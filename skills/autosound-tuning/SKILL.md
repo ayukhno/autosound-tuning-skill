@@ -108,7 +108,7 @@ Rules that hold for ANY profile:
 
 ## The process
 
-The documented end-to-end process (**Phase −1 new-project intake** [`project-intake.md`] → Phase 0 baseline → Phase 1 crossovers/level/delay + nono per-channel targets → Phase 2 hygiene-EQ → joint phase → summed-curve alignment (band pairs / sides / SW+Ws) → final EQ-to-target, in that order → Phase 3 control verdict → Phase 4 optional center/rear → **Phase 5 targeted listening verification** [penultimate; also a cross-cutting ear-tool used throughout] → **Phase 6 client-preference voicing** [subjective] → **Phase 7 project wrap-up: feedback package to the skill author** [`feedback-loop.md`]) is in:
+The documented end-to-end process (**Phase −1 new-project intake** [`project-intake.md`] → Phase 0 baseline → Phase 1 crossovers/level/delay + nono per-channel targets → Phase 2 hygiene-EQ → joint phase → summed-curve alignment (band pairs / sides / SW+Ws) → final EQ-to-target, in that order → Phase 3 control verdict → Phase 4 optional center/rear → **Phase 5 targeted listening verification** [penultimate; also a cross-cutting ear-tool used throughout] → **Phase 6 client-preference voicing** [subjective] → **Phase 7 project wrap-up: closing survey → feedback package → low-key opt-in donation** [`feedback-loop.md`]) is in:
 
 **`references/process-phases.md`** — read it to know which step the user is on and what to produce. **Targeted listening (Phase 5) uses `references/test-tracks.md`** — a hypothesis-driven ear check: pick the track that exposes the dimension, tell the user what to play + listen for.
 
@@ -223,7 +223,7 @@ If the API can't be reached from the host, fall back to the user's exported `.md
 - `references/helix-phase-allpass.md` — **[DSP-specific: Helix]** Phase (all-pass) control + phase-tuning order (midbass reference → sub → mid → tweeter; not applied to midbass)
 - `references/helix-eq-export.md` — **[DSP-specific: Helix]** Audiotec-Fischer EQ export format (30 bands, PK/LS_Q/HS_Q) + REW→Helix import workflow
 - `references/rew-api-quirks.md` — REW API gotchas (encoding, set_filters, IR-timing junk, target garbage) — what `rew_tool/` already handles
-- `references/feedback-loop.md` — **Phase 7 / skill distribution**: how the skill ships (git repo, versions, install) and how experience flows back (feedback package template, channels, safety rules, knowledge/ library of car & DSP profiles)
+- `references/feedback-loop.md` — **Phase 7 / skill distribution**: closing-session ritual (result survey → feedback → careful opt-in donation), how the skill ships (git repo, versions, install), and how experience flows back (feedback package template, channels, safety rules, knowledge/ library of car & DSP profiles)
 - `knowledge/cars/*.md` + `knowledge/dsp/*.md` — **accumulated car & DSP profiles** (community + author experience): check FIRST at intake of a known body/DSP. Seeded: `vw-passat-b8-sedan`, `helix-dsp-ultra-s` (incl. EQ-transfer paths: Audiotec-Fischer file / REW-EQ-CopyPaste-Assistant for 30+ DSPs)
 
 ---
