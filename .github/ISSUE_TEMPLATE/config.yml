@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Discussion / question
+    url: https://github.com/ayukhno/autosound-tuning-skill/discussions
+    about: General questions about the tuning method or using the skill.
