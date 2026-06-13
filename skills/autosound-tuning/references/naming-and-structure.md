@@ -69,7 +69,7 @@ Rule of thumb: **what's small + irreplaceable (config binary, analysis md, light
 
 - Config version = **`vN`**, monotonic, and it **matches the measurement `_N`** (config v18 → measurements `_18`). The full state of the current `vN` always lives in `dsp-state-current` (memory) — gains, crossovers, TA, EQ, polarity.
 - **The DSP tool's own file-version (e.g. Helix PC-Tool `SQ_Jazzi v1.30.pct6`) is a SEPARATE numbering from our `vN`** — don't conflate. The `dsp-config/README.md` map bridges the two (which `.pct6` = which `dsp-state vN` + date). Helix saves config as `.pct6` (binary/encrypted, Audiotec-Fischer); it can't be parsed for analysis, so it's a backup/restore artifact only.
-- **Base + voicing** (SKILL.md → Session lifecycle): the OUTPUT base is shared; name voicing presets by intent — `voicing:EMMA` (competition), `voicing:Accurate` (enjoyment), `voicing:off` (neutral base). A config is then "base vN + voicing:X". Switching curves swaps the voicing, not the base.
+- **Base + voicing** (SKILL.md → Session lifecycle): the OUTPUT base is shared; name voicing presets by intent — `voicing:EMMA` (competition), `voicing:Accurate` (enjoyment), `voicing:off` (neutral base). A config is then "base vN + voicing:X". Switching curves swaps the voicing, not the base. Which presets are worth building (SQ / FULL / SQL / surround / source-input / per-ruleset competition) → `preset-strategy.md`.
 
 ## 6. Target curves & competition vocabulary
 
