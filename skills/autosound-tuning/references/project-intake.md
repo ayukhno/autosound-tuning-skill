@@ -62,7 +62,7 @@
 | **Пресети:** скільки; **що скидається при перемиканні (вхід!)** | Пастка «пресет тихо скинув вхід» (Pre-session №4, `competition.md`) |
 | **Роутинг входів:** окремий вхід для вимірювального сигналу? | Pre-session checklist №4 для цього авто |
 
-**Для не-Helix DSP:** спершу перевір, чи вже є готовий профіль у `knowledge/dsp/` (і `knowledge/cars/` для цього кузова — бібліотека community-досвіду, `feedback-loop.md`). Нема → створити `references/<dsp>-workflow.md` — еквівалент трійки `helix-vcp-workflow` / `helix-eq-export` / `helix-phase-allpass` (архітектура шарів, gain staging, формат обміну EQ, quirks). Helix-файли = зразок структури; решта скілу DSP-агностична.
+**Для не-Helix DSP:** спершу перевір, чи вже є готовий профіль у `knowledge/dsp/` (і `knowledge/cars/` для цього кузова — бібліотека community-досвіду, `feedback-loop.md`). ⚠️ **Збіг має бути ТОЧНИЙ** (той самий кузов / той самий DSP) — профіль іншої машини, навіть платформного родича, **не застосовувати як факт і не називати його в відповіді** (повне правило scope → `SKILL.md` → `knowledge/cars`). Нема точного → створити `references/<dsp>-workflow.md` — еквівалент трійки `helix-vcp-workflow` / `helix-eq-export` / `helix-phase-allpass` (архітектура шарів, gain staging, формат обміну EQ, quirks). Helix-файли = зразок структури; решта скілу DSP-агностична.
 
 ## 5. Згенерувати файли проєкту
 
