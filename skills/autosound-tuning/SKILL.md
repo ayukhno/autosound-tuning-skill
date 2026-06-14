@@ -187,7 +187,7 @@ The **generic process** (roles Critic/Advisor/Arbiter/Cold-auditor · tone proto
 
 ## REW API — pulling data
 
-REW runs **natively on macOS**, so its API at `localhost:4735` is reachable **directly from the host** where Claude/Gemini live — no port-forwarding, pull data live. Parallels is needed **only for the Helix DSP PC-Tool** (Windows-only); the one courier step is handing the REW EQ export to Helix via a shared folder. The Python tool wraps the API:
+REW runs **natively on macOS**, so its API at `localhost:4735` is reachable **directly from the host** where Claude/Gemini live — no port-forwarding, pull data live. Parallels is needed **only for the Helix DSP PC-Tool** (Windows-only); the one courier step is handing the REW EQ export to Helix via a shared folder. **The Python tool ships INSIDE this skill** at `<skill-dir>/rew_tool/` (stdlib-only — no external deps, no project data). The modules import flat, so run it from its own dir: `cd <skill-dir>/rew_tool && python3 rew_tool.py …` (or add that dir to `PYTHONPATH`). It wraps the API:
 
 ```
 rew_tool/rew_api.py    — get_measurements, get_fr, get_group_delay, get_impulse_response,
