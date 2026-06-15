@@ -60,11 +60,22 @@ claude                                            # erster Start öffnet den Bro
 
 ## Installation
 
+**Am einfachsten — lass Claude es installieren.** Öffne Claude Code und bitte einfach, z. B.:
+
+> *„Installiere den Skill `autosound-tuning` und seinen Begleiter `review-loop` von https://github.com/ayukhno/autosound-tuning-skill in meinen benutzerweiten Skills-Ordner (`~/.claude/skills/`), damit er überall verfügbar ist.“*
+
+Claude klont das Repo und legt **beide** Skills (sie sind ein Paar) dorthin, wo du wählst:
+
+- **Benutzerweit — `~/.claude/skills/`** *(empfohlen)*: in **jedem** Ordner verfügbar, in dem du Claude Code öffnest. Wähle das, wenn du mehr als ein Auto abstimmst oder es immer griffbereit haben willst.
+- **Projektweit — `<dein-projekt>/.claude/skills/`**: nur in diesem einen Projekt. Wähle das, um das Repo eines einzelnen Autos eigenständig zu halten.
+
+**Oder manuell:**
 ```bash
 git clone https://github.com/ayukhno/autosound-tuning-skill.git
-# in ein Projekt, z. B. beide Skills verlinken:
-ln -s "$PWD/autosound-tuning-skill/skills/autosound-tuning" dein-projekt/.claude/skills/autosound-tuning
-ln -s "$PWD/autosound-tuning-skill/skills/review-loop"      dein-projekt/.claude/skills/review-loop
+# benutzerweit (überall verfügbar):
+cp -R autosound-tuning-skill/skills/autosound-tuning ~/.claude/skills/
+cp -R autosound-tuning-skill/skills/review-loop      ~/.claude/skills/
+# …oder projektweit: dieselben zwei Ordner nach  dein-projekt/.claude/skills/
 ```
 
 Dann Claude Code in deinem Projekt öffnen und z. B. sagen: *„stimme ein neues Auto von Grund auf ab“* / *"tune a new car from scratch"* — der Skill startet mit **Intake** (`references/project-intake.md`): Quickstart, Equipment- + Ziel-Interview, Wahl der Zielkurve (kein Default — mit dir gewählt), Installationsprüfung und Erzeugung der Projektdateien.

@@ -60,11 +60,22 @@ claude                                            # pierwsze uruchomienie otworz
 
 ## Instalacja
 
+**Najprościej — niech Claude zainstaluje za Ciebie.** Otwórz Claude Code i po prostu poproś, np.:
+
+> *„Zainstaluj skill `autosound-tuning` i towarzyszący `review-loop` z https://github.com/ayukhno/autosound-tuning-skill do mojego folderu skilli na poziomie użytkownika (`~/.claude/skills/`), żeby był dostępny wszędzie.“*
+
+Claude sklonuje repo i umieści **oba** skille (to para) tam, gdzie wybierzesz:
+
+- **Poziom użytkownika — `~/.claude/skills/`** *(zalecane)*: dostępny w **każdym** folderze, w którym otworzysz Claude Code. Wybierz, jeśli będziesz stroić więcej niż jedno auto lub chcesz mieć go zawsze pod ręką.
+- **Poziom projektu — `<twoj-projekt>/.claude/skills/`**: tylko w tym jednym projekcie. Wybierz, by repo jednego auta było samowystarczalne.
+
+**Albo ręcznie:**
 ```bash
 git clone https://github.com/ayukhno/autosound-tuning-skill.git
-# do projektu, np. dowiąż oba skille:
-ln -s "$PWD/autosound-tuning-skill/skills/autosound-tuning" twoj-projekt/.claude/skills/autosound-tuning
-ln -s "$PWD/autosound-tuning-skill/skills/review-loop"      twoj-projekt/.claude/skills/review-loop
+# poziom użytkownika (dostępne wszędzie):
+cp -R autosound-tuning-skill/skills/autosound-tuning ~/.claude/skills/
+cp -R autosound-tuning-skill/skills/review-loop      ~/.claude/skills/
+# …albo poziom projektu: te same dwa foldery do  twoj-projekt/.claude/skills/
 ```
 
 Następnie otwórz Claude Code w projekcie i powiedz np. *„nastrój nowe auto od zera“* / *"tune a new car from scratch"* — skill zacznie od **intake** (`references/project-intake.md`): quickstart, wywiad o sprzęcie + celach, wybór krzywej docelowej (bez domyślnej — wybierana z Tobą), weryfikacja instalacji i wygenerowanie plików projektu.
