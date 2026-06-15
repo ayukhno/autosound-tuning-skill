@@ -206,7 +206,7 @@ If the API can't be reached from the host, fall back to the user's exported `.md
 
 ## References (read on demand)
 
-- `references/project-intake.md` — **NEW PROJECT bootstrap (Фаза −1)**: quickstart for new hands, equipment + goals interview (curve choice — no default), install verification (routing/polarity/gain/noise/break-in), DSP capability checklist (incl. non-Helix), project-file generation. Read whenever there are no project files, a new car/system, or «з нуля»
+- `references/project-intake.md` — **NEW PROJECT bootstrap (Фаза −1)**: quickstart for new hands, equipment + goals interview (curve choice — no default), install verification (routing/polarity/gain/noise/break-in), DSP capability checklist (incl. non-Helix), project-file generation. **First contact also asks the user's preferred working language (EN/UK/DE/PL) → all dialogue + generated project files in it** (the skill body stays English — it's the method; output follows the user). Read whenever there are no project files, a new car/system, or «з нуля»
 - `references/process-phases.md` — the phased process + package format + Claude's refinements to the workflow
 - `references/naming-and-structure.md` — project/session/phase hierarchy · measurement naming + `_N` version suffix · `.mdat` storage · DSP config (`vN`, base+voicing) · target-curve naming · "is the raw data still valid?" after a hardware change
 - `references/analysis-playbook.md` — which REW measurement (FR/phase/IR/GD/CSD/distortion/excess-phase) answers which tuning question

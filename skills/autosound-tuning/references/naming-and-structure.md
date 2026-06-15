@@ -58,6 +58,8 @@ rew_analitic/
 │   └── README.md  maps each binary → its dsp-state version + date + one-line "what it is"
 │                  (without this map an unparseable binary is useless for "review later").
 ├── exports/       REW EQ exports (Audiotec-Fischer), decimated CSV traces, key screenshots → git ✓
+├── target-curves/ house/target curve files → git ✓ — subfolder per curve (full #1 + per-band
+│                  #2–9 components); README.md maps which is ACTIVE + curve↔preset; several coexist
 ├── *.mdat         LARGE (16–112 MB) → .gitignore, NOT backed up (re-measure if ever needed —
 │                  user's call; GitHub's 100 MB/file limit rules them out anyway w/o LFS)
 └── eq-set-*.md, dsp-state, changelog, target-*  analysis records → git ✓ (already)
@@ -73,7 +75,7 @@ Rule of thumb: **what's small + irreplaceable (config binary, analysis md, light
 
 ## 6. Target curves & competition vocabulary
 
-- A curve has a **name** and lives in REW as **#1 = full target** (anchor levels to this) + **#2–9 = per-band sub-targets** (garbage out of band — sample in-band only). The active curve is recorded in project memory (`target-curve-*`). One curve per session.
+- A curve has a **name** and lives in REW as **#1 = full target** (anchor levels to this) + **#2–9 = per-band sub-targets** (garbage out of band — sample in-band only). The active curve is recorded in project memory (`target-curve-*`); the curve **files** (full + per-band components) live in **`rew_analitic/target-curves/<name>/`** — a subfolder per curve, several may coexist, a `README.md` marks the ACTIVE one + curve↔preset. One curve per session (but a project may store several to A/B). **To view/compare curves visually → https://nonotuningtool.com/.**
 - **Curve library in this REW** (each is a candidate session target — naming any of these is a strong "this is a tuning task" signal): `Flat`, `Audiofrog`, `Whitledge`, `Half Whitledge`, `Harman`, `JBL`, `JL Audio`, `Jazzi`, `Jazzi v2`, `RAW-Cat`, `RAW-Cat (uni)`, `ResoNix Accurate`, `ResoNix Laid-Back`, `ATF`, `ATF EQ (Helix)`, `EPY`, `Hanatsu`, `Arkadij`, `Arkadij v2`. Some are industry curves (Harman, Audiofrog, ResoNix, JL Audio, JBL), some custom. The active one is whatever the session picks; the list grows.
 - **No curve is one-size-fits-all, and the curve is a START, not a finish (ResoNix/Apicella).** The right shape depends on cabin size (bass lift), reflections (car-to-car, even location-to-location in the same car), tweeter location (A-pillar vs sail vs dash), speaker polar response (shifts with crossover + placement), and the drivers' distortion profile — two systems matched to the SAME curve can sound completely different. An RTA dip isn't always a heard dip (off-axis/dispersion). So: reach the curve, then **finish by ear** (per-band L/R level + tonality + center cohesion — see `diagnostic-techniques §17`). A car is never "done" the moment the target is met. ResoNix ships two: **Accurate** (flatter mid, less bass, more top — fidelity, can fatigue / lose to road noise) and **Laid-Back** (more bass, pulled-back upper treble — enjoyment).
 - **Competition / scoring context** (drives which voicing preset, per base+voicing): formats **EMMA**, **AYA**, **CARMusic**; categories **SQ** (sound quality), **SQL** (sound quality + loud), **SPL** (loudness). When these appear in a car/autosound context they mean "prep a voicing for judging" — a tuning task, not generic audio. EMMA/AYA voicing ≈ competition preset; enjoyment ≈ Accurate/flat preset.
