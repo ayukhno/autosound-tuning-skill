@@ -19,7 +19,7 @@ skills/
 │   │                      REW-API, Helix-Spezifika, Intake, Feedback
 │   ├── knowledge/         gesammelte Auto- & DSP-Profile (cars/, dsp/)
 │   └── scripts/           Beispiel-Kritiker-Kanal (optionales Rig-Tooling)
-└── review-loop/           Schwester-Skill: unabhängige Review-Orchestrierung (anbieterneutral)
+└── review-loop/           Partner-Skill: unabhängige Review-Orchestrierung (anbieterneutral)
 ```
 
 Die zwei Skills sind ein **Paar** — `autosound-tuning` referenziert `review-loop` für das Review-Protokoll. Installiere beide.
@@ -45,9 +45,9 @@ mkdir ~/car-audio-setup && cd ~/car-audio-setup
 claude                                            # erster Start öffnet den Browser zum Login
 ```
 
-**3. Nicht überstrukturieren.** Beginne mit einem leeren Ordner. Lege deinen ersten REW-Export (`.txt`/`.csv`) so ab, wie er ist, führe ein einziges Markdown-Notizlog (nur anhängen), und lass Ordner (`measurements/`, `configs/`, `eq-log/`) entstehen, wenn du sie wirklich brauchst.
+**3. Nicht überstrukturieren — halte die Struktur schlank.** Beginne mit einem leeren Ordner. Lege deinen ersten REW-Export (`.txt`/`.csv`) so ab, wie er ist, führe ein einziges Markdown-Notizlog (nur anhängen), und lass Ordner (`measurements/`, `configs/`, `eq-log/`) entstehen, wenn du sie wirklich brauchst.
 
-**4. Deine erste Nachricht = „Schritt 0“.** Beschreibe dein System in einer Nachricht: Auto + Lautsprecher-Layout (wie viele Wege, Sub?), DSP-Modell (Helix / Audison / anderes), Mess-Equipment (Mikrofon, Interface), und ob du schon Messungen hast oder von der Hardware startest. Der Skill macht weiter — und **fragt zuerst deine bevorzugte Arbeitssprache** (Englisch / deine Muttersprache, falls unterstützt: EN · UK · DE · PL), damit Gespräch und Projektdateien in ihr entstehen. Dann: Intake → Signalketten-Check → Mikrofon-Kalibrierung → erster Sweep → …
+**4. Deine erste Nachricht = „Schritt 0“: Die Initialisierung.** Beschreibe dein System in einer Nachricht: Auto + Lautsprecher-Layout (wie viele Wege, Sub?), DSP-Modell (Helix / Audison / anderes), Mess-Equipment (Mikrofon, Interface), und ob du schon Messungen hast oder von der Hardware startest. Der Skill macht weiter — und **fragt zuerst deine bevorzugte Arbeitssprache** (Englisch / deine Muttersprache, falls unterstützt: EN · UK · DE · PL), damit Gespräch und Projektdateien in ihr entstehen. Dann: Intake → Signalketten-Check → Mikrofon-Kalibrierung → erster Sweep → …
 
 (Danach den Skill selbst installieren — nächster Abschnitt.)
 
@@ -92,4 +92,4 @@ Bestätigte Erkenntnisse werden in den Skill und die `knowledge/`-Auto-/DSP-Prof
 
 ## Lizenz
 
-[CC BY-SA 4.0](LICENSE) — nutze, passe an, teile; halte Ableitungen offen und nenne die Quelle. Es ist ein Methoden-/Wissenswerk, daher hält Share-Alike die gesammelte Erfahrung der Community offen.
+[CC BY-SA 4.0](LICENSE) — nutze, passe an, teile; halte Ableitungen offen und nenne die Quelle. Es ist ein Methoden-/Wissenswerk, daher hält Share-Alike die gesammelte Erfahrung der Community offen. Die Lizenzbedingungen garantieren, dass methodisches Wissen der Community zugänglich bleibt.
