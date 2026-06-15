@@ -32,7 +32,7 @@ Dieser Skill läuft in **Claude Code**, einem Terminal-Werkzeug. Wenn du bisher 
 
 **1. Claude Code installieren** (macOS / zsh; benötigt Node.js 18+ und einen kostenpflichtigen Claude-Plan — Pro / Max / Team / Enterprise; der kostenlose Plan reicht nicht):
 ```bash
-node --version                                   # 18+ nötig
+node --version                                   # Node.js 18 oder neuer
 mkdir -p ~/.npm-global && npm config set prefix '~/.npm-global'
 echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
 npm install -g @anthropic-ai/claude-code
