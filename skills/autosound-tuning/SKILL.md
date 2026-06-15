@@ -153,7 +153,7 @@ This skill is **co-developed with the project**: sessions deposit candidates, an
 
 The channel is a CLI wrapper that injects the Contract + Context, sends your package to Gemini as Critic, handles Pro→Flash quota fallback, and logs the audit trail.
 
-> **The channel is OPTIONAL tooling of this rig.** On another machine / in other hands, without `agy` and the wrappers, the roles still stand (`../review-loop/SKILL.md` is vendor-agnostic): the Critic can be another model in a second window — or the human. The phase process does not depend on the channel.
+> **The reviewer ROLE is CORE to the method — set it up at project start (`project-intake.md §0`); only the specific `agy` CHANNEL is optional.** A second-opinion reviewer is a colossal quality gain — single-perspective tuning is noticeably worse, so **don't skip it / proactively offer to set it up at init.** Fallback ladder when there's no Gemini/`agy`: (1) any other AI in a second window; (2) **Claude in a SEPARATE session** as reviewer (cross-session self-review — `../review-loop/SKILL.md`, TWO-PASS anti-anchoring); (3) the human as reviewer. The roles are vendor-agnostic (`../review-loop/SKILL.md`); the phase process holds regardless of which reviewer you use.
 
 ```bash
 .claude/skills/autosound-tuning/scripts/gemini_critic.sh <package.md> [trace.csv]
@@ -252,5 +252,7 @@ Gemini critic always runs (free) → even on Sonnet there's a second expert head
 When analyzing measurements, lead with what the user will *hear*:
 
 **🔍 Що я бачу** · **⚠️ Головні проблеми** (freq / magnitude / cause) · **✅ Виправне / ❌ Невиправне** · **🔧 Наступні кроки** · **❓ Одне питання якщо бракує контексту**
+
+**Naming / paths / tasks — general rules ONCE, concrete AT THE MOMENT.** Establish the glossary + naming convention (`<ch>_<vN> (sw|rta)`) + folder layout once (intake/Phase 0), then don't re-explain them. At each action give **copy-paste-ready specifics**: the exact save PATH, the measurement list **short + comma-separated in the agreed abbreviations** (`sw_1, w-L_1, w-R_1, m-L_1…`), and a brief goal. Concise, not verbose.
 
 Keep EQ honest: max boost +6 dB; if a dip needs more it's phase cancellation (unfixable with EQ). Remove resonances, don't chase a flat line.
