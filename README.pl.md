@@ -19,7 +19,7 @@ skills/
 │   │                      REW-API, specyfika Helix, intake, feedback
 │   ├── knowledge/         zgromadzone profile aut i DSP (cars/, dsp/)
 │   └── scripts/           przykładowy kanał Krytyka (opcjonalne narzędzia rigu)
-└── review-loop/           skill-siostra: orkiestracja niezależnej recenzji (niezależna od dostawcy)
+└── review-loop/           skill siostrzany: orkiestracja niezależnej recenzji (niezależna od dostawcy)
 ```
 
 Te dwa skille to **para** — `autosound-tuning` odwołuje się do `review-loop` po protokół recenzji. Zainstaluj oba.
@@ -28,7 +28,7 @@ Te dwa skille to **para** — `autosound-tuning` odwołuje się do `review-loop`
 
 Ten skill działa w **Claude Code**, narzędziu terminalowym. Jeśli używałeś tylko czatu desktop/web, oto jednorazowa konfiguracja.
 
-**Dlaczego Claude Code (a nie aplikacja web / Cowork):** strojenie jest iteracyjne — pomiar → analiza → zmiana → ponowny pomiar — na danych tekstowych/liczbowych (eksporty CSV/tekst z REW, konfiguracje DSP, logi iteracji). Terminal + git dają parsowanie, skrypty i pełną historię zmian. Cowork jest nastawiony na operacje na plikach w innych aplikacjach — tu zbędny.
+**Dlaczego Claude Code (a nie aplikacja web / Cowork):** strojenie jest iteracyjne — pomiar → analiza → zmiana → ponowny pomiar — na danych tekstowych/liczbowych (eksporty CSV/pliki tekstowe z REW, konfiguracje DSP, logi iteracji). Terminal + git dają parsowanie, skrypty i pełną historię zmian. Cowork jest nastawiony na operacje na plikach w innych aplikacjach — tu zbędny.
 
 **1. Zainstaluj Claude Code** (macOS / zsh; wymaga Node.js 18+ i płatnego planu Claude — Pro / Max / Team / Enterprise; darmowy plan nie wystarczy):
 ```bash
