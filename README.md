@@ -2,6 +2,13 @@
 
 🇬🇧 **English** · 🇩🇪 [Deutsch](README.de.md) · 🇵🇱 [Polski](README.pl.md)
 
+**In one line:** a Claude skill that helps you tune car audio — it reads your REW measurements, analyzes them, recommends settings, and can push EQ back into REW.
+
+- 📊 **Works with REW** over its API — pulls measurements, loads EQ filters back in
+- 🎯 **Knows the craft** — target curves, tuning practices, and a built-in step-by-step tuning process
+- 🎧 **Test tracks** — what to listen for and on which track (the descriptions, not the audio)
+- 🚗 **Learns your setup** — accumulates car & gear knowledge from a tuning angle (only with your consent)
+
 A [Claude](https://claude.com/claude-code) **skill** for tuning a car-audio DSP with [REW](https://www.roomeqwizard.com/) — from a brand-new project (equipment + goals interview, target-curve choice, install verification) through crossovers, time alignment, phase, per-channel and summed EQ, imaging/staging, to client-preference voicing. It encodes a measured **method** (Generator ↔ Critic ↔ Arbiter review loop) plus a growing library of hard-won diagnostic techniques.
 
 The skill is **method, not machine.** No car's measurements or DSP state live here — those stay in the tuner's own project. This repo ships the reusable process so it works on **any car / any DSP**.

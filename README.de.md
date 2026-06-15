@@ -2,6 +2,13 @@
 
 🇬🇧 [English](README.md) · 🇩🇪 **Deutsch** · 🇵🇱 [Polski](README.pl.md)
 
+**In einem Satz:** ein Claude-Skill, der dir hilft, Car-Audio abzustimmen — er liest deine REW-Messungen, analysiert sie, empfiehlt Einstellungen und kann EQ zurück in REW laden.
+
+- 📊 **Arbeitet mit REW** über dessen API — holt Messungen, lädt EQ-Filter zurück
+- 🎯 **Kennt das Handwerk** — Zielkurven, Abstimmpraktiken und einen eingebauten Schritt-für-Schritt-Prozess
+- 🎧 **Test-Tracks** — worauf man achtet und auf welchem Track (die Beschreibungen, nicht die Audiodateien)
+- 🚗 **Lernt dein Setup** — sammelt Wissen über Auto & Equipment aus Abstimm-Sicht (nur mit deiner Zustimmung)
+
 Ein **Skill** für [Claude](https://claude.com/claude-code) zum Abstimmen eines Car-Audio-DSP mit [REW](https://www.roomeqwizard.com/) — von einem brandneuen Projekt (Equipment- + Ziel-Interview, Wahl der Zielkurve, Installationsprüfung) über Weichen, Laufzeitkorrektur, Phase, kanalweises und summiertes EQ, Imaging/Bühne, bis zum Voicing nach Kundengeschmack. Er kodiert eine messbasierte **Methode** (Generator ↔ Kritiker ↔ Schiedsrichter Review-Schleife) plus eine wachsende Bibliothek hart erarbeiteter Diagnosetechniken.
 
 Der Skill ist **Methode, nicht Maschine.** Keine Messungen oder DSP-Zustände eines konkreten Autos liegen hier — die bleiben im eigenen Projekt des Tuners. Dieses Repo liefert den wiederverwendbaren Prozess, der mit **jedem Auto / jedem DSP** funktioniert.

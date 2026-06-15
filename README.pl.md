@@ -2,6 +2,13 @@
 
 🇬🇧 [English](README.md) · 🇩🇪 [Deutsch](README.de.md) · 🇵🇱 **Polski**
 
+**W jednym zdaniu:** skill dla Claude, który pomaga stroić car-audio — czyta twoje pomiary z REW, analizuje je, podpowiada ustawienia i potrafi wgrać EQ z powrotem do REW.
+
+- 📊 **Współpracuje z REW** przez jego API — pobiera pomiary, wgrywa z powrotem filtry EQ
+- 🎯 **Zna rzemiosło** — krzywe docelowe, praktyki strojenia i wbudowany proces krok po kroku
+- 🎧 **Ścieżki testowe** — na co zwracać uwagę i na której ścieżce (opisy, nie pliki audio)
+- 🚗 **Uczy się twojego setupu** — gromadzi wiedzę o aucie i sprzęcie z perspektywy strojenia (tylko za twoją zgodą)
+
 **Skill** dla [Claude](https://claude.com/claude-code) do strojenia car-audio DSP za pomocą [REW](https://www.roomeqwizard.com/) — od zupełnie nowego projektu (wywiad o sprzęcie + celach, wybór krzywej docelowej, weryfikacja instalacji) przez zwrotnice, korekcję czasową, fazę, korekcję EQ per-kanał i sumaryczną, imaging/scenę, aż po voicing pod gust klienta. Koduje **metodę** opartą na pomiarach (pętla recenzji Generator ↔ Krytyk ↔ Arbiter) plus rosnącą bibliotekę wypracowanych technik diagnostycznych.
 
 Skill to **metoda, nie maszyna.** Żadne pomiary ani stany DSP konkretnego auta tu nie leżą — zostają w projekcie samego stroiciela. To repo dostarcza proces wielokrotnego użytku, działający z **dowolnym autem / dowolnym DSP**.
