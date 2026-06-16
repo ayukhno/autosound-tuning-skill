@@ -69,20 +69,36 @@ claude                                            # first run opens the browser 
 
 **Easiest — let Claude install it for you.** Open Claude Code and just ask, for example:
 
-> *"Install the `autosound-tuning` skill and its `review-loop` companion from https://github.com/ayukhno/autosound-tuning-skill into my user-level skills folder (`~/.claude/skills/`) so it's available everywhere."*
+> *"Clone https://github.com/ayukhno/autosound-tuning-skill into a temporary folder, then copy the two **inner** skill folders — `skills/autosound-tuning` and `skills/review-loop` — into my user-level `~/.claude/skills/`, so each skill's `SKILL.md` ends up directly at `~/.claude/skills/<name>/SKILL.md`. Don't clone the whole repo into the skills folder."*
 
-Claude clones the repo and places **both** skills (they're a pair) where you choose:
+Claude places **both** skills (they're a pair) where you choose:
 
 - **User-level — `~/.claude/skills/`** *(recommended)*: available in **every** folder you open Claude Code in. Pick this if you'll tune more than one car or want it always on hand.
 - **Project-level — `<your-project>/.claude/skills/`**: only inside that one project. Pick this to keep a single car's repo self-contained.
 
+> ⚠️ **Common install mistake:** don't `git clone` the repo *into* `~/.claude/skills/autosound-tuning/`. That nests `SKILL.md` one level too deep (`…/autosound-tuning/skills/autosound-tuning/SKILL.md`) and Claude Code reports **`Unknown skill: autosound-tuning`** (or never offers the skill at all). Always copy the **inner** `skills/*` folders so `SKILL.md` sits *directly* under the skill folder.
+
 **Or do it manually:**
 ```bash
 git clone https://github.com/ayukhno/autosound-tuning-skill.git
-# user-level (available everywhere):
+# user-level (available everywhere) — copy the INNER skill folders:
 cp -R autosound-tuning-skill/skills/autosound-tuning ~/.claude/skills/
 cp -R autosound-tuning-skill/skills/review-loop      ~/.claude/skills/
 # …or project-level: cp -R the same two folders into  your-project/.claude/skills/
+
+# verify — each line must print the path (SKILL.md sits DIRECTLY under the skill folder):
+ls ~/.claude/skills/autosound-tuning/SKILL.md
+ls ~/.claude/skills/review-loop/SKILL.md
+```
+
+**After installing, start a fresh Claude Code session** — skills are loaded at startup.
+
+**Troubleshooting — `Unknown skill` / the skill never triggers:** almost always the nesting above. If `ls ~/.claude/skills/autosound-tuning/SKILL.md` fails but `…/autosound-tuning/skills/autosound-tuning/SKILL.md` exists, you cloned the whole repo into the skill folder. Fix it, then restart Claude Code:
+```bash
+mv ~/.claude/skills/autosound-tuning ~/.claude/skills/autosound-tuning-repo
+cp -R ~/.claude/skills/autosound-tuning-repo/skills/autosound-tuning ~/.claude/skills/
+cp -R ~/.claude/skills/autosound-tuning-repo/skills/review-loop      ~/.claude/skills/
+rm -rf ~/.claude/skills/autosound-tuning-repo
 ```
 
 Then open Claude Code in your project and say e.g. *"tune a new car from scratch"* — the skill starts with **intake** (`references/project-intake.md`): quickstart, equipment + goals interview, target-curve choice (no default — chosen with you), install verification, and project-file generation. *(It first asks your preferred working language — you can run the whole local project in your own language; English here is just the skill's internal method.)*
