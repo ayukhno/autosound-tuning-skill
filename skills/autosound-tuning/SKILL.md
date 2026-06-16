@@ -4,9 +4,11 @@ description: >
   Orchestrates car-audio DSP tuning for ANY car/system — from a brand-new project
   (intake: equipment + goals interview, target-curve choice, install verification) to deep
   iterative tuning — using REW + a Claude(Generator)↔Gemini(Critic)↔User(Arbiter) review
-  loop. (Active project: VW Passat B8 / Helix DSP Ultra S.) Use whenever the user wants to:
+  loop. Use whenever the user wants to:
   set up or tune a car-audio system FROM SCRATCH («налаштуй нову машину/систему з нуля»,
-  intake/опитування), run a tuning session, pick crossover points, set time delays / phase /
+  intake/опитування), "help me set up my car audio", "tune my speakers/system",
+  CREATE or build a house / target curve (even "make a house curve for fun" — e.g. via
+  nonotuningtool.com), run a tuning session, pick crossover points, set time delays / phase /
   polarity, build per-channel EQ, fix IMAGING/STAGING (center the image, an image that sticks
   to one speaker, mid-walk, stage WIDTH/DEPTH, layering/echelons, "сцена липне до скла"),
   match a target/house curve named by ANY curve in the REW
@@ -18,7 +20,9 @@ description: >
   door resonance, sub integration, crossover, under-lap, imaging/staging/локалізація/центр/
   «образ липне до динаміка»/ширина/глибина сцени/ешелони, any target-curve name, car-audio
   competition prep (EMMA, AYA, CARMusic) or SQ/SQL/SPL when about a car, "send to Gemini",
-  "critic", "що далі", or any step of the documented tuning process.
+  "critic", "що далі", "help me set up my car audio", "make / build a house curve",
+  "tune my speakers", or any step of the documented tuning process. (Built & battle-tested
+  on a VW Passat B8 / Helix DSP Ultra S — but works on ANY car / ANY DSP.)
 ---
 
 # Autosound Tuning Orchestrator

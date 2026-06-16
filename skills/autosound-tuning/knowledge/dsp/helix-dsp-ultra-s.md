@@ -18,5 +18,5 @@
 
 ## Перенос EQ — два шляхи
 
-1. **Канонічний (Helix): файл-імпорт** Audiotec-Fischer → `helix-eq-export.md`. Перевага: у REW одразу видно вплив фільтрів на криву.
+1. **Канонічний (Helix): файл-імпорт** Audiotec-Fischer → `helix-eq-export.md`. Перевага: у REW одразу видно вплив фільтрів на криву. ⚠️ Якщо файл-імпорт незручний (напр. шлях через Parallels/VM на Mac — фідбек із живого тесту) → можна спробувати шлях 2 і на **вікні Helix PC-Tool** (keystroke-підхід генеричний; сумісність полів PC-Tool — **provisional, не верифіковано на Helix**).
 2. **Альтернатива (і шлях для DSP без імпорту): REW-EQ-CopyPaste-Assistant** (github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant) — Windows/PowerShell-помічник: «Copy» у EQ-секції REW → тулза конвертує кліпборд у keystroke-послідовності і сама вбиває смуги у вікно DSP-софта (клік на першу смугу → авто-ввід). **30+ платформ**: Musway TUNEST_PC (перевірено автором скіла), ESX, Zapco, Goldhorn, Ground Zero, Nakamichi-K тощо. Claude може готувати фільтр-пакет для копіювання так само, як готує Audiotec-Fischer файл (через REW або `rew_tool`).
