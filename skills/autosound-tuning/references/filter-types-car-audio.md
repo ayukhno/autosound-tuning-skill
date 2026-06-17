@@ -1,132 +1,132 @@
-# Типи Фільтрів для Кросоверів в Автозвуці
+# Crossover filter types for car audio
 
-## Швидке Порівняння
+## Quick comparison
 
-| Тип | Крутизна АЧХ | Фаза | Імпульс | Для чого |
+| Type | FR slope | Phase | Impulse | For what |
 |---|---|---|---|---|
-| **Linkwitz-Riley (LR4)** | Чітке коліно, -6 дБ на зрізі | Крутий поворот | Середній | Точна зшивка, сума = 0 дБ |
-| **Bessel (BE4)** | Плавне коліно, раннє падіння | Лінійна затримка | Найкращий | Природність, "повітря" |
-| **Butterworth (BW4)** | Найпряміша полка, -3 дБ на зрізі | Компромісний | Хороший | Саб LP, загальне використання |
+| **Linkwitz-Riley (LR4)** | Sharp knee, −6 dB at the cutoff | Steep rotation | Medium | Precise crossover alignment, sum = 0 dB |
+| **Bessel (BE4)** | Gentle knee, early roll-off | Linear delay | Best | Naturalness, "air" |
+| **Butterworth (BW4)** | Flattest passband, −3 dB at the cutoff | Compromise | Good | Sub LP, general use |
 
 ---
 
 ## Linkwitz-Riley (LR)
 
-**Характер:** Математично точний, ідеальна сума (0 дБ на стику при правильному зрізі).
+**Character:** mathematically exact, an ideal sum (0 dB at the joint with the right cutoff).
 
-**Коли використовувати:**
-- Стик мідбас/СЧ (динаміки фізично далеко один від одного → широка зона перекриття небезпечна)
-- Коли потрібна передбачувана, стабільна сцена
-- Якщо динаміки в різних акустичних умовах (двері vs подіум)
+**When to use:**
+- Midbass/mid joint (the drivers are physically far apart → a wide overlap region is dangerous)
+- When you need a predictable, stable stage
+- If the drivers are in different acoustic conditions (door vs pod)
 
-**Особливості в авто:**
-- При ідентичних зрізах L і R дає відтворювану сцену
-- Якщо один динамік має резонанс на частоті зрізу — LR підкреслить його (треба EQ)
+**Quirks in a car:**
+- With identical L and R cutoffs it gives a reproducible stage
+- If one driver has a resonance at the cutoff frequency, LR will emphasize it (needs EQ)
 
 ---
 
 ## Bessel (BE)
 
-**Характер:** Лінійна групова затримка → найкраща перехідна характеристика → звук "швидкий" і природний.
+**Character:** linear group delay → the best transient response → a "fast", natural sound.
 
-**Коли використовувати:**
-- Стик саб/мідбас (дає "злитий", артикульований бас)
-- Стик СЧ/ВЧ **коли динаміки стоять поруч** (< 5-10 см між центрами)
-- Якщо LR дає "стерильний" або "процесорний" присмак
+**When to use:**
+- Sub/midbass joint (gives a "cohesive", articulate bass)
+- Mid/tweeter joint **when the drivers sit close together** (< 5–10 cm between centers)
+- If LR gives a "sterile" or "processed" flavor
 
-**Особливості в авто:**
-- Плавне коліно → велика зона перекриття → ризик при фізично рознесених динаміках
-- Потрібно розносити частоти зрізу: якщо LR ставили б 300 Гц обом — для BE: LP 250 Гц / HP 400 Гц
-- Sub/Midbass на BE: LP саб 45-50 Гц, HP мідбас 65-75 Гц (асиметрично)
+**Quirks in a car:**
+- Gentle knee → a large overlap region → risky with physically spaced-apart drivers
+- You need to spread the cutoff frequencies: where LR would put 300 Hz on both — for BE: LP 250 Hz / HP 400 Hz
+- Sub/midbass on BE: sub LP 45–50 Hz, midbass HP 65–75 Hz (asymmetric)
 
-**Bessel 12 дБ/окт (BE2) vs 24 дБ/окт (BE4):**
-- BE2 — дуже плавний спад, ризик перевантаження динаміків субфасовими частотами
-- BE4 — безпечніший вибір, зберігає переваги Bessel
+**Bessel 12 dB/oct (BE2) vs 24 dB/oct (BE4):**
+- BE2 — a very gentle roll-off, risk of overloading the drivers with below-cutoff frequencies
+- BE4 — the safer choice, keeps Bessel's advantages
 
 ---
 
 ## Butterworth (BW)
 
-**Характер:** Максимально плоска полка до частоти зрізу.
+**Character:** maximally flat passband up to the cutoff.
 
-**Коли використовувати:**
-- Саб LP (дає трохи жорсткіше відсікання, ніж LR)
-- Subsonic для захисту саба (BW 12 дБ/окт — плавний захисний спад)
+**When to use:**
+- Sub LP (a slightly harder cut than LR)
+- Subsonic to protect the sub (BW 12 dB/oct — a gentle protective roll-off)
 
 ---
 
-## Гібридна Стратегія (кандидат для 3-way + sub)
+## Hybrid strategy (a candidate for 3-way + sub)
 
 ```
-Саб (LP) ←─── BE4 ───→ Мідбас (HP)    [Bessel: злитий, природний бас]
+Sub (LP) ←─── BE4 ───→ Midbass (HP)    [Bessel: cohesive, natural bass]
                            ↓
-Мідбас (LP) ←── LR4 ──→ СЧ (HP)       [LR: точна зшивка, стабільна сцена]
+Midbass (LP) ←── LR4 ──→ Mid (HP)      [LR: precise alignment, stable stage]
                               ↓
-СЧ (LP) ←──── BE4 ────→ ВЧ (HP)       [Bessel: якщо поруч; LR якщо далеко]
+Mid (LP) ←──── BE4 ────→ Tweeter (HP)  [Bessel: if close; LR if far apart]
 ```
 
-**Чому так:**
-- BE на сабі прибирає "відтяжку" і "гулкість" баса ззаду
-- LR на мідбас/СЧ дає контроль навіть при рознесених динаміках
-- BE на СЧ/ВЧ (якщо в одному подіумі) дає неймовірну злитість і "повітря"
+**Why this way:**
+- BE on the sub removes the bass's "drag" and "boominess" from behind
+- LR on midbass/mid gives control even with spaced-apart drivers
+- BE on mid/tweeter (if in the same pod) gives incredible cohesion and "air"
 
 ---
 
-## Стартові сети кросоверів (варіанти — їх може бути кілька)
+## Starting crossover sets (variants — there can be several)
 
-Це **стартові точки**, не закон: сетів з часом стає більше, вони уточнюються виміром (RTA-магнітуда + схили → частота; сумація стику → фаза/полярність) і вухом (крутизна → `method-hashimoto.md`). **Поточний вибір конкретного проєкту живе у `dsp-state-current` + профілі §4**, не тут.
+These are **starting points**, not law: the sets grow over time and get refined by measurement (RTA magnitude + slopes → frequency; joint summation → phase/polarity) and by ear (slope → `method-hashimoto.md`). **A specific project's current choice lives in `dsp-state-current` + profile §4**, not here.
 
-**Сет A — «вимірювальний гібрид» (3-way + sub; перевірений на Passat B8):**
-| Стик | Старт | Чому |
+**Set A — "measured hybrid" (3-way + sub; proven on the Passat B8):**
+| Joint | Start | Why |
 |---|---|---|
-| Sub LP ↔ Midbass HP | BE4 45-50 / BE4 65-75 — або LR4 60-63 / LR4 60-80 | BE = злитий артикульований бас; LR = контроль |
-| Midbass LP ↔ Mid HP | LR4 250-350 симетрично | рознесені драйвери → широке перекриття небезпечне |
-| Mid LP ↔ Tweeter HP | BE4 2500-3500 / BE4 4000-5000 (драйвери поруч) — або LR4 3000-3500 (рознесені) | Bessel дає «повітря» на близьких |
-| Subsonic (ЗЯ) | BW2 15-20 | захист |
-| + HSF на мідбасі зверху | ~400-450 Гц, −4..−6 дБ | «дорізає» хвіст динаміка над LP |
+| Sub LP ↔ Midbass HP | BE4 45–50 / BE4 65–75 — or LR4 60–63 / LR4 60–80 | BE = cohesive, articulate bass; LR = control |
+| Midbass LP ↔ Mid HP | LR4 250–350 symmetric | spaced-apart drivers → a wide overlap is dangerous |
+| Mid LP ↔ Tweeter HP | BE4 2500–3500 / BE4 4000–5000 (drivers close) — or LR4 3000–3500 (spaced apart) | Bessel gives "air" on close drivers |
+| Subsonic (sealed) | BW2 15–20 | protection |
+| + HSF on the midbass at the top | ~400–450 Hz, −4..−6 dB | "trims" the driver's tail above the LP |
 
-**Сет B — Hashimoto-старт (by-ear):** саб↔мідбас 60-80 · мідбас↔СЧ 200-1000 (нижче для великої дифузорної СЧ, до 1000 для малої/купольної) · СЧ↔ВЧ 3-6к; **крутизна підбирається вухом ПЕРЕД частотою** (`method-hashimoto.md`). HPF кожного драйвера — на/вище його резонансу.
+**Set B — Hashimoto start (by-ear):** sub↔midbass 60–80 · midbass↔mid 200–1000 (lower for a large-cone midrange, up to 1000 for a small/dome one) · mid↔tweeter 3–6k; **the slope is chosen by ear BEFORE the frequency** (`method-hashimoto.md`). Each driver's HPF — at/above its resonance.
 
-> Симетрія L/R типів/порядків — дефолтне правило (нижче), але виміряні винятки бувають: асиметричний HPF СЧ у переможному конфігу, Hashimoto-варіант «частоти/порядки L/R не зобов'язані збігатись» (`diagnostic §15`). Суддя — сумація стику + вухо.
+> L/R symmetry of types/orders is the default rule (below), but measured exceptions happen: an asymmetric mid HPF in the winning config, the Hashimoto variant "L/R frequencies/orders need not match" (`diagnostic §15`). The judge — joint summation + the ear.
 
 ---
 
-## Практичні Поради
+## Practical tips
 
-### Як перевірити правильність вибору
+### How to check you chose right
 
-1. Встанови один пресет з LR4, другий з BE4 на тому ж стику
-2. Слухай контрабас або щипкову гітару — на BE4 атака чіткіша і "швидша"
-3. Перевір по Impulse Response в REW: пік BE4 чистіший, менше "хвостів"
+1. Set up one preset with LR4, another with BE4 on the same joint
+2. Listen to a double bass or a plucked guitar — on BE4 the attack is crisper and "faster"
+3. Check the Impulse Response in REW: the BE4 peak is cleaner, fewer "tails"
 
-### Симетрія L/R — дефолт SQ
+### L/R symmetry — the SQ default
 
-**Дефолт:** лівий і правий канал однієї смуги мають **однакові тип, порядок І частоту** кросовера.
+**Default:** the left and right channel of one band have the **same type, order AND frequency** of crossover.
 
-Різні (BE4 зліва / LR4 справа — або 3.2к зліва / 3.5к справа) = різне фазове обертання L/R = фантомний центр пливе й розмивається. Асиметрію салону компенсують **EQ і Gain** (+ затримки для центрування), **не кросоверами**.
+Different ones (BE4 on the left / LR4 on the right — or 3.2k left / 3.5k right) = different L/R phase rotation = the phantom center drifts and smears. Compensate cabin asymmetry with **EQ and Gain** (+ delays for centering), **not with crossovers**.
 
-> **Варіант (Хашімото):** асиметричні L/R-кроси, підібрані на слух кожна сторона окремо — допустимі **лише коли симетрія не дає образ**; тоді imaging ретельно верифікувати (`method-hashimoto.md`). Дефолт лишається симетрія.
+> **Variant (Hashimoto):** asymmetric L/R crossovers, tuned by ear each side separately — allowed **only when symmetry won't image**; then verify the imaging carefully (`method-hashimoto.md`). The default stays symmetry.
 
-### Захист динаміків при Bessel
+### Driver protection with Bessel
 
-Через плавне коліно BE пропускає більше енергії нижче зрізу:
-- На мідбасі: HP зріз трохи вище (65-75 Гц замість 60 Гц)
-- На СЧ: HP зріз вище ніж при LR (350-400 Гц замість 300 Гц)
-- Слідкуй за ходом дифузора мідбаса при гучному басі
+Because of the gentle knee, BE passes more energy below the cutoff:
+- On the midbass: HP cutoff a bit higher (65–75 Hz instead of 60 Hz)
+- On the mid: HP cutoff higher than with LR (350–400 Hz instead of 300 Hz)
+- Watch the midbass cone excursion on loud bass
 
-### Акустична сумація на стику: LR4 «на одній частоті» — це ОКРЕМИЙ випадок
+### Acoustic summation at the joint: LR4 "at one frequency" is a SPECIAL case
 
-Електрична частота кросовера ≠ акустична точка сумації. На стику складаються ДВІ криві (драйвер+фільтр кожна), і результат визначає їхня взаємна **ФАЗА** в зоні перекриття — а кожен порядок фільтра докручує фазу ~45° біля коліна.
+The electrical crossover frequency ≠ the acoustic summation point. At the joint TWO curves add (driver+filter each), and the result is set by their mutual **PHASE** in the overlap region — and each filter order adds ~45° of phase near the knee.
 
-- **LR4 (4-й порядок кожна гілка) — зручний випадок:** обидві гілки на ОДНІЙ частоті дають синфазну суму ≈ 0 дБ (плаский стик). Саме тому для LR «LP = HP по частоті» працює.
-- **Будь-який інший тип/порядок** на одній частоті дає **АБО провал** (фази розходяться), **АБО горб** (Bessel summation ≠ 0 дБ). Це не «помилка» — це фазова поведінка типу/порядку.
+- **LR4 (4th order each leg) — the convenient case:** both legs at the SAME frequency give an in-phase sum ≈ 0 dB (a flat joint). That's exactly why "LP = HP in frequency" works for LR.
+- **Any other type/order** at one frequency gives **EITHER a dip** (the phases diverge) **OR a hump** (Bessel summation ≠ 0 dB). This isn't a "mistake" — it's the phase behavior of the type/order.
 
-**Тому задача — не «симетрично vs рознести» за таблицею, а СПРОГНОЗУВАТИ частоти зрізів (з урахуванням типу, порядку І фаз/шляхів У САЛОНІ), щоб АКУСТИЧНА сума на стику вийшла правильна → і перевірити її ВИМІРОМ суми, а не лише електричними числами.** Приклади нижче — ілюстрація принципу, не універсальні числа:
+**So the task is not "symmetric vs spread" by a table, but to PREDICT the cutoff frequencies (accounting for type, order AND phase/paths IN THE CABIN) so the ACOUSTIC sum at the joint comes out right → and to verify it by MEASURING the sum, not just by electrical numbers.** The examples below illustrate the principle, not universal numbers:
 
-- LR4: обидві гілки на 3500 Гц → сума ≈ 0 дБ.
-- BE4 вручну: рознести (напр. LP СЧ 2500 / HP ВЧ 4000–5000) **або** трохи знизити рівень однієї гілки — щоб горб зник.
-- Через NTT (`process-phases.md` крок 5б): даєш тулу тип/частоту/порядок → він рахує per-band цілі з коефіцієнтами сумації. Але салонні фаза/шлях теж впливають → отримані цілі = **стартовий прогноз, верифікувати виміром реальної суми**.
+- LR4: both legs at 3500 Hz → sum ≈ 0 dB.
+- BE4 by hand: spread them (e.g. mid LP 2500 / tweeter HP 4000–5000) **or** drop one leg's level a touch — so the hump disappears.
+- Via NTT (`process-phases.md` step 5b): you give the tool type/frequency/order → it computes per-band targets with summation coefficients. But cabin phase/path matter too → the resulting targets = **a starting prediction, verify by measuring the real sum**.
 
-⚠️ Не плутати з **симетрією L/R** (§вище: однакові тип+порядок зліва й справа — лишається законом). Тут мова про вибір ЧАСТОТ на стику МІЖ полосами, не про L vs R.
+⚠️ Don't confuse this with **L/R symmetry** (§above: the same type+order on the left and right — remains the law). Here we're talking about choosing the FREQUENCIES at the joint BETWEEN bands, not L vs R.
 
-> **Передбачуваність схилу (чому крос ↔ лінеаризація ітеративні):** сира точка перетину двох драйверів **бреше**, якщо в зоні стику є breakup-пік/горб — накладений електричний фільтр дасть НЕ той акустичний схил. Тому грубі піки в зоні перекриття спершу прибери (Output EQ, `process-phases` 2а), щоб акустичний схил став передбачуваним, далі уточни крос. Це не строго лінійно (крос Фаза 1 → EQ Фаза 2), а **ітеративно**: зачепив EQ біля стику — перевір сумацію стику знову.
+> **Slope predictability (why crossover ↔ linearization are iterative):** the raw crossing point of two drivers **lies** if there's a breakup peak/hump in the joint region — the electrical filter on top will give the WRONG acoustic slope. So clear the gross peaks in the overlap region first (Output EQ, `process-phases` 2a) to make the acoustic slope predictable, then refine the crossover. This isn't strictly linear (crossover Phase 1 → EQ Phase 2) but **iterative**: if you touched EQ near the joint — re-check the joint summation.

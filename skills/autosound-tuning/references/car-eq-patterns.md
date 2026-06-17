@@ -1,251 +1,251 @@
-# Типові Акустичні Проблеми і EQ в Автозвуці
+# Common acoustic problems and EQ in car audio
 
-> ⚠️ **Це стартові евристики** — типові патерни й орієнтовні діапазони з практики, не догма. Кожен рух валідувати виміром (peak-vs-null `diagnostic §2`, mic-shift `§13`) і вухом; числа підлаштовувати під систему. Аномалії КОНКРЕТНОГО авто → профіль проєкту (`autosound_context.md`), не цей файл. Сторона «гарячішого» каналу залежить від LHD/RHD і геометрії — приклади нижче писані з LHD-салону.
+> ⚠️ **These are starting heuristics** — typical patterns and ballpark ranges from practice, not dogma. Validate every move by measurement (peak-vs-null `diagnostic §2`, mic-shift `§13`) and by ear; tune the numbers to the system. A SPECIFIC car's anomalies → the project profile (`autosound_context.md`), not this file. Which channel is the "hotter" side depends on LHD/RHD and geometry — the examples below are written from an LHD cabin.
 
-## Головний Принцип: Прозорість = Мінімум Обробки
+## The main principle: transparency = minimum processing
 
-> "Чим менше точок еквалайзера для досягнення цільової кривої, тим більше 'повітря' залишиться в системі."
+> "The fewer EQ points it takes to reach the target curve, the more 'air' stays in the system."
 
-**Правило роботи з провалами:**
-- Вузькі глибокі провали (< 5 дБ ширини) — це фазове скасування. **Не підіймати EQ!** Підсилювач витрачає потужність, але звук не з'являється.
-- Широкі пологі провали > 10 дБ — можна обережно підняти до +4..6 дБ максимум.
+**Rule for dips:**
+- Narrow deep dips (< 5 dB wide) are phase cancellation. **Don't raise EQ!** The amp burns power, but no sound appears.
+- Wide shallow dips > 10 dB — you can carefully raise them, up to +4..6 dB at most.
 
-**Правило роботи з піками:**
-- Піки — різати. Cut завжди краще за Boost.
-- Вузькі піки (Q > 4) — гострий Notch-фільтр.
-- Широкі підйоми — полога корекція або Shelf.
-
----
-
-## Tweeter (ВЧ)
-
-### Типові проблеми
-
-**Горб 7-9 кГц (частіше на правому каналі)**
-- Причина: відбиття від лобового скла
-- Симптом: "цикання" або "піщаність" тарілочок, образи тягнуться вправо
-- Рішення: PK 7500-8500 Гц, -4..-6 дБ, Q=3-4
-
-**Горб на 12-16 кГц**
-- Причина: природня характеристика твітера або відбиття
-- Рішення: HSF (High Shelf) 11000-13000 Гц, -3..-4 дБ, Q=1-1.5
-- **Не чіпати вузькими фільтрами вище 10 кГц** — звучить гірше ніж проблема
-
-**Асиметрія L/R на ВЧ:**
-- Правий (ближчий до скла) майже завжди яскравіший
-- Компенсація: HSF на правому каналі, або знижений Gain правого твітера
-- Ніколи не компенсувати різними типами/порядками кросоверів!
-
-### Прозорість ВЧ
-
-"Прозорість" — не кількість ВЧ, а відсутність фазового сміття в зоні 2-5 кГц.
-
-Якщо після EQ зникла легкість:
-1. Вимкни всі фільтри вище 5 кГц на обох каналах
-2. Якщо легкість повернулась — знайшов причину
-3. Плавно опусти рівень твітерів через Gain, не вмикаючи EQ
+**Rule for peaks:**
+- Peaks — cut them. A cut is always better than a boost.
+- Narrow peaks (Q > 4) — a sharp notch filter.
+- Broad rises — a gentle correction or a shelf.
 
 ---
 
-## Середньочастотник (СЧ) в Подіумі
+## Tweeter (HF)
 
-### Типові проблеми
+### Typical problems
 
-**Горб 2-3 кГц (резонанс подіуму або відбиття від скла)**
-- Найчастіша проблема
-- Симптом: "крикливість", "різкість" жіночого вокалу
-- Визначення: чи змінюється горб при ослабленому кріпленні динаміка → якщо так, то вібрація корпусу; якщо ні → акустика салону
-- Рішення: PK 2300-2500 Гц, -5..-7 дБ, Q=4-5
+**Peak 7–9 kHz (more often on the right channel)**
+- Cause: reflection off the windshield
+- Symptom: "spitting" or "graininess" on cymbals, images pull to the right
+- Fix: PK 7500–8500 Hz, −4..−6 dB, Q=3–4
 
-**Break-up дифузора (4-5 кГц)**
-- Механічний резонанс дифузора
-- Рішення: PK 4500-5000 Гц, -3..-5 дБ, Q=6-8
-- Якщо кросовер вже тут відрізає — може не знадобитись
+**Peak at 12–16 kHz**
+- Cause: the tweeter's natural response or a reflection
+- Fix: HSF (High Shelf) 11000–13000 Hz, −3..−4 dB, Q=1–1.5
+- **Don't touch above 10 kHz with narrow filters** — it sounds worse than the problem
 
-**Провал 600 Гц — 1 кГц**
-- Фазове скасування від відбиття торпедо/скла
-- **НЕ ЧІПАТИ** — підйом EQ не допоможе, тільки забруднить звук
+**L/R asymmetry in the treble:**
+- The right one (closer to the glass) is almost always brighter
+- Compensation: an HSF on the right channel, or a lower gain on the right tweeter
+- Never compensate with different crossover types/orders!
 
-**Горб 150-300 Гц (резонанс малого подіуму)**
-- Динамік грає в замкненому об'ємі → пружність повітря піднімає Fs
-- Рішення: PK 200-250 Гц, -3..-4 дБ, Q=1.5-2, або LSF (Low Shelf)
+### Treble transparency
 
-### Причина горбу: чому подіум "дзвонить"
+"Transparency" isn't the amount of treble — it's the absence of phase trash in the 2–5 kHz region.
 
-**Стояча хвиля:** Якщо внутрішній діаметр ≈ λ/2 на проблемній частоті → резонанс. Для 2.5 кГц λ ≈ 13 см → ризик при ∅ > 6 см.
-
-**Рефракція:** Хвиля від краю подіуму повертається в фазі на певній частоті → горб, який не залежить від вентиляції або наповнювача.
-
-**Вібрація корпусу:** Жорсткий матеріал (PETG CF, карбон) → мало демпфування → кошик динаміка резонує разом з корпусом. Рішення: гумові шайби під кріплення динаміка.
+If the airiness vanished after EQ:
+1. Disable all filters above 5 kHz on both channels
+2. If the airiness came back — you found the cause
+3. Gently lower the tweeter level via Gain, without engaging EQ
 
 ---
 
-## Мідбас в Дверях
+## Midrange (mid) in a pod
 
-### Типові проблеми
+### Typical problems
 
-**Горб 150-250 Гц (резонанс дверей)**
-- Найпоширеніша проблема
-- Симптом: "бубнявий", "картонний" бас, "гул" при вокалі
-- Рішення: PK 180-230 Гц, -4..-6 дБ, Q=2-3
+**Peak 2–3 kHz (pod resonance or a reflection off the glass)**
+- The most common problem
+- Symptom: "shoutiness", "harshness" on female vocals
+- Diagnosis: does the peak change when you loosen the driver's mounting → if yes, it's enclosure vibration; if no → cabin acoustics
+- Fix: PK 2300–2500 Hz, −5..−7 dB, Q=4–5
 
-**Провал 120-180 Гц (антирезонанс карти дверей)**
-- Фазове скасування
-- **НЕ ПІДІЙМАТИ** — закривається правильними затримками в парі з сабом
+**Cone break-up (4–5 kHz)**
+- A mechanical resonance of the cone
+- Fix: PK 4500–5000 Hz, −3..−5 dB, Q=6–8
+- If the crossover already cuts here — it may not be needed
 
-**Зайва енергія 500-1000 Гц (мідбас "співає" голосом)**
-- Симптом: голос "розщеплюється", частина звуку іде з дверей
-- Рішення: HSF (High Shelf) 400-450 Гц, -4..-6 дБ, Q=0.7 → допомагає кросоверу швидше відсікти
-- Або додатковий PK 700-900 Гц, -4 дБ, Q=4
+**Dip 600 Hz – 1 kHz**
+- Phase cancellation from a dash/glass reflection
+- **DON'T TOUCH** — raising EQ won't help, it'll only muddy the sound
 
-**Принцип: мідбас грає тільки бас**
-Увімкни мідбас один без інших динаміків. Якщо чуєш слова пісні — мідбас грає занадто високо. EQ і HSF поки не стане "бубнявим".
+**Peak 150–300 Hz (small-pod resonance)**
+- The driver plays into a closed volume → the air's compliance raises Fs
+- Fix: PK 200–250 Hz, −3..−4 dB, Q=1.5–2, or LSF (Low Shelf)
 
-### Стратегія лінеаризації мідбаса
+### Cause of the peak: why a pod "rings"
 
-1. Виставити кросовери (LR4 HP 80 Гц, LR4 LP 300 Гц)
-2. Замір MMM окремо ліво, окремо право
-3. Auto EQ в REW, обмежити зону 60-400 Гц
-4. Вибрати тільки фільтри в **мінус** (прибрати горби)
-5. Додати HSF 400-450 Гц, -4..-5 дБ для "дорізки"
-6. Провали в зоні 120-180 Гц → ігнорувати
+**Standing wave:** if the internal diameter ≈ λ/2 at the problem frequency → resonance. For 2.5 kHz, λ ≈ 13 cm → risk when ∅ > 6 cm.
 
----
+**Refraction:** the wave from the pod's edge returns in phase at a certain frequency → a peak that doesn't depend on venting or stuffing.
 
-## Сабвуфер в Седані
-
-### Типи корпусу саба (загальне; конкретні числа авто — у профіль з ВИМІРУ)
-
-Вибір корпусу — **не лише акустика**: ще монтаж + **місцева легальність техогляду** (нім. TÜV/HU — різання/переробка кузова може не пройти).
-
-- **Sealed / Closed Box (ЗЯ):** замкнене повітря = пружина, що **демпфує/контролює** хід конуса → тугий старт-стоп, точний бас; спад ~12 дБ/окт нижче Fb, плавний; лягає на cabin gain; толерантний до драйвера. **Робоча конячка SQ/контролю.** Субсонік бажаний, не критичний.
-- **Ported / Bass-Reflex (ФІ, фазоінвертор):** порт додає віддачу біля Fb (гучніше/SPL, ефективніше), але спад ~24 дБ/окт нижче Fb + гірший group delay/transient; **нижче Fb драйвер РОЗВАНТАЖУЄТЬСЯ → субсонік ОБОВ'ЯЗКОВИЙ**; можливий port noise. Менше «тугості» за ЗЯ.
-- **Infinite Baffle (IB):** драйвер на **баффлі** (задня полка / герметична стінка багажника), **багажник = великий нерестриктивний об'єм**. **Золоте правило — 100% ізоляція:** передня й задня хвиля НЕ змішуються (інакше акустичне КЗ → втрата НЧ) → треба **герметизувати межу багажник↔салон** (різати/ущільнювати полицю) → **інвазивно + ризик техогляду (TÜV)**. Потребує **IB-придатний драйвер (free-air Qts >0.6)** — низько-Qts (<0.4) «розхлябується». **Менше контролю за ЗЯ** (нема повітря-пружини; особливо на гучності — sealed тугіший на піку); зате ефективний, глибокий, без коробкової забарвленості, економить місце. **Субсонік/infrasonic ОБОВ'ЯЗКОВИЙ** (нема compliance-фільтрації → інфразвук → bottoming). На помірних рівнях добре зроблений IB ≈ ЗЯ за SQ; різниця на гучності — на користь ЗЯ. *(НЕ беззастережний «SQ-фаворит».)*
-- **Cabin gain (всі типи):** салон підіймає НЧ донизу — це **реальна віддача**, не плющити наосліп (деталі ↓ «Room Gain»).
-- **Мідбас-контроль** — теж ЗЯ / герметизовані-оброблені двері (двері = «дірява» квазі-IB). IB — **сабова** топологія, не для мідбаса.
-
-⚠️ **Число конкретного авто** (напр. «ЗЯ ~35 л → +10-15 дБ <50 Гц») — у профіль ТОГО авто з **виміру**, НЕ успадковувати з іншого проєкту.
-
-### Room Gain (Посилення від Салону)
-
-Салон седана додає +10..15 дБ нижче 50 Гц. Це нормально.
-
-**Правило:** Саб у седані має бути на **+4..6 дБ** гучніший за мідбаси на фінальній АЧХ (психоакустична норма для авто).
-
-### Типові проблеми
-
-**Пік 35-50 Гц (резонанс салону)**
-- Симптом: "гудіння" в зоні баса, звук "важкий" і повільний
-- Рішення: PK на резонансній частоті, -5..-8 дБ, Q=3-5
-
-**Провал 60-80 Гц (стоячі хвилі або протифаза від задньої полки)**
-- **НЕ ПІДІЙМАТИ EQ** — закривається правильними затримками з мідбасом
-- Якщо підняти EQ → підсилювач перегрівається, бас "ватний"
-
-**Саб "тягне" ззаду (локалізація)**
-- Причина: саб грає занадто високо (вище 70 Гц) або затримки неправильні
-- Рішення: знизити LP до 60-63 Гц; перевірити фазу (інвертувати 180°); виставити затримки
-
-### Алгоритм інтеграції саба
-
-1. LP: 60-63 Гц, LR4 або BW4
-2. Subsonic (HP): 15-20 Гц, BW 12 дБ/окт (для ЗЯ)
-3. EQ: прибрати піки резонансу (Notch)
-4. HSF зверху: 85-125 Гц, -4..-6 дБ — додаткове відсікання "хвоста"
-5. **Фаза:** після виставлення кросоверів і затримок — спробуй 0° і 180°, слухай де бас "стрибає" на капот
-6. **Затримки:** виміряй фізичну відстань рулеткою, введи в Helix, потім фінальна корекція на слух
-
-### BE4 для саб/мідбас стику
-
-Bessel на стику дає "злитий" і артикульований бас:
-- LP саб: BE4, 45-50 Гц
-- HP мідбас: BE4, 65-75 Гц (вище ніж LP саба!)
-- Перевір фазу: 0° або 180° на сабі
-- Після переходу з LR4 може знадобитися мікрокорекція затримок
+**Enclosure vibration:** a stiff material (PETG CF, carbon) → little damping → the driver's basket resonates with the enclosure. Fix: rubber washers under the driver's mounting.
 
 ---
 
-## Цільові Криві (House Curve)
+## Midbass in the doors
 
-> **Кривої-дефолту НЕМає — вибір робиться З користувачем** під його жанри/смак/призначення: таблиця **крива→характер** + метод аудиції → `voicing-by-ear.md`; принцип «крива = старт, не фініш» → `naming-and-structure.md §6`. Нижче — лише анатомія двох прикладів для розуміння структури.
+### Typical problems
+
+**Peak 150–250 Hz (door resonance)**
+- The most widespread problem
+- Symptom: "boomy", "cardboard" bass, a "drone" on vocals
+- Fix: PK 180–230 Hz, −4..−6 dB, Q=2–3
+
+**Dip 120–180 Hz (door-card antiresonance)**
+- Phase cancellation
+- **DON'T RAISE** — it's closed with the right delays, paired with the sub
+
+**Excess energy 500–1000 Hz (the midbass "sings" with the voice)**
+- Symptom: the voice "splits", part of the sound comes from the doors
+- Fix: HSF (High Shelf) 400–450 Hz, −4..−6 dB, Q=0.7 → helps the crossover cut faster
+- Or an extra PK 700–900 Hz, −4 dB, Q=4
+
+**Principle: the midbass plays only bass**
+Play the midbass alone, with no other drivers. If you can make out the song's lyrics — the midbass plays too high. Apply EQ and an HSF until you no longer hear the lyrics from it.
+
+### Midbass linearization strategy
+
+1. Set the crossovers (LR4 HP 80 Hz, LR4 LP 300 Hz)
+2. MMM measurement, left and right separately
+3. Auto EQ in REW, limit the range to 60–400 Hz
+4. Keep only the **negative** filters (remove the peaks)
+5. Add an HSF 400–450 Hz, −4..−5 dB for the "extra cut"
+6. Dips in the 120–180 Hz region → ignore
+
+---
+
+## Subwoofer in a sedan
+
+### Sub enclosure types (general; a specific car's numbers go in the profile, from MEASUREMENT)
+
+Choosing the enclosure is **not only acoustics**: also the install + **local roadworthiness-inspection legality** (German TÜV/HU — cutting/modifying the body may fail it).
+
+- **Sealed / Closed Box:** the trapped air = a spring that **damps/controls** the cone's motion → tight start-stop, accurate bass; a ~12 dB/oct roll-off below Fb, gentle; rides on the cabin gain; tolerant of the driver. **The SQ/control workhorse.** A subsonic is desirable, not critical.
+- **Ported / Bass-Reflex:** the port adds output near Fb (louder/SPL, more efficient), but a ~24 dB/oct roll-off below Fb + worse group delay/transient; **below Fb the driver UNLOADS → a subsonic is MANDATORY**; possible port noise. Less "tightness" than a sealed box.
+- **Infinite Baffle (IB):** the driver on a **baffle** (the rear deck / a sealed trunk wall), with **the trunk = a large non-restrictive volume**. **The golden rule — 100% isolation:** the front and rear waves must NOT mix (otherwise an acoustic short → loss of bass) → you must **seal the trunk↔cabin boundary** (cut/seal the deck) → **invasive + an inspection risk (TÜV)**. It needs an **IB-suitable driver (free-air Qts >0.6)** — a low-Qts one (<0.4) gets "sloppy". **Less control than a sealed box** (no air spring; especially at volume — sealed is tighter on peaks); but it's efficient, deep, without boxy coloration, and saves space. **A subsonic/infrasonic filter is MANDATORY** (no compliance filtering → infrasound → bottoming). At moderate levels a well-built IB ≈ a sealed box for SQ; the difference at volume favors the sealed box. *(NOT an unconditional "SQ favorite".)*
+- **Cabin gain (all types):** the cabin lifts the low end downward — this is **real output**, don't flatten it blindly (detail ↓ "Room Gain").
+- **Midbass control** — also a sealed box / sealed-and-treated doors (a door = a "leaky" quasi-IB). IB is a **sub** topology, not for the midbass.
+
+⚠️ **A specific car's number** (e.g. "sealed ~35 L → +10–15 dB <50 Hz") goes in THAT car's profile, from **measurement**, NOT inherited from another project.
+
+### Room Gain (cabin reinforcement)
+
+A sedan cabin adds +10..15 dB below 50 Hz. That's normal.
+
+**Rule:** in a sedan the sub should be **+4..6 dB** louder than the midbasses on the final FR (a psychoacoustic norm for cars).
+
+### Typical problems
+
+**Peak 35–50 Hz (cabin resonance)**
+- Symptom: "droning" in the bass region, the sound is "heavy" and slow
+- Fix: PK at the resonant frequency, −5..−8 dB, Q=3–5
+
+**Dip 60–80 Hz (standing waves or anti-phase from the rear deck)**
+- **DON'T RAISE EQ** — it's closed with the right delays with the midbass
+- If you raise EQ → the amp overheats, the bass goes "cottony"
+
+**The sub "pulls" from behind (localization)**
+- Cause: the sub plays too high (above 70 Hz) or the delays are wrong
+- Fix: lower the LP to 60–63 Hz; check the phase (invert 180°); set the delays
+
+### Sub integration algorithm
+
+1. LP: 60–63 Hz, LR4 or BW4
+2. Subsonic (HP): 15–20 Hz, BW 12 dB/oct (for a sealed box)
+3. EQ: remove the resonance peaks (notch)
+4. HSF at the top: 85–125 Hz, −4..−6 dB — extra "tail" cut
+5. **Phase:** after setting the crossovers and delays — try 0° and 180°, listen for where the bass "jumps" onto the hood
+6. **Delays:** measure the physical distance with a tape measure, enter it in Helix, then a final correction by ear
+
+### BE4 for the sub/midbass joint
+
+Bessel at the joint gives a "cohesive" and articulate bass:
+- Sub LP: BE4, 45–50 Hz
+- Midbass HP: BE4, 65–75 Hz (higher than the sub LP!)
+- Check the phase: 0° or 180° on the sub
+- After switching from LR4 you may need a micro-correction of the delays
+
+---
+
+## Target curves (house curve)
+
+> **There is NO default curve — the choice is made WITH the user** for their genres/taste/purpose: the **curve→character** table + the audition method → `voicing-by-ear.md`; the principle "a curve = a start, not a finish" → `naming-and-structure.md §6`. Below — just the anatomy of two examples, to understand the structure.
 
 ### RAW-Cat (Andy Wehmeyer)
 
-**Філософія:** "Не чіпай те, що не заважає." Залишає більше природної енергії динаміків.
+**Philosophy:** "Don't touch what isn't in the way." Leaves more of the drivers' natural energy.
 
-**Структура:**
-- До 60-80 Гц: підйом +8..12 дБ (підтримка низького баса)
-- 80-300 Гц: плавний спад (-6..-8 дБ на ділянці)
-- 300 Гц — 3 кГц: легкий нахил вниз (-0.5..1 дБ/октава) — зберігає "тіло" звуку
-- Вище 3-5 кГц: плавний спад High Shelf (-2..-4 дБ)
+**Structure:**
+- Up to 60–80 Hz: a +8..12 dB rise (low-bass support)
+- 80–300 Hz: a gentle roll-off (−6..−8 dB across the span)
+- 300 Hz – 3 kHz: a slight downward tilt (−0.5..1 dB/octave) — keeps the "body" of the sound
+- Above 3–5 kHz: a gentle High Shelf roll-off (−2..−4 dB)
 
-**Характер vs ResoNix Accurate** (приклад того, як криві РІЗНЯТЬСЯ смаком, не «правильністю»): Accurate рівніша в нижній середині 300-500 Гц — точніше, але може звучати «тонше»; RAW-Cat лишає більше «тіла» вокалу/інструментів — тепліше, але темніше. Що з цього пасує — вирішує клієнт вухом.
+**Character vs ResoNix Accurate** (an example of how curves DIFFER by taste, not by "correctness"): Accurate is flatter in the lower mids 300–500 Hz — more accurate, but it can sound "thinner"; RAW-Cat leaves more "body" to vocals/instruments — warmer, but darker. Which one fits — the client decides by ear.
 
 ### Harman In-Car
 
-- Науково обґрунтована крива
-- Легкий підйом баса, провал 2-4 кГц для комфорту, рівні ВЧ
-- Універсальний кандидат «як у навушниках»
+- A scientifically grounded curve
+- A slight bass rise, a 2–4 kHz dip for comfort, level treble
+- A universal "headphone-like" candidate
 
-### Як накладати на Virtual Layer
+### How to apply it on the Virtual Layer
 
-В Helix DSP PC-Tool, вкладка Virtual EQ:
+In the Helix DSP PC-Tool, the Virtual EQ tab:
 
 ```
-Low Shelf: 80-100 Гц, +6..8 дБ — підйом баса
-Tilt EQ: широкий нахил для загального характеру
-High Shelf: 5 кГц, -2..-4 дБ — прибрати різкість
+Low Shelf: 80–100 Hz, +6..8 dB — bass lift
+Tilt EQ: a broad tilt for the overall character
+High Shelf: 5 kHz, −2..−4 dB — remove harshness
 ```
 
-Ніколи не намагайся накласти House Curve через кросовери або Output EQ — це розламає фазові стики.
+Never try to apply the House Curve through the crossovers or the Output EQ — it will break the phase joints.
 
 ---
 
-## Вимірювання: Коли і Яке
+## Measurements: when and which
 
-| Метод | Коли використовувати | В REW |
+| Method | When to use | In REW |
 |---|---|---|
-| **MMM** (Moving Mic) | Основна АЧХ, House Curve | SPL → усереднений замір з рухом мікрофону |
-| **Sweep** (одна точка) | Time Alignment, полярність, фаза | Measure → SPL&Phase → фіксований мікрофон |
-| **RTA** | Швидка оцінка, контроль рівнів | RTA → Octave/3rd octave smoothing |
-| **THD** | Перевірка Gain, пошук кліпу | RTA → Show THD |
-| **Impulse Response** | Time Alignment, полярність | З Sweep автоматично |
+| **MMM** (Moving Mic) | Main FR, House Curve | SPL → an averaged measurement with mic movement |
+| **Sweep** (single point) | Time Alignment, polarity, phase | Measure → SPL&Phase → fixed mic |
+| **RTA** | Quick assessment, level control | RTA → Octave/3rd-octave smoothing |
+| **THD** | Gain check, finding clipping | RTA → Show THD |
+| **Impulse Response** | Time Alignment, polarity | Automatically from Sweep |
 
-**Згладжування для аналізу:**
-- 1/6 або 1/3 октави — загальна форма кривої
-- Psychoacoustic — що реально чує мозок (ігнорує вузькі піки)
-- 1/48 — детальна діагностика резонансів (але не для прийняття рішень по EQ)
+**Smoothing for analysis:**
+- 1/6 or 1/3 octave — the overall curve shape
+- Psychoacoustic — what the brain actually hears (ignores narrow peaks)
+- 1/48 — detailed resonance diagnosis (but not for making EQ decisions)
 
-**Не вирівнювати дрібні нерівності видимі на 1/48** — те що бачить мікрофон, вухо часто ігнорує. Вузькі піки/провали від відбиттів — "вбиватиме" живість звуку.
+**Don't flatten the small ripples visible at 1/48** — what the mic sees, the ear often ignores. Chasing narrow peaks/dips from reflections "kills" the liveliness of the sound.
 
 ---
 
-## Аномалії конкретного авто → профіль проєкту
+## A specific car's anomalies → the project profile
 
-Стійкі салонні аномалії (дифракційні провали, фазові розриви, SBIR-нотчі, антикорельовані зони) — це **проєктний стан**, не загальний патерн: вони живуть у профілі `autosound_context.md` (§4/§6) і НЕ передіагностуються щосесії. Для Passat B8 там: провал лівого мідбаса ~150 Гц, room-gain ~190 Гц, фазовий розрив СЧ 230–320 Гц, SBIR-нотчі R645/L850, антикорельований панч мідбасів. Тут — лише переносні прийоми нижче.
+Persistent cabin anomalies (diffraction dips, phase gaps, SBIR notches, anti-correlated zones) are **project state**, not a general pattern: they live in the `autosound_context.md` profile (§4/§6) and are NOT re-diagnosed every session. For the Passat B8, there: a left-midbass dip ~150 Hz, room-gain ~190 Hz, an L/R mid phase gap 230–320 Hz, SBIR notches R645/L850, anti-correlated midbass punch. Here — only the transferable techniques below.
 
-### Under-lapping — загальний принцип
+### Under-lapping — the general principle
 
-Under-lapping = свідоме розведення LP і HP в різні боки від проблемної зони.
+Under-lapping = deliberately spreading the LP and HP to opposite sides of a problem region.
 
 ```
-Звичайна зшивка (LR4):    Мідбас LP 300 Гц ←──→ СЧ HP 300 Гц
-Under-lapping:             Мідбас LP 250 Гц     СЧ HP 350 Гц
-                                          ↕ провал 250–350 Гц
-                                          (навмисна "дірка")
+Normal crossover (LR4):    Midbass LP 300 Hz ←──→ Mid HP 300 Hz
+Under-lapping:             Midbass LP 250 Hz      Mid HP 350 Hz
+                                          ↕ dip 250–350 Hz
+                                          (a deliberate "hole")
 ```
 
-**Коли застосовувати:**
-- Мікро-затримки не закривають фазовий розрив між суміжними каналами
-- Є геометрично/акустично обумовлений розрив фаз в певному діапазоні
-- Провал у зоні "дірки" — прийнятна ціна за усунення фазового конфлікту
+**When to use it:**
+- Micro-delays don't close the phase gap between adjacent channels
+- There's a geometrically/acoustically driven phase gap in a certain range
+- A dip in the "hole" region — an acceptable price for removing the phase conflict
 
-**Компроміс:** невеликий дип на суму в зоні під-лепінгу (250–350 Гц в Passat). Перевіряти по сумарній АЧХ і слухати — якщо дип не помітний суб'єктивно, рішення правильне.
+**Trade-off:** a small dip in the sum in the under-lap region (250–350 Hz in the Passat). Check it on the summed FR and listen — if the dip isn't noticeable subjectively, the decision is right.
 
-### Зведення по піку IR (важкі мідбаси — переносний прийом) — ⚠️ TA-прийом Фази 1/2б, НЕ baseline/передсвипний крок
+### Aligning to the IR peak (heavy midbasses — a transferable technique) — ⚠️ a Phase-1/2b TA technique, NOT a baseline/pre-sweep step
 
-Важкий динамік (приклад: GZNK 165SQ-K у Passat). При зведенні по «носу» (старту) IR:
-- Дифузор тільки починає рухатись → акустична енергія ще не дійшла
-- Сцена "падає" — верхній ешелон не тримається
+A heavy driver (example: the GZNK 165SQ-K in the Passat). When aligning to the "nose" (onset) of the IR:
+- The cone is only starting to move → the acoustic energy hasn't arrived yet
+- The stage "collapses" — the upper tier doesn't hold
 
-**Правило для важких мідбасів:** зводити по **100% піку амплітуди** IR, а не по старту (носу). Слухово дає панч і тіло інструментів на торпедо.
+**Rule for heavy midbasses:** align to **100% of the amplitude peak** of the IR, not to the onset (the nose). By ear it gives punch and instrument body on the dash.

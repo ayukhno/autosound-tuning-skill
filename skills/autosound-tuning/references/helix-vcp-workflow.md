@@ -113,4 +113,4 @@ Use it to check the input signal while setting gains. Shows clipping in real tim
 
 ## Starting crossovers → `filter-types-car-audio.md`
 
-The starting crossover sets (there are several, and they evolve) are consolidated in `references/filter-types-car-audio.md` §"Starting sets"; **this car's current choice** → `dsp-state-current` + profile §4. Not duplicated here.
+The starting crossover sets (there are several, and they evolve) are consolidated in `references/filter-types-car-audio.md` §"Starting crossover sets"; **this car's current choice** → `dsp-state-current` + profile §4. Not duplicated here.
