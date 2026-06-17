@@ -1,89 +1,89 @@
-# Feedback loop — розповсюдження скіла і збір досвіду (Фаза 7)
+# Feedback loop — distributing the skill and collecting experience (Phase 7)
 
-Ціль: скіл вчиться з **кожного** проєкту, не лише авторського — акумулює вдалі рішення, ноу-хау, досвід по авто й залізу (DSP, підсилювачі, драйвери). Принципи: **просто** (markdown, без інфраструктури) · **зручно** (пакет формує скіл) · **прозоро** (користувач бачить усе, що відправляє) · **безпечно** (нуль персональних даних, явна згода).
+Goal: the skill learns from **every** project, not just the author's — it accumulates successful decisions, know-how, experience with cars and gear (DSP, amps, drivers). Principles: **simple** (markdown, no infrastructure) · **convenient** (the skill builds the package) · **transparent** (the user sees everything they send) · **safe** (zero personal data, explicit consent).
 
-## Закриваючий ритуал сесії — ЧОТИРИ різні потоки (не змішувати)
+## The session's closing ritual — FOUR distinct streams (don't mix them)
 
-Коли тюн на цьому етапі готовий (після слухової роботи — Фаза 5/6), Claude проводить короткі **інтерактивні** кроки. Усе опційне, нічого не блокує. Ключове: це **різні речі для різних адресатів** — спершу результат (A), фідбек по скілу (B), згода на внесок (C) → **submit**; і **лише ПІСЛЯ submit** — подяка та (при позитиві) тихий донат-лінк (D). ⚠️ **Донат ніколи не серед питань A–C і не згадується жодним словом до submit** — щоб прохання грошей не тиснуло на фідбек.
+When the tune is ready at this stage (after the listening work — Phase 5/6), Claude runs short **interactive** steps. All optional, nothing blocks. The key: these are **different things for different recipients** — first the result (A), feedback on the skill (B), consent to contribute (C) → **submit**; and **only AFTER submit** — thanks and (on a positive) a quiet donation link (D). ⚠️ **The donation is never among questions A–C and isn't mentioned in any word before submit** — so that a request for money doesn't pressure the feedback.
 
-> **ІНТЕРАКТИВНО, не стіною тексту.** Питай **закритими питаннями з готовими варіантами** (кнопки вибору в Claude Code/claude.ai). **Можливість написати вільно — ЗАВЖДИ присутня як ОПЦІЯ** (у AskUserQuestion це поле «Other») — бо вільний зворотний зв'язок це основа відкритості, і автор його **читає**. Але **ніколи не обов'язкова**: відкриті питання підступні (змушують формулювати, відлякують, дають розпливчасті відповіді) → пропонуй канал, не зобов'язуй заповнювати. Максимум 3-4 питання на потік; **сумарно по A+B — ~5-6 «тапів», не більше** (втома вбиває якість відповідей — краще менше, але влучно).
+> **INTERACTIVELY, not a wall of text.** Ask **closed questions with ready options** (choice buttons in Claude Code/claude.ai). **The ability to write freely is ALWAYS present as an OPTION** (in AskUserQuestion that's the "Other" field) — because free feedback is the basis of openness, and the author **reads it**. But **never mandatory**: open questions are treacherous (they force phrasing, deter people, give vague answers) → offer the channel, don't oblige filling it. At most 3–4 questions per stream; **for A+B combined — ~5–6 "taps", no more** (fatigue kills answer quality — better fewer but on point).
 
-**A. Зворотний зв'язок по ПРОЕКТУ (для майстра/клієнта).** Чи досягнуто мети тюну + backlog авто:
-- **Чи досяг пресет мети?** → `Так, повністю` / `Здебільшого` / `Частково` / `Ще ні`
-- **Загальне враження?** → `🙂 чудово` / `😐 норм` / `🙁 поки не те`
-- **Що докрутити насамперед?** *(кілька)* → центр/глибина · тил · бас/саб · тон · сцена-imaging
-→ у session log + backlog проекту. ⚠️ Це про АВТО — «докрутити» сюди, **не плутати зі скілом (B)**.
+**A. Feedback on the PROJECT (for the installer/client).** Whether the tune's goal was met + the car's backlog:
+- **Did the preset meet the goal?** → `Yes, fully` / `Mostly` / `Partly` / `Not yet`
+- **Overall impression?** → `🙂 great` / `😐 ok` / `🙁 not there yet`
+- **What to fine-tune first?** *(several)* → center/depth · rear · bass/sub · tone · stage-imaging
+→ into the session log + the project backlog. ⚠️ This is about the CAR — "fine-tuning" goes here, **don't confuse it with the skill (B)**.
 
-**B. Фідбек по СКІЛУ (для автора скіла).** Що в скілі **спрацювало**, що **було не дуже** — з практики ЦЬОГО проекту:
-- ⚠️ **Питай ЛИШЕ про реально використане.** Звір по changelog/контексту, які фази/прийоми/референси задіяні (intake? nono-цілі? фази стиків? imaging? depth? competition? presets?) — і питай тільки про них. Питати про невикористане = дратувати нерелевантним.
-- напр.: «Що зі скіла найбільше допомогло?» *(вибір із задіяного)* · «Що було незручно / збивало / бракувало?» *(вибір + опц. коментар)*.
-→ матеріал для покращення скіла.
+**B. Feedback on the SKILL (for the skill's author).** What in the skill **worked**, what **wasn't great** — from THIS project's practice:
+- ⚠️ **Ask ONLY about what was actually used.** Check against the changelog/context which phases/techniques/references were engaged (intake? nono targets? joint phase? imaging? depth? competition? presets?) — and ask only about those. Asking about the unused = irritating with the irrelevant.
+- e.g.: "What in the skill helped most?" *(a choice from what was used)* · "What was inconvenient / threw you off / was missing?" *(a choice + an optional comment)*.
+→ material to improve the skill.
 
-**C. Згода поділитися напрацюваннями зі СПІЛЬНОТОЮ — окремий, мотивуючий крок.**
-Claude **збирає КОНКРЕТНІ напрацювання цього проекту**, **згруповані за 3 категоріями досвіду** (вони фолдяться в РІЗНІ місця, тому й групуємо одразу):
-- **① Метод-скіл** — прийоми / фази / діагностика, universal → SKILL.md + references;
-- **② Авто** — аномалії та рішення конкретного кузова/салону → `knowledge/cars/<кузов>.md`;
-- **③ Обладнання** — quirks і можливості DSP / підсилювачів / драйверів → `knowledge/dsp/<dsp>.md`. ⚠️ Досвід із залізом може **ВІДКРИВАТИ нові можливості/пресети** (напр. Goldhorn із surround-DSP → surround-пресет — `preset-strategy.md`).
+**C. Consent to share the work with the COMMUNITY — a separate, motivating step.**
+Claude **collects the SPECIFIC work from this project**, **grouped by 3 experience categories** (they fold into DIFFERENT places, so group them up front):
+- **① Method-skill** — techniques / phases / diagnostics, universal → SKILL.md + references;
+- **② Car** — anomalies and solutions of a specific body/cabin → `knowledge/cars/<body>.md`;
+- **③ Equipment** — quirks and capabilities of the DSP / amps / drivers → `knowledge/dsp/<dsp>.md`. ⚠️ Hardware experience can **OPEN new capabilities/presets** (e.g. a Goldhorn with a surround DSP → a surround preset — `preset-strategy.md`).
 
-Подає **списком, де КОЖЕН пункт уже ПЕРЕДВИДІЛЕНИЙ (☑)**. Користувач **знімає** те, чим не хоче ділитись (**opt-out, не opt-in** — менше тертя, більший внесок), і тисне **«Погоджуюсь відправити на користь спільноті!»**.
-- **Дай відчуття цінності:** реальний досвід з конкретного авто/DSP рідкісний і робить скіл розумнішим **для всіх тюнерів** — це вклад, не рутина. Підкресли важливість досвіду користувача.
-- **Реалізація opt-out у Claude Code** (AskUserQuestion не має передвиділених галочок → емулюй): покажи нумерований список напрацювань у тексті (усі = «увійдуть»), тоді одне питання: `☑ Так, усі — Погоджуюсь відправити на користь спільноті!` / `Оберу, що виключити` / `Не зараз`. Якщо «виключити» → друге multiSelect-питання: що ЗНЯТИ; решта йде в пакет.
-- **Безпека незмінна:** лише метод + класи обладнання, без персоналій/повних замірів (§«Збір досвіду»). Згода на збір ≠ авто-відправка — **публікацію все одно підтверджує людина** (сама або за проханням через `gh` з показом фінального тексту).
+Presents it as **a list where EACH item is already PRE-SELECTED (☑)**. The user **unchecks** what they don't want to share (**opt-out, not opt-in** — less friction, more contribution), and presses **"I agree to send it for the community's benefit!"**.
+- **Give a sense of value:** real experience from a specific car/DSP is rare and makes the skill smarter **for all tuners** — it's a contribution, not a chore. Emphasize the importance of the user's experience.
+- **Implementing opt-out in Claude Code** (AskUserQuestion has no pre-checked boxes → emulate it): show a numbered list of the work in the text (all = "will be included"), then one question: `☑ Yes, all — I agree to send it for the community's benefit!` / `I'll pick what to exclude` / `Not now`. If "exclude" → a second multiSelect question: what to REMOVE; the rest goes into the package.
+- **Safety is unchanged:** only the method + equipment classes, no personal data/full measurements (§"Collecting experience"). Consent to collect ≠ auto-send — **a human still confirms the publication** (themselves or, on request, via `gh` showing the final text).
 
-**D. Подяка — і лише ПІСЛЯ submit тихий донат-лінк (НЕ пункт форми).** Донат **ніколи не серед питань/списків A–C**, і **до submit про нього — жодного слова** (поки користувач відповідає й підтверджує внесок). Аж **після завершення** (опитування + згода C відправлені): коротка подяка, і **тільки якщо A показав позитив** — одне посилання для швидкого донату.
-> «Дякую за фідбек 🙏 Радий, що вийшло. Якщо скіл був корисний — ось швидке посилання підтримати автора: [Sponsor]. Без тиску.»
-- **Ніколи** при незадоволеності (тоді — лише подяка, без донату); **один раз**, не повторювати; **нічого не замикати** за донатом (CC BY-SA, працює без оплати); тон — подяка, не прохання.
-- **Лінк = Sponsor-кнопка** репо / github.com/sponsors/ayukhno. **Якщо Sponsors не активний** (рядок `github:` у `.github/FUNDING.yml` закоментований) — крок **пропустити** мовчки, не вести на неактивне посилання.
+**D. Thanks — and only AFTER submit a quiet donation link (NOT a form item).** The donation is **never among questions/lists A–C**, and **not a word about it before submit** (while the user is answering and confirming the contribution). Only **after completion** (the survey + consent C are sent): a short thanks, and **only if A showed a positive** — one link for a quick donation.
+> "Thanks for the feedback 🙏 Glad it worked out. If the skill was useful — here's a quick link to support the author: [Sponsor]. No pressure."
+- **Never** on dissatisfaction (then — just thanks, no donation); **once**, don't repeat; **don't lock anything** behind a donation (CC BY-SA, works without payment); the tone — gratitude, not a request.
+- **The link = the repo's Sponsor button** / github.com/sponsors/ayukhno. **If Sponsors isn't active** (the `github:` line in `.github/FUNDING.yml` is commented out) — **skip** the step silently, don't lead to a dead link.
 
-> ⏳ Структура потоків A–D **усталена**; **точні формулювання/шкали** A–B шліфувати з РЕАЛЬНИХ прогонів (вони дають кращі питання, ніж armchair-редагування). Тримати закритими + опційно-відкритими, у бюджеті ~5-6 тапів. A має дві осі (досяг мети vs суб'єктивне враження) — не плутати, не зливати.
+> ⏳ The A–D stream structure is **settled**; **the exact wording/scales** of A–B are polished from REAL runs (they give better questions than armchair editing). Keep them closed + optionally-open, within a ~5–6 tap budget. A has two axes (goal met vs subjective impression) — don't confuse them, don't merge them.
 
 ---
 
-## Розповсюдження скіла
+## Distributing the skill
 
-- **Канон = git-репозиторій скіла** (autosound-tuning + сусід `review-loop` разом — вони пара), **без проєктних даних**: метод відсепарований від машини (профіль `autosound_context.md`, виміри, dsp-state — живуть локально в проєкті користувача і ніколи не входять у скіл).
-- **Версії:** git-теги `vN` + `CHANGELOG.md` (рядок на рефактор; джерело — записи «Last refactor» зі skill-inbox автора).
-- **Установка в нові руки:** clone → копія/симлінк у `.claude/skills/` проєкту тюнера → перша сесія починається з `project-intake.md`. Оновлення = `git pull` (власні файли користувача — профіль, inbox — лежать у його проєкті, тому pull їх не чіпає).
-- Опційно: `package_skill.py` (skill-creator) → `.skill`-файл для установки в claude.ai.
+- **The canon = the skill's git repository** (autosound-tuning + the sibling `review-loop` together — they're a pair), **without project data**: the method is separated from the car (the `autosound_context.md` profile, measurements, dsp-state — live locally in the user's project and never enter the skill).
+- **Versions:** git tags `vN` + `CHANGELOG.md` (a line per refactor; the source — the "Last refactor" entries from the author's skill-inbox).
+- **Installing for new hands:** clone → a copy/symlink into the tuner's project `.claude/skills/` → the first session starts from `project-intake.md`. Updates = `git pull` (the user's own files — the profile, the inbox — live in their project, so a pull doesn't touch them).
+- Optionally: `package_skill.py` (skill-creator) → a `.skill` file for installing into claude.ai.
 
-## Збір досвіду — feedback-пакет
+## Collecting experience — the feedback package
 
-**Тригер (проактивний):** наприкінці проєкту або значної сесії Claude **сам пропонує** «сформувати пакет фідбеку автору скіла?» — не чекаючи прохання (також спрацьовує на «сформуй фідбек»). Проактивність — лише на боці *пропозиції й підготовки*; **відправку завжди робить людина** (див. етап 2 — принцип безпеки). **Механіка — два окремі етапи:**
+**Trigger (proactive):** at the end of a project or a significant session, Claude **proposes itself** "build a feedback package for the skill's author?" — without waiting to be asked (it also fires on "build feedback"). The proactivity is only on the *proposing and preparing* side; **a human always does the sending** (see step 2 — the safety principle). **The mechanics — two separate stages:**
 
-1. **Формування і фіксація (локально).** Скіл збирає дані з `skill-inbox.md` + changelog (`Урок:`-рядки) + профілю і пише **`feedback-YYYY-MM-DD.md`** у проєкті за шаблоном. Користувач читає, редагує, каже «ОК» → файл **зафіксований у проєкті**. На цьому етапі **нікуди нічого не відправлено** — але цінність уже є: зафіксовані пакети лежать поруч, і їх можна віддати разом/пізніше.
-2. **Доставка автору (опційно, окремим явним рішенням).** Користувач сам шле файл одним із каналів нижче — або просить Claude зробити це за нього (напр. `gh issue create`, якщо GitHub CLI налаштований), і тоді Claude **показує фінальний текст і чекає явного підтвердження** перед відправкою. «ОК» з етапу 1 ≠ згода на відправку.
+1. **Building and recording (locally).** The skill collects data from `skill-inbox.md` + the changelog (`Lesson:` lines) + the profile and writes **`feedback-YYYY-MM-DD.md`** in the project per the template. The user reads it, edits, says "OK" → the file is **recorded in the project**. At this stage **nothing has been sent anywhere** — but there's value already: the recorded packages sit nearby and can be handed over together/later.
+2. **Delivery to the author (optional, a separate explicit decision).** The user sends the file themselves via one of the channels below — or asks Claude to do it for them (e.g. `gh issue create`, if the GitHub CLI is set up), and then Claude **shows the final text and waits for explicit confirmation** before sending. The "OK" from stage 1 ≠ consent to send.
 
-### Шаблон пакета
+### The package template
 
 ```markdown
-# Feedback: <авто/кузов> · <DSP> · <дата> · skill <версія>
-## Сетап (класи обладнання, без персоналій)
-авто/кузов · DSP · підсилювачі · драйвери + позиції · саб/оформлення · мік-риг
-## Що спрацювало
-кросовер-сети · прийоми · вдалі symptom→fix · треки-маркери
-## Що НЕ спрацювало / де скіл помилявся або мовчав
-## Нові прийоми / ноу-хау (формат skill-inbox: 📚 один рядок + чому/докази)
-## DSP/залізо-quirks (→ knowledge/dsp/)
-## Аномалії салону цього кузова (→ knowledge/cars/)
+# Feedback: <car/body> · <DSP> · <date> · skill <version>
+## Setup (equipment classes, no personal data)
+car/body · DSP · amps · drivers + positions · sub/enclosure · mic rig
+## What worked
+crossover sets · techniques · successful symptom→fix · track markers
+## What did NOT work / where the skill erred or was silent
+## New techniques / know-how (skill-inbox format: 📚 one line + why/evidence)
+## DSP/hardware quirks (→ knowledge/dsp/)
+## This body's cabin anomalies (→ knowledge/cars/)
 ```
 
-### Канали відправки (за зростанням формальності)
+### Sending channels (by increasing formality)
 
-1. **GitHub Issue** у репо скіла за issue-шаблоном — дефолт: прозоро, тредами, історія видна всім.
-2. **PR**: пакет у `community-inbox/<кузов>-<дата>.md`.
-3. Без git: файл автору месенджером/поштою.
+1. **A GitHub Issue** in the skill's repo per the issue template — the default: transparent, threaded, the history visible to all.
+2. **A PR**: the package in `community-inbox/<body>-<date>.md`.
+3. Without git: the file to the author by messenger/email.
 
-### Правила безпеки пакета
+### Package safety rules
 
-- **Лише метод + класи обладнання.** БЕЗ: імен, локацій, номерів/VIN, фото, повних замірів (`.mdat` великі й ідентифікують систему) — числа лише проріджені, як для критика (`analysis-playbook.md`).
-- Пакет — plain markdown, прочитаний користувачем ПЕРЕД відправкою. Сумнівний рядок → викинути.
+- **Only the method + equipment classes.** WITHOUT: names, locations, plate/VIN numbers, photos, full measurements (`.mdat` are large and identify the system) — numbers only decimated, as for the critic (`analysis-playbook.md`).
+- The package — plain markdown, read by the user BEFORE sending. A doubtful line → drop it.
 
-## Бік автора — як досвід вливається у скіл
+## The author's side — how experience flows into the skill
 
-- `community-inbox/` обробляється **тим самим maintenance loop** (harvest → correlate → fold, SKILL.md): кожен пункт звіряється зі скілом; тег походження `[source: <кузов>/<автор>]` зберігається.
-- **Суперечить нашим висновкам → VARIANT, не видалення** (правило maintenance loop §2: інша геометрія/салон може робити пораду правильною).
-- **Залізо-досвід акумулюється в бібліотеку профілів у скілі:**
-  - `knowledge/cars/<кузов>.md` — карта салону: типові аномалії, переможні кросовер-сети, особливості (перший профіль — Passat B8 з `autosound_context` §4/§6 у знеособленій формі);
-  - `knowledge/dsp/<dsp>.md` — еквівалент helix-* трійки (архітектура шарів, формат EQ-обміну, quirks).
-  На intake нової машини скіл **першим ділом перевіряє**, чи вже є профіль цього кузова/DSP (`project-intake.md §4`).
-- Подяка: contributor-рядок у CHANGELOG.
+- `community-inbox/` is processed by **the same maintenance loop** (harvest → correlate → fold, SKILL.md): each item is checked against the skill; the origin tag `[source: <body>/<author>]` is kept.
+- **Contradicts our conclusions → a VARIANT, not a deletion** (maintenance loop rule §2: a different geometry/cabin can make the tip right).
+- **Hardware experience accumulates into the skill's profile library:**
+  - `knowledge/cars/<body>.md` — the cabin map: typical anomalies, winning crossover sets, quirks (the first profile — the Passat B8 from `autosound_context` §4/§6 in de-identified form);
+  - `knowledge/dsp/<dsp>.md` — the equivalent of the helix-* trio (layer architecture, the EQ-exchange format, quirks).
+  At a new car's intake the skill **checks first** whether a profile of this body/DSP already exists (`project-intake.md §4`).
+- Thanks: a contributor line in the CHANGELOG.

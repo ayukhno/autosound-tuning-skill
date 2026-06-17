@@ -62,10 +62,10 @@ GEMINI_ADVISOR_MODEL=gemini-2.5-pro
 
 After any install/CLI/model change, run one real micro-package — the channel can break silently (a flag rename once killed both wrappers; only the smoke test caught it):
 ```bash
-printf '## Тест\nПеревірка каналу: відповідай одним рядком "канал працює".\n' > /tmp/smoke.md
+printf '## Test\nChannel check: reply with one line "channel works".\n' > /tmp/smoke.md
 scripts/gemini_critic.sh /tmp/smoke.md
 ```
-Expect a one-line Gemini reply + a `— [критик: <model>]` tag. A `*: not found` / `context not found` / `no Gemini CLI` error tells you exactly which of §1–§3 to fix.
+Expect a one-line Gemini reply + a `— [<role>: <model>]` tag (the wrapper labels the role in the project's language — e.g. `критик` for the critic). A `*: not found` / `context not found` / `no Gemini CLI` error tells you exactly which of §1–§3 to fix.
 
 ## 6. No Gemini? Use the fallback ladder (the ROLE still happens)
 
