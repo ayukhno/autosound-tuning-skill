@@ -60,9 +60,9 @@ The full protocol lives in the **Data Contract** — read it before your first p
 1. **Mic + input/output in REW** — mic connected, the correct input/output device selected, levels sane (loopback for phase-critical work).
 2. **REW API server running** (`localhost:4735` responds) — otherwise the data pull fails.
 3. **Cabin ready to measure** — all windows/doors closed; seat in the right position for the current measurement (LP for the listener; a mic-shift is a deliberate offset).
-4. **DSP input matches the CURRENT task** (not one fixed input). For **SWEEP measurements** — the measurement-signal input; for **listening** — the music-source input. Which input means what lives in the **project profile §1** (in the Passat: sweep → RCA/LineIN from Scarlett; listening → OPTICAL S/PDIF ISUDAR, not RCA and not BT). ⚠️ **Switching a preset can silently reset the input to another card** → no sound / wrong sound. Confirm the active input = the current task.
+4. **DSP input matches the CURRENT task** (not one fixed input). For **SWEEP measurements** — the measurement-signal input; for **listening** — the music-source input. The input-to-task mapping lives in the **project profile §1** (in the Passat: sweep → RCA/LineIN from Scarlett; listening → OPTICAL S/PDIF ISUDAR, not RCA and not BT). ⚠️ **Switching a preset can silently reset the input to another card** → no sound / wrong sound. Confirm the active input = the current task.
 
-> It's 30 seconds, but it saves hours: the typical losses — measuring on the wrong mic (the laptop one → void data), the API not up, or an open window shifting the bass/reflections. If the user says "ready / measuring" after a pause — still run those 3 points quickly anyway.
+> It's 30 seconds, but it saves hours: the common pitfalls — measuring on the wrong mic (the laptop one → void data), the API not up, or an open window shifting the bass/reflections. If the user says "ready / measuring" after a pause — still run those 3 points quickly anyway.
 
 > **Naming hygiene — remind the user at the start of working with the skill.** In REW the measurement order is fragile: reorder / delete / an accidental **sort** (one stray click and the list is reshuffled). So **the name is the only stable identity of a measurement**, not its position. Keep names disciplined (`channel…_N`, where `_N` = config version), group into `setup step.X` only for convenience (the numbering doesn't change), and **never trust the visual order**. Full rules → `references/naming-and-structure.md` (§3a — history hygiene).
 
@@ -74,7 +74,7 @@ The full protocol lives in the **Data Contract** — read it before your first p
 
 A session is multi-day and a Mac restart wipes the chat, so **the working state lives in project files, not the chat.** **If these files don't exist — this is a NEW project: go to `references/project-intake.md`** (briefing + interview + install verification + file creation) — don't invent state. Otherwise, before you propose or change *anything*, read these **in order** and reconcile — a fresh session that skips this re-derives work, or worse, overwrites a decision already made:
 
-1. **`…/_AI/Autosound/audit-trail.md`** (iCloud; fallback `rew_analitic/`) — the **canonical decision log**. The Gemini wrapper appends every round here (Trace ID, decision, key objection, verdict). **"Bank" decisions — agreed but NOT yet applied — live here**, and they're the easiest to lose. A real miss once happened *because this file wasn't read*: always open it.
+1. **`…/_AI/Autosound/audit-trail.md`** (iCloud; fallback `rew_analitic/`) — the **canonical decision log**. The Gemini wrapper appends every round here (Trace ID, decision, key objection, verdict). **"Banked" decisions — agreed but NOT yet applied — live here**, and they're the easiest to lose. A real miss once happened *because this file wasn't read*: always open it.
 2. **`tuning-changelog`** (project memory) — steps with status (🟡 proposed / 🟢 applied / 📏 measured / ✅ accepted / ❌ rejected) + the **▶️ CONTINUE block** (named in the project's language) at the top (what's pending for this session).
 3. **`dsp-state-current`** (project memory) — what is *actually* in the DSP now (version, crossovers, TA, EQ, gains, polarity).
 4. **Active target curve** (project memory) + **REW** (`rew_analitic/measurements-*.mdat` or live API; suffix `_N` = version, e.g. `tw-L_7` = v7).
@@ -102,19 +102,19 @@ The car / DSP / drivers / mic rig / cabin-anomaly map are **PROJECT state, not s
 
 Rules that hold for ANY profile:
 
-- **Verify the delta, don't re-derive** — the profile holds *what's known*; what's *currently in the DSP* is `dsp-state-current`. **Polarity / trims / anomalies — read from profile + project memory, never assume a number** (polarity verified per-joint by **summation**, not IR first-movement — `diagnostic-techniques §9`; stale-note precedent: the early "mid +180°" claim).
+- **Verify the delta, don't re-derive** — the profile holds *what's known*; what's *currently in the DSP* is `dsp-state-current`. **Polarity / trims / anomalies — read from profile + project memory, never assume a number** (polarity verified per-joint by **summation**, not IR first arrival — `diagnostic-techniques §9`; stale-note precedent: the early "mid +180°" claim).
 - **DSP state not readable? (no dump / screen-read / export)** — not a dead end. The hinge is *can you measure PER-CHANNEL*, not *can you read the DSP* (`project-intake §4` tiers): solo each output → **reverse-engineer the current tune from measurements** (crossovers/TA/polarity/EQ from per-channel FR/phase/IR — `diagnostic-techniques §22`), then proceed normally, **confirming every change by re-measurement** (no read-back = higher drift risk). If channels can't be isolated at all (summed-only) → tonal balance to target + imaging by ear; no crossover/phase/TA surgery.
 - **Known anomalies in the profile are NOT re-diagnosed** every session — and EQ-boost into non-minimum-phase nulls is forbidden regardless of car (`diagnostic §2`).
-- **Crossover type is chosen per joint, not globally.** Starting variant sets → `references/filter-types-car-audio.md`; the project's current choice lives in `dsp-state-current`. Picking the stitch frequency is a **phase-summation prediction** (type + order + in-cabin phase), not a table number — LR4 sums flat at one matched frequency, other types/orders need the points predicted so the *acoustic* sum is right (`filter-types §Acoustic summation`). **Keep L/R symmetric (same type/order/frequency) by default** for a stable phantom centre; asymmetric L/R is the Hashimoto by-ear variant, used only when symmetric won't image.
+- **Choose the crossover type per joint, not globally.** Starting variant sets → `references/filter-types-car-audio.md`; the project's current choice lives in `dsp-state-current`. Picking the stitch frequency is a **phase-summation prediction** (type + order + in-cabin phase), not a table number — LR4 sums flat at one matched frequency, other types/orders need the points predicted so the *acoustic* sum is right (`filter-types §Acoustic summation`). **Keep L/R symmetric (same type/order/frequency) by default** for a stable phantom centre; asymmetric L/R is the Hashimoto by-ear variant, used only when symmetric won't image.
 - **An explicit user instruction is an Arbiter decision, not a hypothesis to overrule.** If the user says "build on LR4", that's the starting point. Surface a tradeoff if you genuinely see one ("BE4 can suit near-coplanar m↔tw — want to A/B?"), but **don't override their choice with a knowledge-profile default**, and **never assert a profile's install-detail** (coplanarity, driver model, enclosure volume, anomaly Hz) as fact about *their* car to justify the override. The profile is a checklist to verify by measurement; the user decides.
-- **Target / house curve: chosen per session WITH the user — there is NO default curve.** Help choose via the curve→character table (`references/voicing-by-ear.md`) + intake answers (genres/taste). The curve defines **SHAPE only, not level** — level is worked separately from measured levels.
-- **Sample rate matches the rig** (ideally the DSP's native internal rate for the main mic; a USB spot-check mic uses its own hardware max) — per-mic rates live in the profile §3.
+- **Choose the target / house curve per session WITH the user — there is NO default curve.** Help choose via the curve→character table (`references/voicing-by-ear.md`) + intake answers (genres/taste). The curve defines **SHAPE only, not level** — level is worked separately from measured levels.
+- **Match the sample rate to the rig** (ideally the DSP's native internal rate for the main mic; a USB spot-check mic uses its own hardware max) — per-mic rates live in the profile §3.
 
 ---
 
 ## The process
 
-The documented end-to-end process (**Phase −1 new-project intake** [`project-intake.md`] → Phase 0 baseline → Phase 1 crossovers/level/delay + nono per-channel targets → Phase 2 hygiene-EQ → joint phase → summed-curve alignment (band pairs / sides / SW+Ws) → final EQ-to-target, in that order → Phase 3 control verdict → Phase 4 optional center/rear → **Phase 5 targeted listening verification** [penultimate; also a cross-cutting ear-tool used throughout] → **Phase 6 client-preference voicing** [subjective] → **Phase 7 wrap-up: project survey · skill feedback · community-share consent · post-submit thanks/donation** [`feedback-loop.md`]) is in:
+The documented end-to-end process (**Phase −1 new-project intake** [`project-intake.md`] → Phase 0 baseline → Phase 1 crossovers/level/delay + Nono per-channel targets → Phase 2 hygiene-EQ → joint phase → summed-curve alignment (band pairs / sides / SW+Ws) → final EQ-to-target, in that order → Phase 3 control verdict → Phase 4 optional center/rear → **Phase 5 targeted listening verification** [penultimate; also a cross-cutting ear-tool used throughout] → **Phase 6 client-preference voicing** [subjective] → **Phase 7 wrap-up: project survey · skill feedback · community-share consent · post-submit thanks/donation** [`feedback-loop.md`]) is in:
 
 **`references/process-phases.md`** — read it to know which step the user is on and what to produce. **Targeted listening (Phase 5) uses `references/test-tracks.md`** — a hypothesis-driven ear check: pick the track that exposes the dimension, tell the user what to play + listen for.
 
@@ -141,7 +141,7 @@ The flip side of resume: leave the next session a clean handoff, and feed the sk
 - **Skill candidates** → when a session yields a *generalizable* lesson, or confirms/overturns a practice (not just this car's numbers), drop a one-liner into the **skill inbox** `rew_analitic/skill-inbox.md`, tagged `📚`. This is the raw material the maintenance loop folds into the skill — capture it now or it's gone by next restart.
 - **Config backup (at a milestone — a locked/named state, not every save)** → copy the DSP config export into `rew_analitic/dsp-config/` and update its `README.md` map (binary → `dsp-state` version + date + one-liner). Small + irreplaceable → git/GitHub, so the tune survives a disk loss. The binary RESTORES; `dsp-state` EXPLAINS — keep both. Layout + what-goes-where (and the NEW-PROJECT file convention) → `naming-and-structure.md §4a`.
 
-> **State vs candidate — keep them apart.** *"Tomorrow: midbass L/R balance by ear"* is **project state** → changelog. *"Heavy-midbass polarity must be judged by summation, not IR first-movement"* is a **skill candidate** → inbox. The skill holds reusable method; the project holds this car's specific tune.
+> **State vs candidate — keep them apart.** *"Tomorrow: midbass L/R balance by ear"* is **project state** → changelog. *"Heavy-midbass polarity must be judged by summation, not IR first arrival"* is a **skill candidate** → inbox. The skill holds reusable method; the project holds this car's specific tune.
 
 ## Skill maintenance loop (periodic refactor — harvest → correlate → fold)
 
@@ -252,7 +252,7 @@ Default to **Sonnet 4.6** for the session; escalate to **Opus 4.8** only on hard
 | Critic round that **escalates / 3-3 deadlock** | **Opus** | nuanced disagreement |
 | **Final verdict** (Phase 3) + judge-error diagnosis | **Opus** | the calls that decide quality |
 | Tricky **phase / sub↔midbass / L-R region** decisions | **Opus** | subtle psychoacoustics |
-| Pure mechanical mass fetches | Haiku | rarely worth switching |
+| Routine data fetching | Haiku | rarely worth switching |
 
 Gemini critic always runs (free) → even on Sonnet there's a second expert head; Opus is for Claude's own hard calls. **Announce the switch at the START of the step**, not after.
 
