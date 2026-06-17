@@ -65,7 +65,7 @@ After any install/CLI/model change, run one real micro-package — the channel c
 printf '## Test\nChannel check: reply with one line "channel works".\n' > /tmp/smoke.md
 scripts/gemini_critic.sh /tmp/smoke.md
 ```
-Expect a one-line Gemini reply + a `— [<role>: <model>]` tag (the wrapper labels the role in the project's language — e.g. `критик` for the critic). A `*: not found` / `context not found` / `no Gemini CLI` error tells you exactly which of §1–§3 to fix.
+Expect a one-line Gemini reply + a `— [critic: <model>]` tag (or `[advisor: …]` for the advisor variant). A `*: not found` / `context not found` / `no Gemini CLI` error tells you exactly which of §1–§3 to fix.
 
 ## 6. No Gemini? Use the fallback ladder (the ROLE still happens)
 

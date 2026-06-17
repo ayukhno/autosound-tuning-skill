@@ -37,27 +37,27 @@ trap 'rm -f "$PROMPT_FILE"' EXIT
 
 {
   cat <<'HDR'
-SYSTEM ROLE — ТИ КРИТИК (Challenger) у дводмодельному циклі налаштування авто-звуку.
-Завдання: знайти акустичні ризики й хибні припущення в ПРОПОЗИЦІЇ Генератора.
-Машина / DSP / стан системи — у блоці AUTOSOUND CONTEXT нижче; спирайся лише на нього, не припускай інше авто.
-Правила:
-  • НЕ хвали. Не погоджуйся за замовчуванням.
-  • Заперечення мають бути ФАЛЬСИФІКОВАНИМИ (перевірюваними на слух/виміром), не «вайбом».
-  • Думай фізикою салону + психоакустикою, а не математикою ідеальних фільтрів.
-  • Памʼятай: all-pass плоский по АЧХ — будь-яка зміна АЧХ іде через СУМАЦІЮ джерел.
-Відповідай СТРОГО у форматі «Критик → Генератор» з §4 Контракту, українською.
+SYSTEM ROLE — YOU ARE THE CRITIC (Challenger) in a two-model car-audio tuning loop.
+Task: find acoustic risks and false assumptions in the Generator's PROPOSAL.
+The car / DSP / system state is in the AUTOSOUND CONTEXT block below; rely only on it, don't assume a different car.
+Rules:
+  • DON'T praise. Don't agree by default.
+  • Objections must be FALSIFIABLE (testable by ear/measurement), not "a vibe".
+  • Think in cabin physics + psychoacoustics, not the math of ideal filters.
+  • Remember: an all-pass is flat in FR — any FR change comes through source SUMMATION.
+Respond STRICTLY in the "Critic → Generator" format from Contract §4, in English.
 
-====== DATA CONTRACT (регламент) ======
+====== DATA CONTRACT (the protocol) ======
 HDR
   cat "$CONTRACT"
-  printf '\n\n====== AUTOSOUND CONTEXT (єдина точка правди) ======\n'
+  printf '\n\n====== AUTOSOUND CONTEXT (the single source of truth) ======\n'
   cat "$CONTEXT"
-  printf '\n\n====== ПАКЕТ ГЕНЕРАТОРА (це й критикуй) ======\n'
+  printf '\n\n====== GENERATOR PACKAGE (critique this) ======\n'
   cat "$PKG"
   if [[ -n "$TRACE" && -f "$TRACE" ]]; then
-    printf '\n\n====== ПРИКРІПЛЕНИЙ ТРЕЙС (проріджений, для звірки прочитання даних) ======\n'
+    printf '\n\n====== ATTACHED TRACE (decimated, to verify the reading of the data) ======\n'
     cat "$TRACE"
   fi
 } > "$PROMPT_FILE"
 
-gemini_run "$PRIMARY_MODEL" "$FALLBACK_MODEL" "$PROMPT_FILE" "критик"
+gemini_run "$PRIMARY_MODEL" "$FALLBACK_MODEL" "$PROMPT_FILE" "critic"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # gemini_advisor.sh — Claude↔Gemini "Advisor-Expert" channel (depth/staging work).
 #
-# Variant of gemini_critic.sh where Gemini plays ADVISOR-EXPERT (Радник-Експерт),
+# Variant of gemini_critic.sh where Gemini plays ADVISOR-EXPERT,
 # not pure Challenger: a collaborative peer who brings car-audio staging expertise
 # + community best-practice, names acoustic risks AND proposes concrete solutions,
 # builds on the Generator's analysis, and may pose questions back to the Arbiter.
@@ -35,39 +35,39 @@ trap 'rm -f "$PROMPT_FILE"' EXIT
 
 {
   cat <<'HDR'
-SYSTEM ROLE — ТИ РАДНИК-ЕКСПЕРТ (Advisor-Expert) у спільній роботі над сценою авто-звуку (ширина / глибина / тональність).
-Машина / DSP / етап роботи (front-only чи повна система) — у блоці AUTOSOUND CONTEXT нижче. Спирайся ЛИШЕ на нього: не припускай інше авто, інший DSP чи геометрію драйверів з памʼяті.
-Це СПІЛЬНА робота колег, не змагання. Claude = Оркестратор/Генератор, ти = Радник-Експерт, користувач = Арбітр.
+SYSTEM ROLE — YOU ARE THE ADVISOR-EXPERT in a collaborative car-audio staging effort (width / depth / tonality).
+The car / DSP / work stage (front-only or the full system) is in the AUTOSOUND CONTEXT block below. Rely ONLY on it: don't assume a different car, a different DSP, or driver geometry from memory.
+This is COLLABORATIVE work between colleagues, not a contest. Claude = Orchestrator/Generator, you = Advisor-Expert, the user = Arbiter.
 
-Твоя роль (ширша за Критика):
-  • Приноси ГЛИБОКУ експертизу зі staging/depth + найкращі практики спільнот (DIYMA, bestcaraudio, EMMA-суддівство).
-  • Не лише шукай ризики — ПРОПОНУЙ конкретні рішення і порядок кроків.
-  • Будуй НА аналізі Генератора (доповнюй/уточнюй), а не лише спростовуй.
-  • Чесно називай і ризик, і де ФІЗИЧНА СТЕЛЯ розташування драйверів — але її межі бери з CONTEXT/вимірів ЦЬОГО авто (розташування/копланарність СЧ-ВЧ, відстані), не з памʼяті про інший інсталяшн.
-  • Заперечення/поради — ФАЛЬСИФІКОВАНІ (перевірюваність на слух/виміром), не «вайб».
-  • Думай фізикою салону + психоакустикою (precedence/Haas, ILD/ITD/IPD, відбиття скла), не математикою ідеальних фільтрів.
-  • Памʼятай: all-pass плоский по АЧХ — зміна АЧХ лише через СУМАЦІЮ джерел; all-pass НЕ заповнює магнітудний нуль.
-  • Якщо тобі для поради БРАКУЄ даних або потрібне рішення Арбітра — СФОРМУЛЮЙ питання до користувача (Claude передасть).
+Your role (broader than the Critic's):
+  • Bring DEEP staging/depth expertise + community best-practice (DIYMA, bestcaraudio, EMMA judging).
+  • Don't only find risks — PROPOSE concrete solutions and an order of steps.
+  • Build ON the Generator's analysis (extend/refine it), don't only refute.
+  • Honestly name both the risk and where the PHYSICAL CEILING of driver placement is — but take its limits from THIS car's CONTEXT/measurements (mid-tweeter placement/coplanarity, distances), not from memory of another install.
+  • Objections/advice — FALSIFIABLE (testable by ear/measurement), not "a vibe".
+  • Think in cabin physics + psychoacoustics (precedence/Haas, ILD/ITD/IPD, glass reflections), not the math of ideal filters.
+  • Remember: an all-pass is flat in FR — an FR change comes only through source SUMMATION; an all-pass does NOT fill a magnitude null.
+  • If you lack data for advice or need an Arbiter decision — FORMULATE a question for the user (Claude will relay it).
 
-МАЄШ ПАМʼЯТЬ СЕСІЇ (нижче блок «ПАМʼЯТЬ РАДНИКА») — це накопичені рішення/дані попередніх раундів. Спирайся на неї, не повторюй уже узгоджене, нарощуй.
+YOU HAVE SESSION MEMORY (the "ADVISOR MEMORY" block below) — accumulated decisions/data from previous rounds. Rely on it, don't repeat what's already agreed, build on it.
 
-Відповідай українською, структуровано: (1) оцінка пропозиції, (2) ризики/застереження (фальсифіковані), (3) конкретні поради + порядок, (4) питання до Арбітра якщо є.
+Respond in English, structured: (1) assessment of the proposal, (2) risks/caveats (falsifiable), (3) concrete advice + order, (4) questions for the Arbiter if any.
 
-====== DATA CONTRACT (регламент, формат пакета §3) ======
+====== DATA CONTRACT (the protocol, package format §3) ======
 HDR
   cat "$CONTRACT"
-  printf '\n\n====== AUTOSOUND CONTEXT (єдина точка правди) ======\n'
+  printf '\n\n====== AUTOSOUND CONTEXT (the single source of truth) ======\n'
   cat "$CONTEXT"
   if [[ -f "$ADVISOR_MEMORY" ]]; then
-    printf '\n\n====== ПАМʼЯТЬ РАДНИКА (накопичені рішення/дані сесій depth) ======\n'
+    printf '\n\n====== ADVISOR MEMORY (accumulated decisions/data from depth sessions) ======\n'
     cat "$ADVISOR_MEMORY"
   fi
-  printf '\n\n====== ПАКЕТ ГЕНЕРАТОРА (Claude) — обговори як Радник ======\n'
+  printf '\n\n====== GENERATOR PACKAGE (Claude) — discuss as the Advisor ======\n'
   cat "$PKG"
   if [[ -n "$TRACE" && -f "$TRACE" ]]; then
-    printf '\n\n====== ПРИКРІПЛЕНИЙ ТРЕЙС (проріджений) ======\n'
+    printf '\n\n====== ATTACHED TRACE (decimated) ======\n'
     cat "$TRACE"
   fi
 } > "$PROMPT_FILE"
 
-gemini_run "$PRIMARY_MODEL" "$FALLBACK_MODEL" "$PROMPT_FILE" "радник"
+gemini_run "$PRIMARY_MODEL" "$FALLBACK_MODEL" "$PROMPT_FILE" "advisor"

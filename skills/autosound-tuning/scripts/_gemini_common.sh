@@ -100,7 +100,7 @@ gemini_run() {
   echo ">> ${role}: $primary  [cli=$GEMINI_FLAVOR]" >&2
   out="$(_run_model "$primary" "$pf" || true)"; used="$primary"
   if _is_quota_error "$out"; then
-    echo ">> $primary недоступна/вичерпана → фолбек на $fallback" >&2
+    echo ">> $primary unavailable/exhausted → falling back to $fallback" >&2
     out="$(_run_model "$fallback" "$pf" || true)"; used="$fallback (fallback)"
   fi
   printf '%s\n' "$out"
