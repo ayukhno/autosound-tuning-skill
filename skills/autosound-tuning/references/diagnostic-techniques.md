@@ -1,125 +1,125 @@
-# Діагностичні прийоми та евристики (напрацьовано в сесіях)
+# Diagnostic techniques and heuristics (worked out in sessions)
 
-Практичні методи інтерпретації REW-замірів, що багаторазово рятували. Доповнює `analysis-playbook.md` (який замір на яке питання) — тут «як читати й вирішувати».
+Practical methods for interpreting REW measurements that have saved us repeatedly. Complements `analysis-playbook.md` (which measurement for which question) — here it's "how to read and decide".
 
-## 1. Рівень: анкер до мідів / повної цілі, НІКОЛИ не абсолют
-- Абсолютний SPL **дрейфує між проходами** (гучність, референс — траплялись зсуви +18 дБ). Завжди працювати ВІДНОСНО / нормовано.
-- Рівень полоси прив'язувати до **офсету МІДІВ vs їхня ціль** (міди = опорний рівень системи).
-- Порівнювати з **ПОВНОЮ ціллю** (напр. Jazzi #1), а НЕ з пер-смуговими під-цілями: вони мають сміттєві поза-смугові рівні → дають хибний офсет. Реальний приклад: `sub vs Jazzi_sw` показав +6 «гарячий», а `ALL vs Jazzi#1` — в цілі. Вірити повній.
-- **Дрейф референсу:** якщо «зміна» рухає смуги, яких фільтр НЕ чіпає, або рівномірно зсуває всю криву — це зсув референсу/гучності, не твоя зміна. Перебазуватись, не EQ-ити.
+## 1. Level: anchor to the mids / the full target, NEVER an absolute
+- Absolute SPL **drifts between passes** (loudness, reference — shifts of +18 dB have happened). Always work RELATIVELY / normalized.
+- Anchor a band's level to the **MIDS' offset vs their target** (the mids = the system's reference level).
+- Compare with the **FULL target** (e.g. Jazzi #1), NOT with the per-band sub-targets: they have junk out-of-band levels → they give a false offset. A real example: `sub vs Jazzi_sw` showed +6 "hot", but `ALL vs Jazzi#1` — on target. Trust the full one.
+- **Reference drift:** if a "change" moves bands the filter does NOT touch, or shifts the whole curve uniformly — it's a reference/loudness shift, not your change. Re-baseline, don't EQ.
 
-## 2. Пік чи нуль — вирішити ДО будь-якого EQ
-- Нормувати **кожен канал до його ВЛАСНИХ сусідів** (±~1 окт) → видно, хто має пік (різати) vs провал (нуль, НЕ заповнювати). Часто «провал правого» = «гарячий лівий».
-- Канселяція vs мінімум-фаза: excess phase / **GD-спайк** у провалі (sweep, не RTA); або **мікро-зсув міка ±10 см** (дно «їде» = позиційний відбивний нуль = EQ не бере). Глибина > +6 dB щоб «виправити» ⇒ майже напевно канселяція.
-- **Однобічний нуль** (ліва має, права ні) → відбиття геометрії тієї сторони. Центрувати лише зрізом ГУЧНІШОЇ сторони (садить смугу) — крихко й позиційно; часто краще лишити, особливо під змагання.
+## 2. Peak or null — decide BEFORE any EQ
+- Normalize **each channel to its OWN neighbors** (±~1 oct) → you see who has a peak (cut) vs a dip (a null, do NOT fill). Often "the right one's dip" = "the left one's hot".
+- Cancellation vs minimum-phase: excess phase / a **GD spike** in the dip (sweep, not RTA); or a **micro mic-shift ±10 cm** (the bottom "moves" = a positional reflective null = EQ won't take it). Depth > +6 dB to "fix" ⇒ almost certainly cancellation.
+- **A one-sided null** (the left has it, the right doesn't) → a reflection off that side's geometry. Center it only by cutting the LOUDER side (it sinks the band) — fragile and positional; often better to leave it, especially for a competition.
 
-## 3. Сумація: виміряна сума vs power-sum
-- `power-sum = 10·log10(10^(A/10) + 10^(B/10))`. Виміряна сума **> power-sum на ~+3** (до +6 у рівних когерентних) = СИНФАЗНА сумація.
-- На **СТИКАХ** (саб↔мідбас): виміряна > power-sum = конструктив, полярність/фаза ок; провал-яма в сумі = канселяція. Швидкий вердикт без заміру фази.
-- **ХАМП ПЕРЕКРИТТЯ:** пер-сторонній `w+m` на +3 над power-sum у широкій смузі = **over-coherent сумація широкого перекриття кросовера** (НЕ гарячий драйвер) → лікувати зменшенням перекриття / детюном фази / точковим зрізом, **НЕ рівнем** (рівень зріже половину енергії, лишить over-coherence).
+## 3. Summation: the measured sum vs the power-sum
+- `power-sum = 10·log10(10^(A/10) + 10^(B/10))`. The measured sum **> the power-sum by ~+3** (up to +6 for equal coherent) = IN-PHASE summation.
+- At the **JOINTS** (sub↔midbass): measured > power-sum = constructive, polarity/phase OK; a dip in the sum = cancellation. A quick verdict without measuring phase.
+- **OVERLAP HUMP:** a per-side `w+m` at +3 over the power-sum across a wide band = **over-coherent summation of a wide crossover overlap** (NOT a hot driver) → treat it by reducing the overlap / detuning the phase / a point cut, **NOT by level** (level would cut half the energy, leaving the over-coherence).
 
-## 4. Перевірка фази стику ПЕРЕД зміною кросовера
-- Перш ніж міняти крос щоб заповнити дірку (напр. опустити HPF міда під дірку мідбаса) — виміряти **Δφ між драйверами на стику** (sweep, loopback). **<~90°** → заповнення синфазне (безпечно, green light). **~180°** → гаситиме (стоп). Це перетворює «ризик» Критика на чітке так/ні.
-- **Мід HPF НИЖЧЕ за мідбас LPF = перекриття** (заповнює дірку); **мід HPF ВИЩЕ за мідбас LPF = розрив** (under-lap, яма). Не плутати напрям.
+## 4. Checking the joint phase BEFORE changing a crossover
+- Before changing a crossover to fill a hole (e.g. lowering the mid's HPF under the midbass's hole) — measure the **Δφ between the drivers at the joint** (sweep, loopback). **<~90°** → the fill is in phase (safe, green light). **~180°** → it'll cancel (stop). This turns the Critic's "risk" into a clear yes/no.
+- **Mid HPF BELOW the midbass LPF = overlap** (fills the hole); **mid HPF ABOVE the midbass LPF = a gap** (under-lap, a trough). Don't confuse the direction.
 
-## 5. Імеджування: центр vs частотне блукання
-- **Рівномірний/пропорційний зсув сцени** вбік + пер-смугові L/R рівні в межах ~0.5 дБ → це **ЧАС, не рівень**. Лікувати затримкою всієї БЛИЖЧОЇ сторони на однакову Δ (глобальний пер-сторонній зсув, ~0.1–0.2 мс) — зберігає внутрішні стики сторони **І** тональний баланс. (Рівень зіпсував би тон; пер-канальний час зламав би стики.)
-- Після центру **окремі тони ще блукають** → вузькі L/R різниці на тих частотах; мапити дрібним `m-L − m-R` (і `tw-L − tw-R`). Зазвичай відбивні нулі однієї сторони (позиційні, див. §2). М'яко зрізати гучнішу сторону або лишити.
+## 5. Imaging: center vs frequency wander
+- **A uniform/proportional stage shift** to one side + per-band L/R levels within ~0.5 dB → it's **TIME, not level**. Treat it by delaying the whole NEARER side by the same Δ (a global per-side shift, ~0.1–0.2 ms) — it preserves the side's internal joints **AND** the tonal balance. (Level would ruin the tone; per-channel time would break the joints.)
+- After centering, **individual tones still wander** → narrow L/R differences at those frequencies; map with a fine `m-L − m-R` (and `tw-L − tw-R`). Usually one side's reflective nulls (positional, see §2). Gently cut the louder side or leave it.
 
-## 6. Два шари EQ: OUTPUT (асиметрія/хірургія) vs VIRTUAL (симетричний войсинг)
-- Virtual-шар у тракті **ВИЩЕ за пер-драйверні кросовери** → його фазовий зсув СПІЛЬНИЙ для всіх драйверів сторони → **НЕ ламає міждрайверні стики**. Тому це безпечне місце для тональної/house-curve форми (на відміну від per-channel EQ після кросоверів).
-- **Асиметрію L/R — на OUTPUT** (поканально); **симетричний залишок войсингу — на VIRTUAL** (L=R linked). Тоді «вимкнув віртуал = нейтральна база» (база curve-agnostic — див. SKILL §Session lifecycle).
-- Не подвоювати: output робить вузькі піки; virtual лишається широким (шелфи/нахил), не пере-notch'ить.
+## 6. Two EQ layers: OUTPUT (asymmetry/surgery) vs VIRTUAL (symmetric voicing)
+- The virtual layer is in the chain **ABOVE the per-driver crossovers** → its phase shift is SHARED across all of the side's drivers → it **does NOT break the inter-driver joints**. So it's the safe place for the tonal/house-curve shape (unlike per-channel EQ after the crossovers).
+- **L/R asymmetry — on OUTPUT** (per-channel); **the symmetric voicing residual — on VIRTUAL** (L=R linked). Then "turn off the virtual = a neutral base" (the base is curve-agnostic — see SKILL §Session lifecycle).
+- Don't double up: the output does the narrow peaks; the virtual stays broad (shelves/tilt), doesn't re-notch.
 
-## 7. Перевірка вимірювального тракту (важкі уроки)
-- **Sample rate сам не ловить не той мік** (лаптопний вбудований грав на 96к, дані виглядали когерентно, але були хибні — не та позиція/калібровка).
-- Якщо результат правдоподібний-але-дивний, або великий несподіваний стрибок/розворот висновку — підозрювати **ТРАКТ** (мік, рівень/референс, позиція) ПЕРЕД тим як EQ-ити.
-- Недійсні дані **чітко маркувати в логу** (changelog/audit), щоб хибні висновки не поїхали в наступну сесію.
+## 7. Checking the measurement chain (hard lessons)
+- **Sample rate alone doesn't catch the wrong mic** (the laptop's built-in one played at 96k, the data looked coherent but was false — wrong position/calibration).
+- If the result is plausible-but-strange, or a big unexpected jump/reversal of a conclusion — suspect the **CHAIN** (mic, level/reference, position) BEFORE you EQ.
+- Mark invalid data **clearly in the log** (changelog/audit), so false conclusions don't ride into the next session.
 
-## 8. Цикл з Критиком — практика
-- Критик ловить сліпі плями (напр.: all-pass крутить фазу ВСІЄЇ смуги → ламає стик m↔tw; не ігноруй L/R-асиметрію в localization-смузі 2–3к; EQ нижче HPF — марно).
-- Але Генератор тримає позицію на ФАКТАХ тракту: якщо Критик переплутав напрям кросовера (перекриття vs under-lap) чи думає що virtual ламає стики — спокійно виправ сигнал-флоу аргументом. Згода = немає нового *фальсифікованого* заперечення.
+## 8. The cycle with the Critic — in practice
+- The Critic catches blind spots (e.g.: an all-pass rotates the phase of the WHOLE band → breaks the m↔tw joint; don't ignore L/R asymmetry in the 2–3k localization band; EQ below the HPF — pointless).
+- But the Generator holds its position on the chain FACTS: if the Critic confused the crossover direction (overlap vs under-lap) or thinks virtual breaks the joints — calmly correct the signal flow with an argument. Agreement = no new *falsifiable* objection.
 
-## 9. Полярність — по СУМАЦІЇ на стику, НЕ по «імпульс вгору/вниз» (урок 2026-06-04)
-- Напрямок першого руху імпульсу НЕНАДІЙНИЙ для полярності: важкий мідбас має повільний фронт (перший рух розмитий); відбиття плутають; **Bessel-стик може сумуватись КОНСТРУКТИВНО при ПРОТИЛЕЖНИХ полярностях сусідів** (реал: мід↑/твітер↓ сумувались чисто на 4-6к). Зробив «всі імпульси вгору» → зламав мід-твітерну суму (дип 3.5-9к).
-- Правильно: полярність по СУМАЦІЇ на кожному стику (sub↔w, w↔m, m↔tw) + **L↔R mono**: coherent vs power-sum. >0 в фазі; провал = фліп. L↔R mono-сума = прямий **тест дифузності** (протифаза в смузі = «об'ємно / наче тил / розмито», центр може лишатись ОК).
-- «Інверсія ОДНОГО драйвера його ГАСИТЬ (тихішає)» = він був У ФАЗІ (інверсія канселює його з парою/сабом). НЕ плутати з фіксом.
+## 9. Polarity — by SUMMATION at the joint, NOT by "impulse up/down" (lesson 2026-06-04)
+- The direction of the impulse's first movement is UNRELIABLE for polarity: a heavy midbass has a slow front (the first movement is blurred); reflections confuse it; **a Bessel joint can sum CONSTRUCTIVELY with the neighbors at OPPOSITE polarities** (real: mid↑/tweeter↓ summed cleanly at 4–6k). Doing "all impulses up" → broke the mid-tweeter sum (a dip 3.5–9k).
+- Correct: polarity by SUMMATION at each joint (sub↔w, w↔m, m↔tw) + **L↔R mono**: coherent vs power-sum. >0 in phase; a dip = flip. The L↔R mono-sum = a direct **diffuseness test** (anti-phase in a band = "spacious / like a rear / smeared", the center may stay OK).
+- "Inverting ONE driver CANCELS it (goes quieter)" = it was IN PHASE (inverting cancels it with the pair/sub). Don't confuse this with a fix.
 
-## 10. In-cabin фаза/таймінг через REW API — НЕНАДІЙНІ (повторюваний ліміт)
-- Сирий IR через API: `startTime` стрибає (~5мс навіть між СУСІДНІМИ замірами), max-abs «пік» ловить ВІДБИТТЯ (не прямий звук) → peak/centroid/GD/комплекс-сума/inter-channel фаза = СМІТТЯ для таймінгу. Били це багато разів.
-- Надійне: **RTA magnitude** (рівень/тон). Для фази/часу — **REW GUI**: GATED заміри (вікно ріже відбиття; добре для мід/ВЧ, на НЧ слабко), **ETC** (онсет важкого мідбаса), **Generate Minimum Phase** (excess phase). АБО сумація / вухо.
-- **Time Offset (спільний, ≈ час приходу ~8.4 мс)** на ВСІ заміри → прибирає bulk-затримку → фаза читабельна (особл. ВЧ), відносний таймінг збережено. Enabler фазового читання. НЕ кожен до власного піку (зітре приходи). ⚠️ Навіть з чистою рефою одно-позиційна фаза в мідах гуляє ±100-200° (відбиття) → не вгадуй delay з неї.
+## 10. In-cabin phase/timing via the REW API — UNRELIABLE (a repeating limit)
+- The raw IR via the API: `startTime` jumps (~5 ms even between ADJACENT measurements), the max-abs "peak" catches a REFLECTION (not the direct sound) → peak/centroid/GD/complex-sum/inter-channel phase = JUNK for timing. We've hit this many times.
+- Reliable: **RTA magnitude** (level/tone). For phase/time — **the REW GUI**: GATED measurements (the window cuts reflections; good for mid/treble, weak in the bass), **ETC** (a heavy midbass's onset), **Generate Minimum Phase** (excess phase). OR summation / the ear.
+- **A Time Offset (shared, ≈ the arrival time ~8.4 ms)** on ALL measurements → removes the bulk delay → the phase is readable (especially the treble), the relative timing is preserved. The enabler of phase reading. NOT each to its own peak (it would erase the arrivals). ⚠️ Even with a clean reference, single-position phase in the mids wanders ±100–200° (reflections) → don't guess the delay from it.
 
-## 11. L/R SHAPE-матчинг для сцени (НЕ лише рівень) (урок 2026-06-04)
-- Для стабільної сцени L=R по **ФОРМІ АЧХ** у зоні образу, не лише рівень-смуги. Тюнінг кожен-до-цілі + L/R рівні цього НЕ гарантує.
-- Симптом «**образ ПРИЛИП до динаміка**, резистентний до рівня/EQ/часу/полярності» → шукати L/R розбіжність ФОРМИ (часто твітери >6к: різні піки L/R). **Ізолювати:** LPF на пару (відрізати верх) — якщо образ відліп → винна зона ВИЩЕ LPF.
-- Матчити: драйверні розбіжності (min-phase) зрізами до спільної форми; широкий салонний пік — м'яко зрізом; **НЕ бустити нулі/канселяції** (power compression). Пріоритет **L=R > кожен-до-цілі**; тон потім СИМЕТРИЧНО; не до тьмяності.
-- Балансний гейн пари — **ЗАМІРЯТИ при РІВНИХ гейнах** (різниця на LP = відстань), не вгадувати: стара асиметрія виявилась ~2-3 dB ЗАВЕЛИКА → over-drive ближчого боку (внесок у яскравість/стик).
+## 11. L/R SHAPE matching for the stage (NOT just level) (lesson 2026-06-04)
+- For a stable stage, L=R by the **FR SHAPE** in the image region, not just the level. Tuning each-to-target + L/R levels does NOT guarantee it.
+- The symptom "**the image STUCK to the driver**, resistant to level/EQ/time/polarity" → look for an L/R SHAPE divergence (often the tweeters >6k: different L/R peaks). **Isolate it:** an LPF on the pair (cut the top) — if the image came unstuck → the band ABOVE the LPF is to blame.
+- Match: driver divergences (min-phase) with cuts to a common shape; a broad cabin peak — gently with a cut; **do NOT boost nulls/cancellations** (power compression). Priority **L=R > each-to-target**; tone afterward SYMMETRICALLY; not to dullness.
+- A pair's balance gain — **MEASURE at EQUAL gains** (the difference at the LP = distance), don't guess: the old asymmetry turned out ~2–3 dB TOO BIG → over-driving the nearer side (a contribution to brightness/the joint).
 
-## 12. Near-field домінування БЛИЖЧОЇ сторони (повторюваний мотив, 2026-06-04)
-- Драйвери з боку водія (ближчі) читаються ГАРЯЧІШЕ на LP попри менший гейн (близькість б'є гейн). Виявлено тричі: footwell-бас (лівий мідбас мода 100), ВЧ-вліво (лівий твітер), верх-СЧ-вліво (m-L +3..5).
-- Образ басу — level/proximity-driven (<150 Гц ITD слабка) → лікувати РІВНЕМ, не TA; precedence на басах майже не діє. (Підтверджено: зріз лівої мідбас-моди підняв бас з footwell на висоту керма.)
-- **Imaging — ОСТАННІМ:** спершу верифікувати полярність/TA/сумацію (фундамент), тоді imaging. Стійкий залишок (лівий-центр вліво) при ЧИСТОМУ фундаменті = частково ФІЗИКА (слухач збоку, асиметрична кабіна) — DSP компенсує частково, не повністю.
+## 12. Near-field dominance of the NEARER side (a repeating motif, 2026-06-04)
+- The driver-side (nearer) drivers read HOTTER at the LP despite a lower gain (proximity beats gain). Found three times: footwell bass (left midbass mode 100), treble-to-the-left (left tweeter), upper-mid-to-the-left (m-L +3..5).
+- The bass image is level/proximity-driven (<150 Hz ITD is weak) → treat it by LEVEL, not TA; precedence barely works in the bass. (Confirmed: cutting the left midbass mode raised the bass from the footwell to the steering-wheel height.)
+- **Imaging — LAST:** first verify polarity/TA/summation (the foundation), then imaging. A persistent residual (left-center to the left) with a CLEAN foundation = partly PHYSICS (the listener off to the side, an asymmetric cabin) — the DSP compensates partly, not fully.
 
-## 13. Mic-shift: мода vs інтерференція; MMM vs соло-LP (2026-06-04)
-- MMM-горб НЕ різати наосліп. Соло-драйвер на 2 позиціях міка (зсув ~25-30 см): фіча СТОЇТЬ по частоті = мода (min-phase, ріжеться); ЇДЕ = просторова інтерференція/SBIR (НЕ EQ). Калібрувати на відомому дифракц. нулі (він має «їхати»).
-- MMM усереднює простір → може ПОКАЗАТИ горб там, де на LP (фікс. sweep) НУЛЬ (реал: w-R 220 — MMM +5.7, соло-LP −12) → зріз зашкодив би. Звіряти соло-фікс перед зрізом.
-- Не оголошувати «DSP вичерпано» зарано — буває не той цільовий параметр (виявилось: L/R shape-матчинг твітерів, а не широкий рівень). Експеримент користувача (LPF) ізолював зону швидше за всі заміри.
+## 13. Mic-shift: mode vs interference; MMM vs solo-LP (2026-06-04)
+- Don't cut an MMM hump blindly. A solo driver at 2 mic positions (a shift ~25–30 cm): the feature STAYS at the frequency = a mode (min-phase, cuttable); it MOVES = spatial interference/SBIR (NOT EQ). Calibrate on a known diffraction null (it should "move").
+- MMM averages space → it may SHOW a hump where at the LP (a fixed sweep) there's a NULL (real: w-R 220 — MMM +5.7, solo-LP −12) → a cut would have hurt. Check the solo-fixed before cutting.
+- Don't declare "the DSP is exhausted" too early — sometimes it's the wrong target parameter (it turned out to be the tweeters' L/R shape match, not a broad level). The user's experiment (an LPF) isolated the region faster than all the measurements.
 
-## 14. Per-channel EQ = ГЛОБАЛЬНА L/R-балансна ручка, не локальна по позиції (2026-06-05)
-- Пер-канальний (output) EQ на частоті F зсуває баланс F для **ВСІЄЇ сцени**, не однієї позиції. Зрізав m-L на 2030 → центрував LC-целесту (була вліво), АЛЕ штовхнув RC-целесту вправо. LC і RC хочуть ПРОТИЛЕЖНОГО → один пер-канальний EQ не задовольнить обидві. Єдине значення, що рендерить усі позиції правильно = **L=R матч рівня на F**. Пер-канальний level-EQ для imaging = інструмент БАЛАНСУ, не позиції.
-- **Driver-breakup матч — до ОДНАКОВОГО кінцевого рівня, не глибше на одній стороні.** Та сама модель драйвера → той самий breakup; зрізати notch на ОБОХ до однакового нетто. Перестрибнути (зрізати недотреновану сторону НИЖЧЕ за іншу) → перекидає дисбаланс на протилежний бік (m-L 2030: −2 = матч, −3 перестрибнув → образ поїхав вправо). Верифікувати: L−R на частоті breakup ≈ 0.
-- **Твітерний скат НИЖЧЕ кросовера — теж матчити L/R.** Розбіжні шелфи між L/R твітерами лишають одну сторону гарячою у скаті під HPF (tw-L LS6100 ріже 2.5-6к, tw-R LS2500 лише <2500 → tw-R гарячий 2.5-3.5к). Навіть −10..−12 dB під passband швидкий транзієнт твітера домінує локалізацію яскравих інструментів (трикутник) → інструмент липне до гарячої сторони. Чек: L/R баланс **СКАТУ**, не лише passband; фікс — точковий PK під шелф іншої сторони.
-- **Targeted imaging-фільтр НЕ дрейфить тон** — метрика: **ALL_new vs ALL_PREV** (не vs ціль). Вузький скат-PK виправив imaging з ~0 зміною в сумарному ALL (тихий у L+R+sub сумі). Imaging-фікси тонально безпечні; чек ±2 dB vs попередній ALL, окремо від ALL vs ціль (несе давні салонні нулі).
+## 14. Per-channel EQ = a GLOBAL L/R balance knob, not local per position (2026-06-05)
+- Per-channel (output) EQ at a frequency F shifts the F balance for the **WHOLE stage**, not one position. Cutting m-L at 2030 → centered the LC celesta (it was to the left), BUT pushed the RC celesta to the right. LC and RC want the OPPOSITE → one per-channel EQ won't satisfy both. The only value that renders all positions right = an **L=R level match at F**. Per-channel level-EQ for imaging = a BALANCE tool, not a position one.
+- **Driver-breakup matching — to the SAME final level, not deeper on one side.** The same driver model → the same breakup; cut the notch on BOTH to the same net. Overshooting (cutting the under-trained side LOWER than the other) → flips the imbalance to the opposite side (m-L 2030: −2 = match, −3 overshot → the image moved right). Verify: L−R at the breakup frequency ≈ 0.
+- **The tweeter's skirt BELOW the crossover — also match L/R.** Divergent shelves between the L/R tweeters leave one side hot in the skirt under the HPF (tw-L LS6100 cuts 2.5–6k, tw-R LS2500 only <2500 → tw-R is hot 2.5–3.5k). Even at −10..−12 dB under the passband, the tweeter's fast transient dominates the localization of bright instruments (a triangle) → the instrument sticks to the hot side. Check: L/R balance of the SKIRT, not just the passband; the fix — a point PK under the other side's shelf.
+- **A targeted imaging filter does NOT drift the tone** — the metric: **ALL_new vs ALL_PREV** (not vs the target). A narrow skirt PK fixed imaging with ~0 change in the summed ALL (quiet in the L+R+sub sum). Imaging fixes are tonally safe; check ±2 dB vs the previous ALL, separately from ALL vs target (which carries old cabin nulls).
 
-## 15. Зміна кросовера міняє І суму, І таймінг — ізолювати відкатом (2026-06-05)
-- Зміна частоти кросовера однієї сторони змінює ОДНОЧАСНО форму сумації І груповy затримку/таймінг сторони. Опускання w-L LP300→250 створило summation-bump симетричного кросовера (228-279) І зсунуло таймінг → broadband образ поїхав. Дві речі разом → **ізолювати ВІДКАТОМ кросовера** (скасовує обидві), не вгадувати винну.
-- **Симетрія мід-HPF обох сторін — ПЕРЕД рівнем.** Асиметричний мід-HPF (m-L 300 / m-R 250) → стик мідбас↔СЧ на різних частотах L/R → різні фазові схили → imaging нестабільний. Матчити HPF обох мідів до ОДНІЄЇ частоти (midbass LP може лишатись асиметричним) → образ стає на місце, лишається чистий level-офсет. **Порядок діагностики imaging після фундаменту: симетрія кросовера → баланс рівня → пер-драйверний TA для частотного walk-залишку.**
-- **Broadband зсув образу = ТАЙМІНГ; bass-only зсув = РІВЕНЬ/proximity** (розв'язує §5 vs §12). Не пере-узагальнюй «TA не лікує imaging»: bass-only footwell → ILD/proximity (TA не бере, <150Гц ITD слабка); broadband (вся сцена/смуги) → precedence (TA бере, навіть коли центр-мік показує протилежний бік гарячішим — near-field §12). Broadband-зсув робити на **VIRTUAL-шарі** (вся сторона разом → внутрішні стики цілі; саб поза віртуалом → перевір саб↔мідбас після). Частотний walk ВСЕРЕДИНІ смуги одна затримка драйвера не виправить (один драйвер = одна затримка на всю смугу).
+## 15. Changing a crossover changes BOTH the sum AND the timing — isolate by reverting (2026-06-05)
+- Changing one side's crossover frequency changes SIMULTANEOUSLY the summation shape AND the side's group delay/timing. Lowering w-L LP300→250 created a summation bump of the symmetric crossover (228–279) AND shifted the timing → the broadband image moved. Two things at once → **isolate by REVERTING the crossover** (it cancels both), don't guess the culprit.
+- **Symmetry of the mid HPF on both sides — BEFORE level.** An asymmetric mid HPF (m-L 300 / m-R 250) → the midbass↔mid joint at different L/R frequencies → different phase slopes → imaging unstable. Match both mids' HPF to ONE frequency (the midbass LP may stay asymmetric) → the image settles, a clean level offset remains. **The order of imaging diagnosis after the foundation: crossover symmetry → level balance → per-driver TA for the frequency-walk residual.**
+- **A broadband image shift = TIMING; a bass-only shift = LEVEL/proximity** (this resolves §5 vs §12). Don't over-generalize "TA doesn't fix imaging": bass-only footwell → ILD/proximity (TA doesn't take it, <150 Hz ITD is weak); broadband (the whole stage/bands) → precedence (TA takes it, even when the center mic shows the opposite side hotter — near-field §12). A broadband shift goes on the **VIRTUAL layer** (the whole side together → internal joints intact; the sub is outside the virtual → re-check sub↔midbass afterward). A frequency walk WITHIN a band won't be fixed by one driver delay (one driver = one delay for the whole band).
 
-## 16. Фундамент: порядок, фантомний центр, допуск (Audiofrog/Wehmeyer «Straightforward Stereo Tuning Process»)
-Авторитетне зовнішнє джерело; підтверджує і уточнює наш підхід.
-- **Порядок:** полярність → затримки → кросовери → рівень/EQ → підтвердження. Полярність — **електрично** (маркування драйвера/підсилювача, polarity-checker, або UMIK+scope), **НІКОЛИ не «на слух по центру пари»**. Класична пастка: фліп полярності по центру-вухом → потім затримки → драйвери виходять 180° протифазні на всій смузі (центр у басах зник). *(Наш §9 — верифікація СУМАЦІЄЮ — узгоджується: полярність не ставлять по центр-образу.)*
-- **Затримки = компенсація ВІДСТАНІ (рулетка), виставити РАЗ і не чіпати.** Міряти від решітки/ковпачка драйвера до міка. **НЕ рухати образ затримками** — позиція центру = **РІВЕНЬ** (центр вліво → прибрати трохи весь лівий канал). *(Окремий свідомий глобальний/посторонній нудж на virtual для bass-up-front / broadband-образу — §5 — це ПОВЕРХ правильних дистанційних затримок, не заміна їм.)*
-- **Чому центр крихкий — фізика фантомного центру:** слухач ближче до одного драйвера → на частоті де **½ довжини хвилі = різниця шляхів** драйвери протифазні → провал + втрата центру там (типово ~250 Гц при дверній геометрії: 27″ різниці ≈ 250 Гц). Затримка ближчого боку ставить їх синфазно на LP на ВСІХ частотах. *(Пояснює нашу аномалію 230-320.)*
-- **Допуск затримки малий ЛИШЕ вище смуги драйвера:** похибка 1″ дає проблему на 7.5к; 6″ ще не чіпає мідбас із LP300. → не маньячити над суб-мм точністю для НЧ-драйверів; точність важлива для ВЧ.
-- **L/R EQ-метод:** заеквалайзити ЛІВИЙ до цілі → **матчити правий до ЛІВОГО** (не кожен до цілі окремо) → моно-пінк в обидва: RTA = АЧХ твого центрального образу; **великі провали (≥9 dB) = неправильні затримки**, не EQ.
-- **Кросовер-правила дизайну:** (1) драйвер у смузі найменших спотворень; (2) крос обмежує хід (захист); (3) смуга широкої дисперсії (прямий≈відбитий → простіший EQ у near-field салоні). Дефолт: LR4 24dB/окт, саб LP ½ окт нижче за мідбас HP.
+## 16. The foundation: order, the phantom center, tolerance (Audiofrog/Wehmeyer "Straightforward Stereo Tuning Process")
+An authoritative external source; it confirms and refines our approach.
+- **Order:** polarity → delays → crossovers → level/EQ → confirmation. Polarity — **electrically** (driver/amp markings, a polarity checker, or UMIK+scope), **NEVER "by ear on the pair's center"**. The classic trap: a polarity flip by the center-by-ear → then delays → the drivers end up 180° out of phase across the whole band (the center vanished in the bass). *(Our §9 — verification by SUMMATION — agrees: polarity isn't set by the center image.)*
+- **Delays = compensation for DISTANCE (tape measure), set ONCE and don't touch.** Measure from the driver's grille/dust-cap to the mic. **Don't move the image with delays** — the center position = **LEVEL** (center to the left → take a bit off the whole left channel). *(A separate deliberate global/per-side nudge on the virtual for bass-up-front / a broadband image — §5 — is ON TOP of correct distance delays, not a replacement for them.)*
+- **Why the center is fragile — the physics of the phantom center:** the listener is closer to one driver → at the frequency where **½ a wavelength = the path difference**, the drivers are out of phase → a dip + loss of center there (typically ~250 Hz with door geometry: 27″ of difference ≈ 250 Hz). Delaying the nearer side puts them in phase on the LP at ALL frequencies. *(Explains our 230–320 anomaly.)*
+- **The delay tolerance is small ONLY above the driver's band:** a 1″ error gives a problem at 7.5k; 6″ doesn't yet touch a midbass with LP300. → don't obsess over sub-mm accuracy for LF drivers; accuracy matters for the treble.
+- **The L/R EQ method:** EQ the LEFT to target → **match the right to the LEFT** (not each to target separately) → mono pink into both: the RTA = the FR of your central image; **big dips (≥9 dB) = wrong delays**, not EQ.
+- **Crossover-design rules:** (1) the driver in its band of least distortion; (2) the crossover limits excursion (protection); (3) a band of wide dispersion (direct≈reflected → easier EQ in a near-field cabin). Default: LR4 24 dB/oct, sub LP ½ oct below the midbass HP.
 
-## 17. Фінальний L/R level/тон-матч + left-stage compression (ResoNix/Apicella)
-Двокроковий «технічно добре → технічно чудово» фінал, ear-driven (після того як крос/час/EQ виставлені об'єктивно; signal delay — ПЕРЕД усіма замірами).
-- **Крок 1 — L/R рівень по смугах НА СЛУХ** (band-limited 1/3-окт пінк, від пари смуг нижче мідбас-HP вгору): грати ОДИН драйвер, **швидко перемикати L↔R**, чути різницю рівня. **Прибрати з гучнішого І рівно стільки ж додати тихішому** (зберігає загальну АЧХ, не лише ріже). Різниця рідко >1 dB. На цьому кроці **imaging-cues ІГНОРУВАТИ** — лише L/R рівень per band.
-- **Тон L/R може РІЗНИТИСЬ навіть коли рівні/АЧХ збігаються** — типово (driver-to-driver); занотувати, не «виправляти» наосліп.
-- **Крок 2 — ті ж смуги ОБИДВА боки разом → center-cohesion per band.** Оскільки час+рівень уже майже ідеальні, будь-який imaging-залишок, що стирчить = **install / speaker-location (відбиття)**, не tuning-параметр.
-- **Left-side stage compression** (назва явища): LC звучить як far-LEFT, «дірка» в позиції LC сцени (на RHD-авто — права). Перевіряти Center/LC positioning-треками. *(Наш повторюваний «лівий-центр трохи вліво» — саме воно; частково фізика/відбиття, §12.)*
-- **Polarity-pulse трек** для imaging коли center-трек ненадійний (відбиття/компромісні локації): виставити delay (IR/рулетка) → перевірити polarity-pulse → natural reproduction center-треком.
-- **Uncorrelated pink** (на додачу до correlated): correlated гаситься диференційним rear-fill → нею тюнити ТИЛ; різниця correlated−uncorrelated full-system показує **КАНСЕЛЯЦІЇ** в correlated-замірі, які варто адресувати.
+## 17. The final L/R level/tone match + left-stage compression (ResoNix/Apicella)
+A two-step "technically good → technically excellent" finale, ear-driven (after the crossover/time/EQ are set objectively; signal delay — BEFORE all measurements).
+- **Step 1 — L/R level per band BY EAR** (band-limited 1/3-oct pink, from a couple of bands below the midbass HP upward): play ONE driver, **switch L↔R quickly**, hear the level difference. **Take from the louder one AND add exactly as much to the quieter one** (preserves the overall FR, not just a cut). The difference is rarely >1 dB. On this step, **IGNORE imaging cues** — only L/R level per band.
+- **L/R tone can DIFFER even when the levels/FR match** — typical (driver-to-driver); note it, don't "fix" it blindly.
+- **Step 2 — the same bands BOTH sides together → center cohesion per band.** Since time+level are already nearly ideal, any imaging residual that sticks out = **install / speaker-location (reflections)**, not a tuning parameter.
+- **Left-side stage compression** (the name of the phenomenon): LC sounds like far-LEFT, a "hole" in the LC stage position (on an RHD car — the right). Check with Center/LC positioning tracks. *(Our repeating "left-center a bit to the left" — exactly this; partly physics/reflections, §12.)*
+- **A polarity-pulse track** for imaging when a center track is unreliable (reflections/compromised locations): set the delay (IR/tape measure) → check the polarity pulse → natural reproduction with a center track.
+- **Uncorrelated pink** (on top of correlated): correlated is cancelled by a differential rear-fill → tune the REAR with it; the correlated−uncorrelated difference of the full system shows the **CANCELLATIONS** in the correlated measurement worth addressing.
 
-## 18. SBIR vs корпус: повна методика → `enclosure-install-diagnostics.md`
-Фіксований провал у каналі: ПЕРЕД залізом прогнати сепаратор (чистий nearfield + distance-sweep + out-of-car + stuff/seal A/B), потім ETC→Δd→комб-передбачення і source-vs-receiver через РУХ ДЖЕРЕЛА (запасний драйвер у тимчасовому корпусі). Дві пастки: «L=R ідентично = корпус» — ХИБНО (однакова геометрія стійок дає той самий boundary-notch обом); λ/4-збіг довжини = гіпотеза, не діагноз (у нас зійшлось ідеально — і було випадковістю). Деталі, поглинач-vs-екран, версійна регресія, аудит свіжою моделлю — в окремому файлі.
+## 18. SBIR vs box: the full method → `enclosure-install-diagnostics.md`
+A fixed dip in a channel: BEFORE touching hardware, run the separator (clean nearfield + distance sweep + out-of-car + stuff/seal A/B), then ETC→Δd→comb prediction and source-vs-receiver via MOVING THE SOURCE (a spare driver in a temporary box). Two traps: "L=R identical = the box" — FALSE (the same pillar geometry gives the same boundary notch to both); a λ/4 length match = a hypothesis, not a diagnosis (ours matched perfectly — and was a coincidence). Details, absorber-vs-shield, version regression, an audit by a fresh model — in the separate file.
 
-## 19. Симетричний virtual-EQ → АСИМЕТРИЧНИЙ imaging-ефект при спектральній дірі одного каналу (2026-06-10)
-Коли один канал має салонну діру (у нас правий 645 — «тіло»), він **якориться сусідньою смугою** (presence 2-3к). Симетричний (L=R) virtual-зріз тієї смуги забирає якір ТІЛЬКИ в дірявого → його образи валяться до здорової сторони; буст — навпаки, але тягне образи здорової зони до дірявого боку = **гойдалка ЛЦ↔ПЦ** (продовження §14: ЛЦ/ПЦ хочуть протилежного). Наслідки: (1) virtual ≠ «тонально-нейтрально для сцени», коли L/R спектрально нерівні; (2) EQ центрує ЛЦ АБО ПЦ, не обидва — симультанний фікс лише геометрією; (3) тембральна ціна (presence-буст = «жіночий» голос) часто перевершує виграш центрування — вердикт за вухом Арбітра, дефолт = натуральний тембр.
+## 19. A symmetric virtual EQ → an ASYMMETRIC imaging effect when one channel has a spectral hole (2026-06-10)
+When one channel has a cabin hole (ours, the right 645 — "body"), it **anchors on the neighboring band** (presence 2–3k). A symmetric (L=R) virtual cut of that band removes the anchor ONLY from the holed one → its images fall toward the healthy side; a boost — the opposite, but it drags the healthy zone's images toward the holed side = **a seesaw LC↔RC** (a continuation of §14: LC/RC want the opposite). Consequences: (1) virtual ≠ "tonally neutral for the stage" when L/R are spectrally unequal; (2) EQ centers LC OR RC, not both — a simultaneous fix is geometry only; (3) the timbral price (a presence boost = a "female" voice) often exceeds the centering gain — the verdict is the Arbiter's ear, the default = the natural timbre.
 
-## 20. Фізичний центр (manual L+R) = 3-тє джерело → гребінка з мідами; лікувати ЗВУЖЕННЯМ смуги до тіла (2026-06-12)
-Окремий center-канал, заведений як **manual L+R** (не FX/RealCenter), грає той самий контент що й фронтальні міди, але з **іншої точки/відстані** → у сумі Ms+C виходить **гребінка** (центр конструктивно додає де міди в нулі, деструктивно ріже де в піках). Симптом: рвана крива впливу центру (реал: центр LP3150 давав у Ms+C +4-5 на presence-плато 1400-2130 і **нуль 790 −5.8** = протифаза з піком мідів) — «центр гадить мідам». Лікування за пріоритетом:
-- **ЗВУЗИТИ смугу центру до самого тіла голосу — LP~1000-1200** (не широко в presence). Центру для «тіло/якір» досить 400-1200; presence (1.5-3к) лишити чистим фронтальним мідам/твітерам → менше джерел у зоні локалізації = менше гребінки. Реал: LP3150→LP1200 прибрало presence-рвань (≈0) і просадило нуль 790 −5.8→−1.4. (Бонус: вузький LP глушить власний driver-breakup центру → окремий EQ-зріз непотрібний.)
-- **Рівень тихо** (центр = доповнення тіла +1…+2.5 dB, не співучасник на рівних). Загучний центр (реал −3) робить гребінку ±8-11 dB; тихий (−9) — ±2-3.
-- **Полярність — по СУМІ/вуху, не теорії** (§9): реал — інвертований центр гасив 300-500 і рвав 1400/1600; A/B NORM-краще. (Теоретичний «NORM 125° vs m-R → гасить» був крихкою метрикою — сума вирішила.)
-- **APF (all-pass) на центрі — обережно:** розмазує фазу по всій смузі → шкодить тугому якорю-голосу. Якщо єдина його ціль — фаза під hole-fill, а hole-fill не пріоритет → прибрати.
-- ⚠️ **Реальний стан ≠ план:** на старті роботи з центром **виміряй полярність+рівень+APF**, не вір логу (реал: лог казав −12/NORM, у DSP було −3/INV).
+## 20. A physical center (manual L+R) = a 3rd source → a comb with the mids; treat it by NARROWING the band to the body (2026-06-12)
+A separate center channel, driven as **manual L+R** (not FX/RealCenter), plays the same content as the front mids but from **a different point/distance** → in the Ms+C sum you get a **comb** (the center adds constructively where the mids are in nulls, cuts destructively where they're in peaks). The symptom: a ragged curve of the center's effect (real: a center at LP3150 gave +4–5 in Ms+C on the presence plateau 1400–2130 and a **null at 790 −5.8** = anti-phase with the mids' peak) — "the center is messing up the mids". The cure, by priority:
+- **NARROW the center's band to the very body of the voice — LP~1000–1200** (not wide into presence). For "body/anchor" the center needs only 400–1200; leave the presence (1.5–3k) to the clean front mids/tweeters → fewer sources in the localization zone = less combing. Real: LP3150→LP1200 removed the presence raggedness (≈0) and lifted the 790 null −5.8→−1.4. (Bonus: the narrow LP mutes the center's own driver breakup → a separate EQ cut isn't needed.)
+- **Level quiet** (the center = a body complement +1…+2.5 dB, not an accomplice at equal level). A too-loud center (real −3) makes the comb ±8–11 dB; quiet (−9) — ±2–3.
+- **Polarity — by the SUM/ear, not theory** (§9): real — the inverted center cancelled 300–500 and tore 1400/1600; A/B NORM was better. (The theoretical "NORM 125° vs m-R → cancels" was a fragile metric — the sum decided.)
+- **APF (all-pass) on the center — carefully:** it smears the phase across the whole band → hurts the tight voice anchor. If its only goal is phase for a hole-fill, and the hole-fill isn't a priority → remove it.
+- ⚠️ **The real state ≠ the plan:** at the start of work on the center, **measure polarity+level+APF**, don't trust the log (real: the log said −12/NORM, the DSP had −3/INV).
 
-## 21. Хірургічний EQ: сумарна крива банку + fine-роздільність ПЕРЕД заливкою (2026-06-11)
-- Кілька «точкових» PK з помірним Q (1.2-2.5) **сумуються в суцільний широкий зріз** (реал: 3 PK на 470/975/1375 дали −2.3..−3.8 по всій 440-1680 — притопили весь канал і зачепили симетричні/здорові зони, хоч задумані точковими). Перед заливкою **дивитись/рахувати СУМАРНУ криву банку фільтрів** — окремі gain/Q оманливі.
-- **Ціль локалізувати на fine (1/24-1/48) raw, не на 1/12-binned** — биннінг ховає вузькі піки (реал: 1/12 сховав вузький +9 dB R-пік на 520 і верхній 1640 → ціль визначили хибно). Зловлено Арбітром по слуху+графіку.
-- **Surgical = високий Q (5+) на точно локалізованому (fine) піку** + перевірка, що скирт фільтра не лізе в сусідню симетричну зону/тіло каналу.
+## 21. Surgical EQ: the bank's summed curve + fine resolution BEFORE loading (2026-06-11)
+- Several "point" PKs with a moderate Q (1.2–2.5) **sum into one continuous broad cut** (real: 3 PKs at 470/975/1375 gave −2.3..−3.8 across the whole 440–1680 — they sank the whole channel and caught symmetric/healthy zones, though intended as point cuts). Before loading, **look at / compute the SUMMED curve of the filter bank** — the individual gain/Q are misleading.
+- **Localize the target on fine (1/24–1/48) raw, not on 1/12-binned** — binning hides narrow peaks (real: 1/12 hid a narrow +9 dB R-peak at 520 and an upper 1640 → the target was set wrongly). Caught by the Arbiter by ear+graph.
+- **Surgical = a high Q (5+) on a precisely localized (fine) peak** + a check that the filter's skirt doesn't reach into the neighboring symmetric zone / the channel's body.
 
-## 22. Реверс тюну з ПОКАНАЛЬНИХ замірів (black-box DSP — стан не читається) (2026-06-16)
-Коли DSP не дає дамп/екран, але кожен вихід можна зміряти соло — поточні налаштування **відновлюються з REW**, бо тебе цікавить АКУСТИЧНИЙ результат (саме під нього тюніш), а не числа в DSP. Шарнір придатності — `project-intake §4` Рівень 2.
-- **Кросовери (точка + порядок + тип):** по спаду поканальної FR — частота −3/−6 дБ = крос-точка; крутість (дБ/окт: ~12/24/48) → порядок; форма коліна/Q → тип (LR/BW/BE). Звіряти HP однієї смуги з LP сусідньої.
-- **Затримки / TA:** час приходу в IR кожного каналу (loopback-sweep) → відносні затримки = поточне вирівнювання (між L/R і між смугами).
-- **Полярність:** по СУМАЦІЇ на стику (in-phase сумується, anti-phase гасне) — §9/§16, **НЕ по «імпульс вгору/вниз»**.
-- **Наявний EQ:** великі вузькі відхилення поканальної FR від очікуваного природного відгуку драйвера = ймовірний накладений EQ. Повністю відділити EQ від акустики не можна — і **не треба**: тюніш до цілі по сумарному акустичному результату.
-- **Гейни/рівні:** відносний SPL каналів.
-- ⚠️ Відновлюєш **акустичний стан**, не точні DSP-числа — для тюну досить (числа потрібні лише для документації / повторного входу). ⚠️ Нема read-back → **кожну зміну підтверджувати повторним заміром, міняти по одному** (вищий ризик дрейфу).
-- **Деградація до Рівня 3** (канали не ізолюються, лише сума): крос/фаза/TA-хірургія неможлива → тональний баланс усієї системи під ціль + imaging НА СЛУХ (`test-tracks.md`); зафіксувати стелю.
+## 22. Reversing the tune from PER-CHANNEL measurements (black-box DSP — the state isn't readable) (2026-06-16)
+When the DSP gives no dump/screen, but each output can be measured solo — the current settings **recover from REW**, because what you care about is the ACOUSTIC result (that's what you tune for), not the numbers in the DSP. The hinge of applicability — `project-intake §4` Level 2.
+- **Crossovers (point + order + type):** from the per-channel FR's roll-off — the −3/−6 dB frequency = the crossover point; the steepness (dB/oct: ~12/24/48) → the order; the knee shape/Q → the type (LR/BW/BE). Cross-check one band's HP with the neighbor's LP.
+- **Delays / TA:** the arrival time in each channel's IR (loopback sweep) → the relative delays = the current alignment (between L/R and between bands).
+- **Polarity:** by SUMMATION at the joint (in-phase sums, anti-phase cancels) — §9/§16, **NOT by "impulse up/down"**.
+- **Existing EQ:** large narrow deviations of the per-channel FR from the driver's expected natural response = likely applied EQ. You can't fully separate EQ from the acoustics — and you **don't need to**: you tune to the target by the summed acoustic result.
+- **Gains/levels:** the relative SPL of the channels.
+- ⚠️ You recover the **acoustic state**, not the exact DSP numbers — that's enough for the tune (the numbers are needed only for documentation / re-entry). ⚠️ No read-back → **confirm every change by re-measurement, change one at a time** (higher drift risk).
+- **Degradation to Level 3** (channels don't isolate, only the sum): crossover/phase/TA surgery is impossible → the whole system's tonal balance to the target + imaging BY EAR (`test-tracks.md`); record the ceiling.

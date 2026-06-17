@@ -1,38 +1,38 @@
-# Analysis playbook — який замір відповідає на яке питання
+# Analysis playbook — which measurement answers which question
 
-Мапа «рішення → дані → функція REW API». API в `rew_tool/rew_api.py` (`localhost:4735`).
+A map: decision → data → REW API function. The API is in `rew_tool/rew_api.py` (`localhost:4735`).
 
-| Питання при тюнінгу | Який замір/графік | Метод заміру | Функція REW API |
+| Tuning question | Which measurement/graph | Measurement method | REW API function |
 |---|---|---|---|
-| Де ставити крос-частоту (L=R, мін. втрати під ціль) | FR (магнітуда), наявні схили | MMM RTA | `get_fr`, `get_slopes`, `get_target_response` |
-| Чи виправний провал EQ-ом | Excess phase / minimum-phase розклад | Sweep (loopback) | `get_fr` (+ фаза), аналіз у REW |
-| Затримки / часове зведення | Impulse / step response, ETC | Sweep (loopback) | `get_impulse_response` |
-| Поворот фази / надлишкова GD на стиках | Group delay | Sweep | `get_group_delay` |
-| Безпечні межі полос (де ставити HPF) | Distortion (THD + гармоніки) | Sweep на робочому рівні | `get_distortion` |
-| Резонанси / «дзвін» (двері, 150 Гц) | CSD / waterfall | Sweep | (REW UI; IR з `get_impulse_response`) |
-| Прогноз суми L+R чи band+band | Арифметика трейсів A+B | — | REW trace math (UI/API) |
-| Поточні фільтри / EQ каналу | Filters / EQ | — | `get_filters`, `get_equaliser`, `get_equalisers` |
-| Застосувати EQ/фільтри | — | — | `set_filters`, `set_equaliser` |
-| Доступні типи кросоверів і схили | — | — | `get_crossover_types`, `get_slopes` |
-| Ціль (house curve) для порівняння | Target | — | `get_target_settings`, `get_target_response` |
+| Where to put the crossover frequency (L=R, min loss vs target) | FR (magnitude), the existing slopes | MMM RTA | `get_fr`, `get_slopes`, `get_target_response` |
+| Is a dip fixable with EQ | Excess phase / minimum-phase decomposition | Sweep (loopback) | `get_fr` (+ phase), analysis in REW |
+| Delays / time alignment | Impulse / step response, ETC | Sweep (loopback) | `get_impulse_response` |
+| Phase rotation / excess GD at joints | Group delay | Sweep | `get_group_delay` |
+| Safe band limits (where to put the HPF) | Distortion (THD + harmonics) | Sweep at the working level | `get_distortion` |
+| Resonances / "ringing" (doors, 150 Hz) | CSD / waterfall | Sweep | (REW UI; IR from `get_impulse_response`) |
+| Predicting the L+R or band+band sum | Trace arithmetic A+B | — | REW trace math (UI/API) |
+| A channel's current filters / EQ | Filters / EQ | — | `get_filters`, `get_equaliser`, `get_equalisers` |
+| Apply EQ/filters | — | — | `set_filters`, `set_equaliser` |
+| Available crossover types and slopes | — | — | `get_crossover_types`, `get_slopes` |
+| Target (house curve) for comparison | Target | — | `get_target_settings`, `get_target_response` |
 
 ---
 
-## Правила читання
+## Reading rules
 
-- **MMM RTA → магнітуда; Sweep(loopback) → фаза/час.** Не робити фазових/часових висновків з MMM.
-- **Згладжування для рішень:** **1/6 окт — стандарт для рівневих/формних рішень у СЧ-ВЧ** (300-3000+; гасить салонні відбиття, лишає драйверні горби Q>2). **Raw/None — лише для пошуку вузьких резонансів** (Q>5, напр. брейкап драйвера) і гострих мод; на None одно-позиційні дані дикі (реал: m-R −10 на 1117 = відбиття, не драйвер). 1/48 — діагностика гострих резонансів; не вирівнювати все видиме на 1/48. ⚠️ **REW API повертає те згладжування, що активне в сесії** — звір на старті аналізу; якщо None, **застосуй 1/6 математично** перед рішенням. Узгодь стандарт згладжування з критиком перед першою EQ-пропозицією (інакше він читає інші числа). ⚠️ **Згладжування = ПОСТ-ПРОЦЕС, НІКОЛИ не привід перезнімати:** raw знятий раз (1/48 / None) → накладай будь-яке згладжування **математично** (REW головне вікно / `rew_tool` числово) під КОЖНЕ рішення (1/6 — тон · 1/48/raw — резонанси/нулі). НЕ проси користувача перезняти MMM заради іншого розрізнення/згладжування.
-- **RTA-конфіг для correlated-пінк (ResoNix-практика):** RTA **1/48 окт**, Averages **Forever** + **Stop at ~150** (авто-стоп після ~150 усереднень → консистентна к-сть між каналами + ясний сигнал «MMM завершено»; рухати мік до авто-стопу, не на око), Window **Hann**, Max Overlap **93.75%**. ⚠️ **FFT = довжині періодичного/correlated шуму** (тут **128k**, бо й шум у ResoNix 128k; якщо твій шум 64k → FFT **64k**) — це НЕ фікс-число; довше виправдано лише для low-freq THD-роздільності. **Захоплювати на повній роздільності, згладжувати ПОТІМ** (не обрізати дані на вході). MMM = просторове усереднення навколо голови/вух на LP.
-- **RTA-провал ≠ ПОЧУТИЙ провал коли задіяна дисперсія/off-axis.** Напр. високий крос (твітер/мід 5к щоб обійти відбиття) → вузька верх-СЧ дисперсія → мік бачить дип, а вухо ні (off-axis енергія взаємодіє з салоном). Той самий заміряний відгук **звучить РІЗНО залежно від distortion-profile драйвера**. → не ганятись за RTA-flat сліпо; крива = старт, вухо вирішує.
-- **Цілісність заміру перед аналізом:** IR-gate не ріже прямий звук; шумовий поріг; cal-файл завантажено; немає кліпінгу під час sweep.
-- **Токен-дієта для критика:** у пакет — оцифровані аномалії (числа), а сирий трейс — **проріджений CSV окремим файлом** (2-й арг `gemini_critic.sh`), щоб критик міг оскаржити прочитання даних, не топлячись у дампі.
+- **MMM RTA → magnitude; Sweep (loopback) → phase/time.** Don't draw phase/time conclusions from MMM.
+- **Smoothing for decisions:** **1/6 oct is the standard for level/shape decisions in the mid-treble** (300–3000+; it damps cabin reflections, keeps driver peaks Q>2). **Raw/None — only for finding narrow resonances** (Q>5, e.g. a driver breakup) and sharp modes; on None, single-position data is wild (real case: m-R −10 at 1117 = a reflection, not the driver). 1/48 — diagnosing sharp resonances; don't flatten everything visible at 1/48. ⚠️ **The REW API returns whatever smoothing is active in the session** — check it at the start of the analysis; if it's None, **apply 1/6 mathematically** before deciding. Agree the smoothing standard with the critic before the first EQ proposal (otherwise it reads different numbers). ⚠️ **Smoothing = POST-PROCESS, NEVER a reason to re-measure:** raw is captured once (1/48 / None) → apply any smoothing **mathematically** (REW main window / `rew_tool` numerically) for EACH decision (1/6 — tone · 1/48/raw — resonances/nulls). Don't ask the user to re-measure the MMM for a different resolution/smoothing.
+- **RTA config for correlated pink (ResoNix practice):** RTA **1/48 oct**, Averages **Forever** + **Stop at ~150** (auto-stop after ~150 averages → a consistent count across channels + a clear "MMM done" signal; move the mic until the auto-stop, not by eye), Window **Hann**, Max Overlap **93.75%**. ⚠️ **FFT = the length of the periodic/correlated noise** (here **128k**, because the ResoNix noise is 128k too; if your noise is 64k → FFT **64k**) — this is NOT a fixed number; longer is justified only for low-freq THD resolution. **Capture at full resolution, smooth LATER** (don't trim the data at the input). MMM = spatial averaging around the head/ears at the LP.
+- **An RTA dip ≠ a HEARD dip when dispersion/off-axis is involved.** E.g. a high crossover (tweeter/mid 5k to dodge a reflection) → narrow upper-mid dispersion → the mic sees a dip, the ear doesn't (off-axis energy interacts with the cabin). The same measured response **sounds DIFFERENT depending on the driver's distortion profile**. → don't chase RTA-flat blindly; the curve = a start, the ear decides.
+- **Measurement integrity before analysis:** the IR gate doesn't cut the direct sound; the noise floor; the cal file is loaded; no clipping during the sweep.
+- **Token diet for the critic:** the package gets the digitized anomalies (numbers), and the raw trace — a **decimated CSV as a separate file** (the 2nd arg to `gemini_critic.sh`), so the critic can challenge the reading of the data without drowning in the dump.
 
-## Проріджений трейс для критика
+## Decimated trace for the critic
 
-Експортувати з REW (або з `rew_tool`) FR/фазу як CSV, проріджену до ~1/6–1/12 окт (десятки-сотні точок, не тисячі). Колонки: `Freq[Hz], SPL[dB], Phase[deg]`. Передати другим аргументом у `gemini_critic.sh`.
+Export FR/phase from REW (or from `rew_tool`) as CSV, decimated to ~1/6–1/12 oct (tens-to-hundreds of points, not thousands). Columns: `Freq[Hz], SPL[dB], Phase[deg]`. Pass it as the second argument to `gemini_critic.sh`.
 
-## FSAF (REW 5.40+) — дисторшн під реальним навантаженням, НЕ заміна свипу
-Стимул = шум або музика → TD+N у «бойових» умовах щільного спектра (свип міряє дисторшн одним тоном). ✅ Питання «чи брейкап/горб реально СПОТВОРЮЄ під музикою, чи це нешкідлива АЧХ-фіча» (стик зі скаргою «деталь/повітря»). ❌ НЕ для лінійних резонансів/відбиттів (λ/4, SBIR, дифракція — gated-свип бачить їх так само; «FSAF ловить приховані відбиття» = міф) і НЕ для A/B проти свип-baseline (метод має збігатись). Вимога: спільний клок replay/record (ECM8000+Scarlett+loopback ✅; UMIK-1 ❌). Рівень ≤ −14 dB (crest шуму). Impedance/Qtc — окрема вкладка (свип).
+## FSAF (REW 5.40+) — distortion under a real load, NOT a replacement for the sweep
+The stimulus = noise or music → TD+N under "combat" conditions of a dense spectrum (a sweep measures distortion with one tone). ✅ The question "does a breakup/hump actually DISTORT under music, or is it a harmless FR feature" (a joint with a "detail/air" complaint). ❌ NOT for linear resonances/reflections (λ/4, SBIR, diffraction — a gated sweep sees them just as well; "FSAF catches hidden reflections" = a myth) and NOT for an A/B against a sweep baseline (the method must match). Requirement: a shared replay/record clock (ECM8000+Scarlett+loopback ✅; UMIK-1 ❌). Level ≤ −14 dB (noise crest). Impedance/Qtc — a separate tab (sweep).
 
-## ETC (Energy-Time Curve) — карта відбиттів, недовикористаний інструмент
-З IR свипа (REW GUI). Дискретний прихід із затримкою τ після прямого → шлях-різниця Δd = τ·343 м/с → передбачені комб-нулі n·c/(2Δd); збіг передбачених нулів із виміряними у FR = рефлектор ідентифіковано ПО ВІДСТАНІ. + gate-тест (відгейтувати IR → провал заповнився = пізні відбиття). Питання «ДЕ рефлектор, що робить провал» → ETC, не FR. Деталі/кейс → enclosure-install-diagnostics.md §2.
+## ETC (Energy-Time Curve) — a reflection map, an underused tool
+From the sweep's IR (REW GUI). A discrete arrival with a delay τ after the direct → a path difference Δd = τ·343 m/s → predicted comb nulls at n·c/(2Δd); a match of the predicted nulls with the measured ones in the FR = the reflector is identified BY DISTANCE. + a gate test (gate out the IR → the dip filled in = late reflections). The question "WHERE is the reflector that makes the dip" → ETC, not FR. Detail/case → `enclosure-install-diagnostics.md §2`.

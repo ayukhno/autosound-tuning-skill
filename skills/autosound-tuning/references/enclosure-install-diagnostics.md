@@ -1,47 +1,47 @@
-# Корпус vs салон: діагностика дефектів інсталяції (уроки 2026-06-08..10)
+# Box vs cabin: diagnosing install defects (lessons 2026-06-08..10)
 
-Коли канал має фіксований провал/пік і питання «це драйвер, корпус чи салон?» — тут метод. Народжено реальним кейсом: провал СЧ ~600 Гц спершу діагностували як λ/4-резонанс хвоста корпусу (математика збіглась ідеально: 160мм → 536 Гц), а експеримент **спростував** — це був SBIR салону. Уся секція 1 — про те, як не повторити цю помилку.
+When a channel has a fixed dip/peak and the question is "is this the driver, the box, or the cabin?" — here's the method. Born from a real case: a mid dip ~600 Hz was first diagnosed as a λ/4 resonance of the box's tail (the math matched perfectly: 160 mm → 536 Hz), and an experiment **disproved** it — it was a cabin SBIR. The whole of Section 1 is about not repeating that mistake.
 
-## 1. Сепаратор «корпус vs межа (SBIR)» — ОБОВ'ЯЗКОВИЙ перед залізом
+## 1. The "box vs boundary (SBIR)" separator — MANDATORY before touching hardware
 
-Чотири дешеві тести; жоден окремо не достатній, разом — вирок:
+Four cheap tests; none is sufficient alone, together they're a verdict:
 
-1. **Чистий nearfield** (мік впритул до дифузора): дефект корпусу видно ВЖЕ тут; SBIR на справжньому nearfield майже зникає. ⚠️ Перевір, що замір справді nearfield — «nf» на 10-20 см уже ловить межі.
-2. **Distance-sweep**: міряй той самий драйвер впритул / 20см / 50см / LP. Провал, що РОСТЕ з відстанню = інтерференція з межею (SBIR), не корпус.
-3. **Out-of-car**: винеси конструкцію з авто (наскільки дає провід). Рівно поза авто + провал в авто = салон, крапка.
-4. **Stuff/seal A/B**: зміни демпфування корпусу (набий щільно / спустоши / закрий вент). Провал НЕ ворухнувся = не корпус. ⚠️ НЕ міняй ДОВЖИНУ резонатора (не блокуй шийку) — це зсуне частоту й зіпсує порівняння; тестуй демпфування на ІСНУЮЧІЙ частоті. Мік — ідентична позиція.
+1. **Clean nearfield** (mic right up against the cone): a box defect shows ALREADY here; SBIR almost vanishes at a true nearfield. ⚠️ Check the measurement really is nearfield — an "nf" at 10–20 cm already catches the boundaries.
+2. **Distance sweep**: measure the same driver up close / 20 cm / 50 cm / LP. A dip that GROWS with distance = interference with a boundary (SBIR), not the box.
+3. **Out-of-car**: take the structure out of the car (as far as the cable reaches). Flat outside the car + a dip inside the car = the cabin, full stop.
+4. **Stuff/seal A/B**: change the box's damping (pack it tight / empty it / close the vent). The dip didn't budge = not the box. ⚠️ Do NOT change the resonator's LENGTH (don't block the neck) — that shifts the frequency and ruins the comparison; test damping at the EXISTING frequency. Mic — identical position.
 
-**Пастки, через які ми помилились:**
-- **L=R ідентична форма НЕ доводить «корпус»**: однакова зовнішня геометрія обох стійок дає той самий boundary-notch на обох сторонах.
-- **λ/4-математика спокуслива**: збіг фізичної довжини з c/4f буває ВИПАДКОВИМ. Збіг = гіпотеза, не діагноз — валідуй тестами вище.
-- У A/B міряй **і FR, і IR/декей (CSD)**: провал і ringing — два обличчя резонансу; часова область прямо показує чистку транзієнтів (= сприйнята «деталь/повітря»).
+**The traps that fooled us:**
+- **L=R identical shape does NOT prove "the box":** the same external geometry of both pillars gives the same boundary notch on both sides.
+- **The λ/4 math is seductive:** a match of the physical length with c/4f can be ACCIDENTAL. A match = a hypothesis, not a diagnosis — validate with the tests above.
+- In an A/B, measure **both FR and IR/decay (CSD)**: the dip and the ringing are two faces of a resonance; the time domain directly shows the transient cleanup (= perceived "detail/air").
 
-## 2. SBIR підтверджено — знайти ДЕ і ЧИЄ відбиття
+## 2. SBIR confirmed — find WHERE and WHOSE reflection
 
-- **ETC з імпульсу** (REW GUI; ми це роками не використовували — весь аналіз сидів на FR): дискретний прихід із затримкою τ → Δd = τ·343 м → комб-нулі на n·c/(2Δd). Якщо передбачені нулі збігаються з виміряними — рефлектор знайдено по відстані. (Кейс: прихід +2.25мс → Δd≈77см → нулі 667/1111 Гц = виміряні 645/1.1к.)
-- **Gate-тест**: відгейтуй IR до ~1.5 мс → якщо провал у FR заповнився, винні пізні відбиття.
-- **Source-side vs receiver-side** (вирішує, чи поможе рух динаміка): **рухай ДЖЕРЕЛО, не мік** — запасний драйвер у тимчасовому корпусі по позиціях. Нотч їде/зникає з позицією = source-side (геометрія лікує); стоїть = receiver-side (відбиття біля вуха — рух драйвера марний). Бонус: одразу аудиція кандидатних позицій.
-- **Уже встановлений інший драйвер тієї ж моделі в іншій позиції** (напр. центральний) = безкоштовний доказ: якщо він чистий у проблемній смузі — позиція лікує.
-- **ПОЗИЦІЯ домінує над НАПРЯМОМ**: геть від близької межі (кут лобове-торпедо) — головне; aim вгору/вбік помагає лише ДОДАТКОВО і лише далеко від межі. Біля межі ні aim, ні напрям не рятують.
-- **Поглинач як діагностика**: пористий працює від ~λ/10 товщини (600 Гц → 6-14 см). Тонкий фетр/20мм на 600 Гц ≈ нуль ефекту → дасть хибне «не підтвердилось». Для діагностики — подушка/ковдра 10-15см щільно до межі; жорсткий ЕКРАН під кутом навіть кращий (нотч ЗСУНЕТЬСЯ по частоті = точку знайдено).
+- **ETC from the impulse** (REW GUI; we hadn't used it for years — all the analysis sat on FR): a discrete arrival with a delay τ → Δd = τ·343 m → comb nulls at n·c/(2Δd). If the predicted nulls match the measured ones — the reflector is found by distance. (Case: arrival +2.25 ms → Δd≈77 cm → nulls 667/1111 Hz = measured 645/1.1k.)
+- **Gate test**: gate out the IR down to ~1.5 ms → if the FR dip filled in, late reflections are to blame.
+- **Source-side vs receiver-side** (decides whether moving the driver will help): **move the SOURCE, not the mic** — a spare driver in a temporary box across positions. The notch moves/vanishes with position = source-side (geometry cures it); it stays = receiver-side (a reflection near the ear — moving the driver is pointless). Bonus: an immediate audition of candidate positions.
+- **An already-installed driver of the same model in another position** (e.g. the center) = free proof: if it's clean in the problem band — the position cures it.
+- **POSITION dominates over AIM:** away from the near boundary (the windshield–dash corner) is the main thing; aiming up/sideways helps only ADDITIONALLY and only far from the boundary. Near the boundary, neither aim nor direction saves you.
+- **An absorber as diagnostics:** a porous one works from ~λ/10 of thickness (600 Hz → 6–14 cm). A thin felt / 20 mm at 600 Hz ≈ zero effect → it'll give a false "not confirmed". For diagnostics — a pillow/blanket 10–15 cm tight to the boundary; a rigid SHIELD at an angle is even better (the notch will SHIFT in frequency = the point is found).
 
-## 3. Якщо таки корпус (резонанс підтверджено A/B)
+## 3. If it really is the box (resonance confirmed by A/B)
 
-- λ/4 закрито-відкритої труби: f=c/4L; пучність ШВИДКОСТІ на відкритому/вент-кінці → волокнистий демпфер найефективніший там.
-- Ліки = щільний fill усього об'єму + контрольований резистивний вент (аперіодика), НЕ «закрити щільніше». Симптом-підказка: «негерметичний драйвер → рівніше» = недодемпфована закрита система.
-- Дзвін стінок ≠ повітряний резонанс: CLD/вібру НЕ клей спекулятивно. Стінки видають вузькі піки/довгий декей у CSD, не широкі провали. Rap-тест + притиснути долонею під тоном.
-- **Імпеданс-вимір** (REW Impedance + прецизійний резистор / CLIO): резонанс корпусу = аномалія на кривій. Об'єктивніший і дешевший доказ за акустичний.
+- λ/4 of a closed-open tube: f=c/4L; the VELOCITY antinode is at the open/vent end → a fibrous damper is most effective there.
+- The cure = a dense fill of the whole volume + a controlled resistive vent (aperiodic), NOT "seal it tighter". A symptom hint: "an unsealed driver → flatter" = an under-damped sealed system.
+- Wall ringing ≠ an air resonance: don't glue on CLD/damping speculatively. Walls produce narrow peaks/a long decay in the CSD, not broad dips. Rap test + press a palm under a tone.
+- **Impedance measurement** (REW Impedance + a precision resistor / CLIO): a box resonance = an anomaly on the curve. A more objective and cheaper proof than the acoustic one.
 
-## 4. Після БУДЬ-ЯКОЇ фізичної зміни корпусу/позиції
+## 4. After ANY physical change to the box/position
 
-Повний ретюн каналу (XO/TA/EQ) + перевірка сумації стиків із сусідами + латераль. Стара калібровка для цього каналу недійсна (див. naming-and-structure «is the raw data still valid»).
+A full channel retune (XO/TA/EQ) + a check of the joint summation with the neighbors + the lateral. The old calibration for this channel is invalid (see `naming-and-structure` "is the raw data still valid").
 
-## 5. Незалежний аудит свіжою моделлю (практика, що окупилась)
+## 5. An independent audit by a fresh model (a practice that paid off)
 
-Cold-start аудит ІНШОЮ моделлю (під-агент без наших анкорів) на повній історії замірів знайшов те, що ми пропустили за 10+ раундів: невикористаний ETC, прогресивну EQ-регресію presence через версії, власний фільтр що поглиблював салонний нуль. Метод: дати сирі дані + журнал + прямий мандат «оскарж наш висновок, знайди проґавлене», кожен пункт falsifiable. Запускати на великих розворотах або коли «все вже спробували».
+A cold-start audit by ANOTHER model (a sub-agent without our anchors) on the full measurement history found what we'd missed over 10+ rounds: an unused ETC, a progressive EQ regression of presence across versions, our own filter that deepened a cabin null. Method: give the raw data + the log + a direct mandate "challenge our conclusion, find what was missed", each point falsifiable. Run it on big reversals or when "we've already tried everything".
 
-## 6. Регресія через версії (повна історія як інструмент)
+## 6. Regression across versions (the full history as a tool)
 
-- **Стабільність дефекту в СИРИХ замірах через усі версії** = вирок «фізика vs DSP»: стоїть незмінно на фіксованій частоті у всіх сирих сетах → інсталяція; з'явився/їздить із версією → DSP.
-- **Кумулятивний дрейф EQ**: зрізи, що накопичуються версіями, тихо з'їжджають тон (кейс: presence v17 −2 → v29 −7 проти власної середини = «нема повітря»). Періодично порівнюй ALL поточної версії з 2-3 старими і з ціллю — не лише з попередньою.
-- **Перевір власні фільтри проти салонної карти**: фільтр, виведений з одного сету, може різати ВСЕРЕДИНІ салонного нуля на LP (поглиблюєш діру собі сам). Бипас-тест підозрілих — 2 хвилини.
+- **The defect's stability in the RAW measurements across all versions** = the verdict "physics vs DSP": it sits unchanged at a fixed frequency in all raw sets → install; it appeared/moves with a version → DSP.
+- **Cumulative EQ drift**: cuts that accumulate across versions quietly slide the tone (case: presence v17 −2 → v29 −7 vs its own midline = "no air"). Periodically compare the current version's ALL with 2–3 older ones and with the target — not just with the previous one.
+- **Check your own filters against the cabin map**: a filter derived from one set may cut INSIDE a cabin null on the LP (you deepen the hole yourself). A bypass test of the suspect ones — 2 minutes.

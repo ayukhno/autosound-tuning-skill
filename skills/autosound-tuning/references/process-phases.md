@@ -1,189 +1,189 @@
-# Процес налаштування — фази, формат пакета, уточнення
+# The tuning process — phases, package format, refinements
 
-Це робочий розклад процесу, узгоджений з користувачем (14 кроків), згрупований у фази.
-Кожна фаза = один або кілька циклів Генератор↔Критик з ескалацією на Арбітра.
+This is the working schedule of the process, agreed with the user (14 steps), grouped into phases.
+Each phase = one or more Generator↔Critic cycles with escalation to the Arbiter.
 
-> **Сесія = налаштування під ОДНУ криву**, може бути багатоденною і з перервами (перезавантаження Mac стирає чат) — стан тримати у project memory, на resume звірятись із ним. **Фази 0–1 (кросовери, TA, фаза, рівні, карта аномалій) — фундамент, curve-agnostic, роблять один раз.** Зміна цільової кривої переважно повторює **лише Фазу 2** (пер-канальний EQ + форма рівня під нову криву) → друга крива значно швидша. Лайфцикл сесії — у `SKILL.md` §Session lifecycle.
+> **A session = tuning toward ONE curve**, possibly multi-day and with breaks (a Mac restart wipes the chat) — keep the state in project memory, reconcile against it on resume. **Phases 0–1 (crossovers, TA, phase, levels, the anomaly map) are the foundation, curve-agnostic, done once.** Changing the target curve mostly re-runs **only Phase 2** (per-channel EQ + level shaping to the new curve) → a second curve is much faster. The session lifecycle is in `SKILL.md` §Session lifecycle.
 
-Захисні кроси для сирих замірів — **консервативний ЗАХИСТ ЛИШЕ КРИХКИХ драйверів** (ВЧ, СЧ; центр — залежно від ЙОГО драйвера), щоб не спалити надмірним ходом на свипі: HP **на/вище РЕАЛЬНОГО резонансу (Fs) КОЖНОГО драйвера**. ⚠️ **Частота HP = функція КОНКРЕТНОГО драйвера — НЕ фіксоване число, НЕ «типове», НЕ з профілю як факт.** Нема Fs → **запитай у користувача** (або з даташита), тоді постав консервативно вище; **не видавай таблицю частот наперед**. **Мідбас і саб захисний HP НЕ потребують** — вони створені грати низ; **субсонік — лише для ПОРТОВАНОГО саба** (розвантаження конуса нижче налаштування порту), **ЗЯ сам обмежує хід** → не треба. ⚠️ **Фінальні крос-точки/типи — Фаза 1, ПІСЛЯ замірів** (запропонувати / вивести з виміру+сумації, НЕ прескрайбити таблицею; не підставляти драйвери, яких користувач не давав) — і **не показувати/не анонсувати їх раніше**: анонс «кандидатів» на Фазі 0 = забігання наперед + анкоринг. Назви кривих — за глосарієм `autosound_context.md` §5.
-
----
-
-## Три джерела — один метод (вимір × слух × досвід)
-
-Наш процес = **вимір «по приборам» (REW) ⊕ by-ear секрети Хашімото (`method-hashimoto.md`) ⊕ досвід Аркадія/ResoNix/Wehmeyer (`voicing-by-ear.md`, `diagnostic §16-17`)**, сплетені. Принцип: на кожній фазі **ВИМІР дає те, що надійно** (магнітуда, крос-частота, сумація стиків, excess-phase, mic-shift), **СЛУХ — те, що вимір не бере** (крутизна фільтра, образ/глибина/транзієнти, войсинг), і вони **ПЕРЕХРЕСНО звіряють** одне одного.
-- **Кросовери (Фаза 1):** вимір обирає ЧАСТОТУ (RTA-магнітуда+схили); **Хашімото додає КРУТИЗНУ** на слух («крутизна→частота»; треки мід/верх + мід/низ) + правило **HPF на/вище резонансу драйвера** (не нижче 40-50; ВЧ-HPF > резонансу ВЧ). **L/R-симетрія = ДЕФОЛТ** (однакові тип+порядок+частота зліва й справа): різне фазове обертання L/R руйнує фантомний центр — критично для SQ (ЕММА/AYA); асиметрію салону компенсуй EQ/Gain (+ затримки для центру), не кросоверами (`filter-types §Симетрія`). **Асиметричні L/R-кроси, підібрані на слух кожна сторона окремо = свідомий ВАРІАНТ Хашімото** — лише коли симетрія не дає образ; тоді imaging ретельно верифікувати (`method-hashimoto.md`).
-- **Полярність/стики:** Хашімото робить РАНО по слуху (злиття образу) — це **ВАРІАНТ**; наш надійний арбітр = **СУМАЦІЯ** (`diagnostic §9`). Конфлікт → сумація.
-- **Затримки:** база — **геометрія / перший прихід** (рулетка до ковпачка + пік першого приходу легких СЧ/ВЧ); ⚠️ **IR-peak TA по REW API ненадійний** (`rew-api-quirks` — таймінг сміття) → не довіряти API-пікам, звіряти з геометрією. By-ear «вертикалі→центр» на моно, саб по контрабасу. **Затримки стереопари ставляться РАЗ для центрування; НЕ детюнити одну сторону заради ями в АЧХ** (ITD 200Гц–1.5кГц → образ пливе; салонні провали часто SBIR/non-min-phase — часом/EQ не закрити). Зведення стиків — **all-pass'ом** (`helix-phase-allpass`), не зсувом затримки каналу. Образ-центр = РІВЕНЬ не час (Wehmeyer §16); broadband-зсув = час (§15).
-- **EQ:** вимір (RTA до цілі · excess-phase EQ-виправне? · mic-shift мода-vs-рефлексія · 1/6 окт) + by-ear центрування моно-синусами (⚠️ **2.5-5к НЕ чіпати** — чутливість слуху/equal-loudness) + симптом→фікс (`voicing-by-ear.md`).
-- **Прослуховування (Фаза 5):** курований трек під вимір (`test-tracks.md`). **Войсинг клієнта (Фаза 6):** крива→характер + by-ear осі смаку.
-- **Гігієна (Хашімото):** прогрів нових компонентів перед точним тюном; **перерви** (слух забивається, нетренований швидше).
-> Жодне джерело не догма: де by-ear суперечить виміру — тримати як **варіант** (інша геометрія/ситуація може зробити правильним; несподіване відмикає рішення — перевірено в сесії).
+Protective crossovers for the raw measurements — **a conservative PROTECTION of FRAGILE drivers ONLY** (tweeter, mid; center — depending on ITS driver), so as not to burn them with excessive excursion on the sweep: HP **at/above the REAL resonance (Fs) of EACH driver**. ⚠️ **The HP frequency = a function of the SPECIFIC driver — NOT a fixed number, NOT "typical", NOT from a profile as fact.** No Fs → **ask the user** (or from the datasheet), then set it conservatively higher; **don't hand out a frequency table in advance**. **The midbass and sub don't need a protective HP** — they're made to play low; **a subsonic — only for a PORTED sub** (the cone unloads below the port tuning), **a sealed box limits excursion itself** → not needed. ⚠️ **The final crossover points/types — Phase 1, AFTER the measurements** (propose / derive from measurement+summation, do NOT prescribe by a table; don't introduce drivers the user didn't give) — and **don't show/announce them earlier**: announcing "candidates" in Phase 0 = getting ahead + anchoring. Curve names — per the `autosound_context.md` §5 glossary.
 
 ---
 
-## Фаза −1 — Новий проєкт / нова інсталяція (intake)
+## Three sources — one method (measurement × ear × experience)
 
-Якщо проєкт новий (нема профілю/файлів), інсталяція щойно зроблена/перероблена, або «налаштовуємо з нуля» → спершу **`references/project-intake.md`**: інструктаж (quickstart для нових рук) · опитування обладнання й цілей · **вибір цільової кривої РАЗОМ з користувачем (дефолту нема)** · верифікація інсталяції (роутинг, електрична полярність, захисні кроси, gain staging, шуми, прогрів нових драйверів, безпечний рівень свипа) · створення файлів проєкту. Лише після цього — Фаза 0.
+Our process = **measurement "by the instruments" (REW) ⊕ Hashimoto's by-ear secrets (`method-hashimoto.md`) ⊕ the experience of Arkadij/ResoNix/Wehmeyer (`voicing-by-ear.md`, `diagnostic §16-17`)**, interwoven. The principle: at each phase **MEASUREMENT gives what's reliable** (magnitude, crossover frequency, joint summation, excess-phase, mic-shift), **the EAR — what measurement doesn't get** (filter slope, image/depth/transients, voicing), and they **CROSS-CHECK** each other.
+- **Crossovers (Phase 1):** measurement picks the FREQUENCY (RTA magnitude + slopes); **Hashimoto adds the SLOPE** by ear ("slope→frequency"; mid/treble + mid/low tracks) + the rule **HPF at/above the driver's resonance** (not below 40–50; tweeter HPF > the tweeter's resonance). **L/R symmetry = the DEFAULT** (the same type+order+frequency on the left and right): different L/R phase rotation destroys the phantom center — critical for SQ (EMMA/AYA); compensate cabin asymmetry with EQ/Gain (+ delays for the center), not with crossovers (`filter-types §L/R symmetry`). **Asymmetric L/R crossovers, tuned by ear each side separately = a deliberate Hashimoto VARIANT** — only when symmetry won't image; then verify the imaging carefully (`method-hashimoto.md`).
+- **Polarity/joints:** Hashimoto does it EARLY by ear (image fusion) — that's a **VARIANT**; our reliable arbiter = **SUMMATION** (`diagnostic §9`). On conflict → summation.
+- **Delays:** the base — **geometry / first arrival** (tape measure to the dust cap + the first-arrival peak of the light mid/tweeter); ⚠️ **IR-peak TA via the REW API is unreliable** (`rew-api-quirks` — junk timing) → don't trust API peaks, check against geometry. By-ear "verticals→center" on mono, the sub by a double bass. **A stereo pair's delays are set ONCE for centering; do NOT detune one side for an FR dip** (ITD 200 Hz–1.5 kHz → the image drifts; cabin dips are often SBIR/non-min-phase — can't be closed by time/EQ). Align joints with an **all-pass** (`helix-phase-allpass`), not by shifting the channel's delay. Image-center = LEVEL not time (Wehmeyer §16); a broadband shift = time (§15).
+- **EQ:** measurement (RTA to target · excess-phase: EQ-fixable? · mic-shift mode-vs-reflection · 1/6 oct) + by-ear centering with mono sines (⚠️ **don't touch 2.5–5k** — hearing sensitivity/equal-loudness) + symptom→fix (`voicing-by-ear.md`).
+- **Listening (Phase 5):** a curated track for the measurement (`test-tracks.md`). **Client voicing (Phase 6):** curve→character + by-ear taste axes.
+- **Hygiene (Hashimoto):** break in new components before the precise tune; **breaks** (hearing fatigues, the untrained ear faster).
+> No source is dogma: where by-ear contradicts measurement — keep it as a **variant** (a different geometry/situation may make it right; the unexpected one unlocks a solution — proven in a session).
 
 ---
 
-## Фаза 0 — База і ціль (підготовка)
+## Phase −1 — New project / new install (intake)
 
-> Це додано Claude перед Фазою 1 — без цього порівняння «втрат під ціль» не має точки відліку.
+If the project is new (no profile/files), the install was just done/reworked, or "we're tuning from scratch" → first **`references/project-intake.md`**: the briefing (a quickstart for new hands) · the equipment and goals interview · **choosing the target curve TOGETHER with the user (no default)** · install verification (routing, electrical polarity, protective crossovers, gain staging, noise, break-in of new drivers, a safe sweep level) · creating the project files. Only after that — Phase 0.
+
+---
+
+## Phase 0 — Baseline and target (preparation)
+
+> This was added by Claude before Phase 1 — without it, the "loss vs target" comparison has no reference point.
 >
-> **СПЕРШУ — глосарій + конвенція назв (ОДИН раз, з користувачем), ПЕРЕД замірами.** Узгодь коди каналів (`autosound_context.md §5`: `sw / w-L/R / m-L/R / tw-L/R / c / r`) і конвенцію `<канал>_<vN> (sw|rta)` — метод-суфікс **`(sw)`** = loopback-sweep, **`(rta)`** = MMM RTA; **`_N` = версія конфіга** (НЕ «baseline», НЕ `_MMM`). Приклади: `m-L_1 (sw)`, `w-R_1 (rta)`. Далі **правила не повторювати** — у момент дії давай **конкретику copy-paste-ready**: точний ШЛЯХ збереження + список замірів коротко через кому (`sw_1, w-L_1, w-R_1, m-L_1…`) + стислу ціль (`naming-and-structure §3`).
+> **FIRST — the glossary + naming convention (ONCE, with the user), BEFORE the measurements.** Agree the channel codes (`autosound_context.md §5`: `sw / w-L/R / m-L/R / tw-L/R / c / r`) and the convention `<channel>_<vN> (sw|rta)` — the method suffix **`(sw)`** = loopback sweep, **`(rta)`** = MMM RTA; **`_N` = the config version** (NOT "baseline", NOT `_MMM`). Examples: `m-L_1 (sw)`, `w-R_1 (rta)`. Then **don't repeat the rules** — at the moment of action give **copy-paste-ready specifics**: the exact save PATH + the measurement list short and comma-separated (`sw_1, w-L_1, w-R_1, m-L_1…`) + a brief goal (`naming-and-structure §3`).
 >
-> ⚠️ **Baseline = СИРИЙ замір у поточному стані.** TA-прийоми (зведення важких мідбасів по піку IR, затримки) — це **Фаза 1/2б**, НЕ тут; на baseline лише міряємо.
+> ⚠️ **Baseline = a RAW measurement in the current state.** TA techniques (aligning heavy midbasses to the IR peak, delays) are **Phase 1/2b**, NOT here; at baseline we only measure.
 
-1. Імпортувати **цільову криву поточної сесії** у REW як target (обирається на старті кожного налаштування **разом з користувачем — дефолту нема**; допомога вибору: таблиця крива→характер у `voicing-by-ear.md` + жанри/смак з intake). **Ціль задає лише ФОРМУ, не рівень** — рівень працюємо окремо, виходячи з рівнів заміру. Порівнювати з ціллю по формі, а не з пласкою лінією.
-   > ⚠️ **Тут — ЛИШЕ повна крива сесії.** Пер-смугові/пер-канальні цілі (w/m/tw) **не шукай і не генеруй зараз** — вони залежать від крос-сумації, тому генеруються на **кроці 5б ПІСЛЯ фіксації кросоверів**. Поширений промах (з тест-сесії): маючи повну криву, побігти шукати per-band цілі ще до кросоверів.
-2. Зняти baseline всієї системи в поточному стані + зберегти REW-файл з явним Trace ID **за конвенцією вище** (напр. `ALL_1 (sw)` + `ALL_1 (rta)` — НЕ `m-ALL_baseline`).
-3. Перевірити gain staging / кліпінг (вихідні рівні DSP vs чутливість підсилювачів) — щоб у замірах не було спотворень від перевантаження.
-4. Зафіксувати **фіксований патерн MMM** (швидкість, обʼєм охоплення мікрофоном, межі) — інакше послідовні MMM незіставні.
-
----
-
-## Фаза 1 — Кросовери + рівень + попередня затримка
-
-**Користувач (крок 1):** сирі заміри із захисними HPF.
-- **MMM RTA** — для точної АЧХ: (а) вибір крос-точок між полосами так, щоб L=R і мінімальні втрати під ціль (використати наявні схили + цільові схили; у мідбасі ціль часто має підйом — взяти на ньому більше енергії з динаміків); (б) попередня корекція рівня/гейнів каналів.
-- **SWEEP (loopback)** — для: імпульсу (попереднє зведення затримок), distortions (вибір безпечних діапазонів полос), + інші графіки за `analysis-playbook.md`.
-
-**Claude (крок 2):** REW API → аналіз → пропозиція по (а) рівню сигналу, (б) затримці, (в) частотах кросоверів для максимальної SQ ефективним засобом: без глибоких зрізів-втрат енергії, мінімізуючи/балансуючи фазові спотворення, стикаючи полоси для чіткості/деталізації/прозорості. → пакет у Gemini. До 3 раундів → ескалація.
-
-**Gemini (крок 3):** аналізує запропонований варіант + 2–3 альтернативи, ставить питання або пропонує кращі, виходячи з цілей Фази 1.
-
-**Claude (крок 4):** будує в REW EQ типу General на кожній сирій RTA-кривій: HPF, LPF; PK для зрізання піків; SHELF за потреби. Якщо REW не дозволяє — видає **табличку фільтрів** для ручного вводу.
-
-**Користувач (крок 5):** переносить гейни/рівні, затримки, фільтри з REW (або таблички) у DSP. Питання/ідеї — обговорити й скоригувати на місці.
-
-**Крок 5б — цілі ПО СМУГАХ (nonotuningtool):** після фіксації кросоверів згенерувати в **https://nonotuningtool.com** цільові криві **по смугах — w (мідбас), m (СЧ), tw (ВЧ), стерео**: house curve сесії + обрані кросовери (тип/частота/порядок) → тул рахує ціль КОЖНОЇ смуги **з урахуванням коефіцієнтів акустичної сумації в зонах перекриття стиків**. ⚠️ Тому це **НЕ «нарізка» повної кривої** — у перекриттях цілі занижені, щоб **СУМА** смуг дала house curve (інакше подвійний внесок у стику = горб). Експорт для REW → **завантажити файли у `rew_analitic/target-curves/<name>/`** (поряд із повною #1; per-band-файли з крос-частотами в назвах) → імпорт у REW (= «Nono» під-цілі #2–9; завантажені експорти читає `rew_tool/nono_curves.py`: повна=`freq mag`, per-band=`freq mag phase`). Гігієна-EQ Фази 2а рівняє канал до СВОЄЇ nono-цілі, не до повної house curve. ⚠️ Поза смугою під-цілі несуть сміття — семплити лише в смузі (`rew-api-quirks.md`); рівні анкорити до ПОВНОЇ цілі #1, не під-цілей (`diagnostic §1`). Зміна кросовера пізніше = перегенерувати цілі.
+1. Import **the current session's target curve** into REW as the target (chosen at the start of every tune **with the user — no default**; choice help: the curve→character table in `voicing-by-ear.md` + genres/taste from intake). **The target sets only the SHAPE, not the level** — level is worked separately, from the measured levels. Compare with the target by shape, not with a flat line.
+   > ⚠️ **Here — ONLY the session's full curve.** Per-band/per-channel targets (w/m/tw) — don't look for or generate them now — they depend on the crossover summation, so they're generated at **step 5b AFTER the crossovers are fixed**. A common slip (from the test session): having the full curve, running off to look for per-band targets before the crossovers.
+2. Capture a baseline of the whole system in the current state + save the REW file with an explicit Trace ID **per the convention above** (e.g. `ALL_1 (sw)` + `ALL_1 (rta)` — NOT `m-ALL_baseline`).
+3. Check gain staging / clipping (DSP output levels vs amp sensitivity) — so the measurements have no distortion from overload.
+4. Fix a **fixed MMM pattern** (speed, the mic's coverage volume, the bounds) — otherwise successive MMMs aren't comparable.
 
 ---
 
-## Фаза 2 — Лінеаризація → фази → вирівнювання сум → чистова EQ (під-кроки САМЕ в цьому порядку)
+## Phase 1 — Crossovers + level + preliminary delay
 
-> Порядок невипадковий (синхронізовано з користувачем 2026-06-12): **гігієна-EQ (2а) ПЕРЕД зведенням фаз (2б)** — зрізи min-phase піків крутять фазу локально, тож стики зводяться по вже почищених каналах (інакше пізніший EQ зламає щойно виставлені фази). **Вирівнювання СУМАРНИХ кривих (2в)** має сенс лише після чистих стиків. **Чистова EQ (2г)** — фінальна технічна точність до цілі сесії. **Побажання слухача — НЕ тут**: це Фаза 6, повністю на virtual-пресеті. Якщо пізніше міняється EQ біля стику — сумацію того стику перевірити знову.
+**User (step 1):** raw measurements with protective HPFs.
+- **MMM RTA** — for the precise FR: (a) choosing the crossover points between bands so that L=R and the loss vs target is minimal (use the existing slopes + the target slopes; in the midbass the target often has a rise — take more energy from the drivers there); (b) a preliminary correction of channel level/gains.
+- **SWEEP (loopback)** — for: the impulse (preliminary delay alignment), distortion (choosing safe band ranges), + other graphs per `analysis-playbook.md`.
 
-### 2а — Гігієна-EQ кожного каналу (до СВОЄЇ nono-цілі)
-**Користувач (крок 6):** MMM RTA кожного каналу. **Claude (крок 7):** аналіз відхилень від пер-канальної nono-цілі → EQ: **різати min-phase піки, нулі НЕ заповнювати** (peak-vs-null `diagnostic §2`, mic-shift §13; аномалії з профілю не передіагностувати) → пакет у Gemini (**крок 8**, цілі як у кроці 3), 3 раунди → ескалація. Перед заливкою — **сумарна крива банку фільтрів + fine 1/24 локалізація (§21)**. **≥3 смуг — ніколи руками:** EQ будувати в REW → перенос файлом (для Helix → `helix-eq-export.md`).
+**Claude (step 2):** REW API → analysis → a proposal on (a) signal level, (b) delay, (c) crossover frequencies for maximum SQ by an efficient means: without deep loss-cuts, minimizing/balancing phase distortion, joining the bands for clarity/detail/transparency. → a package to Gemini. Up to 3 rounds → escalation.
 
-### 2б — Фази стиків (sweep)
-**Користувач/Claude (крок 9):** SWEEP (loopback) → фінальне TA + зведення фаз по стиках у порядку **мідбас (опора) → саб → СЧ → ВЧ** (`helix-phase-allpass.md`; Wehmeyer `diagnostic §16`), потім **L↔R** (mono-сумація). Вердикт на кожному стику — по СУМАЦІЇ (`diagnostic §3/§9`), не по одно-позиційній фазі (§10); прогнозовані фази можна дивитись на sweep-кривих із застосованими EQ.
+**Gemini (step 3):** analyzes the proposed variant + 2–3 alternatives, asks questions or proposes better ones, given the Phase-1 goals.
 
-### 2в — Вирівнювання сумарних кривих (пари → сторони → стики)
-**Користувач:** MMM RTA сум: **Ws / Ms / TWs** (Л+П кожної полоси) · **L vs R** (повні фронтальні сторони) · **SW+Ws**. **Claude:** вирівняти:
-- **(а) пари полос** між собою — рівень/форма, особливо в зонах сумації (хамп перекриття ≠ гарячий драйвер, `diagnostic §3`);
-- **(б) L vs R** — до збігу **ФОРМИ** в зоні образу (§11; «забери з гучнішого І додай тихішому» §17);
-- **(в) SW+Ws** — стик без ями/горба (§3, полярність §9).
-**Інструмент за призначенням (§6):** асиметрія L/R → **OUTPUT** (по-канально); спільні або свідомо-посторонні рухи → **VIRTUAL** (симетрично L=R, або по стороні — напр. broadband-зсув образу §15); не пере-notch'ити те, що вже зробив output.
+**Claude (step 4):** builds a General-type EQ in REW on each raw RTA curve: HPF, LPF; PK to cut peaks; SHELF if needed. If REW doesn't allow it — produces a **filter table** for manual entry.
 
-### 2г — Чистова EQ до цілі по RTA
-**Claude (крок 10):** залишкову ФОРМУ ALL до house curve — **широкими рухами (шелфи/тілт), переважно на virtual (L=R linked)**. Це ще **технічний** шар (точність до цілі сесії), не смак: смакові відхилення («тепліше», «більше басу») лишити Фазі 6 окремим пресетом. Користувач аналізує прогнозовані криві → переносить у DSP або обговорює сумніви.
+**User (step 5):** transfers the gains/levels, delays, filters from REW (or the table) into the DSP. Questions/ideas — discuss and adjust on the spot.
+
+**Step 5b — per-band targets (nonotuningtool):** after the crossovers are fixed, generate in **https://nonotuningtool.com** the target curves **per band — w (midbass), m (mid), tw (tweeter), stereo**: the session's house curve + the chosen crossovers (type/frequency/order) → the tool computes EACH band's target **accounting for the acoustic-summation coefficients in the overlap regions at the joints**. ⚠️ So this is **NOT a "slicing" of the full curve** — in the overlaps the targets are lowered so the **SUM** of the bands gives the house curve (otherwise a double contribution at the joint = a hump). Export for REW → **load the files into `rew_analitic/target-curves/<name>/`** (next to the full #1; the per-band files with crossover frequencies in the names) → import into REW (= the "Nono" sub-targets #2–9; the loaded exports are read by `rew_tool/nono_curves.py`: full=`freq mag`, per-band=`freq mag phase`). Phase-2a hygiene EQ levels a channel to ITS OWN nono target, not to the full house curve. ⚠️ Out of band the sub-targets carry junk — sample only in-band (`rew-api-quirks.md`); anchor levels to the FULL target #1, not the sub-targets (`diagnostic §1`). A later crossover change = regenerate the targets.
 
 ---
 
-## Фаза 3 — Контрольний замір і вердикт
+## Phase 2 — Linearization → joint phase → summed-curve alignment → final EQ (sub-steps in THIS exact order)
 
-**Користувач (крок 11):** контрольний MMM RTA: кожен канал; пари L+R; саб+обидва мідбаси; ліва сторона і права сторона без саба; всі канали разом.
+> The order isn't accidental (synced with the user 2026-06-12): **hygiene EQ (2a) BEFORE phase alignment (2b)** — cutting min-phase peaks rotates the phase locally, so the joints are aligned on already-cleaned channels (otherwise later EQ breaks the just-set phases). **Aligning the SUMMED curves (2c)** makes sense only after clean joints. **Final EQ (2d)** — the final technical accuracy to the session's target. **The listener's wishes are NOT here**: that's Phase 6, entirely on the virtual preset. If EQ near a joint changes later — re-check that joint's summation.
 
-**Claude + Gemini (крок 12):** аналізують результат, кожен формує **незалежний вердикт**. Організатор і контакт користувача — Claude.
+### 2a — Hygiene EQ of each channel (to ITS OWN nono target)
+**User (step 6):** MMM RTA of each channel. **Claude (step 7):** analysis of the deviations from the per-channel nono target → EQ: **cut min-phase peaks, do NOT fill nulls** (peak-vs-null `diagnostic §2`, mic-shift §13; don't re-diagnose anomalies from the profile) → a package to Gemini (**step 8**, goals as in step 3), 3 rounds → escalation. Before loading — the **summed curve of the filter bank + fine 1/24 localization (§21)**. **≥3 bands — never by hand:** build the EQ in REW → transfer by file (for Helix → `helix-eq-export.md`).
 
----
+### 2b — Joint phase (sweep)
+**User/Claude (step 9):** SWEEP (loopback) → final TA + phase alignment across the joints in the order **midbass (reference) → sub → mid → tweeter** (`helix-phase-allpass.md`; Wehmeyer `diagnostic §16`), then **L↔R** (mono summation). The verdict at each joint — by SUMMATION (`diagnostic §3/§9`), not by single-position phase (§10); the predicted phases can be viewed on the sweep curves with the EQ applied.
 
-## Фаза 4 — Центр і тил (опціонально, після зведеного фронту)
+### 2c — Aligning the summed curves (pairs → sides → joints)
+**User:** MMM RTA of the sums: **Ws / Ms / TWs** (L+R of each band) · **L vs R** (full front sides) · **SW+Ws**. **Claude:** align:
+- **(a) band pairs** to each other — level/shape, especially in the summation regions (an overlap hump ≠ a hot driver, `diagnostic §3`);
+- **(b) L vs R** — to a match of **SHAPE** in the image region (§11; "take from the louder one AND add to the quieter one" §17);
+- **(c) SW+Ws** — a joint without a dip/hump (§3, polarity §9).
+**The tool by purpose (§6):** L/R asymmetry → **OUTPUT** (per-channel); shared or deliberately per-side moves → **VIRTUAL** (symmetric L=R, or per side — e.g. a broadband image shift §15); don't re-notch what the output already did.
 
-**Крок 13:** спершу ІДЕАЛЬНО звести фронт (Фази 0–3), ЛИШЕ потім додавати центр і тил окремим процесом. Рівні/полярність/APF центру й тилу — **ПРОЄКТНИЙ стан** (`dsp-state-current`), на старті роботи **верифікувати виміром, не з пам'яті** (реал 2026-06-12: лог казав −12/NORM, у DSP було −3/INV).
-
-- **Центр — повна методика → `diagnostic-techniques.md §20`:** manual-L+R центр = 3-тє джерело → гребінка з мідами; лікувати **звуженням смуги до тіла голосу (LP~1000-1200)**, тихим рівнем (доповнення, не співучасник), полярність по СУМІ/вуху, APF обережно. Для **FX/RealCenter** (алгоритмічного) — рівень «підтримує фокус, не домінує»; затримка щоб не випереджав фронт; «стискає» сцену → фазовий регулятор. Центральний твітер (якщо є): HP високо (6-8к), рівень −6..−10 дБ (by-ear варіанти — судити вухом).
-- **Тил (rear-fill) — методика → `voicing-by-ear.md` §Тил:** мета = огортання, НЕ задній образ; HP вище боом-зони дверей (~300-315), LP ~4-5к, диференційний матрикс L−R за замовчуванням, рівень тихо, затримка TA + 8-10 мс (Haas).
-
----
-
-## Фаза 5 — Цільове прослуховування (верифікація на слух) [ПЕРЕДОСТАННЯ]
-
-Після того як виміряний тюн залитий і верифікований (Фаза 3 + опц. Фаза 4) — **структурований слуховий прохід по курованих тест-треках** (`test-tracks.md`), щоб перевірити КОЖЕН SQ-вимір вухом: тональний баланс, центр/фантом, L/R imaging, **глибина**, ширина, висота, панч/атака, сибілянти, розділення, spatial coherence. Ловить те, що вимір не бачить (глибина/imaging/транзієнти — ear-driven; салонна фаза/GD ненадійні, `diagnostic §10`).
-- **Метод (точковий):** для кожного виміру взяти трек з індексу `test-tracks.md` → сказати Арбітру **ЩО ставити + де (таймкод) + ЩО слухати** (бінарне добре/погано). Один маркер за раз; не вивалювати весь список.
-- **Стандартний ПРОХІД (повний чек на віхах):** коли тюн «готовий» (після Фази 3/4) або перед змаганням — провести Арбітра **фіксованим маршрутом** `test-tracks.md §Стандартний прохід` (баланс → моно-центр → позиції EMMA → фокус → глибина → панч/стик → саб<40 → сибілянти → навантаження → універсальність). Кожен пункт = трек+маркер+бінарний вердикт у чеклист; усе, що ✗ — backlog наступної ітерації. Це і є структурований «шлях» слухової верифікації.
-- **Цільове прослуховування = і крос-cutting ІНСТРУМЕНТ по ходу ВСЬОГО процесу**, не лише тут: будь-де, де гіпотеза вимагає вуха (фаза стику, полярність важкого мідбаса, панч, центр, дифузність) — підібрати трек і перевірити, не чекаючи Фази 5.
-- Залишки, що DSP не бере (фізика/відбиття/геометрія) — зафіксувати як **межу**, не воювати наосліп.
+### 2d — Final EQ to target by RTA
+**Claude (step 10):** the residual SHAPE of ALL to the house curve — **with broad moves (shelves/tilt), mostly on the virtual (L=R linked)**. This is still a **technical** layer (accuracy to the session's target), not taste: taste deviations ("warmer", "more bass") are left to Phase 6 as a separate preset. The user analyzes the predicted curves → transfers them into the DSP or discusses doubts.
 
 ---
 
-## Фаза 6 — Войсинг під преференції КЛІЄНТА [ОСТАННІЙ]
+## Phase 3 — Control measurement and verdict
 
-Фінальний **СУБ'ЄКТИВНИЙ** шар поверх технічно-коректної бази: підлаштувати войсинг (форма цілі / virtual-шар) під смак клієнта — тепліше/яскравіше, більше басу, менше presence тощо. Тут «точність» свідомо поступається «що клієнту приємно». Робиться на **VIRTUAL-шарі як перемикомий пресет** (base недоторканий — `SKILL.md` §Session lifecycle, base+voicing). Тримати ОБИДВА (технічний + клієнтський) → A/B.
+**User (step 11):** a control MMM RTA: each channel; L+R pairs; the sub + both midbasses; the left side and the right side without the sub; all channels together.
 
-**Методика (повна → `references/voicing-by-ear.md`):**
-1. **Зняти смак клієнта.** Осі: тепло↔яскраво · бас-важко↔нейтрально · forward↔laid-back · точність↔fun. + яка музика і як слухає (жанри, гучність, довгі поїздки). *(Майбутнє: intake-опитник на старті проєкту — roadmap.)*
-2. **Аудит кривих:** вирівняти flat (±1dB) → по черзі прикладати house-криві як EQ-профіль → слухати знайомий трек (Diana Krall «Temptation» · Dire Straits «Private Investigations» · Daft Punk «Giorgio by Moroder») → клієнт обирає. Крива→характер — таблиця у `voicing-by-ear.md`.
-3. **Докрутити by-ear** по осях смаку (підсушити/пожирніше, висота сцени, голос ближче/далі, кристально/м'якший верх) — симптом→EQ-рух у `voicing-by-ear.md`.
-4. **Зберегти як окремий voicing-пресет**; технічний (Accurate/reference) лишити поряд для A/B і змагань.
+**Claude + Gemini (step 12):** analyze the result, each forms an **independent verdict**. The organizer and the user's contact is Claude.
 
 ---
 
-## Фаза 7 — Підсумок проєкту: знання → скіл і автору [ЗАКРИТТЯ]
+## Phase 4 — Center and rear (optional, after the front is aligned)
 
-На віхах (фінал сесії/проєкту, після слухової роботи) Claude **проактивно** проводить закриваючий ритуал — ЧОТИРИ різні потоки, інтерактивно, з завжди-опційним вільним коментарем (повна логіка + правила → `references/feedback-loop.md`):
-- **A. Зворотний зв'язок по ПРОЕКТУ** (мета тюну + backlog авто) → session log. *(«докрутити» — сюди, не плутати зі скілом.)*
-- **B. Фідбек по СКІЛУ** — що добре/не дуже, **ЛИШЕ про використане** в цьому проекті → матеріал покращення скіла.
-- **C. Згода поділитися напрацюваннями зі СПІЛЬНОТОЮ** — список передвиділений (opt-out) → «Погоджуюсь відправити на користь спільноті!»; **відправляє людина** (без персоналій/замірів).
-- **D. ПІСЛЯ submit** — подяка, і лише при позитиві (A) тихий донат-лінк. ⚠️ Донат **не пункт форми, до submit — ні слова**; пропустити, якщо Sponsors не активний.
-- Плюс **session-log дисципліна**: changelog / dsp-state / ▶️ ПРОДОВЖИТИ / skill-inbox (SKILL.md §Session log).
+**Step 13:** first align the front PERFECTLY (Phases 0–3), ONLY then add the center and rear as a separate process. The center's and rear's levels/polarity/APF are **PROJECT state** (`dsp-state-current`); at the start of work **verify by measurement, not from memory** (real case 2026-06-12: the log said −12/NORM, the DSP had −3/INV).
+
+- **Center — the full method → `diagnostic-techniques.md §20`:** a manual-L+R center = a 3rd source → a comb with the mids; treat it by **narrowing the band to the body of the voice (LP~1000–1200)**, a quiet level (a complement, not an accomplice), polarity by the SUM/ear, APF carefully. For an **FX/RealCenter** (algorithmic) — a level that "supports the focus, doesn't dominate"; a delay so it doesn't lead the front; if it "compresses" the stage → the phase control. A center tweeter (if present): HP high (6–8k), level −6..−10 dB (by-ear variants — judge by ear).
+- **Rear (rear-fill) — the method → `voicing-by-ear.md` §Rear:** the goal = envelopment, NOT a rear image; HP above the doors' boom zone (~300–315), LP ~4–5k, a differential L−R matrix by default, a quiet level, delay TA + 8–10 ms (Haas).
 
 ---
 
-## Формат пакета (Генератор → Критик), §3 Контракту
+## Phase 5 — Targeted listening (verification by ear) [PENULTIMATE]
+
+After the measured tune is loaded and verified (Phase 3 + optional Phase 4) — **a structured listening pass over curated test tracks** (`test-tracks.md`), to check EVERY SQ measure by ear: tonal balance, center/phantom, L/R imaging, **depth**, width, height, punch/attack, sibilants, separation, spatial coherence. It catches what measurement doesn't see (depth/imaging/transients — ear-driven; cabin phase/GD unreliable, `diagnostic §10`).
+- **Method (targeted):** for each measure, take a track from the `test-tracks.md` index → tell the Arbiter **WHAT to play + where (timecode) + WHAT to listen for** (a binary good/bad). One marker at a time; don't dump the whole list.
+- **The standard PASS (a full check at milestones):** when the tune is "ready" (after Phase 3/4) or before a competition — take the Arbiter along a **fixed route** `test-tracks.md §Standard pass` (balance → mono-center → EMMA positions → focus → depth → punch/joint → sub<40 → sibilants → load → universality). Each item = track+marker+a binary verdict into a checklist; everything ✗ — the next iteration's backlog. This is the structured "path" of listening verification.
+- **Targeted listening is also a cross-cutting TOOL throughout the WHOLE process**, not only here: anywhere a hypothesis needs the ear (joint phase, heavy-midbass polarity, punch, center, diffuseness) — pick a track and check, without waiting for Phase 5.
+- Residuals the DSP can't take (physics/reflections/geometry) — record as a **limit**, don't fight blindly.
+
+---
+
+## Phase 6 — Voicing to the CLIENT's preferences [LAST]
+
+The final **SUBJECTIVE** layer on top of the technically-correct base: tune the voicing (the target's shape / the virtual layer) to the client's taste — warmer/brighter, more bass, less presence, etc. Here "accuracy" deliberately yields to "what's pleasant to the client". Done on the **VIRTUAL layer as a switchable preset** (the base untouched — `SKILL.md` §Session lifecycle, base+voicing). Keep BOTH (the technical + the client one) → A/B.
+
+**Method (full → `references/voicing-by-ear.md`):**
+1. **Capture the client's taste.** Axes: warm↔bright · bass-heavy↔neutral · forward↔laid-back · accuracy↔fun. + what music and how they listen (genres, loudness, long trips). *(Future: an intake questionnaire at the project start — roadmap.)*
+2. **Curve audition:** flatten (±1 dB) → apply the house curves in turn as an EQ profile → listen to a familiar track (Diana Krall "Temptation" · Dire Straits "Private Investigations" · Daft Punk "Giorgio by Moroder") → the client chooses. Curve→character — the table in `voicing-by-ear.md`.
+3. **Fine-tune by ear** along the taste axes (drier/fuller, stage height, voice closer/farther, crystalline/softer top) — symptom→EQ move in `voicing-by-ear.md`.
+4. **Save as a separate voicing preset**; keep the technical one (Accurate/reference) alongside for A/B and competitions.
+
+---
+
+## Phase 7 — Project wrap-up: knowledge → the skill and the author [CLOSING]
+
+At milestones (the end of a session/project, after the listening work) Claude **proactively** runs the closing ritual — FOUR distinct streams, interactively, with an always-optional free comment (full logic + rules → `references/feedback-loop.md`):
+- **A. Feedback on the PROJECT** (the tune's goal + the car's backlog) → the session log. *("Fine-tuning" — here, not to be confused with the skill.)*
+- **B. Feedback on the SKILL** — what's good/not so, **ONLY about what was used** in this project → material to improve the skill.
+- **C. Consent to share the work with the COMMUNITY** — the list is pre-selected (opt-out) → "I agree to send it for the community's benefit!"; **a human sends it** (no personal data/measurements).
+- **D. AFTER submit** — thanks, and only on a positive (A) a quiet donation link. ⚠️ The donation is **not a form item, not a word before submit**; skip it if Sponsors isn't active.
+- Plus **session-log discipline**: changelog / dsp-state / ▶️ CONTINUE / skill-inbox (SKILL.md §Session log).
+
+---
+
+## Package format (Generator → Critic), Contract §3
 
 ```
-[Iteration N/3]  Генератор: <Claude|Gemini>
-Trace ID: <імʼя заміру в REW>
+[Iteration N/3]  Generator: <Claude|Gemini>
+Trace ID: <the measurement's name in REW>
 
-Актуальний стан (дельта): <що змінилось: фільтри / EQ / затримки>
-Оцифровані аномалії: <числа: АЧХ / фаза / імпульс>   (+ прикріплений трейс CSV)
-Гіпотеза: <причина проблеми>
-Пропозиція: <тип, частота, Q, канал>
-Очікуваний ефект:
-  • Пряма дія фільтра: <напр. APF — поворот фази, 0 дБ на АЧХ>
-  • Прогноз після сумації: <напр. +3 дБ у зоні перекриття L/R>
-Матобґрунтування: <короткі цифри / дельти часу>
-Мої припущення: <що приймаю за дане>
-Що прошу оскаржити найперше: <ОДНА конкретна річ>
+Current state (delta): <what changed: filters / EQ / delays>
+Digitized anomalies: <numbers: FR / phase / impulse>   (+ attached CSV trace)
+Hypothesis: <the cause of the problem>
+Proposal: <type, frequency, Q, channel>
+Expected effect:
+  • The filter's direct action: <e.g. APF — phase rotation, 0 dB in FR>
+  • Prediction after summation: <e.g. +3 dB in the L/R overlap region>
+Math rationale: <short numbers / time deltas>
+My assumptions: <what I take as given>
+What I ask you to challenge first: <ONE specific thing>
 ```
 
-> «Очікуваний ефект» **обовʼязково** розділяє пряму дію фільтра й результат сумації — all-pass плоский по АЧХ, будь-яка зміна АЧХ іде через сумацію джерел.
+> "Expected effect" **must** separate the filter's direct action from the summation result — an all-pass is flat in FR, any FR change comes through source summation.
 
 ---
 
-## Уточнення процесу від Claude (відповідь на крок 14)
+## Claude's refinements to the process (the answer to step 14)
 
-Прийняті до врахування; де доречно — вже вшиті у фази вище.
+Accepted; where relevant — already woven into the phases above.
 
-1. **Порядок: затримки → гігієна-EQ → фази стиків → вирівнювання сум (пари/сторони/SW+Ws) → чистова EQ → [Фаза 6] войсинг побажань** (оновлено 2026-06-12; раніше тут стояло «затримки → фаза → EQ»). Затримка взаємодіє з фазою кросовера на стику; але й зрізи min-phase піків крутять фазу локально — тому стики зводимо ПІСЛЯ лінеаризації каналів (2а→2б), вирівнювання сум — після чистих стиків (2в), чистова EQ — технічний фінал (2г), а смак слухача — окремим virtual-пресетом (Фаза 6). У Фазі 1 затримка **попередня** (з імпульсу/sweep); фінальне TA + фази — Фаза 2б. Висновки про взаємну фазу L/R робити **після** TA, не на baseline (це підтвердив і Gemini у тест-раунді).
+1. **Order: delays → hygiene EQ → joint phase → summed alignment (pairs/sides/SW+Ws) → final EQ → [Phase 6] voicing wishes** (updated 2026-06-12; earlier this read "delays → phase → EQ"). Delay interacts with the crossover phase at the joint; but cutting min-phase peaks also rotates the phase locally — so we align the joints AFTER linearizing the channels (2a→2b), the summed alignment — after clean joints (2c), the final EQ — the technical finale (2d), and the listener's taste — as a separate virtual preset (Phase 6). In Phase 1 the delay is **preliminary** (from the impulse/sweep); the final TA + phase — Phase 2b. Draw conclusions about the mutual L/R phase **after** TA, not on the baseline (Gemini confirmed this in a test round too).
 
-   **Уточнений потік фаз (від користувача):**
-   `сирий sweep → TA → сирий sweep → фаза (для інфо) → крос-фільтри → фаза → RTA → EQ`
-   Сенс: зняти фазу **сирих** сигналів (після TA, до кросоверів) як референс, а потім фазу **з кросоверами** — щоб бачити, **скільки спотворень внесли саме крос-фільтри**, а не плутати їх з геометрією/салоном. Перший «сирий sweep» — до TA (для затримок), другий «сирий sweep» — після TA (референсна фаза без фільтрів).
+   **The refined phase flow (from the user):**
+   `raw sweep → TA → raw sweep → phase (for info) → crossover filters → phase → RTA → EQ`
+   The point: capture the phase of the **raw** signals (after TA, before the crossovers) as a reference, then the phase **with the crossovers** — to see **how much distortion the crossover filters introduced**, rather than confusing it with geometry/cabin. The first "raw sweep" — before TA (for the delays), the second "raw sweep" — after TA (the reference phase without filters).
 
-2. **MMM RTA — для АЧХ, SWEEP — для фази/часу.** MMM усереднює магнітуду по салону, але фаза в ньому ненадійна. Вибір крос-**частоти** = RTA-магнітуда + схили; перевірка фазового **стику** і затримок = loopback-sweep. Не плутати джерела даних.
+2. **MMM RTA — for the FR, SWEEP — for phase/time.** MMM averages the magnitude across the cabin, but the phase in it is unreliable. Choosing the crossover **frequency** = RTA magnitude + slopes; checking the phase **joint** and the delays = a loopback sweep. Don't confuse the data sources.
 
-3. **Excess-phase / minimum-phase розклад.** У REW дивитись excess phase, щоб відрізнити EQ-виправні (мінімум-фазні) провали від невиправних. Це прямо вирішує «чіпати чи ні» провал 150 Гц (дифракція → не мінімум-фазний → EQ заборонений).
+3. **Excess-phase / minimum-phase decomposition.** In REW, look at the excess phase to tell EQ-fixable (minimum-phase) dips from unfixable ones. This directly decides "touch it or not" for the 150 Hz dip (diffraction → not minimum-phase → EQ forbidden).
 
-4. **L=R — це тренд, не клон.** Геометрія салону робить L/R природно асиметричними (провал 150 Гц зліва). Зводити тренди й зону стику, але дозволяти пер-канальний EQ; не гнатись за ідентичними кривими там, де фізика забороняє.
+4. **L=R is a trend, not a clone.** The cabin geometry makes L/R naturally asymmetric (a 150 Hz dip on the left). Align the trends and the joint region, but allow per-channel EQ; don't chase identical curves where physics forbids it.
 
-5. **Прогноз сумації перед застосуванням.** Перед комітом використати арифметику трейсів REW (A+B) — прогнозувати суму L+R та суму смуг (band+band) на стику, щоб не отримати діру/горб постфактум.
+5. **Predict the summation before applying.** Before committing, use REW's trace arithmetic (A+B) — predict the L+R sum and the band+band sum at the joint, so you don't get a hole/hump after the fact.
 
-6. **Sub↔Midbass — окремий фокус.** Стик саба з мідбасом (полярність + затримка + ~60 Гц) часто дає найбільший SQ-виграш; у контрольному замірі (крок 11) пара «саб+обидва мідбаси» вже є — додати явну перевірку фази/полярності на цьому стику.
+6. **Sub↔Midbass — a separate focus.** The sub's joint with the midbass (polarity + delay + ~60 Hz) often gives the biggest SQ gain; in the control measurement (step 11) the "sub + both midbasses" pair is already there — add an explicit phase/polarity check at this joint.
 
-7. **Sweep-data, що корисні (відповідь на питання кроку 1):**
-   - **GD (group delay):** надлишкова GD на стиках і резонансах — де поворот фази допустимий.
-   - **CSD / waterfall:** резонанси й «дзвін» (двері, 150 Гц) — EQ проти механіки.
-   - **Step response:** часова інтеграція драйверів (правило «мідбас по піку, не по носу»).
-   - **Distortion (THD + окремі гармоніки):** безпечні межі полос (де росте THD → туди ставити HPF).
-   - **ETC / impulse:** затримки й відбиття.
-   - **Excess phase:** що EQ-виправне (див. п.3).
+7. **Sweep data that's useful (the answer to the step-1 question):**
+   - **GD (group delay):** excess GD at joints and resonances — where phase rotation is permissible.
+   - **CSD / waterfall:** resonances and "ringing" (doors, 150 Hz) — EQ against mechanics.
+   - **Step response:** the drivers' time integration (the rule "midbass by the peak, not the nose").
+   - **Distortion (THD + individual harmonics):** safe band limits (where THD rises → put the HPF there).
+   - **ETC / impulse:** delays and reflections.
+   - **Excess phase:** what's EQ-fixable (see point 3).
 
-8. **Транспорт (виправлено 2026-06-01).** REW працює **нативно на macOS** → API `localhost:4735` доступний **прямо з хоста**, де живуть Claude/Gemini; прокидання портів НЕ потрібне, дані тягнемо наживо. Parallels (Windows-VM) потрібен **лише для Helix DSP PC-Tool** (Windows-only) — єдиний «кур'єрський» крок це передати EQ-експорт з REW (Mac) у Helix через спільну папку. Канал критика: `gemini_critic.sh` на тому ж macOS-хості. (Раніше тут хибно стояло «REW API всередині VM» — артефакт ранніх припущень, прибрано.)
+8. **Transport (fixed 2026-06-01).** REW runs **natively on macOS** → the API `localhost:4735` is reachable **directly from the host** where Claude/Gemini live; no port-forwarding is needed, we pull data live. Parallels (the Windows VM) is needed **only for the Helix DSP PC-Tool** (Windows-only) — the single "courier" step is handing the EQ export from REW (Mac) to Helix via a shared folder. The critic channel: `gemini_critic.sh` on the same macOS host. (Earlier this wrongly said "the REW API is inside the VM" — an artifact of early assumptions, removed.)
 
-9. **Ротація ролей.** Періодично робити Gemini Генератором, а Claude Критиком — щоб не накопичувалась упередженість однієї моделі (Контракт §0).
+9. **Role rotation.** Periodically make Gemini the Generator and Claude the Critic — so one model's bias doesn't accumulate (Contract §0).

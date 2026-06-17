@@ -1,97 +1,97 @@
-# Новий проєкт — інструктаж, опитування, верифікація інсталяції, файли (Фаза −1)
+# New project — briefing, interview, install verification, files (Phase −1)
 
-**Коли сюди:** Resume не знаходить проєктних файлів · нова машина/система · нова або перероблена інсталяція · скіл передано в нові руки · «налаштуй з нуля». Це **перша сесія проєкту**: спершу опитування + верифікація, лише потім перший замір (Фаза 0).
+**When you come here:** Resume finds no project files · a new car/system · a new or reworked install · the skill was handed to new hands · "tune from scratch". This is the **project's first session**: interview + verification first, only then the first measurement (Phase 0).
 
-> **«Та сама машина, але з нуля»:** профіль (`autosound_context.md`) уже існує — НЕ перестворювати. Пройти лише §2 (цілі/крива — вони могли змінитись) + §3 (верифікація: інсталяція могла дрейфонути), стару історію (changelog/dsp-state) заархівувати з позначкою, почати нову. Класифікація тригера «що з сирих даних ще валідне» → `naming-and-structure.md §2`.
-
----
-
-## 0. Quickstart — що потрібно мати (інструктаж для нових рук)
-
-> 🌍 **Найперше — мова локального проєкту.** Спитай користувача: *«English, or your native language? (supported: **EN · UK · DE · PL**)»*. Далі **весь діалог І ВСІ згенеровані файли проєкту** (`autosound_context`, `tuning-changelog`, `dsp-state-current`, `audit-trail`, `skill-inbox`) — **обраною мовою**. Тіло скіла англійське (це лише метод-каркас) — спілкування й артефакти йдуть мовою користувача; інші мови Claude теж потягне, але офіційно перевірені EN/UK/DE/PL.
-
-- **REW** з увімкненим API-сервером (Preferences → API; перевірка: `localhost:4735` відповідає). Вимірювальний мікрофон **з калібрувальними файлами** + спосіб стабільно позиціонувати його в точці слухача (LP).
-- **Софт свого DSP** і спосіб занести в нього EQ (ідеально — імпорт файлом; з'ясуємо в §4).
-- Цей скіл + сусідній **`../review-loop/SKILL.md`** — вони їдуть разом (review-loop тримає протокол рев'ю).
-- **🔑 Ревьюер (Критик/Радник) — ПІДКЛЮЧИ НА СТАРТІ. Це ЯДРО методу, не опція** — синергія другого експерта дає колосальний приріст якості (одно-перспективний тюн помітно гірший). **Запропонуй користувачу** й обери доступне (фолбек-драбина): **(1) Gemini** через `scripts/gemini_*.sh` — авто-детект CLI (`agy` або `@google/gemini-cli`); **установка + smoke-test за 2 хв → `references/setup-critic-channel.md`** (зроби це ЗАРАЗ, на старті, а не коли впаде перший раунд); **(2)** будь-який інший ШІ в сусідньому вікні; **(3) Claude в ОКРЕМІЙ сесії** як ревьюер (cross-session self-review — `../review-loop/SKILL.md`, TWO-PASS анти-анкоринг); **(4)** людина-ревьюер. Ролі **vendor-agnostic** (review-loop). ⚠️ **Не пропускай цей крок.** (CLI-КАНАЛ опційний; РОЛЬ ревьюера — ні.)
-- **Як виглядає робоча сесія:** Pre-session checklist (залізо) → Resume (стан) → робота по фазах (`process-phases.md`) → Session log (handoff наступній сесії). Перша сесія нового проєкту = цей файл цілком + Фаза 0.
+> **"The same car, but from scratch":** the profile (`autosound_context.md`) already exists — do NOT recreate it. Go through only §2 (goals/curve — they may have changed) + §3 (verification: the install may have drifted), archive the old history (changelog/dsp-state) with a marker, start a new one. Classifying the trigger "what raw data is still valid" → `naming-and-structure.md §2`.
 
 ---
 
-## 1. Опитування: обладнання і система → профіль проєкту
+## 0. Quickstart — what you need to have (a briefing for new hands)
 
-Питати блоками, відповіді одразу фіксувати в `autosound_context.md` (структура — §5 нижче). Не припускати — питати; «не знаю» теж відповідь (тоді міряємо/дивимось у софті DSP).
+> 🌍 **First of all — the local project's language.** Ask the user: *"English, or your native language? (supported: **EN · UK · DE · PL**)"*. From then on, **the whole dialogue AND all generated project files** (`autosound_context`, `tuning-changelog`, `dsp-state-current`, `audit-trail`, `skill-inbox`) — **in the chosen language**. The skill body is English (it's just the method skeleton) — the conversation and artifacts follow the user's language; Claude will manage other languages too, but EN/UK/DE/PL are the officially checked ones.
 
-> ⚠️ **Install/gear-специфіку брати ЛИШЕ звідси (від користувача) або з виміру — НЕ з профілю `knowledge/cars`|`dsp`.** Розташування/орієнтація/копланарність драйверів, рівень gain-staging (напр. Output −6 dB), кросовер-числа, частоти аномалій — усе це залежить від КОНКРЕТНОЇ інсталяції/підсилків і **варіюється навіть на тому самому кузові/DSP**. Профіль = чек-ліст «перевірити», не факти для цитування. Ніколи «у тебе X = Y» без слів користувача або виміру.
+- **REW** with the API server enabled (Preferences → API; check: `localhost:4735` responds). A measurement mic **with calibration files** + a way to position it stably at the listening point (LP).
+- **Your DSP's software** and a way to load EQ into it (ideally a file import; we'll find out in §4).
+- This skill + the sibling **`../review-loop/SKILL.md`** — they travel together (review-loop holds the review protocol).
+- **🔑 The reviewer (Critic/Advisor) — SET IT UP AT THE START. It's the CORE of the method, not an option** — the synergy of a second expert is a colossal quality gain (single-perspective tuning is noticeably worse). **Offer it to the user** and pick what's available (the fallback ladder): **(1) Gemini** via `scripts/gemini_*.sh` — auto-detects the CLI (`agy` or `@google/gemini-cli`); **install + smoke test in 2 min → `references/setup-critic-channel.md`** (do this NOW, at the start, not when the first round fails); **(2)** any other AI in a second window; **(3) Claude in a SEPARATE session** as the reviewer (cross-session self-review — `../review-loop/SKILL.md`, TWO-PASS anti-anchoring); **(4)** a human reviewer. The roles are **vendor-agnostic** (review-loop). ⚠️ **Don't skip this step.** (The CLI CHANNEL is optional; the reviewer ROLE is not.)
+- **What a working session looks like:** Pre-session checklist (hardware) → Resume (state) → work by phases (`process-phases.md`) → Session log (handoff to the next session). A new project's first session = this whole file + Phase 0.
 
-1. **Авто:** марка/модель/кузов (седан vs хетч/універсал → room gain і поведінка НЧ), LHD/RHD (бік слухача → напрям L/R-асиметрії).
-2. **Джерело(а) звуку:** HU/стрімер/телефон; **як сигнал заходить у DSP** (оптика/коакс/RCA/BT/USB); **який вхід — для прослуховування, а який — для вимірювального сигналу** (це піде в Pre-session checklist №4).
-3. **DSP:** модель → повний чеклист можливостей у **§4** (це визначає, які інструменти скілу доступні).
-4. **Підсилювачі:** модель/канали/чутливість входів (для gain staging), що на якому каналі.
-5. **Драйвери:** модель, розмір, **позиція й орієнтація КОЖНОГО** (двері / A-стійка / kick / торпедо / полка; куди дивиться), оформлення (об'єм подіуму/ЗЯ/фрі-ейр), маса/характер (важкий мідбас → зведення по піку IR, `car-eq-patterns.md`), **нові чи награні** (нові → прогрів, §3.6).
-6. **Саб:** оформлення (ЗЯ/ФІ), об'єм, розташування, як заведений.
-7. **Центр / тил:** чи є, як заведені (FX-алгоритм / manual L+R / окремі канали) — це визначає методику Фази 4.
-8. **Мік-риг:** мікрофон + кал-файли (0°/90°), інтерфейс, **чи можливий фізичний loopback** (без нього фазо-критичні заміри ненадійні → більше ваги сумації/вуху), sample rate (за можливості = нативному рейту DSP).
-9. **Шляхи проєкту:** де житимуть контекст/аудит/заміри (локальні параметри проєкту, НЕ константи скілу; типово — git-репо проєкту, структура в §5).
+---
 
-## 2. Опитування: цілі і смак → сід кривої та Фази 6
+## 1. Interview: equipment and system → the project profile
 
-1. **Призначення:** SQ для себе / змагання (який формат — EMMA/AYA/CARMusic, яка категорія) / fun-daily. Можна кілька — архітектура base+voicing дає **окремі пресети** (changelog фіксує які).
-2. **Яку сцену будуємо** (пріоритети, бо все одразу не максимізується): ширина / глибина-ешелони / висота / туга центр-фокусировка; огортання тилом чи фронт-онлі. Чесно прокажи фізичні стелі: глибина обмежена геометрією СЧ (`staging-depth.md §4`), огортання потребує тилу.
-3. **Музика і прослуховування:** жанри, 3–5 улюблених реф-треків користувача, типова гучність (→ equal-loudness, `staging-depth.md §3`), довгі/короткі поїздки.
-4. **Осі смаку:** тепло↔яскраво · бас-важко↔нейтрально · forward↔laid-back · точність↔fun.
-5. **Вибір цільової кривої — РАЗОМ з користувачем, дефолту НЕМає.** Пройтись по таблиці **крива→характер** (`voicing-by-ear.md`), звузити жанрами/смаком до 2–3 кандидатів, фінал — методом аудиції кривих (там же) або взяти кандидата стартом сесії і валідувати вухом у Фазі 5/6. **Крива = старт і форма, не фініш і не рівень** (`naming-and-structure.md §6`).
+Ask in blocks, record the answers right away in `autosound_context.md` (structure — §5 below). Don't assume — ask; "I don't know" is also an answer (then we measure / look in the DSP software).
 
-## 3. Верифікація інсталяції — ПЕРЕД першим заміром
+> ⚠️ **Take install/gear specifics ONLY from here (from the user) or from measurement — NOT from a `knowledge/cars`|`dsp` profile.** Driver placement/orientation/coplanarity, the gain-staging level (e.g. Output −6 dB), crossover numbers, anomaly frequencies — all of these depend on the SPECIFIC install/amps and **vary even on the same body/DSP**. A profile = a checklist to "verify", not facts to cite. Never "your X = Y" without the user's words or a measurement.
 
-Нова/чужа/давно не міряна інсталяція. Кожен пункт дешевий; пропущений — коштує сесії.
+1. **Car:** make/model/body (sedan vs hatch/wagon → room gain and low-frequency behavior), LHD/RHD (the listener's side → the direction of the L/R asymmetry).
+2. **Sound source(s):** HU/streamer/phone; **how the signal enters the DSP** (optical/coax/RCA/BT/USB); **which input is for listening, and which is for the measurement signal** (this goes into the Pre-session checklist #4).
+3. **DSP:** model → the full capability checklist in **§4** (it determines which of the skill's tools are available).
+4. **Amplifiers:** model/channels/input sensitivity (for gain staging), what's on which channel.
+5. **Drivers:** model, size, **the position and orientation of EACH** (door / A-pillar / kick / dash / deck; where it points), enclosure (pod/sealed/free-air volume), mass/character (a heavy midbass → align to the IR peak, `car-eq-patterns.md`), **new or broken-in** (new → break-in, §3.6).
+6. **Sub:** enclosure (sealed/ported), volume, location, how it's driven.
+7. **Center / rear:** present or not, how they're driven (an FX algorithm / manual L+R / separate channels) — this determines the Phase-4 method.
+8. **Mic rig:** mic + cal files (0°/90°), interface, **whether a physical loopback is possible** (without it, phase-critical measurements are unreliable → more weight to summation/the ear), sample rate (where possible = the DSP's native rate).
+9. **Project paths:** where the context/audit/measurements will live (local project parameters, NOT skill constants; typically — the project's git repo, structure in §5).
 
-1. **Маршрутизація:** тихий тестовий сигнал по черзі на кожен вихід DSP → грає САМЕ той драйвер. Заодно карта «канал DSP → динамік» у профіль.
-2. **Полярність — електрично** (маркування/полярність-тестер/батарейка-тест; НЕ «вухом по центру пари» — класична пастка, `diagnostic-techniques.md §16`). Пізніше на стиках — контроль сумацією (§9).
-3. **Захисні кросовери ДО першого свипа — лише ЗАХИСТ КРИХКИХ драйверів, НЕ фінальні кроси:** HPF **на/вище РЕАЛЬНОГО резонансу (Fs) КОЖНОГО драйвера** — ВЧ, СЧ, і центр (залежно від ЙОГО драйвера). ⚠️ **Частота = функція КОНКРЕТНОГО драйвера, НЕ фіксоване/«типове» число й НЕ з профілю як факт** → нема Fs? **запитай у користувача** (або з даташита), тоді постав консервативно вище; **таблицю частот наперед не видавай**. **Мідбас і саб HP НЕ потребують** (створені грати низ); **субсонік — лише для ПОРТОВАНОГО саба** (розвантаження конуса нижче налаштування порту), **ЗЯ сам обмежує хід** → не треба. Фінальні крос-точки/типи = **Фаза 1, ПІСЛЯ замірів** (запропонувати / вивести з виміру) — **і не анонсувати їх раніше** (кандидати на цьому етапі = анкоринг).
-4. **Gain staging:** мінімальний гейн підсилювача + максимальний рівень DSP = кращий SNR; гейн вгору до першого стрибка THD → відкат ~10% (процедура з RTA/THD — у `helix-vcp-workflow.md`, принцип генеричний для будь-якого DSP).
-5. **Шуми:** тиша на паузі, двигун вимк і працює: свист генератора / ground loop / шипіння → лікувати (маса, розв'язка, гейни) **до** тюну — EQ це не бере.
-6. **Прогрів нових драйверів** (Hashimoto): грубий старт-тюн → обкатка музикою → точний тюн. Нові компоненти «розвалюються» по черзі при точному зведенні без обкатки.
-7. **Безпечний рівень свипа:** стартувати тихо, контролювати THD/хід дифузора; невідомий драйвер не ганяти на межі.
-8. **Кліп-чек тракту:** вхід DSP не кліпує на вимірювальному сигналі (ISA/RTA THD).
+## 2. Interview: goals and taste → the curve seed and Phase 6
 
-## 4. Чеклист можливостей DSP → який інструментарій доступний
+1. **Purpose:** SQ for yourself / competition (which format — EMMA/AYA/CARMusic, which category) / fun-daily. Several are possible — the base+voicing architecture gives **separate presets** (the changelog records which).
+2. **What stage we're building** (priorities, because you can't maximize everything at once): width / depth-layering / height / a tight center focus; rear envelopment or front-only. State the physical ceilings honestly: depth is limited by the mid's geometry (`staging-depth.md §4`), envelopment needs a rear.
+3. **Music and listening:** genres, 3–5 of the user's favorite reference tracks, the typical loudness (→ equal-loudness, `staging-depth.md §3`), long/short trips.
+4. **Taste axes:** warm↔bright · bass-heavy↔neutral · forward↔laid-back · accuracy↔fun.
+5. **Choosing the target curve — TOGETHER with the user, there is NO default.** Walk through the **curve→character** table (`voicing-by-ear.md`), narrow it by genres/taste to 2–3 candidates, finalize via the curve-audition method (same place) or take a candidate as the session's start and validate by ear in Phase 5/6. **A curve = a start and a shape, not a finish and not a level** (`naming-and-structure.md §6`).
 
-> **🔑 Шарнір придатності = чи можна МІРЯТИ ПОКАНАЛЬНО, а НЕ «чи читається DSP».** Два питання визначають гілку методу:
-> 1. **Читається стан DSP?** (дамп / екран-рід `screen-read-dsp.md` / файл-експорт) — бачиш поточні крос/TA/EQ/гейни.
-> 2. **Можна міряти ПОКАНАЛЬНО?** (соло кожного виходу — §3.1, свип на кожен динамік окремо).
+## 3. Install verification — BEFORE the first measurement
+
+A new/unfamiliar/long-unmeasured install. Each item is cheap; a skipped one costs a session.
+
+1. **Routing:** a quiet test signal to each DSP output in turn → exactly that driver plays. Also a "DSP channel → speaker" map into the profile.
+2. **Polarity — electrically** (markings/a polarity tester/a battery test; NOT "by ear on the pair's center" — the classic trap, `diagnostic-techniques.md §16`). Later, at the joints — control by summation (§9).
+3. **Protective crossovers BEFORE the first sweep — PROTECTION OF FRAGILE drivers ONLY, NOT the final crossovers:** an HPF **at/above the REAL resonance (Fs) of EACH driver** — tweeter, mid, and center (depending on ITS driver). ⚠️ **The frequency = a function of the SPECIFIC driver, NOT a fixed/"typical" number and NOT from a profile as fact** → no Fs? **ask the user** (or from the datasheet), then set it conservatively higher; **don't hand out a frequency table in advance**. **The midbass and sub HP don't need it** (made to play low); **a subsonic — only for a PORTED sub** (the cone unloads below the port tuning), **a sealed box limits excursion itself** → not needed. The final crossover points/types = **Phase 1, AFTER the measurements** (propose / derive from measurement) — **and don't announce them earlier** (candidates at this stage = anchoring).
+4. **Gain staging:** minimum amp gain + maximum DSP level = better SNR; gain up to the first THD jump → back off ~10% (the RTA/THD procedure is in `helix-vcp-workflow.md`, the principle is generic for any DSP).
+5. **Noise:** silence on a pause, engine off and running: alternator whine / ground loop / hiss → cure it (grounding, isolation, gains) **before** the tune — EQ won't fix it.
+6. **Break-in of new drivers** (Hashimoto): a rough start-tune → break-in with music → a precise tune. New components "fall apart" one by one if you do a precise alignment without break-in.
+7. **A safe sweep level:** start quiet, watch the THD / cone excursion; don't push an unknown driver to its limit.
+8. **A clip check of the chain:** the DSP input doesn't clip on the measurement signal (ISA/RTA THD).
+
+## 4. DSP capability checklist → which toolset is available
+
+> **🔑 The hinge of applicability = whether you can MEASURE PER-CHANNEL, NOT "whether the DSP is readable".** Two questions decide the method branch:
+> 1. **Is the DSP state readable?** (a dump / screen-read `screen-read-dsp.md` / a file export) — you can see the current crossovers/TA/EQ/gains.
+> 2. **Can you measure PER-CHANNEL?** (solo each output — §3.1, a sweep on each driver separately).
 >
-> | Рівень | DSP читається | Поканальний замір | Режим |
+> | Level | DSP readable | Per-channel measurement | Mode |
 > |---|:---:|:---:|---|
-> | **1 — повний** | ✅ | ✅ | весь метод як є (звіряй стан у DSP, не з памʼяті) |
-> | **2 — black-box / реверс** | ❌ | ✅ | поточний тюн не видно → **реверс-інженерити з поканальних замірів** (крос/TA/полярність/EQ читати з FR/phase/IR — `diagnostic-techniques §22`), далі звичайний потік. ⚠️ нема read-back → **кожну зміну підтверджувати ЛИШЕ повторним заміром** (міняти по одному, ре-мір після кожного — вищий ризик дрейфу) |
-> | **3 — лише сума** | ❌/✅ | ❌ (канали не ізолюються) | хірургія крос/фази/TA **неможлива** → впасти на **тональний баланс усієї системи під ціль + imaging/сцену НА СЛУХ** (тест-треки `test-tracks.md`, EMMA-позиції `emma-2024-test-track`); чесно зафіксувати стелю («без поканального доступу — лише тон+імеджинг, не стики») |
+> | **1 — full** | ✅ | ✅ | the whole method as is (verify the state in the DSP, not from memory) |
+> | **2 — black-box / reverse** | ❌ | ✅ | the current tune isn't visible → **reverse-engineer it from per-channel measurements** (read crossovers/TA/polarity/EQ from FR/phase/IR — `diagnostic-techniques §22`), then the normal flow. ⚠️ no read-back → **confirm every change ONLY by re-measurement** (change one at a time, re-measure after each — higher drift risk) |
+> | **3 — sum only** | ❌/✅ | ❌ (channels don't isolate) | crossover/phase/TA surgery is **impossible** → fall back to **the whole system's tonal balance to the target + imaging/staging BY EAR** (test tracks `test-tracks.md`, EMMA positions `emma-2024-test-track`); record the ceiling honestly ("no per-channel access — only tone+imaging, not joints") |
 >
-> ⚠️ «DSP не читається» ≠ глухий кут: майже завжди це **Рівень 2** (соло-виходи міряються, тюн реверситься з REW). Рівень 3 — лише коли канали фізично не ізолювати.
+> ⚠️ "The DSP isn't readable" ≠ a dead end: almost always this is **Level 2** (solo outputs measure, the tune reverses from REW). Level 3 — only when channels physically can't be isolated.
 
-| Питання | Що від нього залежить у скілі |
+| Question | What it determines in the skill |
 |---|---|
-| Чи є **virtual/group-шар** над пер-канальним? | Архітектура base+voicing (`diagnostic §6`). Нема → войсинг = linked L=R на output-EQ; обережно з фазою стиків, пресети-войсинги дорожчі |
-| **EQ:** смуг/канал, типи (PK/shelf/all-pass), **імпорт із файлу + формат** | Канонічний шлях REW→DSP (для Helix → `helix-eq-export.md`); нема файл-імпорту → **REW-EQ-CopyPaste-Assistant** (clipboard→keystrokes у вікно DSP-софта, 30+ платформ: Musway, ESX, Zapco… — `knowledge/dsp/helix-dsp-ultra-s.md` §Перенос EQ) або таблички руками |
-| **Кросовери:** типи (LR/BW/BE), порядки, незалежні HP/LP | Які сети з `filter-types-car-audio.md` реалізовні |
-| **Затримки:** крок і межі; **полярність** per-channel; **фазовий регулятор (all-pass)** | Точність TA; методика фази (для Helix → `helix-phase-allpass.md`) |
-| **Пресети:** скільки; **що скидається при перемиканні (вхід!)** | Пастка «пресет тихо скинув вхід» (Pre-session №4, `competition.md`) |
-| **Роутинг входів:** окремий вхід для вимірювального сигналу? | Pre-session checklist №4 для цього авто |
+| Is there a **virtual/group layer** above the per-channel one? | The base+voicing architecture (`diagnostic §6`). None → voicing = linked L=R on the output EQ; careful with joint phase, voicing presets cost more |
+| **EQ:** bands/channel, types (PK/shelf/all-pass), **file import + format** | The canonical REW→DSP path (for Helix → `helix-eq-export.md`); no file import → **REW-EQ-CopyPaste-Assistant** (clipboard→keystrokes into the DSP software's window, 30+ platforms: Musway, ESX, Zapco… — `knowledge/dsp/helix-dsp-ultra-s.md` §EQ transfer) or tables by hand |
+| **Crossovers:** types (LR/BW/BE), orders, independent HP/LP | Which sets from `filter-types-car-audio.md` are realizable |
+| **Delays:** step and limits; **polarity** per-channel; **a phase control (all-pass)** | TA accuracy; the phase method (for Helix → `helix-phase-allpass.md`) |
+| **Presets:** how many; **what resets on a switch (the input!)** | The "a preset silently reset the input" trap (Pre-session #4, `competition.md`) |
+| **Input routing:** a separate input for the measurement signal? | Pre-session checklist #4 for this car |
 
-**Для не-Helix DSP:** спершу перевір, чи вже є готовий профіль у `knowledge/dsp/` (і `knowledge/cars/` для цього кузова — бібліотека community-досвіду, `feedback-loop.md`). ⚠️ **Збіг має бути ТОЧНИЙ** (той самий кузов / той самий DSP) — профіль іншої машини, навіть платформного родича, **не застосовувати як факт і не називати його в відповіді** (повне правило scope → `SKILL.md` → `knowledge/cars`). Нема точного → створити `references/<dsp>-workflow.md` — еквівалент трійки `helix-vcp-workflow` / `helix-eq-export` / `helix-phase-allpass` (архітектура шарів, gain staging, формат обміну EQ, quirks). Helix-файли = зразок структури; решта скілу DSP-агностична.
+**For non-Helix DSPs:** first check whether there's already a profile in `knowledge/dsp/` (and `knowledge/cars/` for this body — a library of community experience, `feedback-loop.md`). ⚠️ **The match must be EXACT** (the same body / the same DSP) — another car's profile, even a platform sibling's, **must not be applied as fact and must not be named in the answer** (the full scope rule → `SKILL.md` → `knowledge/cars`). No exact match → create `references/<dsp>-workflow.md` — the equivalent of the trio `helix-vcp-workflow` / `helix-eq-export` / `helix-phase-allpass` (layer architecture, gain staging, the EQ exchange format, quirks). The Helix files = a structural template; the rest of the skill is DSP-agnostic.
 
-## 5. Згенерувати файли проєкту
+## 5. Generate the project files
 
-У корені нового проєкту (git-репо; layout і правило «що в git, що ні» → `naming-and-structure.md §4a`):
+In the new project's root (a git repo; layout and the "what's in git, what isn't" rule → `naming-and-structure.md §4a`):
 
-- **`autosound_context.md`** — профіль: §1 обладнання · §2 канали/роутинг · §3 вимірювальний стенд · §4 цілі/крива/кросовери (активна крива → `rew_analitic/target-curves/<name>/`) · §5 **глосарій каналів** (узгодити коди з користувачем; граматика `sw / w-L/R / m-L/R / tw-L/R / r-L/R / c-*`, пари/комбо/стики — `naming-and-structure.md §3`) · §6 лог досвіду/аномалій (порожній — наповнять сесії). Зразок — профіль Passat B8.
-- **`dsp-state-current`** + **`tuning-changelog`** (з ▶️ ПРОДОВЖИТИ-блоком зверху) — project memory.
-- **`audit-trail.md`** (канонічний лог рішень) + **`skill-inbox.md`** (порожній, із шапкою-правилами).
-- **`rew_analitic/`**: `dsp-config/` + `README.md`-мапа · `exports/` · **`target-curves/`** (house/target-криві; **підпапка на криву** = повна крива + per-band складові з кросоверами в назвах; `README.md`-мапа: яка **АКТИВНА** + крива↔пресет — їх може бути декілька) · `.gitignore` з `*.mdat` (+ `.critic-env`).
-- **Файли каналу Критика — у `rew_analitic/` (там, де канал їх читає, project-local).** Створи/поклади:
-  - **`rew_analitic/autosound_context.md`** — це й є профіль вище (канал читає `$PWD/rew_analitic/autosound_context.md`; тримай його тут, не лише в корені).
-  - **`rew_analitic/data-contract-template.md`** — скопіюй bundled-шаблон зі скіла: `cp <skill>/assets/data-contract-template.md rew_analitic/`, тоді заповни `<DSP>`-плейсхолдери. (НЕ копіюй чийсь чужий контракт — у ньому чужі car/DSP-специфіки протечуть у Критика.)
-  - Якщо канал = `@google/gemini-cli` або CWD ≠ корінь проєкту — додай **`rew_analitic/.critic-env`** (`GEMINI_BIN=…`, за потреби `PROJECT_MIRROR=…`). Деталі → `references/setup-critic-channel.md`.
-- Перший запис changelog: «проєкт створено; intake завершено; ціль-кандидат: X; пресети-цілі: …».
+- **`autosound_context.md`** — the profile: §1 equipment · §2 channels/routing · §3 measurement rig · §4 targets/curve/crossovers (the active curve → `rew_analitic/target-curves/<name>/`) · §5 **channel glossary** (agree the codes with the user; grammar `sw / w-L/R / m-L/R / tw-L/R / r-L/R / c-*`, pairs/combos/joints — `naming-and-structure.md §3`) · §6 the experience/anomaly log (empty — the sessions will fill it). Template — the Passat B8 profile.
+- **`dsp-state-current`** + **`tuning-changelog`** (with a ▶️ CONTINUE block at the top) — project memory.
+- **`audit-trail.md`** (the canonical decision log) + **`skill-inbox.md`** (empty, with a rules header).
+- **`rew_analitic/`**: `dsp-config/` + a `README.md` map · `exports/` · **`target-curves/`** (house/target curves; **a subfolder per curve** = the full curve + per-band components with crossovers in the names; a `README.md` map: which is the **ACTIVE** one + curve↔preset — there can be several) · `.gitignore` with `*.mdat` (+ `.critic-env`).
+- **The Critic channel's files — in `rew_analitic/` (where the channel reads them, project-local).** Create/place:
+  - **`rew_analitic/autosound_context.md`** — this is the profile above (the channel reads `$PWD/rew_analitic/autosound_context.md`; keep it here, not only in the root).
+  - **`rew_analitic/data-contract-template.md`** — copy the bundled template from the skill: `cp <skill>/assets/data-contract-template.md rew_analitic/`, then fill in the `<DSP>` placeholders. (Don't copy someone else's contract — its other car/DSP specifics would leak into the Critic.)
+  - If the channel = `@google/gemini-cli` or the CWD ≠ the project root — add **`rew_analitic/.critic-env`** (`GEMINI_BIN=…`, and `PROJECT_MIRROR=…` if needed). Detail → `references/setup-critic-channel.md`.
+- The first changelog entry: "project created; intake done; candidate target: X; preset targets: …".
 
-Далі → **Фаза 0** (`process-phases.md`).
+Next → **Phase 0** (`process-phases.md`).
