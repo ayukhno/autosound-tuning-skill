@@ -104,7 +104,7 @@ gemini_run() {
     out="$(_run_model "$fallback" "$pf" || true)"; used="$fallback (fallback)"
   fi
   if [[ -z "${out//[[:space:]]/}" ]]; then
-    echo ">> WARNING: empty reply from $GEMINI_FLAVOR ($used) — the CLI may be broken/unauthed (a silent break). Smoke-test it; see references/setup-critic-channel.md (e.g. pin GEMINI_BIN=gemini in .critic-env)." >&2
+    echo ">> WARNING: $GEMINI_FLAVOR returned an EMPTY reply ($used) — most often the CLI's QUOTA is exhausted (e.g. Antigravity 'Starter' has a weekly Gemini-group limit that hits 0% → empty exit-0, NO error text → not caught as a quota error above), or it lost auth. Check the CLI's quota (\`agy\` shows a weekly limit + refresh countdown); then either switch to a model group that still has quota (GEMINI_*_MODEL) or to the other CLI (pin GEMINI_BIN=gemini in rew_analitic/.critic-env). See references/setup-critic-channel.md." >&2
   fi
   printf '%s\n' "$out"
   printf '\n— [%s: %s]\n' "$role" "$used"

@@ -67,6 +67,8 @@ scripts/gemini_critic.sh /tmp/smoke.md
 ```
 Expect a one-line Gemini reply + a `— [critic: <model>]` tag (or `[advisor: …]` for the advisor variant). A `*: not found` / `context not found` / `no Gemini CLI` error tells you exactly which of §1–§3 to fix.
 
+An **empty reply** (just the tag, no text) ≠ a crash — it usually means the CLI's **quota is exhausted** or it lost auth. `agy`'s Antigravity *Starter* tier shares a **weekly** quota per model group (Gemini Flash/Pro together); when it hits 0% it returns empty with no error text (and refreshes ~weekly — `agy` shows the countdown). The wrapper now prints a loud WARNING for this. Recover by switching to a model group that still has quota (`GEMINI_CRITIC_MODEL` / `GEMINI_ADVISOR_MODEL`), or pin the other CLI: `GEMINI_BIN=gemini` in `rew_analitic/.critic-env`.
+
 ## 6. No Gemini? Use the fallback ladder (the ROLE still happens)
 
 The reviewer role is vendor-agnostic (`../review-loop/SKILL.md`). If there's no Gemini CLI:
