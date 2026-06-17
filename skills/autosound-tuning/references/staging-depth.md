@@ -1,35 +1,35 @@
-# Глибина та шаровість сцени (front-back) — окремо від латерального imaging
+# Stage depth and layering (front-back) — separate from lateral imaging
 
-`diagnostic-techniques.md` лікує **латераль** (L/R позиції). Цей файл — про **глибину** (вперед-назад: відсунути сцену з лобового скла вглиб за капот) і **шаровість** (ешелони). Інша психоакустика, інші важелі. Робота переважно **ear-driven** (салонна фаза/GD ненадійні — див. diagnostic §10; вимір тут лише санітарний: магнітуда + сумація).
+`diagnostic-techniques.md` treats the **lateral** (L/R positions). This file is about **depth** (front-back: pushing the stage off the windshield back behind the hood) and **layering** (tiers). Different psychoacoustics, different levers. The work is mostly **ear-driven** (cabin phase/GD unreliable — see diagnostic §10; measurement here is only a sanity check: magnitude + summation).
 
-## 1. Корінь «сцена липне до скла / голос випячує / бас-магія пропадає» = ВЕРХ перегарячений відносно баса
-Кластер симптомів — forward-сцена + forward/тонкий голос + «магія баса зникає коли грає все» — найчастіше **один корінь: надлишок верхньої енергії (presence/ВЧ) відносно басового фундаменту**, а НЕ проблема баса. Надлишок верху одночасно: маскує бас, тягне сцену вперед (Haas — рання ВЧ-енергія), робить голос промінантним.
-- **Діагностичний тест:** грай **саб+мідбас СОЛО.** Якщо бас сам по собі чудовий/щільний, але **зникає/втрачає магію коли додати СЧ+ВЧ** → верх перегарячений. Один тест ізолює корінь.
-- Це може суперечити «тон = в цілі» (Jazzi тощо): цільова крива може бути **форвардною для СЦЕНИ**, навіть якщо тонально «правильна». Глибина хоче тепліший войсинг.
+## 1. The root of "the stage sticks to the glass / the voice juts forward / the bass magic disappears" = the TOP is too hot relative to the bass
+The symptom cluster — a forward stage + a forward/thin voice + "the bass magic vanishes when everything plays" — usually has **one root: an excess of upper energy (presence/treble) relative to the bass foundation**, NOT a bass problem. The excess top simultaneously: masks the bass, pulls the stage forward (Haas — early treble energy), makes the voice prominent.
+- **Diagnostic test:** play **sub+midbass SOLO.** If the bass on its own is great/dense, but **disappears/loses its magic when you add the mid+tweeter** → the top is too hot. One test isolates the root.
+- This can contradict "the tone is on target" (Jazzi, etc.): the target curve can be **forward for the STAGE**, even if it's tonally "correct". Depth wants a warmer voicing.
 
-## 2. Лікувати НАРОЩУВАННЯМ баса, НЕ зрізом верху
-Той самий зсув балансу верх/низ, але метод критичний:
-- **Зріз верху (high-shelf) коштує ПРОЗОРОСТІ/повітря** — перевірено вухом (HS 1500 зрізав прозорість, відкинуто).
-- **Підняти бас (low-shelf на virtual бас-каналах, ~+3 нижче 150-160 Гц на virtual-L + virtual-R + virtual-sub)** — піднімає фундамент, СЧ/ВЧ лишаються повними → **прозорість збережена + сцена відступає**. Це й «підняти саб+мідбас» одним контролем (визначений turnover, чистіше за крутіння гейнів).
-- **Presence-trim** як вторинний важіль: **broad-PK 2-3 кГц** (напр. PK2700/−2/Q0.9, на virtual-L+R симетрично) зрізає форвардний presence-горб, але **повітря >5к лишає цілим** (на відміну від полиці, що вбиває й air). Менше руйнує тон. Основну роботу робить бас-lift.
+## 2. Treat it by BUILDING UP the bass, NOT cutting the top
+The same top/bottom balance shift, but the method is critical:
+- **Cutting the top (high-shelf) costs TRANSPARENCY/air** — verified by ear (an HS at 1500 cut the transparency, rejected).
+- **Raise the bass (a low-shelf on the virtual bass channels, ~+3 below 150–160 Hz on virtual-L + virtual-R + virtual-sub)** — it lifts the foundation, the mid/tweeter stay full → **transparency preserved + the stage recedes**. This is also "raise the sub+midbass" with one control (a defined turnover, cleaner than tweaking gains).
+- **A presence trim** as a secondary lever: a **broad PK 2–3 kHz** (e.g. PK2700/−2/Q0.9, on virtual-L+R symmetrically) cuts the forward presence hump, but **leaves the air >5k intact** (unlike a shelf, which kills the air too). It damages the tone less. The bass lift does the main work.
 
-## 3. Глибина ЗАЛЕЖИТЬ ВІД РІВНЯ ГУЧНОСТІ (equal-loudness)
-На малій гучності сприйняття баса падає (контури рівної гучності) → верх відносно домінує → **сцена форвардиться на тихому**. Басовий депт-войсинг **калібрований під рівень відтворення**. → тюнити/слухати на тому рівні, на якому судитимуть (або думати про loudness-компенсацію для тихого).
+## 3. Depth DEPENDS ON THE LOUDNESS LEVEL (equal-loudness)
+At low volume, bass perception drops (equal-loudness contours) → the top relatively dominates → **the stage goes forward when quiet**. The bass depth-voicing is **calibrated to the playback level**. → tune/listen at the level it'll be judged at (or think about loudness compensation for quiet).
 
-## 4. Фізична стеля: розташування СЧ + ГЛИБИНА ЖИВЕ В ЗАПИСІ
-Глибину дає **довгий акустичний шлях до СЧ** (kick-mount, база лобового). **СЧ на A-pillar near-coplanar з твітерами = найфорвардніша геометрія** → абсолютна глибина обмежена фізично. DSP **максимізує** глибину в межах цього, не знімає обмеження. Відсунути на крок-два, не «оркестр за капотом».
-- **Ключове (Wehmeyer/Audiofrog):** образи 2-канальної системи лежать у **трикутнику** [позиція слухача ↔ лівий драйвер ↔ правий]. **Глибина і ширина залежать від АМБІЄНТНОЇ інформації в ЗАПИСІ (ранні/пізні відбиття, reverb), а НЕ від твоїх налаштувань.** Запис без інформації про простір НЕ відтворить глибину за площиною драйверів — хоч що крути. → не можна «додати» глибину, якої немає в треку; depth-войсинг лише ПЕРЕСТАЄ її руйнувати (надлишок верху/Haas) і дає тому, що в записі Є, прозвучати. Тому й реф-трек із вираженим простором (оперний зал) критичний — на «сухому» треку глибини не буде в принципі.
+## 4. The physical ceiling: the mid's location + DEPTH LIVES IN THE RECORDING
+Depth comes from a **long acoustic path to the mid** (a kick mount, the base of the windshield). **A mid on the A-pillar near-coplanar with the tweeters = the most forward geometry** → absolute depth is physically limited. The DSP **maximizes** depth within that, it doesn't lift the limit. Push it back a step or two, not "an orchestra behind the hood".
+- **The key point (Wehmeyer/Audiofrog):** a 2-channel system's images lie within the **triangle** [listening position ↔ left driver ↔ right]. **Depth and width depend on the AMBIENT information in the RECORDING (early/late reflections, reverb), NOT on your settings.** A recording with no spatial information will NOT reproduce depth beyond the plane of the drivers — no matter what you tweak. → you can't "add" depth that isn't in the track; depth-voicing only STOPS destroying it (excess top/Haas) and lets what IS in the recording come through. That's why a reference track with pronounced space (an opera hall) is critical — on a "dry" track there will be no depth at all.
 
-## 5. Глибокий бас і резонанс саба
-- **НЕ бустити EQ-піком резонанс саба** щоб заповнити сусідній провал — додає ringing/decay (однонотний бас) + жене дифузор у макс хід (спотворення). Глибоку вагу давати **РІВНЕМ/полицею**, не точковим бустом резонансу. (peak-vs-null поширюється і на «не бусти резонанс».)
-- Провал між модами в сабі — приймати як фізику, не воювати EQ біля резонансу.
+## 5. Deep bass and sub resonance
+- **Don't boost the sub's resonance with an EQ peak** to fill a neighboring dip — it adds ringing/decay (one-note bass) + drives the cone to max excursion (distortion). Give deep weight with **LEVEL/a shelf**, not a point boost of the resonance. (Peak-vs-null applies to "don't boost the resonance" too.)
+- A dip between modes in the sub — accept it as physics, don't fight it with EQ near the resonance.
 
-## 6. Шаровість (ешелони)
-Не окремий контроль, а наслідок: чиста фаза стиків + рафінований (не роздутий) бас + рецесований presence. Розвивається ear-driven на треках із вираженою залевою глибиною. Латеральні imaging-треки (EMMA) для глибини НЕ годяться — потрібен матеріал із шарами по глибині (оперний зал, акустика). Реф-треки → `competition.md`.
+## 6. Layering (tiers)
+Not a separate control, but a consequence: clean joint phase + a refined (not bloated) bass + recessed presence. It develops ear-driven on tracks with pronounced hall depth. Lateral imaging tracks (EMMA) are NO good for depth — you need material with depth layers (an opera hall, acoustic). Reference tracks → `competition.md`.
 
-> **Для слухової перевірки гіпотез — `references/test-tracks.md`** (індекс вимір→трек + маркери): глибина → #07 Melody Gardot / #14 Hanne Boel; панч мідбаса → #26 Devil Inside / #20 Godsmack; стик саб↔мідбас → #25 Sundust / #16 Dock Funk; саб<40 → #24 Olgoi Khorkhoi. Дай Арбітру трек + таймкод + що слухати.
+> **For listening-test hypotheses — `references/test-tracks.md`** (the measure→track index + markers): depth → #07 Melody Gardot / #14 Hanne Boel; midbass punch → #26 Devil Inside / #20 Godsmack; the sub↔midbass joint → #25 Sundust / #16 Dock Funk; sub<40 → #24 Olgoi Khorkhoi. Give the Arbiter a track + timecode + what to listen for.
 
-## 7. Метод: ear-driven, вимір лише санітарний
-Салонна одно-позиційна фаза/GD непридатні (diagnostic §10) — підтверджено й для глибини. Гіпотезу «фазова дірка L/R на вокальному тілі 230-320 з'їдає тіло» було **СПРОСТОВАНО сумацією** (виміряна сума мідів на 230-320 збіглася з power-sum ±1 → тіло НЕ гаситься). Тому: депт-зміни **на слух**, з **сумацією+магнітудою** як єдиними надійними чеками. Кожна зміна оборотна, у **депт-ПРЕСЕТІ** (войсинг-шар), база недоторкана.
+## 7. The method: ear-driven, measurement only as a sanity check
+Cabin single-position phase/GD are unusable (diagnostic §10) — confirmed for depth too. The hypothesis "an L/R phase hole on the vocal body 230–320 eats the body" was **DISPROVED by summation** (the measured mid sum at 230–320 matched the power-sum ±1 → the body is NOT cancelled). So: depth changes **by ear**, with **summation+magnitude** as the only reliable checks. Every change reversible, in a **depth PRESET** (the voicing layer), the base untouched.
 
-> **Провізорний набір depth-важелів (валідувати в роботі):** presence-shaping 2-5к (менше = далі) · HF-тілт (скочений = дальній план) · чиста фаза стику (відкриває глибину) · direct/reflected (+ тил якщо вмикається) · бас-вага (головний, перевірено).
+> **A provisional set of depth levers (validate in practice):** presence shaping 2–5k (less = farther) · HF tilt (rolled-off = a distant plane) · clean joint phase (opens depth) · direct/reflected (+ rear if it's engaged) · bass weight (the main one, verified).

@@ -1,113 +1,113 @@
-# Тест-треки для перевірки на слух (ear-driven верифікація)
+# Test tracks for listening checks (ear-driven verification)
 
-Курована бібліотека з **діагностичними маркерами** — щоб перевіряти гіпотези ВУХОМ там, де вимір ненадійний (салонна фаза/GD = сміття, diagnostic §10; глибина/панч/інтеграція/сибілянти — ear-driven, staging-depth §7).
+A curated library with **diagnostic markers** — to verify hypotheses BY EAR where measurement is unreliable (cabin phase/GD = junk, diagnostic §10; depth/punch/integration/sibilants — ear-driven, staging-depth §7).
 
-## Як цим користуватись (workflow)
-Коли в тебе (Claude) є **гіпотеза для перевірки на слух**:
-1. Визнач **вимір** (що тестуєш): саб<40, стик саб↔мідбас, панч мідбаса, глибина, сибілянти, роздільність під навантаженням…
-2. Глянь **індекс нижче** → вибери трек, що **оголює саме цей вимір**.
-3. Скажи Арбітру **конкретно:** «постав **[трек № і назва]**, слухай **[таймкод якщо є]** — **[що саме слухати: маркер]**. Питання: **[добра ознака] vs [погана ознака]**?»
-4. Арбітр слухає → каже результат → це твоя **надійна ear-метрика** (замість одно-позиційної фази). Лог у changelog/audit як Trace (трек+маркер замість REW-номера, якщо це слуховий крок).
+## How to use this (workflow)
+When you (Claude) have a **hypothesis to check by ear**:
+1. Identify the **measure** (what you're testing): sub<40, the sub↔midbass joint, midbass punch, depth, sibilants, separation under load…
+2. Look at the **index below** → pick a track that **exposes exactly this measure**.
+3. Tell the Arbiter **specifically:** "play **[track # and name]**, listen at **[timecode if any]** — **[what exactly to listen for: the marker]**. The question: **[good sign] vs [bad sign]**?"
+4. The Arbiter listens → states the result → that's your **reliable ear-metric** (instead of single-position phase). Log it in the changelog/audit as a Trace (track+marker instead of a REW number, if it's a listening step).
 
-> Не вивалюй весь список. Вибери 1 (max 2) трек прицільно під гіпотезу і дай чітке «що слухати». Один маркер за раз.
+> Don't dump the whole list. Pick 1 (max 2) track targeted at the hypothesis and give a clear "what to listen for". One marker at a time.
 
-## Індекс: вимір → трек (CarMus 2026; № = трек у бібліотеці нижче)
-| Що перевіряєш | Трек(и) | Ключовий маркер |
+## Index: measure → track (CarMus 2026; # = the track in the library below)
+| What you're checking | Track(s) | The key marker |
 |---|---|---|
-| **Саб <40 Гц** (розширення, контроль) | **#24** Olgoi Khorkhoi | держить <40 vs сушить/роздуває в гудіння |
-| **Стик саб↔мідбас** (інтеграція, відшарування) | **#25** Sundust · **#16** Dock Funk | удари в зоні стику — саб «відвалюється»? нижній бас відшаровується? |
-| **Панч мідбаса** (груди, щільність) | **#26** Devil Inside · **#20** Godsmack | поштовх у груди vs вялий/розмазаний/пересушений |
-| **Кік vs бас-гітара** (артикуляція НЧ) | **#20** Godsmack · **#21** Sons of Texas · **#16** | кік читається ОКРЕМО від бас-гітари vs каша |
-| **Фактура/щільність НЧ** (роздув vs тонкість) | **#07** · **#09** · **#11** (контрабас) · **#10** | контрабас пружний vs гулкий/роздутий/«висушений» |
-| **Глибина сцени + простір** | **#07** Melody Gardot · **#14** Hanne Boel · **#12** Bradley Cooper | велика глибока сцена vs плоска картинка |
-| **Стабільність вокалу на сцені** | **#07** · **#08** | вокал тримається на місці vs плаває/міняє розмір/відлітають ноти |
-| **Розділення інструментів** (акуст vs електро) | **#12** Bradley Cooper | акуст-гітара жива vs електро через комбік — чути окремо? |
-| **Сибілянти + ВЧ-роздільність/decay** | **#06** Jennifer Warnes · **#05** | сибілянти природні (не відділяються/не зникають); послезвуки тягнуться |
-| **Вокал: резаки в СЧ** (різкість/тиск) | **#08** Hayley Westenra · **#06** · **#10** · **#05** | високий вокал природний vs свердлить вуха/тухне |
-| **Тарілки/мідь** (foil-ефект) | **#20** · **#22** · **#05** | протяжне «дзинь» vs жована фольга / нудне «пщщ» |
-| **Роздільність ПІД НАВАНТАЖЕННЯМ** (мікрособиття) | **#15** Drum Ecstasy · **#23** Hi-Finesse · **#21** | не місить у кашу коли система навантажена |
-| **Макродинаміка / атака** | **#10** · **#15** · **#18** | атака не змазана, початок удару чіткий |
-| **Шаровість/багатошаровість** | **#13** Vahtang | накладені ефекти як шари vs плоско/однообразно |
-| **Загальний баланс / перше враження** | **#01** · **#02** · **#11** | масштаб/простір/розрізнення/баланс зразу |
-| **Універсальність** (контраст записів) | переходи **#17→#18**, **#19** | різні манери запису звучать РІЗНО, не «наступна на радіо» |
-| **Центр / фантомний центр** | **МОНО-треки** (нижче) | моно має зібратись у ТУГУ точку по центру; розмазано/гуляє/широко = L/R не зведені (рівень+час+фаза) |
-| **Imaging 3D / ВИСОТА сцени** | **Ch.23** Britten/Westminster | 3D на 2 колонках; відчуття висоти; масштаб собору |
-| **Перехідні / контроль колонок+підсилка** | **Ch.25** Stravinsky | барабани щільні/натягнуті; різкі чіткі духові |
-| **Точність НЧ-динаміка (артефакти на межі)** | **Ch.27** контрабас соло · **#24** | щипок→резонанс корпусу; немузичні звуки на межі |
-| **Динамічний headroom / компресія на гучності** | **Ch.29** · **Ch.23** піки | тихо→гучно стрес-тест; піки не давляться/не спотворюються |
+| **Sub <40 Hz** (extension, control) | **#24** Olgoi Khorkhoi | holds <40 vs dries up / bloats into droning |
+| **Sub↔midbass joint** (integration, detachment) | **#25** Sundust · **#16** Dock Funk | hits in the joint region — does the sub "fall away"? does the lower bass detach? |
+| **Midbass punch** (chest, density) | **#26** Devil Inside · **#20** Godsmack | a push in the chest vs limp/smeared/over-dried |
+| **Kick vs bass guitar** (LF articulation) | **#20** Godsmack · **#21** Sons of Texas · **#16** | the kick reads SEPARATELY from the bass guitar vs mush |
+| **LF texture/density** (bloat vs thinness) | **#07** · **#09** · **#11** (double bass) · **#10** | the double bass springy vs boomy/bloated/"dried out" |
+| **Stage depth + space** | **#07** Melody Gardot · **#14** Hanne Boel · **#12** Bradley Cooper | a big deep stage vs a flat picture |
+| **Vocal stability on the stage** | **#07** · **#08** | the vocal holds in place vs drifts/changes size/notes fly off |
+| **Instrument separation** (acoustic vs electric) | **#12** Bradley Cooper | an acoustic guitar alive vs electric through an amp — heard separately? |
+| **Sibilants + treble separation/decay** | **#06** Jennifer Warnes · **#05** | sibilants natural (not detaching/not vanishing); decays linger |
+| **Voice: cutters in the mids** (harshness/pressure) | **#08** Hayley Westenra · **#06** · **#10** · **#05** | the high vocal natural vs drilling the ears / dying out |
+| **Cymbals/brass** (foil effect) | **#20** · **#22** · **#05** | a sustained "shimmer" vs chewed foil / a dull "pssh" |
+| **Separation UNDER LOAD** (micro-events) | **#15** Drum Ecstasy · **#23** Hi-Finesse · **#21** | doesn't blend into mush when the system is loaded |
+| **Macrodynamics / attack** | **#10** · **#15** · **#18** | the attack not smeared, the start of the hit crisp |
+| **Layering/multi-layering** | **#13** Vahtang | overlaid effects as layers vs flat/monotonous |
+| **Overall balance / first impression** | **#01** · **#02** · **#11** | scale/space/resolution/balance right away |
+| **Universality** (recording contrast) | transitions **#17→#18**, **#19** | different recording styles sound DIFFERENT, not "the next one on the radio" |
+| **Center / phantom center** | **MONO tracks** (below) | mono should gather into a TIGHT point at center; smeared/wandering/wide = L/R not aligned (level+time+phase) |
+| **3D imaging / stage HEIGHT** | **Ch.23** Britten/Westminster | 3D on 2 speakers; a sense of height; the scale of a cathedral |
+| **Transients / speaker+amp control** | **Ch.25** Stravinsky | drums tight/taut; sharp clear brass |
+| **LF-driver accuracy (artifacts at the limit)** | **Ch.27** double-bass solo · **#24** | pluck→body resonance; non-musical sounds at the limit |
+| **Dynamic headroom / compression at volume** | **Ch.29** · **Ch.23** peaks | quiet→loud stress test; peaks not squashed/not distorting |
 
-> **EMMA 2024 треки (описи + маркери → `competition.md`)** теж придатні для слухової верифікації, з ТОЧНИМИ таймкодами: **глибина/тіло** → T8 (рояль далеко позаду+нижче співачки); **imaging/розділення інструментів** → T9 (джоу-арп 3-4с справа, голоси по позиціях); **рівні сцени висота/глибина** → T11 @2:52 (малий vs тамбурин на різних рівнях); **розділення беквокалу по сцені** → T11 @0:46/1:25/2:00; **вокал-блукання як НОРМА запису** (не плутати з дефектом) → T8.
+> **The EMMA 2024 tracks (descriptions + markers → `competition.md`)** are also usable for listening verification, with EXACT timecodes: **depth/body** → T8 (the piano far behind+below the singer); **imaging/instrument separation** → T9 (jaw harp 3–4 s on the right, voices by position); **stage levels height/depth** → T11 @2:52 (snare vs tambourine at different levels); **backing-vocal separation across the stage** → T11 @0:46/1:25/2:00; **vocal-wander as the recording's NORM** (don't confuse with a defect) → T8.
 
-## Стандартний ПРОХІД — повний слуховий чек на віхах (Фаза 5)
+## The standard PASS — a full listening check at milestones (Phase 5)
 
-Фіксований маршрут (~20–30 хв), коли тюн «готовий» (після Фази 3/4) або перед змаганням. Кожен крок: постав трек → один маркер → **бінарний вердикт ✓/✗** у чеклист. Усе ✗ = backlog наступної ітерації (з мапінгом на смугу/інструмент зі свого рядка індексу).
+A fixed route (~20–30 min), when the tune is "ready" (after Phase 3/4) or before a competition. Each step: play the track → one marker → a **binary verdict ✓/✗** into a checklist. Everything ✗ = the next iteration's backlog (mapped to the band/instrument from its index row).
 
-| # | Що перевіряємо | Треки | ✓-критерій |
+| # | What we check | Tracks | The ✓-criterion |
 |---|---|---|---|
-| 1 | Перше враження / баланс | **#01** (запас: #02, #11) | масштаб/простір/розрізнення одразу |
-| 2 | Моно-центр (фундамент L/R) | Helen Merrill або Byrds (моно, нижче) | туга точка по центру, не пливе |
-| 3 | Позиції L/LC/C/RC/R | EMMA-позиційний трек (5 інстр × 5 позицій → `competition.md`) | кожен інструмент = одна точка на своєму місці |
-| 4 | Фокус / розміри образів | EMMA 2026 тр.7-11 або вокал #07 | ієрархія розмірів (бас найбільший → трикутник найменший) |
-| 5 | Глибина + простір | **#07** / #14 (+ AYA RAUM, якщо є) | сцена за капотом, шари читаються |
-| 6 | Панч + стик саб↔мідбас | **#26**/#20 + **#25**/#16 | удар у груди; саб не «відвалюється» |
-| 7 | Саб <40 Гц | **#24** | держить, не гудить і не сушить |
-| 8 | Сибілянти / верх | **#06** (+#05 послезвуки) | природні, не відділяються/не зникають |
-| 9 | Роздільність під навантаженням | **#15** / #23 | мікрособиття не міситься в кашу |
-| 10 | Універсальність | переходи **#17→#18→#19** | записи звучать РІЗНО, не «радіо» |
+| 1 | First impression / balance | **#01** (backup: #02, #11) | scale/space/resolution right away |
+| 2 | Mono center (the L/R foundation) | Helen Merrill or the Byrds (mono, below) | a tight point at center, doesn't drift |
+| 3 | Positions L/LC/C/RC/R | the EMMA position track (5 instr × 5 positions → `competition.md`) | each instrument = one point in its place |
+| 4 | Focus / image sizes | EMMA 2026 tr.7-11 or vocal #07 | a size hierarchy (bass biggest → triangle smallest) |
+| 5 | Depth + space | **#07** / #14 (+ AYA RAUM, if available) | the stage behind the hood, layers read |
+| 6 | Punch + sub↔midbass joint | **#26**/#20 + **#25**/#16 | a hit in the chest; the sub doesn't "fall away" |
+| 7 | Sub <40 Hz | **#24** | holds, doesn't drone or dry up |
+| 8 | Sibilants / top | **#06** (+#05 decays) | natural, not detaching/not vanishing |
+| 9 | Separation under load | **#15** / #23 | micro-events don't blend into mush |
+| 10 | Universality | transitions **#17→#18→#19** | recordings sound DIFFERENT, not "radio" |
 
-## Моно-треки для ЦЕНТРУ (фантомний центр / L-R матчинг)
-**Принцип:** справжній МОНО-запис (L=R ідентичні) має локалізуватись у **тугу точку по центру** на висоті. Якщо розмазується / гуляє L/R / широкий — L/R **не зведені по рівню+часу+фазі** → це найчистіший тест центру і L-R фундаменту (перед imaging-роботою). Дай Арбітру моно-трек: «вокал/мікс стоїть тугою точкою по центру, чи пливе/широкий?».
-- **The Byrds — «So You Want To Be A Rock 'N' Roll Star»** (Younger Than Yesterday, 1967) — моно-мікс рок.
-- **Helen Merrill — «You'd Be So Nice to Come Home To»** (Cole Porter) — моно вокал-джаз, тугий центр-вокал.
-> Гуляє/розмазано → перевір L/R рівень + TA + полярність (фундамент), НЕ кидайся в imaging-EQ.
+## Mono tracks for the CENTER (phantom center / L-R matching)
+**The principle:** a true MONO recording (L=R identical) should localize into a **tight point at center** at height. If it smears / wanders L/R / is wide — L/R are **not aligned in level+time+phase** → this is the cleanest test of the center and the L-R foundation (before imaging work). Give the Arbiter a mono track: "does the vocal/mix stand as a tight point at center, or does it drift/spread?".
+- **The Byrds — "So You Want To Be A Rock 'N' Roll Star"** (Younger Than Yesterday, 1967) — a mono rock mix.
+- **Helen Merrill — "You'd Be So Nice to Come Home To"** (Cole Porter) — mono vocal jazz, a tight center vocal.
+> Drifting/smeared → check L/R level + TA + polarity (the foundation), DON'T jump into imaging EQ.
 
-## Бібліотека CarMus Test&Demo 2026 (порядок: легкі → важкі/грузькі)
-Джерело: CarMus Test&Demo 2026 (опис автора підбірки). «Слухати музику, а не звуки.»
-1. **Eternal Eclipse — Fate Of The Clockmaker** — інтро: масштаб, простір, розрізнення, макродинаміка — рівень системи зразу.
-2. **Preservation Hall Jazz Band — La Malanga** — багато інструментів: розрізнення, тембри, баланс.
-3. **Felix Irwan — I Don't Want to Miss a Thing** — вокал + акуст-гітари; **удари по корпусу гітари** (впізнавані vs сухі стуки/гулка раскатистість); розділення голосів.
-4. **Elvis Presley — Fever** — простір студії, розрізнення на малих рівнях; **щиглі пальцями** (читаються?).
-5. **Hank Shizzoe — Your Luck Will Find You** — спокійний вокал (не гундосить/не тисне/не анорексичний); ВЧ-діапазон, «тілесність»; гітари не губляться серед тарілок; «покривало на динаміках»?
-6. **Jennifer Warnes — Invitation To the Blues** — ВЧ-розрізнення + рівність СЧ; деталі/послезвуки; **сибілянти** (природні? не відділяються/зникають?).
-7. **Melody Gardot — Over The Rainbow (Live)** — **ГЛИБИНА+простір**; вокал тримається на місці; контрабас (гулить/роздувається vs тощий); щиглі/щипки; **пришіптування вокалістки з ~2:00** під соло контрабаса — читається?
-8. **Hayley Westenra — River Of Dreams** — високий яскравий вокал → **резаки в СЧ** (основні тони + верх-середина); вокал не плаває/не міняє розмір на різних нотах.
-9. **Alla Turovskaya — Sunny Bunny** — інший принцип сведення; фактура контрабаса; теплий вокал; **флейта з 1:20** (резаки?); рояль теплий (живий, не електро); баланс без акцентів.
-10. **Alexander Jean — Another One Bites The Dust** — напор/динаміка/атака не змазана; **акуст-гітари** (чути струни vs «бринь-бринь»); нема гулкості НЧ/нажиму нижньої середини; щільність НЧ; вокал-резаки.
-11. **Quadro Nuevo — Nature Boy** — живі інструменти, природність; грають разом; фактура НЧ (контрабас роздув/втрата наповненості); резаки СЧ.
-12. **Bradley Cooper — Out Of Time** — концертна сцена; **акуст-гітара (жива) vs електро (через комбік) — РОЗДІЛЕННЯ чути**; бас+ударник відділені від залу.
-13. **Vahtang — Black Betty** — бітбокс + накладені ефекти = **багатошаровість**; плоско/однообразно = погано.
-14. **Hanne Boel — House of the Rising Sun** — масштабна простора цільна сцена, повна стереопанорама (не рвана/не злиплена); надривний вокал (витягує косяки); фактура бас-гітари; **бубонці тамбурина з 2:20**.
-15. **Drum Ecstasy — Oh! Empie!** — **барабани: роздільність/розстановка**; макродинаміка/скорострільність; розрізнення = не втрачати мікрособиття під навантаженням.
-16. **Domenico Loparco… — Dock Funk** — **ДВІ бас-гітари** (густа важка НЧ); контроль саба + **коректність зведення мідбас↔саб**; нижній бас не відшаровується; дві бас-гітари ОКРЕМО vs каша.
-17. **AC/DC — Back In Black** — після важкого: не тощий? баланс/читаність; резаки/скованість.
-18. **Greta Van Fleet — Highway Tune** — яскраво/на грані; гітари «вжь», малий вистрілює, бас-гітара пружно гарчить, бас-бочка з ревером не губиться.
-19. **San Di EGO — Stayin' Alive** — **контраст манери запису** з попереднім (інша атмосфера, не «наступна на радіо»); читаність/баланс.
-20. **Godsmack — Cryin' Like A Bitch!** — **бас-бочка**: щільна, в груди як палі; читається ОКРЕМО від бас-гітари й нижніх нот гітари (артикуляція НЧ); тарілки (зажаті) не в фольгу, особл коли удар+тарілка разом.
-21. **Sons Of Texas — Feed The Need** — важкий «ущільнений» але розбірливий саунд; бас-гітара не губиться за бас-бочкою.
-22. **Gus G — Enigma of Life** — легка картинка; електрогітара ріже вуха?; бас-гітара пружна vs тоща; тарілки протяжні vs «пщщ».
-23. **Hi-Finesse — Andromeda** — епік по наростаючій; слабкі системи = нудно/давить; добрі = розкриваються, тримають **обилля мікрособиттів**.
-24. **Loud373 & VAGAN — Olgoi Khorkhoi** — **саб <40 Гц**: держить vs сушить/роздуває в гудіння.
-25. **Rodg & Veljko Jovic — Sundust** — електро; **удари в зоні стику саб↔мідбас** (гіпертрофовані) — саби тут часто «відвалюються».
-26. **Vadim Shantor — Devil Inside** — **мідбас**: енергія ударів вище за #25; щільно/соковито/в груди vs вяло/розмазано/пересушено.
+## The CarMus Test&Demo 2026 library (order: easy → hard/heavy)
+Source: CarMus Test&Demo 2026 (the compiler's description). "Listen to music, not to sounds."
+1. **Eternal Eclipse — Fate Of The Clockmaker** — intro: scale, space, resolution, macrodynamics — the system's level right away.
+2. **Preservation Hall Jazz Band — La Malanga** — many instruments: resolution, timbres, balance.
+3. **Felix Irwan — I Don't Want to Miss a Thing** — vocal + acoustic guitars; **hits on the guitar body** (recognizable vs dry knocks/boomy rumble); voice separation.
+4. **Elvis Presley — Fever** — studio space, resolution at low levels; **finger snaps** (do they read?).
+5. **Hank Shizzoe — Your Luck Will Find You** — a calm vocal (not nasal/not pressing/not anorexic); the treble range, "bodiliness"; guitars don't get lost among the cymbals; a "blanket on the speakers"?
+6. **Jennifer Warnes — Invitation To the Blues** — treble resolution + mid evenness; detail/decays; **sibilants** (natural? not detaching/vanishing?).
+7. **Melody Gardot — Over The Rainbow (Live)** — **DEPTH+space**; the vocal holds in place; the double bass (drones/bloats vs thin); snaps/plucks; **the singer's whispering from ~2:00** under the double-bass solo — does it read?
+8. **Hayley Westenra — River Of Dreams** — a high bright vocal → **cutters in the mids** (fundamentals + upper-mid); the vocal doesn't drift/change size on different notes.
+9. **Alla Turovskaya — Sunny Bunny** — a different mixing principle; double-bass texture; a warm vocal; **a flute from 1:20** (cutters?); a warm piano (live, not electric); balance without accents.
+10. **Alexander Jean — Another One Bites The Dust** — drive/dynamics/attack not smeared; **acoustic guitars** (hear the strings vs "strum-strum"); no boomy LF / no lower-mid pressure; LF density; vocal cutters.
+11. **Quadro Nuevo — Nature Boy** — live instruments, naturalness; they play together; LF texture (the double bass bloated/loss of fullness); mid cutters.
+12. **Bradley Cooper — Out Of Time** — a concert stage; **acoustic guitar (live) vs electric (through an amp) — the SEPARATION is heard**; bass+drummer separated from the hall.
+13. **Vahtang — Black Betty** — beatbox + overlaid effects = **multi-layering**; flat/monotonous = bad.
+14. **Hanne Boel — House of the Rising Sun** — a large spacious cohesive stage, a full stereo panorama (not ragged/not collapsed); a strained vocal (it exposes flaws); bass-guitar texture; **the tambourine jingles from 2:20**.
+15. **Drum Ecstasy — Oh! Empie!** — **drums: separation/placement**; macrodynamics/rate of fire; resolution = don't lose micro-events under load.
+16. **Domenico Loparco… — Dock Funk** — **TWO bass guitars** (dense heavy LF); sub control + the **correctness of the midbass↔sub integration**; the lower bass doesn't detach; the two bass guitars SEPARATELY vs mush.
+17. **AC/DC — Back In Black** — after the heavy ones: not thin? balance/readability; cutters/constriction.
+18. **Greta Van Fleet — Highway Tune** — bright/on the edge; guitars "wzh", the snare cracks out, the bass guitar growls springily, the kick with reverb doesn't get lost.
+19. **San Di EGO — Stayin' Alive** — a **contrast in recording style** with the previous one (a different atmosphere, not "the next one on the radio"); readability/balance.
+20. **Godsmack — Cryin' Like A Bitch!** — the **kick drum**: tight, into the chest like a pile; reads SEPARATELY from the bass guitar and the guitar's low notes (LF articulation); cymbals (clamped) not into foil, especially when a hit+cymbal together.
+21. **Sons Of Texas — Feed The Need** — a heavy "compacted" but intelligible sound; the bass guitar doesn't get lost behind the kick.
+22. **Gus G — Enigma of Life** — a light picture; does the electric guitar cut the ears?; the bass guitar springy vs thin; cymbals sustained vs "pssh".
+23. **Hi-Finesse — Andromeda** — epic, building up; weak systems = boring/oppressive; good ones = open up, hold the **abundance of micro-events**.
+24. **Loud373 & VAGAN — Olgoi Khorkhoi** — **sub <40 Hz**: holds vs dries up / bloats into droning.
+25. **Rodg & Veljko Jovic — Sundust** — electro; **hits in the sub↔midbass joint region** (hypertrophied) — subs here often "fall away".
+26. **Vadim Shantor — Devil Inside** — **midbass**: hit energy higher than #25; tight/juicy/in the chest vs limp/smeared/over-dried.
 
-> Бібліотека росте: EMMA 2021/2024/2026, AYA — у `competition.md` (imaging-карти + TIEFBASS). Додавати нові підбірки сюди з маркерами + таймкодами.
+> The library grows: EMMA 2021/2024/2026, AYA — in `competition.md` (imaging maps + TIEFBASS). Add new compilations here with markers + timecodes.
 
-## Бібліотека Chesky «Ultimate Demo Disc» (стрімінг: Tidal / Spotify / Apple Music) — по виміру SQ
-«Chesky Guide to Critical Listening»: у кожній парі **парний трек = диктор** наговорює концепт виміру, **непарний = музичний приклад**. **30 треків** (T1 welcome … T30 finale), **14 вимірів**. Маркери нижче — з оригінальних текстів диска.
-| # | Вимір | Музичний трек | Що слухати (з оригіналу) |
+## The Chesky "Ultimate Demo Disc" library (streaming: Tidal / Spotify / Apple Music) — by SQ measure
+"Chesky Guide to Critical Listening": in each pair, the **even track = a narrator** describing the measure's concept, the **odd one = a music example**. **30 tracks** (T1 welcome … T30 finale), **14 measures**. The markers below — from the disc's original texts.
+| # | Measure | Music track | What to listen for (from the original) |
 |---|---|---|---|
-| 03 | **High Resolution** | Rebecca Pidgeon «Spanish Harlem» | голос «дихає» з простором навколо; **шейкер ПОЗАДУ — кожен помах інакший** (схожі = нема роздільності); бас глибокий АЛЕ деталізований |
-| 05 | **Depth** | Sara K. «If I Could Sing Your Blues» | **труба за 10 фт від мікр.** = еталон глибини; Сара близько, голос наповнює студію ревербом; гітара тепла/інтимна |
-| 07 | **Atmosphere** | Leny Andrade «Maiden Voyage» | тепла простора сцена, але голос прямий; бас повний/теплий; барабани+тарілки ефірні |
-| 09 | **Midrange Purity** | Livingston Taylor «Grandma's Hands» | **щиглі пальцями = живі/тілесні** (клацни своїми для порівн.); голос має ГРУДНИЙ об'єм, не «відірваний від тіла» |
-| 11 | **Naturalness** | Ana Caram «Correnteza» | дощовий ліс/птахи ОГОРТАЮТЬ; віолончель резонує; дихання Анни відчутне; **нема електронного відблиску/різкості** |
-| 13 | **Transparency** | Fred Hersch Trio «Played Twice» | **рояль перкусійний** — атака молоточка очевидна; бас теплий не гулкий, чути щипок; барабани ПОЗАДУ; тарілки повітряні; «вікно у звук» |
-| 15 | **Presence** | McCoy Tyner / Joe Henderson «Ask Me Now» | сакс **праворуч від центру між колонками**; дихання+механіка клапанів+теплий тон; **відлуння від задньої стіни** (дискретніше=вища роздільність); чи віриш, що живий сакс між колонок? |
-| 17 | **Visceral Impact** | Monty Alexander «Sweet Georgia Brown» | 2 барабани/2 баси/духові — **різні акустики кожного кіта чути**; вражаюча динаміка — **вмикай ГУЧНО, маєш ВІДЧУТИ** |
-| 19 | **Rhythm & Pace (PRaT)** | Johnny Frigo «I Love Paris» | передача ЕНЕРГІЇ: нога відбиває такт/тягне танцювати; стеж за **своєю фізичною реакцією** — нема реакції = шукай далі |
-| 21 | **Focus** | Connecticut Early Music — Vivaldi «Flute Concerto in D» | **контур/межа** інструмента на сцені; флейта чітка не розмита; різкіший край = кращий фокус |
-| 23 | **Holographic Imaging** | Westminster Choir — Britten «Festival Te Deum» | 3D навіть на 2 колонках; масштаб собору 60×225×90 фт; **деякі системи дають ВИСОТУ**; орган атмосферний (шипіння = повітря органа, не плівка); ⚠️ низький рівень + **потужні піки** = тест **headroom** |
-| 25 | **Transients** (перехідні) | Solisti NY — Stravinsky «Royal March» (L'Histoire du Soldat) | різкі зміни рівня; **барабани щільні/натягнуті = індикатор контролю колонок+підсилка**; духові різкі/чіткі; хватка+швидкість підсилка |
-| 27 | **Bass Resonance** | Chesky Sampler v2 — соло контрабаса (3 фути від мікр.) | **щипок (атака) → резонанс корпусу**; тест точності НЧ-динаміка; на межі — **немузичні звуки** = виявляє дефект конструкції |
-| 29 | **Dynamics** | Chesky Sampler v2 — соло барабанів | тихо → **дедалі гучніше** = стрес-тест колонок+підсилка (грати на реалістичних рівнях, обережно) |
-> **Diagnostic-зв'язка (еталони):** глибина → **05** · атака/панч → **17** · фокус/центр → **21** · imaging+ВИСОТА+headroom → **23** · перехідні/контроль → **25** · точність НЧ-динаміка (артефакти на межі) → **27** · динамічний headroom → **29**.
+| 03 | **High Resolution** | Rebecca Pidgeon "Spanish Harlem" | the voice "breathes" with space around it; **the shaker BEHIND — each shake different** (alike = no resolution); the bass deep BUT detailed |
+| 05 | **Depth** | Sara K. "If I Could Sing Your Blues" | **the trumpet 10 ft from the mic** = the reference for depth; Sara close, the voice fills the studio with reverb; the guitar warm/intimate |
+| 07 | **Atmosphere** | Leny Andrade "Maiden Voyage" | a warm spacious stage, but the voice direct; the bass full/warm; drums+cymbals ethereal |
+| 09 | **Midrange Purity** | Livingston Taylor "Grandma's Hands" | **finger snaps = live/bodily** (snap your own to compare); the voice has CHEST volume, not "detached from the body" |
+| 11 | **Naturalness** | Ana Caram "Correnteza" | a rainforest/birds ENVELOP you; the cello resonates; Ana's breathing palpable; **no electronic glint/harshness** |
+| 13 | **Transparency** | Fred Hersch Trio "Played Twice" | **the piano percussive** — the hammer's attack obvious; the bass warm not boomy, hear the pluck; the drums BEHIND; cymbals airy; "a window into the sound" |
+| 15 | **Presence** | McCoy Tyner / Joe Henderson "Ask Me Now" | the sax **to the right of center between the speakers**; breathing+key mechanics+a warm tone; **the echo from the back wall** (more discrete=higher resolution); do you believe a live sax is between the speakers? |
+| 17 | **Visceral Impact** | Monty Alexander "Sweet Georgia Brown" | 2 drums/2 basses/brass — **the different acoustics of each kit heard**; striking dynamics — **turn it UP, you should FEEL it** |
+| 19 | **Rhythm & Pace (PRaT)** | Johnny Frigo "I Love Paris" | the transfer of ENERGY: the foot taps the beat / pulls you to dance; watch your **own physical reaction** — no reaction = keep looking |
+| 21 | **Focus** | Connecticut Early Music — Vivaldi "Flute Concerto in D" | the **outline/edge** of an instrument on the stage; the flute clear not blurred; a sharper edge = better focus |
+| 23 | **Holographic Imaging** | Westminster Choir — Britten "Festival Te Deum" | 3D even on 2 speakers; the scale of a cathedral 60×225×90 ft; **some systems give HEIGHT**; the organ atmospheric (hiss = the organ's air, not tape); ⚠️ a low level + **powerful peaks** = a **headroom** test |
+| 25 | **Transients** | Solisti NY — Stravinsky "Royal March" (L'Histoire du Soldat) | sharp level changes; **drums tight/taut = an indicator of speaker+amp control**; brass sharp/clear; the amp's grip+speed |
+| 27 | **Bass Resonance** | Chesky Sampler v2 — double-bass solo (3 ft from the mic) | **the pluck (attack) → the body resonance**; a test of LF-driver accuracy; at the limit — **non-musical sounds** = reveals a construction defect |
+| 29 | **Dynamics** | Chesky Sampler v2 — drum solo | quiet → **louder and louder** = a stress test of the speakers+amp (play at realistic levels, carefully) |
+> **Diagnostic links (references):** depth → **05** · attack/punch → **17** · focus/center → **21** · imaging+HEIGHT+headroom → **23** · transients/control → **25** · LF-driver accuracy (artifacts at the limit) → **27** · dynamic headroom → **29**.

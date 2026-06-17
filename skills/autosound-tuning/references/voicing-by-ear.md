@@ -1,70 +1,71 @@
-# Войсинг на слух — симптом→фікс + крива→характер (Фаза 6, клієнтські преференції)
+# Voicing by ear — symptom→fix + curve→character (Phase 6, client preferences)
 
-Прикладна база by-ear войсингу: коли база технічно-коректна (Фази 0-3), а треба **підлаштувати характер під смак клієнта** (Фаза 6) або швидко перекласти скаргу слуху в EQ-рух. Джерела: досвід інсталятора «Аркадій Автозвук» + Peter/pssound + крива→характер. ⚠️ **Це by-ear евристики (стартові напрямки), не догма** — кожен рух судити вухом, перевіряти на своїй системі; числа орієнтовні.
-> ⚠️ **Якщо порада тут СУПЕРЕЧИТЬ нашим вимірам/висновкам — НЕ відкидати, лишати як ВАРІАНТ.** Інша геометрія/салон/ситуація може зробити її правильною, і несподівана порада іноді відмикає рішення (перевірено в реальній сесії — суперечливий хід дав вихід). Помічати «(варіант — суперечить X, пробувати коли Y)», не видаляти.
+An applied base for by-ear voicing: when the base is technically correct (Phases 0–3), and you need to **tune the character to the client's taste** (Phase 6) or quickly translate an ear complaint into an EQ move. Sources: the installer "Arkadij Avtozvuk's" experience + Peter/pssound + curve→character. ⚠️ **These are by-ear heuristics (starting directions), not dogma** — judge every move by ear, verify on your own system; the numbers are approximate.
+> ⚠️ **If a tip here CONTRADICTS our measurements/conclusions — don't discard it, keep it as a VARIANT.** A different geometry/cabin/situation can make it right, and an unexpected tip sometimes unlocks a solution (proven in a real session — a contradictory move gave the way out). Mark "(variant — conflicts with X, try when Y)", don't delete.
 
-## Тональний баланс — як читати
-- **НЧ <100 Гц — читати як є; СЧ до 1.5к — по верхніх піках; ВЧ >1.5к — по усередненню.** (Узгоджується з anchor-методами, `diagnostic §1`.)
-- **Equal-loudness:** тихо → треба більше НЧ+ВЧ; гучно → менше. Войсинг калібрується під рівень прослуховування (`staging-depth §3`).
-- Стик мідбас↔СЧ зводити там, де **L і R (w і m) рівні й рівні 400-500 Гц** — інакше крива сцена.
-- Після EQ-корекцій біля кросоверів — **перевірити затримки заново**.
+## Tonal balance — how to read it
+- **Bass <100 Hz — read it as is; mids up to 1.5k — by the upper peaks; treble >1.5k — by the average.** (Consistent with the anchor methods, `diagnostic §1`.)
+- **Equal-loudness:** quiet → you need more bass+treble; loud → less. The voicing is calibrated to the listening level (`staging-depth §3`).
+- Align the midbass↔mid joint where **L and R (w and m) are equal and level at 400–500 Hz** — otherwise the stage is crooked.
+- After EQ corrections near the crossovers — **re-check the delays**.
 
-## Крива → характер (вибір під смак клієнта)
-| Крива | Характер | Кому |
+## Curve → character (choosing for the client's taste)
+| Curve | Character | For whom |
 |---|---|---|
-| **Audiofrog** | природна/нейтральна, трохи тепла; ~−1dB/окт після 100 | reference/SQ-старт |
-| **ResoNix Accurate** | майже еталон, трохи тепліша за Audiofrog | SQ-старт/калібрування |
-| **ATF** | дуже рівна, легкий нахил, студійна — може «тонко» | reference як на моніторах |
-| **Harman** | універсальна, +3dB@100, спад до −6dB@10к | будь-яка музика, «як у навушниках» |
-| **Jazzi** | м'яка/повітряна, підйом 100-200 і 8-10к, «кремова» широка сцена | джаз/соул/вокал |
-| **Jazzi v2** | менше низу, більше середини, краща артикуляція голосу | SQ з акцентом на вокал |
-| **EPY** | гібрид Harman/Jazzi, щільно/натурально | вокал/акустика |
-| **JBL** | яскравіше/агресивніше, presence 3-5к — може стомлювати | поп/гітара/жін.вокал |
-| **Whitledge** | тепла/щільна, **СИЛЬНО піднятий бас** (велика присутність низу), м'який верх | хто свідомо хоче бас-форвард «живий» звук — рок/блюз |
-| **Half Whitledge** | той самий теплий характер, **бас-підйом ~удвічі менший** → ближчий до нейтралі/цілі, легший/швидший | «теплота Whitledge без важкого баса»; **дефолт для «задоволення без бас-біасу»** (не лише «без саба») |
-| **ResoNix Laid-Back** | спокійна, спад після 2к, «ковдрова» | довгі поїздки/джаз |
-| **RAW-Cat** | щільна/басова, −10dB до 1к, темна/масивна | fun/EDM/хіп-хоп |
-**Побачити/порівняти криві візуально:** **https://nonotuningtool.com/** — введи house curve + кросовери → показує форму (там же генеруються пер-канальні Nono-цілі, `process-phases.md` крок 5б). **Дай користувачу ЛІНК, не розводь пояснень.** Криві мають авторів (ResoNix — Nick, Audiofrog — Wehmeyer…) → атрибуцію зберігати.
-> При смаку «задоволення без бас-біасу» з нахилом у Whitledge-теплоту — стартувати з **Half Whitledge** (ближче до цілі), а не повного Whitledge; повний — лише коли свідомо просять важкий низ. *(by-ear, варіант — не догма.)*
+| **Audiofrog** | natural/neutral, slightly warm; ~−1dB/oct after 100 | reference/SQ start |
+| **ResoNix Accurate** | almost a reference, a touch warmer than Audiofrog | SQ start/calibration |
+| **ATF** | very flat, a slight tilt, studio — can be "thin" | reference, like on monitors |
+| **Harman** | universal, +3dB@100, roll-off to −6dB@10k | any music, "headphone-like" |
+| **Jazzi** | soft/airy, a rise at 100–200 and 8–10k, "creamy" wide stage | jazz/soul/vocal |
+| **Jazzi v2** | less low end, more mids, better vocal articulation | SQ with a vocal accent |
+| **EPY** | a Harman/Jazzi hybrid, dense/natural | vocal/acoustic |
+| **JBL** | brighter/more aggressive, presence 3–5k — can fatigue | pop/guitar/female vocal |
+| **Whitledge** | warm/dense, **strongly raised bass** (a big low-end presence), a soft top | someone who deliberately wants a bass-forward "live" sound — rock/blues |
+| **Half Whitledge** | the same warm character, **the bass rise ~half as much** → closer to neutral/the target, lighter/faster | "Whitledge warmth without the heavy bass"; **the default for "enjoyment without a bass bias"** (not just "without a sub") |
+| **ResoNix Laid-Back** | calm, a roll-off after 2k, "blanket-like" | long trips/jazz |
+| **RAW-Cat** | dense/bassy, −10dB to 1k, dark/massive | fun/EDM/hip-hop |
 
-**Метод аудиту смаку:** вирівняти систему flat (±1dB) → по черзі прикладати кожну криву як EQ-профіль → слухати знайомий трек (напр. Diana Krall «Temptation» = вокал+бас · Dire Straits «Private Investigations» = сцена+динаміка · Daft Punk «Giorgio by Moroder» = електро+імпульс) → порівнювати глибину/щільність/яскравість. Клієнт обирає → це його voicing-пресет.
+**See/compare the curves visually:** **https://nonotuningtool.com/** — enter the house curve + crossovers → it shows the shape (the per-channel Nono targets are generated there too, `process-phases.md` step 5b). **Give the user the LINK, don't pile on explanations.** The curves have authors (ResoNix — Nick, Audiofrog — Wehmeyer…) → keep the attribution.
+> For a taste of "enjoyment without a bass bias" leaning toward Whitledge warmth — start with **Half Whitledge** (closer to the target), not full Whitledge; the full one — only when a heavy low end is deliberately requested. *(by-ear, a variant — not dogma.)*
 
-## Осі смаку → EQ-рух
-- **«Підсушити» (світліше/швидше):** sw+мідбас ↓, СЧ(~1.5к)+ВЧ ↑. **«Пожирніше»:** sw+мідбас ↑, СЧ ↓, ВЧ не чіпати.
-- **Висота сцени (за умови верт.фазування):** ПІДНЯТИ = підсушити бас + підняти ВЧ; ПОКЛАСТИ на торпедо = підняти бас + опустити ВЧ.
-- **Голос ближче/далі:** рівень 0.8-1.7к (вище=ближче); відсунути = 1.2-1.4к −2-3dB, придвинути = підняти.
-- **«Кристально»:** EQ >16к +6-8; 10-12.5-15к ↑ (пік 12.5); сходинка 3→4к = кристальність/дзвінкість (добре на середній гучності, на гучній ріже). **М'якший верх:** ВЧ рівно, зменшити (але лишити) сходинку 3→4к.
-- На сцену більше впливають **затримки на нижчих частотах + рівні на вищих**.
+**The taste-audit method:** flatten the system (±1 dB) → apply each curve in turn as an EQ profile → listen to a familiar track (e.g. Diana Krall "Temptation" = vocal+bass · Dire Straits "Private Investigations" = stage+dynamics · Daft Punk "Giorgio by Moroder" = electro+impulse) → compare depth/density/brightness. The client chooses → that's their voicing preset.
 
-## Симптом → фікс (by-ear)
-**Бас:**
-- Панч/«в груди»: горб 40 Гц на сабі вище нижчих (до +10) = панчово не гулко; додати — 160 Гц +3-4 ширше (не на всіх); **панч без зсуву сцени — 160 Гц лише на ПРАВОМУ мідбасі** (локалізується фазою → рівень мало рухає образ).
-- Гул/бубоніння: контрабас гуде 80-100 → −2dB; мідбас-горб 100-105 (двері) Q2 −5-6 (АЛЕ втрачає «м'ясо» — підняття ВЧ маскує гул); саб горб 40/50 — прибрати на слух.
-- «Підсушити бас, лишити голос жирним»: PK 90 Гц Q1.2-1.5 −3.
-- Рихлий саб: 20-30 ↓, 40 ↑. Контрабас як бас-гітара → додати саб; гуде → саб −.
-- [Peter] зростання баса для SQ ≤ 3 dB/окт від 200 Гц.
-**Голос:**
-- 200-500 Гц **рівно І рівне L/R (АЧХ+ФЧХ)** → прибирає плавання нот по сцені (іноді крос на 500).
-- Гундосить → перебір верх-баса, 300-400 трохи ↓; жирний/обволікаючий — 200 ↑ (тільки добра інсталяція). Сухий/без ваги — 400-600 ↑.
-- Живість/дихання — 2-2.5к ↑ (горбик 2.5к = акцент на диханнях). Відкритість жін.голосу — 1.6-2к. Жін.голос вперед — 3к ↑ (перебір → електрогітари ріжуть).
-- Сибілянти: «ш/ч» 4-5к; «з/с/ц» 8-9к (пік міда) і 12.5к.
-**Симетрія L/R по голосу (200-300 Гц, коли мік не дає):** гундосять → прибрати ЗЛІВА (право не чіпати); надто високі/легкі → підняти СПРАВА; зібрати в центр → ліво ↓ + право ↑ на однаковий рівень.
-- При рівних затримках — придушити лівий по смугах щоб образ навпроти водія (≤3dB; хоч відлипити від стійки).
-**Верх/тарілки:** площадка 4-10к рівна = тарілки тілесні (ВЧ +6 над СЧ); 4к — основа тарілок (детальність, але сибілянти їздять); 12.5/14к — детальність+прикрашені сибілянти; «різкий верх+саб» → підняти крос-частоту твітерів + рівень, придушити 12.5к.
+## Taste axes → EQ move
+- **"Drier" (lighter/faster):** sub+midbass ↓, mid(~1.5k)+treble ↑. **"Fuller":** sub+midbass ↑, mid ↓, don't touch the treble.
+- **Stage height (given vertical phasing):** RAISE = dry the bass + raise the treble; LAY it on the dash = raise the bass + lower the treble.
+- **Voice closer/farther:** level 0.8–1.7k (higher=closer); push back = 1.2–1.4k −2–3 dB, bring forward = raise it.
+- **"Crystalline":** EQ >16k +6–8; 10–12.5–15k ↑ (peak at 12.5); a step 3→4k = crystalline-ness/sparkle (good at medium volume, cuts at loud). **A softer top:** treble level, reduce (but keep) the 3→4k step.
+- The stage is more affected by **delays at the lower frequencies + levels at the higher ones**.
 
-## Стик/фільтри (by-ear, Аркадій)
-- Між СЧ і ВЧ — **Bessel краще за LR** (повітря/глибина); багато ВЧ підкреслюють бас.
-- APF 2-го порядку на правому мідбасі на частоті стику — вирівняти провал сумації L+R без EQ-спотворення.
-- Багато ВЧ + хочеш менше підкресленого баса → з BW на LR + підняти ВЧ.
+## Symptom → fix (by-ear)
+**Bass:**
+- Punch / "in the chest": a 40 Hz hump on the sub above the lower ones (up to +10) = punchy not boomy; to add — 160 Hz +3–4 wider (not on all); **punch without shifting the stage — 160 Hz only on the RIGHT midbass** (it localizes by phase → level barely moves the image).
+- Boom/droning: a double bass droning 80–100 → −2 dB; a midbass hump 100–105 (doors) Q2 −5–6 (BUT it loses "meat" — raising the treble masks the boom); a sub hump 40/50 — remove by ear.
+- "Dry the bass, keep the voice full": PK 90 Hz Q1.2–1.5 −3.
+- A flabby sub: 20–30 ↓, 40 ↑. A double bass sounding like a bass guitar → add sub; if it drones → sub −.
+- [Peter] the bass rise for SQ ≤ 3 dB/oct from 200 Hz.
+**Voice:**
+- 200–500 Hz **level AND equal L/R (FR+phase)** → removes notes drifting across the stage (sometimes a crossover at 500).
+- Nasal → too much upper bass, 300–400 a touch ↓; full/enveloping — 200 ↑ (only with a good install). Dry/weightless — 400–600 ↑.
+- Liveliness/breath — 2–2.5k ↑ (a small hump at 2.5k = an accent on the breaths). Female-voice openness — 1.6–2k. Female voice forward — 3k ↑ (too much → electric guitars cut).
+- Sibilants: "sh/ch" 4–5k; "s/z/ts" 8–9k (the mid's peak) and 12.5k.
+**L/R symmetry by the voice (200–300 Hz, when the mic can't):** nasal → take off the LEFT (don't touch the right); too high/light → raise the RIGHT; to gather to center → left ↓ + right ↑ by the same amount.
+- With equal delays — attenuate the left per band so the image is in front of the driver (≤3 dB; at least to unstick it from the pillar).
+**Top/cymbals:** a flat 4–10k plateau = cymbals have body (treble +6 above the mid); 4k — the base of cymbals (detail, but sibilants wander); 12.5/14k — detail + embellished sibilants; "harsh top + sub" → raise the tweeters' crossover frequency + level, suppress 12.5k.
 
-## Тил / rear-fill (огортання, НЕ задній образ)
-Мета тилу в SQ = **ілюзія більшої сцени** (ширше за торпедо, глибше за лобове) — дифузне *огортання*, не задня локалізація. Тому тил **не роблять «як міди» (повносмугово)** — повносмугові = інша мета (задній образ) + «без правильної позиції/обробки тільки шкодять» (Crutchfield/F150/JDPower).
+## Joint/filters (by-ear, Arkadij)
+- Between mid and tweeter — **Bessel is better than LR** (air/depth); lots of treble emphasizes the bass.
+- A 2nd-order APF on the right midbass at the joint frequency — to even out the L+R summation dip without EQ distortion.
+- Lots of treble + you want a less emphasized bass → from BW to LR + raise the treble.
 
-**Матрикс — дві школи (обидві валідні):**
-- **Диференційний L−R (Peter/Hafler — дефолт для SQ):** Rear L = 50%L−50%R (затримка ~690см), Rear R = 50%R−50%L = −Rear L (~640см). L−R = різницевий сигнал = ambience/реверб/ширина; **моно-центр (L=R) канселюється → у тил фізично НЕ йде** → вокал/центр гарантовано ПОПЕРЕДУ (нема ризику «голос позаду» — перевіряти не треба). r-L=−r-R (протифаза) → максимально дифузно/нелокалізовно. Наслідок: **L/R баланс тилу неважливий** (виміряна L/R різниця = акустика дверей, не контент → не вирівнюй EQ під неї).
-- **Моно-сума L+R (Wehmeyer — варіант):** обидва тили = (L+R)/2. Простіша, загальний fill, не творить заднього стерео-образу; АЛЕ дублює центр позаду → вокал МОЖЕ тікати назад → суди з увімкненим тилом що голос попереду.
+## Rear / rear-fill (envelopment, NOT a rear image)
+The rear's goal in SQ = the **illusion of a bigger stage** (wider than the dash, deeper than the windshield) — diffuse *envelopment*, not a rear localization. So the rear is **not done "like the mids" (full-range)** — full-range = a different goal (a rear image) + "without the right position/processing it only hurts" (Crutchfield/F150/JDPower).
 
-**Смуга / рівень / затримка:**
-- **HPF високо, вище за боом-зону:** бас ззаду лише мутить перед + конфліктує з сабом, просторово нічого не дає (бас ненапрямлений). ~**300-315 BW24/LR4** типово; піднімай ще для слабких задніх дверей (реал П2: HP120→315 вбив боом задніх дверей 130-160 з 55→24 dB).
-- **LPF ~4-5к:** верх позаду легше локалізується (видає колонки) → ріж. `off` лишають лише для повного огортання з якісними тилами. Факт-нахил ~−15dB/окт від 400.
-- Рівень **тихо** + затримка = TA-дистанція + ~8-10мс (Haas «зникає позаду»).
+**The matrix — two schools (both valid):**
+- **Differential L−R (Peter/Hafler — the default for SQ):** Rear L = 50%L−50%R (delay ~690 cm), Rear R = 50%R−50%L = −Rear L (~640 cm). L−R = the difference signal = ambience/reverb/width; **the mono center (L=R) cancels → it physically does NOT go to the rear** → the vocal/center is guaranteed to be IN FRONT (no risk of "voice behind" — no need to check). r-L=−r-R (anti-phase) → maximally diffuse/non-localizable. Consequence: **the rear's L/R balance doesn't matter** (the measured L/R difference = door acoustics, not content → don't EQ-match to it).
+- **Mono sum L+R (Wehmeyer — a variant):** both rears = (L+R)/2. Simpler, a general fill, doesn't create a rear stereo image; BUT it duplicates the center behind → the vocal MAY run backward → judge with the rear on that the voice is in front.
+
+**Band / level / delay:**
+- **HPF high, above the boom zone:** bass at the rear only muddies the front + conflicts with the sub, and gives nothing spatially (bass is non-directional). ~**300–315 BW24/LR4** typically; raise it more for weak rear doors (real, P2: HP120→315 killed the rear-door boom 130–160 from 55→24 dB).
+- **LPF ~4–5k:** the top at the rear localizes more easily (gives away the speakers) → cut it. `off` is left only for full envelopment with quality rears. The actual tilt ~−15 dB/oct from 400.
+- Level **quiet** + delay = TA distance + ~8–10 ms (Haas, "it vanishes behind").
