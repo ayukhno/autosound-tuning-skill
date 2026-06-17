@@ -45,7 +45,7 @@ Rules:
   • Objections must be FALSIFIABLE (testable by ear/measurement), not "a vibe".
   • Think in cabin physics + psychoacoustics, not the math of ideal filters.
   • Remember: an all-pass is flat in FR — any FR change comes through source SUMMATION.
-Respond STRICTLY in the "Critic → Generator" format from Contract §4, in English.
+Respond STRICTLY in the "Critic → Generator" format from Contract §4, in the language of the AUTOSOUND CONTEXT below (the project's language).
 
 ====== DATA CONTRACT (the protocol) ======
 HDR
