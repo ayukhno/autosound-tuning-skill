@@ -43,6 +43,24 @@ def build_freqs(start_freq, ppo, n_points):
     return [start_freq * (2 ** (i / ppo)) for i in range(n_points)]
 
 
+def freq_axis(data, n):
+    """Build the frequency axis from a REW response payload.
+
+    REW returns one of two spacings depending on the measurement type:
+      • log-spaced (sweep): "ppo" (points-per-octave) + "startFreq"
+      • linear-spaced (RTA / linear): "freqStep" + "startFreq"
+    Handle both, or get a KeyError crash on RTA data (only "ppo" was handled).
+    """
+    if data.get("ppo"):
+        return build_freqs(data["startFreq"], data["ppo"], n)
+    if data.get("freqStep"):
+        start = data.get("startFreq", 0.0)
+        step = data["freqStep"]
+        return [start + i * step for i in range(n)]
+    # Fallback: assume a sane log axis rather than crashing.
+    return build_freqs(data.get("startFreq", 20.0), data.get("ppo", 48), n)
+
+
 def get_measurements():
     return _get("/measurements")
 
@@ -55,21 +73,26 @@ def get_fr(mid):
     data = _get(f"/measurements/{mid}/frequency-response")
     mag = decode_floats(data["magnitude"])
     phase = decode_floats(data["phase"])
-    freqs = build_freqs(data["startFreq"], data["ppo"], len(mag))
+    freqs = freq_axis(data, len(mag))
     return freqs, mag, phase
 
 
 def get_group_delay(mid):
     data = _get(f"/measurements/{mid}/group-delay")
-    gd = decode_floats(data["groupDelay"])
-    freqs = build_freqs(data["startFreq"], data["ppo"], len(gd))
+    # GD values come under key "magnitude" (verified); accept "groupDelay" too.
+    gd = decode_floats(data.get("groupDelay") or data["magnitude"])
+    freqs = freq_axis(data, len(gd))
     return freqs, gd
 
 
 def get_impulse_response(mid):
     data = _get(f"/measurements/{mid}/impulse-response")
-    ir = decode_floats(data["impulseResponse"])
-    start_time = data.get("startTime", 0)
+    # REW returns the samples under "data" (not "impulseResponse" — that key
+    # doesn't exist on this endpoint; the old code KeyError'd here).
+    ir = decode_floats(data.get("data") or data["impulseResponse"])
+    # Timing comes straight from REW ("startTime"/"delay") — don't reconstruct
+    # it from the array; that gave junk timing (see rew-api-quirks.md).
+    start_time = data.get("startTime", data.get("delay", 0.0))
     sample_rate = data.get("sampleRate", 48000)
     dt = 1.0 / sample_rate
     times = [start_time + i * dt for i in range(len(ir))]
@@ -118,5 +141,5 @@ def get_target_settings(mid):
 def get_target_response(mid):
     data = _get(f"/measurements/{mid}/target-response")
     mag = decode_floats(data["magnitude"])
-    freqs = build_freqs(data["startFreq"], data["ppo"], len(mag))
+    freqs = freq_axis(data, len(mag))
     return freqs, mag

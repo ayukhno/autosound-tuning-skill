@@ -1,0 +1,32 @@
+Audiotec_Fischer_Full_EQ_(30_bands)
+Number	Enabled	Control	Type	Frequency(Hz)	Gain(dB)	Q	Bandwidth(Hz)	TargetT60(ms)	
+1	True	Auto	PK	30.0	-2.0	3.00	10.00	
+2	True	Auto	PK	45.0	1.5	3.00	15.00	
+3	True	Manual	LS_Q	50.0	-1.0	0.7
+4	True	Auto	PK	80.0	-2.0	4.00	20.00	
+5	True	Auto	PK	120.0	2.0	3.00	40.00	
+6	True	Auto	PK	200.0	-3.0	2.00	100.0	
+7	True	Auto	PK	315.0	2.0	3.00	105.0	
+8	True	Auto	PK	500.0	-2.0	4.00	125.0	
+9	True	Auto	PK	630.0	1.5	5.00	126.0	
+10	True	Auto	PK	800.0	-2.5	5.00	160.0	
+11	True	Auto	PK	1000.0	2.0	2.00	500.0	
+12	True	Auto	PK	1250.0	-2.0	5.00	250.0	
+13	True	Auto	PK	1600.0	1.5	4.00	400.0	
+14	True	Auto	PK	2000.0	-3.0	5.00	400.0	
+15	True	Auto	PK	2500.0	2.0	3.00	833.0	
+16	True	Auto	PK	3150.0	-2.0	4.00	787.0	
+17	True	Manual	PK	5000.0	1.0	3.00	1666	
+18	True	Manual	PK	8000.0	-2.0	2.00	4000	
+19	True	Auto	PK	12500.0	-1.5	2.00	6250	
+20	True	Manual	HS_Q	10000.0	-1.0	0.7
+21	True	Auto	None	
+22	True	Auto	None	
+23	True	Auto	None	
+24	True	Auto	None	
+25	True	Auto	None	
+26	True	Auto	None	
+27	True	Auto	None	
+28	True	Auto	None	
+29	True	Auto	None	
+30	True	Auto	None	

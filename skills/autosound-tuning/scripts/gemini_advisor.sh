@@ -12,49 +12,38 @@
 # Usage:
 #   gemini_advisor.sh <package.md> [trace.csv]
 #
-# Env overrides:
-#   GEMINI_ADVISOR_MODEL  primary model (default: gemini-2.5-flash)
-#   GEMINI_FALLBACK_MODEL fallback (default: gemini-2.5-flash)
-#   ADVISOR_MEMORY        session-memory file (default: project rew_analitic/depth-advisor-memory.md)
-#   AUTOSOUND_DIR         contract/context/audit location (default: iCloud _AI/Autosound)
+# Config (see gemini_critic.sh header + references/setup-critic-channel.md):
+#   GEMINI_ADVISOR_MODEL  primary model (default per CLI)
+#   ADVISOR_MEMORY        session-memory file (default: $PROJECT_MIRROR/depth-advisor-memory.md)
+#   + GEMINI_BIN / GEMINI_FALLBACK_MODEL / GEMINI_EXTRA_ARGS / PROJECT_MIRROR / AUTOSOUND_DIR
 set -euo pipefail
+SCRIPT_NAME="gemini_advisor"
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_gemini_common.sh"
 
-AUTOSOUND_DIR="${AUTOSOUND_DIR:-$HOME/Library/Mobile Documents/com~apple~CloudDocs/_AI/Autosound}"
-_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_MIRROR="${PROJECT_MIRROR:-$(cd "$_SCRIPT_DIR/../../../.." && pwd)/rew_analitic}"
-
-CONTRACT="$AUTOSOUND_DIR/data-contract-template.md"
-[[ -f "$CONTRACT" ]] || CONTRACT="$PROJECT_MIRROR/data-contract-template.md"
-CONTEXT="$AUTOSOUND_DIR/autosound_context.md"
-[[ -f "$CONTEXT" ]] || CONTEXT="$PROJECT_MIRROR/autosound_context.md"
-AUDIT="$AUTOSOUND_DIR/audit-trail.md"
 ADVISOR_MEMORY="${ADVISOR_MEMORY:-$PROJECT_MIRROR/depth-advisor-memory.md}"
-
-PRIMARY_MODEL="${GEMINI_ADVISOR_MODEL:-Gemini 3.5 Flash (Medium)}"
-FALLBACK_MODEL="${GEMINI_FALLBACK_MODEL:-Gemini 3.5 Flash (Medium)}"
-
-die() { echo "gemini_advisor: $*" >&2; exit 1; }
 
 PKG="${1:-}"; TRACE="${2:-}"
 [[ -n "$PKG" ]] || die "usage: gemini_advisor.sh <package.md> [trace.csv]"
 [[ -f "$PKG" ]] || die "package not found: $PKG"
-[[ -f "$CONTRACT" ]] || die "contract not found: $CONTRACT"
-[[ -f "$CONTEXT" ]] || die "context not found: $CONTEXT"
-command -v agy >/dev/null || die "agy CLI not on PATH"
+gemini_preflight
+
+PRIMARY_MODEL="${GEMINI_ADVISOR_MODEL:-$(gemini_default_model)}"
+FALLBACK_MODEL="${GEMINI_FALLBACK_MODEL:-$(gemini_default_model)}"
 
 PROMPT_FILE="$(mktemp -t autosound_advisor.XXXXXX)"
 trap 'rm -f "$PROMPT_FILE"' EXIT
 
 {
   cat <<'HDR'
-SYSTEM ROLE — ТИ РАДНИК-ЕКСПЕРТ (Advisor-Expert) у спільній роботі над ГЛИБИНОЮ та ШИРИНОЮ сцени авто-звуку (Passat B8, Helix DSP Ultra S, фронт-only цей етап).
+SYSTEM ROLE — ТИ РАДНИК-ЕКСПЕРТ (Advisor-Expert) у спільній роботі над сценою авто-звуку (ширина / глибина / тональність).
+Машина / DSP / етап роботи (front-only чи повна система) — у блоці AUTOSOUND CONTEXT нижче. Спирайся ЛИШЕ на нього: не припускай інше авто, інший DSP чи геометрію драйверів з памʼяті.
 Це СПІЛЬНА робота колег, не змагання. Claude = Оркестратор/Генератор, ти = Радник-Експерт, користувач = Арбітр.
 
 Твоя роль (ширша за Критика):
   • Приноси ГЛИБОКУ експертизу зі staging/depth + найкращі практики спільнот (DIYMA, bestcaraudio, EMMA-суддівство).
   • Не лише шукай ризики — ПРОПОНУЙ конкретні рішення і порядок кроків.
   • Будуй НА аналізі Генератора (доповнюй/уточнюй), а не лише спростовуй.
-  • Чесно називай і ризик, і де фізична стеля (A-pillar СЧ near-coplanar — глибина обмежена розташуванням).
+  • Чесно називай і ризик, і де ФІЗИЧНА СТЕЛЯ розташування драйверів — але її межі бери з CONTEXT/вимірів ЦЬОГО авто (розташування/копланарність СЧ-ВЧ, відстані), не з памʼяті про інший інсталяшн.
   • Заперечення/поради — ФАЛЬСИФІКОВАНІ (перевірюваність на слух/виміром), не «вайб».
   • Думай фізикою салону + психоакустикою (precedence/Haas, ILD/ITD/IPD, відбиття скла), не математикою ідеальних фільтрів.
   • Памʼятай: all-pass плоский по АЧХ — зміна АЧХ лише через СУМАЦІЮ джерел; all-pass НЕ заповнює магнітудний нуль.
@@ -81,18 +70,4 @@ HDR
   fi
 } > "$PROMPT_FILE"
 
-run_model() {
-  ( cd "$(dirname "$PROMPT_FILE")" && agy --model "$1" -p "$(cat "$PROMPT_FILE")" ) 2>&1 \
-    | grep -viE '^(Ripgrep is not available|\[STARTUP\]|update_topic\()'
-}
-is_quota_error() { grep -qiE 'quota|capacity|exhausted|RESOURCE_EXHAUSTED|TerminalQuotaError|ModelNotFound|not found|429' <<<"$1"; }
-
-echo ">> Радник: $PRIMARY_MODEL" >&2
-OUT="$(run_model "$PRIMARY_MODEL" || true)"; USED="$PRIMARY_MODEL"
-if is_quota_error "$OUT"; then
-  echo ">> Pro-квота вичерпана → фолбек на $FALLBACK_MODEL" >&2
-  OUT="$(run_model "$FALLBACK_MODEL" || true)"; USED="$FALLBACK_MODEL (fallback)"
-fi
-printf '%s\n' "$OUT"
-printf '\n— [радник: %s]\n' "$USED"
-{ printf '%s | advisor=%s | package=%s%s\n' "$(date '+%Y-%m-%d %H:%M')" "$USED" "$(basename "$PKG")" "${TRACE:+ | trace=$(basename "$TRACE")}"; } >> "$AUDIT" 2>/dev/null || true
+gemini_run "$PRIMARY_MODEL" "$FALLBACK_MODEL" "$PROMPT_FILE" "радник"

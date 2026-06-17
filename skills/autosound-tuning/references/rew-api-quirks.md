@@ -5,7 +5,8 @@ Gotchas when driving the REW API over Python/urllib (REW 5.40 Beta 126, API 0.9.
 ## Encoding & endpoints
 - **Data is BIG-ENDIAN float32** (`struct.unpack('>'+n+'f', ...)`). Little-endian (`<f`) returns garbage that grows ~×4 per step. Applies to magnitude / phase / IR / GD. `rew_tool/rew_api.py` decodes correctly.
 - **FR endpoint:** `/measurements/{id}/frequency-response` → keys `magnitude`, `phase` (RTA measurements have **no** phase; sweeps do). Not `/spl`.
-- **IR:** data is under key `data` (not `impulseResponse`). **GD:** values under key `magnitude` (not `groupDelay`).
+- **Two frequency spacings — handle both or RTA crashes.** Log-sweeps return `ppo` (points-per-octave) + `startFreq` → `freq[i] = startFreq·2^(i/ppo)`. RTA / linear measurements return **`freqStep`** + `startFreq` → `freq[i] = startFreq + i·freqStep` (no `ppo`). Assuming `ppo` only → `KeyError` on every RTA pull. `rew_tool/rew_api.py:freq_axis()` picks the right one.
+- **IR:** data is under key `data` (not `impulseResponse`). Timing reference is the **`startTime`/`delay`** field — read it, don't reconstruct timing from the array (it's junk; see "Timing" below). **GD:** values under key `magnitude` (not `groupDelay`).
 
 ## Writing filters
 - **`set_filters` takes ONE filter per call** (PUT an object, not an array): `{'index':1,'type':'PK','enabled':True,'isAuto':False,'frequency':X,'gaindB':Y,'q':Z}`. An array → `400 "must have index"`.
