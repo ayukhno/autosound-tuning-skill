@@ -103,6 +103,9 @@ gemini_run() {
     echo ">> $primary unavailable/exhausted → falling back to $fallback" >&2
     out="$(_run_model "$fallback" "$pf" || true)"; used="$fallback (fallback)"
   fi
+  if [[ -z "${out//[[:space:]]/}" ]]; then
+    echo ">> WARNING: empty reply from $GEMINI_FLAVOR ($used) — the CLI may be broken/unauthed (a silent break). Smoke-test it; see references/setup-critic-channel.md (e.g. pin GEMINI_BIN=gemini in .critic-env)." >&2
+  fi
   printf '%s\n' "$out"
   printf '\n— [%s: %s]\n' "$role" "$used"
   { printf '%s | %s=%s | package=%s%s\n' "$(date '+%Y-%m-%d %H:%M')" \
