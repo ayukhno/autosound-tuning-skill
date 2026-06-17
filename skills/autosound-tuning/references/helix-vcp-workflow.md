@@ -1,116 +1,116 @@
-# Helix DSP Ultra S — Повний Робочий Процес (VCP)
+# Helix DSP Ultra S — full workflow (VCP)
 
-## Архітектура Обробки Сигналу
+## Signal-processing architecture
 
-### Два шари обробки (Output Layer + Virtual Layer)
+### Two processing layers (Output Layer + Virtual Layer)
 
 ```
-Джерело (S/PDIF / BT HD)
+Source (S/PDIF / BT HD)
     ↓
 [VIRTUAL CHANNEL LAYER]  ← House Curve (RAW-CAT / Harman)
     Front L, Front R, Center (RealCenter)
-    Загальна еквалізація всього фронту разом
+    Whole-front EQ together
     ↓
-[OUTPUT LAYER]           ← Кросовери + індивідуальна EQ
-    Output A (Tweeter L)  → кросовер + Notch-фільтри
-    Output B (Mid L)      → кросовер + Notch-фільтри
-    Output C (Midbass L)  → кросовер + Notch-фільтри
-    Output D (Tweeter R)  → кросовер + Notch-фільтри
-    ... і т.д.
+[OUTPUT LAYER]           ← Crossovers + per-driver EQ
+    Output A (Tweeter L)  → crossover + notch filters
+    Output B (Mid L)      → crossover + notch filters
+    Output C (Midbass L)  → crossover + notch filters
+    Output D (Tweeter R)  → crossover + notch filters
+    ... etc.
     ↓
-Підсилювачі → Динаміки
+Amplifiers → Drivers
 ```
 
-**Чому цей порядок критичний:**
-- Кросовери на Output Layer створюють фазові зсуви. Якщо EQ накладати після кросоверів окремо на кожен динамік — стики ламаються.
-- Еквалізація на Virtual Layer впливає на всю смугу разом → стики між динаміками залишаються незмінними. **Механізм:** virtual-EQ стоїть у тракті ВИЩЕ за пер-драйверні кросовери, тож його фазовий зсув СПІЛЬНИЙ для всіх драйверів сторони → взаємна фаза w↔m↔tw не міняється. Тому асиметрію L/R кладемо на OUTPUT, а симетричний войсинг — на VIRTUAL (детальніше — `diagnostic-techniques.md` §6).
-- RealCenter бере сигнал з Virtual channels → автоматично підхоплює House Curve.
+**Why this order is critical:**
+- Crossovers on the Output Layer introduce phase shifts. If you apply EQ after the crossovers, separately per driver, the joints break.
+- EQ on the Virtual Layer affects the whole band together → the joints between drivers stay unchanged. **Mechanism:** virtual-EQ sits in the chain ABOVE the per-driver crossovers, so its phase shift is SHARED across all of the side's drivers → the mutual phase w↔m↔tw doesn't change. So put L/R asymmetry on OUTPUT, and symmetric voicing on VIRTUAL (detail — `diagnostic-techniques.md §6`).
+- RealCenter takes its signal from the Virtual channels → it automatically picks up the House Curve.
 
 ---
 
-## Вимірювання з Loopback (Focusrite Scarlett 2i2)
+## Measuring with loopback (Focusrite Scarlett 2i2)
 
-Якщо є зовнішня звукова карта з loopback-кабелем — це дає **абсолютну часову точку відліку** і усуває затримки USB/буферів.
+If you have an external sound card with a loopback cable, it gives an **absolute time reference** and removes USB/buffer latency.
 
-**Що дає:**
-- Апаратний відлік часу (~9.6 мс реального flight time у Passat B8)
-- Прибирає систематичну похибку software latency
-- Для математичного зведення СЧ/ВЧ «вершина до вершини» → монолітний верхній ешелон сцени
+**What it gives:**
+- A hardware time reference (~9.6 ms of real flight time in the Passat B8)
+- Removes the systematic software-latency error
+- For aligning mid/tweeter peak-to-peak → a monolithic upper tier of the stage
 
-**Мікрофон та калібрування:**
-- **ECM8000 (основний)** — підключений до Scarlett 2i2, має власні cal-файли 0° і 90°, отримані вимірюванням через UMIK-1. Використовується для всіх фазо-критичних вимірювань.
-- **UMIK-1 (USB, допоміжний)** — має штатні cal-файли 0° і 90° від miniDSP. Слугував еталоном для калібрування ECM8000. Зараз використовується лише для SPL spot-check.
-- **Чому ECM8000 краще для фази:** UMIK-1 підключений через USB — будь-яка USB-затримка та jitter буферів накладається на часові вимірювання. ECM8000 через Scarlett з фізичним loopback дає апаратну синхронізацію без USB-jitter → фаза точніша.
+**Microphone and calibration:**
+- **ECM8000 (main)** — connected to the Scarlett 2i2; has its own 0° and 90° cal files, derived by measuring against the UMIK-1. Used for all phase-critical measurements.
+- **UMIK-1 (USB, secondary)** — has stock 0° and 90° cal files from miniDSP. It served as the reference for calibrating the ECM8000. Now used only for SPL spot-checks.
+- **Why the ECM8000 is better for phase:** the UMIK-1 connects over USB — any USB latency and buffer jitter rides on top of the timing measurements. The ECM8000 through the Scarlett with a physical loopback gives hardware sync without USB jitter → more accurate phase.
 
-**Налаштування:**
-- Rate залежить від мікрофона:
-  - **ECM8000 + Scarlett (основний стенд): 96 кГц** — рідний внутрішній рейт Helix DSP Ultra S.
-  - **UMIK-1 (швидкий замір «у дорозі»): 48 кГц** — апаратний максимум UMIK-1 (44.1/48 кГц).
-- Loopback: фізичний кабель аналог (вихід Scarlett → вхід Scarlett) для синхронізації часової шкали
-- Input: ECM8000 на вході 1 Scarlett, loopback на вході 2
+**Setup:**
+- Rate depends on the mic:
+  - **ECM8000 + Scarlett (main rig): 96 kHz** — the Helix DSP Ultra S's native internal rate.
+  - **UMIK-1 (quick measurement on the go): 48 kHz** — the UMIK-1's hardware max (44.1/48 kHz).
+- Loopback: a physical analog cable (Scarlett output → Scarlett input) to sync the time axis
+- Input: ECM8000 on Scarlett input 1, loopback on input 2
 
-**Коли який мікрофон:**
-| Завдання | Мікрофон |
+**Which mic when:**
+| Task | Mic |
 |---|---|
-| Time alignment, фазові виміри, IR | ECM8000 + Scarlett + loopback |
-| SPL/АЧХ (MMM) | ECM8000 або UMIK-1 |
-| Швидка перевірка рівнів (RTA) | будь-який |
+| Time alignment, phase measurements, IR | ECM8000 + Scarlett + loopback |
+| SPL/FR (MMM) | ECM8000 or UMIK-1 |
+| Quick level check (RTA) | any |
 
-**Важливо щодо вибору точки вирівнювання:**
-- **СЧ/ВЧ** — зводити по **вершині (100% піку)** IR, не по старту (носу)
-- **Мідбас (важкий, GZNK 165SQ-K)** — зводити також по піку амплітуди, а не по старту дифузора; у важких динаміків є затримка між стартом руху та максимумом — зведення по носу дає дифузну атаку і "падіння сцени"
-
----
-
-## Порядок налаштування → канон у `process-phases.md`
-
-Повний процес (Фази −1…6: intake → baseline → кросовери/TA → EQ → вердикт → центр/тил → слух → войсинг) — **тільки** в `references/process-phases.md`; тут його НЕ дублюємо (стара копія цього файлу розходилася з каноном). Двошарова логіка OUTPUT-база (асиметрія/хірургія) vs VIRTUAL-войсинг (симетрична форма кривої, не ламає стики) → `diagnostic-techniques.md §6`; як накладати house curve на virtual → `car-eq-patterns.md`. Цей файл тримає лише **Helix-специфіку** нижче.
+**Important — choosing the alignment point:**
+- **Mid/tweeter** — align to the **peak (100% of the peak)** of the IR, not to the onset (the nose)
+- **Midbass (heavy, GZNK 165SQ-K)** — also align to the amplitude peak, not to the cone's onset; heavy drivers have a delay between the start of motion and the maximum — aligning to the nose gives a diffuse attack and a "collapsing stage"
 
 ---
 
-## Helix DSP Ultra S — Специфічні Функції
+## Tuning order → canon in `process-phases.md`
 
-### Вихідна напруга і Gain Staging
+The full process (Phases −1…6: intake → baseline → crossovers/TA → EQ → verdict → center/rear → listening → voicing) lives **only** in `references/process-phases.md`; we don't duplicate it here (an old copy of this file had drifted from the canon). The two-layer logic — OUTPUT base (asymmetry/surgery) vs VIRTUAL voicing (the symmetric curve shape, doesn't break joints) → `diagnostic-techniques.md §6`; how to apply a house curve on the virtual layer → `car-eq-patterns.md`. This file keeps only the **Helix specifics** below.
 
-**Ситуація:** Ultra S видає до 8V на виходах. Більшість підсилювачів приймають 4-5V.
+---
 
-**Рішення:** Виставити всі Output канали на **-6 dB** у PC-Tool → це знижує 8V до ~4V.
+## Helix DSP Ultra S — specific features
 
-**Принцип:**
+### Output voltage and gain staging
+
+**Situation:** the Ultra S puts out up to 8 V on its outputs. Most amplifiers take 4–5 V.
+
+**Solution:** set all Output channels to **−6 dB** in the PC-Tool → this drops 8 V to ~4 V.
+
+**Principle:**
 ```
-Мінімальний Gain на підсилювачі + Максимальний рівень в процесорі = Кращий SNR
+Minimum gain on the amp + maximum level in the processor = better SNR
 ```
 
-**Процедура налаштування Gain на підсилювачах:**
-1. Всі гейни на мінімум
-2. В REW → RTA → увімкнути показ THD
-3. Подати синус (100 Гц для мідбаса, 1 кГц для СЧ, 5 кГц для ВЧ)
-4. Повільно піднімати Gain → до першого стрибка THD → відкотити на 10%
-5. Шум у паузах = Gain підсилювача завищений → зменшити, підняти в Helix
+**Procedure for setting amp gains:**
+1. All gains to minimum
+2. In REW → RTA → enable the THD readout
+3. Feed a sine (100 Hz for midbass, 1 kHz for the mid, 5 kHz for the tweeter)
+4. Slowly raise the gain → to the first jump in THD → back off by 10%
+5. Noise in the pauses = the amp gain is too high → reduce it, raise the level in Helix
 
 ### DAC Digital Filter (AKM Config)
 
-Знаходиться у: ACO Features → AKM Config
+Found in: ACO Features → AKM Config
 
-| Режим | Характер | Рекомендація |
+| Mode | Character | Recommendation |
 |---|---|---|
-| Short Delay Sharp Roll Off | Динамічний, трохи "цифровий" | За замовчуванням |
-| **Short Delay Slow Roll Off** | М'якіший ВЧ, більше "повітря" | **Рекомендується для SQ** |
-| Super Slow Roll Off | Максимально аналоговий, легкий спад >18 кГц | Якщо ВЧ занадто яскраві |
+| Short Delay Sharp Roll Off | Dynamic, slightly "digital" | Default |
+| **Short Delay Slow Roll Off** | Softer treble, more "air" | **Recommended for SQ** |
+| Super Slow Roll Off | Most analog, gentle roll-off >18 kHz | If the treble is too bright |
 
 ### ISA (Input Signal Analyzer)
 
-Використовувати для перевірки вхідного сигналу під час налаштування Gain. Показує кліп в реальному часі.
+Use it to check the input signal while setting gains. Shows clipping in real time.
 
 ### Virtual Channel Processing (VCP)
 
 - **Virtual Channels:** Front L, Front R, Center, Rear
-- **Link:** зв'язати L+R для одночасного регулювання
-- **Virtual EQ:** той самий інтерфейс що і на виходах, але для групи
-- **RealCenter:** алгоритм витягування моно-складової → центральний канал
+- **Link:** tie L+R for simultaneous adjustment
+- **Virtual EQ:** the same interface as on the outputs, but for the group
+- **RealCenter:** an algorithm that extracts the mono component → the center channel
 
 ---
 
-## Стартові кросовери → `filter-types-car-audio.md`
+## Starting crossovers → `filter-types-car-audio.md`
 
-Стартові сети кросоверів (їх кілька, вони еволюціонують) консолідовано у `references/filter-types-car-audio.md` §«Стартові сети»; **поточний вибір цього авто** → `dsp-state-current` + профіль §4. Тут не дублюємо.
+The starting crossover sets (there are several, and they evolve) are consolidated in `references/filter-types-car-audio.md` §"Starting sets"; **this car's current choice** → `dsp-state-current` + profile §4. Not duplicated here.

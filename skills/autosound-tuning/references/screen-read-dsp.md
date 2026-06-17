@@ -1,42 +1,42 @@
-# Зчитування параметрів DSP з ЕКРАНА (screen-read) — коли файл/експорт недоступні
+# Reading DSP parameters off the SCREEN (screen-read) — when the file/export is unavailable
 
-**Коли:** конфіг DSP не читається з файлу (напр. Helix `.pct6` — **шифрований**, доведено) і нема читабельного експорту ПОТОЧНОГО стану → параметри (крос / TA / EQ / gain / полярність) знімаємо **з екрана DSP-софта** скриншотом + зором. DSP-агностично (будь-який софт на екрані). Доповнює black-box-DSP гілку: **намір — з екрана, акустичний результат — з REW**.
+**When:** the DSP config can't be read from a file (e.g. the Helix `.pct6` is **encrypted**, proven) and there's no readable export of the CURRENT state → we read the parameters (crossover / TA / EQ / gain / polarity) **off the DSP software's screen** via screenshot + vision. DSP-agnostic (any software on screen). It complements the black-box-DSP branch: **intent from the screen, the acoustic result from REW**.
 
-## Передумови (що налаштувати тому, кому це треба)
-1. **macOS «Запис екрана»** для термінала: System Settings → Privacy & Security → **Screen Recording** → увімкнути свій термінал (Terminal/iTerm) → **перезапустити термінал**. Без цього `screencapture` падає `could not create image from display`. Для on-demand читання це **ЄДИНЕ потрібне**.
-2. **Логічна роздільність екрана** (для координат `-R`): `osascript -e 'tell application "Finder" to get bounds of window of desktop'` (напр. 1800×1169 @2x Retina; фізично 3600×2338). Координати `-R` — у логічних точках.
-3. DSP-софт **видимий на екрані** (Parallels-вікно / нативно), не згорнутий.
-4. *(Лише якщо колись знадобиться КЕРУВАННЯ інтерфейсом, НЕ для читання):* `brew install cliclick` + дозвіл **Accessibility** (+рестарт). ⚠️ У Parallels синтетичні **клавіші НЕ доходять до гостя** (cliclick/System Events стрілки ігноруються); працюють лише синтетичний **Cmd+Tab** і миша. Тому крокати по бандах/каналах має **людина**, тул лише читає.
+## Prerequisites (what to set up if you need this)
+1. **macOS "Screen Recording"** for the terminal: System Settings → Privacy & Security → **Screen Recording** → enable your terminal (Terminal/iTerm) → **restart the terminal**. Without it, `screencapture` fails with `could not create image from display`. For on-demand reading this is the **ONLY thing needed**.
+2. **The screen's logical resolution** (for the `-R` coordinates): `osascript -e 'tell application "Finder" to get bounds of window of desktop'` (e.g. 1800×1169 @2x Retina; physically 3600×2338). The `-R` coordinates are in logical points.
+3. The DSP software is **visible on screen** (Parallels window / native), not minimized.
+4. *(Only if you ever need to CONTROL the interface, NOT for reading):* `brew install cliclick` + the **Accessibility** permission (+restart). ⚠️ In Parallels synthetic **keystrokes don't reach the guest** (cliclick/System Events arrow keys are ignored); only a synthetic **Cmd+Tab** and the mouse work. So a **human** steps through the bands/channels; the tool only reads.
 
-## Метод (read-on-demand)
-**Найпростіше (ОСНОВНИЙ шлях, підтверджено практикою): користувач САМ робить скриншот потрібної зони** (macOS `Cmd+Shift+4`, або `+Пробіл` для цілого вікна) і дає файл/шлях → Claude читає зором. Людина знає, що важливо, і кадрує точно — **без координатних плиток** (не варто «городити» сканування).
+## Method (read-on-demand)
+**Simplest (the MAIN path, confirmed in practice): the user takes the screenshot of the needed area themselves** (macOS `Cmd+Shift+4`, or `+Space` for a whole window) and hands over the file/path → Claude reads it with vision. The human knows what matters and frames it precisely — **no coordinate tiles** (no need to over-engineer the scanning).
 
-*Альтернатива (коли треба, щоб Claude зняв сам, без перемикань):*
-1. Користувач **стає на потрібний екран/параметр** у DSP-софті.
-2. Знімок **НАТИВНОЇ зони** (не весь екран!): `screencapture -x -R x,y,w,h /tmp/cap.png`.
-   - **Плитка ≤ ~900 px завширшки.** Повний екран (3600px) даунскейлиться під ліміт зору (~1500px) → дрібний текст і LED гинуть. Мала зона = нативна роздільність = читабельно.
-   - Розмір перевірити: `sips -g pixelWidth -g pixelHeight /tmp/cap.png`.
-3. Прочитати плитку зором → витягти значення.
-4. Нечітко (цифра/LED) → **тісніший кроп** тієї ж зони і перечитати.
+*Alternative (when Claude needs to capture it itself, without switching):*
+1. The user **navigates to the needed screen/parameter** in the DSP software.
+2. Capture a **NATIVE-resolution area** (not the whole screen!): `screencapture -x -R x,y,w,h /tmp/cap.png`.
+   - **Tile ≤ ~900 px wide.** A full screen (3600 px) is downscaled to the vision limit (~1500 px) → small text and LEDs die. A small area = native resolution = readable.
+   - Check the size: `sips -g pixelWidth -g pixelHeight /tmp/cap.png`.
+3. Read the tile with vision → extract the values.
+4. Unclear (a digit/LED) → a **tighter crop** of the same area and re-read.
 
-## Чек-ліст читання (ОБОВ'ЯЗКОВО — проти пропуску стану)
-Перед тим як назвати ЗНАЧЕННЯ — читати В ЦЬОМУ ПОРЯДКУ:
-1. **Bypass/Enable КОЖНОЇ секції** (highpass, lowpass, КОЖНА EQ-банда): кнопка Bypass з LED — червоний/світиться = **секція ВИМКНЕНА**, її значення НЕ діють → сказати це явно. ⚠️ **Найчастіша пропущена річ** (кілька разів поспіль проґавлено Bypass кросовера/банди — НЕ повторювати).
-2. **Полярність / Mute** каналу (червоний LED = inverted / muted).
-3. **Порядок APF** (1st / 2nd) на allpass — кнопка з LED.
-4. **Тип** (Fine / Parametric / High-Low Shelf / Allpass) → і лише ПОТІМ числа (dB / Hz / Q).
-> Правило: **жодного значення без стану enable/bypass поруч.** Числа без «увімкнено/вимкнено» — недостовірні.
+## Reading checklist (MANDATORY — against missing a state)
+Before naming a VALUE — read IN THIS ORDER:
+1. **Bypass/Enable of EVERY section** (highpass, lowpass, EVERY EQ band): the Bypass button with an LED — red/lit = the **section is OFF**, its values don't apply → say so explicitly. ⚠️ **The most-often-missed thing** (the crossover/band Bypass was overlooked several times in a row — do NOT repeat).
+2. **Polarity / Mute** of the channel (red LED = inverted / muted).
+3. **APF order** (1st / 2nd) on an all-pass — a button with an LED.
+4. **Type** (Fine / Parametric / High-Low Shelf / Allpass) → and only THEN the numbers (dB / Hz / Q).
+> Rule: **no value without its enable/bypass state alongside.** Numbers without "on/off" are unreliable.
 
-## Критичні граблі (доказано на практиці 2026-06-14)
-- **Даунскейл:** великий кадр стискається → завжди дрібними плитками, не повним екраном.
-- **Дрібні кольорові LED = СТАН; читати свідомо, зумом:** **Mute** червоний = muted; **Bypass** червоний = фільтр/банда ВИМКНЕНО; кнопка **порядку APF** (1st/2nd order). У даунскейлі вони зникають — це джерело типових помилок читання.
-- **Parallels-VM:** синтетичні клавіші в гостя не йдуть → крокає людина; Cmd+Tab і миша — йдуть.
-- **EQ band-панель різна за ТИПОМ:** Fine / Parametric → `dB·Hz·Q`; High/Low Shelf → `dB·Hz·Q(slope)`; **Allpass → `Hz·Q`, без dB**. **Parametric/Allpass показують НОМЕР банди** — корисний checkpoint синхронізації.
-- Значення банди показуються **по одній** (селектор/стрілка) → повний дамп EQ = перебір банд (поки що — людиною).
+## Critical gotchas (proven in practice 2026-06-14)
+- **Downscaling:** a large frame gets compressed → always work in small tiles, not the full screen.
+- **Small colored LEDs = STATE; read them deliberately, zoomed in:** **Mute** red = muted; **Bypass** red = the filter/band is OFF; the **APF order** button (1st/2nd order). In a downscale they vanish — this is a source of typical reading errors.
+- **Parallels VM:** synthetic keystrokes don't reach the guest → a human steps through; Cmd+Tab and the mouse work.
+- **The EQ band panel differs by TYPE:** Fine / Parametric → `dB·Hz·Q`; High/Low Shelf → `dB·Hz·Q(slope)`; **Allpass → `Hz·Q`, no dB**. **Parametric/Allpass show the band NUMBER** — a useful sync checkpoint.
+- Band values are shown **one at a time** (a selector/arrow) → a full EQ dump = stepping through the bands (for now, by a human).
 
-## Повний перебір (sweep) — ВІДКЛАДЕНО, поки on-demand
-Якщо колись знадобиться знімати ВСІ банди/канали системно → алгоритм **STEP-CONFIRM**: людина крокує лінійно (тільки →), на кожен крок тул знімає + **звіряє зміну (`md5`)** (ловить пропуск/подвійний крок НАЖИВО) + нумерує, звіряючи з номером банди на Parametric/Allpass-панелі. **Не реалізовано як авто** (синтетичні клавіші в Parallels не йдуть, live-нарація неможлива, дедуп плутається при не-лінійній навігації). Тримати як план; зараз — on-demand.
+## Full sweep — DEFERRED, on-demand for now
+If you ever need to capture ALL bands/channels systematically → the **STEP-CONFIRM** algorithm: the human steps linearly (only →); on each step the tool captures + **checks the change (`md5`)** (catches a skipped/double step LIVE) + numbers it, cross-checking against the band number on the Parametric/Allpass panel. **Not implemented as automation** (synthetic keystrokes don't reach Parallels, live narration is impossible, dedup gets confused on non-linear navigation). Keep it as a plan; for now — on-demand.
 
-## Зв'язок
-- `.pct6` шифрований (не парситься) → `knowledge/dsp/helix-dsp-ultra-s.md`. Єдиний частково-читабельний Helix-файл = AF **EQ-експорт** (текст) → `helix-eq-export.md`.
-- Інтеграція в тюнінг: намір з екрана + акустика з REW → `diagnostic-techniques.md`, `analysis-playbook.md`.
+## Related
+- `.pct6` is encrypted (can't be parsed) → `knowledge/dsp/helix-dsp-ultra-s.md`. The only partially-readable Helix file = the AF **EQ export** (text) → `helix-eq-export.md`.
+- Integration into tuning: intent from the screen + acoustics from REW → `diagnostic-techniques.md`, `analysis-playbook.md`.

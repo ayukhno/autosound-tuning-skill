@@ -1,28 +1,28 @@
-# Helix DSP — формат експорту EQ (Audiotec-Fischer) і обмін REW → Helix
+# Helix DSP — EQ export format (Audiotec-Fischer) and REW → Helix exchange
 
-## Мета
-Не вводити EQ у Helix вручну (поканальний EQ не видно/не скопіювати весь одразу). Замість цього — **експорт з REW у форматі Audiotec-Fischer → імпорт у Helix PC-Tool одним файлом**.
+## Goal
+Don't enter EQ into Helix by hand (the per-channel EQ can't be viewed/copied all at once). Instead — **export from REW in the Audiotec-Fischer format → import into the Helix PC-Tool as a single file**.
 
-## Канонічний шлях
-1. У REW (EQ window) виставити **Equaliser = «Audiotec-Fischer»** (через API: `set_equaliser(mid, "Audiotec Fischer")`; список — `get_equalisers()`). Тоді REW тримає фільтри одразу в обмеженнях Helix: **30 смуг**, типи PK / LS_Q / HS_Q.
-2. Підігнати фільтри під ціль (Method 2: Target Settings + Generic/Extended EQ) — вони вже в Helix-сумісній формі.
-3. **Експортувати** список фільтрів → файл у форматі нижче.
-4. Перекинути файл у Parallels (спільна папка) → **імпорт у Helix PC-Tool** на відповідний канал.
+## The canonical path
+1. In REW (EQ window) set **Equaliser = "Audiotec-Fischer"** (via the API: `set_equaliser(mid, "Audiotec Fischer")`; list — `get_equalisers()`). Then REW keeps the filters within Helix's limits from the start: **30 bands**, types PK / LS_Q / HS_Q.
+2. Fit the filters to the target (Method 2: Target Settings + Generic/Extended EQ) — they're already in a Helix-compatible form.
+3. **Export** the filter list → a file in the format below.
+4. Move the file into Parallels (shared folder) → **import into the Helix PC-Tool** on the right channel.
 
-> Альтернатива — `rew_tool/atf_eq.py` (валідовано на РЕАЛЬНОМУ експорті: `rew_tool/testdata/atf_full_eq_sample.txt`, `python atf_eq.py --selftest`): **`format_atf_eq()`** генерує цей 30-смуговий блок із розрахованих PEQ (обхід REW-експорту, deviation→PEQ), а **`parse_atf_eq()`** читає його НАЗАД у структуру — для black-box кейсу (відновити наявний Helix-EQ з файлу, коли живий DSP не читається — `diagnostic-techniques.md §22`). CLI: `python atf_eq.py <file>`.
-> Ще варіант (і основний шлях для DSP **без** файл-імпорту — Musway, ESX, Zapco та ін.): **REW-EQ-CopyPaste-Assistant** (github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant) — Copy в EQ-секції REW → авто-ввід смуг keystroke-ами у вікно DSP-софта. Для Helix файл-імпорт зручніший (вплив фільтрів видно одразу в REW), але опція існує. Деталі → `knowledge/dsp/helix-dsp-ultra-s.md` §Перенос EQ.
+> Alternative — `rew_tool/atf_eq.py` (validated on a REAL export: `rew_tool/testdata/atf_full_eq_sample.txt`, `python atf_eq.py --selftest`): **`format_atf_eq()`** generates this 30-band block from computed PEQs (bypassing the REW export, deviation→PEQ), and **`parse_atf_eq()`** reads it BACK into a structure — for the black-box case (recover an existing Helix EQ from a file when the live DSP can't be read — `diagnostic-techniques.md §22`). CLI: `python atf_eq.py <file>`.
+> Another option (and the main path for DSPs **without** file import — Musway, ESX, Zapco, etc.): **REW-EQ-CopyPaste-Assistant** (github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant) — Copy in REW's EQ section → auto-enters the bands via keystrokes into the DSP software's window. For Helix, file import is more convenient (the filter effect shows immediately in REW), but the option exists. Detail → `knowledge/dsp/helix-dsp-ultra-s.md` §EQ transfer.
 
-## Скільки EQ переносити — мінімалізм > автозаливка
-Головне правило (підтверджено практикою користувача): **переносити лише СВІДОМО обрані, реально потрібні смуги — не авто-згенерований повний банк.** REW «Match target» і NTT-автозаливка кидають набагато більше фільтрів, ніж тюну треба (over-EQ); це швидше, але гірше. Будуємо EQ **разом, крок за кроком, тільки необхідне**, переглядаючи кожну смугу.
+## How much EQ to transfer — minimalism > autofill
+The main rule (confirmed in the user's practice): **transfer only the CONSCIOUSLY chosen, genuinely needed bands — not an auto-generated full bank.** REW "Match target" and NTT autofill throw far more filters than the tune needs (over-EQ); it's faster but worse. We build the EQ **together, step by step, only what's necessary**, reviewing each band.
 
-Через те **зручний шлях для Helix — копі-паст із терміналу прямо в PC-Tool, навіть по одній смузі** (поканальне введення в Helix швидке). Тобто `atf_eq.py`:
-- **`format_atf_eq(bands)`** — згенерувати блок ЛИШЕ з обраних смуг (решта = `None`) → імпорт файлом, **або**
-- `python atf_eq.py <file>` / parse-друк — показати смуги (freq·gain·Q·тип) для ручного по-смугового вводу/копі-пасту.
+Because of that, **a convenient path for Helix is copy-paste from the terminal straight into the PC-Tool, even one band at a time** (per-band entry in Helix is quick). So `atf_eq.py`:
+- **`format_atf_eq(bands)`** — generate a block with ONLY the chosen bands (the rest = `None`) → file import, **or**
+- `python atf_eq.py <file>` / parse-print — show the bands (freq·gain·Q·type) for manual per-band entry / copy-paste.
 
-NTT теж уміє генерити Helix-файли (PC-Tool замість REW) — швидше, але та сама пастка over-EQ; перевага свідомого мінімалізму лишається.
+NTT can also generate Helix files (PC-Tool instead of REW) — faster, but the same over-EQ trap; the advantage of conscious minimalism stands.
 
-## Формат файлу (tab-separated)
-Перший рядок — заголовок банку, далі шапка колонок, далі **рівно 30 рядків** (порожні смуги = `Type None`).
+## File format (tab-separated)
+The first line is the bank header, then the column header, then **exactly 30 rows** (empty bands = `Type None`).
 
 ```
 Audiotec_Fischer_Full_EQ_(30_bands)
@@ -35,15 +35,15 @@ Number	Enabled	Control	Type	Frequency(Hz)	Gain(dB)	Q	Bandwidth(Hz)	TargetT60(ms)
 30	True	Auto	None	
 ```
 
-Колонки:
-- **Number** 1–30 (фіксовано 30 смуг).
+Columns:
+- **Number** 1–30 (fixed at 30 bands).
 - **Enabled** True/False · **Control** Auto/Manual.
-- **Type:** `PK` (параметричний пік), `LS_Q` (low-shelf з Q), `HS_Q` (high-shelf з Q), `None` (смуга порожня).
+- **Type:** `PK` (parametric peak), `LS_Q` (low-shelf with Q), `HS_Q` (high-shelf with Q), `None` (empty band).
 - **Frequency(Hz), Gain(dB), Q.**
-- **Bandwidth(Hz)** — для PK (альтернатива Q; REW пише обидва). Для шелфів порожньо.
-- **TargetT60(ms)** — службова колонка REW, для Helix-імпорту неважлива (часто порожня).
+- **Bandwidth(Hz)** — for PK (an alternative to Q; REW writes both). Empty for shelves.
+- **TargetT60(ms)** — a REW housekeeping column, irrelevant for the Helix import (often empty).
 
-## Зауваги
-- ≤ **30 смуг** на канал; типи: PK / LS_Q / HS_Q + **AP1 (all-pass 1-й порядок) / AP2 (all-pass 2-й порядок)**. AP-фільтри можна використовувати декілька штук; вони змінюють лише фазу, АЧХ не торкають.
-- **Кросовери (HP/LP) — НЕ в цьому файлі.** Вони задаються окремо в блоці кросоверів Helix (тип LR/BE/BW + частота + порядок) → переносимо параметрами.
-- **Затримки / полярність / фаза** — теж окремі поля Helix («Phase, Polarity & Time»), не EQ-банк.
+## Notes
+- ≤ **30 bands** per channel; types: PK / LS_Q / HS_Q + **AP1 (1st-order all-pass) / AP2 (2nd-order all-pass)**. You can use several AP filters; they change only the phase, leaving the FR untouched.
+- **Crossovers (HP/LP) are NOT in this file.** They're set separately in Helix's crossover block (type LR/BE/BW + frequency + order) → we transfer them as parameters.
+- **Delays / polarity / phase** — also separate Helix fields ("Phase, Polarity & Time"), not the EQ bank.
