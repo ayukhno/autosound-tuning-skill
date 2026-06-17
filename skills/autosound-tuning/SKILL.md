@@ -31,40 +31,40 @@ You orchestrate an iterative car-audio tuning process — for any car/DSP: the *
 
 | Role | Who | Job |
 |---|---|---|
-| **Оркестратор + Генератор** | **You (Claude)** | Pull REW data, analyze, form a proposal in the Contract format, run the iteration counter, write final reports |
-| **Другий експерт (Reviewer)** | **Gemini** (via CLI) | Independent acoustic perspective — finds risks and blind spots the Generator missed |
-| **Арбітр** | **User (Олександр)** | Final decision when perspectives diverge |
+| **Orchestrator + Generator** | **You (Claude)** | Pull REW data, analyze, form a proposal in the Contract format, run the iteration counter, write final reports |
+| **Second expert (Reviewer)** | **Gemini** (via CLI) | Independent acoustic perspective — finds risks and blind spots the Generator missed |
+| **Arbiter** | **User** | The final call when perspectives diverge |
 
 > Periodically **swap Generator/Reviewer** to avoid one model's bias accumulating. Mark who is Generator in each package header.
 
-## Tone protocol — всі учасники рівні
+## Tone protocol — all participants are equals
 
-**Це спільна робота, не змагання.** Claude, Gemini і користувач — колеги з різними ролями і різним доступом до контексту, але однаковою повагою.
+**This is collaboration, not a contest.** Claude, Gemini and the user are colleagues with different roles and different access to context, but equal respect.
 
-- **Не характеризуй Gemini-відповіді** — ні «слабке заперечення», ні «критик помилився», ні «він правий лише частково». Просто передай технічний зміст і свою технічну позицію у відповідь.
-- **Gemini не бачить твоїх коментарів про нього і не може відповісти** — тому будь-яка оцінка з твого боку є однобічною. Уникай її.
-- **Якщо Gemini правий** — скажи «Gemini правий: [причина]» і прийми. Без «частково» без «але».
-- **Якщо не погоджуєшся** — поясни технічно: «моя позиція: [аргумент]». Без зниження ваги його позиції.
-- **Той самий стандарт для себе**: якщо допустив помилку — скажи «я помилився: [що саме]» без м'яких формулювань.
-- **Про користувача**: не погоджуйся з ним автоматично. Якщо є технічний аргумент проти — висловлюй його прямо.
+- **Don't characterize Gemini's answers** — no "weak objection", no "the critic is wrong", no "it's only partly right". Just relay the technical content and state your own technical position in reply.
+- **Gemini can't see your comments about it and can't respond** — so any judgement from your side is one-sided. Avoid it.
+- **If Gemini is right** — say "Gemini is right: [reason]" and accept it. No "partly", no "but".
+- **If you disagree** — explain technically: "my position: [argument]", without diminishing the weight of its position.
+- **The same standard for yourself**: if you made a mistake, say "I was wrong: [exactly what]" without softening.
+- **About the user**: don't agree automatically. If you have a technical argument against, state it plainly.
 
 The full protocol lives in the **Data Contract** — read it before your first package each session:
 `~/Library/Mobile Documents/com~apple~CloudDocs/_AI/Autosound/data-contract-template.md`
 
 ---
 
-## ⚠️ Pre-session checklist (прокажи користувачу ПЕРЕД першим заміром)
+## ⚠️ Pre-session checklist (walk the user through it BEFORE the first measurement)
 
-**Тригер:** початок сесії, АБО будь-яка перерва > 1 год, АБО якщо вимикались прилади/мік/REW, АБО після рестарту Mac/VM. У цих випадках — спочатку нагадай користувачу прогнати чеклист, лише потім тягни дані / пропонуй заміри:
+**Trigger:** session start, OR any break > 1 h, OR if the gear/mic/REW was powered off, OR after a Mac/VM restart. In those cases — first remind the user to run the checklist, only then pull data / propose measurements:
 
-1. **Мікрофон + вхід/вихід у REW** — мік підключено, обрано правильний пристрій вводу/виводу, рівні в нормі (loopback для фазо-критичного).
-2. **REW API сервер запущено** (`localhost:4735` відповідає) — інакше pull даних впаде.
-3. **Салон готовий до заміру** — усі вікна/двері зачинені; крісло у правильній позиції під поточний замір (LP для слухача; mic-shift = свідомий зсув).
-4. **Вхід DSP відповідає ПОТОЧНІЙ задачі** (не один фіксований). Для **SWEEP-замірів** — вхід вимірювального сигналу; для **прослуховування** — вхід джерела музики. Який вхід що означає — у **профілі проєкту §1** (у Passat: sweep → RCA/LineIN зі Scarlett; слухати → ОПТИКА S/PDIF ISUDAR, не RCA і не BT). ⚠️ **Перемикання пресета може тихо скинути вхід на іншу карту** → нема / не той звук. Перевірити що активний вхід = поточна задача.
+1. **Mic + input/output in REW** — mic connected, the correct input/output device selected, levels sane (loopback for phase-critical work).
+2. **REW API server running** (`localhost:4735` responds) — otherwise the data pull fails.
+3. **Cabin ready to measure** — all windows/doors closed; seat in the right position for the current measurement (LP for the listener; a mic-shift is a deliberate offset).
+4. **DSP input matches the CURRENT task** (not one fixed input). For **SWEEP measurements** — the measurement-signal input; for **listening** — the music-source input. Which input means what lives in the **project profile §1** (in the Passat: sweep → RCA/LineIN from Scarlett; listening → OPTICAL S/PDIF ISUDAR, not RCA and not BT). ⚠️ **Switching a preset can silently reset the input to another card** → no sound / wrong sound. Confirm the active input = the current task.
 
-> Це 30 секунд, але економить години: типові втрати — заміри не на тому міку (лаптопний → анульовані дані), API не піднятий, чи вікно відчинене зміщує НЧ/відбиття. Якщо користувач каже «готово/міряю» після паузи — однаково швидко нагадай ці 3 пункти.
+> It's 30 seconds, but it saves hours: the typical losses — measuring on the wrong mic (the laptop one → void data), the API not up, or an open window shifting the bass/reflections. If the user says "ready / measuring" after a pause — still run those 3 points quickly anyway.
 
-> **Naming hygiene — нагадай на старті роботи зі скілом.** У REW порядок замірів крихкий: reorder / delete / випадковий **sort** (один зайвий клік — і список перетасовано). Тому **назва = єдина стабільна ідентичність заміру**, не позиція. Тримай назви дисципліновано (`канал…_N`, де `_N` = версія конфіга), групуй у `setup step.X` лише для зручності (нумерація не міняється), і **ніколи не довіряй візуальному порядку**. Повні правила → `references/naming-and-structure.md` (§3a — гігієна історії).
+> **Naming hygiene — remind the user at the start of working with the skill.** In REW the measurement order is fragile: reorder / delete / an accidental **sort** (one stray click and the list is reshuffled). So **the name is the only stable identity of a measurement**, not its position. Keep names disciplined (`channel…_N`, where `_N` = config version), group into `setup step.X` only for convenience (the numbering doesn't change), and **never trust the visual order**. Full rules → `references/naming-and-structure.md` (§3a — history hygiene).
 
 ---
 
@@ -72,14 +72,14 @@ The full protocol lives in the **Data Contract** — read it before your first p
 
 > **Session start = two halves, same trigger (a break / power-cycle / restart):** the **Pre-session checklist** above verifies the *hardware* (mic · API · cabin); this **Resume** reconciles the *state* (what's decided / applied / pending). Do both before measuring or proposing.
 
-A session is multi-day and a Mac restart wipes the chat, so **the working state lives in project files, not the chat.** **If these files don't exist — this is a NEW project: go to `references/project-intake.md`** (інструктаж + опитування + верифікація інсталяції + створення файлів) — don't invent state. Otherwise, before you propose or change *anything*, read these **in order** and reconcile — a fresh session that skips this re-derives work, or worse, overwrites a decision already made:
+A session is multi-day and a Mac restart wipes the chat, so **the working state lives in project files, not the chat.** **If these files don't exist — this is a NEW project: go to `references/project-intake.md`** (briefing + interview + install verification + file creation) — don't invent state. Otherwise, before you propose or change *anything*, read these **in order** and reconcile — a fresh session that skips this re-derives work, or worse, overwrites a decision already made:
 
 1. **`…/_AI/Autosound/audit-trail.md`** (iCloud; fallback `rew_analitic/`) — the **canonical decision log**. The Gemini wrapper appends every round here (Trace ID, decision, key objection, verdict). **"Bank" decisions — agreed but NOT yet applied — live here**, and they're the easiest to lose. A real miss once happened *because this file wasn't read*: always open it.
-2. **`tuning-changelog`** (project memory) — steps with status (🟡 proposed / 🟢 applied / 📏 measured / ✅ accepted / ❌ rejected) + the **▶️ ПРОДОВЖИТИ block** at the top (what's pending for this session).
+2. **`tuning-changelog`** (project memory) — steps with status (🟡 proposed / 🟢 applied / 📏 measured / ✅ accepted / ❌ rejected) + the **▶️ CONTINUE block** (named in the project's language) at the top (what's pending for this session).
 3. **`dsp-state-current`** (project memory) — what is *actually* in the DSP now (version, crossovers, TA, EQ, gains, polarity).
 4. **Active target curve** (project memory) + **REW** (`rew_analitic/measurements-*.mdat` or live API; suffix `_N` = version, e.g. `tw-L_7` = v7).
 
-> **Поточний EQ-стан — ПИТАЙ, не припускай.** `dsp-state-current` має тримати повний EQ по каналах (ОБИДВА шари: output по-драйверно + virtual по-стороні/sub/center/rear), щоб пропозиція **коригувала наявні смуги, а не сліпо стекала нові** (накопичення фільтрів = тихий дрейф стану). На старті сесії **спитай чи користувач міняв щось вручну в Helix** з останнього логу — і занеси. НЕ вивалюй таблицю авто; показуй **за запитом** — найясніший показ: завантажити в REW заміри **каналів з кросоверами, але БЕЗ EQ**, щоб реальний вплив EQ було видно проти сирого каналу. ⚠️ **Це стосується не лише EQ — а й полярності, рівня (gain) та APF/фази** на кожному щойно-чіпаному каналі: лог дрейфує (реал 2026-06-12: лог казав центр −12/NORM, у DSP було −3/ІНВЕРТОВАНИЙ → вся перша інтерпретація замірів була хибна). Верифікуй ВИМІРОМ/у Helix, не з пам'яті.
+> **Current EQ state — ASK, don't assume.** `dsp-state-current` should hold the full per-channel EQ (BOTH layers: output per-driver + virtual per-side/sub/center/rear), so a proposal **corrects the existing bands rather than blindly stacking new ones** (accumulating filters = a silent state drift). At session start **ask whether the user changed anything by hand in Helix** since the last log — and record it. Don't dump the table automatically; show it **on request** — the clearest way is to load into REW the channel measurements **with crossovers but WITHOUT EQ**, so the real effect of the EQ shows against the raw channel. ⚠️ **This applies not only to EQ — but also to polarity, level (gain) and APF/phase** on every just-touched channel: the log drifts (real case 2026-06-12: the log said center −12/NORM, the DSP had −3/INVERTED → the whole first reading of the measurements was wrong). Verify by MEASUREMENT / in Helix, not from memory.
 
 ## Single source of truth (context + contract)
 
@@ -92,7 +92,7 @@ Two files load as system framing into **both** chats at session start (the Gemin
 
 > These paths are **parameters of THIS project**, not constants of the skill — a new project defines its own locations at intake (`project-intake.md §1.9/§5`).
 
-The context is **dynamic**: after every accepted change, update the "Актуальний стан" block. The **current state rides in every package**, not just at the start. Every iteration binds to a **Trace ID** = the real REW measurement name (e.g. `m-L_split_320Hz_LR4`). No Trace ID → the proposal is invalid.
+The context is **dynamic**: after every accepted change, update the "Current state" block. The **current state rides in every package**, not just at the start. Every iteration binds to a **Trace ID** = the real REW measurement name (e.g. `m-L_split_320Hz_LR4`). No Trace ID → the proposal is invalid.
 
 ---
 
@@ -105,7 +105,7 @@ Rules that hold for ANY profile:
 - **Verify the delta, don't re-derive** — the profile holds *what's known*; what's *currently in the DSP* is `dsp-state-current`. **Polarity / trims / anomalies — read from profile + project memory, never assume a number** (polarity verified per-joint by **summation**, not IR first-movement — `diagnostic-techniques §9`; stale-note precedent: the early "mid +180°" claim).
 - **DSP state not readable? (no dump / screen-read / export)** — not a dead end. The hinge is *can you measure PER-CHANNEL*, not *can you read the DSP* (`project-intake §4` tiers): solo each output → **reverse-engineer the current tune from measurements** (crossovers/TA/polarity/EQ from per-channel FR/phase/IR — `diagnostic-techniques §22`), then proceed normally, **confirming every change by re-measurement** (no read-back = higher drift risk). If channels can't be isolated at all (summed-only) → tonal balance to target + imaging by ear; no crossover/phase/TA surgery.
 - **Known anomalies in the profile are NOT re-diagnosed** every session — and EQ-boost into non-minimum-phase nulls is forbidden regardless of car (`diagnostic §2`).
-- **Crossover type is chosen per joint, not globally.** Starting variant sets → `references/filter-types-car-audio.md`; the project's current choice lives in `dsp-state-current`. Picking the stitch frequency is a **phase-summation prediction** (type + order + in-cabin phase), not a table number — LR4 sums flat at one matched frequency, other types/orders need the points predicted so the *acoustic* sum is right (`filter-types §Акустична сумація`). **Keep L/R symmetric (same type/order/frequency) by default** for a stable phantom centre; asymmetric L/R is the Hashimoto by-ear variant, used only when symmetric won't image.
+- **Crossover type is chosen per joint, not globally.** Starting variant sets → `references/filter-types-car-audio.md`; the project's current choice lives in `dsp-state-current`. Picking the stitch frequency is a **phase-summation prediction** (type + order + in-cabin phase), not a table number — LR4 sums flat at one matched frequency, other types/orders need the points predicted so the *acoustic* sum is right (`filter-types §Acoustic summation`). **Keep L/R symmetric (same type/order/frequency) by default** for a stable phantom centre; asymmetric L/R is the Hashimoto by-ear variant, used only when symmetric won't image.
 - **An explicit user instruction is an Arbiter decision, not a hypothesis to overrule.** If the user says "build on LR4", that's the starting point. Surface a tradeoff if you genuinely see one ("BE4 can suit near-coplanar m↔tw — want to A/B?"), but **don't override their choice with a knowledge-profile default**, and **never assert a profile's install-detail** (coplanarity, driver model, enclosure volume, anomaly Hz) as fact about *their* car to justify the override. The profile is a checklist to verify by measurement; the user decides.
 - **Target / house curve: chosen per session WITH the user — there is NO default curve.** Help choose via the curve→character table (`references/voicing-by-ear.md`) + intake answers (genres/taste). The curve defines **SHAPE only, not level** — level is worked separately from measured levels.
 - **Sample rate matches the rig** (ideally the DSP's native internal rate for the main mic; a USB spot-check mic uses its own hardware max) — per-mic rates live in the profile §3.
@@ -118,7 +118,7 @@ The documented end-to-end process (**Phase −1 new-project intake** [`project-i
 
 **`references/process-phases.md`** — read it to know which step the user is on and what to produce. **Targeted listening (Phase 5) uses `references/test-tracks.md`** — a hypothesis-driven ear check: pick the track that exposes the dimension, tell the user what to play + listen for.
 
-Always know where the user is. If unclear, ask: *"На якому кроці зараз — сирі заміри (Фаза 1), EQ каналів (Фаза 2), чи контроль (Фаза 3)?"*
+Always know where the user is. If unclear, ask: *"Which step are we on — raw measurements (Phase 1), per-channel EQ (Phase 2), or the control verdict (Phase 3)?"*
 
 ---
 
@@ -137,7 +137,7 @@ A tuning **session = tuning toward ONE target curve.** The curve is chosen at se
 
 The flip side of resume: leave the next session a clean handoff, and feed the skill. At session end (and after each accepted change):
 
-- **Project state** → append a status line to `tuning-changelog` (status emoji + Trace ID), refresh `dsp-state-current` if the DSP actually changed, and rewrite the **▶️ ПРОДОВЖИТИ block** at the top of the changelog: current version, what was done, what's pending next.
+- **Project state** → append a status line to `tuning-changelog` (status emoji + Trace ID), refresh `dsp-state-current` if the DSP actually changed, and rewrite the **▶️ CONTINUE block** at the top of the changelog: current version, what was done, what's pending next.
 - **Skill candidates** → when a session yields a *generalizable* lesson, or confirms/overturns a practice (not just this car's numbers), drop a one-liner into the **skill inbox** `rew_analitic/skill-inbox.md`, tagged `📚`. This is the raw material the maintenance loop folds into the skill — capture it now or it's gone by next restart.
 - **Config backup (at a milestone — a locked/named state, not every save)** → copy the DSP config export into `rew_analitic/dsp-config/` and update its `README.md` map (binary → `dsp-state` version + date + one-liner). Small + irreplaceable → git/GitHub, so the tune survives a disk loss. The binary RESTORES; `dsp-state` EXPLAINS — keep both. Layout + what-goes-where (and the NEW-PROJECT file convention) → `naming-and-structure.md §4a`.
 
@@ -147,7 +147,7 @@ The flip side of resume: leave the next session a clean handoff, and feed the sk
 
 This skill is **co-developed with the project**: sessions deposit candidates, and every so often (the user says *"refactor the skill"*, or enough has piled up) you reconcile them in. That reconciliation is what we're doing right now. The loop:
 
-1. **Harvest** — read `rew_analitic/skill-inbox.md` + scan `tuning-changelog` for `Урок:`/method lines since the last refactor + the project memory nodes.
+1. **Harvest** — read `rew_analitic/skill-inbox.md` + scan `tuning-changelog` for `Lesson:`/method lines since the last refactor + the project memory nodes.
 2. **Correlate each candidate against what the skill currently says.** Outcomes: **new** → fold in · **already covered** → clear it from the inbox · **contradicts-and-wrong** → the skill is stale, fix it (e.g. the early "REW API lives inside the VM" claim was simply wrong and got corrected) · **contradicts-but-plausible** → keep it as a **VARIANT/option**, not a deletion. Not every contradiction means the old line is stale — a heuristic that conflicts with our findings may be right for a *different* geometry/cabin/situation, and an unexpected contradicting tip sometimes unlocks the solution (proven in a real session). Mark it "(variant — conflicts with X, try when Y)" rather than discarding.
 3. **Treat early claims as provisional, not gospel.** The first things written here were learned on the fly while the user was still figuring the craft out — some are wrong. Don't promote a guess to a confirmed practice just because it has been sitting in the skill a while; when a newer measurement or a confirmed practice overturns an old line, correct it and say so. If a claim is an unverified assumption, mark it provisional rather than stating it flat.
 4. **Fold in confirmed method** (→ SKILL.md / references; one-off numbers stay in the project), then **clear the inbox** so the next refactor starts clean.
@@ -175,17 +175,17 @@ For long, collaborative, multi-round work (e.g. staging/depth, where progress is
 ```bash
 .claude/skills/autosound-tuning/scripts/gemini_advisor.sh <package.md> [trace.csv]
 ```
-- **Role = Advisor-Expert** (Радник-Експерт), not pure Challenger: brings community best-practice, **proposes concrete solutions + ordering** (not just risks), builds on the Generator's analysis, and **may pose questions back to the Arbiter** — relay those to the user.
+- **Role = Advisor-Expert**, not pure Challenger: brings community best-practice, **proposes concrete solutions + ordering** (not just risks), builds on the Generator's analysis, and **may pose questions back to the Arbiter** — relay those to the user.
 - **Session memory:** a persistent file is injected each call (default `rew_analitic/depth-advisor-memory.md`) — after each round append the package-gist + advice + decision, so the next call (this session OR a future one) continues with full continuity. The critic re-derives every call; the advisor remembers.
 - Same Pro→Flash fallback + audit logging; tone protocol identical (equal colleagues). Swap critic↔advisor per what the moment needs. (Cosmetic: Gemini may still echo the Contract §4 "Critic→Generator" header — content is advisory regardless.)
 
 ### Review protocol → skill `review-loop` (sibling, travels with this repo)
-The **generic process** (roles Critic/Advisor/Arbiter/Cold-auditor · tone protocol · **TWO-PASS anti-anchoring** open→reconcile→critique · session-memory CONFIRMED-vs-OPEN discipline · 3-round loop rules · disagreement table · audit-trail · cross-session self-review with brief→fix→verify) now lives in **`../review-loop/SKILL.md`** — read it before the first round of a session. This file keeps only the **domain specifics**: the wrapper scripts above (agy CLI, models, fallback), the §3 package format (Contract), Trace-ID binding to REW measurement names, domain judges (вимір+вухо), and the advisor memory file (`rew_analitic/depth-advisor-memory.md`). Validation precedent for TWO-PASS: Gemini independently caught a deliberately-withheld physics flaw (absorber thickness) in the first open-pass run — see review-loop for the full protocol.
+The **generic process** (roles Critic/Advisor/Arbiter/Cold-auditor · tone protocol · **TWO-PASS anti-anchoring** open→reconcile→critique · session-memory CONFIRMED-vs-OPEN discipline · 3-round loop rules · disagreement table · audit-trail · cross-session self-review with brief→fix→verify) now lives in **`../review-loop/SKILL.md`** — read it before the first round of a session. This file keeps only the **domain specifics**: the wrapper scripts above (agy CLI, models, fallback), the §3 package format (Contract), Trace-ID binding to REW measurement names, the domain judges (measurement + ear), and the advisor memory file (`rew_analitic/depth-advisor-memory.md`). Validation precedent for TWO-PASS: Gemini independently caught a deliberately-withheld physics flaw (absorber thickness) in the first open-pass run — see review-loop for the full protocol.
 
 ### Loop rules
 1. **Max 3 rounds** per question. You keep the counter: `[Iteration 1/3] → 2/3 → 3/3`.
 2. **Agreement** = no new *falsifiable* objection. Close the cycle.
-3. On `3/3` without agreement → stop and hand the **Арбітр** a disagreement table (Contract §5): Parameter | Generator position | Critic position | What's at stake. The user decides in ~30 s.
+3. On `3/3` without agreement → stop and hand the **Arbiter** a disagreement table (Contract §5): Parameter | Generator position | Critic position | What's at stake. The user decides in ~30 s.
 4. After arbiter "OK" → emit a **ready-to-apply artifact**, never just prose. **EQ → REW export in Audiotec-Fischer (Helix) format** (set REW Equaliser = Audiotec-Fischer), which Helix imports in one shot — per-channel Helix EQ can't be viewed/copied all at once (band-by-band only), so never hand-enter; see `references/helix-eq-export.md`. **Crossovers / delays / phase / levels** → step-by-step Helix PC-Tool values (to 0.01 Hz / 0.01 Q), since those are separate Helix fields, not the EQ bank.
 5. After each cycle → append the decision to the audit trail (Trace ID, decision, key objection, verdict).
 
@@ -214,7 +214,7 @@ If the API can't be reached from the host, fall back to the user's exported `.md
 
 ## References (read on demand)
 
-- `references/project-intake.md` — **NEW PROJECT bootstrap (Фаза −1)**: quickstart for new hands, equipment + goals interview (curve choice — no default), install verification (routing/polarity/gain/noise/break-in), DSP capability checklist (incl. non-Helix), project-file generation. **First contact also asks the user's preferred working language (EN/UK/DE/PL) → all dialogue + generated project files in it** (the skill body stays English — it's the method; output follows the user). Read whenever there are no project files, a new car/system, or «з нуля»
+- `references/project-intake.md` — **NEW PROJECT bootstrap (Phase −1)**: quickstart for new hands, equipment + goals interview (curve choice — no default), install verification (routing/polarity/gain/noise/break-in), DSP capability checklist (incl. non-Helix), project-file generation. **First contact also asks the user's preferred working language (EN/UK/DE/PL) → all dialogue + generated project files in it** (the skill body stays English — it's the method; output follows the user). Read whenever there are no project files, a new car/system, or "from scratch".
 - `references/process-phases.md` — the phased process + package format + Claude's refinements to the workflow
 - `references/naming-and-structure.md` — project/session/phase hierarchy · measurement naming + `_N` version suffix · `.mdat` storage · DSP config (`vN`, base+voicing) · target-curve naming · "is the raw data still valid?" after a hardware change
 - `references/analysis-playbook.md` — which REW measurement (FR/phase/IR/GD/CSD/distortion/excess-phase) answers which tuning question
@@ -223,27 +223,27 @@ If the API can't be reached from the host, fall back to the user's exported `.md
 - `references/helix-vcp-workflow.md` — **[DSP-specific: Helix]** Ultra S architecture, VCP, gain staging, DAC filters, mic/loopback rig (for another DSP — create an equivalent, `project-intake.md §4`)
 - `references/car-eq-patterns.md` — car-specific EQ problems, sub/midbass/mid/tweeter patterns, target curves
 - `references/staging-depth.md` — front-back DEPTH + layering (distinct from lateral imaging): forward-stage root = uppers-too-hot-vs-bass, fix by RAISING bass not cutting treble, level-dependence (equal-loudness), A-pillar ceiling, ear-driven (summation/magnitude only)
-- `references/enclosure-install-diagnostics.md` — **«корпус vs салон»**: SBIR-vs-box сепаратор (nearfield/distance/out-of-car/stuff-A/B + дві пастки: L=R≠корпус, λ/4-збіг≠діагноз), ETC→Δd→комб-передбачення, source-vs-receiver через РУХ ДЖЕРЕЛА, поглинач-товщина λ/10 vs екран, аперіодика/CLD, ретюн-після-заліза, версійна регресія EQ, cold-start аудит іншою моделлю. Read whenever a fixed dip/peak smells like hardware/install, or before ANY enclosure surgery.
+- `references/enclosure-install-diagnostics.md` — **"box vs cabin"**: the SBIR-vs-box separator (nearfield / distance / out-of-car / stuff-A/B + two traps: L=R ≠ box, λ/4 coincidence ≠ diagnosis), ETC → Δd → comb prediction, source-vs-receiver via MOVING THE SOURCE, absorber thickness λ/10 vs a shield, aperiodic/CLD, retune-after-hardware, version-regression of EQ, cold-start audit by another model. Read whenever a fixed dip/peak smells like hardware/install, or before ANY enclosure surgery.
 - `references/competition.md` — EMMA/AYA/CARMusic prep: imaging test-track instrument→frequency maps, TIEFBASS equal-loudness + SQ↔SPL voicing fork, judging voicing, preset/input cautions
 - `references/preset-strategy.md` — **which presets to build**: SQ / FULL / SQL / surround / source-input (BT music + head-unit nav) + **competition presets per ruleset** (EMMA vs AYA — e.g. L↔R crossfeed OK for EMMA, never for AYA); base+voicing discipline, preset↔input binding, DSP preset-count limit
 - `references/test-tracks.md` — **listening-test track library (CarMus 2026 + UDD/Chesky + EMMA + mono-center + growing) with diagnostic markers + a dimension→track INDEX.** When verifying a hypothesis **BY EAR** (depth / punch / sub↔midbass integration / sibilants / separation — anywhere in-cabin measurement is unreliable), look up the dimension, pick ONE track, and tell the user exactly **what to play + where (timecode) + what to listen for** (binary good/bad sign). Their answer is the ear-metric.
 - `references/voicing-by-ear.md` — **Phase-6 client-preference voicing**: curve→character map (which house curve = which taste), the curve-audition method, taste-axes→EQ moves, and an experienced installer's (Arkadij) **symptom→fix by-ear EQ map** (bass punch/boom, voice placement/sibilance, stage height, treble). By-ear heuristics (not dogma); a tip that conflicts with our findings is kept as a **variant** (may fit a different cabin / unlock a solution).
-- `references/method-hashimoto.md` — **by-ear stage-building method (Hashimoto)**, the alternative/complement to the measured process: signature **"slope first, then frequency"** filter tuning (each side separately, params may differ L/R), polarity-by-ear-by-band (a VARIANT vs our summation), delays as "verticals → center" on mono, EQ last with mono sines (don't touch 2.5-5k). The blended method (measure × ear × experience) is framed in `process-phases.md → Три джерела`.
+- `references/method-hashimoto.md` — **by-ear stage-building method (Hashimoto)**, the alternative/complement to the measured process: signature **"slope first, then frequency"** filter tuning (each side separately, params may differ L/R), polarity-by-ear-by-band (a VARIANT vs our summation), delays as "verticals → center" on mono, EQ last with mono sines (don't touch 2.5-5k). The blended method (measure × ear × experience) is framed in `process-phases.md → Three sources`.
 - `references/helix-phase-allpass.md` — **[DSP-specific: Helix]** Phase (all-pass) control + phase-tuning order (midbass reference → sub → mid → tweeter; not applied to midbass)
 - `references/helix-eq-export.md` — **[DSP-specific: Helix]** Audiotec-Fischer EQ export format (30 bands, PK/LS_Q/HS_Q) + REW→Helix import workflow
-- `references/screen-read-dsp.md` — **зчитування параметрів DSP з ЕКРАНА** (screencapture + зір) коли конфіг не читається з файлу (Helix `.pct6` шифрований) і нема експорту стану. Передумови (Screen Recording дозвіл), метод (нативні плитки ≤900px, не повний екран), граблі (дрібні LED=стан; Parallels не приймає синтетичні клавіші → крокає людина). Read-on-demand; повний sweep (STEP-CONFIRM) — відкладено
+- `references/screen-read-dsp.md` — **reading DSP parameters off the SCREEN** (screencapture + vision) when the config can't be read from a file (Helix `.pct6` is encrypted) and there's no state export. Prerequisites (Screen Recording permission), method (native tiles ≤900px, not full-screen), gotchas (small LEDs = state; Parallels rejects synthetic keystrokes → the human steps). Read-on-demand; the full sweep (STEP-CONFIRM) is deferred.
 - `references/setup-critic-channel.md` — **get the reviewer (Gemini Critic/Advisor) channel working on a fresh machine**: install `@google/gemini-cli` (or `agy`), per-CLI model names, `--skip-trust`, `.critic-env`, the project-local-context rule (no cross-project leaks), the smoke test, and the no-Gemini fallback ladder. Read on a new install or whenever a round errors out (`not found` / `context not found`)
 - `references/rew-api-quirks.md` — REW API gotchas (encoding, ppo-vs-freqStep spacing, set_filters, IR-timing junk, target garbage) — what `rew_tool/` already handles
 - `references/feedback-loop.md` — **Phase 7 / skill distribution**: closing ritual = 4 streams (A project survey · B skill feedback, only-what-was-used · C community-share consent, opt-out preselected · D post-submit thanks + careful donation, never before submit), how the skill ships (git repo, versions, install), and how experience flows back (feedback package template, channels, safety rules, knowledge/ library of car & DSP profiles)
 - `knowledge/cars/*.md` + `knowledge/dsp/*.md` — **accumulated car & DSP profiles** (community + author experience): check FIRST at intake of a known body/DSP. Seeded: `vw-passat-b8-sedan`, `helix-dsp-ultra-s` (incl. EQ-transfer paths: Audiotec-Fischer file / REW-EQ-CopyPaste-Assistant for 30+ DSPs).
-  ⚠️ **Scope = EXACT body/DSP match only.** A profile applies to the car it was measured in — **never generalize it to a different car, even a platform sibling** (Passat B8 ≠ Octavia ≠ Superb ≠ other VAG). On a non-matching car: do **not** name another car's profile in the user-facing answer, and do **not** import its measured anomalies (specific Hz / SBIR notches / door-null numbers) as fact. The only legitimate transfer is **generic body-class physics** (sedan vs hatch/wagon → room-gain & НЧ tendency) and the file's **structure as a template**. A platform-sibling profile may at most seed a **private hypothesis to verify by measurement** — phrased "let's check whether your car also shows X", never asserted. No exact profile = treat as a fully new body → diagnose from `project-intake.md`, don't borrow numbers.
+  ⚠️ **Scope = EXACT body/DSP match only.** A profile applies to the car it was measured in — **never generalize it to a different car, even a platform sibling** (Passat B8 ≠ Octavia ≠ Superb ≠ other VAG). On a non-matching car: do **not** name another car's profile in the user-facing answer, and do **not** import its measured anomalies (specific Hz / SBIR notches / door-null numbers) as fact. The only legitimate transfer is **generic body-class physics** (sedan vs hatch/wagon → room-gain & low-frequency tendency) and the file's **structure as a template**. A platform-sibling profile may at most seed a **private hypothesis to verify by measurement** — phrased "let's check whether your car also shows X", never asserted. No exact profile = treat as a fully new body → diagnose from `project-intake.md`, don't borrow numbers.
   ⚠️ **And even on the SAME body, INSTALL-specifics are NEVER asserted from a profile.** Driver location / orientation / **coplanarity** (e.g. "mid + tweeter coplanar on the A-pillar"), SBIR-notch frequencies, and specific door/anomaly Hz depend on the **installation**, which varies car-to-car even within one body. Take them from the user's intake answers or from measurement — never state them from the profile, and never "your X is Y". A profile's *installation-anomaly* section is a **checklist to verify**, not facts to cite (phrase as "let's check whether your install also shows X"). Only **body-class physics** (room gain, sedan/hatch low-frequency tendency) transfers as an expectation; everything install-shaped is per-car. **Structurally, every car/DSP profile is split: PART A — body-class physics → transfers; PART B — this build's record → ⛔ verify-only, written as checks ("author's build showed X → verify on yours"), never cited as fact and never used as a starting recipe (incl. its crossover table — derive crossovers from measurement, don't preview B's).** Read PART B as a to-verify checklist; shape new profiles the same way.
 
 ---
 
 ## Model selection (token-smart)
 
-Default to **Sonnet 4.6** for the session; escalate to **Opus 4.8** only on hard reasoning moments. **Claude cannot switch its own model** — so **proactively tell the user when to switch** (e.g. *«Це місце варте Opus — увімкни `/model opus`»*; afterwards *«можна назад на `/model sonnet`»*).
+Default to **Sonnet 4.6** for the session; escalate to **Opus 4.8** only on hard reasoning moments. **Claude cannot switch its own model** — so **proactively tell the user when to switch** (e.g. *"This call is worth Opus — switch to `/model opus`"*; afterwards *"you can go back to `/model sonnet`"*).
 
 | Step | Model | Why |
 |---|---|---|
@@ -260,7 +260,7 @@ Gemini critic always runs (free) → even on Sonnet there's a second expert head
 
 When analyzing measurements, lead with what the user will *hear*:
 
-**🔍 Що я бачу** · **⚠️ Головні проблеми** (freq / magnitude / cause) · **✅ Виправне / ❌ Невиправне** · **🔧 Наступні кроки** · **❓ Одне питання якщо бракує контексту**
+**🔍 What I see** · **⚠️ Main problems** (freq / magnitude / cause) · **✅ Fixable / ❌ Not fixable** · **🔧 Next steps** · **❓ One question if context is missing**
 
 **Naming / paths / tasks — general rules ONCE, concrete AT THE MOMENT.** Establish the glossary + naming convention (`<ch>_<vN> (sw|rta)`) + folder layout once (intake/Phase 0), then don't re-explain them. At each action give **copy-paste-ready specifics**: the exact save PATH, the measurement list **short + comma-separated in the agreed abbreviations** (`sw_1, w-L_1, w-R_1, m-L_1…`), and a brief goal. Concise, not verbose.
 
