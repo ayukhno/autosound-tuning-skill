@@ -10,6 +10,8 @@
 
 ---
 
+> **Slope choice also maps to the whole-system GOAL** (a by-ear variant, field-confirmed): **LR4 on EVERY joint + time-align by IR first-arrival = a precise STAGE** — the pick for strict imaging rulesets (EMMA-type, where the image/centre must lock). **Gentle / Bessel with wider overlaps = a natural, coherent blend = "beautiful"** — the pick where the stage is less demanding (AYA-type). The per-joint tradeoffs below refine this. The impedance angle (each HP above the driver's installed Fs — the margin scales with the slope; never cross on coincident neighbour resonances) → `impedance-ts.md`.
+
 ## Linkwitz-Riley (LR)
 
 **Character:** mathematically exact, an ideal sum (0 dB at the joint with the right cutoff).
