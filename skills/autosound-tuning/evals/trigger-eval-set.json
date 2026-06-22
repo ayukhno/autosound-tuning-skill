@@ -1,0 +1,22 @@
+[
+  {"query": "ok i pulled my ground zero 10\" sub out of the car, it's on the bench. i want to build a proper sealed box but i only know the free-air fs. how do i get qts and vas so i can pick the volume?", "should_trigger": true},
+  {"query": "got a REW impedance jig set up. how do i run the added-mass method to extract thiele-small for my midwoofer? what weight do i stick on the cone?", "should_trigger": true},
+  {"query": "my sub enclosure is finished (sealed, ~30L). can i verify the qtc and that there are no leaks with an impedance sweep before i close it up for good?", "should_trigger": true},
+  {"query": "i suspect my left and right midbass arent matched, one side sounds weaker. any way to check driver matching with impedance measurements?", "should_trigger": true},
+  {"query": "новий сабвуфер dvc 2x2 ома, треба порахувати обєм закритого ящика. як зміряти параметри т-с і чи комутація котушок впливає на замір?", "should_trigger": true},
+  {"query": "the vocal image keeps pulling left toward the A-pillar in my passat, cant get a centered stage. help me fix the imaging with time alignment", "should_trigger": true},
+  {"query": "prepping for an EMMA round next month, need help setting crossover points, slopes and delays on my helix 3-way active front", "should_trigger": true},
+  {"query": "took an MMM sweep, midbass has a fat hump around 90hz and the top feels dull. what EQ gets me closer to the ResoNix Laid-Back curve?", "should_trigger": true},
+  {"query": "how should i wire my dual 4-ohm voice coil subwoofer, and does series-vs-parallel change what box volume i should build?", "should_trigger": true},
+  {"query": "datasheet gives Vas 22L, Qts 0.45, Fs 28Hz for my sub. what sealed box volume gives a qtc around 0.7, and can i confirm it after building?", "should_trigger": true},
+  {"query": "im building a sealed plywood enclosure for my noisy 3d printer to cut fan noise, what internal volume and foam do i need?", "should_trigger": false},
+  {"query": "my home bookshelf speakers are rated 6 ohm, my vintage marantz says 8 ohm minimum. is it safe to drive them?", "should_trigger": false},
+  {"query": "can you explain the physics of why a high-Qts driver prefers a bigger enclosure? just trying to understand thiele-small theory, no project", "should_trigger": false},
+  {"query": "designing a 3d-printed enclosure box in fusion 360 for my raspberry pi cluster, need mounting standoffs and airflow", "should_trigger": false},
+  {"query": "what 12 inch subwoofer should i buy for my car under $250, mostly rap and edm?", "should_trigger": false},
+  {"query": "theres an annoying rattle/resonance in my car door around 60 km/h while driving, how do i track down and fix the buzz?", "should_trigger": false},
+  {"query": "measuring the input impedance of an op-amp circuit on my breadboard with a function generator, getting weird numbers", "should_trigger": false},
+  {"query": "what does Vas actually mean in a speaker spec sheet?", "should_trigger": false},
+  {"query": "help me dial in a flat reference target curve for my studio nearfield monitors for mixing", "should_trigger": false},
+  {"query": "im measuring the characteristic impedance of a coax cable for an antenna project, 50 ohm vs 75 ohm", "should_trigger": false}
+]

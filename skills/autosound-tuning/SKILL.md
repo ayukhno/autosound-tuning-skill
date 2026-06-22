@@ -14,11 +14,11 @@ description: >
   match a target/house curve named by ANY curve in the REW
   library (Jazzi, ResoNix Accurate/Laid-Back, Audiofrog, Harman, JBL, JL Audio, Whitledge,
   RAW-Cat, ATF, EPY, Hanatsu, Arkadij, Flat…), pull or analyze REW measurements
-  (FR/phase/IR/GD/distortion via REW API localhost:4735), update the tune state
+  (FR/phase/IR/GD/distortion/impedance via REW API localhost:4735), measure driver Thiele-Small parameters & design or verify a subwoofer enclosure (Fs/Qts/Vas, the added-mass method, sealed-box volume & Qtc, DVC coil wiring, L/R driver matching by impedance), update the tune state
   (dsp-state / changelog / session log), or get a second opinion from Gemini
   on a tuning proposal. Trigger on: REW data/screenshots, Helix DSP, MMM RTA, sweep, midbass
   door resonance, sub integration, crossover, under-lap, imaging/staging/локалізація/центр/
-  «образ липне до динаміка»/ширина/глибина сцени/ешелони, any target-curve name, car-audio
+  «образ липне до динаміка»/ширина/глибина сцени/ешелони, any target-curve name, impedance / Thiele-Small / T-S / Fs / Qts / Vas / added-mass / sealed box / enclosure volume / box design / Qtc / DVC wiring / driver matching, car-audio
   competition prep (EMMA, AYA, CARMusic) or SQ/SQL/SPL when about a car, "send to Gemini",
   "critic", "що далі", "help me set up my car audio", "make / build a house curve",
   "tune my speakers", or any step of the documented tuning process. (Built & battle-tested
