@@ -30,7 +30,7 @@ Four cheap tests; none is sufficient alone, together they're a verdict:
 - λ/4 of a closed-open tube: f=c/4L; the VELOCITY antinode is at the open/vent end → a fibrous damper is most effective there.
 - The cure = a dense fill of the whole volume + a controlled resistive vent (aperiodic), NOT "seal it tighter". A symptom hint: "an unsealed driver → flatter" = an under-damped sealed system.
 - Wall ringing ≠ an air resonance: don't glue on CLD/damping speculatively. Walls produce narrow peaks/a long decay in the CSD, not broad dips. Rap test + press a palm under a tone.
-- **Impedance measurement** (REW Impedance + a precision resistor / CLIO): a box resonance = an anomaly on the curve. A more objective and cheaper proof than the acoustic one.
+- **Impedance measurement** (REW Impedance + a precision resistor / CLIO): a box resonance = an anomaly on the curve. A more objective and cheaper proof than the acoustic one. A built sealed box reads ONE peak at Fc; `Fc/Fs=Qtc/Qts` confirms it's airtight (a leak lowers/broadens it). Full method (T/S extraction, the trust map, DVC, enclosure QC, what impedance can't see) → `impedance-ts.md`.
 
 ## 4. After ANY physical change to the box/position
 
