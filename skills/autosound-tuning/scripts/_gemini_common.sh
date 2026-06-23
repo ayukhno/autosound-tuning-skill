@@ -47,6 +47,21 @@ if [[ -z "${GEMINI_BIN:-}" ]]; then
 fi
 GEMINI_FLAVOR="$(basename "${GEMINI_BIN:-none}")"
 
+# Catch a FAKE agy = a symlink `agy → gemini` (the #1 setup trap, e.g. from an
+# earlier attempt): we'd otherwise pick agy model-ids + flags but actually invoke
+# gemini → "untrusted dir" error + wrong model. Resolve the symlink chain; if it
+# lands on gemini, run as the GEMINI flavor (right ids + --skip-trust) and nudge
+# toward installing the real Antigravity CLI.
+if [[ "$GEMINI_FLAVOR" == agy ]]; then
+  _agy_p="$(command -v agy 2>/dev/null || true)"; _agy_r="$_agy_p"
+  for _ in 1 2 3 4 5; do [[ -L "$_agy_r" ]] || break; _agy_r="$(readlink "$_agy_r")"; done
+  case "$(basename "${_agy_r:-}")" in
+    *gemini*)
+      echo ">> WARNING: 'agy' on PATH is a symlink to gemini ($_agy_p → $_agy_r), NOT real Antigravity — using the gemini flavor (right model ids + --skip-trust). For real agy: brew install --cask antigravity-cli (references/setup-critic-channel.md §1)." >&2
+      GEMINI_FLAVOR=gemini ;;
+  esac
+fi
+
 # Per-CLI extra args: @google/gemini-cli refuses headless runs in an "untrusted"
 # directory unless --skip-trust is passed; agy has no such flag.
 if [[ -z "${GEMINI_EXTRA_ARGS:-}" ]]; then
@@ -111,4 +126,39 @@ gemini_run() {
   { printf '%s | %s=%s | package=%s%s\n' "$(date '+%Y-%m-%d %H:%M')" \
       "$role" "$used" "$(basename "${PKG:-?}")" "${TRACE:+ | trace=$(basename "$TRACE")}"; } \
     >> "$AUDIT" 2>/dev/null || true
+}
+
+# gemini_doctor — one-shot preflight: diagnose the WHOLE channel + run a live smoke,
+# so setup traps surface in ONE command instead of serially (a real cold-start hit
+# ~6 papercuts here). Invoked via the wrappers' `--doctor` flag.
+gemini_doctor() {
+  local ok=1 envf bin
+  echo "== Gemini reviewer channel — doctor =="
+  if [[ -z "${GEMINI_BIN:-}" ]]; then
+    echo "✗ CLI: none on PATH. Fix: brew install --cask antigravity-cli (agy, default) OR npm i -g @google/gemini-cli"; ok=0
+  else
+    bin="$(command -v "$GEMINI_BIN" 2>/dev/null || echo "$GEMINI_BIN")"
+    echo "✓ CLI: $GEMINI_BIN → $bin  (flavor=$GEMINI_FLAVOR · model='$(gemini_default_model)' · extra='${GEMINI_EXTRA_ARGS}')"
+    if [[ "$(uname)" == Darwin && -e "$bin" ]] && xattr -p com.apple.quarantine "$bin" >/dev/null 2>&1; then
+      echo "✗ quarantine: $bin is Gatekeeper-quarantined. Fix: xattr -dr com.apple.quarantine \"$bin\""; ok=0
+    fi
+  fi
+  envf=""; for e in "$PWD/rew_analitic/.critic-env" "$PWD/.critic-env"; do [[ -f "$e" ]] && { envf="$e"; break; }; done
+  if [[ -n "$envf" ]]; then
+    if ( set -a; . "$envf" ) 2>/tmp/_ce_err; then echo "✓ .critic-env: $envf parses"
+    else echo "✗ .critic-env: $envf SYNTAX error — quote model names with spaces/parens, e.g. GEMINI_CRITIC_MODEL=\"Gemini 3.5 Flash (Medium)\":"; sed 's/^/    /' /tmp/_ce_err; ok=0; fi
+    rm -f /tmp/_ce_err
+  else echo "· .critic-env: none (defaults; optional — cp scripts/.critic-env.example rew_analitic/.critic-env)"; fi
+  [[ -f "$CONTRACT" ]] && echo "✓ contract: $CONTRACT" || { echo "✗ contract: $CONTRACT not found — run intake or set PROJECT_MIRROR"; ok=0; }
+  [[ -f "$CONTEXT"  ]] && echo "✓ context:  $CONTEXT"  || { echo "✗ context:  $CONTEXT not found — copy autosound_context.md into rew_analitic/ or set PROJECT_MIRROR"; ok=0; }
+  if [[ -n "${GEMINI_BIN:-}" ]]; then
+    echo "— live smoke (1 line) —"
+    local sf out; sf="$(mktemp)"; printf 'reply with exactly: channel works' > "$sf"
+    out="$(_run_model "$(gemini_default_model)" "$sf" || true)"; rm -f "$sf"
+    if [[ -z "${out//[[:space:]]/}" ]]; then echo "✗ smoke: EMPTY → quota exhausted (agy weekly Starter tier?) or lost auth. agy: run 'agy' in a REAL terminal to log in / check the weekly countdown. gemini: set GEMINI_API_KEY (the OAuth tier is deprecated)."; ok=0
+    elif _is_quota_error "$out"; then echo "✗ smoke: model/quota error → $(printf '%s' "$out" | head -1)"; ok=0
+    else echo "✓ smoke: $(printf '%s' "$out" | head -1)"; fi
+  fi
+  echo "== $([[ $ok = 1 ]] && echo 'ALL GOOD ✓' || echo 'ISSUES ABOVE ✗ — fix and re-run --doctor') =="
+  [[ $ok = 1 ]]
 }

@@ -1,0 +1,18 @@
+# Copy to your project:  cp scripts/.critic-env.example rew_analitic/.critic-env
+# Then edit + uncomment what you need. Sourced automatically by both wrappers.
+# ⚠️ Model names with SPACES/PARENS MUST be quoted, or the file won't parse.
+
+# ---- Default: real Antigravity (agy) ----
+GEMINI_BIN=agy
+GEMINI_CRITIC_MODEL="Gemini 3.5 Flash (Medium)"
+GEMINI_ADVISOR_MODEL="Gemini 3.1 Pro (High)"
+
+# ---- Fallback: @google/gemini-cli via a FREE API KEY (cross-platform) ----
+# gemini-cli's free OAuth sign-in is deprecated (IneligibleTierError) → use a key.
+# Get one free (no card) at https://aistudio.google.com/apikey
+# GEMINI_BIN=gemini
+# GEMINI_API_KEY=AIza...                      # exported to gemini-cli automatically
+# GEMINI_CRITIC_MODEL=gemini-2.5-flash
+# GEMINI_ADVISOR_MODEL=gemini-2.5-pro
+
+# PROJECT_MIRROR=/abs/path/to/project/rew_analitic   # only if CWD differs from the project

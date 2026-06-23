@@ -20,6 +20,9 @@ set -euo pipefail
 SCRIPT_NAME="gemini_advisor"
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_gemini_common.sh"
 
+# Preflight: `gemini_advisor.sh --doctor` diagnoses the channel + runs a live smoke.
+if [[ "${1:-}" == "--doctor" ]]; then gemini_doctor && exit 0 || exit 1; fi
+
 ADVISOR_MEMORY="${ADVISOR_MEMORY:-$PROJECT_MIRROR/depth-advisor-memory.md}"
 
 PKG="${1:-}"; TRACE="${2:-}"

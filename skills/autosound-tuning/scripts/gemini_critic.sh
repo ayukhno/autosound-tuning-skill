@@ -24,6 +24,10 @@ set -euo pipefail
 SCRIPT_NAME="gemini_critic"
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_gemini_common.sh"
 
+# Preflight: `gemini_critic.sh --doctor` diagnoses CLI/symlink/quarantine/.critic-env/
+# context + runs a live smoke, so setup traps surface in ONE shot.
+if [[ "${1:-}" == "--doctor" ]]; then gemini_doctor && exit 0 || exit 1; fi
+
 PKG="${1:-}"; TRACE="${2:-}"
 [[ -n "$PKG" ]] || die "usage: gemini_critic.sh <package.md> [trace.csv]"
 [[ -f "$PKG" ]] || die "package not found: $PKG"
