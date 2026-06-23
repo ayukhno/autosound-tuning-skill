@@ -107,6 +107,8 @@ These are **starting points**, not law: the sets grow over time and get refined 
 
 Different ones (BE4 on the left / LR4 on the right — or 3.2k left / 3.5k right) = different L/R phase rotation = the phantom center drifts and smears. Compensate cabin asymmetry with **EQ and Gain** (+ delays for centering), **not with crossovers**.
 
+**Choosing the symmetric value when the sides differ — minimax:** the cabin is L/R-asymmetric, but the crossover stays symmetric — so place the shared frequency to satisfy the **WORSE (more-constrained) side**, so the joint holds on BOTH, not at the better/average side. ⚠️ And don't read that from one channel's **in-cabin** slope near the band edge: an installed per-channel FR there is driver × cabin × mic-path and is distorted **differently L vs R for the SAME driver** — the apparent "natural rolloff" can be all cabin. Read the real joint slope/level from the **both-sides SUMMATION** in the car, not one channel's in-cabin LP/HP.
+
 > **Variant (Hashimoto):** asymmetric L/R crossovers, tuned by ear each side separately — allowed **only when symmetry won't image**; then verify the imaging carefully (`method-hashimoto.md`). The default stays symmetry.
 
 ### Driver protection with Bessel
