@@ -212,6 +212,18 @@ If the API can't be reached from the host, fall back to the user's exported `.md
 
 ---
 
+## Installing / updating this skill
+
+This skill ships as a **git repo** (`autosound-tuning-skill`); the canonical install is a **clone + symlinks**, NOT a plain file copy — so updates are a simple `git pull`:
+- Clone the repo somewhere persistent, then symlink **BOTH** skills into `~/.claude/skills/`: `autosound-tuning` **and** the sibling `review-loop`.
+- **Update = `git pull`** in the clone — the symlinked skill goes live immediately (no re-copy).
+- ⚠️ **Never `git clone` the whole repo directly into `~/.claude/skills/autosound-tuning`** — `SKILL.md` then sits one level too deep → "Unknown skill". Clone elsewhere; symlink the inner `skills/*`.
+- If you find this installed as a **plain file copy** (not a git checkout) and the user wants ongoing updates → **offer to convert** to clone+symlink; don't just re-copy / clone-sync over it each time (that drifts).
+
+(Distribution / versions / how experience flows back → `references/feedback-loop.md`.)
+
+---
+
 ## References (read on demand)
 
 - `references/project-intake.md` — **NEW PROJECT bootstrap (Phase −1)**: quickstart for new hands, equipment + goals interview (curve choice — no default), install verification (routing/polarity/gain/noise/break-in), DSP capability checklist (incl. non-Helix), project-file generation. **First contact also asks the user's preferred working language (EN/UK/DE/PL) → all dialogue + generated project files in it** (the skill body stays English — it's the method; output follows the user). Read whenever there are no project files, a new car/system, or "from scratch".
