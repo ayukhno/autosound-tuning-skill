@@ -6,6 +6,7 @@ Practical methods for interpreting REW measurements that have saved us repeatedl
 - Absolute SPL **drifts between passes** (loudness, reference — shifts of +18 dB have happened). Always work RELATIVELY / normalized.
 - Anchor a band's level to the **MIDS' offset vs their target** (the mids = the system's reference level).
 - Compare with the **FULL target** (e.g. Jazzi #1), NOT with the per-band sub-targets: they have junk out-of-band levels → they give a false offset. A real example: `sub vs Jazzi_sw` showed +6 "hot", but `ALL vs Jazzi#1` — on target. Trust the full one.
+- **A L/R level decision needs the per-FREQUENCY `L−R`, NOT the band-average.** The band-average masks WHERE the difference lives: a **uniform** offset across the band = a real level/gain difference (→ fix with **gain**); a **localized hump** at specific freqs (a ~2k breakup, a positional mode) = an EQ/resonance issue (→ **EQ at that frequency**). Acting on the average — e.g. a broadband −5 dB cut for what is really one hump — over-cuts the rest of the band AND drags the phantom image with frequency. **Plot `m-L − m-R` (and `tw-L − tw-R`) before any gain/EQ call** (recurring trap: the band-avg said "L is hotter" when only a ~2.2k hump was).
 - **Reference drift:** if a "change" moves bands the filter does NOT touch, or shifts the whole curve uniformly — it's a reference/loudness shift, not your change. Re-baseline, don't EQ.
 
 ## 2. Peak or null — decide BEFORE any EQ
