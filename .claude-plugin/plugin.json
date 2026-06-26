@@ -1,0 +1,12 @@
+{
+  "name": "autosound-tuning",
+  "description": "Tune a car-audio DSP with REW — from a brand-new project (equipment + goals interview, target-curve choice, install verification) through crossovers, time alignment, phase, per-channel and summed EQ, imaging/staging, to taste voicing, via a Generator-Critic-Arbiter review loop. Works on any car / any DSP.",
+  "version": "1.1.0",
+  "author": {
+    "name": "ayukhno"
+  },
+  "license": "CC-BY-SA-4.0",
+  "homepage": "https://github.com/ayukhno/autosound-tuning-skill",
+  "keywords": ["car-audio", "dsp", "rew", "tuning", "crossover", "eq", "time-alignment", "phase", "imaging", "soundstage", "helix", "subwoofer", "thiele-small"],
+  "skills": ["./skills/autosound-tuning"]
+}

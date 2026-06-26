@@ -16,17 +16,16 @@ Er deckt eine komplette Abstimmung ab — von einem neuen Projekt (Interview zu 
 ## Was hier drin ist
 
 ```
-skills/
-├── autosound-tuning/   der Haupt-Skill
-│   ├── SKILL.md        Einstiegspunkt — Prozessübersicht, Sitzungs-Lebenszyklus, Rollen
-│   ├── references/     Docs bei Bedarf (Phasen, Diagnostik, EQ, Filter, Bühne,
-│   │                   Test-Tracks, REW API, Helix, Intake, Feedback …)
-│   ├── knowledge/      gesammelte Auto- & DSP-Profile (cars/, dsp/)
-│   └── scripts/        Beispiel-Tooling für den Kritiker-Kanal (optional)
-└── review-loop/        Schwester-Skill: Orchestrierung unabhängiger Reviews
+autosound-tuning-skill/        ein Claude-Code-Plugin
+└── skills/autosound-tuning/    der Skill
+    ├── SKILL.md        Einstiegspunkt — Prozessübersicht, Sitzungs-Lebenszyklus, Rollen
+    ├── references/     Docs bei Bedarf (Phasen, Diagnostik, EQ, Filter, Bühne,
+    │                   Test-Tracks, REW API, Helix, die Review-Methode, Intake …)
+    ├── knowledge/      gesammelte Auto- & DSP-Profile (cars/, dsp/)
+    └── scripts/        Beispiel-Tooling für den Kritiker-Kanal (optional)
 ```
 
-Die beiden sind ein **Paar** — `autosound-tuning` nutzt `review-loop` für das Review-Protokoll. Installiere beide.
+Ein Skill — die unabhängige Review-Methode (Kritiker/Berater/Schiedsrichter, Anti-Anchoring) ist als `references/review-loop.md` gebündelt.
 
 ## Erste Schritte — neu bei Claude Code?
 
@@ -60,25 +59,14 @@ claude                                            # der erste Start öffnet den 
 
 ## Installation
 
-**Am einfachsten — lass Claude es erledigen.** Öffne Claude Code und sag:
-
-> *„Klone https://github.com/ayukhno/autosound-tuning-skill in einen temporären Ordner, kopiere dann die zwei **inneren** Ordner `skills/autosound-tuning` und `skills/review-loop` nach `~/.claude/skills/`, sodass jede `SKILL.md` direkt unter `~/.claude/skills/<name>/SKILL.md` landet. Klone nicht das ganze Repo in den Skills-Ordner.“*
-
-Installiere **beide** (sie sind ein Paar) auf **Benutzerebene — `~/.claude/skills/`** (überall verfügbar, empfohlen) oder **Projektebene — `<projekt>/.claude/skills/`** (hält das Repo eines Autos eigenständig).
-
-> ⚠️ **Der eine zu vermeidende Fehler:** klone das Repo nicht *in* `~/.claude/skills/autosound-tuning/`. Das verschachtelt `SKILL.md` eine Ebene zu tief, und Claude meldet **`Unknown skill`**. Kopiere immer die **inneren** `skills/*`-Ordner, sodass `SKILL.md` *direkt* unter dem Skill-Ordner liegt.
-
-**Manuell:**
-```bash
-git clone https://github.com/ayukhno/autosound-tuning-skill.git
-cp -R autosound-tuning-skill/skills/autosound-tuning ~/.claude/skills/
-cp -R autosound-tuning-skill/skills/review-loop      ~/.claude/skills/
-# prüfen — jede Zeile muss den Pfad ausgeben (SKILL.md direkt unter dem Skill-Ordner):
-ls ~/.claude/skills/autosound-tuning/SKILL.md
-ls ~/.claude/skills/review-loop/SKILL.md
+Installiere als **Claude-Code-Plugin** — ein Marketplace, ein Befehl, kein manuelles Kopieren:
 ```
+/plugin marketplace add ayukhno/autosound-tuning-skill
+/plugin install autosound-tuning
+```
+**Dann starte eine frische Claude-Code-Sitzung** (Plugins laden beim Start) und sag z. B. *„stimme ein neues Auto von Grund auf ab“* — der Skill beginnt mit dem **Intake**: Schnellstart, Interview zu Equipment + Zielen, Wahl der Zielkurve (mit dir gewählt), Einbau-Checks, Erzeugung der Projektdateien. Später aktualisieren mit `/plugin update autosound-tuning`.
 
-**Dann starte eine frische Claude-Code-Sitzung** (Skills laden beim Start) und sag z. B. *„stimme ein neues Auto von Grund auf ab“* — der Skill beginnt mit dem **Intake**: Schnellstart, Interview zu Equipment + Zielen, Wahl der Zielkurve (mit dir gewählt), Einbau-Checks, Erzeugung der Projektdateien. *(Bei `Unknown skill` oder wenn er nie auslöst — fast immer die obige Verschachtelung; kopiere die inneren `skills/*`-Ordner neu und starte neu.)*
+*(Lieber ein manueller Checkout? Klone das Repo und verlinke (symlink) den **inneren** Ordner `skills/autosound-tuning` nach `~/.claude/skills/`. ⚠️ Klone nicht das ganze Repo *in* `~/.claude/skills/autosound-tuning/` — `SKILL.md` liegt dann eine Ebene zu tief und Claude meldet `Unknown skill`.)*
 
 ## Deine Erfahrung beitragen
 

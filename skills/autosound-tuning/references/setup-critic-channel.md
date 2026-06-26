@@ -88,10 +88,10 @@ Expect a one-line reply + a `— [critic: <model>]` tag (or `[advisor: …]`). A
 
 ## 7. No CLI — or the CLI is slow/dry? Use a manual channel (the ROLE still happens)
 
-The reviewer role is vendor-agnostic (`../review-loop/SKILL.md`). When there's no CLI — **or `agy` is quota-dry / hanging on a big package** — go manual:
+The reviewer role is vendor-agnostic (`review-loop.md`). When there's no CLI — **or `agy` is quota-dry / hanging on a big package** — go manual:
 1. **Copy-paste into a desktop chat** *(field-proven; the go-to when the CLI chokes)* — `cat package.md | pbcopy`, paste into a **Gemini / Claude / ChatGPT desktop chat** where you have a subscription / tokens, then paste the reply back. No CLI, no quota juggling, no agentic stalls — ideal for a **bulk one-off** review (e.g. several long docs at once). Real use: a 4-language README review the agentic CLI couldn't finish.
 2. **Any other AI** in a second window — same idea, ask it to play the Critic.
-3. **Claude in a SEPARATE session** (cross-session self-review; TWO-PASS anti-anchoring — see `review-loop`).
+3. **Claude in a SEPARATE session** (cross-session self-review; TWO-PASS anti-anchoring — see `review-loop.md`).
 4. **The human** as reviewer.
 
 Never skip the second perspective just because the `agy`/`gemini` channel isn't set up or is slow — use a manual channel instead.

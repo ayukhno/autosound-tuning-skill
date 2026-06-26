@@ -16,17 +16,16 @@
 ## Що тут є
 
 ```
-skills/
-├── autosound-tuning/   головний скіл
-│   ├── SKILL.md        точка входу — мапа процесу, життєвий цикл сесії, ролі
-│   ├── references/     документи на вимогу (фази, діагностика, EQ, фільтри, сцена,
-│   │                   тест-треки, REW API, Helix, інтейк, фідбек …)
-│   ├── knowledge/      накопичені профілі авто й DSP (cars/, dsp/)
-│   └── scripts/        приклад інструментарію каналу Критика (опційно)
-└── review-loop/        сусідній скіл: оркестрація незалежного рев'ю
+autosound-tuning-skill/        плагін Claude Code
+└── skills/autosound-tuning/    скіл
+    ├── SKILL.md        точка входу — мапа процесу, життєвий цикл сесії, ролі
+    ├── references/     документи на вимогу (фази, діагностика, EQ, фільтри, сцена,
+    │                   тест-треки, REW API, Helix, метод рев'ю, інтейк …)
+    ├── knowledge/      накопичені профілі авто й DSP (cars/, dsp/)
+    └── scripts/        приклад інструментарію каналу Критика (опційно)
 ```
 
-Ці два — **пара**: `autosound-tuning` використовує `review-loop` за протоколом рев'ю. Встанови обидва.
+Один скіл — незалежний метод рев'ю (Критик/Радник/Арбітр, анти-анкоринг) вкладено як `references/review-loop.md`.
 
 ## Початок роботи — уперше в Claude Code?
 
@@ -60,25 +59,14 @@ claude                                            # перший запуск в
 
 ## Встановлення
 
-**Найпростіше — хай Claude зробить це.** Відкрий Claude Code і скажи:
-
-> *«Склонуй https://github.com/ayukhno/autosound-tuning-skill у тимчасову теку, тоді скопіюй дві **внутрішні** теки `skills/autosound-tuning` і `skills/review-loop` у `~/.claude/skills/`, щоб `SKILL.md` кожного опинився прямо в `~/.claude/skills/<name>/SKILL.md`. Не клонуй увесь репозиторій у теку скілів.»*
-
-Встанови **обидва** (вони — пара) на **рівні користувача — `~/.claude/skills/`** (доступно скрізь, рекомендовано) або **рівні проєкту — `<проєкт>/.claude/skills/`** (щоб репозиторій одного авто був самодостатнім).
-
-> ⚠️ **Єдина помилка, якої слід уникати:** не роби `git clone` репозиторію *у* `~/.claude/skills/autosound-tuning/`. Це вкладе `SKILL.md` на рівень глибше, і Claude повідомить **`Unknown skill`**. Завжди копіюй **внутрішні** теки `skills/*`, щоб `SKILL.md` лежав *прямо* в теці скіла.
-
-**Вручну:**
-```bash
-git clone https://github.com/ayukhno/autosound-tuning-skill.git
-cp -R autosound-tuning-skill/skills/autosound-tuning ~/.claude/skills/
-cp -R autosound-tuning-skill/skills/review-loop      ~/.claude/skills/
-# перевірка — кожен має вивести шлях (SKILL.md прямо в теці скіла):
-ls ~/.claude/skills/autosound-tuning/SKILL.md
-ls ~/.claude/skills/review-loop/SKILL.md
+Встанови як **плагін Claude Code** — один marketplace, одна команда, без ручного копіювання:
 ```
+/plugin marketplace add ayukhno/autosound-tuning-skill
+/plugin install autosound-tuning
+```
+**Тоді запусти НОВУ сесію Claude Code** (плагіни завантажуються на старті) і скажи, напр. *«налаштуй нове авто з нуля»* — скіл почне з **інтейку**: швидкий старт, опитування обладнання + цілей, вибір цільової кривої (обирається з тобою), перевірка інсталяції, генерація файлів проєкту. Оновлення згодом: `/plugin update autosound-tuning`.
 
-**Тоді запусти НОВУ сесію Claude Code** (скіли завантажуються на старті) і скажи, напр. *«налаштуй нове авто з нуля»* — скіл почне з **інтейку**: швидкий старт, опитування обладнання + цілей, вибір цільової кривої (обирається з тобою), перевірка інсталяції, генерація файлів проєкту. *(Якщо `Unknown skill` або скіл не тригериться — майже завжди це вкладеність вище; перекопіюй внутрішні теки `skills/*` і перезапусти.)*
+*(Більше до вподоби ручний checkout? Склонуй репо і зроби symlink **внутрішньої** теки `skills/autosound-tuning` у `~/.claude/skills/`. ⚠️ Не клонуй увесь репозиторій *у* `~/.claude/skills/autosound-tuning/` — `SKILL.md` тоді ляже на рівень глибше, і Claude повідомить `Unknown skill`.)*
 
 ## Як поділитися досвідом
 

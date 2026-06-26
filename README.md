@@ -16,17 +16,16 @@ It covers a full tune — from a new project (equipment + goals interview, targe
 ## What's in here
 
 ```
-skills/
-├── autosound-tuning/   the main skill
-│   ├── SKILL.md        entry point — process map, session lifecycle, roles
-│   ├── references/     on-demand docs (phases, diagnostics, EQ, filters, staging,
-│   │                   test tracks, REW API, Helix, intake, feedback …)
-│   ├── knowledge/      accumulated car & DSP profiles (cars/, dsp/)
-│   └── scripts/        example Critic-channel rig tooling (optional)
-└── review-loop/        sibling skill: independent-review orchestration
+autosound-tuning-skill/        a Claude Code plugin
+└── skills/autosound-tuning/    the skill
+    ├── SKILL.md        entry point — process map, session lifecycle, roles
+    ├── references/     on-demand docs (phases, diagnostics, EQ, filters, staging,
+    │                   test tracks, REW API, Helix, the review method, intake …)
+    ├── knowledge/      accumulated car & DSP profiles (cars/, dsp/)
+    └── scripts/        example Critic-channel rig tooling (optional)
 ```
 
-The two are a **pair** — `autosound-tuning` uses `review-loop` for the review protocol. Install both.
+One skill — the independent-review method (Critic/Advisor/Arbiter, anti-anchoring) is bundled as `references/review-loop.md`.
 
 ## Getting started — new to Claude Code?
 
@@ -60,25 +59,14 @@ claude                                            # first run opens the browser 
 
 ## Install
 
-**Easiest — ask Claude to do it.** Open Claude Code and say:
-
-> *"Clone https://github.com/ayukhno/autosound-tuning-skill into a temp folder, then copy the two **inner** folders `skills/autosound-tuning` and `skills/review-loop` into `~/.claude/skills/`, so each `SKILL.md` lands directly at `~/.claude/skills/<name>/SKILL.md`. Don't clone the whole repo into the skills folder."*
-
-Install **both** (they're a pair) at **user level — `~/.claude/skills/`** (available everywhere, recommended) or **project level — `<project>/.claude/skills/`** (keeps one car's repo self-contained).
-
-> ⚠️ **The one mistake to avoid:** don't `git clone` the repo *into* `~/.claude/skills/autosound-tuning/`. That nests `SKILL.md` a level too deep and Claude reports **`Unknown skill`**. Always copy the **inner** `skills/*` folders so `SKILL.md` sits *directly* under the skill folder.
-
-**Manual:**
-```bash
-git clone https://github.com/ayukhno/autosound-tuning-skill.git
-cp -R autosound-tuning-skill/skills/autosound-tuning ~/.claude/skills/
-cp -R autosound-tuning-skill/skills/review-loop      ~/.claude/skills/
-# verify — each must print the path (SKILL.md directly under the skill folder):
-ls ~/.claude/skills/autosound-tuning/SKILL.md
-ls ~/.claude/skills/review-loop/SKILL.md
+Install as a **Claude Code plugin** — one marketplace, one command, no manual copy:
 ```
+/plugin marketplace add ayukhno/autosound-tuning-skill
+/plugin install autosound-tuning
+```
+**Then start a fresh Claude Code session** (plugins load at startup) and say e.g. *"tune a new car from scratch"* — the skill begins with **intake**: quickstart, equipment + goals interview, target-curve choice (chosen with you), install checks, project-file generation. Update later with `/plugin update autosound-tuning`.
 
-**Then start a fresh Claude Code session** (skills load at startup) and say e.g. *"tune a new car from scratch"* — the skill begins with **intake**: quickstart, equipment + goals interview, target-curve choice (chosen with you), install checks, project-file generation. *(If `Unknown skill` or it never triggers — almost always due to the nesting above; re-copy the inner `skills/*` folders and restart.)*
+*(Prefer a manual checkout? Clone the repo and symlink the **inner** `skills/autosound-tuning` into `~/.claude/skills/`. ⚠️ Don't clone the whole repo INTO `~/.claude/skills/autosound-tuning/` — `SKILL.md` then sits a level too deep and Claude reports `Unknown skill`.)*
 
 ## Contributing your experience
 

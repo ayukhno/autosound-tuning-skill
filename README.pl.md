@@ -16,17 +16,16 @@ Obejmuje pełne strojenie — od nowego projektu (wywiad o sprzęcie + celach, w
 ## Co tu jest
 
 ```
-skills/
-├── autosound-tuning/   główny skill
-│   ├── SKILL.md        punkt wejścia — mapa procesu, cykl życia sesji, role
-│   ├── references/     dokumenty na żądanie (fazy, diagnostyka, EQ, filtry, scena,
-│   │                   ścieżki testowe, REW API, Helix, intake, feedback …)
-│   ├── knowledge/      zgromadzone profile aut i DSP (cars/, dsp/)
-│   └── scripts/        przykładowe narzędzia kanału Krytyka (opcjonalne)
-└── review-loop/        skill siostrzany: orkiestracja niezależnej recenzji
+autosound-tuning-skill/        wtyczka Claude Code
+└── skills/autosound-tuning/    skill
+    ├── SKILL.md        punkt wejścia — mapa procesu, cykl życia sesji, role
+    ├── references/     dokumenty na żądanie (fazy, diagnostyka, EQ, filtry, scena,
+    │                   ścieżki testowe, REW API, Helix, metoda recenzji, intake …)
+    ├── knowledge/      zgromadzone profile aut i DSP (cars/, dsp/)
+    └── scripts/        przykładowe narzędzia kanału Krytyka (opcjonalne)
 ```
 
-Te dwa to **para** — `autosound-tuning` korzysta z `review-loop` dla protokołu recenzji. Zainstaluj oba.
+Jeden skill — niezależna metoda recenzji (Krytyk/Doradca/Arbiter, anti-anchoring) jest dołączona jako `references/review-loop.md`.
 
 ## Pierwsze kroki — nowy w Claude Code?
 
@@ -60,25 +59,14 @@ claude                                            # pierwsze uruchomienie otworz
 
 ## Instalacja
 
-**Najprościej — niech Claude to zrobi.** Otwórz Claude Code i powiedz:
-
-> *„Sklonuj https://github.com/ayukhno/autosound-tuning-skill do tymczasowego folderu, następnie skopiuj dwa **wewnętrzne** foldery `skills/autosound-tuning` i `skills/review-loop` do `~/.claude/skills/`, tak aby każdy `SKILL.md` trafił bezpośrednio do `~/.claude/skills/<name>/SKILL.md`. Nie klonuj całego repo do folderu skilli.”*
-
-Zainstaluj **oba** (to para) na **poziomie użytkownika — `~/.claude/skills/`** (dostępne wszędzie, zalecane) lub **poziomie projektu — `<projekt>/.claude/skills/`** (utrzymuje repo jednego auta samodzielnym).
-
-> ⚠️ **Jeden błąd, którego należy unikać:** nie rób `git clone` repo *do* `~/.claude/skills/autosound-tuning/`. To zagnieżdża `SKILL.md` o poziom za głęboko i Claude zgłasza **`Unknown skill`**. Zawsze kopiuj **wewnętrzne** foldery `skills/*`, aby `SKILL.md` leżał *bezpośrednio* w folderze skilla.
-
-**Ręcznie:**
-```bash
-git clone https://github.com/ayukhno/autosound-tuning-skill.git
-cp -R autosound-tuning-skill/skills/autosound-tuning ~/.claude/skills/
-cp -R autosound-tuning-skill/skills/review-loop      ~/.claude/skills/
-# weryfikacja — każda linia musi wypisać ścieżkę (SKILL.md bezpośrednio w folderze skilla):
-ls ~/.claude/skills/autosound-tuning/SKILL.md
-ls ~/.claude/skills/review-loop/SKILL.md
+Zainstaluj jako **wtyczkę Claude Code** — jeden marketplace, jedna komenda, bez ręcznego kopiowania:
 ```
+/plugin marketplace add ayukhno/autosound-tuning-skill
+/plugin install autosound-tuning
+```
+**Następnie uruchom nową sesję Claude Code** (wtyczki ładują się przy starcie) i powiedz np. *„nastrój nowe auto od zera”* — skill zaczyna od **intake'u**: szybki start, wywiad o sprzęcie + celach, wybór krzywej docelowej (wybierany z tobą), kontrola montażu, generowanie plików projektu. Aktualizacja później: `/plugin update autosound-tuning`.
 
-**Następnie uruchom nową sesję Claude Code** (skille ładują się przy starcie) i powiedz np. *„nastrój nowe auto od zera”* — skill zaczyna od **intake'u**: szybki start, wywiad o sprzęcie + celach, wybór krzywej docelowej (wybierany z tobą), kontrola montażu, generowanie plików projektu. *(Jeśli `Unknown skill` lub skill nigdy się nie uruchamia — to prawie zawsze powyższe zagnieżdżenie; skopiuj ponownie wewnętrzne foldery `skills/*` i zrestartuj.)*
+*(Wolisz ręczny checkout? Sklonuj repo i zrób symlink **wewnętrznego** folderu `skills/autosound-tuning` do `~/.claude/skills/`. ⚠️ Nie klonuj całego repo *do* `~/.claude/skills/autosound-tuning/` — `SKILL.md` trafi wtedy o poziom za głęboko i Claude zgłosi `Unknown skill`.)*
 
 ## Dzielenie się doświadczeniem
 
