@@ -5,39 +5,34 @@
 **In one line:** a Claude skill that helps you tune car audio — it reads your REW measurements, analyzes them, recommends settings, and can push EQ back into REW.
 
 - 📊 **Works with REW** over its API — pulls measurements, loads EQ filters back in
-- 🎯 **Knows the craft** — target curves, tuning practices, and a built-in step-by-step tuning process
-- 🎧 **Test tracks** — what to listen for and on which track (the descriptions, not the audio)
-- 🚗 **Learns your setup** — accumulates car & gear knowledge from a tuning angle (only with your consent)
+- 🎯 **Knows the craft** — target curves, tuning practices, a step-by-step process
+- 🎧 **Test tracks** — what to listen for and on which track (descriptions, not audio)
+- 🚗 **Learns your setup** — accumulates car & gear knowledge, only with your consent
 
-A [Claude](https://claude.com/claude-code) **skill** for tuning a car-audio DSP with [REW](https://www.roomeqwizard.com/) — from a brand-new project (equipment + goals interview, target-curve choice, install verification) through crossovers, time alignment, phase, per-channel and summed EQ, imaging/staging, to client-preference voicing. It encodes a measured **method** (Generator ↔ Critic ↔ Arbiter review loop) plus a growing library of hard-won diagnostic techniques.
+It covers a full tune — from a new project (equipment + goals interview, target-curve choice, install checks) through crossovers, time alignment, phase, per-channel and summed EQ, and imaging, to taste voicing — driven by a Generator ↔ Critic ↔ Arbiter review loop. It's **method, not machine**: no car's measurements or DSP state live here (those stay in your project), so it works on **any car / any DSP**.
 
-The skill is **method, not machine.** No car's measurements or DSP state live here — those stay in the tuner's own project. This repo ships the reusable process so it works on **any car / any DSP**.
-
-> Built and battle-tested on a VW Passat B8 / Helix DSP Ultra S (an AYA competition win), but the car/DSP specifics are isolated into a profile + a `knowledge/` library so a new project is just "pick the inputs."
+> Built and battle-tested on a VW Passat B8 / Helix DSP Ultra S (an AYA competition win); the car/DSP specifics are isolated into a profile + a `knowledge/` library, so a new project is just "pick the inputs."
 
 ## What's in here
 
 ```
 skills/
-├── autosound-tuning/      the main skill
-│   ├── SKILL.md           entry point (process map, session lifecycle, roles)
-│   ├── references/        on-demand docs: phases, diagnostics, EQ patterns,
-│   │                      filter types, staging/depth, competition, test tracks,
-│   │                      voicing-by-ear, REW API, Helix specifics, intake, feedback
-│   ├── knowledge/         accumulated car & DSP profiles (cars/, dsp/)
-│   └── scripts/           example Critic-channel implementation (optional rig tooling)
-└── review-loop/           sibling skill: independent-review orchestration (vendor-agnostic)
+├── autosound-tuning/   the main skill
+│   ├── SKILL.md        entry point — process map, session lifecycle, roles
+│   ├── references/     on-demand docs (phases, diagnostics, EQ, filters, staging,
+│   │                   test tracks, REW API, Helix, intake, feedback …)
+│   ├── knowledge/      accumulated car & DSP profiles (cars/, dsp/)
+│   └── scripts/        example Critic-channel rig tooling (optional)
+└── review-loop/        sibling skill: independent-review orchestration
 ```
 
-The two skills are a **pair** — `autosound-tuning` references `review-loop` for the review protocol. Install both.
+The two are a **pair** — `autosound-tuning` uses `review-loop` for the review protocol. Install both.
 
-## Getting started — new to Claude Code / the terminal?
+## Getting started — new to Claude Code?
 
-This skill runs in **Claude Code**, a terminal tool. If you've only used desktop/web chat before, here's the one-time setup. *(Other languages: [Deutsch](README.de.md) · [Polski](README.pl.md) · [Українська](README.uk.md).)*
+This skill runs in **Claude Code**, a terminal tool. Tuning is iterative (measure → analyze → change → re-measure) over text/numeric data, so a terminal + git — parsing, scripting, full change history — fit far better than the web app.
 
-**Why Claude Code (not the web app / Cowork):** tuning is iterative — measure → analyze → change → re-measure — over text/numeric data (REW CSV/text exports, DSP configs, iteration logs). A terminal + git gives you parsing, scripting, and a full change history. Cowork is oriented to file operations in other apps — overkill here.
-
-**1. Install Claude Code** (macOS / zsh; needs Node.js 18+ and a paid Claude plan — Pro / Max / Team / Enterprise; the free plan won't work):
+**1. Install Claude Code** (macOS / zsh; needs Node.js 18+ and a paid Claude plan — Pro / Max / Team / Enterprise):
 ```bash
 node --version                                   # Node.js 18 or newer
 mkdir -p ~/.npm-global && npm config set prefix '~/.npm-global'
@@ -52,75 +47,53 @@ mkdir ~/car-audio-setup && cd ~/car-audio-setup
 claude                                            # first run opens the browser to log in
 ```
 
-**3. Don't over-structure.** Start with an empty folder. Drop in your first REW export (`.txt`/`.csv`) as-is, keep one markdown notes log (append-only), and let folders (`measurements/`, `configs/`, `eq-log/`) appear when you actually need them.
+**3. Start simple.** An empty folder, your first REW export dropped in as-is, one append-only notes log — let subfolders appear when you actually need them.
 
-**4. Your first message = "step 0".** Describe your system in one message: car + speaker layout (how many ways, sub?), DSP model (Helix / Audison / other), measurement gear (mic, interface), and whether you already have measurements or are starting from the hardware. The skill takes it from there — and **first asks your preferred working language** (English / your native, if supported: EN · UK · DE · PL) so the conversation and your project files come out in it. Then: intake → signal-chain check → mic calibration → first sweep → …
-
-(Then install the skill itself — next section.)
+**4. Your first message = "step 0".** Describe your system: car + speaker layout (ways, sub?), DSP model, measurement gear, and whether you have measurements yet. The skill takes it from there — and **first asks your preferred working language** (EN · UK · DE · PL) so the conversation and your project files come out in it.
 
 ## Requirements
 
 - **Claude Code** (or claude.ai with skills).
-- **REW** with the API server enabled (`localhost:4735`), a calibrated measurement mic.
-- Your **DSP's software** and a way to load EQ into it (file import ideal; for 30+ DSPs without import, see [REW-EQ-CopyPaste-Assistant](https://github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant)).
-- **Optional:** a second AI model as the "Critic" (any vendor — the roles are vendor-agnostic). Without it, a human plays the reviewer; the process still holds.
+- **REW** with the API server on (`localhost:4735`) and a calibrated mic.
+- Your **DSP's software** + a way to load EQ (file import ideal; for 30+ DSPs without it, see [REW-EQ-CopyPaste-Assistant](https://github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant)).
+- **Optional:** a second AI model as the "Critic" (any vendor). Without it a human reviews; the process still holds.
 
 ## Install
 
-**Easiest — let Claude install it for you.** Open Claude Code and just ask, for example:
+**Easiest — ask Claude to do it.** Open Claude Code and say:
 
-> *"Clone https://github.com/ayukhno/autosound-tuning-skill into a temporary folder, then copy the two **inner** skill folders — `skills/autosound-tuning` and `skills/review-loop` — into my user-level `~/.claude/skills/`, so each skill's `SKILL.md` ends up directly at `~/.claude/skills/<name>/SKILL.md`. Don't clone the whole repo into the skills folder."*
+> *"Clone https://github.com/ayukhno/autosound-tuning-skill into a temp folder, then copy the two **inner** folders `skills/autosound-tuning` and `skills/review-loop` into `~/.claude/skills/`, so each `SKILL.md` lands directly at `~/.claude/skills/<name>/SKILL.md`. Don't clone the whole repo into the skills folder."*
 
-Claude places **both** skills (they're a pair) where you choose:
+Install **both** (they're a pair) at **user level — `~/.claude/skills/`** (available everywhere, recommended) or **project level — `<project>/.claude/skills/`** (keeps one car's repo self-contained).
 
-- **User-level — `~/.claude/skills/`** *(recommended)*: available in **every** folder you open Claude Code in. Pick this if you'll tune more than one car or want it always on hand.
-- **Project-level — `<your-project>/.claude/skills/`**: only inside that one project. Pick this to keep a single car's repo self-contained.
+> ⚠️ **The one mistake to avoid:** don't `git clone` the repo *into* `~/.claude/skills/autosound-tuning/`. That nests `SKILL.md` a level too deep and Claude reports **`Unknown skill`**. Always copy the **inner** `skills/*` folders so `SKILL.md` sits *directly* under the skill folder.
 
-> ⚠️ **Common install mistake:** don't `git clone` the repo *into* `~/.claude/skills/autosound-tuning/`. That nests `SKILL.md` one level too deep (`…/autosound-tuning/skills/autosound-tuning/SKILL.md`) and Claude Code reports **`Unknown skill: autosound-tuning`** (or never offers the skill at all). Always copy the **inner** `skills/*` folders so `SKILL.md` sits *directly* under the skill folder.
-
-**Or do it manually:**
+**Manual:**
 ```bash
 git clone https://github.com/ayukhno/autosound-tuning-skill.git
-# user-level (available everywhere) — copy the INNER skill folders:
 cp -R autosound-tuning-skill/skills/autosound-tuning ~/.claude/skills/
 cp -R autosound-tuning-skill/skills/review-loop      ~/.claude/skills/
-# …or project-level: cp -R the same two folders into  your-project/.claude/skills/
-
-# verify — each line must print the path (SKILL.md sits DIRECTLY under the skill folder):
+# verify — each must print the path (SKILL.md directly under the skill folder):
 ls ~/.claude/skills/autosound-tuning/SKILL.md
 ls ~/.claude/skills/review-loop/SKILL.md
 ```
 
-**After installing, start a fresh Claude Code session** — skills are loaded at startup.
-
-**Troubleshooting — `Unknown skill` / the skill never triggers:** almost always the nesting above. If `ls ~/.claude/skills/autosound-tuning/SKILL.md` fails but `…/autosound-tuning/skills/autosound-tuning/SKILL.md` exists, you cloned the whole repo into the skill folder. Fix it, then restart Claude Code:
-```bash
-mv ~/.claude/skills/autosound-tuning ~/.claude/skills/autosound-tuning-repo
-cp -R ~/.claude/skills/autosound-tuning-repo/skills/autosound-tuning ~/.claude/skills/
-cp -R ~/.claude/skills/autosound-tuning-repo/skills/review-loop      ~/.claude/skills/
-rm -rf ~/.claude/skills/autosound-tuning-repo
-```
-
-Then open Claude Code in your project and say e.g. *"tune a new car from scratch"* — the skill starts with **intake** (`references/project-intake.md`): quickstart, equipment + goals interview, target-curve choice (no default — chosen with you), install verification, and project-file generation. *(It first asks your preferred working language — you can run the whole local project in your own language; English here is just the skill's internal method.)*
+**Then start a fresh Claude Code session** (skills load at startup) and say e.g. *"tune a new car from scratch"* — the skill begins with **intake**: quickstart, equipment + goals interview, target-curve choice (chosen with you), install checks, project-file generation. *(If `Unknown skill` or it never triggers — almost always the nesting above; re-copy the inner `skills/*` folders and restart.)*
 
 ## Contributing your experience
 
-The skill **learns from every tune — and it gathers that feedback right in the terminal, while you work, not via a form to fill in.** At wrap-up (Phase 7) it runs a short closing ritual: asks what actually helped, what was off, and any DSP/car quirk you hit — then, **with your explicit consent**, offers to share the *generalizable* lessons.
+The skill **learns from every tune — gathering feedback right in the terminal as you work, not via a form.** At wrap-up (Phase 7) it asks what helped, what was off, and any DSP/car quirk you hit — then, **with your explicit consent**, offers to share the *generalizable* lessons (to grow the shared method + the `knowledge/` library).
 
-**What the final survey is for, and what it collects:** to grow the shared method + the `knowledge/` library. It captures **method + equipment classes only** — the car body/cabin behavior, the DSP/processor and gear class, and which techniques worked. **Never personal data, never full measurements.** You see exactly what would be shared and opt in (or out) per item.
-
-Confirmed lessons get folded into the skill and the `knowledge/` car/DSP profiles (with attribution). Tips that contradict existing findings are kept as *variants*, not deletions — a different cabin may make them right.
-
-*(Prefer GitHub? You can still open a [field-feedback issue](../../issues/new?template=field-feedback.md) — same rule: method/equipment classes only.)*
+It captures **method + equipment classes only** — cabin behavior, the DSP/gear class, which techniques worked. **Never personal data, never full measurements;** you see exactly what's shared and opt in per item. Confirmed lessons fold into the skill with attribution; contradicting tips are kept as *variants*, not deleted. *(Prefer GitHub? Open a [field-feedback issue](../../issues/new?template=field-feedback.md) — same rule.)*
 
 ## Support
 
-The skill is **free and open** (CC BY-SA) and always will be — nothing is gated behind a payment. If it helped you dial in your system and you'd like to say thanks, there's a **voluntary tip jar**, no pressure:
+The skill is **free and open** (CC BY-SA) and always will be — nothing is gated behind a payment. If it helped and you'd like to say thanks, there's a **voluntary tip jar**, no pressure:
 
 ☕ **[Support this skill — Monobank jar](https://send.monobank.ua/jar/8wThVcodjm)** 🤝
 
-One tap, no account needed; the page also takes foreign cards (Apple/Google Pay, Visa/Mastercard).
+One tap, no account; the page also takes foreign cards (Apple/Google Pay, Visa/Mastercard).
 
 ## License
 
-[CC BY-SA 4.0](LICENSE) — use it, adapt it, share it; keep derivatives open and give attribution. It's a method/knowledge work, so share-alike keeps the community's accumulated experience open.
+[CC BY-SA 4.0](LICENSE) — use it, adapt it, share it; keep derivatives open and attribute. It's a method/knowledge work, so share-alike keeps the community's experience open.

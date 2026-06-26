@@ -4,40 +4,35 @@
 
 **In einem Satz:** ein Claude-Skill, der dir hilft, Car-Audio abzustimmen — er liest deine REW-Messungen, analysiert sie, empfiehlt Einstellungen und kann EQ zurück in REW laden.
 
-- 📊 **Arbeitet mit REW** über dessen API — holt Messungen, lädt EQ-Filter zurück
-- 🎯 **Kennt das Handwerk** — Zielkurven, Abstimmpraktiken und einen eingebauten Schritt-für-Schritt-Prozess
-- 🎧 **Test-Tracks** — worauf man achtet und auf welchem Track (die Beschreibungen, nicht die Audiodateien)
-- 🚗 **Lernt dein Setup** — sammelt Wissen über Auto & Equipment aus Abstimm-Sicht (nur mit deiner Zustimmung)
+- 📊 **Arbeitet mit REW** über die API — holt Messungen, lädt EQ-Filter zurück
+- 🎯 **Kennt das Handwerk** — Zielkurven, Abstimmpraktiken, ein Schritt-für-Schritt-Prozess
+- 🎧 **Test-Tracks** — worauf zu achten ist und auf welchem Track (Beschreibungen, kein Audio)
+- 🚗 **Lernt dein Setup** — sammelt Wissen über Auto & Geräte, nur mit deiner Zustimmung
 
-Ein **Skill** für [Claude](https://claude.com/claude-code) zum Abstimmen eines Car-Audio-DSP mit [REW](https://www.roomeqwizard.com/) — von einem brandneuen Projekt (Equipment- + Ziel-Interview, Wahl der Zielkurve, Installationsprüfung) über Weichen, Laufzeitkorrektur, Phase, kanalweises und summiertes EQ, Imaging/Bühne, bis zum Voicing nach Kundengeschmack. Er kodiert eine messbasierte **Methode** (Generator ↔ Kritiker ↔ Schiedsrichter Review-Schleife) plus eine wachsende Bibliothek hart erarbeiteter Diagnosetechniken.
+Er deckt eine komplette Abstimmung ab — von einem neuen Projekt (Interview zu Geräten + Zielen, Wahl der Zielkurve, Einbau-Checks) über Frequenzweichen, Laufzeitkorrektur, Phase, kanalweisen und summierten EQ und die Bühnenabbildung, bis zum Geschmacks-Voicing — gesteuert von einer Generator-↔-Kritiker-↔-Schiedsrichter-Review-Schleife. Es ist **Methode, keine Maschine**: keine Messungen eines Autos oder DSP-Zustände liegen hier (die bleiben in deinem Projekt), also funktioniert es mit **jedem Auto / jedem DSP**.
 
-Der Skill ist **Methode, nicht Maschine.** Keine Messungen oder DSP-Zustände eines konkreten Autos liegen hier — die bleiben im eigenen Projekt des Tuners. Dieses Repo liefert den wiederverwendbaren Prozess, der mit **jedem Auto / jedem DSP** funktioniert.
+> Gebaut und praxiserprobt an einem VW Passat B8 / Helix DSP Ultra S (ein AYA-Wettbewerbssieg); die Auto-/DSP-Spezifika sind in ein Profil + eine `knowledge/`-Bibliothek ausgelagert, sodass ein neues Projekt nur „die Eingaben wählen" heißt.
 
-> Entwickelt und im Wettbewerb bewährt an einem VW Passat B8 / Helix DSP Ultra S (ein AYA-Wettbewerbssieg), aber die Auto-/DSP-Spezifika sind in ein Profil + eine `knowledge/`-Bibliothek ausgelagert, sodass ein neues Projekt nur „die Eingaben wählen“ bedeutet.
-
-## Was ist hier drin
+## Was hier drin ist
 
 ```
 skills/
-├── autosound-tuning/      der Haupt-Skill
-│   ├── SKILL.md           Einstiegspunkt (Prozesskarte, Sitzungs-Lebenszyklus, Rollen)
-│   ├── references/        Docs bei Bedarf: Phasen, Diagnostik, EQ-Muster, Filtertypen,
-│   │                      Bühne/Tiefe, Wettbewerb, Test-Tracks, Voicing-nach-Gehör,
-│   │                      REW-API, Helix-Spezifika, Intake, Feedback
-│   ├── knowledge/         gesammelte Auto- & DSP-Profile (cars/, dsp/)
-│   └── scripts/           Beispiel-Kritiker-Kanal (optionales Rig-Tooling)
-└── review-loop/           Partner-Skill: unabhängige Review-Orchestrierung (anbieterneutral)
+├── autosound-tuning/   der Haupt-Skill
+│   ├── SKILL.md        Einstiegspunkt — Prozessübersicht, Sitzungs-Lebenszyklus, Rollen
+│   ├── references/     Docs bei Bedarf (Phasen, Diagnostik, EQ, Filter, Bühne,
+│   │                   Test-Tracks, REW API, Helix, Intake, Feedback …)
+│   ├── knowledge/      gesammelte Auto- & DSP-Profile (cars/, dsp/)
+│   └── scripts/        Beispiel-Tooling für den Kritiker-Kanal (optional)
+└── review-loop/        Schwester-Skill: Orchestrierung unabhängiger Reviews
 ```
 
-Die zwei Skills sind ein **Paar** — `autosound-tuning` referenziert `review-loop` für das Review-Protokoll. Installiere beide.
+Die beiden sind ein **Paar** — `autosound-tuning` nutzt `review-loop` für das Review-Protokoll. Installiere beide.
 
-## Erste Schritte — neu bei Claude Code / im Terminal?
+## Erste Schritte — neu bei Claude Code?
 
-Dieser Skill läuft in **Claude Code**, einem Terminal-Werkzeug. Wenn du bisher nur Desktop-/Web-Chat genutzt hast, hier die einmalige Einrichtung.
+Dieser Skill läuft in **Claude Code**, einem Terminal-Tool. Abstimmen ist iterativ (messen → analysieren → ändern → neu messen) über Text-/Zahlendaten, daher passen ein Terminal + git — Parsing, Skripting, vollständige Änderungshistorie — weit besser als die Web-App.
 
-**Warum Claude Code (nicht die Web-App / Cowork):** Abstimmen ist iterativ — messen → analysieren → ändern → erneut messen — über Text-/Zahlendaten (REW-CSV/Text-Exporte, DSP-Konfigs, Iterations-Logs). Ein Terminal + git geben dir Parsing, Skripting und eine vollständige Änderungshistorie. Cowork ist auf Dateioperationen in anderen Apps ausgerichtet — hier überflüssig.
-
-**1. Claude Code installieren** (macOS / zsh; benötigt Node.js 18+ und einen kostenpflichtigen Claude-Plan — Pro / Max / Team / Enterprise; der kostenlose Plan reicht nicht):
+**1. Claude Code installieren** (macOS / zsh; benötigt Node.js 18+ und einen kostenpflichtigen Claude-Plan — Pro / Max / Team / Enterprise):
 ```bash
 node --version                                   # Node.js 18 oder neuer
 mkdir -p ~/.npm-global && npm config set prefix '~/.npm-global'
@@ -46,81 +41,59 @@ npm install -g @anthropic-ai/claude-code
 claude --version                                 # prüfen
 ```
 
-**2. Projektordner erstellen und starten:**
+**2. Projektordner anlegen und starten:**
 ```bash
 mkdir ~/car-audio-setup && cd ~/car-audio-setup
-claude                                            # erster Start öffnet den Browser zum Login
+claude                                            # der erste Start öffnet den Browser zum Anmelden
 ```
 
-**3. Nicht überstrukturieren — halte die Struktur schlank.** Beginne mit einem leeren Ordner. Lege deinen ersten REW-Export (`.txt`/`.csv`) so ab, wie er ist, führe ein einziges Markdown-Notizlog (nur anhängen), und lass Ordner (`measurements/`, `configs/`, `eq-log/`) entstehen, wenn du sie wirklich brauchst.
+**3. Halte es einfach.** Ein leerer Ordner, dein erster REW-Export unverändert hineingelegt, ein anhängender Notiz-Log — lass Unterordner entstehen, wenn du sie wirklich brauchst.
 
-**4. Deine erste Nachricht = „Schritt 0“: Die Initialisierung.** Beschreibe dein System in einer Nachricht: Auto + Lautsprecher-Layout (wie viele Wege, Sub?), DSP-Modell (Helix / Audison / anderes), Mess-Equipment (Mikrofon, Interface), und ob du schon Messungen hast oder von der Hardware startest. Der Skill macht weiter — und **fragt zuerst deine bevorzugte Arbeitssprache** (Englisch / deine Muttersprache, falls unterstützt: EN · UK · DE · PL), damit Gespräch und Projektdateien in ihr entstehen. Dann: Intake → Signalketten-Check → Mikrofon-Kalibrierung → erster Sweep → …
-
-(Danach den Skill selbst installieren — nächster Abschnitt.)
+**4. Deine erste Nachricht = „Schritt 0".** Beschreibe dein System: Auto + Lautsprecher-Layout (Wege, Sub?), DSP-Modell, Messtechnik, und ob du schon Messungen hast. Den Rest übernimmt der Skill — und **fragt zuerst nach deiner bevorzugten Arbeitssprache** (EN · UK · DE · PL), damit Gespräch und Projektdateien in ihr entstehen.
 
 ## Voraussetzungen
 
 - **Claude Code** (oder claude.ai mit Skills).
-- **REW** mit aktiviertem API-Server (`localhost:4735`), ein kalibriertes Messmikrofon.
-- Die **Software deines DSP** und ein Weg, EQ hineinzuladen (Datei-Import ideal; für 30+ DSPs ohne Import siehe [REW-EQ-CopyPaste-Assistant](https://github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant)).
-- **Optional:** ein zweites KI-Modell als „Kritiker“ (beliebiger Anbieter — die Rollen sind anbieterneutral). Ohne ihn übernimmt ein Mensch die Review-Rolle; der Prozess bleibt gültig.
+- **REW** mit aktiviertem API-Server (`localhost:4735`) und ein kalibriertes Mikrofon.
+- Die **Software deines DSP** + eine Möglichkeit, EQ zu laden (Datei-Import ideal; für 30+ DSPs ohne Import siehe [REW-EQ-CopyPaste-Assistant](https://github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant)).
+- **Optional:** ein zweites KI-Modell als „Kritiker" (beliebiger Anbieter). Ohne es übernimmt ein Mensch das Review; der Prozess hält trotzdem.
 
 ## Installation
 
-**Am einfachsten — lass Claude es installieren.** Öffne Claude Code und bitte einfach, z. B.:
+**Am einfachsten — lass Claude es erledigen.** Öffne Claude Code und sag:
 
-> *„Klone https://github.com/ayukhno/autosound-tuning-skill in einen temporären Ordner, dann kopiere die zwei **inneren** Skill-Ordner — `skills/autosound-tuning` und `skills/review-loop` — in meinen benutzerweiten `~/.claude/skills/`, sodass die `SKILL.md` jedes Skills direkt unter `~/.claude/skills/<name>/SKILL.md` liegt. Klone nicht das ganze Repo in den Skills-Ordner.“*
+> *„Klone https://github.com/ayukhno/autosound-tuning-skill in einen temporären Ordner, kopiere dann die zwei **inneren** Ordner `skills/autosound-tuning` und `skills/review-loop` nach `~/.claude/skills/`, sodass jede `SKILL.md` direkt unter `~/.claude/skills/<name>/SKILL.md` landet. Klone nicht das ganze Repo in den Skills-Ordner."*
 
-Claude legt **beide** Skills (sie sind ein Paar) dorthin, wo du wählst:
+Installiere **beide** (sie sind ein Paar) auf **Benutzerebene — `~/.claude/skills/`** (überall verfügbar, empfohlen) oder **Projektebene — `<projekt>/.claude/skills/`** (hält das Repo eines Autos eigenständig).
 
-- **Benutzerweit — `~/.claude/skills/`** *(empfohlen)*: in **jedem** Ordner verfügbar, in dem du Claude Code öffnest. Wähle das, wenn du mehr als ein Auto abstimmst oder es immer griffbereit haben willst.
-- **Projektweit — `<dein-projekt>/.claude/skills/`**: nur in diesem einen Projekt. Wähle das, um das Repo eines einzelnen Autos eigenständig zu halten.
+> ⚠️ **Der eine zu vermeidende Fehler:** klone das Repo nicht *in* `~/.claude/skills/autosound-tuning/`. Das verschachtelt `SKILL.md` eine Ebene zu tief, und Claude meldet **`Unknown skill`**. Kopiere immer die **inneren** `skills/*`-Ordner, sodass `SKILL.md` *direkt* unter dem Skill-Ordner liegt.
 
-> ⚠️ **Häufiger Installationsfehler:** Klone das Repo nicht *in* `~/.claude/skills/autosound-tuning/`. Das verschachtelt die `SKILL.md` eine Ebene zu tief (`…/autosound-tuning/skills/autosound-tuning/SKILL.md`), und Claude Code meldet **`Unknown skill: autosound-tuning`** (oder bietet den Skill gar nicht an). Kopiere immer die **inneren** `skills/*`-Ordner, sodass die `SKILL.md` *direkt* unter dem Skill-Ordner liegt.
-
-**Oder manuell:**
+**Manuell:**
 ```bash
 git clone https://github.com/ayukhno/autosound-tuning-skill.git
-# benutzerweit (überall verfügbar) — die INNEREN Skill-Ordner kopieren:
 cp -R autosound-tuning-skill/skills/autosound-tuning ~/.claude/skills/
 cp -R autosound-tuning-skill/skills/review-loop      ~/.claude/skills/
-# …oder projektweit: dieselben zwei Ordner nach  dein-projekt/.claude/skills/
-
-# prüfen — jede Zeile muss den Pfad ausgeben (SKILL.md liegt DIREKT unter dem Skill-Ordner):
+# prüfen — jede Zeile muss den Pfad ausgeben (SKILL.md direkt unter dem Skill-Ordner):
 ls ~/.claude/skills/autosound-tuning/SKILL.md
 ls ~/.claude/skills/review-loop/SKILL.md
 ```
 
-**Nach der Installation eine neue Claude-Code-Sitzung starten** — Skills werden beim Start geladen.
-
-**Fehlerbehebung — `Unknown skill` / der Skill löst nie aus:** fast immer die obige Verschachtelung. Wenn `ls ~/.claude/skills/autosound-tuning/SKILL.md` fehlschlägt, aber `…/autosound-tuning/skills/autosound-tuning/SKILL.md` existiert, hast du das ganze Repo in den Skill-Ordner geklont. Behebe es, dann Claude Code neu starten:
-```bash
-mv ~/.claude/skills/autosound-tuning ~/.claude/skills/autosound-tuning-repo
-cp -R ~/.claude/skills/autosound-tuning-repo/skills/autosound-tuning ~/.claude/skills/
-cp -R ~/.claude/skills/autosound-tuning-repo/skills/review-loop      ~/.claude/skills/
-rm -rf ~/.claude/skills/autosound-tuning-repo
-```
-
-Dann Claude Code in deinem Projekt öffnen und z. B. sagen: *„stimme ein neues Auto von Grund auf ab“* / *"tune a new car from scratch"* — der Skill startet mit **Intake** (`references/project-intake.md`): Quickstart, Equipment- + Ziel-Interview, Wahl der Zielkurve (kein Default — mit dir gewählt), Installationsprüfung und Erzeugung der Projektdateien.
+**Dann starte eine frische Claude-Code-Sitzung** (Skills laden beim Start) und sag z. B. *„stimme ein neues Auto von Grund auf ab"* — der Skill beginnt mit dem **Intake**: Schnellstart, Interview zu Geräten + Zielen, Wahl der Zielkurve (mit dir gewählt), Einbau-Checks, Erzeugung der Projektdateien. *(Bei `Unknown skill` oder wenn er nie auslöst — fast immer die obige Verschachtelung; kopiere die inneren `skills/*`-Ordner neu und starte neu.)*
 
 ## Deine Erfahrung beitragen
 
-Der Skill **lernt aus jeder Abstimmung — und sammelt dieses Feedback direkt im Terminal, während du arbeitest, nicht über ein auszufüllendes Formular.** Zum Abschluss (Phase 7) führt er ein kurzes Abschlussritual durch: fragt, was wirklich geholfen hat, was danebenlag, und welche DSP-/Auto-Eigenheit dir begegnet ist — und bietet dann, **mit deiner ausdrücklichen Zustimmung**, an, die *verallgemeinerbaren* Erkenntnisse zu teilen.
+Der Skill **lernt aus jeder Abstimmung — und sammelt dieses Feedback direkt im Terminal, während du arbeitest, nicht über ein Formular.** Zum Abschluss (Phase 7) fragt er, was geholfen hat, was nicht passte und welche DSP-/Auto-Eigenheit dir begegnet ist — dann bietet er, **mit deiner ausdrücklichen Zustimmung**, an, die *verallgemeinerbaren* Erkenntnisse zu teilen (um die gemeinsame Methode + die `knowledge/`-Bibliothek wachsen zu lassen).
 
-**Wozu die Abschlussumfrage dient und was sie erfasst:** um die gemeinsame Methode + die `knowledge/`-Bibliothek wachsen zu lassen. Erfasst werden **nur Methode + Geräteklassen** — das Verhalten von Karosserie/Innenraum, das DSP/der Prozessor und die Geräteklasse, und welche Techniken funktioniert haben. **Niemals persönliche Daten, niemals vollständige Messungen.** Du siehst genau, was geteilt würde, und stimmst pro Punkt zu (oder nicht).
-
-Bestätigte Erkenntnisse werden in den Skill und die `knowledge/`-Auto-/DSP-Profile eingearbeitet (mit Namensnennung). Tipps, die bestehenden Erkenntnissen widersprechen, werden als *Varianten* behalten, nicht gelöscht — ein anderer Innenraum kann sie richtig machen.
-
-*(Lieber GitHub? Du kannst weiterhin ein [Field-Feedback-Issue](../../issues/new?template=field-feedback.md) öffnen — gleiche Regel: nur Methode/Geräteklassen.)*
+Er erfasst **nur Methode + Geräteklassen** — Innenraumverhalten, DSP-/Geräteklasse, welche Techniken funktioniert haben. **Niemals persönliche Daten, niemals vollständige Messungen;** du siehst genau, was geteilt wird, und stimmst pro Punkt zu. Bestätigte Erkenntnisse werden mit Namensnennung eingearbeitet; widersprechende Tipps werden als *Varianten* behalten, nicht gelöscht. *(Lieber GitHub? Öffne ein [Field-Feedback-Issue](../../issues/new?template=field-feedback.md) — gleiche Regel.)*
 
 ## Unterstützung
 
-Der Skill ist **kostenlos und offen** (CC BY-SA) und bleibt es — nichts ist hinter einer Zahlung verschlossen. Wenn er dir geholfen hat, dein System einzustellen, und du Danke sagen möchtest, gibt es eine **freiwillige Spendenkasse**, ganz ohne Druck:
+Der Skill ist **kostenlos und offen** (CC BY-SA) und bleibt es — nichts ist hinter einer Zahlung verschlossen. Wenn er geholfen hat und du Danke sagen möchtest, gibt es eine **freiwillige Spendenkasse**, ganz ohne Druck:
 
 ☕ **[Diesen Skill unterstützen — Monobank-Kasse](https://send.monobank.ua/jar/8wThVcodjm)** 🤝
 
-Ein Tippen, kein Konto nötig; die Seite akzeptiert auch ausländische Karten (Apple/Google Pay, Visa/Mastercard).
+Ein Tippen, kein Konto; die Seite akzeptiert auch ausländische Karten (Apple/Google Pay, Visa/Mastercard).
 
 ## Lizenz
 
-[CC BY-SA 4.0](LICENSE) — nutze, passe an, teile; halte Ableitungen offen und nenne die Quelle. Es ist ein Methoden-/Wissenswerk, daher hält Share-Alike die gesammelte Erfahrung der Community offen. Die Lizenzbedingungen garantieren, dass methodisches Wissen der Community zugänglich bleibt.
+[CC BY-SA 4.0](LICENSE) — nutze, passe an, teile; halte Ableitungen offen und nenne die Quelle. Es ist ein Methoden-/Wissenswerk, daher hält Share-Alike die gesammelte Erfahrung der Community offen.
