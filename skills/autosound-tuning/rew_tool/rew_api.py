@@ -69,6 +69,41 @@ def get_measurement(mid):
     return _get(f"/measurements/{mid}")
 
 
+def find_measurement_id(name, measurements=None, exact=True):
+    """Resolve a measurement's CURRENT ordinal id by its title (name).
+
+    REW keys get_measurements() by an ordinal ("1","15",...) that is NOT stable
+    across calls — a reorder / sort / delete / new sweep reshuffles it. So never
+    cache an index; resolve the title→id immediately before each pull. Raises on
+    an AMBIGUOUS (>1) or MISSING (0) match, so a wrong-channel pull can't pass
+    silently (the real m-L/m-R swap bug). See rew-api-quirks.md.
+    """
+    ms = measurements if measurements is not None else get_measurements()
+    matches = []
+    for mid, m in ms.items():
+        title = (m or {}).get("title", "")
+        if (title == name) if exact else (name.lower() in title.lower()):
+            matches.append(mid)
+    if not matches:
+        titles = [(m or {}).get("title", "") for m in ms.values()]
+        raise KeyError(f"No measurement titled {name!r} (have: {titles})")
+    if len(matches) > 1:
+        raise KeyError(f"Ambiguous: {len(matches)} measurements titled {name!r} "
+                       f"→ {matches}; rename so titles are unique")
+    return matches[0]
+
+
+def get_measurement_by_name(name, exact=True):
+    """(id, measurement_dict) resolved by title NOW — never via a cached index.
+
+    Use this (or find_measurement_id) right before pulling FR/IR/etc., e.g.:
+        mid, _ = get_measurement_by_name("m-L_07 (sw)"); freqs, mag, ph = get_fr(mid)
+    """
+    ms = get_measurements()
+    mid = find_measurement_id(name, ms, exact=exact)
+    return mid, ms[mid]
+
+
 def get_fr(mid):
     data = _get(f"/measurements/{mid}/frequency-response")
     mag = decode_floats(data["magnitude"])

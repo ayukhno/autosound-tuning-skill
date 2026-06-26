@@ -87,3 +87,114 @@ def compute_deviation(meas_freqs, meas_mag, target_freqs, target_mag):
     target_at_meas = interpolate_target(target_freqs, target_mag, meas_freqs)
     deviation = [m - t for m, t in zip(meas_mag, target_at_meas)]
     return meas_freqs, deviation
+
+
+# ── IR timing (see rew-api-quirks.md "Timing", diagnostic §10) ──────────────
+
+def _leading_edge_index(ir, rel_threshold_db=-20.0):
+    """Index of the DIRECT sound's leading edge — the FIRST sample crossing a
+    fraction of the GLOBAL peak (default −20 dB). NOT the global max, which can
+    sit on a late reflection (a fixed buffer index a few ms after onset)."""
+    if not ir:
+        return None
+    peak = max(abs(v) for v in ir)
+    if peak <= 0:
+        return None
+    thresh = peak * (10 ** (rel_threshold_db / 20.0))
+    for i, v in enumerate(ir):
+        if abs(v) >= thresh:
+            return i
+    return None
+
+
+def first_arrival(times, ir, rel_threshold_db=-20.0):
+    """Leading-edge first-arrival time of the direct sound (NOT the global peak).
+
+    The global max-abs can land on a late REFLECTION → timing off it is wrong.
+    This walks forward to the first sample within `rel_threshold_db` of the peak
+    = the direct onset. Use it for absolute per-channel arrival WITH a shared
+    loopback Time Offset, then sanity-check (cm-scale, stable on a repeat). The
+    SUB/LF onset is the weak spot — read those from summation instead."""
+    i = _leading_edge_index(ir, rel_threshold_db)
+    if i is None:
+        return None
+    return {"arrival_time_ms": round(times[i] * 1000, 4), "index": i,
+            "threshold_dB": rel_threshold_db}
+
+
+def relative_delay_xcorr(ir_a, ir_b, sample_rate, max_lag_ms=5.0, window_ms=10.0):
+    """Relative delay between two IRs (e.g. w-L vs w-R) by CROSS-CORRELATION.
+
+    Robust to impulse SHAPE — unlike an onset/threshold pick, which is fragile on
+    a dirty/ragged impulse (a door midbass) and can be off by multiples (real
+    bug: 3.5 ms vs ~0.9 ms on the GUI cursor). Returns the lag that best aligns
+    B onto A: **positive = B arrives LATER than A**. Both IRs are cropped to a
+    SHARED window around the earlier leading edge (one time base → the relative
+    delay is preserved) to bound the cost. Always cross-check vs the REW GUI
+    cursor before stating the number."""
+    n = min(len(ir_a), len(ir_b))
+    if n == 0:
+        return None
+    a = list(ir_a[:n]); b = list(ir_b[:n])
+    if window_ms:
+        ia = _leading_edge_index(a) or 0
+        ib = _leading_edge_index(b) or 0
+        guard = int(0.001 * sample_rate)
+        start = max(0, min(ia, ib) - guard)
+        end = min(n, start + int(window_ms * 1e-3 * sample_rate))
+        a = a[start:end]; b = b[start:end]
+    m = min(len(a), len(b))
+    a = a[:m]; b = b[:m]
+    max_lag = max(1, min(int(round(max_lag_ms * 1e-3 * sample_rate)), m - 1))
+    best_lag, best_corr = 0, None
+    for lag in range(-max_lag, max_lag + 1):
+        if lag >= 0:
+            s = sum(a[i] * b[i + lag] for i in range(0, m - lag))
+        else:
+            s = sum(a[i] * b[i + lag] for i in range(-lag, m))
+        if best_corr is None or s > best_corr:
+            best_corr, best_lag = s, lag
+    return {"delay_ms": round(best_lag / sample_rate * 1000.0, 4),
+            "lag_samples": best_lag, "max_lag_ms": max_lag_ms}
+
+
+def _selftest():
+    fs = 48000
+    dt = 1.0 / fs
+    n = 1024
+    # An IR with a DIRECT arrival at 5.0 ms (0.6) and a LARGER reflection at
+    # 8.0 ms (1.0). The global peak is the reflection — first_arrival must NOT
+    # be fooled by it; analyze_impulse (global peak) reports the reflection.
+    d_idx, r_idx = int(0.005 * fs), int(0.008 * fs)
+    ir = [0.0] * n
+    ir[d_idx] = 0.6
+    ir[r_idx] = 1.0
+    times = [i * dt for i in range(n)]
+    fa = first_arrival(times, ir)
+    assert fa["index"] == d_idx, f"first_arrival caught {fa['index']}, not direct {d_idx}"
+    assert abs(fa["arrival_time_ms"] - 5.0) < 0.05, fa
+    pk = analyze_impulse(times, ir)
+    assert abs(pk["peak_time_ms"] - 8.0) < 0.05, f"global peak should be the reflection: {pk}"
+
+    # Cross-correlation: b = a delayed by +12 samples → recover +12 / −12.
+    base, shift = int(0.005 * fs), 12
+    a = [0.0] * n
+    for k, amp in [(0, 1.0), (1, 0.7), (2, 0.4), (3, -0.3), (4, 0.2)]:
+        a[base + k] = amp
+    b = [a[i - shift] if 0 <= i - shift < n else 0.0 for i in range(n)]
+    res = relative_delay_xcorr(a, b, fs)
+    assert res["lag_samples"] == shift, f"xcorr lag {res['lag_samples']} != {shift}"
+    assert abs(res["delay_ms"] - shift / fs * 1000) < 1e-6, res
+    res2 = relative_delay_xcorr(b, a, fs)
+    assert res2["lag_samples"] == -shift, f"reverse xcorr {res2['lag_samples']} != {-shift}"
+    print(f"selftest OK — first_arrival {fa['arrival_time_ms']} ms avoids the reflection "
+          f"(global peak {pk['peak_time_ms']} ms); xcorr {res['delay_ms']} ms (+) / "
+          f"{res2['delay_ms']} ms (−)")
+
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "--selftest":
+        _selftest()
+    else:
+        print("usage: python analysis.py --selftest")

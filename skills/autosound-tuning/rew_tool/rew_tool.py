@@ -248,9 +248,16 @@ def main():
             break
         try:
             mid = int(choice)
-            run(mid, args.curves_dir)
         except ValueError:
-            print("  Невірний ввід.")
+            # A name instead of a number → resolve title→id FRESH (substring ok),
+            # never a cached index (rew-api-quirks.md).
+            try:
+                mid = api.find_measurement_id(choice, exact=False)
+            except KeyError as e:
+                print(f"  {e}")
+                continue
+        try:
+            run(mid, args.curves_dir)
         except Exception as e:
             print(f"  Помилка: {e}")
 

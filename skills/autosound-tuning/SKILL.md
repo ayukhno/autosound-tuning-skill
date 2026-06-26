@@ -199,15 +199,19 @@ REW runs **natively on macOS**, so its API at `localhost:4735` is reachable **di
 ```
 rew_tool/rew_api.py    — get_measurements, get_fr, get_group_delay, get_impulse_response,
                          get_distortion, get_filters/set_filters, get_equaliser/set_equaliser,
-                         get_crossover_types, get_slopes, get_target_settings/response
-rew_tool/analysis.py   — FR/phase/IR/GD analysis + PEQ suggestions
+                         get_crossover_types, get_slopes, get_target_settings/response;
+                         find_measurement_id(name) / get_measurement_by_name(name)
+                         — resolve title→id FRESH before a pull (never a cached index)
+rew_tool/analysis.py   — FR/phase/IR/GD analysis + PEQ suggestions; first_arrival (leading-edge,
+                         not the global peak) + relative_delay_xcorr (L↔R delay, shape-robust);
+                         `python3 analysis.py --selftest`
 rew_tool/target_curves.py
 rew_tool/nono_curves.py — parse Nono Tuning Tool curve exports (full = freq·mag; per-band = freq·mag·phase)
 rew_tool/atf_eq.py     — parse/generate the Audiotec-Fischer (Helix) 30-band EQ bank (validated on a real export; parse = read an existing bank, format = emit only the bands you decided)
 rew_tool/rew_tool.py    — entry point
 ```
 
-Prefer pulling data numerically over reading screenshots. **What to pull for which decision** → `references/analysis-playbook.md`. **How to read/decide** (anchor-to-mids not absolute · peak-vs-null · power-sum summation · joint-phase before crossover moves · centering=time vs frequency-wander · output-vs-virtual · verify the mic/reference) → `references/diagnostic-techniques.md`. **API gotchas** (big-endian float32, `set_filters` one-by-one with `gaindB`, IR timing is junk, out-of-band target garbage) → `references/rew-api-quirks.md` — `rew_tool/` already encodes these, so check it before hand-rolling a call.
+Prefer pulling data numerically over reading screenshots. **What to pull for which decision** → `references/analysis-playbook.md`. **How to read/decide** (anchor-to-mids not absolute · peak-vs-null · power-sum summation · joint-phase before crossover moves · centering=time vs frequency-wander · output-vs-virtual · verify the mic/reference) → `references/diagnostic-techniques.md`. **API gotchas** (big-endian float32, `set_filters` one-by-one with `gaindB`, address measurements by NAME not index, IR timing usable with the right method — leading-edge/cross-correlate, out-of-band target garbage) → `references/rew-api-quirks.md` — `rew_tool/` already encodes these, so check it before hand-rolling a call.
 
 If the API can't be reached from the host, fall back to the user's exported `.mdat`/CSV (e.g. `rew_analitic/measurements-*.mdat`) or screenshots.
 
