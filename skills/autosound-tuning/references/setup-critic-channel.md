@@ -22,12 +22,13 @@ brew install --cask antigravity-cli      # the REAL agy — NOT a symlink to gem
   ```
   The token persists; the wrappers' `-p` mode then works. (Don't smoke-test with `agy --version`/`-p` *before* this login — they hang / re-trigger OAuth.)
 - **Quota:** Antigravity's free *Starter* tier is a **WEEKLY** Flash+Pro group limit. At 0% the channel returns empty for ~a week (`agy` shows the countdown) — fall back to §2 when it's dry.
+- ⚠️ **Agentic — slow / hangs on BIG inputs.** `agy` is an *agentic* CLI; on a large `-p` package (tens of KB — e.g. several long docs at once) it can think for minutes or hang outright (seen: a 34 KB review timed out at 5 min, no output). Keep packages **lean** (decimated numbers, one focus — `analysis-playbook.md`). For a genuine bulk one-off review, skip the CLI and use the **copy-paste desktop channel (§7)** — faster and more reliable.
 
 ⚠️ **A FAKE `agy`** = a leftover symlink `agy → gemini`. The wrapper now **detects it**, warns, and runs the gemini flavor automatically (right model ids + `--skip-trust`) — but it isn't real Antigravity. Install the real one (above) or just use §2. `--doctor` flags this.
 
 ## 2. Fallback CLI — `@google/gemini-cli` via a FREE API key (cross-platform)
 
-Use this when `agy` isn't available (Linux/Windows) or its weekly quota is dry. The **free OAuth tier is gone**, so authenticate with a **free API key** (no card):
+Use this when `agy` isn't available (Linux/Windows) or its weekly quota is dry. The **free OAuth tier is fully retired** — bare `gemini -p` (no key) now **hard-fails** with `IneligibleTierError: no longer supported … migrate to Antigravity` (confirmed 2026-06). So the **free API key is now mandatory** for the gemini flavor — authenticate with one (no card):
 ```bash
 npm i -g @google/gemini-cli
 # get a free key at https://aistudio.google.com/apikey , then in .critic-env (§4):
@@ -85,11 +86,12 @@ scripts/gemini_critic.sh /tmp/smoke.md
 ```
 Expect a one-line reply + a `— [critic: <model>]` tag (or `[advisor: …]`). An **empty reply** (just the tag) ≠ a crash — it's almost always **quota exhausted** (agy's weekly tier) or lost auth; the wrapper prints a loud WARNING. Recover by switching the model group, re-logging-in `agy`, or pinning the gemini API-key path (§2).
 
-## 7. No CLI at all? Use the fallback ladder (the ROLE still happens)
+## 7. No CLI — or the CLI is slow/dry? Use a manual channel (the ROLE still happens)
 
-The reviewer role is vendor-agnostic (`../review-loop/SKILL.md`). With no CLI:
-1. **Any other AI** in a second window — paste the package, ask it to play Critic.
-2. **Claude in a SEPARATE session** (cross-session self-review; TWO-PASS anti-anchoring — see `review-loop`).
-3. **The human** as reviewer.
+The reviewer role is vendor-agnostic (`../review-loop/SKILL.md`). When there's no CLI — **or `agy` is quota-dry / hanging on a big package** — go manual:
+1. **Copy-paste into a desktop chat** *(field-proven; the go-to when the CLI chokes)* — `cat package.md | pbcopy`, paste into a **Gemini / Claude / ChatGPT desktop chat** where you have a subscription / tokens, then paste the reply back. No CLI, no quota juggling, no agentic stalls — ideal for a **bulk one-off** review (e.g. several long docs at once). Real use: a 4-language README review the agentic CLI couldn't finish.
+2. **Any other AI** in a second window — same idea, ask it to play the Critic.
+3. **Claude in a SEPARATE session** (cross-session self-review; TWO-PASS anti-anchoring — see `review-loop`).
+4. **The human** as reviewer.
 
-Never skip the second perspective just because the `agy`/`gemini` channel isn't set up — use a fallback instead.
+Never skip the second perspective just because the `agy`/`gemini` channel isn't set up or is slow — use a manual channel instead.
