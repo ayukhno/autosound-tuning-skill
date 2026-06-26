@@ -41,7 +41,7 @@ Each line: *what the author's build showed* → **how to check it on yours.** Do
 
 **The crossovers that won in the author's build — DATA, not your starting table:**
 > ⚠️ These are *one build's measurement results*, not recommendations. Derive a specific car's crossovers from baseline + summation (`process-phases` Phase 1). Do **NOT** present these as candidates before measuring.
-- mid↔tweeter **BE4** (close together, ~coplanar on the pillar in that build): mid LPF 3k2 BE4 + tweeter HPF 5k0 BE4 (~4k acoustically, through the Bessel overlap) — the key to the AYA win (junior group).
+- mid↔tweeter **BE4** (close together, ~coplanar on the pillar in that build): mid LPF 3k2 BE4 + tweeter HPF 5k0 BE4 (~4k acoustically, through the Bessel overlap) — part of the **LR4+BE4 hybrid that won AYA (junior group)**. ⚠️ That win is **this car+install+gear-specific, NOT "the AYA recipe"** (the scheme + its confidence → `knowledge/approaches.md`).
 - midbass↔mid **LR4** ~300 Hz electrical (≈250 acoustic through the B8 midbass roll-off) — spaced-apart drivers.
 - sub: LP ~60–63 LR4; subsonic 20 BE1/BW2 (that build was sealed); judge the SW+Ws joint by summation.
 

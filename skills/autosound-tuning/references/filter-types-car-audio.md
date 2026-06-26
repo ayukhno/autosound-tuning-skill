@@ -10,11 +10,11 @@
 
 ---
 
-> **Slope choice also maps to the whole-system GOAL** (a by-ear variant, field-confirmed): **LR4 on EVERY joint + time-align by IR first-arrival = a precise STAGE** — the pick for strict imaging rulesets (EMMA-type, where the image/centre must lock). **Gentle / Bessel with wider overlaps = a natural, coherent blend = "beautiful"** — the pick where the stage is less demanding (AYA-type). The per-joint tradeoffs below refine this. The impedance angle (each HP above the driver's installed Fs — the margin scales with the slope; never cross on coincident neighbour resonances) → `impedance-ts.md`.
+> **Slope serves the whole-system GOAL — but the GOAL, not the competition format, is the thing; the slopes are SETUP-driven.** Name the goal first: a **locked, precise stage** (strict imaging — "EMMA-type") vs a **natural, coherent blend** ("AYA-type"). Then the slopes that reach it depend, in **decreasing priority, on the SETUP — body shape → install (driver placement) → number of ways → equipment** — **not** on the format. ⚠️ **The format↔slope pairs are success STORIES, not laws** (the catalog → `knowledge/approaches.md`): e.g. one builder's **AYA win was LR4 (midbass↔mid) + BE4 (mid↔tw)** — a *hybrid*, not "gentle everywhere"; "EMMA = LR4 on every joint" was that builder's shorthand, **unconfirmed** as a format rule; a newer AYA attempt (BW2+BE2) is **not yet validated** by results. So: find what the SETUP needs, choose the slope for THAT, log the outcome — don't apply a format→slope recipe. The per-joint tradeoffs below + the impedance angle (each HP above the driver's installed Fs — the margin scales with the slope; never cross on coincident neighbour resonances → `impedance-ts.md`) inform the pick.
 
 > **Three layers of a crossover number — keep the PROVENANCE straight (a unifying frame).** A crossover value comes from THREE different sources; conflating them is how anchoring sneaks in:
 > 1. **START frequency ← the DRIVER's physics** — impedance / installed Fs: where it naturally rolls off, a safe HP above Fs. An anechoic / NTT starting guess (`impedance-ts.md`).
-> 2. **TYPE & slope ← the GOAL** — EMMA → LR4 every joint; AYA → gentle/Bessel (the slope↔goal note above; `method-hashimoto.md`).
+> 2. **TYPE & slope ← the GOAL realised through the SETUP** — name the goal (locked stage vs natural blend), then the SETUP (body → install → ways → gear) picks the slopes that reach it; the format↔slope pairs are success stories, **not** laws (`knowledge/approaches.md`, the slope↔goal note above, `method-hashimoto.md`).
 > 3. **FINAL frequency ← the CABIN's physics** — the in-car phase-summation: where the SUM is flat on **both** sides (minimax, §L/R symmetry). NOT the start number, NOT a table.
 > **Provenance discipline:** always be clear WHERE a number came from — an arbiter/brief decision (START) vs derived-from-measurement vs final-verified-by-summation. **Never present a start/arbiter number as if it were "found from analysing the curves."** **Pre-flight sanity (Phase 0→1):** before entering the start crossovers, glance the raw per-channel roll-offs (is a crossover landing in a neighbour's roll-off? does the driver reach with margin? which side is the minimax constraint?) — not to finalise (summation finalises, after applying), but to catch an obvious problem early.
 
@@ -82,7 +82,7 @@ Mid (LP) ←──── BE4 ────→ Tweeter (HP)  [Bessel: if close; LR
 
 ## Starting crossover sets (variants — there can be several)
 
-These are **starting points**, not law: the sets grow over time and get refined by measurement (RTA magnitude + slopes → frequency; joint summation → phase/polarity) and by ear (slope → `method-hashimoto.md`). **A specific project's current choice lives in `dsp-state-current` + profile §4**, not here.
+These are **starting points**, not law: the sets grow over time and get refined by measurement (RTA magnitude + slopes → frequency; joint summation → phase/polarity) and by ear (slope → `method-hashimoto.md`). **A specific project's current choice lives in `dsp-state-current` + profile §4**, not here. **The catalog of whole-system approaches** — schemes as variants tagged with setup context (body→install→ways→gear) + success stories + confidence — is `knowledge/approaches.md` (a scheme is a *hypothesis* for a similar setup, never a format recipe).
 
 **Set A — "measured hybrid" (3-way + sub; proven on the Passat B8):**
 | Joint | Start | Why |

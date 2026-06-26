@@ -87,5 +87,6 @@ crossover sets · techniques · successful symptom→fix · track markers
 - **Hardware experience accumulates into the skill's profile library** (each new entry = **copy the blank `_TEMPLATE.md` and fill it**, so the structure/discipline is consistent):
   - `knowledge/cars/<body>.md` — the cabin map: PART A body-physics / PART B verify-only anomalies, winning crossover sets, quirks (template `knowledge/cars/_TEMPLATE.md`; worked example — the Passat B8, de-identified);
   - `knowledge/dsp/<dsp>.md` — the capability profile (layers, EQ-exchange format, presets, quirks) (template `knowledge/dsp/_TEMPLATE.md`; worked example — `helix-dsp-ultra-s.md`).
-  At a new car's intake the skill **checks first** whether a profile of this body/DSP already exists (`project-intake.md §4`).
+  - `knowledge/approaches.md` — the **classifier of whole-system schemes** (crossover/slope approaches as variants tagged by setup context + success story + confidence + any competition result). Each finished tune **appends** the scheme it used; this is the seed of a public, community-rated classifier. ⚠️ A scheme is bound to ITS setup — never a format→slope recipe.
+  At a new car's intake the skill **checks first** whether a profile of this body/DSP already exists (`project-intake.md §4`), and `knowledge/approaches.md` for schemes that worked on a similar setup (a shortlist of hypotheses, not facts).
 - Thanks: a contributor line in the CHANGELOG.
