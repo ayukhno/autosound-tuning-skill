@@ -9,6 +9,7 @@ Each output channel of the Helix Ultra S has its own **Phase** control (0–360�
 
 ## Phase-alignment methodology
 - **Midbass is the reference.** The Phase control works for the **sub, mid, tweeter** and is **not applied to the midbass** — we don't rotate its phase.
+  - ⚠️ **This "reference" is the PHASE-tuning anchor (the channel you DON'T all-pass) — it is NOT the arrival-TA reference.** The arrival-TA reference is the **measured latest-arriving driver** (`process-phases.md` Phase 1), which is often NOT the midbass (it frequently arrives early). Two different "midbass = reference" roles — don't conflate them (a real bug: the midbass was pinned as the TA zero and everyone else delayed, when the midbass was actually the EARLY arriver that needed delaying).
 - Rule: **of the 4 drivers you adjust only 3.**
 - **Order:** from the midbass (the reference) → first the **sub** (the sub↔midbass joint is the most important) → then the **mid** → then the **tweeter**.
 - **How to set it:** with **RTA** on, watching the **overlap region at the joint**, rotate the channel's phase to **maximum summation** (the dip disappears) at the crossover frequency. The sub↔midbass joint is the most critical.

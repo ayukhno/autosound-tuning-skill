@@ -12,6 +12,12 @@
 
 > **Slope choice also maps to the whole-system GOAL** (a by-ear variant, field-confirmed): **LR4 on EVERY joint + time-align by IR first-arrival = a precise STAGE** — the pick for strict imaging rulesets (EMMA-type, where the image/centre must lock). **Gentle / Bessel with wider overlaps = a natural, coherent blend = "beautiful"** — the pick where the stage is less demanding (AYA-type). The per-joint tradeoffs below refine this. The impedance angle (each HP above the driver's installed Fs — the margin scales with the slope; never cross on coincident neighbour resonances) → `impedance-ts.md`.
 
+> **Three layers of a crossover number — keep the PROVENANCE straight (a unifying frame).** A crossover value comes from THREE different sources; conflating them is how anchoring sneaks in:
+> 1. **START frequency ← the DRIVER's physics** — impedance / installed Fs: where it naturally rolls off, a safe HP above Fs. An anechoic / NTT starting guess (`impedance-ts.md`).
+> 2. **TYPE & slope ← the GOAL** — EMMA → LR4 every joint; AYA → gentle/Bessel (the slope↔goal note above; `method-hashimoto.md`).
+> 3. **FINAL frequency ← the CABIN's physics** — the in-car phase-summation: where the SUM is flat on **both** sides (minimax, §L/R symmetry). NOT the start number, NOT a table.
+> **Provenance discipline:** always be clear WHERE a number came from — an arbiter/brief decision (START) vs derived-from-measurement vs final-verified-by-summation. **Never present a start/arbiter number as if it were "found from analysing the curves."** **Pre-flight sanity (Phase 0→1):** before entering the start crossovers, glance the raw per-channel roll-offs (is a crossover landing in a neighbour's roll-off? does the driver reach with margin? which side is the minimax constraint?) — not to finalise (summation finalises, after applying), but to catch an obvious problem early.
+
 ## Linkwitz-Riley (LR)
 
 **Character:** mathematically exact, an ideal sum (0 dB at the joint with the right cutoff).
