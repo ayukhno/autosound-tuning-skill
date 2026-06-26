@@ -1,6 +1,6 @@
 # Autosound Tuning Skill
 
-🇬🇧 **English** · 🇩🇪 [Deutsch](README.de.md) · 🇵🇱 [Polski](README.pl.md)
+🇬🇧 **English** · 🇩🇪 [Deutsch](README.de.md) · 🇵🇱 [Polski](README.pl.md) · 🇺🇦 [Українська](README.uk.md)
 
 **In one line:** a Claude skill that helps you tune car audio — it reads your REW measurements, analyzes them, recommends settings, and can push EQ back into REW.
 
@@ -33,7 +33,7 @@ The two skills are a **pair** — `autosound-tuning` references `review-loop` fo
 
 ## Getting started — new to Claude Code / the terminal?
 
-This skill runs in **Claude Code**, a terminal tool. If you've only used desktop/web chat before, here's the one-time setup. *(Other languages: [Deutsch](README.de.md) · [Polski](README.pl.md).)*
+This skill runs in **Claude Code**, a terminal tool. If you've only used desktop/web chat before, here's the one-time setup. *(Other languages: [Deutsch](README.de.md) · [Polski](README.pl.md) · [Українська](README.uk.md).)*
 
 **Why Claude Code (not the web app / Cowork):** tuning is iterative — measure → analyze → change → re-measure — over text/numeric data (REW CSV/text exports, DSP configs, iteration logs). A terminal + git gives you parsing, scripting, and a full change history. Cowork is oriented to file operations in other apps — overkill here.
 

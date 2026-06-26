@@ -1,6 +1,6 @@
 # Autosound Tuning Skill
 
-🇬🇧 [English](README.md) · 🇩🇪 [Deutsch](README.de.md) · 🇵🇱 **Polski**
+🇬🇧 [English](README.md) · 🇩🇪 [Deutsch](README.de.md) · 🇵🇱 **Polski** · 🇺🇦 [Українська](README.uk.md)
 
 **W jednym zdaniu:** skill dla Claude, który pomaga stroić car-audio — czyta twoje pomiary z REW, analizuje je, podpowiada ustawienia i potrafi wgrać EQ z powrotem do REW.
 
