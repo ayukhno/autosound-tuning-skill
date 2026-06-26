@@ -153,7 +153,7 @@ A sedan cabin adds +10..15 dB below 50 Hz. That's normal.
 3. EQ: remove the resonance peaks (notch)
 4. HSF at the top: 85–125 Hz, −4..−6 dB — extra "tail" cut
 5. **Phase:** after setting the crossovers and delays — try 0° and 180°, listen for where the bass "jumps" onto the hood
-6. **Delays:** measure the physical distance with a tape measure, enter it in Helix, then a final correction by ear
+6. **Delays:** measure the physical distance with a tape measure, enter it into the DSP, then a final correction by ear
 
 ### BE4 for the sub/midbass joint
 
@@ -189,7 +189,7 @@ Bessel at the joint gives a "cohesive" and articulate bass:
 
 ### How to apply it on the Virtual Layer
 
-In the Helix DSP PC-Tool, the Virtual EQ tab:
+On your DSP's virtual/group EQ layer (Helix: the Virtual EQ tab; any DSP with a layer above the per-driver crossovers — `diagnostic §6`):
 
 ```
 Low Shelf: 80–100 Hz, +6..8 dB — bass lift
@@ -222,7 +222,7 @@ Never try to apply the House Curve through the crossovers or the Output EQ — i
 
 ## A specific car's anomalies → the project profile
 
-Persistent cabin anomalies (diffraction dips, phase gaps, SBIR notches, anti-correlated zones) are **project state**, not a general pattern: they live in the `autosound_context.md` profile (§4/§6) and are NOT re-diagnosed every session. For the Passat B8, there: a left-midbass dip ~150 Hz, room-gain ~190 Hz, an L/R mid phase gap 230–320 Hz, SBIR notches R645/L850, anti-correlated midbass punch. Here — only the transferable techniques below.
+Persistent cabin anomalies (diffraction dips, phase gaps, SBIR notches, anti-correlated zones) are **project state**, not a general pattern: they live in the project's `autosound_context.md` profile (§4/§6) — and, de-identified, in `knowledge/cars/<body>.md` (the worked example: `knowledge/cars/vw-passat-b8-sedan.md` PART B, **verify-only**) — and are NOT re-diagnosed every session. **Don't carry one car's specific Hz onto another** (even a platform sibling — `SKILL.md → knowledge/cars`). Here — only the transferable techniques below.
 
 ### Under-lapping — the general principle
 
@@ -240,7 +240,7 @@ Under-lapping:             Midbass LP 250 Hz      Mid HP 350 Hz
 - There's a geometrically/acoustically driven phase gap in a certain range
 - A dip in the "hole" region — an acceptable price for removing the phase conflict
 
-**Trade-off:** a small dip in the sum in the under-lap region (250–350 Hz in the Passat). Check it on the summed FR and listen — if the dip isn't noticeable subjectively, the decision is right.
+**Trade-off:** a small dip in the sum in the under-lap region (example: ~250–350 Hz). Check it on the summed FR and listen — if the dip isn't noticeable subjectively, the decision is right.
 
 ### Aligning to the IR peak (heavy midbasses — a transferable technique) — ⚠️ a Phase-1/2b TA technique, NOT a baseline/pre-sweep step
 

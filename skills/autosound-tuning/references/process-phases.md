@@ -188,6 +188,6 @@ Accepted; where relevant — already woven into the phases above.
    - **ETC / impulse:** delays and reflections.
    - **Excess phase:** what's EQ-fixable (see point 3).
 
-8. **Transport (fixed 2026-06-01).** REW runs **natively on macOS** → the API `localhost:4735` is reachable **directly from the host** where Claude/Gemini live; no port-forwarding is needed, we pull data live. Parallels (the Windows VM) is needed **only for the Helix DSP PC-Tool** (Windows-only) — the single "courier" step is handing the EQ export from REW (Mac) to Helix via a shared folder. The critic channel: `gemini_critic.sh` on the same macOS host. (Earlier this wrongly said "the REW API is inside the VM" — an artifact of early assumptions, removed.)
+8. **Transport.** The REW API `localhost:4735` is reachable **from the host where Claude/Gemini run** → no port-forwarding, pull data live. ⚠️ **Setup-dependent:** if the DSP software runs on a different OS/VM than REW (the author's case: REW on macOS + the Helix PC-Tool in a Parallels Windows VM), the single "courier" step is handing the EQ export from REW to the DSP via a shared folder; a native same-OS DSP tool skips it. The critic channel runs on the same host as REW.
 
 9. **Role rotation.** Periodically make Gemini the Generator and Claude the Critic — so one model's bias doesn't accumulate (Contract §0).

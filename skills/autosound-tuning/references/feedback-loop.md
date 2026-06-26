@@ -84,8 +84,8 @@ crossover sets · techniques · successful symptom→fix · track markers
 
 - `community-inbox/` is processed by **the same maintenance loop** (harvest → correlate → fold, SKILL.md): each item is checked against the skill; the origin tag `[source: <body>/<author>]` is kept.
 - **Contradicts our conclusions → a VARIANT, not a deletion** (maintenance loop rule §2: a different geometry/cabin can make the tip right).
-- **Hardware experience accumulates into the skill's profile library:**
-  - `knowledge/cars/<body>.md` — the cabin map: typical anomalies, winning crossover sets, quirks (the first profile — the Passat B8 from `autosound_context` §4/§6 in de-identified form);
-  - `knowledge/dsp/<dsp>.md` — the equivalent of the helix-* trio (layer architecture, the EQ-exchange format, quirks).
+- **Hardware experience accumulates into the skill's profile library** (each new entry = **copy the blank `_TEMPLATE.md` and fill it**, so the structure/discipline is consistent):
+  - `knowledge/cars/<body>.md` — the cabin map: PART A body-physics / PART B verify-only anomalies, winning crossover sets, quirks (template `knowledge/cars/_TEMPLATE.md`; worked example — the Passat B8, de-identified);
+  - `knowledge/dsp/<dsp>.md` — the capability profile (layers, EQ-exchange format, presets, quirks) (template `knowledge/dsp/_TEMPLATE.md`; worked example — `helix-dsp-ultra-s.md`).
   At a new car's intake the skill **checks first** whether a profile of this body/DSP already exists (`project-intake.md §4`).
 - Thanks: a contributor line in the CHANGELOG.
