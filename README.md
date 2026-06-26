@@ -9,7 +9,7 @@
 - 🎧 **Test tracks** — what to listen for and on which track (descriptions, not audio)
 - 🚗 **Learns your setup** — accumulates car & gear knowledge, only with your consent
 
-It covers a full tune — from a new project (equipment + goals interview, target-curve choice, install checks) through crossovers, time alignment, phase, per-channel and summed EQ, and imaging, to taste voicing — driven by a Generator ↔ Critic ↔ Arbiter review loop. It's **method, not machine**: no car's measurements or DSP state live here (those stay in your project), so it works on **any car / any DSP**.
+It covers a full tune — from a new project (equipment + goals interview, target-curve choice, install checks) through crossovers, time alignment, phase, per-channel and summed EQ, and imaging, to voicing to taste — driven by a Generator ↔ Critic ↔ Arbiter review loop. It's **method, not machine**: no car's measurements or DSP state live here (those stay in your project), so it works on **any car / any DSP**.
 
 > Built and battle-tested on a VW Passat B8 / Helix DSP Ultra S (an AYA competition win); the car/DSP specifics are isolated into a profile + a `knowledge/` library, so a new project is just "pick the inputs."
 
@@ -78,7 +78,7 @@ ls ~/.claude/skills/autosound-tuning/SKILL.md
 ls ~/.claude/skills/review-loop/SKILL.md
 ```
 
-**Then start a fresh Claude Code session** (skills load at startup) and say e.g. *"tune a new car from scratch"* — the skill begins with **intake**: quickstart, equipment + goals interview, target-curve choice (chosen with you), install checks, project-file generation. *(If `Unknown skill` or it never triggers — almost always the nesting above; re-copy the inner `skills/*` folders and restart.)*
+**Then start a fresh Claude Code session** (skills load at startup) and say e.g. *"tune a new car from scratch"* — the skill begins with **intake**: quickstart, equipment + goals interview, target-curve choice (chosen with you), install checks, project-file generation. *(If `Unknown skill` or it never triggers — almost always due to the nesting above; re-copy the inner `skills/*` folders and restart.)*
 
 ## Contributing your experience
 

@@ -9,9 +9,9 @@
 - 🎧 **Test-Tracks** — worauf zu achten ist und auf welchem Track (Beschreibungen, kein Audio)
 - 🚗 **Lernt dein Setup** — sammelt Wissen über Auto & Geräte, nur mit deiner Zustimmung
 
-Er deckt eine komplette Abstimmung ab — von einem neuen Projekt (Interview zu Geräten + Zielen, Wahl der Zielkurve, Einbau-Checks) über Frequenzweichen, Laufzeitkorrektur, Phase, kanalweisen und summierten EQ und die Bühnenabbildung, bis zum Geschmacks-Voicing — gesteuert von einer Generator-↔-Kritiker-↔-Schiedsrichter-Review-Schleife. Es ist **Methode, keine Maschine**: keine Messungen eines Autos oder DSP-Zustände liegen hier (die bleiben in deinem Projekt), also funktioniert es mit **jedem Auto / jedem DSP**.
+Er deckt eine komplette Abstimmung ab — von einem neuen Projekt (Interview zu Equipment + Zielen, Wahl der Zielkurve, Einbau-Checks) über Frequenzweichen, Laufzeitkorrektur, Phase, kanalweisen und summierten EQ und die Bühnenabbildung, bis hin zum Voicing nach Geschmack — gesteuert von einer Generator-↔-Kritiker-↔-Schiedsrichter-Review-Schleife. Es ist **Methode, keine Maschine**: keine Messungen eines Autos oder DSP-Zustände liegen hier (die bleiben in deinem Projekt), also funktioniert es mit **jedem Auto / jedem DSP**.
 
-> Gebaut und praxiserprobt an einem VW Passat B8 / Helix DSP Ultra S (ein AYA-Wettbewerbssieg); die Auto-/DSP-Spezifika sind in ein Profil + eine `knowledge/`-Bibliothek ausgelagert, sodass ein neues Projekt nur „die Eingaben wählen" heißt.
+> Gebaut und praxiserprobt an einem VW Passat B8 / Helix DSP Ultra S (ein AYA-Wettbewerbssieg); die Auto-/DSP-Spezifika sind in ein Profil + eine `knowledge/`-Bibliothek ausgelagert, sodass ein neues Projekt nur „die Eingaben wählen“ heißt.
 
 ## Was hier drin ist
 
@@ -49,20 +49,20 @@ claude                                            # der erste Start öffnet den 
 
 **3. Halte es einfach.** Ein leerer Ordner, dein erster REW-Export unverändert hineingelegt, ein anhängender Notiz-Log — lass Unterordner entstehen, wenn du sie wirklich brauchst.
 
-**4. Deine erste Nachricht = „Schritt 0".** Beschreibe dein System: Auto + Lautsprecher-Layout (Wege, Sub?), DSP-Modell, Messtechnik, und ob du schon Messungen hast. Den Rest übernimmt der Skill — und **fragt zuerst nach deiner bevorzugten Arbeitssprache** (EN · UK · DE · PL), damit Gespräch und Projektdateien in ihr entstehen.
+**4. Deine erste Nachricht = „Schritt 0“.** Beschreibe dein System: Auto + Lautsprecher-Layout (Wege, Sub?), DSP-Modell, Messtechnik, und ob du schon Messungen hast. Den Rest übernimmt der Skill — und **fragt zuerst nach deiner bevorzugten Arbeitssprache** (EN · UK · DE · PL), damit Gespräch und Projektdateien in ihr entstehen.
 
 ## Voraussetzungen
 
 - **Claude Code** (oder claude.ai mit Skills).
 - **REW** mit aktiviertem API-Server (`localhost:4735`) und ein kalibriertes Mikrofon.
 - Die **Software deines DSP** + eine Möglichkeit, EQ zu laden (Datei-Import ideal; für 30+ DSPs ohne Import siehe [REW-EQ-CopyPaste-Assistant](https://github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant)).
-- **Optional:** ein zweites KI-Modell als „Kritiker" (beliebiger Anbieter). Ohne es übernimmt ein Mensch das Review; der Prozess hält trotzdem.
+- **Optional:** ein zweites KI-Modell als „Kritiker“ (beliebiger Anbieter). Ohne es übernimmt ein Mensch das Review; der Prozess hält trotzdem.
 
 ## Installation
 
 **Am einfachsten — lass Claude es erledigen.** Öffne Claude Code und sag:
 
-> *„Klone https://github.com/ayukhno/autosound-tuning-skill in einen temporären Ordner, kopiere dann die zwei **inneren** Ordner `skills/autosound-tuning` und `skills/review-loop` nach `~/.claude/skills/`, sodass jede `SKILL.md` direkt unter `~/.claude/skills/<name>/SKILL.md` landet. Klone nicht das ganze Repo in den Skills-Ordner."*
+> *„Klone https://github.com/ayukhno/autosound-tuning-skill in einen temporären Ordner, kopiere dann die zwei **inneren** Ordner `skills/autosound-tuning` und `skills/review-loop` nach `~/.claude/skills/`, sodass jede `SKILL.md` direkt unter `~/.claude/skills/<name>/SKILL.md` landet. Klone nicht das ganze Repo in den Skills-Ordner.“*
 
 Installiere **beide** (sie sind ein Paar) auf **Benutzerebene — `~/.claude/skills/`** (überall verfügbar, empfohlen) oder **Projektebene — `<projekt>/.claude/skills/`** (hält das Repo eines Autos eigenständig).
 
@@ -78,7 +78,7 @@ ls ~/.claude/skills/autosound-tuning/SKILL.md
 ls ~/.claude/skills/review-loop/SKILL.md
 ```
 
-**Dann starte eine frische Claude-Code-Sitzung** (Skills laden beim Start) und sag z. B. *„stimme ein neues Auto von Grund auf ab"* — der Skill beginnt mit dem **Intake**: Schnellstart, Interview zu Geräten + Zielen, Wahl der Zielkurve (mit dir gewählt), Einbau-Checks, Erzeugung der Projektdateien. *(Bei `Unknown skill` oder wenn er nie auslöst — fast immer die obige Verschachtelung; kopiere die inneren `skills/*`-Ordner neu und starte neu.)*
+**Dann starte eine frische Claude-Code-Sitzung** (Skills laden beim Start) und sag z. B. *„stimme ein neues Auto von Grund auf ab“* — der Skill beginnt mit dem **Intake**: Schnellstart, Interview zu Equipment + Zielen, Wahl der Zielkurve (mit dir gewählt), Einbau-Checks, Erzeugung der Projektdateien. *(Bei `Unknown skill` oder wenn er nie auslöst — fast immer die obige Verschachtelung; kopiere die inneren `skills/*`-Ordner neu und starte neu.)*
 
 ## Deine Erfahrung beitragen
 

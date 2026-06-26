@@ -9,9 +9,9 @@
 - 🎧 **Ścieżki testowe** — czego słuchać i na której ścieżce (opisy, nie audio)
 - 🚗 **Uczy się twojego zestawu** — gromadzi wiedzę o aucie i sprzęcie, tylko za twoją zgodą
 
-Obejmuje pełne strojenie — od nowego projektu (wywiad o sprzęcie + celach, wybór krzywej docelowej, kontrola montażu) przez zwrotnice, korekcję czasową, fazę, EQ kanałowy i sumaryczny oraz budowę sceny, aż po voicing pod gust — sterowane pętlą recenzji Generator ↔ Krytyk ↔ Arbiter. To **metoda, nie maszyna**: pomiary żadnego auta ani stan DSP tu nie są przechowywane (zostają w twoim projekcie), więc działa z **dowolnym autem / dowolnym DSP**.
+Obejmuje pełne strojenie — od nowego projektu (wywiad o sprzęcie + celach, wybór krzywej docelowej, kontrola montażu) przez zwrotnice, korekcję czasową, fazę, EQ kanałowy i sumaryczny oraz budowę sceny, aż po voicing pod własny gust — sterowane pętlą recenzji Generator ↔ Krytyk ↔ Arbiter. To **metoda, nie maszyna**: pomiary żadnego auta ani stan DSP tu nie są przechowywane (zostają w twoim projekcie), więc działa z **dowolnym autem / dowolnym DSP**.
 
-> Zbudowany i sprawdzony w boju na VW Passat B8 / Helix DSP Ultra S (wygrana na zawodach AYA); specyfika auta/DSP jest wydzielona do profilu + biblioteki `knowledge/`, więc nowy projekt to po prostu „wybierz dane wejściowe".
+> Zbudowany i sprawdzony w boju na VW Passat B8 / Helix DSP Ultra S (wygrana na zawodach AYA); specyfika auta/DSP jest wydzielona do profilu + biblioteki `knowledge/`, więc nowy projekt to po prostu „wybierz dane wejściowe”.
 
 ## Co tu jest
 
@@ -49,20 +49,20 @@ claude                                            # pierwsze uruchomienie otworz
 
 **3. Zacznij prosto.** Pusty folder, pierwszy eksport REW wrzucony bez zmian, jeden dopisywany log notatek — pozwól podfolderom pojawić się, gdy naprawdę będą potrzebne.
 
-**4. Twoja pierwsza wiadomość = „krok 0".** Opisz swój system: auto + układ głośników (ile dróg, sub?), model DSP, sprzęt pomiarowy, i czy masz już pomiary. Resztę przejmuje skill — i **najpierw pyta o preferowany język pracy** (EN · UK · DE · PL), aby rozmowa i pliki projektu powstawały w nim.
+**4. Twoja pierwsza wiadomość = „krok 0”.** Opisz swój system: auto + układ głośników (ile dróg, sub?), model DSP, sprzęt pomiarowy, i czy masz już pomiary. Resztę przejmuje skill — i **najpierw pyta o preferowany język pracy** (EN · UK · DE · PL), aby rozmowa i pliki projektu powstawały w nim.
 
 ## Wymagania
 
 - **Claude Code** (lub claude.ai ze skillami).
 - **REW** z włączonym serwerem API (`localhost:4735`) i skalibrowany mikrofon.
 - **Oprogramowanie twojego DSP** + sposób na wgranie EQ (import pliku idealnie; dla 30+ DSP bez importu zob. [REW-EQ-CopyPaste-Assistant](https://github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant)).
-- **Opcjonalnie:** drugi model AI jako „Krytyk" (dowolny dostawca). Bez niego recenzję robi człowiek; proces i tak się trzyma.
+- **Opcjonalnie:** drugi model AI jako „Krytyk” (dowolny dostawca). Bez niego recenzję robi człowiek; proces nadal działa.
 
 ## Instalacja
 
 **Najprościej — niech Claude to zrobi.** Otwórz Claude Code i powiedz:
 
-> *„Sklonuj https://github.com/ayukhno/autosound-tuning-skill do tymczasowego folderu, następnie skopiuj dwa **wewnętrzne** foldery `skills/autosound-tuning` i `skills/review-loop` do `~/.claude/skills/`, tak aby każdy `SKILL.md` trafił bezpośrednio do `~/.claude/skills/<name>/SKILL.md`. Nie klonuj całego repo do folderu skilli."*
+> *„Sklonuj https://github.com/ayukhno/autosound-tuning-skill do tymczasowego folderu, następnie skopiuj dwa **wewnętrzne** foldery `skills/autosound-tuning` i `skills/review-loop` do `~/.claude/skills/`, tak aby każdy `SKILL.md` trafił bezpośrednio do `~/.claude/skills/<name>/SKILL.md`. Nie klonuj całego repo do folderu skilli.”*
 
 Zainstaluj **oba** (to para) na **poziomie użytkownika — `~/.claude/skills/`** (dostępne wszędzie, zalecane) lub **poziomie projektu — `<projekt>/.claude/skills/`** (utrzymuje repo jednego auta samodzielnym).
 
@@ -78,7 +78,7 @@ ls ~/.claude/skills/autosound-tuning/SKILL.md
 ls ~/.claude/skills/review-loop/SKILL.md
 ```
 
-**Następnie uruchom nową sesję Claude Code** (skille ładują się przy starcie) i powiedz np. *„nastrój nowe auto od zera"* — skill zaczyna od **intake'u**: szybki start, wywiad o sprzęcie + celach, wybór krzywej docelowej (wybierany z tobą), kontrola montażu, generowanie plików projektu. *(Jeśli `Unknown skill` lub skill nigdy się nie uruchamia — to prawie zawsze powyższe zagnieżdżenie; skopiuj ponownie wewnętrzne foldery `skills/*` i zrestartuj.)*
+**Następnie uruchom nową sesję Claude Code** (skille ładują się przy starcie) i powiedz np. *„nastrój nowe auto od zera”* — skill zaczyna od **intake'u**: szybki start, wywiad o sprzęcie + celach, wybór krzywej docelowej (wybierany z tobą), kontrola montażu, generowanie plików projektu. *(Jeśli `Unknown skill` lub skill nigdy się nie uruchamia — to prawie zawsze powyższe zagnieżdżenie; skopiuj ponownie wewnętrzne foldery `skills/*` i zrestartuj.)*
 
 ## Dzielenie się doświadczeniem
 
