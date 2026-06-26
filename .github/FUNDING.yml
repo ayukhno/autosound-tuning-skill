@@ -5,7 +5,10 @@
 # profile is APPROVED by GitHub — otherwise the button leads to an inactive page.
 # github: ayukhno
 
+# Active channel: Monobank jar (one tap, no account; the web page accepts foreign
+# cards via Apple/Google Pay / Visa / Mastercard, so non-UA donors can give too).
+custom: ["https://send.monobank.ua/jar/8wThVcodjm"]
+
 # Optional extra channels (uncomment + fill if you add them):
 # ko_fi: your-kofi-username
 # buy_me_a_coffee: your-bmc-username
-# custom: ["https://send.monobank.ua/jar/xxxxxxxx"]
