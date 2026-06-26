@@ -18,6 +18,23 @@
 
 ---
 
+## 0.5 — First-start guided flow (run IN ORDER; clear each gate before the next)
+
+A new project's first contact has a fixed order, but the detail is spread across this file + `process-phases.md` Phase 0 — and fresh sessions keep **skipping** a step (the glossary before measuring, the loopback, the reviewer). So run it as ONE sequence; the detail of each step is in the section noted — **this is the order + the gates:**
+
+1. **Language** (§0) — ask EN/UK/DE/PL; the dialogue AND every project file follow it.
+2. **Reviewer channel** (§0) — offer it and set it up NOW (the method's core, not an afterthought; `setup-critic-channel.md`).
+3. **Interview** (§1–§2) — equipment + goals + the curve seed → write `autosound_context.md`.
+4. **REW rig ready** — the mic + its cal files loaded; the sample rate = the DSP's native rate where possible; a **physical loopback** wired (without it, phase/timing reads are unreliable → lean on summation/ear); the right input/output devices selected; the measurement input **doesn't clip** (§3.8); the API answers at `localhost:4735`.
+5. **Naming + glossary — AGREE BEFORE ANY MEASUREMENT.** ⛔ **Gate:** don't measure until the channel codes (`sw / w-L/R / m-L/R / tw-L/R / c / r`) AND the convention `<ch>_<vN> (sw|rta)` are set with the user (`naming-and-structure.md §3`). The recurring slip is running off to measure with un-agreed names → an unusable history.
+6. **Install verification** (§3) — routing · electrical polarity · protective crossovers (fragile drivers only, above each Fs) · gain staging · noise · break-in of new drivers · a safe sweep level. ⛔ **Gate:** don't tune before this.
+7. **Generate the project files** (§5).
+8. **First baseline** (Phase 0) — solo each output, the agreed names: all `sw` + the MMM `rta`, a RAW current-state capture (no TA tricks yet) → hand off to `process-phases.md` Phase 0/1.
+
+> Steps 1–3 are the interview; 4–5 ready the rig and the language of the data; 6 protects the hardware; 7–8 produce the first real measurements. The two ⛔ gates — **measure only after naming, tune only after verification** — are where fresh sessions most often slip.
+
+---
+
 ## 1. Interview: equipment and system → the project profile
 
 Ask in blocks, record the answers right away in `autosound_context.md` (structure — §5 below). Don't assume — ask; "I don't know" is also an answer (then we measure / look in the DSP software).
