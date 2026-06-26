@@ -113,6 +113,14 @@ Potwierdzone wnioski trafiają do skilla i profili `knowledge/` aut/DSP (z atryb
 
 *(Wolisz GitHub? Nadal możesz otworzyć [zgłoszenie field-feedback](../../issues/new?template=field-feedback.md) — ta sama zasada: tylko metoda/klasy sprzętu.)*
 
+## Wsparcie
+
+Skill jest **darmowy i otwarty** (CC BY-SA) i taki pozostanie — nic nie jest zablokowane za płatnością. Jeśli pomógł ci dostroić system i chcesz podziękować, jest **dobrowolna skarbonka**, bez żadnej presji:
+
+☕ **[Wesprzyj ten skill — skarbonka Monobank](https://send.monobank.ua/jar/8wThVcodjm)** 🤝
+
+Jedno dotknięcie, bez konta; strona przyjmuje też karty zagraniczne (Apple/Google Pay, Visa/Mastercard).
+
 ## Licencja
 
 [CC BY-SA 4.0](LICENSE) — używaj, adaptuj, udostępniaj; zachowaj pochodne otwarte i podaj autorstwo. To dzieło metodyczne/wiedzowe, więc share-alike utrzymuje zgromadzone doświadczenie społeczności otwartym.

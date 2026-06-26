@@ -113,6 +113,14 @@ Bestätigte Erkenntnisse werden in den Skill und die `knowledge/`-Auto-/DSP-Prof
 
 *(Lieber GitHub? Du kannst weiterhin ein [Field-Feedback-Issue](../../issues/new?template=field-feedback.md) öffnen — gleiche Regel: nur Methode/Geräteklassen.)*
 
+## Unterstützung
+
+Der Skill ist **kostenlos und offen** (CC BY-SA) und bleibt es — nichts ist hinter einer Zahlung verschlossen. Wenn er dir geholfen hat, dein System einzustellen, und du Danke sagen möchtest, gibt es eine **freiwillige Spendenkasse**, ganz ohne Druck:
+
+☕ **[Diesen Skill unterstützen — Monobank-Kasse](https://send.monobank.ua/jar/8wThVcodjm)** 🤝
+
+Ein Tippen, kein Konto nötig; die Seite akzeptiert auch ausländische Karten (Apple/Google Pay, Visa/Mastercard).
+
 ## Lizenz
 
 [CC BY-SA 4.0](LICENSE) — nutze, passe an, teile; halte Ableitungen offen und nenne die Quelle. Es ist ein Methoden-/Wissenswerk, daher hält Share-Alike die gesammelte Erfahrung der Community offen. Die Lizenzbedingungen garantieren, dass methodisches Wissen der Community zugänglich bleibt.

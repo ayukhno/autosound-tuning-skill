@@ -113,6 +113,14 @@ Confirmed lessons get folded into the skill and the `knowledge/` car/DSP profile
 
 *(Prefer GitHub? You can still open a [field-feedback issue](../../issues/new?template=field-feedback.md) — same rule: method/equipment classes only.)*
 
+## Support
+
+The skill is **free and open** (CC BY-SA) and always will be — nothing is gated behind a payment. If it helped you dial in your system and you'd like to say thanks, there's a **voluntary tip jar**, no pressure:
+
+☕ **[Support this skill — Monobank jar](https://send.monobank.ua/jar/8wThVcodjm)** 🤝
+
+One tap, no account needed; the page also takes foreign cards (Apple/Google Pay, Visa/Mastercard).
+
 ## License
 
 [CC BY-SA 4.0](LICENSE) — use it, adapt it, share it; keep derivatives open and give attribution. It's a method/knowledge work, so share-alike keeps the community's accumulated experience open.
