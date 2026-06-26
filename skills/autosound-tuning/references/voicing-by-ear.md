@@ -6,6 +6,7 @@ An applied base for by-ear voicing: when the base is technically correct (Phases
 ## Tonal balance — how to read it
 - **Bass <100 Hz — read it as is; mids up to 1.5k — by the upper peaks; treble >1.5k — by the average.** (Consistent with the anchor methods, `diagnostic §1`.)
 - **Equal-loudness:** quiet → you need more bass+treble; loud → less. The voicing is calibrated to the listening level (`staging-depth §3`).
+- **The mic finds the FREQUENCY; the EAR decides the final voicing (and all depth).** RTA steady-state **underestimates HF transients** (the windshield smears them) → don't set the perceived top purely from the trace. And **MMM spatial variability is ±2–3 dB** — about the SIZE of a small voicing filter → at the fine-voicing stage the meter can't tell a 2 dB move from its own noise, so the **arbiter is the ear**. Use the mic to locate WHERE (frequency), the ear to decide HOW MUCH.
 - Align the midbass↔mid joint where **L and R (w and m) are equal and level at 400–500 Hz** — otherwise the stage is crooked.
 - After EQ corrections near the crossovers — **re-check the delays**.
 
@@ -49,9 +50,11 @@ An applied base for by-ear voicing: when the base is technically correct (Phases
 - Nasal → too much upper bass, 300–400 a touch ↓; full/enveloping — 200 ↑ (only with a good install). Dry/weightless — 400–600 ↑.
 - Liveliness/breath — 2–2.5k ↑ (a small hump at 2.5k = an accent on the breaths). Female-voice openness — 1.6–2k. Female voice forward — 3k ↑ (too much → electric guitars cut).
 - Sibilants: "sh/ch" 4–5k; "s/z/ts" 8–9k (the mid's peak) and 12.5k.
+- **A "harsh / cutting" top is usually TWO narrow peaks, not a broad band — don't reach for a wide shelf/bell.** Read the trace: a **presence peak ~3k** and a **sibilance peak ~8–10k**, with a **natural dip 5–6k between them**. Treating it with a wide shelf dulls the air and the body; instead place **two narrow PK on the VIRTUAL (L=R)**, one on each peak. A **de-ess at ~8.5k** also **"releases" 11–12k** (the harshness there rides on the 8.5k peak) → you keep the **air (>10k)** while killing the sibilance.
 **L/R symmetry by the voice (200–300 Hz, when the mic can't):** nasal → take off the LEFT (don't touch the right); too high/light → raise the RIGHT; to gather to center → left ↓ + right ↑ by the same amount.
 - With equal delays — attenuate the left per band so the image is in front of the driver (≤3 dB; at least to unstick it from the pillar).
 **Top/cymbals:** a flat 4–10k plateau = cymbals have body (treble +6 above the mid); 4k — the base of cymbals (detail, but sibilants wander); 12.5/14k — detail + embellished sibilants; "harsh top + sub" → raise the tweeters' crossover frequency + level, suppress 12.5k.
+- **A natural presence dip ~5–6k = a built-in de-esser — don't reflexively fill it.** If the cabin/tweeter already dips here (confirmed on the raw drivers), it's separating the presence (3k) from the sibilance (8–10k) for you; flattening it makes the top harsher. **Air lives >10k**, separately — protect it. (Pairs with the two-peak treble fix above.)
 
 ## Joint/filters (by-ear, Arkadij)
 - Between mid and tweeter — **Bessel is better than LR** (air/depth); lots of treble emphasizes the bass.

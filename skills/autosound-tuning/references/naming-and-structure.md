@@ -32,6 +32,7 @@ Measurement name = **`<channel|pair|combo|joint>[ <modifier>]_<version>`**, opti
 - **Channel / pair / combo / joint codes** → `autosound_context.md §5` (this car: `sw`, `w-L/R`, `m-L/R`, `tw-L/R`, `r-L/R`, `c-H/c-L`; pairs `Ws/Ms/TWs`; combos `ALL`, `ALL+C`; joints `SW+Ws`, `L w+m`, `R m+tw`; full side `L`/`R`).
 - **Method suffix:** `(rta)` = MMM RTA (for magnitude/tone) · `(sw)` = acoustic sweep (for phase/timing/distortion).
 - **Modifiers:** `FX` = measured with Helix FX on; `c` / `c FX` = front without / with FX.
+- **Transient experiment tags** — while A/B-testing a candidate change, tag the variant in the name (`i`/`INV` = inverted polarity, `+Δτ` = an added delay trial, etc.) so the two readings don't get confused. The tag is **temporary**: once the change is **baked into the base** it drops from the name (the measurement is just `_N+1` at the new config). **`dsp-state-current` is the source of truth for what's in the base** — the name tags only the experiment in flight, not the committed state.
 - **Version suffix `_N`** = the **DSP config version the measurement was taken under**. `tw-L_7` = tweeter-L at config v7; `ALL_25` = full front at v25. **Bump N whenever the DSP config changes.** This is what lets the changelog line up "before vs after a change" (e.g. `ALL_17` vs `ALL_18` shows what an EQ import moved). A measurement with no `_N` is ambiguous — avoid it.
 
 ## 3a. REW history hygiene — names are the identity (tell the user early)

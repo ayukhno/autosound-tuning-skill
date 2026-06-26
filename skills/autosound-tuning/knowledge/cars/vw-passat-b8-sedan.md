@@ -24,6 +24,18 @@ Each line: *what the author's build showed* → **how to check it on yours.** Do
 - □ **Anti-correlated L/R midbass punch?** In the author's (B8 doors): w-L null ~150 / peak 90–127, w-R mirror-opposite. Don't "treat" one side to match the other blindly. → check your own L vs R.
 - □ **An L/R mid phase gap 230–320 Hz (~40°)?** In the author's, parallel mounting; micro-delays didn't collapse it — BUT the summation showed coherent addition there (verified 2026-06-05, don't panic). → judge by YOUR own summation, not by the number.
 
+**Cabin response anomalies — check by measurement; if present, LEAVE them, don't fill (interference / non-min-phase):**
+- □ **An R-side cabin null ~250–375 Hz (w-R −10..−15 dB)?** Interference, not min-phase → **don't EQ-boost**; that joint is "as good as the cabin allows." → check your own R door.
+- □ **Deep mid nulls ~640–1078 Hz and ~1524–1711 Hz?** Cabin interference (the ~645 region = the R-pillar SBIR above) → leave, don't fill. → check your own.
+- □ **A soft dip ~160 Hz?** A **λ/4 floor/console bounce** (distinct from the room-gain region) — the sub there sits −15..−20 dB → you can't pull it back with phase or EQ; leave it. → check your own.
+- □ **A 40 Hz room-mode hump?** → check your own cabin.
+- □ **A tweeter dip ~5–6 kHz (seen on the RAW drivers)?** A **built-in de-esser** separating presence (~3k) from sibilance (~8–10k) — don't flatten it (`voicing-by-ear.md` Top/cymbals). → check your own raw tweeters.
+- □ **An LHD level tilt — the LEFT drivers hotter in the upper bands (on-axis) → the stage pulls LEFT?** Balance it **cut-only on the left** (don't boost the right). → check which side YOUR geometry (LHD/RHD) favours; the direction flips on an RHD car.
+
+**Install polarity & inter-channel timing — a SUMMATION result of THIS build's crossovers, NOT a rule:**
+- □ **Per-driver polarity** in the author's build: **sub + midbass + tweeter INVERTED, mid NORMAL** — because the **Bessel joints summed best at opposite polarities** (tweeter flips against the mid, §9 `diagnostic`) while the **sub's BW joint did NOT flip.** ⚠️ Derive yours by **summation** (`diagnostic §9`), never copy this pattern — it's a result, not a recipe.
+- □ **A midbass L/R intrinsic arrival shift ~1.2 ms** (the pair isn't symmetric — door path/mounting). → set arrival-TA from the **measured latest arriver** (`process-phases.md` Phase 1), don't assume L=R.
+
 **Drivers / enclosure — from the user's intake or the datasheet, NOT from here:**
 - □ The sub enclosure in the author's build = a **sealed box ~35 L** in the trunk (worked well). → your enclosure type/volume is whatever the user actually has; **don't assume "35 L" or "sealed"**.
 
