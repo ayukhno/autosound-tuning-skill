@@ -24,7 +24,7 @@ A new project's first contact has a fixed order, but the detail is spread across
 
 1. **Language** (§0) — ask EN/UK/DE/PL; the dialogue AND every project file follow it.
 2. **Reviewer channel** (§0) — offer it and set it up NOW (the method's core, not an afterthought; `setup-critic-channel.md`).
-3. **Interview** (§1–§2) — equipment + goals + the curve seed → write `autosound_context.md`.
+3. **Interview** (§1–§2) — equipment (§1) + goals (§2: competition vs for-yourself vs both · **the reference seat — driver / passenger / all** · music & taste) + the curve seed → write `autosound_context.md`.
 4. **REW rig ready** — the mic + its cal files loaded; the sample rate = the DSP's native rate where possible; a **physical loopback** wired (without it, phase/timing reads are unreliable → lean on summation/ear); the right input/output devices selected; the measurement input **doesn't clip** (§3.8); the API answers at `localhost:4735`.
 5. **Naming + glossary — AGREE BEFORE ANY MEASUREMENT.** ⛔ **Gate:** don't measure until the channel codes (`sw / w-L/R / m-L/R / tw-L/R / c / r`) AND the convention `<ch>_<vN> (sw|rta)` are set with the user (`naming-and-structure.md §3`). The recurring slip is running off to measure with un-agreed names → an unusable history.
 6. **Install verification** (§3) — routing · electrical polarity · protective crossovers (fragile drivers only, above each Fs) · gain staging · noise · break-in of new drivers · a safe sweep level. ⛔ **Gate:** don't tune before this.
@@ -53,11 +53,19 @@ Ask in blocks, record the answers right away in `autosound_context.md` (structur
 
 ## 2. Interview: goals and taste → the curve seed and Phase 6
 
-1. **Purpose:** SQ for yourself / competition (which format — EMMA/AYA/CARMusic, which category) / fun-daily. Several are possible — the base+voicing architecture gives **separate presets** (the changelog records which).
-2. **What stage we're building** (priorities, because you can't maximize everything at once): width / depth-layering / height / a tight center focus; rear envelopment or front-only. State the physical ceilings honestly: depth is limited by the mid's geometry (`staging-depth.md §4`), envelopment needs a rear.
-3. **Music and listening:** genres, 3–5 of the user's favorite reference tracks, the typical loudness (→ equal-loudness, `staging-depth.md §3`), long/short trips.
-4. **Taste axes:** warm↔bright · bass-heavy↔neutral · forward↔laid-back · accuracy↔fun.
-5. **Choosing the target curve — TOGETHER with the user, there is NO default.** Walk through the **curve→character** table (`voicing-by-ear.md`), narrow it by genres/taste to 2–3 candidates, finalize via the curve-audition method (same place) or take a candidate as the session's start and validate by ear in Phase 5/6. **A curve = a start and a shape, not a finish and not a level** (`naming-and-structure.md §6`).
+Ask it the way the user thinks of it — a few **branching** questions, in this order:
+
+1. **Purpose (the first fork):**
+   - **Competition** → which format(s): **EMMA / AYA / CARMusic — one, several, or all.** ⚠️ Formats judge differently and some techniques are **mutually exclusive** (e.g. crossfeed stabilises an EMMA stage but is never used for AYA) → "several/all" = **separate presets**, not one tune (`competition.md`, `preset-strategy.md`). A format names a **GOAL**, not a slope recipe (`knowledge/approaches.md`).
+   - **For yourself (daily enjoyment)** → fan out into #3 (music · loudness · taste).
+   - **Both** → competition preset(s) + an enjoyment preset; base+voicing makes the second cheap.
+2. **Who is the tune FOR — the reference seat(s)** (ask explicitly; it's a GOAL, not a detail): the **driver only** / the **front passenger too** / **all seats**. (The car's **LHD/RHD** from §1 sets the *direction* of the L/R asymmetry.) ⚠️ This decides what the tune **optimises**: a **single seat** can be fully centred and imaged — one listening point is THE reference; **all seats** is a deliberate **compromise** — no perfect phantom centre for anyone, you trade per-seat perfection for an even spread. Settle it up front — it changes the centering/TA strategy (`diagnostic-techniques.md §16`), not just a level.
+3. **Music & how you listen (the "for-yourself" branch):** genres + **what you love most** (bass · vocals · winds & strings · acoustic · electronica) → seeds the curve character; 3–5 favourite reference tracks; **how loud** (loud vs moderate → equal-loudness, `staging-depth.md §3`); long/short trips.
+4. **What stage we're building** (priorities — you can't maximize everything at once): width / depth-layering / height / a tight center focus; rear envelopment or front-only. State the physical ceilings honestly: depth is limited by the mid's geometry (`staging-depth.md §4`), envelopment needs a rear.
+5. **Taste axes:** warm↔bright · bass-heavy↔neutral · forward↔laid-back · accuracy↔fun.
+6. **Choosing the target curve — TOGETHER with the user, there is NO default.** Walk through the **curve→character** table (`voicing-by-ear.md`), narrow it by genres/taste to 2–3 candidates, finalize via the curve-audition method (same place) or take a candidate as the session's start and validate by ear in Phase 5/6. **A curve = a start and a shape, not a finish and not a level** (`naming-and-structure.md §6`). ⚠️ The curve is only **SEEDED** here — it's finalised AFTER the raw baseline (Phase 0), with the measured reality in hand.
+
+> **The order the user pictures (and the skill follows):** goals (this §2) → **equipment analysis** (§1 + the DSP capability §4) → **raw baseline measurement** (Phase 0) → **finalise the target curve** → tuning. The curve is chosen *with* the measurement, not before it.
 
 ## 3. Install verification — BEFORE the first measurement
 
