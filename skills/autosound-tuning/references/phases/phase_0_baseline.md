@@ -27,6 +27,13 @@ Load the chosen house curve into REW.
 * Anchoring of curves and target levels is handled relative to the measured midrange level.
 * **Do NOT generate per-band targets yet!** Per-band targets depend on the final acoustic crossovers and are generated in Phase 1 (Step 5b) after crossovers are finalized.
 
+### 2.5 Prepare the Base DSP Profile (Arbiter)
+Before taking raw baseline measurements, prepare the clean starting preset in Helix PC-Tool:
+* **Clean Baseline Profile:** Start with a clean/reset preset in Helix PC-Tool (representing version `v0`).
+* **Basic Configuration Only:** Configure the input-to-output routing matrix (Input/Output Matrix) and assign correct output names (`tw-L/R`, `m-L/R`, `w-L/R`, `sw`) according to the glossary.
+* **Zero Acoustic Modifiers:** Ensure all acoustic modifiers are cleared: all delays set to exactly `0 ms / 0 cm / 0 samples`, all polarities set to NORM, all output EQs flat (bypass/0 dB), and initial output gains set to 0 dB (with protective crossovers applied to ВЧ/СЧ as described in Phase 1).
+* This forms the "pure routing preset" baseline from which all subsequent acoustic tuning is built.
+
 ### 3. Capture the Baseline
 Instruct the user to measure the current whole-system response.
 * Capture `ALL_1 (sw)` and `ALL_1 (rta)`.
