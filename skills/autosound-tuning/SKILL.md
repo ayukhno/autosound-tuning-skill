@@ -49,9 +49,11 @@ Before proposing any measurements or adjustments, run these steps in order:
 
 These rules govern every session turn. Never delegate or defer them:
 * **Output Honesty & Anti-Overconfidence:** If a method is known-fragile for the current signal/context (e.g., dirty door impulse responses, low-frequency onsets, single-point high-frequency reads, phase-math polarity predictions, or API index lookups), **never** present its output as reliable fact. State your confidence honestly, describe the risks, and reach for a robust method (cross-correlation, summation, or name-based matching) or cross-check (GUI cursor, repeat measurements, or graph verification) before asserting a number.
-* **⚠️ INTERACTIVE PRESENTATION RULE (Lesson 2026-06-27):** Never simply refer to local files on disk or expect the user to open and parse files to find the settings to apply. You MUST output all actionable DSP parameters (crossovers, delays, gains, polarities) directly in your chat response as a highly legible, step-by-step list with arrow pointers (`──►`) specifying exact values (both samples and milliseconds for Helix DSP), or as clean Markdown tables. This is the **Golden Standard Format** for user instructions:
+* **⚠️ INTERACTIVE PRESENTATION RULE (Lesson 2026-06-27):** Never simply refer to local files on disk or expect the user to open and parse files to find the settings to apply. You MUST output all actionable DSP parameters (crossovers, delays, gains, polarities) directly in your chat response as a highly legible, step-by-step list with arrow pointers (`──►`) specifying exact values (both samples and milliseconds for Helix DSP), or as clean Markdown tables.
+  * **⚠️ CRITICAL WARNING — DSP SAMPLE RATE SENSITIVITY:** Converting physical delay (ms / cm) into digital samples is **strictly hardware-dependent** based on the DSP's native operating sample rate (e.g., 96 kHz for Helix DSP Ultra S, but 48 kHz for some other DSPs). Entering sample values calculated for 96 kHz into a 48 kHz DSP will double the physical delay and completely ruin the acoustic alignment. **Rule: Always check the active car/DSP profile (`autosound_context.md`) for the native sample rate. If calculating samples, explicitly state the assumed frequency (e.g., "розраховано для Helix 96 кГц"). Always instruct the user that if they use a different DSP or if the sample rate differs, physical milliseconds (ms) or centimeters (cm) remain the absolute, hardware-independent source of truth.**
+  This is the **Golden Standard Format** for user instructions:
   ```markdown
-  ### Крок 1. Налаштування процесора в Helix PC-Tool
+  ### Крок 1. Налаштування процесора в Helix PC-Tool (Примітка: затримки розраховано для Helix 96 кГц)
   1. Запустіть Helix PC-Tool на вашому Windows-комп'ютері або у віртуальній машині.
   2. Перейдіть у меню Crossovers (Кросовери) та встановіть для каналів:
       • ВЧ (tw-L, tw-R): HPF = 3500 Гц | Крутизна = Linkwitz-Riley 24 дБ (LR4).
@@ -59,7 +61,7 @@ These rules govern every session turn. Never delegate or defer them:
       • НЧ (w-L, w-R): HPF = 60 Гц, LPF = 300 Гц | LR4 (24 дБ).
       • Сабвуфер (sw): HPF (Subsonic) = 20 Гц BW2 (Butterworth 12 дБ) | LPF = 60 Гц LR4 (24 дБ).
       • Тил (r-L, r-R) та Центр (c): Тимчасово заглушіть (Mute).
-  3. Перейдіть у меню Time Alignment (Затримки) та введіть значення:
+  3. Перейдіть у меню Time Alignment (Затримки) та введіть значення (мілісекунди — абсолютний референс, семпли наведено для 96 кГц):
       • tw-L (Канал A) ──► 626 семплів (6.52 мс)
       • tw-R (Канал B) ──► 510 семплів (5.31 мс)
       • m-L  (Канал C) ───► 633 семпли (6.59 мс)
