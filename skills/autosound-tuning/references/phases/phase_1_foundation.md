@@ -23,6 +23,11 @@ The user takes measurements for each isolated channel using protective HPFs:
 
 ### 2. Gross / Arrival Time-Alignment (TA)
 Equalize the physical flight times of sound from each driver to the microphone.
+* **⚠️ CRITICAL RULE: NEVER BLINDLY TRUST REW'S AUTOMATED DELAY ESTIMATES (Lesson 2026-06-27):**
+  * **The situation is always such that we MUST inspect the impulse response graphs manually in the REW GUI, rather than trusting REW's automated numbers, because REW's internal estimation logic is fixed (фіксована логіка).**
+  * REW's automatic delay-estimation logic easily locks onto strong late reflections (windshield, floor, or console) instead of the true direct sound, or can be skewed by pre-existing active DSP delays.
+  * **How to manually inspect/verify:** Open the Impulse Response (IR) graph in the REW GUI. Locate the true geometric beginning of the impulse (**onset** — the very first deviation of the leading edge from the zero-amplitude line).
+  * **Accounting for DSP offsets:** Always check if any time delays or phase adjustments were active in the DSP during measurement. If the DSP had active delays (e.g., from a prior tune), the acoustic arrival will be measured on top of those existing delays. We must manually subtract/account for those pre-existing delays to find the true physical acoustic paths.
 * Use the **IR FIRST FRONT** (leading edge, NOT the global peak) of each solo channel.
 * **Reference Selection:** The latest-arriving driver gets `0.00 ms` added delay, and every earlier driver is delayed to match it. Find "who is latest" from the measurements — do **not** assume it is the midbass.
 * *Note:* Absolute IR time is crossover-independent and should be set early. Joint phase alignment is a separate, second step done in Phase 2.
