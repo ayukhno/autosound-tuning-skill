@@ -128,6 +128,11 @@ A unified Python implementation is available as a cross-platform fallback, but *
 
 If a direct API or local CLI is unavailable, both the Bash and Python channels support **Clipboard Mode**, copying the complete prompt block to your host's clipboard for easy pasting into any Web-browser LLM chat.
 
+### 3. Autopilot: Integrated Multi-Agent Self-Loop (Zero-Configuration)
+For the ultimate streamlined experience, you can execute the review loop entirely within this single terminal session using the same underlying model under a different persona. 
+* **Subagent Fork:** Spawns a background subagent (`critic_advisor`) with an isolated context using the `invoke_subagent` tool. This ensures perfect anti-anchoring, as the reviewer has zero access to the generator's inner monologue, only seeing the proposed package.
+* **Script Automation:** If an API key is configured, the Generator can programmatically execute the local `autosound_ai.py` or Bash scripts and render the Critic-Advisor's response directly to the user.
+
 ---
 
 ## 📊 Model Selection Guidance
