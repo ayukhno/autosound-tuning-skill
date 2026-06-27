@@ -1,10 +1,16 @@
-# Setting up the Critic / Advisor channel (out-of-the-box)
+# Setting up the Critic-Advisor channel (out-of-the-box)
 
-The reviewer channel is a CLI wrapper (`scripts/gemini_critic.sh` + `scripts/gemini_advisor.sh`) that sends your Generator package to a **second AI** acting as Critic/Advisor — the single biggest quality lever in this method (one-perspective tuning is noticeably worse). The **role is core; the specific CLI is not.** This file gets the default channel working on a fresh machine, then lists fallbacks.
+The reviewer channel is critical to prevent single-perspective bias. There are three ways to configure it (Autopilot, Automated Scripts, or Manual Clipboard):
 
-> 🩺 **Stuck? Run the doctor FIRST:** `scripts/gemini_critic.sh --doctor`. It checks the CLI, a fake-`agy` symlink, macOS quarantine, `.critic-env` syntax, the Contract/Context paths, and runs a live 1-line smoke — printing the exact fix for each, so you diagnose all of §1–§4 in ONE command instead of serially. (A real cold-start hit ~6 papercuts here; the doctor surfaces them at once.)
+## 0. Autopilot: Integrated Multi-Agent Self-Loop (Default & Recommendation)
+If the user selects Autopilot mode, **no external API keys or CLI logins are required** from the user, as the Generator itself programmatically spawns an isolated subagent or runs local scripts.
+* **How to verify/smoke-test it:**
+  Simply spawn a quick test subagent named `critic_advisor` with an isolated context and ask: *"Channel check: reply with one line 'Autopilot works'."*.
+  If you get a reply, the channel is 100% ready. Mark it as verified and bypass any API key/CLI questions!
 
 ## 1. Install the CLI — `agy` (Antigravity) is the default
+
+> 🩺 **Stuck? Run the doctor FIRST:** `scripts/gemini_critic.sh --doctor`. It checks the CLI, a fake-`agy` symlink, macOS quarantine, `.critic-env` syntax, the Contract/Context paths, and runs a live 1-line smoke — printing the exact fix for each, so you diagnose all of §1–§4 in ONE command instead of serially. (A real cold-start hit ~6 papercuts here; the doctor surfaces them at once.)
 
 Google is steering free interactive access into **Antigravity (`agy`)**; `@google/gemini-cli`'s free OAuth sign-in is now **deprecated** (`IneligibleTierError`). So `agy` is the recommended default; gemini-cli-via-API-key is the cross-platform fallback (§2).
 
