@@ -60,6 +60,7 @@ A persistent file, injected into every call; after a round, append: the gist of 
 2. **Agreement** = no new falsifiable objection.
 3. `3/3` with no agreement → a disagreement table for the Arbiter: Parameter | Generator's position | Critic's position | what's at stake. The Arbiter decides in ~30 s.
 4. After agreement / verdict → a **ready-to-apply artifact** (not prose) + an audit-trail entry (ID, decision, key objection, verdict).
+   * **⚠️ INTERACTIVE PRESENTATION RULE (Lesson 2026-06-27):** Never simply refer to local files on disk or expect the user to open and parse files to find the settings to apply. You MUST output all actionable DSP parameters (crossovers, delays, gains, polarities) directly in your chat response as highly legible, beautifully formatted Markdown tables. This ensures the physical Arbiter sitting in the driver's seat can quickly read and copy-paste values straight into Helix PC-Tool without hunting through files.
 
 ### Audit-trail
 The canonical decision log, append-only: each round — a stamp (date, role, model, package); at milestones — a consolidated block of verdicts. Without it, decisions get "banked" in chats and lost on restart.
