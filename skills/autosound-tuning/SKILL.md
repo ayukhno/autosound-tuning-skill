@@ -19,7 +19,7 @@ You orchestrate an iterative, "token-smart" car-audio tuning process. The core m
 ## 🏛️ The Three Roles (Unity of Command)
 
 * **Creator + Generator (You, Claude):** Owns the code, architecture, and writes the tuning packages in the Data Contract format.
-* **Critic + Advisor (Gemini, via `autosound_ai.py`):** Independent acoustic challenger. Finds risks, tests assumptions, and does not edit core files.
+* **Critic + Advisor (Gemini, via stable Bash wrappers `gemini_critic.sh` / `gemini_advisor.sh`):** Independent acoustic challenger. Finds risks, tests assumptions, and does not edit core files. (An experimental cross-platform Python fallback `autosound_ai.py` is available but must pass doctor & live smoke tests before production use).
 * **Arbiter (User):** Makes the final call on disagreements.
 
 > [!TIP]
@@ -42,6 +42,21 @@ Claude, Gemini, and the user are equal colleagues. Never demean Gemini's objecti
 Before proposing any measurements or adjustments, run these steps in order:
 1. **Verify Hardware:** Mic connected, REW API running on port 4735, cabin closed, and active DSP input matches current task. See [pre-session checklist](file:///skills/autosound-tuning/references/phases/phase_0_baseline.md#1-agree-on-naming-conventions-once).
 2. **Reconcile State:** Read `audit-trail.md`, `tuning-changelog` (specifically the top **▶️ CONTINUE** block), and `dsp-state-current`. Never assume levels or polarities from memory. Ask if the user has changed anything manually.
+
+---
+
+## ⚠️ Core Behavioral Guardrails (Always Loaded)
+
+These rules govern every session turn. Never delegate or defer them:
+* **Output Honesty & Anti-Overconfidence:** If a method is known-fragile for the current signal/context (e.g., dirty door impulse responses, low-frequency onsets, single-point high-frequency reads, phase-math polarity predictions, or API index lookups), **never** present its output as reliable fact. State your confidence honestly, describe the risks, and reach for a robust method (cross-correlation, summation, or name-based matching) or cross-check (GUI cursor, repeat measurements, or graph verification) before asserting a number.
+* **Reviewer is CORE (Propose Early):** A second-opinion reviewer is a colossal quality gain. **At the first tuning proposal of every session**, if no reviewer channel is active yet, you **must** proactively propose initiating the Critic/Reviewer channel before emitting the package. Do not quietly proceed single-perspective.
+* **Verify Banked Decisions:** On every resume or session start, check `audit-trail.md` specifically for "banked decisions" (decisions agreed upon in previous rounds but not yet applied to the active DSP state) and prompt the user to apply them.
+* **Skill Maintenance Loop:** This skill is organically co-developed with the project. When the user requests a refactor or enough has piled up, run this 5-step loop:
+  1. **Harvest:** Read `rew_analitic/skill-inbox.md` + scan `tuning-changelog` for `Lesson:` or method lines.
+  2. **Correlate:** Check candidates against the current skill. Fold new insights in, clear duplicates.
+  3. **Validate:** If a candidate contradicts, don't just delete the old line—keep it as a conditional variant if plausible for other geometries/cabins.
+  4. **Provisionality:** Treat early claims as provisional, not gospel; replace guesses with confirmed practices.
+  5. **Fold & Clear:** Update files in the skill/references, then clear the inbox to start clean.
 
 ---
 
@@ -95,14 +110,23 @@ Use the `view_file` tool to load these specialized guides exactly when their spe
 
 ---
 
-## 💻 Python Automation (`autosound_ai.py`)
+## 🛠️ Gemini Review Channel (Stable Bash & Python Fallback)
 
-To execute a review round with Gemini, use the unified cross-platform Python script:
+The reviewer channel is critical to prevent single-perspective bias. Run review rounds using either the stable Bash wrappers (primary, highly recommended on macOS/Linux) or the cross-platform Python tool (experimental fallback):
+
+### 1. Primary: Stable Bash Wrappers (Recommended)
+Use these proven, battle-tested wrappers for executing review rounds. They auto-detect your local CLI environment (`agy` or `gemini` cli) and handle Pro↔Flash quota fallback, credentials, and logging:
+* **Critic Mode:** `scripts/gemini_critic.sh <package.md> [trace.csv]`
+* **Advisor Mode:** `scripts/gemini_advisor.sh <package.md> [trace.csv]`
+
+*(Note: In user workspaces, these are typically located in `.agents/skills/autosound-tuning/scripts/` or `.claude/skills/autosound-tuning/scripts/`).*
+
+### 2. Experimental: Cross-Platform Python Automation (`autosound_ai.py`)
+A unified Python implementation is available as a cross-platform fallback, but **must pass doctor and live smoke tests** (`python scripts/autosound_ai.py doctor`) before production use:
 * **Critic Mode:** `python scripts/autosound_ai.py critic <package.md> [trace.csv]`
 * **Advisor Mode:** `python scripts/autosound_ai.py advisor <package.md> [trace.csv]`
-* **Doctor Mode:** `python scripts/autosound_ai.py doctor`
 
-If a direct API or local CLI is unavailable, the script automatically activates **Clipboard Mode**, copying the complete prompt block to your host's clipboard to easily paste into any Web-browser LLM chat.
+If a direct API or local CLI is unavailable, both the Bash and Python channels support **Clipboard Mode**, copying the complete prompt block to your host's clipboard for easy pasting into any Web-browser LLM chat.
 
 ---
 
