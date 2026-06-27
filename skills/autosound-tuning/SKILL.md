@@ -49,7 +49,30 @@ Before proposing any measurements or adjustments, run these steps in order:
 
 These rules govern every session turn. Never delegate or defer them:
 * **Output Honesty & Anti-Overconfidence:** If a method is known-fragile for the current signal/context (e.g., dirty door impulse responses, low-frequency onsets, single-point high-frequency reads, phase-math polarity predictions, or API index lookups), **never** present its output as reliable fact. State your confidence honestly, describe the risks, and reach for a robust method (cross-correlation, summation, or name-based matching) or cross-check (GUI cursor, repeat measurements, or graph verification) before asserting a number.
-* **⚠️ INTERACTIVE PRESENTATION RULE (Lesson 2026-06-27):** Never simply refer to local files on disk or expect the user to open and parse files to find the settings to apply. You MUST output all actionable DSP parameters (crossovers, delays, gains, polarities) directly in your chat response as highly legible, beautifully formatted Markdown tables. This ensures the physical Arbiter sitting in the driver's seat can quickly read and copy-paste values straight into Helix PC-Tool without hunting through files.
+* **⚠️ INTERACTIVE PRESENTATION RULE (Lesson 2026-06-27):** Never simply refer to local files on disk or expect the user to open and parse files to find the settings to apply. You MUST output all actionable DSP parameters (crossovers, delays, gains, polarities) directly in your chat response as a highly legible, step-by-step list with arrow pointers (`──►`) specifying exact values (both samples and milliseconds for Helix DSP), or as clean Markdown tables. This is the **Golden Standard Format** for user instructions:
+  ```markdown
+  ### Крок 1. Налаштування процесора в Helix PC-Tool
+  1. Запустіть Helix PC-Tool на вашому Windows-комп'ютері або у віртуальній машині.
+  2. Перейдіть у меню Crossovers (Кросовери) та встановіть для каналів:
+      • ВЧ (tw-L, tw-R): HPF = 3500 Гц | Крутизна = Linkwitz-Riley 24 дБ (LR4).
+      • СЧ (m-L, m-R): HPF = 300 Гц, LPF = 3500 Гц | LR4 (24 дБ).
+      • НЧ (w-L, w-R): HPF = 60 Гц, LPF = 300 Гц | LR4 (24 дБ).
+      • Сабвуфер (sw): HPF (Subsonic) = 20 Гц BW2 (Butterworth 12 дБ) | LPF = 60 Гц LR4 (24 дБ).
+      • Тил (r-L, r-R) та Центр (c): Тимчасово заглушіть (Mute).
+  3. Перейдіть у меню Time Alignment (Затримки) та введіть значення:
+      • tw-L (Канал A) ──► 626 семплів (6.52 мс)
+      • tw-R (Канал B) ──► 510 семплів (5.31 мс)
+      • m-L  (Канал C) ───► 633 семпли (6.59 мс)
+      • m-R  (Канал D) ───► 515 семплів (5.36 мс)
+      • w-L  (Канал E) ───► 522 семпли (5.44 мс)
+      • w-R  (Канал F) ───► 450 семплів (4.69 мс)
+      • sw   (Канал H) ────► 0 семплів (0.00 мс)
+  4. Перейдіть у меню Gain (Рівні) та притисніть ліву сторону для базового балансу сцени:
+      • tw-L ──► -1.5 дБ | m-L ──► -2.0 дБ | w-L ──► -1.5 дБ
+      • Всі праві канали та саб залишаються на 0.0 дБ.
+  5. Збережіть цей пресет у процесор (наприклад, у Слот 1) та збережіть файл на комп'ютер як B8_EMMA_v1_foundation.pct6.
+  ```
+  This ensures the physical Arbiter sitting in the driver's seat can quickly read and input values straight into Helix PC-Tool without hunting through files.
 * **Reviewer is CORE (Propose Early):** A second-opinion reviewer is a colossal quality gain. **At the first tuning proposal of every session**, if no reviewer channel is active yet, you **must** proactively propose initiating the Critic/Reviewer channel before emitting the package. Do not quietly proceed single-perspective.
 * **Verify Banked Decisions:** On every resume or session start, check `audit-trail.md` specifically for "banked decisions" (decisions agreed upon in previous rounds but not yet applied to the active DSP state) and prompt the user to apply them.
 * **Skill Maintenance Loop:** This skill is organically co-developed with the project. When the user requests a refactor or enough has piled up, run this 5-step loop:
