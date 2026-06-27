@@ -43,6 +43,12 @@ Equalize the physical flight times of sound from each driver to the microphone.
 ### 4. Review and Discussion
 Format a Generator proposal package (per the data contract §3) and send it to the Critic. Refine the levels, timing, and crossovers. Upon agreement, the user applies these values to the DSP.
 
+* **How to apply & save to the DSP (Arbiter):**
+  1. Open Helix PC-Tool and load your **existing active baseline setup** (the current active profile you are starting from). Do *not* assume a `.pct6` file of version `v0` exists on disk if this is a fresh start.
+  2. Enter the new parameters (protective/preliminary crossovers, delays, and level adjustments) exactly as agreed in the final proposal.
+  3. Save the modified profile as `<prefix>_v1_foundation.pct6` locally on your computer in the workspace directory **`rew_analitic/dsp-config/`** (so it can be committed to Git and tracked properly).
+  4. Write/flash this configuration into an active, safe slot of your physical Helix DSP to make it active before running any sweeps.
+
 ### 5. Generate Band-Specific Targets (Step 5b)
 Once crossovers are locked, generate per-band target curves using [nonotuningtool.com](https://nonotuningtool.com).
 * **Acoustic Summation:** The tool computes targets that are lowered in overlap regions so their acoustic sum reconstructs the house curve without a joint-hump.
