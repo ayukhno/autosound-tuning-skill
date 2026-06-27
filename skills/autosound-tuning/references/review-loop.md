@@ -35,8 +35,7 @@ Periodically (at milestones, on reversals, or when "we've tried everything") run
 | Role | Essence | When |
 |---|---|---|
 | **Generator** | analyzes, forms the proposal | you (the main agent) |
-| **Critic** (Challenger) | stress-test: risks, false assumptions, falsifiable objections; **does not praise** | one-off decisions, checking proposals |
-| **Advisor** (Advisor-Expert) | co-builder: best practice, concrete solutions + order, questions for the Arbiter; **has session memory** | a long collaborative thread |
+| **Critic-Advisor** <br>*(Критик-Радник)* | Unified reviewer: stress-tests physical hypotheses (falsifiable acoustic objections) AND provides constructive architectural advice + maintains process consistency and session memory; **does not praise** | checking proposals, guiding state transitions, preventing infinite loops |
 | **Arbiter** | the human: the final word on disagreement, ear / domain truth | always |
 | **Cold-auditor** | another model, cold-start, full history | milestones, reversals, "tried everything" |
 

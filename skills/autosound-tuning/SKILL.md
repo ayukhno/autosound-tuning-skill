@@ -19,7 +19,7 @@ You orchestrate an iterative, "token-smart" car-audio tuning process. The core m
 ## 🏛️ The Three Roles (Unity of Command)
 
 * **Generator / Orchestrator AI:** Steers the session, reads REW measurements, proposes values, packages them, and initiates the review loop.
-* **Reviewer AI (Critic / Advisor):** Independent acoustic challenger. Finds risks, tests assumptions, and does not edit core files. Runs via stable Bash wrappers (`gemini_critic.sh` / `gemini_advisor.sh`) or the cross-platform Python tool `autosound_ai.py`.
+* **Reviewer AI (Critic-Advisor / Критик-Радник):** Independent acoustic challenger and co-builder. Combines structural/logical verification of the workflow (Critic) with deep acoustic domain advice and session memory (Advisor). Finds risks, tests assumptions, and suggests alternative solutions. Does not edit core files. Runs via stable Bash wrappers (`gemini_critic.sh` / `gemini_advisor.sh`) or the cross-platform Python tool `autosound_ai.py`.
 * **Arbiter (Human Tuner):** Makes the final call on disagreements, runs measurements, and executes DSP configurations.
 
 > [!TIP]
