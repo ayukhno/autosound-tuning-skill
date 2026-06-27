@@ -2,12 +2,16 @@
 
 🇬🇧 **English** · 🇩🇪 [Deutsch](README.de.md) · 🇵🇱 [Polski](README.pl.md) · 🇺🇦 [Українська](README.uk.md)
 
-**In one line:** a Claude skill that helps you tune car audio — it reads your REW measurements, analyzes them, recommends settings, and can push EQ back into REW.
+**In one line:** a Claude skill that guides you toward clean, transparent, balanced sound in *your* car — it brings the whole craft to your specific setup, reads your REW measurements, and helps you choose each change.
 
 - 📊 **Works with REW** over its API — pulls measurements, loads EQ filters back in
 - 🎯 **Knows the craft** — target curves, tuning practices, a step-by-step process
 - 🎧 **Test tracks** — what to listen for and on which track (descriptions, not audio)
 - 🚗 **Learns your setup** — accumulates car & gear knowledge, only with your consent
+
+**Who it's for — the Seeker.** Anyone building their own sound who's still learning the craft (not only the seasoned master). You bring the ears and the car; the skill brings the map.
+
+**Why.** Tuning is an avalanche — too many methods, parameters, and rules of thumb to hold in your head, and it's easy to dive into one detail and lose the whole picture. The skill is your navigator: it holds the knowledge, points to the few changes that matter, and keeps the soundstage-versus-tonal-balance trade-off in view. Your ear is the final judge.
 
 It covers a full tune — from a new project (equipment + goals interview, target-curve choice, install checks) through crossovers, time alignment, phase, per-channel and summed EQ, and imaging, to voicing to taste — driven by a Generator ↔ Critic ↔ Arbiter review loop. It's **method, not machine**: no car's measurements or DSP state live here (those stay in your project), so it works on **any car / any DSP**.
 

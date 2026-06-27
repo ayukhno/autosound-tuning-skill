@@ -2,12 +2,16 @@
 
 🇬🇧 [English](README.md) · 🇩🇪 **Deutsch** · 🇵🇱 [Polski](README.pl.md) · 🇺🇦 [Українська](README.uk.md)
 
-**In einem Satz:** ein Claude-Skill, der dir hilft, Car-Audio abzustimmen — er liest deine REW-Messungen, analysiert sie, empfiehlt Einstellungen und kann EQ zurück in REW laden.
+**In einem Satz:** ein Claude-Skill, der dich zu **klarem, transparentem, ausgewogenem Klang** in *deinem* Auto führt — er bringt das ganze Handwerk auf dein konkretes Setup, liest deine REW-Messungen und hilft dir, jede Änderung zu wählen.
 
 - 📊 **Arbeitet mit REW** über die API — holt Messungen, lädt EQ-Filter zurück
 - 🎯 **Kennt das Handwerk** — Zielkurven, Abstimmpraktiken, ein Schritt-für-Schritt-Prozess
 - 🎧 **Test-Tracks** — worauf zu achten ist und auf welchem Track (Beschreibungen, kein Audio)
 - 🚗 **Lernt dein Setup** — sammelt Wissen über Auto & Geräte, nur mit deiner Zustimmung
+
+**Für wen — der Seeker (Suchende).** Alle, die den eigenen Klang aufbauen und das Handwerk noch lernen (nicht nur der erfahrene Meister). Du bringst Ohren und Auto — der Skill bringt die Karte.
+
+**Warum.** Abstimmen ist eine Lawine — zu viele Methoden, Parameter und Faustregeln, um sie im Kopf zu behalten, und man verliert sich leicht in einem Detail und damit das Gesamtbild. Der Skill ist dein Navigator: Er hält das Wissen bereit, weist auf die wenigen Änderungen hin, die wirklich zählen, und behält den Kompromiss zwischen Bühnenabbildung und tonaler Balance im Blick. Dein Ohr ist der letzte Richter.
 
 Er deckt eine komplette Abstimmung ab — von einem neuen Projekt (Interview zu Equipment + Zielen, Wahl der Zielkurve, Einbau-Checks) über Frequenzweichen, Laufzeitkorrektur, Phase, kanalweisen und summierten EQ und die Bühnenabbildung, bis hin zum Voicing nach Geschmack — gesteuert von einer Generator-↔-Kritiker-↔-Schiedsrichter-Review-Schleife. Es ist **Methode, keine Maschine**: keine Messungen eines Autos oder DSP-Zustände liegen hier (die bleiben in deinem Projekt), also funktioniert es mit **jedem Auto / jedem DSP**.
 

@@ -2,12 +2,16 @@
 
 🇬🇧 [English](README.md) · 🇩🇪 [Deutsch](README.de.md) · 🇵🇱 **Polski** · 🇺🇦 [Українська](README.uk.md)
 
-**W jednym zdaniu:** skill dla Claude, który pomaga stroić car-audio — czyta twoje pomiary z REW, analizuje je, podpowiada ustawienia i potrafi wgrać EQ z powrotem do REW.
+**W jednym zdaniu:** skill dla Claude, który prowadzi cię do **czystego, przejrzystego, zrównoważonego brzmienia** w *twoim* aucie — wnosi całe rzemiosło do twojego konkretnego zestawu, czyta twoje pomiary z REW i pomaga wybrać każdą zmianę.
 
 - 📊 **Współpracuje z REW** przez API — pobiera pomiary, wgrywa filtry EQ z powrotem
 - 🎯 **Zna rzemiosło** — krzywe docelowe, praktyki strojenia, proces krok po kroku
 - 🎧 **Ścieżki testowe** — czego słuchać i na której ścieżce (opisy, nie audio)
 - 🚗 **Uczy się twojego zestawu** — gromadzi wiedzę o aucie i sprzęcie, tylko za twoją zgodą
+
+**Dla kogo — Seeker (poszukiwacz).** Każdy, kto buduje własne brzmienie i wciąż uczy się rzemiosła (nie tylko doświadczony mistrz). Ty dajesz uszy i auto — skill daje mapę.
+
+**Dlaczego.** Strojenie to lawina — zbyt wiele metod, parametrów i reguł, by utrzymać je w głowie, i łatwo zanurzyć się w jednym szczególe i zgubić cały obraz. Skill jest twoim nawigatorem: trzyma wiedzę, wskazuje te kilka zmian, które naprawdę się liczą, i utrzymuje w polu widzenia kompromis między sceną a balansem tonalnym. Twoje ucho jest ostatecznym sędzią.
 
 Obejmuje pełne strojenie — od nowego projektu (wywiad o sprzęcie + celach, wybór krzywej docelowej, kontrola montażu) przez zwrotnice, korekcję czasową, fazę, EQ kanałowy i sumaryczny oraz budowę sceny, aż po voicing pod własny gust — sterowane pętlą recenzji Generator ↔ Krytyk ↔ Arbiter. To **metoda, nie maszyna**: pomiary żadnego auta ani stan DSP tu nie są przechowywane (zostają w twoim projekcie), więc działa z **dowolnym autem / dowolnym DSP**.
 
