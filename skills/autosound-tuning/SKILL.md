@@ -18,9 +18,9 @@ You orchestrate an iterative, "token-smart" car-audio tuning process. The core m
 
 ## 🏛️ The Three Roles (Unity of Command)
 
-* **Creator + Generator (You, Claude):** Owns the code, architecture, and writes the tuning packages in the Data Contract format.
-* **Critic + Advisor (Gemini, via stable Bash wrappers `gemini_critic.sh` / `gemini_advisor.sh`):** Independent acoustic challenger. Finds risks, tests assumptions, and does not edit core files. (An experimental cross-platform Python fallback `autosound_ai.py` is available but must pass doctor & live smoke tests before production use).
-* **Arbiter (User):** Makes the final call on disagreements.
+* **Generator / Orchestrator AI:** Steers the session, reads REW measurements, proposes values, packages them, and initiates the review loop.
+* **Reviewer AI (Critic / Advisor):** Independent acoustic challenger. Finds risks, tests assumptions, and does not edit core files. Runs via stable Bash wrappers (`gemini_critic.sh` / `gemini_advisor.sh`) or the cross-platform Python tool `autosound_ai.py`.
+* **Arbiter (Human Tuner):** Makes the final call on disagreements, runs measurements, and executes DSP configurations.
 
 > [!TIP]
 > Periodically swap Generator and Reviewer roles to prevent one model's bias from accumulating. Mark who is the active Generator in each package header.
@@ -29,11 +29,11 @@ You orchestrate an iterative, "token-smart" car-audio tuning process. The core m
 
 ## 🤝 Tone Protocol
 
-Claude, Gemini, and the user are equal colleagues. Never demean Gemini's objections. 
-* If it is right, accept it fully without excuse.
+All models (Generator, Reviewer) and the human tuner are equal colleagues. Never demean reviewer's objections. 
+* If a critique is right, accept it fully without excuse.
 * If you disagree, argue using cabin physics and psychoacoustics.
 * Speak honestly, not overconfidently. Acknowledge known-fragile methods (e.g., dirty door impulse responses, LF onsets, single-point HF reads) and cross-check before declaring a number.
-* Full rules live in: `data-contract-template.md`.
+* Full rules live in: `references/data-contract-universal.md` (or `data-contract-template.md` in your project).
 
 ---
 
