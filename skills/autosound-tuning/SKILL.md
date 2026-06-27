@@ -47,8 +47,8 @@ Before proposing any measurements or adjustments, run these steps in order:
 
 ## 🧭 The "Phase Sliding Window" Protocol
 
-To minimize token usage and focus LLM attention, the tuning phases are divided into modular reference documents. 
-* **The Rule:** You **MUST** read the `tuning-changelog` to identify the active phase. Using the `view_file` tool, load **ONLY** the reference file for the current phase and the next adjacent phase. Do not load other phase files unless requested.
+To focus LLM attention and prevent cognitive overload, the tuning process is modularized. 
+* **The Rule:** You **MUST** read the top **▶️ CONTINUE** block of the `tuning-changelog` at the start of every session to identify the active phase. Using the `view_file` tool, load **ONLY** the reference file for that specific active phase and the next adjacent phase. Do not guess the phase and do not load other phases unless requested.
 
 ### Phase Reference Files
 * **Phase -1: Project Intake & Checklist** ──► [phase_-1_intake.md](file:///skills/autosound-tuning/references/phases/phase_-1_intake.md)
@@ -65,33 +65,33 @@ To minimize token usage and focus LLM attention, the tuning phases are divided i
 
 ## 📁 Reference Map (Read On-Demand via `view_file`)
 
-Use the `view_file` tool to load these specialized guides exactly when their specific read triggers occur:
+Use the `view_file` tool to load these specialized guides exactly when their specific read triggers occur. Do not assume or skip these rules:
 
 | Reference File | Read Trigger (When to read) |
 | :--- | :--- |
-| [references/installation.md](file:///skills/autosound-tuning/references/installation.md) | Installing, updating, or configuring this skill plugin. |
-| [references/process-phases.md](file:///skills/autosound-tuning/references/process-phases.md) | Initializing or routing between the 9 tuning phases. |
-| [references/project-intake.md](file:///skills/autosound-tuning/references/project-intake.md) | Initiating a new car profile, choosing curves, or verifying installs. |
-| [references/naming-and-structure.md](file:///skills/autosound-tuning/references/naming-and-structure.md) | Reviewing folder structures, save paths, or measurement names. |
-| [references/analysis-playbook.md](file:///skills/autosound-tuning/references/analysis-playbook.md) | Selecting which REW graph (FR, GD, IR, Distortion) to pull for a decision. |
-| [references/diagnostic-techniques.md](file:///skills/autosound-tuning/references/diagnostic-techniques.md) | Interpreting acoustic anomalies, summing groups, or troubleshooting. |
-| [references/filter-types-car-audio.md](file:///skills/autosound-tuning/references/filter-types-car-audio.md) | Selecting crossover filters (Linkwitz-Riley vs. Bessel vs. Butterworth). |
-| [references/staging-depth.md](file:///skills/autosound-tuning/references/staging-depth.md) | Solving soundstage depth, vertical height, or driver layering problems. |
-| [references/enclosure-install-diagnostics.md](file:///skills/autosound-tuning/references/enclosure-install-diagnostics.md) | Separating speaker enclosure resonances from cabin SBIR nulls. |
-| [references/impedance-ts.md](file:///skills/autosound-tuning/references/impedance-ts.md) | Measuring driver T/S parameters, designing enclosures, or DVC wiring. |
-| [references/competition.md](file:///skills/autosound-tuning/references/competition.md) | Tuning or voicing for car audio rulesets (EMMA, AYA, CARMusic). |
-| [references/preset-strategy.md](file:///skills/autosound-tuning/references/preset-strategy.md) | Structuring multiple DSP presets (A/B base tuning vs. voicing). |
-| [references/test-tracks.md](file:///skills/autosound-tuning/references/test-tracks.md) | Selecting diagnostic tracks with specific timestamps for ear checks. |
-| [references/voicing-by-ear.md](file:///skills/autosound-tuning/references/voicing-by-ear.md) | Mapping subjective symptoms to precise parametric equalizer adjustments. |
-| [references/method-hashimoto.md](file:///skills/autosound-tuning/references/method-hashimoto.md) | Applying Hashimoto's specialized "slope-first" by-ear stage-building. |
-| [references/helix-phase-allpass.md](file:///skills/autosound-tuning/references/helix-phase-allpass.md) | Tuning all-pass filters in Helix DSP PC-Tool. |
-| [references/helix-eq-export.md](file:///skills/autosound-tuning/references/helix-eq-export.md) | Formatting and exporting PEQ parameter banks for Helix import. |
-| [references/rew-tool-docs.md](file:///skills/autosound-tuning/references/rew-tool-docs.md) | Reviewing the built-in python REW API tool layout and arguments. |
-| [references/rew-api-quirks.md](file:///skills/autosound-tuning/references/rew-api-quirks.md) | Debugging REW API communication errors, float32 encoding, or off-axis noise. |
-| [references/screen-read-dsp.md](file:///skills/autosound-tuning/references/screen-read-dsp.md) | Capturing and parsing parameters off active DSP software screenshots. |
-| [references/review-loop.md](file:///skills/autosound-tuning/references/review-loop.md) | Organizing the stateless multi-AI review, templates, or disagreement rules. |
-| [references/setup-critic-channel.md](file:///skills/autosound-tuning/references/setup-critic-channel.md) | Setting up or debugging local CLI review helper environments. |
-| [references/feedback-loop.md](file:///skills/autosound-tuning/references/feedback-loop.md) | Executing the Phase 7 closing surveys or sharing profiles. |
+| [references/installation.md](file:///skills/autosound-tuning/references/installation.md) | Installing, updating, or troubleshooting the local skill setup or plugin. |
+| [references/process-phases.md](file:///skills/autosound-tuning/references/process-phases.md) | Deciding next steps, transitioning between phases, or overviewing the 9-stage sequence. |
+| [references/project-intake.md](file:///skills/autosound-tuning/references/project-intake.md) | Initiating a new car profile, conducting the intake/equipment interview, or selecting target curves. |
+| [references/naming-and-structure.md](file:///skills/autosound-tuning/references/naming-and-structure.md) | Formatting measurement names (_N version suffix), storing .mdat files, or structuring DSP presets. |
+| [references/analysis-playbook.md](file:///skills/autosound-tuning/references/analysis-playbook.md) | Deciding which REW graph (FR, Group Delay, IR, CSD, THD, excess-phase) is needed for a specific tuning decision. |
+| [references/diagnostic-techniques.md](file:///skills/autosound-tuning/references/diagnostic-techniques.md) | Interpreting physical anomalies, joint-phase summation, peak-vs-null rules, anchor-to-mids, or output-vs-virtual layering. |
+| [references/filter-types-car-audio.md](file:///skills/autosound-tuning/references/filter-types-car-audio.md) | Selecting crossover filter types (Linkwitz-Riley vs. Bessel vs. Butterworth) and choosing starting crossover points. |
+| [references/staging-depth.md](file:///skills/autosound-tuning/references/staging-depth.md) | Troubleshooting front-back stage depth, vertical stage height, or driver spatial layering. |
+| [references/enclosure-install-diagnostics.md](file:///skills/autosound-tuning/references/enclosure-install-diagnostics.md) | Diagnosing hardware rattles, SBIR vs. speaker cabinet resonances, nearfield testing, or CLD damping. |
+| [references/impedance-ts.md](file:///skills/autosound-tuning/references/impedance-ts.md) | Measuring driver T-S parameters, sealed/ported box design, DVC wiring, or driver impedance matching. |
+| [references/competition.md](file:///skills/autosound-tuning/references/competition.md) | Preparing for EMMA, AYA, or CARMusic SQ competitions (judging guidelines, crossfeed, or target curves). |
+| [references/preset-strategy.md](file:///skills/autosound-tuning/references/preset-strategy.md) | Structuring multiple DSP slots (base output layer vs. subjective virtual voicing presets). |
+| [references/test-tracks.md](file:///skills/autosound-tuning/references/test-tracks.md) | Selecting objective diagnostic audio tracks with timestamps to verify staging, center focus, sibilance, or bass. |
+| [references/voicing-by-ear.md](file:///skills/autosound-tuning/references/voicing-by-ear.md) | Applying Arkadij's symptom-to-fix ear EQ map or executing client subjective taste tuning. |
+| [references/method-hashimoto.md](file:///skills/autosound-tuning/references/method-hashimoto.md) | Applying Hashimoto's specialized "slope-first" filter matching, polarity-by-ear, or mono-center focus. |
+| [references/helix-phase-allpass.md](file:///skills/autosound-tuning/references/helix-phase-allpass.md) | Tuning Helix-specific phase controls or configuring 2nd-order all-pass filters. |
+| [references/helix-eq-export.md](file:///skills/autosound-tuning/references/helix-eq-export.md) | Formatting, exporting, or importing PEQ parameter banks in Audiotec-Fischer format. |
+| [references/rew-tool-docs.md](file:///skills/autosound-tuning/references/rew-tool-docs.md) | Integrating REW API client scripts or verifying the built-in python module layout. |
+| [references/rew-api-quirks.md](file:///skills/autosound-tuning/references/rew-api-quirks.md) | Debugging REW API float32 encoding, single-filter gaindB requests, or loopback timing offsets. |
+| [references/screen-read-dsp.md](file:///skills/autosound-tuning/references/screen-read-dsp.md) | Parsing DSP parameters off screenshots (using vision/screencapture) when config exports are locked. |
+| [references/review-loop.md](file:///skills/autosound-tuning/references/review-loop.md) | Executing TWO-PASS anti-anchoring reviews, handling multi-AI deadlocks (3/3), or running cross-session audits. |
+| [references/setup-critic-channel.md](file:///skills/autosound-tuning/references/setup-critic-channel.md) | Configuring local CLI environments (agy, gemini-cli) or setting up the .critic-env credentials. |
+| [references/feedback-loop.md](file:///skills/autosound-tuning/references/feedback-loop.md) | Executing the Phase 7 closing surveys, collecting skill feedback, or sharing anonymized car profiles. |
 
 ---
 
@@ -108,13 +108,13 @@ If a direct API or local CLI is unavailable, the script automatically activates 
 
 ## 📊 Model Selection Guidance
 
-Proactively advise the user when to switch models. Do not waste expensive context/models on routine tasks:
+Proactively advise the user when to switch models. Do not waste high-reasoning context on routine tasks:
 
-| Active Task | Model | Rationale |
+| Active Task | Model Class | Rationale |
 | :--- | :--- | :--- |
-| Parsing data, routine PEQ adjustments, draft review packages | **Claude 3.5 Sonnet** | High speed, cost-efficient, accurate parser. |
-| Crossover strategy (Phase 1), Multi-AI Deadlocks (3/3) | **Claude 3.5/3.0 Opus** | Exceptional multi-variable cabin physics reasoning. |
-| Technical Verdicts (Phase 3), Complex Psychoacoustic Checks | **Claude 3.5/3.0 Opus** | Highly nuanced judgment calls. |
+| Parsing data, routine PEQ adjustments, draft review packages | **Medium class (e.g., Sonnet)** | High speed, cost-efficient, accurate data parser. |
+| Crossover strategy (Phase 1), Multi-AI Deadlocks (3/3) | **High-reasoning class (e.g., Opus)** | Exceptional multi-variable cabin physics reasoning. |
+| Technical Verdicts (Phase 3), Complex Psychoacoustic Checks | **High-reasoning class (e.g., Opus)** | Highly nuanced judgment calls. |
 
 ---
 
