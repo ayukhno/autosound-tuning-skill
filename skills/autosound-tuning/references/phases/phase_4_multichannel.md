@@ -1,10 +1,12 @@
 # Phase 4 — Center & Rear-Fill Integration (Optional)
 
-This phase integrates the Center and Rear-Fill channels. This **MUST** only be attempted after the main front soundstage (Left, Right, Sub) is perfectly aligned, verified, and locked in Phase 3.
+This phase integrates the Center and Rear-Fill channels — an **optional, additive layer done LATE**.
+
+> ⛔ **GATE: do NOT start center/rear until the FRONT genuinely SATISFIES** — technically locked (Phase 3) **and** subjectively OK to the user by ear (after the front's listening/fine-tuning in Phase 5 and any voicing in Phase 6). Center/rear on an unsatisfying front is **wasted work** — you'll redo it the moment the front changes. Finish the front first.
 
 ## 🎯 Goal-node
 
-**Purpose:** integrate center + rear-fill **without dragging the front stage back** — only after the front (L/R/sub) is locked (Phase 3).
+**Purpose:** integrate center + rear-fill **without dragging the front stage back** — an optional layer, only after the front is locked (Phase 3) **AND satisfies the user by ear** (post Phase 5/6). If the front isn't satisfying, go back and finish it first.
 
 **Questions this phase answers:** does the center anchor focus without narrowing width? does rear-fill add envelopment without pulling the stage rearward?
 
@@ -51,4 +53,4 @@ The objective of rear-fill is to provide a sense of acoustic **envelopment** wit
 * **Haas Delay:** Apply a time delay equal to the physical front-to-rear arrival difference **plus an extra $8\text{ ms}$ to $10\text{ ms}$** (the Haas precedence effect). This ensures the ear localizes all sound sources to the front while perceiving the rear channels as ambient spaciousness.
 * **Attenuate Levels:** Set the rear-fill output gain quiet enough that the rear speakers are inaudible when sitting in the front seats, but their absence is immediately noticed as a loss of spaciousness when muted.
 
-Log all finalized center and rear-fill parameters in the `dsp-state-current` register, then transition to **Phase 5**.
+Log all finalized center and rear-fill parameters in the `dsp-state-current` register, then **re-check the full system by ear** (the center/rear must not have dragged the front back) and proceed to **Phase 7** (wrap-up).

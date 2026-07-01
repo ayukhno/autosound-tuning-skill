@@ -48,4 +48,4 @@ Apply minor EQ adjustments to resolve specific listening symptoms. Common exampl
 * **The Voicing Layer (Virtual EQ):** Apply subjectivevoicing moves **exclusively on the Virtual Layer** (linked L=R EQ). Since virtual moves do not introduce phase discrepancies between left and right channels, they are safe and will not break the crossover joints or time alignment.
 * **Save as a Separate Preset:** Save the final client-voiced profile as a separate DSP preset (e.g., Preset 2: "Enjoyment/Voiced"), leaving the technical baseline untouched on Preset 1 ("Reference/Technical") for easy comparison and A/B testing.
 
-Once the voicing preset is finalized and saved, proceed to the wrap-up in **Phase 7**.
+Once the voicing preset is finalized and the **front satisfies the user**, proceed to **Phase 7** (wrap-up) — **or**, if you're adding the optional **center/rear** now that the front is solid, do **Phase 4** first, then Phase 7.

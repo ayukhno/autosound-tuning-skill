@@ -60,4 +60,4 @@ Once the technical alignment is accepted by the Arbiter:
 * Back up the project's REW `.mdat` file.
 * Update `tuning-changelog`, `dsp-state-current`, and `audit-trail.md` (project-local, in the project's `rew_analitic/`).
 
-Proceed to **Phase 4** (multi-channel integration, if applicable) or **Phase 5** (listening tests).
+Proceed to **Phase 5** (front listening & fine-tuning) + any **Phase 6** voicing — get the **FRONT** to satisfy the user first. **Center/rear (Phase 4) is optional and comes only once the front satisfies** — don't jump to it straight from the lock.
