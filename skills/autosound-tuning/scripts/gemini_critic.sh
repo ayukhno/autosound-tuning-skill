@@ -19,7 +19,7 @@
 #   GEMINI_FALLBACK_MODEL fallback when the primary is exhausted/unavailable
 #   GEMINI_EXTRA_ARGS     extra CLI flags (auto: --skip-trust for @google/gemini-cli)
 #   PROJECT_MIRROR        project docs dir (default: $PWD/rew_analitic)  ← context/contract live here
-#   AUTOSOUND_DIR         author's iCloud canon (audit-log home; context fallback only)
+#   AUTOSOUND_DIR         OPTIONAL cross-project canon dir (audit/context fallback; unset by default)
 set -euo pipefail
 SCRIPT_NAME="gemini_critic"
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_gemini_common.sh"

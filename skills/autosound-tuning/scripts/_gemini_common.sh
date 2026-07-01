@@ -9,7 +9,7 @@
 #
 # Why project-local first: the skill is installed GLOBALLY and shared across
 # cars, so the only reliable "which project am I tuning" signal is the directory
-# you launch Claude from (CWD). A stale iCloud/_AI copy from ANOTHER car must
+# you launch Claude from (CWD). A stale copy from ANOTHER project must
 # NOT hijack the Critic — that silently leaks the wrong vehicle's context (the
 # real "Critic cited sessions that never happened" bug). Override any path via
 # env or a .critic-env file — see references/tooling/setup-critic-channel.md.
@@ -22,17 +22,17 @@ done
 
 # --- where the docs live ----------------------------------------------------
 # PROJECT_MIRROR = the project you're tuning RIGHT NOW (= CWD/rew_analitic).
-# AUTOSOUND_DIR  = the author's iCloud single-source-of-truth (audit-log home;
-#                  used for Context/Contract ONLY as a last-resort fallback).
+# AUTOSOUND_DIR  = an OPTIONAL cross-project canon dir (UNSET by default; set it
+#                  yourself in .critic-env for a shared Context/audit home).
 PROJECT_MIRROR="${PROJECT_MIRROR:-$PWD/rew_analitic}"
-AUTOSOUND_DIR="${AUTOSOUND_DIR:-$HOME/Library/Mobile Documents/com~apple~CloudDocs/_AI/Autosound}"
+AUTOSOUND_DIR="${AUTOSOUND_DIR:-}"
 
 CONTRACT="$PROJECT_MIRROR/data-contract-template.md"
-[[ -f "$CONTRACT" ]] || CONTRACT="$AUTOSOUND_DIR/data-contract-template.md"
+[[ -f "$CONTRACT" || -z "$AUTOSOUND_DIR" ]] || CONTRACT="$AUTOSOUND_DIR/data-contract-template.md"
 CONTEXT="$PROJECT_MIRROR/autosound_context.md"
-[[ -f "$CONTEXT" ]] || CONTEXT="$AUTOSOUND_DIR/autosound_context.md"
-# Audit: append to iCloud canon if that dir exists, else keep it project-local.
-if [[ -d "$AUTOSOUND_DIR" ]]; then AUDIT="$AUTOSOUND_DIR/audit-trail.md"
+[[ -f "$CONTEXT" || -z "$AUTOSOUND_DIR" ]] || CONTEXT="$AUTOSOUND_DIR/autosound_context.md"
+# Audit: project-local by default; the $AUTOSOUND_DIR canon only if you set one.
+if [[ -n "$AUTOSOUND_DIR" && -d "$AUTOSOUND_DIR" ]]; then AUDIT="$AUTOSOUND_DIR/audit-trail.md"
 else AUDIT="$PROJECT_MIRROR/audit-trail.md"; fi
 
 # --- Gemini CLI detection ---------------------------------------------------

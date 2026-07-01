@@ -8,7 +8,7 @@ for _env in "$PWD/rew_analitic/.critic-env" "$PWD/.critic-env"; do
 done
 
 PROJECT_MIRROR="${PROJECT_MIRROR:-$PWD/rew_analitic}"
-AUTOSOUND_DIR="${AUTOSOUND_DIR:-$HOME/Library/Mobile Documents/com~apple~CloudDocs/_AI/Autosound}"
+AUTOSOUND_DIR="${AUTOSOUND_DIR:-}"   # OPTIONAL cross-project canon dir; unset by default
 
 CONTRACT="$PROJECT_MIRROR/data-contract-template.md"
 [[ -f "$CONTRACT" ]] || CONTRACT="$AUTOSOUND_DIR/data-contract-template.md"

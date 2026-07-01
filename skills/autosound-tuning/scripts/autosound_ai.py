@@ -27,7 +27,7 @@ from datetime import datetime
 # Налаштування шляхів
 CWD = os.getcwd()
 PROJECT_MIRROR = os.environ.get("PROJECT_MIRROR", os.path.join(CWD, "rew_analitic"))
-ICLOUD_DIR = os.path.expanduser("~/Library/Mobile Documents/com~apple~CloudDocs/_AI/Autosound")
+# AUTOSOUND_DIR (optional cross-project canon) is resolved from env below, after .critic-env loads.
 
 # Спроба зчитати конфігурацію з .critic-env
 def load_env_file():
@@ -56,6 +56,9 @@ def load_env_file():
 
 ENV_FILE_USED = load_env_file()
 
+# Optional cross-project canon dir (UNSET by default; set AUTOSOUND_DIR in env/.critic-env).
+AUTOSOUND_DIR = os.environ.get("AUTOSOUND_DIR", "")
+
 # Пошук файлів контракту та контексту
 def find_file(filename, fallback_dir=None):
     # Спочатку шукаємо локально в rew_analitic
@@ -66,18 +69,18 @@ def find_file(filename, fallback_dir=None):
     cwd_path = os.path.join(CWD, filename)
     if os.path.isfile(cwd_path):
         return cwd_path
-    # Потім у fallback (iCloud)
+    # Потім у fallback ($AUTOSOUND_DIR, якщо заданий)
     if fallback_dir:
         fallback_path = os.path.join(fallback_dir, filename)
         if os.path.isfile(fallback_path):
             return fallback_path
     return None
 
-CONTRACT = find_file("data-contract-template.md", ICLOUD_DIR)
-CONTEXT = find_file("autosound_context.md", ICLOUD_DIR)
+CONTRACT = find_file("data-contract-template.md", AUTOSOUND_DIR or None)
+CONTEXT = find_file("autosound_context.md", AUTOSOUND_DIR or None)
 
-if os.path.isdir(ICLOUD_DIR):
-    AUDIT_TRAIL = os.path.join(ICLOUD_DIR, "audit-trail.md")
+if AUTOSOUND_DIR and os.path.isdir(AUTOSOUND_DIR):
+    AUDIT_TRAIL = os.path.join(AUTOSOUND_DIR, "audit-trail.md")
 else:
     AUDIT_TRAIL = os.path.join(PROJECT_MIRROR, "audit-trail.md")
 
@@ -235,10 +238,10 @@ def main():
         
     # Префлайт перевірка локальних файлів
     if not CONTRACT or not os.path.isfile(CONTRACT):
-        print(f"Помилка: Не знайдено контракт data-contract-template.md у '{PROJECT_MIRROR}' чи iCloud.", file=sys.stderr)
+        print(f"Помилка: Не знайдено контракт data-contract-template.md у '{PROJECT_MIRROR}' чи в AUTOSOUND_DIR.", file=sys.stderr)
         sys.exit(1)
     if not CONTEXT or not os.path.isfile(CONTEXT):
-        print(f"Помилка: Не знайдено контекст проекту autosound_context.md у '{PROJECT_MIRROR}' чи iCloud.", file=sys.stderr)
+        print(f"Помилка: Не знайдено контекст проекту autosound_context.md у '{PROJECT_MIRROR}' чи в AUTOSOUND_DIR.", file=sys.stderr)
         sys.exit(1)
 
     # Зчитування файлів
