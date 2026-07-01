@@ -10,7 +10,7 @@ This phase acts as the final technical gate before proceeding to subjective list
 
 **Required evidence:** the full verification MMM set (each `_final` channel, Ws/Ms/TWs, sw+Ws, L/R sides, `ALL_final`); independent Claude + Gemini analyses.
 
-**✅ Quality gate → Phase 4/5 (Technical Lock):** verification scans captured; **two independent (cross-vendor) verdicts**; disagreements resolved or escalated to the Arbiter (Disagreement Table at 3/3); config backed up to `dsp-config/`, changelog/dsp-state/audit-trail updated.
+**✅ Quality gate → Phase 4/5 (Technical Lock):** verification scans captured; **two independent (cross-vendor) verdicts**; **a minimum stage assessment passed by ear** (mono-center / EMMA imaging — there is no "tuned version" without it); disagreements resolved or escalated to the Arbiter (Disagreement Table at 3/3); config backed up to `dsp-config/`, changelog/dsp-state/audit-trail updated.
 
 **⚠️ Failure modes:** endless review rounds (cap at 3/3 → Disagreement Table) · locking without a backup · a single-perspective verdict (must be cross-vendor).
 
@@ -35,6 +35,16 @@ Claude (the Orchestrator) and Gemini (the Critic/Advisor) perform separate, unbi
 * **The Data Pull:** Use the REW API to query the measurement files directly, analyzing magnitude trends, joint summation quality, and L/R symmetry.
 * **The Verdict:** Each AI issues an independent report assessing target-curve accuracy, joint alignment, and imaging trends. Claude acts as the primary contact, compiling the results for the user.
 * **Deadlock Escalation:** If Claude and Gemini disagree on a critical alignment step, do not engage in endless rounds. If Iteration 3/3 is reached without agreement, compile a standard **Disagreement Table** (Contract §5) and hand the decision to the Arbiter (the User).
+
+---
+
+## 2.5 Minimum stage assessment by ear — MANDATORY before the lock
+
+A config is **not a "tuned version" until the stage is confirmed by ear** — at minimum, don't lock on measurements alone. Before locking:
+* **Mono track** → the phantom center must be tight and **dead-centre** (a mono signal must image as ONE point). If it smears or pulls to a side, the L/R timing/level/phase isn't right → **do not lock**; return to Phase 2 (the gate is re-entrant).
+* **EMMA localization tracks** ([`test-tracks.md`](file:///skills/autosound-tuning/references/patterns/test-tracks.md)) → check the L / C-L / C / C-R / R positions line up.
+
+This is the **minimum imaging sanity** that makes the lock meaningful; the full tonal + stage pass is Phase 5.
 
 ---
 
