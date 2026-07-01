@@ -251,3 +251,15 @@ A heavy driver (example: the GZNK 165SQ-K in the Passat). When aligning to the "
 - The stage "collapses" — the upper tier doesn't hold
 
 **Rule for heavy midbasses:** align to **100% of the amplitude peak** of the IR, not to the onset (the nose). By ear it gives punch and instrument body on the dash.
+
+### Vertical stage elevate after a presence recess (2-step) — a transferable technique
+
+A deep **presence recess** (−2…−4 dB on the mids, e.g. to push the singer behind the glass) also **lowers the perceived stage height**. Restore height with a **symmetric СЧ+ВЧ level lift, in TWO steps**:
+- **+1.5 dB** first (mids and tweeters, L=R);
+- **+1 dB more** *after* the per-band EQ is finished to target (elevate the final shape, not a work-in-progress).
+
+By ear this lifts the stage back toward eye level **without** collapsing the depth the recess bought. Field-proven (EMMA/Passat).
+
+### Physical baseline priority — don't APF door woofers for local cabin anomalies — a transferable technique
+
+Fixing a **local door/cabin reflection** on a door woofer with an **all-pass filter (APF)** broke the soundstage — loss of focus and acoustic fatigue (real case: `w-L` APF ~159 Hz). A simple **notch** plus **physical phase symmetry** (Normal polarity, no APF) was subjectively far more stable. **Rule:** reach for a notch + physical symmetry before electrical phase tricks on the midbass. *(The VCP-over-Output placement for narrow high-Q junction cuts lives in `phase_2_eq.md §2a`.)*
