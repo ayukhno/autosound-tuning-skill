@@ -64,12 +64,12 @@ Compile the Arbiter's binary verdicts into a structured checklist:
 
 ## The sound satisfies — a natural FINISH point (capture feedback NOW)
 
-When the pass is clean and the user is **satisfied with the sound**, treat it as a real **milestone / likely finish** — many users **stop here** and won't come back for the "details" (Phase 6 variations, center/rear). So **do NOT defer feedback to a Phase 7 that may never come**:
+When the pass is clean and the user is **satisfied with the sound**, treat it as a real **milestone / likely finish** — many users **stop here** and won't come back for the "details" (Phase 6 variations, center/rear). So **do NOT defer feedback to a separate wrap the user may never reach**:
 * **Capture the project feedback now — interactively** (closed questions with ready options + an always-open "Other"; ≤3–4 taps; never a wall of open questions):
   * **Result vs baseline** — much better / better / same? · **what you love most** (bass · vocals · width · depth · clarity · …) · **anything still bugging you** (free-text / "nothing").
   * **Consent to share** — may we add your **de-identified** car profile + curves to the community library (it helps the next person with this car)? (yes / anonymized only / no).
-  * **Creator support — at the satisfaction PEAK** (Stream D): when the user is genuinely delighted, this is the emotional high point — offer a **quiet, non-obtrusive** thanks / support link, so the moment isn't lost to a Phase 7 many never reach. Let the emotion work *for* us — honestly, never pushily. ⚠️ ONLY when genuinely satisfied · quiet & non-obtrusive · **after** the feedback, never as part of a form/questionnaire · **skip entirely if Sponsors isn't configured**.
-  * Log it to `changelog`/`audit-trail`. Skill-specific feedback (Stream B) + the full closing ritual → [`feedback-loop.md`](file:///skills/autosound-tuning/references/core/feedback-loop.md) / Phase 7.
+  * **Creator support — at the satisfaction PEAK** (Stream D): when the user is genuinely delighted, this is the emotional high point — offer a **quiet, non-obtrusive** thanks / support link, so the moment isn't lost to a wrap many never reach. Let the emotion work *for* us — honestly, never pushily. ⚠️ ONLY when genuinely satisfied · quiet & non-obtrusive · **after** the feedback, never as part of a form/questionnaire · **skip entirely if Sponsors isn't configured**.
+  * Log it to `changelog`/`audit-trail` (ritual detail → [`feedback-loop.md`](file:///skills/autosound-tuning/references/core/feedback-loop.md)).
 * **Then fork:**
-  * **Done for now** → **Phase 7** (wrap-up: backup + the closing feedback ritual + consent-to-share).
-  * **Continue for the details** → **Phase 6** (voicing variations) and/or the optional **center/rear** — the front stays the locked base.
+  * **Done for now → close the session HERE** (no separate wrap phase): write the ▶️ **CONTINUE block** + the backlog in `tuning-changelog`; **back up** the DSP config to `rew_analitic/dsp-config/` (+ README) and the REW `.mdat`; and **send the experience** — harvest any generalizable lesson / new track / car quirk into `skill-inbox` (📚) for the periodic **Skill Maintenance Loop**, plus any skill-specific feedback (was the guidance clear?).
+  * **Continue for the details** → **Phase 6** (voicing variations + the optional **center/rear**) — the front stays the locked base. ♻️ **Phase 6 is CYCLICAL: come back to the project anytime to add another preset or tweak an existing one** (the base is never touched).

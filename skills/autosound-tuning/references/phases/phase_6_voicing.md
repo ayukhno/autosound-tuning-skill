@@ -4,7 +4,7 @@ This is the final sound shaping phase. It layers subjective preference on top of
 
 ## 🎯 Goal-node
 
-**Purpose:** layer **subjective taste** on top of the locked technical base (Phases 1–3) — as a separate, reversible voicing preset.
+**Purpose:** layer **subjective taste** on top of the locked technical base (Phases 1–3) — as separate, reversible voicing presets. ♻️ **Cyclical:** return to the project **anytime** to add a new preset ("road", "jazz", "rock", enveloping) or tweak an existing one; the base is never touched.
 
 **Questions this phase answers:** which taste axes (warm↔bright, bass↔neutral, forward↔laid-back, analytical↔fun)? which target curve does the user prefer **by ear**? which symptom→fix moves close the remaining gaps?
 
