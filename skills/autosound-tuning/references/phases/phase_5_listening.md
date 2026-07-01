@@ -10,7 +10,7 @@ This is the penultimate phase. While physical measurements verify technical corr
 
 **Required evidence:** one-track-at-a-time **binary** ear checks (track + timecode + a specific marker), from the test-track catalog.
 
-**✅ Quality gate → Phase 6:** the 6-point listening pass run; each item a binary 🟢/❌; failed items added to the backlog (→ Phase 2/6); core technical traits pass.
+**✅ Quality gate:** the 6-point pass run (binary 🟢/❌; fails → backlog → Phase 2/6); the user is **satisfied with the sound**; **feedback captured here** (a natural finish point) → then either continue to Phase 6 (details) or wrap up (Phase 7).
 
 **⚠️ Failure modes:** dumping a long song list (propose **one** track/marker at a time) · vague checks (use binary markers) · treating a forward/flat stage as taste when it's top-too-hot-vs-bass or a joint phase error.
 
@@ -62,4 +62,10 @@ Compile the Arbiter's binary verdicts into a structured checklist:
 * **Item:** [Track & Timecode] — [Acoustic Attribute] ──► **[🟢 Passed / ❌ Failed]**
 * Any failed items are added directly to the active tuning backlog, triggering targeted adjustments in Phase 2 or 6.
 
-Once all core technical listening traits pass, proceed to **Phase 6**.
+## The sound satisfies — a natural FINISH point (capture feedback NOW)
+
+When the pass is clean and the user is **satisfied with the sound**, treat it as a real **milestone / likely finish** — many users **stop here** and won't come back for the "details" (Phase 6 variations, center/rear). So **do NOT defer feedback to a Phase 7 that may never come**:
+* **Capture the project feedback now** — the user's impression vs baseline, what they love, what's still open (log to `changelog`/`audit-trail`; the fuller ritual → [`feedback-loop.md`](file:///skills/autosound-tuning/references/core/feedback-loop.md)).
+* **Then fork:**
+  * **Done for now** → **Phase 7** (wrap-up: backup + the closing feedback ritual + consent-to-share).
+  * **Continue for the details** → **Phase 6** (voicing variations) and/or the optional **center/rear** — the front stays the locked base.

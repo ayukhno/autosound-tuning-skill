@@ -4,7 +4,7 @@ This phase closes the active tuning session, records findings, and feeds valuabl
 
 ## 🎯 Goal-node
 
-**Purpose:** close the session cleanly — log final state, run the 4-stream feedback ritual, harvest generalizable lessons back to the skill.
+**Purpose:** close the session cleanly — log final state, run the 4-stream feedback ritual, harvest generalizable lessons back to the skill. **Entered whenever the user is done — often right after Phase 5** (satisfied with the sound), not only after Phase 6; the project feedback may already be partly captured at that finish point.
 
 **Questions this phase answers:** is the final DSP state + backlog logged? what worked / didn't (project + skill)? consent to share? any generalizable lessons?
 
