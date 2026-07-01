@@ -1,8 +1,8 @@
-# Voicing by ear — symptom→fix + curve→character (Phase 6, client preferences)
+# Voicing by ear — symptom→fix + curve→character (Phase 5, client preferences)
 
 > 🧩 **PATTERN REPOSITORY — starting hypotheses, not rules.** Everything here is "in similar conditions this often worked": a **starting point**, validated by measurement/ear, never a mandate. See [`knowledge-architecture.md`](file:///skills/autosound-tuning/references/core/knowledge-architecture.md).
 
-An applied base for by-ear voicing: when the base is technically correct (Phases 0–3), and you need to **tune the character to the client's taste** (Phase 6) or quickly translate an ear complaint into an EQ move. Sources: the installer "Arkadij Avtozvuk's" experience + Peter/pssound + curve→character. ⚠️ **These are by-ear heuristics (starting directions), not dogma** — judge every move by ear, verify on your own system; the numbers are approximate.
+An applied base for by-ear voicing: when the base is technically correct (Phases 0–3), and you need to **tune the character to the client's taste** (Phase 5) or quickly translate an ear complaint into an EQ move. Sources: the installer "Arkadij Avtozvuk's" experience + Peter/pssound + curve→character. ⚠️ **These are by-ear heuristics (starting directions), not dogma** — judge every move by ear, verify on your own system; the numbers are approximate.
 > ⚠️ **If a tip here CONTRADICTS our measurements/conclusions — don't discard it, keep it as a VARIANT.** A different geometry/cabin/situation can make it right, and an unexpected tip sometimes unlocks a solution (proven in a real session — a contradictory move gave the way out). Mark "(variant — conflicts with X, try when Y)", don't delete.
 
 ## Tonal balance — how to read it

@@ -40,7 +40,7 @@ Claude (the Orchestrator) and Gemini (the Critic/Advisor) perform separate, unbi
 
 ## 2.5 Minimum ear assessment + an honest read of the result — MANDATORY before the lock
 
-A config is **not a "tuned version" until it's confirmed by ear** — don't lock on measurements alone. Do a **brief but real listen** (the full pass is Phase 5) covering the two things that matter:
+A config is **not a "tuned version" until it's confirmed by ear** — don't lock on measurements alone. Do a **brief but real listen** (the full pass is Phase 4) covering the two things that matter:
 * **Stage** — a **mono track** must image tight and **dead-centre** (ONE point); + EMMA localization tracks ([`test-tracks.md`](file:///skills/autosound-tuning/references/patterns/test-tracks.md)) for L / C-L / C / C-R / R. Smears or pulls to a side → the L/R timing/level/phase isn't right.
 * **Overall tonal balance** — a couple of familiar tracks: bass weight & control · vocal naturalness/placement · top-end transparency (no glare/harshness). Is the whole balanced, or is something clearly off?
 
@@ -60,4 +60,4 @@ Once the technical alignment is accepted by the Arbiter:
 * Back up the project's REW `.mdat` file.
 * Update `tuning-changelog`, `dsp-state-current`, and `audit-trail.md` (project-local, in the project's `rew_analitic/`).
 
-Proceed to **Phase 5** (front listening & fine-tuning) + any **Phase 6** voicing — get the **FRONT** to satisfy the user first. **Center/rear (Phase 4) is optional and comes only once the front satisfies** — don't jump to it straight from the lock.
+Proceed to **Phase 4** (front listening & fine-tuning) + any **Phase 5** voicing — get the **FRONT** to satisfy the user first. **Center/rear (Phase 5) is optional and comes only once the front satisfies** — don't jump to it straight from the lock.

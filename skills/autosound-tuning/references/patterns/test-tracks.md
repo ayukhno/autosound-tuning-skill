@@ -47,9 +47,9 @@ When you (Claude) have a **hypothesis to check by ear**:
 
 > **The EMMA 2024 tracks (descriptions + markers → `competition.md`)** are also usable for listening verification, with EXACT timecodes: **depth/body** → T8 (the piano far behind+below the singer); **imaging/instrument separation** → T9 (jaw harp 3–4 s on the right, voices by position); **stage levels height/depth** → T11 @2:52 (snare vs tambourine at different levels); **backing-vocal separation across the stage** → T11 @0:46/1:25/2:00; **vocal-wander as the recording's NORM** (don't confuse with a defect) → T8.
 
-## The standard PASS — a full listening check at milestones (Phase 5)
+## The standard PASS — a full listening check at milestones (Phase 4)
 
-A fixed route (~20–30 min), when the tune is "ready" (after Phase 3/4) or before a competition. Each step: play the track → one marker → a **binary verdict ✓/✗** into a checklist. Everything ✗ = the next iteration's backlog (mapped to the band/instrument from its index row).
+A fixed route (~20–30 min), when the tune is "ready" (after the Phase 3 lock) or before a competition. Each step: play the track → one marker → a **binary verdict ✓/✗** into a checklist. Everything ✗ = the next iteration's backlog (mapped to the band/instrument from its index row).
 
 | # | What we check | Track | **Library** | The ✓-criterion |
 |---|---|---|---|---|

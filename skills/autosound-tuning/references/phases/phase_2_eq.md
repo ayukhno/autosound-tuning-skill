@@ -12,7 +12,7 @@ This is the core technical execution phase. All operations **MUST** be performed
 
 **✅ Quality gate → Phase 3:** peaks cut / nulls untouched; joints aligned by **summation** (APF/fine delay, not raw-delay shifts); summed groups match target; final target EQ on the **virtual layer** only; strict order 2a→2d held; **two critic checkpoints passed** (after phase alignment · after EQ).
 
-**⚠️ Failure modes:** boosting into nulls (non-min-phase → wasted headroom/distortion) · 30-band auto-banks (use minimal conscious EQ) · shifting raw channel delays for phase (breaks gross TA) · sneaking client taste in here (that's Phase 6).
+**⚠️ Failure modes:** boosting into nulls (non-min-phase → wasted headroom/distortion) · 30-band auto-banks (use minimal conscious EQ) · shifting raw channel delays for phase (breaks gross TA) · sneaking client taste in here (that's Phase 5).
 
 **🧩 Refs:** min-vs-non-min phase, summation → [`diagnostic-techniques.md`](file:///skills/autosound-tuning/references/core/diagnostic-techniques.md).
 
@@ -73,7 +73,7 @@ Shape the technical response of the entire summed system — the `(rta)` of the 
 * Apply **broad, smooth acoustic moves** (tilts, shelves, high/low Q shaping).
 * Work primarily on the **Virtual Layer** (L=R linked, identical on both sides).
 * Since the Virtual Layer sits above crossovers in the DSP routing chain, its phase shifts are identical for both sides, **never breaking the acoustic joints** set in Step 2b.
-* Save client-preference voicing requests for Phase 6. This layer is purely technical target accuracy.
+* Save client-preference voicing requests for Phase 5. This layer is purely technical target accuracy.
 
 > 🔍 **Critic checkpoint (2 of 2):** with the EQ done, run a cross-vendor review round on the linearized + target-matched result **before** the Phase-3 lock.
 

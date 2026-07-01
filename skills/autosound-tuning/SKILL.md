@@ -99,10 +99,8 @@ To focus LLM attention and prevent cognitive overload, the tuning process is mod
 * **Phase 1: Crossovers, Levels, & Delays** ──► [phase_1_foundation.md](file:///skills/autosound-tuning/references/phases/phase_1_foundation.md)
 * **Phase 2: EQ & Acoustic Alignment** ──► [phase_2_eq.md](file:///skills/autosound-tuning/references/phases/phase_2_eq.md)
 * **Phase 3: Technical Verdict & Lock** ──► [phase_3_control.md](file:///skills/autosound-tuning/references/phases/phase_3_control.md)
-* **Phase 4: Center & Rear Integration** ──► [phase_4_multichannel.md](file:///skills/autosound-tuning/references/phases/phase_4_multichannel.md)
-* **Phase 5: Targeted Ear Verification** ──► [phase_5_listening.md](file:///skills/autosound-tuning/references/phases/phase_5_listening.md)
-* **Phase 6: Client Subjective Voicing** ──► [phase_6_voicing.md](file:///skills/autosound-tuning/references/phases/phase_6_voicing.md)
-* **Phase 7: Wrap-Up & Feedback** ──► [phase_7_feedback.md](file:///skills/autosound-tuning/references/phases/phase_7_feedback.md)
+* **Phase 4: Targeted Listening → Satisfied → Feedback → Session Close** ──► [phase_4_listening.md](file:///skills/autosound-tuning/references/phases/phase_4_listening.md)
+* **Phase 5: Variations (cyclical) — Voicing + Center/Rear** ──► [phase_5_variations.md](file:///skills/autosound-tuning/references/phases/phase_5_variations.md)
 
 ---
 
@@ -138,7 +136,7 @@ Use the `view_file` tool to load these specialized guides exactly when their spe
 | [references/tooling/screen-read-dsp.md](file:///skills/autosound-tuning/references/tooling/screen-read-dsp.md) | Parsing DSP parameters off screenshots (using vision/screencapture) when config exports are locked. |
 | [references/core/review-loop.md](file:///skills/autosound-tuning/references/core/review-loop.md) | Executing TWO-PASS anti-anchoring reviews, handling multi-AI deadlocks (3/3), or running cross-session audits. |
 | [references/tooling/setup-critic-channel.md](file:///skills/autosound-tuning/references/tooling/setup-critic-channel.md) | Configuring local CLI environments (agy, gemini-cli) or setting up the .critic-env credentials. |
-| [references/core/feedback-loop.md](file:///skills/autosound-tuning/references/core/feedback-loop.md) | Executing the Phase 7 closing surveys, collecting skill feedback, or sharing anonymized car profiles. |
+| [references/core/feedback-loop.md](file:///skills/autosound-tuning/references/core/feedback-loop.md) | Executing the session-close feedback ritual, collecting skill feedback, or sharing anonymized car profiles. |
 
 ---
 

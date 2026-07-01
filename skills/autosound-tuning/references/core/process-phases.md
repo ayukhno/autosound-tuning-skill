@@ -1,6 +1,6 @@
 # Tuning Process Phases — Modular Directory Index
 
-The tuning process consists of nine chronological phases. To optimize large language model (LLM) context windows and prevent attention dilution, the monolithic `process-phases.md` has been split into individual, focused reference files.
+The tuning process consists of seven chronological phases. To optimize large language model (LLM) context windows and prevent attention dilution, the monolithic `process-phases.md` has been split into individual, focused reference files.
 
 ---
 
@@ -24,10 +24,8 @@ When assisting with a tuning session, the AI **MUST** follow this context-minimi
 | **Phase 1** | [phase_1_foundation.md](file:///skills/autosound-tuning/references/phases/phase_1_foundation.md) | Crossovers, levels, preliminary gross time-alignment (arrival TA), Nono per-band target generation. |
 | **Phase 2** | [phase_2_eq.md](file:///skills/autosound-tuning/references/phases/phase_2_eq.md) | Hygiene EQ (minimum-phase peaks only), joint phase alignment (APF/fine delay), summed group alignment, final technical virtual EQ. |
 | **Phase 3** | [phase_3_control.md](file:///skills/autosound-tuning/references/phases/phase_3_control.md) | Final RTA verification scans, independent AI verdicts (Claude/Gemini), Technical Lock & backups. |
-| **Phase 4** | [phase_4_multichannel.md](file:///skills/autosound-tuning/references/phases/phase_4_multichannel.md) | Center channel (RealCenter, bandwidth limit, level/delay) & Rear-fill (differential L-R, Haas delay, high-pass) integration. **⛔ OPTIONAL · LATE — only after the FRONT satisfies (locked + user OK); flow-wise it follows Phase 5/6, not Phase 3.** |
-| **Phase 5** | [phase_5_listening.md](file:///skills/autosound-tuning/references/phases/phase_5_listening.md) | Systematic test-track listening pass, soundstage depth, lateral focus, transient checks, binary checklists. |
-| **Phase 6** | [phase_6_voicing.md](file:///skills/autosound-tuning/references/phases/phase_6_voicing.md) | Client preference voicing, target-curve auditions, subjective symptom-to-fix EQ mapping, separate voicing presets. |
-| **Phase 7** | [phase_7_feedback.md](file:///skills/autosound-tuning/references/phases/phase_7_feedback.md) | Closing ritual, session log updates, 4-stream feedback surveys, community uploads, creator donations. |
+| **Phase 4** | [phase_4_listening.md](file:///skills/autosound-tuning/references/phases/phase_4_listening.md) | Systematic test-track listening pass → **satisfied with the sound** → feedback → **session close** (backup · experience via a GitHub Issue). |
+| **Phase 5** | [phase_5_variations.md](file:///skills/autosound-tuning/references/phases/phase_5_variations.md) | **Variations (cyclical):** client voicing presets (genre/context) + the optional **center & rear** (envelopment). Return anytime to add/tweak a preset. |
 
 ---
 

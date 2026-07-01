@@ -2,7 +2,7 @@
 
 The Preference Profile isolates the user's **subjective voicing preferences** from the objective
 engineering. It is seeded at intake and applied **only after** the objective tune is complete
-(Phase 6 voicing). It never overrides measurement-driven engineering.
+(Phase 5 voicing). It never overrides measurement-driven engineering.
 See [`knowledge-architecture.md`](file:///skills/autosound-tuning/references/core/knowledge-architecture.md).
 
 ## What IS a preference (goes here)
@@ -17,7 +17,7 @@ See [`knowledge-architecture.md`](file:///skills/autosound-tuning/references/cor
 These **shape the engineering**, so they are objective goals, not skippable tastes:
 
 - **Reference seat** (driver / passenger / all) → drives centering & TA strategy
-- **Competition format(s)** (EMMA / AYA / CARMusic) → drives preset architecture & allowed techniques (Engineering). ⚠️ *Also* seeds a format-specific **voicing target** (stage weight, echelons, the tonal balance the format rewards) — that part is a format-driven **preference**, finalized by ear in Phase 6. So the format spans both layers.
+- **Competition format(s)** (EMMA / AYA / CARMusic) → drives preset architecture & allowed techniques (Engineering). ⚠️ *Also* seeds a format-specific **voicing target** (stage weight, echelons, the tonal balance the format rewards) — that part is a format-driven **preference**, finalized by ear in Phase 5. So the format spans both layers.
 - **Hard constraints** ("don't cut the doors", TÜV, budget) → hard limits
 - **Physical ceilings** (depth limited by mid geometry; envelopment needs a rear)
 
@@ -28,7 +28,7 @@ These **shape the engineering**, so they are objective goals, not skippable tast
 
 - **Seeded** at intake — [`project-intake.md` §2](file:///skills/autosound-tuning/references/core/project-intake.md).
 - **Held out** of Phases 0–5 (the objective tune).
-- **Applied** in **Phase 6** — [`phase_6_voicing.md`](file:///skills/autosound-tuning/references/phases/phase_6_voicing.md)
+- **Applied** in **Phase 5** — [`phase_5_variations.md`](file:///skills/autosound-tuning/references/phases/phase_5_variations.md)
   via [`voicing-by-ear.md`](file:///skills/autosound-tuning/references/patterns/voicing-by-ear.md),
   often as a separate voicing preset ([`preset-strategy.md`](file:///skills/autosound-tuning/references/core/preset-strategy.md)).
 

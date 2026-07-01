@@ -2,7 +2,7 @@
 
 > 🧩 **PATTERN REPOSITORY — starting hypotheses, not rules.** Everything here is "in similar conditions this often worked": a **starting point**, validated by measurement/ear, never a mandate. See [`knowledge-architecture.md`](file:///skills/autosound-tuning/references/core/knowledge-architecture.md).
 
-A complete **by-ear** method from the Japanese installer **Hashimoto** (translated by Anton Nikolaev, a video summary). The goal = **building the soundstage**. It's an ALTERNATIVE/complement to our REW measurement process (`process-phases.md`) — useful where we work by ear (Phase 5) or without full REW. The signature technique: **"first the optimal filter SLOPE, then the optimal FREQUENCY"**, each joint separately, each side separately.
+A complete **by-ear** method from the Japanese installer **Hashimoto** (translated by Anton Nikolaev, a video summary). The goal = **building the soundstage**. It's an ALTERNATIVE/complement to our REW measurement process (`process-phases.md`) — useful where we work by ear (Phase 4) or without full REW. The signature technique: **"first the optimal filter SLOPE, then the optimal FREQUENCY"**, each joint separately, each side separately.
 
 ## Order: crossovers (slope→freq) → polarity per band → delays (verticals→center) → EQ (last) → voicing on music
 0. **Break in the components** (new ones — break them in like an engine; otherwise during alignment the midbass/mid/sub "fall apart" one by one). A rough start-tune → break-in → precise.
@@ -30,9 +30,9 @@ The goal = focused, localized images (as the engineer intended). A mono recordin
 ## EQ — the LAST step
 After crossovers+delays (EQ also rotates phase). Mono sines / narrow noises of different frequencies → must come from the CENTER. Play quietly, low→high. In the bass there's no localization (λ > the cabin); closer to the top the image gathers to the center. Image shifted right at a frequency → the right is louder there → **take a little off the right + add to the left** → center (to the left → vice versa). Go through the whole spectrum. ⚠️ **At 2.5–5 kHz the sound seems louder/shouts — do NOT touch EQ there** (hearing sensitivity); only determine the relative L/R loudness. A serious shift at a frequency → go back to the earlier steps. An excess/dip at a frequency = resonances/install → ideally treat the cause.
 
-## Voicing on real music (emotion/character) — = our Phase 6
+## Voicing on real music (emotion/character) — = our Phase 5
 Then tune the "academic" system on **favorite music** (live instruments are better — richer; the brain compares with a real instrument). An instrument's character = the fundamentals + the **overtones/harmonics** → affect both the fundamentals and the harmonics. Brighter overall: ↓~200 + ↑~2k, then balance the harmonics. ↑100/300/1k + harmonics = more energy. → by-ear details in `voicing-by-ear.md`.
 > **Take breaks** — hearing fatigues (the untrained ear faster), you stop hearing the effect of changes.
 
 ## What to take into our process
-- The technique **"slope→frequency, each side separately"** — powerful for by-ear filter choice (Phase 5 / when REW is unavailable). · Joint frequencies/orders can differ L/R = a **by-ear VARIANT** (the default — L/R symmetry: the same type+order+frequency for a stable phantom center; asymmetry only when symmetry won't image → verify imaging; `filter-types §L/R symmetry`, `diagnostic §15`). · EQ centering with mono sines + **don't touch 2.5–5k**. · Break in components + breaks. · Polarity per band = a **variant** (check by summation).
+- The technique **"slope→frequency, each side separately"** — powerful for by-ear filter choice (Phase 4 / when REW is unavailable). · Joint frequencies/orders can differ L/R = a **by-ear VARIANT** (the default — L/R symmetry: the same type+order+frequency for a stable phantom center; asymmetry only when symmetry won't image → verify imaging; `filter-types §L/R symmetry`, `diagnostic §15`). · EQ centering with mono sines + **don't touch 2.5–5k**. · Break in components + breaks. · Polarity per band = a **variant** (check by summation).

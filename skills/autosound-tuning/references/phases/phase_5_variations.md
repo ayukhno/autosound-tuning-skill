@@ -1,16 +1,16 @@
-# Phase 6 — Client Voicing & Subjective Taste
+# Phase 5 — Variations (voicing presets + center & rear)
 
-This is the final sound shaping phase. It layers subjective preference on top of the technically correct, measured base established in Phases 1–3.
+The **variations** phase: switchable presets layered on the satisfying, locked front (Phases 1–3, verified in Phase 4). Two kinds — **subjective voicing** (genre/context taste) and the optional **spatial** additions (**center**, **rear**). All optional; the front base is never touched.
 
 ## 🎯 Goal-node
 
-**Purpose:** layer **subjective taste** on top of the locked technical base (Phases 1–3) — as separate, reversible voicing presets. ♻️ **Cyclical:** return to the project **anytime** to add a new preset ("road", "jazz", "rock", enveloping) or tweak an existing one; the base is never touched.
+**Purpose:** build **variations** on the satisfying front — switchable **voicing presets** (genre/context taste) and the optional **spatial** layers (**center**, **rear/envelopment**) — all on top of the locked base (Phases 1–3), never touching it. ♻️ **Cyclical:** return to the project **anytime** to add a new preset ("road", "jazz", "rock", enveloping) or tweak an existing one.
 
 **Questions this phase answers:** which taste axes (warm↔bright, bass↔neutral, forward↔laid-back, analytical↔fun)? which target curve does the user prefer **by ear**? which symptom→fix moves close the remaining gaps?
 
 **Required evidence:** the **Preference Profile** (taste axes, loudness, genres); curve auditions on familiar tracks; symptom→fix ear checks.
 
-**✅ Quality gate → Phase 7:** taste mapped (Preference Profile); a curve chosen by ear; symptom→fix moves applied **only on the virtual layer**; saved as a **separate voicing preset** (technical base untouched).
+**✅ Quality gate (per variation):** taste mapped (Preference Profile); a curve chosen by ear; symptom→fix moves applied **only on the virtual layer**; each variation saved as a **separate preset** (technical base untouched). **Center/rear only after the front satisfies** (see the spatial section).
 
 **⚠️ Failure modes:** editing the output/base layer for taste (breaks joints/TA) · voicing before the technical base is locked · not keeping a separate preset (loses the reference A/B).
 
@@ -48,4 +48,27 @@ Apply minor EQ adjustments to resolve specific listening symptoms. Common exampl
 * **The Voicing Layer (Virtual EQ):** Apply subjectivevoicing moves **exclusively on the Virtual Layer** (linked L=R EQ). Since virtual moves do not introduce phase discrepancies between left and right channels, they are safe and will not break the crossover joints or time alignment.
 * **Save as a Separate Preset:** Save the final client-voiced profile as a separate DSP preset (e.g., Preset 2: "Enjoyment/Voiced"), leaving the technical baseline untouched on Preset 1 ("Reference/Technical") for easy comparison and A/B testing.
 
-Once the voicing preset is finalized and the **front satisfies the user**, proceed to **Phase 7** (wrap-up) — **or**, if you're adding the optional **center/rear** now that the front is solid, do **Phase 4** first, then Phase 7.
+---
+
+## 5. Spatial variation — Center Channel (optional)
+
+> ⛔ **Only once the FRONT satisfies** (locked + user OK) — center/rear on an unsatisfying front is wasted work. Their levels/polarities/APFs are **project state** (`dsp-state-current`) — **verify by measurement**, never assume from logs.
+
+Integrating a center introduces a third source that can comb-filter with the L/R mids.
+* **Method A — Manual L+R center:** bandwidth-limit to the core vocal range (HPF+LPF ≈ 1.0–1.2 kHz); keep it **quiet** (a subtle complement); set polarity/APF by **maximum summation at the LP**.
+* **Method B — Algorithmic (e.g. Helix RealCenter):** dial the level so it anchors focus **without narrowing** width; set delay so it doesn't arrive before L/R; if the stage narrows, adjust the center's all-pass. Center tweeter (if any): HPF high (6–8 kHz), gain very low (−6…−10 dB).
+
+## 6. Spatial variation — Rear-Fill (envelopment, optional)
+
+Goal: a sense of **envelopment** without dragging the front stage back.
+* **Differential L−R matrix** — cancels the mono vocal so it stays up front.
+* **Bandwidth-limit** — HPF ≥ 300–315 Hz, LPF ≈ 4–5 kHz (avoid door/cabin resonances).
+* **Haas delay** — the front→rear arrival difference **+ 8–10 ms** (precedence → localizes front, rear = ambience).
+* **Level** — quiet enough to be inaudible from the front, but missed when muted.
+* After: **re-check the full system by ear** (center/rear must not have dragged the front back) and log to `dsp-state-current`.
+
+> Refs: center → [`diagnostic-techniques.md` §20](file:///skills/autosound-tuning/references/core/diagnostic-techniques.md) · rear → [`voicing-by-ear.md` §Rear](file:///skills/autosound-tuning/references/patterns/voicing-by-ear.md).
+
+---
+
+When the chosen variations are saved (base untouched) and the user is done, **close the session** — see Phase 4's finish (backup + experience via a GitHub Issue). ♻️ Return anytime to add or tweak a variation.

@@ -1,4 +1,4 @@
-# Phase 5 — Targeted Listening (Ear Verification)
+# Phase 4 — Targeted Listening (Ear Verification)
 
 This is the penultimate phase. While physical measurements verify technical correctness, the human ear is the ultimate judge of acoustic reproduction, soundstage depth, and natural voicing.
 
@@ -10,7 +10,7 @@ This is the penultimate phase. While physical measurements verify technical corr
 
 **Required evidence:** one-track-at-a-time **binary** ear checks (track + timecode + a specific marker), from the test-track catalog.
 
-**✅ Quality gate:** the 6-point pass run (binary 🟢/❌; fails → backlog → Phase 2/6); the user is **satisfied with the sound**; **feedback captured here** (a natural finish point) → then either continue to Phase 6 (details) or wrap up (Phase 7).
+**✅ Quality gate:** the 6-point pass run (binary 🟢/❌; fails → backlog → Phase 2/5); the user is **satisfied with the sound**; **feedback captured here** (a natural finish point) → then either continue to Phase 5 (details) or wrap up (close the session here).
 
 **⚠️ Failure modes:** dumping a long song list (propose **one** track/marker at a time) · vague checks (use binary markers) · treating a forward/flat stage as taste when it's top-too-hot-vs-bass or a joint phase error.
 
@@ -60,11 +60,11 @@ When performing a final verification of a newly finished tune or preparing for a
 ## Verdict Logging
 Compile the Arbiter's binary verdicts into a structured checklist:
 * **Item:** [Track & Timecode] — [Acoustic Attribute] ──► **[🟢 Passed / ❌ Failed]**
-* Any failed items are added directly to the active tuning backlog, triggering targeted adjustments in Phase 2 or 6.
+* Any failed items are added directly to the active tuning backlog, triggering targeted adjustments in Phase 2 or 5.
 
 ## The sound satisfies — a natural FINISH point (capture feedback NOW)
 
-When the pass is clean and the user is **satisfied with the sound**, treat it as a real **milestone / likely finish** — many users **stop here** and won't come back for the "details" (Phase 6 variations, center/rear). So **do NOT defer feedback to a separate wrap the user may never reach**:
+When the pass is clean and the user is **satisfied with the sound**, treat it as a real **milestone / likely finish** — many users **stop here** and won't come back for the "details" (Phase 5 variations, center/rear). So **do NOT defer feedback to a separate wrap the user may never reach**:
 * **Capture the project feedback now — interactively** (closed questions with ready options + an always-open "Other"; ≤3–4 taps; never a wall of open questions):
   * **Result vs baseline** — much better / better / same? · **what you love most** (bass · vocals · width · depth · clarity · …) · **anything still bugging you** (free-text / "nothing").
   * **Consent to share** — may we add your **de-identified** car profile + curves to the community library (it helps the next person with this car)? (yes / anonymized only / no).
@@ -72,4 +72,4 @@ When the pass is clean and the user is **satisfied with the sound**, treat it as
   * Log it to `changelog`/`audit-trail` (ritual detail → [`feedback-loop.md`](file:///skills/autosound-tuning/references/core/feedback-loop.md)).
 * **Then fork:**
   * **Done for now → close the session HERE** (no separate wrap phase): write the ▶️ **CONTINUE block** + the backlog in `tuning-changelog`; **back up** the DSP config to `rew_analitic/dsp-config/` (+ README) and the REW `.mdat`; and **send the experience via a GitHub Issue** in the skill's repo (per the issue template) — a generalizable lesson, a new track, a car quirk, or skill feedback (was the guidance clear?). This channel is **explicit and the processing is controlled/visible** — the transparent default (`feedback-loop.md`). *(The author's own local harvest → `skill-inbox` 📚 / the Skill Maintenance Loop.)*
-  * **Continue for the details** → **Phase 6** (voicing variations + the optional **center/rear**) — the front stays the locked base. ♻️ **Phase 6 is CYCLICAL: come back to the project anytime to add another preset or tweak an existing one** (the base is never touched).
+  * **Continue for the details** → **Phase 5** (voicing variations + the optional **center/rear**) — the front stays the locked base. ♻️ **Phase 5 is CYCLICAL: come back to the project anytime to add another preset or tweak an existing one** (the base is never touched).
