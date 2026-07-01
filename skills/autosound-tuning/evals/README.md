@@ -39,3 +39,9 @@ python3.12 evals/run_trigger_eval.py --eval-set evals/trigger-eval-set.json \
 Validated 2026-07-01 on the v2.0.1 description (added casual-EN + create-a-curve triggers):
 **9/9** on a focused set — all casual-EN / create-curve queries fire; near-misses
 (home-theater, studio monitors, sub-buying, door-rattle) correctly do not.
+
+v2.0.2 added **UK/DE/PL native-language triggers** (Gemini native-QA: use technical markers —
+процесор/затримки, Car-HiFi einmessen/Laufzeitkorrektur, strojenie DSP/opóźnienia — which are
+both idiomatic and exclude home-hifi/PC-speaker false-positives). Validated **7/7**: all
+UK/DE/PL enthusiast queries fire; native-language near-misses (home theater, living-room hi-fi,
+PC speakers) correctly do not.

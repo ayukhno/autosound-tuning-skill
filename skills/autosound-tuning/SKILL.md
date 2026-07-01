@@ -9,6 +9,10 @@ description: >
   pick crossover points, set time delays, phase, or polarity, build per-channel EQ, fix imaging/staging,
   match OR create/build a target/house curve (ResoNix, Jazzi, Harman, Audiofrog, or a custom one via the
   Nono Tuning Tool), pull REW measurements, or run a tuning session.
+  Also fires on native-language requests — UK: «налаштувати автозвук/процесор у машині»,
+  «затримки та кросовери в авто», «образ липне до динаміка / сцена попливла»; DE: „Car-HiFi
+  einmessen / DSP einstellen", „Laufzeitkorrektur im Auto"; PL: „strojenie DSP w aucie/samochodzie",
+  „ustawić opóźnienia czasowe car audio".
 ---
 
 # Autosound Tuning Orchestrator

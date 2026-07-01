@@ -22,5 +22,12 @@
   {"query": "hi, I would like to setup my car audio. could you help me?", "should_trigger": true},
   {"query": "can you help me tune my speakers? staging feels off and vocals pull to the left", "should_trigger": true},
   {"query": "i want to create a custom house curve (EPY) for fun, maybe for EMMA later — how do i build one?", "should_trigger": true},
-  {"query": "help me set up my home theater receiver and speaker layout for dolby atmos", "should_trigger": false}
+  {"query": "help me set up my home theater receiver and speaker layout for dolby atmos", "should_trigger": false},
+  {"query": "допоможи налаштувати автозвук у машині — процесор, затримки, кросовери; образ липне вліво до динаміка", "should_trigger": true},
+  {"query": "хочу з нуля налаштувати автозвук на своїй машині, є REW і Helix", "should_trigger": true},
+  {"query": "kannst du mir helfen mein Car-HiFi einzumessen? DSP Laufzeitkorrektur im Auto stimmt nicht", "should_trigger": true},
+  {"query": "pomóż mi ze strojeniem DSP w aucie — opóźnienia czasowe, zwrotnice i korektor", "should_trigger": true},
+  {"query": "допоможи налаштувати домашній кінотеатр і колонки у вітальні", "should_trigger": false},
+  {"query": "hilf mir mein Wohnzimmer-Heimkino und die HiFi-Anlage einzustellen", "should_trigger": false},
+  {"query": "jak ustawić głośniki w komputerze do grania i filmów?", "should_trigger": false}
 ]
