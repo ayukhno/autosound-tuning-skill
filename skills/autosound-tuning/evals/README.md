@@ -16,3 +16,26 @@ the `claude -p` subprocess; the improve step then hit a token limit. So the impe
 trigger phrases in `description` were added MANUALLY (additive — cannot reduce existing recall).
 Re-run this set on a machine where the eval harness actually registers the skill to get a valid
 before/after.
+
+## `run_trigger_eval.py` — valid runner (repairs the caveat above)
+
+The 0%-recall artifact was diagnosed (2026-07-01): skill-creator's `run_eval` injects the
+candidate description as a temp **slash-command** and only matches that uuid in the tool input —
+so it never matches a real `Skill(autosound-tuning)` invocation and reports false 0 even for
+slam-dunk triggers (confirmed: an EMMA/crossover query really does fire `Skill(autosound-tuning)`).
+
+`run_trigger_eval.py` tests the **actually-loaded** skill instead: it runs `claude -p <query>` and
+detects a real `Skill(<skill-name>)` tool_use in the stream, killing the subprocess the moment a
+trigger is seen (so you don't pay for the whole skill run). Requires the skill to be discoverable
+by `claude -p` (a `~/.claude/skills/<name>` symlink or an installed plugin), and tests the LIVE
+description. Pass `--model` explicitly (the default-model bug is what produced the old 0% — a
+disabled session model made every `claude -p` fail).
+
+```
+python3.12 evals/run_trigger_eval.py --eval-set evals/trigger-eval-set.json \
+  --skill-name autosound-tuning --model claude-sonnet-4-6 --workers 5
+```
+
+Validated 2026-07-01 on the v2.0.1 description (added casual-EN + create-a-curve triggers):
+**9/9** on a focused set — all casual-EN / create-curve queries fire; near-misses
+(home-theater, studio monitors, sub-buying, door-rattle) correctly do not.

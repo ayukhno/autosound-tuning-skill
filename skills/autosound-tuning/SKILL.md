@@ -4,10 +4,11 @@ description: >
   Orchestrates car-audio DSP tuning for ANY car/system — from a brand-new project
   (intake: equipment + goals interview, target-curve choice, install verification) to deep
   iterative tuning — using REW + a Claude(Generator)↔Gemini(Critic/Advisor)↔User(Arbiter) review
-  loop. Use whenever the user wants to: set up or tune a car-audio system FROM SCRATCH, tune speakers,
+  loop. Use whenever the user wants to (e.g. "help me set up my car audio", "tune my speakers/system"):
+  set up or tune a car-audio system FROM SCRATCH, tune speakers,
   pick crossover points, set time delays, phase, or polarity, build per-channel EQ, fix imaging/staging,
-  match a target/house curve (ResoNix, Jazzi, Harman, Audiofrog, etc.), pull REW measurements, or
-  run a tuning session.
+  match OR create/build a target/house curve (ResoNix, Jazzi, Harman, Audiofrog, or a custom one via the
+  Nono Tuning Tool), pull REW measurements, or run a tuning session.
 ---
 
 # Autosound Tuning Orchestrator

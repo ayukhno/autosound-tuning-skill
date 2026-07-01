@@ -18,5 +18,9 @@
   {"query": "measuring the input impedance of an op-amp circuit on my breadboard with a function generator, getting weird numbers", "should_trigger": false},
   {"query": "what does Vas actually mean in a speaker spec sheet?", "should_trigger": false},
   {"query": "help me dial in a flat reference target curve for my studio nearfield monitors for mixing", "should_trigger": false},
-  {"query": "im measuring the characteristic impedance of a coax cable for an antenna project, 50 ohm vs 75 ohm", "should_trigger": false}
+  {"query": "im measuring the characteristic impedance of a coax cable for an antenna project, 50 ohm vs 75 ohm", "should_trigger": false},
+  {"query": "hi, I would like to setup my car audio. could you help me?", "should_trigger": true},
+  {"query": "can you help me tune my speakers? staging feels off and vocals pull to the left", "should_trigger": true},
+  {"query": "i want to create a custom house curve (EPY) for fun, maybe for EMMA later — how do i build one?", "should_trigger": true},
+  {"query": "help me set up my home theater receiver and speaker layout for dolby atmos", "should_trigger": false}
 ]
