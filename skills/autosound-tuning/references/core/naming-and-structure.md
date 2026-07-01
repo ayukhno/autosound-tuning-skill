@@ -35,6 +35,19 @@ Measurement name = **`<channel|pair|combo|joint>[ <modifier>]_<version>`**, opti
 - **Transient experiment tags** — while A/B-testing a candidate change, tag the variant in the name (`i`/`INV` = inverted polarity, `+Δτ` = an added delay trial, etc.) so the two readings don't get confused. The tag is **temporary**: once the change is **baked into the base** it drops from the name (the measurement is just `_N+1` at the new config). **`dsp-state-current` is the source of truth for what's in the base** — the name tags only the experiment in flight, not the committed state.
 - **Version suffix `_N`** = the **DSP config version the measurement was taken under**. `tw-L_7` = tweeter-L at config v7; `ALL_25` = full front at v25. **Bump N whenever the DSP config changes.** This is what lets the changelog line up "before vs after a change" (e.g. `ALL_17` vs `ALL_18` shows what an EQ import moved). A measurement with no `_N` is ambiguous — avoid it.
 
+### Capture plan per phase — `sw` vs `rta` (take BOTH in one solo pass)
+
+Rule of thumb: **magnitude / tone / summation / target → `(rta)`**; **phase / time / IR / distortion → `(sw)`**. In a solo pass, capture BOTH types so you never re-measure just to get the other. Type→purpose detail: `analysis-playbook.md`.
+
+| Phase | Capture (concrete names) | Type |
+|---|---|---|
+| **0 baseline** | each driver solo: `<ch>_1 (sw)` **+** `<ch>_1 (rta)` | **both**, one pass/driver |
+| **1** (analyzes `_1`, **no new capture**) | — | TA/Time-Offset/excess-phase ← `(sw)`; crossover freq & level ← `(rta)` |
+| **2** (needs the re-measured `_2`) | each driver solo post-`v1`: `<ch>_2 (sw)` **+** `<ch>_2 (rta)`; then groups `Ws_2/Ms_2/TWs_2 (rta)`, `L_2/R_2 (rta)`, `SW+Ws_2 (rta)` | **both** solo, then **rta** groups |
+| **3 verify** | `<ch>_final (rta)`, `Ws/Ms/TWs_final (rta)`, `SW+Ws_final (rta)`, `L/R` sides, `ALL_final (rta)` | **rta** (+ `(sw)` spot-checks) |
+
+- **2a** needs `_2 (rta)` (magnitude to EQ) **+** `_2 (sw)` (excess-phase → what's EQ-able); **2b** needs `_2 (sw)` (phase/summation); **2c/2d** the `(rta)` groups.
+
 ## 3a. REW history hygiene — names are the identity (tell the user early)
 
 **REW measurement order is fragile.** You can reorder, delete, and — worst — *sort* the measurement list, and an accidental click reshuffles everything. So **position means nothing; the name is the only stable identity of a measurement.** All history work (lining up `_N` versions, before/after a change, joints) hangs on names, not row order. Practical rules:

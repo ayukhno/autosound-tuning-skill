@@ -75,6 +75,14 @@ It bakes in the crossover roll-off, the two-speaker **summation offset** (~6 dB 
 * Save into `rew_analitic/target-curves/<name>/`, load into REW, and use them for Phase 2a hygiene EQ.
 * *(Alternative — manual:* [nonotuningtool.com](https://nonotuningtool.com) does the same in a web UI with a "Stereo" config — mention it to the user as an option.)
 
-Then **re-measure each channel with the `v1` config applied** (`<ch>_2 (sw)` + `<ch>_2 (rta)`) — this post-foundation `_2` set (crossovers + TA + levels now in place), **not** the raw `_1` baseline, is what Phase 2 works on.
+### 6. Apply `v1` explicitly, then capture `_2` (hand-off to Phase 2)
+**Before capturing `_2`, command the user to enter the FULL `v1` config into the DSP and save it — no silently assumed state.** Output it as an explicit step-by-step list (Golden Standard Format):
+* **Crossovers** — freq / slope / type per channel.
+* **Delays (TA)** — per channel, in **samples AND ms** (state the assumed DSP sample rate).
+* **Gains** — per-channel levels (from `level_offsets.py`).
+* **EQ** — as decided so far (flat / none yet at this hand-off — Phase 2a builds it).
+* **REW sweep Time Offset** — set it (≈ the reference driver's arrival) **before** the sweeps, so phase reads flat.
+
+**Then re-measure each channel** post-`v1` — `<ch>_2 (sw)` + `<ch>_2 (rta)`. This `_2` set (not the raw `_1` baseline) is what Phase 2 works on.
 
 Once completed and verified, transition to **Phase 2**.

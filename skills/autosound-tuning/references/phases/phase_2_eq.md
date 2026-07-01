@@ -19,7 +19,7 @@ This is the core technical execution phase. All operations **MUST** be performed
 ---
 
 ## 2a — Hygiene EQ of Each Channel
-Linearize each individual channel (its `_2` post-crossover measurement) to its own **per-band target** (from Phase 1 §5 / `target_bands.py`).
+Linearize each individual channel to its own **per-band target** (from Phase 1 §5 / `target_bands.py`), using its **`<ch>_2 (rta)`** for the magnitude to EQ and its **`<ch>_2 (sw)`** excess-phase to decide what is EQ-able.
 
 ### Rules of Action
 1. **Min-Phase Peaks Only:** Cut narrow and wide minimum-phase peaks.
@@ -63,7 +63,7 @@ Measure and analyze the MMM RTA of the following combinations:
 ---
 
 ## 2d — Final EQ to Target
-Shape the technical response of the entire summed system to the session's target curve.
+Shape the technical response of the entire summed system — the `(rta)` of the summed groups vs the target — to the session's target curve.
 
 ### Rules of Action
 * Apply **broad, smooth acoustic moves** (tilts, shelves, high/low Q shaping).
