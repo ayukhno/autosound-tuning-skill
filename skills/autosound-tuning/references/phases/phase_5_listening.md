@@ -65,7 +65,10 @@ Compile the Arbiter's binary verdicts into a structured checklist:
 ## The sound satisfies — a natural FINISH point (capture feedback NOW)
 
 When the pass is clean and the user is **satisfied with the sound**, treat it as a real **milestone / likely finish** — many users **stop here** and won't come back for the "details" (Phase 6 variations, center/rear). So **do NOT defer feedback to a Phase 7 that may never come**:
-* **Capture the project feedback now** — the user's impression vs baseline, what they love, what's still open (log to `changelog`/`audit-trail`; the fuller ritual → [`feedback-loop.md`](file:///skills/autosound-tuning/references/core/feedback-loop.md)).
+* **Capture the project feedback now — interactively** (closed questions with ready options + an always-open "Other"; ≤3–4 taps; never a wall of open questions):
+  * **Result vs baseline** — much better / better / same? · **what you love most** (bass · vocals · width · depth · clarity · …) · **anything still bugging you** (free-text / "nothing").
+  * **Consent to share** — may we add your **de-identified** car profile + curves to the community library (it helps the next person with this car)? (yes / anonymized only / no).
+  * Log it to `changelog`/`audit-trail`. The full closing ritual (skill-specific feedback + creator support) stays in [`feedback-loop.md`](file:///skills/autosound-tuning/references/core/feedback-loop.md) / Phase 7.
 * **Then fork:**
   * **Done for now** → **Phase 7** (wrap-up: backup + the closing feedback ritual + consent-to-share).
   * **Continue for the details** → **Phase 6** (voicing variations) and/or the optional **center/rear** — the front stays the locked base.
