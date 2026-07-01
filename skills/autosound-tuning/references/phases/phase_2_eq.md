@@ -10,7 +10,7 @@ This is the core technical execution phase. All operations **MUST** be performed
 
 **Required evidence:** a **fresh re-measurement of the applied `v1` system** (`_2`, each channel **post-crossover** — not the raw `_1` baseline): per-channel FR + excess-phase (min vs non-min phase); joint summation (uninverted vs inverted); summed-group MMM (Ws/Ms/TWs, L vs R, SW+Ws).
 
-**✅ Quality gate → Phase 3:** peaks cut / nulls untouched; joints aligned by **summation** (APF/fine delay, not raw-delay shifts); summed groups match target; final target EQ on the **virtual layer** only; strict order 2a→2d held.
+**✅ Quality gate → Phase 3:** peaks cut / nulls untouched; joints aligned by **summation** (APF/fine delay, not raw-delay shifts); summed groups match target; final target EQ on the **virtual layer** only; strict order 2a→2d held; **two critic checkpoints passed** (after phase alignment · after EQ).
 
 **⚠️ Failure modes:** boosting into nulls (non-min-phase → wasted headroom/distortion) · 30-band auto-banks (use minimal conscious EQ) · shifting raw channel delays for phase (breaks gross TA) · sneaking client taste in here (that's Phase 6).
 
@@ -19,14 +19,16 @@ This is the core technical execution phase. All operations **MUST** be performed
 ---
 
 ## 2a — Hygiene EQ of Each Channel
-Linearize each individual channel to its own **per-band target** (from Phase 1 §5 / `target_bands.py`), using its **`<ch>_2 (rta)`** for the magnitude to EQ and its **`<ch>_2 (sw)`** excess-phase to decide what is EQ-able.
+Linearize each individual channel to its own **per-band target** (from Phase 1 §5 / `target_bands.py`), using its **`<ch>_2 (rta)`** for the magnitude to EQ and its **`<ch>_2 (sw)`** excess-phase to decide what is EQ-able. Calculate the correction from `analysis.py` **`compute_deviation`** (measured − target) — don't eyeball it; and **read the channel's current filters first** (`get_filters`/`get_equaliser`) — never assume it is raw (a real bug overwrote the user's manual notches).
 
 ### Rules of Action
 1. **Min-Phase Peaks Only:** Cut narrow and wide minimum-phase peaks.
 2. **Never Fill Nulls:** Do **NOT** EQ-boost acoustic nulls/dips. If a dip is deep and narrow, it is a phase cancellation or diffraction effect (non-minimum-phase). Equalizer boosting into nulls wastes amplifier headroom and introduces physical distortion.
    * *Example:* The VW Passat B8 left midbass has a null at ~150 Hz due to door diffraction. It is non-minimum-phase; EQ is strictly forbidden. Check the excess-phase curve in REW to separate minimum-phase from non-minimum-phase.
 3. **L=R is a Trend, Not a Clone:** Cabin acoustics force natural asymmetry. Align the general shape/trend, but do not force identical per-channel curves where physics forbids it.
-4. **Generate PEQ Files:** For more than 3 bands, build the EQ in REW and export the filter set. For Helix DSP, use the Audiotec-Fischer export format via `rew_tool/atf_eq.py` to allow clean, one-shot file import. Do **not** input 30-band auto-banks. Conscious, minimal EQ beats excessive bands.
+4. **Generate PEQ Files:** For more than 3 bands, build the EQ in REW and export the filter set. For Helix DSP, use the Audiotec-Fischer export format via `rew_tool/atf_eq.py` (this transfer already exists — never re-script it) for a clean, one-shot file import. Do **not** input 30-band auto-banks. Conscious, minimal EQ beats excessive bands.
+5. **VCP over Output at junctions (field-proven):** place narrow high-Q cuts **near a crossover junction** on the **Virtual/VCP layer**, not the output channel — it preserves the driver's phase coherence at the joint (real case: mid cuts ~453/459 Hz on VCP saved the 300 Hz summation). ⚠️ On Helix the virtual EQ **sums electrically** with the output EQ — account for both layers.
+6. **Editing existing EQ → show a was→became table:** whenever you touch already-entered EQ, output ALL affected bands (channel **and** virtual) as a `freq | was → became | Q` table, so nothing is silently lost.
 
 ---
 
@@ -43,6 +45,8 @@ Align the relative phase response of the channels in their overlap regions.
    * Align joints using **All-pass filters (APF)** or Helix Phase controls rather than shifting raw channel delays, which can break the gross time arrival.
    * The sub-to-midbass joint (~60 Hz) yields the largest subjective SQ gain. Verify carefully.
    * The final verdict at any joint is determined by **SUMMATION** (uninverted vs. inverted polarity), not single-position phase values.
+
+> 🔍 **Critic checkpoint (1 of 2):** with the joints/polarity set, run a cross-vendor review round on the phase alignment **before** EQ — a falsifiable challenge of the joints, the alignment sequence, and the summation verdicts.
 
 ---
 
@@ -70,5 +74,7 @@ Shape the technical response of the entire summed system — the `(rta)` of the 
 * Work primarily on the **Virtual Layer** (L=R linked, identical on both sides).
 * Since the Virtual Layer sits above crossovers in the DSP routing chain, its phase shifts are identical for both sides, **never breaking the acoustic joints** set in Step 2b.
 * Save client-preference voicing requests for Phase 6. This layer is purely technical target accuracy.
+
+> 🔍 **Critic checkpoint (2 of 2):** with the EQ done, run a cross-vendor review round on the linearized + target-matched result **before** the Phase-3 lock.
 
 Once the final curve is aligned and verified, transition to the **Phase 3** control gate.
