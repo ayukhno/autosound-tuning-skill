@@ -2,10 +2,19 @@
 
 This phase acts as the final technical gate before proceeding to subjective listening or surround integration.
 
-## Core Objectives
-1. **Acquire Verification Scans:** Measure all individual, paired, and summed configurations to verify technical alignment.
-2. **Execute Multi-AI Verdicts:** Run independent reviews (Claude and Gemini) on the final technical outcome.
-3. **Establish Technical Lock:** Secure a stable baseline from which subjective voicing and multi-channel work can build.
+## 🎯 Goal-node
+
+**Purpose:** the final technical gate — verification scans + independent cross-vendor verdicts + Technical Lock, before subjective/multichannel work.
+
+**Questions this phase answers:** does the measured system meet target/joint/symmetry criteria? do independent reviewers agree? is it stable enough to lock?
+
+**Required evidence:** the full verification MMM set (each `_final` channel, Ws/Ms/TWs, sw+Ws, L/R sides, `ALL_final`); independent Claude + Gemini analyses.
+
+**✅ Quality gate → Phase 4/5 (Technical Lock):** verification scans captured; **two independent (cross-vendor) verdicts**; disagreements resolved or escalated to the Arbiter (Disagreement Table at 3/3); config backed up to `dsp-config/`, changelog/dsp-state/audit-trail updated.
+
+**⚠️ Failure modes:** endless review rounds (cap at 3/3 → Disagreement Table) · locking without a backup · a single-perspective verdict (must be cross-vendor).
+
+**🧩 Refs:** [`review-loop.md`](file:///skills/autosound-tuning/references/core/review-loop.md) (loop, deadlock, Disagreement Table §5).
 
 ---
 

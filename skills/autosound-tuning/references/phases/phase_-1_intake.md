@@ -2,17 +2,25 @@
 
 This phase bootstraps a brand-new tuning project or a fresh system installation.
 
-## Core Objectives
-1. **Bootstrap the Project:** Set up the user environment, workspace directory structure, and language preferences.
-2. **Collect Setup Context:** Run the equipment and goals interview.
-3. **Verify the Installation:** Check speaker wiring, routing, electrical polarities, gain staging, safe sweep levels, and background noise.
-4. **Choose the Target Curve:** Select the sonic house curve in alignment with the user's taste (no defaults!).
+## 🎯 Goal-node
+
+**Purpose:** bootstrap a brand-new project — workspace + language, equipment/goals interview, install verification, target-curve seed — so measurement can start safely on a known system.
+
+**Questions this phase answers:** what's the car/drivers/DSP/mic rig? what are the goals (competition/enjoyment, reference seat, taste)? is the install safe and correct to measure?
+
+**Required evidence:** the user interview (no guessing); driver `Fs` (datasheet/ask); routing · electrical polarity · gain · noise checks.
+
+**✅ Quality gate → Phase 0:** language set; `autosound_context.md` (Engineering Profile) + `preference-profile.md` created; install verified + protective HPFs set for fragile drivers; a candidate target curve **seeded** (no default).
+
+**⚠️ Failure modes:** skipping install verification (costs a session) · filing reference seat / competition format as a "preference" (they're engineering) · enforcing a default curve.
+
+**🧩 Patterns / refs:** full flow → [`project-intake.md`](file:///skills/autosound-tuning/references/core/project-intake.md); curve→character → [`voicing-by-ear.md`](file:///skills/autosound-tuning/references/patterns/voicing-by-ear.md).
 
 ---
 
 ## Step-by-Step Runbook
 
-For a comprehensive walkthrough, you **MUST** refer to and follow [project-intake.md](file:///skills/autosound-tuning/references/project-intake.md).
+For a comprehensive walkthrough, you **MUST** refer to and follow [project-intake.md](file:///skills/autosound-tuning/references/core/project-intake.md).
 
 ### 1. Welcome & Language Gate
 Identify the user's preferred working language (EN/UK/DE/PL) at first contact. All subsequent dialogue and generated files must adhere to this preference, while the underlying skill instructions and protocol headers remain in English.
@@ -32,7 +40,7 @@ Collect details on:
 * **Acoustic Integrity Check:** Verify routing (left/right channels aren't swapped), gain staging (no clipping on outputs), and ambient noise level.
 
 ### 4. Target Curve Selection
-Audit the user's taste and map it to a target curve. Do **not** enforce a default curve. Present the curve-to-character mapping table in [voicing-by-ear.md](file:///skills/autosound-tuning/references/voicing-by-ear.md) to help them decide.
+Audit the user's taste and map it to a target curve. Do **not** enforce a default curve. Present the curve-to-character mapping table in [voicing-by-ear.md](file:///skills/autosound-tuning/references/patterns/voicing-by-ear.md) to help them decide.
 
 ### 5. File & Workspace Creation
 Create the baseline project files:

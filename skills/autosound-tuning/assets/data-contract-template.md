@@ -122,7 +122,7 @@ The Generator emits a **ready-to-apply** artifact, not "text":
 
 - **REW runs natively on macOS** → `localhost:4735` (the REW API) is **reachable directly from the host** where Claude Code / the Critic CLI live. No port-forwarding is needed; we pull data live over the API.
 - **A Windows VM (Parallels, etc.)** is needed only if your DSP's editor is Windows-only. Then the single "courier" step — handing the **EQ export from REW (Mac) to the DSP software (VM)** via a shared folder.
-- **The critic channel:** Claude Code (the orchestrator) + `scripts/gemini_critic.sh` (auto-CLI: `agy` / `@google/gemini-cli`) — on the same host, no VM. Setup → `references/setup-critic-channel.md`.
+- **The critic channel:** Claude Code (the orchestrator) + `scripts/gemini_critic.sh` (auto-CLI: `agy` / `@google/gemini-cli`) — on the same host, no VM. Setup → `references/tooling/setup-critic-channel.md`.
 
 -----
 

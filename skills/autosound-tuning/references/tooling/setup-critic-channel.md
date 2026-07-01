@@ -1,12 +1,12 @@
 # Setting up the Critic-Advisor channel (out-of-the-box)
 
-The reviewer channel is critical to prevent single-perspective bias. There are three ways to configure it (Autopilot, Automated Scripts, or Manual Clipboard):
+The reviewer channel is critical to prevent single-perspective bias. **The strongest setup is a second, different AI vendor** — Claude + Gemini — via the CLI wrappers (§1–§4) or a manual chat (§7). The Autopilot self-loop (§0) is a **fallback** for when no second AI is available.
 
-## 0. Autopilot: Integrated Multi-Agent Self-Loop (Default & Recommendation)
-If the user selects Autopilot mode, **no external API keys or CLI logins are required** from the user, as the Generator itself programmatically spawns an isolated subagent or runs local scripts.
+## 0. Autopilot self-loop — FALLBACK (only when you have no second AI)
+If no second AI is available, the Generator can run the loop by programmatically spawning an isolated subagent — **no external API keys or CLI logins required**. ⚠️ Same-model review shares the model's blind spots (**not** true cross-vendor anti-anchoring) and is the mode where long autonomous sessions have drifted (lost DSP state / phase). Prefer §1–§4 or §7 whenever a second vendor exists.
 * **How to verify/smoke-test it:**
   Simply spawn a quick test subagent named `critic_advisor` with an isolated context and ask: *"Channel check: reply with one line 'Autopilot works'."*.
-  If you get a reply, the channel is 100% ready. Mark it as verified and bypass any API key/CLI questions!
+  If you get a reply, the fallback is ready. Only rely on it when a second vendor genuinely isn't available (§1–§7).
 
 ## 1. Install the CLI — `agy` (Antigravity) is the default
 

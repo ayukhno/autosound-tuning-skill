@@ -64,7 +64,7 @@ If you have an external sound card with a loopback cable, it gives an **absolute
 
 ## Tuning order → canon in `process-phases.md`
 
-The full process (Phases −1…6: intake → baseline → crossovers/TA → EQ → verdict → center/rear → listening → voicing) lives **only** in `references/process-phases.md`; we don't duplicate it here (an old copy of this file had drifted from the canon). The two-layer logic — OUTPUT base (asymmetry/surgery) vs VIRTUAL voicing (the symmetric curve shape, doesn't break joints) → `diagnostic-techniques.md §6`; how to apply a house curve on the virtual layer → `car-eq-patterns.md`. This file keeps only the **Helix specifics** below.
+The full process (Phases −1…6: intake → baseline → crossovers/TA → EQ → verdict → center/rear → listening → voicing) lives **only** in `references/core/process-phases.md`; we don't duplicate it here (an old copy of this file had drifted from the canon). The two-layer logic — OUTPUT base (asymmetry/surgery) vs VIRTUAL voicing (the symmetric curve shape, doesn't break joints) → `diagnostic-techniques.md §6`; how to apply a house curve on the virtual layer → `car-eq-patterns.md`. This file keeps only the **Helix specifics** below.
 
 ---
 
@@ -113,4 +113,4 @@ Use it to check the input signal while setting gains. Shows clipping in real tim
 
 ## Starting crossovers → `filter-types-car-audio.md`
 
-The starting crossover sets (there are several, and they evolve) are consolidated in `references/filter-types-car-audio.md` §"Starting crossover sets"; **this car's current choice** → `dsp-state-current` + profile §4. Not duplicated here.
+The starting crossover sets (there are several, and they evolve) are consolidated in `references/core/filter-types-car-audio.md` §"Starting crossover sets"; **this car's current choice** → `dsp-state-current` + profile §4. Not duplicated here.

@@ -2,16 +2,25 @@
 
 This phase closes the active tuning session, records findings, and feeds valuable generalizable lessons back into the parent skill repository.
 
-## Core Objectives
-1. **Log Session State:** Write the finalized tuning step into the session log and update the `tuning-changelog`.
-2. **Execute the Closing Ritual:** Conduct the 4-stream feedback process with the user.
-3. **Contribute to Community Knowledge:** Back up configurations and check for generalizable skill candidates.
+## 🎯 Goal-node
+
+**Purpose:** close the session cleanly — log final state, run the 4-stream feedback ritual, harvest generalizable lessons back to the skill.
+
+**Questions this phase answers:** is the final DSP state + backlog logged? what worked / didn't (project + skill)? consent to share? any generalizable lessons?
+
+**Required evidence:** `dsp-state-current` + `tuning-changelog` updated with a ▶️ CONTINUE block; the 4 feedback streams; skill-inbox candidates.
+
+**✅ Quality gate (project complete):** dsp-state/changelog finalized with a CONTINUE block + backlog; the 4-stream feedback run (project · skill · consent · support); DSP binary backed up to `dsp-config/` with a README; lessons written to `skill-inbox` with 📚.
+
+**⚠️ Failure modes:** transmitting user data automatically (user uploads manually; strip personal data) · showing the donation link before feedback is complete / when Sponsors is unset · skipping the skill-inbox harvest (loses the learning).
+
+**🧩 Refs:** [`feedback-loop.md`](file:///skills/autosound-tuning/references/core/feedback-loop.md).
 
 ---
 
 ## Step-by-Step Runbook
 
-For complete instructions and templates, refer to [feedback-loop.md](file:///skills/autosound-tuning/references/feedback-loop.md).
+For complete instructions and templates, refer to [feedback-loop.md](file:///skills/autosound-tuning/references/core/feedback-loop.md).
 
 ### 1. Finalize Project Documentation & State
 * Update `dsp-state-current` to reflect the exact crossover points, delays, gains, polarities, and virtual EQ shelves currently loaded into the vehicle's DSP.

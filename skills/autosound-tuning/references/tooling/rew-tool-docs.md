@@ -52,9 +52,9 @@ Or add `<skill-dir>/rew_tool` to your `PYTHONPATH`.
 
 1. **Numerical Data over Screenshots:** Prefer pulling data numerically over reading screenshots.
 2. **Analysis Protocol:**
-   * To decide what REW measurement (FR, GD, IR, etc.) to pull for a given task, refer to [analysis-playbook.md](file:///skills/autosound-tuning/references/analysis-playbook.md).
-   * For advice on interpreting data (anchor-to-mids, peak-vs-null, power-sum summation, joint-phase checks, etc.), refer to [diagnostic-techniques.md](file:///skills/autosound-tuning/references/diagnostic-techniques.md).
+   * To decide what REW measurement (FR, GD, IR, etc.) to pull for a given task, refer to [analysis-playbook.md](file:///skills/autosound-tuning/references/core/analysis-playbook.md).
+   * For advice on interpreting data (anchor-to-mids, peak-vs-null, power-sum summation, joint-phase checks, etc.), refer to [diagnostic-techniques.md](file:///skills/autosound-tuning/references/core/diagnostic-techniques.md).
 3. **API Quirks & Gotchas:**
    * Watch out for big-endian float32 encoding, the requirement to `set_filters` one-by-one with `gaindB`, addressing measurements strictly by NAME instead of index, IR timing usability details, and out-of-band target curve garbage.
-   * Check [rew-api-quirks.md](file:///skills/autosound-tuning/references/rew-api-quirks.md) for full documentation. (The `rew_tool/` codebase already handles these quirks).
+   * Check [rew-api-quirks.md](file:///skills/autosound-tuning/references/tooling/rew-api-quirks.md) for full documentation. (The `rew_tool/` codebase already handles these quirks).
 4. **Fallback:** If the API cannot be reached from the host, fall back to the user's exported `.mdat` / CSV (e.g., `rew_analitic/measurements-*.mdat`) or screenshots.

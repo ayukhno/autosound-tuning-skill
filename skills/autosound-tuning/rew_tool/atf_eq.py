@@ -2,14 +2,14 @@
 
 This is the tab-separated text block REW produces with Equaliser = "Audiotec
 Fischer" and that you paste/import into Helix DSP PC-Tool. Format spec +
-REW→Helix workflow: references/helix-eq-export.md. Validated against a REAL
+REW→Helix workflow: references/tooling/helix-eq-export.md. Validated against a REAL
 export — testdata/atf_full_eq_sample.txt (run `python atf_eq.py --selftest`).
 
 Two directions:
   parse_atf_eq(text_or_path) -> list[Band]
       recover a tune's EQ bank from a copied/exported block — the black-box
       case (read an existing Helix EQ from a file when the live DSP can't be
-      read; references/diagnostic-techniques.md §22).
+      read; references/core/diagnostic-techniques.md §22).
   format_atf_eq(bands)       -> str
       emit the 30-band block from computed PEQ, so the tool produces the Helix
       import file itself (skip the REW round-trip).

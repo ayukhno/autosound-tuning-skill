@@ -1,5 +1,7 @@
 # The Hashimoto method — by-ear stage building (an alternative/complementary approach)
 
+> 🧩 **PATTERN REPOSITORY — starting hypotheses, not rules.** Everything here is "in similar conditions this often worked": a **starting point**, validated by measurement/ear, never a mandate. See [`knowledge-architecture.md`](file:///skills/autosound-tuning/references/core/knowledge-architecture.md).
+
 A complete **by-ear** method from the Japanese installer **Hashimoto** (translated by Anton Nikolaev, a video summary). The goal = **building the soundstage**. It's an ALTERNATIVE/complement to our REW measurement process (`process-phases.md`) — useful where we work by ear (Phase 5) or without full REW. The signature technique: **"first the optimal filter SLOPE, then the optimal FREQUENCY"**, each joint separately, each side separately.
 
 ## Order: crossovers (slope→freq) → polarity per band → delays (verticals→center) → EQ (last) → voicing on music

@@ -2,11 +2,25 @@
 
 This is the penultimate phase. While physical measurements verify technical correctness, the human ear is the ultimate judge of acoustic reproduction, soundstage depth, and natural voicing.
 
+## 🎯 Goal-node
+
+**Purpose:** ear-verify the technically-correct tune across the standard listening pass — the ear is the final judge of tone, imaging, depth, voicing.
+
+**Questions this phase answers:** pass or fail on each — tonal balance · mono-center focus · lateral localization · depth/layering · midbass punch · HF sibilance?
+
+**Required evidence:** one-track-at-a-time **binary** ear checks (track + timecode + a specific marker), from the test-track catalog.
+
+**✅ Quality gate → Phase 6:** the 6-point listening pass run; each item a binary 🟢/❌; failed items added to the backlog (→ Phase 2/6); core technical traits pass.
+
+**⚠️ Failure modes:** dumping a long song list (propose **one** track/marker at a time) · vague checks (use binary markers) · treating a forward/flat stage as taste when it's top-too-hot-vs-bass or a joint phase error.
+
+**🧩 Refs:** tracks → [`test-tracks.md`](file:///skills/autosound-tuning/references/patterns/test-tracks.md); depth → [`staging-depth.md`](file:///skills/autosound-tuning/references/patterns/staging-depth.md).
+
 ---
 
 ## Core Guidelines
 * **On-Demand Ear Checks:** Listening checks are not just restricted to this phase — they are a cross-cutting diagnostic tool. Use them during crossover selection, time-alignment, and joint phasing to cross-check measurement anomalies.
-* **Curated Diagnostic Tracks:** Always refer to the index in [test-tracks.md](file:///skills/autosound-tuning/references/test-tracks.md) to pick the exact track tailored to expose specific acoustic traits (e.g., soundstage depth, lateral focus, midbass punch, or vocal sibilance).
+* **Curated Diagnostic Tracks:** Always refer to the index in [test-tracks.md](file:///skills/autosound-tuning/references/patterns/test-tracks.md) to pick the exact track tailored to expose specific acoustic traits (e.g., soundstage depth, lateral focus, midbass punch, or vocal sibilance).
 * **Hypothesis-Driven Instruction:** Do **not** dump a long, overwhelming list of songs on the user. Propose **one track at a time**, instructing the user exactly:
   1. **What song** to play.
   2. **At what timecode** (timestamp) to focus their attention.
@@ -31,7 +45,7 @@ When performing a final verification of a newly finished tune or preparing for a
 
 ### 4. Soundstage Depth & Layering (Echelons)
 * **Check:** Front-to-back depth, vocal placement, and separation of physical instruments in space.
-* **Symptom fix:** A "forward" or flat stage is often caused by hot upper-midrange/highs relative to the bass, or phase misalignment at the midrange-to-tweeter joint. Review [staging-depth.md](file:///skills/autosound-tuning/references/staging-depth.md).
+* **Symptom fix:** A "forward" or flat stage is often caused by hot upper-midrange/highs relative to the bass, or phase misalignment at the midrange-to-tweeter joint. Review [staging-depth.md](file:///skills/autosound-tuning/references/patterns/staging-depth.md).
 
 ### 5. Midbass Punch & Transient Attack
 * **Check:** Kick-drum impact, speed, and tactile feel in the doors.

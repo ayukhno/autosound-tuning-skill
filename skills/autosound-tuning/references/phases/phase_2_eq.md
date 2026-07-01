@@ -2,6 +2,20 @@
 
 This is the core technical execution phase. All operations **MUST** be performed in this exact chronological order: Hygiene EQ (2a) → Joint Phase Alignment (2b) → Summed Alignment (2c) → Final Technical EQ (2d).
 
+## 🎯 Goal-node
+
+**Purpose:** linearize + acoustically align the system to the target — hygiene EQ, joint phase, summed alignment, final target EQ.
+
+**Questions this phase answers:** which peaks are minimum-phase (EQ-able) vs nulls (leave)? are the joints phase-aligned by summation? does the summed system match the target?
+
+**Required evidence:** per-channel FR + excess-phase (min vs non-min phase); joint summation (uninverted vs inverted); summed-group MMM (Ws/Ms/TWs, L vs R, SW+Ws).
+
+**✅ Quality gate → Phase 3:** peaks cut / nulls untouched; joints aligned by **summation** (APF/fine delay, not raw-delay shifts); summed groups match target; final target EQ on the **virtual layer** only; strict order 2a→2d held.
+
+**⚠️ Failure modes:** boosting into nulls (non-min-phase → wasted headroom/distortion) · 30-band auto-banks (use minimal conscious EQ) · shifting raw channel delays for phase (breaks gross TA) · sneaking client taste in here (that's Phase 6).
+
+**🧩 Refs:** min-vs-non-min phase, summation → [`diagnostic-techniques.md`](file:///skills/autosound-tuning/references/core/diagnostic-techniques.md).
+
 ---
 
 ## 2a — Hygiene EQ of Each Channel

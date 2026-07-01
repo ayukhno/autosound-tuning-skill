@@ -2,17 +2,25 @@
 
 This is the final sound shaping phase. It layers subjective preference on top of the technically correct, measured base established in Phases 1–3.
 
-## Core Objectives
-1. **Understand Client Preferences:** Map the user's subjective taste across distinct acoustic axes.
-2. **Conduct Curve Auditions:** Listen to and select from different target curve profiles.
-3. **Execute By-Ear Adjustments:** Make subtle adjustments to parameters based on subjective ear symptoms.
-4. **Build Separate Voicing Presets:** Keep the technical base untouched; save subjective tuning as a switchable preset.
+## 🎯 Goal-node
+
+**Purpose:** layer **subjective taste** on top of the locked technical base (Phases 1–3) — as a separate, reversible voicing preset.
+
+**Questions this phase answers:** which taste axes (warm↔bright, bass↔neutral, forward↔laid-back, analytical↔fun)? which target curve does the user prefer **by ear**? which symptom→fix moves close the remaining gaps?
+
+**Required evidence:** the **Preference Profile** (taste axes, loudness, genres); curve auditions on familiar tracks; symptom→fix ear checks.
+
+**✅ Quality gate → Phase 7:** taste mapped (Preference Profile); a curve chosen by ear; symptom→fix moves applied **only on the virtual layer**; saved as a **separate voicing preset** (technical base untouched).
+
+**⚠️ Failure modes:** editing the output/base layer for taste (breaks joints/TA) · voicing before the technical base is locked · not keeping a separate preset (loses the reference A/B).
+
+**🧩 Refs:** [`voicing-by-ear.md`](file:///skills/autosound-tuning/references/patterns/voicing-by-ear.md) · [`preference-profile.md`](file:///skills/autosound-tuning/references/core/preference-profile.md) · [`preset-strategy.md`](file:///skills/autosound-tuning/references/core/preset-strategy.md).
 
 ---
 
 ## Step-by-Step Runbook
 
-For detailed subjective adjustment guidelines and installer secrets, refer to [voicing-by-ear.md](file:///skills/autosound-tuning/references/voicing-by-ear.md).
+For detailed subjective adjustment guidelines and installer secrets, refer to [voicing-by-ear.md](file:///skills/autosound-tuning/references/patterns/voicing-by-ear.md).
 
 ### 1. Map Subjective Taste
 Audit the user's preferences across the following classic sound-staging axes:

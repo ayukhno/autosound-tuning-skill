@@ -12,12 +12,12 @@
 
 - **REW** with the API server enabled (Preferences → API; check: `localhost:4735` responds). A measurement mic **with calibration files** + a way to position it stably at the listening point (LP).
 - **Your DSP's software** and a way to load EQ into it (ideally a file import; we'll find out in §4).
-- The review protocol lives in **`references/review-loop.md`** (roles, TWO-PASS anti-anchoring, the loop rules) — read it before the first review round.
+- The review protocol lives in **`references/core/review-loop.md`** (roles, TWO-PASS anti-anchoring, the loop rules) — read it before the first review round.
 - **🔑 The reviewer (Critic-Advisor) — SET IT UP AT THE START. It's the CORE of the method, not an option** — the synergy of a second expert is a colossal quality gain (single-perspective tuning is noticeably worse). **Offer it to the user** and pick what's available (the fallback ladder):
-  - **(1) Autopilot (Integrated Multi-Agent Self-Loop):** **THE DEFAULT / BEST FOR NEW SESSIONS.** Programmatic context-isolated review (spawns an internal subagent `critic_advisor` or uses local scripts) within the same terminal. Zero-configuration, zero copy-paste, no second-model setup needed. Smoke-test it by spawning a quick test subagent. Bypass any API key prompts if this is chosen.
-  - **(2) Automated Scripts (CLI/API):** Runs `scripts/gemini_*.sh` — auto-detects the CLI (`agy` or `@google/gemini-cli`) or `autosound_ai.py` using a Gemini API key. Verify with `scripts/gemini_critic.sh --doctor`. See `references/setup-critic-channel.md`.
-  - **(3) Clipboard Mode (Manual Web-Chat):** Copy-paste packages into any Web browser AI (ChatGPT, Claude, Gemini Advanced). No CLI/key needed, highly robust.
-  - **(4) Human Reviewer.**
+  - **(1) Automated Scripts (CLI/API) — RECOMMENDED DEFAULT (a second, different AI vendor).** Runs the per-vendor wrappers `scripts/{gemini,claude,codex}_*.sh` (auto-detects the CLI — `agy` / `@google/gemini-cli` — or `autosound_ai.py` via an API key). **Pair Claude + Gemini** (Generator one vendor, reviewer the other) for true cross-vendor anti-anchoring. Verify with `scripts/gemini_critic.sh --doctor`. See `references/tooling/setup-critic-channel.md`.
+  - **(2) Clipboard Mode (Manual Web-Chat) — robust, no CLI.** Copy-paste packages into a second AI's desktop/web chat (ChatGPT, Claude, Gemini Advanced) and paste the reply back. No CLI/key needed.
+  - **(3) Human Reviewer.**
+  - **(4) Autopilot self-loop — FALLBACK (only when no second AI is available).** The Generator spawns an isolated subagent `critic_advisor` in the same terminal — zero-config, no second-model setup. ⚠️ Same-model review shares the model's blind spots (not true cross-vendor anti-anchoring) and is where long autonomous sessions drifted (lost DSP state/phase). Use only if options 1–3 aren't available.
   ⚠️ **Don't skip this step.** (The CLI CHANNEL is optional; the reviewer ROLE is not.)
 - **What a working session looks like:** Pre-session checklist (hardware) → Resume (state) → work by phases (`process-phases.md`) → Session log (handoff to the next session). A new project's first session = this whole file + Phase 0.
 
@@ -60,6 +60,8 @@ Ask in blocks, record the answers right away in `autosound_context.md` (structur
 
 Ask it the way the user thinks of it — a few **branching** questions, in this order:
 
+> 📂 **Route each answer into the right layer** (see [`preference-profile.md`](file:///skills/autosound-tuning/references/core/preference-profile.md)): answers that **shape the engineering** → **Engineering Profile** (`autosound_context.md`): purpose/competition format (#1), reference seat (#2), stage priorities & physical ceilings (#4), hard constraints (#7). **Pure taste** → **Preference Profile** (`preference-profile.md`), applied only in Phase 6: music & loudness (#3), taste axes (#5), curve character (#6).
+
 1. **Purpose (the first fork):**
    - **Competition** → which format(s): **EMMA / AYA / CARMusic — one, several, or all.** ⚠️ Formats judge differently and some techniques are **mutually exclusive** (e.g. crossfeed stabilises an EMMA stage but is never used for AYA) → "several/all" = **separate presets**, not one tune (`competition.md`, `preset-strategy.md`). A format names a **GOAL**, not a slope recipe (`knowledge/approaches.md`).
    - **For yourself (daily enjoyment)** → fan out into #3 (music · loudness · taste).
@@ -80,8 +82,8 @@ A new/unfamiliar/long-unmeasured install. Each item is cheap; a skipped one cost
 1. **Routing:** a quiet test signal to each DSP output in turn → exactly that driver plays. Also a "DSP channel → speaker" map into the profile.
 2. **Polarity — electrically** (markings/a polarity tester/a battery test; NOT "by ear on the pair's center" — the classic trap, `diagnostic-techniques.md §16`). Later, at the joints — control by summation (§9).
 3. **Protective crossovers BEFORE the first sweep — PROTECTION OF FRAGILE drivers ONLY, NOT the final crossovers:**
-   * **Steep Slope Mandatory:** Always use a steep **24 dB/oct (LR4 or BW4)** slope for protective crossovers. Gentle slopes (e.g. 12 dB/oct) do not sufficiently protect fragile voice coils from low-frequency energy during sweep measurements.
-   * **Dynamic Fs-Bound Frequency:** The protective frequency must bind to the *specific driver's* actual resonant frequency ($F_s$). Set the HPF conservatively at **$1.1 \times F_s$** to **$1.5 \times F_s$** (rounded up). For example, for a tweeter with $F_s = 900$ Hz (like Hertz ML 280.3), set the protective HPF to **1000 Hz @ 24 dB/oct** (or ask the user what starting protective value they feel safe with at low sweep volumes). For midranges, do the same based on their $F_s$.
+   * **Steep slope (safe default):** A steep **24 dB/oct (LR4 or BW4)** slope is the recommended starting default for protective crossovers — gentle slopes (e.g. 12 dB/oct) may not sufficiently protect fragile voice coils from low-frequency energy during sweep measurements. *(The protection STEP is required; the exact slope/frequency here are safe **starting values** to adjust per driver — patterns, not mandates.)*
+   * **Dynamic Fs-bound frequency:** Bind the protective frequency to the *specific driver's* actual resonant frequency ($F_s$). Set the HPF conservatively at **$1.1 \times F_s$** to **$1.5 \times F_s$** (rounded up). For example, for a tweeter with $F_s = 900$ Hz (like Hertz ML 280.3), set the protective HPF to **1000 Hz @ 24 dB/oct** (or ask the user what starting protective value they feel safe with at low sweep volumes). For midranges, do the same based on their $F_s$.
    * **The Overlap Exposure Rule (Правило розкриття стику):** If we set the protective HPF too high, we blind ourselves to the expected crossover/overlap region, making it impossible to design the target acoustic slope or match phases. The protective HPF should be set **at least 1 octave below the anticipated crossover point** where possible, but **never below $1.1 \times F_s$**. To make this low crossover safe, the sweep measurement **must be run at a safe, moderate volume** (e.g., −20 dB FS, comfortable to the ear). For example: Tweeter $F_s = 900$ Hz, expected crossover = 3000 Hz. Setting the protective HPF to 3500 Hz ruins the measurement. Setting it to **1000 Hz @ 24 dB/oct** and running a **quiet sweep** completely protects the voice coil while fully exposing the tweeter's roll-off and phase down to 1000 Hz!
    * **No Silently Assumed State:** Since we cannot automatically program the DSP, you **must** output an explicit, high-visibility **"⚠️ ACTION REQUIRED: MANUAL DSP PROTECTION SETUP"** block. Command the user to open their Helix/DSP software and manually configure these protective crossovers in the physical hardware *before* taking any measurements.
    * **Other Drivers:** Midbass and sub HPF don't need protective crossovers for sweeps (they are built for LF); a subsonic HPF is only needed for a ported sub (sealed enclosures limit cone excursion naturally).
@@ -122,13 +124,14 @@ A new/unfamiliar/long-unmeasured install. Each item is cheap; a skipped one cost
 In the new project's root (a git repo; layout and the "what's in git, what isn't" rule → `naming-and-structure.md §4a`):
 
 - **`autosound_context.md`** — the profile: §1 equipment · §2 channels/routing · §3 measurement rig · §4 targets/curve/crossovers (the active curve → `rew_analitic/target-curves/<name>/`) · §5 **channel glossary** (agree the codes with the user; grammar `sw / w-L/R / m-L/R / tw-L/R / r-L/R / c-*`, pairs/combos/joints — `naming-and-structure.md §3`) · §6 the experience/anomaly log (empty — the sessions will fill it). Template — the Passat B8 profile.
+- **`preference-profile.md`** — the **Preference Profile** (layer 4): pure voicing preferences (taste axes, loudness habit, favourite tracks, curve character), kept separate from the Engineering Profile above and applied only in Phase 6. See `references/core/preference-profile.md`.
 - **`dsp-state-current`** + **`tuning-changelog`** (with a ▶️ CONTINUE block at the top) — project memory.
 - **`audit-trail.md`** (the canonical decision log) + **`skill-inbox.md`** (empty, with a rules header).
 - **`rew_analitic/`**: `dsp-config/` + a `README.md` map · `exports/` · **`target-curves/`** (house/target curves; **a subfolder per curve** = the full curve + per-band components with crossovers in the names; a `README.md` map: which is the **ACTIVE** one + curve↔preset — there can be several) · `.gitignore` with `*.mdat` (+ `.critic-env`).
 - **The Critic channel's files — in `rew_analitic/` (where the channel reads them, project-local).** Create/place:
   - **`rew_analitic/autosound_context.md`** — this is the profile above (the channel reads `$PWD/rew_analitic/autosound_context.md`; keep it here, not only in the root).
   - **`rew_analitic/data-contract-template.md`** — copy the bundled template from the skill: `cp <skill>/assets/data-contract-template.md rew_analitic/`, then fill in the `<DSP>` placeholders. (Don't copy someone else's contract — its other car/DSP specifics would leak into the Critic.)
-  - If the channel = `@google/gemini-cli` or the CWD ≠ the project root — add **`rew_analitic/.critic-env`** (`GEMINI_BIN=…`, and `PROJECT_MIRROR=…` if needed). Detail → `references/setup-critic-channel.md`.
+  - If the channel = `@google/gemini-cli` or the CWD ≠ the project root — add **`rew_analitic/.critic-env`** (`GEMINI_BIN=…`, and `PROJECT_MIRROR=…` if needed). Detail → `references/tooling/setup-critic-channel.md`.
 - The first changelog entry: "project created; intake done; candidate target: X; preset targets: …".
 
 Next → **Phase 0** (`process-phases.md`).

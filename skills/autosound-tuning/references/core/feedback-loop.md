@@ -43,7 +43,7 @@ Presents it as **a list where EACH item is already PRE-SELECTED (☑)**. The use
 
 ## Distributing the skill
 
-- **The canon = the skill's git repository** (the `autosound-tuning` skill, with the review process in `references/review-loop.md`), **without project data**: the method is separated from the car (the `autosound_context.md` profile, measurements, dsp-state — live locally in the user's project and never enter the skill).
+- **The canon = the skill's git repository** (the `autosound-tuning` skill, with the review process in `references/core/review-loop.md`), **without project data**: the method is separated from the car (the `autosound_context.md` profile, measurements, dsp-state — live locally in the user's project and never enter the skill).
 - **Versions:** git tags `vN` + `CHANGELOG.md` (a line per refactor; the source — the "Last refactor" entries from the author's skill-inbox).
 - **Installing for new hands:** clone → a copy/symlink into the tuner's project `.claude/skills/` → the first session starts from `project-intake.md`. Updates = `git pull` (the user's own files — the profile, the inbox — live in their project, so a pull doesn't touch them).
 - Optionally: `package_skill.py` (skill-creator) → a `.skill` file for installing into claude.ai.

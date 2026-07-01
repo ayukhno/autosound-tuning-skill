@@ -2,13 +2,27 @@
 
 This phase integrates the Center and Rear-Fill channels. This **MUST** only be attempted after the main front soundstage (Left, Right, Sub) is perfectly aligned, verified, and locked in Phase 3.
 
+## 🎯 Goal-node
+
+**Purpose:** integrate center + rear-fill **without dragging the front stage back** — only after the front (L/R/sub) is locked (Phase 3).
+
+**Questions this phase answers:** does the center anchor focus without narrowing width? does rear-fill add envelopment without pulling the stage rearward?
+
+**Required evidence:** measured center level/polarity/APF (verify, don't assume); summation at the LP for center polarity; the front-to-rear arrival difference for the Haas delay.
+
+**✅ Quality gate → Phase 5:** front locked first; center bandwidth-limited + level/delay/polarity set by summation, anchors focus without narrowing; rear-fill differential L−R, band-limited, Haas-delayed, quiet (inaudible from the front but missed when muted); all logged to `dsp-state-current`.
+
+**⚠️ Failure modes:** starting before the front is locked · center too loud/wideband (comb filtering, narrows the stage) · rear-fill audible / pulling the stage back · assuming params from logs instead of measuring.
+
+**🧩 Refs:** center → [`diagnostic-techniques.md` §20](file:///skills/autosound-tuning/references/core/diagnostic-techniques.md); rear → [`voicing-by-ear.md` §Rear](file:///skills/autosound-tuning/references/patterns/voicing-by-ear.md).
+
 ---
 
 ## Core Guidelines & Safety Gate
 * The center and rear-fill levels, polarities, and all-pass filters are part of the active **PROJECT state** (`dsp-state-current`).
 * Prior to commencing work, **always verify these parameters via physical measurement**, rather than assuming values from past session logs.
-* For comprehensive center setup rules, see [diagnostic-techniques.md §20](file:///skills/autosound-tuning/references/diagnostic-techniques.md).
-* For comprehensive rear-fill tuning rules, see [voicing-by-ear.md §Rear](file:///skills/autosound-tuning/references/voicing-by-ear.md).
+* For comprehensive center setup rules, see [diagnostic-techniques.md §20](file:///skills/autosound-tuning/references/core/diagnostic-techniques.md).
+* For comprehensive rear-fill tuning rules, see [voicing-by-ear.md §Rear](file:///skills/autosound-tuning/references/patterns/voicing-by-ear.md).
 
 ---
 

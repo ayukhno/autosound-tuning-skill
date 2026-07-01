@@ -12,7 +12,7 @@
 # you launch Claude from (CWD). A stale iCloud/_AI copy from ANOTHER car must
 # NOT hijack the Critic — that silently leaks the wrong vehicle's context (the
 # real "Critic cited sessions that never happened" bug). Override any path via
-# env or a .critic-env file — see references/setup-critic-channel.md.
+# env or a .critic-env file — see references/tooling/setup-critic-channel.md.
 
 # --- optional per-machine / per-project config -----------------------------
 # Sourced if present so a user pins CLI/model/paths ONCE, not on every call.
@@ -57,7 +57,7 @@ if [[ "$GEMINI_FLAVOR" == agy ]]; then
   for _ in 1 2 3 4 5; do [[ -L "$_agy_r" ]] || break; _agy_r="$(readlink "$_agy_r")"; done
   case "$(basename "${_agy_r:-}")" in
     *gemini*)
-      echo ">> WARNING: 'agy' on PATH is a symlink to gemini ($_agy_p → $_agy_r), NOT real Antigravity — using the gemini flavor (right model ids + --skip-trust). For real agy: brew install --cask antigravity-cli (references/setup-critic-channel.md §1)." >&2
+      echo ">> WARNING: 'agy' on PATH is a symlink to gemini ($_agy_p → $_agy_r), NOT real Antigravity — using the gemini flavor (right model ids + --skip-trust). For real agy: brew install --cask antigravity-cli (references/tooling/setup-critic-channel.md §1)." >&2
       GEMINI_FLAVOR=gemini ;;
   esac
 fi
@@ -90,7 +90,7 @@ gemini_preflight() {
   [[ -f "$CONTEXT" ]] || die "context not found: $CONTEXT
   → copy your project's autosound_context.md into rew_analitic/, or set PROJECT_MIRROR"
   [[ -n "$GEMINI_BIN" ]] || die "no Gemini CLI on PATH — install the official one:
-  npm i -g @google/gemini-cli   (then 'gemini'; see references/setup-critic-channel.md)"
+  npm i -g @google/gemini-cli   (then 'gemini'; see references/tooling/setup-critic-channel.md)"
 }
 
 # _run_model <model> <prompt_file> — prints raw Gemini output, strips CLI noise.
@@ -119,7 +119,7 @@ gemini_run() {
     out="$(_run_model "$fallback" "$pf" || true)"; used="$fallback (fallback)"
   fi
   if [[ -z "${out//[[:space:]]/}" ]]; then
-    echo ">> WARNING: $GEMINI_FLAVOR returned an EMPTY reply ($used) — most often the CLI's QUOTA is exhausted (e.g. Antigravity 'Starter' has a weekly Gemini-group limit that hits 0% → empty exit-0, NO error text → not caught as a quota error above), or it lost auth. Check the CLI's quota (\`agy\` shows a weekly limit + refresh countdown); then either switch to a model group that still has quota (GEMINI_*_MODEL) or to the other CLI (pin GEMINI_BIN=gemini in rew_analitic/.critic-env). See references/setup-critic-channel.md." >&2
+    echo ">> WARNING: $GEMINI_FLAVOR returned an EMPTY reply ($used) — most often the CLI's QUOTA is exhausted (e.g. Antigravity 'Starter' has a weekly Gemini-group limit that hits 0% → empty exit-0, NO error text → not caught as a quota error above), or it lost auth. Check the CLI's quota (\`agy\` shows a weekly limit + refresh countdown); then either switch to a model group that still has quota (GEMINI_*_MODEL) or to the other CLI (pin GEMINI_BIN=gemini in rew_analitic/.critic-env). See references/tooling/setup-critic-channel.md." >&2
   fi
   printf '%s\n' "$out"
   printf '\n— [%s: %s]\n' "$role" "$used"

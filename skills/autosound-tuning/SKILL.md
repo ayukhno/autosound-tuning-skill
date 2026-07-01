@@ -19,7 +19,7 @@ You orchestrate an iterative, "token-smart" car-audio tuning process. The core m
 ## 🏛️ The Three Roles (Unity of Command)
 
 * **Generator / Orchestrator AI:** Steers the session, reads REW measurements, proposes values, packages them, and initiates the review loop.
-* **Reviewer AI (Critic-Advisor / Критик-Радник):** Independent acoustic challenger and co-builder. Combines structural/logical verification of the workflow (Critic) with deep acoustic domain advice and session memory (Advisor). Finds risks, tests assumptions, and suggests alternative solutions. Does not edit core files. Runs via stable Bash wrappers (`gemini_critic.sh` / `gemini_advisor.sh`) or the cross-platform Python tool `autosound_ai.py`.
+* **Reviewer AI (Critic-Advisor / Критик-Радник):** Independent acoustic challenger and co-builder. Combines structural/logical verification of the workflow (Critic) with deep acoustic domain advice and session memory (Advisor). Finds risks, tests assumptions, and suggests alternative solutions. Does not edit core files. **Ideally a different AI vendor than the Generator** (cross-vendor anti-anchoring) — see the Review Channel below for the per-vendor wrappers and the Autopilot fallback.
 * **Arbiter (Human Tuner):** Makes the final call on disagreements, runs measurements, and executes DSP configurations.
 
 > [!TIP]
@@ -33,7 +33,7 @@ All models (Generator, Reviewer) and the human tuner are equal colleagues. Never
 * If a critique is right, accept it fully without excuse.
 * If you disagree, argue using cabin physics and psychoacoustics.
 * Speak honestly, not overconfidently. Acknowledge known-fragile methods (e.g., dirty door impulse responses, LF onsets, single-point HF reads) and cross-check before declaring a number.
-* Full rules live in: `references/data-contract-universal.md` (or `data-contract-template.md` in your project).
+* Full rules live in: `references/core/data-contract-universal.md` (or `data-contract-template.md` in your project).
 
 ---
 
@@ -77,6 +77,7 @@ These rules govern every session turn. Never delegate or defer them:
   This ensures the physical Arbiter sitting in the driver's seat can quickly read and input values straight into Helix PC-Tool without hunting through files.
 * **Reviewer is CORE (Propose Early):** A second-opinion reviewer is a colossal quality gain. **At the first tuning proposal of every session**, if no reviewer channel is active yet, you **must** proactively propose initiating the Critic/Reviewer channel before emitting the package. Do not quietly proceed single-perspective.
 * **Verify Banked Decisions:** On every resume or session start, check `audit-trail.md` specifically for "banked decisions" (decisions agreed upon in previous rounds but not yet applied to the active DSP state) and prompt the user to apply them.
+* **State lives on disk, not in context (anti-drift):** The DSP's actual state lives in `dsp-state-current` — never in conversation memory. **Re-read it before proposing any DSP change, and update it immediately after the user applies one.** On long sessions, re-anchor from `dsp-state-current` + the active phase's ✅ Quality Gate instead of recalling values — a degrading context silently forgets delays, crossovers, and even which phase you're in (a real, observed failure mode of long autonomous sessions). If unsure what is loaded, ask or re-measure; never assume.
 * **Skill Maintenance Loop:** This skill is organically co-developed with the project. When the user requests a refactor or enough has piled up, run this 5-step loop:
   1. **Harvest:** Read `rew_analitic/skill-inbox.md` + scan `tuning-changelog` for `Lesson:` or method lines.
   2. **Correlate:** Check candidates against the current skill. Fold new insights in, clear duplicates.
@@ -110,56 +111,57 @@ Use the `view_file` tool to load these specialized guides exactly when their spe
 
 | Reference File | Read Trigger (When to read) |
 | :--- | :--- |
-| [references/installation.md](file:///skills/autosound-tuning/references/installation.md) | Installing, updating, or troubleshooting the local skill setup or plugin. |
-| [references/process-phases.md](file:///skills/autosound-tuning/references/process-phases.md) | Deciding next steps, transitioning between phases, or overviewing the 9-stage sequence. |
-| [references/project-intake.md](file:///skills/autosound-tuning/references/project-intake.md) | Initiating a new car profile, conducting the intake/equipment interview, or selecting target curves. |
-| [references/target-curves/target_curves_guide.md](file:///skills/autosound-tuning/references/target-curves/target_curves_guide.md) | Formulating target curves (e.g. EMMA Reference, ResoNix, Jazzi) and understanding curve offsets. |
-| [references/target-curves/target_curves_visualizer.html](file:///skills/autosound-tuning/references/target-curves/target_curves_visualizer.html) | Curve Comparison Web Tool for interactive target vs. measurement shape visualization. |
-| [references/naming-and-structure.md](file:///skills/autosound-tuning/references/naming-and-structure.md) | Formatting measurement names (_N version suffix), storing .mdat files, or structuring DSP presets. |
-| [references/analysis-playbook.md](file:///skills/autosound-tuning/references/analysis-playbook.md) | Deciding which REW graph (FR, Group Delay, IR, CSD, THD, excess-phase) is needed for a specific tuning decision. |
-| [references/diagnostic-techniques.md](file:///skills/autosound-tuning/references/diagnostic-techniques.md) | Interpreting physical anomalies, joint-phase summation, peak-vs-null rules, anchor-to-mids, or output-vs-virtual layering. |
-| [references/filter-types-car-audio.md](file:///skills/autosound-tuning/references/filter-types-car-audio.md) | Selecting crossover filter types (Linkwitz-Riley vs. Bessel vs. Butterworth) and choosing starting crossover points. |
-| [references/staging-depth.md](file:///skills/autosound-tuning/references/staging-depth.md) | Troubleshooting front-back stage depth, vertical stage height, or driver spatial layering. |
-| [references/enclosure-install-diagnostics.md](file:///skills/autosound-tuning/references/enclosure-install-diagnostics.md) | Diagnosing hardware rattles, SBIR vs. speaker cabinet resonances, nearfield testing, or CLD damping. |
-| [references/impedance-ts.md](file:///skills/autosound-tuning/references/impedance-ts.md) | Measuring driver T-S parameters, sealed/ported box design, DVC wiring, or driver impedance matching. |
-| [references/competition.md](file:///skills/autosound-tuning/references/competition.md) | Preparing for EMMA, AYA, or CARMusic SQ competitions (judging guidelines, crossfeed, or target curves). |
-| [references/preset-strategy.md](file:///skills/autosound-tuning/references/preset-strategy.md) | Structuring multiple DSP slots (base output layer vs. subjective virtual voicing presets). |
-| [references/test-tracks.md](file:///skills/autosound-tuning/references/test-tracks.md) | Selecting objective diagnostic audio tracks with timestamps to verify staging, center focus, sibilance, or bass. |
-| [references/voicing-by-ear.md](file:///skills/autosound-tuning/references/voicing-by-ear.md) | Applying Arkadij's symptom-to-fix ear EQ map or executing client subjective taste tuning. |
-| [references/method-hashimoto.md](file:///skills/autosound-tuning/references/method-hashimoto.md) | Applying Hashimoto's specialized "slope-first" filter matching, polarity-by-ear, or mono-center focus. |
-| [references/helix-phase-allpass.md](file:///skills/autosound-tuning/references/helix-phase-allpass.md) | Tuning Helix-specific phase controls or configuring 2nd-order all-pass filters. |
-| [references/helix-eq-export.md](file:///skills/autosound-tuning/references/helix-eq-export.md) | Formatting, exporting, or importing PEQ parameter banks in Audiotec-Fischer format. |
-| [references/rew-tool-docs.md](file:///skills/autosound-tuning/references/rew-tool-docs.md) | Integrating REW API client scripts or verifying the built-in python module layout. |
-| [references/rew-api-quirks.md](file:///skills/autosound-tuning/references/rew-api-quirks.md) | Debugging REW API float32 encoding, single-filter gaindB requests, or loopback timing offsets. |
-| [references/screen-read-dsp.md](file:///skills/autosound-tuning/references/screen-read-dsp.md) | Parsing DSP parameters off screenshots (using vision/screencapture) when config exports are locked. |
-| [references/review-loop.md](file:///skills/autosound-tuning/references/review-loop.md) | Executing TWO-PASS anti-anchoring reviews, handling multi-AI deadlocks (3/3), or running cross-session audits. |
-| [references/setup-critic-channel.md](file:///skills/autosound-tuning/references/setup-critic-channel.md) | Configuring local CLI environments (agy, gemini-cli) or setting up the .critic-env credentials. |
-| [references/feedback-loop.md](file:///skills/autosound-tuning/references/feedback-loop.md) | Executing the Phase 7 closing surveys, collecting skill feedback, or sharing anonymized car profiles. |
+| [references/core/knowledge-architecture.md](file:///skills/autosound-tuning/references/core/knowledge-architecture.md) | Understanding the 5-layer knowledge model (Core / Patterns / Engineering Profile / Preference Profile / Project State) or where a piece of knowledge belongs. |
+| [references/core/preference-profile.md](file:///skills/autosound-tuning/references/core/preference-profile.md) | Separating subjective voicing preferences from objective engineering goals (what belongs in the Preference Profile vs the Engineering Profile). |
+| [references/tooling/installation.md](file:///skills/autosound-tuning/references/tooling/installation.md) | Installing, updating, or troubleshooting the local skill setup or plugin. |
+| [references/core/process-phases.md](file:///skills/autosound-tuning/references/core/process-phases.md) | Deciding next steps, transitioning between phases, or overviewing the 9-stage sequence. |
+| [references/core/project-intake.md](file:///skills/autosound-tuning/references/core/project-intake.md) | Initiating a new car profile, conducting the intake/equipment interview, or selecting target curves. |
+| [references/patterns/target-curves/target_curves_guide.md](file:///skills/autosound-tuning/references/patterns/target-curves/target_curves_guide.md) | Formulating target curves (e.g. EMMA Reference, ResoNix, Jazzi) and understanding curve offsets. |
+| [references/patterns/target-curves/target_curves_visualizer.html](file:///skills/autosound-tuning/references/patterns/target-curves/target_curves_visualizer.html) | Curve Comparison Web Tool for interactive target vs. measurement shape visualization. |
+| [references/core/naming-and-structure.md](file:///skills/autosound-tuning/references/core/naming-and-structure.md) | Formatting measurement names (_N version suffix), storing .mdat files, or structuring DSP presets. |
+| [references/core/analysis-playbook.md](file:///skills/autosound-tuning/references/core/analysis-playbook.md) | Deciding which REW graph (FR, Group Delay, IR, CSD, THD, excess-phase) is needed for a specific tuning decision. |
+| [references/core/diagnostic-techniques.md](file:///skills/autosound-tuning/references/core/diagnostic-techniques.md) | Interpreting physical anomalies, joint-phase summation, peak-vs-null rules, anchor-to-mids, or output-vs-virtual layering. |
+| [references/core/filter-types-car-audio.md](file:///skills/autosound-tuning/references/core/filter-types-car-audio.md) | Selecting crossover filter types (Linkwitz-Riley vs. Bessel vs. Butterworth) and choosing starting crossover points. |
+| [references/patterns/staging-depth.md](file:///skills/autosound-tuning/references/patterns/staging-depth.md) | Troubleshooting front-back stage depth, vertical stage height, or driver spatial layering. |
+| [references/core/enclosure-install-diagnostics.md](file:///skills/autosound-tuning/references/core/enclosure-install-diagnostics.md) | Diagnosing hardware rattles, SBIR vs. speaker cabinet resonances, nearfield testing, or CLD damping. |
+| [references/core/impedance-ts.md](file:///skills/autosound-tuning/references/core/impedance-ts.md) | Measuring driver T-S parameters, sealed/ported box design, DVC wiring, or driver impedance matching. |
+| [references/patterns/competition.md](file:///skills/autosound-tuning/references/patterns/competition.md) | Preparing for EMMA, AYA, or CARMusic SQ competitions (judging guidelines, crossfeed, or target curves). |
+| [references/core/preset-strategy.md](file:///skills/autosound-tuning/references/core/preset-strategy.md) | Structuring multiple DSP slots (base output layer vs. subjective virtual voicing presets). |
+| [references/patterns/test-tracks.md](file:///skills/autosound-tuning/references/patterns/test-tracks.md) | Selecting objective diagnostic audio tracks with timestamps to verify staging, center focus, sibilance, or bass. |
+| [references/patterns/voicing-by-ear.md](file:///skills/autosound-tuning/references/patterns/voicing-by-ear.md) | Applying Arkadij's symptom-to-fix ear EQ map or executing client subjective taste tuning. |
+| [references/patterns/method-hashimoto.md](file:///skills/autosound-tuning/references/patterns/method-hashimoto.md) | Applying Hashimoto's specialized "slope-first" filter matching, polarity-by-ear, or mono-center focus. |
+| [references/tooling/helix-phase-allpass.md](file:///skills/autosound-tuning/references/tooling/helix-phase-allpass.md) | Tuning Helix-specific phase controls or configuring 2nd-order all-pass filters. |
+| [references/tooling/helix-eq-export.md](file:///skills/autosound-tuning/references/tooling/helix-eq-export.md) | Formatting, exporting, or importing PEQ parameter banks in Audiotec-Fischer format. |
+| [references/tooling/rew-tool-docs.md](file:///skills/autosound-tuning/references/tooling/rew-tool-docs.md) | Integrating REW API client scripts or verifying the built-in python module layout. |
+| [references/tooling/rew-api-quirks.md](file:///skills/autosound-tuning/references/tooling/rew-api-quirks.md) | Debugging REW API float32 encoding, single-filter gaindB requests, or loopback timing offsets. |
+| [references/tooling/screen-read-dsp.md](file:///skills/autosound-tuning/references/tooling/screen-read-dsp.md) | Parsing DSP parameters off screenshots (using vision/screencapture) when config exports are locked. |
+| [references/core/review-loop.md](file:///skills/autosound-tuning/references/core/review-loop.md) | Executing TWO-PASS anti-anchoring reviews, handling multi-AI deadlocks (3/3), or running cross-session audits. |
+| [references/tooling/setup-critic-channel.md](file:///skills/autosound-tuning/references/tooling/setup-critic-channel.md) | Configuring local CLI environments (agy, gemini-cli) or setting up the .critic-env credentials. |
+| [references/core/feedback-loop.md](file:///skills/autosound-tuning/references/core/feedback-loop.md) | Executing the Phase 7 closing surveys, collecting skill feedback, or sharing anonymized car profiles. |
 
 ---
 
-## 🛠️ Gemini Review Channel (Stable Bash & Python Fallback)
+## 🛠️ Review Channel (Recommended: two different AIs)
 
-The reviewer channel is critical to prevent single-perspective bias. Run review rounds using either the stable Bash wrappers (primary, highly recommended on macOS/Linux) or the cross-platform Python tool (experimental fallback):
+A second, independent reviewer prevents single-perspective bias — and the real strength comes from a **different AI vendor** than the Generator (different training → different blind spots). **Recommended default: Claude + Gemini** — one drives as Generator, the other reviews as Critic-Advisor (Codex/ChatGPT is a third option). Run rounds via the per-vendor CLI wrappers or the unified Python tool.
 
-### 1. Primary: Stable Bash Wrappers (Recommended)
-Use these proven, battle-tested wrappers for executing review rounds. They auto-detect your local CLI environment (`agy` or `gemini` cli) and handle Pro↔Flash quota fallback, credentials, and logging:
-* **Critic Mode:** `scripts/gemini_critic.sh <package.md> [trace.csv]`
-* **Advisor Mode:** `scripts/gemini_advisor.sh <package.md> [trace.csv]`
+### 1. Per-vendor CLI wrappers (recommended)
+Battle-tested Bash wrappers, one pair per vendor. They auto-detect the local CLI and handle quota/model fallback, credentials, and logging. **Pair a reviewer from a different vendor than your Generator:**
+* **Gemini:** `scripts/gemini_critic.sh` · `scripts/gemini_advisor.sh <package.md> [trace.csv]`
+* **Claude:** `scripts/claude_critic.sh` · `scripts/claude_advisor.sh <package.md> [trace.csv]`
+* **Codex (ChatGPT):** `scripts/codex_critic.sh` · `scripts/codex_advisor.sh <package.md> [trace.csv]`
 
-*(Note: In user workspaces, these are typically located in `.agents/skills/autosound-tuning/scripts/` or `.claude/skills/autosound-tuning/scripts/`).*
+*(Note: In user workspaces these live in `.agents/skills/autosound-tuning/scripts/` or `.claude/skills/autosound-tuning/scripts/`.)*
 
-### 2. Experimental: Cross-Platform Python Automation (`autosound_ai.py`)
-A unified Python implementation is available as a cross-platform fallback, but **must pass doctor and live smoke tests** (`python scripts/autosound_ai.py doctor`) before production use:
-* **Critic Mode:** `python scripts/autosound_ai.py critic <package.md> [trace.csv]`
-* **Advisor Mode:** `python scripts/autosound_ai.py advisor <package.md> [trace.csv]`
+### 2. Unified cross-platform tool (`autosound_ai.py`)
+One stdlib-only entry point for any vendor (drives local CLIs or cloud APIs). Must pass `python scripts/autosound_ai.py doctor` before production use. If no CLI/API is available, **Clipboard Mode** copies the full prompt block to paste into any web LLM chat:
+* **Critic:** `python scripts/autosound_ai.py critic <package.md> [trace.csv]`
+* **Advisor:** `python scripts/autosound_ai.py advisor <package.md> [trace.csv]`
 
-If a direct API or local CLI is unavailable, both the Bash and Python channels support **Clipboard Mode**, copying the complete prompt block to your host's clipboard for easy pasting into any Web-browser LLM chat.
-
-### 3. Autopilot: Integrated Multi-Agent Self-Loop (Zero-Configuration)
-For the ultimate streamlined experience, you can execute the review loop entirely within this single terminal session using the same underlying model under a different persona. 
-* **Subagent Fork:** Spawns a background subagent (`critic_advisor`) with an isolated context using the `invoke_subagent` tool. This ensures perfect anti-anchoring, as the reviewer has zero access to the generator's inner monologue, only seeing the proposed package.
-* **Script Automation:** If an API key is configured, the Generator can programmatically execute the local `autosound_ai.py` or Bash scripts and render the Critic-Advisor's response directly to the user.
+### 3. Autopilot self-loop — FALLBACK ONLY (use only if you have no second AI)
+If only one AI is available, you can run the loop inside a single session by forking a subagent (`critic_advisor`) with an **isolated context** — it sees only the proposed package, never the Generator's inner monologue.
+> [!WARNING]
+> This is a **fallback, not the default.** A same-model reviewer shares the model's systematic blind spots, so it is **not** true cross-vendor anti-anchoring — it catches reasoning-trace anchoring, not model-level bias. It is also the mode where long autonomous sessions have drifted (lost DSP state / phase). Whenever a second vendor is available, prefer options 1–2.
 
 ---
 

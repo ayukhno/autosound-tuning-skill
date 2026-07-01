@@ -2,11 +2,22 @@
 
 This phase establishes the physical foundation of the tune: crossovers, preliminary level balance, raw driver timing, and band-specific targets.
 
-## Core Objectives
-1. **Raw Measurement (User):** Capture individual channel sweeps and MMM RTAs.
-2. **Gross Time-Alignment (TA):** Align the arrival of direct sound from all drivers using the Impulse Response (IR).
-3. **Crossover Selection:** Propose acoustic crossover frequencies and slopes.
-4. **Band-Specific Targets:** Generate per-channel targets using the Nono Tuning Tool (NTT).
+## 🎯 Goal-node
+
+**Purpose:** establish the physical foundation — crossovers, raw driver timing (arrival TA), preliminary level balance, per-band targets — so Phase 2 EQ works on a correctly-aligned system.
+
+**Questions this phase answers:**
+- Who arrives latest (the TA reference), and what is each driver's true acoustic arrival?
+- What crossover frequencies/slopes/types suit these drivers + this cabin geometry?
+- What per-band targets sum to the house curve without a joint hump?
+
+**Required evidence:** per-channel MMM RTA (FR) + sweep-with-loopback (IR/phase/GD) for every isolated driver; the active DSP delay state during measurement.
+
+**✅ Quality gate → Phase 2:** arrival TA set from **manually-inspected IR onsets** (not REW auto-estimates); L/R-symmetric crossovers agreed via the review loop and applied to the DSP; per-band NTT targets generated, verified (`_SUM` +3…6 dB vs single) and loaded; `<prefix>_v1_foundation.pct6` saved to `rew_analitic/dsp-config/`.
+
+**⚠️ Failure modes:** trusting REW auto-delay (locks onto reflections / prior DSP offsets) → inspect IR onset by hand · assuming the midbass is latest → measure it · detuning crossovers L/R to fix a cabin asymmetry (kills the phantom center) → fix with EQ instead.
+
+**🧩 Common patterns (hypotheses):** filter type by driver spacing (BE4 close/coplanar · LR4 far-apart) → [`filter-types-car-audio.md`](file:///skills/autosound-tuning/references/core/filter-types-car-audio.md); heavy midbass → align to IR peak → [`car-eq-patterns.md`](file:///skills/autosound-tuning/references/patterns/car-eq-patterns.md).
 
 ---
 
@@ -38,7 +49,7 @@ Equalize the physical flight times of sound from each driver to the microphone.
 * **Selection Guidelines:** Propose filter types based on physical driver characteristics and cabin geometry:
   * **Bessel (BE4):** Exceptional for close, coplanar drivers (e.g., midrange ↔ tweeter on A-pillars).
   * **Linkwitz-Riley (LR4):** Preferred where drivers are physically far apart (e.g., midbass in door ↔ midrange on A-pillar), as it minimizes overlap.
-  * For crossover tradeoffs, refer to [filter-types-car-audio.md](file:///skills/autosound-tuning/references/filter-types-car-audio.md).
+  * For crossover tradeoffs, refer to [filter-types-car-audio.md](file:///skills/autosound-tuning/references/core/filter-types-car-audio.md).
 
 ### 4. Review and Discussion
 Format a Generator proposal package (per the data contract §3) and send it to the Critic. Refine the levels, timing, and crossovers. Upon agreement, the user applies these values to the DSP.

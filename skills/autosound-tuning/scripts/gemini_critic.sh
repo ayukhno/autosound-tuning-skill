@@ -13,7 +13,7 @@
 #   trace.csv    Optional decimated trace attached for point-checking the data.
 #
 # Config — set inline, via env, or once in rew_analitic/.critic-env
-# (see references/setup-critic-channel.md). All resolved in _gemini_common.sh:
+# (see references/tooling/setup-critic-channel.md). All resolved in _gemini_common.sh:
 #   GEMINI_BIN            CLI to use (auto: agy → gemini)
 #   GEMINI_CRITIC_MODEL   primary model (default per CLI; agy "Gemini 3.5 Flash (Medium)" · gemini gemini-2.5-flash)
 #   GEMINI_FALLBACK_MODEL fallback when the primary is exhausted/unavailable

@@ -2,11 +2,19 @@
 
 This phase establishes the raw baseline measurement of the car's current acoustic response and prepares the target curves for comparison.
 
-## Core Objectives
-1. **Name Channels & Set Conventions:** Align on standard channel tags and measurement file naming rules.
-2. **Import Target Curve:** Load the chosen session target curve into Room EQ Wizard (REW).
-3. **Capture Baseline:** Measure the uncorrected, current state of the vehicle (both via Loopback Sweeps and MMM RTA).
-4. **Ensure Signal Hygiene:** Confirm gain settings and mic patterns are locked down.
+## 🎯 Goal-node
+
+**Purpose:** capture the raw, uncorrected baseline and prepare the target — so tuning starts from measured reality, not assumptions.
+
+**Questions this phase answers:** what channel names/conventions do we agree? what does the system currently do (raw)? is the signal chain clean (no clipping)?
+
+**Required evidence:** agreed naming/glossary; a clean base DSP profile (`v0`, zeroed modifiers); `ALL_1 (sw)` + `ALL_1 (rta)`; a locked, repeatable MMM pattern.
+
+**✅ Quality gate → Phase 1:** names agreed **before** measuring; target curve imported (shape only, not level); raw baseline captured with all modifiers zeroed; no clipping; MMM pattern locked.
+
+**⚠️ Failure modes:** measuring before names are agreed (unusable history) · generating per-band targets now (they depend on Phase-1 crossovers) · applying TA/level tricks during the baseline (stay observational).
+
+**🧩 Refs:** naming/history → [`naming-and-structure.md`](file:///skills/autosound-tuning/references/core/naming-and-structure.md).
 
 ---
 
@@ -19,7 +27,7 @@ Before any measurements are taken, establish the channel abbreviations (`sw / w-
 * Suffix **`_N`** = configuration/measurement version (starts at `_1`, NOT "baseline").
 * *Examples:* `m-L_1 (sw)`, `w-R_1 (rta)`.
 
-Give the user copy-paste-ready specifics containing the exact save PATH, short comma-separated measurement names, and a brief explanation of the immediate goal. Follow the history hygiene details in [naming-and-structure.md](file:///skills/autosound-tuning/references/naming-and-structure.md).
+Give the user copy-paste-ready specifics containing the exact save PATH, short comma-separated measurement names, and a brief explanation of the immediate goal. Follow the history hygiene details in [naming-and-structure.md](file:///skills/autosound-tuning/references/core/naming-and-structure.md).
 
 ### 2. Import Target Curve
 Load the chosen house curve into REW.

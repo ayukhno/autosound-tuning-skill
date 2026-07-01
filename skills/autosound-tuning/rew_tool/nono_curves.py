@@ -6,7 +6,7 @@ curves exported by nonotuningtool.com, in two shapes:
   * Per-band     (e.g. `..._mid_..._SUM`)  -> 3 cols:  freq  mag(dB)  phase(deg)
 
 The full curve is magnitude-only (no phase); the per-band components carry
-the crossover phase (see `references/rew-api-quirks.md` Targets). Use this to
+the crossover phase (see `references/tooling/rew-api-quirks.md` Targets). Use this to
 pull a downloaded Nono curve straight into analysis without a REW round-trip.
 
 stdlib-only. CLI self-test: `python nono_curves.py <file-or-dir>`

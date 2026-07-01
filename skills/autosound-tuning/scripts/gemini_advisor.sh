@@ -12,7 +12,7 @@
 # Usage:
 #   gemini_advisor.sh <package.md> [trace.csv]
 #
-# Config (see gemini_critic.sh header + references/setup-critic-channel.md):
+# Config (see gemini_critic.sh header + references/tooling/setup-critic-channel.md):
 #   GEMINI_ADVISOR_MODEL  primary model (default per CLI)
 #   ADVISOR_MEMORY        session-memory file (default: $PROJECT_MIRROR/depth-advisor-memory.md)
 #   + GEMINI_BIN / GEMINI_FALLBACK_MODEL / GEMINI_EXTRA_ARGS / PROJECT_MIRROR / AUTOSOUND_DIR

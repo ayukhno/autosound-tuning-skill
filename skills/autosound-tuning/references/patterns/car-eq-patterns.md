@@ -1,5 +1,7 @@
 # Common acoustic problems and EQ in car audio
 
+> 🧩 **PATTERN REPOSITORY — starting hypotheses, not rules.** Everything here is "in similar conditions this often worked": a **starting point**, validated by measurement/ear, never a mandate. See [`knowledge-architecture.md`](file:///skills/autosound-tuning/references/core/knowledge-architecture.md).
+
 > ⚠️ **These are starting heuristics** — typical patterns and ballpark ranges from practice, not dogma. Validate every move by measurement (peak-vs-null `diagnostic §2`, mic-shift `§13`) and by ear; tune the numbers to the system. A SPECIFIC car's anomalies → the project profile (`autosound_context.md`), not this file. Which channel is the "hotter" side depends on LHD/RHD and geometry — the examples below are written from an LHD cabin.
 
 ## The main principle: transparency = minimum processing

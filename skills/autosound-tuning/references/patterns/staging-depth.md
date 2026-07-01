@@ -1,5 +1,7 @@
 # Stage depth and layering (front-back) — separate from lateral imaging
 
+> 🧩 **PATTERN REPOSITORY — starting hypotheses, not rules.** Everything here is "in similar conditions this often worked": a **starting point**, validated by measurement/ear, never a mandate. (Physics stays firm; the prescriptions are hypotheses.) See [`knowledge-architecture.md`](file:///skills/autosound-tuning/references/core/knowledge-architecture.md).
+
 `diagnostic-techniques.md` treats the **lateral** (L/R positions). This file is about **depth** (front-back: pushing the stage off the windshield back behind the hood) and **layering** (tiers). Different psychoacoustics, different levers. The work is mostly **ear-driven** (cabin phase/GD unreliable — see diagnostic §10; measurement here is only a sanity check: magnitude + summation).
 
 ## 1. The root of "the stage sticks to the glass / the voice juts forward / the bass magic disappears" = the TOP is too hot relative to the bass
@@ -27,7 +29,7 @@ Depth comes from a **long acoustic path to the mid** (a kick mount, the base of 
 ## 6. Layering (tiers)
 Not a separate control, but a consequence: clean joint phase + a refined (not bloated) bass + recessed presence. It develops ear-driven on tracks with pronounced hall depth. Lateral imaging tracks (EMMA) are NO good for depth — you need material with depth layers (an opera hall, acoustic). Reference tracks → `competition.md`.
 
-> **For listening-test hypotheses — `references/test-tracks.md`** (the measure→track index + markers): depth → #07 Melody Gardot / #14 Hanne Boel; midbass punch → #26 Devil Inside / #20 Godsmack; the sub↔midbass joint → #25 Sundust / #16 Dock Funk; sub<40 → #24 Olgoi Khorkhoi. Give the Arbiter a track + timecode + what to listen for.
+> **For listening-test hypotheses — `references/patterns/test-tracks.md`** (the measure→track index + markers): depth → #07 Melody Gardot / #14 Hanne Boel; midbass punch → #26 Devil Inside / #20 Godsmack; the sub↔midbass joint → #25 Sundust / #16 Dock Funk; sub<40 → #24 Olgoi Khorkhoi. Give the Arbiter a track + timecode + what to listen for.
 
 ## 7. The method: ear-driven, measurement only as a sanity check
 Cabin single-position phase/GD are unusable (diagnostic §10) — confirmed for depth too. The hypothesis "an L/R phase hole on the vocal body 230–320 eats the body" was **DISPROVED by summation** (the measured mid sum at 230–320 matched the power-sum ±1 → the body is NOT cancelled). So: depth changes **by ear**, with **summation+magnitude** as the only reliable checks. Every change reversible, in a **depth PRESET** (the voicing layer), the base untouched.

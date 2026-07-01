@@ -1,5 +1,7 @@
 # Competition prep (EMMA / AYA / CARMusic) — criteria, tracks, diagnostics
 
+> 🧩 **PATTERN REPOSITORY — starting hypotheses, not rules.** Techniques here are "in similar conditions this often worked": **starting points**, validated by measurement/ear. (Format judging criteria are hard constraints, not hypotheses.) See [`knowledge-architecture.md`](file:///skills/autosound-tuning/references/core/knowledge-architecture.md).
+
 The context when the user is preparing for judging (not just "enjoyment"). Formats: **EMMA**, **AYA**, **CARMusic** — related SQ protocols. Categories: **SQ** (sound quality), **SQL** (SQ+loudness), **SPL** (loudness). In a car context, any of these abbreviations + a format name = a strong trigger.
 
 ## Imaging diagnostics via a test track (instrument→frequency)
@@ -22,7 +24,7 @@ Judging tracks play known instruments at known stage positions. If an instrument
 > - AYA `22-RAUM` — Mozart, Die Zauberflöte (Drottningholm Palace) — an opera hall, the reference for HALL depth+layering+vocal body
 > - *(add the rest of the descriptions as they come in)*
 >
-> **The general listening-test track library with markers + a measure→track index → `references/test-tracks.md`** (CarMus Test&Demo 2026 entered: sub<40 #24, sub↔midbass joint #25/#16, punch #26/#20, depth #07/#14, sibilants #06…). For ear-driven hypothesis verification.
+> **The general listening-test track library with markers + a measure→track index → `references/patterns/test-tracks.md`** (CarMus Test&Demo 2026 entered: sub<40 #24, sub↔midbass joint #25/#16, punch #26/#20, depth #07/#14, sibilants #06…). For ear-driven hypothesis verification.
 
 ## AYA "Authentic Audio Check" — a category system (a diagnostic frame)
 AYA (Are You Authentic, ayasound.org + Stockfisch-Records) rates a system **BY CATEGORIES — each track isolates one measure.** The official SACD (19 tracks) — audiophile Stockfisch recordings; **the category scheme (German terms) is the transferable diagnostic frame**, regardless of the specific track:
@@ -61,7 +63,7 @@ EMMA judges **4 sections of tonal accuracy: Subbass · Midbass · Midrange · Hi
 ## Voicing for judging
 - The foundation (Phases 0–1: crossovers/TA/polarity/L-R) is **curve-agnostic** — done once, held across targets.
 - The competition voicing = a **separate preset** (the virtual layer), forked from the fixed base. Keep BOTH (the SQ-accurate + the competition/depth one) → an on-the-spot A/B with fresh ears, pick for the category/day.
-- **A preset — for a SPECIFIC format, because the rules differ → the techniques can be mutually exclusive.** Example (by-practice): **crossfeed L↔R** (blending the opposite channel into the front to stabilize the stage) — applicable for **EMMA**, but **NEVER for AYA** (there natural width/separation is prized). The full preset strategy (SQ/FULL/SQL/surround/source + per-ruleset) → `references/preset-strategy.md`.
+- **A preset — for a SPECIFIC format, because the rules differ → the techniques can be mutually exclusive.** Example (by-practice): **crossfeed L↔R** (blending the opposite channel into the front to stabilize the stage) — applicable for **EMMA**, but **NEVER for AYA** (there natural width/separation is prized). The full preset strategy (SQ/FULL/SQL/surround/source + per-ruleset) → `references/core/preset-strategy.md`.
 - ⚠️ **After switching a preset at a competition — check that the DSP input = the LISTENING source** (in this car — the **OPTICAL S/PDIF**, not RCA; RCA is only for sweep measurements). Switching a preset can reset the input to another card (BT/USB) → no/wrong sound. The most annoying loss of points.
 
 ## EMMA 2026 — the test-disc structure (SQ Judgebook 2026; the user's summary, the original on the EMMA site + NotebookLM)
