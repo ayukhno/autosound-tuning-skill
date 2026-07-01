@@ -37,6 +37,10 @@ Or add `<skill-dir>/rew_tool` to your `PYTHONPATH`.
   * Parses Nono Tuning Tool curve exports:
     * `full` = `freq` & `mag`
     * `per-band` = `freq`, `mag`, & `phase`
+* **`rew_tool/level_offsets.py`**
+  * Preliminary per-channel LEVEL offsets from geometry (off-axis piston directivity + distance). Cut-only starting balance for Phase 1 §3.5, verified by RTA/ear. Inputs (distance/angle/piston radius/`n`) are project data. `--selftest`.
+* **`rew_tool/target_bands.py`**
+  * Generates per-driver (per-band) target curves locally: house curve + crossovers + two-speaker summation offset + asymmetric L/R compensation + per-channel gains. Change a crossover → regenerate in one shot (no NTT-web round-trip). Phase 1 §5. `--selftest`, `--demo`.
 * **`rew_tool/atf_eq.py`**
   * Parses and generates the Audiotec-Fischer (Helix) 30-band EQ bank (validated on real exports; parses an existing bank, formats and emits only the bands you decided).
 * **`rew_tool/verify_measurements.py`**

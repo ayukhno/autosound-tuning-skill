@@ -65,10 +65,14 @@ Format a Generator proposal package (per the data contract §3) and send it to t
   4. Write/flash this configuration into an active, safe slot of your physical Helix DSP to make it active before running any sweeps.
 
 ### 5. Generate Band-Specific Targets (Step 5b)
-Once crossovers are locked, generate per-band target curves using [nonotuningtool.com](https://nonotuningtool.com).
-* **Acoustic Summation:** The tool computes targets that are lowered in overlap regions so their acoustic sum reconstructs the house curve without a joint-hump.
-* **Stereo Configuration:** Ensure drivers are configured as "Stereo" in the tool prior to exporting.
-* **Verify exports:** `_SUM` targets (for L+R pairs) should be +3 to +6 dB hot compared to non-SUM (single-side) targets. Mono channels (sub) should have identical SUM and non-SUM targets.
-* Save targets into `rew_analitic/target-curves/<name>/` and load them into REW. Use these targets for Phase 2a hygiene EQ.
+Once crossovers + levels are set, generate the per-driver targets **locally** with
+[`rew_tool/target_bands.py`](file:///skills/autosound-tuning/rew_tool/target_bands.py) — feed it the
+project's house curve + the per-channel config (crossovers/types + the gains from `level_offsets.py`).
+It bakes in the crossover roll-off, the two-speaker **summation offset** (~6 dB LF → ~3 dB HF), and the
+**asymmetric compensation** (so an asymmetric L/R sum still reconstructs the house curve).
+* **The payoff:** change a crossover or a level → **regenerate in one shot**, no manual web round-trip.
+* **Sanity check:** `_SUM` (L+R pair) targets sit ~+3…6 dB above a single side; the mono sub has no summation offset.
+* Save into `rew_analitic/target-curves/<name>/`, load into REW, and use them for Phase 2a hygiene EQ.
+* *(Alternative — manual:* [nonotuningtool.com](https://nonotuningtool.com) does the same in a web UI with a "Stereo" config — mention it to the user as an option.)
 
 Once completed and verified, transition to **Phase 2**.
