@@ -51,18 +51,18 @@ When you (Claude) have a **hypothesis to check by ear**:
 
 A fixed route (~20–30 min), when the tune is "ready" (after Phase 3/4) or before a competition. Each step: play the track → one marker → a **binary verdict ✓/✗** into a checklist. Everything ✗ = the next iteration's backlog (mapped to the band/instrument from its index row).
 
-| # | What we check | Tracks | The ✓-criterion |
-|---|---|---|---|
-| 1 | First impression / balance | **#01** (backup: #02, #11) | scale/space/resolution right away |
-| 2 | Mono center (the L/R foundation) | Helen Merrill or the Byrds (mono, below) | a tight point at center, doesn't drift |
-| 3 | Positions L/LC/C/RC/R | the EMMA position track (5 instr × 5 positions → `competition.md`) | each instrument = one point in its place |
-| 4 | Focus / image sizes | EMMA 2026 tr.7-11 or vocal #07 | a size hierarchy (bass biggest → triangle smallest) |
-| 5 | Depth + space | **#07** / #14 (+ AYA RAUM, if available) | the stage behind the hood, layers read |
-| 6 | Punch + sub↔midbass joint | **#26**/#20 + **#25**/#16 | a hit in the chest; the sub doesn't "fall away" |
-| 7 | Sub <40 Hz | **#24** | holds, doesn't drone or dry up |
-| 8 | Sibilants / top | **#06** (+#05 decays) | natural, not detaching/not vanishing |
-| 9 | Separation under load | **#15** / #23 | micro-events don't blend into mush |
-| 10 | Universality | transitions **#17→#18→#19** | recordings sound DIFFERENT, not "radio" |
+| # | What we check | Track | **Library** | The ✓-criterion |
+|---|---|---|---|---|
+| 1 | First impression / balance | **#01** (backup: #02, #11) | CarMus | scale/space/resolution right away |
+| 2 | Mono center (the L/R foundation) | Helen Merrill or the Byrds (below) | mono | a tight point at center, doesn't drift |
+| 3 | Positions L/LC/C/RC/R | the position track (5 instr × 5 positions) | EMMA (`competition.md`) | each instrument = one point in its place |
+| 4 | Focus / image sizes | EMMA 2026 tr.7-11, or vocal #07 | EMMA / CarMus | a size hierarchy (bass biggest → triangle smallest) |
+| 5 | Depth + space | **#07** / #14 (+ RAUM if available) | CarMus (+ AYA) | the stage behind the hood, layers read |
+| 6 | Punch + sub↔midbass joint | **#26**/#20 + **#25**/#16 | CarMus | a hit in the chest; the sub doesn't "fall away" |
+| 7 | Sub <40 Hz | **#24** | CarMus | holds, doesn't drone or dry up |
+| 8 | Sibilants / top | **#06** (+#05 decays) | CarMus | natural, not detaching/not vanishing |
+| 9 | Separation under load | **#15** / #23 | CarMus | micro-events don't blend into mush |
+| 10 | Universality | transitions **#17→#18→#19** | CarMus | recordings sound DIFFERENT, not "radio" |
 
 ## Mono tracks for the CENTER (phantom center / L-R matching)
 **The principle:** a true MONO recording (L=R identical) should localize into a **tight point at center** at height. If it smears / wanders L/R / is wide — L/R are **not aligned in level+time+phase** → this is the cleanest test of the center and the L-R foundation (before imaging work). Give the Arbiter a mono track: "does the vocal/mix stand as a tight point at center, or does it drift/spread?".
