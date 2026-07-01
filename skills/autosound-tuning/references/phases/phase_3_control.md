@@ -42,6 +42,6 @@ Claude (the Orchestrator) and Gemini (the Critic/Advisor) perform separate, unbi
 Once the technical alignment is accepted by the Arbiter:
 * Save the final DSP configuration file. Copy it to `rew_analitic/dsp-config/` with an updated `README.md` cataloging the changes.
 * Back up the project's REW `.mdat` file.
-* Update `tuning-changelog`, `dsp-state-current`, and the iCloud `audit-trail.md`.
+* Update `tuning-changelog`, `dsp-state-current`, and `audit-trail.md` (project-local, in the project's `rew_analitic/`).
 
 Proceed to **Phase 4** (multi-channel integration, if applicable) or **Phase 5** (listening tests).

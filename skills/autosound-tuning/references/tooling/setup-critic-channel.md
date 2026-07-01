@@ -77,7 +77,7 @@ The wrappers inject the **Contract** (protocol) + your **project's `autosound_co
 ```
 $PWD/rew_analitic/data-contract-template.md   ← preferred
 $PWD/rew_analitic/autosound_context.md        ← preferred
-   (fallback only: $AUTOSOUND_DIR, the author's iCloud canon)
+   (fallback only: $AUTOSOUND_DIR — an OPTIONAL cross-project canon dir you set yourself; unset by default)
 ```
 So **launch Claude from the project directory** (CWD = the car you're tuning). `PROJECT_MIRROR` defaults to `$PWD/rew_analitic`.
 

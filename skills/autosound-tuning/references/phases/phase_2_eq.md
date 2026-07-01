@@ -61,7 +61,7 @@ Measure and analyze the MMM RTA of the following combinations:
 
 ### Correction Rules
 * **Band-to-band alignment:** Adjust levels so they sum smoothly. An overlap hump is a summation issue, not a hot driver.
-* **L vs. R Balance:** Match the **SHAPE** in the critical imaging region ($200\text{ Hz}$ to $1.5\text{ kHz}$). "Take from the louder side and add to the quieter side" to balance levels without altering the average target alignment.
+* **L vs. R Balance (compare by FR):** overlay left-side vs right-side FR **level-normalized** (a level offset ≠ a shape difference — `analysis-playbook.md`) in the imaging region ($200\text{ Hz}$ to $1.5\text{ kHz}$). A pure **level tilt** → balance by level ("take from the louder side, add to the quieter", don't overboost); a **shape** difference → cabin/geometry, handle per side (don't force a clone). Use **MMM**, not a single point, for the HF part of this compare (a fixed-mic read above ~4 kHz is corrupted by the windshield reflection — `diagnostic-techniques.md`).
 * **Summation Checks:** Use REW's trace arithmetic ($A+B$) to predict summation outcomes prior to applying changes.
 
 ---
