@@ -75,4 +75,6 @@ It bakes in the crossover roll-off, the two-speaker **summation offset** (~6 dB 
 * Save into `rew_analitic/target-curves/<name>/`, load into REW, and use them for Phase 2a hygiene EQ.
 * *(Alternative — manual:* [nonotuningtool.com](https://nonotuningtool.com) does the same in a web UI with a "Stereo" config — mention it to the user as an option.)
 
+Then **re-measure each channel with the `v1` config applied** (`<ch>_2 (sw)` + `<ch>_2 (rta)`) — this post-foundation `_2` set (crossovers + TA + levels now in place), **not** the raw `_1` baseline, is what Phase 2 works on.
+
 Once completed and verified, transition to **Phase 2**.

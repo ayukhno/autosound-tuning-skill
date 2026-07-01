@@ -8,7 +8,7 @@ This is the core technical execution phase. All operations **MUST** be performed
 
 **Questions this phase answers:** which peaks are minimum-phase (EQ-able) vs nulls (leave)? are the joints phase-aligned by summation? does the summed system match the target?
 
-**Required evidence:** per-channel FR + excess-phase (min vs non-min phase); joint summation (uninverted vs inverted); summed-group MMM (Ws/Ms/TWs, L vs R, SW+Ws).
+**Required evidence:** a **fresh re-measurement of the applied `v1` system** (`_2`, each channel **post-crossover** — not the raw `_1` baseline): per-channel FR + excess-phase (min vs non-min phase); joint summation (uninverted vs inverted); summed-group MMM (Ws/Ms/TWs, L vs R, SW+Ws).
 
 **✅ Quality gate → Phase 3:** peaks cut / nulls untouched; joints aligned by **summation** (APF/fine delay, not raw-delay shifts); summed groups match target; final target EQ on the **virtual layer** only; strict order 2a→2d held.
 
@@ -19,7 +19,7 @@ This is the core technical execution phase. All operations **MUST** be performed
 ---
 
 ## 2a — Hygiene EQ of Each Channel
-Linearize each individual channel to its own band-specific Nono Tuning Tool target.
+Linearize each individual channel (its `_2` post-crossover measurement) to its own **per-band target** (from Phase 1 §5 / `target_bands.py`).
 
 ### Rules of Action
 1. **Min-Phase Peaks Only:** Cut narrow and wide minimum-phase peaks.
