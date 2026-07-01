@@ -8,12 +8,19 @@ A curated library with **diagnostic markers** — to verify hypotheses BY EAR wh
 When you (Claude) have a **hypothesis to check by ear**:
 1. Identify the **measure** (what you're testing): sub<40, the sub↔midbass joint, midbass punch, depth, sibilants, separation under load…
 2. Look at the **index below** → pick a track that **exposes exactly this measure**.
-3. Tell the Arbiter **specifically:** "play **[track # and name]**, listen at **[timecode if any]** — **[what exactly to listen for: the marker]**. The question: **[good sign] vs [bad sign]**?"
+3. Tell the Arbiter **specifically:** "play **[track # and name — Library]**, listen at **[timecode if any]** — **[what exactly to listen for: the marker]**. The question: **[good sign] vs [bad sign]**?" (Streaming → give artist — title — the exact version, e.g. the MONO mix.)
 4. The Arbiter listens → states the result → that's your **reliable ear-metric** (instead of single-position phase). Log it in the changelog/audit as a Trace (track+marker instead of a REW number, if it's a listening step).
 
 > Don't dump the whole list. Pick 1 (max 2) track targeted at the hypothesis and give a clear "what to listen for". One marker at a time.
 
-## Index: measure → track (CarMus 2026; # = the track in the library below)
+## Which library does the user have? — establish FIRST (project data)
+
+**Propose ONLY tracks the user can actually play.** Ask at intake which they have; store it in the project profile; **every track you name states its Library.**
+- **A loaded compilation** — CarMus Test&Demo 2026 (`#NN`) · Chesky Ultimate Demo Disc (`Ch.NN`) · an EMMA / AYA competition disc (`competition.md`) · the mono set — cite the track by number **and** library.
+- **Streaming** (Tidal / Spotify / Apple Music) — you can't cite a disc `#` blindly: give **Artist — Title — the exact version** you need (the **MONO** mix · a specific album / year / remaster), because masters differ and a **stereo copy silently breaks a mono-center test**. Confirm the user opened the right version before trusting the result.
+
+## Index: measure → track
+> **Library tags:** `#NN` = CarMus Test&Demo 2026 · `Ch.NN` = Chesky (streaming) · `T#`/`tr.#` = EMMA · AYA → `competition.md` · **mono** = the mono set. **Always name the library when you propose a track**, and check it's one the user has.
 | What you're checking | Track(s) | The key marker |
 |---|---|---|
 | **Sub <40 Hz** (extension, control) | **#24** Olgoi Khorkhoi | holds <40 vs dries up / bloats into droning |
