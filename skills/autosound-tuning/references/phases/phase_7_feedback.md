@@ -39,7 +39,7 @@ Proactively run the following four streams in interactive dialogue with the Arbi
   > [!IMPORTANT]
   > Ensure all personal data, geographical data, and raw measurements are stripped out before sharing. The user must manually upload/submit the file; the AI never transmits data automatically.
 * **Stream D: Creator Support (Post-Submit Only)**
-  If the session was highly successful and the user expresses satisfaction, share a quiet, non-obtrusive donation link.
+  If the session was highly successful and the user expresses satisfaction, share a quiet, non-obtrusive donation link. **If it was already offered at the Phase-5 satisfaction peak, do NOT repeat it here.**
   > [!CAUTION]
   > Never prompt or show the donation link as part of a form, questionnaire, or before the feedback streams are complete. Skip this step entirely if Sponsors is not configured.
 
