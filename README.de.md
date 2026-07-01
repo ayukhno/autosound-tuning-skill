@@ -29,7 +29,7 @@ autosound-tuning-skill/        ein Claude-Code-Plugin
     └── scripts/        Beispiel-Tooling für den Kritiker-Kanal (optional)
 ```
 
-Ein Skill — die unabhängige Review-Methode (Kritiker/Berater/Schiedsrichter, Anti-Anchoring) ist als `references/review-loop.md` gebündelt.
+Ein Skill — die unabhängige Review-Methode (Kritiker/Berater/Schiedsrichter, Anti-Anchoring) ist als `references/core/review-loop.md` gebündelt.
 
 ## Erste Schritte — neu bei Claude Code?
 
@@ -74,7 +74,7 @@ Installiere als **Claude-Code-Plugin** — ein Marketplace, ein Befehl, kein man
 
 ## Deine Erfahrung beitragen
 
-Der Skill **lernt aus jeder Abstimmung — und sammelt dieses Feedback direkt im Terminal, während du arbeitest, nicht über ein Formular.** Zum Abschluss (Phase 7) fragt er, was geholfen hat, was nicht passte und welche DSP-/Auto-Eigenheit dir begegnet ist — dann bietet er, **mit deiner ausdrücklichen Zustimmung**, an, die *verallgemeinerbaren* Erkenntnisse zu teilen (um die gemeinsame Methode + die `knowledge/`-Bibliothek wachsen zu lassen).
+Der Skill **lernt aus jeder Abstimmung — und sammelt dieses Feedback direkt im Terminal, während du arbeitest, nicht über ein Formular.** Zum Abschluss (sobald du mit dem Klang zufrieden bist) fragt er, was geholfen hat, was nicht passte und welche DSP-/Auto-Eigenheit dir begegnet ist — dann bietet er, **mit deiner ausdrücklichen Zustimmung**, an, die *verallgemeinerbaren* Erkenntnisse zu teilen (um die gemeinsame Methode + die `knowledge/`-Bibliothek wachsen zu lassen).
 
 Er erfasst **nur Methode + Geräteklassen** — Innenraumverhalten, DSP-/Geräteklasse, welche Techniken funktioniert haben. **Niemals persönliche Daten, niemals vollständige Messungen;** du siehst genau, was geteilt wird, und stimmst pro Punkt zu. Bestätigte Erkenntnisse werden mit Namensnennung eingearbeitet; widersprechende Tipps werden als *Varianten* behalten, nicht gelöscht. *(Lieber GitHub? Öffne ein [Field-Feedback-Issue](../../issues/new?template=field-feedback.md) — gleiche Regel.)*
 

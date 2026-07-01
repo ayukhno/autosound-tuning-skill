@@ -29,7 +29,7 @@ autosound-tuning-skill/        wtyczka Claude Code
     └── scripts/        przykładowe narzędzia kanału Krytyka (opcjonalne)
 ```
 
-Jeden skill — niezależna metoda recenzji (Krytyk/Doradca/Arbiter, anti-anchoring) jest dołączona jako `references/review-loop.md`.
+Jeden skill — niezależna metoda recenzji (Krytyk/Doradca/Arbiter, anti-anchoring) jest dołączona jako `references/core/review-loop.md`.
 
 ## Pierwsze kroki — nowy w Claude Code?
 
@@ -74,7 +74,7 @@ Zainstaluj jako **wtyczkę Claude Code** — jeden marketplace, jedna komenda, b
 
 ## Dzielenie się doświadczeniem
 
-Skill **uczy się z każdego strojenia — i zbiera ten feedback wprost w terminalu, gdy pracujesz, a nie przez formularz.** Na zakończenie (Faza 7) pyta, co pomogło, co było nie tak, i o każdą osobliwość DSP/auta, na którą trafiłeś — następnie, **za twoją wyraźną zgodą**, proponuje podzielić się *uogólnialnymi* wnioskami (aby rozwijać wspólną metodę + bibliotekę `knowledge/`).
+Skill **uczy się z każdego strojenia — i zbiera ten feedback wprost w terminalu, gdy pracujesz, a nie przez formularz.** Na zakończenie (gdy jesteś zadowolony z brzmienia) pyta, co pomogło, co było nie tak, i o każdą osobliwość DSP/auta, na którą trafiłeś — następnie, **za twoją wyraźną zgodą**, proponuje podzielić się *uogólnialnymi* wnioskami (aby rozwijać wspólną metodę + bibliotekę `knowledge/`).
 
 Zbiera **tylko metodę + klasy sprzętu** — zachowanie kabiny, klasę DSP/sprzętu, które techniki zadziałały. **Nigdy danych osobowych, nigdy pełnych pomiarów;** widzisz dokładnie, co jest udostępniane, i decydujesz pozycja po pozycji. Potwierdzone wnioski trafiają do skilla z atrybucją; sprzeczne wskazówki są zachowywane jako *warianty*, nie usuwane. *(Wolisz GitHub? Otwórz [zgłoszenie field-feedback](../../issues/new?template=field-feedback.md) — ta sama zasada.)*
 

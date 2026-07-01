@@ -29,7 +29,7 @@ autosound-tuning-skill/        a Claude Code plugin
     └── scripts/        example Critic-channel rig tooling (optional)
 ```
 
-One skill — the independent-review method (Critic/Advisor/Arbiter, anti-anchoring) is bundled as `references/review-loop.md`.
+One skill — the independent-review method (Critic/Advisor/Arbiter, anti-anchoring) is bundled as `references/core/review-loop.md`.
 
 ## Getting started — new to Claude Code?
 
@@ -74,7 +74,7 @@ Install as a **Claude Code plugin** — one marketplace, one command, no manual 
 
 ## Contributing your experience
 
-The skill **learns from every tune — gathering feedback right in the terminal as you work, not via a form.** At wrap-up (Phase 7) it asks what helped, what was off, and any DSP/car quirk you hit — then, **with your explicit consent**, offers to share the *generalizable* lessons (to grow the shared method + the `knowledge/` library).
+The skill **learns from every tune — gathering feedback right in the terminal as you work, not via a form.** At wrap-up (once you're happy with the sound) it asks what helped, what was off, and any DSP/car quirk you hit — then, **with your explicit consent**, offers to share the *generalizable* lessons (to grow the shared method + the `knowledge/` library).
 
 It captures **method + equipment classes only** — cabin behavior, the DSP/gear class, which techniques worked. **Never personal data, never full measurements;** you see exactly what's shared and opt in per item. Confirmed lessons fold into the skill with attribution; contradicting tips are kept as *variants*, not deleted. *(Prefer GitHub? Open a [field-feedback issue](../../issues/new?template=field-feedback.md) — same rule.)*
 
