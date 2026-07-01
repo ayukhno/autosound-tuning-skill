@@ -10,7 +10,7 @@ This phase acts as the final technical gate before proceeding to subjective list
 
 **Required evidence:** the full verification MMM set (each `_final` channel, Ws/Ms/TWs, sw+Ws, L/R sides, `ALL_final`); independent Claude + Gemini analyses.
 
-**✅ Quality gate → Phase 4/5 (Technical Lock):** verification scans captured; **two independent (cross-vendor) verdicts**; **a minimum stage assessment passed by ear** (mono-center / EMMA imaging — there is no "tuned version" without it); disagreements resolved or escalated to the Arbiter (Disagreement Table at 3/3); config backed up to `dsp-config/`, changelog/dsp-state/audit-trail updated.
+**✅ Quality gate → Phase 4/5 (Technical Lock):** verification scans captured; **two independent (cross-vendor) verdicts**; **a minimum ear assessment passed** — **stage** (mono-center / EMMA) **and overall tonal balance** — with an honest read of the result logged and the **Arbiter satisfied** (or the dissatisfaction resolved by an adjustment / a step back); disagreements resolved or escalated to the Arbiter (Disagreement Table at 3/3); config backed up to `dsp-config/`, changelog/dsp-state/audit-trail updated.
 
 **⚠️ Failure modes:** endless review rounds (cap at 3/3 → Disagreement Table) · locking without a backup · a single-perspective verdict (must be cross-vendor).
 
@@ -38,13 +38,19 @@ Claude (the Orchestrator) and Gemini (the Critic/Advisor) perform separate, unbi
 
 ---
 
-## 2.5 Minimum stage assessment by ear — MANDATORY before the lock
+## 2.5 Minimum ear assessment + an honest read of the result — MANDATORY before the lock
 
-A config is **not a "tuned version" until the stage is confirmed by ear** — at minimum, don't lock on measurements alone. Before locking:
-* **Mono track** → the phantom center must be tight and **dead-centre** (a mono signal must image as ONE point). If it smears or pulls to a side, the L/R timing/level/phase isn't right → **do not lock**; return to Phase 2 (the gate is re-entrant).
-* **EMMA localization tracks** ([`test-tracks.md`](file:///skills/autosound-tuning/references/patterns/test-tracks.md)) → check the L / C-L / C / C-R / R positions line up.
+A config is **not a "tuned version" until it's confirmed by ear** — don't lock on measurements alone. Do a **brief but real listen** (the full pass is Phase 5) covering the two things that matter:
+* **Stage** — a **mono track** must image tight and **dead-centre** (ONE point); + EMMA localization tracks ([`test-tracks.md`](file:///skills/autosound-tuning/references/patterns/test-tracks.md)) for L / C-L / C / C-R / R. Smears or pulls to a side → the L/R timing/level/phase isn't right.
+* **Overall tonal balance** — a couple of familiar tracks: bass weight & control · vocal naturalness/placement · top-end transparency (no glare/harshness). Is the whole balanced, or is something clearly off?
 
-This is the **minimum imaging sanity** that makes the lock meaningful; the full tonal + stage pass is Phase 5.
+Then **read the result honestly with the Arbiter** and record it:
+* **What came out** — the strengths **and** the remaining limitations/potential (a lock is a *good base with room*, not "perfect"). Log it to `audit-trail`/`changelog`.
+* **The Arbiter's impression** — how the user *feels* about the work so far is a first-class signal, not an afterthought.
+
+**Branch on satisfaction:**
+* **Satisfied** (with a clear-eyed view of what's still open) → lock.
+* **Not satisfied** → either a **small adjustment** here, or **step back** (re-open Phase 1/2 — the gate is re-entrant) and **search for a solution** first. **Don't lock over a known dissatisfaction.**
 
 ---
 
