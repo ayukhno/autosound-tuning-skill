@@ -31,6 +31,7 @@ Each line: *what the author's build showed* → **how to check it on yours.** Do
 - □ **A 40 Hz room-mode hump?** → check your own cabin.
 - □ **A tweeter dip ~5–6 kHz (seen on the RAW drivers)?** A **built-in de-esser** separating presence (~3k) from sibilance (~8–10k) — don't flatten it (`voicing-by-ear.md` Top/cymbals). → check your own raw tweeters.
 - □ **An LHD level tilt — the LEFT drivers hotter in the upper bands (on-axis) → the stage pulls LEFT?** Balance it **cut-only on the left** (don't boost the right). → check which side YOUR geometry (LHD/RHD) favours; the direction flips on an RHD car.
+- □ **A right-woofer resonance ~70–100 Hz? A ~190 Hz cabin boom (both sides)?** Unlike the nulls above, these are **peaks** → they ARE notchable (cut, don't leave). The author's build: R-woofer **73 Hz · −9 dB · Q 3.5**; boom **188 Hz · −5.5 dB · Q 5.0** (L) / **193 Hz · −3.0 dB · Q 6.0** (R). → measure YOUR peaks; those Hz/depth/Q are this build's — notch what your cabin actually shows, never copy these numbers.
 
 **Install polarity & inter-channel timing — a SUMMATION result of THIS build's crossovers, NOT a rule:**
 - □ **Per-driver polarity** in the author's build: **sub + midbass + tweeter INVERTED, mid NORMAL** — because the **Bessel joints summed best at opposite polarities** (tweeter flips against the mid, §9 `diagnostic`) while the **sub's BW joint did NOT flip.** ⚠️ Derive yours by **summation** (`diagnostic §9`), never copy this pattern — it's a result, not a recipe.
