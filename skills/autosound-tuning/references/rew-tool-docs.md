@@ -39,6 +39,10 @@ Or add `<skill-dir>/rew_tool` to your `PYTHONPATH`.
     * `per-band` = `freq`, `mag`, & `phase`
 * **`rew_tool/atf_eq.py`**
   * Parses and generates the Audiotec-Fischer (Helix) 30-band EQ bank (validated on real exports; parses an existing bank, formats and emits only the bands you decided).
+* **`rew_tool/verify_measurements.py`**
+  * Verification script for REW sweep data. Analyzes impulse response peaks, calculates initial time alignment delays, and detects exact acoustic crossover intersection frequencies.
+* **`rew_tool/make_plot.py`**
+  * Visual RTA plotting utility that generates comparative charts (L/R measurements vs. house/target curves) for visual-acoustic analysis.
 * **`rew_tool/rew_tool.py`**
   * Main CLI entry point.
 

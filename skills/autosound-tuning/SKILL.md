@@ -113,6 +113,8 @@ Use the `view_file` tool to load these specialized guides exactly when their spe
 | [references/installation.md](file:///skills/autosound-tuning/references/installation.md) | Installing, updating, or troubleshooting the local skill setup or plugin. |
 | [references/process-phases.md](file:///skills/autosound-tuning/references/process-phases.md) | Deciding next steps, transitioning between phases, or overviewing the 9-stage sequence. |
 | [references/project-intake.md](file:///skills/autosound-tuning/references/project-intake.md) | Initiating a new car profile, conducting the intake/equipment interview, or selecting target curves. |
+| [references/target-curves/target_curves_guide.md](file:///skills/autosound-tuning/references/target-curves/target_curves_guide.md) | Formulating target curves (e.g. EMMA Reference, ResoNix, Jazzi) and understanding curve offsets. |
+| [references/target-curves/target_curves_visualizer.html](file:///skills/autosound-tuning/references/target-curves/target_curves_visualizer.html) | Curve Comparison Web Tool for interactive target vs. measurement shape visualization. |
 | [references/naming-and-structure.md](file:///skills/autosound-tuning/references/naming-and-structure.md) | Formatting measurement names (_N version suffix), storing .mdat files, or structuring DSP presets. |
 | [references/analysis-playbook.md](file:///skills/autosound-tuning/references/analysis-playbook.md) | Deciding which REW graph (FR, Group Delay, IR, CSD, THD, excess-phase) is needed for a specific tuning decision. |
 | [references/diagnostic-techniques.md](file:///skills/autosound-tuning/references/diagnostic-techniques.md) | Interpreting physical anomalies, joint-phase summation, peak-vs-null rules, anchor-to-mids, or output-vs-virtual layering. |
