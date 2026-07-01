@@ -11,6 +11,8 @@ When assisting with a tuning session, the AI **MUST** follow this context-minimi
 2. **Load active & adjacent phases:** Use the `view_file` tool to load **ONLY** the active phase file and the next logical phase file (e.g., `phase_1_foundation.md` and `phase_2_eq.md`).
 3. **Ignore out-of-scope phases:** Do not load or process instructions for prior or future phases unless explicitly requested by the user or required for global context reconciliation.
 
+> ⚙️ **Quality Gates are re-entrant, not one-way locks.** Tuning is iterative and non-linear: a later change that touches a **crossover joint band** (±~1 octave of a joint, e.g. 230–350 Hz or 3–5 kHz), or a failed Phase-5/6 ear check, **re-opens** the affected earlier gate (typically phase/joint alignment) — re-measure and re-verify the summation; never treat a passed gate as permanent. An EQ move inside a joint band rotates local phase/group-delay and can undo a prior alignment.
+
 ---
 
 ## 🗺️ Process Phase Directory

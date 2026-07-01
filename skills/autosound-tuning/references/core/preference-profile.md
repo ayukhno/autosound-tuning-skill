@@ -17,7 +17,7 @@ See [`knowledge-architecture.md`](file:///skills/autosound-tuning/references/cor
 These **shape the engineering**, so they are objective goals, not skippable tastes:
 
 - **Reference seat** (driver / passenger / all) → drives centering & TA strategy
-- **Competition format(s)** (EMMA / AYA / CARMusic) → drives preset architecture & allowed techniques
+- **Competition format(s)** (EMMA / AYA / CARMusic) → drives preset architecture & allowed techniques (Engineering). ⚠️ *Also* seeds a format-specific **voicing target** (stage weight, echelons, the tonal balance the format rewards) — that part is a format-driven **preference**, finalized by ear in Phase 6. So the format spans both layers.
 - **Hard constraints** ("don't cut the doors", TÜV, budget) → hard limits
 - **Physical ceilings** (depth limited by mid geometry; envelopment needs a rear)
 
