@@ -8,7 +8,7 @@ This phase establishes the raw baseline measurement of the car's current acousti
 
 **Questions this phase answers:** what channel names/conventions do we agree? what does the system currently do (raw)? is the signal chain clean (no clipping)?
 
-**Required evidence:** agreed naming/glossary; a clean base DSP profile (`v0`, zeroed modifiers); `ALL_1 (sw)` + `ALL_1 (rta)`; a locked, repeatable MMM pattern.
+**Required evidence:** agreed naming/glossary; a clean base DSP profile (`v0`, zeroed modifiers); **per-driver** `<ch>_1 (sw)` + `<ch>_1 (rta)` for each driver we'll work with; a locked, repeatable MMM pattern.
 
 **✅ Quality gate → Phase 1:** names agreed **before** measuring; target curve imported (shape only, not level); raw baseline captured with all modifiers zeroed; no clipping; MMM pattern locked.
 
@@ -42,11 +42,11 @@ Before taking raw baseline measurements, prepare the clean starting preset in He
 * **Zero Acoustic Modifiers:** Ensure all acoustic modifiers are cleared: all delays set to exactly `0 ms / 0 cm / 0 samples`, all polarities set to NORM, all output EQs flat (bypass/0 dB), and initial output gains set to 0 dB (with protective crossovers applied to ВЧ/СЧ as described in Phase 1).
 * This forms the "pure routing preset" baseline from which all subsequent acoustic tuning is built.
 
-### 3. Capture the Baseline
-Instruct the user to measure the current whole-system response.
-* Capture `ALL_1 (sw)` and `ALL_1 (rta)`.
-* This represents the **raw baseline** of the system.
-* Do **NOT** perform time-alignment, delay adjustments, or level-matching yet. This phase is purely observational.
+### 3. Capture the Baseline (per-driver)
+Instruct the user to measure **each driver we'll work with**, solo, on the clean `v0` profile (protective HPFs on fragile drivers; no TA/EQ):
+* For every front channel — `sw`, `w-L/R`, `m-L/R`, `tw-L/R` — capture `<ch>_1 (sw)` (loopback sweep → IR/phase/GD) **and** `<ch>_1 (rta)` (MMM). *(Center/rear are integrated later, Phase 4.)*
+* This per-driver set **is** the raw baseline **and** the input for Phase 1 (TA, crossovers, levels, per-band targets) — **Phase 1 does not re-collect it.**
+* Do **NOT** perform time-alignment, delay, or level-matching yet. This phase is purely observational.
 
 ### 4. Gain Staging & Environmental Hygiene
 * Check for clipping (DSP outputs vs. amplifier inputs). Measurements must remain clean and undistorted.

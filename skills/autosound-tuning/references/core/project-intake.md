@@ -34,7 +34,7 @@ A new project's first contact has a fixed order, but the detail is spread across
 5. **Naming + glossary — AGREE BEFORE ANY MEASUREMENT.** ⛔ **Gate:** don't measure until the channel codes (`sw / w-L/R / m-L/R / tw-L/R / c / r`) AND the convention `<ch>_<vN> (sw|rta)` are set with the user (`naming-and-structure.md §3`). The recurring slip is running off to measure with un-agreed names → an unusable history.
 6. **Install verification** (§3) — routing · electrical polarity · protective crossovers (fragile drivers only, above each Fs) · gain staging · noise · break-in of new drivers · a safe sweep level. ⛔ **Gate:** don't tune before this.
 7. **Generate the project files** (§5).
-8. **First baseline** (Phase 0) — solo each output, the agreed names: all `sw` + the MMM `rta`, a RAW current-state capture (no TA tricks yet) → hand off to `process-phases.md` Phase 0/1.
+8. **First baseline** (Phase 0) — **each driver solo**, the agreed names: `<ch>_1 (sw)` + `<ch>_1 (rta)` per driver, a RAW current-state capture on the clean `v0` (no TA/EQ) → this per-driver set feeds Phase 1 (which does not re-collect it).
 
 > Steps 1–3 are the interview; 4–5 ready the rig and the language of the data; 6 protects the hardware; 7–8 produce the first real measurements. The two ⛔ gates — **measure only after naming, tune only after verification** — are where fresh sessions most often slip.
 

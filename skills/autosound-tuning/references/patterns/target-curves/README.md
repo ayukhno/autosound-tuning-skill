@@ -1,14 +1,16 @@
-# Цільові криві проекту (Target Curves)
+# Target curves (skill library)
 
-Тут зберігаються конфігураційні файли цільових кривих для імпорту в REW. Кожна крива знаходиться у власній підпапці та складається з загальної кривої (#1) та покомпонентних кривих для кожної смуги окремо.
+Standard reference target curves + the comparison tool. A target curve is a **starting shape**,
+not a finish and not a level — pick or build one **per project** (there is no default). Full
+guide: [`target_curves_guide.md`](./target_curves_guide.md).
 
-## Карта цільових кривих
+## Contents
+- **`NTT/`** — standard reference curves at 0 dB (REW/NTT format): Audiofrog, Harman, Jazzi v2,
+  ResoNix Accurate, Half Whitledge.
+- **`target_curves_guide.md`** — character comparison, how to load into NTT/REW, and building your own.
+- **`target_curves_visualizer.html`** — interactive comparison (open in a browser).
 
-| Назва підпапки | Назва кривої | Статус | Пресет / Призначення | Опис характеру звуку |
-|:---|:---|:---:|:---|:---|
-| `modified_laidback` | **ResoNix Laid-Back (Mod)** | **Кандидат** | EMMA SQ / Повсякденний | Теплий глибокий бас, комфортна і рівна середина з легким підйомом на ВЧ (вимоги до яскравості). |
-| `jazzi_v2` | **Jazzi v2 (Mod)** | **Кандидат** | Альтернативний | Чудова фокусованість та збалансований тональний баланс для змагань. |
-
----
-
-*Примітка:* Фінальний вибір кривої буде зроблено після перших сирих вимірів у Phase 0/1.
+## Where per-project curves live
+Your car's **chosen** curve and its **per-driver** targets (generated in Phase 1 after crossovers)
+belong in the PROJECT's `rew_analitic/target-curves/<name>/`, **not** here. This skill folder holds
+only the reusable standard references.

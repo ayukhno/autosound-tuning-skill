@@ -1,51 +1,43 @@
-# Гід по цільових кривих — Вибір характеру звучання
+# Target-curve guide — choosing the character of the sound
 
-Цей інтерактивний гід допоможе вам візуально порівняти відомі світові цільові криві (Target Curves) та зрозуміти архітектуру нашої збалансованої змагальної кривої **"EMMA-Ref"**.
+A target ("house") curve is a **starting shape**, not a finish and not a level. You pick or
+build one **per project**, then finalize it by ear after the raw baseline. This guide compares
+the well-known reference curves and shows how to load one into NTT / REW.
 
----
+> 🧩 A target curve is a **hypothesis**: a start, validated by measurement + ear. There is **no
+> default**, and each project ends up with its own curve. See
+> [`knowledge-architecture.md`](file:///skills/autosound-tuning/references/core/knowledge-architecture.md).
 
-## 🚀 Відкрийте Інтерактивний графік у Браузері (Рекомендовано!)
+## Open the interactive comparison
+Double-click to open in a browser (Chrome/Safari — VS Code's Restricted Mode blocks embedded SVG):
+[target_curves_visualizer.html](file:///skills/autosound-tuning/references/patterns/target-curves/target_curves_visualizer.html)
 
-Оскільки VS Code часто відкривається в **Restricted Mode (Обмеженому режимі)** і блокує відтворення вбудованих зображень та SVG з міркувань безпеки, ми оновили наш інтерактивний HTML-додаток:
+## Standard reference curves (character)
 
-👉 **Двічі клікніть по цьому файлу у вашому Finder, щоб відкрити його у Chrome або Safari:**
-[target_curves_visualizer.html](file:///Users/o.yukhno/dev/Agy/EMMA-Aug26_agy/rew_analitic/target-curves/target_curves_visualizer.html)
-
-*Там ви побачите оновлений інтерфейс, абсолютно точні стандартні криві (Jazzi v2, Harman, Audiofrog) відповідно до стандартів NTT, а також нашу нову цільову криву **EMMA-Ref**.*
-
----
-
-## 🔍 Детальний опис та акустичний ефект кожної кривої
-
-| Цільова крива | Головний фокус | Опис звучання та вплив на вухо |
+| Curve | Focus | Sound & effect |
 | :--- | :--- | :--- |
-| **Audiofrog Reference** | Натуральність / Лінійність | Студійний стандарт Енді Веймейєра (+4.5 дБ басу з плавним спадом до 100 Гц, далі спад -0.5 дБ/окт). Дає правильні тембри, але в реальному рухомому авто може звучати занадто сухо. |
-| **Harman Car Curve** | Глибокий суббас / Спад ВЧ | Розроблена групою Harman (+10 дБ глибокого басу, -1.2 дБ/окт спад ВЧ). Має масштабний, жирний характер, але в седанах може гудіти та маскувати середину. |
-| **Jazzi v2 (NTT-style)** | Потужний бас + Глибока яма | Особлива крива (+9 дБ суббасу, різкий провал -4.5 дБ на 2 кГц). Створює велику ілюзію сцени, але такий сильний виріз може зробити вокал занадто порожнім або «відірваним від горла». |
-| **EMMA-Ref** <br>*(Наша рекомендація)* | **Максимум сцени + Натуральність** | **Розроблена на досвіді змагань EMMA та порадах спільноти:**<br>• Помірний, зібраний бас (**+8.0 дБ**) з плавним виходом у нуль на 100 Гц (щоб суббас мав вагу, але не маскував вокал).<br>• Плавний, природний спад ВЧ (**-0.5 дБ/октаву** від 1 кГц) — саме такий характер мають реальні кімнати та студії.<br>• Широка, м'яка кишеня присутності (**-2.0 дБ** на 2.5 кГц) — відсуває сцену за лобове скло, зберігаючи природний тембр. |
+| **Audiofrog** (Andy Wehmeyer) | Neutral / linear | Studio-accurate (+~4.5 dB bass, gentle decline to 100 Hz). Correct timbre; can feel "dry" in a moving car. |
+| **Harman car curve** | Deep sub-bass / HF rolloff | Big, full character (+~10 dB deep bass, −1.2 dB/oct HF). In sedans can boom and mask the mids. |
+| **Jazzi v2** (NTT-style) | Strong bass + deep dip | +~9 dB sub-bass, sharp −4.5 dB dip near 2 kHz. Big stage illusion; the deep cut can hollow the vocal. |
+| **ResoNix Accurate** | Balanced SQ reference | A popular, natural competition start — even balance, honest timbre, no extreme moves. |
+| **Half Whitledge** | Warm, half the bass rise | Whitledge warmth with the bass rise ~halved → closer to neutral, lighter and faster. |
 
----
+Curve files live in [`NTT/`](file:///skills/autosound-tuning/references/patterns/target-curves/NTT).
 
-## 👣 Як це працює у NTT (Nono Tuning Tool) та REW?
+## Building your OWN target (per project)
 
-Ми створили універсальний файл імпорту нашої цільової кривої **EMMA-Ref**, який ви можете завантажити в будь-який інструмент:
+Narrow by the user's genres/taste — the curve→character table in
+[`voicing-by-ear.md`](file:///skills/autosound-tuning/references/patterns/voicing-by-ear.md) — to
+2–3 candidates, then audition by ear (finalized **after** the Phase-0 baseline, with measured reality
+in hand). A competition-oriented curve is often a moderate, collected bass + a gentle HF decline +
+a soft presence pocket (to push the stage behind the glass) — but the exact shape is yours to build
+and confirm by measurement. Export a 2-column `freq  dB` file (log-spaced, 20 Hz–20 kHz) into this
+project's `rew_analitic/target-curves/<name>/`.
 
-👉 **Файл для імпорту:** [EMMA_Ref_target.txt](file:///Users/o.yukhno/dev/Agy/EMMA-Aug26_agy/rew_analitic/target-curves/EMMA_Ref_target.txt) *(200 точок високої роздільної здатності на логарифмічній шкалі від 20 Гц до 20 000 Гц)*.
+## Loading a curve
 
-### 📥 Інструкція для NTT (Nono Tuning Tool):
-1. Відкрийте **Nono Tuning Tool** (nonotuningtool.com).
-2. Перейдіть до розділу завантаження / імпорту цільових кривих (**Custom Target Curve**).
-3. Оберіть файл `EMMA_Ref_target.txt` з папки `rew_analitic/target-curves/`.
-4. Інструмент автоматично підтягне криву з усіма нашими фірмовими нюансами!
+**NTT (nonotuningtool.com):** *Custom Target Curve* → import your `.txt` → it pulls the shape (and,
+with the per-band/stereo config, generates the per-driver targets — see Phase 1 §5).
 
-### 📥 Інструкція для REW (Room EQ Wizard):
-1. У REW перейдіть у **Preferences** (Налаштування) -> вкладка **House Curve**.
-2. Натисніть **Browse** і виберіть наш файл `EMMA_Ref_target.txt`.
-3. У вікні еквалізації (EQ) увімкніть галочку **Add room curve to target**, і REW буде будувати фільтри саме під нашу криву!
-
----
-
-## ❓ Питання до Арбітра:
-Подивіться на фіолетову криву **EMMA-Ref** на нашому інтерактивному графіку в браузері. Бачите, як вона поєднує вивірений соковитий бас, плавне згасання високих і природну, неекстремальну кишеню для глибини сцени?
-
-Чи затверджуємо ми її як нашу робочу ціль для підготовки Passat B8 до змагань EMMA SQ?
+**REW:** *Preferences → House Curve → Browse* your `.txt`; in the EQ window enable
+*Add room curve to target* so REW designs filters to your curve.

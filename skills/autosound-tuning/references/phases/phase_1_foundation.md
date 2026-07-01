@@ -23,10 +23,8 @@ This phase establishes the physical foundation of the tune: crossovers, prelimin
 
 ## Step-by-Step Runbook
 
-### 1. Collect Raw Measurements
-The user takes measurements for each isolated channel using protective HPFs:
-* **MMM RTA:** For frequency response (FR) magnitude.
-* **SWEEP (with physical Loopback):** For impulse response, phase, distortion, and group delay.
+### 1. Use the Phase-0 per-driver baseline
+Phase 0 already captured each isolated driver raw (`<ch>_1 (sw)` + `<ch>_1 (rta)`, protective HPFs, clean `v0`) — the sweep carries IR/phase/distortion/GD, the MMM carries FR magnitude. **Analyze that baseline here; do not re-collect it.** (Only re-measure a driver if its baseline is missing or the install changed.)
 
 > [!IMPORTANT]
 > **Set a consistent Time Offset on the sweeps BEFORE reading phase:**
@@ -50,6 +48,12 @@ Equalize the physical flight times of sound from each driver to the microphone.
   * **Bessel (BE4):** Exceptional for close, coplanar drivers (e.g., midrange ↔ tweeter on A-pillars).
   * **Linkwitz-Riley (LR4):** Preferred where drivers are physically far apart (e.g., midbass in door ↔ midrange on A-pillar), as it minimizes overlap.
   * For crossover tradeoffs, refer to [filter-types-car-audio.md](file:///skills/autosound-tuning/references/core/filter-types-car-audio.md).
+
+### 3.5 Preliminary Level Balance (computed from geometry — a starting hypothesis)
+Set an initial **cut-only** per-channel level from physics, then verify by RTA/ear (a start, not a verdict). The nearer / more on-axis driver is louder at the reference seat → cut it.
+* **Method** ([`rew_tool/level_offsets.py`](file:///skills/autosound-tuning/rew_tool/level_offsets.py)): per driver, off-axis loss = band-averaged far-field piston directivity `D(f,θ)=2·J1(ka·sinθ)/(ka·sinθ)`, plus distance loss `10·n·log10(d)`; offsets normalized cut-only (loudest driver cut most). This is why the mid can differ from the tweeter/woofer — the directivity integral depends on the driver's radius, band, and angle.
+* **Inputs are PROJECT data — ASK the user** (store in `autosound_context.md`, Engineering Profile): per-driver **distance** to the reference ear, **off-axis aiming angle** (pods/pillars: on-axis / cross-fired / to centre), **effective piston radius** (≈ cone/dome size; the **enclosure** sets the LF band edge), cabin **distance exponent `n`** (2 = free field; lower if reverberant).
+* The computed gains are the **start**; the summed RTA (§5 / Phase 2c) and the ear confirm/trim them. Never treat the number as final.
 
 ### 4. Review and Discussion
 Format a Generator proposal package (per the data contract §3) and send it to the Critic. Refine the levels, timing, and crossovers. Upon agreement, the user applies these values to the DSP.
