@@ -161,6 +161,10 @@
             <div class="card-title"><span class="dot" style="background-color: #ef4444;"></span>Harman (NTT)</div>
             <div class="card-desc"><b>Суббасовий монстр:</b> Енергійний глибокий бас (+5.4 дБ у вашій версії, але з плавною серединою) та комфортні завалені високі. Дуже масштабне звучання.</div>
         </div>
+        <div class="card">
+            <div class="card-title"><span class="dot" style="background-color: #eab308;"></span>ResoNix Laid-Back (NTT)</div>
+            <div class="card-desc"><b>Соковитий / розслаблений:</b> Той самий почерк ResoNix, але з <b>більшим басом</b> і <b>притишеним верхом</b> — тепліше, менш втомлює, для довгого слухання й задоволення (проти «еталонного» Accurate).</div>
+        </div>
     </div>
 </div>
 
@@ -333,6 +337,15 @@
             curveChart.data.datasets.push({ label: (name || fallback || 'Curve') + ' (loaded)', data: pts,
                 borderColor: color, borderWidth: 3, pointRadius: 0, tension: 0.3, borderDash: [6, 3] });
             curveChart.update();
+            const grid = document.querySelector('.info-grid');
+            if (grid) {
+                const card = document.createElement('div');
+                card.className = 'card';
+                const t = (name || fallback || 'Curve') + ' (loaded)';
+                card.innerHTML = '<div class="card-title"><span class="dot" style="background-color:' + color + ';"></span>' + t + '</div>' +
+                    '<div class="card-desc">Крива, завантажена з файлу під час сесії (' + pts.length + ' точок).</div>';
+                grid.appendChild(card);
+            }
         }
         function handle(files) { for (const f of files) { const r = new FileReader();
             r.onload = e => add(e.target.result, f.name.replace(/\.txt$/i, '')); r.readAsText(f); } }
