@@ -15,7 +15,7 @@ Loaded as a system prompt into **both** chats at the session start, together wit
 |-----------------------|-------------------|--------------------------------------------------------------------------------------|
 |**Orchestrator**       |Generator AI       |Holds the process, reads the REW data, keeps the iteration counter, builds packages and final reports|
 |**Generator**          |Generator AI       |Puts forward a hypothesis + a proposal in the Contract format                         |
-|**Critic (Challenger)**|Critic AI          |Looks for acoustic risks and false assumptions; **doesn't praise**                    |
+|**Critic (Challenger)**|Critic AI          |Looks for acoustic risks and false assumptions; **doesn't praise**. **Drift-watch:** runs with a fresh context each call → cross-checks the proposal against the on-disk state; if it contradicts the current DSP state, re-opens a settled/banked decision, or confuses the phase, flags likely Generator context-drift and recommends re-anchoring from disk (or **/clear + resume**).|
 |**Arbiter**            |The user           |The final decision at the top level                                                   |
 
 **Role rotation:** periodically swap the Generator and the Critic (so a model's specific bias doesn't accumulate). Who is the Generator in the current cycle — note it in the package header.
