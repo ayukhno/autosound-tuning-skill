@@ -54,6 +54,19 @@ claude_run() {
   { printf '%s | %s=claude(%s) | package=%s%s\n' "$(date '+%Y-%m-%d %H:%M')" \
       "$role" "$display_model" "$(basename "${PKG:-?}")" "${TRACE:+ | trace=$(basename "$TRACE")}"; } \
     >> "$AUDIT" 2>/dev/null || true
+  # Full round transcript → review-log (session reconstruction / observability). Disable with REVIEW_LOG=.
+  local rlog="${REVIEW_LOG-$PROJECT_MIRROR/review-log.md}"
+  if [[ -n "$rlog" ]]; then
+    {
+      printf '\n---\n## %s · %s · claude(%s) · package=%s%s\n' \
+        "$(date '+%Y-%m-%d %H:%M:%S')" "$role" "$display_model" "$(basename "${PKG:-?}")" "${TRACE:+ · trace=$(basename "$TRACE")}"
+      if grep -qiE '/clear|re-?anchor|drift|дрейф|ре-анкор|перечита' <<<"$out"; then
+        printf '> ⚠️ DRIFT-FLAG: reviewer flagged possible Generator drift (re-anchor / clear)\n'
+      fi
+      printf '\n### Package (Generator → reviewer)\n```\n%s\n```\n\n### Reply (reviewer → Generator)\n%s\n' \
+        "$(cat "${PKG:-/dev/null}" 2>/dev/null)" "$out"
+    } >> "$rlog" 2>/dev/null || true
+  fi
 }
 
 claude_doctor() {
