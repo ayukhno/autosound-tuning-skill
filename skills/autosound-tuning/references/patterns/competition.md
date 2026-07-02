@@ -56,7 +56,7 @@ EMMA judges **4 sections of tonal accuracy: Subbass · Midbass · Midrange · Hi
 
 ## TIEFBASS / deep-bass criterion — equal-loudness and the SQ↔SPL fork
 - Deep-bass tracks have a foundation **below the test tones**: e.g. "Put On" — content at **25–35 Hz** (the deepest note ~16), whereas the level check plays 40–55 Hz.
-- **Equal-loudness:** for a tone to sound equally loud, a lower one needs MORE SPL (40 Hz ≈ +6 dB over 55 at a moderate level; at loud — less). A flat SPL → the low end sounds quieter. **Check the track's real frequency (web) BEFORE EQ-ing it "flat".**
+- **Equal-loudness:** for a tone to sound equally loud, a lower one needs MORE SPL (40 Hz ≈ +6 dB over 55 at a moderate level; at loud — less). A flat SPL → the low end sounds quieter. **Check the track's real frequency (web) BEFORE EQ-ing it "flat".** → compute the per-frequency sub targets on your **actual listening-level** contour with [`rew_tool/equal_loudness.py`](file:///skills/autosound-tuning/rew_tool/equal_loudness.py) (anchor to one measured freq+SPL; realize cut-only + master up).
 - **Judges rate the reproduction/authority of the deep notes, not literal equal loudness** (at 25 Hz the ear is nearly deaf — that's physics, all systems are quieter there).
 - **The SQ↔SPL voicing fork:** for pure SQ the subsonic is tamed (less boom); for the deep-bass category — it's left/grown for extension. These are different **presets**, not one compromise. Dial the level/extension on the track itself (the track = the reference), at the judged loudness.
 

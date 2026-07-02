@@ -16,7 +16,7 @@ The same top/bottom balance shift, but the method is critical:
 - **A presence trim** as a secondary lever: a **broad PK 2–3 kHz** (e.g. PK2700/−2/Q0.9, on virtual-L+R symmetrically) cuts the forward presence hump, but **leaves the air >5k intact** (unlike a shelf, which kills the air too). It damages the tone less. The bass lift does the main work.
 
 ## 3. Depth DEPENDS ON THE LOUDNESS LEVEL (equal-loudness)
-At low volume, bass perception drops (equal-loudness contours) → the top relatively dominates → **the stage goes forward when quiet**. The bass depth-voicing is **calibrated to the playback level**. → tune/listen at the level it'll be judged at (or think about loudness compensation for quiet).
+At low volume, bass perception drops (equal-loudness contours) → the top relatively dominates → **the stage goes forward when quiet**. The bass depth-voicing is **calibrated to the playback level**. → tune/listen at the level it'll be judged at (or think about loudness compensation for quiet). Derive the level-anchored sub targets with [`rew_tool/equal_loudness.py`](file:///skills/autosound-tuning/rew_tool/equal_loudness.py).
 
 ## 4. The physical ceiling: the mid's location + DEPTH LIVES IN THE RECORDING
 Depth comes from a **long acoustic path to the mid** (a kick mount, the base of the windshield). **A mid on the A-pillar near-coplanar with the tweeters = the most forward geometry** → absolute depth is physically limited. The DSP **maximizes** depth within that, it doesn't lift the limit. Push it back a step or two, not "an orchestra behind the hood".
