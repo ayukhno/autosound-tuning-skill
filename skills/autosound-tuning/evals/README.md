@@ -45,3 +45,15 @@ v2.0.2 added **UK/DE/PL native-language triggers** (Gemini native-QA: use techni
 both idiomatic and exclude home-hifi/PC-speaker false-positives). Validated **7/7**: all
 UK/DE/PL enthusiast queries fire; native-language near-misses (home theater, living-room hi-fi,
 PC speakers) correctly do not.
+
+v2.0.4 added **resume / continuation triggers** (so a returning user's message fires the skill's
+Resume protocol on ANY project, not only ones with rich auto-memory — a gap found by the
+anti-drift dry-run). Validated: **imperative** resume phrasings ("resume my car-audio tune",
+«продовжуємо тюн авто», «на чому зупинились у тюні авто») fire; generic-project near-misses
+("resume my code project", «продовжуємо роботу над проєктом», bare "what's my current state")
+correctly do not. **Known limitation (documented, not a defect):** a *pure status question*
+("coming back — what's my current DSP state?") consistently does NOT trigger (0/4) — the model
+routes "what is X?" as a lookup, not a skill-load. Low impact: the anti-drift dry-run showed such
+a question still **self-answers correctly from disk** (reads dsp-state/changelog/audit-trail), and
+forcing a lookup to load a full tuning skill isn't clearly desirable. Imperative resume is the
+common case and it works.

@@ -8,7 +8,10 @@ description: >
   set up or tune a car-audio system FROM SCRATCH, tune speakers,
   pick crossover points, set time delays, phase, or polarity, build per-channel EQ, fix imaging/staging,
   match OR create/build a target/house curve (ResoNix, Jazzi, Harman, Audiofrog, or a custom one via the
-  Nono Tuning Tool), pull REW measurements, or run a tuning session.
+  Nono Tuning Tool), pull REW measurements, or run a tuning session. Also fires when RESUMING an
+  in-progress car-audio tune — "resume/continue my car-audio tune", "what's my current
+  DSP / crossover / time-alignment / gain state", "where did we leave off on the tune",
+  «продовжити тюн», «нагадай стан DSP / кросовери / затримки», «на чому зупинились у тюні авто».
   Also fires on native-language requests — UK: «налаштувати автозвук/процесор у машині»,
   «затримки та кросовери в авто», «образ липне до динаміка / сцена попливла»; DE: „Car-HiFi
   einmessen / DSP einstellen", „Laufzeitkorrektur im Auto"; PL: „strojenie DSP w aucie/samochodzie",

@@ -29,5 +29,11 @@
   {"query": "pomóż mi ze strojeniem DSP w aucie — opóźnienia czasowe, zwrotnice i korektor", "should_trigger": true},
   {"query": "допоможи налаштувати домашній кінотеатр і колонки у вітальні", "should_trigger": false},
   {"query": "hilf mir mein Wohnzimmer-Heimkino und die HiFi-Anlage einzustellen", "should_trigger": false},
-  {"query": "jak ustawić głośniki w komputerze do grania i filmów?", "should_trigger": false}
+  {"query": "jak ustawić głośniki w komputerze do grania i filmów?", "should_trigger": false},
+  {"query": "resume my car-audio tune — remind me the current crossover and delay settings on my helix", "should_trigger": true},
+  {"query": "продовжуємо тюн авто, нагадай на чому зупинились — кросовери, затримки, гейни й полярність", "should_trigger": true},
+  {"query": "на чому ми зупинились у тюні авто минулого разу? який зараз стан DSP?", "should_trigger": true},
+  {"query": "let's resume — where did we leave off on my code project yesterday?", "should_trigger": false},
+  {"query": "продовжуємо роботу над проєктом, нагадай на чому зупинились минулого разу?", "should_trigger": false},
+  {"query": "what's my current state? remind me where we left off", "should_trigger": false}
 ]
