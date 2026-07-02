@@ -41,6 +41,8 @@ Or add `<skill-dir>/rew_tool` to your `PYTHONPATH`.
   * Preliminary per-channel LEVEL offsets from geometry (off-axis piston directivity + distance). Cut-only starting balance for Phase 1 §3.5, verified by RTA/ear. Inputs (distance/angle/piston radius/`n`) are project data. `--selftest`.
 * **`rew_tool/target_bands.py`**
   * Generates per-driver (per-band) target curves locally: house curve + crossovers + two-speaker summation offset + asymmetric L/R compensation + per-channel gains. Change a crossover → regenerate in one shot (no NTT-web round-trip). Phase 1 §5. `--selftest`, `--demo`.
+* **`rew_tool/equal_loudness.py`**
+  * Equal-loudness (ISO 226:2003) **sub-bass targeting**: a flat sub sounds bass-light because ear sensitivity at LF depends on listening level (Fletcher-Munson). Anchor to one measured sub freq+SPL → calibrate the phon contour → read per-freq target SPLs → `target − measured` = the EQ adjustment (cut-only + master up). Field-validated (helped win an AYA round). `--anchor F SPL --measure f=spl…`, `--selftest`.
 * **`rew_tool/atf_eq.py`**
   * Parses and generates the Audiotec-Fischer (Helix) 30-band EQ bank (validated on real exports; parses an existing bank, formats and emits only the bands you decided).
 * **`rew_tool/verify_measurements.py`**
