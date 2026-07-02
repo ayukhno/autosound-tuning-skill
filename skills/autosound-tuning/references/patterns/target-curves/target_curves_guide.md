@@ -9,8 +9,11 @@ the well-known reference curves and shows how to load one into NTT / REW.
 > [`knowledge-architecture.md`](file:///skills/autosound-tuning/references/core/knowledge-architecture.md).
 
 ## Open the interactive comparison
-Double-click to open in a browser (Chrome/Safari — VS Code's Restricted Mode blocks embedded SVG):
-[target_curves_visualizer.html](file:///skills/autosound-tuning/references/patterns/target-curves/target_curves_visualizer.html)
+`target_curves_visualizer.html` is **fully self-contained — it works OFFLINE** (Chart.js is inlined; no CDN / no internet needed — important when tuning in the car). Open it in a browser:
+- **macOS:** `open <skill-dir>/references/patterns/target-curves/target_curves_visualizer.html` (or double-click it in Finder → opens in your default browser).
+- **Any OS:** double-click the file, or drag it onto a browser tab.
+
+*(When an assistant is driving the session, it can launch it for the user by running `open` on the resolved path — the file's location is known once the skill is loaded.)*
 
 ## Standard reference curves (character)
 
