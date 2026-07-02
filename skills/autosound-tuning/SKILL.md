@@ -152,6 +152,8 @@ Use the `view_file` tool to load these specialized guides exactly when their spe
 
 A second, independent reviewer prevents single-perspective bias — and the real strength comes from a **different AI vendor** than the Generator (different training → different blind spots). **Recommended default: Claude + Gemini** — one drives as Generator, the other reviews as Critic-Advisor (Codex/ChatGPT is a third option). Run rounds via the per-vendor CLI wrappers or the unified Python tool.
 
+**But the method works fine with a SINGLE AI** — the reviewer role still adds a lot, and most setups have one model (running several paid AIs is a big ask). A second vendor is a *bonus, not a requirement*; see the single-AI ladder (§3). **Any reviewer is always an on-demand, stateless call** that re-reads state from disk each time — **never a long-lived background agent** (those die on restart / laptop-sleep, and long-lived solo loops are exactly where long sessions drift).
+
 ### 1. Per-vendor CLI wrappers (recommended)
 Battle-tested Bash wrappers, one pair per vendor. They auto-detect the local CLI and handle quota/model fallback, credentials, and logging. **Pair a reviewer from a different vendor than your Generator:**
 * **Gemini:** `scripts/gemini_critic.sh` · `scripts/gemini_advisor.sh <package.md> [trace.csv]`
@@ -165,10 +167,14 @@ One stdlib-only entry point for any vendor (drives local CLIs or cloud APIs). Mu
 * **Critic:** `python scripts/autosound_ai.py critic <package.md> [trace.csv]`
 * **Advisor:** `python scripts/autosound_ai.py advisor <package.md> [trace.csv]`
 
-### 3. Autopilot self-loop — FALLBACK ONLY (use only if you have no second AI)
-If only one AI is available, you can run the loop inside a single session by forking a subagent (`critic_advisor`) with an **isolated context** — it sees only the proposed package, never the Generator's inner monologue.
-> [!WARNING]
-> This is a **fallback, not the default.** A same-model reviewer shares the model's systematic blind spots, so it is **not** true cross-vendor anti-anchoring — it catches reasoning-trace anchoring, not model-level bias. It is also the mode where long autonomous sessions have drifted (lost DSP state / phase). Whenever a second vendor is available, prefer options 1–2.
+### 3. Single AI — the reviewer ladder (works fine with just ONE model)
+One AI is fully supported. A reviewer role still adds a lot, so **never run solo on a long or drift-prone session** (a known failure mode of some Generators: losing DSP state / phase mid-session). When your preferred cross-vendor reviewer is unavailable (e.g. a daily token limit hit mid-session), don't drop to solo — descend this ladder, keeping an **on-demand, stateless** reviewer active:
+1. **Pause & wait** for the cross-vendor reviewer (e.g. until the daily reset). Tuning isn't time-critical — waiting to keep the strong reviewer usually beats pushing on with a weak one.
+2. **Another vendor** on-demand, if one is configured.
+3. **Same vendor, HIGHER tier** than the Generator (e.g. a Flash generator reviewed by a Pro / thinking model). Model-tier diversity catches more than a peer; ⚠️ it still shares the vendor's systematic blind spots, so it's a rung below true cross-vendor.
+4. **Same model, context-isolated** — the reviewer sees only the proposed package, never the Generator's inner monologue. Weakest (catches reasoning-trace anchoring, not model-level bias); last resort.
+> [!IMPORTANT]
+> Every rung is a **short-lived on-demand call that re-hydrates from disk**, NOT a long-lived background agent (those crash on restart / laptop-sleep). Keep the reviewer role active and prefer the highest tier available. Descend the ladder only as far as forced; **never silently go solo.**
 
 ---
 
