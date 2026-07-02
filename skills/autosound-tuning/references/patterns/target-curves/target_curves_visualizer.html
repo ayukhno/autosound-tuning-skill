@@ -333,17 +333,24 @@
         function add(text, fallback) {
             const { name, pts } = parse(text);
             if (!pts.length) { alert('Не знайшов пар freq dB у файлі.'); return; }
+            // Normalize to the 0-dB house-curve reference (~0 over 200-500 Hz) so a "_50db" export
+            // (or any offset) overlays the built-in curves instead of flying off the chart.
+            let ref = pts.filter(p => p.x >= 200 && p.x <= 500);
+            if (!ref.length) ref = pts;
+            const off = ref.reduce((s, p) => s + p.y, 0) / ref.length;
+            if (Math.abs(off) > 0.05) { for (const p of pts) p.y -= off; }
+            const shift = (off >= 0 ? '\u2212' : '+') + Math.abs(off).toFixed(1) + ' dB';
             const color = palette[n++ % palette.length];
-            curveChart.data.datasets.push({ label: (name || fallback || 'Curve') + ' (loaded)', data: pts,
+            const label = (name || fallback || 'Curve') + ' (loaded' + (Math.abs(off) > 0.5 ? ', ' + shift : '') + ')';
+            curveChart.data.datasets.push({ label: label, data: pts,
                 borderColor: color, borderWidth: 3, pointRadius: 0, tension: 0.3, borderDash: [6, 3] });
             curveChart.update();
             const grid = document.querySelector('.info-grid');
             if (grid) {
                 const card = document.createElement('div');
                 card.className = 'card';
-                const t = (name || fallback || 'Curve') + ' (loaded)';
-                card.innerHTML = '<div class="card-title"><span class="dot" style="background-color:' + color + ';"></span>' + t + '</div>' +
-                    '<div class="card-desc">Крива, завантажена з файлу під час сесії (' + pts.length + ' точок).</div>';
+                card.innerHTML = '<div class="card-title"><span class="dot" style="background-color:' + color + ';"></span>' + label + '</div>' +
+                    '<div class="card-desc">Завантажена з файлу (' + pts.length + ' точок' + (Math.abs(off) > 0.5 ? '; нормалізовано ' + shift + ' до 0-dB референсу 200-500 Гц' : '') + ').</div>';
                 grid.appendChild(card);
             }
         }
