@@ -134,6 +134,10 @@
             ↳ Перетягніть сюди файл кривої <b>.txt</b> (REW/NTT: <code>freq dB</code>) — або клацніть, щоб обрати. Додається на графік миттєво, офлайн.
         </div>
         <input type="file" id="curveFile" accept=".txt,text/plain" multiple style="display:none">
+        <div style="margin-top:12px;text-align:center;">
+            <button id="toggleAllBtn" style="background:#1f2937;color:#f3f4f6;border:1px solid #374151;border-radius:6px;padding:3px 9px;cursor:pointer;font-size:13px; padding:8px 18px;font-size:14px;">Сховати всі криві</button>
+            <span style="color:#6b7280;font-size:13px;margin-left:10px;">клац на картку внизу — сховати/показати криву</span>
+        </div>
     </div>
     
     <div class="info-grid">
@@ -342,16 +346,36 @@
             const shift = (off >= 0 ? '\u2212' : '+') + Math.abs(off).toFixed(1) + ' dB';
             const color = palette[n++ % palette.length];
             const label = (name || fallback || 'Curve') + ' (loaded' + (Math.abs(off) > 0.5 ? ', ' + shift : '') + ')';
-            curveChart.data.datasets.push({ label: label, data: pts,
-                borderColor: color, borderWidth: 3, pointRadius: 0, tension: 0.3, borderDash: [6, 3] });
+            const ds = { label: label, data: pts, borderColor: color, borderWidth: 3, pointRadius: 0, tension: 0.3, borderDash: [6, 3] };
+            curveChart.data.datasets.push(ds);
+            const idx = curveChart.data.datasets.length - 1;
             curveChart.update();
             const grid = document.querySelector('.info-grid');
             if (grid) {
+                const bs = "background:#1f2937;color:#f3f4f6;border:1px solid #374151;border-radius:6px;padding:3px 9px;cursor:pointer;font-size:13px;";
                 const card = document.createElement('div');
                 card.className = 'card';
                 card.innerHTML = '<div class="card-title"><span class="dot" style="background-color:' + color + ';"></span>' + label + '</div>' +
-                    '<div class="card-desc">Завантажена з файлу (' + pts.length + ' точок' + (Math.abs(off) > 0.5 ? '; нормалізовано ' + shift + ' до 0-dB референсу 200-500 Гц' : '') + ').</div>';
+                    '<div class="card-desc">Завантажена з файлу (' + pts.length + ' точок). Точне вирівнювання:</div>' +
+                    '<div class="offset-ctl" style="margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">' +
+                        '<button class="ob" data-d="-1" style="' + bs + '">-1</button>' +
+                        '<button class="ob" data-d="-0.5" style="' + bs + '">-0.5</button>' +
+                        '<span class="ofs" style="min-width:56px;text-align:center;color:#9ca3af;">0.0 dB</span>' +
+                        '<button class="ob" data-d="0.5" style="' + bs + '">+0.5</button>' +
+                        '<button class="ob" data-d="1" style="' + bs + '">+1</button></div>';
                 grid.appendChild(card);
+                let manual = 0;
+                card.querySelectorAll('.ob').forEach(function (b) {
+                    b.addEventListener('click', function (e) {
+                        e.stopPropagation();
+                        const d = parseFloat(b.getAttribute('data-d'));
+                        manual += d;
+                        for (const q of ds.data) q.y += d;
+                        card.querySelector('.ofs').textContent = (manual >= 0 ? '+' : '-') + Math.abs(manual).toFixed(1) + ' dB';
+                        curveChart.update();
+                    });
+                });
+                if (window.__wireCard) window.__wireCard(card, idx);
             }
         }
         function handle(files) { for (const f of files) { const r = new FileReader();
@@ -361,6 +385,32 @@
         ['dragover', 'dragenter'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.style.borderColor = '#eab308'; dz.style.color = '#f3f4f6'; }));
         ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.style.borderColor = '#374151'; dz.style.color = '#9ca3af'; }));
         dz.addEventListener('drop', e => handle(e.dataTransfer.files));
+    })();
+
+    // --- Interactive legend: click a card to hide/show its curve; a Hide-all toggle ---
+    (function () {
+        function wire(card, idx) {
+            card.style.cursor = 'pointer';
+            card.title = 'Клац — сховати / показати';
+            card.addEventListener('click', function (e) {
+                if (e.target.closest('.offset-ctl')) return;
+                const vis = curveChart.isDatasetVisible(idx);
+                curveChart.setDatasetVisibility(idx, !vis);
+                curveChart.update();
+                card.style.opacity = vis ? '0.4' : '1';
+            });
+        }
+        document.querySelectorAll('.info-grid .card').forEach(function (c, i) { wire(c, i); });
+        window.__wireCard = wire;
+        const btn = document.getElementById('toggleAllBtn');
+        let hidden = false;
+        btn.addEventListener('click', function () {
+            hidden = !hidden;
+            curveChart.data.datasets.forEach(function (d, i) { curveChart.setDatasetVisibility(i, !hidden); });
+            curveChart.update();
+            document.querySelectorAll('.info-grid .card').forEach(function (c) { c.style.opacity = hidden ? '0.4' : '1'; });
+            btn.textContent = hidden ? 'Показати всі криві' : 'Сховати всі криві';
+        });
     })();
 
 </script>
