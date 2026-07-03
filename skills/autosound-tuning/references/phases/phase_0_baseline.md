@@ -43,7 +43,7 @@ Before taking raw baseline measurements, prepare the clean starting preset in He
 * This forms the "pure routing preset" baseline from which all subsequent acoustic tuning is built.
 
 ### 3. Capture the Baseline (per-driver)
-Instruct the user to measure **each driver we'll work with**, solo, on the clean `v0` profile (protective HPFs on fragile drivers; no TA/EQ):
+Instruct the user to measure **each driver we'll work with**, solo, on the clean `v0` profile (protective HPFs on fragile drivers; no TA/EQ). ⚠️ **Before any sweep, run the pre-sweep safety gate** `rew_tool/gates/presweep_safety.py` → `require_safe([...])`: a full-range sweep with no/too-low/too-gentle HPF on a fragile driver (tweeter/mid) can destroy it, so the gate refuses unless HPF ≥ 1.1×Fs @ ≥24 dB/oct + level under the safe ceiling + clip headroom. Hardware safety is acoustic-domain but HARD — no waiver (a blown tweeter isn't recoverable).
 * For every front channel — `sw`, `w-L/R`, `m-L/R`, `tw-L/R` — capture `<ch>_1 (sw)` (loopback sweep → IR/phase/GD) **and** `<ch>_1 (rta)` (MMM). *(Center/rear are integrated later, Phase 5.)*
 * This per-driver set **is** the raw baseline **and** the input for Phase 1 (TA, crossovers, levels, per-band targets) — **Phase 1 does not re-collect it.**
 * Do **NOT** perform time-alignment, delay, or level-matching yet. This phase is purely observational.

@@ -58,9 +58,10 @@ Set an initial **cut-only** per-channel level from physics, then verify by RTA/e
 ### 4. Review and Discussion
 Format a Generator proposal package (per the data contract §3) and send it to the Critic. Refine the levels, timing, and crossovers. Upon agreement, the user applies these values to the DSP.
 
+* **Bank the change first, then key it in (Generator):** route every hard-param change (crossover / gain / TA / polarity) through `apply.propose` — it writes the versioned snapshot AND emits the exact **old→new settings sheet** the Arbiter enters; after the Arbiter enters it, `attest` (🟡→🟢). This keeps state on disk (A/B, revert, resume) instead of drifting, and it's what produces the clean sheet. Details: [`rew_tool/state/schema.md`](file:///skills/autosound-tuning/rew_tool/state/schema.md).
 * **How to apply & save to the DSP (Arbiter):**
   1. Open Helix PC-Tool and load your **existing active baseline setup** (the current active profile you are starting from). Do *not* assume a `.pct6` file of version `v0` exists on disk if this is a fresh start.
-  2. Enter the new parameters (protective/preliminary crossovers, delays, and level adjustments) exactly as agreed in the final proposal.
+  2. Enter the new parameters from the settings sheet (protective/preliminary crossovers, delays, and level adjustments) exactly as emitted by `apply.propose`.
   3. Save the modified profile as `<prefix>_v1_foundation.pct6` locally on your computer in the workspace directory **`rew_analitic/dsp-config/`** (so it can be committed to Git and tracked properly).
   4. Write/flash this configuration into an active, safe slot of your physical Helix DSP to make it active before running any sweeps.
 

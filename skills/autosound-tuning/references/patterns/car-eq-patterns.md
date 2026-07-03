@@ -19,6 +19,59 @@
 
 ---
 
+## Judge deviations by AUDIBILITY, not by the trace — catch what the ear hears, leave what it doesn't
+
+This is a whole-spectrum, both-scales discipline, not a rule about any one band. The same idea plays
+out in the **bass, mids, and highs**, and at both the **macro** scale (a broad tilt/offset across a
+region) and the **micro** scale (a single narrow feature). The numbers in the examples below are
+**illustrations, not targets** — in another car the same case sits at a different frequency and width.
+The job is never "flatten the trace"; it is **match what the ear actually weights to the target, and
+don't touch what it doesn't.** Two opposite ways to fail — both are "not listening to what matters":
+
+**Fail A — MISS an audible deviation (under-correct).** The ear hears a deviation by **how wide** it
+is, not by its peak dB. A **broad tilt/offset from target** (macro) hides in plain sight: it isn't a
+peak, it barely moves RMS, and it sounds fine in a 30-second A/B — then tires you on a long listen. It
+can live anywhere: a warm lower-mid hump, a shy or bloated bass shelf, a forward presence tilt, a
+rolled or hot top octave. **To catch it, integrate the deviation over half-decade bands vs the target**
+(`analysis-playbook.md`) instead of reading peak dB / RMS — a trace can be a "good" 1.5 dB RMS and
+still be **voiced wrong** because the residual that matters is the slope, not the wiggles.
+
+**Fail B — OVERCORRECT what the ear ignores or that can't be fixed (kills transparency/liveliness).**
+The opposite sin, and the more damaging one: EQ-ing narrow features the ear doesn't weight, or that
+aren't even electrically fixable — **phase-cancellation dips** (boosting burns amp power for no sound),
+**off-axis / dispersion dips** the mic sees but the ear doesn't (`analysis-playbook.md` RTA-dip≠heard-
+dip), **single-mic HF comb**, narrow reflection notches. Chasing these flat makes the sound **dry,
+clinical, dead** — it strips the air/liveliness. This is the "transparency = minimum processing" rule
+above: the fewer points it takes to reach the target, the more life stays in. **When unsure whether a
+feature is audible-and-correctable, leave it** — a small honest deviation beats a filter that kills the
+sound.
+
+**The weighting, in one line:** weight every deviation by **audibility = bandwidth × region-the-ear-
+cares-about × is-it-minimum-phase-correctable × dispersion context** — not by dB and not by how ugly
+the trace looks. Broad beats narrow at equal dB; a correctable broad tilt beats an uncorrectable narrow
+null; a region the ear leans on (presence, vocal band) beats one it doesn't (deep sub, extreme air).
+
+**Worked example of Fail A — the over-EQ ⇄ mud seesaw (read the Hz as an instance, not the rule).**
+Automated RTA-driven high-Q cuts in the lower mids (here ~80–300 Hz) over-tame cabin reflections and
+**strip body/"meat"** → dry, clinical, hollow (upright bass loses woody resonance, a female voice loses
+chest register). The right instinct is to **relax those cuts ~2–4 dB** (wide Q, minimal depth unless a
+peak is truly severe) — but **relaxing by ear to restore body overshoots easily** into a broad hump
+that now rides *above* target: fine in the moment, muddy/tiring after 20 minutes. So the relax is only
+half the job: **relax for body, then re-check the band-integrated level vs target** so you don't tilt
+into fatigue. (In a bright car the mirror case is relaxing HF cuts into a fatiguing presence tilt — same
+seesaw, different band.) This is why the DONE gate needs the broadband-vs-target scan
+(`phase_3_control.md §2`) and the ear pass needs a long/fatigue listen (`phase_4_listening.md`) — the
+error shows up as fatigue, not as a peak, so a spot-check / RTA-flat chase / peak-RMS read walks past it.
+
+> **Field evidence (Passat B8 · Jazzi) — one instance, not the general number.** Ear-relaxed lower-mid
+> cuts to cure dryness (correct move) overshot to **+1.5 dB over Jazzi across a broad 160–630 Hz** — a
+> macro tilt. It sounded fine at the moment but muddy/tiring on a long listen; the overall 1.5 dB RMS
+> "looked done," and a peak/narrow read passed it. Caught only by integrating deviation-vs-target per
+> band. Fix = gentle tilt down over the hump + up over the light midbass (~2 dB swing around the pivot),
+> re-fit level, confirm by ear on vocals + kick — **wide and small, never narrow and deep.**
+
+---
+
 ## Tweeter (HF)
 
 ### Typical problems

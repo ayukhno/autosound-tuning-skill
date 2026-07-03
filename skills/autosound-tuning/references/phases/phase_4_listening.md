@@ -12,7 +12,7 @@ This is the penultimate phase. While physical measurements verify technical corr
 
 **✅ Quality gate:** the 6-point pass run (binary 🟢/❌; fails → backlog → Phase 2/5); the user is **satisfied with the sound**; **feedback captured here** (a natural finish point) → then either continue to Phase 5 (details) or wrap up (close the session here).
 
-**⚠️ Failure modes:** dumping a long song list (propose **one** track/marker at a time) · vague checks (use binary markers) · treating a forward/flat stage as taste when it's top-too-hot-vs-bass or a joint phase error.
+**⚠️ Failure modes:** dumping a long song list (propose **one** track/marker at a time) · vague checks (use binary markers) · treating a forward/flat stage as taste when it's top-too-hot-vs-bass or a joint phase error · **declaring done from short spot-checks when a broad tonal tilt only reveals itself as fatigue on a long listen** (add the fatigue pass, item 7).
 
 **🧩 Refs:** tracks → [`test-tracks.md`](file:///skills/autosound-tuning/references/patterns/test-tracks.md); depth → [`staging-depth.md`](file:///skills/autosound-tuning/references/patterns/staging-depth.md).
 
@@ -54,6 +54,24 @@ When performing a final verification of a newly finished tune or preparing for a
 ### 6. High-Frequency Sibilance & Glare
 * **Check:** Female vocal sibilance ("s", "sh" sounds), horn glare, and cymbal airiness.
 * **Symptom fix:** Ringing or harshness around 3 kHz–5 kHz should be corrected with surgical virtual-layer EQ notches.
+
+### 7. Long-Listen / Fatigue Check (broadband tonal balance) — the one the spot-checks miss
+The six checks above are short, focused probes — they catch imaging, joints, and narrow glare, but a
+**broad tonal tilt is inaudible as "wrong" in a 30-second A/B and only shows up as fatigue.** The ear
+adapts to a slow warm/bright/muddy slope for a minute, then tires of it over 15–20+ minutes. So before
+you call it done, do a **relaxed album-length listen** (≥15–20 min, familiar acoustic + vocal
+material, comfortable level — not analytical): does it stay easy and inviting, or does it get tiring,
+thick/muddy, thin, or shouty as time passes?
+* **If it fatigues, first tell which KIND** (they call for opposite fixes):
+  * **Tired from a tilt** (too thick/muddy, too bright/shouty, too warm/dark) → re-run the
+    **band-integrated deviation-vs-target scan** ([`analysis-playbook.md`](file:///skills/autosound-tuning/references/core/analysis-playbook.md)); a broad band riding ≥~1–1.5 dB off target is the culprit — in *any* region (lower-mid mud, hot 2–5 kHz shout, bloated/shy bass, rolled/hot top). Fix as a **gentle broadband tilt, never narrow notches**.
+  * **Tired from deadness** (dry, clinical, lifeless, no air) → that's **over-correction, not a tilt** —
+    too many/too-deep EQ cuts chasing reflections the ear ignored. The fix is to **remove EQ, not add
+    it**: relax or pull filters and let transparency back in (`car-eq-patterns.md` → judge-by-audibility,
+    Fail B). Adding more EQ here makes it worse.
+* **Why it belongs by ear, not only on the trace:** the trace tells you *where* the broadband tilt is;
+  the long listen tells you it *matters*. A tune that measures 1.5 dB RMS "done" but tires the listener
+  isn't done — this is the check that separates a lock from a keeper.
 
 ---
 
