@@ -10,6 +10,7 @@ the well-known reference curves and shows how to load one into NTT / REW.
 
 ## Open the interactive comparison
 `target_curves_visualizer.html` is **fully self-contained — it works OFFLINE** (Chart.js is inlined; no CDN / no internet needed — important when tuning in the car). Open it in a browser:
+- **Quickest:** open **`curves.html`** at the **skill root** — a one-click launcher that opens this visualizer.
 - **macOS:** `open <skill-dir>/references/patterns/target-curves/target_curves_visualizer.html` (or double-click it in Finder → opens in your default browser).
 - **Any OS:** double-click the file, or drag it onto a browser tab.
 
