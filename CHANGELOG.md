@@ -2,6 +2,44 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
+## [Unreleased] — targets **v2.1.0** (commit `95de374`)
+
+State substrate + field-harvested acoustic method. **Not tagged yet** — v2.1.0 is cut after the current dogfood. (Authoritative version of a checkout is `plugin.json`; the unambiguous identity of a build is the commit hash.)
+
+### Added
+- **Versioned hard-params state** (`rew_tool/state/state.py`) — one JSON snapshot per change (crossovers / gains / TA / polarity + EQ pointers); `snapshot` / `diff` / `revert` / `render`. ms is canonical, samples derived at the DSP's rate. Anti-drift anchor + cheap A/B / revert / resume.
+- **apply-change** (`rew_tool/state/apply.py`) — `propose` → banks a 🟡 snapshot + emits the human settings sheet (channel/param old→new, ms+samples); `attest` → 🟢 applied (proposed-vs-applied).
+- **Side-effect gate** (`rew_tool/gates/side_effect.py`) — outbound actions run an exact command with the repo **hardcoded** + returned-URL verify (FAIL LOUD); kills the confabulated-repo failure.
+- **Pre-sweep safety gate** (`rew_tool/gates/presweep_safety.py`) — refuses a sweep on an unprotected fragile driver (HPF ≥1.1×Fs @≥24 dB, level, clip).
+- **Offline target-curve visualizer** (`curves.html`) + **`rew_tool/equal_loudness.py`** (ISO 226 sub-bass targeting) + ResoNix Laid-Back curve; review-loop full-transcript logging.
+
+### Added — acoustic method
+- **Judge deviations by audibility, not the trace** (`references/patterns/car-eq-patterns.md`): weight by *bandwidth* (a broad tilt vs the target beats a narrow notch of equal dB), catch it with a band-integrated deviation-vs-target scan (analysis playbook + Phase-3 verdict) + a long/fatigue listen (Phase 4); don't overcorrect narrow nulls / off-axis dips (kills transparency). Folded from field feedback (VW Passat B8 · Jazzi, issue #2).
+
+### Notes
+- A token-handshake + `override` "control-plane" was built and then **removed by design** — the substrate stays simple; compliance is model-choice + human-in-the-loop, not scaffolding.
+
+## [v2.0.6] — 2026-07-02
+Critic as drift-watchdog (recommends re-anchor / `/clear` on detected Generator drift).
+
+## [v2.0.5] — 2026-07-02
+Single-AI reviewer ladder (on-demand / stateless, tier-escalating, never solo).
+
+## [v2.0.4] — 2026-07-02
+Resume / continuation description triggers (anchored, validated).
+
+## [v2.0.3] — 2026-07-02
+L/R shape-match group-delay caution (Gemini v2.0 methodology review).
+
+## [v2.0.2] — 2026-07-02
+UK / DE / PL native-language description triggers (validated 7/7).
+
+## [v2.0.1] — 2026-07-02
+Restore casual-EN + create-curve description triggers (9/9); repaired trigger-eval runner.
+
+## [v2.0.0] — 2026-07-01
+Assisted method: Claude+Gemini default reviewer, 5-layer knowledge architecture, goal-node phases, anti-drift state-on-disk, Gemini gemini-optim tooling. **Major bump — the numbering moved from 1.x to 2.x here;** the CHANGELOG had lagged at v1.1.0 (reconciled 2026-07-04, which is why a stale read reported "v1.1.0").
+
 ## [v1.1.0] — 2026-06-26
 
 Packaging + method-harvest release.
