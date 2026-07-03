@@ -366,13 +366,16 @@
                         '<button class="ob" data-d="1" style="' + bs + '">+1</button></div>';
                 grid.appendChild(card);
                 let manual = 0;
+                const baseLabel = ds.label;
                 card.querySelectorAll('.ob').forEach(function (b) {
                     b.addEventListener('click', function (e) {
                         e.stopPropagation();
                         const d = parseFloat(b.getAttribute('data-d'));
                         manual += d;
                         for (const q of ds.data) q.y += d;
-                        card.querySelector('.ofs').textContent = (manual >= 0 ? '+' : '-') + Math.abs(manual).toFixed(1) + ' dB';
+                        const s = (manual >= 0 ? '+' : '-') + Math.abs(manual).toFixed(1) + ' dB';
+                        card.querySelector('.ofs').textContent = s;
+                        ds.label = baseLabel + (Math.abs(manual) > 0.001 ? '  (' + s + ')' : '');
                         curveChart.update('none');
                     });
                 });
@@ -413,6 +416,7 @@
                     '<button class="ob" data-d="1" style="' + bs + '">+1</button>';
                 card.appendChild(ctl);
                 let manual = 0;
+                const baseLabel = curveChart.data.datasets[idx].label;
                 ctl.querySelectorAll('.ob').forEach(function (b) {
                     b.addEventListener('click', function (e) {
                         e.stopPropagation();
@@ -420,7 +424,9 @@
                         manual += d;
                         const data = curveChart.data.datasets[idx].data;
                         for (const q of data) q.y += d;
-                        ctl.querySelector('.ofs').textContent = (manual >= 0 ? '+' : '-') + Math.abs(manual).toFixed(1) + ' dB';
+                        const s = (manual >= 0 ? '+' : '-') + Math.abs(manual).toFixed(1) + ' dB';
+                        ctl.querySelector('.ofs').textContent = s;
+                        curveChart.data.datasets[idx].label = baseLabel + (Math.abs(manual) > 0.001 ? '  (' + s + ')' : '');
                         curveChart.update('none');
                     });
                 });
