@@ -31,6 +31,11 @@ Or add `<skill-dir>/rew_tool` to your `PYTHONPATH`.
   * FR/phase/IR/GD analysis + PEQ suggestions
   * `first_arrival` (leading-edge, not the global peak) + `relative_delay_xcorr` (L ↔ R delay, shape-robust)
   * Verify setup: `python3 analysis.py --selftest`
+* **`rew_tool/joint_analysis.py`** — within-session summation / TA / phase decisions (magnitude-safe where in-cabin phase is not trustworthy)
+  * **Quality / drift:** `flag_remeasure_candidates` (pre-echo vs the CLEANEST version of the SAME driver → which sweeps to redo), `timing_drift_audit` (Δstart vs waveform xcorr → REW label-drift vs a real TA change), `impulse_polarity` (leading-edge sign)
+  * **Classify:** `joint_summation_check` (measured pair vs incoherent power ref → phase cancellation vs tonal dip; never boost a null), `phase_trust_gate` (do the complex solos reproduce the pair? if not, BLOCK delay/APF/polarity)
+  * **Correct (drift-immune, relative):** `align_by_summation` (polarity + relative delay maximizing the coherent sum = the TA you can enter in the DSP), `allpass_for_residual_null` (2nd-order APF F/Q on the residual), `shelf_vs_bell` (broad tilt = shelf, gentler phase; else keep the bell)
+  * `perceptual_smooth`, `midband_level_anchor`, `shape_deviation`. Verify: `python3 joint_analysis.py --selftest`
 * **`rew_tool/target_curves.py`**
   * Handles loading and interpolating target curves.
 * **`rew_tool/nono_curves.py`**
