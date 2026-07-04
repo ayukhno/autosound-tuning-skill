@@ -20,13 +20,14 @@ the well-known reference curves and shows how to load one into NTT / REW.
 
 | Curve | Focus | Sound & effect |
 | :--- | :--- | :--- |
+| **EMMA-Ref v3** (this project — **bundled**) | Juicy + SQ-accurate | Deep juicy sub-bass (+9 dB), ultra-smooth decline to 200 Hz (kills boom), a −2 dB stage dip at 2.5 kHz, natural HF decline (−0.5 dB/oct). The only curve that **ships with the skill** (`curves/`). |
 | **Audiofrog** (Andy Wehmeyer) | Neutral / linear | Studio-accurate (+~4.5 dB bass, gentle decline to 100 Hz). Correct timbre; can feel "dry" in a moving car. |
 | **Harman car curve** | Deep sub-bass / HF rolloff | Big, full character (+~10 dB deep bass, −1.2 dB/oct HF). In sedans can boom and mask the mids. |
 | **Jazzi v2** (NTT-style) | Strong bass + deep dip | +~9 dB sub-bass, sharp −4.5 dB dip near 2 kHz. Big stage illusion; the deep cut can hollow the vocal. |
 | **ResoNix Accurate** | Balanced SQ reference | A popular, natural competition start — even balance, honest timbre, no extreme moves. |
 | **Half Whitledge** | Warm, half the bass rise | Whitledge warmth with the bass rise ~halved → closer to neutral, lighter and faster. |
 
-Curve files live in [`NTT/`](file:///skills/autosound-tuning/references/patterns/target-curves/NTT).
+Only **EMMA-Ref v3** ships with the skill (in [`curves/`](file:///skills/autosound-tuning/references/patterns/target-curves/curves)). The five community curves above are **downloaded from the Nono Tuning Tool** ([nonotuningtool.com](https://nonotuningtool.com)) — not redistributed here — then dropped into `curves/` or onto the visualizer.
 
 ## Building your OWN target (per project)
 
