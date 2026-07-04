@@ -26,4 +26,11 @@ A clone + a symlink of the inner `skills/autosound-tuning` into `~/.claude/skill
 ### 3. Plain File Copy (Legacy fallback)
 If you find this installed as a **plain file copy** that the user wants to keep updated, we recommend offering to switch to the plugin (above) to avoid manual copying/clone-syncing over it each time which can lead to drift.
 
+---
+
+## Troubleshooting
+
+- **Antigravity / agy sandbox — state snapshots vanish.** Some agent environments restrict certain file writes to the session's own directory (observed on Antigravity: an artifact-write outside `…/brain/<session>/` was refused). If versioned snapshots don't land where you expect, point `AUTOSOUND_STATE_ROOT` inside the project and verify it's writable **from within the session**: `python rew_tool/state/state.py selftest` (must print `selftest OK`); confirm the root actually fills after the first `apply.py propose`.
+- **Reviewer CLI hangs inside an agent session.** Spawning a reviewer CLI (agy/gemini/claude) from *inside* another agent session deadlocks chronically (agent-inside-agent; observed ~15/20 field sessions). `autosound_ai.py` kills a hung CLI after `AUTOSOUND_CLI_TIMEOUT` (default 120 s) and falls back to Clipboard Mode — but the reliable pattern is running reviewer wrappers from a **separate terminal**. See [process-control.md](file:///skills/autosound-tuning/references/core/process-control.md).
+
 For details on distribution, versions, and how experience flows back, see [feedback-loop.md](file:///skills/autosound-tuning/references/core/feedback-loop.md).

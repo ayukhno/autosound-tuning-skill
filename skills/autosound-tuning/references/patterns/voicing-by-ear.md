@@ -57,6 +57,7 @@ An applied base for by-ear voicing: when the base is technically correct (Phases
 - With equal delays — attenuate the left per band so the image is in front of the driver (≤3 dB; at least to unstick it from the pillar).
 **Top/cymbals:** a flat 4–10k plateau = cymbals have body (treble +6 above the mid); 4k — the base of cymbals (detail, but sibilants wander); 12.5/14k — detail + embellished sibilants; "harsh top + sub" → raise the tweeters' crossover frequency + level, suppress 12.5k.
 - **A natural presence dip ~5–6k = a built-in de-esser — don't reflexively fill it.** If the cabin/tweeter already dips here (confirmed on the raw drivers), it's separating the presence (3k) from the sibilance (8–10k) for you; flattening it makes the top harsher. **Air lives >10k**, separately — protect it. (Pairs with the two-peak treble fix above.)
+- **[provisional — an idea to TRY, not a rule] An off-axis tweeter may sound best running at its natural HF potential.** Single-mic target-matching over-corrects an off-axis driver's top (its natural roll-off reads as excess/dips to "fix"), and those cuts can choke decay tails, air, and spatial cues. Before keeping software HF cuts on the FAR/off-axis tweeter, A/B their bypass by ear (field case, Passat B8: bypassing 12.3k + 6.0k cuts on the off-axis A-pillar tweeter restored long decays and vocal transparency). Geometry-dependent — judge per install.
 
 ## Joint/filters (by-ear, Arkadij)
 - Between mid and tweeter — **Bessel is better than LR** (air/depth); lots of treble emphasizes the bass.

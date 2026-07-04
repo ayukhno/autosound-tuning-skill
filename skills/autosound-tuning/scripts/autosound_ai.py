@@ -337,9 +337,28 @@ def main():
                 model = "gemini-2.5-flash" if cli_bin == "gemini" else ("Gemini 3.5 Flash (Medium)" if role == "critic" else "Gemini 3.1 Pro (High)")
                 
             extra_args = ["--skip-trust"] if cli_bin == "gemini" else []
-            
+
+            # Agent-inside-agent = chronic deadlock (observed ~15/20 field sessions).
+            # Best-effort detection: warn, then still try — but ALWAYS with a timeout.
+            nested = [k for k in os.environ
+                      if k.startswith(("ANTIGRAVITY", "AGY_", "CLAUDECODE", "CLAUDE_CODE", "GEMINI_SESSION"))]
+            if nested:
+                print(f">> ⚠️ Схоже, ми ВСЕРЕДИНІ агент-сесії (маркер: {nested[0]}). "
+                      "Виклик CLI зсередини сесії часто DEADLOCK'ає — надійніше запустити "
+                      "рецензента з ОКРЕМОГО термінала або Clipboard Mode. Пробую з таймаутом…",
+                      file=sys.stderr)
+            cli_timeout = int(os.environ.get("AUTOSOUND_CLI_TIMEOUT", "120"))
             cmd = [cli_bin, "--model", model] + extra_args + ["-p", temp_prompt_path]
-            proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
+            try:
+                proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                                      timeout=cli_timeout)
+            except subprocess.TimeoutExpired:
+                print(f">> ⛔ CLI '{cli_bin}' завис і вбитий по таймауту ({cli_timeout} с) — "
+                      "класична ознака agent-inside-agent deadlock. НЕ рахуй «вручну»: "
+                      "запусти рецензента з окремого термінала, або скористайся Clipboard Mode "
+                      "(нижче). Таймаут налаштовується: AUTOSOUND_CLI_TIMEOUT.",
+                      file=sys.stderr)
+                raise RuntimeError("CLI timeout — falling back to Clipboard Mode")
             if proc.returncode == 0 and proc.stdout.strip():
                 print(proc.stdout)
                 print(f"\n— [{role}: {model}]")
