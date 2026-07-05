@@ -330,9 +330,10 @@
             const desc = descFor(rawName) || ('Завантажена, ' + ptsLen + ' точок');
             const card = document.createElement('div');
             card.className = 'card';
-            card.innerHTML = '<div class="card-title"><span class="dot" style="background-color:' + color + ';"></span>' +
-                '<span style="flex:1;">' + label + '</span>' +
-                '<button class="del-btn" title="Видалити криву" style="background:none;border:none;color:#6b7280;cursor:pointer;font-size:16px;line-height:1;padding:0 2px;">✕</button></div>' +
+            card.innerHTML = '<div class="card-title" style="flex-wrap:wrap;">' +
+                '<span class="dot" style="background-color:' + color + ';flex-shrink:0;"></span>' +
+                '<span style="flex:1;min-width:0;overflow-wrap:anywhere;">' + label + '</span>' +
+                '<button class="del-btn" title="Видалити криву" style="flex-shrink:0;background:none;border:none;color:#6b7280;cursor:pointer;font-size:16px;line-height:1;padding:0 2px;">✕</button></div>' +
                 '<div class="card-desc">' + desc + '</div>' +
                 '<div class="offset-ctl" style="margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">Рівень: ' +
                 '<button class="ob" data-d="-1" style="' + bs + '">-1</button>' +
