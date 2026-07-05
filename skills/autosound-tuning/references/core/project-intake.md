@@ -123,6 +123,7 @@ A new/unfamiliar/long-unmeasured install. Each item is cheap; a skipped one cost
 
 In the new project's root (a git repo; layout and the "what's in git, what isn't" rule → `naming-and-structure.md §4a`):
 
+- **`curves.html`** — a symlink to the skill's target-curve visualizer, right at the project root, so the tool is one click away instead of buried in the skill's folders: `ln -s <skill-dir>/curves.html curves.html`. **`.gitignore` it** — an absolute-path symlink is machine-specific (same pattern as `.agents/skills/`); re-link it with the command above on a new machine.
 - **`autosound_context.md`** — the profile: §1 equipment · §2 channels/routing · §3 measurement rig · §4 targets/curve/crossovers (the active curve → `rew_analitic/target-curves/<name>/`) · §5 **channel glossary** (agree the codes with the user; grammar `sw / w-L/R / m-L/R / tw-L/R / r-L/R / c-*`, pairs/combos/joints — `naming-and-structure.md §3`) · §6 the experience/anomaly log (empty — the sessions will fill it). Template — the Passat B8 profile.
 - **`preference-profile.md`** — the **Preference Profile** (layer 4): pure voicing preferences (taste axes, loudness habit, favourite tracks, curve character), kept separate from the Engineering Profile above and applied only in Phase 5. See `references/core/preference-profile.md`.
 - **`dsp-state-current`** + **`tuning-changelog`** (with a ▶️ CONTINUE block at the top) — project memory.
