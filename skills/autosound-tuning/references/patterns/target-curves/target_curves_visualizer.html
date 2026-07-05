@@ -286,24 +286,38 @@
         function persist() {
             const st = curveChart.data.datasets.map((d, i) => ({
                 label: d.label, color: d.borderColor, data: d.data,
-                hidden: !curveChart.isDatasetVisible(i), builtin: i < BUILTINS
+                hidden: !curveChart.isDatasetVisible(i), builtin: i < BUILTINS,
+                offset: d._manual || 0
             }));
             try { localStorage.setItem(LS, JSON.stringify(st)); } catch (e) {}
         }
 
+        // Fallback for state saved before `offset` was persisted explicitly:
+        // recover the manual offset from the trailing "(±X dB)" label suffix.
+        function parseManualFromLabel(label) {
+            const m = /\(([+\-−][\d.]+)\s*dB\)\s*$/.exec(label || '');
+            return m ? parseFloat(m[1].replace('−', '-')) : 0;
+        }
+
         function wireOffset(card, ds) {
-            let manual = 0;
+            if (ds._manual === undefined) ds._manual = 0;
             const strip = s => s.replace(/\s+\([+\-−][^)]*dB\)$/, '');
             const base = strip(ds.label);
+            function refresh() {
+                const m = ds._manual;
+                const s = (m >= 0 ? '+' : '-') + Math.abs(m).toFixed(1) + ' dB';
+                const ofs = card.querySelector('.ofs'); if (ofs) ofs.textContent = Math.abs(m) > 0.001 ? s : '0.0 dB';
+                ds.label = base + (Math.abs(m) > 0.001 ? '  (' + s + ')' : '');
+            }
+            card._offsetRefresh = refresh;
+            refresh();
             card.querySelectorAll('.ob').forEach(function (b) {
                 b.addEventListener('click', function (e) {
                     e.stopPropagation();
                     const d = parseFloat(b.getAttribute('data-d'));
-                    manual += d;
+                    ds._manual += d;
                     for (const q of ds.data) q.y += d;
-                    const s = (manual >= 0 ? '+' : '-') + Math.abs(manual).toFixed(1) + ' dB';
-                    const ofs = card.querySelector('.ofs'); if (ofs) ofs.textContent = s;
-                    ds.label = base + (Math.abs(manual) > 0.001 ? '  (' + s + ')' : '');
+                    refresh();
                     curveChart.update('none');
                     persist();
                 });
@@ -316,7 +330,9 @@
             const desc = descFor(rawName) || ('Завантажена, ' + ptsLen + ' точок');
             const card = document.createElement('div');
             card.className = 'card';
-            card.innerHTML = '<div class="card-title"><span class="dot" style="background-color:' + color + ';"></span>' + label + '</div>' +
+            card.innerHTML = '<div class="card-title"><span class="dot" style="background-color:' + color + ';"></span>' +
+                '<span style="flex:1;">' + label + '</span>' +
+                '<button class="del-btn" title="Видалити криву" style="background:none;border:none;color:#6b7280;cursor:pointer;font-size:16px;line-height:1;padding:0 2px;">✕</button></div>' +
                 '<div class="card-desc">' + desc + '</div>' +
                 '<div class="offset-ctl" style="margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">Рівень: ' +
                 '<button class="ob" data-d="-1" style="' + bs + '">-1</button>' +
@@ -326,12 +342,28 @@
                 '<button class="ob" data-d="1" style="' + bs + '">+1</button></div>';
             grid.appendChild(card);
             wireOffset(card, ds);
-            wireToggle(card, idx);
+            wireToggle(card, ds);
+            wireDelete(card, ds);
             return card;
         }
 
-        function plot(label, pts, color, rawName) {
+        function wireDelete(card, ds) {
+            const btn = card.querySelector('.del-btn');
+            if (!btn) return;
+            btn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                const idx = curveChart.data.datasets.indexOf(ds);
+                if (idx === -1) return;
+                curveChart.data.datasets.splice(idx, 1);
+                curveChart.update();
+                card.remove();
+                persist();
+            });
+        }
+
+        function plot(label, pts, color, rawName, initialOffset) {
             const ds = { label: label, data: pts, borderColor: color, borderWidth: 3, pointRadius: 0, tension: 0.3, borderDash: [6, 3] };
+            if (initialOffset) ds._manual = initialOffset;
             curveChart.data.datasets.push(ds);
             const idx = curveChart.data.datasets.length - 1;
             buildCard(label, color, pts.length, ds, idx, rawName);
@@ -370,11 +402,13 @@
         ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.style.borderColor = '#374151'; dz.style.color = '#9ca3af'; }));
         dz.addEventListener('drop', e => handle(e.dataTransfer.files));
 
-        function wireToggle(card, idx) {
+        function wireToggle(card, ds) {
             card.style.cursor = 'pointer';
             card.title = 'Клац — сховати / показати';
             card.addEventListener('click', function (e) {
-                if (e.target.closest('.offset-ctl')) return;
+                if (e.target.closest('.offset-ctl') || e.target.closest('.del-btn')) return;
+                const idx = curveChart.data.datasets.indexOf(ds);
+                if (idx === -1) return;
                 const vis = curveChart.isDatasetVisible(idx);
                 curveChart.setDatasetVisibility(idx, !vis);
                 curveChart.update();
@@ -393,10 +427,10 @@
                     '<button class="ob" data-d="0.5" style="' + bs + '">+0.5</button>' +
                     '<button class="ob" data-d="1" style="' + bs + '">+1</button>';
                 card.appendChild(ctl);
-                wireOffset(card, curveChart.data.datasets[idx]);
+                wireOffset(card, ds);
             }
         }
-        document.querySelectorAll('.info-grid .card').forEach(function (c, i) { wireToggle(c, i); });
+        document.querySelectorAll('.info-grid .card').forEach(function (c, i) { wireToggle(c, curveChart.data.datasets[i]); });
 
         const btn = document.getElementById('toggleAllBtn');
         let hidden = false;
@@ -415,13 +449,20 @@
             let bi = 0;
             for (const e of st) {
                 if (e.builtin && bi < BUILTINS) {
-                    curveChart.data.datasets[bi].data = e.data;
-                    curveChart.data.datasets[bi].label = e.label;
+                    const ds = curveChart.data.datasets[bi];
+                    ds.data = e.data;
+                    ds._manual = e.offset !== undefined ? e.offset : parseManualFromLabel(e.label);
+                    const card = document.querySelectorAll('.info-grid .card')[bi];
+                    if (card && card._offsetRefresh) card._offsetRefresh();
                     bi++;
                 }
             }
             for (const e of st) {
-                if (!e.builtin) { n = Math.max(n, 1); plot(e.label, e.data, e.color || palette[n++ % palette.length], e.label); }
+                if (!e.builtin) {
+                    n = Math.max(n, 1);
+                    const off = e.offset !== undefined ? e.offset : parseManualFromLabel(e.label);
+                    plot(e.label, e.data, e.color || palette[n++ % palette.length], e.label, off);
+                }
             }
             curveChart.update();
             st.forEach(function (e, i) {
