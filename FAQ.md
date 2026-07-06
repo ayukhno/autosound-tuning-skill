@@ -81,7 +81,13 @@ Choose the instructions for your operating system:
      ```powershell
      git config --global --add safe.directory *
      ```
-5. **Create a project folder and launch Claude:**
+5. **Install Python (Required for Windows scripts):**
+   Windows does not come with Python pre-installed. Run this command in PowerShell to install it instantly:
+   ```powershell
+   winget install Python.Python.3.11
+   ```
+   *Once installation completes, completely restart your PowerShell window or editor to apply the new PATH changes.*
+6. **Create a project folder and launch Claude:**
    Run these commands in PowerShell:
    ```powershell
    mkdir car-audio-tuning; cd car-audio-tuning; claude
@@ -155,69 +161,20 @@ agy -p "Hello, world!"
 
 ---
 
-### Linux & Fallback Setup (using Gemini CLI + Free API Key)
+### Fallback: Direct API Setup (No CLI or Node.js required!)
 
-Use this method if you are running **Linux**, if the Antigravity CLI is not available on your system, or if your weekly Antigravity free quota is exhausted and you need to switch to a free Google AI Studio API key.
+If you are running **Linux**, if the Antigravity CLI is not available on your system, or if your weekly Antigravity free quota is exhausted, you can call Google's Gemini API directly using a free API key without installing Node.js, npm, or any external command-line utilities:
 
-Since Windows and Linux fallback users use the official cross-platform `@google/gemini-cli` powered by a free Google AI Studio API key.
-
-1. **Verify Node.js & npm (Required):**
-   Run this command in your terminal to see if you have `npm` installed:
-   ```bash
-   npm --version
+1. **Get a free API key** (no credit card required) at **[aistudio.google.com/apikey](https://aistudio.google.com/apikey)**.
+2. **Add it to your config:** Create a file named `.critic-env` inside your project's `rew_analitic/` directory (or in CWD) and add your key:
+   ```env
+   GEMINI_API_KEY=AIzaSy...your_actual_key...
    ```
-   * **If npm is NOT recognized (Windows):** Run this command in PowerShell to install Node.js (which includes npm) instantly using the built-in Windows Package Manager (`winget`):
-     ```powershell
-     winget install OpenJS.NodeJS.LTS --silent --accept-source-agreements --accept-package-agreements
-     ```
-     *Once installation completes, update your path in the active window by running:*
-     ```powershell
-     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-     ```
-     *(Or simply close your current PowerShell/terminal window and open a new one to apply the changes).*
-     
-     **If PowerShell blocks npm** (showing an error like `npm.ps1 cannot be loaded because running scripts is disabled`):
-     Run this command in PowerShell to permanently allow running local scripts for your user account (no Administrator rights required):
-     ```powershell
-     Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
-     ```
-   * **If npm is NOT recognized (Linux):** Install Node.js and npm via your package manager (e.g., `sudo apt update && sudo apt install -y nodejs npm`).
-
-2. **Install the Gemini CLI globally:**
-   Run this command in your new terminal window:
-   ```bash
-   npm install -g @google/gemini-cli
-   ```
-2. **Get a free API key** (no credit card required) at **[aistudio.google.com/apikey](https://aistudio.google.com/apikey)**.
-3. **Configure the API Key (Secure Environment Method - Recommended):**
-   To avoid storing your API key in plain text within project folders, save it securely directly into your operating system's user environment variables:
-   
-   * **For Windows (PowerShell):** Run these two commands in PowerShell (replace `AIzaSy...` with your actual key; do **NOT** change the word `"User"`):
-     ```powershell
-     [Environment]::SetEnvironmentVariable("GEMINI_API_KEY", "AIzaSy...your_actual_key...", "User")
-     [Environment]::SetEnvironmentVariable("GEMINI_BIN", "gemini", "User")
-     ```
-     *After running this, close your current PowerShell window and open a new one to apply the global changes.*
-   * **For Linux (Bash):** Add these lines to your shell profile (e.g., `~/.bashrc` or `~/.profile`):
-     ```bash
-     export GEMINI_API_KEY="AIzaSy...your_actual_key..."
-     export GEMINI_BIN="gemini"
-     ```
-     *Then run `source ~/.bashrc` or open a new terminal window.*
-
-   * **Alternative (Local file method):** If you prefer using a file, you can create a file named `.critic-env` inside your project's `rew_analitic/` directory and add your credentials there (already ignored in `.gitignore`):
-     ```env
-     GEMINI_BIN=gemini
-     GEMINI_API_KEY=AIzaSy...your_actual_key...
-     ```
-4. **Verify the installation:**
-   ```bash
-   gemini --skip-trust -p "Hello, world!"
-   ```
+3. That's it! The Python script (`autosound_ai.py`) will automatically detect the key and make direct, lightweight HTTPS API calls to Gemini (using the robust and active `gemini-2.5-flash` model), bypassing any need for local CLI tools or npm shims.
 
 > [!TIP]
 > **Do I have to set this up?**
-> No. If no local Gemini CLI is found, the tuning skill will seamlessly fall back to **Autopilot self-loop** (spawning an isolated subagent inside Claude Code) or **Clipboard Mode** (allowing you to copy-paste proposals into any web-based AI of your choice, like ChatGPT or Gemini web).
+> No. If no local Gemini CLI or API key is found, the tuning skill will seamlessly fall back to **Autopilot self-loop** (spawning an isolated subagent inside Claude Code) or **Clipboard Mode** (allowing you to copy-paste proposals into any web-based AI of your choice, like ChatGPT or Gemini web).
 
 ---
 
