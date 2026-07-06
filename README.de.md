@@ -1,6 +1,6 @@
 # Autosound Tuning Skill
 
-🇬🇧 [English](README.md) · 🇩🇪 **Deutsch** · 🇵🇱 [Polski](README.pl.md) · 🇺🇦 [Українська](README.uk.md)
+🇬🇧 [English](README.md) · 🇩🇪 **Deutsch** · 🇵🇱 [Polski](README.pl.md) · 🇺🇦 [Українська](README.uk.md) · [FAQ](FAQ.md)
 
 **In einem Satz:** ein Claude-Skill, der dich zu **klarem, transparentem, ausgewogenem Klang** in *deinem* Auto führt — er bringt das ganze Handwerk auf dein konkretes Setup, liest deine REW-Messungen und hilft dir, jede Änderung zu wählen.
 
@@ -9,13 +9,35 @@
 - 🎧 **Test-Tracks** — worauf zu achten ist und auf welchem Track (Beschreibungen, kein Audio)
 - 🚗 **Lernt dein Setup** — sammelt Wissen über Auto & Geräte, nur mit deiner Zustimmung
 
-**Für wen — der Seeker (Suchende).** Alle, die den eigenen Klang aufbauen und das Handwerk noch lernen (nicht nur der erfahrene Meister). Du bringst Ohren und Auto — der Skill bringt die Karte.
+## Erste Schritte
 
-**Warum.** Abstimmen ist eine Lawine — zu viele Methoden, Parameter und Faustregeln, um sie im Kopf zu behalten, und man verliert sich leicht in einem Detail und damit das Gesamtbild. Der Skill ist dein Navigator: Er hält das Wissen bereit, weist auf die wenigen Änderungen hin, die wirklich zählen, und behält den Kompromiss zwischen Bühnenabbildung und tonaler Balance im Blick. Dein Ohr ist der letzte Richter.
+Dieser Skill läuft als Plugin für **Claude Code** (dem offiziellen Terminal-Agenten von Anthropic).
 
-Er deckt eine komplette Abstimmung ab — von einem neuen Projekt (Interview zu Equipment + Zielen, Wahl der Zielkurve, Einbau-Checks) über Frequenzweichen, Laufzeitkorrektur, Phase, kanalweisen und summierten EQ und die Bühnenabbildung, bis hin zum Voicing nach Geschmack — gesteuert von einer Generator-↔-Kritiker-↔-Schiedsrichter-Review-Schleife. Es ist **Methode, keine Maschine**: keine Messungen eines Autos oder DSP-Zustände liegen hier (die bleiben in deinem Projekt), also funktioniert es mit **jedem Auto / jedem DSP**.
+### 1. Schnelle Installation
 
-> Gebaut und praxiserprobt an einem VW Passat B8 / Helix DSP Ultra S (ein AYA-Wettbewerbssieg); die Auto-/DSP-Spezifika sind in ein Profil + eine `knowledge/`-Bibliothek ausgelagert, sodass ein neues Projekt nur „die Eingaben wählen“ heißt.
+Führe diese Befehle in deiner aktiven Claude-Code-Sitzung **nacheinander (einzeln)** aus (kopiere und füge sie nicht zusammen ein):
+
+```bash
+/plugin marketplace add ayukhno/autosound-tuning-skill
+```
+
+```bash
+/plugin install autosound-tuning
+```
+
+```bash
+/reload-plugins
+```
+
+*Dann starte das Tuning mit:* **"tune a new car from scratch"** (oder auf Deutsch: *"stimme ein neues Auto von Grund auf ab"*).
+
+### 2. Umfassendes Setup & FAQ
+
+Brauchst du Hilfe bei der Einrichtung von Claude Code, der Ausführung unter **Windows**, der Konfiguration des **Gemini Critic** (einschließlich eines völlig kostenlosen, browserbasierten Arbeitsbereichs über **Google AI Studio**) oder der Auswahl des Mikrofons?
+
+👉 Siehe direkt in unserem umfassenden **[FAQ.md](FAQ.md)** nach.
+
+---
 
 ## Was hier drin ist
 
@@ -31,61 +53,18 @@ autosound-tuning-skill/        ein Claude-Code-Plugin
 
 Ein Skill — die unabhängige Review-Methode (Kritiker/Berater/Schiedsrichter, Anti-Anchoring) ist als `references/core/review-loop.md` gebündelt.
 
-## Erste Schritte — neu bei Claude Code?
+## Für wen & Warum
 
-Dieser Skill läuft in **Claude Code**, einem Terminal-Tool. Abstimmen ist iterativ (messen → analysieren → ändern → neu messen) über Text-/Zahlendaten, daher passen ein Terminal + git — Parsing, Skripting, vollständige Änderungshistorie — weit besser als die Web-App.
+* **Für wen:** Für alle, die den Sound im Auto aufbauen und dieses Handwerk lernen. Es ist dein Exoskelett, das – angetrieben von deinem Gehör und deinen Handlungen dort, wo es keine direkten Software-Schnittstellen gibt – Wissen und Erfahrung verwaltet, um den Car-HiFi-Sound deiner Träume abzustimmen.
+* **Warum:** Abstimmen ist eine Lawine — zu viele Methoden, Parameter und Faustregeln, um sie im Kopf zu behalten, und man verliert sich leicht in einem Detail und damit das Gesamtbild. Der Skill ist dein Navigator: Er hält das Wissen bereit, weist auf die wenigen Änderungen hin, die wirklich zählen, und behält den Kompromiss zwischen Bühnenabbildung und tonaler Balance im Blick. Dein Ohr ist der letzte Richter.
 
-**1. Claude Code installieren** (macOS / zsh; benötigt Node.js 18+ und einen kostenpflichtigen Claude-Plan — Pro / Max / Team / Enterprise):
-```bash
-node --version                                   # Node.js 18 oder neuer
-mkdir -p ~/.npm-global && npm config set prefix '~/.npm-global'
-echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
-npm install -g @anthropic-ai/claude-code
-claude --version                                 # prüfen
-```
-
-**2. Projektordner anlegen und starten:**
-```bash
-mkdir ~/car-audio-setup && cd ~/car-audio-setup
-claude                                            # der erste Start öffnet den Browser zum Anmelden
-```
-
-**3. Halte es einfach.** Ein leerer Ordner, dein erster REW-Export unverändert hineingelegt, ein anhängender Notiz-Log — lass Unterordner entstehen, wenn du sie wirklich brauchst.
-
-**4. Deine erste Nachricht = „Schritt 0“.** Beschreibe dein System: Auto + Lautsprecher-Layout (Wege, Sub?), DSP-Modell, Messtechnik, und ob du schon Messungen hast. Den Rest übernimmt der Skill — und **fragt zuerst nach deiner bevorzugten Arbeitssprache** (EN · UK · DE · PL), damit Gespräch und Projektdateien in ihr entstehen.
-
-## Voraussetzungen
-
-- **Claude Code** (oder claude.ai mit Skills).
-- **REW** mit aktiviertem API-Server (`localhost:4735`) und ein kalibriertes Mikrofon.
-- Die **Software deines DSP** + eine Möglichkeit, EQ zu laden (Datei-Import ideal; für 30+ DSPs ohne Import siehe [REW-EQ-CopyPaste-Assistant](https://github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant)).
-- **Optional:** ein zweites KI-Modell als „Kritiker“ (beliebiger Anbieter). Ohne es übernimmt ein Mensch das Review; der Prozess hält trotzdem.
-
-## Installation
-
-Installiere als **Claude-Code-Plugin**, indem du diese Befehle **nacheinander (einzeln)** ausführst (kopiere und füge sie nicht zusammen ein, da die Eingabeaufforderung von Claude interaktiv ist):
-
-```bash
-/plugin marketplace add ayukhno/autosound-tuning-skill
-```
-
-```bash
-/plugin install autosound-tuning
-```
-
-```bash
-/reload-plugins
-```
-
-**Dann starte das Tuning**, indem du z. B. sagst *„stimme ein neues Auto von Grund auf ab“* — der Skill beginnt mit dem **Intake**: Schnellstart, Interview zu Equipment + Zielen, Wahl der Zielkurve (mit dir gewählt), Einbau-Checks, Erzeugung der Projektdateien. Später aktualisieren mit `/plugin update autosound-tuning`.
-
-*(Lieber ein manueller Checkout? Klone das Repo und verlinke (symlink) den **inneren** Ordner `skills/autosound-tuning` nach `~/.claude/skills/`. ⚠️ Klone nicht das ganze Repo *in* `~/.claude/skills/autosound-tuning/` — `SKILL.md` liegt dann eine Ebene zu tief und Claude meldet `Unknown skill`.)*
+Er deckt eine komplette Abstimmung ab — von einem neuen Projekt über Frequenzweichen, Laufzeitkorrektur, Phase, kanalweisen und summierten EQ, die Bühnenabbildung bis hin zum Voicing nach Geschmack — gesteuert von einer **Generator-↔-Kritiker-↔-Schiedsrichter-Review-Schleife**.
 
 ## Deine Erfahrung beitragen
 
-Der Skill **lernt aus jeder Abstimmung — und sammelt dieses Feedback direkt im Terminal, während du arbeitest, nicht über ein Formular.** Zum Abschluss (sobald du mit dem Klang zufrieden bist) fragt er, was geholfen hat, was nicht passte und welche DSP-/Auto-Eigenheit dir begegnet ist — dann bietet er, **mit deiner ausdrücklichen Zustimmung**, an, die *verallgemeinerbaren* Erkenntnisse zu teilen (um die gemeinsame Methode + die `knowledge/`-Bibliothek wachsen zu lassen).
+Der Skill lernt aus jeder Abstimmung — und sammelt dieses Feedback direkt im Terminal, während du arbeitest, nicht über ein Formular. Zum Abschluss (sobald du mit dem Klang zufrieden bist) fragt er, was geholfen hat, was nicht passte und welche DSP-/Auto-Eigenheit dir begegnet ist — dann bietet er, **mit deiner ausdrücklichen Zustimmung**, an, die *verallgemeinerbaren* Erkenntnisse zu teilen (um die gemeinsame Methode + die `knowledge/`-Bibliothek wachsen zu lassen).
 
-Er erfasst **nur Methode + Geräteklassen** — Innenraumverhalten, DSP-/Geräteklasse, welche Techniken funktioniert haben. **Niemals persönliche Daten, niemals vollständige Messungen;** du siehst genau, was geteilt wird, und stimmst pro Punkt zu. Bestätigte Erkenntnisse werden mit Namensnennung eingearbeitet; widersprechende Tipps werden als *Varianten* behalten, nicht gelöscht. *(Lieber GitHub? Öffne ein [Field-Feedback-Issue](../../issues/new?template=field-feedback.md) — gleiche Regel.)*
+Er erfasst **nur Methode + Geräteklassen** — Innenraumverhalten, DSP-/Geräteklasse, welche Techniken funktioniert haben. **Niemals persönliche Daten, niemals vollständige Messungen;** du siehst genau, was geteilt wird, und stimmst pro Punkt zu. Bestätigte Erkenntnisse werden mit Namensnennung eingearbeitet.
 
 ## Unterstützung
 

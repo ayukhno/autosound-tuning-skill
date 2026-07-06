@@ -1,6 +1,6 @@
 # Autosound Tuning Skill
 
-🇬🇧 [English](README.md) · 🇩🇪 [Deutsch](README.de.md) · 🇵🇱 **Polski** · 🇺🇦 [Українська](README.uk.md)
+🇬🇧 [English](README.md) · 🇩🇪 [Deutsch](README.de.md) · 🇵🇱 **Polski** · 🇺🇦 [Українська](README.uk.md) · [FAQ](FAQ.md)
 
 **W jednym zdaniu:** skill dla Claude, który prowadzi cię do **czystego, przejrzystego, zrównoważonego brzmienia** w *twoim* aucie — wnosi całe rzemiosło do twojego konkretnego zestawu, czyta twoje pomiary z REW i pomaga wybrać każdą zmianę.
 
@@ -9,13 +9,35 @@
 - 🎧 **Ścieżki testowe** — czego słuchać i na której ścieżce (opisy, nie audio)
 - 🚗 **Uczy się twojego zestawu** — gromadzi wiedzę o aucie i sprzęcie, tylko za twoją zgodą
 
-**Dla kogo — Seeker (poszukiwacz).** Każdy, kto buduje własne brzmienie i wciąż uczy się rzemiosła (nie tylko doświadczony mistrz). Ty dajesz uszy i auto — skill daje mapę.
+## Pierwsze kroki
 
-**Dlaczego.** Strojenie to lawina — zbyt wiele metod, parametrów i reguł, by utrzymać je w głowie, i łatwo zanurzyć się w jednym szczególe i zgubić cały obraz. Skill jest twoim nawigatorem: trzyma wiedzę, wskazuje te kilka zmian, które naprawdę się liczą, i utrzymuje w polu widzenia kompromis między sceną a balansem tonalnym. Twoje ucho jest ostatecznym sędzią.
+Ten skill działa jako wtyczka do **Claude Code** (oficjalnego agenta terminalowego od Anthropic).
 
-Obejmuje pełne strojenie — od nowego projektu (wywiad o sprzęcie + celach, wybór krzywej docelowej, kontrola montażu) przez zwrotnice, korekcję czasową, fazę, EQ kanałowy i sumaryczny oraz budowę sceny, aż po voicing pod własny gust — sterowane pętlą recenzji Generator ↔ Krytyk ↔ Arbiter. To **metoda, nie maszyna**: pomiary żadnego auta ani stan DSP tu nie są przechowywane (zostają w twoim projekcie), więc działa z **dowolnym autem / dowolnym DSP**.
+### 1. Szybka instalacja
 
-> Zbudowany i sprawdzony w boju na VW Passat B8 / Helix DSP Ultra S (wygrana na zawodach AYA); specyfika auta/DSP jest wydzielona do profilu + biblioteki `knowledge/`, więc nowy projekt to po prostu „wybierz dane wejściowe”.
+Uruchom poniższe polecenia w aktywnej sesji Claude Code **jedno po drugim** (nie kopiuj i nie wklejaj ich razem):
+
+```bash
+/plugin marketplace add ayukhno/autosound-tuning-skill
+```
+
+```bash
+/plugin install autosound-tuning
+```
+
+```bash
+/reload-plugins
+```
+
+*Następnie rozpocznij strojenie, mówiąc:* **"tune a new car from scratch"** (lub po polsku: *"nastrój nowe auto od zera"*).
+
+### 2. Kompleksowa konfiguracja i FAQ
+
+Potrzebujesz pomocy w konfiguracji Claude Code, uruchomieniu na systemie **Windows**, konfiguracji **Gemini Critic** (w tym całkowicie darmowego, opartego na przeglądarce środowiska pracy za pośrednictwem **Google AI Studio**) lub wyborze mikrofonu pomiarowego?
+
+👉 Zajrzyj bezpośrednio do naszego wyczerpującego **[FAQ.md](FAQ.md)**.
+
+---
 
 ## Co tu jest
 
@@ -31,61 +53,18 @@ autosound-tuning-skill/        wtyczka Claude Code
 
 Jeden skill — niezależna metoda recenzji (Krytyk/Doradca/Arbiter, anti-anchoring) jest dołączona jako `references/core/review-loop.md`.
 
-## Pierwsze kroki — nowy w Claude Code?
+## Dla kogo i Dlaczego
 
-Ten skill działa w **Claude Code**, narzędziu w terminalu. Strojenie jest iteracyjne (mierz → analizuj → zmień → zmierz ponownie) na danych tekstowych/liczbowych, więc terminal + git — parsowanie, skrypty, pełna historia zmian — pasują znacznie lepiej niż aplikacja webowa.
+* **Dla kogo:** Dla tych, którzy budują dźwięk w samochodzie i uczą się tego rzemiosła. To twój egzoszkielet, który za pomocą twojego słuchu i działań (tam, gdzie nie ma bezpośrednich interfejsów oprogramowania) zarządza wiedzą i doświadczeniem, strojąc car audio twoich marzeń.
+* **Dlaczego:** Strojenie to lawina — zbyt wiele metod, parametrów i reguł, by utrzymać je w głowie, i łatwo zanurzyć się w jednym szczególe i zgubić cały obraz. Skill jest twoim nawigatorem: trzyma wiedzę, wskazuje te kilka zmian, które naprawdę się liczą, i utrzymuje w polu widzenia kompromis między sceną a balansem tonalnym. Twoje ucho jest ostatecznym sędzią.
 
-**1. Zainstaluj Claude Code** (macOS / zsh; wymaga Node.js 18+ i płatnego planu Claude — Pro / Max / Team / Enterprise):
-```bash
-node --version                                   # Node.js 18 lub nowszy
-mkdir -p ~/.npm-global && npm config set prefix '~/.npm-global'
-echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
-npm install -g @anthropic-ai/claude-code
-claude --version                                 # weryfikacja
-```
-
-**2. Utwórz folder projektu i uruchom:**
-```bash
-mkdir ~/car-audio-setup && cd ~/car-audio-setup
-claude                                            # pierwsze uruchomienie otworzy przeglądarkę do logowania
-```
-
-**3. Zacznij prosto.** Pusty folder, pierwszy eksport REW wrzucony bez zmian, jeden dopisywany log notatek — pozwól podfolderom pojawić się, gdy naprawdę będą potrzebne.
-
-**4. Twoja pierwsza wiadomość = „krok 0”.** Opisz swój system: auto + układ głośników (ile dróg, sub?), model DSP, sprzęt pomiarowy, i czy masz już pomiary. Resztę przejmuje skill — i **najpierw pyta o preferowany język pracy** (EN · UK · DE · PL), aby rozmowa i pliki projektu powstawały w nim.
-
-## Wymagania
-
-- **Claude Code** (lub claude.ai ze skillami).
-- **REW** z włączonym serwerem API (`localhost:4735`) i skalibrowany mikrofon.
-- **Oprogramowanie twojego DSP** + sposób na wgranie EQ (import pliku idealnie; dla 30+ DSP bez importu zob. [REW-EQ-CopyPaste-Assistant](https://github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant)).
-- **Opcjonalnie:** drugi model AI jako „Krytyk” (dowolny dostawca). Bez niego recenzję robi człowiek; proces nadal działa.
-
-## Instalacja
-
-Zainstaluj jako **wtyczkę Claude Code**, uruchamiając te polecenia **jedno po drugim** (nie kopiuj i nie wklejaj ich razem, ponieważ monit Claude'a jest interaktywny):
-
-```bash
-/plugin marketplace add ayukhno/autosound-tuning-skill
-```
-
-```bash
-/plugin install autosound-tuning
-```
-
-```bash
-/reload-plugins
-```
-
-**Następnie rozpocznij strojenie**, mówiąc np. *„nastrój nowe auto od zera”* — skill zaczyna od **intake'u**: szybki start, wywiad o sprzęcie + celach, wybór krzywej docelowej (wybierany z tobą), kontrola montażu, generowanie plików projektu. Aktualizacja później: `/plugin update autosound-tuning`.
-
-*(Wolisz ręczny checkout? Sklonuj repo i zrób symlink **wewnętrznego** folderu `skills/autosound-tuning` do `~/.claude/skills/`. ⚠️ Nie klonuj całego repo *do* `~/.claude/skills/autosound-tuning/` — `SKILL.md` trafi wtedy o poziom za głęboko i Claude zgłosi `Unknown skill`.)*
+Obejmuje pełne strojenie — od nowego projektu przez zwrotnice, korekcję czasową, fazę, EQ kanałowy i sumaryczny, budowę sceny aż po voicing pod własny gust — sterowane pętlą recenzji **Generator ↔ Krytyk ↔ Arbiter**.
 
 ## Dzielenie się doświadczeniem
 
-Skill **uczy się z każdego strojenia — i zbiera ten feedback wprost w terminalu, gdy pracujesz, a nie przez formularz.** Na zakończenie (gdy jesteś zadowolony z brzmienia) pyta, co pomogło, co było nie tak, i o każdą osobliwość DSP/auta, na którą trafiłeś — następnie, **za twoją wyraźną zgodą**, proponuje podzielić się *uogólnialnymi* wnioskami (aby rozwijać wspólną metodę + bibliotekę `knowledge/`).
+Skill uczy się z każdego strojenia — i zbiera ten feedback wprost w terminalu, gdy pracujesz, a nie przez formularz. Na zakończenie (gdy jesteś zadowolony z brzmienia) pyta, co pomogło, co było nie tak, i o każdą osobliwość DSP/auta, na którą trafiłeś — następnie, **za twoją wyraźną zgodą**, proponuje podzielić się *uogólnialnymi* wnioskami (aby rozwijać wspólną metodę + bibliotekę `knowledge/`).
 
-Zbiera **tylko metodę + klasy sprzętu** — zachowanie kabiny, klasę DSP/sprzętu, które techniki zadziałały. **Nigdy danych osobowych, nigdy pełnych pomiarów;** widzisz dokładnie, co jest udostępniane, i decydujesz pozycja po pozycji. Potwierdzone wnioski trafiają do skilla z atrybucją; sprzeczne wskazówki są zachowywane jako *warianty*, nie usuwane. *(Wolisz GitHub? Otwórz [zgłoszenie field-feedback](../../issues/new?template=field-feedback.md) — ta sama zasada.)*
+Zbiera **tylko metodę + klasy sprzętu** — zachowanie kabiny, klasę DSP/sprzętu, które techniki zadziałały. **Nigdy danych osobowych, nigdy pełnych pomiarów;** widzisz dokładnie, co jest udostępniane, i decydujesz pozycja po pozycji. Potwierdzone wnioski trafiają do skilla z atrybucją.
 
 ## Wsparcie
 
