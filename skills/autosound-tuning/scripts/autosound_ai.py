@@ -353,9 +353,11 @@ def main():
                       file=sys.stderr)
             cli_timeout = int(os.environ.get("AUTOSOUND_CLI_TIMEOUT", "120"))
             cmd = [cli_bin, "--model", model] + extra_args + ["-p", temp_prompt_path]
+            # На Windows потрібен shell=True, щоб запускати .cmd обгортки типу gemini.cmd / agy.cmd від npm/scoop
+            use_shell = (sys.platform == "win32")
             try:
                 proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
-                                      timeout=cli_timeout)
+                                      timeout=cli_timeout, shell=use_shell)
             except subprocess.TimeoutExpired:
                 print(f">> ⛔ CLI '{cli_bin}' завис і вбитий по таймауту ({cli_timeout} с) — "
                       "класична ознака agent-inside-agent deadlock. НЕ рахуй «вручну»: "
