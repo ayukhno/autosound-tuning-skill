@@ -55,7 +55,7 @@ One skill — the independent-review method (Critic/Advisor/Arbiter, anti-anchor
 
 ## Who it's for & Why
 
-* **Who it's for:** Anyone building their own sound who's still learning the craft. You bring the ears and the car; the skill brings the map.
+* **Who it's for:** For those building sound in their car and learning this craft. It's your exoskeleton which—powered by your hearing and actions where direct software interfaces don't exist—manages knowledge and experience to tune the car audio of your dreams.
 * **Why:** Tuning is an avalanche — too many methods, parameters, and rules of thumb to hold in your head, and it's easy to dive into one detail and lose the whole picture. The skill is your navigator: it holds the knowledge, points to the few changes that matter, and keeps the soundstage-versus-tonal-balance trade-off in view. Your ear is the final judge.
 
 It covers a full tune — from a new project through crossovers, time alignment, phase, per-channel and summed EQ, imaging, to voicing to taste — driven by a **Generator ↔ Critic ↔ Arbiter** review loop.
