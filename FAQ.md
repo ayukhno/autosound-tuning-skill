@@ -186,6 +186,13 @@ If you are running **Linux**, if the Antigravity CLI is not available on your sy
 
 This is a fantastic alternative if you prefer a beautiful, visual, browser-based workspace, are on an iPad, mobile device, or tablet, do not want to install Python/Git locally, or want to completely bypass command-line quotas.
 
+> [!NOTE]
+> **Can I run the main Generator process in AI Studio too?**
+> Technically yes, but it is highly impractical. The main Generator needs access to your local files (to read REW `.mdat`/`.csv` measurements, save the current DSP state, and log tuning steps) and needs to execute local Python scripts (`rew_tool`) to calculate phase offsets. AI Studio has no access to your filesystem or local execution environment. Therefore, AI Studio is best kept strictly for the **Critic** role, while the main Generator runs locally.
+> 
+> **How does the Critic interact with my local session?**
+> Since AI Studio is a standard cloud website, it cannot talk to your local terminal directly. Instead, it works via **Clipboard Mode**. When you run a critic check locally, the system compiles the full prompt (including your system state, contract, and the new proposal) and automatically copies it to your clipboard. You simply paste it into your Google AI Studio chat, let Gemini generate the critique, and copy the response back to your local agent.
+
 ### How to set up a permanent "Car Audio Critic" in Google AI Studio:
 
 1. **Go to Google AI Studio:** Open **[aistudio.google.com](https://aistudio.google.com/)** in your browser and sign in with your Google account.
