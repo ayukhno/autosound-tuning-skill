@@ -63,12 +63,21 @@ claude                                            # der erste Start öffnet den 
 
 ## Installation
 
-Installiere als **Claude-Code-Plugin** — ein Marketplace, ein Befehl, kein manuelles Kopieren:
-```
+Installiere als **Claude-Code-Plugin**, indem du diese Befehle **nacheinander (einzeln)** ausführst (kopiere und füge sie nicht zusammen ein, da die Eingabeaufforderung von Claude interaktiv ist):
+
+```bash
 /plugin marketplace add ayukhno/autosound-tuning-skill
+```
+
+```bash
 /plugin install autosound-tuning
 ```
-**Dann starte eine frische Claude-Code-Sitzung** (Plugins laden beim Start) und sag z. B. *„stimme ein neues Auto von Grund auf ab“* — der Skill beginnt mit dem **Intake**: Schnellstart, Interview zu Equipment + Zielen, Wahl der Zielkurve (mit dir gewählt), Einbau-Checks, Erzeugung der Projektdateien. Später aktualisieren mit `/plugin update autosound-tuning`.
+
+```bash
+/reload-plugins
+```
+
+**Dann starte das Tuning**, indem du z. B. sagst *„stimme ein neues Auto von Grund auf ab“* — der Skill beginnt mit dem **Intake**: Schnellstart, Interview zu Equipment + Zielen, Wahl der Zielkurve (mit dir gewählt), Einbau-Checks, Erzeugung der Projektdateien. Später aktualisieren mit `/plugin update autosound-tuning`.
 
 *(Lieber ein manueller Checkout? Klone das Repo und verlinke (symlink) den **inneren** Ordner `skills/autosound-tuning` nach `~/.claude/skills/`. ⚠️ Klone nicht das ganze Repo *in* `~/.claude/skills/autosound-tuning/` — `SKILL.md` liegt dann eine Ebene zu tief und Claude meldet `Unknown skill`.)*
 

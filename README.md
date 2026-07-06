@@ -1,6 +1,6 @@
 # Autosound Tuning Skill
 
-🇬🇧 **English** · 🇩🇪 [Deutsch](README.de.md) · 🇵🇱 [Polski](README.pl.md) · 🇺🇦 [Українська](README.uk.md)
+🇬🇧 **English** · 🇩🇪 [Deutsch](README.de.md) · 🇵🇱 [Polski](README.pl.md) · 🇺🇦 [Українська](README.uk.md) · [FAQ](FAQ.md)
 
 **In one line:** a Claude skill that guides you toward clean, transparent, balanced sound in *your* car — it brings the whole craft to your specific setup, reads your REW measurements, and helps you choose each change.
 
@@ -63,14 +63,27 @@ claude                                            # first run opens the browser 
 
 ## Install
 
-Install as a **Claude Code plugin** — one marketplace, one command, no manual copy:
-```
+Install as a **Claude Code plugin** by running these commands **one by one** (do not copy and paste them together, as Claude's prompt is interactive):
+
+```bash
 /plugin marketplace add ayukhno/autosound-tuning-skill
+```
+
+```bash
 /plugin install autosound-tuning
 ```
-**Then start a fresh Claude Code session** (plugins load at startup) and say e.g. *"tune a new car from scratch"* — the skill begins with **intake**: quickstart, equipment + goals interview, target-curve choice (chosen with you), install checks, project-file generation. Update later with `/plugin update autosound-tuning`.
+
+```bash
+/reload-plugins
+```
+
+**Then start tuning** by saying e.g. *"tune a new car from scratch"* — the skill begins with **intake**: quickstart, equipment + goals interview, target-curve choice (chosen with you), install checks, project-file generation. Update later with `/plugin update autosound-tuning`.
 
 *(Prefer a manual checkout? Clone the repo and symlink the **inner** `skills/autosound-tuning` into `~/.claude/skills/`. ⚠️ Don't clone the whole repo INTO `~/.claude/skills/autosound-tuning/` — `SKILL.md` then sits a level too deep and Claude reports `Unknown skill`.)*
+
+## FAQ
+
+Windows setup, no Claude experience, "does this work with my DSP" — real questions answered in **[FAQ.md](FAQ.md)**.
 
 ## Contributing your experience
 

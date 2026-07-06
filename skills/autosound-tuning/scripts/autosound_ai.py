@@ -22,7 +22,16 @@ import subprocess
 import json
 import urllib.request
 import time
+import shutil
 from datetime import datetime
+
+# Примусово налаштовуємо UTF-8 для виводу на Windows, щоб уникнути збоїв кодування (UnicodeEncodeError) на українських символах
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
 
 # Налаштування шляхів
 CWD = os.getcwd()
@@ -109,12 +118,12 @@ def copy_to_clipboard(text):
 
 # Спроба прямого виклику Gemini API через стандартну бібліотеку
 def call_gemini_api(api_key, model, prompt):
-    # Відобразимо аліаси моделей на технічні імена API
+    # Відобразимо аліаси моделей на технічні імена API (актуалізовано для 2026 року)
     model_map = {
-        "Gemini 3.5 Flash (Medium)": "gemini-1.5-flash",
-        "Gemini 3.1 Pro (High)": "gemini-1.5-pro",
-        "gemini-2.5-flash": "gemini-1.5-flash",  # fallback якщо ліміт
-        "gemini-2.5-pro": "gemini-1.5-pro",
+        "Gemini 3.5 Flash (Medium)": "gemini-2.5-flash",
+        "Gemini 3.1 Pro (High)": "gemini-2.5-pro",
+        "gemini-2.5-flash": "gemini-2.5-flash",
+        "gemini-2.5-pro": "gemini-2.5-pro",
     }
     api_model = model_map.get(model, model)
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{api_model}:generateContent?key={api_key}"
@@ -143,15 +152,10 @@ def detect_cli():
     if forced_bin:
         return forced_bin
     
-    # Автодетект
+    # Автодетект через shutil.which (надійно знаходить exe/cmd/bat/ps1 на Windows)
     for binary in ["agy", "gemini"]:
-        # shutil.which або кросплатформний пошук
-        cmd = "where" if sys.platform == "win32" else "which"
-        try:
-            subprocess.run([cmd, binary], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        if shutil.which(binary):
             return binary
-        except Exception:
-            continue
     return None
 
 def run_doctor():
@@ -386,6 +390,7 @@ def main():
     # Створимо файл для ручного перенесення про всяк випадок
     manual_file_path = os.path.join(PROJECT_MIRROR, "combined_prompt.md")
     try:
+        os.makedirs(os.path.dirname(manual_file_path), exist_ok=True)
         with open(manual_file_path, "w", encoding="utf-8") as mf:
             mf.write(compiled_prompt)
         print(f"✓ Пакет збережено локально: {manual_file_path}", file=sys.stderr)

@@ -5,10 +5,17 @@ This document describes how to install, update, and set up the `autosound-tuning
 ## Installation Methods
 
 ### 1. Claude Code Plugin (Recommended)
-This skill ships as a **Claude Code plugin** (the `autosound-tuning-skill` repo is a single-plugin marketplace). The canonical install is **one command — no manual copy, no nesting traps:**
+This skill ships as a **Claude Code plugin** (the `autosound-tuning-skill` repo is a single-plugin marketplace). Run these commands **one by one** (do not copy and paste them together, as Claude Code's prompt is interactive and pasting them together deadlocks):
 ```bash
 /plugin marketplace add ayukhno/autosound-tuning-skill
+```
+
+```bash
 /plugin install autosound-tuning
+```
+
+```bash
+/reload-plugins
 ```
 
 * **Update:** `/plugin update autosound-tuning` (or re-install from the marketplace). The plugin bundles the whole skill — `references/` (incl. the review-loop method, now `references/core/review-loop.md`), `scripts/`, `rew_tool/`, `knowledge/`.
@@ -31,6 +38,6 @@ If you find this installed as a **plain file copy** that the user wants to keep 
 ## Troubleshooting
 
 - **Antigravity / agy sandbox — state snapshots vanish.** Some agent environments restrict certain file writes to the session's own directory (observed on Antigravity: an artifact-write outside `…/brain/<session>/` was refused). If versioned snapshots don't land where you expect, point `AUTOSOUND_STATE_ROOT` inside the project and verify it's writable **from within the session**: `python rew_tool/state/state.py selftest` (must print `selftest OK`); confirm the root actually fills after the first `apply.py propose`.
-- **Reviewer CLI hangs inside an agent session.** Spawning a reviewer CLI (agy/gemini/claude) from *inside* another agent session deadlocks chronically (agent-inside-agent; observed ~15/20 field sessions). `autosound_ai.py` kills a hung CLI after `AUTOSOUND_CLI_TIMEOUT` (default 120 s) and falls back to Clipboard Mode — but the reliable pattern is running reviewer wrappers from a **separate terminal**. See [process-control.md](file:///skills/autosound-tuning/references/core/process-control.md).
+- **Reviewer CLI hangs inside an agent session.** Spawning a reviewer CLI (agy/claude) from *inside* another agent session deadlocks chronically (agent-inside-agent; observed ~15/20 field sessions). `autosound_ai.py` kills a hung CLI after `AUTOSOUND_CLI_TIMEOUT` (default 120 s) and falls back to Clipboard Mode — but the reliable pattern is running reviewer wrappers from a **separate terminal**. See [process-control.md](file:///skills/autosound-tuning/references/core/process-control.md).
 
 For details on distribution, versions, and how experience flows back, see [feedback-loop.md](file:///skills/autosound-tuning/references/core/feedback-loop.md).

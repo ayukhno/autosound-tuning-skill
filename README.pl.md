@@ -63,12 +63,21 @@ claude                                            # pierwsze uruchomienie otworz
 
 ## Instalacja
 
-Zainstaluj jako **wtyczkę Claude Code** — jeden marketplace, jedna komenda, bez ręcznego kopiowania:
-```
+Zainstaluj jako **wtyczkę Claude Code**, uruchamiając te polecenia **jedno po drugim** (nie kopiuj i nie wklejaj ich razem, ponieważ monit Claude'a jest interaktywny):
+
+```bash
 /plugin marketplace add ayukhno/autosound-tuning-skill
+```
+
+```bash
 /plugin install autosound-tuning
 ```
-**Następnie uruchom nową sesję Claude Code** (wtyczki ładują się przy starcie) i powiedz np. *„nastrój nowe auto od zera”* — skill zaczyna od **intake'u**: szybki start, wywiad o sprzęcie + celach, wybór krzywej docelowej (wybierany z tobą), kontrola montażu, generowanie plików projektu. Aktualizacja później: `/plugin update autosound-tuning`.
+
+```bash
+/reload-plugins
+```
+
+**Następnie rozpocznij strojenie**, mówiąc np. *„nastrój nowe auto od zera”* — skill zaczyna od **intake'u**: szybki start, wywiad o sprzęcie + celach, wybór krzywej docelowej (wybierany z tobą), kontrola montażu, generowanie plików projektu. Aktualizacja później: `/plugin update autosound-tuning`.
 
 *(Wolisz ręczny checkout? Sklonuj repo i zrób symlink **wewnętrznego** folderu `skills/autosound-tuning` do `~/.claude/skills/`. ⚠️ Nie klonuj całego repo *do* `~/.claude/skills/autosound-tuning/` — `SKILL.md` trafi wtedy o poziom za głęboko i Claude zgłosi `Unknown skill`.)*
 
