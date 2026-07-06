@@ -11,7 +11,8 @@ Have a question that isn't here? Open a [discussion or issue](../../issues) and 
   - [2. Authentication & Plugin Setup](#2-authentication--plugin-setup-cross-platform)
 - [Setting up the Gemini/Antigravity Critic (Standalone)](#setting-up-the-geminiantigravity-critic-standalone-setup)
   - [macOS & Windows Setup (Antigravity CLI - Recommended)](#macos--windows-setup-using-antigravity-cli---recommended)
-  - [Linux & Fallback Setup (Gemini CLI)](#linux--fallback-setup-using-gemini-cli--free-api-key)
+  - [Fallback: Direct API Setup (No CLI/Node.js)](#fallback-direct-api-setup-no-cli-or-nodejs-required)
+  - [Do you have a version running on Google AI Studio?](#do-you-have-a-version-running-on-google-ai-studio)
 - [Measuring Phase & Time Alignment: UMIK-1 vs. XLR](#measuring-phase--time-alignment-umik-1-vs-xlr-microphones)
   - [Can I measure phase with a UMIK-1?](#can-i-measure-phase-with-a-umik-1)
 
@@ -175,6 +176,45 @@ If you are running **Linux**, if the Antigravity CLI is not available on your sy
 > [!TIP]
 > **Do I have to set this up?**
 > No. If no local Gemini CLI or API key is found, the tuning skill will seamlessly fall back to **Autopilot self-loop** (spawning an isolated subagent inside Claude Code) or **Clipboard Mode** (allowing you to copy-paste proposals into any web-based AI of your choice, like ChatGPT or Gemini web).
+
+---
+
+
+## Do you have a version running on Google AI Studio?
+
+**Yes, absolutely!** You can run the entire Critic/Advisor workflow directly inside **[Google AI Studio](https://aistudio.google.com/)** completely for free. 
+
+This is a fantastic alternative if you prefer a beautiful, visual, browser-based workspace, are on an iPad, mobile device, or tablet, do not want to install Python/Git locally, or want to completely bypass command-line quotas.
+
+### How to set up a permanent "Car Audio Critic" in Google AI Studio:
+
+1. **Go to Google AI Studio:** Open **[aistudio.google.com](https://aistudio.google.com/)** in your browser and sign in with your Google account.
+2. **Create a New Chat Prompt:** Click the **"Create new prompt"** button (+ icon) on the left-hand panel and select **"Chat prompt"**.
+3. **Configure System Instructions (The Critic's Brain):**
+   * On the right-hand configuration panel, find the **System Instructions** text area.
+   * Copy and paste this system instructions block there:
+     ```
+     SYSTEM ROLE — YOU ARE THE CRITIC (Challenger) in a two-model car-audio tuning loop.
+     Task: find acoustic risks and false assumptions in the Generator's PROPOSAL.
+     The car / DSP / system state is in the AUTOSOUND CONTEXT block below; rely only on it.
+     Rules:
+       • DON'T praise. Don't agree by default.
+       • Objections must be FALSIFIABLE (testable by ear/measurement), not "a vibe".
+       • Think in cabin physics + psychoacoustics, not the math of ideal filters.
+       • Remember: an all-pass is flat in FR — any FR change comes through source SUMMATION.
+     Respond STRICTLY in the "Critic → Generator" format from Contract §4, in the language of the AUTOSOUND CONTEXT.
+     ```
+4. **Anchor your Car Context & Contract (Baseline Knowledge):**
+   * Open your local project's `rew_analitic/autosound_context.md` (containing your Passat B8 configuration) and paste its entire text into the chat.
+   * Open `rew_analitic/data-contract-template.md` (containing the data contract protocol) and paste its entire text into the chat.
+   * Press **Enter** or click **"Run"** to let Gemini ingest your system configuration.
+5. **Save the Workspace:**
+   * Click **Save** in the top-right corner of the web interface.
+   * Name your workspace something like *«Car Audio Critic — Passat B8»*.
+   * This workspace is now permanently saved in your Google Drive. You can reopen it at any time from your AI Studio dashboard!
+6. **Start Tuning:**
+   * Whenever you or your agent have a crossover, delay, or EQ proposal, simply run the Critic call to trigger **Clipboard Mode**, copy the compiled package, paste it into your saved Google AI Studio chat, and hit Enter.
+   * Gemini will immediately reply with a professional, grounded, and physically accurate critique!
 
 ---
 
