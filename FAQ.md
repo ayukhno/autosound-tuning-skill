@@ -238,3 +238,10 @@ There is a major difference in how USB and XLR microphones handle time-critical 
 
 For a complete step-by-step video guide on how to configure REW for accurate phase measurements with a USB microphone, watch this excellent tutorial by RAW-Cat:
 👉 [RAW-Cat: Measuring Speaker Phase in REW](https://www.youtube.com/watch?v=El-kwZ5_nnU)
+
+> [!WARNING]
+> **CRITICAL RULE: Take all sweeps consecutively in one run!**
+> Whether you are using a physical loopback (XLR) or an Acoustic Timing Reference (USB), **always measure all speakers consecutively in a single session.** Do not measure one speaker, take a 15-minute break (or turn on the AC/heater), and then measure the next one.
+> * **Temperature Drift:** The speed of sound depends heavily on cabin air temperature. A shift of just 5°C changes the speed of sound enough to alter calculated arrival times by several tenths of a millisecond, which completely ruins sub-millisecond phase alignment at the crossovers.
+> * **Clock Drift:** If you are using a USB microphone (like the UMIK), the microphone and your output sound card run on separate hardware clocks. Because they are unsynchronized, their sample rates slowly drift over time. Waiting between measurements introduces artificial time offsets that do not physically exist.
+> * **Rule of thumb:** If you adjust the microphone, change the cabin temperature (e.g., turn on/off AC), or pause the session for more than a few minutes, **re-measure all channels again** to guarantee your timing baseline remains 100% consistent.
