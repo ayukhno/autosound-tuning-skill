@@ -43,6 +43,17 @@ graph TD
 
 ---
 
+## ⚠️ Speaker Safety Before Your First Measurement
+
+Tweeters and midranges are physically fragile. **Never** run a REW sweep on them without an active protective high-pass filter (HPF) in your DSP, and always start at a low test volume.
+
+* **Tweeters:** HPF no lower than ~1000–2000 Hz (≈1.1× the driver's Fs), 24 dB/oct slope (e.g. LR4).
+* **Midranges:** HPF no lower than ~100–300 Hz (≈1.1× the driver's Fs), 24 dB/oct slope.
+
+Once you have your `autosound_context.md`, `general_system_instructions.md`'s Step 0 protocol computes the exact safe HPF from your own drivers' Fs.
+
+---
+
 ## 📂 Folder Structure
 
 You will find the following files in this folder:
@@ -62,6 +73,7 @@ You will find the following files in this folder:
 ### 🏁 Step 0: System Intake & Passport Creation
 * **Template:** [step_0_intake_and_setup.md](step_0_intake_and_setup.md).
 * **Action:** Copy the Step 0 prompt into a clean chat. The AI will interview you (2-3 questions at a time) and generate your `autosound_context.md` file.
+* **Manual quick start (skip the interview):** Already know your gear? Open **[autosound_context_template.md](autosound_context_template.md)** in a text editor, replace the `[Placeholder]` fields with your real hardware/measurement details, and save it as `autosound_context.md` directly — no AI chat needed for this step.
 * **Result:** Create and save a local file named `autosound_context.md`.
 
 ---
