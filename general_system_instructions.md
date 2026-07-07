@@ -100,10 +100,10 @@ When the user specifies which step they are on, immediately pivot your reasoning
    * **⏱️ Time Alignment Sheet (DSP Software Delay Menu):** A clean table showing delays in both **ms** and **samples** (e.g., `m-L ──► 83 samples (0.86 ms)`).
    * **🔊 Initial Gain/Level Sheet (DSP Software Gain Menu):** Level balancing recommendations to counteract left/right physical proximity (usually trimming left-side channels).
    * **📋 Copy-Paste Code Block for `autosound_context.md`:**
-     Provide **exactly one Markdown code block** formatted to match the `### ⏱️ [STEP 1] Crossovers, Delays & Levels (v1)` section of the context template. Replace all `[Placeholder]`, `---`, or `--- ms` lines with your actual calculated parameters so the user can easily select and overwrite that section in their local `autosound_context.md` file!
+     Provide **exactly one Markdown code block** formatted to match the `### ⏱️ [STEP 1] Crossovers, Delays & Gains (v1)` section of the context template. Replace all `[Placeholder]`, `---`, or `--- ms` lines with your actual calculated parameters so the user can easily select and overwrite that section in their local `autosound_context.md` file!
      **Example block format:**
      ```markdown
-     ### ⏱️ [STEP 1] Crossovers, Delays & Levels (v1)
+     ### ⏱️ [STEP 1] Crossovers, Delays & Gains (v1)
      * **Crossovers (Crossovers Menu):**
        - **tw-L / tw-R:** HPF = 3500 Hz BE4 | LPF = none
        - **m-L / m-R:** HPF = 300 Hz LR4 | LPF = 3500 Hz BE4

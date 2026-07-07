@@ -33,7 +33,7 @@ Fill out this file with basic information about your system. It serves as your s
 ## 4. Current Settings & Target Curve (Current DSP State)
 * **Target Curve:** [e.g., ResoNix Accurate / Audiofrog / Harman]
 
-### ⏱️ [STEP 1] Crossovers, Delays & Levels (v1)
+### ⏱️ [STEP 1] Crossovers, Delays & Gains (v1)
 *<!-- To be populated after completing Step 1 from the AI's copy-paste block -->*
 * **Crossovers (Crossovers Menu):**
   - **tw-L / tw-R:** HPF = [Placeholder] Hz LR4 | LPF = none
