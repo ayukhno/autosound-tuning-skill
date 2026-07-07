@@ -59,12 +59,13 @@ Once you have your `autosound_context.md`, `general_system_instructions.md`'s St
 You will find the following files in this folder:
 
 1. **[general_system_instructions.md](general_system_instructions.md)** — **The Core System Instructions**. Copy and paste this into the "System Instructions" box of your chat workspace once at the beginning.
-2. **[autosound_context_template.md](autosound_context_template.md)** — Template for a quick manual start (if you want to fill in your speaker models and hardware configuration yourself without an AI interview).
-3. **[step_0_intake_and_setup.md](step_0_intake_and_setup.md)** — Prompt template to let the AI conduct an interactive interview and generate your `autosound_context.md` file for you.
-4. **[step_1_baseline_analysis.md](step_1_baseline_analysis.md)** — Prompt to analyze raw sweeps and calculate baseline crossovers, delays, and initial gain asymmetry.
-5. **[step_2_tonal_balance_eq.md](step_2_tonal_balance_eq.md)** — Prompt to calculate per-channel EQ matching your target curve and calculate exact micro-delays or Helix Phase angles.
-6. **[step_3_fine_tuning_and_phase.md](step_3_fine_tuning_and_phase.md)** — Prompt for subjective fine-tuning based on your listening feedback using professional test tracks.
-7. **[measurement_and_naming_guide.md](measurement_and_naming_guide.md)** — Guide on how to properly take measurements in REW (MMM RTA, impulse sweeps, naming conventions).
+2. **[autosound_context.md](autosound_context.md)** — **Your live working passport**, already here as a blank starter copy. Step 0's AI output replaces its contents (or hand-fill it yourself); every later step updates one section of this same file.
+3. **[autosound_context_template.md](autosound_context_template.md)** — The pristine, never-edited reference copy of the passport structure — used as Step 0's input, or to restore `autosound_context.md` if you ever need a clean reset.
+4. **[step_0_intake_and_setup.md](step_0_intake_and_setup.md)** — Prompt template to let the AI conduct an interactive interview and generate your `autosound_context.md` contents for you.
+5. **[step_1_baseline_analysis.md](step_1_baseline_analysis.md)** — Prompt to analyze raw sweeps and calculate baseline crossovers, delays, and initial gain asymmetry.
+6. **[step_2_tonal_balance_eq.md](step_2_tonal_balance_eq.md)** — Prompt to calculate per-channel EQ matching your target curve and calculate exact micro-delays or Helix Phase angles.
+7. **[step_3_fine_tuning_and_phase.md](step_3_fine_tuning_and_phase.md)** — Prompt for subjective fine-tuning based on your listening feedback using professional test tracks.
+8. **[measurement_and_naming_guide.md](measurement_and_naming_guide.md)** — Guide on how to properly take measurements in REW (MMM RTA, impulse sweeps, naming conventions).
 
 ---
 
@@ -72,9 +73,9 @@ You will find the following files in this folder:
 
 ### 🏁 Step 0: System Intake & Passport Creation
 * **Template:** [step_0_intake_and_setup.md](step_0_intake_and_setup.md).
-* **Action:** Copy the Step 0 prompt into a clean chat. The AI will interview you (2-3 questions at a time) and generate your `autosound_context.md` file.
-* **Manual quick start (skip the interview):** Already know your gear? Open **[autosound_context_template.md](autosound_context_template.md)** in a text editor, replace the `[Placeholder]` fields with your real hardware/measurement details, and save it as `autosound_context.md` directly — no AI chat needed for this step.
-* **Result:** Create and save a local file named `autosound_context.md`.
+* **Action:** Copy the Step 0 prompt into a clean chat, pasting in `autosound_context_template.md`'s contents where indicated. The AI will interview you (2-3 questions at a time) and generate a fully populated Markdown block.
+* **Manual quick start (skip the interview):** Already know your gear? Open **[autosound_context.md](autosound_context.md)** directly (it's already here as a blank starter copy) and replace the `[Placeholder]` fields yourself — no AI chat needed for this step.
+* **Result:** Replace this folder's **[autosound_context.md](autosound_context.md)** entirely with the AI's generated block (Path 1) or your hand-filled version (Path 2). This one file carries your system state through every later step.
 
 ---
 
