@@ -26,6 +26,7 @@
 
 ## 4. Current Settings & Target Curve (Current DSP State)
 * **Target Curve:** [e.g., ResoNix Accurate / Audiofrog / Harman]
+* **Crossover Filter Scheme:** [e.g., a) All LR4 / b) BE4-LR4-BE4 (default) / c) BW2-LR4-BW2 / d) Own — describe]
 
 ### ⏱️ [STEP 1] Crossovers, Delays & Gains (v1)
 *<!-- To be populated after completing Step 1 from the AI's copy-paste block -->*
@@ -72,6 +73,6 @@
 * Suffixes: `(sw)` — sweep measurement on a tripod, `(rta)` — MMM RTA spatial average measurement around your head.
 
 ## 6. System Knowledge & Known Cabin Anomalies
-* **Anomaly 1:** [e.g., Left woofer dip at ~150 Hz due to floor reflections/door-card cancellation — EQ boost forbidden!]
-* **Anomaly 2:** [e.g., Cabin resonance peak at ~190 Hz — cut with a narrow Q-factor filter.]
+* **Anomaly 1:** [e.g., a narrow, non-minimum-phase null on one channel caused by a physical reflection/diffraction path — do not attempt to boost it.]
+* **Anomaly 2:** [e.g., a cabin resonance (room mode) peak at a specific frequency — cut with a narrow Q-factor filter.]
 * **Notes & Observations:** [e.g., Bessel (BE4) crossovers sound smoother on the MF/HF transition than Linkwitz-Riley LR4.]
