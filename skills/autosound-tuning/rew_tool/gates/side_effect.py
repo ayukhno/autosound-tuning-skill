@@ -130,7 +130,10 @@ def post_feedback(body_file, car, dsp, runner=_subprocess_runner, dry_run=False)
     import sys
     if not os.path.isfile(body_file):
         raise ValueError(f"body-file not found: {body_file!r} (write the feedback file first)")
-    if shutil.which("gh") is None and not dry_run:
+    # Only require the real `gh` binary when we're about to actually shell out to it — an injected
+    # runner (tests, smoke_test.py) never touches the filesystem's `gh`, so it must stay installable-
+    # and-runnable on a box with no `gh` on PATH (the whole point of dependency injection here).
+    if runner is _subprocess_runner and shutil.which("gh") is None and not dry_run:
         raise EnvironmentError("`gh` CLI not found — install/auth it, or use the copy-paste block.")
     title = f"Feedback: {car} · {dsp}"
     if not dry_run:

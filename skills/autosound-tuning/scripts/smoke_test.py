@@ -19,6 +19,15 @@ import sys
 import tempfile
 import traceback
 
+# Windows consoles often default to cp1252, which can't encode the ✓/✗ markers below — same fix
+# already used in autosound_ai.py / issue_triage.py.
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 SKILL = os.path.dirname(HERE)                              # …/skills/autosound-tuning
 for _p in (os.path.join(SKILL, "rew_tool", "state"), os.path.join(SKILL, "rew_tool", "gates")):
