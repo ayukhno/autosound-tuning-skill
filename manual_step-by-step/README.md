@@ -1,36 +1,39 @@
-# Ручне покрокове налаштування DSP в будь-якому веб-чаті (Manual Step-by-Step)
+# Manual Step-by-Step DSP Tuning in Any Web Chat
 
-> [!WARNING]
-> **FIRST DRAFT / ПЕРШИЙ ДРАФТ:**
-> This manual step-by-step pipeline is currently a **first draft** and is written in **Ukrainian**. Please note that the standard language of this repository is English. A fully translated English version is planned for future updates.
+> [!CAUTION]
+> ### 🛑 EXPERIMENTAL & UNSUPPORTED CONCEPT
+> This manual web-chat tuning pipeline is purely an **experimental concept** and is **not officially supported**. 
+> Web chats (such as ChatGPT, Claude web, Gemini Advanced, and AI Studio) are highly unstable, prone to hallucinating values, and suffer from severe "memory drift" over long conversations. Use these templates at your own risk. 
+> 
+> **For a stable, reliable, automated, and mathematically validated tuning experience, we highly recommend using the official terminal-based agent setup via Claude Code instead.**
 
-Ласкаво просимо до **ручного конвеєра налаштування автозвуку**!
+Welcome to the manual car audio tuning pipeline!
 
-Якщо ви не використовуєте автоматичного термінального агента (Claude Code), ви можете отримати таку ж математичну точність і високу якість звуку в будь-кому зручному веб-чаті (**ChatGPT Plus**, **Claude Pro**, **Gemini Advanced / AI Studio**).
+If you are not using the automatic terminal agent (Claude Code), you can still attempt to achieve similar high-precision phase and time alignment in any standard web chat interface (**ChatGPT Plus**, **Claude Pro**, **Gemini Advanced / AI Studio**).
 
-Папка `manual_step-by-step` містить набір детермінованих бездержавних (**stateless**) шаблонів-промптів та шаблонів даних, які перетворюють будь-який веб-чат на професійного акустичного інженера.
+This `manual_step-by-step` folder contains a set of deterministic, stateless prompt and data templates that help guide a generic web chat to analyze your car acoustics.
 
 ---
 
-## 📐 Філософія єдиної інструкції та бездержавного веб-чату
+## 📐 The Stateless Web Chat Philosophy
 
-Раніше користувачам доводилося копіювати гігантські промпти в системні налаштування кожного разу при переході на новий крок, що викликало багато незручностей у веб-інтерфейсах.
+Generic web chats have a limited memory window. When a conversation gets too long, models begin to suffer from "memory drift"—they start modifying previously agreed-upon delays, altering crossover slopes, and hallucinating values.
 
-Ми спростили та оптимізували цей процес за допомогою **архітектури єдиної інструкції**:
+To bypass this, we use a **Stateless Architecture**:
 
-1. **Єдині системні інструкції:** Ви один раз копіюєте файл **[general_system_instructions.md](general_system_instructions.md)** і вставляєте його у поле **System Instructions** (в Google AI Studio) або **Custom Instructions** (в ChatGPT). Цей файл містить повну роль, всі формули, правила безпеки та логіку для всіх Кроків (0, 1, 2, 3) одночасно.
-2. **Бездержавність (Stateless):** Кожен крок налаштування виконується у **новому, чистому вікні чату**, де діють ті самі загальні системні інструкції. Це повністю запобігає "дрейфу пам'яті" (memory drift) та накопиченню помилок у ШІ.
-3. **Прості User-промпти:** Для кожного кроку ви просто відкриваєте нову вкладку (де вже прописано загальний системний промпт) і надсилаєте короткий та зручний користувацький промпт, прикріплюючи файл паспорта системи `autosound_context.md` та дані замірів.
+1. **Unified System Instructions:** You copy the contents of **[general_system_instructions.md](general_system_instructions.md)** once and paste it into the **System Instructions** field (in Google AI Studio) or **Custom Instructions** (in ChatGPT). This contains the full system role, formulas, safety limits, and workflow for all steps (0 to 3).
+2. **Stateless Sessions:** Every tuning step is executed in a **brand-new, clean chat session**. This completely prevents "memory drift" and error accumulation.
+3. **Simple User Prompts:** For each step, you simply open a new tab (which inherits the system prompt) and paste the short user prompt for that step, attaching your `autosound_context.md` passport file and REW measurements.
 
 ```mermaid
 graph TD
-    A[Крок 0: Створення паспорта] -->|Генерація| B[autosound_context.md]
-    B -->|Чистий чат + Крок 1| C[Розрахунок зрізів та TA]
-    C -->|Внесення в DSP + замір REW| D[Локальне оновлення контексту]
-    D -->|Чистий чат + Крок 2| E[Розрахунок поканального EQ]
-    E -->|Внесення в DSP + замір REW| F[Локальне оновлення контексту]
-    F -->|Чистий чат + Крок 3| G[Зведення фаз + Тонкий тюн]
-    G -->|Фінальний звук!| H[Готова система]
+    A[Step 0: Create Passport] -->|Generate| B[autosound_context.md]
+    B -->|Clean Chat + Step 1| C[Calculate Crossovers & TA]
+    C -->|Apply to DSP + REW Measure| D[Local Context Update]
+    D -->|Clean Chat + Step 2| E[Calculate Channel EQ]
+    E -->|Apply to DSP + REW Measure| F[Local Context Update]
+    F -->|Clean Chat + Step 3| G[Phase Alignment & Fine-Tuning]
+    G -->|Final Sound!| H[Fully Calibrated System]
     
     style B fill:#34d399,stroke:#059669,stroke-width:2px
     style D fill:#34d399,stroke:#059669,stroke-width:2px
@@ -39,71 +42,71 @@ graph TD
 
 ---
 
-## 📂 Структура папки та файли
+## 📂 Folder Structure
 
-У цій папці ви знайдете наступні інструменти:
+You will find the following files in this folder:
 
-1. **[general_system_instructions.md](general_system_instructions.md)** — **Головне ядро системи**. Скопіюйте його та вставте в поле "System Instructions" вашого чату один раз на початку роботи.
-2. **[autosound_context_template.md](autosound_context_template.md)** — Шаблон для швидкого ручного старту (якщо ви хочете заповнити дані про динаміки та процесор самостійно без інтерв'ю).
-3. **[step_0_intake_and_setup.md](step_0_intake_and_setup.md)** — Промпт-інтерв'ю для автоматичної генерації вашого файлу `autosound_context.md` силами ШІ.
-4. **[step_1_baseline_analysis.md](step_1_baseline_analysis.md)** — Промпт для розрахунку базових кросоверів, гейнів та затримок за імпульсними характеристиками.
-5. **[step_2_tonal_balance_eq.md](step_2_tonal_balance_eq.md)** — Промпт для розрахунку поканального EQ під цільову криву та точного зведення фаз (Helix Phase кути та мікрозатримки).
-6. **[step_3_fine_tuning_and_phase.md](step_3_fine_tuning_and_phase.md)** — Промпт для суб'єктивного тюнінгу системи на основі детального відгуку від прослуховування тестових треків.
-7. **[measurement_and_naming_guide.md](measurement_and_naming_guide.md)** — Інструкція із правильного зняття вимірів у REW (поза тіла у кріслі водія для MMM RTA, FFT, RTA Autostop тощо).
-
----
-
-## 🛠️ Покроковий протокол налаштування
-
-### 🏁 Крок 0: Створення паспорта системи
-* **Провідник:** [step_0_intake_and_setup.md](step_0_intake_and_setup.md).
-* **Дія:** Скопіюйте промпт Кроку 0 у чистий чат. ШІ проведе інтерактивне інтерв'ю (або застосує *Bypass Gate*, якщо ви дасте всі дані одразу) та видасть готовий паспорт `autosound_context.md`.
-* **Результат:** Створіть та збережіть локальний файл `autosound_context.md`.
+1. **[general_system_instructions.md](general_system_instructions.md)** — **The Core System Instructions**. Copy and paste this into the "System Instructions" box of your chat workspace once at the beginning.
+2. **[autosound_context_template.md](autosound_context_template.md)** — Template for a quick manual start (if you want to fill in your speaker models and hardware configuration yourself without an AI interview).
+3. **[step_0_intake_and_setup.md](step_0_intake_and_setup.md)** — Prompt template to let the AI conduct an interactive interview and generate your `autosound_context.md` file for you.
+4. **[step_1_baseline_analysis.md](step_1_baseline_analysis.md)** — Prompt to analyze raw sweeps and calculate baseline crossovers, delays, and initial gain asymmetry.
+5. **[step_2_tonal_balance_eq.md](step_2_tonal_balance_eq.md)** — Prompt to calculate per-channel EQ matching your target curve and calculate exact micro-delays or Helix Phase angles.
+6. **[step_3_fine_tuning_and_phase.md](step_3_fine_tuning_and_phase.md)** — Prompt for subjective fine-tuning based on your listening feedback using professional test tracks.
+7. **[measurement_and_naming_guide.md](measurement_and_naming_guide.md)** — Guide on how to properly take measurements in REW (MMM RTA, impulse sweeps, naming conventions).
 
 ---
 
-### ⏱️ Крок 1: Базові кросовери та затримки
-* **Провідник:** [step_1_baseline_analysis.md](step_1_baseline_analysis.md).
-* **Вимоги до замірів:** 
-  * Одиночні свипи (`sw`) кожного динаміка на штативі з увімкненим таймінгом (Acoustic Timing Reference або XLR loopback).
-  * MMM RTA заміри (`rta`) кожного динаміка окремо навколо голови на рівні вух.
-  * Усі кросовери та EQ в DSP мають бути вимкнені (або виставлені тимчасові безпечні HPF).
-* **Запуск у чаті:** Відкрийте **НОВИЙ** чат. Надішліть промпт Кроку 1. Передайте йому ваш `autosound_context.md` та завантажте `.mdat` файл вимірів.
-* **Внесення в DSP:** Введіть отримані частоти зрізів, типи фільтрів та значення затримок у ваш процесор.
-* **Оновлення:** Вставте отримані розрахунки у відповідний розділ вашого локального файлу `autosound_context.md`. Закрийте чат.
+## 🛠️ Step-by-Step Calibration Protocol
+
+### 🏁 Step 0: System Intake & Passport Creation
+* **Template:** [step_0_intake_and_setup.md](step_0_intake_and_setup.md).
+* **Action:** Copy the Step 0 prompt into a clean chat. The AI will interview you (2-3 questions at a time) and generate your `autosound_context.md` file.
+* **Result:** Create and save a local file named `autosound_context.md`.
 
 ---
 
-### 🎛️ Крок 2: Тональний баланс, поканальний EQ та оптимізація фаз
-* **Провідник:** [step_2_tonal_balance_eq.md](step_2_tonal_balance_eq.md).
-* **Вимоги до замірів:**
-  * Усі налаштування з Кроку 1 (`v1`) мають бути активні в DSP!
-  * MMM RTA заміри (`rta`) кожного динаміка окремо для розрахунку PEQ.
-  * Одиночні свипи (`sw`) кожного динаміка та свипи сумарних стиків (`L w+m_2`, `R w+m_2`, `L m+tw_2`, `R m+tw_2`, `SW+Ws_2`) для аналізу фазової сумації.
-* **Запуск у чаті:** Відкрийте **НОВИЙ** чат. Надішліть промпт Кроку 2. Передайте йому оновлений `autosound_context.md` та ваш `.mdat` файл. Вкажіть точні значення фази в градусах, зчитані з REW на частотах кросоверів.
-* **Результат:** ШІ розрахує точні смуги PEQ, кути фазообертання Helix Phase та мікрокоригування затримок.
-* **Внесення в DSP:** Імпортуйте або введіть параметри PEQ, фазові налаштування та мікро-затримки у процесор. 
-* **Оновлення:** Оновіть таблиці у вашому файлі `autosound_context.md`. Закрийте чат.
+### ⏱️ Step 1: Baseline Crossovers & Delays
+* **Template:** [step_1_baseline_analysis.md](step_1_baseline_analysis.md).
+* **Measurement Requirements:**
+  * Single impulse sweeps (`sw`) for each of your speakers with timing reference enabled (Acoustic Timing Reference or XLR loopback).
+  * MMM RTA measurements (`rta`) for each speaker taken around your head position.
+  * All crossovers and EQ in your DSP must be bypassed (or temporary safe HPF enabled for tweeters and midranges).
+* **Chat Run:** Open a **NEW** clean chat. Send the Step 1 prompt along with your `autosound_context.md` and upload your REW `.txt` or `.csv` export files (24 PPO, 1/6 oct).
+* **DSP Entry:** Apply the calculated crossover points, slopes, and delays (in samples) into your DSP.
+* **Context Update:** Copy the AI's formatted output block and replace the Step 1 section in your local `autosound_context.md`. Close the chat.
 
 ---
 
-### 🔄 Крок 3: Суб'єктивний тюн та відгук (Ітеративний цикл)
-* **Провідник:** [step_3_fine_tuning_and_phase.md](step_3_fine_tuning_and_phase.md).
-* **Вимоги до замірів:**
-  * Переконайтеся, що всі налаштування з Кроку 2 (`v2`) активні в DSP.
-  * Зніміть MMM RTA заміри сумарних сторін: `L_3` (ліва в зборі), `R_3` (права), `ALL_3` (весь фронт).
-  * Зніміть свипи сумарних сторін: `L_3 (sw)`, `R_3 (sw)`, `ALL_3 (sw)`.
-* **Оцінка на слух:** Сядьте на водійське сидіння у звичайну позу. Запустіть якісні тестові треки. Оцініть: фокус та розмір центрального образу, ширину/висоту/глибину сцени, різкість жіночого вокалу, сибілянти, гудіння басу чи сабвуфера.
-* **Запуск у чаті:** Відкрийте **НОВИЙ** чат. Надішліть промпт Кроку 3. Надайте ШІ ваш `autosound_context.md`, `.mdat` файл замірів та детально опишіть ваш відгук від прослуховування.
-* **Внесення в DSP:** Спробуйте делікатні точкові коригування від ШІ.
-* **Повторюваність:** Цей крок є повторюваним, ітеративним процесом. Ви можете коригувати, знову слухати та давати ШІ новий фідбек до досягнення вашого особистого акустичного ідеалу!
+### 🎛️ Step 2: Tonal Balance, Channel EQ & Phase Alignment
+* **Template:** [step_2_tonal_balance_eq.md](step_2_tonal_balance_eq.md).
+* **Measurement Requirements:**
+  * Crossovers, delays, and gains from Step 1 (`v1`) must be active in your DSP!
+  * MMM RTA measurements (`rta`) for each speaker to calculate PEQ filters.
+  * Single sweeps (`sw`) and summation sweeps (`L w+m_2`, `R w+m_2`, `L m+tw_2`, `R m+tw_2`, `SW+Ws_2`) to verify crossovers.
+* **Chat Run:** Open a **NEW** clean chat. Send the Step 2 prompt, select your target curve, enter the measured phase values at the crossovers, upload your REW measurement exports, and paste your `autosound_context.md`.
+* **Result:** The AI will calculate precise PEQ filters, micro-delays, and Helix Phase angles.
+* **DSP Entry:** Apply the PEQ bands, fine delays, and phase angles to your DSP.
+* **Context Update:** Copy the AI's formatted output block and replace the Step 2 section in your local `autosound_context.md`. Close the chat.
 
 ---
 
-## 💡 Порада для користувачів Google AI Studio
+### 🔄 Step 3: Subjective Fine-Tuning & Listening Loops
+* **Template:** [step_3_fine_tuning_and_phase.md](step_3_fine_tuning_and_phase.md).
+* **Measurement Requirements:**
+  * All Step 2 (`v2`) settings active in your DSP.
+  * MMM RTA measurements of combined sides: `L_3` (full left), `R_3` (full right), `ALL_3` (full front stage with subwoofer).
+  * Measurement sweeps of combined sides: `L_3 (sw)`, `R_3 (sw)`, `ALL_3 (sw)`.
+* **Listening Check:** Sit in the driver's seat. Play high-quality test tracks. Evaluate: center image focus, stage size (width, height, depth), vocal harshness, sibilance, and bass boominess.
+* **Chat Run:** Open a **NEW** clean chat. Send the Step 3 prompt along with your updated `autosound_context.md`, upload combined REW measurements, and describe your listening feedback in detail.
+* **DSP Entry:** Apply the recommended micro-adjustments to EQ bands or channel levels.
+* **Iteration:** Repeat this step as many times as necessary to reach your personal acoustic ideal!
 
-Якщо ви використовуєте безкоштовне середовище розробника **Google AI Studio** з моделлю **Gemini 1.5 Pro**:
-1. Вставте вміст файлу **[general_system_instructions.md](general_system_instructions.md)** у поле **System Instructions** на правій панелі вікна.
-2. Це поле збережеться для всіх нових вкладок чату у цьому ж проекті, тому вам більше не потрібно буде перенастроювати системний промпт.
-3. У полі введення повідомлень ви просто надсилаєте короткий користувацький промпт відповідного кроку та прикріплюєте ваш `autosound_context.md` і файл замірів.
-4. Це забезпечить максимально чисті, сфокусовані та точні відповіді моделі на будь-якому етапі роботи.
+---
+
+## 💡 Pro Tip for Google AI Studio Users
+
+If you are using the free developer interface in **Google AI Studio** with **Gemini 1.5 Pro**:
+1. Copy the contents of **[general_system_instructions.md](general_system_instructions.md)** and paste it into the **System Instructions** field on the right-hand panel.
+2. This field persists across all new tabs/chats in the same project, so you don't need to reconfigure it.
+3. In the message box, simply paste the short prompt template of the step you are on, attach your `autosound_context.md` file, and upload your REW exports.
+4. This ensures clean, focused, and mathematically precise responses from the model.

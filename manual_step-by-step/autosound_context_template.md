@@ -1,83 +1,83 @@
-# ШАБЛОН КОНТЕКСТУ АУДІОСИСТЕМИ (`autosound_context.md`)
+# AUDIOSYSTEM CONTEXT TEMPLATE (`autosound_context.md`)
 
-Заповніть цей файл базовою інформацією про вашу систему. Він буде служити вашим єдиним джерелом правди (static context) для ШІ-асистента на кожному кроці ручного налаштування в веб-чаті. Копіюйте його разом із відповідним промптом кроку.
+Fill out this file with basic information about your system. It serves as your single source of truth (static context) for your AI assistant during each manual step in web chats. Copy its contents and paste them along with the corresponding step prompt.
 
 ---
 
-# КОНТЕКСТ ПРОЄКТУ: НАЛАШТУВАННЯ АУДІОСИСТЕМИ
+# PROJECT CONTEXT: AUDIOSYSTEM CALIBRATION
 
-## 1. Конфігурація Обладнання
-* **Автомобіль:** [наприклад: VW Passat B8, седан, 2018 р.в., LHD (ліве кермо)]
-* **Джерело звуку (HU):** [наприклад: Штатна магнітола / Android HU Isudar T78 по оптиці S/PDIF]
-* **Процесор (DSP):** [наприклад: Helix DSP Ultra S, частота дискретизації 96 кГц]
-* **Підсилювачі:**
-  - [наприклад: Ground Zero GZPA 4SQ -> на ВЧ/СЧ]
-  - [наприклад: Ground Zero GZA 125.4 -> на мідбаси]
-  - [наприклад: Audison SR 1.500 -> на сабвуфер]
+## 1. Hardware Configuration
+* **Vehicle:** [e.g., VW Passat B8, Sedan, 2018, LHD (Left-Hand Drive)]
+* **Head Unit (HU):** [e.g., Stock HU / Android HU Isudar T78 via S/PDIF Optical output]
+* **DSP Processor:** [e.g., Helix DSP Ultra S, native 96 kHz sample rate]
+* **Amplifiers:**
+  - [e.g., Ground Zero GZPA 4SQ -> for MF/HF]
+  - [e.g., Ground Zero GZA 125.4 -> for LF]
+  - [e.g., Audison SR 1.500 -> for Subwoofer]
 
-## 2. Схема Каналів (Wiring & Routing)
-| Канал DSP | Динамік | Смуга частот | Підсилювач | Фізичне розміщення та спрямування |
+## 2. Channel Map (Wiring & Routing)
+| DSP Channel | Speaker | Frequency Band | Amplifier | Physical Placement & Aiming |
 | :--- | :--- | :--- | :--- | :--- |
-| CH1 (A) | tw-L (ВЧ Лівий) | Високі (HF) | [Модель підсилювача] | [напр. Стійки, спрямування в центр салону] |
-| CH2 (B) | tw-R (ВЧ Правий) | Високі (HF) | [Модель підсилювача] | [напр. Стійки, спрямування в центр салону] |
-| CH3 (C) | m-L (СЧ Лівий) | Середні (MF) | [Модель підсилювача] | [напр. Стійки, копланарні з ВЧ] |
-| CH4 (D) | m-R (СЧ Правий) | Середні (MF) | [Модель підсилювача] | [напр. Стійки, копланарні з ВЧ] |
-| CH5 (E) | w-L (Мідбас Л) | Низькі (LF) | [Модель підсилювача] | [напр. Двері, підготовлені, штатні місця] |
-| CH6 (F) | w-R (Мідбас П) | Низькі (LF) | [Модель підсилювача] | [напр. Двері, підготовлені, штатні місця] |
-| CH7 (G) | sw (Сабвуфер) | Суббас (SUB) | [Модель підсилювача] | [напр. ЗЯ 35л у багажнику] |
+| CH1 (A) | tw-L (Tweeter Left) | High (HF) | [Amp Model] | [e.g., A-pillars, aimed at cabin center] |
+| CH2 (B) | tw-R (Tweeter Right) | High (HF) | [Amp Model] | [e.g., A-pillars, aimed at driver] |
+| CH3 (C) | m-L (Midrange Left) | Middle (MF) | [Amp Model] | [e.g., A-pillars, coplanar with tweeter] |
+| CH4 (D) | m-R (Midrange Right) | Middle (MF) | [Amp Model] | [e.g., A-pillars, coplanar with tweeter] |
+| CH5 (E) | w-L (Woofer/Midbass L) | Low (LF) | [Amp Model] | [e.g., Doors, treated, stock locations] |
+| CH6 (F) | w-R (Woofer/Midbass R) | Low (LF) | [Amp Model] | [e.g., Doors, treated, stock locations] |
+| CH7 (G) | sw (Subwoofer) | Sub-bass (SUB) | [Amp Model] | [e.g., Sealed Box 35L in trunk] |
 
-## 3. Вимірювальний Стенд
-* **Вимірювальний мікрофон:** [наприклад: UMIK-1 (USB, 48 кГц) / Behringer ECM8000 (XLR)]
-* **Таймінг (Timing Reference):** [наприклад: Acoustic Timing Reference в REW / Фізичний кабель loopback (для XLR)]
+## 3. Measurement Equipment
+* **Microphone:** [e.g., UMIK-1 (USB, 48 kHz) / Behringer ECM8000 (XLR)]
+* **Timing Reference:** [e.g., Acoustic Timing Reference in REW / Physical Loopback cable (XLR)]
 
-## 4. Поточні Налаштування та Цільова Крива (Current DSP State)
-* **Цільова крива (Target Curve):** [наприклад: ResoNix Accurate / Audiofrog / Harman]
+## 4. Current Settings & Target Curve (Current DSP State)
+* **Target Curve:** [e.g., ResoNix Accurate / Audiofrog / Harman]
 
-### ⏱️ [КРОК 1] Кросовери, Затримки та Рівні (v1)
-*<!-- Заповнюється після проходження Кроку 1 за даними ШІ-чат-сесії -->*
-* **Кросовери (Crossovers Menu):**
-  - **tw-L / tw-R:** HPF = [Заготовка] Hz LR4 | LPF = none
-  - **m-L / m-R:** HPF = [Заготовка] Hz | LPF = [Заготовка] Hz
-  - **w-L / w-R:** HPF = [Заготовка] Hz | LPF = [Заготовка] Hz
-  - **sw:** HPF = 20 Hz BW2 | LPF = [Заготовка] Hz
-* **Затримки (Delay Menu):**
+### ⏱️ [STEP 1] Crossovers, Delays & Levels (v1)
+*<!-- To be populated after completing Step 1 from the AI's copy-paste block -->*
+* **Crossovers (Crossovers Menu):**
+  - **tw-L / tw-R:** HPF = [Placeholder] Hz LR4 | LPF = none
+  - **m-L / m-R:** HPF = [Placeholder] Hz | LPF = [Placeholder] Hz
+  - **w-L / w-R:** HPF = [Placeholder] Hz | LPF = [Placeholder] Hz
+  - **sw:** HPF = 20 Hz BW2 | LPF = [Placeholder] Hz
+* **Delays (Delay Menu):**
   - tw-L: --- ms (--- samples) | tw-R: --- ms (--- samples)
   - m-L: --- ms (--- samples) | m-R: --- ms (--- samples)
   - w-L: --- ms (--- samples) | w-R: --- ms (--- samples)
   - sw: 0.00 ms (0 samples)
-* **Початкові рівні (Gain Menu):**
+* **Initial Gains (Gain Menu):**
   - tw-L: --- dB | tw-R: --- dB
   - m-L: --- dB | m-R: --- dB
   - w-L: --- dB | w-R: --- dB
   - sw: --- dB
 
-### 🎛️ [КРОК 2] Поканальний EQ та Зведення Фаз (v2)
-*<!-- Заповнюється після проходження Кроку 2 за даними ШІ-чат-сесії -->*
-* **Параметричний EQ (Output PEQ):**
-  - **tw-L:** [Немає PEQ]
-  - **tw-R:** [Немає PEQ]
-  - **m-L:** [Немає PEQ]
-  - **m-R:** [Немає PEQ]
-  - **w-L:** [Немає PEQ]
-  - **w-R:** [Немає PEQ]
-  - **sw:** [Немає PEQ]
-* **Мікро-затримки та Регулятори Фази (Helix Phase 0-360° / All-pass):**
-  - tw-L / tw-R: мікро-затримка = 0.00 ms (0 samples)
-  - m-L / m-R: мікро-затримка = 0.00 ms (0 samples) | Helix Phase = 0°
-  - w-L / w-R: мікро-затримка = 0.00 ms (0 samples)
+### 🎛️ [STEP 2] Per-Channel EQ & Phase Alignment (v2)
+*<!-- To be populated after completing Step 2 from the AI's copy-paste block -->*
+* **Parametric EQ (Output PEQ):**
+  - **tw-L:** [No PEQ]
+  - **tw-R:** [No PEQ]
+  - **m-L:** [No PEQ]
+  - **m-R:** [No PEQ]
+  - **w-L:** [No PEQ]
+  - **w-R:** [No PEQ]
+  - **sw:** [No PEQ]
+* **Micro-Delays & Phase Controls (Helix Phase 0-360° / All-pass):**
+  - tw-L / tw-R: micro-delay = 0.00 ms (0 samples)
+  - m-L / m-R: micro-delay = 0.00 ms (0 samples) | Helix Phase = 0°
+  - w-L / w-R: micro-delay = 0.00 ms (0 samples)
   - sw: Helix Phase = 0°
 
-### 🎧 [КРОК 3] Лог Суб'єктивного Налаштування та Ітерацій (v3+)
-*<!-- Сюди вставляються результати ітерацій з прослуховування на Кроці 3 -->*
-* **Ітерація 1:**
-  - *Суб'єктивний відгук:* [Опис першого прослуховування на слух]
-  - *Внесені мікро-корекції:* [Коригування EQ чи рівнів на Кроці 3]
+### 🎧 [STEP 3] Subjective Fine-Tuning & Iterations Log (v3+)
+*<!-- To be populated during Step 3 listening loops -->*
+* **Iteration 1:**
+  - *Subjective Feedback:* [Describe the initial listening impressions]
+  - *Applied Micro-Corrections:* [List any adjustments to EQ or level settings]
 
-## 5. Система кодування каналів та замірів (Naming Convention)
-* tw-L / tw-R (ВЧ Лівий/Правий) · m-L / m-R (СЧ Лівий/Правий) · w-L / w-R (Мідбас Лівий/Правий) · sw (Сабвуфер).
-* Суфікси: `(sw)` — свип-замір на штативі, `(rta)` — RTA вимір методом MMM навколо голови.
+## 5. Channel and Measurement Naming Convention
+* tw-L / tw-R (Tweeter L/R) · m-L / m-R (Midrange L/R) · w-L / w-R (Woofer L/R) · sw (Subwoofer).
+* Suffixes: `(sw)` — sweep measurement on a tripod, `(rta)` — MMM RTA spatial average measurement around your head.
 
-## 6. База Знань та Відомі Аномалії Салону
-* **Аномалія 1:** [наприклад: Провал лівого мідбасу на ~150 Гц через дифракцію дверей — EQ заборонено!]
-* **Аномалія 2:** [наприклад: Резонанс салону (горб) на ~190 Гц — різати вузьким Q-фактором.]
-* **Уроки та спостереження:** [наприклад: Bessel (BE4) звучит значно м'якше на стику СЧ-ВЧ, ніж LR4.]
+## 6. System Knowledge & Known Cabin Anomalies
+* **Anomaly 1:** [e.g., Left woofer dip at ~150 Hz due to floor reflections/door-card cancellation — EQ boost forbidden!]
+* **Anomaly 2:** [e.g., Cabin resonance peak at ~190 Hz — cut with a narrow Q-factor filter.]
+* **Notes & Observations:** [e.g., Bessel (BE4) crossovers sound smoother on the MF/HF transition than Linkwitz-Riley LR4.]

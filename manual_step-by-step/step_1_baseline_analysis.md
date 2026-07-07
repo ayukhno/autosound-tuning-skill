@@ -1,47 +1,48 @@
-# Крок 1: Базові кросовери та затримки (Baseline Analysis)
+# Step 1: Baseline Analysis (Crossovers & Delays)
 
-Використовуйте цей шаблон у **новому, чистому сеансі чату** після того, як ви зняли перші базові виміри динаміків без зрізів та EQ (із безпечними HPF для захисту ВЧ/СЧ).
-
----
-
-### 📋 Попередня дія:
-Переконайтеся, що ви скопіювали вміст файлу **[general_system_instructions.md](general_system_instructions.md)** та вставили його у поле **System Instructions** (Системні інструкції) цього нового чату.
+Use this template in a **new, clean chat session** after you have taken your first baseline measurements of speakers without crossovers or EQ (with temporary safe HPFs enabled to protect your tweeters and midranges).
 
 ---
 
-### 💡 Формат завантаження даних у Google AI Studio (УВАГА: Оптимізація токенів!):
-Оскільки текстові файли без оптимізації містять забагато точок і перевищують ліміт токенів чату (помилка `exceeds the maximum number of tokens`), налаштуйте параметри експорту в REW наступним чином:
-
-1. **Застосуйте згладжування на графіку REW:**
-   - Перейдіть на графік виміру та застосуйте згладжування **1/6 oct** (або максимум **1/12 oct** для свипів): `Graph -> Apply 1/6 smoothing`.
-2. **Налаштуйте вікно експорту в REW (`File -> Export -> Export measurement as text`):**
-   - 🔘 **Resolution:** Виберіть `Use custom resolution` і встановіть **24 PPO** (Points Per Octave) — це ідеальний компроміс між точністю та розміром.
-   - 🔘 **Smoothing:** Виберіть `Use smoothing of measurement: 1/6 octave` (або `1/12 octave`).
-   - 📄 Збережіть файл. Тепер кожен динамік займатиме всього по ~200–300 рядків тексту, і ШІ без зусиль обробить усі 7 файлів разом!
-3. **Завантажте файли:**
-   - Перетягніть отримані легкі текстові `.txt` або `.csv` файли прямо в чат Google AI Studio.
+### 📋 Prerequisite Action:
+Ensure that you have copied the contents of **[general_system_instructions.md](general_system_instructions.md)** and pasted it into the **System Instructions** box of this new chat.
 
 ---
 
-### 💬 Промпт для копіювання у чат:
-👉 **Скопіюйте весь текст нижче (все, що знаходиться після лінії розділювача `--------------------------------------------------`):**
+### 💡 Data Upload Format (AI Studio Token Optimization):
+To prevent hitting chat input token limits (the `exceeds the maximum number of tokens` error) when uploading high-resolution measurements, adjust your export settings in REW as follows:
+
+1. **Apply Smoothing in REW:**
+   - Go to your measurement's graph page and apply **1/6 oct** smoothing (or maximum **1/12 oct** for sweeps): `Graph -> Apply 1/6 smoothing`.
+2. **Configure REW Text Export Window (`File -> Export -> Export measurement as text`):**
+   - 🔘 **Resolution:** Select `Use custom resolution` and set it to **24 PPO** (Points Per Octave) — this is the ideal compromise between accuracy and data size.
+   - 🔘 **Smoothing:** Select `Use smoothing of measurement: 1/6 octave` (or `1/12 octave`).
+   - 📄 Save the file. Each speaker's measurement will now take only ~200–300 lines of text, allowing the AI to easily process all of them together!
+3. **Upload the Files:**
+   - Drag and drop your lightweight `.txt` or `.csv` export files directly into your Google AI Studio chat window.
+
+---
+
+### 💬 Copy-Paste Prompt:
+👉 **Copy the entire text below (everything after the divider line `--------------------------------------------------`):**
 
 --------------------------------------------------
 
-Я перебуваю на **Кроці 1: Базові кросовери та затримки (Baseline Analysis)**.
+I am at **Step 1: Baseline Analysis (Crossovers & Delays)**.
 
-Моє завдання — отримати від тебе стартові кросовери, початкові гейни та точне часове вирівнювання (затримки) на основі імпульсних характеристик моїх динаміків.
+My goal is to obtain baseline crossover recommendation points, initial gain levels, and exact time-alignment delays (in ms and digital samples) calculated from the impulse response peaks of my speakers.
 
-Я завантажую текстові експорти моїх вимірів в оптимізованій роздільній здатності 24 PPO та згладжуванні 1/6 або 1/12 oct (файли .txt / .csv):
-* *(Перетягніть ваші легкі текстові файли експорту вимірів REW прямо в чат)*
+I am uploading the text exports of my baseline measurements using optimized 24 PPO resolution and 1/6 or 1/12 oct smoothing (.txt or .csv files):
+* *(Drag and drop your lightweight REW measurement text files directly into the chat)*
 
-Проаналізуй ці виміри відповідно до своїх системних інструкцій та виведи рекомендації у встановленій структурі:
+Please analyze these measurements according to your system instructions and output your recommendations in the defined structure:
 1. 🔍 Acoustic Analysis Summary
 2. 🔧 Crossover Recommendations (DSP Software Crossovers Menu)
 3. ⏱️ Time Alignment Sheet (DSP Software Delay Menu)
 4. 🔊 Initial Gain/Level Sheet (DSP Software Gain Menu)
+5. 📋 Code Block for direct copy-pasting into `autosound_context.md`
 
-Ось мій статичний паспорт системи (вміст файлу `autosound_context.md` після Кроку 0):
+Here is my static system passport (the contents of my `autosound_context.md` file after Step 0):
 ==================================================
-<ВСТАВТЕ СЮДИ ВМІСТ ВАШОГО ФАЙЛУ autosound_context.md>
+<PASTE THE CONTENTS OF YOUR autosound_context.md FILE HERE>
 ==================================================

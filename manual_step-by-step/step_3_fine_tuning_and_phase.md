@@ -1,64 +1,65 @@
-# Крок 3: Суб'єктивний тюн, відгук від прослуховування та фінальне полірування (Subjective Fine-Tuning)
+# Step 3: Subjective Fine-Tuning & Listening Feedback
 
-Використовуйте цей шаблон у **новому, чистому сеансі чату** після того, як ви внесли в DSP налаштування з Кроку 2 (EQ, мікрозатримки та кути Helix Phase), зняли контрольні заміри сторін та провели оцінку на слух.
-
----
-
-### 📋 Попередня дія:
-Переконайтеся, що ви скопіювали вміст файлу **[general_system_instructions.md](general_system_instructions.md)** та вставили його у поле **System Instructions** (Системні інструкції) цього нового чату.
+Use this template in a **new, clean chat session** after you have applied the settings from Step 2 (EQ, micro-delays, and Helix Phase angles) to your DSP, taken combined verification measurements, and evaluated the sound stage by ear.
 
 ---
 
-### 💡 Формат завантаження даних у Google AI Studio (УВАГА: Оптимізація токенів!):
-Оскільки текстові файли без оптимізації містять забагато точок і перевищують ліміт токенів чату (помилка `exceeds the maximum number of tokens`), налаштуйте параметри експорту в REW наступним чином:
-
-1. **Застосуйте згладжування на графіку REW:**
-   - Перейдіть на графік виміру та застосуйте згладжування **1/6 oct** (або максимум **1/12 oct** для свипів): `Graph -> Apply 1/6 smoothing`.
-2. **Налаштуйте вікно експорту в REW (`File -> Export -> Export measurement as text`):**
-   - 🔘 **Resolution:** Виберіть `Use custom resolution` і встановіть **24 PPO** (Points Per Octave) — це ідеальний компроміс між точністю та розміром.
-   - 🔘 **Smoothing:** Виберіть `Use smoothing of measurement: 1/6 octave` (або `1/12 octave`).
-   - 📄 Збережіть файл. Тепер кожен динамік займатиме всього по ~200–300 рядків тексту, і ШІ без зусиль обробить усі файли разом!
-3. **Завантажте файли:**
-   - Перетягніть отримані легкі текстові `.txt` або `.csv` файли прямо в чат Google AI Studio.
+### 📋 Prerequisite Action:
+Ensure that you have copied the contents of **[general_system_instructions.md](general_system_instructions.md)** and pasted it into the **System Instructions** box of this new chat.
 
 ---
 
-### 💬 Промпт для копіювання у чат:
-👉 **Скопіюйте весь текст нижче (все, що знаходиться після лінії розділювача `--------------------------------------------------`):**
+### 💡 Data Upload Format (AI Studio Token Optimization):
+To prevent hitting chat input token limits (the `exceeds the maximum number of tokens` error) when uploading high-resolution measurements, adjust your export settings in REW as follows:
+
+1. **Apply Smoothing in REW:**
+   - Go to your measurement's graph page and apply **1/6 oct** smoothing (or maximum **1/12 oct** for sweeps): `Graph -> Apply 1/6 smoothing`.
+2. **Configure REW Text Export Window (`File -> Export -> Export measurement as text`):**
+   - 🔘 **Resolution:** Select `Use custom resolution` and set it to **24 PPO** (Points Per Octave) — this is the ideal compromise between accuracy and data size.
+   - 🔘 **Smoothing:** Select `Use smoothing of measurement: 1/6 octave` (or `1/12 octave`).
+   - 📄 Save the file. Each speaker's measurement will now take only ~200–300 lines of text, allowing the AI to easily process all of them together!
+3. **Upload the Files:**
+   - Drag and drop your lightweight `.txt` or `.csv` export files directly into your Google AI Studio chat window.
+
+---
+
+### 💬 Copy-Paste Prompt:
+👉 **Copy the entire text below (everything after the divider line `--------------------------------------------------`):**
 
 --------------------------------------------------
 
-Я перебуваю на **Кроці 3: Суб'єктивний тюн, відгук від прослуховування та фінальне полірування (Subjective Fine-Tuning)**.
+I am at **Step 3: Subjective Fine-Tuning & Listening Feedback**.
 
-Моє завдання — отримати від тебе делікатні точкові коригування еквалайзера та рівнів гучності на основі мого суб'єктивного відгуку та контрольних вимірів сумарних сторін.
+My goal is to obtain subtle, highly targeted adjustments to EQ bands and channel levels based on my subjective listening feedback and combined verification measurements.
 
-### ⚠️ Перевірочні Ворота (Verification Gate):
-* Я підтверджую, що повноцінний поканальний EQ, мікрозатримки та кути Helix Phase з Кроку 2 повністю внесені в DSP процесор.
+### ⚠️ Verification Gate:
+* I confirm that all crossovers, per-channel EQ, micro-delays, and Helix Phase angles from Step 2 are fully applied to my DSP.
 
-Я завантажую текстові експорти моїх контрольних вимірів зі згладжуванням 1/6 або 1/12 oct (L_3 rta, R_3 rta, ALL_3 rta та свипи L_3 sw, R_3 sw, ALL_3 sw у файлах .txt / .csv):
-* *(Перетягніть ваші легкі текстові файли експорту вимірів REW прямо в чат)*
+I am uploading the text exports of my combined measurements with 1/6 or 1/12 oct smoothing (L_3 rta, R_3 rta, ALL_3 rta, and sweeps L_3 sw, R_3 sw, ALL_3 sw as .txt / .csv files):
+* *(Drag and drop your lightweight REW measurement text files directly into the chat)*
 
-### 🎧 Мій суб'єктивний відгук від прослуховування тестових треків:
+### 🎧 My Subjective Listening Feedback on Test Tracks:
 
-1. **Фокус та образи (Staging & Imaging):**
-   * *Наприклад: Чи стоїть вокал чітко по центру? Чи немає прилипання звуку до лівого/правого динаміків на певних нотах? Чи образ сфокусований?*
-   * **Ваш відгук:** [Опишіть тут]
+1. **Staging & Imaging:**
+   * *For example: Does the center image sit exactly in the center of the dash? Do certain vocal frequencies "pull" towards the left or right speaker? Is the image razor-sharp or blurry?*
+   * **Your Feedback:** [Describe here]
 
-2. **Параметри сцени (Stage Parameters):**
-   * *Наприклад: Яка висота сцени (на рівні очей чи падає)? Яка ширина (виходить за стійки)? Яка глибина та ешелонування інструментів?*
-   * **Ваш відгук:** [Опишіть тут]
+2. **Stage Parameters:**
+   * *For example: What is the height of the stage (at eye level, or does it drop)? What is the width (does it stretch beyond the A-pillars)? How is the depth and instrument separation?*
+   * **Your Feedback:** [Describe here]
 
-3. **Тональний баланс (Tonal Balance):**
-   * *Наприклад: Чи немає різкості на жіночому вокалі при високій гучності? Чи не забагато сибілянтів ("с", "ц", "ш")? Чи комфортні високі? My-comfortні баси?*
-   * **Ваш відгук:** [Опишіть тут]
+3. **Tonal Balance:**
+   * *For example: Is there any harshness or glare in female vocals at high volumes? Do you hear too much sibilance ("s", "t", "sh" sounds)? Are high frequencies smooth? Is the bass punchy and well-integrated, or boomy?*
+   * **Your Feedback:** [Describe here]
 
-Будь ласка, співставь мої скарги та спостереження з наданими графіками вимірів сторін згідно з твоїми системними інструкцій та виведи делікатні коригування у встановленій структурі:
-1. 🔍 Співставлення Скарг з Акустичними Кривими (Correlation Audit)
-2. 🎛️ Точкові Коригування EQ (DSP Output EQ Updates)
-3. 🔊 Точкове Коригування Рівнів (Level Adjustments)
-4. 🔄 План Наступного Прослуховування (що перевірити після внесення змін)
+Please correlate my subjective complaints and observations with the provided measurement graphs, analyze them according to your system instructions, and output your recommendations in the defined structure:
+1. 🔍 Correlation Audit (Subjective Feedback vs. Acoustic Curves)
+2. 🎛️ Targeted EQ Adjustments Sheet (DSP Output EQ Updates)
+3. 🔊 Targeted Level Adjustments Sheet (Gain Updates)
+4. 🔄 Next Listening Plan (what to focus on after applying changes)
+5. 📋 Code Block for direct logging into `autosound_context.md`
 
-Ось мій актуальний паспорт системи (вміст файлу `autosound_context.md` після Кроку 2):
+Here is my active system passport (the contents of my `autosound_context.md` file updated after Step 2):
 ==================================================
-<ВСТАВТЕ СЮДИ ВМІСТ ВАШОГО ФАЙЛУ autosound_context.md>
+<PASTE THE CONTENTS OF YOUR autosound_context.md FILE HERE>
 ==================================================

@@ -1,64 +1,65 @@
-# Крок 2: Тональний баланс, поканальний EQ та зведення фаз (Tonal Balance & Phase Alignment)
+# Step 2: Tonal Balance, Channel EQ & Phase Alignment
 
-Використовуйте цей шаблон у **новому, чистому сеансі чату** після того, як ви внесли в DSP налаштування з Кроку 1 (кросовери та затримки) та зняли новий пакет вимірів.
-
----
-
-### 📋 Попередня дія:
-Переконайтеся, що ви скопіювали вміст файлу **[general_system_instructions.md](general_system_instructions.md)** та вставили його у поле **System Instructions** (Системні інструкції) цього нового чату.
+Use this template in a **new, clean chat session** after you have applied the crossovers and delays from Step 1 into your DSP and taken a new round of measurements.
 
 ---
 
-### 💡 Формат завантаження даних у Google AI Studio (УВАГА: Оптимізація токенів!):
-Оскільки текстові файли без оптимізації містять забагато точок і перевищують ліміт токенів чату (помилка `exceeds the maximum number of tokens`), налаштуйте параметри експорту в REW наступним чином:
-
-1. **Застосуйте згладжування на графіку REW:**
-   - Перейдіть на графік виміру та застосуйте згладжування **1/6 oct** (або максимум **1/12 oct** для свипів): `Graph -> Apply 1/6 smoothing`.
-2. **Налаштуйте вікно експорту в REW (`File -> Export -> Export measurement as text`):**
-   - 🔘 **Resolution:** Виберіть `Use custom resolution` і встановіть **24 PPO** (Points Per Octave) — це ідеальний компроміс між точністю та розміром.
-   - 🔘 **Smoothing:** Виберіть `Use smoothing of measurement: 1/6 octave` (або `1/12 octave`).
-   - 📄 Збережіть файл. Тепер кожен динамік займатиме всього по ~200–300 рядків тексту, і ШІ без зусиль обробить усі файли разом!
-3. **Завантажте файли:**
-   - Перетягніть отримані легкі текстові `.txt` або `.csv` файли прямо в чат Google AI Studio.
+### 📋 Prerequisite Action:
+Ensure that you have copied the contents of **[general_system_instructions.md](general_system_instructions.md)** and pasted it into the **System Instructions** box of this new chat.
 
 ---
 
-### 💬 Промпт для копіювання у чат:
-👉 **Скопіюйте весь текст нижче (все, що знаходиться після лінії розділювача `--------------------------------------------------`):**
+### 💡 Data Upload Format (AI Studio Token Optimization):
+To prevent hitting chat input token limits (the `exceeds the maximum number of tokens` error) when uploading high-resolution measurements, adjust your export settings in REW as follows:
+
+1. **Apply Smoothing in REW:**
+   - Go to your measurement's graph page and apply **1/6 oct** smoothing (or maximum **1/12 oct** for sweeps): `Graph -> Apply 1/6 smoothing`.
+2. **Configure REW Text Export Window (`File -> Export -> Export measurement as text`):**
+   - 🔘 **Resolution:** Select `Use custom resolution` and set it to **24 PPO** (Points Per Octave) — this is the ideal compromise between accuracy and data size.
+   - 🔘 **Smoothing:** Select `Use smoothing of measurement: 1/6 octave` (or `1/12 octave`).
+   - 📄 Save the file. Each speaker's measurement will now take only ~200–300 lines of text, allowing the AI to easily process all of them together!
+3. **Upload the Files:**
+   - Drag and drop your lightweight `.txt` or `.csv` export files directly into your Google AI Studio chat window.
+
+---
+
+### 💬 Copy-Paste Prompt:
+👉 **Copy the entire text below (everything after the divider line `--------------------------------------------------`):**
 
 --------------------------------------------------
 
-Я перебуваю на **Кроці 2: Тональний баланс, поканальний EQ та зведення фаз (Tonal Balance & Phase Alignment)**.
+I am at **Step 2: Tonal Balance, Channel EQ & Phase Alignment**.
 
-Моє завдання — отримати розрахований поканальний параметричний еквалайзер (PEQ) під мою цільову криву, а також мікрокоригування затримок та кути фазообертання (Helix Phase) на стиках кросоверів.
+My goal is to obtain calculated per-channel parametric EQ (PEQ) filters matching my target curve, as well as micro-delays and phase rotation angles (Helix Phase) at the crossover summation points.
 
-### 🎯 Вибір Цільової Кривої (Target Curve Selection):
-Вкажіть, яку саме цільову криву використовувати для розрахунку поканального EQ (залиште одну або опишіть свої побажання):
-* **Цільова крива:** [ResoNix Accurate (Дефолт / Рівний SQ) | Harman Car Target (Басовитий) | Audiofrog (Плавний спад ВЧ) | Jazzi | Кастомна (опишіть: наприклад, спад на ВЧ -3дБ та підйом суббасу +6дБ)]
+### 🎯 Target Curve Selection:
+Please specify which target curve to use for the PEQ calculation (leave one or describe your preferences):
+* **Target Curve:** [ResoNix Accurate (Default / Flat SQ) | Harman Car Target (Bass Boost) | Audiofrog (Smooth HF Roll-off) | Jazzi | Custom (describe: e.g., smooth treble roll-off -3dB and sub-bass boost +6dB)]
 
-### ⚠️ Перевірочні Ворота (Verification Gate):
-* Я підтверджую, що всі базові кросовери, затримки та початкові гейни з Кроку 1 повністю активовані в DSP процесорі.
+### ⚠️ Verification Gate:
+* I confirm that all baseline crossovers, delays, and initial gains from Step 1 are fully activated in my DSP processor.
 
-Я завантажую текстові експорти моїх нових вимірів в оптимізованій роздільній здатності 24 PPO та згладжуванні 1/6 або 1/12 oct (RTA, одиночні свипи та свипи сумарних стиків: L w+m_2, R w+m_2, L m+tw_2, R m+tw_2, SW+Ws_2 у файлах .txt / .csv):
-* *(Перетягніть ваші легкі текстові файли експорту вимірів REW прямо в чат)*
+I am uploading the text exports of my new measurements in optimized 24 PPO resolution and 1/6 or 1/12 oct smoothing (RTA, individual sweeps, and crossover summation sweeps: L w+m_2, R w+m_2, L m+tw_2, R m+tw_2, SW+Ws_2 as .txt / .csv files):
+* *(Drag and drop your lightweight REW measurement text files directly into the chat)*
 
-Також, для ідеального математичного зведення фаз, ось точні значення фази в градусах (зчитані з вкладки Phase в REW на частотах кросоверів):
-* **Стик СЧ/ВЧ (на частоті [Вкажіть частоту кросовера СЧ/ВЧ, наприклад, 3500 Гц]):**
-  - Фаза m-L = [Значення]° | Фаза tw-L = [Значення]°
-  - Фаза m-R = [Значення]° | Фаза tw-R = [Значення]°
-* **Стик Мідбас/СЧ (на частоті [Вкажіть частоту кросовера Мідбас/СЧ, наприклад, 300 Гц]):**
-  - Фаза w-L = [Значення]° | Фаза m-L = [Значення]°
-  - Фаза w-R = [Значення]° | Фаза m-R = [Значення]°
-* **Стик Сабвуфер/Мідбас (на частоті [Вкажіть частоту кросовера Саб/Мідбас, наприклад, 60 Гц]):**
-  - Фаза sw = [Значення]° | Фаза Ws (сума мідбасів) = [Значення]°
+Also, for perfect mathematical phase alignment, here are the exact phase values in degrees (read from the Phase tab in REW at the crossover frequencies):
+* **MF/HF Crossover (at [Specify crossover frequency, e.g., 3500 Hz]):**
+  - m-L Phase = [Value]° | tw-L Phase = [Value]°
+  - m-R Phase = [Value]° | tw-R Phase = [Value]°
+* **LF/MF Crossover (at [Specify crossover frequency, e.g., 300 Hz]):**
+  - w-L Phase = [Value]° | m-L Phase = [Value]°
+  - w-R Phase = [Value]° | m-R Phase = [Value]°
+* **SUB/LF Crossover (at [Specify crossover frequency, e.g., 60 Hz]):**
+  - sw Phase = [Value]° | Ws (sum of midbasses) Phase = [Value]°
 
-Проаналізуй ці виміри й значення фаз відповідно до своїх системних інструкцій та виведи результат у встановленій структурі:
-1. 🔍 Оцінка АЧХ та Фазових Стиків
-2. 🎛️ Таблиця Поканального EQ (DSP Output EQ) для кожного каналу окремо
-3. ⏱️ Мікрокоригування Затримок та Фазових Кутів (All-Pass/Phase у мс, семплах та градусах)
-4. 🔊 Коригування Рівнів (Gain Fine-Tuning)
+Please analyze these measurements and phase values according to your system instructions and output your recommendations in the defined structure:
+1. 🔍 Acoustic Analysis & Crossover Summation Audit
+2. 🎛️ Per-Channel Parametric EQ Sheet (DSP Output EQ)
+3. ⏱️ Micro-Delays & Phase Rotation Sheet (Helix Phase & All-Pass)
+4. 🔊 Gain/Level Fine-Tuning Sheet
+5. 📋 Code Block for direct copy-pasting into `autosound_context.md`
 
-Ось мій актуальний паспорт системи (вміст файлу `autosound_context.md` з оновленими даними Кроку 1):
+Here is my active system passport (the contents of my `autosound_context.md` file updated with Step 1 values):
 ==================================================
-<ВСТАВТЕ СЮДИ ВМІСТ ВАШОГО ФАЙЛУ autosound_context.md>
+<PASTE THE CONTENTS OF YOUR autosound_context.md FILE HERE>
 ==================================================

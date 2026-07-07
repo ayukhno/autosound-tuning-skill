@@ -1,26 +1,26 @@
-# Крок 0: Збір інформації та створення профілю (System Intake & Profile Setup)
+# Step 0: System Intake & Profile Setup
 
-Використовуйте цей шаблон для початку процесу налаштування у вашому веб-чаті.
-
----
-
-### 📋 Попередня дія:
-Переконайтеся, що ви скопіювали вміст файлу **[general_system_instructions.md](general_system_instructions.md)** та вставили його у поле **System Instructions** (Системні інструкції) у Google AI Studio, Custom Instructions у ChatGPT або аналогічний системний блок вашого чату. Цю дію достатньо виконати **один раз на початку проекту**.
+Use this template to start your tuning process in any web chat interface.
 
 ---
 
-### 💬 Промпт для копіювання у чат:
-👉 **Скопіюйте весь текст нижче (все, що знаходиться після лінії розділювача `--------------------------------------------------`), вставивши вміст файлу `autosound_context_template.md` у відповідне поле:**
+### 📋 Prerequisite Action:
+Ensure that you have copied the contents of **[general_system_instructions.md](general_system_instructions.md)** and pasted it into the **System Instructions** box in Google AI Studio, Custom Instructions in ChatGPT, or the equivalent system configuration block in your chat client. You only need to do this **once at the start of your project**.
+
+---
+
+### 💬 Copy-Paste Prompt:
+👉 **Copy the entire text below (everything after the divider line `--------------------------------------------------`), inserting the contents of `autosound_context_template.md` in the designated field:**
 
 --------------------------------------------------
 
-Я перебуваю на **Кроці 0: Збір інформації та створення профілю (System Intake & Profile Setup)**.
+I am at **Step 0: System Intake & Profile Setup**.
 
-Будь ласка, привітай мене, проведи зі мною інтерактивне інтерв'ю (групами по 2-3 питання за раз) та заповни для мене шаблон паспорта системи, який я надсилаю нижче.
+Please greet me, conduct an interactive interview with me (asking 2-3 questions at a time), and use my responses to fill out the system passport template provided below.
 
-*(Примітка для ШІ: Якщо я надішлю тобі технічні дані про свою систему одним великим повідомленням відразу, будь ласка, застосуй Bypass Gate — припини інтерв'ю та відразу згенеруй повний заповнений паспорт системи `autosound_context.md` відповідно до структури наданого шаблону).*
+*(AI Note: If I provide my system specifications in a single large message, please activate the Bypass Gate: stop the interview immediately, parse the data, and generate the fully populated `autosound_context.md` file matching the template structure below).*
 
-Ось порожній шаблон для заповнення:
+Here is the blank template to populate:
 ==================================================
-<СКОПІЮЙТЕ СЮДИ І ВСТАВТЕ ПОВНИЙ ВМІСТ ФАЙЛУ autosound_context_template.md>
+<COPY AND PASTE THE COMPLETE CONTENTS OF autosound_context_template.md HERE>
 ==================================================
