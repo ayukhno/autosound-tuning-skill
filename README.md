@@ -60,7 +60,7 @@ Once you have your `autosound_context.md`, `step_-1_general_system_instructions.
 You will find the following files in this folder:
 
 1. **[step_-1_general_system_instructions.md](step_-1_general_system_instructions.md)** — **The Core System Instructions**. Copy and paste this into the "System Instructions" box of your chat workspace once at the beginning.
-2. **[autosound_context.md](autosound_context.md)** — **Your live working passport**, already here as a blank starter copy. Step 0's AI output replaces its contents (or hand-fill it yourself); every later step updates one section of this same file.
+2. **[autosound_context.md](autosound_context.md)** — **Your live working passport**, already here as a blank starter copy (identical structure to the template below, just without its title/intro note). Step 0's AI output replaces its contents (or hand-fill it yourself); every later step updates one section of this same file. ⚠️ It is **not empty** — it's pre-filled with `[Placeholder]` text, so always select-all-and-delete before pasting new content in. Never paste new content above or alongside what's already there; that produces duplicated, conflicting sections.
 3. **[autosound_context_template.md](autosound_context_template.md)** — The pristine, never-edited reference copy of the passport structure — used as Step 0's input, or to restore `autosound_context.md` if you ever need a clean reset.
 4. **[step_0_intake_and_setup.md](step_0_intake_and_setup.md)** — Prompt template to let the AI conduct an interactive interview and generate your `autosound_context.md` contents for you.
 5. **[step_1_baseline_analysis.md](step_1_baseline_analysis.md)** — Prompt to analyze raw sweeps and calculate baseline crossovers, delays, and initial gain asymmetry.
@@ -83,7 +83,7 @@ You will find the following files in this folder:
 * **Template:** [step_0_intake_and_setup.md](step_0_intake_and_setup.md).
 * **Action:** Copy the Step 0 prompt into a clean chat, pasting in `autosound_context_template.md`'s contents where indicated. The AI will interview you (2-3 questions at a time) and generate a fully populated Markdown block.
 * **Manual quick start (skip the interview):** Already know your gear? Open **[autosound_context.md](autosound_context.md)** directly (it's already here as a blank starter copy) and replace the `[Placeholder]` fields yourself — no AI chat needed for this step.
-* **Result:** Replace this folder's **[autosound_context.md](autosound_context.md)** entirely with the AI's generated block (Path 1) or your hand-filled version (Path 2). This one file carries your system state through every later step.
+* **Result:** Open **[autosound_context.md](autosound_context.md)**, select all existing text and delete it, then paste in the AI's generated block (Path 1) or your hand-filled version (Path 2) in its place — a true full-file replace, not an insert. This one file carries your system state through every later step, so a stray leftover section here will silently conflict with later steps.
 
 ---
 

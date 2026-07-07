@@ -1,14 +1,3 @@
-# YOUR SYSTEM PASSPORT (`autosound_context.md`)
-
-This is your **live, working passport** — it starts as a blank copy of `autosound_context_template.md` and gets updated after every step. Two ways to fill it in:
-
-* **Path 1 (AI-guided, recommended):** Copy `step_0_intake_and_setup.md`'s prompt into a new chat, pasting the contents of `autosound_context_template.md` (the pristine copy) where indicated. The AI will interview you and generate a fully populated Markdown block — **replace this entire file's contents** with that block.
-* **Path 2 (Manual quick start):** Already know your gear? Replace the `[Placeholder]` fields below yourself with your real hardware/measurement details, then delete this note.
-
-After Step 0, this file holds your equipment + a blank Step 1/2/3 structure. After each later step, paste the AI's returned block over that step's section in this same file — never in the template.
-
----
-
 # PROJECT CONTEXT: AUDIOSYSTEM CALIBRATION
 
 ## 1. Hardware Configuration
