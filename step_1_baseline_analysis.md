@@ -32,8 +32,7 @@ I am at **Step 1: Baseline Analysis (Crossovers & Delays)**.
 
 My goal is to obtain baseline crossover recommendation points, initial gain levels, and exact time-alignment delays (in ms and digital samples) calculated from the impulse response peaks of my speakers.
 
-I am uploading the text exports of my baseline measurements using optimized 24 PPO resolution and 1/6 or 1/12 oct smoothing (.txt or .csv files):
-* *(Drag and drop your lightweight REW measurement text files directly into the chat)*
+I am uploading the text exports of my baseline measurements using optimized 24 PPO resolution and 1/6 or 1/12 oct smoothing (.txt or .csv files).
 
 Please analyze these measurements according to your system instructions and output your recommendations in the defined structure:
 1. 🔍 Acoustic Analysis Summary
@@ -46,3 +45,5 @@ Here is my static system passport (the contents of my `autosound_context.md` fil
 ==================================================
 <PASTE THE CONTENTS OF YOUR autosound_context.md FILE HERE>
 ==================================================
+
+* *(Drag and drop your lightweight REW measurement text files directly into the chat)*
