@@ -6,10 +6,14 @@ Have a question that isn't here? Open a [discussion or issue](../../issues) and 
 
 ## Table of Contents
 
-- [The Philosophy: Why AI, and Why Not Just a Standard Web Chat?](#the-philosophy-why-ai-and-why-not-just-a-standard-web-chat)
+- [Philosophy & Structure: Why AI?](#philosophy--structure-why-ai)
+  - [Our Mission & Vision](#our-mission--vision)
+  - [Why We Need Specialized AI & Local State](#why-we-need-specialized-ai--local-state)
+  - [The 5-Step Tuning Journey](#the-5-step-tuning-journey)
+  - [Subscription Options, Quotas, & Budgets (As of July 2026)](#subscription-options-quotas--budgets-as-of-july-2026)
 - [First-Time Setup (Claude Code)](#first-time-setup-windows-claude-code--antigravity)
-  - [1. Quick Installation (macOS & Windows)](#1-quick-installation-claude-code)
-  - [2. Authentication & Plugin Setup](#2-authentication--plugin-setup-cross-platform)
+  - [Quick Installation (macOS & Windows)](#quick-installation-claude-code)
+  - [Authentication & Plugin Setup](#authentication--plugin-setup-cross-platform)
 - [Setting up the Gemini/Antigravity Critic (Standalone)](#setting-up-the-geminiantigravity-critic-standalone-setup)
   - [macOS & Windows Setup (Antigravity CLI - Recommended)](#macos--windows-setup-using-antigravity-cli---recommended)
   - [Fallback: Direct API Setup (No CLI/Node.js)](#fallback-direct-api-setup-no-cli-or-nodejs-required)
@@ -19,26 +23,32 @@ Have a question that isn't here? Open a [discussion or issue](../../issues) and 
 
 ---
 
-## The Philosophy: Why AI, and Why Not Just a Standard Web Chat?
+## Philosophy & Structure: Why AI?
 
-You absolutely *can* use a regular web-chat with free versions of Claude or Gemini! The core of this project is a **methodology**, not just software. However, there is a fundamental difference between a general chat and our structured AI-assisted approach. Here is why the "Skill + State + API" architecture exists, and the 5-step journey it guides you through:
+You absolutely *can* use a regular web-chat with free versions of Claude or Gemini! The core of this project is a **methodology**, not just software. However, there is a fundamental difference between a general chat and our structured AI-assisted approach. Here is how our philosophy and the entire tuning process are organized into four key aspects:
 
-### 1. Why a general chat eventually fails (The "Memory Drift" problem)
-Tuning a car is a highly iterative process. You don't do it in one go. You measure, adjust crossovers, set delays, check phase, and then do EQ. 
-Over a long conversation, **general AI models suffer from "context drift."** They start to forget or slightly alter the exact numbers (delay values, crossover points, slope types) decided at the beginning. This can lead to contradictory, incorrect, or even dangerous suggestions for your speakers.
-* **The Solution:** We keep your active DSP configuration on disk in simple text files (`dsp-state-current.md` and `tuning-changelog.md`). Every time you invoke the AI, it reads this "single source of truth" from disk, restoring 100% of its memory instantly. It never guesses or forgets your state.
+### Our Mission & Vision
 
-### 2. What a specialized "Skill" actually is
-A general AI model knows basic audio theory, but it doesn't know car cabins, specific driver behaviors, or safety boundaries. 
-A **Skill** is like installing a custom "firmware" into the AI. It loads specialized acoustic patterns, safety checklists (to protect your tweeters), target curves (like ResoNix or Audiofrog), and calculation scripts. It turns a generic text generator into a professional car-audio calibration engineer that guides you by the hand.
+We believe that professional-grade car audio tuning should be accessible to every enthusiast. Our goal is to showcase the power of modern AI not as a replacement for human judgment, but as a powerful **intellectual exoskeleton** for the tuner.
 
-### 3. Why we use local scripts & APIs (Optional but Powerful)
-Measuring a car generates massive amounts of data (phase curves, impulse responses, RTA sweeps). Copying and pasting thousands of rows of CSV data or taking dozens of screenshots is tedious and error-prone.
-Our Python scripts connect directly to **REW's local API**. They automatically pull the raw measurements, extract the acoustic essence (phase cancellations, cabin resonances, timing deltas), and feed them to the AI in milliseconds. It turns a 10-minute manual data entry job into a 2-second automated command.
+The human (the Arbiter) always remains the master who listens, feels the soundstage, and makes final decisions. The AI acts as the exoskeleton—instantly calculating complex cabin physics, analyzing phase alignments, automating tasks via the REW API, and offering bold, non-standard acoustic insights. We bridge the gap between rigorous science and human intuition to reveal the true emotional depth and pure joy of music in your car.
 
----
+### Why We Need Specialized AI & Local State
+
+To make AI-assisted tuning highly reliable, repeatable, and automated, we solve three major limitations of generic web chats:
+
+* **The "Memory Drift" Problem (Why general chat eventually fails):**
+  Tuning a car is a highly iterative process (measuring, adjusting crossovers, set delays, check phase, EQ). Over a long conversation, **general AI models suffer from "context drift"**—they start to forget or slightly alter the exact numbers decided at the beginning, leading to contradictory or dangerous suggestions.
+  *The Solution:* We keep your active DSP configuration on disk (`dsp-state-current.md` and `tuning-changelog.md`). Every time you invoke the AI, it reads this "single source of truth" from disk, restoring 100% of its memory instantly.
+
+* **What a Specialized "Skill" Actually Is:**
+  A general AI model knows basic audio theory, but it doesn't know car cabins, specific driver behaviors, or safety boundaries. A **Skill** is like installing a custom "firmware" into the AI. It loads specialized acoustic patterns, safety checklists (to protect your tweeters), target curves (like ResoNix or Audiofrog), and calculation scripts. It turns a generic text generator into a professional car-audio calibration engineer that guides you by the hand.
+
+* **Why We Use Local Scripts & APIs (Optional but Powerful):**
+  Measuring a car generates massive amounts of data (phase curves, impulse responses, RTA sweeps). Copying and pasting thousands of rows of CSV data or taking dozens of screenshots is tedious and error-prone. Our Python scripts connect directly to **REW's local API**. They automatically pull the raw measurements, extract the acoustic essence (phase cancellations, cabin resonances, timing deltas), and feed them to the AI in milliseconds. It turns a 10-minute manual data entry job into a 2-second automated command.
 
 ### The 5-Step Tuning Journey
+
 Regardless of whether you use our automated scripts (Level 2) or simply follow our guidebook in a free web-chat (Level 1), the process always follows this rigorous 5-step roadmap:
 
 1. **System Audit & Target Selection (Baseline & Target)**
@@ -52,6 +62,25 @@ Regardless of whether you use our automated scripts (Level 2) or simply follow o
 5. **Tailoring to Taste (Voicing & Variations)**
    We build subtle variations and presets tailored to your preferences (e.g., a high-energy rock preset, a highly detailed jazz preset, or a relaxed daily driving profile).
 
+### Subscription Options, Quotas, & Budgets (As of July 2026)
+
+In car audio, enthusiasts easily spend hundreds or thousands of dollars on physical hardware (where a single premium sound dampening sheet or a high-quality RCA cable costs $20–$50). When it comes to tuning your system with this AI tool, you have three flexible financial paths depending on your budget, tolerance for rate limits, and preference for automation:
+
+* **Option 1 (Recommended Baseline): Claude ($20/mo) + Free Gemini as Advisor/Critic**
+  You pay $20 for a 1-month Claude Pro subscription (using Claude as the strict, highly structured, and systematic "driver" of the tuning process) and connect Gemini as the Critic/Advisor for free (via Clipboard Mode or standard free API keys from Google AI Studio). 
+  * **Pros:** Highly precise, 100% protection against mathematical errors, costs just $20. You simply cancel the subscription once your car is tuned.
+  * **Cons:** The free-tier Gemini API can occasionally hit Rate Limits (RPM/TPM quotas) during rapid, back-to-back testing.
+
+* **Option 2 (Budget Compromise): Gemini Solo ($10 deposit)**
+  You set up a paid billing account on [Google Cloud Console Billing](https://console.cloud.google.com/billing) and deposit $10 (the minimum required deposit to activate paid API tiers, which unlocks $300 in free credits for new accounts). You then run Gemini "solo" as your main tuner. 
+  * **Pros:** Extremely cost-efficient ($10). **Indeed, having Gemini in the driver's seat yields the most amazing acoustic insights and non-standard tuning solutions.**
+  * **Cons:** Due to the risk of "memory drift" under heavy contexts, you will need to manually double-check any variables or parameters the AI references (for example, when it suggests changing a crossover frequency from 200 Hz to 250 Hz when you actually have 230 Hz set, or no filter at all) and start every new tuning phase with a clean session using the `/clear + resume` command.
+
+* **Option 3 (Professional & Seamless): Both Paid (Claude Pro $20 + Paid Gemini Cloud API)**
+  You keep a paid Claude Pro subscription ($20) for the main structured "driver" agent and use a funded [Google Cloud Console Billing](https://console.cloud.google.com/billing) account for the Gemini API Critic/Advisor.
+  * **Pros:** This is the absolute peak of the dual-AI review loop. It eliminates all rate limits, prevents "API quota exhausted" errors, and allows you to tune continuously without pauses. This is highly recommended for professionals, people tuning multiple cars, or those running deep, back-to-back testing sessions.
+  * **Cons:** Costs $20 plus pay-as-you-go API usage (which typically amounts to just a few cents or dollars per session drawn from your Google Cloud deposit).
+
 ---
 
 ## First-Time Setup (Windows, Claude Code & Antigravity)
@@ -61,7 +90,7 @@ To get started, you will need a laptop, a calibrated microphone setup, and a DSP
 > [!IMPORTANT]
 > **Subscription:** You will need a paid **Claude Pro** subscription ($20/mo) because Claude Code (the CLI agent) requires API access that isn't available on the free tier. ChatGPT Plus plans cannot be transferred.
 
-#### 1. Quick Installation (Claude Code)
+#### Quick Installation (Claude Code)
 
 Choose the instructions for your operating system:
 
@@ -134,7 +163,7 @@ Choose the instructions for your operating system:
 
 ---
 
-#### 2. Authentication & Plugin Setup (Cross-Platform)
+#### Authentication & Plugin Setup (Cross-Platform)
 
 Once you run the `claude` command in your terminal:
 
