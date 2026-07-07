@@ -79,7 +79,7 @@ def generate_ai_draft(title, body):
 We received a user issue. Read the title and body below, and generate a professional, helpful, and friendly response in Markdown.
 
 Instructions for your response:
-1. Speak in Ukrainian (since the project's lead maintainer communicates in Ukrainian with native users), but if the issue is in English or German/Polish, respond in the language of the issue.
+1. Respond in English by default — it is the project's public working language, and issues/replies are kept in English so the whole community can follow the thread. Only if the issue is clearly written in another language (e.g. Ukrainian, German, Polish) may you mirror that language.
 2. Link the appropriate sections of our FAQ (e.g., mention that we have a detailed FAQ.md with Windows, Google AI Studio, or mic choices guides).
 3. If it's a bug, suggest logical debugging steps (like running the 'doctor' check).
 4. If it's a feature request, welcome it warmly and explain how we can collaborate.

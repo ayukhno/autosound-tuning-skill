@@ -283,6 +283,116 @@ def render_diff(d):
     return "\n".join(lines) + "\n"
 
 
+# ── multi-slot registry (issue #5: active-slot integrity) ─────────────────────
+class Registry:
+    """Which preset (slot) is ACTIVE in the physical DSP right now — the anti-cross-slot-anchoring
+    pointer.
+
+    A multi-preset processor (e.g. Helix Slot 1/2/3) invites a degrading model to anchor on the
+    WRONG slot's gains: the real incident (issue #5) was tuning Slot 3 (EMMA-Ref v3) while the top
+    of a flat state table showed Slot 2 (ResoNix) numbers, so proposed HF filters were computed off
+    a −8.0 dB baseline that belonged to a different slot. Each preset's snapshots already live
+    physically isolated under `<root>/<preset>/` (PresetHistory); this registry adds the one missing
+    thing — an explicit, machine-checked pointer to the live slot — and `render()` emits a LOUD
+    banner so a top-down read hits the active slot first and can't drift to a neighbour's table.
+    The apply gate (`apply.py propose`) reads this to REFUSE a change aimed at a non-active slot.
+    """
+
+    def __init__(self, root):
+        self.root = root
+        os.makedirs(root, exist_ok=True)
+
+    def _path(self):
+        return os.path.join(self.root, "registry.json")
+
+    def list_presets(self):
+        """Preset names that actually have a snapshot history under root (dirs holding v_NNN.json)."""
+        out = []
+        if os.path.isdir(self.root):
+            for name in sorted(os.listdir(self.root)):
+                d = os.path.join(self.root, name)
+                if os.path.isdir(d) and any(
+                        fn.endswith(".json") and _VER_RE.match(fn[:-5]) for fn in os.listdir(d)):
+                    out.append(name)
+        return out
+
+    def load(self):
+        p = self._path()
+        if os.path.exists(p):
+            with open(p) as f:
+                return json.load(f)
+        return {"active": None, "slots": {}}
+
+    def _write(self, reg):
+        reg["updated"] = datetime.datetime.now().isoformat(timespec="seconds")
+        with open(self._path(), "w") as f:
+            json.dump(reg, f, indent=2, sort_keys=True, ensure_ascii=False)
+
+    def get_active(self):
+        return self.load().get("active")
+
+    def set_active(self, preset):
+        """Point the active slot at `preset`. Deterministic guard: it must already have a history."""
+        presets = self.list_presets()
+        if preset not in presets:
+            raise ValueError(f"preset {preset!r} has no snapshot history under {self.root!r} "
+                             f"(known: {presets or 'none'}) — seed it (history.snapshot) before "
+                             f"making it the active slot")
+        reg = self.load()
+        reg["active"] = preset
+        reg.setdefault("slots", {})
+        self._write(reg)
+        return preset
+
+    def describe_slot(self, preset, label=None, note=None):
+        """Attach an optional human label/desc to a slot (e.g. label='Slot 3', note='EMMA-Ref v3')."""
+        reg = self.load()
+        entry = reg.setdefault("slots", {}).setdefault(preset, {})
+        if label is not None:
+            entry["label"] = label
+        if note is not None:
+            entry["note"] = note
+        self._write(reg)
+        return entry
+
+    def render(self):
+        return render_registry(self.root, self.load(), self.list_presets())
+
+
+def render_registry(root, reg, presets):
+    """LOUD active-slot banner + one isolated summary row per preset — the generated multi-slot
+    `dsp-state-current` view. Generated-only (never hand-edited): a top-down read hits the ACTIVE
+    banner first, so it cannot anchor on a neighbour slot's gains (issue #5)."""
+    active = reg.get("active")
+    slots = reg.get("slots") or {}
+    lines = ["# DSP state — multi-slot registry", ""]
+    if active:
+        lbl = (slots.get(active) or {}).get("label")
+        lines.append(f"> ⚠️ **ACTIVE SLOT IN THE DSP:** `{active}`" + (f" — {lbl}" if lbl else ""))
+        lines.append("> Read and propose ONLY against this preset's section. The apply gate refuses "
+                     "changes aimed at any other slot.")
+    else:
+        lines.append("> ⚠️ **NO ACTIVE SLOT SET** — run `state.py registry set-active <preset>` "
+                     "before proposing any change.")
+    lines.append("")
+    if not presets:
+        return "\n".join(lines + ["_(no presets have a snapshot history yet)_", ""])
+    lines += ["| Slot (preset) | Active | HEAD | Target | Key gains (dB) |",
+              "|---|---|---|---|---|"]
+    for preset in presets:
+        h = PresetHistory(root, preset)
+        head = h.head()
+        s = h.load(head) if head else {}
+        chans = s.get("channels", {}) or {}
+        gains = " · ".join(f"{c}={chans[c].get('gain_db')}" for c in list(chans)[:4]) if chans else "—"
+        lbl = (slots.get(preset) or {}).get("label")
+        name = preset + (f" — {lbl}" if lbl else "")
+        mark = "✅" if preset == active else ""
+        lines.append(f"| {name} | {mark} | {head or '—'} | {s.get('target', '—')} | {gains} |")
+    lines.append("")
+    return "\n".join(lines)
+
+
 # ── CLI ───────────────────────────────────────────────────────────────────────
 def _main(argv=None):
     p = argparse.ArgumentParser(description="Versioned hard-params DSP state")
@@ -298,11 +408,27 @@ def _main(argv=None):
     sp.add_argument("preset")
     sp.add_argument("va")
     sp.add_argument("vb")
+    rp = sub.add_parser("registry", help="multi-slot active-slot pointer (issue #5)")
+    rp.add_argument("action", choices=["show", "set-active", "render", "describe"])
+    rp.add_argument("preset", nargs="?", default=None)
+    rp.add_argument("--label", default=None)
+    rp.add_argument("--note", default=None)
     sub.add_parser("selftest")
     args = p.parse_args(argv)
 
     if args.cmd == "selftest" or args.cmd is None:
         return _selftest()
+    if args.cmd == "registry":
+        reg = Registry(args.root)
+        if args.action == "set-active":
+            print("active →", reg.set_active(args.preset))
+        elif args.action == "describe":
+            print(reg.describe_slot(args.preset, label=args.label, note=args.note))
+        elif args.action == "render":
+            print(reg.render())
+        else:  # show
+            print(json.dumps(reg.load(), indent=2, ensure_ascii=False))
+        return 0
     h = PresetHistory(args.root, args.preset)
     if args.cmd == "log":
         for v in h.versions():
@@ -391,8 +517,28 @@ def _selftest():
     except ValueError:
         pass
 
+    # ── multi-slot registry (issue #5): active-slot pointer + LOUD banner ──
+    h2 = PresetHistory(root, "ResoNix")
+    h2.snapshot(_sample_state(), note="resonix baseline")     # a second slot to disambiguate
+    reg = Registry(root)
+    assert set(reg.list_presets()) == {"SQ_Jazzi", "ResoNix"}, reg.list_presets()
+    try:
+        reg.set_active("EMMA_Ref_v3")                          # no history → deterministic refusal
+        raise AssertionError("set_active accepted a preset with no history")
+    except ValueError:
+        pass
+    reg.set_active("SQ_Jazzi")
+    assert reg.get_active() == "SQ_Jazzi"
+    banner = reg.render()
+    assert "ACTIVE SLOT IN THE DSP:** `SQ_Jazzi`" in banner, banner
+    assert "ResoNix" in banner, "every slot must still be listed (isolated rows)"
+    active_row = [ln for ln in banner.splitlines() if ln.startswith("| SQ_Jazzi")][0]
+    assert "✅" in active_row, active_row
+
     print(f"selftest OK — 3 snapshots, diff caught exactly the 3 changes, 5.38 ms → 516 smp @96k "
-          f"(258 @48k), revert forward-only (v_001→v_003), validation rejected bad polarity. root={root}")
+          f"(258 @48k), revert forward-only (v_001→v_003), validation rejected bad polarity; "
+          f"registry: 2 slots isolated, active=SQ_Jazzi loud-bannered, set-active refused a "
+          f"history-less slot. root={root}")
     return 0
 
 

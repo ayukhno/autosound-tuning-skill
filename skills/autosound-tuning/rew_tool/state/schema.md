@@ -87,3 +87,33 @@ apply.attest(h)                                 # Arbiter entered it in Helix ->
 - Lifecycle: `propose` 🟡 → `attest` 🟢 → 📏 after a control measurement confirms effect.
 - Why it's kept simple: banking a change is genuinely useful (A/B, revert, resume after `/clear`, one
   honest audit trail), so it earns its place on merit — not as a mechanism to police the model.
+
+## Multi-slot registry (`Registry` — issue #5)
+A multi-preset DSP (e.g. Helix Slot 1/2/3) invites a degrading model to anchor on the **wrong slot's**
+gains: the real incident was tuning Slot 3 (EMMA-Ref v3) while the top of a flat state table still
+showed Slot 2 (ResoNix) numbers, so proposed HF filters were computed off a baseline that belonged to
+a different slot. Each preset's snapshots are **already** physically isolated under `<root>/<preset>/`;
+the registry adds the one missing thing — an explicit, machine-checked pointer to the **live** slot.
+```
+<root>/registry.json      # {"active": "<preset>", "slots": {"<preset>": {"label": "Slot 3", "note": "…"}}, "updated": "…"}
+```
+- **`set_active(preset)`** — deterministic guard: the preset must already have a snapshot history.
+- **`render()`** — the generated multi-slot `dsp-state-current` view: a **LOUD active-slot banner**
+  first (a top-down read can't drift to a neighbour), then one isolated summary row per slot.
+- **Gate integration:** `apply.propose(h, delta, registry=reg)` **REFUSES** a change whose preset is
+  not the active slot (unless `allow_nonactive=True`) and stamps the settings-sheet header
+  `ACTIVE SLOT ✅` / `⚠️ NON-ACTIVE SLOT`. This is the *mechanized* MULTI-SLOT STATE INTEGRITY RULE —
+  a gate that refuses, not prose that asks.
+```python
+from state import Registry
+reg = Registry(root)
+reg.set_active("EMMA_Ref_v3")                 # which slot is loaded in the DSP right now
+reg.describe_slot("EMMA_Ref_v3", label="Slot 3")
+print(reg.render())                           # banner + per-slot table (generated dsp-state-current)
+apply.propose(h, delta, registry=reg)         # refuses if h.preset != active slot
+```
+```
+python state.py --root <dir> registry show|render
+python state.py --root <dir> registry set-active <preset>
+python state.py --root <dir> registry describe <preset> --label "Slot 3" --note "EMMA-Ref v3"
+```

@@ -38,6 +38,18 @@ Need help setting up Claude Code, running on **Windows**, configuring the **Gemi
 👉 Refer directly to our comprehensive **[FAQ.md](FAQ.md)**.
 
 
+## Recommended models
+
+The skill runs a two-role loop — a **Driver** (Generator/Orchestrator) proposes, a **Critic/Advisor** stress-tests — so the models are **complementary, not competing**:
+
+| Role | Recommended | Why |
+| :--- | :--- | :--- |
+| **Driver** — steers the session, reads REW, proposes values | **Claude Sonnet 5** | Reliable, structured, cost-efficient, an accurate data parser — the backbone of the process. Escalate to **Claude Opus 4.8** for crossover strategy, 3-way deadlocks, and final technical verdicts. |
+| **Critic / Advisor** — challenges assumptions, cabin-physics depth | **Gemini** (2.5 Pro for hard acoustic calls, 2.5 Flash for routine) | Cross-vendor anti-anchoring + creative acoustic depth. Caveat: it can drift on long autonomous sessions — keep it on-demand and re-anchor from disk. |
+
+**Which is "better"?** Neither — it's about the seat. **Claude Sonnet 5 is the dependable driver**; **Gemini is a high-value, low-cost second-vendor critic** (a different vendor catches more than a same-vendor peer). If you run just one, drive with Sonnet 5 and let the reviewer role fall back to a higher-tier Claude. Per-task detail → `SKILL.md` (Model Selection); operating modes → `references/core/process-control.md`.
+
+
 ## What's in here
 
 ```

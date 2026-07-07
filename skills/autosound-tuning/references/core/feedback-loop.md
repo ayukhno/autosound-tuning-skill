@@ -69,9 +69,15 @@ crossover sets · techniques · successful symptom→fix · track markers
 ## This body's cabin anomalies (→ knowledge/cars/)
 ```
 
+> **Write the feedback package in English.** Local project files follow the user's chosen language
+> (EN/UK/DE/PL, `project-intake.md §5`), but a feedback package becomes a **public GitHub issue** read
+> by the maintainer and the whole community — so the issue **title and body are always English**,
+> regardless of the session language. If the tune was run in UK/DE/PL, translate the package on the way
+> out. (The title is already English — `post_feedback` builds `Feedback: <car> · <DSP>`; keep the body English too.)
+
 ### Sending channels (by increasing formality)
 
-1. **A GitHub Issue** in the skill's repo per the issue template — the default: transparent, threaded, the history visible to all.
+1. **A GitHub Issue** in the skill's repo per the issue template — the default: transparent, threaded, the history visible to all. **In English** (public repo — see the note above).
 2. **A PR**: the package in `community-inbox/<body>-<date>.md`.
 3. Without git: the file to the author by messenger/email.
 

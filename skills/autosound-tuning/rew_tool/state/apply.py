@@ -104,13 +104,17 @@ _FIELD_LABEL = {"hp": "HP", "lp": "LP", "gain_db": "Gain", "ta_ms": "TA",
                 "polarity": "Polarity", "helix_ch": "Helix ch", "eq_ptr": "EQ", "status": "status"}
 
 
-def settings_sheet(diff, rate, preset, version):
+def settings_sheet(diff, rate, preset, version, slot_note=None):
     """The compact 'APPLY THIS at the PC-Tool screen' table — only the changed fields, old→new.
 
     This is the artifact the Arbiter keys in; ms is the source of truth, samples shown for the rate.
-    Generated-only — it is a view of the diff, never edited by hand.
+    Generated-only — it is a view of the diff, never edited by hand. `slot_note` (issue #5) stamps
+    the header with the preset's active-slot status so the human never keys a change into the wrong slot.
     """
-    lines = [f"## APPLY THIS in Helix PC-Tool — {preset} · {version} (proposed)",
+    header = f"## APPLY THIS in Helix PC-Tool — {preset} · {version} (proposed)"
+    if slot_note:
+        header += f" · {slot_note}"
+    lines = [header,
              "Enter only these. ms is the source of truth; samples shown for the active rate.", "",
              "| Channel | Param | Old → New |", "|---|---|---|"]
     any_row = False
@@ -134,11 +138,27 @@ def settings_sheet(diff, rate, preset, version):
     return "\n".join(lines)
 
 
-def propose(history, delta, note=None, provenance=None):
+def propose(history, delta, note=None, provenance=None, registry=None, allow_nonactive=False):
     """Gate: validate the delta against current HEAD, bank a 🟡 proposed snapshot, return the sheet.
 
     Returns {version, sheet, full_render, diff, advisories}. Raises ValueError on a deterministic
-    refusal (the state is NOT banked on refusal — a garbage change can't slip through)."""
+    refusal (the state is NOT banked on refusal — a garbage change can't slip through).
+
+    Multi-slot integrity (issue #5): if `registry` is given and an active slot is set, REFUSE a
+    proposal aimed at a different preset (the cross-slot anchoring trap — tuning Slot 3 off Slot 2's
+    baseline), unless `allow_nonactive=True`. The settings sheet is stamped with the slot status."""
+    slot_note = None
+    if registry is not None:
+        active = registry.get_active()
+        if active is not None:
+            if history.preset != active and not allow_nonactive:
+                raise ValueError(
+                    f"⛔ SLOT MISMATCH — proposing to preset {history.preset!r} but the ACTIVE slot "
+                    f"in the DSP is {active!r}. This is the issue-#5 cross-slot anchoring trap. Either "
+                    f"`registry set-active {history.preset}` (if you really switched slots) or pass "
+                    f"allow_nonactive=True for a deliberate off-slot edit.")
+            slot_note = ("ACTIVE SLOT ✅" if history.preset == active
+                         else f"⚠️ NON-ACTIVE SLOT (active={active})")
     current = history.load()  # read-before-edit (raises if no baseline — seed via history.snapshot first)
     proposed = apply_delta(current, delta)          # deterministic refusals fire here
     if provenance is not None:
@@ -147,7 +167,7 @@ def propose(history, delta, note=None, provenance=None):
     adv = advisories(current, proposed)
     version = history.snapshot(proposed, note=note or "proposed change")   # validates again + versions
     rate = proposed["sample_rate"]
-    sheet = settings_sheet({**d, "to": version}, rate, history.preset, version)
+    sheet = settings_sheet({**d, "to": version}, rate, history.preset, version, slot_note=slot_note)
     if adv:
         sheet += "\n\n⚠️ **Advisories (double-check, not blocking):**\n" + "\n".join("- " + a for a in adv)
     sheet += (f"\n\nAfter entering these in Helix, run `attest {version}` to bank it 🟢 applied, "
@@ -222,9 +242,29 @@ def _selftest():
     assert h.load(rc["version"])["channels"]["c"]["status"] == "proposed"
     assert "NEW channel" in rc["sheet"]
 
+    # ── multi-slot slot-guard (issue #5): propose to a NON-active slot is refused, banks nothing ──
+    reg = _state.Registry(root)
+    h2 = _state.PresetHistory(root, "ResoNix")
+    h2.snapshot(_state._sample_state(), note="resonix baseline")
+    reg.set_active("ResoNix")                              # active slot = ResoNix; h is SQ_Jazzi
+    n0 = len(h.versions())
+    try:
+        propose(h, {"w-L": {"gain_db": -7.0}}, registry=reg)
+        raise AssertionError("gate accepted a proposal aimed at a non-active slot")
+    except ValueError as e:
+        assert "SLOT MISMATCH" in str(e), e
+    assert len(h.versions()) == n0, "a slot-mismatch refusal must NOT bank a snapshot"
+    # deliberate override banks + stamps NON-ACTIVE; on the active slot the sheet stamps ACTIVE.
+    r_over = propose(h, {"w-L": {"gain_db": -7.0}}, registry=reg, allow_nonactive=True)
+    assert "NON-ACTIVE SLOT" in r_over["sheet"], r_over["sheet"]
+    reg.set_active("SQ_Jazzi")
+    r_act = propose(h, {"w-L": {"gain_db": -7.1}}, registry=reg)
+    assert "ACTIVE SLOT ✅" in r_act["sheet"], r_act["sheet"]
+
     print(f"selftest OK — propose banked 🟡 + settings-sheet (old→new, 5.45 ms=523 smp@96k), "
           f"advisory on polarity flip, attest flipped 🟡→🟢 (w-L,sub), 3 deterministic refusals "
-          f"banked nothing, new-channel add allowed. root={root}")
+          f"banked nothing, new-channel add allowed; slot-guard refused a non-active-slot propose "
+          f"(banked nothing) + stamped ACTIVE/NON-ACTIVE. root={root}")
     return 0
 
 
