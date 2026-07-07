@@ -20,3 +20,30 @@ Ready answers to the capability checklist `project-intake.md §4`. Detail — in
 
 1. **Canonical (Helix): file import** of Audiotec-Fischer → `helix-eq-export.md`. Advantage: in REW you immediately see the filters' effect on the curve. ⚠️ If file import is inconvenient (e.g. the path through Parallels/VM on Mac — feedback from a live test) → you can try path 2 on the **Helix PC-Tool window** too (the keystroke approach is generic; PC-Tool field compatibility is **provisional, not verified on Helix**).
 2. **Alternative (and the path for DSPs without import): REW-EQ-CopyPaste-Assistant** (github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant) — a Windows/PowerShell helper: "Copy" in REW's EQ section → the tool converts the clipboard into keystroke sequences and types the bands into the DSP software's window itself (click the first band → auto-entry). **30+ platforms**: Musway TUNEST_PC (verified by the skill author), ESX, Zapco, Goldhorn, Ground Zero, Nakamichi-K, etc. Claude can prepare a filter package for copying the same way it prepares an Audiotec-Fischer file (via REW or `rew_tool`).
+
+## Worked settings-sheet example (illustrates SKILL.md's presentation rule)
+
+`SKILL.md`'s always-loaded core requires every actionable DSP change to be presented as a step-by-step, arrow-pointer (`──►`) list — samples **and** ms, never a bare file reference. This is what that looks like on THIS DSP (a different DSP profile would show its own PC-Tool/app steps; the rule itself is DSP-agnostic — see SKILL.md).
+
+```markdown
+### Крок 1. Налаштування процесора в Helix PC-Tool (Примітка: затримки розраховано для Helix 96 кГц)
+1. Запустіть Helix PC-Tool на вашому Windows-комп'ютері або у віртуальній машині.
+2. Перейдіть у меню Crossovers (Кросовери) та встановіть для каналів:
+    • ВЧ (tw-L, tw-R): HPF = 3500 Гц | Крутизна = Linkwitz-Riley 24 дБ (LR4).
+    • СЧ (m-L, m-R): HPF = 300 Гц, LPF = 3500 Гц | LR4 (24 дБ).
+    • НЧ (w-L, w-R): HPF = 60 Гц, LPF = 300 Гц | LR4 (24 дБ).
+    • Сабвуфер (sw): HPF (Subsonic) = 20 Гц BW2 (Butterworth 12 дБ) | LPF = 60 Гц LR4 (24 дБ).
+    • Тил (r-L, r-R) та Центр (c): Тимчасово заглушіть (Mute).
+3. Перейдіть у меню Time Alignment (Затримки) та введіть значення (мілісекунди — абсолютний референс, семпли наведено для 96 кГц):
+    • tw-L (Канал A) ──► 626 семплів (6.52 мс)
+    • tw-R (Канал B) ──► 510 семплів (5.31 мс)
+    • m-L  (Канал C) ───► 633 семпли (6.59 мс)
+    • m-R  (Канал D) ───► 515 семплів (5.36 мс)
+    • w-L  (Канал E) ───► 522 семпли (5.44 мс)
+    • w-R  (Канал F) ───► 450 семплів (4.69 мс)
+    • sw   (Канал H) ────► 0 семплів (0.00 мс)
+4. Перейдіть у меню Gain (Рівні) та притисніть ліву сторону для базового балансу сцени:
+    • tw-L ──► -1.5 дБ | m-L ──► -2.0 дБ | w-L ──► -1.5 дБ
+    • Всі праві канали та саб залишаються на 0.0 дБ.
+5. Збережіть цей пресет у процесор (наприклад, у Слот 1) та збережіть файл на комп'ютер як B8_EMMA_v1_foundation.pct6.
+```
