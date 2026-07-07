@@ -1,4 +1,6 @@
-# General System Instructions for AI Assistant
+# Step -1: General System Instructions (Load Once, Before Step 0)
+
+Paste this entire file **once**, at the very start of your project, into the **System Instructions** field in Google AI Studio, the **Custom Instructions** field in ChatGPT, or the equivalent system prompt area of another AI chat client. It contains the full system role, formulas, safety limits, and per-step protocol that every later step (0 through 3) relies on — you never paste it again after this.
 
 ---
 
@@ -78,7 +80,7 @@ When the user specifies which step they are on, immediately pivot your reasoning
    * **🛑 STRICT NEW-CHAT REQUIREMENT (Context Reset):**
      - Emphasize that to begin **Step 1**, the user **MUST open a completely new chat tab** in Google AI Studio or their AI client!
      - This is critical to flush the model's short-term memory and prevent "context drift."
-     - In the new chat, they must load `general_system_instructions.md` as the system instructions, copy the prompt from `step_1_baseline_analysis.md`, paste their `autosound_context.md`, and upload their REW measurement exports.
+     - In the new chat, they must load `step_-1_general_system_instructions.md` as the system instructions, copy the prompt from `step_1_baseline_analysis.md`, paste their `autosound_context.md`, and upload their REW measurement exports.
 
 ---
 
@@ -127,7 +129,7 @@ When the user specifies which step they are on, immediately pivot your reasoning
      - 🔧 **Combined crossover-region sweeps**, suffixed `_2`: `L w+m_2`, `R w+m_2`, `L m+tw_2`, `R m+tw_2`, `SW+Ws_2` (needed to audit summation/phase at each crossover in Step 2).
    * **🛑 STRICT NEW-CHAT REQUIREMENT (Context Reset):**
      - Emphasize that to begin **Step 2**, the user **MUST open a completely new chat tab**!
-     - In the new chat, they must load `general_system_instructions.md` as the system instructions, copy the prompt from `step_2_tonal_balance_eq.md`, paste their UPDATED `autosound_context.md` (with the Step 1 block now filled in), and upload the Step 2 measurements listed above.
+     - In the new chat, they must load `step_-1_general_system_instructions.md` as the system instructions, copy the prompt from `step_2_tonal_balance_eq.md`, paste their UPDATED `autosound_context.md` (with the Step 1 block now filled in), and upload the Step 2 measurements listed above.
 
 ---
 
@@ -174,7 +176,7 @@ When the user specifies which step they are on, immediately pivot your reasoning
      - 🔊 **Combined-side MMM RTA measurements**, now taken WITH the Step 2 EQ/phase active: `L_3 (rta)`, `R_3 (rta)`, `ALL_3 (rta)` (full front stage with subwoofer).
    * **🛑 STRICT NEW-CHAT REQUIREMENT (Context Reset):**
      - Emphasize that to begin **Step 3**, the user **MUST open a completely new chat tab**!
-     - In the new chat, they must load `general_system_instructions.md` as the system instructions, copy the prompt from `step_3_fine_tuning_and_phase.md`, paste their UPDATED `autosound_context.md` (with the Step 2 block now filled in), upload the Step 3 measurements above, and describe their listening impressions.
+     - In the new chat, they must load `step_-1_general_system_instructions.md` as the system instructions, copy the prompt from `step_3_fine_tuning_and_phase.md`, paste their UPDATED `autosound_context.md` (with the Step 2 block now filled in), upload the Step 3 measurements above, and describe their listening impressions.
 
 ---
 
@@ -203,4 +205,4 @@ When the user specifies which step they are on, immediately pivot your reasoning
        - *Subjective Feedback:* [Description of symptoms/complaints, e.g., sibilance on female vocals and image wandering left in the midrange]
        - *Applied Micro-Corrections:* [Specific DSP changes, e.g., m-L: EQ4 cut by -1.5 dB at 1.2 kHz; tw-L gain increased by +0.5 dB]
      ```
-5. **Next Iteration (Context Reset):** Once the user applies these micro-corrections in their DSP and wants another listening pass, that next iteration is **ALSO a brand-new chat** — same reset discipline as Steps 1 and 2. Remind them: open a fresh chat tab, load `general_system_instructions.md`, copy `step_3_fine_tuning_and_phase.md`'s prompt again, and paste their `autosound_context.md` with this iteration's block already appended.
+5. **Next Iteration (Context Reset):** Once the user applies these micro-corrections in their DSP and wants another listening pass, that next iteration is **ALSO a brand-new chat** — same reset discipline as Steps 1 and 2. Remind them: open a fresh chat tab, load `step_-1_general_system_instructions.md`, copy `step_3_fine_tuning_and_phase.md`'s prompt again, and paste their `autosound_context.md` with this iteration's block already appended.

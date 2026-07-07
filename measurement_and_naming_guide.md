@@ -131,7 +131,7 @@ Follow this sequence to ensure your tuning session progresses smoothly and safel
         *   `w-L_1 (rta)`, `w-R_1 (rta)`
         *   `sw_1 (rta)`
 2.  **Hardware Timing (Timing Reference):** If you use an XLR mic with a loopback setup, make sure you configure your loopback correctly to get sample-accurate impulse and phase measurements.
-3.  **Step 1 Chat:** Open a clean chat session. Paste `general_system_instructions.md` into System Instructions, send your `autosound_context.md`, upload your REW `.txt`/`.csv` export files (24 PPO, 1/6 oct), and paste the `step_1_baseline_analysis.md` prompt.
+3.  **Step 1 Chat:** Open a clean chat session. Paste `step_-1_general_system_instructions.md` into System Instructions, send your `autosound_context.md`, upload your REW `.txt`/`.csv` export files (24 PPO, 1/6 oct), and paste the `step_1_baseline_analysis.md` prompt.
 4.  **Result:** The AI will calculate crossover points, slopes, delays, and baseline level asymmetry.
 5.  **DSP Entry:** Apply these parameters to your DSP and save the preset as `v1`. Copy the AI's copy-paste block to replace the Step 1 section in your local `autosound_context.md`. Close the chat.
 

@@ -5,7 +5,7 @@ Use this template in a **new, clean chat session** after you have applied the cr
 ---
 
 ### 📋 Prerequisite Action:
-Ensure that you have copied the contents of **[general_system_instructions.md](general_system_instructions.md)** and pasted it into the **System Instructions** box of this new chat.
+Ensure that you have copied the contents of **[step_-1_general_system_instructions.md](step_-1_general_system_instructions.md)** and pasted it into the **System Instructions** box of this new chat.
 
 ---
 

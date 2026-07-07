@@ -21,14 +21,15 @@ Generic web chats have a limited memory window. When a conversation gets too lon
 
 To bypass this, we use a **Stateless Architecture**:
 
-1. **Unified System Instructions:** Copy the entire contents of **[general_system_instructions.md](general_system_instructions.md)** ONCE and paste it into the **System Instructions** field in Google AI Studio, the **Custom Instructions** field in ChatGPT, or the equivalent system prompt area of another AI chat client. It contains the full system role, formulas, safety limits, and workflow for all steps (0 to 3) — once added, you can open a new chat tab for any step and simply say *"I am on Step 1"*, *"I am on Step 2"*, etc., without re-configuring anything.
+1. **Unified System Instructions:** Copy the entire contents of **[step_-1_general_system_instructions.md](step_-1_general_system_instructions.md)** ONCE and paste it into the **System Instructions** field in Google AI Studio, the **Custom Instructions** field in ChatGPT, or the equivalent system prompt area of another AI chat client. It contains the full system role, formulas, safety limits, and workflow for all steps (0 to 3) — once added, you can open a new chat tab for any step and simply say *"I am on Step 1"*, *"I am on Step 2"*, etc., without re-configuring anything.
    > ⚠️ **ChatGPT's Custom Instructions field has a small character limit** (well under this file's size) — it will likely reject the full paste. If it does, skip Custom Instructions and instead paste the entire file as the **very first message** of a brand-new chat; the model still picks up the same system role and protocol from there, it's just a regular message instead of a dedicated field.
 2. **Stateless Sessions:** Every tuning step is executed in a **brand-new, clean chat session**. This completely prevents "memory drift" and error accumulation.
 3. **Simple User Prompts:** For each step, you simply open a new tab (which inherits the system prompt) and paste the short user prompt for that step, attaching your `autosound_context.md` passport file and REW measurements.
 
 ```mermaid
 graph TD
-    A[Step 0: Create Passport] -->|Generate| B[autosound_context.md]
+    Z[Step -1: Load System Instructions] -->|Once, ever| A[Step 0: Create Passport]
+    A -->|Generate| B[autosound_context.md]
     B -->|Clean Chat + Step 1| C[Calculate Crossovers & TA]
     C -->|Apply to DSP + REW Measure| D[Local Context Update]
     D -->|Clean Chat + Step 2| E[Calculate Channel EQ]
@@ -50,7 +51,7 @@ Tweeters and midranges are physically fragile. **Never** run a REW sweep on them
 * **Tweeters:** HPF no lower than ~1000–2000 Hz (≈1.1× the driver's Fs), 24 dB/oct slope (e.g. LR4).
 * **Midranges:** HPF no lower than ~100–300 Hz (≈1.1× the driver's Fs), 24 dB/oct slope.
 
-Once you have your `autosound_context.md`, `general_system_instructions.md`'s Step 0 protocol computes the exact safe HPF from your own drivers' Fs.
+Once you have your `autosound_context.md`, `step_-1_general_system_instructions.md`'s Step 0 protocol computes the exact safe HPF from your own drivers' Fs.
 
 ---
 
@@ -58,7 +59,7 @@ Once you have your `autosound_context.md`, `general_system_instructions.md`'s St
 
 You will find the following files in this folder:
 
-1. **[general_system_instructions.md](general_system_instructions.md)** — **The Core System Instructions**. Copy and paste this into the "System Instructions" box of your chat workspace once at the beginning.
+1. **[step_-1_general_system_instructions.md](step_-1_general_system_instructions.md)** — **The Core System Instructions**. Copy and paste this into the "System Instructions" box of your chat workspace once at the beginning.
 2. **[autosound_context.md](autosound_context.md)** — **Your live working passport**, already here as a blank starter copy. Step 0's AI output replaces its contents (or hand-fill it yourself); every later step updates one section of this same file.
 3. **[autosound_context_template.md](autosound_context_template.md)** — The pristine, never-edited reference copy of the passport structure — used as Step 0's input, or to restore `autosound_context.md` if you ever need a clean reset.
 4. **[step_0_intake_and_setup.md](step_0_intake_and_setup.md)** — Prompt template to let the AI conduct an interactive interview and generate your `autosound_context.md` contents for you.
@@ -70,6 +71,13 @@ You will find the following files in this folder:
 ---
 
 ## 🛠️ Step-by-Step Calibration Protocol
+
+### ➖ Step -1: Load System Instructions (Once)
+* **Template:** [step_-1_general_system_instructions.md](step_-1_general_system_instructions.md).
+* **Action:** Copy its entire contents into the **System Instructions** field (AI Studio) or **Custom Instructions** (ChatGPT) — or, if that field is too small, paste the whole file as the first message of a brand-new chat instead.
+* **Result:** Done once per project. Every chat tab you open from now on (Steps 0–3) inherits this same system role and protocol — you never paste it again.
+
+---
 
 ### 🏁 Step 0: System Intake & Passport Creation
 * **Template:** [step_0_intake_and_setup.md](step_0_intake_and_setup.md).
@@ -120,7 +128,7 @@ You will find the following files in this folder:
 ## 💡 Pro Tip for Google AI Studio Users
 
 If you are using the free developer interface in **Google AI Studio** with **Gemini 1.5 Pro**:
-1. Copy the contents of **[general_system_instructions.md](general_system_instructions.md)** and paste it into the **System Instructions** field on the right-hand panel.
+1. Copy the contents of **[step_-1_general_system_instructions.md](step_-1_general_system_instructions.md)** and paste it into the **System Instructions** field on the right-hand panel.
 2. This field persists across all new tabs/chats in the same project, so you don't need to reconfigure it.
 3. In the message box, simply paste the short prompt template of the step you are on, attach your `autosound_context.md` file, and upload your REW exports.
 4. This ensures clean, focused, and mathematically precise responses from the model.

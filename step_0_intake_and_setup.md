@@ -5,7 +5,7 @@ Use this template to start your tuning process in any web chat interface.
 ---
 
 ### 📋 Prerequisite Action:
-Ensure that you have copied the contents of **[general_system_instructions.md](general_system_instructions.md)** and pasted it into the **System Instructions** box in Google AI Studio, Custom Instructions in ChatGPT, or the equivalent system configuration block in your chat client. You only need to do this **once at the start of your project**.
+Ensure that you have copied the contents of **[step_-1_general_system_instructions.md](step_-1_general_system_instructions.md)** and pasted it into the **System Instructions** box in Google AI Studio, Custom Instructions in ChatGPT, or the equivalent system configuration block in your chat client. You only need to do this **once at the start of your project**.
 
 ---
 
