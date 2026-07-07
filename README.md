@@ -37,15 +37,6 @@ Need help setting up Claude Code, running on **Windows**, configuring the **Gemi
 
 👉 Refer directly to our comprehensive **[FAQ.md](FAQ.md)**.
 
-### 3. Manual Step-by-Step Tuning (Web Chats)
-
-If you are not using Claude Code in your terminal, you can use our manual step-by-step templates to tune your car in any standard web browser (ChatGPT, Claude Pro, Gemini Advanced).
-
-> [!WARNING]
-> **FIRST DRAFT / ПЕРШИЙ ДРАФТ:**
-> The manual step-by-step pipeline is currently a **first draft** and is written in **Ukrainian** (the repository's standard is English). You can access these files directly in the **[manual_step-by-step/](manual_step-by-step/)** folder.
-
----
 
 ## What's in here
 
