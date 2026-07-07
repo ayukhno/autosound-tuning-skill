@@ -247,13 +247,18 @@ If you are running **Linux**, if the Antigravity CLI is not available on your sy
 
 ## Do you have a version running on Google AI Studio?
 
-**Yes, absolutely!** You can run the entire Critic/Advisor workflow directly inside **[Google AI Studio](https://aistudio.google.com/)** completely for free. 
+**We are currently exploring and testing this option, but we have serious doubts about its stability.** While it is technically possible to run the Critic/Advisor workflow (or a fully manual tuning process) directly inside **[Google AI Studio](https://aistudio.google.com/)** for free, standard web chats suffer from high variance, severe memory drift, and value hallucinations over long sessions.
 
-This is a fantastic alternative if you prefer a beautiful, visual, browser-based workspace, are on an iPad, mobile device, or tablet, do not want to install Python/Git locally, or want to completely bypass command-line quotas.
+Therefore, we **do not recommend** this as a primary or reliable workflow. It is strictly an experimental draft concept.
 
 > [!NOTE]
 > **Can I run the main Generator process in AI Studio too?**
 > Technically yes, but it is highly impractical. The main Generator needs access to your local files (to read REW `.mdat`/`.csv` measurements, save the current DSP state, and log tuning steps) and needs to execute local Python scripts (`rew_tool`) to calculate phase offsets. AI Studio has no access to your filesystem or local execution environment. Therefore, AI Studio is best kept strictly for the **Critic** role, while the main Generator runs locally.
+> 
+> **What if I really want a completely manual, browser-based tuning pipeline?**
+> We heard your feedback and are currently exploring and testing options! We have created an early draft of an experimental manual step-by-step tuning pipeline. You can find the draft templates and guidelines on the public git branch **[manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step)**.
+> 
+> **CRITICAL DISCLAIMER:** This manual flow is purely an experimental concept with absolutely **zero active support or future commitments**. Standard web chats are highly unstable, prone to hallucination, and suffer from severe context drift over long conversations. Use it at your own risk!
 > 
 > **How does the Critic interact with my local session?**
 > Since AI Studio is a standard cloud website, it cannot talk to your local terminal directly. Instead, it works via **Clipboard Mode**. When you run a critic check locally, the system compiles the full prompt (including your system state, contract, and the new proposal) and automatically copies it to your clipboard. You simply paste it into your Google AI Studio chat, let Gemini generate the critique, and copy the response back to your local agent.
