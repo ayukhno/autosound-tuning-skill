@@ -1,9 +1,11 @@
 @echo off
+set "PYCMD=python"
+where py >nul 2>nul && set "PYCMD=py -3"
 set "arg=%~1"
 if "%arg%"=="--doctor" (
-    python "%~dp0autosound_ai.py" doctor
+    %PYCMD% "%~dp0autosound_ai.py" doctor
 ) else if "%arg%"=="doctor" (
-    python "%~dp0autosound_ai.py" doctor
+    %PYCMD% "%~dp0autosound_ai.py" doctor
 ) else (
-    python "%~dp0autosound_ai.py" advisor %*
+    %PYCMD% "%~dp0autosound_ai.py" advisor %*
 )
