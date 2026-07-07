@@ -21,7 +21,8 @@ Generic web chats have a limited memory window. When a conversation gets too lon
 
 To bypass this, we use a **Stateless Architecture**:
 
-1. **Unified System Instructions:** You copy the contents of **[general_system_instructions.md](general_system_instructions.md)** once and paste it into the **System Instructions** field (in Google AI Studio) or **Custom Instructions** (in ChatGPT). This contains the full system role, formulas, safety limits, and workflow for all steps (0 to 3).
+1. **Unified System Instructions:** Copy the entire contents of **[general_system_instructions.md](general_system_instructions.md)** ONCE and paste it into the **System Instructions** field in Google AI Studio, the **Custom Instructions** field in ChatGPT, or the equivalent system prompt area of another AI chat client. It contains the full system role, formulas, safety limits, and workflow for all steps (0 to 3) — once added, you can open a new chat tab for any step and simply say *"I am on Step 1"*, *"I am on Step 2"*, etc., without re-configuring anything.
+   > ⚠️ **ChatGPT's Custom Instructions field has a small character limit** (well under this file's size) — it will likely reject the full paste. If it does, skip Custom Instructions and instead paste the entire file as the **very first message** of a brand-new chat; the model still picks up the same system role and protocol from there, it's just a regular message instead of a dedicated field.
 2. **Stateless Sessions:** Every tuning step is executed in a **brand-new, clean chat session**. This completely prevents "memory drift" and error accumulation.
 3. **Simple User Prompts:** For each step, you simply open a new tab (which inherits the system prompt) and paste the short user prompt for that step, attaching your `autosound_context.md` passport file and REW measurements.
 
