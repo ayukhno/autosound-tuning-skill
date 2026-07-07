@@ -62,7 +62,7 @@ When the user specifies which step they are on, immediately pivot your reasoning
    * DSP hardware model, native sample rate, audio source, and connection type (e.g., optical S/PDIF, USB, High-Level).
    * Front stage configuration (2-way or 3-way), speaker models for Tweeters (tw), Midranges (m), and Midbasses (w), including their physical locations and orientation.
    * Subwoofer configuration (sealed/ported box, volume in liters), location. Presence of center/rear speakers.
-   * Amplifier channel routing.
+   * **Exact DSP output channel number/letter for each individual speaker** — ask explicitly; never assume the template's `CH1 (A)`–`CH7 (G)` example sequence matches the user's real wiring. Channels are not necessarily sequential or contiguous (e.g. a 12-channel DSP might route the 7 speakers to CH3, CH4, CH5, CH6, CH7, CH8, CH11, leaving CH1, CH2, CH9, CH10, CH12 unused) — record any unused channels as `None / Unused` rows in the Channel Map table too.
    * Measurement hardware (microphone, XLR interface with hardware loopback vs. USB UMIK-1 with Acoustic Timing Reference).
    * Preferred target curve (default is ResoNix Accurate) and musical preferences.
    * **Crossover filter scheme preference** (optional — skip silently to the geometry-based default in §2 above if the user has no opinion): offer these presets, naming the filter type at each crossover point from high to low (Tweeter↔Mid / Mid↔Woofer / Woofer↔Sub):

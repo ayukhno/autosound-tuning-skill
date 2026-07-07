@@ -16,15 +16,16 @@ Fill out this file with basic information about your system. It serves as your s
   - [e.g., Audison SR 1.500 -> for Subwoofer]
 
 ## 2. Channel Map (Wiring & Routing)
+*The `DSP Channel` column below is illustrative, not your real wiring — replace every cell with your own DSP's actual output channel numbers/letters. They don't have to be sequential or start at CH1: if your DSP has more physical outputs than speakers (e.g. a 12-channel unit driving 7 speakers), state the real, possibly non-adjacent channels used and list the rest as `None / Unused` rows.*
 | DSP Channel | Speaker | Frequency Band | Amplifier | Physical Placement & Aiming |
 | :--- | :--- | :--- | :--- | :--- |
-| CH1 (A) | tw-L (Tweeter Left) | High (HF) | [Amp Model] | [e.g., A-pillars, aimed at cabin center] |
-| CH2 (B) | tw-R (Tweeter Right) | High (HF) | [Amp Model] | [e.g., A-pillars, aimed at driver] |
-| CH3 (C) | m-L (Midrange Left) | Middle (MF) | [Amp Model] | [e.g., A-pillars, coplanar with tweeter] |
-| CH4 (D) | m-R (Midrange Right) | Middle (MF) | [Amp Model] | [e.g., A-pillars, coplanar with tweeter] |
-| CH5 (E) | w-L (Woofer/Midbass L) | Low (LF) | [Amp Model] | [e.g., Doors, treated, stock locations] |
-| CH6 (F) | w-R (Woofer/Midbass R) | Low (LF) | [Amp Model] | [e.g., Doors, treated, stock locations] |
-| CH7 (G) | sw (Subwoofer) | Sub-bass (SUB) | [Amp Model] | [e.g., Sealed Box 35L in trunk] |
+| [e.g., CH1 (A)] | tw-L (Tweeter Left) | High (HF) | [Amp Model] | [e.g., A-pillars, aimed at cabin center] |
+| [e.g., CH2 (B)] | tw-R (Tweeter Right) | High (HF) | [Amp Model] | [e.g., A-pillars, aimed at driver] |
+| [e.g., CH3 (C)] | m-L (Midrange Left) | Middle (MF) | [Amp Model] | [e.g., A-pillars, coplanar with tweeter] |
+| [e.g., CH4 (D)] | m-R (Midrange Right) | Middle (MF) | [Amp Model] | [e.g., A-pillars, coplanar with tweeter] |
+| [e.g., CH5 (E)] | w-L (Woofer/Midbass L) | Low (LF) | [Amp Model] | [e.g., Doors, treated, stock locations] |
+| [e.g., CH6 (F)] | w-R (Woofer/Midbass R) | Low (LF) | [Amp Model] | [e.g., Doors, treated, stock locations] |
+| [e.g., CH7 (G)] | sw (Subwoofer) | Sub-bass (SUB) | [Amp Model] | [e.g., Sealed Box 35L in trunk] |
 
 ## 3. Measurement Equipment
 * **Microphone:** [e.g., UMIK-1 (USB, 48 kHz) / Behringer ECM8000 (XLR)]
