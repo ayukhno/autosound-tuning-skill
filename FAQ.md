@@ -6,6 +6,7 @@ Have a question that isn't here? Open a [discussion or issue](../../issues) and 
 
 ## Table of Contents
 
+- [The Philosophy: Why AI, and Why Not Just a Standard Web Chat?](#the-philosophy-why-ai-and-why-not-just-a-standard-web-chat)
 - [First-Time Setup (Claude Code)](#first-time-setup-windows-claude-code--antigravity)
   - [1. Quick Installation (macOS & Windows)](#1-quick-installation-claude-code)
   - [2. Authentication & Plugin Setup](#2-authentication--plugin-setup-cross-platform)
@@ -15,6 +16,41 @@ Have a question that isn't here? Open a [discussion or issue](../../issues) and 
   - [Do you have a version running on Google AI Studio?](#do-you-have-a-version-running-on-google-ai-studio)
 - [Measuring Phase & Time Alignment: UMIK-1 vs. XLR](#measuring-phase--time-alignment-umik-1-vs-xlr-microphones)
   - [Can I measure phase with a UMIK-1?](#can-i-measure-phase-with-a-umik-1)
+
+---
+
+## The Philosophy: Why AI, and Why Not Just a Standard Web Chat?
+
+You absolutely *can* use a regular web-chat with free versions of Claude or Gemini! The core of this project is a **methodology**, not just software. However, there is a fundamental difference between a general chat and our structured AI-assisted approach. Here is why the "Skill + State + API" architecture exists, and the 5-step journey it guides you through:
+
+### 1. Why a general chat eventually fails (The "Memory Drift" problem)
+Tuning a car is a highly iterative process. You don't do it in one go. You measure, adjust crossovers, set delays, check phase, and then do EQ. 
+Over a long conversation, **general AI models suffer from "context drift."** They start to forget or slightly alter the exact numbers (delay values, crossover points, slope types) decided at the beginning. This can lead to contradictory, incorrect, or even dangerous suggestions for your speakers.
+* **The Solution:** We keep your active DSP configuration on disk in simple text files (`dsp-state-current.md` and `tuning-changelog.md`). Every time you invoke the AI, it reads this "single source of truth" from disk, restoring 100% of its memory instantly. It never guesses or forgets your state.
+
+### 2. What a specialized "Skill" actually is
+A general AI model knows basic audio theory, but it doesn't know car cabins, specific driver behaviors, or safety boundaries. 
+A **Skill** is like installing a custom "firmware" into the AI. It loads specialized acoustic patterns, safety checklists (to protect your tweeters), target curves (like ResoNix or Audiofrog), and calculation scripts. It turns a generic text generator into a professional car-audio calibration engineer that guides you by the hand.
+
+### 3. Why we use local scripts & APIs (Optional but Powerful)
+Measuring a car generates massive amounts of data (phase curves, impulse responses, RTA sweeps). Copying and pasting thousands of rows of CSV data or taking dozens of screenshots is tedious and error-prone.
+Our Python scripts connect directly to **REW's local API**. They automatically pull the raw measurements, extract the acoustic essence (phase cancellations, cabin resonances, timing deltas), and feed them to the AI in milliseconds. It turns a 10-minute manual data entry job into a 2-second automated command.
+
+---
+
+### The 5-Step Tuning Journey
+Regardless of whether you use our automated scripts (Level 2) or simply follow our guidebook in a free web-chat (Level 1), the process always follows this rigorous 5-step roadmap:
+
+1. **System Audit & Target Selection (Baseline & Target)**
+   We document your physical hardware (speaker placement, amps, DSP native sample rate) and agree on a target acoustic curve (e.g., flat monitor, warm bass, or competition-grade).
+2. **Building the Stage (Crossovers & Delays)**
+   We **select and configure** the exact crossovers for each speaker so they play in alignment and within their optimal performance ranges. Then, we apply precise time-alignment delays so sound from every speaker arrives at your ears at the exact same microsecond, creating a razor-sharp, stable stereo image on your dashboard.
+3. **Tonal Balance & Phase Matching (EQ & Phase Alignment)**
+   We use the parametric EQ to tame major cabin resonances and smooth out vocals. **Our core philosophy here is Phase Alignment over surgical EQ: we focus on matching the acoustic phases of the speakers at their crossover points, consciously minimizing the number of EQ bands used.** This is a deliberate compromise with the "ideal" mathematical curve to preserve a live, dynamic, and natural soundstage rather than forcing a flat but lifeless response.
+4. **Objective & Subjective Verification (Technical Lock & Listening)**
+   We verify our work using specialized acoustic sweeps and then listen to critical test tracks **from specialized music-testing libraries, which you can buy, find on the internet, or stream on popular services**. We check for center focus, stage width/depth, and any harshness or boominess.
+5. **Tailoring to Taste (Voicing & Variations)**
+   We build subtle variations and presets tailored to your preferences (e.g., a high-energy rock preset, a highly detailed jazz preset, or a relaxed daily driving profile).
 
 ---
 
