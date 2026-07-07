@@ -33,7 +33,7 @@ Uruchom poniższe polecenia w aktywnej sesji Claude Code **jedno po drugim** (ni
 
 ### 2. Kompleksowa konfiguracja i FAQ
 
-Potrzebujesz pomocy w konfiguracji Claude Code, uruchomieniu na systemie **Windows**, konfiguracji **Gemini Critic** (w tym całkowicie darmowego, opartego na przeglądarce środowiska pracy za pośrednictwem **Google AI Studio**) lub wyborze mikrofonu pomiarowego?
+Potrzebujesz pomocy w konfiguracji Claude Code, uruchomieniu na systemie **Windows**, konfiguracji **Gemini Critic** lub wyborze mikrofonu pomiarowego?
 
 👉 Zajrzyj bezpośrednio do naszego wyczerpującego **[FAQ.md](FAQ.md)**.
 

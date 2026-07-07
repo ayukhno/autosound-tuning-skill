@@ -33,7 +33,7 @@ Führe diese Befehle in deiner aktiven Claude-Code-Sitzung **nacheinander (einze
 
 ### 2. Umfassendes Setup & FAQ
 
-Brauchst du Hilfe bei der Einrichtung von Claude Code, der Ausführung unter **Windows**, der Konfiguration des **Gemini Critic** (einschließlich eines völlig kostenlosen, browserbasierten Arbeitsbereichs über **Google AI Studio**) oder der Auswahl des Mikrofons?
+Brauchst du Hilfe bei der Einrichtung von Claude Code, der Ausführung unter **Windows**, der Konfiguration des **Gemini Critic** oder der Auswahl des Mikrofons?
 
 👉 Siehe direkt in unserem umfassenden **[FAQ.md](FAQ.md)** nach.
 

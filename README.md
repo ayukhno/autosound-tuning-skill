@@ -33,7 +33,7 @@ Inside your active Claude Code session, run these commands **one by one** (do no
 
 ### 2. Comprehensive Setup & FAQ
 
-Need help setting up Claude Code, running on **Windows**, configuring the **Gemini Critic** (including a completely free, browser-based workspace via **Google AI Studio**), or choosing a microphone?
+Need help setting up Claude Code, running on **Windows**, configuring the **Gemini Critic**, or choosing a microphone?
 
 👉 Refer directly to our comprehensive **[FAQ.md](FAQ.md)**.
 
