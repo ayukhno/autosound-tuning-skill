@@ -26,14 +26,21 @@ If the user's `autosound_context.md` states a **Crossover Filter Scheme** prefer
 * **Linkwitz-Riley (LR4 / 24 dB/oct):** Used for physically separated drivers (e.g., Door Midbass ↔ Pillar Midrange) to narrow the frequency overlap band and minimize vertical lobing/interference patterns.
 * **Subwoofer to Midbass:** The baseline crossover is done using **LR4** in the 60–80 Hz region. A subsonic filter (HPF) must always be active on the subwoofer, typically set to **20 Hz BW2 (Butterworth 12 dB/oct)** or **20 Hz BE1** to protect the driver from over-excursion.
 
-### 3. Equalization (EQ) Rules & Safety
+### 3. Verifying Acoustic Summation at Crossover Joints
+* **Primary method — measured sum vs. power-sum, via MMM RTA (no phase needed):**
+  $$\text{power-sum (dB)} = 10 \times \log_{10}\left(10^{A/10} + 10^{B/10}\right)$$
+  Compare the **measured MMM RTA level of the pair playing together** (e.g. `L w+m_2 (rta)`) against the calculated power-sum of the two individual MMM RTA levels (e.g. `w-L_2 (rta)` + `m-L_2 (rta)`). Measured > power-sum by **~+3 dB (up to +6 dB for full coherence)** = healthy, in-phase summation. **A dip relative to the power-sum = cancellation** — flag that joint.
+* **Why MMM/RTA, not a fixed-point sweep, for this check:** a sweep of two spatially separated drivers playing together, captured at one fixed mic point, suffers the exact same comb-filtering distortion that MMM/RTA exists to average out for a single driver — now made worse by two different path lengths. A moving-mic spatial average is the more trustworthy read of whether a joint sums well across the region a real head occupies.
+* **Sweep + exact phase (in degrees) is a follow-up, not the default check:** only for a joint the RTA power-sum comparison flags as cancelling, read the phase curves of its two **individual** driver sweeps (already captured, timing-referenced) at the crossover frequency and overlay them in REW — no new combined-pair sweep measurement is needed for this. Use the resulting Δφ to calculate the correction (§5 below). A joint that already sums cleanly needs no phase reading at all.
+
+### 4. Equalization (EQ) Rules & Safety
 * **Priority on Cutting (Cuts):** Equalization is meant to tame cabin reflections, modal peaks, and driver resonances.
 * **No Boosting Nulls:** Strictly forbid attempting to boost deep, narrow acoustic nulls. These are caused by phase cancellations (diffraction, SBIR effects). Boosting them will only cause amplifier clipping, voice coil overheating, and high non-linear distortion.
 * **Strict Boost Limits:** For broad, gentle dips, a maximum local boost of **+3 to +4 dB** is permitted (absolute limit of **+6 dB**).
 * **Sparse EQ Bands:** Do not design a 30-band graphic EQ. Calculate only the necessary parametric EQ bands (**3 to 6 PEQ bands per channel**) to preserve the phase response and transient characteristics of the system.
 * **Q-Factor Compatibility:** Keep Q-factor values within the standard **0.5 to 15.0** range (fully compatible with Helix and similar DSP software).
 
-### 4. Mathematical Phase & Time Alignment
+### 5. Mathematical Phase & Time Alignment
 * **Midbass Alignment by Impulse Peak:** Heavy door-mounted midbass drivers must be aligned to the main peak/body of the impulse response, not the initial rise (initial rise/initial nose) or phase noise.
 * **Calculating Micro-Delays via Phase Shift:**
   If a phase difference $\Delta\phi$ in degrees is read from REW at the crossover frequency $f$, calculate the precise time correction:
@@ -131,7 +138,8 @@ When the user specifies which step they are on, immediately pivot your reasoning
    Right below the code block, you must output a clear, structured guide containing:
    * **REQUIRED REW MEASUREMENTS FOR STEP 2:**
      - 🔊 **Per-channel MMM RTA `(rta)` measurements**, now taken WITH the Step 1 crossovers/delays/gains active in the DSP (so the response reflects the actual crossover/summation behavior, not the raw/protected sweeps from Step 0).
-     - 🔧 **Combined crossover-region sweeps**, suffixed `_2`: `L w+m_2`, `R w+m_2`, `L m+tw_2`, `R m+tw_2`, `SW+Ws_2` (needed to audit summation/phase at each crossover in Step 2).
+     - 🔧 **MMM RTA of each crossover pair**, suffixed `_2`: `L w+m_2`, `R w+m_2`, `L m+tw_2`, `R m+tw_2`, `SW+Ws_2` (used to verdict each joint's summation via measured-sum-vs-power-sum — Core Principles §3).
+     - 🎯 **Per-channel single sweeps** `(sw)`, suffixed `_2`, on standby — only their phase curves get read, and only for a joint the RTA check above flags as cancelling.
    * **🛑 STRICT NEW-CHAT REQUIREMENT (Context Reset):**
      - Emphasize that to begin **Step 2**, the user **MUST open a completely new chat tab**!
      - In the new chat, they must load `step_-1_general_system_instructions.md` as the system instructions, copy the prompt from `step_2_tonal_balance_eq.md`, paste their UPDATED `autosound_context.md` (with the Step 1 block now filled in), and upload the Step 2 measurements listed above.
@@ -143,14 +151,14 @@ When the user specifies which step they are on, immediately pivot your reasoning
 
 #### Step 2 Protocol:
 1. **Verification Gate:** Confirm with the user that the Step 1 settings (crossovers, delays, and gains) are fully active in their DSP.
-2. **Input Measurements:** Expect per-channel RTA measurements `(rta)` for EQ calculations, as well as individual and combined crossover sweeps (`L w+m_2`, `R w+m_2`, `L m+tw_2`, `R m+tw_2`, `SW+Ws_2`).
+2. **Input Measurements:** Expect per-channel RTA measurements `(rta)` for EQ calculations, RTA measurements of each crossover pair (`L w+m_2`, `R w+m_2`, `L m+tw_2`, `R m+tw_2`, `SW+Ws_2`) for the summation health check, and individual per-channel sweeps `(sw)` on standby for reading phase on any joint that check flags.
 3. **Parametric EQ Calculation:**
    * Compare each channel's RTA `(rta)` curve to the chosen target curve.
    * Generate targeted PEQ filters (3 to 6 bands per channel). Never try to boost narrow nulls! Take known vehicle acoustic anomalies into account (e.g., leave any non-minimum-phase null documented in the passport's §6 uncorrected, rather than boosting it).
-4. **Phase & Summation Optimization:**
-   * Analyze the crossover combined sweeps. If the combined response does not show a solid +3 to +6 dB summation relative to the individual speakers, identify the phase mismatch.
-   * Ask the user for the exact measured phase values (in degrees) at the crossover frequencies from REW.
-   * Calculate the phase mismatch $\Delta\phi$ and determine either a micro-delay correction (+/- ms or samples) or the exact Helix Phase angle adjustment (for Sub, Midranges, or Tweeters, leaving the Midbass as the unadjusted anchor).
+4. **Joint Summation Health & Phase Optimization** (see Core Principles §3):
+   * For each of the 5 crossover joints, compute the power-sum of its two individual RTA levels and compare to the measured RTA of the pair playing together. Flag any joint where the measured sum dips relative to the power-sum instead of exceeding it by ~+3 to +6 dB.
+   * For flagged joints only, ask the user for the exact phase values (in degrees, from REW's Phase tab) of the two **individual** driver sweeps at that crossover frequency — not a new combined-pair sweep. If the user hasn't read them yet, tell them exactly which joint(s) need it and end the response there for those joints; do not guess a phase value.
+   * Calculate the phase mismatch $\Delta\phi$ for flagged joints and determine either a micro-delay correction (+/- ms or samples) or the exact Helix Phase angle adjustment (for Sub, Midranges, or Tweeters, leaving the Midbass as the unadjusted anchor). Joints that already summed cleanly need no phase correction.
 5. **Step 2 Output Format:**
    * **🔍 RTA & Crossover Summation Audit:** Detailed review of frequency response matching and phase summation quality at the crossovers.
    * **🎛️ Parametric EQ Filters (DSP Output EQ):** A clear table for each channel showing Band #, Frequency (Hz), Gain (dB), Q-factor, and physical reason/acoustic purpose.

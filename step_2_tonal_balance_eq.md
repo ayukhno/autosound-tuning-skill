@@ -39,10 +39,13 @@ Please specify which target curve to use for the PEQ calculation (leave one or d
 ### ⚠️ Verification Gate:
 * I confirm that all baseline crossovers, delays, and initial gains from Step 1 are fully activated in my DSP processor.
 
-I am uploading the text exports of my new measurements in optimized 24 PPO resolution and 1/6 or 1/12 oct smoothing (RTA, individual sweeps, and crossover summation sweeps: L w+m_2, R w+m_2, L m+tw_2, R m+tw_2, SW+Ws_2 as .txt / .csv files):
+I am uploading the text exports of my new measurements in optimized 24 PPO resolution and 1/6 or 1/12 oct smoothing (individual RTA for each speaker, RTA of each crossover pair for the summation check, and individual per-channel sweeps as .txt / .csv files):
 * *(Drag and drop your lightweight REW measurement text files directly into the chat)*
 
-Also, for perfect mathematical phase alignment, here are the exact phase values in degrees (read from the Phase tab in REW at the crossover frequencies):
+### 🔧 Joint Phase Values (optional — only if you already suspect a problem):
+Leave this section blank on your first pass. Diagnose each joint's summation health from my RTA measurements (measured pair level vs. the power-sum of the two individual levels) first, and tell me exactly which joint(s), if any, need a phase reading before I go back to REW for it.
+
+If you already suspect a specific joint (e.g. from a prior audit, or you're replying with the values I asked for), here are the exact phase values in degrees (read from the Phase tab in REW, on the two **individual** driver sweeps, at the crossover frequency):
 * **MF/HF Crossover (at [Specify crossover frequency, e.g., 3500 Hz]):**
   - m-L Phase = [Value]° | tw-L Phase = [Value]°
   - m-R Phase = [Value]° | tw-R Phase = [Value]°
@@ -52,7 +55,7 @@ Also, for perfect mathematical phase alignment, here are the exact phase values 
 * **SUB/LF Crossover (at [Specify crossover frequency, e.g., 60 Hz]):**
   - sw Phase = [Value]° | Ws (sum of midbasses) Phase = [Value]°
 
-Please analyze these measurements and phase values according to your system instructions and output your recommendations in the defined structure:
+Please analyze these measurements and any phase values according to your system instructions and output your recommendations in the defined structure:
 1. 🔍 Acoustic Analysis & Crossover Summation Audit
 2. 🎛️ Per-Channel Parametric EQ Sheet (DSP Output EQ)
 3. ⏱️ Micro-Delays & Phase Rotation Sheet (Helix Phase & All-Pass)

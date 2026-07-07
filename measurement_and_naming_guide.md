@@ -138,11 +138,12 @@ Follow this sequence to ensure your tuning session progresses smoothly and safel
 ### Step 2: Tonal Balance, Channel EQ & Crossover Fine-Tuning (`_2`)
 1.  **DSP Verification:** Before measuring, confirm that all Step 1 (`v1`) settings are active in your DSP!
 2.  **Measurement Session (Compact Checklist):**
-    *   **MMM RTA measurements around head** (for per-channel PEQ calculation):
-        *   `tw-L_2 (rta)`, `tw-R_2 (rta)`, `m-L_2 (rta)`, `m-R_2 (rta)`, `w-L_2 (rta)`, `w-R_2 (rta)`, `sw_2 (rta)`
-    *   **Single sweeps on tripod** (for phase curves and micro-delays):
+    *   **MMM RTA measurements around head** (for per-channel PEQ calculation AND joint summation health):
+        *   Individual: `tw-L_2 (rta)`, `tw-R_2 (rta)`, `m-L_2 (rta)`, `m-R_2 (rta)`, `w-L_2 (rta)`, `w-R_2 (rta)`, `sw_2 (rta)`
+        *   Summation: `L w+m_2 (rta)`, `R w+m_2 (rta)`, `L m+tw_2 (rta)`, `R m+tw_2 (rta)`, `SW+Ws_2 (rta)` — compare each against the *power-sum* of its two individual RTA levels to verdict the joint (measured > power-sum by ~+3 dB = constructive; a dip = cancellation). A moving-mic average is more trustworthy here than a fixed point, which suffers the same comb-filtering between two spatially separated sources that MMM exists to average out.
+    *   **Single sweeps on tripod** (kept on standby for phase curves and micro-delays):
         *   `tw-L_2 (sw)`, `tw-R_2 (sw)`, `m-L_2 (sw)`, `m-R_2 (sw)`, `w-L_2 (sw)`, `w-R_2 (sw)`, `sw_2 (sw)`
-        *   **Summation sweeps:** `L w+m_2 (sw)`, `R w+m_2 (sw)`, `L m+tw_2 (sw)`, `R m+tw_2 (sw)`, `SW+Ws_2 (sw)`
+        *   Only read the phase curves of a **pair whose RTA summation check flagged a cancellation** — overlay their two individual phase traces in REW at the crossover frequency to get Δφ. A healthy joint needs no phase reading and no combined-pair sweep at all.
 3.  **Step 2 Chat:** Open a clean chat session. Upload your REW exports, paste your updated `autosound_context.md`, and copy the `step_2_tonal_balance_eq.md` prompt.
 4.  **Result:** The AI will calculate precise PEQ bands, micro-delays, and Helix Phase rotation angles.
 5.  **DSP Entry:** Apply the PEQ bands, micro-delays, and phase settings to your DSP, then save as `v2`. Update your local `autosound_context.md` with the AI's copy-pasteable block. Close the chat.

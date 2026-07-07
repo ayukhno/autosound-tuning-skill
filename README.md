@@ -103,8 +103,8 @@ You will find the following files in this folder:
 * **Template:** [step_2_tonal_balance_eq.md](step_2_tonal_balance_eq.md).
 * **Measurement Requirements:**
   * Crossovers, delays, and gains from Step 1 (`v1`) must be active in your DSP!
-  * MMM RTA measurements (`rta`) for each speaker to calculate PEQ filters.
-  * Single sweeps (`sw`) and summation sweeps (`L w+m_2`, `R w+m_2`, `L m+tw_2`, `R m+tw_2`, `SW+Ws_2`) to verify crossovers.
+  * MMM RTA measurements (`rta`) for each speaker to calculate PEQ filters, plus MMM RTA of each crossover pair (`L w+m_2`, `R w+m_2`, `L m+tw_2`, `R m+tw_2`, `SW+Ws_2`) to verdict joint summation via measured-sum-vs-power-sum — a moving-mic average is more reliable here than a single fixed point.
+  * Single sweeps (`sw`) for each speaker, kept on standby — only read their individual phase curves (overlaid in REW) for a joint the RTA check flags as cancelling, to calculate its correction.
 * **Chat Run:** Open a **NEW** clean chat. Send the Step 2 prompt, select your target curve, enter the measured phase values at the crossovers, upload your REW measurement exports, and paste your `autosound_context.md`.
 * **Result:** The AI will calculate precise PEQ filters, micro-delays, and Helix Phase angles.
 * **DSP Entry:** Apply the PEQ bands, fine delays, and phase angles to your DSP.
