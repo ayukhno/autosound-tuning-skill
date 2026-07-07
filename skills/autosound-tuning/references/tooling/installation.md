@@ -35,6 +35,16 @@ If you find this installed as a **plain file copy** that the user wants to keep 
 
 ---
 
+## Verify the install (one command)
+
+After a clone / `git pull` / plugin update — or on a fresh machine (Windows/macOS/Linux) — run the
+smoke test to confirm the deterministic tooling works here (versioned state, apply-change gate, the
+issue-#5 multi-slot integrity, side-effect / pre-sweep gates). Offline + stdlib-only; it also prints
+an INFO line on the reviewer channel (local CLI / API key) without failing on it:
+```
+python skills/autosound-tuning/scripts/smoke_test.py     # exit 0 = healthy · SMOKE_VERBOSE=1 for tracebacks
+```
+
 ## Troubleshooting
 
 - **Antigravity / agy sandbox — state snapshots vanish.** Some agent environments restrict certain file writes to the session's own directory (observed on Antigravity: an artifact-write outside `…/brain/<session>/` was refused). If versioned snapshots don't land where you expect, point `AUTOSOUND_STATE_ROOT` inside the project and verify it's writable **from within the session**: `python rew_tool/state/state.py selftest` (must print `selftest OK`); confirm the root actually fills after the first `apply.py propose`.
