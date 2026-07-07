@@ -1,5 +1,9 @@
 # Ручне покрокове налаштування DSP в будь-якому веб-чаті (Manual Step-by-Step)
 
+> [!WARNING]
+> **FIRST DRAFT / ПЕРШИЙ ДРАФТ:**
+> This manual step-by-step pipeline is currently a **first draft** and is written in **Ukrainian**. Please note that the standard language of this repository is English. A fully translated English version is planned for future updates.
+
 Ласкаво просимо до **ручного конвеєра налаштування автозвуку**!
 
 Якщо ви не використовуєте автоматичного термінального агента (Claude Code), ви можете отримати таку ж математичну точність і високу якість звуку в будь-якому зручному веб-чаті (**ChatGPT Plus**, **Claude Pro**, **Gemini Advanced / AI Studio**).
