@@ -39,6 +39,8 @@ brew install --cask antigravity-cli      # the REAL agy — NOT a symlink to gem
 |---|---|---|
 | `agy` | `Gemini 3.5 Flash (Medium)` | `Gemini 3.1 Pro (High)` |
 
+> ℹ️ **`Gemini 3.5/3.1` are Antigravity's own display labels** (what `agy models` shows), NOT real Gemini versions — the direct-API path (`autosound_ai.py`, no CLI) maps them to `gemini-2.5-flash` / `gemini-2.5-pro`. Use the label your channel expects: the `agy` CLI wants the display name; a raw `GEMINI_API_KEY` call wants the `gemini-2.5-*` id.
+
 Defaults are **Flash** (free, snappy, strong critic). Names drift — list current ones with `agy models`. Override per call:
 ```bash
 GEMINI_CRITIC_MODEL="Gemini 3.1 Pro (High)" scripts/gemini_critic.sh pkg.md
