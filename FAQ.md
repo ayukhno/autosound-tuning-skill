@@ -247,9 +247,9 @@ If you are running **Linux**, if the Antigravity CLI is not available on your sy
 
 ## Do you have a version running on Google AI Studio?
 
-**Yes, absolutely!** You can run the entire Critic/Advisor workflow directly inside **[Google AI Studio](https://aistudio.google.com/)** completely for free. 
+**We are currently exploring and testing this option, but we have serious doubts about its stability.** While it is technically possible to run the Critic/Advisor workflow (or a fully manual tuning process) directly inside **[Google AI Studio](https://aistudio.google.com/)** for free, standard web chats suffer from high variance, severe memory drift, and value hallucinations over long sessions.
 
-This is a fantastic alternative if you prefer a beautiful, visual, browser-based workspace, are on an iPad, mobile device, or tablet, do not want to install Python/Git locally, or want to completely bypass command-line quotas.
+Therefore, we **do not recommend** this as a primary or reliable workflow. It is strictly an experimental draft concept.
 
 > [!NOTE]
 > **Can I run the main Generator process in AI Studio too?**
