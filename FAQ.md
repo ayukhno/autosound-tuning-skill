@@ -251,7 +251,7 @@ If you are running **Linux**, if the Antigravity CLI is not available on your sy
 
 Therefore, we **do not recommend** this as a primary or reliable workflow.
 
-If you are interested in exploring this experimental flow, all templates, system instructions, and step-by-step setup guides (including how to configure the Critic in AI Studio) have been moved to the dedicated public git branch **[manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step)**.
+If you are interested in exploring this experimental flow, all templates and system instructions for the stateless, copy-paste manual pipeline live on the dedicated **[manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step)** branch.
 
 ---
 
