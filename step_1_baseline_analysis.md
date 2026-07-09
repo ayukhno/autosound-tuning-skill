@@ -39,9 +39,9 @@ Please analyze these measurements according to your system instructions and outp
 2. 🔧 Crossover Recommendations (DSP Software Crossovers Menu)
 3. ⏱️ Time Alignment Sheet (DSP Software Delay Menu)
 4. 🔊 Initial Gain/Level Sheet (DSP Software Gain Menu)
-5. 📋 Code Block for direct copy-pasting into `autosound_context.md`
+5. 📋 The COMPLETE regenerated passport (whole file, per your State Discipline protocol) with the CURRENT DSP STATE block filled in and a [STEP 1] change-history entry — I will save it as `autosound_context_v1.md`.
 
-Here is my static system passport (the contents of my `autosound_context.md` file after Step 0):
+Here is my static system passport (the contents of my base `autosound_context.md` file after Step 0):
 ==================================================
 <PASTE THE CONTENTS OF YOUR autosound_context.md FILE HERE>
 ==================================================

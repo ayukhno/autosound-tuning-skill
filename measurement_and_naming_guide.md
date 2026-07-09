@@ -133,7 +133,7 @@ Follow this sequence to ensure your tuning session progresses smoothly and safel
 2.  **Hardware Timing (Timing Reference):** If you use an XLR mic with a loopback setup, make sure you configure your loopback correctly to get sample-accurate impulse and phase measurements.
 3.  **Step 1 Chat:** Open a clean chat session. Paste `step_-1_general_system_instructions.md` into System Instructions, send your `autosound_context.md`, upload your REW `.txt`/`.csv` export files (24 PPO, 1/6 oct), and paste the `step_1_baseline_analysis.md` prompt.
 4.  **Result:** The AI will calculate crossover points, slopes, delays, and baseline level asymmetry.
-5.  **DSP Entry:** Apply these parameters to your DSP and save the preset as `v1`. Copy the AI's copy-paste block to replace the Step 1 section in your local `autosound_context.md`. Close the chat.
+5.  **DSP Entry:** Apply these parameters to your DSP and save the preset as `v1`. The AI returns the COMPLETE regenerated passport — save it as a NEW file `autosound_context_v1.md` (don't hand-edit the old file's sections); it's your v1 source of truth for Step 2. Close the chat.
 
 ### Step 2: Tonal Balance, Channel EQ & Crossover Fine-Tuning (`_2`)
 1.  **DSP Verification:** Before measuring, confirm that all Step 1 (`v1`) settings are active in your DSP!
@@ -146,7 +146,7 @@ Follow this sequence to ensure your tuning session progresses smoothly and safel
         *   Only read the phase curves of a **pair whose RTA summation check flagged a cancellation** — overlay their two individual phase traces in REW at the crossover frequency to get Δφ. A healthy joint needs no phase reading and no combined-pair sweep at all.
 3.  **Step 2 Chat:** Open a clean chat session. Upload your REW exports, paste your updated `autosound_context.md`, and copy the `step_2_tonal_balance_eq.md` prompt.
 4.  **Result:** The AI will calculate precise PEQ bands, micro-delays, and Helix Phase rotation angles.
-5.  **DSP Entry:** Apply the PEQ bands, micro-delays, and phase settings to your DSP, then save as `v2`. Update your local `autosound_context.md` with the AI's copy-pasteable block. Close the chat.
+5.  **DSP Entry:** Apply the PEQ bands, micro-delays, and phase settings to your DSP, then save as `v2`. The AI returns the COMPLETE regenerated passport (CURRENT DSP STATE now carries the EQ/phase) — save it as a NEW file `autosound_context_v2.md`. Close the chat.
 
 ### Step 3: Subjective Fine-Tuning & Listening Loops (`_3`)
 1.  **Measurement Session:** With Step 2 (`v2`) settings active, measure:
@@ -156,6 +156,6 @@ Follow this sequence to ensure your tuning session progresses smoothly and safel
     *   Sit in the driver's seat in your normal listening position.
     *   Play high-quality test tracks (e.g., AYA, EMMA, Focal evaluation discs, or your favorite reference songs).
     *   Evaluate stage width, height, depth, center image focus, sibilance, and sub/bass integration.
-3.  **Step 3 Chat:** Open a clean chat session. Copy the `step_3_fine_tuning_and_phase.md` prompt, attach your updated `autosound_context.md` file, upload combined measurements, and describe your listening feedback in detail.
-4.  **Result:** The AI will analyze the graphs against your feedback and recommend subtle level or EQ adjustments.
-5.  **Iteration:** Repeat this listening loop until you are completely satisfied with the sound stage and tonal balance. Save your final DSP preset!
+3.  **Step 3 Chat:** Open a clean chat session. Copy the `step_3_fine_tuning_and_phase.md` prompt, attach your latest passport file (`autosound_context_v2.md`, or the previous iteration's `autosound_context_v3.N.md`), upload the combined RTA measurements, and describe your listening feedback in detail.
+4.  **Result:** The AI will analyze the graphs against your feedback, recommend subtle level or EQ adjustments, and return the COMPLETE regenerated passport with every change folded into the CURRENT DSP STATE block — save it as `autosound_context_v3.N.md` (N = iteration number).
+5.  **Iteration:** Repeat this listening loop (each pass a fresh chat fed the latest `_v3.N` file) until you are completely satisfied with the sound stage and tonal balance. Save your final DSP preset!

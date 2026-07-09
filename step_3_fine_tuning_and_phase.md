@@ -57,9 +57,9 @@ Please correlate my subjective complaints and observations with the provided mea
 2. 🎛️ Targeted EQ Adjustments Sheet (DSP Output EQ Updates)
 3. 🔊 Targeted Level Adjustments Sheet (Gain Updates)
 4. 🔄 Next Listening Plan (what to focus on after applying changes)
-5. 📋 Code Block for direct logging into `autosound_context.md`
+5. 📋 The COMPLETE regenerated passport (whole file, per your State Discipline protocol) — fold EVERY change from this iteration (including any gain/delay/EQ edit) into the CURRENT DSP STATE block, and append an Iteration entry to the [STEP 3] change history (each change as delta + absolute). I will save it as `autosound_context_v3.N.md`.
 
-Here is my active system passport (the contents of my `autosound_context.md` file updated after Step 2):
+Here is my active system passport (paste the contents of my latest passport file — `autosound_context_v2.md` on the first Step-3 pass, or the previous iteration's `autosound_context_v3.N.md` on a repeat):
 ==================================================
 <PASTE THE CONTENTS OF YOUR autosound_context.md FILE HERE>
 ==================================================

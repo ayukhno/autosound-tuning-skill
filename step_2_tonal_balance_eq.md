@@ -60,9 +60,9 @@ Please analyze these measurements and any phase values according to your system 
 2. 🎛️ Per-Channel Parametric EQ Sheet (DSP Output EQ)
 3. ⏱️ Micro-Delays & Phase Rotation Sheet (Helix Phase & All-Pass)
 4. 🔊 Gain/Level Fine-Tuning Sheet
-5. 📋 Code Block for direct copy-pasting into `autosound_context.md`
+5. 📋 The COMPLETE regenerated passport (whole file, per your State Discipline protocol) with the CURRENT DSP STATE block updated (PEQ + micro-delays/phase folded in, absolute) and a [STEP 2] change-history entry (each change as delta + absolute) — I will save it as `autosound_context_v2.md`.
 
-Here is my active system passport (the contents of my `autosound_context.md` file updated with Step 1 values):
+Here is my active system passport (paste the contents of my latest `autosound_context_v1.md`):
 ==================================================
 <PASTE THE CONTENTS OF YOUR autosound_context.md FILE HERE>
 ==================================================

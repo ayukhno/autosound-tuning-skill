@@ -83,7 +83,7 @@ You will find the following files in this folder:
 * **Template:** [step_0_intake_and_setup.md](step_0_intake_and_setup.md).
 * **Action:** Copy the Step 0 prompt into a clean chat, pasting in `autosound_context_template.md`'s contents where indicated. The AI will interview you (2-3 questions at a time) and generate a fully populated Markdown block.
 * **Manual quick start (skip the interview):** Already know your gear? Copy `autosound_context_template.md`'s contents into the empty **[autosound_context.md](autosound_context.md)** and replace the `[Placeholder]` fields yourself — no AI chat needed for this step.
-* **Result:** Paste the AI's generated block (Path 1) or your hand-filled version (Path 2) straight into the empty **[autosound_context.md](autosound_context.md)**. This one file carries your system state through every later step — when a later step's AI returns an updated block, replace that step's section only; never leave two copies of the same section in the file.
+* **Result:** Paste the AI's generated block (Path 1) or your hand-filled version (Path 2) straight into the empty **[autosound_context.md](autosound_context.md)** — your base passport. From here on, **each step's AI output is the COMPLETE regenerated passport, which you save as a NEW versioned file** (`autosound_context_v1.md` after Step 1, `_v2.md` after Step 2, `_v3.1.md` / `_v3.2.md` per Step-3 iteration). You never hand-merge sections: the latest file is always the full, current source of truth, and the chain of files is your history. Each step's request is fed the latest file.
 
 ---
 
@@ -94,8 +94,8 @@ You will find the following files in this folder:
   * MMM RTA measurements (`rta`) for each speaker taken around your head position.
   * All crossovers and EQ in your DSP must be bypassed (or temporary safe HPF enabled for tweeters and midranges).
 * **Chat Run:** Open a **NEW** clean chat. Send the Step 1 prompt along with your `autosound_context.md` and upload your REW `.txt` or `.csv` export files (24 PPO, 1/6 oct).
-* **DSP Entry:** Apply the calculated crossover points, slopes, and delays (in samples) into your DSP.
-* **Context Update:** Copy the AI's formatted output block and replace the Step 1 section in your local `autosound_context.md`. Close the chat.
+* **DSP Entry:** Apply the calculated crossover points, slopes, and delays (in samples) into your DSP; save the DSP preset as `v1`.
+* **Context Update:** The AI returns the COMPLETE regenerated passport. **Save it as a NEW file `autosound_context_v1.md`** (don't hand-edit sections of the old one) — this is your v1 source of truth, and what you paste into Step 2. Close the chat.
 
 ---
 
@@ -107,8 +107,8 @@ You will find the following files in this folder:
   * Single sweeps (`sw`) for each speaker, kept on standby — only read their individual phase curves (overlaid in REW) for a joint the RTA check flags as cancelling, to calculate its correction.
 * **Chat Run:** Open a **NEW** clean chat. Send the Step 2 prompt, select your target curve, enter the measured phase values at the crossovers, upload your REW measurement exports, and paste your `autosound_context.md`.
 * **Result:** The AI will calculate precise PEQ filters, micro-delays, and Helix Phase angles.
-* **DSP Entry:** Apply the PEQ bands, fine delays, and phase angles to your DSP.
-* **Context Update:** Copy the AI's formatted output block and replace the Step 2 section in your local `autosound_context.md`. Close the chat.
+* **DSP Entry:** Apply the PEQ bands, fine delays, and phase angles to your DSP; save the DSP preset as `v2`.
+* **Context Update:** The AI returns the COMPLETE regenerated passport (its CURRENT DSP STATE now carries the EQ/phase too). **Save it as a NEW file `autosound_context_v2.md`** — your v2 source of truth, and what you paste into Step 3. Close the chat.
 
 ---
 
@@ -118,9 +118,10 @@ You will find the following files in this folder:
   * All Step 2 (`v2`) settings active in your DSP.
   * MMM RTA measurements of combined sides: `L_3` (full left), `R_3` (full right), `ALL_3` (full front stage with subwoofer). Step 3 is tonal/subjective (RTA domain) — **no combined-side sweeps** (a two-side sweep at one fixed point suffers the comb-filtering MMM averages out).
 * **Listening Check:** Sit in the driver's seat. Play high-quality test tracks. Evaluate: center image focus, stage size (width, height, depth), vocal harshness, sibilance, and bass boominess.
-* **Chat Run:** Open a **NEW** clean chat. Send the Step 3 prompt along with your updated `autosound_context.md`, upload combined REW measurements, and describe your listening feedback in detail.
+* **Chat Run:** Open a **NEW** clean chat. Send the Step 3 prompt along with your latest passport file (`autosound_context_v2.md` on the first pass, or the previous iteration's `autosound_context_v3.N.md`), upload the combined RTA measurements, and describe your listening feedback in detail.
 * **DSP Entry:** Apply the recommended micro-adjustments to EQ bands or channel levels.
-* **Iteration:** Repeat this step as many times as necessary to reach your personal acoustic ideal!
+* **Context Update:** The AI returns the COMPLETE regenerated passport with every change folded into the CURRENT DSP STATE block (not just the iteration log). **Save it as `autosound_context_v3.N.md`** (N = iteration number).
+* **Iteration:** Repeat this step as many times as necessary to reach your personal acoustic ideal — each iteration is a fresh chat fed the latest `_v3.N` file!
 
 ---
 

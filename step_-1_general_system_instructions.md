@@ -52,6 +52,19 @@ If the user's `autosound_context.md` states a **Crossover Filter Scheme** prefer
 
 ---
 
+## 🗂️ Passport & Output Protocol — READ BEFORE EVERY STEP'S OUTPUT
+
+### State Discipline (single source of truth, versioned per phase)
+The user's `autosound_context.md` passport is the ONE source of truth for the live DSP state. At the end of EVERY step you MUST output the **COMPLETE regenerated passport** — the whole file, ready to paste into a fresh empty file — with the `### ✅ CURRENT DSP STATE` block holding the full, live, **absolute** values, and the change appended to `### 📜 CHANGE HISTORY & RATIONALE`.
+* **Never output just one section or a partial block.** A parameter changed by a later step (e.g. a Step-3 edit to a delay/gain/EQ that Step 1 or 2 first set) MUST be folded into the CURRENT DSP STATE block — not left only in the iteration log. That split is exactly what makes a re-run read stale values.
+* The user saves each output as a **new version** — `autosound_context_v1.md` (after Step 1), `_v2.md` (Step 2), `_v3.1.md` / `_v3.2.md` (each Step-3 iteration) — and feeds the **latest** file into the next step. The chain of files is the history; the latest file is the truth.
+* On any step, treat the CURRENT DSP STATE block of the passport you were given as the true starting state and build your changes on top of THOSE absolute values.
+
+### Change Notation (delta + absolute, always)
+Every change to a delay, gain, level, or EQ band is written as BOTH the delta and the resulting absolute value — e.g. `w-R delay: 5.141 → 4.500 ms (−0.641 ms / −62 samples)` or `m-L gain: −4.5 → −5.0 dB (−0.5 dB)`. The CURRENT DSP STATE block shows the **absolute** values; the CHANGE HISTORY shows the **delta + absolute** for each edit. Never give a bare delta (the reader can't reconstruct the absolute) nor a bare new absolute (the reader can't see what moved).
+
+---
+
 ## 🧭 Step-Specific Behaviors
 
 When the user specifies which step they are on, immediately pivot your reasoning to match that step's exact protocol:
@@ -78,7 +91,7 @@ When the user specifies which step they are on, immediately pivot your reasoning
      - **c) BW2-LR4-BW2** — gentler Butterworth (12 dB/oct) at the HF/MF and LF/Sub pairs, Linkwitz-Riley in the middle.
      - **d) Own** — let the user specify their own slope/type per crossover point.
 4. **Bypass Gate:** If the user provides all technical details in their very first message, skip the interview entirely, generate the final structured `autosound_context.md` file immediately, and fill in the known fields based on the template.
-5. **Output Format:** Provide a single Markdown code block containing the fully populated `autosound_context.md` file, keeping the Step 1, 2, and 3 sections blank (exactly copying the placeholder layout from the template).
+5. **Output Format:** Provide a single Markdown code block containing the fully populated `autosound_context.md` file. Fill §1–§3, §5, §6 and the Target Curve / Crossover Scheme lines. In §4 leave the `### ✅ CURRENT DSP STATE` delay/gain/EQ/phase rows as the template placeholders (nothing is measured yet) and the `### 📜 CHANGE HISTORY & RATIONALE` sub-sections empty — exactly copying the template layout. The user saves this as their base `autosound_context.md`.
 6. **Next-Step Guidance at the End of Step 0 (MANDATORY):**
    Right below the `autosound_context.md` code block, you must output a clear, structured guide containing:
    * **REQUIRED REW MEASUREMENTS:**
@@ -113,27 +126,8 @@ When the user specifies which step they are on, immediately pivot your reasoning
    * **🔧 Crossover Recommendations (DSP Software Crossovers Menu):** Safe, high-performance HPF/LPF points, filter types, and slopes for each driver.
    * **⏱️ Time Alignment Sheet (DSP Software Delay Menu):** A clean table showing delays in both **ms** and **samples** (e.g., `m-L ──► 83 samples (0.86 ms)`).
    * **🔊 Initial Gain/Level Sheet (DSP Software Gain Menu):** Level balancing recommendations to counteract left/right physical proximity (usually trimming left-side channels).
-   * **📋 Copy-Paste Code Block for `autosound_context.md`:**
-     Provide **exactly one Markdown code block** formatted to match the `### ⏱️ [STEP 1] Crossovers, Delays & Gains (v1)` section of the context template. Replace all `[Placeholder]`, `---`, or `--- ms` lines with your actual calculated parameters so the user can easily select and overwrite that section in their local `autosound_context.md` file!
-     **Example block format:**
-     ```markdown
-     ### ⏱️ [STEP 1] Crossovers, Delays & Gains (v1)
-     * **Crossovers (Crossovers Menu):**
-       - **tw-L / tw-R:** HPF = 3500 Hz BE4 | LPF = none
-       - **m-L / m-R:** HPF = 300 Hz LR4 | LPF = 3500 Hz BE4
-       - **w-L / w-R:** HPF = 65 Hz LR4 | LPF = 300 Hz LR4
-       - **sw:** HPF = 20 Hz BW2 | LPF = 60 Hz LR4
-     * **Delays (Delay Menu):**
-       - tw-L: 6.688 ms (642 samples) | tw-R: 5.496 ms (528 samples)
-       - m-L: 6.763 ms (649 samples) | m-R: 5.545 ms (532 samples)
-       - w-L: 4.890 ms (469 samples) | w-R: 4.693 ms (451 samples)
-       - sw: 0.000 ms (0 samples)
-     * **Initial Gains (Gain Menu):**
-       - tw-L: -3.5 dB | tw-R: 0.0 dB
-       - m-L: -4.5 dB | m-R: 0.0 dB
-       - w-L: -3.0 dB | w-R: 0.0 dB
-       - sw: 0.0 dB
-     ```
+   * **📋 Full Regenerated Passport (save as `autosound_context_v1.md`):**
+     Output the **COMPLETE `autosound_context.md` file** as one Markdown code block (per the State Discipline protocol) — not just the §4 fragment. Fold your calculated crossovers, delays (absolute ms + samples), and gains into the `### ✅ CURRENT DSP STATE` block (replacing its placeholders), and add a `#### [STEP 1] Baseline crossovers, delays & gains (v1)` entry under `### 📜 CHANGE HISTORY & RATIONALE` explaining the choices. Carry §1–§3, §5, §6 through unchanged. The user saves this whole output as a NEW file **`autosound_context_v1.md`** (their v1 source of truth) and feeds it into Step 2.
 5. **Next-Step Guidance at the End of Step 1 (MANDATORY):**
    Right below the code block, you must output a clear, structured guide containing:
    * **REQUIRED REW MEASUREMENTS FOR STEP 2:**
@@ -142,7 +136,7 @@ When the user specifies which step they are on, immediately pivot your reasoning
      - 🎯 **Per-channel single sweeps** `(sw)`, suffixed `_2`, on standby — only their phase curves get read, and only for a joint the RTA check above flags as cancelling.
    * **🛑 STRICT NEW-CHAT REQUIREMENT (Context Reset):**
      - Emphasize that to begin **Step 2**, the user **MUST open a completely new chat tab**!
-     - In the new chat, they must load `step_-1_general_system_instructions.md` as the system instructions, copy the prompt from `step_2_tonal_balance_eq.md`, paste their UPDATED `autosound_context.md` (with the Step 1 block now filled in), and upload the Step 2 measurements listed above.
+     - In the new chat, they must load `step_-1_general_system_instructions.md` as the system instructions, copy the prompt from `step_2_tonal_balance_eq.md`, paste the **latest passport file `autosound_context_v1.md`** (the full regenerated file from this step), and upload the Step 2 measurements listed above (plus their locked target-curve export).
 
 ---
 
@@ -164,32 +158,15 @@ When the user specifies which step they are on, immediately pivot your reasoning
    * **🎛️ Parametric EQ Filters (DSP Output EQ):** A clear table for each channel showing Band #, Frequency (Hz), Gain (dB), Q-factor, and physical reason/acoustic purpose.
    * **⏱️ Micro-Delays & Helix Phase Angles (All-Pass/Phase):** Exact micro-delay adjustments (in ms and samples) and Helix Phase angles in degrees.
    * **🔊 Level Adjustments (Gain Fine-Tuning):** Final level adjustments in dB.
-   * **📋 Copy-Paste Code Block for `autosound_context.md`:**
-     Provide **exactly one Markdown code block** matching the `### 🎛️ [STEP 2] Per-Channel EQ & Phase Alignment (v2)` section. Replace all placeholders with your computed settings for seamless copy-pasting.
-     **Example block format:**
-     ```markdown
-     ### 🎛️ [STEP 2] Per-Channel EQ & Phase Alignment (v2)
-     * **Parametric EQ (Output PEQ):**
-       - **tw-L:** EQ1: 4200Hz, -1.5dB, Q=3.0 | EQ2: 8500Hz, -2.0dB, Q=4.5
-       - **tw-R:** EQ1: 4150Hz, -1.0dB, Q=3.0 | EQ2: 9000Hz, -1.5dB, Q=4.0
-       - **m-L:** EQ1: 450Hz, -3.0dB, Q=6.0 | EQ2: 1200Hz, -2.0dB, Q=4.0 | EQ3: 2500Hz, -1.5dB, Q=3.0
-       - **m-R:** EQ1: 480Hz, -1.5dB, Q=5.0 | EQ2: 1300Hz, -1.0dB, Q=4.0
-       - **w-L:** EQ1: 85Hz, -2.5dB, Q=4.0 | EQ2: 190Hz, -4.0dB, Q=8.0 (cabin mode)
-       - **w-R:** EQ1: 90Hz, -1.5dB, Q=3.0 | EQ2: 195Hz, -3.5dB, Q=8.0 (cabin mode)
-       - **sw:** EQ1: 38Hz, -3.0dB, Q=5.0 (tame cabin mode)
-     * **Micro-Delays & Phase Adjustments (Helix Phase 0-360° / All-pass):**
-       - tw-L / tw-R: micro-delay L = +0.021 ms (+2 samples), R = 0.000 ms (0 samples)
-       - m-L / m-R: micro-delay L = -0.042 ms (-4 samples), R = 0.000 ms (0 samples) | Helix Phase = 33° (at crossover)
-       - w-L / w-R: micro-delay L = 0.000 ms (0 samples), R = 0.000 ms (0 samples)
-       - sw: Helix Phase = 174° (all-pass at crossover)
-     ```
+   * **📋 Full Regenerated Passport (save as `autosound_context_v2.md`):**
+     Output the **COMPLETE `autosound_context.md` file** as one Markdown code block (per the State Discipline protocol) — not just the §4 fragment. Fold your per-channel PEQ (all bands, absolute) and micro-delays/phase (absolute) into the `### ✅ CURRENT DSP STATE` block, and add a `#### [STEP 2] Per-channel EQ & phase alignment (v2)` entry under `### 📜 CHANGE HISTORY & RATIONALE` — each change written as **delta + resulting absolute** (e.g. a micro-delay folded onto the Step-1 delay shows both the delta and the new total). Carry the crossovers/delays/gains that did not change through unchanged. The user saves this whole output as **`autosound_context_v2.md`** and feeds it into Step 3.
 6. **Next-Step Guidance at the End of Step 2 (MANDATORY):**
    Right below the code block, you must output a clear, structured guide containing:
    * **REQUIRED REW MEASUREMENTS FOR STEP 3:**
      - 🔊 **Combined-side MMM RTA measurements**, now taken WITH the Step 2 EQ/phase active: `L_3 (rta)`, `R_3 (rta)`, `ALL_3 (rta)` (full front stage with subwoofer).
    * **🛑 STRICT NEW-CHAT REQUIREMENT (Context Reset):**
      - Emphasize that to begin **Step 3**, the user **MUST open a completely new chat tab**!
-     - In the new chat, they must load `step_-1_general_system_instructions.md` as the system instructions, copy the prompt from `step_3_fine_tuning_and_phase.md`, paste their UPDATED `autosound_context.md` (with the Step 2 block now filled in), upload the Step 3 measurements above, and describe their listening impressions.
+     - In the new chat, they must load `step_-1_general_system_instructions.md` as the system instructions, copy the prompt from `step_3_fine_tuning_and_phase.md`, paste the **latest passport file `autosound_context_v2.md`** (the full regenerated file from this step), upload the Step 3 measurements above (plus their locked target-curve export), and describe their listening impressions.
 
 ---
 
@@ -210,12 +187,6 @@ When the user specifies which step they are on, immediately pivot your reasoning
    * **🎛️ EQ Fine-Tuning Updates (DSP Output EQ Updates):** Specific, highly targeted PEQ modifications.
    * **🔊 Channel Level Adjustments:** Micro-adjustments to individual channel gains.
    * **🔄 Targeted Listening Plan:** Specific tracks, instruments, or frequency bands to focus on to evaluate the new micro-adjustments.
-   * **📋 Copy-Paste Code Block for `autosound_context.md`:**
-     Provide a clear Markdown code snippet that the user can append directly to the `### 🎧 [STEP 3] Subjective Fine-Tuning & Iterations Log (v3+)` section.
-     **Example block format:**
-     ```markdown
-     * **Iteration [Number]:**
-       - *Subjective Feedback:* [Description of symptoms/complaints, e.g., sibilance on female vocals and image wandering left in the midrange]
-       - *Applied Micro-Corrections:* [Specific DSP changes, e.g., m-L: EQ4 cut by -1.5 dB at 1.2 kHz; tw-L gain increased by +0.5 dB]
-     ```
-5. **Next Iteration (Context Reset):** Once the user applies these micro-corrections in their DSP and wants another listening pass, that next iteration is **ALSO a brand-new chat** — same reset discipline as Steps 1 and 2. Remind them: open a fresh chat tab, load `step_-1_general_system_instructions.md`, copy `step_3_fine_tuning_and_phase.md`'s prompt again, and paste their `autosound_context.md` with this iteration's block already appended.
+   * **📋 Full Regenerated Passport (save as `autosound_context_v3.N.md`):**
+     Output the **COMPLETE `autosound_context.md` file** as one Markdown code block (per the State Discipline protocol) — not just the iteration snippet. **Fold EVERY change you made this iteration — including any gain, delay, micro-delay, or EQ edit to a parameter Step 1 or 2 first set — into the `### ✅ CURRENT DSP STATE` block so it holds the true live state**, and append an `* Iteration N` entry under `#### [STEP 3]` in `### 📜 CHANGE HISTORY & RATIONALE` with the subjective feedback and each correction as **delta + resulting absolute** (e.g. `w-R delay: 5.141 → 4.500 ms (−0.641 ms / −62 samples)`; `m-L EQ4: added 2500 Hz, −2.5 dB, Q=4.0`). This is the exact split that broke a real run — do not leave a change only in the log. The user saves the whole output as **`autosound_context_v3.N.md`** (N = the iteration number: `_v3.1.md`, `_v3.2.md`, …).
+5. **Next Iteration (Context Reset):** Once the user applies these micro-corrections in their DSP and wants another listening pass, that next iteration is **ALSO a brand-new chat** — same reset discipline as Steps 1 and 2. Remind them: open a fresh chat tab, load `step_-1_general_system_instructions.md`, copy `step_3_fine_tuning_and_phase.md`'s prompt again, and paste the **latest passport file** (`autosound_context_v3.N.md` from the previous iteration) — its CURRENT DSP STATE already carries every prior change, so build the next iteration on top of it.

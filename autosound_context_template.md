@@ -31,31 +31,41 @@ Fill out this file with basic information about your system. It serves as your s
 * **Microphone:** [e.g., UMIK-1 (USB, 48 kHz) / Behringer ECM8000 (XLR)]
 * **Timing Reference:** [e.g., Acoustic Timing Reference in REW / Physical Loopback cable (XLR)]
 
-## 4. Current Settings & Target Curve (Current DSP State)
-* **Target Curve:** [e.g., ResoNix Accurate / Audiofrog / Harman]
+## 4. Current Settings & Target Curve
+
+> [!IMPORTANT]
+> **This file is the SINGLE SOURCE OF TRUTH for the live DSP state.** Each step's
+> AI output is a COMPLETE regenerated copy of this whole file — save it as a
+> **new version** (`autosound_context_v1.md` after Step 1, `_v2.md` after Step 2,
+> `_v3.1.md` / `_v3.2.md` per Step 3 iteration) and feed the *latest* file into
+> the next step. The chain of files is your history; the latest file is the
+> truth. **Never hand-merge or partially edit sections.** The CURRENT DSP STATE
+> block below always carries the full, live, **absolute** values — including any
+> change a later step makes to a parameter an earlier step first set (e.g. a
+> Step-3 delay or gain edit updates this block, not just the history log).
+
+* **Target Curve:** [e.g., ResoNix Accurate / Audiofrog / Harman] — the actual curve DATA is uploaded each step as a REW text export (imported + LOCKED in REW; see the measurement guide), not inferred from this name.
 * **Crossover Filter Scheme:** [e.g., a) All LR4 / b) BE4-LR4-BE4 (default) / c) BW2-LR4-BW2 / d) Own — describe]
 
-### ⏱️ [STEP 1] Crossovers, Delays & Gains (v1)
-*<!-- To be populated after completing Step 1 from the AI's copy-paste block -->*
+### ✅ CURRENT DSP STATE (complete, absolute — the source of truth)
+*<!-- Regenerated IN FULL every step. Every value here is the live ABSOLUTE setting currently in the DSP. Before Step 1 the delay/gain/EQ rows stay as placeholders. -->*
 * **Crossovers (Crossovers Menu):**
   - **tw-L / tw-R:** HPF = [Placeholder] Hz LR4 | LPF = none
   - **m-L / m-R:** HPF = [Placeholder] Hz | LPF = [Placeholder] Hz
   - **w-L / w-R:** HPF = [Placeholder] Hz | LPF = [Placeholder] Hz
   - **sw:** HPF = 20 Hz BW2 | LPF = [Placeholder] Hz
-* **Delays (Delay Menu):**
+* **Delays (Delay Menu) — absolute:**
   - tw-L: --- ms (--- samples) | tw-R: --- ms (--- samples)
   - m-L: --- ms (--- samples) | m-R: --- ms (--- samples)
   - w-L: --- ms (--- samples) | w-R: --- ms (--- samples)
   - sw: 0.00 ms (0 samples)
-* **Initial Gains (Gain Menu):**
+* **Gains (Gain Menu) — absolute:**
   - tw-L: --- dB | tw-R: --- dB
   - m-L: --- dB | m-R: --- dB
   - w-L: --- dB | w-R: --- dB
   - sw: --- dB
-
-### 🎛️ [STEP 2] Per-Channel EQ & Phase Alignment (v2)
-*<!-- To be populated after completing Step 2 from the AI's copy-paste block -->*
-* **Parametric EQ (Output PEQ):**
+  - *Polarity (if any channel inverted):* [e.g., tw-R = Inverted]
+* **Parametric EQ (Output PEQ) — absolute, ALL active bands per channel:**
   - **tw-L:** [No PEQ]
   - **tw-R:** [No PEQ]
   - **m-L:** [No PEQ]
@@ -63,17 +73,23 @@ Fill out this file with basic information about your system. It serves as your s
   - **w-L:** [No PEQ]
   - **w-R:** [No PEQ]
   - **sw:** [No PEQ]
-* **Micro-Delays & Phase Controls (Helix Phase 0-360° / All-pass):**
+* **Micro-Delays & Phase (Helix Phase 0-360° / All-pass) — absolute:**
   - tw-L / tw-R: micro-delay = 0.00 ms (0 samples)
   - m-L / m-R: micro-delay = 0.00 ms (0 samples) | Helix Phase = 0°
   - w-L / w-R: micro-delay = 0.00 ms (0 samples)
   - sw: Helix Phase = 0°
 
-### 🎧 [STEP 3] Subjective Fine-Tuning & Iterations Log (v3+)
-*<!-- To be populated during Step 3 listening loops -->*
+### 📜 CHANGE HISTORY & RATIONALE (append-only)
+*<!-- WHY each change was made. Every delay/gain/level/EQ change is written as DELTA + resulting ABSOLUTE, e.g. `w-R delay: 5.141 → 4.500 ms (−0.641 ms / −62 samples)`. Never overwrite earlier entries — append. -->*
+#### [STEP 1] Baseline crossovers, delays & gains (v1)
+*<!-- To be populated after Step 1: what was set and why. -->*
+#### [STEP 2] Per-channel EQ & phase alignment (v2)
+*<!-- To be populated after Step 2: EQ/phase decisions, each change as Δ + absolute. -->*
+#### [STEP 3] Subjective fine-tuning iterations (v3+)
+*<!-- To be populated during Step 3 listening loops. -->*
 * **Iteration 1:**
   - *Subjective Feedback:* [Describe the initial listening impressions]
-  - *Applied Micro-Corrections:* [List any adjustments to EQ or level settings]
+  - *Applied Micro-Corrections (Δ + resulting absolute):* [e.g., m-L EQ4: added 2500 Hz, −2.5 dB, Q=4.0; w-R delay: 5.141 → 4.500 ms (−0.641 ms / −62 samples)]
 
 ## 5. Channel and Measurement Naming Convention
 * tw-L / tw-R (Tweeter L/R) · m-L / m-R (Midrange L/R) · w-L / w-R (Woofer L/R) · sw (Subwoofer).
