@@ -35,7 +35,7 @@ My goal is to obtain subtle, highly targeted adjustments to EQ bands and channel
 ### ⚠️ Verification Gate:
 * I confirm that all crossovers, per-channel EQ, micro-delays, and Helix Phase angles from Step 2 are fully applied to my DSP.
 
-I am uploading the text exports of my combined measurements with 1/6 or 1/12 oct smoothing (L_3 rta, R_3 rta, ALL_3 rta, and sweeps L_3 sw, R_3 sw, ALL_3 sw as .txt / .csv files):
+I am uploading the text exports of my combined MMM RTA measurements with 1/6 oct smoothing (L_3 rta, R_3 rta, ALL_3 rta as .txt / .csv files). Step 3 is subjective/tonal work in the RTA domain — no combined-side sweeps are needed (a sweep of two spatially separated sides at one fixed mic point suffers the comb-filtering MMM exists to average out). My locked target curve is included in the upload set for reference:
 * *(Drag and drop your lightweight REW measurement text files directly into the chat)*
 
 ### 🎧 My Subjective Listening Feedback on Test Tracks:

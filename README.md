@@ -116,8 +116,7 @@ You will find the following files in this folder:
 * **Template:** [step_3_fine_tuning_and_phase.md](step_3_fine_tuning_and_phase.md).
 * **Measurement Requirements:**
   * All Step 2 (`v2`) settings active in your DSP.
-  * MMM RTA measurements of combined sides: `L_3` (full left), `R_3` (full right), `ALL_3` (full front stage with subwoofer).
-  * Measurement sweeps of combined sides: `L_3 (sw)`, `R_3 (sw)`, `ALL_3 (sw)`.
+  * MMM RTA measurements of combined sides: `L_3` (full left), `R_3` (full right), `ALL_3` (full front stage with subwoofer). Step 3 is tonal/subjective (RTA domain) — **no combined-side sweeps** (a two-side sweep at one fixed point suffers the comb-filtering MMM averages out).
 * **Listening Check:** Sit in the driver's seat. Play high-quality test tracks. Evaluate: center image focus, stage size (width, height, depth), vocal harshness, sibilance, and bass boominess.
 * **Chat Run:** Open a **NEW** clean chat. Send the Step 3 prompt along with your updated `autosound_context.md`, upload combined REW measurements, and describe your listening feedback in detail.
 * **DSP Entry:** Apply the recommended micro-adjustments to EQ bands or channel levels.

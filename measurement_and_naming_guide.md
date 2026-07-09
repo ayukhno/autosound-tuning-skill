@@ -151,7 +151,7 @@ Follow this sequence to ensure your tuning session progresses smoothly and safel
 ### Step 3: Subjective Fine-Tuning & Listening Loops (`_3`)
 1.  **Measurement Session:** With Step 2 (`v2`) settings active, measure:
     *   **MMM RTA around head:** `L_3 (rta)` (full left), `R_3 (rta)` (full right), `ALL_3 (rta)` (full front stage + sub)
-    *   **Single sweeps on tripod:** `L_3 (sw)`, `R_3 (sw)`, `ALL_3 (sw)`
+    *   ⚠️ **No combined-side sweeps.** Step 3 is tonal/subjective work in the RTA domain — a single sweep of two spatially separated sides at one fixed mic point suffers the exact comb-filtering that MMM/RTA exists to average out, so it would mislead rather than help. Joint phase/timing was already handled in Step 2 from the *individual* driver sweeps.
 2.  **Listening Auditing:**
     *   Sit in the driver's seat in your normal listening position.
     *   Play high-quality test tracks (e.g., AYA, EMMA, Focal evaluation discs, or your favorite reference songs).
