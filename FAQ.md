@@ -18,6 +18,7 @@ Have a question that isn't here? Open a [discussion or issue](../../issues) and 
   - [macOS & Windows Setup (Antigravity CLI - Recommended)](#macos--windows-setup-using-antigravity-cli---recommended)
   - [Fallback: Direct API Setup (No CLI/Node.js)](#fallback-direct-api-setup-no-cli-or-nodejs-required)
   - [Do you have a version running on Google AI Studio?](#do-you-have-a-version-running-on-google-ai-studio)
+  - [Can I ask Gemini to install and run the skill itself?](#can-i-ask-gemini-to-install-and-run-the-skill-itself-without-claude-code)
 - [Measuring Phase & Time Alignment: UMIK-1 vs. XLR](#measuring-phase--time-alignment-umik-1-vs-xlr-microphones)
   - [Can I measure phase with a UMIK-1?](#can-i-measure-phase-with-a-umik-1)
 
@@ -95,7 +96,7 @@ To get started, you will need a laptop, a calibrated microphone setup, and a DSP
 Choose the instructions for your operating system:
 
 <details>
-<summary><b>🍎 For macOS</b></summary>
+<summary><b>For macOS</b></summary>
 
 1. **Open Terminal** (press **Cmd + Space**, type `Terminal`, and hit **Enter**).
 2. **Install Claude Code** by running this command:
@@ -115,7 +116,7 @@ Choose the instructions for your operating system:
 </details>
 
 <details>
-<summary><b>🪟 For Windows</b></summary>
+<summary><b>For Windows</b></summary>
 
 1. **Open Windows PowerShell** (press **Win + R**, type `powershell`, and hit **Enter**). If you are already in a standard Command Prompt (CMD), type `powershell` first to switch to the PowerShell environment.
 2. **Install Claude Code** by running this command:
@@ -193,7 +194,7 @@ Google's official **Antigravity CLI (`agy`)** is the recommended default method 
 
 #### 1. Install the CLI:
 
-* **🍎 For macOS:** Install via Homebrew:
+* **For macOS:** Install via Homebrew:
   ```bash
   brew install --cask antigravity-cli
   ```
@@ -201,7 +202,7 @@ Google's official **Antigravity CLI (`agy`)** is the recommended default method 
   ```bash
   xattr -dr com.apple.quarantine "$(command -v agy)"
   ```
-* **🪟 For Windows (PowerShell):** Run this command in Windows PowerShell:
+* **For Windows (PowerShell):** Run this command in Windows PowerShell:
   ```powershell
   irm https://antigravity.google/cli/install.ps1 | iex
   ```
@@ -247,11 +248,27 @@ If you are running **Linux**, if the Antigravity CLI is not available on your sy
 
 ## Do you have a version running on Google AI Studio?
 
-**We are currently exploring and testing this option, but we have serious doubts about its stability.** While it is technically possible to run the Critic/Advisor workflow (or a fully manual tuning process) directly inside **[Google AI Studio](https://aistudio.google.com/)** for free, standard web chats suffer from high variance, severe memory drift, and value hallucinations over long sessions.
+**Yes.** We shipped a beta built specifically for this: a set of stateless prompt templates you run entirely inside **[Google AI Studio](https://aistudio.google.com/)** (or any web chat) with free Gemini, no local install and no API key required.
 
-Therefore, we **do not recommend** this as a primary or reliable workflow.
+**[manual_step-by-step branch](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step)**
 
-If you are interested in exploring this experimental flow, all templates and system instructions for the stateless, copy-paste manual pipeline live on the dedicated **[manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step)** branch.
+Each tuning step runs in a fresh chat with a short copy-paste prompt plus your REW exports. The passport file (your car's settings) gets regenerated in full at each step and saved as a new version, so nothing gets lost between steps the way long chat sessions tend to drift.
+
+Being honest about where it stands: it works, but it's a step below the full local setup described above. There's no REW API pulling numbers automatically, no persistent state between messages, and no real back-and-forth review loop. Treat it as the fastest way to try the method for free, before deciding whether the full local setup is worth the time and the small subscription cost.
+
+Still labeled experimental (it's new), and feedback from real tuning sessions is welcome.
+
+---
+
+## Can I ask Gemini to install and run the skill itself, without Claude Code?
+
+**Yes, as a manual bootstrap, not a formal install.** There is no plugin system for Gemini the way Claude Code has one. But since the skill is plain Markdown and Python, nothing Claude-specific, you can point an agentic Gemini session (Antigravity CLI, or any Gemini setup with file and shell access) at the repo and ask it directly:
+
+> Clone https://github.com/ayukhno/autosound-tuning-skill, read `skills/autosound-tuning/SKILL.md`, and follow that method as your operating instructions for this session.
+
+One real caveat: Claude Code's own Skill system loads only the active phase on demand (see `SKILL.md`'s "Phase Sliding Window"), which keeps its context focused over a long session. A Gemini session that reads everything at once, instead of pulling files in on demand, may not hold that same discipline over a long session, on top of Gemini's already-documented tendency to drift on long sessions (see above).
+
+The fully stateless, no-install alternative is the [manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step) pipeline described just above.
 
 ---
 
@@ -267,7 +284,7 @@ There is a major difference in how USB and XLR microphones handle time-critical 
 **Yes.** You can still get highly accurate phase and time-delay measurements with a USB microphone by using REW's **Acoustic Timing Reference**. Instead of a loopback cable, REW will play a short high-frequency "chirp" from a designated reference speaker (usually a tweeter) before each measurement sweep to calculate the timing offset.
 
 For a complete step-by-step video guide on how to configure REW for accurate phase measurements with a USB microphone, watch this excellent tutorial by RAW-Cat:
-👉 [RAW-Cat: Measuring Speaker Phase in REW](https://www.youtube.com/watch?v=El-kwZ5_nnU)
+[RAW-Cat: Measuring Speaker Phase in REW](https://www.youtube.com/watch?v=El-kwZ5_nnU)
 
 > [!WARNING]
 > **CRITICAL RULE: Take all sweeps consecutively in one run!**
