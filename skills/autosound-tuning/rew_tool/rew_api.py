@@ -107,7 +107,9 @@ def get_measurement_by_name(name, exact=True):
 def get_fr(mid):
     data = _get(f"/measurements/{mid}/frequency-response")
     mag = decode_floats(data["magnitude"])
-    phase = decode_floats(data["phase"])
+    # RTA measurements carry no phase (rew-api-quirks.md "Timing"); return None
+    # so magnitude-only callers keep working instead of hitting a KeyError.
+    phase = decode_floats(data["phase"]) if "phase" in data else None
     freqs = freq_axis(data, len(mag))
     return freqs, mag, phase
 
@@ -178,3 +180,45 @@ def get_target_response(mid):
     mag = decode_floats(data["magnitude"])
     freqs = freq_axis(data, len(mag))
     return freqs, mag
+
+
+def _selftest():
+    """Exercise both branches of get_fr offline — phase-present (sweep) and
+    phase-absent (RTA). The RTA branch used to KeyError on data["phase"]
+    (rew-api-quirks.md "Timing"); it stayed hidden because no test drove it.
+    Stubbing the HTTP layer keeps this regression caught even when no live
+    measurement or production caller touches the phase-absent path."""
+    global _get
+    _orig = _get
+
+    def _enc(vals):
+        return base64.b64encode(struct.pack(f">{len(vals)}f", *vals)).decode()
+
+    try:
+        _get = lambda path: {                       # sweep: has "phase"
+            "magnitude": _enc([80.0, 82.0, 84.0]),
+            "phase": _enc([-10.0, -20.0, -30.0]),
+            "startFreq": 100.0, "ppo": 48,
+        }
+        _f, _m, p = get_fr("stub")
+        assert p is not None and len(p) == 3, "sweep: phase should decode"
+
+        _get = lambda path: {                       # RTA: NO "phase" key
+            "magnitude": _enc([70.0, 71.0, 72.0]),
+            "startFreq": 20.0, "freqStep": 10.0,
+        }
+        f, m, p = get_fr("stub")
+        assert p is None, "RTA: phase must be None, not a KeyError"
+        assert len(m) == 3 and len(f) == 3, "RTA: magnitude/freqs still returned"
+    finally:
+        _get = _orig
+    print("rew_api selftest OK — get_fr handles phase-present (sweep) and "
+          "phase-absent (RTA) without KeyError")
+
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "--selftest":
+        _selftest()
+    else:
+        print("usage: python rew_api.py --selftest")

@@ -61,11 +61,14 @@ def print_fr_analysis(freqs, mag, phase, title="АЧХ / Фаза"):
                   f"max={stats['max_dB']:6.1f} @ {stats['max_freq']:>7.1f} Hz  "
                   f"Δ={stats['range_dB']:.1f} dB")
 
-    anomalies = an.find_phase_anomalies(freqs, phase)
-    if anomalies:
-        print(f"\n  Фазові аномалії (>30°/окт):")
-        for f, rate in anomalies[:10]:
-            print(f"    {f:>8.1f} Hz  {rate:.0f}°/окт")
+    if phase is None:
+        print(f"\n  Фаза: недоступна (RTA-вимір — лише магнітуда)")
+    else:
+        anomalies = an.find_phase_anomalies(freqs, phase)
+        if anomalies:
+            print(f"\n  Фазові аномалії (>30°/окт):")
+            for f, rate in anomalies[:10]:
+                print(f"    {f:>8.1f} Hz  {rate:.0f}°/окт")
 
 
 def print_ir_analysis(times, ir):

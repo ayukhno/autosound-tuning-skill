@@ -30,7 +30,9 @@ if sys.platform == "win32":
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SKILL = os.path.dirname(HERE)                              # …/skills/autosound-tuning
-for _p in (os.path.join(SKILL, "rew_tool", "state"), os.path.join(SKILL, "rew_tool", "gates")):
+for _p in (os.path.join(SKILL, "rew_tool"),
+           os.path.join(SKILL, "rew_tool", "state"),
+           os.path.join(SKILL, "rew_tool", "gates")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
@@ -95,6 +97,17 @@ def _gates_selftest():
         _quiet(presweep_safety._selftest)
 
 
+def _rew_tool_selftest():
+    """get_fr's phase-present (sweep) vs phase-absent (RTA) branch + the FR
+    analysis magnitude-only path. The RTA branch used to KeyError silently
+    because no test drove it (rew-api-quirks.md 'Timing') — cover it here so a
+    post-pull smoke catches a regression even with no live measurement."""
+    import rew_api
+    import analysis
+    _quiet(rew_api._selftest)
+    _quiet(analysis._selftest)
+
+
 def main():
     print("=== autosound-tuning smoke test ===")
     print(f"python {sys.version.split()[0]} · {sys.platform} · skill={SKILL}")
@@ -104,6 +117,7 @@ def main():
     check("apply.py selftest (apply-change gate)", _apply_selftest)
     check("issue #5 (active=EMMA-Ref v3 → propose to ResoNix REFUSED)", _issue5_scenario)
     check("gates selftest (side_effect + presweep_safety)", _gates_selftest)
+    check("rew_tool selftest (get_fr RTA/sweep phase branch + FR analysis)", _rew_tool_selftest)
 
     # reviewer channel — INFO only; machine/project-dependent, never fails the smoke.
     print("\n[reviewer channel — informational]")

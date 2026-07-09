@@ -1,19 +1,26 @@
 import math
 
 
-def analyze_fr(freqs, mag, phase, f_low=20, f_high=20000):
-    """Return summary stats for FR in given frequency range."""
-    zone = [(f, m, p) for f, m, p in zip(freqs, mag, phase) if f_low <= f <= f_high]
+def analyze_fr(freqs, mag, phase=None, f_low=20, f_high=20000):
+    """Return summary stats for FR in a given frequency range.
+
+    Magnitude stats are always returned. When `phase` is provided (sweep
+    measurements — RTA has none, pass ``None``), the in-band phase is collected
+    and exposed on demand as ``mean_phase_deg`` so a caller that needs a rough
+    band phase reference can read it without a second pass. It is a raw
+    arithmetic mean and phase wraps at ±180°, so treat it as a coarse marker —
+    for meaningful phase behaviour use :func:`find_phase_anomalies` (wrap-aware
+    rate of change). When phase is absent the key is simply omitted (RTA-safe)."""
+    zone = [(f, m) for f, m in zip(freqs, mag) if f_low <= f <= f_high]
     if not zone:
         return {}
-    mags = [m for _, m, _ in zone]
-    phases = [p for _, _, p in zone]
+    mags = [m for _, m in zone]
     mean_mag = sum(mags) / len(mags)
     min_mag = min(mags)
     max_mag = max(mags)
     min_f = zone[mags.index(min_mag)][0]
     max_f = zone[mags.index(max_mag)][0]
-    return {
+    stats = {
         "mean_dB": round(mean_mag, 2),
         "min_dB": round(min_mag, 2),
         "max_dB": round(max_mag, 2),
@@ -21,11 +28,20 @@ def analyze_fr(freqs, mag, phase, f_low=20, f_high=20000):
         "min_freq": round(min_f, 1),
         "max_freq": round(max_f, 1),
     }
+    if phase is not None:
+        phases = [p for f, p in zip(freqs, phase) if f_low <= f <= f_high]
+        if phases:
+            stats["mean_phase_deg"] = round(sum(phases) / len(phases), 1)
+    return stats
 
 
 def find_phase_anomalies(freqs, phase, threshold_deg=30, f_low=20, f_high=20000):
-    """Find zones with rapid phase change (> threshold per octave)."""
+    """Find zones with rapid phase change (> threshold per octave).
+
+    Returns [] when phase is absent (RTA measurements have no phase)."""
     anomalies = []
+    if phase is None:
+        return anomalies
     prev_f, prev_p = None, None
     for f, p in zip(freqs, phase):
         if not (f_low <= f <= f_high):
@@ -187,9 +203,23 @@ def _selftest():
     assert abs(res["delay_ms"] - shift / fs * 1000) < 1e-6, res
     res2 = relative_delay_xcorr(b, a, fs)
     assert res2["lag_samples"] == -shift, f"reverse xcorr {res2['lag_samples']} != {-shift}"
+
+    # RTA path (phase=None): the magnitude-only branch that used to be
+    # unexercised. analyze_fr must skip mean_phase_deg and find_phase_anomalies
+    # must return [] — neither may crash on a phase-less (RTA) measurement.
+    freqs = [50, 100, 200, 400, 800, 1600]
+    mag = [80, 82, 84, 83, 81, 79]
+    phase = [0, -20, -50, -90, -140, -200]
+    s_rta = analyze_fr(freqs, mag, None, 100, 1000)
+    assert "mean_phase_deg" not in s_rta and s_rta["mean_dB"] > 0, s_rta
+    assert find_phase_anomalies(freqs, None) == [], "phase=None must yield no anomalies"
+    s_sw = analyze_fr(freqs, mag, phase, 100, 1000)
+    assert "mean_phase_deg" in s_sw, "sweep: phase present → mean_phase_deg exposed"
+    assert find_phase_anomalies(freqs, phase), "sweep: real phase should flag anomalies"
+
     print(f"selftest OK — first_arrival {fa['arrival_time_ms']} ms avoids the reflection "
           f"(global peak {pk['peak_time_ms']} ms); xcorr {res['delay_ms']} ms (+) / "
-          f"{res2['delay_ms']} ms (−)")
+          f"{res2['delay_ms']} ms (−); FR phase-present/absent branches OK")
 
 
 if __name__ == "__main__":
