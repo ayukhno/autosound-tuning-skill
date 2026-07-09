@@ -65,6 +65,9 @@ Regardless of whether you use our automated scripts (Level 2) or simply follow o
 
 ### Subscription Options, Quotas, & Budgets (As of July 2026)
 
+> [!WARNING]
+> **Prices, quotas, free-credit offers, and model names below are a snapshot (July 2026) and go stale fast.** Treat the dollar figures and limits as illustrative of the *shape* of the choice (cheap-solo vs. reliable-dual), not as current fact — always verify the live pricing on the Anthropic / Google Cloud pages before committing.
+
 In car audio, enthusiasts easily spend hundreds or thousands of dollars on physical hardware (where a single premium sound dampening sheet or a high-quality RCA cable costs $20–$50). When it comes to tuning your system with this AI tool, you have three flexible financial paths depending on your budget, tolerance for rate limits, and preference for automation:
 
 * **Option 1 (Recommended Baseline): Claude ($20/mo) + Free Gemini as Advisor/Critic**
