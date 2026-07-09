@@ -4,6 +4,8 @@ This phase establishes the physical foundation of the tune: crossovers, prelimin
 
 ## 🎯 Goal-node
 
+> ⛔ **Entry precondition — confirm BEFORE any Phase-1 measurement/analysis:** the Phase −1 / `project-intake.md §3` install verification is actually done — routing · electrical polarity · protective crossovers · **gain staging (amp gain up to the first THD jump, backed off ~10%)** · noise floor · safe sweep level. **Gain staging is the one most often skipped silently**, and every later level/EQ/target decision inherits a bad gain structure if it was — so name it explicitly and confirm it with the user. If you can't confirm a step was done, **stop and clear it (`§3`) before continuing** — don't tune on an unverified install. (This entry gate exists because a real run walked into Phase 1 with gains never set.)
+
 **Purpose:** establish the physical foundation — crossovers, raw driver timing (arrival TA), preliminary level balance, per-band targets — so Phase 2 EQ works on a correctly-aligned system.
 
 **Questions this phase answers:**
