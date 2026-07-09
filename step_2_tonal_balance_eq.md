@@ -32,9 +32,9 @@ I am at **Step 2: Tonal Balance, Channel EQ & Phase Alignment**.
 
 My goal is to obtain calculated per-channel parametric EQ (PEQ) filters matching my target curve, as well as micro-delays and phase rotation angles (Helix Phase) at the crossover summation points.
 
-### 🎯 Target Curve Selection:
-Please specify which target curve to use for the PEQ calculation (leave one or describe your preferences):
-* **Target Curve:** [ResoNix Accurate (Default / Flat SQ) | Harman Car Target (Bass Boost) | Audiofrog (Smooth HF Roll-off) | Jazzi | Custom (describe: e.g., smooth treble roll-off -3dB and sub-bass boost +6dB)]
+### 🎯 Target Curve:
+* **Name:** [ResoNix Accurate (Default / Flat SQ) | Harman Car Target (Bass Boost) | Audiofrog (Smooth HF Roll-off) | Jazzi | Custom (describe: e.g., smooth treble roll-off -3dB and sub-bass boost +6dB)]
+* **Curve DATA is in my upload.** I have imported the target curve into REW and LOCKED it (`Ctrl+L`), so it exports with every "Export all measurements as text" and is included in the files below (e.g. `ResoNix_Accurate_..._REW`). Use the actual curve points — do not infer the shape from the name — and level-anchor my measurements to it before computing EQ (per your system instructions). If you don't see a target-curve file in my upload, ask me for it before calculating EQ.
 
 ### ⚠️ Verification Gate:
 * I confirm that all baseline crossovers, delays, and initial gains from Step 1 are fully activated in my DSP processor.

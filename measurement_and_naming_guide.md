@@ -117,6 +117,7 @@ Follow this sequence to ensure your tuning session progresses smoothly and safel
 2.  **Reset Modifiers:** Ensure all delays = `0 ms`, EQ = `flat` (0 dB), gains = `0 dB`, and polarities = `NORM`.
 3.  **Protect Drivers:** Set up temporary safe crossover filters (HPF) for tweeters and midranges (see safety section).
 4.  **Create Context:** This is automated in Step 0 using AI. You can also fill out the local `autosound_context_template.md` manually and save it as `autosound_context.md` in your project folder. No absolute file paths are required.
+5.  **Load & LOCK the Target Curve (once, at the start):** Import your target curve into REW as a measurement (`File → Import → Import frequency response`, e.g. a `ResoNix_Accurate_..._REW` text file). Then **lock it**: select it and press **`Ctrl+L`** (or right-click its thumbnail / overlay-legend entry → **Lock**). The delete icon becomes a **padlock**. Why it matters for your workflow: locked measurements are **NOT removed by "Remove all measurements"** and **ARE included in "Export all measurements as text"** — so your constant target rides along in every export cycle automatically and reaches the AI with your measurements. (Unlock later with `Ctrl+U` if ever needed. Ref: REW Measurements Panel help.) The AI needs the real curve data — it must never guess the target's shape from its name.
 
 ### Step 1: Baseline Measurements (`_1`) & Core Calculations
 1.  **Measurement Session (Compact Checklist):**

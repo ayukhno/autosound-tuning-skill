@@ -55,6 +55,18 @@ Once you have your `autosound_context.md`, `step_-1_general_system_instructions.
 
 ---
 
+## 🎯 Target Curve — Load & LOCK It Once
+
+The AI needs the **real target-curve data**, not its name — a guessed "ResoNix / Harman / Audiofrog" shape produces wrong EQ. The curve is constant, so set it up once and let it ride with your measurements:
+
+1. Import the target into REW as a measurement (`File → Import → Import frequency response`, e.g. `ResoNix_Accurate_..._REW`).
+2. **Lock it:** select it and press **`Ctrl+L`** (or right-click its thumbnail / legend → **Lock**) — the delete icon becomes a **padlock**.
+3. Now "**Remove all measurements**" skips it and "**Export all measurements as text**" includes it — so every export-all cycle carries the target automatically, and you upload it with your measurements each step. (Unlock with `Ctrl+U` if needed.)
+
+The AI level-anchors your measurements to this curve (over ~200 Hz–2 kHz, ignoring sub-bass) before computing EQ — see the system instructions.
+
+---
+
 ## 📂 Folder Structure
 
 You will find the following files in this folder:
@@ -105,7 +117,7 @@ You will find the following files in this folder:
   * Crossovers, delays, and gains from Step 1 (`v1`) must be active in your DSP!
   * MMM RTA measurements (`rta`) for each speaker to calculate PEQ filters, plus MMM RTA of each crossover pair (`L w+m_2`, `R w+m_2`, `L m+tw_2`, `R m+tw_2`, `SW+Ws_2`) to verdict joint summation via measured-sum-vs-power-sum — a moving-mic average is more reliable here than a single fixed point.
   * Single sweeps (`sw`) for each speaker, kept on standby — only read their individual phase curves (overlaid in REW) for a joint the RTA check flags as cancelling, to calculate its correction.
-* **Chat Run:** Open a **NEW** clean chat. Send the Step 2 prompt, select your target curve, enter the measured phase values at the crossovers, upload your REW measurement exports, and paste your `autosound_context.md`.
+* **Chat Run:** Open a **NEW** clean chat. Send the Step 2 prompt, name your target curve **and upload its locked REW export** (so the AI matches the real curve, not a guess — see the target-curve setup below), upload your measurement exports, and paste your latest `autosound_context_v1.md`.
 * **Result:** The AI will calculate precise PEQ filters, micro-delays, and Helix Phase angles.
 * **DSP Entry:** Apply the PEQ bands, fine delays, and phase angles to your DSP; save the DSP preset as `v2`.
 * **Context Update:** The AI returns the COMPLETE regenerated passport (its CURRENT DSP STATE now carries the EQ/phase too). **Save it as a NEW file `autosound_context_v2.md`** — your v2 source of truth, and what you paste into Step 3. Close the chat.
