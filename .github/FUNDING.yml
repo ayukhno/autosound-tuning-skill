@@ -4,9 +4,12 @@
 # GitHub Sponsors: APPROVED 2026-07-11 — profile is public, button active.
 github: ayukhno
 
-# Second channel: Monobank jar (one tap, no account; the web page accepts foreign
-# cards via Apple/Google Pay / Visa / Mastercard, so non-UA donors can give too).
-custom: https://send.monobank.ua/jar/8wThVcodjm
+# Monobank jar is NOT listed here on purpose: GitHub's `custom:` field has no
+# label option and always renders the raw URL as the link text in the sidebar
+# widget — ugly, and redundant now that Sponsors covers the native button.
+# The jar is still offered as a no-account fallback, with proper text, in
+# README (Support section) and the session-close donation ritual
+# (feedback-loop.md §D) — those are ours to format, this file isn't.
 
 # Optional extra channels (uncomment + fill if you add them):
 # ko_fi: your-kofi-username
