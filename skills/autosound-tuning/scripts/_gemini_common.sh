@@ -160,7 +160,7 @@ gemini_doctor() {
     echo "✗ CLI: none on PATH. Fix: brew install --cask antigravity-cli (agy, default) OR npm i -g @google/gemini-cli"; ok=0
   else
     bin="$(command -v "$GEMINI_BIN" 2>/dev/null || echo "$GEMINI_BIN")"
-    echo "✓ CLI: $GEMINI_BIN → $bin  (flavor=$GEMINI_FLAVOR · model='$(gemini_default_model)' · extra='${GEMINI_EXTRA_ARGS}')"
+    echo "✓ CLI: $GEMINI_BIN → $bin  (flavor=$GEMINI_FLAVOR · critic='${GEMINI_CRITIC_MODEL:-$(gemini_default_critic_model)}' · advisor='${GEMINI_ADVISOR_MODEL:-$(gemini_default_model)}' · extra='${GEMINI_EXTRA_ARGS}')"
     if [[ "$(uname)" == Darwin && -e "$bin" ]] && xattr -p com.apple.quarantine "$bin" >/dev/null 2>&1; then
       echo "✗ quarantine: $bin is Gatekeeper-quarantined. Fix: xattr -dr com.apple.quarantine \"$bin\""; ok=0
     fi
