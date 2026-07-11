@@ -294,6 +294,66 @@ def _parse_joint(spec):
     return lo, hi, fc, pair
 
 
+def _edge_f(edge):
+    """A crossover edge (hp/lp) → its frequency, or None when disabled/OFF/null."""
+    if isinstance(edge, dict):
+        f = edge.get("f")
+        return float(f) if f not in (None, "OFF", "off") else None
+    return None
+
+
+def _is_sub(ch):
+    return ch.lower().startswith(("sw", "sub"))
+
+
+def _side_of(ch):
+    if ch.endswith("-L"):
+        return "L"
+    if ch.endswith("-R"):
+        return "R"
+    return "sub" if _is_sub(ch) else "other"   # center/rear ('other') → Phase 5, skip
+
+
+def _joints_from_state(state_root, preset=None, ver_state=None):
+    """Derive the joint map (adjacent driver pairs + crossover freq) from a
+    versioned state snapshot's crossovers — so `analyze-joints` needn't be
+    hand-fed `lo,hi,fc`. Works against the ACTIVE slot by default (the multi-
+    slot guardrail: never a neighbour slot). The measured `pair` for the phase-
+    trust gate is a measurement-naming convention, not in state, so state-derived
+    joints carry no pair (→ UNVERIFIED) until the user attaches one via --joint.
+
+    Returns (preset, version, [(lo, hi, fc, None), …]) sorted low→high per side.
+    """
+    state_dir = os.path.join(os.path.dirname(__file__), "state")
+    if state_dir not in sys.path:
+        sys.path.insert(0, state_dir)
+    import state as st
+
+    if preset is None:
+        preset = st.Registry(state_root).get_active()
+        if not preset:
+            raise ValueError(f"active slot не задано в registry ({state_root}); "
+                             f"вкажи --preset")
+    snap = st.PresetHistory(state_root, preset).load(ver_state)
+    channels = snap.get("channels", {})
+    edges = {ch: (_edge_f(cfg.get("hp")), _edge_f(cfg.get("lp")))
+             for ch, cfg in channels.items()}
+
+    joints, seen = [], set()
+    for side in ("L", "R"):
+        grp = [ch for ch in channels
+               if _side_of(ch) == side or _side_of(ch) == "sub"]
+        # sort by high edge (lp); a full-range top (lp=None, e.g. tweeter) → last
+        grp.sort(key=lambda ch: edges[ch][1] if edges[ch][1] is not None else float("inf"))
+        for lo, hi in zip(grp, grp[1:]):
+            fc = edges[lo][1]                    # lo's lp = the crossover at this joint
+            if fc is None or (lo, hi) in seen:
+                continue
+            seen.add((lo, hi))
+            joints.append((lo, hi, float(fc), None))
+    return preset, snap.get("version"), joints
+
+
 def analyze_joints(joint_specs, ver="2", band_oct=1.0):
     """Batch joint/group analysis: walk every adjacent joint in ONE pass and
     render one consolidated table (polarity + drift-immune delay + residual +
@@ -516,6 +576,41 @@ def _selftest():
         api.get_measurements, api.get_fr = orig_gm2, orig_fr2
         api.find_measurement_id = orig_find_id
 
+    # ── state-map: joints auto-derived from a snapshot's crossovers ───────────
+    import tempfile
+    state_dir = os.path.join(os.path.dirname(__file__), "state")
+    if state_dir not in sys.path:
+        sys.path.insert(0, state_dir)
+    import state as _st
+
+    def _mkch(hp, lp):
+        return {"helix_ch": "X",
+                "hp": {"f": hp, "type": "BW", "slope": 12} if hp else "OFF",
+                "lp": {"f": lp, "type": "BW", "slope": 12} if lp else "OFF",
+                "gain_db": -6.0, "ta_ms": 5.0, "polarity": "NORM",
+                "eq_ptr": {}, "status": "applied"}
+
+    sstate = {"sample_rate": 96000, "target": "Jazzi",
+              "roles": {"artist": None, "producer": None, "critic": None},
+              "provenance": {}, "banked_ear_verdicts": [], "virtual_eq_ptr": None,
+              "channels": {
+                  "sub": _mkch(20, 45),
+                  "w-L": _mkch(70, 270), "m-L": _mkch(270, 2800), "tw-L": _mkch(2800, None),
+                  "w-R": _mkch(70, 270), "m-R": _mkch(270, 2800), "tw-R": _mkch(2800, None),
+              }}
+    tmp = tempfile.mkdtemp(prefix="autosound_jointmap_")
+    _st.PresetHistory(tmp, "TESTP").snapshot(sstate, note="t")
+    _st.Registry(tmp).set_active("TESTP")
+    preset, ver_s, sp = _joints_from_state(tmp)          # active-slot path (no --preset)
+    jset = {(lo, hi, fc) for lo, hi, fc, _ in sp}
+    assert preset == "TESTP", preset
+    for j in [("sub", "w-L", 45.0), ("w-L", "m-L", 270.0), ("m-L", "tw-L", 2800.0),
+              ("sub", "w-R", 45.0), ("w-R", "m-R", 270.0), ("m-R", "tw-R", 2800.0)]:
+        assert j in jset, (j, jset)
+    assert len(sp) == 6, sp                              # no spurious cross-side joints
+    print(f"selftest[state-map] OK — derived {len(sp)} joints from active slot "
+          f"'{preset}' crossovers (sub↔w↔m↔tw per side).")
+
 
 def main():
     parser = argparse.ArgumentParser(description="REW Analysis Tool")
@@ -532,6 +627,16 @@ def main():
                         help="Масовий аналіз усіх стиків → одна таблиця (полярність/затримка/APF)")
     pj.add_argument("--joint", action="append", default=[], metavar="lo,hi,fc[,pair]",
                     help="Стик: 'w-L,m-L,400' або з парою 'sw,w-L,60,SW+Ws_2 (rta)'. Повторюваний.")
+    pj.add_argument("--from-state", action="store_true",
+                    help="Автодеривація стиків із кросоверів активного слота (state/); "
+                         "--joint тоді доповнює/уточнює (напр. чіпляє виміряну пару)")
+    pj.add_argument("--preset", default=None,
+                    help="Пресет для --from-state (дефолт = активний слот у registry)")
+    pj.add_argument("--state-root",
+                    default=os.environ.get("AUTOSOUND_STATE_ROOT", "state"),
+                    help="Каталог зі снапшотами state (env AUTOSOUND_STATE_ROOT; дефолт 'state')")
+    pj.add_argument("--state-ver", default=None,
+                    help="Версія снапшота для --from-state (дефолт = HEAD)")
     pj.add_argument("--ver", default="2",
                     help="Версія solo-замірів (назва = <ch>_<ver> (sw)); дефолт 2")
     pj.add_argument("--band-oct", type=float, default=1.0,
@@ -552,18 +657,31 @@ def main():
             sys.exit(1)
         return
     if args.cmd == "analyze-joints":
-        if not args.joint:
-            print("Вкажи хоча б один --joint 'lo,hi,fc[,pair]' "
-                  "(напр. --joint 'w-L,m-L,400').")
+        if not args.joint and not args.from_state:
+            print("Вкажи --from-state (авто зі state/) або хоча б один "
+                  "--joint 'lo,hi,fc[,pair]' (напр. --joint 'w-L,m-L,400').")
             sys.exit(1)
         try:
-            specs = [_parse_joint(s) for s in args.joint]
+            specs = []
+            if args.from_state:
+                preset, ver_s, specs = _joints_from_state(
+                    args.state_root, args.preset, args.state_ver)
+                print(f"\n  Стики з кросоверів слота '{preset}' ({ver_s or 'HEAD'}): "
+                      f"{len(specs)} шт.")
+            # user --joint entries override/add by (lo,hi) — e.g. to attach a pair
+            by_key = {(lo, hi): (lo, hi, fc, pair) for (lo, hi, fc, pair) in specs}
+            for lo, hi, fc, pair in (_parse_joint(s) for s in args.joint):
+                by_key[(lo, hi)] = (lo, hi, fc, pair)
+            specs = list(by_key.values())
+            if not specs:
+                print("  Жодного стику не отримано (порожній state?).")
+                sys.exit(1)
             analyze_joints(specs, ver=args.ver, band_oct=args.band_oct)
         except ValueError as e:
-            print(f"Помилка розбору стику: {e}")
+            print(f"Помилка: {e}")
             sys.exit(1)
         except Exception as e:
-            print(f"Помилка підключення до REW API: {e}")
+            print(f"Помилка підключення до REW API / state: {e}")
             print("Переконайся що REW запущений з -api і API сервер увімкнений.")
             sys.exit(1)
         return
