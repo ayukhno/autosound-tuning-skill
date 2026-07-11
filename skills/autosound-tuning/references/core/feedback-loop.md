@@ -86,9 +86,20 @@ crossover sets · techniques · successful symptom→fix · track markers
 - **Only the method + equipment classes.** WITHOUT: names, locations, plate/VIN numbers, photos, full measurements (`.mdat` are large and identify the system) — numbers only decimated, as for the critic (`analysis-playbook.md`).
 - The package — plain markdown, read by the user BEFORE sending. A doubtful line → drop it.
 
+## The maintenance loop (harvest → fold)
+
+The skill is organically co-developed with the project. **On a refactor request or when enough has piled up** (not per-turn), run this 5-step loop:
+1. **Harvest:** read `rew_analitic/skill-inbox.md` + scan `tuning-changelog` for `Lesson:` / method lines.
+2. **Correlate:** check candidates against the current skill; fold new insights in, clear duplicates.
+3. **Validate:** if a candidate contradicts an existing line, don't just delete the old one — keep it as a conditional **variant** if plausible for other geometries/cabins.
+4. **Provisionality:** treat early claims as provisional, not gospel; replace guesses with confirmed practice.
+5. **Fold & clear:** update the skill/reference files, then clear the inbox to start clean.
+
+The same loop processes community contributions (below).
+
 ## The author's side — how experience flows into the skill
 
-- `community-inbox/` is processed by **the same maintenance loop** (harvest → correlate → fold, SKILL.md): each item is checked against the skill; the origin tag `[source: <body>/<author>]` is kept.
+- `community-inbox/` is processed by **this maintenance loop** (harvest → correlate → fold): each item is checked against the skill; the origin tag `[source: <body>/<author>]` is kept.
 - **Contradicts our conclusions → a VARIANT, not a deletion** (maintenance loop rule §2: a different geometry/cabin can make the tip right).
 - **Hardware experience accumulates into the skill's profile library** (each new entry = **copy the blank `_TEMPLATE.md` and fill it**, so the structure/discipline is consistent):
   - `knowledge/cars/<body>.md` — the cabin map: PART A body-physics / PART B verify-only anomalies, winning crossover sets, quirks (template `knowledge/cars/_TEMPLATE.md`; worked example — the Passat B8, de-identified);
