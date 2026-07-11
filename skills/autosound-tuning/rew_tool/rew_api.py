@@ -182,46 +182,6 @@ def get_target_response(mid):
     return freqs, mag
 
 
-# ── Measurement capture / control (POST /measure/*) ─────────────────────────
-# Verified against REW 5.40 API 0.9.5. `measure_command("SPL")` FIRES a sweep =
-# real acoustic output → NEVER call it (or any capture) without first passing
-# gates/presweep_safety.require_safe. The safe reads/setters below don't fire.
-
-def get_measure_commands():
-    """The commands the measure engine accepts (e.g. 'SPL', 'Check levels', 'Cancel')."""
-    return _get("/measure/commands")
-
-
-def get_sweep_config():
-    return _get("/measure/sweep/configuration")
-
-
-def set_measurement_naming(title, naming_option="Use as entered"):
-    """Name the NEXT captured measurement (POST /measure/naming). Safe — no fire."""
-    return _post("/measure/naming", {"title": title, "namingOption": naming_option})
-
-
-def measure_command(command, parameters=None):
-    """Low-level POST /measure/command. ⚠️ 'SPL' triggers a sweep (fires hardware);
-    'Check levels' verifies levels; 'Cancel' aborts. Gate any 'SPL' behind
-    presweep_safety.require_safe."""
-    body = {"command": command}
-    if parameters is not None:
-        body["parameters"] = parameters
-    return _post("/measure/command", body)
-
-
-def get_timing_offset():
-    """The measurement Time Offset in SECONDS (GET /measure/timing/offset)."""
-    return _get("/measure/timing/offset")
-
-
-def set_timing_offset(seconds):
-    """Set the Time Offset (seconds) applied to sweeps so phase reads flat — the
-    Phase-1 step. Safe — no fire."""
-    return _post("/measure/timing/offset", float(seconds))
-
-
 def _selftest():
     """Exercise both branches of get_fr offline — phase-present (sweep) and
     phase-absent (RTA). The RTA branch used to KeyError on data["phase"]
