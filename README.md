@@ -39,6 +39,8 @@ Inside your active Claude Code session, run these commands **one by one** (do no
 
 *Then start tuning by saying:* **"tune a new car from scratch"**.
 
+> **Triggering — include a car-audio word.** The skill wakes on *what you ask*, so a bare `resume` on its own won't fire it (too generic — it could mean any project). Add one domain word: **"resume my car-audio tune"**, **"continue tuning the car"**, **"what's my current DSP / crossover state"** (or in your language — «продовжити тюн авто», „Auto-DSP weiter einmessen", „wróćmy do strojenia car audio"). Same for a fresh start: name the car/audio, not just "help me".
+
 ## Recommended Models, Modes & My Take
 
 The skill supports two ways to run it, ranked by reliability. Pick based on how much the tune matters versus how much setup you want to do:
