@@ -33,7 +33,7 @@ PKG="${1:-}"; TRACE="${2:-}"
 [[ -f "$PKG" ]] || die "package not found: $PKG"
 gemini_preflight
 
-PRIMARY_MODEL="${GEMINI_CRITIC_MODEL:-$(gemini_default_model)}"
+PRIMARY_MODEL="${GEMINI_CRITIC_MODEL:-$(gemini_default_critic_model)}"
 FALLBACK_MODEL="${GEMINI_FALLBACK_MODEL:-$(gemini_default_model)}"
 
 PROMPT_FILE="$(mktemp -t autosound_critic.XXXXXX)"

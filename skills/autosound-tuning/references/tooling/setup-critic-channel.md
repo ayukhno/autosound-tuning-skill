@@ -35,15 +35,17 @@ brew install --cask antigravity-cli      # the REAL agy — NOT a symlink to gem
 
 ## 2. Models
 
-| CLI | default (Flash) | opt-in Pro (hard calls) |
+| Role | `agy` default | `gemini` CLI default |
 |---|---|---|
-| `agy` | `Gemini 3.5 Flash (Medium)` | `Gemini 3.1 Pro (High)` |
+| **Critic** | `Gemini 3.1 Pro (High)` | `gemini-2.5-pro` |
+| Advisor / routine | `Gemini 3.5 Flash (Medium)` | `gemini-2.5-flash` |
+| Fallback (quota dry) | Flash | Flash |
 
 > ℹ️ **`Gemini 3.5/3.1` are Antigravity's own display labels** (what `agy models` shows), NOT real Gemini versions — the direct-API path (`autosound_ai.py`, no CLI) maps them to `gemini-2.5-flash` / `gemini-2.5-pro`. Use the label your channel expects: the `agy` CLI wants the display name; a raw `GEMINI_API_KEY` call wants the `gemini-2.5-*` id.
 
-Defaults are **Flash** (free, snappy, strong critic). Names drift — list current ones with `agy models`. Override per call:
+**The Critic defaults to Pro** — a Flash critic praises and misses obvious problems (field-observed); "don't praise" prompt text doesn't fix a too-weak model. Flash remains the advisor/routine default and the automatic fallback (⚠️ agy Starter shares one weekly Flash+Pro quota — Pro burns it faster; when dry, pin Flash or use the manual channel §6). Names drift — list current ones with `agy models`. Override per call:
 ```bash
-GEMINI_CRITIC_MODEL="Gemini 3.1 Pro (High)" scripts/gemini_critic.sh pkg.md
+GEMINI_CRITIC_MODEL="Gemini 3.5 Flash (Medium)" scripts/gemini_critic.sh pkg.md  # force Flash
 ```
 
 ## 3. Pin config once with `.critic-env`

@@ -72,13 +72,22 @@ if [[ -z "${GEMINI_EXTRA_ARGS:-}" ]]; then
 fi
 
 # Per-CLI default model. agy uses human-readable labels (`agy models`);
-# @google/gemini-cli uses API ids (`gemini models` / the docs). Flash is the
-# default (free + snappy + strong critic); opt into Pro per call via the
-# role model env (GEMINI_CRITIC_MODEL / GEMINI_ADVISOR_MODEL).
+# @google/gemini-cli uses API ids (`gemini models` / the docs).
+# CRITIC defaults to PRO: a Flash critic praises and misses obvious problems
+# (field-observed) — one stronger model beats pages of "don't praise" prompt
+# text. Flash stays the default for routine advisor pings + the FALLBACK when
+# Pro quota is dry (agy Starter: weekly Flash+Pro group limit). Override per
+# role via GEMINI_CRITIC_MODEL / GEMINI_ADVISOR_MODEL.
 gemini_default_model() {
   case "$GEMINI_FLAVOR" in
     gemini) echo "gemini-2.5-flash" ;;
     *)      echo "Gemini 3.5 Flash (Medium)" ;;
+  esac
+}
+gemini_default_critic_model() {
+  case "$GEMINI_FLAVOR" in
+    gemini) echo "gemini-2.5-pro" ;;
+    *)      echo "Gemini 3.1 Pro (High)" ;;
   esac
 }
 
