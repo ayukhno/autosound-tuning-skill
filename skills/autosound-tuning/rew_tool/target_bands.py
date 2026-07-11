@@ -22,6 +22,7 @@ from __future__ import annotations
 import math
 import os
 import sys
+import warnings
 from bisect import bisect_left
 
 
@@ -124,9 +125,27 @@ def band_target(freq: float, house: HouseCurve, name: str, ch: dict,
     return db
 
 
+def _warn_if_demo_config(cfg: dict[str, dict]) -> None:
+    """Catch the real incident this guards against: per-band targets committed
+    for an actual project while `cfg` was still (partly) the module's demo
+    placeholders — wrong crossover knees + flat/symmetric-looking gains,
+    silently, because nothing ever complained. Last-resort net; the real fix is
+    feeding `generate()` the project's actual v1/vN crossovers + level_offsets.py
+    gains, never `_DEMO_CFG` itself (see phase_1_foundation.md Step 5)."""
+    for name, ch in cfg.items():
+        demo = _DEMO_CFG.get(name)
+        if demo and all(ch.get(k) == v for k, v in demo.items() if k != "gain"):
+            warnings.warn(
+                f"target_bands: channel {name!r} config matches _DEMO_CFG's crossover "
+                f"exactly (hpf/lpf/type) — if this is a real project, you're generating "
+                f"per-band targets from PLACEHOLDER values, not this project's actual "
+                f"crossovers. Feed generate() the real v1/vN config.", UserWarning)
+
+
 def generate(house: HouseCurve, cfg: dict[str, dict], npts: int = 200,
              f_min: float = 20.0, f_max: float = 20000.0,
              summ_kw: dict | None = None) -> dict[str, list[tuple[float, float]]]:
+    _warn_if_demo_config(cfg)
     summ_kw = summ_kw or {}
     lo, hi = math.log10(f_min), math.log10(f_max)
     out: dict[str, list[tuple[float, float]]] = {}
@@ -169,10 +188,15 @@ def _selftest() -> None:
     # symmetric config → stereo passband target ≈ house − summation_offset (comp = 0)
     sym = {"m-L": {"hpf": 300, "lpf": 3500, "gain": 0.0, "is_stereo": True},
            "m-R": {"hpf": 300, "lpf": 3500, "gain": 0.0, "is_stereo": True}}
-    ms = next(db for f, db in generate(house, sym, npts=200)["m-R"] if abs(f - 1000) < 30)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)  # sym reuses demo-shaped hpf/lpf on purpose
+        ms = next(db for f, db in generate(house, sym, npts=200)["m-R"] if abs(f - 1000) < 30)
     assert abs(ms - (house.at(1000) - summation_offset(1000))) < 0.3, f"symmetric mid ≈ house − S, got {ms}"
-    # asymmetric demo → the cut side sits exactly (gain difference) below the uncut side
-    t = generate(house, _DEMO_CFG, npts=200)
+    # asymmetric demo → the cut side sits exactly (gain difference) below the uncut side.
+    # _DEMO_CFG legitimately triggers the demo-config guard here — expected, silence it.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        t = generate(house, _DEMO_CFG, npts=200)
     assert set(t) == set(_DEMO_CFG)
 
     def val(name, ft):
@@ -182,7 +206,22 @@ def _selftest() -> None:
     # mono sub (no summation offset): below house by its narrow-band crossover roll-off only
     sub40 = next(db for f, db in t["sw"] if abs(f - 40) < 5)
     assert house.at(40) - 4.0 < sub40 < house.at(40), f"sub follows house minus xo, got {sub40}"
-    print("selftest OK — sym m-R@1k=%.2f (house−S=%.2f); asym m-L−m-R=%.2f dB; sub@40=%.2f (house=%.2f)"
+    # The demo-config guard: real incident (RN-A project) had per-band targets
+    # committed with _DEMO_CFG's tw HPF 3500 instead of the project's actual
+    # 1000 Hz — silently, because nothing warned. Confirm the net catches it.
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        generate(house, {"tw-L": dict(_DEMO_CFG["tw-L"])}, npts=20)
+        assert any("PLACEHOLDER" in str(x.message) for x in caught), \
+            "demo-shaped config must warn"
+    with warnings.catch_warnings(record=True) as caught2:
+        warnings.simplefilter("always")
+        generate(house, {"tw-L": {"hpf": 1000, "hpf_type": "lr4", "gain": -1.2,
+                                  "is_stereo": True}}, npts=20)
+        assert not caught2, "a real (non-demo) config must NOT warn"
+
+    print("selftest OK — sym m-R@1k=%.2f (house−S=%.2f); asym m-L−m-R=%.2f dB; sub@40=%.2f (house=%.2f); "
+          "demo-config guard fires on placeholder cfg, silent on a real one"
           % (ms, house.at(1000) - summation_offset(1000), val("m-L", 1000) - val("m-R", 1000), sub40, house.at(40)))
 
 

@@ -75,6 +75,8 @@ It bakes in the crossover roll-off, the two-speaker **summation offset** (~6 dB 
 **asymmetric compensation** (so an asymmetric L/R sum still reconstructs the house curve).
 * **The payoff:** change a crossover or a level → **regenerate in one shot**, no manual web round-trip.
 * **Sanity check:** `_SUM` (L+R pair) targets sit ~+3…6 dB above a single side; the mono sub has no summation offset.
+* ⚠️ **Never generate from `target_bands.py`'s built-in `_DEMO_CFG` (or leave `gain` unset/0) for a real project.** A real incident: per-band targets were committed with the demo's placeholder crossovers/gains (tw HPF ~3500 Hz instead of the project's actual 1000 Hz, gains left at the demo's −1.5/−2.0/0.0 instead of `level_offsets.py`'s real numbers) — L/R came out looking flat/symmetric and the tweeter target's roll-off knee didn't match the DSP at all, silently. **The config passed to `generate()` must be THIS project's just-applied `v1` crossovers/types + the actual `level_offsets.py` gains — never the module's demo/example values.** `target_bands.py` warns (`UserWarning`) if a channel's config exactly matches `_DEMO_CFG`, but that's a last-resort net, not a substitute for feeding it the real config.
+* **Regenerate whenever a crossover or gain changes** — a per-band target file is a *derived* artifact of the current `v1`/`vN` hard-params, not a one-time output; a stale target after a crossover move silently misguides Phase 2a hygiene EQ.
 * Save into `rew_analitic/target-curves/<name>/`, load into REW, and use them for Phase 2a hygiene EQ.
 * *(Alternative — manual:* [nonotuningtool.com](https://nonotuningtool.com) does the same in a web UI with a "Stereo" config — mention it to the user as an option.)
 
