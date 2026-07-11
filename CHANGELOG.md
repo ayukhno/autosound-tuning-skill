@@ -2,6 +2,14 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
+## [v2.4.1] — 2026-07-11
+
+### Fixed
+- **Trigger phrases for impedance/T-S/box-design restored in the skill `description`** — a false negative on "REW impedance jig / added-mass method" traced back to the 2026-06-27 ultra-compact router rewrite (`532dbb4`), which dropped phrases an earlier commit (`20ab543`) had added; the later `v2.0.1` restore covered casual-EN and create-curve phrasing but missed these. Additive-only restore (cannot reduce existing recall). Caught by `run_trigger_eval.py`.
+
+### Changed
+- **`--doctor` output now shows per-role models** — was one collapsed `model=` field; now shows `critic=` and `advisor=` separately, so the Pro-critic default (added in v2.4.0) is actually visible when diagnosing a solo-Gemini setup.
+
 ## [v2.4.0] — 2026-07-11
 
 Simplification release, driven by a full external audit (`audit-fable-2026-07-11.md`) of a felt regression: sessions had become slow, over-cautious, and micro-stepping. Root cause: the always-loaded core had been optimized for the *worst* driver (solo-Gemini countermeasures) and thereby taxed the best one — SKILL.md had grown 1.1k→3.6k words with doubled defensive-tone density.
