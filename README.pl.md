@@ -96,7 +96,7 @@ Zbiera **tylko metodę i klasy sprzętu**: zachowanie kabiny, klasę DSP/sprzęt
 
 Skill jest **darmowy i otwarty** (CC BY-SA). Jeśli pomógł i chcesz podziękować, są dwa dobrowolne kanały:
 
-💜 **[GitHub Sponsors](https://github.com/sponsors/ayukhno)** · ☕ **[Skarbonka na Monobank](https://send.monobank.ua/jar/8wThVcodjm)** (bez konta, karty zagraniczne OK)
+💜 **[GitHub Sponsors](https://github.com/sponsors/ayukhno)** · ☕ **[Skarbonka na Monobank](https://send.monobank.ua/jar/8wThVcodjm)** (Apple Pay, Google Pay, ...)
 
 Jedno dotknięcie, bez konta; strona przyjmuje też karty zagraniczne (Apple/Google Pay, Visa/Mastercard).
 

@@ -96,7 +96,7 @@ Er erfasst **nur Methode und Geräteklassen**: Innenraumverhalten, DSP-/Gerätek
 
 Der Skill ist **kostenlos und offen** (CC BY-SA). Wenn er geholfen hat und du Danke sagen möchtest, gibt es zwei freiwillige Kanäle:
 
-💜 **[GitHub Sponsors](https://github.com/sponsors/ayukhno)** · ☕ **[Monobank-Spendenkasse](https://send.monobank.ua/jar/8wThVcodjm)** (kein Konto nötig, ausländische Karten OK)
+💜 **[GitHub Sponsors](https://github.com/sponsors/ayukhno)** · ☕ **[Monobank-Spendenkasse](https://send.monobank.ua/jar/8wThVcodjm)** (Apple Pay, Google Pay, ...)
 
 Ein Tippen, kein Konto; die Seite akzeptiert auch ausländische Karten (Apple/Google Pay, Visa/Mastercard).
 
