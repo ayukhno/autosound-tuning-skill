@@ -294,6 +294,20 @@ def _parse_joint(spec):
     return lo, hi, fc, pair
 
 
+def _load_state(state_root, preset=None, ver_state=None):
+    """Load a state snapshot (active slot by default). Returns (preset, snap)."""
+    state_dir = os.path.join(os.path.dirname(__file__), "state")
+    if state_dir not in sys.path:
+        sys.path.insert(0, state_dir)
+    import state as st
+    if preset is None:
+        preset = st.Registry(state_root).get_active()
+        if not preset:
+            raise ValueError(f"active slot не задано в registry ({state_root}); "
+                             f"вкажи --preset")
+    return preset, st.PresetHistory(state_root, preset).load(ver_state)
+
+
 def _edge_f(edge):
     """A crossover edge (hp/lp) → its frequency, or None when disabled/OFF/null."""
     if isinstance(edge, dict):
@@ -324,17 +338,7 @@ def _joints_from_state(state_root, preset=None, ver_state=None):
 
     Returns (preset, version, [(lo, hi, fc, None), …]) sorted low→high per side.
     """
-    state_dir = os.path.join(os.path.dirname(__file__), "state")
-    if state_dir not in sys.path:
-        sys.path.insert(0, state_dir)
-    import state as st
-
-    if preset is None:
-        preset = st.Registry(state_root).get_active()
-        if not preset:
-            raise ValueError(f"active slot не задано в registry ({state_root}); "
-                             f"вкажи --preset")
-    snap = st.PresetHistory(state_root, preset).load(ver_state)
+    preset, snap = _load_state(state_root, preset, ver_state)
     channels = snap.get("channels", {})
     edges = {ch: (_edge_f(cfg.get("hp")), _edge_f(cfg.get("lp")))
              for ch, cfg in channels.items()}
@@ -448,6 +452,73 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0):
           f"тоді L↔R. Вводь через APF/Helix-phase, не raw-delay.")
     print(f"{SEP}\n")
     return rows
+
+
+# Flip to True ONLY after a supervised live single-channel fire test confirms the
+# name→(check-levels)→SPL→completion sequence on this rig. Until then --fire is a
+# no-op that falls back to DRY-RUN (an unvalidated auto-fire could damage a driver).
+_LIVE_FIRE_VALIDATED = False
+
+
+def _is_fragile(ch):
+    t = ch.lower()
+    return t.startswith(("tw", "m-", "m_")) or t == "m"
+
+
+def capture_sweeps(chan_specs, ver="1", level_db=None, headroom_db=None, fire=False):
+    """Safety-gated loopback-sweep capture. DRY-RUN by default.
+
+    Only STATIONARY loopback sweeps are automatable; MMM/RTA needs a moving mic →
+    stays manual. EVERY channel is checked by presweep_safety.require_safe BEFORE
+    anything fires; one unsafe channel aborts the whole batch (hardware safety has
+    no waiver). `chan_specs`: [{channel, driver_fs, hpf, fragile?}] (hpf usually
+    from state). Reuses rew_api capture wrappers verified against REW 0.9.5.
+    """
+    gates_dir = os.path.join(os.path.dirname(__file__), "gates")
+    if gates_dir not in sys.path:
+        sys.path.insert(0, gates_dir)
+    import presweep_safety as ps
+
+    # Build the safety specs and run the HARD gate first, for ALL channels.
+    specs = [{"channel": c["channel"], "driver_fs": c.get("driver_fs"),
+              "hpf": c.get("hpf"), "level_db": level_db, "headroom_db": headroom_db,
+              "fragile": c.get("fragile", _is_fragile(c["channel"]))}
+             for c in chan_specs]
+    ps.require_safe(specs)                       # raises UnsafeToSweep → nothing fires
+
+    if fire and not _LIVE_FIRE_VALIDATED:
+        print("\n  ⛔ --fire вимкнено: послідовність запуску ще не валідована наживо на "
+              "цьому стенді. Проведи контрольований тест ОДНОГО каналу з користувачем "
+              "(кабіна зачинена), тоді ввімкни _LIVE_FIRE_VALIDATED. Продовжую як DRY-RUN.")
+        fire = False
+
+    mode = "🔴 FIRE" if fire else "DRY-RUN (нічого не запускається)"
+    print_header(f"CAPTURE SWEEPS — {mode}  ({len(chan_specs)} канал(ів))")
+    print("  Тільки стаціонарні loopback-свіпи. MMM/RTA (рух мікрофона) — вручну.\n")
+
+    fired = []
+    for c in chan_specs:
+        name = f"{c['channel']}_{ver} (sw)"
+        if not fire:
+            hp = c.get("hpf")
+            hp_s = "OFF" if hp in (None, "OFF") else f"{hp.get('f')}Hz/{hp.get('slope')}dB"
+            print(f"  • {c['channel']:<8} → name '{name}' · HPF {hp_s} · "
+                  f"Check levels → SPL  [safe ✓]")
+            continue
+        api.set_measurement_naming(name)          # name the next capture
+        api.measure_command("SPL")                # FIRES the sweep
+        before = len(api.get_measurements())
+        # poll for the new measurement to appear (bounded)
+        for _ in range(60):
+            if len(api.get_measurements()) > before:
+                break
+        fired.append(name)
+
+    if not fire:
+        print(f"\n  Усе безпечно ✓. Реальний запуск: --fire (лише після live-валідації), "
+              f"кабіна зачинена, мік на місці. MMM/групові — знімай вручну.")
+    print(f"{SEP}\n")
+    return {"planned": [c["channel"] for c in chan_specs], "fired": fired, "fired_live": fire}
 
 
 def run(mid, curves_dir, show_all=True):
@@ -611,6 +682,37 @@ def _selftest():
     print(f"selftest[state-map] OK — derived {len(sp)} joints from active slot "
           f"'{preset}' crossovers (sub↔w↔m↔tw per side).")
 
+    # ── capture wrappers + safety gate (no live fire) ─────────────────────────
+    posted, orig_post3, orig_get3 = {}, api._post, api._get
+    api._post = lambda path, data: posted.__setitem__(path, data)
+    api._get = lambda path: 0.0048556 if "timing" in path else None
+    try:
+        assert api.get_timing_offset() == 0.0048556
+        api.set_timing_offset(0.005); assert posted["/measure/timing/offset"] == 0.005
+        api.set_measurement_naming("tw-L_1 (sw)")
+        assert posted["/measure/naming"]["title"] == "tw-L_1 (sw)"
+        api.measure_command("SPL"); assert posted["/measure/command"]["command"] == "SPL"
+    finally:
+        api._post, api._get = orig_post3, orig_get3
+
+    # safe channel → DRY-RUN plans, fires nothing
+    safe = [{"channel": "tw-L", "driver_fs": 1400,
+             "hpf": {"f": 5000, "type": "BE", "slope": 24}}]
+    r = capture_sweeps(safe, ver="1", level_db=-12, headroom_db=6, fire=False)
+    assert r["fired"] == [] and r["fired_live"] is False, r
+    # --fire is guarded (not live-validated) → still no fire
+    r2 = capture_sweeps(safe, ver="1", level_db=-12, headroom_db=6, fire=True)
+    assert r2["fired"] == [] and r2["fired_live"] is False, r2
+    # unsafe channel (tweeter, HPF OFF) → require_safe FAILS LOUD, batch aborts
+    unsafe = [{"channel": "tw-L", "driver_fs": 1400, "hpf": "OFF"}]
+    try:
+        capture_sweeps(unsafe, ver="1", level_db=-12, fire=False)
+        raise AssertionError("unsafe capture must raise")
+    except RuntimeError as e:
+        assert "UNSAFE" in str(e), e
+    print("selftest[capture] OK — timing/naming/SPL wrappers post correct bodies; "
+          "dry-run fires nothing; --fire guarded; unsafe tweeter → FAIL LOUD.")
+
 
 def main():
     parser = argparse.ArgumentParser(description="REW Analysis Tool")
@@ -641,7 +743,28 @@ def main():
                     help="Версія solo-замірів (назва = <ch>_<ver> (sw)); дефолт 2")
     pj.add_argument("--band-oct", type=float, default=1.0,
                     help="Півширина смуги стику в октавах навколо fc (дефолт 1.0)")
-    sub.add_parser("selftest", help="Офлайн-перевірка batch/joints режимів (без REW)")
+    pc = sub.add_parser("capture-sweeps",
+                        help="Safety-gated масовий захват loopback-свіпів (DRY-RUN за замовч.)")
+    pc.add_argument("--preset", default=None,
+                    help="Пресет (дефолт = активний слот); HPF беруться з його кросоверів")
+    pc.add_argument("--state-root",
+                    default=os.environ.get("AUTOSOUND_STATE_ROOT", "state"))
+    pc.add_argument("--state-ver", default=None)
+    pc.add_argument("--fs", default="",
+                    help="Fs драйверів для fragile-перевірки: 'tw-L=1400,m-L=550'")
+    pc.add_argument("--level", type=float, default=None,
+                    help="Рівень свіпу dB (перевірка проти безпечної стелі)")
+    pc.add_argument("--headroom", type=float, default=None, help="Clip headroom dB")
+    pc.add_argument("--only", default="", help="Обмежити каналами: 'tw-L,m-L'")
+    pc.add_argument("--ver", default="1",
+                    help="Версія в імені (name = <ch>_<ver> (sw)); дефолт 1")
+    pc.add_argument("--fire", action="store_true",
+                    help="Реально запускати свіпи (діє лише після live-валідації)")
+    pt = sub.add_parser("time-offset",
+                        help="Показати/встановити Time Offset (сек) через REW API")
+    pt.add_argument("seconds", nargs="?", type=float, default=None,
+                    help="Значення для встановлення; порожньо = показати поточне")
+    sub.add_parser("selftest", help="Офлайн-перевірка batch/joints/capture режимів (без REW)")
     args = parser.parse_args()
 
     if args.cmd == "selftest":
@@ -683,6 +806,46 @@ def main():
         except Exception as e:
             print(f"Помилка підключення до REW API / state: {e}")
             print("Переконайся що REW запущений з -api і API сервер увімкнений.")
+            sys.exit(1)
+        return
+    if args.cmd == "time-offset":
+        try:
+            if args.seconds is None:
+                print(f"Time Offset = {api.get_timing_offset()} c")
+            else:
+                api.set_timing_offset(args.seconds)
+                print(f"Time Offset ← {args.seconds} c (встановлено)")
+        except Exception as e:
+            print(f"Помилка REW API: {e}")
+            sys.exit(1)
+        return
+    if args.cmd == "capture-sweeps":
+        try:
+            _, snap = _load_state(args.state_root, args.preset, args.state_ver)
+            channels = snap.get("channels", {})
+            fsmap = {}
+            for tok in args.fs.split(","):
+                tok = tok.strip()
+                if "=" in tok:
+                    k, v = tok.split("=", 1)
+                    fsmap[k.strip()] = float(v)
+            only = {x.strip() for x in args.only.split(",") if x.strip()}
+            chan_specs = [{"channel": ch, "driver_fs": fsmap.get(ch), "hpf": cfg.get("hp")}
+                          for ch, cfg in channels.items()
+                          if _side_of(ch) != "other" and (not only or ch in only)]
+            if not chan_specs:
+                print("Жодного каналу для захвату (перевір state / --only).")
+                sys.exit(1)
+            capture_sweeps(chan_specs, ver=args.ver, level_db=args.level,
+                           headroom_db=args.headroom, fire=args.fire)
+        except ValueError as e:
+            print(f"Помилка: {e}")
+            sys.exit(1)
+        except RuntimeError as e:          # UnsafeToSweep — FAIL LOUD, nothing fired
+            print(f"\n{e}")
+            sys.exit(1)
+        except Exception as e:
+            print(f"Помилка підключення до REW API / state: {e}")
             sys.exit(1)
         return
 
