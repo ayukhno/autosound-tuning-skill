@@ -123,41 +123,21 @@ Use the `view_file` tool to load these specialized guides exactly when their spe
 
 ## 🛠️ Review Channel (Recommended: two different AIs)
 
-A second, independent reviewer prevents single-perspective bias — and the real strength comes from a **different AI vendor** than the Generator (different training → different blind spots). **Recommended default: Claude + Gemini** — one drives as Generator, the other reviews as Critic-Advisor (Codex/ChatGPT is a third option). Run rounds via the per-vendor CLI wrappers or the unified Python tool.
+A second, independent reviewer prevents single-perspective bias — strongest when it's a **different AI vendor** than the Generator (different training → different blind spots). **Default: Claude + Gemini** (Codex/ChatGPT a third option). **But it works fine with a SINGLE AI** — the reviewer role still adds a lot; a second vendor is a *bonus, not a requirement*. **Any reviewer is an on-demand, stateless call that re-reads state from disk — never a long-lived background agent** (those die on restart/laptop-sleep; long solo loops are where sessions drift). Running clean each call, it doubles as a **drift-watchdog**: if a proposal contradicts on-disk state, re-opens a banked decision, or confuses the phase, it flags likely Generator drift → re-anchor from disk (or `/clear` + resume).
 
-> **Which configuration for THIS session?** The Arbiter picks one of three reliability-ranked **operating modes** — **A** Claude-drives + Gemini-Advisor (advisor MANDATORY at solution-search nodes) · **B** Claude solo + self-control · **C** Gemini solo (process risk consciously accepted; pair it with the spot-check habit) → [`process-control.md`](file:///skills/autosound-tuning/references/core/process-control.md). Modes pick the **driver**; the §3 ladder below picks the **reviewer** when degraded. ⚠️ Run reviewer CLIs from **outside** the driver session (inside = deadlock, observed chronically).
+> **Which config THIS session?** The Arbiter picks an **operating mode** — **A** Claude-drives + Gemini-Advisor (advisor mandatory at solution-search nodes) · **B** Claude solo + self-control · **C** Gemini solo (risk accepted). Modes pick the *driver* → [`process-control.md`](file:///skills/autosound-tuning/references/core/process-control.md). ⚠️ Run reviewer CLIs **outside** the driver session (inside = deadlock).
 
-**But the method works fine with a SINGLE AI** — the reviewer role still adds a lot, and most setups have one model (running several paid AIs is a big ask). A second vendor is a *bonus, not a requirement*; see the single-AI ladder (§3). **Any reviewer is always an on-demand, stateless call** that re-reads state from disk each time — **never a long-lived background agent** (those die on restart / laptop-sleep, and long-lived solo loops are exactly where long sessions drift). Because the reviewer runs **clean each call, it doubles as a drift-watchdog**: if a proposal contradicts the on-disk state, re-opens a banked decision, or confuses the phase, the reviewer should flag likely Generator context-drift and recommend re-anchoring from disk — or a **/clear + resume** — before continuing.
+### How to run it
+Per-vendor CLI wrappers (`{gemini,claude,codex}_critic.sh` · `_advisor.sh <package.md> [trace.csv]`), the unified stdlib `autosound_ai.py` (any vendor / cloud API / **clipboard mode** for a web chat), or a manual desktop chat — full setup, `--doctor`, models, credentials → [`setup-critic-channel.md`](file:///skills/autosound-tuning/references/tooling/setup-critic-channel.md).
 
-### 1. Per-vendor CLI wrappers (recommended)
-Battle-tested Bash wrappers, one pair per vendor. They auto-detect the local CLI and handle quota/model fallback, credentials, and logging. **Pair a reviewer from a different vendor than your Generator:**
-* **Gemini:** `scripts/gemini_critic.sh` · `scripts/gemini_advisor.sh <package.md> [trace.csv]`
-* **Claude:** `scripts/claude_critic.sh` · `scripts/claude_advisor.sh <package.md> [trace.csv]`
-* **Codex (ChatGPT):** `scripts/codex_critic.sh` · `scripts/codex_advisor.sh <package.md> [trace.csv]`
-
-*(Note: In user workspaces these live in `.agents/skills/autosound-tuning/scripts/` or `.claude/skills/autosound-tuning/scripts/`.)*
-
-### 2. Unified cross-platform tool (`autosound_ai.py`)
-One stdlib-only entry point for any vendor (drives local CLIs or cloud APIs). Must pass `python scripts/autosound_ai.py doctor` before production use. If no CLI/API is available, **Clipboard Mode** copies the full prompt block to paste into any web LLM chat:
-* **Critic:** `python scripts/autosound_ai.py critic <package.md> [trace.csv]`
-* **Advisor:** `python scripts/autosound_ai.py advisor <package.md> [trace.csv]`
-
-### 3. Single AI — the reviewer ladder (works fine with just ONE model)
-One AI is fully supported. A reviewer role still adds a lot, so **never run solo on a long or drift-prone session** (a known failure mode of some Generators: losing DSP state / phase mid-session). When your preferred cross-vendor reviewer is unavailable (e.g. a daily token limit hit mid-session), don't drop to solo — descend this ladder, keeping an **on-demand, stateless** reviewer active:
-1. **Pause & wait** for the cross-vendor reviewer (e.g. until the daily reset). Tuning isn't time-critical — waiting to keep the strong reviewer usually beats pushing on with a weak one.
-2. **Another vendor** on-demand, if one is configured.
-3. **Same vendor, HIGHER tier** than the Generator (e.g. a Flash generator reviewed by a Pro / thinking model). Model-tier diversity catches more than a peer; ⚠️ it still shares the vendor's systematic blind spots, so it's a rung below true cross-vendor.
-4. **Same model, context-isolated** — the reviewer sees only the proposed package, never the Generator's inner monologue. Weakest (catches reasoning-trace anchoring, not model-level bias); last resort.
-> [!IMPORTANT]
-> Every rung is a **short-lived on-demand call that re-hydrates from disk**, NOT a long-lived background agent (those crash on restart / laptop-sleep). Keep the reviewer role active and prefer the highest tier available. Descend the ladder only as far as forced; **never silently go solo.**
+### Reviewer unavailable? Descend the ladder — never silently solo
+Every rung is a **short-lived on-demand call that re-hydrates from disk** (not a background agent): **pause & wait** for the cross-vendor reviewer › **another vendor** › **same vendor, higher tier** (still shares the vendor's blind spots — a rung below true cross-vendor) › **same model, context-isolated** (weakest, last resort). Detail → [`setup-critic-channel.md`](file:///skills/autosound-tuning/references/tooling/setup-critic-channel.md) §7 + [`review-loop.md`](file:///skills/autosound-tuning/references/core/review-loop.md).
 
 ---
 
 ## 📊 Model Selection Guidance
 
-Proactively advise the user when to switch models. Do not waste high-reasoning context on routine tasks:
-
-Default split: **Claude Sonnet 5 drives**, **Gemini critiques** (cross-vendor). Names drift — treat the model column as *classes* and use the current top model in each.
+Proactively advise switching models — don't waste high-reasoning context on routine tasks. Default: **Claude Sonnet 5 drives**, **Gemini critiques** (cross-vendor). Names drift — treat the column as *classes*, use the current top model in each.
 
 | Active Task | Recommended model | Rationale |
 | :--- | :--- | :--- |
@@ -173,5 +153,5 @@ Default split: **Claude Sonnet 5 drives**, **Gemini critiques** (cross-vendor). 
 1. **Be Honest and Direct:** Lead with what the user will hear:
    `🔍 What I see` · `⚠️ Main problems` · `✅ Fixable / ❌ Not fixable` · `🔧 Next steps` · `❓ One question`
 2. **Action-Oriented Context:** Establish naming and paths once at intake. During active tuning steps, provide **copy-paste-ready specifics**: the exact save PATH, short comma-separated measurement lists, and direct targets.
-3. **EQ Discipline:** Max boost is **$+6\text{ dB}$**. Do not add auto-generated 30-band full registers. Propose and add only the specific bands the channel requires, present them **as one batch, in order, for a single review pass** (not a one-band-per-confirmation loop — that stalls the session for no safety gain on a Level 1/full-readback DSP; see `phase_2_eq.md` 2a.4), and format them clearly for transfer.
-4. **Round-based cadence (don't micro-step):** the unit of iteration is a **round**, not a single parameter. Measure → compute the *whole batch* of changes the round needs (all channels/bands together) → apply as **one** DSP import → re-measure **once** to verify the whole batch (this is already how Phase 1 works: compute the full foundation → one `_2` re-measure). Looping change-one-parameter → re-measure → change-next stalls the session for **no** safety gain on a readable DSP — it is the single biggest usability killer. Reserve that granularity for **Level-2 black-box DSPs only** (no read-back — `project-intake.md`); never on a readable one.
+3. **EQ Discipline:** max boost **+6 dB**; no auto-generated 30-band registers — propose only the bands the channel needs, **as one batch for a single review pass** (not one-band-per-confirmation; detail → `phase_2_eq.md` §2a).
+4. **Round-based cadence (don't micro-step):** iterate by **round**, not by single parameter — measure → compute the *whole batch* → apply as **one** DSP import → re-measure **once**. Change-one → re-measure → change-next is the single biggest usability killer on a readable DSP; reserve it for Level-2 black-box DSPs only (`project-intake.md`).
