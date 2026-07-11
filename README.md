@@ -94,9 +94,9 @@ It captures **method + equipment classes only**: cabin behavior, the DSP/gear cl
 
 ## Support
 
-The skill is **free and open** (CC BY-SA) and always will be. Nothing is gated behind a payment. If it helped and you'd like to say thanks, there's a **voluntary tip jar**:
+The skill is **free and open** (CC BY-SA) and always will be. Nothing is gated behind a payment. If it helped and you'd like to say thanks, there are two voluntary channels:
 
-☕ **[Support this skill on Monobank](https://send.monobank.ua/jar/8wThVcodjm)**
+💜 **[GitHub Sponsors](https://github.com/sponsors/ayukhno)** · ☕ **[Monobank jar](https://send.monobank.ua/jar/8wThVcodjm)** (no account, foreign cards OK)
 
 One tap, no account; the page also takes foreign cards (Apple/Google Pay, Visa/Mastercard).
 

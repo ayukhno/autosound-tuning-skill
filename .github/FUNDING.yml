@@ -1,11 +1,10 @@
 # Funding / Sponsor button for this repo.
 # The "Sponsor" button appears once an ACTIVE platform line is uncommented below.
 #
-# GitHub Sponsors: uncomment the line below ONLY after the github.com/sponsors/ayukhno
-# profile is APPROVED by GitHub — otherwise the button leads to an inactive page.
-# github: ayukhno
+# GitHub Sponsors: APPROVED 2026-07-11 — profile is public, button active.
+github: ayukhno
 
-# Active channel: Monobank jar (one tap, no account; the web page accepts foreign
+# Second channel: Monobank jar (one tap, no account; the web page accepts foreign
 # cards via Apple/Google Pay / Visa / Mastercard, so non-UA donors can give too).
 custom: https://send.monobank.ua/jar/8wThVcodjm
 

@@ -94,9 +94,9 @@ autosound-tuning-skill/        плагін Claude Code
 
 ## Підтримати
 
-Скіл **безкоштовний і відкритий** (CC BY-SA). Якщо він допоміг і хочеш подякувати, є **добровільна банка**:
+Скіл **безкоштовний і відкритий** (CC BY-SA). Якщо він допоміг і хочеш подякувати, є два добровільні канали:
 
-☕ **[Підтримати цей скіл на Monobank](https://send.monobank.ua/jar/8wThVcodjm)**
+💜 **[GitHub Sponsors](https://github.com/sponsors/ayukhno)** · ☕ **[Банка на Monobank](https://send.monobank.ua/jar/8wThVcodjm)** (без акаунту, іноземні картки ок)
 
 Один тап, без акаунту; сторінка приймає й іноземні картки (Apple/Google Pay, Visa/Mastercard).
 

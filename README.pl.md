@@ -94,9 +94,9 @@ Zbiera **tylko metodę i klasy sprzętu**: zachowanie kabiny, klasę DSP/sprzęt
 
 ## Wsparcie
 
-Skill jest **darmowy i otwarty** (CC BY-SA). Jeśli pomógł i chcesz podziękować, jest **dobrowolna skarbonka**:
+Skill jest **darmowy i otwarty** (CC BY-SA). Jeśli pomógł i chcesz podziękować, są dwa dobrowolne kanały:
 
-☕ **[Wesprzyj ten skill na Monobank](https://send.monobank.ua/jar/8wThVcodjm)**
+💜 **[GitHub Sponsors](https://github.com/sponsors/ayukhno)** · ☕ **[Skarbonka na Monobank](https://send.monobank.ua/jar/8wThVcodjm)** (bez konta, karty zagraniczne OK)
 
 Jedno dotknięcie, bez konta; strona przyjmuje też karty zagraniczne (Apple/Google Pay, Visa/Mastercard).
 
