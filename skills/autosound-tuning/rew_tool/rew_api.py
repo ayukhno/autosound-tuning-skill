@@ -182,6 +182,48 @@ def get_target_response(mid):
     return freqs, mag
 
 
+# ── Measurement-processing commands (POST /measurements/{id}/command) ────────
+# Distinct from the Pro-gated capture namespace (/measure/*): processing an
+# EXISTING measurement is free. Verified live on REW 5.40 / API 0.9.5.
+
+def measurement_command(mid, command, parameters=None):
+    """Low-level `POST /measurements/{id}/command`. `parameters` is a dict
+    (REW reports missing keys with a 400 listing them — build up from there)."""
+    body = {"command": command}
+    if parameters is not None:
+        body["parameters"] = parameters
+    return _post(f"/measurements/{mid}/command", body)
+
+
+def minimum_phase_version(mid, append_lf_tail=False, append_hf_tail=False,
+                          include_cal=False, replicate_data=False):
+    """Create the **minimum-phase** version of a sweep (new measurement `<name>-MP`).
+    Tails off by default (turning a tail on also needs its start/slope params —
+    pass a raw dict via `measurement_command` for that). Returns 202 in-progress."""
+    return measurement_command(mid, "Minimum phase version", {
+        "append lf tail": append_lf_tail, "append hf tail": append_hf_tail,
+        "include cal": include_cal, "replicate data": replicate_data})
+
+
+def excess_phase_version(mid, append_lf_tail=False, append_hf_tail=False,
+                         include_cal=False, replicate_data=False):
+    """Create the **excess-phase** version of a sweep (new measurement `<name>-EP`).
+    REW's own Hilbert-based excess phase = measured − minimum phase; read it back
+    with `get_fr` (its phase channel IS the excess phase) to decide min- vs
+    non-min-phase at a joint — the authoritative path, not a home-brew scan."""
+    return measurement_command(mid, "Excess phase version", {
+        "append lf tail": append_lf_tail, "append hf tail": append_hf_tail,
+        "include cal": include_cal, "replicate data": replicate_data})
+
+
+def set_smoothing(mid, smoothing="1/6"):
+    """Apply REW's own smoothing to a measurement (`Smooth` command) so a later
+    `get_fr` returns REW-smoothed data — avoids the home-brew perceptual_smooth
+    drift. Values per `/measurements/frequency-response/smoothing-choices`
+    (e.g. '1/1'…'1/48', 'Var', 'Psy', 'None')."""
+    return measurement_command(mid, "Smooth", {"smoothing": smoothing})
+
+
 def _selftest():
     """Exercise both branches of get_fr offline — phase-present (sweep) and
     phase-absent (RTA). The RTA branch used to KeyError on data["phase"]
@@ -212,8 +254,28 @@ def _selftest():
         assert len(m) == 3 and len(f) == 3, "RTA: magnitude/freqs still returned"
     finally:
         _get = _orig
-    print("rew_api selftest OK — get_fr handles phase-present (sweep) and "
-          "phase-absent (RTA) without KeyError")
+
+    # command wrappers post the right path/body (mock _post — no live REW)
+    global _post
+    _origp = _post
+    sent = {}
+    try:
+        _post = lambda path, data: (sent.update(path=path, data=data),
+                                    {"message": "ok"})[1]
+        excess_phase_version(7)
+        assert sent["path"] == "/measurements/7/command", sent
+        assert sent["data"]["command"] == "Excess phase version", sent
+        assert sent["data"]["parameters"]["replicate data"] is False, sent
+        minimum_phase_version(7)
+        assert sent["data"]["command"] == "Minimum phase version", sent
+        set_smoothing(7, "1/6")
+        assert sent["data"] == {"command": "Smooth",
+                                "parameters": {"smoothing": "1/6"}}, sent
+    finally:
+        _post = _origp
+
+    print("rew_api selftest OK — get_fr handles sweep/RTA phase branch; "
+          "excess/min-phase + smooth command wrappers post correct bodies")
 
 
 if __name__ == "__main__":

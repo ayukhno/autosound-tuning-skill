@@ -27,6 +27,7 @@ Or add `<skill-dir>/rew_tool` to your `PYTHONPATH`.
   * `get_crossover_types`, `get_slopes`
   * `get_target_settings`/`response`
   * `find_measurement_id(name)` / `get_measurement_by_name(name)` — **resolve title ↔ id FRESH before every pull** (never use a cached index)
+  * **Measurement-processing (free, not Pro-gated — `POST /measurements/{id}/command`):** `excess_phase_version(mid)` / `minimum_phase_version(mid)` create the `-EP`/`-MP` versions (read excess phase back via `get_fr` — the authoritative min-vs-non-min decision, REW's own Hilbert); `set_smoothing(mid, '1/6')` applies REW's own smoothing before a pull; `measurement_command(mid, cmd, params)` is the low-level entry.
 * **`rew_tool/analysis.py`**
   * FR/phase/IR/GD analysis + PEQ suggestions
   * `first_arrival` (leading-edge, not the global peak) + `relative_delay_xcorr` (L ↔ R delay, shape-robust)
