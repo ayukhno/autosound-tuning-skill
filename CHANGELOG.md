@@ -2,6 +2,11 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
+## [v2.3.2] — 2026-07-11
+
+### Fixed
+- **`.github/FUNDING.yml` no longer lists the Monobank jar under `custom:`.** GitHub's `custom:` field has no label option — it always renders the raw URL as link text in the repo's "Sponsor this project" sidebar widget, unlike `github:`/other predefined platforms. With GitHub Sponsors now covering the native widget, dropped the unstyled raw-URL entry rather than live with it. The jar is unaffected as a channel — still offered with proper text in README and the session-close donation ritual (`feedback-loop.md` §D).
+
 ## [v2.3.1] — 2026-07-11
 
 Docs-only follow-ups plus a funding-channel activation.
