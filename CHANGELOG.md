@@ -2,6 +2,23 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
+## [v2.4.0] — 2026-07-11
+
+Simplification release, driven by a full external audit (`audit-fable-2026-07-11.md`) of a felt regression: sessions had become slow, over-cautious, and micro-stepping. Root cause: the always-loaded core had been optimized for the *worst* driver (solo-Gemini countermeasures) and thereby taxed the best one — SKILL.md had grown 1.1k→3.6k words with doubled defensive-tone density.
+
+### Changed
+- **SKILL.md cut to ~1.4k words (was ~2.6k after two earlier passes, peak 3.6k).** Guardrails compressed to 1–3 lines + links; reference-map descriptions shortened; Model Selection table folded into `process-control.md` §1. Frontmatter (triggers) untouched.
+- **Review cadence: ONE reviewer call per round is the default.** Package the round's whole batch (crossovers+levels, or the full EQ plan) → one critique pass → Arbiter. TWO-PASS anti-anchoring is now an **escalation** — phase gates (Phase-1 strategy, Phase-3 verdict) or after the reviewer fully agrees twice in a row — not the per-decision default. 3 rounds = ceiling, expectation = 1 (`review-loop.md`, `process-control.md` mode A).
+- **Phase-2 gate: one critic checkpoint on the round's full package** (a second, after 2b, only when joint alignment was reworked) — was two mandatory checkpoints.
+- **Critic wrapper defaults to Pro** (`gemini-2.5-pro` / `Gemini 3.1 Pro (High)`): a Flash critic praises and misses obvious problems; "don't praise" prompt text doesn't fix a too-weak model. Flash remains the advisor/routine default and the quota fallback (`setup-critic-channel.md` §2).
+- **Cadence contradiction fixed:** `happy-paths.md` path C rewritten round-based (was "propose one change"); data-contract §3 field is now «Пакет пропозицій раунду» — the package format no longer structurally enforces one-change-per-review.
+
+### Added
+- **`references/core/driver-discipline.md`** — the anti-confabulation ruleset (pull-based control, "done costs a path", behavior→countermeasure table, wrapper-only self-critique) split out of the always-loaded core. Loaded **only for solo drivers (modes B/C)**; a mode-A Claude driver no longer reads solo-Gemini policing every turn. `process-control.md` §2/§3 replaced by a pointer.
+- **`scripts/start_gemini_tuner.sh`** — one-command solo-Gemini (mode C) launcher: writes a hydrated `GEMINI.md` (operating instructions + `driver-discipline` pointer + ▶️ CONTINUE block + `dsp-state-current` snapshot) that gemini-cli auto-loads; `--refresh` regenerates it after `/clear` or an applied change. Moves "re-read the state" discipline from model memory to infrastructure. (Adopted from Gemini's self-review, audit §8.)
+- **Solo self-critique rule:** for round packages and phase gates, self-critique goes through a **stateless `gemini_critic.sh` call on the model's own package** (clean context + contract §4 format) — never in-context "now imagine you are a strict judge" (that shares every anchor and produces praise). In-prompt self-critique only for routine micro-decisions (`driver-discipline.md` §2).
+- **`scripts/skill_metrics.sh`** — complexity guard for the always-loaded core: SKILL.md ≤1500 words, defensive markers ≤15, cadence invariants present, no driver-discipline leakage. Run before a release; fails → trim, don't ship.
+
 ## [v2.3.2] — 2026-07-11
 
 ### Fixed

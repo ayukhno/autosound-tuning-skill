@@ -37,7 +37,7 @@ Or add `<skill-dir>/rew_tool` to your `PYTHONPATH`.
   * **Classify:** `joint_summation_check` (measured pair vs incoherent power ref → phase cancellation vs tonal dip; never boost a null), `phase_trust_gate` (do the complex solos reproduce the pair? if not, BLOCK delay/APF/polarity)
   * **Correct (drift-immune, relative):** `align_by_summation` (polarity + relative delay maximizing the coherent sum = the TA you can enter in the DSP), `allpass_for_residual_null` (2nd-order APF F/Q on the residual), `shelf_vs_bell` (broad tilt = shelf, gentler phase; else keep the bell)
   * `perceptual_smooth`, `midband_level_anchor`, `shape_deviation`. Verify: `python3 joint_analysis.py --selftest`
-* **`rew_tool/spot_check.py`** — independent verification of a model's CITED numbers against live REW (process-control §2.3; run it before applying a proposed package)
+* **`rew_tool/spot_check.py`** — independent verification of a model's CITED numbers against live REW (driver-discipline §1.3; run it before applying a proposed package)
   * pair mode: levels at cited freqs + A−B deltas + actual band peak vs the **claimed** peak (flags a claim >1/12 oct off)
   * target mode: shape-anchored deviation vs a loaded target at cited freqs
   * `python3 spot_check.py "L_09 (rta)" "R_09 (rta)" --at 160,2540 --peak 2000-3000 --claim 2543.8` · `--selftest`
