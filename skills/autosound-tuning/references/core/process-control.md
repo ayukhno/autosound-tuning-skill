@@ -15,7 +15,7 @@ Reliability-ranked. Pick per session — critical work up the list, casual voici
 
 | Mode | Configuration | Reliability | Trade-off |
 |---|---|---|---|
-| **A** | **Claude drives (Generator) + Gemini as Advisor** — advisor call **MANDATORY at solution-search nodes**: crossover strategy (Phase 1), the EQ plan (Phase 2), the Phase-3 verdict, staging/imaging decisions | Highest | Needs both AIs; slower per decision — buys anti-anchoring + a drift-watchdog |
+| **A** | **Claude drives (Generator) + Gemini as Advisor** — **ONE advisor call per round** at solution-search nodes: crossover strategy (Phase 1), the round's EQ plan (Phase 2), the Phase-3 verdict, staging/imaging decisions. Package the whole batch, not per-parameter calls | Highest | Needs both AIs; one extra call per round — buys anti-anchoring + a drift-watchdog |
 | **B** | **Claude solo + self-control** — substrate tools (state/apply/gates) + disk-state discipline | Middle | One perspective; self-review catches less than cross-vendor. (Tool-compliance of a Claude driver: not yet field-measured — treat as promising, verify like anything else) |
 | **C** | **Gemini solo** — **process-loss risk consciously ACCEPTED** | Lowest process-reliability, proven acoustics | Superb acoustic proposals and (in the measured run) numerically real data — but expect narrated compliance: no versioned state, "saved/updated" claims without artifacts, weaker resume. Mitigate with §2 + §3 |
 

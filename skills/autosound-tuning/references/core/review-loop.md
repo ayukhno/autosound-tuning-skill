@@ -44,8 +44,11 @@ Periodically **swap Generator ↔ Critic** (anti-bias). Any AI drops into a role
 ### Tone protocol (all levels)
 Collaboration, not competition. Don't characterize a colleague's answer ("a weak objection") — convey the technical content and your own technical position. A colleague is right → "X is right: [reason]", without "partly". You disagree → "my position: [argument]". You were wrong → "I was wrong: [exactly what]", without softeners. With the Arbiter — don't agree automatically: if there's a technical argument against, say it plainly.
 
-### TWO-PASS — anti-anchoring (the key protocol)
-**The symptom of the disease:** a reviewer who "fully agrees" round after round is ratifying your frame, not checking it. The anchor sits in the **conclusion baked into the question**, not in memory.
+### Default cadence — ONE critique call per round
+The default review is **one** stateless critique pass on the **round's whole batch** (crossovers+levels, or the full EQ plan) — not per-parameter, not two-pass. Package → critique → Arbiter. This keeps the loop fast; the escalations below are for specific symptoms, not routine.
+
+### TWO-PASS — anti-anchoring (escalation, not default)
+**When:** phase gates (Phase-1 strategy, Phase-3 verdict), or when the reviewer has **fully agreed twice in a row** — that agreement pattern is the disease: it ratifies your frame instead of checking it. The anchor sits in the **conclusion baked into the question**, not in memory.
 1. **Pass 1 — OPEN:** the raw data + neutral facts + an **open question WITHOUT your conclusion / hints** ("what's your read?") → an independent diagnosis.
 2. **Reconcile:** compare its read with yours → form the proposal.
 3. **Pass 2 — CRITIQUE:** the proposal goes to the Critic ("objectively, don't invent").
@@ -56,7 +59,7 @@ Collaboration, not competition. Don't characterize a colleague's answer ("a weak
 A persistent file, injected into every call; after a round, append: the gist of the package → the advice → the decision / measurement. **Hard-separate CONFIRMED vs OPEN** — history should inform, not pre-decide an open question. Honest OVERTURNED entries: mark the disproven, don't erase it (a record of the error = protection against repeating it).
 
 ### Loop rules
-1. Max **3 rounds** per question; the `[Iteration N/3]` counter is on you.
+1. **Default expectation: 1 round.** Max **3 rounds** per question is a ceiling for real disagreements, not a norm; the `[Iteration N/3]` counter is on you.
 2. **Agreement** = no new falsifiable objection.
 3. `3/3` with no agreement → a disagreement table for the Arbiter: Parameter | Generator's position | Critic's position | what's at stake. The Arbiter decides in ~30 s.
 4. After agreement / verdict → a **ready-to-apply artifact** (not prose) + an audit-trail entry (ID, decision, key objection, verdict). The artifact goes straight into the chat as a legible settings-sheet — see the **Interactive Presentation Rule** in `SKILL.md` (never make the Arbiter open files to find the values).

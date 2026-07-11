@@ -31,13 +31,13 @@ Skim these once to see the *shape* of a session end-to-end. They are deliberatel
 
 ---
 
-## C. A single Phase 1 → Phase 2 change
+## C. An EQ round after Phase 1
 
 > Mid-session: a crossover joint is set, now you're doing EQ.
 
 1. **Re-read `dsp-state-current` before proposing** — including the virtual/VCP EQ layer and any existing per-channel notches (`get_filters` first; never assume a channel is raw).
-2. **Diagnose, then propose one change.** E.g. a minimum-phase cabin peak → one PK cut (max boost +6 dB rule; no auto 30-band registers). Confirm it's min-phase (excess-phase read), not an interference null you must leave.
-3. **Review + bank.** Critic pass on the EQ plan → `apply.propose` → Arbiter enters the sheet → `attest`.
+2. **Diagnose the whole round, propose the whole batch.** `analyze-batch` for the full deviation picture → all min-phase peaks that need cutting, across every channel that needs hygiene EQ (max boost +6 dB; no auto 30-band registers; excess-phase read to skip interference nulls). One batch, not one filter at a time (`phase_2_eq.md` §2a).
+3. **Review + bank.** ONE critic pass on the round's package → `apply.propose` → Arbiter enters the sheet → `attest` → one re-measure pass.
 4. **⚠️ Re-entrancy:** if the EQ move sits inside a crossover joint band (±~1 octave of a joint), it rotates local phase → **re-open the Phase-2 joint alignment gate** and re-check the summation. A passed gate is not permanent. → `process-phases.md` quality-gate note.
 
 **What "good" looks like:** you read the channel's real filters first, proposed only the bands the channel needed, and re-verified the joint after an in-band EQ move.

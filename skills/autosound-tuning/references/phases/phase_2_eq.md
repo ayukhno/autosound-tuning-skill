@@ -10,7 +10,7 @@ This is the core technical execution phase. All operations **MUST** be performed
 
 **Required evidence:** a **fresh re-measurement of the applied `v1` system** (`_2`, each channel **post-crossover** — not the raw `_1` baseline): per-channel FR + excess-phase (min vs non-min phase); joint summation (uninverted vs inverted); summed-group MMM (Ws/Ms/TWs, L vs R, SW+Ws).
 
-**✅ Quality gate → Phase 3:** peaks cut / nulls untouched; joints aligned by **summation** (APF/fine delay, not raw-delay shifts); summed groups match target; final target EQ on the **virtual layer** only; strict order 2a→2d held; **two critic checkpoints passed** (after phase alignment · after EQ).
+**✅ Quality gate → Phase 3:** peaks cut / nulls untouched; joints aligned by **summation** (APF/fine delay, not raw-delay shifts); summed groups match target; final target EQ on the **virtual layer** only; strict order 2a→2d held; **one critic checkpoint passed on the round's full package** (add a second, after 2b, only when joint alignment was reworked).
 
 **⚠️ Failure modes:** boosting into nulls (non-min-phase → wasted headroom/distortion) · 30-band auto-banks (use minimal conscious EQ) · shifting raw channel delays for phase (breaks gross TA) · sneaking client taste in here (that's Phase 5).
 
