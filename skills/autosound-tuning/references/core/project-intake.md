@@ -48,7 +48,7 @@ Ask in blocks, record the answers right away in `autosound_context.md` (structur
 
 1. **Car:** make/model/body (sedan vs hatch/wagon → room gain and low-frequency behavior), LHD/RHD (the listener's side → the direction of the L/R asymmetry).
 2. **Sound source(s):** HU/streamer/phone; **how the signal enters the DSP** (optical/coax/RCA/BT/USB); **which input is for listening, and which is for the measurement signal** (this goes into the Pre-session checklist #4).
-3. **DSP:** model → the full capability checklist in **§4** (it determines which of the skill's tools are available).
+3. **DSP:** model → the full capability checklist in **§4** (it determines which of the skill's tools are available). *(Just a small fine-tune of an already-working system? You can enter **light-touch = Level 0** — §4 — and skip the full DSP dump, working from the measurement + target.)*
 4. **Amplifiers:** model/channels/input sensitivity (for gain staging), what's on which channel.
 5. **Drivers:** model, size, **the position and orientation of EACH** (door / A-pillar / kick / dash / deck; where it points), enclosure (pod/sealed/free-air volume), mass/character (a heavy midbass → align to the IR peak, `car-eq-patterns.md`), **new or broken-in** (new → break-in, §3.6).
 6. **Sub:** enclosure (sealed/ported), volume, location, how it's driven.
@@ -107,6 +107,12 @@ A new/unfamiliar/long-unmeasured install. Each item is cheap; a skipped one cost
 > | **3 — sum only** | ❌/✅ | ❌ (channels don't isolate) | crossover/phase/TA surgery is **impossible** → fall back to **the whole system's tonal balance to the target + imaging/staging BY EAR** (test tracks `test-tracks.md`, EMMA positions `emma-2024-test-track`); record the ceiling honestly ("no per-channel access — only tone+imaging, not joints") |
 >
 > ⚠️ "The DSP isn't readable" ≠ a dead end: almost always this is **Level 2** (solo outputs measure, the tune reverses from REW). Level 3 — only when channels physically can't be isolated.
+>
+> ### Level 0 — light-touch entry (an INTENT, orthogonal to 1/2/3)
+> Levels 1–3 answer *what you CAN do*; **Level 0 answers how much you WANT to do this session.** For a **small fine-tune of an already-working system** — nudge the tone, chase one symptom, or swap the target curve — you can **skip reading/reversing the full DSP state** and work only from **the current measurement + the target + basic car/equipment info**. The measurement is the acoustic truth regardless of which DSP params produced it, so a correction *toward the target from measured reality* needs no full state dump. This is the low-friction door for "I just want it a bit better", not a from-scratch build (that's the full Phase −1→5).
+> - **Do:** measure the current result → compare to target → propose the correction from what's measured; don't first reconstruct the whole old DSP state.
+> - **⚠️ The one real risk — double-correction, blind to existing filters.** Not seeing the current EQ, you can fight it: cut a dip the old EQ already boosted into, or stack a notch on an existing one. Guards: (1) **still read THAT channel's current filters before editing its EQ** (`get_filters`/`get_equaliser` — a cheap per-channel read, not a full dump; this is already the always-loaded anti-drift rule, and it's exactly what keeps Level 0 honest); (2) prefer **broad moves on a fresh voicing/virtual layer** over surgical output-EQ edits; (3) if a change doesn't behave as predicted on re-measure, suspect a hidden filter interaction → read more state.
+> - **Escalate freely:** the phase gates are re-entrant (`process-phases.md`). If light-touch keeps fighting something invisible, promote to Level 1/2 (read/reverse the DSP). Level 0 is the fast entry, **not a ceiling.**
 
 | Question | What it determines in the skill |
 |---|---|
