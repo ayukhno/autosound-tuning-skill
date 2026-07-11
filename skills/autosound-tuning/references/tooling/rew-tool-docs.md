@@ -59,7 +59,11 @@ Or add `<skill-dir>/rew_tool` to your `PYTHONPATH`.
 * **`rew_tool/make_plot.py`**
   * Visual RTA plotting utility that generates comparative charts (L/R measurements vs. house/target curves) for visual-acoustic analysis.
 * **`rew_tool/rew_tool.py`**
-  * Main CLI entry point.
+  * Main CLI entry point. Two modes:
+    * **Interactive** (no args) — deep dive on **one** measurement at a time (FR + GD + IR + distortion + target).
+    * **`analyze-batch "<pattern>"`** — **mass analysis** of every measurement whose title contains `<pattern>` (e.g. `analyze-batch "_2 (rta)"`) in **one** consolidated deviation matrix: per-driver band-mean deviation vs its per-band target, plus an `anchor` column (300–3000 Hz offset — subtract from the bands to read pure shape) and `ripple` (post-anchor spread). One `get_measurements` + one **FR-only** `get_fr` per driver (not the 5-endpoint interactive fan-out), so a whole batch is ~5× fewer round-trips and one review-ready table instead of N dumps. Use it for the **mass read** in Phase 1 §5 (all `_2` drivers vs targets) and **Phase 2a hygiene** (diagnose every channel in one pass) — then drill into a specific driver interactively if a cell looks off. `--no-targets` = band levels only.
+    * **`analyze-joints --joint "lo,hi,fc[,pair]" …`** — **mass joint analysis** (Phase 2b): walks every adjacent joint in one pass and renders one table (polarity · drift-immune delay from `align_by_summation` · residual null · APF f0/Q), reusing `joint_analysis.py` unchanged. **Honest by construction** — a computed delay/polarity/APF is emitted **only** when a measured `pair` reproduces the complex solos (`phase_trust_gate` passes ✓); if the pair is missing → row flagged **UNVERIFIED** (confirm by summation before entering); if the gate trips → **BLOCK**, no delay emitted, fall back to the magnitude power-sum verdict + "flip polarity, re-measure". `--ver N` picks the solo version (`<ch>_N (sw)`, default 2), `--band-oct` sets the ±octave joint window. Example: `analyze-joints --joint "sw,w-L,60,SW+Ws_2 (rta)" --joint "w-L,m-L,400" --joint "m-L,tw-L,3000"`.
+    * `python3 rew_tool.py selftest` = offline check of both batch + joints paths (no live REW).
 
 ---
 

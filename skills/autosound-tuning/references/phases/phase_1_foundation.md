@@ -88,4 +88,6 @@ It bakes in the crossover roll-off, the two-speaker **summation offset** (~6 dB 
 
 **Then re-measure each channel** post-`v1` — `<ch>_2 (sw)` + `<ch>_2 (rta)`. This `_2` set (not the raw `_1` baseline) is what Phase 2 works on.
 
+> **⚡ Read the whole `_2` set at once** — `python3 rew_tool.py analyze-batch "_2 (rta)"` renders one deviation matrix (every driver vs its per-band target, band means + `anchor` + `ripple`) so you enter Phase 2a with the batch picture in a single review pass, not N interactive pulls.
+
 Once completed and verified, transition to **Phase 2**.
