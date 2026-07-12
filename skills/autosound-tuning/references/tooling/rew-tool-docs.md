@@ -37,6 +37,10 @@ Or add `<skill-dir>/rew_tool` to your `PYTHONPATH`.
   * **Classify:** `joint_summation_check` (measured pair vs incoherent power ref → phase cancellation vs tonal dip; never boost a null), `phase_trust_gate` (do the complex solos reproduce the pair? if not, BLOCK delay/APF/polarity)
   * **Correct (drift-immune, relative):** `align_by_summation` (polarity + relative delay maximizing the coherent sum = the TA you can enter in the DSP), `allpass_for_residual_null` (2nd-order APF F/Q on the residual), `shelf_vs_bell` (broad tilt = shelf, gentler phase; else keep the bell)
   * `perceptual_smooth`, `midband_level_anchor`, `shape_deviation`. Verify: `python3 joint_analysis.py --selftest`
+* **`rew_tool/xover_select.py`** — crossover-realization + joint-alignment API distilled from the v3 acoustic-target experiment (the rules live in `filter-types-car-audio.md` §Acoustic-plan-first)
+  * `realize_driver` (acoustic target → electrical XO + trim + EQ, boost-budgeted), `select_neighbor_pair` (adjacent bands as a PAIR by acoustic-sum quality — per-driver-optimal picks can leave a >10 dB pair hole), `align_joint` (analytic delay/polarity), `repair_joint_apf` (APF2 tried on BOTH branches; may return None when delay already absorbs a low-Q rotation), `lr_phase_tracking` (the L/R acoustic-symmetry metric)
+  * deps: numpy + **scipy** (via `dsp_math.py`); fixed fs=96 kHz. Verify: `python3 xover_select.py --selftest`
+* **`rew_tool/dsp_math.py`** — REW-exact filter math shared by `xover_select` (BU/BE/L-R crossovers — scipy Bessel with `norm="mag"`; PK/LS_Q/HS_Q ≡ RBJ; `apf2_response` hardware-verified on the Helix Ultra S, `helix-phase-allpass.md`)
 * **`rew_tool/spot_check.py`** — independent verification of a model's CITED numbers against live REW (driver-discipline §1.3; run it before applying a proposed package)
   * pair mode: levels at cited freqs + A−B deltas + actual band peak vs the **claimed** peak (flags a claim >1/12 oct off)
   * target mode: shape-anchored deviation vs a loaded target at cited freqs

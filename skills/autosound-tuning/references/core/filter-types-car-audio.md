@@ -99,6 +99,17 @@ These are **starting points**, not law: the sets grow over time and get refined 
 
 ---
 
+## Acoustic-plan-first selection (measurement-driven "v3" rules)
+
+Validated end-to-end on one 3-way+sub build (simulation → hardware attestation, 2026-07); the numbers are that build's, the RULES are general. Reference implementation: `rew_tool/xover_select.py` (`--selftest`).
+
+1. **Choose the ACOUSTIC plan first** (joint frequencies + acoustic slopes, e.g. NTT band targets), then search electrical XO + trim + EQ per driver to REALIZE it. Electrical corners routinely land far from the acoustic ones (an electrical LPF 235 Hz realized an acoustic 320 Hz LR4) — never conflate the two numbers (the provenance frame above).
+2. **Magnitude decisions on RTA/MMM, phase decisions on sweeps** (two measurement spaces; `diagnostic §24`).
+3. **Never finalize adjacent bands independently** — select neighbor configs as a PAIR by the acoustic-sum quality after alignment: per-driver-optimal picks left an 11.6 dB hole in the pair sum.
+4. **Delay/polarity per joint analytically** (energy maximization over a delay grid; smallest |τ| among near-ties) — never inside a stochastic optimizer's search space (18–21 ms nonsense delays came out of that).
+5. **APF2 for a residual high-Q joint notch:** try it on BOTH branches (an allpass only adds lag — the repair may belong on the LEADING branch); never trade broadband summation energy (>2%) for the notch; keep f0 a quarter-octave inside the joint band; re-verify the branch's OTHER joint; and optimize the jitter-ROBUST worst null (`diagnostic §24`), not the razor optimum.
+6. **L/R-identical electrical crossovers are a guard heuristic, not physics — what must be symmetric is the ACOUSTIC result.** Measured: woofer electrical asymmetry added ~2° to a cabin-dominated ~52° L/R phase divergence; the mids diverged 117° with IDENTICAL settings. An asymmetric electrical XO is admissible when an L/R phase-tracking metric stays comparable to the symmetric variant — but the default stays symmetric (independence bought nothing there). Caveats: benign partly because near-linear-phase (Bessel-family) filters were in play — strongly dissimilar families rotate more; single-point phase tracking is unreliable above ~3 kHz.
+
 ## Practical tips
 
 ### How to check you chose right

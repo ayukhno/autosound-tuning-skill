@@ -2,6 +2,23 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
+## [v2.5.0] — 2026-07-13
+
+Harvest of the AutoSci "v3 acoustic-target" research arc (crossover realization → joint alignment → hardware attestation on the Passat B8 / Helix Ultra S) plus the same-day v4.x joint/imaging/voicing loop.
+
+### Added
+- **`rew_tool/xover_select.py` + `rew_tool/dsp_math.py`** — crossover-realization & joint-alignment API (realize_driver / select_neighbor_pair / align_joint / repair_joint_apf / lr_phase_tracking), REW-exact filter math, `--selftest` green. New dep: scipy.
+- **`filter-types-car-audio.md` §Acoustic-plan-first** — the six validated "v3" selection rules (acoustic plan first; two measurement spaces; joint-aware pair selection; analytic delay/polarity; APF repair discipline; L/R symmetry reformulated as an ACOUSTIC requirement with a phase-tracking metric).
+- **`diagnostic-techniques.md` §23–25** — per-pair imaging TA (never one constant side shift); session-local + jitter-ROBUST joint-phase solving (incl. the single-variable same-session A/B protocol for verifying DSP filter implementations, and the low-Q≈delay degeneracy trap); the delay+APF package rule (+ APF rotation reach ~f0/Q; post-repair energy bump belongs to virtual EQ). Plus §1: series-level level-comparability; §13: point-sweep spikes must survive MMM before EQ.
+- **`staging-depth.md` §1** — provisional: a joint-coherence repair raises the stage (height/forwardness); rebalance the foundation, don't undo the repair.
+- **`knowledge/approaches.md`** — the acoustic-plan-decomposition scheme (field-confirmed, one build).
+
+### Changed
+- **`knowledge/dsp/helix-dsp-ultra-s.md`** — a virtual SUB channel EXISTS (user-verified; the old "Front L/R, Center, Rear only" was wrong); AP2 hardware-verified ≡ textbook APF2; LS_Q/HS_Q(Q=0.71) ≡ RBJ S=1; REW modeling target = Generic Extended (20 slots).
+- **`helix-phase-allpass.md`** — explicit AP1/AP2 EQ-bank section with the hardware-verification protocol and the high-Q-only verification caveat.
+- **`rew-api-quirks.md`** — Generic Extended push schema (crossover shapes + slopedBPerOctave, shelves with q, "All pass" with q), the predicted-response smoothing leak, and the REW↔model filter-math equivalences (Bessel `norm="mag"`).
+- **`knowledge/cars/vw-passat-b8-sedan.md`** — PART B: tri-pair 1.28 ms left-early arrival; mid-pair 117° phase divergence at identical settings; pair mono-sum suckouts (Ws 175 / Ms 501); tweeter non-min-phase 2100–2800 zone; the 2026-07 "v3" electrical set as a second crossover data point.
+
 ## [v2.4.1] — 2026-07-11
 
 ### Fixed

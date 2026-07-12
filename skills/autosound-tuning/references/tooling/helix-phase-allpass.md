@@ -18,6 +18,13 @@ Each output channel of the Helix Ultra S has its own **Phase** control (0–360�
 ## Practice for our system (Passat B8)
 In the first successful configuration (AYA) the phase control is set: sub `174.375°`, left mid `33°`, the rest `0°`; the midbasses — no rotation (the reference). See `autosound_context.md` §4A.
 
+## Explicit AP1/AP2 bands in the EQ bank (vs the auto Phase knob) — hardware-verified
+Besides the auto Phase control above, the PEQ bank accepts explicit **AP1/AP2 bands at an arbitrary f0/Q** (several allowed; `helix-eq-export.md`). Facts established 2026-07 on the Ultra S:
+- **The AP2 implementation matches the textbook 2nd-order all-pass** (phase `−2·atan2((f/f0)/Q, 1−(f/f0)²)`). Verified by the **same-session single-variable A/B protocol**: sweep → change ONLY the APF in the DSP (mic untouched) → sweep; the complex ratio isolates the hardware filter. The free fit recovered the entered parameters (f0 4386 / Q 3.82 / correct sign vs 4414 / Q 4.0 entered; 31° RMS residual). An allpass-only change must also ratio to **0 dB magnitude** — the protocol's built-in sanity check.
+- ⚠️ **Verify with a HIGH-Q setting.** A low-Q APF over a band-limited ratio is nearly degenerate with delay+offset — the fit cannot separate them (a Q1 "mismatch" was this degeneracy, not hardware).
+- **Rotation reach scales as ~f0/Q:** a Q4 APF at 4.4 kHz barely rotates at 3.2 kHz. Check the APF's phase AT THE JOINT frequency, not at f0 (`diagnostic-techniques.md §25`).
+- Joint-repair APF choices must be **jitter-robust**, not razor-optimal (`diagnostic-techniques.md §24`).
+
 ## Sources
 - DIYMobileAudio: "Using the phase adjustment in Helix DSP"; "Helix DSP phase VS delay adjustment"; "Let's Phac our Helix DSP — how to set Phase degree/AllPass".
 - PASMAG: Helix P-DSP review (Signal Delay & Phase Control).

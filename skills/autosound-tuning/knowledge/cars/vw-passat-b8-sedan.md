@@ -35,7 +35,10 @@ Each line: *what the author's build showed* → **how to check it on yours.** Do
 
 **Install polarity & inter-channel timing — a SUMMATION result of THIS build's crossovers, NOT a rule:**
 - □ **Per-driver polarity** in the author's build: **sub + midbass + tweeter INVERTED, mid NORMAL** — because the **Bessel joints summed best at opposite polarities** (tweeter flips against the mid, §9 `diagnostic`) while the **sub's BW joint did NOT flip.** ⚠️ Derive yours by **summation** (`diagnostic §9`), never copy this pattern — it's a result, not a recipe.
-- □ **A midbass L/R intrinsic arrival shift ~1.2 ms** (the pair isn't symmetric — door path/mounting). → set arrival-TA from the **measured latest arriver** (`process-phases.md` Phase 1), don't assume L=R.
+- □ **A midbass L/R intrinsic arrival shift ~1.2 ms** (the pair isn't symmetric — door path/mounting). → set arrival-TA from the **measured latest arriver** (`process-phases.md` Phase 1), don't assume L=R. 2026-07 re-measure: the LEFT side arrived ~1.28 ms early **consistently across all three pairs** (w 1.29 / m 1.30 / tw 1.24) — LHD geometry; zero each pair's own diff (`diagnostic §23`).
+- □ **An L/R phase-shape divergence far beyond the electrical filters?** In the author's build (phase-tracking metric, 2026-07): mids ~117° weighted L/R divergence **with IDENTICAL electrical settings**, woofers ~52° — cabin/install-dominated (electrical asymmetry added only ~2°). → measure YOUR pairs' phase tracking before blaming crossovers; the mid-pair asymmetry is an install property.
+- □ **Pair mono-sum suckouts?** In the author's: Ws −11 dB @ 175 Hz (ties to the anti-correlated midbass pair above), Ms −6.4 dB @ ~501 Hz. L+R same-driver interference — leave unless the pair delay strategy changes. → check your own pair sums vs the power-sum.
+- □ **A tweeter NON-minimum-phase zone 2100–2800 Hz?** In the author's raw tweeters: excess group delay elevated to 4.3–6.5 ms vs a ~3 ms baseline (REW excess-phase version). Joint repairs whose null sits in that zone resist APF work — expect chaos there, solve robustly (`diagnostic §24`). → run REW's excess-phase on YOUR tweeter sweeps.
 
 **Drivers / enclosure — from the user's intake or the datasheet, NOT from here:**
 - □ The sub enclosure in the author's build = a **sealed box ~35 L** in the trunk (worked well). → your enclosure type/volume is whatever the user actually has; **don't assume "35 L" or "sealed"**.
@@ -45,6 +48,7 @@ Each line: *what the author's build showed* → **how to check it on yours.** Do
 - mid↔tweeter **BE4** (close together, ~coplanar on the pillar in that build): mid LPF 3k2 BE4 + tweeter HPF 5k0 BE4 (~4k acoustically, through the Bessel overlap) — part of the **LR4+BE4 hybrid that won AYA (junior group)**. ⚠️ That win is **this car+install+gear-specific, NOT "the AYA recipe"** (the scheme + its confidence → `knowledge/approaches.md`).
 - midbass↔mid **LR4** ~300 Hz electrical (≈250 acoustic through the B8 midbass roll-off) — spaced-apart drivers.
 - sub: LP ~60–63 LR4; subsonic 20 BE1/BW2 (that build was sealed); judge the SW+Ws joint by summation.
+- **Second data point (2026-07, the same build, acoustic-plan-first / "v3"):** an NTT acoustic plan 70/320/3500 LR4 was REALIZED by electrical sub LPF 88 BW36 · w 86/215 LR12 · m 460 BW24 + 2000 LR12 · tw 3625 BW24 (mid+tw polarity inverted — again a summation result). Attested in hardware: balance residuals ≤1.1 dB, all joints healthy, "wow, transparent" by ear. Note how FAR electrical corners sit from the acoustic plan (460 electrical → 320 acoustic) — the provenance rule (`filter-types-car-audio.md`) in the flesh.
 
 **Techniques (more transferable, still verify by ear/measurement):**
 - Heavy midbasses in the doors → align to **100% of the IR peak**, not the nose (`car-eq-patterns.md`). [Phase-1 TA]

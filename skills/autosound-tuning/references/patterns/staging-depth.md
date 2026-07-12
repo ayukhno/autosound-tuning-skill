@@ -7,6 +7,7 @@
 ## 1. The root of "the stage sticks to the glass / the voice juts forward / the bass magic disappears" = the TOP is too hot relative to the bass
 The symptom cluster — a forward stage + a forward/thin voice + "the bass magic vanishes when everything plays" — usually has **one root: an excess of upper energy (presence/treble) relative to the bass foundation**, NOT a bass problem. The excess top simultaneously: masks the bass, pulls the stage forward (Haas — early treble energy), makes the voice prominent.
 - **Diagnostic test:** play **sub+midbass SOLO.** If the bass on its own is great/dense, but **disappears/loses its magic when you add the mid+tweeter** → the top is too hot. One test isolates the root.
+- **A phase/joint-coherence REPAIR raises the stage (height AND forwardness) as a side effect** *(provisional, one build 2026-07)*: after tweeter-joint repairs the summed HF energy is delivered more coherently — the stage rose above eye level even though the ALL magnitude stayed median-neutral. Don't undo the repair; rebalance the foundation (§2) instead.
 - This can contradict "the tone is on target" (Jazzi, etc.): the target curve can be **forward for the STAGE**, even if it's tonally "correct". Depth wants a warmer voicing.
 
 ## 2. Treat it by BUILDING UP the bass, NOT cutting the top
