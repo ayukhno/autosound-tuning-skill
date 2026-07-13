@@ -40,6 +40,8 @@ Each line: *what the author's build showed* → **how to check it on yours.** Do
 - □ **Pair mono-sum suckouts?** In the author's: Ws −11 dB @ 175 Hz (ties to the anti-correlated midbass pair above), Ms −6.4 dB @ ~501 Hz. L+R same-driver interference — leave unless the pair delay strategy changes. → check your own pair sums vs the power-sum.
 - □ **A tweeter NON-minimum-phase zone 2100–2800 Hz?** In the author's raw tweeters: excess group delay elevated to 4.3–6.5 ms vs a ~3 ms baseline (REW excess-phase version). Joint repairs whose null sits in that zone resist APF work — expect chaos there, solve robustly (`diagnostic §24`). → run REW's excess-phase on YOUR tweeter sweeps.
 
+- □ **Center-fill as the mid-pair remedy (validated in this build, 2026-07):** the winning config was a COMPLEMENTARY center — HPF 620 LR36 · LPF 2330 LR36 · PK 1000 −9 Q2 + PK 1450 −9 Q2 (trough over the coherent 900–1600 zone), INV + 0.74 ms vs the raw state, quiet level (~+3 dB working point), fed by a static L+R matrix (RealCenter OFF — signal-dependent steering breaks fixed calibration). Measured pocket recovery +4.4/+2.3 dB; head-turn-stable center by ear. ⚠️ The pocket frequencies/shape are THIS build's coherence map — derive yours from YOUR map (`diagnostic §26`), never copy these corners.
+
 **Drivers / enclosure — from the user's intake or the datasheet, NOT from here:**
 - □ The sub enclosure in the author's build = a **sealed box ~35 L** in the trunk (worked well). → your enclosure type/volume is whatever the user actually has; **don't assume "35 L" or "sealed"**.
 
