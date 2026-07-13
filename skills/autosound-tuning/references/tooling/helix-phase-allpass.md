@@ -24,6 +24,7 @@ Besides the auto Phase control above, the PEQ bank accepts explicit **AP1/AP2 ba
 - ⚠️ **Verify with a HIGH-Q setting.** A low-Q APF over a band-limited ratio is nearly degenerate with delay+offset — the fit cannot separate them (a Q1 "mismatch" was this degeneracy, not hardware).
 - **Rotation reach scales as ~f0/Q:** a Q4 APF at 4.4 kHz barely rotates at 3.2 kHz. Check the APF's phase AT THE JOINT frequency, not at f0 (`diagnostic-techniques.md §25`).
 - Joint-repair APF choices must be **jitter-robust**, not razor-optimal (`diagnostic-techniques.md §24`).
+- **REW mirroring:** the Generic Extended equaliser has "All pass" (freq+Q = AP2) but **no 1st-order all-pass** — an AP1 band in the Helix cannot be mirrored in the REW panels (`rew-api-quirks.md`). Prefer AP2 in prescriptions; if AP1 is ever used, record the mirroring gap in the ledger.
 
 ## Sources
 - DIYMobileAudio: "Using the phase adjustment in Helix DSP"; "Helix DSP phase VS delay adjustment"; "Let's Phac our Helix DSP — how to set Phase degree/AllPass".
