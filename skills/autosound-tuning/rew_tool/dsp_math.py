@@ -150,9 +150,13 @@ def apf_search(freqs_hz, A, B, band, apply_to="hi", n_f0=48,
 
 def greedy_eq_fit(freqs_hz, resid_db, weight, n_bands=4,
                   gain_lo=-12.0, gain_hi=3.0, q_set=(0.7, 1.0, 1.4, 2.0, 3.0, 5.0, 8.0),
-                  n_f0=28, band=None, allow_shelf=True, no_boost_zones=()):
+                  n_f0=28, band=None, allow_shelf=True, no_boost_zones=(),
+                  boost_gate=None):
     """Greedy magnitude-domain EQ fit: minimize weighted RMS of resid_db.
     resid_db = acoustic_db - target_db (positive -> needs cut).
+    boost_gate: optional callable (kind, f0, q) -> bool from
+    eq_gate.ExcessPhaseGate.as_boost_gate() — measurement-driven veto of PK
+    boosts into deep phase-anomalous notches (complements the static zones).
     Returns (bands, resid_after) where bands = [(kind, f0, gain, q), ...]."""
     resid = resid_db.copy()
     w = weight / (np.sum(weight) + 1e-12)
@@ -209,6 +213,8 @@ def greedy_eq_fit(freqs_hz, resid_db, weight, n_bands=4,
                             break
                     if blocked:
                         continue
+                if g > 0 and boost_gate is not None and not boost_gate(kind, f0, q):
+                    continue
                 # don't stack boosts within 1/3 octave of an existing boost
                 # (a dip that "needs" that is likely cancellation, not EQ-able)
                 if g > 0 and any(abs(np.log2(f0 / f2)) < 0.333 and g2 > 0

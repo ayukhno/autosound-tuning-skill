@@ -64,11 +64,15 @@ def _eval(rta, target, w, hp_h, lp_h):
 
 def realize_driver(freqs, rta_mag_db, target_mag_db, *, hp_slot=None, lp_slot=None,
                    trust_band, min_hp_order=None, xo_options=XO_OPTIONS,
-                   eq_bands=4, top_k=6):
+                   eq_bands=4, top_k=6, no_boost_zones=(), boost_gate=None):
     """Find electrical XO + level trim + EQ realizing an acoustic target.
 
     hp_slot/lp_slot: (lo_hz, hi_hz, step_hz) hardware search ranges, or None.
     min_hp_order: datasheet/installed-Fs protection floor (dB/oct), e.g. 12.
+    no_boost_zones: static (lo, hi) Hz zones (car-record knowledge).
+    boost_gate: eq_gate.ExcessPhaseGate.as_boost_gate() — measurement-driven
+      veto of PK boosts into deep phase-anomalous notches (build the gate from
+      the same driver's sweep + REW excess-phase version).
     Returns top_k realizations sorted by post-EQ score:
       {"hp": (type, order, corner)|None, "lp": ..., "trim_db", "eq": [(kind, f0,
        gain, q)...], "fit_rms_db", "score"}.
@@ -117,7 +121,9 @@ def realize_driver(freqs, rta_mag_db, target_mag_db, *, hp_slot=None, lp_slot=No
         lo = max(trust_band[0], hp[2] / 2 if hp else trust_band[0])
         hi = min(trust_band[1], lp[2] * 2 if lp else trust_band[1])
         bands, resid_after = greedy_eq_fit(freqs, resid, w, n_bands=eq_bands,
-                                           band=(lo, hi))
+                                           band=(lo, hi),
+                                           no_boost_zones=no_boost_zones,
+                                           boost_gate=boost_gate)
         fit = _wrms(resid_after, w)
         out.append({"hp": hp, "lp": lp, "trim_db": trim, "eq": bands,
                     "fit_rms_db": fit,

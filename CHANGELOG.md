@@ -2,6 +2,11 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
+## [Unreleased]
+
+### Added
+- **`rew_tool/eq_gate.py` — excess-phase EQ-boost-ability gate** (the peak-vs-null doctrine made quantitative): `ExcessPhaseGate` built from a driver sweep + REW's native excess-phase version vetoes boosts only where a deep local dip ∧ phase anomaly ∧ real delivered gain coincide; three-state ALLOW/WARN(→ mic-shift cross-check)/BLOCK; plugs into `greedy_eq_fit(boost_gate=…)` / `realize_driver(boost_gate=…)` (both grew the parameter; `realize_driver` also gained `no_boost_zones`). Calibration provisional — reproduced 7/7 of the source build's real boost history (3 known violations caught, 4 working boosts passed); synthetic selftest: near-identical r=0.95 vs r=1.05 reflection combs (min-phase ALLOW / non-min-phase BLOCK). Design lessons in the module docstring: point |z| zero-crosses at a bipolar notch center (use sliding-RMS S); working-region max over-blocks wide filters whose skirt clips a bad zone; phase alone carpets 30-50 % of a cabin's band — the magnitude conjunction is essential. Rule 6 added to `filter-types-car-audio.md` §Acoustic-plan-first.
+
 ## [v2.5.0] — 2026-07-13
 
 Harvest of the AutoSci "v3 acoustic-target" research arc (crossover realization → joint alignment → hardware attestation on the Passat B8 / Helix Ultra S) plus the same-day v4.x joint/imaging/voicing loop.
