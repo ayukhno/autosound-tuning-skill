@@ -115,10 +115,41 @@ def align_delay_polarity(freqs_hz, A, B, band, max_delay_ms=3.0, step_ms=0.01,
     return pol, tau * 1000.0, null_db
 
 
+# Jitter set field-validated in the v4.x/vC1 loop: deep interference nulls
+# are chaotic — even same-session sweep ratios breathe 4-6 dB RMS (1/12 oct),
+# and razor-tuned APF optima did not survive ONE HOUR between snapshots.
+# (delay_seconds, level_db) perturbations applied to one branch.
+ROBUST_PERT = ((0.0, 0.0), (20e-6, 0.0), (-20e-6, 0.0), (0.0, 0.5),
+               (0.0, -0.5), (15e-6, 0.35), (-15e-6, -0.35))
+
+
+def robust_worst_null(freqs_hz, A, B, band, perturbations=ROBUST_PERT):
+    """Worst energy-significant null of A+B over jitter perturbations of B.
+    THE objective for joint-phase decisions (diagnostic-techniques §24):
+    a solution must hold under small delay/level drift, not win at the
+    razor point. Returns the worst null in dB (0 = perfectly coherent)."""
+    m = (freqs_hz >= band[0]) & (freqs_hz <= band[1])
+    f, a, b = freqs_hz[m], A[m], B[m]
+    ceil0 = np.abs(a) + np.abs(b)
+    sig = 20 * np.log10(ceil0 + 1e-12) >= np.max(20 * np.log10(ceil0 + 1e-12)) - 20.0
+    worst = np.inf
+    for tau, lv in perturbations:
+        bb = b * np.exp(-2j * np.pi * f * tau) * 10 ** (lv / 20.0)
+        c = np.abs(a) + np.abs(bb)
+        n = float(np.min(20 * np.log10(np.abs((a + bb)[sig]) / (c[sig] + 1e-12) + 1e-12)))
+        worst = min(worst, n)
+    return worst
+
+
 def apf_search(freqs_hz, A, B, band, apply_to="hi", n_f0=48,
-               q_set=(0.5, 0.7, 1.0, 1.5, 2.0, 3.0, 4.0)):
+               q_set=(0.5, 0.7, 1.0, 1.5, 2.0, 3.0, 4.0),
+               robust=False, perturbations=ROBUST_PERT):
     """APF2 (f0,q) on one branch maximizing the WORST-case null in band
     (energy-significant bins only) without losing total energy.
+    robust=True scores every candidate (and the baseline) by the worst null
+    over the jitter perturbations instead of the clean single-point null —
+    the field-validated objective (razor optima collapse under cm-scale
+    drift; see ROBUST_PERT note). Default False preserves legacy behavior.
     Returns (f0, q, null_gain_db) or (None, None, 0.0) if no improvement."""
     m = (freqs_hz >= band[0]) & (freqs_hz <= band[1])
     f, a, b = freqs_hz[m], A[m], B[m]
@@ -126,12 +157,22 @@ def apf_search(freqs_hz, A, B, band, apply_to="hi", n_f0=48,
     ceil_db = 20 * np.log10(ceil + 1e-12)
     sig = ceil_db >= np.max(ceil_db) - 20.0
 
-    def worst_null(s):
-        return float(np.min(20 * np.log10(np.abs(s[sig]) / ceil[sig] + 1e-12)))
+    pert = perturbations if robust else ((0.0, 0.0),)
+    rots = [(np.exp(-2j * np.pi * f * tau), 10 ** (lv / 20.0)) for tau, lv in pert]
 
-    base_sum = a + b
-    base_null = worst_null(base_sum)
-    base_energy = np.sum(np.abs(base_sum) ** 2)
+    def score(aa, bb):
+        """Worst null over the active perturbation set (jitter on bb)."""
+        worst = np.inf
+        for rot, g in rots:
+            bp = bb * rot * g
+            c = np.abs(aa) + np.abs(bp)
+            n = float(np.min(20 * np.log10(np.abs((aa + bp)[sig]) / (c[sig] + 1e-12)
+                                           + 1e-12)))
+            worst = min(worst, n)
+        return worst
+
+    base_null = score(a, b)
+    base_energy = np.sum(np.abs(a + b) ** 2)
     # keep f0 a quarter-octave inside the band edges: an edge APF "fixing"
     # an edge bin is metric exploitation, not a crossover-region repair
     grid = np.geomspace(band[0] * 1.19, band[1] / 1.19, n_f0)
@@ -139,10 +180,10 @@ def apf_search(freqs_hz, A, B, band, apply_to="hi", n_f0=48,
     for f0 in grid:
         for q in q_set:
             ap = apf2_response(f, f0, q)
-            s = (a * ap + b) if apply_to == "lo" else (a + b * ap)
-            if np.sum(np.abs(s) ** 2) < 0.98 * base_energy:
+            aa, bb = (a * ap, b) if apply_to == "lo" else (a, b * ap)
+            if np.sum(np.abs(aa + bb) ** 2) < 0.98 * base_energy:
                 continue  # never trade broadband summation for the notch
-            n = worst_null(s)
+            n = score(aa, bb)
             if n > best[0]:
                 best = (n, f0, q)
     return best[1], best[2], float(best[0] - base_null)

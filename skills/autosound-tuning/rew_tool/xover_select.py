@@ -149,19 +149,61 @@ def align_joint(freqs, h_lo, h_hi, band, *, max_delay_ms=3.0):
     return {"polarity": pol, "delay_ms": round(tau, 2), "worst_null_db": round(null, 2)}
 
 
-def repair_joint_apf(freqs, h_lo, h_hi_aligned, band, *, min_gain_db=0.5):
+def repair_joint_apf(freqs, h_lo, h_hi_aligned, band, *, min_gain_db=0.5,
+                     robust=True):
     """APF2 (f0, q) improving the worst energy-significant null without losing
     broadband summation. An allpass only ADDS phase lag, so the repair may
     belong on either branch — both are tried; result says which via "apply_to".
+    robust=True (the default — field-validated, diagnostic §24) scores by the
+    jitter-robust worst null (dsp_math.ROBUST_PERT); robust=False is the
+    legacy razor objective, kept for reproducing old runs only.
     CAUTION: apply_to="lo" rotates that branch's OTHER joint too — re-verify it.
     Returns {"f0_hz","q","null_gain_db","apply_to"} or None."""
     best = None
     for side in ("hi", "lo"):
-        f0, q, g = apf_search(freqs, h_lo, h_hi_aligned, band, apply_to=side)
+        f0, q, g = apf_search(freqs, h_lo, h_hi_aligned, band, apply_to=side,
+                              robust=robust)
         if f0 is not None and g >= min_gain_db and (best is None or g > best["null_gain_db"]):
             best = {"f0_hz": round(f0, 1), "q": q, "null_gain_db": round(g, 2),
                     "apply_to": side}
     return best
+
+
+def repair_joint_apf_multi(freqs, snapshots, band, *, min_gain_db=0.5,
+                           n_f0=48, q_set=(0.5, 0.7, 1.0, 1.5, 2.0, 3.0, 4.0)):
+    """APF2 repair selected across SEVERAL same-day snapshots of the same
+    joint: score(candidate) = MIN over snapshots of the jitter-robust worst
+    null. Field lesson (v4.1): even robust optima from ONE snapshot did not
+    transfer across an hour — with two+ snapshots select by the worst case.
+    snapshots: sequence of (h_lo, h_hi_aligned) pairs on the SAME freqs grid,
+    each captured in one session (mic untouched within a snapshot).
+    Returns {"f0_hz","q","null_gain_db","apply_to","per_snapshot_db"} or None."""
+    from dsp_math import apf2_response, robust_worst_null
+
+    def min_robust(apf=None, side="hi"):
+        vals = []
+        for h_lo, h_hi in snapshots:
+            a, b = h_lo, h_hi
+            if apf is not None:
+                ap = apf2_response(freqs, *apf)
+                a, b = (a * ap, b) if side == "lo" else (a, b * ap)
+            vals.append(robust_worst_null(freqs, a, b, band))
+        return min(vals), vals
+
+    base, _ = min_robust()
+    grid = np.geomspace(band[0] * 1.19, band[1] / 1.19, n_f0)
+    best = None
+    for side in ("hi", "lo"):
+        for f0 in grid:
+            for q in q_set:
+                s, vals = min_robust((f0, q), side)
+                if s - base >= min_gain_db and (best is None or s > best[0]):
+                    best = (s, f0, q, side, vals)
+    if best is None:
+        return None
+    s, f0, q, side, vals = best
+    return {"f0_hz": round(f0, 1), "q": q, "null_gain_db": round(s - base, 2),
+            "apply_to": side, "per_snapshot_db": [round(v, 2) for v in vals]}
 
 
 def select_neighbor_pair(freqs, branches_lo, branches_hi, fits_lo, fits_hi,
@@ -258,10 +300,52 @@ def _selftest():
     rep = repair_joint_apf(freqs, lo, hi_al, (150, 600))
     assert rep is not None and rep["null_gain_db"] > 0.5, rep
 
+    # 6) Robust-objective API contract (diagnostic §24). NOTE: true razor-
+    # collapse (a -19 dB clean optimum falling to -35 dB under ±20 µs) comes
+    # from the chaotic fine structure of MEASURED responses and cannot be
+    # reproduced with smooth synthetics — that part is field-validated
+    # (v4.1/vC1 harnesses). Here we pin the contract: (a) the jittered
+    # worst-case can never beat the clean point (it includes it); (b) a
+    # robust=True repair must hold under jitter at least as well as the
+    # legacy razor repair.
+    from dsp_math import robust_worst_null
+    band6 = (1000.0, 4000.0)
+    a6 = flat.copy()
+    b6 = flat * apf2_response(freqs, 2000.0, 6.0)  # strong local rotation
+    al6 = align_joint(freqs, a6, b6, band6, max_delay_ms=1.0)
+    b6a = al6["polarity"] * b6 * np.exp(-2j * np.pi * freqs * al6["delay_ms"] * 1e-3)
+    clean = align_joint(freqs, a6, b6a, band6, max_delay_ms=0.0)["worst_null_db"]
+    rob = robust_worst_null(freqs, a6, b6a, band6)
+    # 0.02 tolerance: align_joint reports worst_null_db rounded to 2 decimals
+    assert rob <= clean + 0.02, (clean, rob)  # (a) monotone: jitter can't help
+    rep_r = repair_joint_apf(freqs, a6, b6a, band6, robust=True)
+    rep_z = repair_joint_apf(freqs, a6, b6a, band6, robust=False)
+
+    def post_jitter(rep_):
+        if rep_ is None:
+            return rob
+        ap = apf2_response(freqs, rep_["f0_hz"], rep_["q"])
+        aa, bb = (a6 * ap, b6a) if rep_["apply_to"] == "lo" else (a6, b6a * ap)
+        return robust_worst_null(freqs, aa, bb, band6)
+    assert post_jitter(rep_r) >= post_jitter(rep_z) - 0.05, (rep_r, rep_z)
+
+    # 7) multi-snapshot selection: with two drifted captures the winner must
+    # hold on BOTH (MIN-selection), not just the first
+    b6b = b6a * np.exp(-2j * np.pi * freqs * 25e-6) * 10 ** (0.4 / 20)
+    rep_m = repair_joint_apf_multi(freqs, [(a6, b6a), (a6, b6b)], band6)
+    if rep_m is not None:
+        assert len(rep_m["per_snapshot_db"]) == 2, rep_m
+        assert min(rep_m["per_snapshot_db"]) >= rob + rep_m["null_gain_db"] - 0.3, rep_m
+
     print("selftest OK -- realize(fit=%.2f dB, hp=%s, lp=%s) + align(pol=%d, %.2f ms) "
-          "+ lr_track(%.1f deg, %.3f ms) + pair-select(no-hole) + apf(+%.2f dB)"
+          "+ lr_track(%.1f deg, %.3f ms) + pair-select(no-hole) + apf(+%.2f dB) "
+          "+ robust-contract(clean %.1f / jitter %.1f dB; repair +%.2f dB robust) "
+          "+ multi(%s)"
           % (r0["fit_rms_db"], r0["hp"], r0["lp"], al["polarity"], al["delay_ms"],
-             tr["rms_deg"], tr["equiv_delay_ms"], rep["null_gain_db"]))
+             tr["rms_deg"], tr["equiv_delay_ms"], rep["null_gain_db"],
+             clean, rob,
+             rep_r["null_gain_db"] if rep_r else 0.0,
+             "%.2f dB on worst snapshot" % rep_m["null_gain_db"] if rep_m else "no-gain"))
 
 
 if __name__ == "__main__":
