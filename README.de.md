@@ -5,6 +5,7 @@
 **In einem Satz:** ein Claude-Skill, der dich zu klarem, transparentem, ausgewogenem Klang in *deinem* Auto führt. Er bringt das ganze Handwerk auf dein konkretes Setup, liest deine REW-Messungen und hilft dir, jede Änderung zu wählen.
 
 - **Arbeitet mit REW**: holt Messungen über die API, schreibt berechnete EQ-Filter zurück in REW, von wo du sie in dein DSP exportierst
+- **Diagnostiziert, bevor korrigiert wird**: ermittelt EQ-fähige Frequenzen, akustische Reflexionen (Phasenauslöschungen) und Verzerrungsgrenzen jedes Treibers aus deiner Grundmessung, bevor eine Weichen- oder EQ-Änderung vorgeschlagen wird
 - **Kennt das Handwerk**: Zielkurven, Abstimmpraktiken, ein Schritt-für-Schritt-Prozess
 - **Test-Tracks**: worauf zu achten ist und auf welchem Track (Beschreibungen, kein Audio)
 - **Lernt dein Setup**: sammelt Wissen über Auto und Geräte, nur mit deiner Zustimmung
@@ -98,7 +99,7 @@ Der Skill ist **kostenlos und offen** (CC BY-SA). Wenn er geholfen hat und du Da
 
 💜 **[GitHub Sponsors](https://github.com/sponsors/ayukhno)** · ☕ **[Monobank-Spendenkasse](https://send.monobank.ua/jar/8wThVcodjm)** (Apple Pay, Google Pay, ...)
 
-Ein Tippen, kein Konto; die Seite akzeptiert auch ausländische Karten (Apple/Google Pay, Visa/Mastercard).
+Ein Tippen, kein Konto; die Seite akzeptiert auch Karten — Apple Pay, Google Pay, Visa, Mastercard.
 
 ## Lizenz
 

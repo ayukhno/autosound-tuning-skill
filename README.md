@@ -5,6 +5,7 @@
 **In one line:** a Claude skill that guides you toward clean, transparent, balanced sound in *your* car. It brings the whole craft to your specific setup, reads your REW measurements, and helps you choose each change.
 
 - **Works with REW**: pulls measurements over its API, writes computed EQ filters back into REW for you to export to your DSP
+- **Diagnoses before it fixes**: maps EQ-able frequencies, acoustic reflections (phase cancellations), and driver distortion floors from your baseline before proposing any crossover or EQ change
 - **Knows the craft**: target curves, tuning practices, a step-by-step process
 - **Test tracks**: what to listen for and on which track (descriptions, not audio)
 - **Learns your setup**: accumulates car & gear knowledge, only with your consent
@@ -98,7 +99,7 @@ The skill is **free and open** (CC BY-SA) and always will be. Nothing is gated b
 
 💜 **[GitHub Sponsors](https://github.com/sponsors/ayukhno)** · ☕ **[Monobank jar](https://send.monobank.ua/jar/8wThVcodjm)** (Apple Pay, Google Pay, ...)
 
-One tap, no account; the page also takes foreign cards (Apple/Google Pay, Visa/Mastercard).
+One tap, no account; the page also takes cards — Apple Pay, Google Pay, Visa, Mastercard.
 
 ## License
 

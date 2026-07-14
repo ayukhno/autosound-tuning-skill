@@ -5,6 +5,7 @@
 **W jednym zdaniu:** skill dla Claude, który prowadzi cię do czystego, przejrzystego, zrównoważonego brzmienia w *twoim* aucie. Wnosi całe rzemiosło do twojego konkretnego zestawu, czyta twoje pomiary z REW i pomaga wybrać każdą zmianę.
 
 - **Współpracuje z REW**: pobiera pomiary przez API, zapisuje obliczone filtry EQ z powrotem w REW, skąd eksportujesz je do swojego DSP
+- **Diagnozuje, zanim naprawi**: określa podatność na EQ, odbicia (problemy fazowe) i granice zniekształceń każdego głośnika na podstawie pomiaru bazowego, zanim zaproponuje jakąkolwiek zmianę zwrotnicy lub EQ
 - **Zna rzemiosło**: krzywe docelowe, praktyki strojenia, proces krok po kroku
 - **Ścieżki testowe**: czego słuchać i na której ścieżce (opisy, nie audio)
 - **Uczy się twojego zestawu**: gromadzi wiedzę o aucie i sprzęcie, tylko za twoją zgodą
@@ -98,7 +99,7 @@ Skill jest **darmowy i otwarty** (CC BY-SA). Jeśli pomógł i chcesz podziękow
 
 💜 **[GitHub Sponsors](https://github.com/sponsors/ayukhno)** · ☕ **[Skarbonka na Monobank](https://send.monobank.ua/jar/8wThVcodjm)** (Apple Pay, Google Pay, ...)
 
-Jedno dotknięcie, bez konta; strona przyjmuje też karty zagraniczne (Apple/Google Pay, Visa/Mastercard).
+Jedno dotknięcie, bez konta; strona przyjmuje też karty — Apple Pay, Google Pay, Visa, Mastercard.
 
 ## Licencja
 

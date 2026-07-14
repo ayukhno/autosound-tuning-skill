@@ -53,7 +53,7 @@ To make AI-assisted tuning highly reliable, repeatable, and automated, we solve 
 Regardless of whether you use our automated scripts (Level 2) or simply follow our guidebook in a free web-chat (Level 1), the process always follows this rigorous 5-step roadmap:
 
 1. **System Audit & Target Selection (Baseline & Target)**
-   We document your physical hardware (speaker placement, amps, DSP native sample rate) and agree on a target acoustic curve (e.g., flat monitor, warm bass, or competition-grade).
+   We document your physical hardware (speaker placement, amps, DSP native sample rate) and agree on a target acoustic curve (e.g., flat monitor, warm bass, or competition-grade). We also run a flaw-analysis pass on that same baseline — which frequencies are EQ-able versus physically unfixable (phase cancellation, cabin interference), where L/R pairs decorrelate, and each driver's distortion floor — so later steps don't chase a fix that can't work.
 2. **Building the Stage (Crossovers & Delays)**
    We **select and configure** the exact crossovers for each speaker so they play in alignment and within their optimal performance ranges. Then, we apply precise time-alignment delays so sound from every speaker arrives at your ears at the exact same microsecond, creating a razor-sharp, stable stereo image on your dashboard.
 3. **Tonal Balance & Phase Matching (EQ & Phase Alignment)**
