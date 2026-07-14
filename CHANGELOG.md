@@ -2,7 +2,9 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
-## [Unreleased]
+## [v2.6.0] — 2026-07-14
+
+"How we look" release — three of the tuner's seeing disciplines turned into tools and wired into the phase pipeline, all validated on live data the day they were built. Headed to AYA/EMMA with the source build.
 
 ### Added
 - **IR-start triangulation + ETC/Step helpers** (`analysis.arrival_triangulate` / `etc_envelope` / `step_response`): the honest resolution of "REW never finds the right start" — for a band-limited driver a single start does NOT exist; the tool measures four estimators (peak, −20/−30 dB edges, ETC peak) and returns TRUSTED/ILL-POSED from their spread (measured: clean mids 0.06 ms; door midbass 2.8 ms; sub 13 ms). ILL-POSED routes to xcorr-for-pairs / summation-for-joints instead of any single onset. Step response documented as LF-character visual only (live data: step "polarity" disagreed between identically-polarized mids — §9 stands).
