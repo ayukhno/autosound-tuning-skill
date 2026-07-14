@@ -56,6 +56,8 @@ From the SAME `_1` captures (no extra measuring), build the install/cabin flaw m
 2. **Pair coherence maps (per L/R pair):** weighted pair coherence `20·log10(|L+R|/(|L|+|R|))` over each pair's band + the unwrapped Δφ climb test (`diagnostic §26`). Pockets < −3 dB with a >1-rotation climb = **multipath — flagged NOW**: no one burns APF bands on it later, and the center-fill/physics decision (§26 remedy) enters the plan early instead of surfacing as a Phase-4 listening mystery.
 3. **Three-distance reads (per channel + pairs' L−R):** `curve_view.report` (band → macro trend → fine features with doctrine routing) — macro anomalies inform crossover/level planning; routed fine features seed the verify list.
 
+4. **Distortion floor map (per driver):** `rew_api.get_distortion` on each `<ch>_1 (sw)` (THD comes free with the sweep). Mark where in-band THD exceeds ~1 % (caution) / ~3 % (avoid) — **crossover corners in Phase 1 need low measured THD with margin**, which replaces datasheet-only floors; in-band spikes (e.g. a woofer 4.8 % @ 160 Hz) are install findings for the car record. Below-HPF rows are noise — ignore.
+
 **Record the map** in the project's car record (PART-B style: each item phrased as a check) + `autosound_context.md`; log in the changelog. **Downstream consumption (the map is not a report — it binds):** Phase 1 crossover corners avoid landing joints inside multipath pockets / non-min-phase zones; Phase 2 EQ passes the gate; imaging work knows which symptoms are electrically unfixable BEFORE chasing them.
 
 ### 4. Gain Staging & Environmental Hygiene

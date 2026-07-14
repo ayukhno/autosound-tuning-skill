@@ -174,6 +174,70 @@ def relative_delay_xcorr(ir_a, ir_b, sample_rate, max_lag_ms=5.0, window_ms=10.0
             "lag_samples": best_lag, "max_lag_ms": max_lag_ms}
 
 
+def etc_envelope(ir):
+    """Energy-Time-Curve basis: the analytic (Hilbert) envelope of the IR.
+    Use for REFLECTION analysis (enclosure-install-diagnostics) and as the
+    third vote in arrival_triangulate. numpy is imported lazily (FFT) — the
+    rest of this module stays dependency-free."""
+    try:
+        import numpy as np
+    except ImportError as e:
+        raise RuntimeError("etc_envelope needs numpy (FFT Hilbert). "
+                           "pip install numpy") from e
+    x = np.asarray(ir, dtype=float)
+    n = len(x)
+    F = np.fft.fft(x)
+    h = np.zeros(n)
+    h[0] = 1.0
+    h[1:(n + 1) // 2] = 2.0
+    if n % 2 == 0:
+        h[n // 2] = 1.0
+    return np.abs(np.fft.ifft(F * h))
+
+
+def step_response(ir):
+    """Cumulative-sum step response (pure python). ⚠️ For LF character /
+    attack VISUALS only: live data (2026-07-14) showed the step 'polarity'
+    disagreeing between two identically-polarized mids (reflections shape
+    the early step) — polarity stays a SUMMATION verdict (diagnostic §9),
+    never a step/impulse-direction read."""
+    out, acc = [], 0.0
+    for v in ir:
+        acc += v
+        out.append(acc)
+    return out
+
+
+def arrival_triangulate(times, ir, spread_ok_ms=0.15):
+    """The honest answer to "where does this impulse START": for a
+    band-limited driver there is no single start point — so measure FOUR
+    estimators and let their SPREAD diagnose whether the question is
+    well-posed in this band.
+
+    Field data (2026-07-14): clean mids — all four within 0.06 ms (any
+    works); door midbass — 2.8 ms spread; sub — 13 ms spread (meaningless).
+
+    Returns {peak_ms, edge20_ms, edge30_ms, etc_peak_ms, spread_ms, verdict}:
+      "TRUSTED"   (spread <= spread_ok_ms): edge/xcorr timing is safe here;
+      "ILL-POSED" (spread >): do NOT pin TA on any single onset in this
+        band — relative xcorr for pairs, SUMMATION for joints
+        (diagnostic §10; rew-api-quirks "Timing")."""
+    a = [abs(v) for v in ir]
+    peak_i = a.index(max(a))
+    out = {"peak_ms": round(times[peak_i] * 1000, 3)}
+    for name, thr_db in (("edge20_ms", -20.0), ("edge30_ms", -30.0)):
+        i = _leading_edge_index(ir, thr_db)
+        out[name] = round(times[i] * 1000, 3) if i is not None else None
+    env = etc_envelope(ir)
+    etc_i = int(max(range(len(env)), key=lambda k: env[k]))
+    out["etc_peak_ms"] = round(times[etc_i] * 1000, 3)
+    vals = [v for v in (out["peak_ms"], out["edge20_ms"], out["edge30_ms"],
+                        out["etc_peak_ms"]) if v is not None]
+    out["spread_ms"] = round(max(vals) - min(vals), 3)
+    out["verdict"] = "TRUSTED" if out["spread_ms"] <= spread_ok_ms else "ILL-POSED"
+    return out
+
+
 def _selftest():
     fs = 48000
     dt = 1.0 / fs
@@ -216,6 +280,25 @@ def _selftest():
     s_sw = analyze_fr(freqs, mag, phase, 100, 1000)
     assert "mean_phase_deg" in s_sw, "sweep: phase present → mean_phase_deg exposed"
     assert find_phase_anomalies(freqs, phase), "sweep: real phase should flag anomalies"
+
+    # arrival_triangulate: clean synthetic pulse -> TRUSTED; slow LF hump
+    # with an early toe -> ILL-POSED (the field phenomenon, synthesized)
+    fs_t = 48000.0
+    t_ax = [i / fs_t for i in range(2400)]
+    clean = [0.0] * 2400
+    clean[240] = 1.0
+    clean[241] = -0.6
+    tri_c = arrival_triangulate(t_ax, clean)
+    assert tri_c["verdict"] == "TRUSTED", tri_c
+    slow = [0.0] * 2400
+    for i in range(2400):
+        ph = (i / fs_t - 0.015) * 60.0 * 2 * math.pi
+        slow[i] = math.exp(-((i / fs_t - 0.015) / 0.006) ** 2) * math.cos(ph)
+        if 140 <= i < 200:
+            slow[i] += 0.12
+    tri_s = arrival_triangulate(t_ax, slow)
+    assert tri_s["verdict"] == "ILL-POSED", tri_s
+    assert len(step_response([1.0, -0.5])) == 2
 
     print(f"selftest OK — first_arrival {fa['arrival_time_ms']} ms avoids the reflection "
           f"(global peak {pk['peak_time_ms']} ms); xcorr {res['delay_ms']} ms (+) / "

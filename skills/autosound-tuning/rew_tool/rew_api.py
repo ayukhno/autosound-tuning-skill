@@ -224,6 +224,31 @@ def set_smoothing(mid, smoothing="1/6"):
     return measurement_command(mid, "Smooth", {"smoothing": smoothing})
 
 
+def get_distortion(mid):
+    """THD-vs-frequency table computed by REW from a normal log sweep
+    (endpoint /measurements/{id}/distortion; verified live 2026-07-14).
+    Returns (freqs, fundamental_db, thd_pct, rows) where rows keeps the raw
+    per-harmonic columns. ⚠️ Rows below the channel's HPF are noise (a 71 %
+    "THD" at 10 Hz on a 460 Hz-HPF mid is the noise floor, not the driver) —
+    evaluate only in/near the intended passband. Use: the Phase-0 flaw map's
+    distortion floors — a crossover corner needs LOW measured THD with
+    margin, not just a datasheet Fs rule."""
+    data = _get(f"/measurements/{mid}/distortion")
+    hdr = data.get("columnHeaders", [])
+    rows = data.get("data", [])
+
+    def col(idx):
+        out = []
+        for r in rows:
+            try:
+                out.append(float(r[idx]))
+            except (IndexError, TypeError, ValueError):
+                out.append(float("nan"))
+        return out
+    i_thd = next((i for i, h in enumerate(hdr) if "THD" in h), 2)
+    return col(0), col(1), col(i_thd), rows
+
+
 def _selftest():
     """Exercise both branches of get_fr offline — phase-present (sweep) and
     phase-absent (RTA). The RTA branch used to KeyError on data["phase"]

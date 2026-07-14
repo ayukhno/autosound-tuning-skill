@@ -42,6 +42,9 @@ Each line: *what the author's build showed* → **how to check it on yours.** Do
 
 - □ **Center-fill as the mid-pair remedy (validated in this build, 2026-07):** the winning config was a COMPLEMENTARY center — HPF 620 LR36 · LPF 2330 LR36 · PK 1000 −9 Q2 + PK 1450 −9 Q2 (trough over the coherent 900–1600 zone), INV + 0.74 ms vs the raw state, quiet level (~+3 dB working point), fed by a static L+R matrix (RealCenter OFF — signal-dependent steering breaks fixed calibration). Measured pocket recovery +4.4/+2.3 dB; head-turn-stable center by ear. ⚠️ The pocket frequencies/shape are THIS build's coherence map — derive yours from YOUR map (`diagnostic §26`), never copy these corners.
 
+- □ **An in-band woofer THD spike ~160 Hz on the LEFT door (4.8 % vs <1 % elsewhere in-band)?** Found via `get_distortion` on the raw sweeps (2026-07-14); sits in the same region as the left-door null ~150 — suspect mechanical (excursion/rub at the diffraction-compensated zone). → run the THD table on YOUR raw sweeps; a spike like this is an install finding (damping/mounting check), not an EQ target.
+- □ **Measured THD floors that justified this build's crossover corners:** mid-R 18 % @ 100 Hz → clean by 200 (HPF 460 = huge margin); tweeters clean from ~1250 (HPF 3625 ✓); sub best 32–63, 3.6 % @ 125 (LPF 88 ✓). → derive YOUR corners from YOUR THD table (Phase-0 flaw map item 4), never copy these.
+
 **Drivers / enclosure — from the user's intake or the datasheet, NOT from here:**
 - □ The sub enclosure in the author's build = a **sealed box ~35 L** in the trunk (worked well). → your enclosure type/volume is whatever the user actually has; **don't assume "35 L" or "sealed"**.
 
