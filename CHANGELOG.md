@@ -5,6 +5,7 @@ All notable changes to the autosound-tuning skill. The skill is co-developed wit
 ## [Unreleased]
 
 ### Added
+- **Phase-0 §3.5 "Acoustic Flaw Map"** — the flaw-analysis math is now a prescribed EARLY step (mandatory for a new car; redo on a changed install), built from the SAME raw `_1` baseline with no extra measuring: per-channel EQ-ability map (excess-phase versions → `eq_gate`), per-pair coherence maps + the >1-rotation multipath test (§26), and `curve_view` three-distance reads. The map BINDS downstream: Phase-1 crossover corners avoid multipath pockets/non-min-phase zones (new bullet in §3), Phase-2 EQ passes the gate structurally (`boost_gate=` wired into the "Never Fill Nulls" rule), imaging work knows what is electrically unfixable before chasing it.
 - **`rew_tool/curve_view.py` — multi-scale curve viewer with doctrine routing** (from the user's "look at curves from different distances" insight, 2026-07-14): band window → MACRO trend (1/3 oct, band-anchored) → FINE residual (1/24 − macro) with FWHM-measured features, each routed to the doctrine that owns it (broad → voicing §6; narrow-on-sweep → verify-first §13; medium peak → point-EQ cut §21/§2; medium dip → null-suspect §2/§13; `source='mmm'` skips the verify-first arm). Replaces a pattern that had been hand-rolled ~8 times in one project's ad-hoc scripts. Smoke-tested on real data: it independently rediscovered the mid-pair decorrelation pocket structure (657-dip/788-peak) from the ALL curve alone.
 
 ## [v2.5.1] — 2026-07-14

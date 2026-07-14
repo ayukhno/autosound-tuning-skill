@@ -48,6 +48,16 @@ Instruct the user to measure **each driver we'll work with**, solo, on the clean
 * This per-driver set **is** the raw baseline **and** the input for Phase 1 (TA, crossovers, levels, per-band targets) — **Phase 1 does not re-collect it.**
 * Do **NOT** perform time-alignment, delay, or level-matching yet. This phase is purely observational.
 
+### 3.5 Acoustic Flaw Map — one analytical pass over the raw baseline (NEW CAR: mandatory; same car with a CHANGED install: redo)
+
+From the SAME `_1` captures (no extra measuring), build the install/cabin flaw map that every later phase consumes. Three tools, three artifacts:
+
+1. **EQ-ability map (per channel):** create REW excess-phase versions of each `<ch>_1 (sw)` (`rew_api.excess_phase_version`) → build `eq_gate.ExcessPhaseGate` per channel. This replaces guessing later: Phase-2 EQ fits take the gate directly (`boost_gate=`), and known-bad zones land in the car record as data, not lore.
+2. **Pair coherence maps (per L/R pair):** weighted pair coherence `20·log10(|L+R|/(|L|+|R|))` over each pair's band + the unwrapped Δφ climb test (`diagnostic §26`). Pockets < −3 dB with a >1-rotation climb = **multipath — flagged NOW**: no one burns APF bands on it later, and the center-fill/physics decision (§26 remedy) enters the plan early instead of surfacing as a Phase-4 listening mystery.
+3. **Three-distance reads (per channel + pairs' L−R):** `curve_view.report` (band → macro trend → fine features with doctrine routing) — macro anomalies inform crossover/level planning; routed fine features seed the verify list.
+
+**Record the map** in the project's car record (PART-B style: each item phrased as a check) + `autosound_context.md`; log in the changelog. **Downstream consumption (the map is not a report — it binds):** Phase 1 crossover corners avoid landing joints inside multipath pockets / non-min-phase zones; Phase 2 EQ passes the gate; imaging work knows which symptoms are electrically unfixable BEFORE chasing them.
+
 ### 4. Gain Staging & Environmental Hygiene
 * Check for clipping (DSP outputs vs. amplifier inputs). Measurements must remain clean and undistorted.
 * Lock down a repeatable **MMM measurement pattern** (spatial boundaries, speed, volume coverage). Successive RTA tests must use this identical pattern to be comparable.

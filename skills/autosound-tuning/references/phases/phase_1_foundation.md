@@ -44,6 +44,7 @@ Equalize the physical flight times of sound from each driver to the microphone.
 * *Note:* Absolute IR time is crossover-independent and should be set early. Joint phase alignment is a separate, second step done in Phase 2.
 
 ### 3. Crossover & Slope Selection
+* **Consult the Phase-0 Acoustic Flaw Map first (§3.5):** do not land a joint inside a measured multipath pocket or a non-min-phase zone — the joint's phase there is chaotic and its APF repair will not hold (`diagnostic §24/§26`); place corners so the overlap region sits in coherent territory where possible.
 * **L/R Symmetry is the default:** Crossover type, slope, and frequency must be identical on both sides. Cabin acoustic asymmetries are corrected using output EQ, not by detuning crossovers, which destroys the phantom center.
 * **Asymmetry as a variant:** Asymmetric crossovers are used only as a Hashimoto by-ear variant when symmetric setups fail to image (`method-hashimoto.md`).
 * **Selection Guidelines:** Propose filter types based on physical driver characteristics and cabin geometry:
