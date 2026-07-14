@@ -2,6 +2,11 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
+## [Unreleased]
+
+### Added
+- **`rew_tool/curve_view.py` — multi-scale curve viewer with doctrine routing** (from the user's "look at curves from different distances" insight, 2026-07-14): band window → MACRO trend (1/3 oct, band-anchored) → FINE residual (1/24 − macro) with FWHM-measured features, each routed to the doctrine that owns it (broad → voicing §6; narrow-on-sweep → verify-first §13; medium peak → point-EQ cut §21/§2; medium dip → null-suspect §2/§13; `source='mmm'` skips the verify-first arm). Replaces a pattern that had been hand-rolled ~8 times in one project's ad-hoc scripts. Smoke-tested on real data: it independently rediscovered the mid-pair decorrelation pocket structure (657-dip/788-peak) from the ALL curve alone.
+
 ## [v2.5.1] — 2026-07-14
 
 Field-harvest release: everything learned in the v4.x/vC1 arc after v2.5.0 — the robust joint-phase objective, the excess-phase boost gate, the validated center-fill remedy — plus scipy soft-degradation so the new modules never brick a lean install.
