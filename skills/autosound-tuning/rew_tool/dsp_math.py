@@ -3,25 +3,42 @@ All responses are complex numpy arrays over an arbitrary frequency vector,
 digital-domain at FS=96000 (matches Helix DSP Ultra S).
 """
 import numpy as np
-from scipy.signal import bessel, butter, freqz
 
 FS = 96000.0
 
 
 # ---------- crossover filters (same conventions as v2, minus Chebyshev) ----------
+# scipy is needed ONLY here (Bessel/Butterworth design). Everything else in
+# this module — PEQ/shelf/APF responses, alignment, APF search, robust
+# metrics, greedy EQ fit — is pure numpy and must keep working without scipy
+# (soft degradation: an install without scipy can still run eq_gate and all
+# joint-phase analysis; only crossover REALIZATION needs the extra dep).
+
+def _scipy_signal():
+    try:
+        from scipy import signal
+        return signal
+    except ImportError as e:
+        raise RuntimeError(
+            "dsp_math.xo_response needs scipy for crossover design "
+            "(Bessel/Butterworth/LR). Install it: pip install scipy. "
+            "PEQ/APF/joint-phase functions work without it.") from e
+
 
 def _design(order_db_per_oct, wn, btype, ftype):
+    sig = _scipy_signal()
     n = max(1, round(order_db_per_oct / 6))
     if ftype == "BE":
         # norm="mag" (-3 dB at the corner) matches REW's BE shapes, verified
         # against REW predicted responses 2026-07-12 (norm="phase" gave up to
         # 27 dB transfer-function error on BE12/BE18 channels)
-        return bessel(n, wn, btype=btype, norm="mag")
-    return butter(n, wn, btype=btype)
+        return sig.bessel(n, wn, btype=btype, norm="mag")
+    return sig.butter(n, wn, btype=btype)
 
 
 def xo_response(freqs_hz, corner_hz, order_db_per_oct, kind, ftype):
     """Complex response of one HPF/LPF slot. kind: 'hp'|'lp'. ftype: 'BW'|'BE'|'LR'."""
+    freqz = _scipy_signal().freqz
     wn = min(max(corner_hz / (FS / 2.0), 1e-4), 0.999)
     btype = "highpass" if kind == "hp" else "lowpass"
     w = 2 * np.pi * freqs_hz / FS

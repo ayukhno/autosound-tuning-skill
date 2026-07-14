@@ -117,7 +117,14 @@ class ExcessPhaseGate:
 
 
 def _selftest():
-    from scipy.signal import hilbert
+    # scipy here is TEST-ONLY (Hilbert builds the synthetic min-phase
+    # reference); the gate itself is pure numpy and works without scipy
+    try:
+        from scipy.signal import hilbert
+    except ImportError:
+        print("selftest SKIPPED -- scipy not installed (needed only to "
+              "synthesize the test combs; the gate itself is scipy-free)")
+        return
 
     n = 2 ** 14
     f = np.linspace(1.0, 8000.0, n)
