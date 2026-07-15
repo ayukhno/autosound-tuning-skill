@@ -22,7 +22,7 @@ It covers a full tune, from a new project through crossovers, time alignment, ph
 
 ## Getting Started
 
-This skill runs as a plugin for **Claude Code** (the official terminal agent by Anthropic). If you don't have it yet, the FAQ below has copy-paste macOS/Windows install steps (a paid Claude subscription is required; see the FAQ for cost paths).
+This skill runs as a plugin for **Claude Code** (the official terminal agent by Anthropic). If you don't have it yet, the FAQ below has copy-paste macOS/Windows install steps (a paid Claude subscription is required; see the FAQ for cost paths — and for [why a full session uses fewer tokens than you'd expect](FAQ.md#why-a-full-session-uses-fewer-tokens-than-youd-expect)).
 
 Inside your active Claude Code session, run these commands **one by one** (do not copy and paste them together):
 

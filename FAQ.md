@@ -11,6 +11,7 @@ Have a question that isn't here? Open a [discussion or issue](../../issues) and 
   - [Why We Need Specialized AI & Local State](#why-we-need-specialized-ai--local-state)
   - [The 5-Step Tuning Journey](#the-5-step-tuning-journey)
   - [Subscription Options, Quotas, & Budgets (As of July 2026)](#subscription-options-quotas--budgets-as-of-july-2026)
+  - [Why a full session uses fewer tokens than you'd expect](#why-a-full-session-uses-fewer-tokens-than-youd-expect)
 - [First-Time Setup (Claude Code)](#first-time-setup-windows-claude-code--antigravity)
   - [Quick Installation (macOS & Windows)](#quick-installation-claude-code)
   - [Authentication & Plugin Setup](#authentication--plugin-setup-cross-platform)
@@ -84,6 +85,18 @@ In car audio, enthusiasts easily spend hundreds or thousands of dollars on physi
   You keep a paid Claude Pro subscription ($20) for the main structured "driver" agent and use a funded [Google Cloud Console Billing](https://console.cloud.google.com/billing) account for the Gemini API Critic/Advisor.
   * **Pros:** This is the absolute peak of the dual-AI review loop. It eliminates all rate limits, prevents "API quota exhausted" errors, and allows you to tune continuously without pauses. This is highly recommended for professionals, people tuning multiple cars, or those running deep, back-to-back testing sessions.
   * **Cons:** Costs $20 plus pay-as-you-go API usage (which typically amounts to just a few cents or dollars per session drawn from your Google Cloud deposit).
+
+### Why a full session uses fewer tokens than you'd expect
+
+A real full in-car session (bass shaping, HF imaging, and a first-pass rear-fill — with measured verification of every step, on the most capable Claude model) consumed noticeably less quota than casual chat use would suggest. That's not luck; it's what the skill's "token-smart" design does, and it's worth knowing so you can keep it that way:
+
+1. **Raw measurement data never enters the chat.** A REW sweep is thousands of data points, but they live inside local Python scripts; only digests come back to the conversation ("zone median +5.3 dB", a five-row joint table). Analysis costs tokens proportional to the *conclusion*, not to the *data*. This is the single biggest factor — and the main economic difference from the copy-paste manual method, where curves have to be described in text both ways.
+2. **State lives on disk, not in the context.** The DSP ledger and changelog are re-read in slices when needed; the AI never re-narrates the project history to itself turn after turn. Session summaries are appended to files, not repeated in chat.
+3. **The phase sliding window.** Only the active phase's reference doc (plus its neighbor) is loaded — never the whole knowledge corpus.
+4. **Round-based review cadence.** One Critic call per round on the whole batch (not per-parameter), escalating to two passes only at phase gates — a handful of compact review packages per session instead of dozens.
+5. **The Arbiter matters too.** Precise listening verdicts, measuring proactively, and a screenshot instead of a description save whole clarification round-trips — the cheapest tokens are the ones never spent.
+
+Practical takeaway: a structured tuning session on a strong model is dominated by *decisions*, not *chatter* — so the strong model is affordable exactly where it counts. If your sessions feel token-hungry, check you're running with the local scripts (not the manual copy-paste path) and resuming from disk state (`/clear` + resume) rather than carrying one endless conversation.
 
 ---
 
