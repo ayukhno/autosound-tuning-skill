@@ -47,6 +47,12 @@ Collaboration, not competition. Don't characterize a colleague's answer ("a weak
 ### Default cadence — ONE critique call per round
 The default review is **one** stateless critique pass on the **round's whole batch** (crossovers+levels, or the full EQ plan) — not per-parameter, not two-pass. Package → critique → Arbiter. This keeps the loop fast; the escalations below are for specific symptoms, not routine.
 
+### Triage the critique: verify NUMBERS by script, adopt PHYSICS as redesign
+A critic's objections come in two kinds, and they earn different responses (field-validated, 2026-07-15, two rounds vs Gemini 3.1 Pro):
+- **Numeric/predictive claims** ("this EQ will degrade the joint") — **verify immediately with the measured data + the filter model** before arguing or complying. In both live rounds the prediction was wrong (the cut *improved* the joint, measured robust −2.08 → −1.78), and a one-script check settled in minutes what argument would not have.
+- **Physical-mechanism claims** ("a virtual-layer cut also thins the mid's DIRECT sound while the door's reverberant excess stays"; "split the correction ±1 dB across both sides instead of +2 on one") — these don't reduce to a number you already hold; **treat them as design input**. In the same rounds, both physics objections reshaped the final package for the better.
+The failure mode this prevents: winning the numeric exchange and concluding the critic was useless — the numbers were mine to check, the physics was the critic's real contribution.
+
 ### TWO-PASS — anti-anchoring (escalation, not default)
 **When:** phase gates (Phase-1 strategy, Phase-3 verdict), or when the reviewer has **fully agreed twice in a row** — that agreement pattern is the disease: it ratifies your frame instead of checking it. The anchor sits in the **conclusion baked into the question**, not in memory.
 1. **Pass 1 — OPEN:** the raw data + neutral facts + an **open question WITHOUT your conclusion / hints** ("what's your read?") → an independent diagnosis.

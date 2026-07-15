@@ -36,3 +36,10 @@ Not a separate control, but a consequence: clean joint phase + a refined (not bl
 Cabin single-position phase/GD are unusable (diagnostic §10) — confirmed for depth too. The hypothesis "an L/R phase hole on the vocal body 230–320 eats the body" was **DISPROVED by summation** (the measured mid sum at 230–320 matched the power-sum ±1 → the body is NOT cancelled). So: depth changes **by ear**, with **summation+magnitude** as the only reliable checks. Every change reversible, in a **depth PRESET** (the voicing layer), the base untouched.
 
 > **A provisional set of depth levers (validate in practice):** presence shaping 2–5k (less = farther) · HF tilt (rolled-off = a distant plane) · clean joint phase (opens depth) · direct/reflected (+ rear if it's engaged) · bass weight (the main one, verified).
+
+## 8. BASS-image height and sub forward-masking live in the front's upper-bass (130–500) *(one build, 2026-07)*
+
+LF itself has no vertical cue — the bass image sits where its **harmonics** image, and those come from the front stage. Two field-validated consequences:
+
+- **Cutting 250–430 on the side that "shines" from the pillars steals the bass image's HEIGHT.** A hot left-side 250–430 (both midbass skirt AND pillar-mid skirt — LHD near-side gain) pulled lower mids left and boomed; the per-branch cuts fixed both diseases, but the bass image dropped from the windshield to the bottom of the dash — the pillar-height harmonic energy had been doing vertical work. **The symmetric compensator: a small in-band PK lift on the mid PAIR** (here PK 520 +1.2 Q1.8 — inside the mids' passband, NOT their skirt) restored the height ("sub on the hood") without re-adding the L/R skew. Cut the disease per-side, restore the height per-pair.
+- **The front's 130–250 punch zone forward-masks the trunk sub.** Over-cutting it (see the phase-2 "summed package curve" rule) audibly unmasked the sub — it localized rearward at normal listening levels; softening the cut re-anchored the bass front. If the sub "moves back" right after front midbass EQ, suspect the front anchor before touching the sub.

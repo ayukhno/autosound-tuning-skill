@@ -74,6 +74,8 @@ So **launch Claude from the project directory** (CWD = the car you're tuning). `
 
 > ⚠️ If the Critic ever cites a vehicle/history you don't recognise, it loaded a *different* project's context — fix the path here (or `PROJECT_MIRROR`), don't argue with the output.
 
+> ⚠️ **Keep the mirror's `autosound_context.md` CURRENT — the Critic grades you against it.** Field case (2026-07-15): a mirror assembled from a stale copy (predating the build's center channel) made the Critic flag the Generator's *correct* statement as "context drift — re-read the config". When you assemble/copy a `PROJECT_MIRROR` for the wrappers, reconcile the context file with the live ledger/state first (append a dated ADDENDUM with the current channel map and active preset if the original is user-owned). A critic on stale context spends its round policing ghosts.
+
 ## 6. Smoke-test before you rely on it
 
 `--doctor` (top of file) already runs a live smoke. Or by hand after any CLI/model change:

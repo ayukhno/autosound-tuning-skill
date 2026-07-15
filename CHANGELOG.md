@@ -2,6 +2,20 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
+## [v2.6.1] — 2026-07-15
+
+Field-harvest release from a full in-car session (bass form → HF edges → rear-fill, driven by Fable 5 with Gemini 3.1 Pro as Critic): seven confirmed lessons folded into doctrine and device knowledge. No engine changes.
+
+### Added
+- **Rear-fill worked example in Phase-5 §6** — the doctrine recipe validated first-pass on a live build: differential ±50% feed on the DSP's virtual channels, HPF 315 / LPF 4000 LR24, per-side Haas delays from MEASURED arrivals (+~9 ms, sides differ when the rears sit asymmetrically), one PK flattening the rears' own hump. Plus the practical rules that made it work: **verify the matrix with correlated pink (rears must go SILENT; a positive test needs decorrelated material)** and **judge level by MUTE-CONTRAST, not by hearing the rear** — a correct differential rear is nearly inaudible as a source.
+- **`staging-depth.md` §8 — bass-image height & sub forward-masking live in the front's upper-bass (130–500):** cutting 250–430 on the pillar-lit side steals the bass image's height (fix the L/R disease per-side, restore height with a small symmetric in-band PK on the mid PAIR — field result "sub on the hood"); over-cutting the front's 130–250 punch unmasks the trunk sub (it localizes rearward) — suspect the front anchor before touching the sub.
+- **Phase-2 rule: score the package's SUMMED curve per channel** — overlapping PK skirts stack (live case: −5.1 dB delivered where −3.5 was intended, audible regression); compute the product of all new filters (`dsp_math.peq_response`) before issuing a settings sheet.
+- **THD null-artifact disqualifier** (Phase-0 flaw-map item 4 + `rew-api-quirks.md`): in a deep null the fundamental collapses while harmonics radiate outside it → THD % explodes with a QUIET fundamental. Read the fundamental-dB column next to THD % — a spike counts as mechanical only at a healthy fundamental. Resolves the B8 card's "4.8 % @ 160 Hz" verify item: **mechanics cleared**.
+- **`review-loop.md` — critique triage: verify NUMBERS by script, adopt PHYSICS as redesign.** Both live rounds: the critic's numeric predictions lost to a one-script check against measured data, while its physical-mechanism objections (direct/reflected balance; split the correction across both sides) reshaped the final package for the better.
+- **`setup-critic-channel.md` — keep the mirror's context CURRENT:** a stale `autosound_context.md` copy made the Critic police ghosts ("context drift" flagged on a correct statement); reconcile the mirror with the live ledger (dated ADDENDUM) when assembling `PROJECT_MIRROR`.
+- **Helix Ultra S profile:** delays up to **20.82 ms on BOTH output and virtual channels — they SUM** (enter in one layer only); virtual-mixer legs take **signed percentages** → true differential rear feed works; **RearRC** (Conductor) = live rear-level knob on the `[RearATT]` virtuals — a ready-made ear-ladder.
+- **B8 car card:** near-side 250–430 excess carried by BOTH branches (w and m) — check both before assigning it to one; rear-fill worked config (verify-only).
+
 ## [v2.6.0] — 2026-07-14
 
 "How we look" release — three of the tuner's seeing disciplines turned into tools and wired into the phase pipeline, all validated on live data the day they were built. Headed to AYA/EMMA with the source build.

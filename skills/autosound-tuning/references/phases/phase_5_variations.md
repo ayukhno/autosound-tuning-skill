@@ -68,6 +68,12 @@ Goal: a sense of **envelopment** without dragging the front stage back.
 * **Level** — quiet enough to be inaudible from the front, but missed when muted.
 * After: **re-check the full system by ear** (center/rear must not have dragged the front back) and log to `dsp-state-current`.
 
+**Field-validated worked example (first-pass success, 2026-07-15, Helix Ultra S):** differential feed ±50% on the rear VIRTUAL channels (mixer with signed legs; whole-output polarity INV can't build this) · HPF 315 LR24 / LPF 4000 LR24 · one PK per side flattening the rears' own 600–1200 hump (−4.5/−5.5 Q1.5) · delays from MEASURED arrivals: rear arrives (front − rear arrival) + ~9 ms later on BOTH sides (per-side delays differ when the rears sit asymmetrically — here 12.0/9.5 ms) · level via a remote knob ladder. Practical rules that made it work:
+- **Verify the matrix with correlated pink: the rears must go SILENT.** Silence on ordinary (correlated) pink = the differential is wired right; for a *positive* test you need decorrelated material — a live/hall track or uncorrelated dual-mono pink (`test-tracks.md`).
+- **Judge level by MUTE-CONTRAST, not by hearing the rear:** a correct differential rear is nearly inaudible as a source. Raise until the hall "wraps", step back, then A/B mute — "flatter/poorer without it" = right level; "no difference" = go up. Expect the knob higher than intuition suggests (the diff feed is −6 dB on centered content by construction).
+- On mostly-mono tracks the rear correctly goes near-silent — don't chase level on those.
+- Rear arrival onsets are usually ILL-POSED (`arrival_triangulate`) — fine for Haas: ±0.5 ms doesn't matter inside an 8–10 ms window.
+
 > Refs: center → [`diagnostic-techniques.md` §20](file:///skills/autosound-tuning/references/core/diagnostic-techniques.md) · rear → [`voicing-by-ear.md` §Rear](file:///skills/autosound-tuning/references/patterns/voicing-by-ear.md).
 
 ---
