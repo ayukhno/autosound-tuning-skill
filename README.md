@@ -84,7 +84,7 @@ autosound-tuning-skill/        a Claude Code plugin
     └── curves.html     target-curve visualizer
 ```
 
-The independent-review method (Critic/Advisor/Arbiter, anti-anchoring) is bundled as `references/core/review-loop.md`.
+The independent-review method (Critic/Advisor/Arbiter, anti-anchoring) is bundled as `references/core/review-loop.md`. **To see it working on a real hard call** — one bass problem, two critique rounds, every role wrong once and the loop catching all of it — read the [case study from a live session](case-study-mode-a-bass-2026-07-15.md).
 
 A separate, stateless web-chat version of the method, with no local install, lives on the [manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step) branch.
 
