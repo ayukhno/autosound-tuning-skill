@@ -44,7 +44,15 @@ Three voices: **you** at the listening seat, **Claude** driving the process, **G
 >
 > **You:** …The sub is on the hood! Leaving it.
 
-About two hours from "it booms" to "the sub is on the hood" — a problem that usually eats weeks of forum-guided trial and error. The measurements kept the ear honest, the ear caught what the model couldn't predict, and the critic stopped a crossover mistake before it reached the hardware: every participant caught something the others missed, and the loop resolved all of it. The full technical version, with every number: [the case study](case-study-mode-a-bass-2026-07-15.md).
+About forty minutes from "it booms" to "the sub is on the hood" — a problem that usually eats weeks of forum-guided trial and error. The measurements kept the ear honest, the ear caught what the model couldn't predict, and the critic stopped a crossover mistake before it reached the hardware: every participant caught something the others missed, and the loop resolved all of it. The full technical version, with every number: [the case study](case-study-mode-a-bass-2026-07-15.md).
+
+**The math under the hood of those quick answers** (local scripts, your measurements never leave your machine):
+
+- **Jitter-robust phase summation** — every crossover-joint verdict is scored under small delay/level perturbations, so the fix survives real-world drift instead of winning at one razor point;
+- **Hardware-verified filter models** — each proposed EQ/all-pass is simulated on your *measured* complex responses before you type it in (the models were validated against the DSP itself);
+- **An excess-phase "boostability" gate** — tells a fillable dip from an interference null, so the skill never asks a driver to fight physics;
+- **Four-estimator arrival triangulation** — instead of trusting one impulse peak, four independent timing reads must agree before any delay is touched, otherwise the skill says so and switches method;
+- **Fundamental-aware distortion reading** — THD spikes are cross-checked against the fundamental's level, so a room null is never misdiagnosed as a broken driver.
 
 ## Getting Started
 
