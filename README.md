@@ -58,7 +58,7 @@ Three voices: **you** at the listening seat, **Claude** driving the process, **G
 
 About forty minutes from "it booms" to "the sub is on the hood" — a problem that usually eats weeks of forum-guided trial and error. The measurements kept the ear honest, the ear caught what the model couldn't predict, and the critic stopped a crossover mistake before it reached the hardware: every participant caught something the others missed, and the loop resolved all of it. The full technical version, with every number: [the case study](case-study-mode-a-bass-2026-07-15.md).
 
-**The math under the hood** — of these quick answers, and of the whole method (local scripts; your measurements never leave your machine):
+**The math under the hood** — a library of scripts that crunches huge data sets locally, so it never burns model tokens on it:
 
 - **A cabin & install flaw map, built before any tuning** — from the very first baseline sweeps the scripts map your car's real physics: door nulls and reflections, which defects are EQ-able and which are acoustics, where the left/right pair decorrelates into "pockets" no stereo EQ can fill — so crossovers and EQ are planned *around* the cabin, and the truly unfixable gets named honestly (with remedies like a complementary center-fill where one is warranted);
 - **Multi-scale curve reading** — every response is read at three "distances" (broad trend → macro shape → fine residual), and each feature is routed to the discipline that owns it: voicing, verification, a surgical cut, or "leave it, that's the room";

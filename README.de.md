@@ -58,7 +58,7 @@ Drei Stimmen: **du** auf dem Hörplatz, **Claude**, der den Prozess führt, **Ge
 
 Etwa vierzig Minuten von „es dröhnt" bis „der Bass sitzt auf der Motorhaube" — ein Problem, das sonst Wochen forumsgeleiteten Ausprobierens frisst. Die Messungen hielten das Ohr ehrlich, das Ohr erkannte, was das Modell nicht vorhersagen konnte, und der Kritiker stoppte einen Weichenfehler, bevor er in der Hardware landete: jeder Teilnehmer erkannte etwas, das die anderen übersehen hatten, und die Schleife löste alles davon. Die vollständige technische Version, mit jeder Zahl: [die Fallstudie](case-study-mode-a-bass-2026-07-15.md).
 
-**Die Mathematik dahinter** — sowohl dieser schnellen Antworten als auch der gesamten Methode (lokale Skripte; deine Messungen verlassen nie deinen Rechner):
+**Die Mathematik dahinter** — eine Skript-Bibliothek, die riesige Datenmengen lokal verarbeitet und dabei keine Modell-Tokens verbrennt:
 
 - **Eine Innenraum- und Einbau-Fehlerkarte, erstellt vor jedem Tuning** — schon aus den ersten Grundmessungen kartieren die Skripte die reale Physik deines Autos: Türresonanzen und Reflexionen, welche Defekte EQ-fähig sind und welche Akustik sind, wo das linke/rechte Paar in „Taschen" dekorreliert, die kein Stereo-EQ füllen kann — so werden Weichen und EQ *um den Innenraum herum* geplant, und das wirklich Unreparierbare wird ehrlich benannt (mit Abhilfen wie einem komplementären Center-Fill, wo einer gerechtfertigt ist);
 - **Mehrskaliges Kurvenlesen** — jede Antwort wird auf drei „Distanzen" gelesen (breiter Trend → Makroform → feiner Rest), und jedes Merkmal wird der Disziplin zugeordnet, der es gehört: Voicing, Verifikation, ein chirurgischer Schnitt oder „lass es, das ist der Raum";

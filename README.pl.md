@@ -58,7 +58,7 @@ Trzy głosy: **ty** na miejscu odsłuchowym, **Claude** prowadzący proces, **Ge
 
 Około czterdziestu minut od „dudni" do „bas jest na masce" — problem, który zwykle pochłania tygodnie prób i błędów prowadzonych przez fora. Pomiary trzymały ucho w ryzach, ucho złapało to, czego model nie przewidział, a krytyk zatrzymał błąd zwrotnicy, zanim trafił do sprzętu: każdy uczestnik złapał coś, co przeoczyli inni, a pętla to wszystko rozwiązała. Pełna techniczna wersja, z każdą liczbą: [studium przypadku](case-study-mode-a-bass-2026-07-15.md).
 
-**Matematyka pod maską** — zarówno tych szybkich odpowiedzi, jak i całej metody (lokalne skrypty; twoje pomiary nigdy nie opuszczają twojego komputera):
+**Matematyka pod maską** — biblioteka skryptów, która przetwarza ogromne zbiory danych lokalnie i nie spala tokenów modelu:
 
 - **Mapa wad kabiny i instalacji, budowana przed jakimkolwiek strojeniem** — już od pierwszych pomiarów bazowych skrypty mapują prawdziwą fizykę twojego auta: zera drzwiowe i odbicia, które wady są podatne na EQ, a które to akustyka, gdzie para lewo/prawo dekoreluje się w „kieszenie", których żaden stereo EQ nie wypełni — dzięki temu zwrotnice i EQ są planowane *wokół* kabiny, a to, co naprawdę nienaprawialne, jest uczciwie nazwane (z remedium jak komplementarny center-fill tam, gdzie jest uzasadniony);
 - **Wieloskalowe czytanie krzywych** — każda odpowiedź jest czytana z trzech „odległości" (szeroki trend → kształt makro → subtelna reszta), a każda cecha jest kierowana do dyscypliny, do której należy: voicing, weryfikacja, chirurgiczne cięcie, albo „zostaw, to kabina";
