@@ -13,6 +13,18 @@
 > [!CAUTION]
 > AI can get numbers wrong. Always double-check crossover frequencies, slopes, and EQ values in your DSP before unmuting, especially on tweeters, and start at a low volume.
 
+## Table of Contents
+
+- [Who it's for & Why](#who-its-for--why)
+- [What that loop sounds like (a real session, condensed)](#what-that-loop-sounds-like-a-real-session-condensed)
+- [Getting Started](#getting-started)
+- [Recommended Models, Modes & My Take](#recommended-models-modes--my-take)
+- [Full Setup & FAQ](#full-setup--faq)
+- [What's in here](#whats-in-here)
+- [Contributing your experience](#contributing-your-experience)
+- [Support](#support)
+- [License](#license)
+
 ## Who it's for & Why
 
 * **Who it's for:** For those building sound in their car and learning this craft. It's your exoskeleton (powered by your hearing and actions where direct software interfaces don't exist) that manages knowledge and experience so you can tune your car's audio.
@@ -78,6 +90,12 @@ Inside your active Claude Code session, run these commands **one by one** (do no
 
 > **Triggering — include a car-audio word.** The skill wakes on *what you ask*, so a bare `resume` on its own won't fire it (too generic — it could mean any project). Add one domain word: **"resume my car-audio tune"**, **"continue tuning the car"**, **"what's my current DSP / crossover state"** (or in your language — «продовжити тюн авто», „Auto-DSP weiter einmessen", „wróćmy do strojenia car audio"). Same for a fresh start: name the car/audio, not just "help me".
 
+**Starting under Gemini as the driver:** not quite as fast as Claude Code, at least not yet. There is no plugin installer for it, but the quickest path is to point an agentic Gemini session (Antigravity CLI, or any Gemini setup with file and shell access) at the repo and ask it directly:
+
+> Clone https://github.com/ayukhno/autosound-tuning-skill, read `skills/autosound-tuning/SKILL.md`, and follow that method as your operating instructions for this session.
+
+See the FAQ for more detail.
+
 ## Recommended Models, Modes & My Take
 
 The skill supports two ways to run it, ranked by reliability. Pick based on how much the tune matters versus how much setup you want to do:
@@ -93,12 +111,6 @@ The skill supports two ways to run it, ranked by reliability. Pick based on how 
 * **Gemini drives, with Claude or a stronger Gemini model as the reviewer:** much faster. After two full measurement rounds, I already had a first working version. But later in the session, it can start to hallucinate or lose track of earlier decisions, to the point where I wanted to switch back to Claude. I have not tried this with free Gemini, because of the limits — lifting Gemini's free-tier rate limits needs a paid Google Cloud billing account (the [FAQ's cost paths](FAQ.md#subscription-options-quotas--budgets-as-of-july-2026) cover the current deposit / free-credit details, which change often). If you pay for API access either way, Mode A ends up cheaper overall.
 * **The manual step-by-step version (no local scripts):** it works, but the copy-paste process is stressful. You have to be careful not to lose any value along the way. After trying a full session with real memory between messages, it takes effort to go back to this.
 * **Which model to trust as driver, so far:** **Claude Opus** has given the most consistently stable results. **Sonnet 5** works but still comes across as less sure of itself in this role — worth double-checking its calls for now. **Fable 5** has produced the best results of any model: it audited and rebuilt the skill while running a full tuning session (see [audit-fable-2026-07-11.md](audit-fable-2026-07-11.md)), and then drove a second full in-car session on the simplified rules (bass shape → HF imaging → a first-pass rear-fill in one sitting, with measured verification of every step) — that build is currently the best-sounding result I have. **Gemini** lost some capability as the process rules grew more complex; after the audit simplified them, Gemini 3.1 Pro has now been re-verified in the **Critic** role (two live review rounds — its physics objections genuinely improved the final settings, its numeric predictions still need checking against the data). Gemini as the *driver* under the new rules is still unverified — feedback from the community is welcome here.
-
-**Starting under Gemini as the driver:** not quite as fast as Claude Code, at least not yet. There is no plugin installer for it, but the quickest path is to point an agentic Gemini session (Antigravity CLI, or any Gemini setup with file and shell access) at the repo and ask it directly:
-
-> Clone https://github.com/ayukhno/autosound-tuning-skill, read `skills/autosound-tuning/SKILL.md`, and follow that method as your operating instructions for this session.
-
-See the FAQ for more detail.
 
 ## Full Setup & FAQ
 
