@@ -27,10 +27,10 @@
 
 ## Dla kogo i dlaczego
 
-* **Dla kogo:** Dla tych, którzy budują dźwięk w samochodzie i uczą się tego rzemiosła. To twój egzoszkielet (napędzany twoim słuchem i działaniami tam, gdzie nie ma bezpośrednich interfejsów oprogramowania), który zarządza wiedzą i doświadczeniem, żebyś mógł nastroić dźwięk swojego auta.
+* **Dla kogo:** Dla tych, którzy budują dźwięk w samochodzie i uczą się tego rzemiosła. To twój egzoszkielet: on niesie wiedzę i doświadczenie rzemiosła, ty wnosisz uszy i ręce na DSP.
 * **Dlaczego:** Strojenie to lawina: zbyt wiele metod, parametrów i reguł, by utrzymać je w głowie, i łatwo zanurzyć się w jednym szczególe i zgubić cały obraz. Skill jest twoim nawigatorem: trzyma wiedzę, wskazuje te kilka zmian, które naprawdę się liczą, i utrzymuje w polu widzenia kompromis między sceną a balansem tonalnym. Twoje ucho jest ostatecznym sędzią.
 
-Obejmuje pełne strojenie, od nowego projektu przez zwrotnice, korekcję czasową, fazę, EQ kanałowy i sumaryczny, budowę sceny, aż po voicing pod własny gust — plus opcjonalne warstwy przestrzenne (komplementarny **center-fill** i różnicowy **rear-fill**, oba przepisy zweryfikowane w praktyce) — sterowane pętlą recenzji **Generator ↔ Krytyk ↔ Arbiter**.
+Obejmuje pełne strojenie: od nowego projektu przez zwrotnice, korekcję czasową, fazę, EQ kanałowy i sumaryczny oraz budowę sceny, aż po voicing pod własny gust — plus opcjonalne warstwy przestrzenne (komplementarny **center-fill** i różnicowy **rear-fill**, oba przepisy zweryfikowane w praktyce). Każda zmiana przechodzi przez pętlę recenzji **Generator ↔ Krytyk ↔ Arbiter**: jedno AI proponuje, drugie kwestionuje, ty decydujesz.
 
 ## Jak wygląda prawdziwa praca i synergia różnych AI
 
@@ -38,7 +38,7 @@ Trzy głosy: **ty** na miejscu odsłuchowym, **Claude** prowadzący proces, **Ge
 
 > **Ty (Arbiter):** Kontrabas trochę dudni. A kiedy przesunąłem opóźnienia na słuch, bas brzmiał lepiej — wprowadźmy moje wartości?
 >
-> **Claude (Orkiestrator):** Najpierw sprawdzone na świeżych pomiarach: twoje opóźnienia są już optymalne — twoje ucho polubiło coś innego. Prawdziwi winowajcy to dwa wąskie rezonanse drzwi i zbyt głośna lewa strona. Proponuję trzy chirurgiczne cięcia.
+> **Claude (Generator):** Najpierw sprawdzone na świeżych pomiarach: twoje opóźnienia są już optymalne — twoje ucho polubiło coś innego. Prawdziwi winowajcy to dwa wąskie rezonanse drzwi i zbyt głośna lewa strona. Proponuję trzy chirurgiczne cięcia.
 >
 > **Gemini (Krytyk):** Sprzeciw: jedno z tych cięć siedzi w punkcie podziału zwrotnicy — może zepsuć tam sumowanie.
 >
@@ -56,21 +56,21 @@ Trzy głosy: **ty** na miejscu odsłuchowym, **Claude** prowadzący proces, **Ge
 >
 > **Ty:** …Bas jest na masce! Zostawiam tak.
 
-Około czterdziestu minut od „dudni" do „bas jest na masce" — problem, który zwykle pochłania tygodnie prób i błędów prowadzonych przez fora. Pomiary trzymały ucho w ryzach, ucho złapało to, czego model nie przewidział, a krytyk zatrzymał błąd zwrotnicy, zanim trafił do sprzętu: każdy uczestnik złapał coś, co przeoczyli inni, a pętla to wszystko rozwiązała. Pełna techniczna wersja, z każdą liczbą: [studium przypadku](case-study-mode-a-bass-2026-07-15.md).
+Około czterdziestu minut od „dudni" do „bas jest na masce" — problem, który zwykle pochłania tygodnie prób i błędów prowadzonych przez fora. Każdy uczestnik złapał coś, co przeoczyli inni, a pętla to wszystko rozwiązała. Pełna techniczna wersja, z każdą liczbą: [studium przypadku](case-study-mode-a-bass-2026-07-15.md).
 
 **Matematyka pod maską** — biblioteka skryptów, która przetwarza ogromne zbiory danych lokalnie i nie spala tokenów modelu:
 
-- **Mapa wad kabiny i instalacji, budowana przed jakimkolwiek strojeniem** — już od pierwszych pomiarów bazowych skrypty mapują prawdziwą fizykę twojego auta: zera drzwiowe i odbicia, które wady są podatne na EQ, a które to akustyka, gdzie para lewo/prawo dekoreluje się w „kieszenie", których żaden stereo EQ nie wypełni — dzięki temu zwrotnice i EQ są planowane *wokół* kabiny, a to, co naprawdę nienaprawialne, jest uczciwie nazwane (z remedium jak komplementarny center-fill tam, gdzie jest uzasadniony);
-- **Wieloskalowe czytanie krzywych** — każda odpowiedź jest czytana z trzech „odległości" (szeroki trend → kształt makro → subtelna reszta), a każda cecha jest kierowana do dyscypliny, do której należy: voicing, weryfikacja, chirurgiczne cięcie, albo „zostaw, to kabina";
-- **Sumowanie fazowe odporne na jitter** — każdy werdykt o złączu zwrotnicy jest oceniany pod małymi zaburzeniami opóźnienia/poziomu, żeby poprawka przetrwała rzeczywisty dryf, zamiast wygrywać tylko w jednym brzytwo-ostrym punkcie;
-- **Modele filtrów zweryfikowane sprzętowo** — każdy proponowany EQ/all-pass jest symulowany na twoich *zmierzonych* odpowiedziach zespolonych, zanim go wpiszesz (modele zostały zwalidowane względem samego DSP);
-- **Bramka „podatności na wzmocnienie" excess-phase** — odróżnia dołek, który można wypełnić, od zera interferencyjnego, więc skill nigdy nie każe głośnikowi walczyć z fizyką;
-- **Triangulacja przyjścia z czterech estymatorów** — zamiast ufać jednemu szczytowi impulsu, cztery niezależne odczyty czasowe muszą się zgodzić, zanim jakiekolwiek opóźnienie zostanie ruszone — inaczej skill to mówi i zmienia metodę;
-- **Odczyt zniekształceń świadomy tonu podstawowego** — skoki THD są krzyżowo sprawdzane względem poziomu tonu podstawowego, więc zero pokojowe nigdy nie jest błędnie zdiagnozowane jako uszkodzony głośnik.
+- **Mapa wad kabiny i instalacji jeszcze przed strojeniem** — zera drzwiowe, odbicia i „kieszenie" L/P, których żaden stereo EQ nie wypełni, są mapowane z pierwszych pomiarów — dzięki temu EQ jest planowany *wokół* kabiny, zamiast z nią walczyć;
+- **Wieloskalowe czytanie krzywych** — każda krzywa jest czytana z trzech „odległości" (trend → kształt → drobne szczegóły), a każde znalezisko idzie do właściwego narzędzia: voicing, weryfikacja, chirurgiczne cięcie, albo „zostaw, to kabina";
+- **Sumowanie fazowe odporne na jitter** — poprawki punktów podziału zwrotnic są oceniane pod małym dryfem opóźnienia/poziomu, żeby przetrwały rzeczywisty świat, zamiast wygrywać w jednym brzytwo-ostrym punkcie;
+- **Modele filtrów zweryfikowane sprzętowo** — każdy proponowany EQ/all-pass jest symulowany na twoich *zmierzonych* odpowiedziach, zanim go wpiszesz;
+- **Bramka „podatności na wzmocnienie" excess-phase** — odróżnia dołek, który można wypełnić, od zera interferencyjnego: żaden głośnik nie będzie walczył z fizyką;
+- **Triangulacja przyjścia z czterech estymatorów** — cztery niezależne odczyty czasowe muszą się zgodzić, zanim jakiekolwiek opóźnienie zostanie ruszone;
+- **Odczyt zniekształceń świadomy tonu podstawowego** — skoki THD są sprawdzane względem poziomu tonu podstawowego, więc zero pokojowe nigdy nie jest błędnie zdiagnozowane jako uszkodzony głośnik.
 
 ## Pierwsze kroki
 
-Ten skill działa jako wtyczka do **Claude Code** (oficjalnego agenta terminalowego od Anthropic). Jeśli go jeszcze nie masz, w FAQ poniżej znajdziesz gotowe do wklejenia kroki instalacji na macOS/Windows (wymagana jest płatna subskrypcja Claude; ścieżki kosztowe też w FAQ — a tam też, [dlaczego pełna sesja zużywa mniej tokenów, niż można by się spodziewać](FAQ.md#why-a-full-session-uses-fewer-tokens-than-youd-expect)).
+Ten skill działa jako wtyczka do **Claude Code** (oficjalnego agenta terminalowego od Anthropic). Jeśli go jeszcze nie masz, w FAQ poniżej znajdziesz gotowe do wklejenia kroki instalacji na macOS/Windows; wymagana jest płatna subskrypcja Claude, a ścieżki kosztowe opisuje FAQ. Tam też przeczytasz, [dlaczego pełna sesja zużywa mniej tokenów, niż można by się spodziewać](FAQ.md#why-a-full-session-uses-fewer-tokens-than-youd-expect).
 
 Uruchom poniższe polecenia w aktywnej sesji Claude Code **jedno po drugim** (nie kopiuj i nie wklejaj ich razem):
 
@@ -107,10 +107,10 @@ Skill obsługuje dwa sposoby działania, uszeregowane według niezawodności. Wy
 
 **Moje własne doświadczenie jak dotąd** (to na razie tylko moje doświadczenie; gdy więcej osób nastroi z tym skillem, chcę, żeby to było doświadczenie społeczności, a nie tylko moje):
 
-* **Claude prowadzi, Gemini recenzuje (tryb A):** stabilnie, ale porusza się małymi krokami, więc może wydawać się trochę wolne. Trzeba zapłacić przynajmniej za Claude. Darmowy Gemini też działa, ale czasem trafia na swoje limity. Jeszcze jedno, co zauważyłem: Sonnet jest niezawodny, ale ostrożny, i często zatrzymuje się, by pytać o rzeczy, które Opus zwykle rozstrzyga sam, szybciej.
-* **Gemini prowadzi, z Claude lub mocniejszym modelem Gemini jako recenzentem:** dużo szybciej. Po dwóch pełnych rundach pomiarowych miałem już pierwszą działającą wersję. Ale później w sesji może zacząć halucynować lub gubić wcześniejsze decyzje, do tego stopnia, że chciałem wrócić do Claude. Nie próbowałem tego z darmowym Gemini, przez limity. Darmowy poziom Gemini ma twarde limity zapytań; żeby je znieść, potrzebne jest płatne konto rozliczeniowe Google Cloud, do którego aktywacji trzeba wpłacić minimum $10, a dla niektórych kart (np. ukraińskich) jest to realne obciążenie, nie tylko blokada środków. Nowe konta dostają przy tym obecnie też $300 darmowego kredytu, który wystarczy na całe strojenie, ale ten kredyt wygasa po 3 miesiącach i jest to bieżąca promocja, a nie gwarantowany warunek na przyszłość. Jeśli i tak płacisz za dostęp do API, tryb A wychodzi ogólnie taniej.
+* **Claude prowadzi, Gemini recenzuje (tryb A):** stabilnie, ale porusza się małymi krokami, więc może wydawać się trochę wolne. Trzeba zapłacić przynajmniej za Claude. Darmowy Gemini też działa, ale czasem trafia na swoje limity. Jeszcze jedno, co zauważyłem: Sonnet jest niezawodny, ale ostrożny, i często zatrzymuje się, by pytać o rzeczy, które Opus zwykle rozstrzyga sam, szybciej. Za to Sonnet oszczędniej gospodaruje tokenami, więc rzadziej trafiasz na limity użycia.
+* **Gemini prowadzi, z Claude lub mocniejszym modelem Gemini jako recenzentem:** dużo szybciej. Po dwóch pełnych rundach pomiarowych miałem już pierwszą działającą wersję. Ale później w sesji może zacząć halucynować lub gubić wcześniejsze decyzje, do tego stopnia, że chciałem wrócić do Claude. Nie próbowałem tego z darmowym Gemini, przez limity — żeby je znieść, potrzebne jest płatne konto rozliczeniowe Google Cloud ([ścieżki kosztowe w FAQ](FAQ.md#subscription-options-quotas--budgets-as-of-july-2026) opisują aktualne szczegóły depozytu i darmowych kredytów, które często się zmieniają). Jeśli i tak płacisz za dostęp do API, tryb A wychodzi ogólnie taniej.
 * **Ręczna wersja krok po kroku (bez lokalnych skryptów):** działa, ale sam proces kopiuj-wklej jest nerwowo napięty. Trzeba uważać, żeby po drodze niczego nie zgubić. Po pełnej sesji z prawdziwą pamięcią między wiadomościami trudno się do tego zmusić z powrotem.
-* **Który model jak dotąd jest najbardziej niezawodny jako prowadzący:** **Claude Opus** dawał dotychczas najstabilniejsze wyniki. **Sonnet 5** działa, ale jak dotąd wydaje się mniej pewny siebie w tej roli — warto na razie dokładniej sprawdzać jego decyzje. **Fable 5** dał najlepszy wynik ze wszystkich modeli: przeprowadził audyt i przebudował skill, jednocześnie prowadząc pełną sesję strojenia (zob. [audit-fable-2026-07-11.md](audit-fable-2026-07-11.md)), a potem poprowadził drugą pełną sesję w aucie według uproszczonych zasad (kształt basu → obrazowanie góry pasma → pierwszy przebieg rear-fill w jednym posiedzeniu, z pomiarową weryfikacją każdego kroku) — ten strój jest obecnie moim najlepszym wynikiem pod względem brzmienia. **Gemini** stracił trochę możliwości wraz ze wzrostem złożoności regulaminu; po tym, jak audyt go uprościł, Gemini 3.1 Pro zostało teraz ponownie zweryfikowane w roli **Krytyka** (dwie realne rundy recenzji — jego zastrzeżenia fizyczne rzeczywiście poprawiły finalne ustawienia, jego przewidywania liczbowe wciąż trzeba sprawdzać względem danych). Gemini jako *prowadzący* pod nowymi zasadami wciąż nie jest zweryfikowany — czekamy na opinie społeczności.
+* **Który model jak dotąd jest najbardziej niezawodny jako prowadzący:** **Claude Opus** dawał dotychczas najstabilniejsze wyniki. **Sonnet 5** działa, ale jak dotąd wydaje się mniej pewny siebie w tej roli — warto na razie dokładniej sprawdzać jego decyzje. **Fable 5** dał najlepszy wynik ze wszystkich modeli: przeprowadził audyt i przebudował skill, jednocześnie prowadząc pełną sesję strojenia (zob. [audit-fable-2026-07-11.md](audit-fable-2026-07-11.md)), a potem poprowadził drugą pełną sesję w aucie według uproszczonych zasad — ten strój jest obecnie moim najlepszym wynikiem pod względem brzmienia. **Gemini** stracił trochę możliwości wraz ze wzrostem złożoności regulaminu; po tym, jak audyt go uprościł, Gemini 3.1 Pro znów sprawdziło się w roli **Krytyka**, a Gemini jako *prowadzący* pod nowymi zasadami wciąż nie jest zweryfikowany — czekamy na opinie społeczności.
 
 ## Pełna konfiguracja i FAQ
 
@@ -132,7 +132,7 @@ autosound-tuning-skill/        wtyczka Claude Code
     └── curves.html     wizualizator krzywych docelowych
 ```
 
-Niezależna metoda recenzji (Krytyk/Doradca/Arbiter, anti-anchoring) jest dołączona jako `references/core/review-loop.md`. **Żeby zobaczyć ją w akcji przy prawdziwym trudnym przypadku** — jeden problem z basem, dwie rundy krytyki, każda rola pomyliła się raz, a pętla to wszystko wyłapała — przeczytaj [studium przypadku z prawdziwej sesji](case-study-mode-a-bass-2026-07-15.md).
+Niezależna metoda recenzji (Krytyk/Doradca/Arbiter, anti-anchoring) jest dołączona jako `references/core/review-loop.md`; [studium przypadku](case-study-mode-a-bass-2026-07-15.md) pokazuje ją w akcji przy prawdziwym trudnym przypadku.
 
 Osobna, bezstanowa wersja metody do czatu webowego, bez lokalnej instalacji, znajduje się w gałęzi [manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step).
 
@@ -144,11 +144,9 @@ Zbiera **tylko metodę i klasy sprzętu**: zachowanie kabiny, klasę DSP/sprzęt
 
 ## Wsparcie
 
-Skill jest **darmowy i otwarty** (CC BY-SA). Jeśli pomógł i chcesz podziękować, są dwa dobrowolne kanały:
+Skill jest **darmowy i otwarty** (CC BY-SA) — i taki pozostanie; nic nie jest ukryte za płatnością. Jeśli pomógł i chcesz podziękować, są dwa dobrowolne kanały:
 
-💜 **[GitHub Sponsors](https://github.com/sponsors/ayukhno)** · ☕ **[Skarbonka na Monobank](https://send.monobank.ua/jar/8wThVcodjm)** (Apple Pay, Google Pay, ...)
-
-Jedno dotknięcie, bez konta; strona przyjmuje też karty — Apple Pay, Google Pay, Visa, Mastercard.
+💜 **[GitHub Sponsors](https://github.com/sponsors/ayukhno)** · ☕ **[Skarbonka na Monobank](https://send.monobank.ua/jar/8wThVcodjm)** — jedno dotknięcie, bez konta; przyjmuje Apple Pay, Google Pay, Visa, Mastercard.
 
 ## Licencja
 

@@ -27,10 +27,10 @@
 
 ## Who it's for & Why
 
-* **Who it's for:** For those building sound in their car and learning this craft. It's your exoskeleton (powered by your hearing and actions where direct software interfaces don't exist) that manages knowledge and experience so you can tune your car's audio.
+* **Who it's for:** For those building sound in their car and learning this craft. It's your exoskeleton: it carries the craft's knowledge and experience, you bring the ears and the hands on the DSP.
 * **Why:** Tuning is an avalanche: too many methods, parameters, and rules of thumb to hold in your head, and it's easy to dive into one detail and lose the whole picture. The skill is your navigator: it holds the knowledge, points to the few changes that matter, and keeps the soundstage-versus-tonal-balance trade-off in view. Your ear is the final judge.
 
-It covers a full tune, from a new project through crossovers, time alignment, phase, per-channel and summed EQ, imaging, to voicing to taste — plus the optional spatial layers (a complementary **center-fill** and a differential **rear-fill**, both field-validated recipes) — driven by a **Generator ↔ Critic ↔ Arbiter** review loop.
+It covers a full tune: from a new project through crossovers, time alignment, phase, per-channel and summed EQ, and imaging, to voicing to taste — plus the optional spatial layers (a complementary **center-fill** and a differential **rear-fill**, both field-validated recipes). Every change runs through a **Generator ↔ Critic ↔ Arbiter** review loop: one AI proposes, another challenges, you decide.
 
 ## What real work and synergy between different AIs looks like
 
@@ -38,7 +38,7 @@ Three voices: **you** at the listening seat, **Claude** driving the process, **G
 
 > **You (Arbiter):** The double bass booms a bit. And when I nudged the delays by ear, the bass got better — let's enter my values?
 >
-> **Claude (Orchestrator):** Checked against fresh measurements first: your delays are already optimal — your ear liked something else. The real culprits are two narrow door resonances and a hot left side. I propose three surgical cuts.
+> **Claude (Generator):** Checked against fresh measurements first: your delays are already optimal — your ear liked something else. The real culprits are two narrow door resonances and a hot left side. I propose three surgical cuts.
 >
 > **Gemini (Critic):** Objection: one of those cuts sits inside a crossover joint — it can break the summation there.
 >
@@ -56,21 +56,21 @@ Three voices: **you** at the listening seat, **Claude** driving the process, **G
 >
 > **You:** …The sub is on the hood! Leaving it.
 
-About forty minutes from "it booms" to "the sub is on the hood" — a problem that usually eats weeks of forum-guided trial and error. The measurements kept the ear honest, the ear caught what the model couldn't predict, and the critic stopped a crossover mistake before it reached the hardware: every participant caught something the others missed, and the loop resolved all of it. The full technical version, with every number: [the case study](case-study-mode-a-bass-2026-07-15.md).
+About forty minutes from "it booms" to "the sub is on the hood" — a problem that usually eats weeks of forum-guided trial and error. Every participant caught something the others missed, and the loop resolved all of it. The full technical version, with every number: [the case study](case-study-mode-a-bass-2026-07-15.md).
 
 **The math under the hood** — a library of scripts that crunches huge data sets locally, so it never burns model tokens on it:
 
-- **A cabin & install flaw map, built before any tuning** — from the very first baseline sweeps the scripts map your car's real physics: door nulls and reflections, which defects are EQ-able and which are acoustics, where the left/right pair decorrelates into "pockets" no stereo EQ can fill — so crossovers and EQ are planned *around* the cabin, and the truly unfixable gets named honestly (with remedies like a complementary center-fill where one is warranted);
-- **Multi-scale curve reading** — every response is read at three "distances" (broad trend → macro shape → fine residual), and each feature is routed to the discipline that owns it: voicing, verification, a surgical cut, or "leave it, that's the room";
-- **Jitter-robust phase summation** — every crossover-joint verdict is scored under small delay/level perturbations, so the fix survives real-world drift instead of winning at one razor point;
-- **Hardware-verified filter models** — each proposed EQ/all-pass is simulated on your *measured* complex responses before you type it in (the models were validated against the DSP itself);
-- **An excess-phase "boostability" gate** — tells a fillable dip from an interference null, so the skill never asks a driver to fight physics;
-- **Four-estimator arrival triangulation** — instead of trusting one impulse peak, four independent timing reads must agree before any delay is touched, otherwise the skill says so and switches method;
-- **Fundamental-aware distortion reading** — THD spikes are cross-checked against the fundamental's level, so a room null is never misdiagnosed as a broken driver.
+- **A cabin & install flaw map, built before any tuning** — door nulls, reflections, and L/R "pockets" no stereo EQ can fill are mapped from the first sweeps, so EQ plans *around* the cabin instead of fighting it;
+- **Multi-scale curve reading** — each curve is read at three "distances" (trend → shape → fine detail), and each finding goes to the tool that owns it: voicing, verification, a surgical cut, or "leave it, that's the room";
+- **Jitter-robust phase summation** — crossover-joint fixes are scored under small delay/level drift, so they survive the real world instead of winning at one razor point;
+- **Hardware-verified filter models** — every proposed EQ/all-pass is simulated on your *measured* responses before you type it in;
+- **An excess-phase "boostability" gate** — tells a fillable dip from an interference null, so no driver is ever asked to fight physics;
+- **Four-estimator arrival triangulation** — four independent timing reads must agree before any delay is touched;
+- **Fundamental-aware distortion reading** — THD spikes are checked against the fundamental's level, so a room null is never misdiagnosed as a broken driver.
 
 ## Getting Started
 
-This skill runs as a plugin for **Claude Code** (the official terminal agent by Anthropic). If you don't have it yet, the FAQ below has copy-paste macOS/Windows install steps (a paid Claude subscription is required; see the FAQ for cost paths — and for [why a full session uses fewer tokens than you'd expect](FAQ.md#why-a-full-session-uses-fewer-tokens-than-youd-expect)).
+This skill runs as a plugin for **Claude Code** (the official terminal agent by Anthropic). If you don't have it yet, the FAQ below has copy-paste macOS/Windows install steps; a paid Claude subscription is required, and the FAQ covers the cost paths. It also explains [why a full session uses fewer tokens than you'd expect](FAQ.md#why-a-full-session-uses-fewer-tokens-than-youd-expect).
 
 Inside your active Claude Code session, run these commands **one by one** (do not copy and paste them together):
 
@@ -107,10 +107,10 @@ The skill supports two ways to run it, ranked by reliability. Pick based on how 
 
 **My own experience so far** (this is just my experience for now; once more people have tuned with it, I want this to be community experience, not only mine):
 
-* **Claude drives, Gemini reviews (Mode A):** stable, but moves in small steps, so it can feel a bit slow. You need to pay at least for Claude. Free Gemini works too, but it sometimes hits its limits. One more thing I noticed: Sonnet is reliable but cautious, and tends to stop and ask things that Opus would often just decide on its own, faster.
+* **Claude drives, Gemini reviews (Mode A):** stable, but moves in small steps, so it can feel a bit slow. You need to pay at least for Claude. Free Gemini works too, but it sometimes hits its limits. One more thing I noticed: Sonnet is reliable but cautious, and tends to stop and ask things that Opus would often just decide on its own, faster. On the plus side, Sonnet is thriftier with tokens, so you hit usage limits less often.
 * **Gemini drives, with Claude or a stronger Gemini model as the reviewer:** much faster. After two full measurement rounds, I already had a first working version. But later in the session, it can start to hallucinate or lose track of earlier decisions, to the point where I wanted to switch back to Claude. I have not tried this with free Gemini, because of the limits — lifting Gemini's free-tier rate limits needs a paid Google Cloud billing account (the [FAQ's cost paths](FAQ.md#subscription-options-quotas--budgets-as-of-july-2026) cover the current deposit / free-credit details, which change often). If you pay for API access either way, Mode A ends up cheaper overall.
 * **The manual step-by-step version (no local scripts):** it works, but the copy-paste process is stressful. You have to be careful not to lose any value along the way. After trying a full session with real memory between messages, it takes effort to go back to this.
-* **Which model to trust as driver, so far:** **Claude Opus** has given the most consistently stable results. **Sonnet 5** works but still comes across as less sure of itself in this role — worth double-checking its calls for now. **Fable 5** has produced the best results of any model: it audited and rebuilt the skill while running a full tuning session (see [audit-fable-2026-07-11.md](audit-fable-2026-07-11.md)), and then drove a second full in-car session on the simplified rules (bass shape → HF imaging → a first-pass rear-fill in one sitting, with measured verification of every step) — that build is currently the best-sounding result I have. **Gemini** lost some capability as the process rules grew more complex; after the audit simplified them, Gemini 3.1 Pro has now been re-verified in the **Critic** role (two live review rounds — its physics objections genuinely improved the final settings, its numeric predictions still need checking against the data). Gemini as the *driver* under the new rules is still unverified — feedback from the community is welcome here.
+* **Which model to trust as driver, so far:** **Claude Opus** has given the most consistently stable results. **Sonnet 5** works but still comes across as less sure of itself in this role — worth double-checking its calls for now. **Fable 5** has produced the best results of any model: it audited and rebuilt the skill while running a full tuning session (see [audit-fable-2026-07-11.md](audit-fable-2026-07-11.md)), then drove a second full in-car session on the simplified rules — that build is currently the best-sounding result I have. **Gemini** lost some capability as the process rules grew more complex; after the audit simplified them, Gemini 3.1 Pro proved itself again in the **Critic** role, while Gemini as the *driver* under the new rules is still unverified — feedback from the community is welcome here.
 
 ## Full Setup & FAQ
 
@@ -132,7 +132,7 @@ autosound-tuning-skill/        a Claude Code plugin
     └── curves.html     target-curve visualizer
 ```
 
-The independent-review method (Critic/Advisor/Arbiter, anti-anchoring) is bundled as `references/core/review-loop.md`. **To see it working on a real hard call** — one bass problem, two critique rounds, every role wrong once and the loop catching all of it — read the [case study from a live session](case-study-mode-a-bass-2026-07-15.md).
+The independent-review method (Critic/Advisor/Arbiter, anti-anchoring) is bundled as `references/core/review-loop.md`; the [case study](case-study-mode-a-bass-2026-07-15.md) shows it working on a real hard call.
 
 A separate, stateless web-chat version of the method, with no local install, lives on the [manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step) branch.
 
@@ -146,9 +146,7 @@ It captures **method + equipment classes only**: cabin behavior, the DSP/gear cl
 
 The skill is **free and open** (CC BY-SA) and always will be. Nothing is gated behind a payment. If it helped and you'd like to say thanks, there are two voluntary channels:
 
-💜 **[GitHub Sponsors](https://github.com/sponsors/ayukhno)** · ☕ **[Monobank jar](https://send.monobank.ua/jar/8wThVcodjm)** (Apple Pay, Google Pay, ...)
-
-One tap, no account; the page also takes cards — Apple Pay, Google Pay, Visa, Mastercard.
+💜 **[GitHub Sponsors](https://github.com/sponsors/ayukhno)** · ☕ **[Monobank jar](https://send.monobank.ua/jar/8wThVcodjm)** — one tap, no account; takes Apple Pay, Google Pay, Visa, Mastercard.
 
 ## License
 
