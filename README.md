@@ -20,6 +20,32 @@
 
 It covers a full tune, from a new project through crossovers, time alignment, phase, per-channel and summed EQ, imaging, to voicing to taste — plus the optional spatial layers (a complementary **center-fill** and a differential **rear-fill**, both field-validated recipes) — driven by a **Generator ↔ Critic ↔ Arbiter** review loop.
 
+## What that loop sounds like (a real session, condensed)
+
+Three voices: **you** at the listening seat, **Claude** driving the process, **Gemini** challenging every move.
+
+> **You (Arbiter):** The double bass booms a bit. And when I nudged the delays by ear, the bass got better — let's enter my values?
+>
+> **Claude (Orchestrator):** Checked against fresh measurements first: your delays are already optimal — your ear liked something else. The real culprits are two narrow door resonances and a hot left side. I propose three surgical cuts.
+>
+> **Gemini (Critic):** Objection: one of those cuts sits inside a crossover joint — it can break the summation there.
+>
+> **Claude:** Verified on the measurements — that joint actually gets *better*. But your doubt made me look deeper, and you're onto something: it's not just the woofer, the midrange is hot there too. Revised plan: each driver gets its own cut.
+>
+> **Gemini:** Now agreed.
+>
+> **You:** Entered. The boom is gone… but the subwoofer now localizes behind me!
+>
+> **Claude:** My miss — two of my filters overlap and cut deeper than intended. Softening one.
+>
+> **You:** Bass is back up front — but it sits low. I want it up on the windshield, where it used to be.
+>
+> **Claude:** The old defect was what propped the image up. We won't bring the defect back — a gentle symmetric EQ lift on both midranges instead, so the height returns without the skew.
+>
+> **You:** …The sub is on the hood! Leaving it.
+
+About two hours from "it booms" to "the sub is on the hood" — a problem that usually eats weeks of forum-guided trial and error. The measurements kept the ear honest, the ear caught what the model couldn't predict, and the critic stopped a crossover mistake before it reached the hardware: every participant caught something the others missed, and the loop resolved all of it. The full technical version, with every number: [the case study](case-study-mode-a-bass-2026-07-15.md).
+
 ## Getting Started
 
 This skill runs as a plugin for **Claude Code** (the official terminal agent by Anthropic). If you don't have it yet, the FAQ below has copy-paste macOS/Windows install steps (a paid Claude subscription is required; see the FAQ for cost paths — and for [why a full session uses fewer tokens than you'd expect](FAQ.md#why-a-full-session-uses-fewer-tokens-than-youd-expect)).
