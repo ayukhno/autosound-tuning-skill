@@ -16,7 +16,7 @@
 ## Inhalt
 
 - [Für wen & Warum](#für-wen--warum)
-- [Wie sich diese Schleife anhört (eine echte Sitzung, verdichtet)](#wie-sich-diese-schleife-anhört-eine-echte-sitzung-verdichtet)
+- [Wie echte Arbeit und Synergie zwischen verschiedenen KIs aussieht](#wie-echte-arbeit-und-synergie-zwischen-verschiedenen-kis-aussieht)
 - [Erste Schritte](#erste-schritte)
 - [Empfohlene Modelle, Modi & meine Erfahrung](#empfohlene-modelle-modi--meine-erfahrung)
 - [Vollständiges Setup & FAQ](#vollständiges-setup--faq)
@@ -32,7 +32,7 @@
 
 Er deckt eine komplette Abstimmung ab, von einem neuen Projekt über Frequenzweichen, Laufzeitkorrektur, Phase, kanalgetrennten und summierten EQ, die Bühnenabbildung, bis hin zum Voicing nach Geschmack — plus die optionalen räumlichen Ebenen (ein komplementäres **Center-Fill** und ein differenzielles **Rear-Fill**, beides feldvalidierte Rezepte) — gesteuert von einer **Generator ↔ Kritiker ↔ Schiedsrichter**-Review-Schleife.
 
-## Wie sich diese Schleife anhört (eine echte Sitzung, verdichtet)
+## Wie echte Arbeit und Synergie zwischen verschiedenen KIs aussieht
 
 Drei Stimmen: **du** auf dem Hörplatz, **Claude**, der den Prozess führt, **Gemini**, das jeden Schritt hinterfragt.
 

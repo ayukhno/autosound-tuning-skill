@@ -16,7 +16,7 @@
 ## Spis treści
 
 - [Dla kogo i dlaczego](#dla-kogo-i-dlaczego)
-- [To, jak brzmi ta pętla (prawdziwa sesja, w skrócie)](#to-jak-brzmi-ta-pętla-prawdziwa-sesja-w-skrócie)
+- [Jak wygląda prawdziwa praca i synergia różnych AI](#jak-wygląda-prawdziwa-praca-i-synergia-różnych-ai)
 - [Pierwsze kroki](#pierwsze-kroki)
 - [Polecane modele, tryby i moje doświadczenie](#polecane-modele-tryby-i-moje-doświadczenie)
 - [Pełna konfiguracja i FAQ](#pełna-konfiguracja-i-faq)
@@ -32,7 +32,7 @@
 
 Obejmuje pełne strojenie, od nowego projektu przez zwrotnice, korekcję czasową, fazę, EQ kanałowy i sumaryczny, budowę sceny, aż po voicing pod własny gust — plus opcjonalne warstwy przestrzenne (komplementarny **center-fill** i różnicowy **rear-fill**, oba przepisy zweryfikowane w praktyce) — sterowane pętlą recenzji **Generator ↔ Krytyk ↔ Arbiter**.
 
-## To, jak brzmi ta pętla (prawdziwa sesja, w skrócie)
+## Jak wygląda prawdziwa praca i synergia różnych AI
 
 Trzy głosy: **ty** na miejscu odsłuchowym, **Claude** prowadzący proces, **Gemini** kwestionujący każdy ruch.
 

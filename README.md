@@ -16,7 +16,7 @@
 ## Table of Contents
 
 - [Who it's for & Why](#who-its-for--why)
-- [What that loop sounds like (a real session, condensed)](#what-that-loop-sounds-like-a-real-session-condensed)
+- [What real work and synergy between different AIs looks like](#what-real-work-and-synergy-between-different-ais-looks-like)
 - [Getting Started](#getting-started)
 - [Recommended Models, Modes & My Take](#recommended-models-modes--my-take)
 - [Full Setup & FAQ](#full-setup--faq)
@@ -32,7 +32,7 @@
 
 It covers a full tune, from a new project through crossovers, time alignment, phase, per-channel and summed EQ, imaging, to voicing to taste — plus the optional spatial layers (a complementary **center-fill** and a differential **rear-fill**, both field-validated recipes) — driven by a **Generator ↔ Critic ↔ Arbiter** review loop.
 
-## What that loop sounds like (a real session, condensed)
+## What real work and synergy between different AIs looks like
 
 Three voices: **you** at the listening seat, **Claude** driving the process, **Gemini** challenging every move.
 
