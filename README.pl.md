@@ -151,3 +151,5 @@ Skill jest **darmowy i otwarty** (CC BY-SA) — i taki pozostanie; nic nie jest 
 ## Licencja
 
 [CC BY-SA 4.0](LICENSE): używaj, adaptuj, udostępniaj; zachowaj pochodne otwarte i podaj autorstwo. To dzieło metodyczne/wiedzowe, więc share-alike utrzymuje zgromadzone doświadczenie społeczności otwartym.
+
+Kod i skrypty (`rew_tool/`, `scripts/` oraz inne pliki .py/.sh) są na [licencji MIT](LICENSE-CODE). Zasoby stron trzecich wymieniono w [LICENSES/NOTICE.md](LICENSES/NOTICE.md).

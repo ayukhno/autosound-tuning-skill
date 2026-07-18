@@ -19,9 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-# Scope
-This file (LICENSE-CODE) applies to source code and executable scripts in this
-repository (for example, files in rew_tool/, scripts/, and other .py/.sh files).
-Documentation, guides, and other non-code materials in the repository remain
-covered by the repository's primary LICENSE (Creative Commons Attribution-ShareAlike 4.0).

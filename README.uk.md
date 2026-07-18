@@ -151,3 +151,5 @@ autosound-tuning-skill/        плагін Claude Code
 ## Ліцензія
 
 [CC BY-SA 4.0](LICENSE): користуйся, адаптуй, поширюй; тримай похідні відкритими і вказуй авторство. Це методичний/знаннєвий твір, тож share-alike тримає досвід спільноти відкритим.
+
+Код і скрипти (`rew_tool/`, `scripts/` та інші .py/.sh файли) — під [ліцензією MIT](LICENSE-CODE). Сторонні ресурси перелічені в [LICENSES/NOTICE.md](LICENSES/NOTICE.md).
