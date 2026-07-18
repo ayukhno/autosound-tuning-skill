@@ -1,6 +1,6 @@
 # Autosound Tuning Skill
 
-🇬🇧 **English** · 🇩🇪 [Deutsch](README.de.md) · 🇵🇱 [Polski](README.pl.md) · 🇺🇦 [Українська](README.uk.md) · [FAQ](FAQ.md)
+🇬🇧 **English** · 🇩🇪 [Deutsch](README.de.md) · 🇵🇱 [Polski](README.pl.md) · 🇺🇦 [Українська](README.uk.md) · ❓ [FAQ](FAQ.md) · <img src="assets/icons/roadmap.svg" width="14" height="14" valign="middle" alt="Roadmap" /> [Roadmap (EN, draft)](ROADMAP.md)
 
 **In one line:** a Claude skill that guides you toward clean, transparent, balanced sound in *your* car. It brings the whole craft to your specific setup, reads your REW measurements, and helps you choose each change.
 

@@ -1,6 +1,6 @@
 # Autosound Tuning Skill
 
-🇬🇧 [English](README.md) · 🇩🇪 [Deutsch](README.de.md) · 🇵🇱 [Polski](README.pl.md) · 🇺🇦 **Українська** · [FAQ](FAQ.md)
+🇬🇧 [English](README.md) · 🇩🇪 [Deutsch](README.de.md) · 🇵🇱 [Polski](README.pl.md) · 🇺🇦 **Українська** · ❓ [FAQ](FAQ.md) · <img src="assets/icons/roadmap.svg" width="14" height="14" valign="middle" alt="Roadmap" /> [Roadmap (англ., чернетка)](ROADMAP.md)
 
 **Одним рядком:** скіл для Claude, що веде тебе до чистого, прозорого, збалансованого звуку у *твоїй* машині. Приносить усе ремесло під твій конкретний сетап, читає твої заміри з REW і допомагає обрати кожну зміну.
 
