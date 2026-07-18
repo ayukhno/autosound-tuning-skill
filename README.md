@@ -151,3 +151,5 @@ The skill is **free and open** (CC BY-SA) and always will be. Nothing is gated b
 ## License
 
 [CC BY-SA 4.0](LICENSE): use it, adapt it, share it; keep derivatives open and attribute. It's a method/knowledge work, so share-alike keeps the community's experience open.
+
+Code and scripts (`rew_tool/`, `scripts/`, and other .py/.sh files) are under the [MIT License](LICENSE-CODE). Third-party assets are listed in [LICENSES/NOTICE.md](LICENSES/NOTICE.md).

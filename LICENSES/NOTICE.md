@@ -1,17 +1,17 @@
-# LICENSES & NOTICE
+# Licenses & Notice
 
-Коротка карта ліцензій у цьому репозиторії:
+License map for this repository:
 
-- Основна ліцензія у корені (`LICENSE`): Creative Commons Attribution-ShareAlike 4.0 International — застосовується до документації, методів, case studies, .md та .html файлів, а також до матеріалів, явно не позначених іншим чином.
+- Primary license at the root (`LICENSE`): Creative Commons Attribution-ShareAlike 4.0 International — applies to documentation, methods, case studies, .md and .html files, and any material not explicitly marked otherwise.
 
-- Код і виконувані скрипти: `LICENSE-CODE` (MIT License) — усі файли з розширеннями .py, .sh, та інші виконувані скрипти у каталогах `rew_tool/`, `scripts/`, `skills/` і т. п., якщо інше не вказано у конкретному файлі.
+- Code and executable scripts: `LICENSE-CODE` (MIT License) — applies to source code and executable scripts (.py, .sh, and similar) in `skills/autosound-tuning/rew_tool/`, `skills/autosound-tuning/scripts/`, `skills/autosound-tuning/evals/`, and elsewhere in the repository, unless a specific file states otherwise.
 
-- Треті-сторонні ресурси (іконки, зовнішні криві, дані): якщо такі файли присутні і мають іншу ліцензію, вони будуть перелічені нижче (у цьому PR поле поки що пусте — наповнимо після ревізії):
+## Third-party assets
 
-  - (placeholder) assets/icons/... — перевірити ліцензію
-  - (placeholder) references/patterns/curves/... — перевірити джерело
+Third-party resources (icons, external target curves, data) with their own licenses are listed here:
 
-Зауваження:
-- Якщо ви включаєте сторонній контент у PR, вкажіть його джерело та ліцензію у PR описі.
-- Похідні роботи документації повинні залишатися під CC BY‑SA 4.0 (ShareAlike).
+- `assets/icons/roadmap.svg` — source and license to be verified.
 
+Notes:
+- If you include third-party content in a contribution, state its source and license in the PR description.
+- Derivative works of the documentation must remain under CC BY-SA 4.0 (ShareAlike).

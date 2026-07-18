@@ -151,3 +151,5 @@ Der Skill ist **kostenlos und offen** (CC BY-SA) — und bleibt es; nichts ist h
 ## Lizenz
 
 [CC BY-SA 4.0](LICENSE): nutze, passe an, teile; halte Ableitungen offen und nenne die Quelle. Es ist ein Methoden-/Wissenswerk, daher hält Share-Alike die gesammelte Erfahrung der Community offen.
+
+Code und Skripte (`rew_tool/`, `scripts/` und andere .py/.sh-Dateien) stehen unter der [MIT-Lizenz](LICENSE-CODE). Assets Dritter sind in [LICENSES/NOTICE.md](LICENSES/NOTICE.md) aufgeführt.
