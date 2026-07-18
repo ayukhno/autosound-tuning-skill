@@ -2,6 +2,10 @@
 
 Дякуємо за інтерес до участі в проєкті! Нижче — мінімальні кроки і правила, щоб ваш внесок був швидко прийнятий.
 
+## Language / Localization policy
+- Primary language: English. Please write issues, PR titles, and descriptions in English where possible to help the widest audience and contributors.
+- Translations are welcome: add them as README.<lang>.md (for example README.uk.md) or link them from the main README. Localized discussion or case studies may be written in the respective language, but summary and key actions should be in English.
+
 ## Quickstart (локальна розробка)
 1. Клонувати репозиторій та перейти на нову гілку:
    ```bash
