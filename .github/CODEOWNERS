@@ -1,0 +1,16 @@
+# CODEOWNERS
+
+# Automatic reviewers / owners for key paths. Use GitHub usernames.
+# Lines are matched from top to bottom. Patterns follow the same rules as .gitignore
+
+# Repository admins / general
+/.github/ @ayukhno
+
+# Code and skills
+/skills/ @ayukhno
+/rew_tool/ @ayukhno
+/scripts/ @ayukhno
+
+# Documentation and references
+/references/ @ayukhno
+/skills/autosound-tuning/ @ayukhno
