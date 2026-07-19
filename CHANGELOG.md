@@ -2,6 +2,18 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
+## [v2.6.2] — 2026-07-19
+
+Field-harvest release from three sessions (2026-07-16/17/19: center realign + Chebyshev O2 + tone-ladder vT1; gain structure vG1/vG1.1; stage/bass session v4.5 + pan/piano rounds vP1/vP2). Twenty-two confirmed lessons folded. No engine changes.
+
+### Added
+- **`diagnostic-techniques.md` §27–33:** the ghost-overshoot arbitration ladder (deltas vs a single baseline lie on steep interference structures; repeat → bank check → solo bypass protocol → baseline 1/12 structure); band-limited pair arrival is ill-defined (four estimators, four answers — decide by summation coherence); the consolidated drift-floor family (solo ratios unreadable near corners/skirts; HF gain work by pair-average); measurement-frame discipline (differential ops immune to constant setup errors; arithmetic over noisy medians; group-delta sanity vs the contributor's own level; anchor circularity); pan collapse as a frequency seesaw of solo sides; the amp gain-structure field kit (RCA-pull, XO-bypass noise locator, per-pair knob ceiling, global preset invalidation, relative aux gains); complementary-center corner re-solve after any overlapped-branch change + the guard-dip cap.
+- **`staging-depth.md` §9:** a trunk sub localizes on SUSTAINED bass only, and only above its calibrated level (precedence vs steady-state energy); the ±6 dB bass-image stability window; road-masking as the owner-vs-judge divergence mechanism.
+- **`review-loop.md` triage additions:** re-anchor the critic's claims against the ledger (hallucinated hardware params deep in a round); compute the NET differential filter stack, sign included, before accepting "asymmetric EQ ruins phantom phase" (a counter-sign cut UNWOUND net pair phase 9.8° → 6.8°).
+- **`SKILL.md`:** settings sheets carry ABSOLUTE target values only (relative phrasing caused a 3 dB hardware/ledger fork); in-car session close = an explicit EXIT CHECKLIST (revert test values, knobs, backup).
+- **Helix Ultra S profile:** RTC is global (presets don't switch it), Director/Conductor knobs are not stored in `.pct6`, RTC anchors vs applied values, the foolproof flat-point master config; RTC OFF on every measurement series.
+- **B8 car card:** the coherent presence valley (EQ-liftable, with the measured escalation criterion), position-sensitive left cold lobes + the hot 990–1250 lob (piano wander / bass left-drift mechanism), bass-pan seesaw items — all verify-only.
+
 ## [v2.6.1] — 2026-07-15
 
 Field-harvest release from a full in-car session (bass form → HF edges → rear-fill, driven by Fable 5 with Gemini 3.1 Pro as Critic): seven confirmed lessons folded into doctrine and device knowledge. No engine changes.

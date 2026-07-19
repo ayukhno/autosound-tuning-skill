@@ -42,13 +42,14 @@ Tone: equal colleagues. Accept a correct critique fully; argue disagreements in 
 1. **Hardware:** mic connected, REW API on :4735, cabin closed, active DSP input matches the task.
 2. **Reconcile state from disk:** `audit-trail.md`, the top **▶️ CONTINUE** block of `tuning-changelog`, and `dsp-state-current`. Multi-slot DSP → read the active-slot banner first (`python rew_tool/state/state.py registry render`) and work only against that slot. Ask what the user changed manually.
 3. **Banked decisions:** 🟡 items agreed earlier but not yet applied → prompt to apply before proposing anything new.
+4. **In-car session close → EXIT CHECKLIST** (only what THIS session touched): revert test-only values (A/B gains, level-match trims, mutes), remote-knob positions back, backup the config after hardware-state changes. Test states left in hardware are the top source of ledger/hardware forks.
 
 ---
 
 ## ⚠️ Core Guardrails (always on)
 
 * **State lives on disk, not in context.** Re-read `dsp-state-current` before proposing any DSP change; update it right after the user applies one. **Bank every agreed change via `apply.propose`** — it writes the `v_NNN` versioned snapshot AND emits the settings sheet the Arbiter enters (A/B, revert, resume after `/clear`). Long session → re-anchor from disk or `/clear` + resume. Detail → [`process-control.md`](file:///skills/autosound-tuning/references/core/process-control.md).
-* **Settings land in chat.** All actionable DSP params (crossovers, delays, gains, polarities) as a legible step-by-step list or table directly in chat — never "see the file". **ms/cm is the source of truth; samples are DSP-rate-dependent** — if you give samples, state the assumed rate (native rate: `autosound_context.md`). Sheet format + worked example → [`helix-dsp-ultra-s.md`](file:///skills/autosound-tuning/knowledge/dsp/helix-dsp-ultra-s.md).
+* **Settings land in chat.** All actionable DSP params (crossovers, delays, gains, polarities) as a legible step-by-step list or table directly in chat — never "see the file". **ms/cm is the source of truth; samples are DSP-rate-dependent** — if you give samples, state the assumed rate (native rate: `autosound_context.md`). **Gains/params as ABSOLUTE target values only — never relative phrasing** ("remove the +3" once landed 3 dB off intent). Sheet format + worked example → [`helix-dsp-ultra-s.md`](file:///skills/autosound-tuning/knowledge/dsp/helix-dsp-ultra-s.md).
 * **Fragile signals get a cross-check.** Dirty door IRs, LF onsets, single-point HF reads, phase-math polarity predictions, API index lookups: cross-check (cross-correlation, summation, GUI cursor, re-measure) before quoting the number, and say your confidence.
 * **Round-based cadence.** Iterate by **round**, not by parameter: measure → compute the *whole batch* → one DSP import → one re-measure. Per-parameter loops are only for Level-2 black-box DSPs (`project-intake.md`). EQ: max boost **+6 dB**, only the bands the channel needs, as one batch per review pass (`phase_2_eq.md` §2a).
 * **Reviewer early.** At the session's first tuning proposal, offer to start the reviewer channel if none is active.

@@ -53,6 +53,10 @@ A critic's objections come in two kinds, and they earn different responses (fiel
 - **Physical-mechanism claims** ("a virtual-layer cut also thins the mid's DIRECT sound while the door's reverberant excess stays"; "split the correction ±1 dB across both sides instead of +2 on one") — these don't reduce to a number you already hold; **treat them as design input**. In the same rounds, both physics objections reshaped the final package for the better.
 The failure mode this prevents: winning the numeric exchange and concluding the critic was useless — the numbers were mine to check, the physics was the critic's real contribution.
 
+Two additions (field-validated 2026-07-19, three-iteration round vs Gemini 3.1 Pro):
+- **Re-anchor the critic's claims against the ledger before conceding.** In a late iteration the critic argued physics from hallucinated hardware ("LPF 250 LR4" vs the actual 215 LR12); the factual-error rate rises as a round deepens. Check every hardware/state parameter a critique leans on.
+- **"Asymmetric EQ ruins phantom phase" objections: compute the NET differential stack, sign included.** A cut placed next to an existing opposite-sign filter on the same channel REDUCED the net inter-channel phase (9.8° → 6.8°) — the objection inverted under the number. Also re-check the measurement protocol behind an interference claim (a lob measured with the center muted cannot be center interference).
+
 ### TWO-PASS — anti-anchoring (escalation, not default)
 **When:** phase gates (Phase-1 strategy, Phase-3 verdict), or when the reviewer has **fully agreed twice in a row** — that agreement pattern is the disease: it ratifies your frame instead of checking it. The anchor sits in the **conclusion baked into the question**, not in memory.
 1. **Pass 1 — OPEN:** the raw data + neutral facts + an **open question WITHOUT your conclusion / hints** ("what's your read?") → an independent diagnosis.
