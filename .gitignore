@@ -18,3 +18,4 @@
 **/rew_analitic/
 *.mdat
 *.pct6
+.gstack/

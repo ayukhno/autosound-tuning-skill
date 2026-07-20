@@ -132,6 +132,8 @@ autosound-tuning-skill/        a Claude Code plugin
     └── curves.html     target-curve visualizer
 ```
 
+▶ Open the [target-curve visualizer](skills/autosound-tuning/curves.html?lang=en) — drag in your own curve or a standard one from the [Nono Tuning Tool](https://nonotuningtool.com), right-click any point on the chart for a frequency-character guide, and compare curves side by side.
+
 The independent-review method (Critic/Advisor/Arbiter, anti-anchoring) is bundled as `references/core/review-loop.md`; the [case study](case-study-mode-a-bass-2026-07-15.md) shows it working on a real hard call.
 
 A separate, stateless web-chat version of the method, with no local install, lives on the [manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step) branch.
