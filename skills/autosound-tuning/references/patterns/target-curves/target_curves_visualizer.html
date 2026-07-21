@@ -617,6 +617,29 @@
         }
     };
 
+    // Custom hover mode: the built-in 'index' mode assumes every dataset shares
+    // the same x samples, but our curves are loaded from different files with
+    // different frequency grids — so 'index' only matched one curve. This picks,
+    // for every VISIBLE dataset, the point nearest the cursor's x, so the tooltip
+    // lists all curves at that frequency.
+    if (window.Chart && Chart.Interaction && Chart.Interaction.modes) {
+        Chart.Interaction.modes.allNearestX = function (chart, e) {
+            const pos = (e && typeof e.x === 'number') ? e : Chart.helpers.getRelativePosition(e, chart);
+            const items = [];
+            chart.getSortedVisibleDatasetMetas().forEach(function (meta) {
+                let best = null, bd = Infinity;
+                for (let idx = 0; idx < meta.data.length; idx++) {
+                    const el = meta.data[idx];
+                    if (!el || el.skip) continue;
+                    const d = Math.abs(el.x - pos.x);
+                    if (d < bd) { bd = d; best = { element: el, datasetIndex: meta.index, index: idx }; }
+                }
+                if (best) items.push(best);
+            });
+            return items;
+        };
+    }
+
     // Render Chart
     const ctx = document.getElementById('curvesChart').getContext('2d');
     const curveChart = new Chart(ctx, {
@@ -647,7 +670,7 @@
             responsive: true,
             maintainAspectRatio: false,
             interaction: {
-                mode: 'index',
+                mode: 'allNearestX',
                 axis: 'x',
                 intersect: false
             },
