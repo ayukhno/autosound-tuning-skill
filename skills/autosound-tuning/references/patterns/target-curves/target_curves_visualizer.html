@@ -179,10 +179,10 @@
             <option value="de">DE</option>
             <option value="pl">PL</option>
         </select>
-        <button id="compareBtn" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 16px;cursor:pointer;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.4);">Compare</button>
-        <button id="instrBtn" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 16px;cursor:pointer;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.4);">Instruments</button>
-        <button id="toggleAllBtn" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 16px;cursor:pointer;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.4);">Hide all</button>
-        <button id="clearLoadedBtn" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 16px;cursor:pointer;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.4);display:none;">Clear</button>
+        <button id="compareBtn" title="Compare" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:15px;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.4);">⚖️</button>
+        <button id="instrBtn" title="Instruments" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:15px;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.4);">🎵</button>
+        <button id="toggleAllBtn" title="Hide all" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:15px;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.4);">🙈</button>
+        <button id="clearLoadedBtn" title="Clear" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:15px;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.4);display:none;">🗑️</button>
     </div>
     <h1 id="mainTitle">Acoustic Target Curve Visualizer</h1>
     <p class="subtitle" id="subtitle">Reference curve for project <b>SQ-Comp-Ref</b>. Drag in your own curve, or grab a standard curve from the <a href="https://nonotuningtool.com" target="_blank" rel="noopener" style="color:#a855f7;">Nono Tuning Tool</a> (nonotuningtool.com) — it plots offline once dropped in. Part of the <a href="https://github.com/ayukhno/autosound-tuning-skill" target="_blank" rel="noopener" style="color:#a855f7;">Autosound Tuning Skill</a> project — an AI-guided car-audio tuning workflow that reads what each curve means for your instruments.</p>
@@ -1358,7 +1358,8 @@
             curveChart.data.datasets.forEach(function (d, i) { curveChart.setDatasetVisibility(i, !hidden); });
             curveChart.update();
             document.querySelectorAll('.info-grid .card').forEach(function (c) { c.style.opacity = hidden ? '0.4' : '1'; });
-            btn.textContent = hidden ? t().showAll : t().hideAll;
+            btn.textContent = hidden ? '👁️' : '🙈';
+            btn.title = hidden ? t().showAll : t().hideAll;
             persist();
         });
 
@@ -1425,10 +1426,10 @@
             const hintLine = document.getElementById('hintLine'); if (hintLine) hintLine.textContent = s.hintLine;
             const emmaDesc = document.getElementById('emmaCardDesc'); if (emmaDesc) emmaDesc.innerHTML = s.emmaCardDesc;
             const flatDesc = document.getElementById('flatCardDesc'); if (flatDesc) flatDesc.innerHTML = s.flatCardDesc;
-            btn.textContent = hidden ? s.showAll : s.hideAll;
-            const cBtn = document.getElementById('compareBtn'); if (cBtn) cBtn.textContent = s.compareBtn;
-            const clBtn = document.getElementById('clearLoadedBtn'); if (clBtn) clBtn.textContent = s.clearLoaded;
-            const iBtn = document.getElementById('instrBtn'); if (iBtn) iBtn.textContent = INSTR_STR.ui.instruments[lang] || 'Instruments';
+            btn.title = hidden ? s.showAll : s.hideAll;
+            const cBtn = document.getElementById('compareBtn'); if (cBtn) cBtn.title = s.compareBtn;
+            const clBtn = document.getElementById('clearLoadedBtn'); if (clBtn) clBtn.title = s.clearLoaded;
+            const iBtn = document.getElementById('instrBtn'); if (iBtn) iBtn.title = INSTR_STR.ui.instruments[lang] || 'Instruments';
             const iPanel = document.getElementById('instrPanel');
             if (iPanel && iPanel.style.display !== 'none') renderInstrPanel();
             updateClearLoadedBtn();
