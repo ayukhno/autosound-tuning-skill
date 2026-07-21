@@ -132,6 +132,8 @@ autosound-tuning-skill/        wtyczka Claude Code
     └── curves.html     wizualizator krzywych docelowych
 ```
 
+▶ **[Otwórz wizualizator krzywych docelowych online](https://ayukhno.github.io/autosound-tuning-skill/curve-visualizer.html?lang=pl)** (lub otwórz `skills/autosound-tuning/curves.html` lokalnie) — przeciągnij własną krzywą lub standardową z [Nono Tuning Tool](https://nonotuningtool.com), kliknij prawym przyciskiem myszy na dowolny punkt wykresu, aby zobaczyć przewodnik charakterystyk częstotliwości, i porównuj krzywe obok siebie. To pojedynczy samodzielny plik (działa offline) — użyj **Zapisz jako** w przeglądarce, aby zachować własną kopię; wbudowane krzywe i import przeciągnięciem działają dalej.
+
 Niezależna metoda recenzji (Krytyk/Doradca/Arbiter, anti-anchoring) jest dołączona jako `references/core/review-loop.md`; [studium przypadku](case-study-mode-a-bass-2026-07-15.md) pokazuje ją w akcji przy prawdziwym trudnym przypadku.
 
 Osobna, bezstanowa wersja metody do czatu webowego, bez lokalnej instalacji, znajduje się w gałęzi [manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step).

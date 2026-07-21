@@ -132,6 +132,8 @@ autosound-tuning-skill/        плагін Claude Code
     └── curves.html     візуалізатор цільових кривих
 ```
 
+▶ **[Відкрий візуалізатор цільових кривих онлайн](https://ayukhno.github.io/autosound-tuning-skill/curve-visualizer.html?lang=uk)** (або відкрий `skills/autosound-tuning/curves.html` локально) — перетягни свою криву або стандартну з [Nono Tuning Tool](https://nonotuningtool.com), клацни правою кнопкою миші по графіку для гіда частотних характеристик і порівнюй криві між собою. Це один самодостатній файл (працює офлайн) — через **Зберегти як** у браузері можна зберегти собі копію; вбудовані криві та drag-drop імпорт працюватимуть.
+
 Незалежний метод рев'ю (Критик/Радник/Арбітр, анти-анкоринг) вкладено як `references/core/review-loop.md`; [кейс-стаді](case-study-mode-a-bass-2026-07-15.md) показує його в дії на реальному складному випадку.
 
 Окрема, безстанова версія методу для веб-чату, без локальної інсталяції, живе в гілці [manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step).

@@ -1,15 +1,17 @@
 <!DOCTYPE html>
-<html lang="uk">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <title>Curve Visualizer — launcher</title>
     <!-- One-click launcher at the SKILL ROOT: opens the (deep) self-contained curve visualizer.
-         Portable (no symlink); works offline. Double-click this file or `open curves.html`. -->
-    <script>location.replace('references/patterns/target-curves/target_curves_visualizer.html');</script>
+         Portable (no symlink); works offline. Double-click this file or `open curves.html`.
+         Forwards the query string (e.g. ?lang=uk from a README link) to the visualizer. -->
+    <script>location.replace('references/patterns/target-curves/target_curves_visualizer.html' + location.search);</script>
     <style>body{background:#0b0f19;color:#f3f4f6;font-family:system-ui,sans-serif;padding:48px;text-align:center;}a{color:#a855f7;}</style>
 </head>
 <body>
-    Відкриваю акустичний візуалізатор кривих…
-    <p><a href="references/patterns/target-curves/target_curves_visualizer.html">Якщо не відкрилось автоматично — клацни тут</a></p>
+    Opening the acoustic target curve visualizer…
+    <p><a id="fallbackLink" href="references/patterns/target-curves/target_curves_visualizer.html">If it didn't open automatically — click here</a></p>
+    <script>document.getElementById('fallbackLink').href += location.search;</script>
 </body>
 </html>

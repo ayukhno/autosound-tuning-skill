@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="uk">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Акустичний Візуалізатор Цільових Кривих</title>
+    <title>Acoustic Target Curve Visualizer</title>
     <!-- Chart.js v4.4.4 INLINED — self-contained, works OFFLINE (no CDN needed; critical for in-car tuning). Source: cdn.jsdelivr.net/npm/chart.js@4.4.4 -->
     <script>
 /**
@@ -36,8 +36,34 @@
             --text-muted: #9ca3af;
             --border-color: #1f2937;
             --accent-purple: #a855f7;
+            --btn-bg: #1f2937;
+            --btn-fg: #f3f4f6;
+            --btn-border: #374151;
+            --panel-bg: #26344d;
+            --panel-border: #3b4b66;
+            --hint-color: #6b7280;
+            --grid-color: #1f2937;
+            --axis-color: #9ca3af;
+            --legend-color: #f3f4f6;
         }
-        
+        :root[data-theme="light"] {
+            --bg-color: #eef1f6;
+            --card-bg: #ffffff;
+            --text-color: #1f2430;
+            --text-muted: #55607a;
+            --border-color: #d3d9e3;
+            --accent-purple: #7c3aed;
+            --btn-bg: #f1f3f8;
+            --btn-fg: #1f2430;
+            --btn-border: #c4ccda;
+            --panel-bg: #f5f7fb;
+            --panel-border: #c4ccda;
+            --hint-color: #6b7280;
+            --grid-color: #e2e6ee;
+            --axis-color: #55607a;
+            --legend-color: #1f2430;
+        }
+
         body {
             background-color: var(--bg-color);
             color: var(--text-color);
@@ -50,9 +76,11 @@
             min-height: 100vh;
         }
 
+        :root { --container-max: min(1600px, 96vw); }
+        :root[data-width="narrow"] { --container-max: 1100px; }
         .container {
             position: relative;
-            max-width: 1100px;
+            max-width: var(--container-max);
             width: 100%;
             background-color: var(--card-bg);
             border-radius: 16px;
@@ -126,25 +154,52 @@
 <body>
 
 <div class="container">
-    <button id="toggleAllBtn" style="position:absolute;top:22px;right:26px;z-index:5;background:#1f2937;color:#f3f4f6;border:1px solid #374151;border-radius:8px;padding:8px 16px;cursor:pointer;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.4);">Сховати всі криві</button>
-    <h1>Акустичний Візуалізатор Цільових Кривих</h1>
-    <p class="subtitle">Референсна крива проєкту <b>EMMA-Ref v3</b>. Перетягни свою криву або будь-яку з Nono Tuning Tool (nonotuningtool.com) — додасться на графік офлайн.</p>
-    
+    <div style="position:absolute;top:22px;right:26px;z-index:5;display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+        <button id="widthBtn" title="Toggle wide / narrow layout" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 12px;font-size:15px;cursor:pointer;line-height:1;">📱</button>
+        <button id="themeBtn" title="Toggle light / dark theme" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 12px;font-size:15px;cursor:pointer;line-height:1;">☀️</button>
+        <select id="langSel" title="Language" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 10px;font-size:13px;cursor:pointer;">
+            <option value="en">EN</option>
+            <option value="uk">UA</option>
+            <option value="de">DE</option>
+            <option value="pl">PL</option>
+        </select>
+        <button id="compareBtn" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 16px;cursor:pointer;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.4);">Compare curves</button>
+        <button id="toggleAllBtn" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 16px;cursor:pointer;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.4);">Hide all curves</button>
+    </div>
+    <h1 id="mainTitle">Acoustic Target Curve Visualizer</h1>
+    <p class="subtitle" id="subtitle">Reference curve for project <b>EMMA-Ref v3</b>. Drag in your own curve, or grab a standard curve from the <a href="https://nonotuningtool.com" target="_blank" rel="noopener" style="color:#a855f7;">Nono Tuning Tool</a> (nonotuningtool.com) — it plots offline once dropped in. Part of the <a href="https://github.com/ayukhno/autosound-tuning-skill" target="_blank" rel="noopener" style="color:#a855f7;">Autosound Tuning Skill</a> project — an AI-guided car-audio tuning workflow that reads what each curve means for your instruments.</p>
+
     <div class="chart-wrapper">
         <canvas id="curvesChart"></canvas>
+        <div id="freqCharPanel" style="display:none;position:absolute;width:340px;max-height:calc(100% - 20px);overflow:auto;background:var(--panel-bg);border:1px solid var(--panel-border);border-radius:10px;padding:14px;font-size:13.5px;line-height:1.45;color:var(--text-color);z-index:7;box-shadow:0 4px 16px rgba(0,0,0,.5);"></div>
     </div>
-    <div id="dropZone" style="margin-top:14px;padding:14px;border:2px dashed #374151;border-radius:10px;text-align:center;color:#9ca3af;cursor:pointer;user-select:none;transition:.15s;">
-        ↳ Перетягніть сюди файл кривої <b>.txt</b> (REW/NTT: <code>freq dB</code>) — або клацніть, щоб обрати. Додається на графік миттєво, офлайн.
+    <!-- Comparison table sits directly under the chart (in-flow, not a modal) so the
+         curves stay visible while you read the per-band description. -->
+    <div id="comparePanel" style="display:none;margin-top:14px;max-height:56vh;overflow:auto;background:var(--card-bg);border:1px solid var(--border-color);border-radius:12px;padding:20px;box-shadow:0 4px 20px rgba(0,0,0,.4);"></div>
+    <div id="dropZone" style="margin-top:14px;padding:14px;border:2px dashed var(--btn-border);border-radius:10px;text-align:center;color:var(--text-muted);cursor:pointer;user-select:none;transition:.15s;">
+        ↳ Drop a curve <b>.txt</b> file here (REW/NTT: <code>freq dB</code>) — or click to choose one. Plots instantly, offline.
     </div>
     <input type="file" id="curveFile" accept=".txt,text/plain" multiple style="display:none">
     <div style="margin-top:12px;text-align:center;">
-        <span style="color:#6b7280;font-size:13px;">клац на картку внизу — сховати/показати криву</span>
+        <span id="hintLine" style="color:var(--hint-color);font-size:13px;">click a card below to hide/show that curve &nbsp;·&nbsp; right-click the chart for a frequency-character guide</span>
     </div>
 
-    <div class="info-grid">
-        <div class="card">
-            <div class="card-title"><span class="dot" style="background-color: #a855f7;"></span>EMMA-Ref v3 (Juicy Edition)</div>
-            <div class="card-desc"><b>Поєднання соковитості та SQ-точності:</b> Глибокий соковитий суббас (+9.0 дБ, аналогічно Audiofrog), м'який та надплавний спад до 200 Гц (повністю усуває бубніння), яма сцени (-2 дБ на 2.5 кГц) та природний спад ВЧ (-0.5 дБ/окт).</div>
+    <div id="gridWrap" style="position:relative;">
+        <div class="info-grid">
+            <div class="card" data-raw-name="EMMA-Ref v3 (Juicy Edition)">
+                <div class="card-title" style="flex-wrap:wrap;">
+                    <span class="dot" style="background-color: #a855f7;"></span>
+                    <span style="flex:1;min-width:0;overflow-wrap:anywhere;">EMMA-Ref v3 (Juicy Edition)</span>
+                </div>
+                <div class="card-desc" id="emmaCardDesc"><b>Blends juiciness with SQ accuracy:</b> deep juicy sub-bass (+9.0 dB, similar to Audiofrog), a soft, ultra-smooth roll-off to 200 Hz (fully removes boominess), a presence dip (-2 dB at 2.5 kHz) and a natural HF roll-off (-0.5 dB/oct).</div>
+            </div>
+            <div class="card" data-raw-name="Flat">
+                <div class="card-title" style="flex-wrap:wrap;">
+                    <span class="dot" style="background-color: #6b7280;"></span>
+                    <span style="flex:1;min-width:0;overflow-wrap:anywhere;">Flat</span>
+                </div>
+                <div class="card-desc" id="flatCardDesc">0 dB reference line — the neutral baseline. Useful for reading other curves' absolute deviation at a glance.</div>
+            </div>
         </div>
     </div>
 </div>
@@ -153,9 +208,402 @@
     // EMMA-Ref v3 reference curve (project). Other curves load via drag-drop.
     const emmaRefData = [{"x": 20.0, "y": 9.0}, {"x": 20.706, "y": 9.0}, {"x": 21.438, "y": 9.0}, {"x": 22.195, "y": 9.0}, {"x": 22.979, "y": 9.0}, {"x": 23.791, "y": 9.0}, {"x": 24.631, "y": 9.0}, {"x": 25.501, "y": 9.0}, {"x": 26.402, "y": 9.0}, {"x": 27.334, "y": 9.0}, {"x": 28.3, "y": 9.0}, {"x": 29.299, "y": 9.0}, {"x": 30.334, "y": 9.0}, {"x": 31.406, "y": 9.0}, {"x": 32.515, "y": 9.0}, {"x": 33.664, "y": 9.0}, {"x": 34.853, "y": 9.0}, {"x": 36.084, "y": 8.92}, {"x": 37.358, "y": 8.83}, {"x": 38.678, "y": 8.74}, {"x": 40.044, "y": 8.64}, {"x": 41.458, "y": 8.54}, {"x": 42.923, "y": 8.44}, {"x": 44.439, "y": 8.34}, {"x": 46.009, "y": 8.23}, {"x": 47.634, "y": 8.11}, {"x": 49.316, "y": 8.0}, {"x": 51.058, "y": 7.88}, {"x": 52.862, "y": 7.75}, {"x": 54.729, "y": 7.63}, {"x": 56.662, "y": 7.5}, {"x": 58.663, "y": 7.36}, {"x": 60.735, "y": 7.22}, {"x": 62.881, "y": 7.08}, {"x": 65.102, "y": 6.93}, {"x": 67.401, "y": 6.77}, {"x": 69.782, "y": 6.62}, {"x": 72.247, "y": 6.45}, {"x": 74.799, "y": 6.29}, {"x": 77.441, "y": 6.11}, {"x": 80.176, "y": 5.94}, {"x": 83.008, "y": 5.76}, {"x": 85.94, "y": 5.57}, {"x": 88.976, "y": 5.38}, {"x": 92.118, "y": 5.18}, {"x": 95.372, "y": 4.98}, {"x": 98.741, "y": 4.77}, {"x": 102.229, "y": 4.56}, {"x": 105.84, "y": 4.34}, {"x": 109.578, "y": 4.12}, {"x": 113.449, "y": 3.89}, {"x": 117.456, "y": 3.66}, {"x": 121.604, "y": 3.42}, {"x": 125.9, "y": 3.18}, {"x": 130.347, "y": 2.93}, {"x": 134.951, "y": 2.68}, {"x": 139.718, "y": 2.43}, {"x": 144.653, "y": 2.18}, {"x": 149.762, "y": 1.92}, {"x": 155.052, "y": 1.66}, {"x": 160.529, "y": 1.4}, {"x": 166.199, "y": 1.15}, {"x": 172.069, "y": 0.89}, {"x": 178.147, "y": 0.65}, {"x": 184.44, "y": 0.42}, {"x": 190.954, "y": 0.21}, {"x": 197.699, "y": 0.03}, {"x": 204.682, "y": -0.0}, {"x": 211.912, "y": -0.0}, {"x": 219.397, "y": -0.0}, {"x": 227.147, "y": -0.0}, {"x": 235.17, "y": -0.0}, {"x": 243.477, "y": -0.0}, {"x": 252.077, "y": -0.0}, {"x": 260.98, "y": -0.0}, {"x": 270.199, "y": -0.0}, {"x": 279.743, "y": -0.0}, {"x": 289.624, "y": -0.0}, {"x": 299.854, "y": -0.0}, {"x": 310.445, "y": -0.0}, {"x": 321.411, "y": -0.0}, {"x": 332.763, "y": -0.0}, {"x": 344.517, "y": -0.0}, {"x": 356.686, "y": -0.01}, {"x": 369.285, "y": -0.01}, {"x": 382.329, "y": -0.01}, {"x": 395.833, "y": -0.01}, {"x": 409.815, "y": -0.01}, {"x": 424.29, "y": -0.02}, {"x": 439.277, "y": -0.02}, {"x": 454.793, "y": -0.02}, {"x": 470.857, "y": -0.03}, {"x": 487.489, "y": -0.03}, {"x": 504.708, "y": -0.04}, {"x": 522.535, "y": -0.05}, {"x": 540.992, "y": -0.05}, {"x": 560.101, "y": -0.06}, {"x": 579.885, "y": -0.07}, {"x": 600.367, "y": -0.09}, {"x": 621.573, "y": -0.1}, {"x": 643.528, "y": -0.12}, {"x": 666.259, "y": -0.14}, {"x": 689.792, "y": -0.16}, {"x": 714.157, "y": -0.18}, {"x": 739.383, "y": -0.2}, {"x": 765.499, "y": -0.23}, {"x": 792.538, "y": -0.26}, {"x": 820.532, "y": -0.3}, {"x": 849.514, "y": -0.33}, {"x": 879.521, "y": -0.37}, {"x": 910.587, "y": -0.42}, {"x": 942.751, "y": -0.46}, {"x": 976.05, "y": -0.51}, {"x": 1010.526, "y": -0.57}, {"x": 1046.22, "y": -0.65}, {"x": 1083.174, "y": -0.74}, {"x": 1121.434, "y": -0.83}, {"x": 1161.045, "y": -0.92}, {"x": 1202.055, "y": -1.01}, {"x": 1244.514, "y": -1.1}, {"x": 1288.473, "y": -1.2}, {"x": 1333.984, "y": -1.3}, {"x": 1381.103, "y": -1.4}, {"x": 1429.886, "y": -1.49}, {"x": 1480.392, "y": -1.59}, {"x": 1532.682, "y": -1.69}, {"x": 1586.819, "y": -1.79}, {"x": 1642.869, "y": -1.88}, {"x": 1700.898, "y": -1.97}, {"x": 1760.977, "y": -2.06}, {"x": 1823.178, "y": -2.15}, {"x": 1887.576, "y": -2.23}, {"x": 1954.248, "y": -2.3}, {"x": 2023.276, "y": -2.38}, {"x": 2094.742, "y": -2.44}, {"x": 2168.732, "y": -2.5}, {"x": 2245.336, "y": -2.55}, {"x": 2324.645, "y": -2.59}, {"x": 2406.756, "y": -2.63}, {"x": 2491.767, "y": -2.66}, {"x": 2579.781, "y": -2.68}, {"x": 2670.903, "y": -2.7}, {"x": 2765.244, "y": -2.7}, {"x": 2862.918, "y": -2.7}, {"x": 2964.041, "y": -2.7}, {"x": 3068.737, "y": -2.68}, {"x": 3177.13, "y": -2.66}, {"x": 3289.352, "y": -2.64}, {"x": 3405.538, "y": -2.61}, {"x": 3525.828, "y": -2.58}, {"x": 3650.367, "y": -2.54}, {"x": 3779.305, "y": -2.5}, {"x": 3912.797, "y": -2.45}, {"x": 4051.004, "y": -2.41}, {"x": 4194.093, "y": -2.36}, {"x": 4342.236, "y": -2.31}, {"x": 4495.612, "y": -2.26}, {"x": 4654.405, "y": -2.21}, {"x": 4818.807, "y": -2.16}, {"x": 4989.016, "y": -2.12}, {"x": 5165.238, "y": -2.07}, {"x": 5347.683, "y": -2.03}, {"x": 5536.573, "y": -1.99}, {"x": 5732.135, "y": -1.95}, {"x": 5934.605, "y": -1.92}, {"x": 6144.226, "y": -1.89}, {"x": 6361.251, "y": -1.86}, {"x": 6585.943, "y": -1.83}, {"x": 6818.57, "y": -1.81}, {"x": 7059.415, "y": -1.79}, {"x": 7308.766, "y": -1.77}, {"x": 7566.925, "y": -1.76}, {"x": 7834.203, "y": -1.75}, {"x": 8110.921, "y": -1.75}, {"x": 8397.414, "y": -1.74}, {"x": 8694.026, "y": -1.74}, {"x": 9001.115, "y": -1.74}, {"x": 9319.051, "y": -1.75}, {"x": 9648.217, "y": -1.76}, {"x": 9989.01, "y": -1.76}, {"x": 10341.84, "y": -1.77}, {"x": 10707.133, "y": -1.79}, {"x": 11085.329, "y": -1.8}, {"x": 11476.883, "y": -1.82}, {"x": 11882.268, "y": -1.83}, {"x": 12301.972, "y": -1.85}, {"x": 12736.5, "y": -1.87}, {"x": 13186.377, "y": -1.89}, {"x": 13652.144, "y": -1.91}, {"x": 14134.363, "y": -1.93}, {"x": 14633.614, "y": -1.95}, {"x": 15150.501, "y": -1.97}, {"x": 15685.644, "y": -2.0}, {"x": 16239.69, "y": -2.02}, {"x": 16813.306, "y": -2.04}, {"x": 17407.183, "y": -2.07}, {"x": 18022.037, "y": -2.09}, {"x": 18658.608, "y": -2.11}, {"x": 19317.664, "y": -2.14}, {"x": 20000.0, "y": -2.16}];
 
+    // Flat 0 dB reference (2 points is enough — Chart.js draws a straight
+    // pixel-space segment between them, so it reads flat under the log x-axis too).
+    const flatData = [{ x: 20, y: 0 }, { x: 20000, y: 0 }];
+
+    // --- i18n: UI + built-in descriptions + frequency-character labels ---
+    // Curve NAMES (EMMA-Ref v3, ResoNix, Harman, Flat, …) stay in English/original
+    // in every language — they're proper nouns, same convention as the rest of
+    // the car-audio community. Only prose (descriptions, labels, UI chrome) is translated.
+    const LANG_LS = 'acv_lang_v1';
+    const THEME_LS = 'acv_theme_v1';
+    // Apply the saved theme to <html> as early as possible so the first paint
+    // already matches (avoids a dark flash before JS runs the toggle wiring).
+    let currentTheme = 'dark';
+    try { const savedTheme = localStorage.getItem(THEME_LS); if (savedTheme === 'light' || savedTheme === 'dark') currentTheme = savedTheme; } catch (e) {}
+    document.documentElement.setAttribute('data-theme', currentTheme);
+    const WIDTH_LS = 'acv_width_v1';
+    let currentWidth = 'wide';
+    try { const savedWidth = localStorage.getItem(WIDTH_LS); if (savedWidth === 'wide' || savedWidth === 'narrow') currentWidth = savedWidth; } catch (e) {}
+    document.documentElement.setAttribute('data-width', currentWidth);
+    // Coarse 10-band grid — only used to compute the Compare feature's per-band
+    // dB deltas (a fixed grid makes that math simple); NOT used for the
+    // right-click guide below, which uses the finer FREQ_ENTRIES list instead.
+    const FREQ_BANDS = [
+        [20, 60], [60, 100], [100, 200], [200, 500], [500, 1000],
+        [1000, 2000], [2000, 4000], [4000, 6000], [6000, 10000], [10000, 20000],
+    ];
+    const DESC_TOKENS = [
+        ['laidback'], ['resonix', 'accurate'], ['harman'], ['audiofrog'],
+        ['jazzi'], ['whitledge'], ['emmaref'], ['flat'],
+    ];
+    function fmtHz(v) { return v >= 1000 ? (v / 1000).toFixed(v % 1000 ? 1 : 0) + 'k' : String(v); }
+    function fmtRange(range) { return fmtHz(range[0]) + '–' + fmtHz(range[1]) + ' Hz'; }
+
+    // --- Right-click frequency-character guide — reviewed by the Gemini
+    // Critic/Advisor channel for IN-CAR cabin acoustics (not studio mixing):
+    // ranges/terms match the well-known "boost vs. cut" frequency cheat-sheet,
+    // corrected for car-specific causes (door/pillar/dash/glass reflections,
+    // phase/time-alignment vs. pure EQ). Phrases stay in English (terms of
+    // art, same convention as curve names); only the explanation is localized.
+    const FREQ_ENTRIES = [
+        { range: [20, 60], type: 'boost', phrase: 'Boosted bass', instruments: { en: 'Synth bass, kick drum fundamental, pipe organ', uk: 'Синт-бас, основа бас-бочки, орган', de: 'Synth-Bass, Kickdrum-Grundton, Orgel', pl: 'Bas syntezatorowy, podstawa stopy, organy' }, desc: {
+            en: 'Deep, powerful subwoofer rumble that physically pressurizes the cabin and impacts the chest.',
+            uk: 'Глибокий сабвуферний бас, що створює фізичний тиск у салоні та відчувається грудьми.',
+            de: 'Tiefes, druckvolles Subwoofer-Grollen, das die Fahrzeugkabine physisch unter Druck setzt und in der Brust spürbar ist.',
+            pl: 'Głęboki, potężny bas z subwoofera, który fizycznie pompuje ciśnienie w kabinie i uderza w klatkę piersiową.' } },
+        { range: [20, 60], type: 'boost', phrase: 'fat / muddy / bassy', instruments: { en: 'Synth sub-bass, 808 kick, electric bass low notes', uk: 'Синт саб-бас, 808-бочка, низи бас-гітари', de: 'Synth-Subbass, 808-Kick, tiefe Bassgitarrentöne', pl: 'Subbas syntezatorowy, stopa 808, niskie nuty basu' }, desc: {
+            en: 'Overwhelming sub-bass that drowns out mid-bass definition and aggressively rattles cabin panels.',
+            uk: 'Надмірний саб-бас, який глушить мідбас та змушує деренчати панелі салону.',
+            de: 'Übermäßiger Subbass, der die Midbass-Definition überdeckt und Verkleidungen der Kabine klappern lässt.',
+            pl: 'Dudniący subbas, który zagłusza definicję midbasu i agresywnie powoduje rezonans plastików w kabinie.' } },
+        { range: [20, 60], type: 'cut', phrase: 'disattached bass', instruments: { en: 'Upright bass lowest strings, low kick drum resonance', uk: 'Найнижчі струни контрабаса, низький резонанс бочки', de: 'Tiefste Kontrabass-Saiten, tiefe Kickdrum-Resonanz', pl: 'Najniższe struny kontrabasu, niski rezonans stopy' }, desc: {
+            en: 'Subwoofer feels physically disconnected, pulling the soundstage into the trunk instead of blending up front. Usually a time-alignment/phase or crossover-slope issue, not a pure EQ problem.',
+            uk: 'Сабвуфер грає окремо від фронту, відтягуючи звукову сцену назад у багажник замість злиття. Зазвичай це проблема затримки/фази чи нахилу кросовера, а не суто EQ.',
+            de: 'Subwoofer wirkt abgetrennt und zieht die Bühne in den Kofferraum, statt mit der Front zu verschmelzen. Meist ein Zeitkorrektur-/Phasen- oder Übergangsfrequenz-Problem, kein reines EQ-Thema.',
+            pl: 'Subwoofer gra w oderwaniu od przodu, przeciągając scenę dźwiękową do bagażnika zamiast spójnego brzmienia. Zwykle to problem wyrównania czasowego/fazy lub nachylenia zwrotnicy, a nie tylko EQ.' } },
+        { range: [20, 60], type: 'cut', phrase: 'bass-shy / thin', instruments: { en: 'Bass guitar root notes, large toms, electronic kick', uk: 'Основні ноти бас-гітари, великі томи, електронна бочка', de: 'Grundtöne der Bassgitarre, große Toms, elektronische Kick', pl: 'Podstawowe nuty basu, duże tomy, elektroniczna stopa' }, desc: {
+            en: 'Weak subwoofer foundation, leaving the system sounding thin and easily drowned out by road noise.',
+            uk: 'Слабкий фундамент сабвуфера, через що система звучить тонко і губиться на тлі шуму дороги.',
+            de: 'Schwaches Subwoofer-Fundament; das System klingt dünn und geht leicht im Fahrgeräusch unter.',
+            pl: 'Słaby fundament subwoofera, przez co system brzmi chudo i łatwo gubi się w szumie drogi.' } },
+        { range: [20, 50], type: 'cut', phrase: 'tight bass', instruments: { en: 'Fast double kick pedals, synth bass articulation', uk: 'Швидка подвійна бочка, артикуляція синт-баса', de: 'Schnelle Doppel-Fußmaschine, Synth-Bass-Artikulation', pl: 'Szybka podwójna stopa, artykulacja basu syntezatorowego' }, desc: {
+            en: 'Subsonic roll-off controls cabin gain bloat, improving subwoofer speed, mechanical safety, and tightness.',
+            uk: 'Зріз найнижчих частот прибирає гудіння салону, покращуючи швидкість сабвуфера та його механічну безпеку.',
+            de: 'Subsonic-Filter reduziert Druckkammereffekt-Wummern und verbessert Subwoofer-Präzision, Straffheit sowie mechanische Belastbarkeit.',
+            pl: 'Cięcie subsoniczne redukuje podbicie kabiny, poprawiając szybkość subwoofera, jego zwartość i bezpieczeństwo mechaniczne.' } },
+        { range: [60, 100], type: 'cut', phrase: 'hollow bass', instruments: { en: 'Kick drum body, bass guitar attack, lower tom thud', uk: 'Тіло бочки, атака бас-гітари, удар низького тома', de: 'Kickdrum-Körper, Bassgitarren-Attack, tiefer Tom-Schlag', pl: 'Ciało stopy, atak basu, uderzenie niskiego tomu' }, desc: {
+            en: 'Lacks midbass impact and punch; the rhythm section feels completely empty and flat.',
+            uk: 'Відсутність удару та панчу мідбаса; ритм-секція звучить цілком порожньо.',
+            de: 'Fehlender Midbass-Kick und -Punch; die Rhythmusgruppe wirkt völlig leer und flach.',
+            pl: 'Brak uderzenia i punchu midbasu; sekcja rytmiczna brzmi zupełnie pusto i płasko.' } },
+        { range: [60, 150], type: 'boost', phrase: 'muddy / boomy / rubbery bass, slam', instruments: { en: 'Kick drum punch, electric bass, snare bottom', uk: 'Панч бочки, бас-гітара, низ малого барабана', de: 'Kickdrum-Punch, E-Bass, Snare-Unterseite', pl: 'Punch stopy, bas elektryczny, spód werbla' }, desc: {
+            en: 'Aggressive midbass punch that, depending on the driver location (doors, kick panels, under-seat, pods), can turn boomy or muddy in a cabin.',
+            uk: 'Агресивний панч мідбаса, який залежно від місця драйвера (двері, кік-панелі, під сидінням, поди) може стати гудячим чи каламутним у салоні.',
+            de: 'Aggressiver Midbass-Punch, der je nach Einbauort des Treibers (Türen, Kickpanels, unter dem Sitz, Pods) im Innenraum wummerig oder matschig werden kann.',
+            pl: 'Agresywny punch midbasu, który zależnie od lokalizacji głośnika (drzwi, kick panele, pod fotelem, pody) może stać się dudniący lub mętny w kabinie.' } },
+        { range: [150, 300], type: 'boost', phrase: 'warmth / punchy bass', instruments: { en: 'Male vocal fundamentals, cello, snare drum body', uk: 'Основа чоловічого вокалу, віолончель, тіло малого барабана', de: 'Grundtöne männlicher Stimme, Cello, Snare-Körper', pl: 'Podstawy męskiego wokalu, wiolonczela, ciało werbla' }, desc: {
+            en: 'Adds warmth and body — but depending on where the midbass sits (doors, kick panels, under-seat, pods) this range can also excite panel resonance and tip into mud.',
+            uk: 'Додає тепла й тіла — але залежно від розташування мідбаса (двері, кік-панелі, під сидінням, поди) ця смуга може збуджувати резонанс панелей і йти в кашу.',
+            de: 'Sorgt für Wärme und Körper — je nach Einbauort des Midbass (Türen, Kickpanels, unter dem Sitz, Pods) kann dieser Bereich aber auch Verkleidungsresonanzen anregen und in Matsch kippen.',
+            pl: 'Dodaje ciepła i ciała — ale zależnie od miejsca midbasu (drzwi, kick panele, pod fotelem, pody) to pasmo może też wzbudzać rezonans paneli i przechodzić w błoto.' } },
+        { range: [300, 400], type: 'boost', phrase: 'muddy, cuppy', instruments: { en: 'Lower male vocals, viola, lower acoustic guitar', uk: 'Нижній чоловічий вокал, альт, низ акустичної гітари', de: 'Tiefere Männerstimme, Bratsche, tiefere Akustikgitarre', pl: 'Niższy męski wokal, altówka, niższa gitara akustyczna' }, desc: {
+            en: "Dashboard reflections amplify this range, causing a boxy, stifled, 'talking into a cup' vocal coloration.",
+            uk: 'Відбиття від торпедо підсилюють цей діапазон, створюючи коробковий, затиснутий вокал «через рупор».',
+            de: 'Armaturenbrett-Reflexionen verstärken diesen Bereich und verursachen verfärbte, topfige Stimmen wie durch vorgehaltene Hände.',
+            pl: 'Odbicia od deski rozdzielczej wzmacniają to pasmo, dając pudełkowaty, stłumiony wokal jak przez tubę.' } },
+        { range: [300, 400], type: 'cut', phrase: 'hollow voices', instruments: { en: 'Male vocal chest voice, lower brass, acoustic guitar body', uk: 'Грудний чоловічий голос, низькі духові, тіло акустичної гітари', de: 'Männliche Bruststimme, tiefe Blechbläser, Akustikgitarren-Körper', pl: 'Piersiowy głos męski, niskie blachy, ciało gitary akustycznej' }, desc: {
+            en: 'Over-cutting to fix reflections leaves vocals sounding thin, empty, and lacking natural chest resonance.',
+            uk: 'Надмірне зрізання для боротьби з відбиттями робить вокал тонким, порожнім і без грудного резонансу.',
+            de: 'Zu starkes Absenken gegen Reflexionen lässt Stimmen dünn, leer und ohne natürlichen Brustkorb-Klang wirken.',
+            pl: 'Zbyt mocne wycięcie dla redukcji odbić zostawia wokale cienkimi, pustymi i bez naturalnego rezonansu klatki.' } },
+        { range: [400, 800], type: 'boost', phrase: 'honky / boxy', instruments: { en: 'Male vocal chest, snare body, midbass driver output', uk: 'Груди чоловічого вокалу, тіло малого барабана, віддача мідбаса', de: 'Männliche Bruststimme, Snare-Körper, Midbass-Ausgabe', pl: 'Pierś męskiego wokalu, ciało werbla, wyjście midbasu' }, desc: {
+            en: "Boxy, cabinet-like coloration — sounds trapped inside a box; typically a midbass enclosure resonance (door panel, pod, kick panel, or box), wherever the driver is mounted.",
+            uk: 'Коробковий призвук — ніби звук замкнений у ящику; зазвичай резонанс корпусу мідбаса (дверна панель, под, кік-панель чи короб), де б драйвер не стояв.',
+            de: 'Kistige, schachtelartige Klangfärbung — wie in einer Box gefangen; meist eine Gehäuseresonanz des Midbass (Türverkleidung, Pod, Kickpanel oder Box), egal wo der Treiber sitzt.',
+            pl: 'Pudełkowate zabarwienie — jakby dźwięk był zamknięty w pudełku; zwykle rezonans obudowy midbasu (panel drzwi, pod, kick panel lub skrzynka), niezależnie od miejsca montażu.' } },
+        { range: [400, 800], type: 'cut', phrase: 'hollow', instruments: { en: 'Male vocal body, acoustic guitar body, piano lower-mid', uk: 'Тіло чоловічого вокалу, тіло акустичної гітари, нижня середина фортепіано', de: 'Körper der Männerstimme, Akustikgitarren-Körper, unterer Klaviermittelbereich', pl: 'Ciało męskiego wokalu, ciało gitary akustycznej, dolna średnica fortepianu' }, desc: {
+            en: 'Hollow lower-midrange — vocals and instruments lose body and sound thin or distant.',
+            uk: 'Порожній нижній мідрейндж — голоси й інструменти втрачають тіло, звучать тонко або віддалено.',
+            de: 'Hohler unterer Mitteltonbereich — Stimmen und Instrumente verlieren an Körper, klingen dünn oder entfernt.',
+            pl: 'Puste dolne pasmo średnich — wokale i instrumenty tracą ciało, brzmią cienko lub odlegle.' } },
+        { range: [1000, 2000], type: 'boost', phrase: 'nasal / horn-like / plastic', instruments: { en: 'Female vocal presence, horn-loaded tweeter peak, trumpet bite', uk: 'Присутність жіночого вокалу, пік рупорного твітера, різкість труби', de: 'Präsenz weiblicher Stimme, Horn-Hochtöner-Spitze, Trompeten-Biss', pl: 'Obecność żeńskiego wokalu, pik tweetera tubowego, ostrość trąbki' }, desc: {
+            en: 'Nasal, horn-like resonance — often cone break-up or a pod/tweeter horn peak; can sound plasticky or "cupped".',
+            uk: 'Носовий, рупороподібний резонанс — часто злам конуса чи пік рупора твітера/поду; може звучати пластиково або «крізь долоні».',
+            de: 'Nasale, hornartige Resonanz — oft Konus-Membranbruch oder eine Hornspitze am Pod/Hochtöner; kann plastikartig oder „wie durch die Hand“ klingen.',
+            pl: 'Nosowy, rogopodobny rezonans — często efekt załamania membrany lub piku rogu tweetera/podu; może brzmieć plastikowo lub „przez dłonie”.' } },
+        { range: [1000, 2000], type: 'cut', phrase: 'veiled / lacking presence', instruments: { en: 'Female vocal consonants, snare crack, acoustic guitar pick attack', uk: 'Приголосні жіночого вокалу, тріск малого барабана, атака медіатора гітари', de: 'Konsonanten weiblicher Stimme, Snare-Crack, Plektrum-Attack der Gitarre', pl: 'Spółgłoski żeńskiego wokalu, trzask werbla, atak kostki gitarowej' }, desc: {
+            en: 'Veiled, recessed upper-midrange — vocals and lead instruments sound distant or muffled.',
+            uk: 'Завуальований, запалий верхній мідрейндж — вокал і солюючі інструменти звучать віддалено або приглушено.',
+            de: 'Verschleierter, zurückgenommener oberer Mitteltonbereich — Gesang und Lead-Instrumente klingen entfernt oder gedämpft.',
+            pl: 'Zawoalowane, cofnięte górne pasmo średnich — wokal i instrumenty prowadzące brzmią odlegle lub stłumione.' } },
+        { range: [1000, 2000], type: 'cut', phrase: 'plastic / cuppy', instruments: { en: 'Electric guitar, piano core, human voice presence', uk: 'Електрогітара, ядро фортепіано, присутність голосу', de: 'E-Gitarre, Klavier-Kern, Präsenz der Stimme', pl: 'Gitara elektryczna, rdzeń fortepianu, obecność głosu' }, desc: {
+            en: 'Scooping this core band destroys center image focus and strips natural timbre from most instruments.',
+            uk: 'Вирізання цієї ключової смуги руйнує фокус центрального образу та позбавляє інструменти природного тембру.',
+            de: 'Das Absenken dieses Kernbereichs zerstört den Bühnenfokus und beraubt die Instrumente ihrer natürlichen Klangfarbe.',
+            pl: 'Wycięcie tego kluczowego pasma niszczy ostrość sceny na środku i pozbawia instrumenty naturalnej barwy.' } },
+        { range: [2000, 2500], type: 'boost', phrase: 'nasal / tinny / forward', instruments: { en: 'Electric guitar bite, snare crack, female vocal harshness', uk: 'Різкість електрогітари, тріск малого барабана, жорсткість жіночого вокалу', de: 'E-Gitarren-Biss, Snare-Crack, Härte weiblicher Stimme', pl: 'Ostrość gitary elektrycznej, trzask werbla, szorstkość żeńskiego wokalu' }, desc: {
+            en: 'A-pillar reflections and crossover phase issues make this band aggressively forward, nasal, and ear-fatiguing.',
+            uk: 'Відбиття від стійок і фазові проблеми кросовера роблять цю смугу агресивною, носовою та виснажливою.',
+            de: 'A-Säulen-Reflexionen und Phasenprobleme der Weiche machen dieses Band aggressiv aufdringlich, nasal und anstrengend.',
+            pl: 'Odbicia od słupków i problemy fazowe zwrotnicy czynią to pasmo agresywnie wypchniętym, nosowym i męczącym.' } },
+        { range: [2000, 3000], type: 'cut', phrase: 'lacking attack / laid back / sweet', instruments: { en: 'Snare drum snap, acoustic guitar pluck, piano hammers', uk: 'Клац малого барабана, щипок акустичної гітари, молоточки фортепіано', de: 'Snare-Snap, Anzupfen der Akustikgitarre, Klavierhämmer', pl: 'Strzał werbla, szarpnięcie gitary akustycznej, młoteczki fortepianu' }, desc: {
+            en: 'Often slightly dipped in cars to reduce listening fatigue, but over-cutting causes dull, lifeless attack.',
+            uk: 'Часто трохи приглушується в авто для комфорту, але надмірний зріз дає мляву, тьмяну атаку.',
+            de: 'Im Auto oft leicht gesenkt, um Gehörermüdung zu mindern; zu viel Schnitt killt aber die Dynamik.',
+            pl: 'Często lekko wycofywane w aucie dla komfortu, ale zbyt mocne cięcie daje matowy, martwy atak.' } },
+        { range: [2500, 4000], type: 'boost', phrase: 'thin / bright / too clear', instruments: { en: 'Cymbal crash fundamentals, upper female vocals, violin bite', uk: 'Основа крешу тарілок, верхній жіночий вокал, різкість скрипки', de: 'Grundton des Crash-Beckens, obere Frauenstimme, Geigen-Biss', pl: 'Podstawa blachy crash, górny żeński wokal, ostrość skrzypiec' }, desc: {
+            en: 'Glare from window reflections creates an abrasive, harsh edge that quickly fatigues the ear.',
+            uk: 'Відбиття від вікон створюють різкий, їдкий призвук, який швидко стомлює слух на високій гучності.',
+            de: 'Glasreflexionen erzeugen eine scharfe, aggressive Härte, die bei Lautstärke schnell in den Ohren schmerzt.',
+            pl: 'Odbicia od szyb tworzą ostry, jazgotliwy nalot, który bardzo szybko męczy słuch przy większej głośności.' } },
+        { range: [2500, 4000], type: 'cut', phrase: 'lacking clarity / detail', instruments: { en: 'Vocal articulation, snare drum crispness, acoustic guitar overtones', uk: 'Артикуляція вокалу, чіткість малого барабана, обертони акустичної гітари', de: 'Gesangsartikulation, Snare-Knackigkeit, Akustikgitarren-Obertöne', pl: 'Artykulacja wokalu, wyrazistość werbla, alikwoty gitary akustycznej' }, desc: {
+            en: "Causes a 'blanket over speakers' effect, smearing details and dropping the soundstage height downward.",
+            uk: 'Ефект «ковдри на динаміках», який змазує деталі та опускає висоту звукової сцени вниз.',
+            de: 'Bewirkt einen „Decke-über-Lautsprechern“-Effekt, verschmiert Details und zieht die Bühnenabbildung räumlich nach unten.',
+            pl: 'Efekt „koca na głośnikach”, który zamazuje detale i znacząco obniża wysokość sceny dźwiękowej ku dołowi.' } },
+        { range: [4000, 5000], type: 'boost', phrase: 'edgy / sharp / sibilant / overly bright', instruments: { en: 'Vocal sibilance (S/T sounds), cymbal crash edge, synth leads', uk: 'Сибілянти вокалу (звуки С/Т), край крешу тарілок, синт-ліди', de: 'Zischlaute der Stimme (S/T-Laute), Crash-Becken-Kante, Synth-Leads', pl: 'Sybilanty wokalu (głoski S/T), krawędź blachy crash, syntezatorowe leady' }, desc: {
+            en: "Severe 'ice pick' harshness where vocal sibilance and cymbals painfully pierce ears in enclosed cabins.",
+            uk: 'Болюча різкість, коли сибілянти вокалу та тарілки буквально ріжуть вухо в закритому просторі салону.',
+            de: 'Schmerzhafte Schärfe, bei der Zischlaute und Becken im geschlossenen Innenraum förmlich in den Ohren stechen.',
+            pl: 'Bolesna ostrość, gdzie sybilanty wokalu i talerze dosłownie kłują w uszy w zamkniętej kabinie.' } },
+        { range: [5000, 10000], type: 'boost', phrase: 'piercing / sharp / accentuated', instruments: { en: 'Cymbal wash, tambourine, hi-hats, vocal breath', uk: 'Шелест тарілок, бубон, хай-хети, дихання вокалу', de: 'Becken-Wash, Tamburin, Hi-Hats, Atem der Stimme', pl: 'Szum talerzy, tamburyn, hi-haty, oddech wokalu' }, desc: {
+            en: 'Tweeters aimed directly on-axis or gained too high cause exaggerated hiss and fast listener fatigue.',
+            uk: 'Твітери, спрямовані прямо на слухача або занадто гучні, викликають надмірне шипіння і швидку втому.',
+            de: 'Direkt ausgerichtete oder zu laute Hochtöner verursachen übermäßiges Zischeln und schnelle Ermüdung des Gehörs.',
+            pl: 'Tweetery skierowane bezpośrednio na uszy lub zbyt głośne powodują przesadne syczenie i szybkie zmęczenie słuchu.' } },
+        { range: [5000, 10000], type: 'cut', phrase: 'lacking finesse / poor sound drums', instruments: { en: 'Hi-hats, cymbals, snare wire buzz', uk: 'Хай-хети, тарілки, дзвін пружини малого барабана', de: 'Hi-Hats, Becken, Snare-Teppich-Schnarren', pl: 'Hi-haty, talerze, brzęczenie sprężyny werbla' }, desc: {
+            en: 'Often caused by off-axis tweeter mounting or thick grilles; collapses stereo width and dulls cymbals.',
+            uk: 'Часто виникає через розворот твітерів або товсті сітки; звужує стереобазу і робить тарілки тьмяними.',
+            de: 'Oft durch Fehlwinkel der Hochtöner oder dicke Gitter verursacht; schrumpft Stereobreite und dämpft Becken.',
+            pl: 'Często przez złe ukierunkowanie tweeterów lub grube maskownice; zwęża bazę stereo i matowi blachy.' } },
+        { range: [5000, 10000], type: 'cut', phrase: 'drum-hits lack power / treble lacking', instruments: { en: 'Percussion attack, cymbal stick impact, synth overtones', uk: 'Атака перкусії, удар палички по тарілці, обертони синтезатора', de: 'Percussion-Attack, Stick-Aufprall auf Becken, Synth-Obertöne', pl: 'Atak perkusji, uderzenie pałki w talerz, alikwoty syntezatora' }, desc: {
+            en: 'Transients lose their snap and micro-dynamics disappear, making the system sound distant and lifeless.',
+            uk: 'Транзієнти втрачають різкість, зникає мікродинаміка, через що система звучить відсторонено та неживо.',
+            de: 'Transienten verlieren ihren Biss und Mikrodynamik verschwindet, wodurch das System distanziert und leblos wirkt.',
+            pl: 'Transjenty tracą swój trzask i znika mikrodynamika, przez co system brzmi z oddali i bez życia.' } },
+        { range: [10000, 20000], type: 'boost', phrase: 'air', instruments: { en: 'Cymbal decay, room reverb tails, triangle', uk: 'Загасання тарілок, хвости реверберації приміщення, трикутник', de: 'Becken-Ausklang, Raumhall-Fahnen, Triangel', pl: 'Wybrzmienie talerzy, ogony pogłosu pomieszczenia, trójkąt' }, desc: {
+            en: 'Can add space and breath, but in cars often just amplifies amplifier hiss and wind noise.',
+            uk: 'Може додати простору, але в авто часто лише підсилює шум підсилювача та вітру.',
+            de: 'Kann Räumlichkeit bringen, verstärkt im Auto aber oft nur das Rauschen von Verstärker und Fahrwind.',
+            pl: 'Może dodać przestrzeni, ale w aucie najczęściej tylko wzmacnia szum wzmacniacza i pęd powietrza.' } },
+        { range: [10000, 20000], type: 'cut', phrase: 'lacking air / sparkle / realism', instruments: { en: 'High cymbal harmonics, recording room ambiance', uk: 'Високі гармоніки тарілок, атмосфера студії запису', de: 'Hohe Becken-Obertöne, Atmosphäre des Aufnahmeraums', pl: 'Wysokie harmoniczne talerzy, atmosfera pomieszczenia nagraniowego' }, desc: {
+            en: 'Severe off-axis tweeter angles cause early roll-off, closing in the stage and eliminating high-end shimmer.',
+            uk: 'Сильний кут розвороту твітерів викликає ранній спад, затискаючи сцену і прибираючи іскристість верхів.',
+            de: 'Starke Fehlwinkel der Hochtöner verursachen einen frühen Abfall, verengen die Bühne und schlucken den Hochtonglanz.',
+            pl: 'Mocne odchylenie tweeterów od osi powoduje wczesny spadek, zamykając scenę i zabierając blask na samej górze.' } },
+    ];
+    function matchFreqEntries(freq) {
+        const boost = FREQ_ENTRIES.filter(function (e) { return e.type === 'boost' && freq >= e.range[0] && freq < e.range[1]; });
+        const cut = FREQ_ENTRIES.filter(function (e) { return e.type === 'cut' && freq >= e.range[0] && freq < e.range[1]; });
+        return { boost: boost, cut: cut };
+    }
+    // Used by Compare: the most specific (narrowest-range) entry of the given
+    // type whose range covers a band's geometric-mean frequency.
+    function bestPhraseForBand(range, type) {
+        const f = Math.sqrt(range[0] * range[1]);
+        const cands = FREQ_ENTRIES.filter(function (e) { return e.type === type && f >= e.range[0] && f < e.range[1]; });
+        if (!cands.length) return null;
+        cands.sort(function (a, b) { return (a.range[1] - a.range[0]) - (b.range[1] - b.range[0]); });
+        return cands[0];
+    }
+
+    const I18N = {
+        en: {
+            mainTitle: 'Acoustic Target Curve Visualizer',
+            subtitlePre: 'Reference curve for project ', subtitleMid: '. Drag in your own curve, or grab a standard curve from the ', subtitlePost: ' — it plots offline once dropped in.',
+            subtitlePromoPre: 'Part of the ', subtitlePromoPost: ' project — an AI-guided car-audio tuning workflow that reads what each curve means for your instruments.',
+            hideAll: 'Hide all curves', showAll: 'Show all curves',
+            dropPre: '↳ Drop a curve ', dropMid: ' file here (REW/NTT: ', dropPost: ') — or click to choose one. Plots instantly, offline.',
+            hintLine: 'click a card below to hide/show that curve · right-click the chart for a frequency-character guide',
+            freqAxis: 'Frequency (Hz)', levelAxis: 'Level (dB)', level: 'Level:',
+            delTitle: 'Delete curve', loadedPts: n => 'Loaded, ' + n + ' points',
+            clickToggleTitle: 'Click to hide / show', noPairsAlert: 'No freq/dB pairs found in file.',
+            offsetPrompt: v => 'Suggested normalization offset: ' + v + ' dB (curve will be shifted so the 200–500 Hz band sits near 0 dB). Adjust the value if you want a different reference level, or keep it as is:',
+            emmaCardDesc: '<b>Blends juiciness with SQ accuracy:</b> deep juicy sub-bass (+9.0 dB, similar to Audiofrog), a soft, ultra-smooth roll-off to 200 Hz (fully removes boominess), a presence dip (-2 dB at 2.5 kHz) and a natural HF roll-off (-0.5 dB/oct).',
+            flatCardDesc: '0 dB reference line — the neutral baseline. Useful for reading other curves\' absolute deviation at a glance.',
+            descText: [
+                '<b>ResoNix Laid-Back:</b> same signature, more bass and a tamed top end — warmer, less fatiguing.',
+                '<b>ResoNix Accurate:</b> a competition favorite — powerful sub-bass, linear HF roll-off, accurate timbre.',
+                '<b>Harman:</b> a sub-bass monster — energetic deep bass and a comfortably rolled-off top end.',
+                '<b>Audiofrog (A. Wehmeyer):</b> the naturalness benchmark — smooth bass, gentle HF roll-off, great timbre.',
+                '<b>Jazzi:</b> a community classic — bass +~10 dB and a presence dip at 2.5 kHz for a deep soundstage.',
+                '<b>Half Whitledge:</b> a warm rock character — meaty midbass, rolled-off top end, dense vocals.',
+                '<b>EMMA-Ref v3 (project):</b> juicy sub-bass, ultra-smooth roll-off to 200 Hz, presence dip −2 dB @2.5 kHz.',
+                '<b>Flat:</b> 0 dB reference — no tonal shaping, useful as a neutral baseline.',
+            ],
+            compareBtn: 'Compare curves', compareTitle: 'Curve comparison',
+            compareNeedMore: 'Show (un-hide) at least 2 curves to compare.',
+            compareBaseline: 'Baseline:', chooseBaseline: 'Baseline curve (columns are compared against it):',
+            bandCol: 'Frequency band', compareClose: 'Close', egWord: 'e.g.',
+            intSlight: 'slightly', intModerate: 'moderately', intStrong: 'clearly',
+        },
+        uk: {
+            mainTitle: 'Візуалізатор цільових акустичних кривих',
+            subtitlePre: 'Референсна крива проєкту ', subtitleMid: '. Перетягни свою криву або візьми стандартну криву з ', subtitlePost: ' — вона додасться на графік офлайн.',
+            subtitlePromoPre: 'Частина проєкту ', subtitlePromoPost: ' — AI-гайд для тюнінгу автозвуку, що пояснює вплив кожної кривої на інструменти.',
+            hideAll: 'Сховати всі криві', showAll: 'Показати всі криві',
+            dropPre: '↳ Перетягни сюди файл кривої ', dropMid: ' (REW/NTT: ', dropPost: ') — або клацни, щоб обрати. Додається на графік миттєво, офлайн.',
+            hintLine: 'клацни на картку внизу, щоб сховати/показати криву · права кнопка миші на графіку — гід частотних характеристик',
+            freqAxis: 'Частота (Гц)', levelAxis: 'Рівень (дБ)', level: 'Рівень:',
+            delTitle: 'Видалити криву', loadedPts: n => 'Завантажено, ' + n + ' точок',
+            clickToggleTitle: 'Клац — сховати / показати', noPairsAlert: 'У файлі не знайдено пар частота/дБ.',
+            offsetPrompt: v => 'Пропонований офсет нормалізації: ' + v + ' дБ (крива зсунеться так, щоб смуга 200–500 Гц була близько до 0 дБ). Зміни значення, якщо потрібен інший рівень відліку, або залиш як є:',
+            emmaCardDesc: '<b>Поєднання соковитості та SQ-точності:</b> глибокий соковитий суббас (+9.0 дБ, як в Audiofrog), м’який, надплавний спад до 200 Гц (повністю прибирає бубніння), яма присутності (-2 дБ на 2.5 кГц) та природний спад ВЧ (-0.5 дБ/окт).',
+            flatCardDesc: 'Лінія 0 дБ — нейтральна база. Зручно бачити абсолютне відхилення інших кривих одним поглядом.',
+            descText: [
+                '<b>ResoNix Laid-Back:</b> той самий почерк, більше басу й притишений верх — тепліше, менш втомлює.',
+                '<b>ResoNix Accurate:</b> улюблениця змагань — потужний суббас, лінійний спад ВЧ, точні тембри.',
+                '<b>Harman:</b> суббасовий монстр — енергійний глибокий бас і комфортно завалені високі.',
+                '<b>Audiofrog (A. Wehmeyer):</b> еталон натуральності — плавний бас, делікатний спад ВЧ, чудові тембри.',
+                '<b>Jazzi:</b> community-класика — бас +~10 дБ і яма присутності на 2.5 кГц для глибокої сцени.',
+                '<b>Half Whitledge:</b> теплий рок-характер — м’ясистий мідбас, завалений верх, щільний вокал.',
+                '<b>EMMA-Ref v3 (проєкт):</b> соковитий суббас, надплавний спад до 200 Гц, яма присутності −2 дБ @2.5 кГц.',
+                '<b>Flat:</b> референс 0 дБ — без тональної корекції, зручно як нейтральна база.',
+            ],
+            compareBtn: 'Порівняти криві', compareTitle: 'Порівняння кривих',
+            compareNeedMore: 'Покажи (не приховуй) щонайменше 2 криві для порівняння.',
+            compareBaseline: 'База:', chooseBaseline: 'Базова крива (стовпчики порівнюються з нею):',
+            bandCol: 'Смуга частот', compareClose: 'Закрити', egWord: 'напр.',
+            intSlight: 'трохи', intModerate: 'помірно', intStrong: 'виразно',
+        },
+        de: {
+            mainTitle: 'Visualizer für akustische Zielkurven',
+            subtitlePre: 'Referenzkurve für das Projekt ', subtitleMid: '. Ziehe deine eigene Kurve hierher oder hol dir eine Standardkurve vom ', subtitlePost: ' — sie wird offline ins Diagramm geladen.',
+            subtitlePromoPre: 'Teil des Projekts ', subtitlePromoPost: ' — ein KI-gestützter Car-Audio-Tuning-Workflow, der erklärt, was jede Kurve für deine Instrumente bedeutet.',
+            hideAll: 'Alle Kurven ausblenden', showAll: 'Alle Kurven einblenden',
+            dropPre: '↳ Ziehe eine ', dropMid: '-Kurvendatei hierher (REW/NTT: ', dropPost: ') — oder klicke, um eine auszuwählen. Wird sofort offline geplottet.',
+            hintLine: 'Klicke auf eine Karte unten, um die Kurve auszublenden/einzublenden · Rechtsklick auf das Diagramm für den Frequenzcharakter-Guide',
+            freqAxis: 'Frequenz (Hz)', levelAxis: 'Pegel (dB)', level: 'Pegel:',
+            delTitle: 'Kurve löschen', loadedPts: n => 'Geladen, ' + n + ' Punkte',
+            clickToggleTitle: 'Klicken zum Ein-/Ausblenden', noPairsAlert: 'Keine Frequenz/dB-Paare in der Datei gefunden.',
+            offsetPrompt: v => 'Vorgeschlagener Normalisierungs-Offset: ' + v + ' dB (die Kurve wird so verschoben, dass der Bereich 200–500 Hz nahe 0 dB liegt). Ändere den Wert bei Bedarf, oder übernimm ihn so:',
+            emmaCardDesc: '<b>Verbindet Fülle mit SQ-Präzision:</b> tiefer, satter Subbass (+9.0 dB, ähnlich wie Audiofrog), ein sanfter, ultra-glatter Abfall bis 200 Hz (beseitigt Dröhnen vollständig), eine Präsenzsenke (-2 dB bei 2.5 kHz) und ein natürlicher Höhenabfall (-0.5 dB/Okt).',
+            flatCardDesc: '0-dB-Referenzlinie — die neutrale Basislinie. Praktisch, um die absolute Abweichung anderer Kurven auf einen Blick zu sehen.',
+            descText: [
+                '<b>ResoNix Laid-Back:</b> gleicher Charakter, mehr Bass und ein gezähmter Hochtonbereich — wärmer, weniger ermüdend.',
+                '<b>ResoNix Accurate:</b> ein Wettbewerbsfavorit — kräftiger Subbass, linearer Höhenabfall, präzises Timbre.',
+                '<b>Harman:</b> ein Subbass-Monster — energiegeladener Tiefbass und ein angenehm abfallender Hochtonbereich.',
+                '<b>Audiofrog (A. Wehmeyer):</b> der Maßstab für Natürlichkeit — sanfter Bass, sanfter Höhenabfall, tolles Timbre.',
+                '<b>Jazzi:</b> ein Community-Klassiker — Bass +~10 dB und eine Präsenzsenke bei 2.5 kHz für eine tiefe Bühne.',
+                '<b>Half Whitledge:</b> ein warmer Rock-Charakter — kräftiger Mitteltonbass, abfallender Hochtonbereich, dichter Gesang.',
+                '<b>EMMA-Ref v3 (Projekt):</b> satter Subbass, ultra-glatter Abfall bis 200 Hz, Präsenzsenke −2 dB @2.5 kHz.',
+                '<b>Flat:</b> 0-dB-Referenz — keine tonale Formung, praktisch als neutrale Basislinie.',
+            ],
+            compareBtn: 'Kurven vergleichen', compareTitle: 'Kurvenvergleich',
+            compareNeedMore: 'Zeige (blende ein) mindestens 2 Kurven zum Vergleichen.',
+            compareBaseline: 'Basis:', chooseBaseline: 'Basiskurve (Spalten werden dagegen verglichen):',
+            bandCol: 'Frequenzband', compareClose: 'Schließen', egWord: 'z. B.',
+            intSlight: 'leicht', intModerate: 'mäßig', intStrong: 'deutlich',
+        },
+        pl: {
+            mainTitle: 'Wizualizator docelowych krzywych akustycznych',
+            subtitlePre: 'Krzywa referencyjna projektu ', subtitleMid: '. Przeciągnij własną krzywą lub pobierz standardową krzywą z ', subtitlePost: ' — zostanie naniesiona na wykres offline.',
+            subtitlePromoPre: 'Część projektu ', subtitlePromoPost: ' — prowadzony przez AI workflow strojenia audio samochodowego, który tłumaczy wpływ każdej krzywej na instrumenty.',
+            hideAll: 'Ukryj wszystkie krzywe', showAll: 'Pokaż wszystkie krzywe',
+            dropPre: '↳ Przeciągnij tu plik krzywej ', dropMid: ' (REW/NTT: ', dropPost: ') — lub kliknij, aby wybrać. Nanosi się na wykres natychmiast, offline.',
+            hintLine: 'kliknij kartę poniżej, aby ukryć/pokazać krzywą · kliknij prawym przyciskiem na wykresie, aby zobaczyć przewodnik charakterystyk częstotliwości',
+            freqAxis: 'Częstotliwość (Hz)', levelAxis: 'Poziom (dB)', level: 'Poziom:',
+            delTitle: 'Usuń krzywą', loadedPts: n => 'Wczytano, ' + n + ' punktów',
+            clickToggleTitle: 'Kliknij, aby ukryć / pokazać', noPairsAlert: 'Nie znaleziono par częstotliwość/dB w pliku.',
+            offsetPrompt: v => 'Proponowane przesunięcie normalizacji: ' + v + ' dB (krzywa zostanie przesunięta tak, aby pasmo 200–500 Hz było blisko 0 dB). Zmień wartość, jeśli chcesz inny poziom odniesienia, albo zostaw bez zmian:',
+            emmaCardDesc: '<b>Łączy soczystość z precyzją SQ:</b> głęboki, soczysty subbas (+9.0 dB, podobnie jak Audiofrog), miękkie, bardzo płynne opadanie do 200 Hz (całkowicie eliminuje dudnienie), zapadnięcie obecności (-2 dB przy 2.5 kHz) oraz naturalny spadek wysokich tonów (-0.5 dB/okt).',
+            flatCardDesc: 'Linia referencyjna 0 dB — neutralna baza. Ułatwia odczyt bezwzględnego odchylenia innych krzywych na pierwszy rzut oka.',
+            descText: [
+                '<b>ResoNix Laid-Back:</b> ten sam charakter, więcej basu i stonowana góra — cieplej, mniej męcząco.',
+                '<b>ResoNix Accurate:</b> ulubieniec zawodów — mocny subbas, liniowy spadek wysokich tonów, precyzyjna barwa.',
+                '<b>Harman:</b> potwór subbasowy — energiczny głęboki bas i komfortowo opadające wysokie tony.',
+                '<b>Audiofrog (A. Wehmeyer):</b> wzorzec naturalności — gładki bas, delikatny spadek wysokich tonów, świetna barwa.',
+                '<b>Jazzi:</b> klasyk społeczności — bas +~10 dB i zapadnięcie obecności przy 2.5 kHz dla głębokiej sceny.',
+                '<b>Half Whitledge:</b> ciepły rockowy charakter — mięsisty midbas, opadająca góra, gęsty wokal.',
+                '<b>EMMA-Ref v3 (projekt):</b> soczysty subbas, bardzo płynne opadanie do 200 Hz, zapadnięcie obecności −2 dB @2.5 kHz.',
+                '<b>Flat:</b> referencja 0 dB — bez kształtowania tonalnego, przydatna jako neutralna baza.',
+            ],
+            compareBtn: 'Porównaj krzywe', compareTitle: 'Porównanie krzywych',
+            compareNeedMore: 'Pokaż (odkryj) co najmniej 2 krzywe, aby porównać.',
+            compareBaseline: 'Punkt odniesienia:', chooseBaseline: 'Krzywa bazowa (kolumny są porównywane względem niej):',
+            bandCol: 'Pasmo częstotliwości', compareClose: 'Zamknij', egWord: 'np.',
+            intSlight: 'lekko', intModerate: 'umiarkowanie', intStrong: 'wyraźnie',
+        },
+    };
+    let currentLang = 'en';
+    try { const saved = localStorage.getItem(LANG_LS); if (saved && I18N[saved]) currentLang = saved; } catch (e) {}
+    // ?lang=uk (etc.) wins over the saved preference — used by the README language
+    // links so opening the tool from a translated README lands in that language.
+    try {
+        const urlLang = new URLSearchParams(location.search).get('lang');
+        if (urlLang && I18N[urlLang]) currentLang = urlLang;
+    } catch (e) {}
+    function t() { return I18N[currentLang]; }
+
+    let lastFreqCharFreq = null; // last right-clicked frequency, for re-render on language change
+    let freqCharMatches = null; // { boost: [...entries], cut: [...entries] } for the canvas dome overlay
+    let compareHoverRange = null; // [lo, hi] of the compare-table row under the cursor, highlighted on the chart
+
+    // Highlights the frequency band of the compare-table row under the cursor as
+    // a vertical stripe on the chart, so you can see which curves you're reading.
+    const compareHoverPlugin = {
+        id: 'compareHover',
+        beforeDatasetsDraw(chart) {
+            if (!compareHoverRange) return;
+            const { ctx, chartArea: area, scales } = chart;
+            const x = scales.x;
+            if (!x) return;
+            const x0 = Math.max(area.left, x.getPixelForValue(compareHoverRange[0]));
+            const x1 = Math.min(area.right, x.getPixelForValue(compareHoverRange[1]));
+            if (x1 <= x0) return;
+            ctx.save();
+            ctx.fillStyle = 'rgba(168,85,247,0.14)';
+            ctx.fillRect(x0, area.top, x1 - x0, area.bottom - area.top);
+            ctx.strokeStyle = 'rgba(168,85,247,0.5)';
+            ctx.setLineDash([4, 3]);
+            ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(x0, area.top); ctx.lineTo(x0, area.bottom);
+            ctx.moveTo(x1, area.top); ctx.lineTo(x1, area.bottom); ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.restore();
+        }
+    };
+
+    // Canvas overlay: draws a hump for each matched boost entry (top) and a dip
+    // for each matched cut entry (bottom), stacked when more than one applies
+    // at the clicked frequency. Short labels only — full text lives in the
+    // side panel (freqCharPanel) so the chart stays readable.
+    const freqCharPlugin = {
+        id: 'freqChar',
+        afterDatasetsDraw(chart) {
+            if (!freqCharMatches) return;
+            const { ctx, chartArea: area, scales } = chart;
+            const x = scales.x;
+            if (!x) return;
+            const clampX = (px) => Math.max(area.left, Math.min(area.right, px));
+            const maxDomes = 2; // cap stacked shapes per side so the chart stays legible
+
+            function dome(entries, side, color, textColor) {
+                entries.slice(0, maxDomes).forEach(function (e, idx) {
+                    const x0 = clampX(x.getPixelForValue(Math.max(e.range[0], 20)));
+                    const x1 = clampX(x.getPixelForValue(Math.min(e.range[1], 20000)));
+                    const cx = clampX(x.getPixelForValue(Math.sqrt(e.range[0] * e.range[1])));
+                    if (x1 - x0 < 4) return;
+                    const domeH = Math.min(70, area.height * 0.22) - idx * 16;
+                    const baseY = side === 'boost' ? area.top : area.bottom;
+                    const peakY = side === 'boost' ? area.top + domeH : area.bottom - domeH;
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.moveTo(x0, baseY);
+                    ctx.quadraticCurveTo(cx, peakY, x1, baseY);
+                    ctx.closePath();
+                    ctx.fillStyle = color;
+                    ctx.fill();
+                    ctx.setLineDash([4, 3]);
+                    ctx.strokeStyle = textColor;
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(cx, baseY);
+                    ctx.lineTo(cx, peakY);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+
+                    const text = (side === 'boost' ? '+ ' : '− ') + e.phrase;
+                    ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+                    ctx.fillStyle = textColor;
+                    ctx.textAlign = 'center';
+                    const textY = side === 'boost' ? Math.max(area.top + 12, peakY - 6) : Math.min(area.bottom - 6, peakY + 16);
+                    ctx.fillText(text, Math.min(Math.max(cx, area.left + 90), area.right - 90), textY);
+                    ctx.restore();
+                });
+            }
+
+            dome(freqCharMatches.boost, 'boost', 'rgba(251,146,60,0.28)', '#fb923c');
+            dome(freqCharMatches.cut, 'cut', 'rgba(56,189,248,0.28)', '#38bdf8');
+        }
+    };
+
     // Render Chart
     const ctx = document.getElementById('curvesChart').getContext('2d');
     const curveChart = new Chart(ctx, {
+        plugins: [freqCharPlugin, compareHoverPlugin],
         type: 'line',
         data: {
             datasets: [
@@ -167,13 +615,22 @@
                     pointRadius: 0,
                     tension: 0.3
                 },
+                {
+                    label: 'Flat',
+                    data: flatData,
+                    borderColor: '#6b7280',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    pointRadius: 0,
+                    tension: 0
+                },
             ]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
             interaction: {
-                mode: 'nearest',
+                mode: 'index',
                 axis: 'x',
                 intersect: false
             },
@@ -183,6 +640,13 @@
                     labels: {
                         color: '#f3f4f6',
                         font: { size: 12 }
+                    },
+                    onClick: function (e, legendItem, legend) {
+                        const index = legendItem.datasetIndex;
+                        const ci = legend.chart;
+                        if (ci.isDatasetVisible(index)) { ci.hide(index); legendItem.hidden = true; }
+                        else { ci.show(index); legendItem.hidden = false; }
+                        if (window.__syncCardVisibility) window.__syncCardVisibility(index);
                     }
                 },
                 tooltip: {
@@ -215,7 +679,7 @@
                     },
                     title: {
                         display: true,
-                        text: 'Частота (Гц)',
+                        text: 'Frequency (Hz)',
                         color: '#9ca3af'
                     }
                 },
@@ -233,13 +697,223 @@
                     },
                     title: {
                         display: true,
-                        text: 'Рівень (дБ)',
+                        text: 'Level (dB)',
                         color: '#9ca3af'
                     }
                 }
             }
         }
     });
+
+    // Right-click the chart: a floating panel lists every boost-character (+)
+    // and cut-character (−) phrase whose range covers that frequency, with a
+    // description and example instruments — translated to the active language.
+    // Left-click or Esc clears it.
+    function renderFreqCharPanel(freq) {
+        const panel = document.getElementById('freqCharPanel');
+        if (!panel) return;
+        const s = t();
+        const m = matchFreqEntries(freq);
+        freqCharMatches = m;
+        // Kill the hover tooltip while the description panel is up — otherwise the
+        // last-shown "N Hz" box lingers and overlaps the panel.
+        curveChart.options.plugins.tooltip.enabled = false;
+        if (curveChart.tooltip) curveChart.tooltip.setActiveElements([], { x: 0, y: 0 });
+        curveChart.setActiveElements([]);
+        curveChart.update('none');
+        function block(list, sign, color) {
+            if (!list.length) return '';
+            let html = '';
+            for (const e of list) {
+                const instr = (typeof e.instruments === 'object') ? (e.instruments[currentLang] || e.instruments.en) : e.instruments;
+                const octW = Math.log2(e.range[1] / e.range[0]);
+                const bandInfo = fmtRange(e.range) + ' · ~' + octW.toFixed(octW < 1 ? 2 : 1) + ' oct';
+                html += '<div style="margin-top:12px;">' +
+                    '<div style="font-weight:600;font-size:14px;color:' + color + ';">' + sign + ' ' + e.phrase +
+                    ' <span style="font-weight:400;font-size:12px;color:var(--hint-color);">(' + bandInfo + ')</span></div>' +
+                    '<div style="color:var(--text-color);margin-top:3px;">' + (e.desc[currentLang] || e.desc.en) + '</div>' +
+                    '<div style="color:var(--hint-color);font-style:italic;font-size:13.5px;margin-top:3px;">' + s.egWord + ' ' + instr + '</div>' +
+                    '</div>';
+            }
+            return html;
+        }
+        panel.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+            '<b>~' + Math.round(freq) + ' Hz</b>' +
+            '<button id="freqCharCloseBtn" style="background:none;border:none;color:var(--hint-color);cursor:pointer;font-size:16px;line-height:1;">✕</button></div>' +
+            block(m.boost, '+', '#fb923c') + block(m.cut, '−', '#38bdf8');
+        const closeBtn = document.getElementById('freqCharCloseBtn');
+        if (closeBtn) closeBtn.addEventListener('click', hideFreqCharPanel);
+    }
+    function hideFreqCharPanel() {
+        const panel = document.getElementById('freqCharPanel');
+        if (panel) panel.style.display = 'none';
+        lastFreqCharFreq = null;
+        freqCharMatches = null;
+        curveChart.options.plugins.tooltip.enabled = true;
+        curveChart.draw();
+    }
+    (function () {
+        const canvas = document.getElementById('curvesChart');
+        const wrapper = canvas.parentElement;
+        const PANEL_W = 340;
+        canvas.addEventListener('contextmenu', function (e) {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const px = e.clientX - rect.left;
+            const freq = curveChart.scales.x.getValueForPixel(px);
+            if (!isFinite(freq)) return;
+            lastFreqCharFreq = freq;
+            const panel = document.getElementById('freqCharPanel');
+            const wrapW = wrapper.getBoundingClientRect().width;
+            // Park the panel on the far edge AWAY from the click: click on the
+            // left half → pin to the right edge, and vice-versa. This keeps the
+            // humps/dips drawn at the click x fully uncovered.
+            const left = px < wrapW / 2 ? (wrapW - PANEL_W - 8) : 8;
+            panel.style.left = left + 'px';
+            panel.style.top = '50%';
+            panel.style.transform = 'translateY(-50%)';
+            renderFreqCharPanel(freq);
+            panel.style.display = 'block';
+        });
+        canvas.addEventListener('click', hideFreqCharPanel);
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && lastFreqCharFreq !== null) hideFreqCharPanel();
+        });
+    })();
+
+    // --- Curve comparison: compares every currently VISIBLE curve as a table
+    // (rows = frequency bands, columns = curves), against an explicitly chosen
+    // baseline curve (radio row at the top — picking the baseline matters, so
+    // it's never implicit). Cell text reuses the same phrase vocabulary as the
+    // right-click frequency guide, so both features read consistently. ---
+    function cleanLabel(label) {
+        let s = (label || '').trim(), prev;
+        do { prev = s; s = s.replace(/\s*\([^()]*\)\s*$/, '').trim(); } while (s !== prev);
+        return s || label;
+    }
+    function bandAvg(data, lo, hi) {
+        const pts = data.filter(p => p.x >= lo && p.x < hi);
+        if (pts.length) return pts.reduce((s, p) => s + p.y, 0) / pts.length;
+        const mid = Math.sqrt(lo * hi);
+        for (let i = 0; i < data.length - 1; i++) {
+            const a = data[i], b = data[i + 1];
+            if (mid >= a.x && mid <= b.x) { const f = (mid - a.x) / ((b.x - a.x) || 1); return a.y + f * (b.y - a.y); }
+        }
+        return data.length ? data[data.length - 1].y : 0;
+    }
+    let lastCompareIdxs = null, lastCompareBaseIdx = null;
+    function visibleDatasetIdxs() {
+        const idxs = [];
+        curveChart.data.datasets.forEach(function (d, i) { if (curveChart.isDatasetVisible(i)) idxs.push(i); });
+        return idxs;
+    }
+    function showComparePanel() {
+        const panel = document.getElementById('comparePanel');
+        if (panel) { panel.style.display = 'block'; panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+    }
+    function hideComparePanel() {
+        const panel = document.getElementById('comparePanel');
+        if (panel) panel.style.display = 'none';
+        if (compareHoverRange) { compareHoverRange = null; curveChart.draw(); }
+    }
+    function renderComparePanel(idxs, baseIdx) {
+        const panel = document.getElementById('comparePanel');
+        const s = t();
+        lastCompareIdxs = idxs; lastCompareBaseIdx = baseIdx;
+        let html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">' +
+            '<h2 style="margin:0;font-size:18px;">' + s.compareTitle + '</h2>' +
+            '<button id="cmpCloseBtn" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:6px 14px;cursor:pointer;font-size:13px;">' + s.compareClose + '</button></div>';
+        if (!idxs || idxs.length < 2) {
+            html += '<p style="color:var(--text-muted);font-size:14px;">' + s.compareNeedMore + '</p>';
+            panel.innerHTML = html;
+            showComparePanel();
+            const cb0 = document.getElementById('cmpCloseBtn'); if (cb0) cb0.addEventListener('click', hideComparePanel);
+            return;
+        }
+        if (idxs.indexOf(baseIdx) === -1) baseIdx = idxs[0];
+        const others = idxs.filter(function (i) { return i !== baseIdx; });
+
+        html += '<div style="margin-bottom:12px;font-size:13px;color:var(--text-muted);">' + s.chooseBaseline + '</div>' +
+            '<div id="cmpBaseRadios" style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px;">';
+        idxs.forEach(function (i) {
+            const lbl = cleanLabel(curveChart.data.datasets[i].label);
+            html += '<label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;">' +
+                '<input type="radio" name="cmpBase" value="' + i + '"' + (i === baseIdx ? ' checked' : '') + '> ' + lbl + '</label>';
+        });
+        html += '</div>';
+
+        html += '<div style="overflow-x:auto;"><table style="border-collapse:collapse;width:100%;font-size:12.5px;">' +
+            '<thead><tr><th style="text-align:left;padding:6px 10px;border-bottom:2px solid var(--border-color);color:var(--text-muted);">' + s.bandCol + '</th>' +
+            '<th style="text-align:left;padding:6px 10px;border-bottom:2px solid var(--border-color);">' + s.compareBaseline + ' <b>' + cleanLabel(curveChart.data.datasets[baseIdx].label) + '</b></th>';
+        others.forEach(function (i) {
+            html += '<th style="text-align:left;padding:6px 10px;border-bottom:2px solid var(--border-color);"><b>' + cleanLabel(curveChart.data.datasets[i].label) + '</b></th>';
+        });
+        html += '</tr></thead><tbody>';
+
+        const baseDs = curveChart.data.datasets[baseIdx];
+        FREQ_BANDS.forEach(function (range) {
+            const baseAvg = bandAvg(baseDs.data, range[0], range[1]);
+            html += '<tr class="cmp-row" data-lo="' + range[0] + '" data-hi="' + range[1] + '" style="cursor:default;"><td style="padding:8px 10px;border-bottom:1px solid var(--border-color);color:var(--text-muted);white-space:nowrap;">' + fmtRange(range) + '</td>' +
+                '<td style="padding:8px 10px;border-bottom:1px solid var(--border-color);color:var(--text-muted);">' + (baseAvg >= 0 ? '+' : '') + baseAvg.toFixed(1) + ' dB</td>';
+            others.forEach(function (i) {
+                const ds = curveChart.data.datasets[i];
+                const avg = bandAvg(ds.data, range[0], range[1]);
+                const delta = avg - baseAvg;
+                let cell;
+                const absd = Math.abs(delta);
+                if (absd < 1) {
+                    cell = '<span style="color:#4b5563;">—</span>';
+                } else {
+                    const entry = bestPhraseForBand(range, delta >= 0 ? 'boost' : 'cut');
+                    const sign = delta >= 0 ? '+' : '';
+                    // Weight the wording by HOW BIG the difference is: a ~1 dB gap is
+                    // "slightly …" (phrase only, no alarming sentence); only a bigger
+                    // gap earns the full description. Keeps small diffs from reading
+                    // scarier than they are.
+                    const tier = absd < 2.5 ? 'slight' : (absd < 4.5 ? 'moderate' : 'strong');
+                    const qual = tier === 'slight' ? s.intSlight : (tier === 'moderate' ? s.intModerate : s.intStrong);
+                    cell = '<b style="color:' + (delta >= 0 ? '#fb923c' : '#38bdf8') + ';">' + sign + delta.toFixed(1) + ' dB</b>';
+                    if (entry) {
+                        cell += '<div style="margin-top:2px;font-weight:600;">' + qual + ' ' + entry.phrase + '</div>';
+                        if (tier !== 'slight') {
+                            cell += '<div style="color:var(--text-muted);margin-top:2px;">' + (entry.desc[currentLang] || entry.desc.en) + '</div>';
+                        }
+                    }
+                }
+                html += '<td style="padding:8px 10px;border-bottom:1px solid var(--border-color);vertical-align:top;">' + cell + '</td>';
+            });
+            html += '</tr>';
+        });
+        html += '</tbody></table></div>';
+
+        panel.innerHTML = html;
+        showComparePanel();
+        const closeBtn = document.getElementById('cmpCloseBtn');
+        if (closeBtn) closeBtn.addEventListener('click', hideComparePanel);
+        document.querySelectorAll('#cmpBaseRadios input[name="cmpBase"]').forEach(function (r) {
+            r.addEventListener('change', function () { renderComparePanel(idxs, parseInt(r.value, 10)); });
+        });
+        // Hover a row → highlight that frequency band on the chart above.
+        panel.querySelectorAll('tr.cmp-row').forEach(function (row) {
+            row.addEventListener('mouseenter', function () {
+                compareHoverRange = [parseFloat(row.getAttribute('data-lo')), parseFloat(row.getAttribute('data-hi'))];
+                row.style.background = 'rgba(168,85,247,0.10)';
+                curveChart.draw();
+            });
+            row.addEventListener('mouseleave', function () {
+                compareHoverRange = null;
+                row.style.background = '';
+                curveChart.draw();
+            });
+        });
+    }
+    (function () {
+        const compareBtn = document.getElementById('compareBtn');
+        compareBtn.addEventListener('click', function () {
+            const idxs = visibleDatasetIdxs();
+            renderComparePanel(idxs, idxs[0]);
+        });
+    })();
 
     // --- Runtime curve loader + persistence (localStorage) — offline, no CDN ---
     // Group imports share ONE common offset (preserve mono/stereo/per-band level
@@ -269,18 +943,9 @@
             if (!ref.length) ref = pts;
             return ref.reduce((s, p) => s + p.y, 0) / ref.length;
         }
-        const DESC = [
-            [['laidback'], '<b>ResoNix Laid-Back:</b> той самий почерк, більше басу й притишений верх — тепліше, менш втомлює.'],
-            [['resonix', 'accurate'], '<b>ResoNix Accurate:</b> супер-хіт змагань — потужний суббас, лінійний спад ВЧ, точні тембри.'],
-            [['harman'], '<b>Harman:</b> суббасовий монстр — енергійний глибокий бас і комфортно завалені високі.'],
-            [['audiofrog'], '<b>Audiofrog (A. Wehmeyer):</b> еталон натуральності — плавний бас, делікатний спад ВЧ, чудові тембри.'],
-            [['jazzi'], '<b>Jazzi:</b> community-classic — бас +~10 дБ і яма присутності на 2.5 кГц для глибокої сцени.'],
-            [['whitledge'], '<b>Half Whitledge:</b> теплий рок-характер — м\'ясистий мідбас, завалений верх, щільний вокал.'],
-            [['emmaref'], '<b>EMMA-Ref v3 (проєкт):</b> соковитий суббас, надплавний спад до 200 Гц, яма сцени −2 дБ @2.5 кГц.'],
-        ];
         function descFor(name) {
             const k = (name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-            for (const [toks, html] of DESC) { if (toks.every(t => k.includes(t))) return html; }
+            for (let i = 0; i < DESC_TOKENS.length; i++) { if (DESC_TOKENS[i].every(tok => k.includes(tok))) return t().descText[i]; }
             return null;
         }
         function persist() {
@@ -291,6 +956,14 @@
             }));
             try { localStorage.setItem(LS, JSON.stringify(st)); } catch (e) {}
         }
+
+        // Keeps the card below the chart in sync when a curve is toggled from the
+        // Chart.js legend itself (not just by clicking the card).
+        window.__syncCardVisibility = function (idx) {
+            const card = document.querySelectorAll('.info-grid .card')[idx];
+            if (card) card.style.opacity = curveChart.isDatasetVisible(idx) ? '1' : '0.4';
+            persist();
+        };
 
         // Fallback for state saved before `offset` was persisted explicitly:
         // recover the manual offset from the trailing "(±X dB)" label suffix.
@@ -326,19 +999,21 @@
 
         function buildCard(label, color, ptsLen, ds, idx, rawName) {
             if (!grid) return;
-            const bs = "background:#1f2937;color:#f3f4f6;border:1px solid #374151;border-radius:6px;padding:3px 9px;cursor:pointer;font-size:13px;";
-            const desc = descFor(rawName) || ('Завантажена, ' + ptsLen + ' точок');
+            const bs = "background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:6px;padding:3px 9px;cursor:pointer;font-size:13px;";
+            const desc = descFor(rawName) || t().loadedPts(ptsLen);
             const card = document.createElement('div');
             card.className = 'card';
+            card.dataset.rawName = rawName || '';
+            card.dataset.ptsLen = ptsLen;
             card.innerHTML = '<div class="card-title" style="flex-wrap:wrap;">' +
                 '<span class="dot" style="background-color:' + color + ';flex-shrink:0;"></span>' +
                 '<span style="flex:1;min-width:0;overflow-wrap:anywhere;">' + label + '</span>' +
-                '<button class="del-btn" title="Видалити криву" style="flex-shrink:0;background:none;border:none;color:#6b7280;cursor:pointer;font-size:16px;line-height:1;padding:0 2px;">✕</button></div>' +
+                '<button class="del-btn" title="' + t().delTitle + '" style="flex-shrink:0;background:none;border:none;color:var(--hint-color);cursor:pointer;font-size:16px;line-height:1;padding:0 2px;">✕</button></div>' +
                 '<div class="card-desc">' + desc + '</div>' +
-                '<div class="offset-ctl" style="margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">Рівень: ' +
+                '<div class="offset-ctl" style="margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;"><span class="lvl-label">' + t().level + '</span> ' +
                 '<button class="ob" data-d="-1" style="' + bs + '">-1</button>' +
                 '<button class="ob" data-d="-0.5" style="' + bs + '">-0.5</button>' +
-                '<span class="ofs" style="min-width:56px;text-align:center;color:#9ca3af;">0.0 dB</span>' +
+                '<span class="ofs" style="min-width:56px;text-align:center;color:var(--text-muted);">0.0 dB</span>' +
                 '<button class="ob" data-d="0.5" style="' + bs + '">+0.5</button>' +
                 '<button class="ob" data-d="1" style="' + bs + '">+1</button></div>';
             grid.appendChild(card);
@@ -373,8 +1048,13 @@
 
         function add(text, fallback, sharedOff) {
             const r = parse(text);
-            if (!r.pts.length) { alert('Не знайшов пар freq dB у файлі.'); return; }
-            const off = (sharedOff === undefined) ? refMean(r.pts) : sharedOff;
+            if (!r.pts.length) { alert(t().noPairsAlert); return; }
+            const suggested = (sharedOff === undefined) ? refMean(r.pts) : sharedOff;
+            let off = suggested;
+            if (sharedOff === undefined) {
+                const input = window.prompt(t().offsetPrompt(suggested.toFixed(1)), suggested.toFixed(1));
+                if (input !== null) { const v = parseFloat(input.replace(',', '.')); if (isFinite(v)) off = v; }
+            }
             if (Math.abs(off) > 0.05) { for (const p of r.pts) p.y -= off; }
             const shift = (off >= 0 ? '−' : '+') + Math.abs(off).toFixed(1) + ' dB';
             const rawName = r.name || fallback || 'Curve';
@@ -390,7 +1070,10 @@
             Promise.all(Array.from(files).map(readText)).then(items => {
                 if (items.length > 1) {
                     const first = parse(items[0].text).pts;
-                    const common = first.length ? refMean(first) : 0;
+                    const suggested = first.length ? refMean(first) : 0;
+                    let common = suggested;
+                    const input = window.prompt(t().offsetPrompt(suggested.toFixed(1)), suggested.toFixed(1));
+                    if (input !== null) { const v = parseFloat(input.replace(',', '.')); if (isFinite(v)) common = v; }
                     items.forEach(it => add(it.text, it.name, common));
                 } else if (items.length) {
                     add(items[0].text, items[0].name);
@@ -399,13 +1082,14 @@
         }
         dz.addEventListener('click', () => fi.click());
         fi.addEventListener('change', e => handle(e.target.files));
-        ['dragover', 'dragenter'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.style.borderColor = '#eab308'; dz.style.color = '#f3f4f6'; }));
-        ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.style.borderColor = '#374151'; dz.style.color = '#9ca3af'; }));
+        const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+        ['dragover', 'dragenter'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.style.borderColor = '#eab308'; dz.style.color = cssVar('--text-color'); }));
+        ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.style.borderColor = cssVar('--btn-border'); dz.style.color = cssVar('--text-muted'); }));
         dz.addEventListener('drop', e => handle(e.dataTransfer.files));
 
         function wireToggle(card, ds) {
             card.style.cursor = 'pointer';
-            card.title = 'Клац — сховати / показати';
+            card.title = t().clickToggleTitle;
             card.addEventListener('click', function (e) {
                 if (e.target.closest('.offset-ctl') || e.target.closest('.del-btn')) return;
                 const idx = curveChart.data.datasets.indexOf(ds);
@@ -417,14 +1101,14 @@
                 persist();
             });
             if (!card.querySelector('.offset-ctl')) {
-                const bs = "background:#1f2937;color:#f3f4f6;border:1px solid #374151;border-radius:6px;padding:3px 9px;cursor:pointer;font-size:13px;";
+                const bs = "background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:6px;padding:3px 9px;cursor:pointer;font-size:13px;";
                 const ctl = document.createElement('div');
                 ctl.className = 'offset-ctl';
                 ctl.style.cssText = 'margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;';
-                ctl.innerHTML = 'Рівень: ' +
+                ctl.innerHTML = '<span class="lvl-label">' + t().level + '</span> ' +
                     '<button class="ob" data-d="-1" style="' + bs + '">-1</button>' +
                     '<button class="ob" data-d="-0.5" style="' + bs + '">-0.5</button>' +
-                    '<span class="ofs" style="min-width:56px;text-align:center;color:#9ca3af;">0.0 dB</span>' +
+                    '<span class="ofs" style="min-width:56px;text-align:center;color:var(--text-muted);">0.0 dB</span>' +
                     '<button class="ob" data-d="0.5" style="' + bs + '">+0.5</button>' +
                     '<button class="ob" data-d="1" style="' + bs + '">+1</button>';
                 card.appendChild(ctl);
@@ -440,7 +1124,7 @@
             curveChart.data.datasets.forEach(function (d, i) { curveChart.setDatasetVisibility(i, !hidden); });
             curveChart.update();
             document.querySelectorAll('.info-grid .card').forEach(function (c) { c.style.opacity = hidden ? '0.4' : '1'; });
-            btn.textContent = hidden ? 'Показати всі криві' : 'Сховати всі криві';
+            btn.textContent = hidden ? t().showAll : t().hideAll;
             persist();
         });
 
@@ -474,6 +1158,92 @@
                 if (i < st.length && st[i].hidden) c.style.opacity = '0.4';
             });
         })();
+
+        // --- Language switching: rewrite every static + dynamic string in place ---
+        function applyLanguage(lang) {
+            if (!I18N[lang]) return;
+            currentLang = lang;
+            try { localStorage.setItem(LANG_LS, lang); } catch (e) {}
+            const s = t();
+            document.documentElement.lang = lang;
+            const mainTitle = document.getElementById('mainTitle'); if (mainTitle) mainTitle.textContent = s.mainTitle;
+            const subtitle = document.getElementById('subtitle');
+            const readmeUrl = 'https://github.com/ayukhno/autosound-tuning-skill/blob/main/README' + (lang === 'en' ? '' : '.' + lang) + '.md';
+            if (subtitle) subtitle.innerHTML = s.subtitlePre + '<b>EMMA-Ref v3</b>' + s.subtitleMid +
+                '<a href="https://nonotuningtool.com" target="_blank" rel="noopener" style="color:#a855f7;">Nono Tuning Tool</a> (nonotuningtool.com)' + s.subtitlePost +
+                ' ' + s.subtitlePromoPre + '<a href="' + readmeUrl + '" target="_blank" rel="noopener" style="color:#a855f7;">Autosound Tuning Skill</a>' + s.subtitlePromoPost;
+            const dropZoneEl = document.getElementById('dropZone');
+            if (dropZoneEl) dropZoneEl.innerHTML = s.dropPre + '<b>.txt</b>' + s.dropMid + '<code>freq dB</code>' + s.dropPost;
+            const hintLine = document.getElementById('hintLine'); if (hintLine) hintLine.textContent = s.hintLine;
+            const emmaDesc = document.getElementById('emmaCardDesc'); if (emmaDesc) emmaDesc.innerHTML = s.emmaCardDesc;
+            const flatDesc = document.getElementById('flatCardDesc'); if (flatDesc) flatDesc.innerHTML = s.flatCardDesc;
+            btn.textContent = hidden ? s.showAll : s.hideAll;
+            const cBtn = document.getElementById('compareBtn'); if (cBtn) cBtn.textContent = s.compareBtn;
+
+            document.querySelectorAll('.info-grid .card').forEach(function (c) {
+                const rawName = c.dataset.rawName;
+                const descEl = c.querySelector('.card-desc');
+                if (descEl && rawName) {
+                    const d = descFor(rawName);
+                    if (d) descEl.innerHTML = d;
+                    else if (c.dataset.ptsLen) descEl.innerHTML = s.loadedPts(c.dataset.ptsLen);
+                }
+                const delBtn = c.querySelector('.del-btn'); if (delBtn) delBtn.title = s.delTitle;
+                const lvlLabel = c.querySelector('.lvl-label'); if (lvlLabel) lvlLabel.textContent = s.level;
+                c.title = s.clickToggleTitle;
+            });
+
+            curveChart.options.scales.x.title.text = s.freqAxis;
+            curveChart.options.scales.y.title.text = s.levelAxis;
+            curveChart.update();
+            if (lastFreqCharFreq !== null) renderFreqCharPanel(lastFreqCharFreq);
+
+            const panel = document.getElementById('comparePanel');
+            if (panel && panel.style.display !== 'none' && panel.innerHTML && lastCompareIdxs) {
+                renderComparePanel(lastCompareIdxs, lastCompareBaseIdx);
+            }
+        }
+        const langSel = document.getElementById('langSel');
+        if (langSel) {
+            langSel.value = currentLang;
+            langSel.addEventListener('change', function () { applyLanguage(langSel.value); });
+        }
+        applyLanguage(currentLang);
+
+        // --- Light / dark theme: CSS vars carry the surfaces; the chart's own
+        // colors (axes, grid, legend) live in JS, so re-read the vars and push
+        // them into Chart.js on every switch. Persists across reloads. ---
+        function applyTheme(theme) {
+            currentTheme = theme;
+            document.documentElement.setAttribute('data-theme', theme);
+            try { localStorage.setItem(THEME_LS, theme); } catch (e) {}
+            const gv = (nm) => getComputedStyle(document.documentElement).getPropertyValue(nm).trim();
+            const axis = gv('--axis-color'), grid = gv('--grid-color'), legend = gv('--legend-color');
+            const o = curveChart.options;
+            o.plugins.legend.labels.color = legend;
+            o.scales.x.ticks.color = axis; o.scales.x.grid.color = grid; o.scales.x.title.color = axis;
+            o.scales.y.ticks.color = axis; o.scales.y.grid.color = grid; o.scales.y.title.color = axis;
+            curveChart.update();
+            const tb = document.getElementById('themeBtn');
+            if (tb) tb.textContent = theme === 'light' ? '🌙' : '☀️';
+        }
+        const themeBtn = document.getElementById('themeBtn');
+        if (themeBtn) themeBtn.addEventListener('click', function () { applyTheme(currentTheme === 'light' ? 'dark' : 'light'); });
+        applyTheme(currentTheme);
+
+        // --- Layout width toggle: wide (up to 1600px / 96vw) vs narrow (1100px).
+        // Icon shows the state you'd switch TO. Chart reflows via ResizeObserver. ---
+        function applyWidth(mode) {
+            currentWidth = mode;
+            document.documentElement.setAttribute('data-width', mode);
+            try { localStorage.setItem(WIDTH_LS, mode); } catch (e) {}
+            const wb = document.getElementById('widthBtn');
+            if (wb) wb.textContent = mode === 'wide' ? '📱' : '🖥️';
+            curveChart.resize();
+        }
+        const widthBtn = document.getElementById('widthBtn');
+        if (widthBtn) widthBtn.addEventListener('click', function () { applyWidth(currentWidth === 'wide' ? 'narrow' : 'wide'); });
+        applyWidth(currentWidth);
     })();
 
 </script>
