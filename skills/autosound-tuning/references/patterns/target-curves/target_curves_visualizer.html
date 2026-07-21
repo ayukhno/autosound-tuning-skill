@@ -965,6 +965,20 @@
         const BUILTINS = curveChart.data.datasets.length;
         let n = 0;
 
+        // "Save As" in a browser serializes the LIVE DOM, so any loaded-curve cards
+        // added at runtime get baked into the saved file — but their datasets and
+        // data live only in memory/localStorage, not in the HTML. On the saved copy
+        // those cards are orphans (controls point at datasets that don't exist).
+        // Remove any card that isn't one of the built-ins (built-in .card-desc carries
+        // an id) so the saved file opens as a clean, working tool. Real loaded curves
+        // are re-added below from localStorage when it's present for this file.
+        if (grid) {
+            grid.querySelectorAll('.card').forEach(function (c) {
+                const d = c.querySelector('.card-desc');
+                if (!d || !d.id) c.remove();
+            });
+        }
+
         function parse(text) {
             const pts = []; let name = null;
             for (const line of text.split(/\r?\n/)) {
