@@ -315,7 +315,7 @@
         { g:'emma2026', e:'🔺', n:{"en": "Triangle", "uk": "Трикутник", "de": "Triangel", "pl": "Trójkąt"}, f:[2000, 20000], h:null },
     ];
     const INSTR_GROUPS_ORDER = ['vocal','perc','strings','winds','keys','emma2024','emma2026'];
-    const INSTR_STR = { groups: {"vocal": {"en": "Vocal", "uk": "Вокал", "de": "Gesang", "pl": "Wokal"}, "perc": {"en": "Percussion", "uk": "Ударні", "de": "Percussion", "pl": "Perkusyjne"}, "strings": {"en": "Strings", "uk": "Струнні", "de": "Streicher", "pl": "Strunowe"}, "winds": {"en": "Winds", "uk": "Духові", "de": "Blasinstrumente", "pl": "Dęte"}, "keys": {"en": "Keys & Other", "uk": "Клавішні та інше", "de": "Tasten & Andere", "pl": "Klawiszowe i inne"}, "emma2024": {"en": "EMMA 2024", "uk": "EMMA 2024", "de": "EMMA 2024", "pl": "EMMA 2024"}, "emma2026": {"en": "EMMA 2026", "uk": "EMMA 2026", "de": "EMMA 2026", "pl": "EMMA 2026"}}, ui: {"instruments": {"en": "Musical instruments", "uk": "Музичні інструменти", "de": "Musikinstrumente", "pl": "Instrumenty muzyczne"}, "ranges": {"en": "Instrument ranges", "uk": "Діапазони інструментів", "de": "Instrumentenbereiche", "pl": "Zakresy instrumentów"}, "selectUpTo": {"en": "Select up to 3", "uk": "Виберіть до 3-х", "de": "Bis zu 3 auswählen", "pl": "Wybierz do 3"}, "fundamentals": {"en": "Fundamentals", "uk": "Основні тони", "de": "Grundtöne", "pl": "Tony podstawowe"}, "harmonics": {"en": "Harmonics", "uk": "Гармоніки", "de": "Obertöne", "pl": "Harmoniczne"}} };
+    const INSTR_STR = { groups: {"vocal": {"en": "Vocal", "uk": "Вокал", "de": "Gesang", "pl": "Wokal"}, "perc": {"en": "Percussion", "uk": "Ударні", "de": "Percussion", "pl": "Perkusyjne"}, "strings": {"en": "Strings", "uk": "Струнні", "de": "Streicher", "pl": "Strunowe"}, "winds": {"en": "Winds", "uk": "Духові", "de": "Blasinstrumente", "pl": "Dęte"}, "keys": {"en": "Keys & Other", "uk": "Клавішні та інше", "de": "Tasten & Andere", "pl": "Klawiszowe i inne"}, "emma2024": {"en": "EMMA 2024", "uk": "EMMA 2024", "de": "EMMA 2024", "pl": "EMMA 2024"}, "emma2026": {"en": "EMMA 2026", "uk": "EMMA 2026", "de": "EMMA 2026", "pl": "EMMA 2026"}}, ui: {"instruments": {"en": "Musical instruments", "uk": "Музичні інструменти", "de": "Musikinstrumente", "pl": "Instrumenty muzyczne"}, "ranges": {"en": "Instrument ranges", "uk": "Діапазони інструментів", "de": "Instrumentenbereiche", "pl": "Zakresy instrumentów"}, "selectUpTo": {"en": "Select up to 5", "uk": "Виберіть до 5-ти", "de": "Bis zu 5 auswählen", "pl": "Wybierz do 5"}, "clear": {"en": "Clear", "uk": "Очистити", "de": "Leeren", "pl": "Wyczyść"}, "fundamentals": {"en": "Fundamentals", "uk": "Основні тони", "de": "Grundtöne", "pl": "Tony podstawowe"}, "harmonics": {"en": "Harmonics", "uk": "Гармоніки", "de": "Obertöne", "pl": "Harmoniczne"}} };
     const DESC_TOKENS = [
         ['laidback'], ['resonix', 'accurate'], ['harman'], ['audiofrog'],
         ['jazzi'], ['whitledge'], ['sqcompref'], ['flat'],
@@ -631,8 +631,8 @@
     // Instrument-range overlay: draws a stacked horizontal band per selected
     // instrument at the top of the plot — fundamentals solid, harmonics lighter —
     // so you can see where each instrument lives against the target curve.
-    const INSTR_COLORS = ['#f59e0b', '#22d3ee', '#a3e635', '#f472b6'];
-    const INSTR_MAX = 3;
+    const INSTR_COLORS = ['#f59e0b', '#22d3ee', '#a3e635', '#f472b6', '#60a5fa'];
+    const INSTR_MAX = 5;
     let selectedInstruments = []; // indices into BAND_INSTRUMENTS (max INSTR_MAX)
     const instrPlugin = {
         id: 'instr',
@@ -641,7 +641,7 @@
             const { ctx, chartArea: area, scales } = chart;
             const x = scales.x;
             if (!x) return;
-            const rowH = 18, gap = 6;
+            const rowH = 16, gap = 5;
             const clamp = (px) => Math.max(area.left, Math.min(area.right, px));
             selectedInstruments.forEach(function (ii, slot) {
                 const it = BAND_INSTRUMENTS[ii];
@@ -1066,9 +1066,12 @@
     function renderInstrPanel() {
         const p = document.getElementById('instrPanel'); if (!p) return;
         const lang = currentLang, U = INSTR_STR.ui, G = INSTR_STR.groups;
+        const bs = 'background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:6px 14px;cursor:pointer;font-size:13px;';
         let html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
             '<h2 style="margin:0;font-size:18px;">' + U.ranges[lang] + '</h2>' +
-            '<button id="instrCloseBtn" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:6px 14px;cursor:pointer;font-size:13px;">' + t().compareClose + '</button></div>';
+            '<div style="display:flex;gap:8px;">' +
+            '<button id="instrClearBtn" style="' + bs + '">' + (U.clear ? U.clear[lang] : 'Clear') + '</button>' +
+            '<button id="instrCloseBtn" style="' + bs + '">' + t().compareClose + '</button></div></div>';
         html += '<div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;">' + U.selectUpTo[lang] +
             ' &nbsp;·&nbsp; <span style="display:inline-block;width:22px;height:10px;background:#f59e0bcc;vertical-align:middle;border-radius:2px;"></span> ' + U.fundamentals[lang] +
             ' &nbsp; <span style="display:inline-block;width:22px;height:10px;background:#f59e0b33;vertical-align:middle;border-radius:2px;"></span> ' + U.harmonics[lang] + '</div>';
@@ -1091,6 +1094,8 @@
         });
         p.innerHTML = html; p.style.display = 'block';
         const cb = document.getElementById('instrCloseBtn'); if (cb) cb.addEventListener('click', hideInstrPanel);
+        const clr = document.getElementById('instrClearBtn');
+        if (clr) clr.addEventListener('click', function () { selectedInstruments = []; persistInstr(); curveChart.draw(); renderInstrPanel(); });
         p.querySelectorAll('.instr-chk').forEach(function (chk) {
             chk.addEventListener('change', function () {
                 const idx = parseInt(chk.getAttribute('data-idx'), 10);
