@@ -495,7 +495,7 @@
                 '<b>SQ-Comp-Ref (project):</b> deep, controlled sub-bass, ultra-smooth roll-off to 200 Hz, presence dip −2 dB @2.5 kHz.',
                 '<b>Flat:</b> 0 dB reference — no tonal shaping, useful as a neutral baseline.',
             ],
-            compareBtn: 'Compare current curves', clearLoaded: 'Clear loaded curves', clearConfirm: 'Remove all loaded curves? The built-in curves stay.', compareTitle: 'Curve comparison',
+            themeTitle: 'Toggle light / dark theme', widthTitle: 'Toggle wide / narrow layout', compareBtn: 'Compare current curves', clearLoaded: 'Clear loaded curves', clearConfirm: 'Remove all loaded curves? The built-in curves stay.', compareTitle: 'Curve comparison',
             compareNeedMore: 'Show (un-hide) at least 2 curves to compare.',
             compareBaseline: 'Baseline:', chooseBaseline: 'Baseline curve (columns are compared against it):',
             bandCol: 'Frequency band', compareClose: 'Close', egWord: 'e.g.',
@@ -524,7 +524,7 @@
                 '<b>SQ-Comp-Ref (проєкт):</b> глибокий, але контрольований суббас, надплавний спад до 200 Гц, яма присутності −2 дБ @2.5 кГц.',
                 '<b>Flat:</b> референс 0 дБ — без тональної корекції, зручно як нейтральна база.',
             ],
-            compareBtn: 'Порівняти поточні криві', clearLoaded: 'Очистити завантажені криві', clearConfirm: 'Прибрати всі завантажені криві? Вбудовані лишаться.', compareTitle: 'Порівняння кривих',
+            themeTitle: 'Світла / темна тема', widthTitle: 'Широкий / вузький макет', compareBtn: 'Порівняти поточні криві', clearLoaded: 'Очистити завантажені криві', clearConfirm: 'Прибрати всі завантажені криві? Вбудовані лишаться.', compareTitle: 'Порівняння кривих',
             compareNeedMore: 'Покажи (не приховуй) щонайменше 2 криві для порівняння.',
             compareBaseline: 'База:', chooseBaseline: 'Базова крива (стовпчики порівнюються з нею):',
             bandCol: 'Смуга частот', compareClose: 'Закрити', egWord: 'напр.',
@@ -553,7 +553,7 @@
                 '<b>SQ-Comp-Ref (Projekt):</b> tiefer, aber kontrollierter Subbass, ultra-glatter Abfall bis 200 Hz, Präsenzsenke −2 dB @2.5 kHz.',
                 '<b>Flat:</b> 0-dB-Referenz — keine tonale Formung, praktisch als neutrale Basislinie.',
             ],
-            compareBtn: 'Aktuelle Kurven vergleichen', clearLoaded: 'Geladene Kurven löschen', clearConfirm: 'Alle geladenen Kurven entfernen? Die integrierten bleiben.', compareTitle: 'Kurvenvergleich',
+            themeTitle: 'Helles / dunkles Design', widthTitle: 'Breites / schmales Layout', compareBtn: 'Aktuelle Kurven vergleichen', clearLoaded: 'Geladene Kurven löschen', clearConfirm: 'Alle geladenen Kurven entfernen? Die integrierten bleiben.', compareTitle: 'Kurvenvergleich',
             compareNeedMore: 'Zeige (blende ein) mindestens 2 Kurven zum Vergleichen.',
             compareBaseline: 'Basis:', chooseBaseline: 'Basiskurve (Spalten werden dagegen verglichen):',
             bandCol: 'Frequenzband', compareClose: 'Schließen', egWord: 'z. B.',
@@ -582,7 +582,7 @@
                 '<b>SQ-Comp-Ref (projekt):</b> głęboki, ale kontrolowany subbas, bardzo płynne opadanie do 200 Hz, zapadnięcie obecności −2 dB @2.5 kHz.',
                 '<b>Flat:</b> referencja 0 dB — bez kształtowania tonalnego, przydatna jako neutralna baza.',
             ],
-            compareBtn: 'Porównaj bieżące krzywe', clearLoaded: 'Wyczyść wczytane krzywe', clearConfirm: 'Usunąć wszystkie wczytane krzywe? Wbudowane pozostaną.', compareTitle: 'Porównanie krzywych',
+            themeTitle: 'Motyw jasny / ciemny', widthTitle: 'Układ szeroki / wąski', compareBtn: 'Porównaj bieżące krzywe', clearLoaded: 'Wyczyść wczytane krzywe', clearConfirm: 'Usunąć wszystkie wczytane krzywe? Wbudowane pozostaną.', compareTitle: 'Porównanie krzywych',
             compareNeedMore: 'Pokaż (odkryj) co najmniej 2 krzywe, aby porównać.',
             compareBaseline: 'Punkt odniesienia:', chooseBaseline: 'Krzywa bazowa (kolumny są porównywane względem niej):',
             bandCol: 'Pasmo częstotliwości', compareClose: 'Zamknij', egWord: 'np.',
@@ -1431,6 +1431,8 @@
             const cBtn = document.getElementById('compareBtn'); if (cBtn) cBtn.title = s.compareBtn;
             const clBtn = document.getElementById('clearLoadedBtn'); if (clBtn) clBtn.title = s.clearLoaded;
             const iBtn = document.getElementById('instrBtn'); if (iBtn) iBtn.title = INSTR_STR.ui.instruments[lang] || 'Instruments';
+            const thBtn = document.getElementById('themeBtn'); if (thBtn) thBtn.title = s.themeTitle;
+            const wBtn = document.getElementById('widthBtn'); if (wBtn) wBtn.title = s.widthTitle;
             const iPanel = document.getElementById('instrPanel');
             if (iPanel && iPanel.style.display !== 'none') renderInstrPanel();
             updateClearLoadedBtn();
