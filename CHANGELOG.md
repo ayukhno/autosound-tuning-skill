@@ -2,14 +2,16 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
-## [Unreleased]
+## [v2.6.3] — 2026-07-21
+
+Curve-visualizer release: the target-curve visualizer became a standalone, shareable tool, and the bundled curve was renamed for trademark safety.
 
 ### Changed
-- **Renamed the bundled target curve `EMMA-Ref v3` → `SQ-Comp-Ref`** (character tag `Tight-Sub Edition`). "EMMA" is a registered trademark of the European Mobile Media Association; the curve is our own, developed in-house, so the name is changed to avoid implying any affiliation. The file is now `curves/SQ-Comp-Ref_0db_REW.txt`; references and the visualizer's built-in curve, descriptions, and match token were updated across all languages. Curve data is unchanged.
+- **Renamed the bundled target curve `EMMA-Ref v3` → `SQ-Comp-Ref`** (character tag `Tight-Sub Edition`). "EMMA" is a registered trademark of the European Mobile Media Association; the curve is our own, developed in-house, so the name is changed to avoid implying any affiliation. The file is now `curves/SQ-Comp-Ref_0db_REW.txt`; references and the visualizer's built-in curve, descriptions, and match token were updated across all languages. Curve data is unchanged. The description now states it's our own in-house curve and reframes "juicy" as a deep-but-controlled low end.
 
 ### Added
-- **Standalone curve visualizer** (`_curve-visualizer.html` at the repo root, served via GitHub Pages): 4-language UI (EN/UA/DE/PL), light/dark and wide/narrow toggles, a Flat reference curve, an editable normalization offset on import, right-click frequency-character guide (boost/cut characters, per-band descriptions, example instruments, band + octave width), and a curve-comparison table with relative tonal-trend wording. Descriptions and translations were reviewed via the Gemini advisor.
-- **FAQ:** "Can I build my own target curve?"
+- **Standalone curve visualizer** (`_curve-visualizer.html` at the repo root, served via GitHub Pages): 4-language UI (EN/UA/DE/PL), light/dark and wide/narrow toggles, a Flat reference curve, an editable normalization offset on import, per-curve color pickers, a "Clear loaded" button, right-click frequency-character guide (boost/cut characters, per-band descriptions, example instruments, band + octave width), and a curve-comparison table that reads the difference between curves as a relative tonal trend (not an absolute defect). The hover tooltip lists every visible curve. All descriptions and translations were reviewed via the Gemini advisor.
+- **`promotion/`** section with the launch post; **FAQ:** "Can I build my own target curve?"
 
 Field-harvest release from three sessions (2026-07-16/17/19: center realign + Chebyshev O2 + tone-ladder vT1; gain structure vG1/vG1.1; stage/bass session v4.5 + pan/piano rounds vP1/vP2). Twenty-two confirmed lessons folded. No engine changes.
 

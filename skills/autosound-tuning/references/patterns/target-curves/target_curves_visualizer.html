@@ -144,6 +144,22 @@
             display: inline-block;
         }
 
+        /* Per-curve color picker rendered as a small circular swatch (the old dot). */
+        .dot-color {
+            width: 16px;
+            height: 16px;
+            padding: 0;
+            border: none;
+            border-radius: 50%;
+            background: none;
+            cursor: pointer;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+        .dot-color::-webkit-color-swatch-wrapper { padding: 0; }
+        .dot-color::-webkit-color-swatch { border: none; border-radius: 50%; }
+        .dot-color::-moz-color-swatch { border: none; border-radius: 50%; }
+
         .card-desc {
             font-size: 13px;
             color: var(--text-muted);
@@ -164,8 +180,8 @@
             <option value="pl">PL</option>
         </select>
         <button id="compareBtn" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 16px;cursor:pointer;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.4);">Compare</button>
-        <button id="clearLoadedBtn" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 16px;cursor:pointer;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.4);display:none;">Clear</button>
         <button id="toggleAllBtn" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 16px;cursor:pointer;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.4);">Hide all</button>
+        <button id="clearLoadedBtn" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 16px;cursor:pointer;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.4);display:none;">Clear</button>
     </div>
     <h1 id="mainTitle">Acoustic Target Curve Visualizer</h1>
     <p class="subtitle" id="subtitle">Reference curve for project <b>SQ-Comp-Ref</b>. Drag in your own curve, or grab a standard curve from the <a href="https://nonotuningtool.com" target="_blank" rel="noopener" style="color:#a855f7;">Nono Tuning Tool</a> (nonotuningtool.com) — it plots offline once dropped in. Part of the <a href="https://github.com/ayukhno/autosound-tuning-skill" target="_blank" rel="noopener" style="color:#a855f7;">Autosound Tuning Skill</a> project — an AI-guided car-audio tuning workflow that reads what each curve means for your instruments.</p>
@@ -189,14 +205,14 @@
         <div class="info-grid">
             <div class="card" data-raw-name="SQ-Comp-Ref (Tight-Sub Edition)">
                 <div class="card-title" style="flex-wrap:wrap;">
-                    <span class="dot" style="background-color: #a855f7;"></span>
+                    <input type="color" class="dot-color" value="#a855f7" title="Curve color">
                     <span style="flex:1;min-width:0;overflow-wrap:anywhere;">SQ-Comp-Ref (Tight-Sub Edition)</span>
                 </div>
                 <div class="card-desc" id="emmaCardDesc"><b>Our own curve, developed in-house for this project.</b> Blends deep-but-controlled bass with SQ accuracy: a deep sub-bass floor (+9.0 dB, similar to Audiofrog), a soft, ultra-smooth roll-off to 200 Hz (fully removes boominess), a presence dip (-2 dB at 2.5 kHz) and a natural HF roll-off (-0.5 dB/oct).</div>
             </div>
             <div class="card" data-raw-name="Flat">
                 <div class="card-title" style="flex-wrap:wrap;">
-                    <span class="dot" style="background-color: #6b7280;"></span>
+                    <input type="color" class="dot-color" value="#6b7280" title="Curve color">
                     <span style="flex:1;min-width:0;overflow-wrap:anywhere;">Flat</span>
                 </div>
                 <div class="card-desc" id="flatCardDesc">0 dB reference line — the neutral baseline. Useful for reading other curves' absolute deviation at a glance.</div>
@@ -416,7 +432,7 @@
             dropPre: '↳ Drop a curve ', dropMid: ' file here (REW/NTT: ', dropPost: ') — or click to choose one. Plots instantly, offline.',
             hintLine: 'click a card below to hide/show that curve · right-click the chart for a frequency-character guide',
             freqAxis: 'Frequency (Hz)', levelAxis: 'Level (dB)', level: 'Level:',
-            delTitle: 'Delete curve', loadedPts: n => 'Loaded, ' + n + ' points',
+            delTitle: 'Delete curve', colorTitle: 'Curve color', loadedPts: n => 'Loaded, ' + n + ' points',
             clickToggleTitle: 'Click to hide / show', noPairsAlert: 'No freq/dB pairs found in file.',
             offsetPrompt: v => 'Suggested normalization offset: ' + v + ' dB (curve will be shifted so the 200–500 Hz band sits near 0 dB). Adjust the value if you want a different reference level, or keep it as is:',
             emmaCardDesc: '<b>Our own curve, developed in-house for this project.</b> Blends deep-but-controlled bass with SQ accuracy: a deep sub-bass floor (+9.0 dB, similar to Audiofrog), a soft, ultra-smooth roll-off to 200 Hz (fully removes boominess), a presence dip (-2 dB at 2.5 kHz) and a natural HF roll-off (-0.5 dB/oct).',
@@ -445,7 +461,7 @@
             dropPre: '↳ Перетягни сюди файл кривої ', dropMid: ' (REW/NTT: ', dropPost: ') — або клацни, щоб обрати. Додається на графік миттєво, офлайн.',
             hintLine: 'клацни на картку внизу, щоб сховати/показати криву · права кнопка миші на графіку — гід частотних характеристик',
             freqAxis: 'Частота (Гц)', levelAxis: 'Рівень (дБ)', level: 'Рівень:',
-            delTitle: 'Видалити криву', loadedPts: n => 'Завантажено, ' + n + ' точок',
+            delTitle: 'Видалити криву', colorTitle: 'Колір кривої', loadedPts: n => 'Завантажено, ' + n + ' точок',
             clickToggleTitle: 'Клац — сховати / показати', noPairsAlert: 'У файлі не знайдено пар частота/дБ.',
             offsetPrompt: v => 'Пропонований офсет нормалізації: ' + v + ' дБ (крива зсунеться так, щоб смуга 200–500 Гц була близько до 0 дБ). Зміни значення, якщо потрібен інший рівень відліку, або залиш як є:',
             emmaCardDesc: '<b>Наша власна крива, розроблена всередині проєкту.</b> Поєднання глибокого, але контрольованого басу та SQ-точності: глибокий суббас (+9.0 дБ, як в Audiofrog), м’який, надплавний спад до 200 Гц (повністю прибирає бубніння), яма присутності (-2 дБ на 2.5 кГц) та природний спад ВЧ (-0.5 дБ/окт).',
@@ -474,7 +490,7 @@
             dropPre: '↳ Ziehe eine ', dropMid: '-Kurvendatei hierher (REW/NTT: ', dropPost: ') — oder klicke, um eine auszuwählen. Wird sofort offline geplottet.',
             hintLine: 'Klicke auf eine Karte unten, um die Kurve auszublenden/einzublenden · Rechtsklick auf das Diagramm für den Frequenzcharakter-Guide',
             freqAxis: 'Frequenz (Hz)', levelAxis: 'Pegel (dB)', level: 'Pegel:',
-            delTitle: 'Kurve löschen', loadedPts: n => 'Geladen, ' + n + ' Punkte',
+            delTitle: 'Kurve löschen', colorTitle: 'Kurvenfarbe', loadedPts: n => 'Geladen, ' + n + ' Punkte',
             clickToggleTitle: 'Klicken zum Ein-/Ausblenden', noPairsAlert: 'Keine Frequenz/dB-Paare in der Datei gefunden.',
             offsetPrompt: v => 'Vorgeschlagener Normalisierungs-Offset: ' + v + ' dB (die Kurve wird so verschoben, dass der Bereich 200–500 Hz nahe 0 dB liegt). Ändere den Wert bei Bedarf, oder übernimm ihn so:',
             emmaCardDesc: '<b>Unsere eigene, projektintern entwickelte Kurve.</b> Verbindet tiefen, aber kontrollierten Bass mit SQ-Präzision: ein tiefes Subbass-Fundament (+9.0 dB, ähnlich wie Audiofrog), ein sanfter, ultra-glatter Abfall bis 200 Hz (beseitigt Dröhnen vollständig), eine Präsenzsenke (-2 dB bei 2.5 kHz) und ein natürlicher Höhenabfall (-0.5 dB/Okt).',
@@ -503,7 +519,7 @@
             dropPre: '↳ Przeciągnij tu plik krzywej ', dropMid: ' (REW/NTT: ', dropPost: ') — lub kliknij, aby wybrać. Nanosi się na wykres natychmiast, offline.',
             hintLine: 'kliknij kartę poniżej, aby ukryć/pokazać krzywą · kliknij prawym przyciskiem na wykresie, aby zobaczyć przewodnik charakterystyk częstotliwości',
             freqAxis: 'Częstotliwość (Hz)', levelAxis: 'Poziom (dB)', level: 'Poziom:',
-            delTitle: 'Usuń krzywą', loadedPts: n => 'Wczytano, ' + n + ' punktów',
+            delTitle: 'Usuń krzywą', colorTitle: 'Kolor krzywej', loadedPts: n => 'Wczytano, ' + n + ' punktów',
             clickToggleTitle: 'Kliknij, aby ukryć / pokazać', noPairsAlert: 'Nie znaleziono par częstotliwość/dB w pliku.',
             offsetPrompt: v => 'Proponowane przesunięcie normalizacji: ' + v + ' dB (krzywa zostanie przesunięta tak, aby pasmo 200–500 Hz było blisko 0 dB). Zmień wartość, jeśli chcesz inny poziom odniesienia, albo zostaw bez zmian:',
             emmaCardDesc: '<b>Nasza własna krzywa, opracowana wewnątrz projektu.</b> Łączy głęboki, ale kontrolowany bas z precyzją SQ: głęboki subbas (+9.0 dB, podobnie jak Audiofrog), miękkie, bardzo płynne opadanie do 200 Hz (całkowicie eliminuje dudnienie), zapadnięcie obecności (-2 dB przy 2.5 kHz) oraz naturalny spadek wysokich tonów (-0.5 dB/okt).',
@@ -1066,7 +1082,7 @@
             card.dataset.rawName = rawName || '';
             card.dataset.ptsLen = ptsLen;
             card.innerHTML = '<div class="card-title" style="flex-wrap:wrap;">' +
-                '<span class="dot" style="background-color:' + color + ';flex-shrink:0;"></span>' +
+                '<input type="color" class="dot-color" value="' + color + '" title="' + t().colorTitle + '" style="flex-shrink:0;">' +
                 '<span style="flex:1;min-width:0;overflow-wrap:anywhere;">' + label + '</span>' +
                 '<button class="del-btn" title="' + t().delTitle + '" style="flex-shrink:0;background:none;border:none;color:var(--hint-color);cursor:pointer;font-size:16px;line-height:1;padding:0 2px;">✕</button></div>' +
                 '<div class="card-desc">' + desc + '</div>' +
@@ -1080,7 +1096,22 @@
             wireOffset(card, ds);
             wireToggle(card, ds);
             wireDelete(card, ds);
+            wireColor(card, ds);
             return card;
+        }
+
+        // Per-curve color picker: change the line color live, keep the card swatch,
+        // the chart line and the legend in sync, and persist so it survives a reload.
+        function wireColor(card, ds) {
+            const inp = card.querySelector('.dot-color');
+            if (!inp || !ds) return;
+            if (ds.borderColor && /^#/.test(ds.borderColor)) inp.value = ds.borderColor;
+            inp.addEventListener('click', function (e) { e.stopPropagation(); });
+            inp.addEventListener('input', function () {
+                ds.borderColor = inp.value;
+                curveChart.update('none');
+                persist();
+            });
         }
 
         function wireDelete(card, ds) {
@@ -1175,7 +1206,7 @@
                 wireOffset(card, ds);
             }
         }
-        document.querySelectorAll('.info-grid .card').forEach(function (c, i) { wireToggle(c, curveChart.data.datasets[i]); });
+        document.querySelectorAll('.info-grid .card').forEach(function (c, i) { wireToggle(c, curveChart.data.datasets[i]); wireColor(c, curveChart.data.datasets[i]); });
 
         const btn = document.getElementById('toggleAllBtn');
         let hidden = false;
@@ -1268,6 +1299,7 @@
                     else if (c.dataset.ptsLen) descEl.innerHTML = s.loadedPts(c.dataset.ptsLen);
                 }
                 const delBtn = c.querySelector('.del-btn'); if (delBtn) delBtn.title = s.delTitle;
+                const colInp = c.querySelector('.dot-color'); if (colInp) colInp.title = s.colorTitle;
                 const lvlLabel = c.querySelector('.lvl-label'); if (lvlLabel) lvlLabel.textContent = s.level;
                 c.title = s.clickToggleTitle;
             });
