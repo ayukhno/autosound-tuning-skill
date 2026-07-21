@@ -163,9 +163,9 @@
             <option value="de">DE</option>
             <option value="pl">PL</option>
         </select>
-        <button id="compareBtn" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 16px;cursor:pointer;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.4);">Compare curves</button>
-        <button id="clearLoadedBtn" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 16px;cursor:pointer;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.4);display:none;">Clear loaded</button>
-        <button id="toggleAllBtn" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 16px;cursor:pointer;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.4);">Hide all curves</button>
+        <button id="compareBtn" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 16px;cursor:pointer;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.4);">Compare</button>
+        <button id="clearLoadedBtn" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 16px;cursor:pointer;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.4);display:none;">Clear</button>
+        <button id="toggleAllBtn" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 16px;cursor:pointer;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.4);">Hide all</button>
     </div>
     <h1 id="mainTitle">Acoustic Target Curve Visualizer</h1>
     <p class="subtitle" id="subtitle">Reference curve for project <b>SQ-Comp-Ref</b>. Drag in your own curve, or grab a standard curve from the <a href="https://nonotuningtool.com" target="_blank" rel="noopener" style="color:#a855f7;">Nono Tuning Tool</a> (nonotuningtool.com) — it plots offline once dropped in. Part of the <a href="https://github.com/ayukhno/autosound-tuning-skill" target="_blank" rel="noopener" style="color:#a855f7;">Autosound Tuning Skill</a> project — an AI-guided car-audio tuning workflow that reads what each curve means for your instruments.</p>
@@ -412,7 +412,7 @@
             mainTitle: 'Acoustic Target Curve Visualizer',
             subtitlePre: 'Reference curve for project ', subtitleMid: '. Drag in your own curve, or grab a standard curve from the ', subtitlePost: ' — it plots offline once dropped in.',
             subtitlePromoPre: 'Part of the ', subtitlePromoPost: ' project — an AI-guided car-audio tuning workflow that reads what each curve means for your instruments.',
-            hideAll: 'Hide all curves', showAll: 'Show all curves',
+            hideAll: 'Hide all', showAll: 'Show all',
             dropPre: '↳ Drop a curve ', dropMid: ' file here (REW/NTT: ', dropPost: ') — or click to choose one. Plots instantly, offline.',
             hintLine: 'click a card below to hide/show that curve · right-click the chart for a frequency-character guide',
             freqAxis: 'Frequency (Hz)', levelAxis: 'Level (dB)', level: 'Level:',
@@ -431,7 +431,7 @@
                 '<b>SQ-Comp-Ref (project):</b> deep, controlled sub-bass, ultra-smooth roll-off to 200 Hz, presence dip −2 dB @2.5 kHz.',
                 '<b>Flat:</b> 0 dB reference — no tonal shaping, useful as a neutral baseline.',
             ],
-            compareBtn: 'Compare curves', clearLoaded: 'Clear loaded', compareTitle: 'Curve comparison',
+            compareBtn: 'Compare', clearLoaded: 'Clear', compareTitle: 'Curve comparison',
             compareNeedMore: 'Show (un-hide) at least 2 curves to compare.',
             compareBaseline: 'Baseline:', chooseBaseline: 'Baseline curve (columns are compared against it):',
             bandCol: 'Frequency band', compareClose: 'Close', egWord: 'e.g.',
@@ -441,7 +441,7 @@
             mainTitle: 'Візуалізатор цільових акустичних кривих',
             subtitlePre: 'Референсна крива проєкту ', subtitleMid: '. Перетягни свою криву або візьми стандартну криву з ', subtitlePost: ' — вона додасться на графік офлайн.',
             subtitlePromoPre: 'Частина проєкту ', subtitlePromoPost: ' — AI-гайд для тюнінгу автозвуку, що пояснює вплив кожної кривої на інструменти.',
-            hideAll: 'Сховати всі криві', showAll: 'Показати всі криві',
+            hideAll: 'Сховати всі', showAll: 'Показати всі',
             dropPre: '↳ Перетягни сюди файл кривої ', dropMid: ' (REW/NTT: ', dropPost: ') — або клацни, щоб обрати. Додається на графік миттєво, офлайн.',
             hintLine: 'клацни на картку внизу, щоб сховати/показати криву · права кнопка миші на графіку — гід частотних характеристик',
             freqAxis: 'Частота (Гц)', levelAxis: 'Рівень (дБ)', level: 'Рівень:',
@@ -460,7 +460,7 @@
                 '<b>SQ-Comp-Ref (проєкт):</b> глибокий, але контрольований суббас, надплавний спад до 200 Гц, яма присутності −2 дБ @2.5 кГц.',
                 '<b>Flat:</b> референс 0 дБ — без тональної корекції, зручно як нейтральна база.',
             ],
-            compareBtn: 'Порівняти криві', clearLoaded: 'Очистити завантажені', compareTitle: 'Порівняння кривих',
+            compareBtn: 'Порівняти', clearLoaded: 'Очистити', compareTitle: 'Порівняння кривих',
             compareNeedMore: 'Покажи (не приховуй) щонайменше 2 криві для порівняння.',
             compareBaseline: 'База:', chooseBaseline: 'Базова крива (стовпчики порівнюються з нею):',
             bandCol: 'Смуга частот', compareClose: 'Закрити', egWord: 'напр.',
@@ -470,7 +470,7 @@
             mainTitle: 'Visualizer für akustische Zielkurven',
             subtitlePre: 'Referenzkurve für das Projekt ', subtitleMid: '. Ziehe deine eigene Kurve hierher oder hol dir eine Standardkurve vom ', subtitlePost: ' — sie wird offline ins Diagramm geladen.',
             subtitlePromoPre: 'Teil des Projekts ', subtitlePromoPost: ' — ein KI-gestützter Car-Audio-Tuning-Workflow, der erklärt, was jede Kurve für deine Instrumente bedeutet.',
-            hideAll: 'Alle Kurven ausblenden', showAll: 'Alle Kurven einblenden',
+            hideAll: 'Alle ausblenden', showAll: 'Alle einblenden',
             dropPre: '↳ Ziehe eine ', dropMid: '-Kurvendatei hierher (REW/NTT: ', dropPost: ') — oder klicke, um eine auszuwählen. Wird sofort offline geplottet.',
             hintLine: 'Klicke auf eine Karte unten, um die Kurve auszublenden/einzublenden · Rechtsklick auf das Diagramm für den Frequenzcharakter-Guide',
             freqAxis: 'Frequenz (Hz)', levelAxis: 'Pegel (dB)', level: 'Pegel:',
@@ -489,7 +489,7 @@
                 '<b>SQ-Comp-Ref (Projekt):</b> tiefer, aber kontrollierter Subbass, ultra-glatter Abfall bis 200 Hz, Präsenzsenke −2 dB @2.5 kHz.',
                 '<b>Flat:</b> 0-dB-Referenz — keine tonale Formung, praktisch als neutrale Basislinie.',
             ],
-            compareBtn: 'Kurven vergleichen', clearLoaded: 'Geladene löschen', compareTitle: 'Kurvenvergleich',
+            compareBtn: 'Vergleichen', clearLoaded: 'Leeren', compareTitle: 'Kurvenvergleich',
             compareNeedMore: 'Zeige (blende ein) mindestens 2 Kurven zum Vergleichen.',
             compareBaseline: 'Basis:', chooseBaseline: 'Basiskurve (Spalten werden dagegen verglichen):',
             bandCol: 'Frequenzband', compareClose: 'Schließen', egWord: 'z. B.',
@@ -499,7 +499,7 @@
             mainTitle: 'Wizualizator docelowych krzywych akustycznych',
             subtitlePre: 'Krzywa referencyjna projektu ', subtitleMid: '. Przeciągnij własną krzywą lub pobierz standardową krzywą z ', subtitlePost: ' — zostanie naniesiona na wykres offline.',
             subtitlePromoPre: 'Część projektu ', subtitlePromoPost: ' — prowadzony przez AI workflow strojenia audio samochodowego, który tłumaczy wpływ każdej krzywej na instrumenty.',
-            hideAll: 'Ukryj wszystkie krzywe', showAll: 'Pokaż wszystkie krzywe',
+            hideAll: 'Ukryj wszystkie', showAll: 'Pokaż wszystkie',
             dropPre: '↳ Przeciągnij tu plik krzywej ', dropMid: ' (REW/NTT: ', dropPost: ') — lub kliknij, aby wybrać. Nanosi się na wykres natychmiast, offline.',
             hintLine: 'kliknij kartę poniżej, aby ukryć/pokazać krzywą · kliknij prawym przyciskiem na wykresie, aby zobaczyć przewodnik charakterystyk częstotliwości',
             freqAxis: 'Częstotliwość (Hz)', levelAxis: 'Poziom (dB)', level: 'Poziom:',
@@ -518,7 +518,7 @@
                 '<b>SQ-Comp-Ref (projekt):</b> głęboki, ale kontrolowany subbas, bardzo płynne opadanie do 200 Hz, zapadnięcie obecności −2 dB @2.5 kHz.',
                 '<b>Flat:</b> referencja 0 dB — bez kształtowania tonalnego, przydatna jako neutralna baza.',
             ],
-            compareBtn: 'Porównaj krzywe', clearLoaded: 'Wyczyść wczytane', compareTitle: 'Porównanie krzywych',
+            compareBtn: 'Porównaj', clearLoaded: 'Wyczyść', compareTitle: 'Porównanie krzywych',
             compareNeedMore: 'Pokaż (odkryj) co najmniej 2 krzywe, aby porównać.',
             compareBaseline: 'Punkt odniesienia:', chooseBaseline: 'Krzywa bazowa (kolumny są porównywane względem niej):',
             bandCol: 'Pasmo częstotliwości', compareClose: 'Zamknij', egWord: 'np.',
