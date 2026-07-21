@@ -22,6 +22,8 @@ Have a question that isn't here? Open a [discussion or issue](../../issues) and 
   - [Can I ask Gemini to install and run the skill itself?](#can-i-ask-gemini-to-install-and-run-the-skill-itself-without-claude-code)
 - [Measuring Phase & Time Alignment: UMIK-1 vs. XLR](#measuring-phase--time-alignment-umik-1-vs-xlr-microphones)
   - [Can I measure phase with a UMIK-1?](#can-i-measure-phase-with-a-umik-1)
+- [Target curves](#target-curves)
+  - [Can I build my own target curve?](#can-i-build-my-own-target-curve)
 
 ---
 
@@ -308,3 +310,43 @@ For a complete step-by-step video guide on how to configure REW for accurate pha
 > * **Temperature Drift:** The speed of sound depends heavily on cabin air temperature. A shift of just 5°C alters the speed of sound enough to shift calculated arrival times by nearly 0.08 ms. While this is negligible for low-frequency bass/subwoofer alignment, it is completely fatal for midranges and tweeters (MF/HF) where wave periods are extremely short, easily destroying your crossover phase alignment and stage focus.
 > * **Clock Drift:** If you are using a USB microphone (like the UMIK), the microphone and your output sound card run on separate hardware clocks. Because they are unsynchronized, their sample rates slowly drift over time. Waiting between measurements introduces artificial time offsets that do not physically exist.
 > * **Rule of thumb:** If you adjust the microphone, change the cabin temperature (e.g., turn on/off AC), or pause the session for more than a few minutes, **re-measure all channels again** to guarantee your timing baseline remains 100% consistent.
+
+---
+
+## Target curves
+
+#### Can I build my own target curve?
+
+**Yes — and you often should.** A target ("house") curve is not a fixed standard; it's a
+*per-project starting hypothesis* that you finalize by ear after the Phase-0 baseline. There is
+no single "correct" curve — each car, install, and taste ends up with its own.
+
+Two practical ways to build one:
+
+**1. Ask the skill to design it.** Describe your taste and the skill will propose a shape, run it
+through the Generator ↔ Critic ↔ Arbiter loop, and export it for REW/your DSP. The more concretely
+you describe the *character* you want, the better the result. Useful things to tell it:
+- Your genres and how you listen (low volume vs. loud, long drives).
+- The direction vs. a reference: e.g. *"start from ResoNix Accurate but +2 dB more sub-bass and calmer highs"*, or *"like EMMA-Ref v3 but with a slightly deeper presence dip for more laid-back vocals"*.
+- Any complaints about the current sound in the frequency-character language (*boomy, honky, thin, sibilant, no air*…).
+
+Example prompts:
+> *"Build me a custom target curve: warm, punchy bass for rock, vocals slightly forward, gentle highs — start from Half Whitledge and show me the shape."*
+>
+> *"Blend Audiofrog and Harman into one target with Audiofrog's timbre but a bit more deep bass, then compare it against both."*
+
+The skill writes a 2-column `freq  dB` file (log-spaced, 20 Hz–20 kHz) into the project's
+`rew_analitic/target-curves/<name>/`, and `rew_tool` then uses it as the house curve when it
+designs EQ filters. You still confirm the final shape by ear with the measured baseline in hand.
+
+> *Reality check: the AI will draw whatever curve you ask for, but your speakers have to physically support it — make sure your midbass and subwoofer have the power and excursion headroom before committing to an aggressive low-end boost.*
+
+**2. Draw it yourself in the Nono Tuning Tool** ([nonotuningtool.com](https://nonotuningtool.com) →
+*Custom Target Curve*), then export the `.txt` and drop it into the project's `curves/` folder or
+onto the visualizer.
+
+**Compare and sanity-check it** against the well-known reference curves — and see what each hump or
+dip means for your instruments — in the interactive comparison tool:
+**[open the curve visualizer online](https://ayukhno.github.io/autosound-tuning-skill/_curve-visualizer.html)**
+(works offline too; drag your `.txt` in, compare it side by side against EMMA-Ref v3 / ResoNix /
+Audiofrog / Harman / Jazzi / Whitledge, and right-click any point for a frequency-character guide).

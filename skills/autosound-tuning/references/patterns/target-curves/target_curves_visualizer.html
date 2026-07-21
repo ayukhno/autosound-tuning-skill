@@ -248,131 +248,131 @@
     // phase/time-alignment vs. pure EQ). Phrases stay in English (terms of
     // art, same convention as curve names); only the explanation is localized.
     const FREQ_ENTRIES = [
-        { range: [20, 60], type: 'boost', phrase: 'Boosted bass', instruments: { en: 'Synth bass, kick drum fundamental, pipe organ', uk: 'Синт-бас, основа бас-бочки, орган', de: 'Synth-Bass, Kickdrum-Grundton, Orgel', pl: 'Bas syntezatorowy, podstawa stopy, organy' }, desc: {
+        { range: [20, 60], type: 'boost', phrase: 'Boosted bass', gloss: { uk: 'підсилений бас', de: 'verstärkter Bass', pl: 'podbity bas' }, instruments: { en: 'Synth bass, kick drum fundamental, pipe organ', uk: 'Синт-бас, основа бас-бочки, орган', de: 'Synth-Bass, Kickdrum-Grundton, Orgel', pl: 'Bas syntezatorowy, podstawa stopy, organy' }, desc: {
             en: 'Deep, powerful subwoofer rumble that physically pressurizes the cabin and impacts the chest.',
             uk: 'Глибокий сабвуферний бас, що створює фізичний тиск у салоні та відчувається грудьми.',
             de: 'Tiefes, druckvolles Subwoofer-Grollen, das die Fahrzeugkabine physisch unter Druck setzt und in der Brust spürbar ist.',
             pl: 'Głęboki, potężny bas z subwoofera, który fizycznie pompuje ciśnienie w kabinie i uderza w klatkę piersiową.' } },
-        { range: [20, 60], type: 'boost', phrase: 'fat / muddy / bassy', instruments: { en: 'Synth sub-bass, 808 kick, electric bass low notes', uk: 'Синт саб-бас, 808-бочка, низи бас-гітари', de: 'Synth-Subbass, 808-Kick, tiefe Bassgitarrentöne', pl: 'Subbas syntezatorowy, stopa 808, niskie nuty basu' }, desc: {
+        { range: [20, 60], type: 'boost', phrase: 'fat / muddy / bassy', gloss: { uk: 'жирний / мутний / басовитий', de: 'fett / matschig / basslastig', pl: 'tłusty / zamulony / basowy' }, instruments: { en: 'Synth sub-bass, 808 kick, electric bass low notes', uk: 'Синт саб-бас, 808-бочка, низи бас-гітари', de: 'Synth-Subbass, 808-Kick, tiefe Bassgitarrentöne', pl: 'Subbas syntezatorowy, stopa 808, niskie nuty basu' }, desc: {
             en: 'Overwhelming sub-bass that drowns out mid-bass definition and aggressively rattles cabin panels.',
             uk: 'Надмірний саб-бас, який глушить мідбас та змушує деренчати панелі салону.',
             de: 'Übermäßiger Subbass, der die Midbass-Definition überdeckt und Verkleidungen der Kabine klappern lässt.',
-            pl: 'Dudniący subbas, który zagłusza definicję midbasu i agresywnie powoduje rezonans plastików w kabinie.' } },
-        { range: [20, 60], type: 'cut', phrase: 'disattached bass', instruments: { en: 'Upright bass lowest strings, low kick drum resonance', uk: 'Найнижчі струни контрабаса, низький резонанс бочки', de: 'Tiefste Kontrabass-Saiten, tiefe Kickdrum-Resonanz', pl: 'Najniższe struny kontrabasu, niski rezonans stopy' }, desc: {
+            pl: 'Dudniący subbas, który zagłusza definicję midbasu i agresywnie wprawia w rezonans plastiki w kabinie.' } },
+        { range: [20, 60], type: 'cut', phrase: 'disattached bass', gloss: { uk: 'відірваний бас', de: 'abgetrennter Bass', pl: 'oderwany bas' }, instruments: { en: 'Upright bass lowest strings, low kick drum resonance', uk: 'Найнижчі струни контрабаса, низький резонанс бочки', de: 'Tiefste Kontrabass-Saiten, tiefe Kickdrum-Resonanz', pl: 'Najniższe struny kontrabasu, niski rezonans stopy' }, desc: {
             en: 'Subwoofer feels physically disconnected, pulling the soundstage into the trunk instead of blending up front. Usually a time-alignment/phase or crossover-slope issue, not a pure EQ problem.',
             uk: 'Сабвуфер грає окремо від фронту, відтягуючи звукову сцену назад у багажник замість злиття. Зазвичай це проблема затримки/фази чи нахилу кросовера, а не суто EQ.',
-            de: 'Subwoofer wirkt abgetrennt und zieht die Bühne in den Kofferraum, statt mit der Front zu verschmelzen. Meist ein Zeitkorrektur-/Phasen- oder Übergangsfrequenz-Problem, kein reines EQ-Thema.',
-            pl: 'Subwoofer gra w oderwaniu od przodu, przeciągając scenę dźwiękową do bagażnika zamiast spójnego brzmienia. Zwykle to problem wyrównania czasowego/fazy lub nachylenia zwrotnicy, a nie tylko EQ.' } },
-        { range: [20, 60], type: 'cut', phrase: 'bass-shy / thin', instruments: { en: 'Bass guitar root notes, large toms, electronic kick', uk: 'Основні ноти бас-гітари, великі томи, електронна бочка', de: 'Grundtöne der Bassgitarre, große Toms, elektronische Kick', pl: 'Podstawowe nuty basu, duże tomy, elektroniczna stopa' }, desc: {
+            de: 'Subwoofer wirkt abgetrennt und zieht die Bühne in den Kofferraum, statt mit der Front zu verschmelzen. Meist ein Zeitkorrektur-/Phasen- oder Flankensteilheit-Problem, kein reines EQ-Thema.',
+            pl: 'Subwoofer gra w oderwaniu od przodu, ściągając scenę do bagażnika zamiast zgrać się z systemem. Zwykle to problem opóźnień czasowych (czasów), fazy lub zbocza cięcia, a nie samego EQ.' } },
+        { range: [20, 60], type: 'cut', phrase: 'bass-shy / thin', gloss: { uk: 'бідний бас / тонко', de: 'bassarm / dünn', pl: 'ubogi bas / cienko' }, instruments: { en: 'Bass guitar root notes, large toms, electronic kick', uk: 'Основні ноти бас-гітари, великі томи, електронна бочка', de: 'Grundtöne der Bassgitarre, große Toms, elektronische Kick', pl: 'Tony podstawowe gitary basowej, duże tomy, elektroniczna stopa' }, desc: {
             en: 'Weak subwoofer foundation, leaving the system sounding thin and easily drowned out by road noise.',
             uk: 'Слабкий фундамент сабвуфера, через що система звучить тонко і губиться на тлі шуму дороги.',
             de: 'Schwaches Subwoofer-Fundament; das System klingt dünn und geht leicht im Fahrgeräusch unter.',
             pl: 'Słaby fundament subwoofera, przez co system brzmi chudo i łatwo gubi się w szumie drogi.' } },
-        { range: [20, 50], type: 'cut', phrase: 'tight bass', instruments: { en: 'Fast double kick pedals, synth bass articulation', uk: 'Швидка подвійна бочка, артикуляція синт-баса', de: 'Schnelle Doppel-Fußmaschine, Synth-Bass-Artikulation', pl: 'Szybka podwójna stopa, artykulacja basu syntezatorowego' }, desc: {
+        { range: [20, 50], type: 'cut', phrase: 'tight bass', gloss: { uk: 'зібраний, пружний бас', de: 'straffer Bass', pl: 'zwarty bas' }, instruments: { en: 'Fast double kick pedals, synth bass articulation', uk: 'Швидка подвійна бочка, артикуляція синт-баса', de: 'Schnelle Doppel-Fußmaschine, Synth-Bass-Artikulation', pl: 'Szybka podwójna stopa, artykulacja basu syntezatorowego' }, desc: {
             en: 'Subsonic roll-off controls cabin gain bloat, improving subwoofer speed, mechanical safety, and tightness.',
             uk: 'Зріз найнижчих частот прибирає гудіння салону, покращуючи швидкість сабвуфера та його механічну безпеку.',
             de: 'Subsonic-Filter reduziert Druckkammereffekt-Wummern und verbessert Subwoofer-Präzision, Straffheit sowie mechanische Belastbarkeit.',
             pl: 'Cięcie subsoniczne redukuje podbicie kabiny, poprawiając szybkość subwoofera, jego zwartość i bezpieczeństwo mechaniczne.' } },
-        { range: [60, 100], type: 'cut', phrase: 'hollow bass', instruments: { en: 'Kick drum body, bass guitar attack, lower tom thud', uk: 'Тіло бочки, атака бас-гітари, удар низького тома', de: 'Kickdrum-Körper, Bassgitarren-Attack, tiefer Tom-Schlag', pl: 'Ciało stopy, atak basu, uderzenie niskiego tomu' }, desc: {
+        { range: [60, 100], type: 'cut', phrase: 'hollow bass', gloss: { uk: 'порожній бас', de: 'hohler Bass', pl: 'pusty bas' }, instruments: { en: 'Kick drum body, bass guitar attack, lower tom thud', uk: 'Тіло бочки, атака бас-гітари, удар низького тома', de: 'Kickdrum-Körper, Bassgitarren-Attack, tiefer Tom-Schlag', pl: 'Wypełnienie stopy, atak basu, uderzenie niskiego tomu' }, desc: {
             en: 'Lacks midbass impact and punch; the rhythm section feels completely empty and flat.',
             uk: 'Відсутність удару та панчу мідбаса; ритм-секція звучить цілком порожньо.',
             de: 'Fehlender Midbass-Kick und -Punch; die Rhythmusgruppe wirkt völlig leer und flach.',
             pl: 'Brak uderzenia i punchu midbasu; sekcja rytmiczna brzmi zupełnie pusto i płasko.' } },
-        { range: [60, 150], type: 'boost', phrase: 'muddy / boomy / rubbery bass, slam', instruments: { en: 'Kick drum punch, electric bass, snare bottom', uk: 'Панч бочки, бас-гітара, низ малого барабана', de: 'Kickdrum-Punch, E-Bass, Snare-Unterseite', pl: 'Punch stopy, bas elektryczny, spód werbla' }, desc: {
+        { range: [60, 150], type: 'boost', phrase: 'muddy / boomy / rubbery bass, slam', gloss: { uk: 'мутний / гудячий / «гумовий» бас, панч', de: 'matschig / wummerig / schwammig, Slam', pl: 'zamulony / dudniący / gumowy bas, uderzenie' }, instruments: { en: 'Kick drum punch, electric bass, snare bottom', uk: 'Панч бочки, бас-гітара, низ малого барабана', de: 'Kickdrum-Punch, E-Bass, Snare-Unterseite', pl: 'Punch stopy, bas elektryczny, sprężyna werbla' }, desc: {
             en: 'Aggressive midbass punch that, depending on the driver location (doors, kick panels, under-seat, pods), can turn boomy or muddy in a cabin.',
-            uk: 'Агресивний панч мідбаса, який залежно від місця драйвера (двері, кік-панелі, під сидінням, поди) може стати гудячим чи каламутним у салоні.',
+            uk: 'Агресивний панч мідбаса, який залежно від місця драйвера (двері, кік-панелі, під сидінням, подіуми) може стати гудячим чи мутним у салоні.',
             de: 'Aggressiver Midbass-Punch, der je nach Einbauort des Treibers (Türen, Kickpanels, unter dem Sitz, Pods) im Innenraum wummerig oder matschig werden kann.',
-            pl: 'Agresywny punch midbasu, który zależnie od lokalizacji głośnika (drzwi, kick panele, pod fotelem, pody) może stać się dudniący lub mętny w kabinie.' } },
-        { range: [150, 300], type: 'boost', phrase: 'warmth / punchy bass', instruments: { en: 'Male vocal fundamentals, cello, snare drum body', uk: 'Основа чоловічого вокалу, віолончель, тіло малого барабана', de: 'Grundtöne männlicher Stimme, Cello, Snare-Körper', pl: 'Podstawy męskiego wokalu, wiolonczela, ciało werbla' }, desc: {
+            pl: 'Agresywny punch midbasu, który zależnie od lokalizacji głośnika (drzwi, kick panele, pod fotelem, pody) może stać się dudniący lub zamulony w kabinie.' } },
+        { range: [150, 300], type: 'boost', phrase: 'warmth / punchy bass', gloss: { uk: 'теплота / пружний бас', de: 'Wärme / punchiger Bass', pl: 'ciepło / dynamiczny bas' }, instruments: { en: 'Male vocal fundamentals, cello, snare drum body', uk: 'Основа чоловічого вокалу, віолончель, тіло малого барабана', de: 'Grundtöne männlicher Stimme, Cello, Snare-Körper', pl: 'Tony podstawowe męskiego wokalu, wiolonczela, wypełnienie werbla' }, desc: {
             en: 'Adds warmth and body — but depending on where the midbass sits (doors, kick panels, under-seat, pods) this range can also excite panel resonance and tip into mud.',
-            uk: 'Додає тепла й тіла — але залежно від розташування мідбаса (двері, кік-панелі, під сидінням, поди) ця смуга може збуджувати резонанс панелей і йти в кашу.',
-            de: 'Sorgt für Wärme und Körper — je nach Einbauort des Midbass (Türen, Kickpanels, unter dem Sitz, Pods) kann dieser Bereich aber auch Verkleidungsresonanzen anregen und in Matsch kippen.',
-            pl: 'Dodaje ciepła i ciała — ale zależnie od miejsca midbasu (drzwi, kick panele, pod fotelem, pody) to pasmo może też wzbudzać rezonans paneli i przechodzić w błoto.' } },
-        { range: [300, 400], type: 'boost', phrase: 'muddy, cuppy', instruments: { en: 'Lower male vocals, viola, lower acoustic guitar', uk: 'Нижній чоловічий вокал, альт, низ акустичної гітари', de: 'Tiefere Männerstimme, Bratsche, tiefere Akustikgitarre', pl: 'Niższy męski wokal, altówka, niższa gitara akustyczna' }, desc: {
+            uk: 'Додає тепла й тіла — але залежно від розташування мідбаса (двері, кік-панелі, під сидінням, подіуми) ця смуга може збуджувати резонанс панелей і йти в кашу.',
+            de: 'Sorgt für Wärme und Körper — je nach Einbauort des Midbass (Türen, Kickpanels, unter dem Sitz, Pods) kann dieser Bereich aber auch Verkleidungsresonanzen anregen und matschig klingen.',
+            pl: 'Dodaje ciepła i masy — ale zależnie od miejsca midbasu to pasmo może wzbudzać rezonans tapicerki i powodować zamulenie.' } },
+        { range: [300, 400], type: 'boost', phrase: 'muddy, cuppy', gloss: { uk: 'мутний, «як з відра»', de: 'matschig, topfig', pl: 'zamulony, pudełkowy' }, instruments: { en: 'Lower male vocals, viola, lower acoustic guitar', uk: 'Нижній чоловічий вокал, альт, низ акустичної гітари', de: 'Tiefere Männerstimme, Bratsche, tiefere Akustikgitarre', pl: 'Niższy męski wokal, altówka, niższe rejestry gitary akustycznej' }, desc: {
             en: "Dashboard reflections amplify this range, causing a boxy, stifled, 'talking into a cup' vocal coloration.",
             uk: 'Відбиття від торпедо підсилюють цей діапазон, створюючи коробковий, затиснутий вокал «через рупор».',
             de: 'Armaturenbrett-Reflexionen verstärken diesen Bereich und verursachen verfärbte, topfige Stimmen wie durch vorgehaltene Hände.',
-            pl: 'Odbicia od deski rozdzielczej wzmacniają to pasmo, dając pudełkowaty, stłumiony wokal jak przez tubę.' } },
-        { range: [300, 400], type: 'cut', phrase: 'hollow voices', instruments: { en: 'Male vocal chest voice, lower brass, acoustic guitar body', uk: 'Грудний чоловічий голос, низькі духові, тіло акустичної гітари', de: 'Männliche Bruststimme, tiefe Blechbläser, Akustikgitarren-Körper', pl: 'Piersiowy głos męski, niskie blachy, ciało gitary akustycznej' }, desc: {
+            pl: 'Odbicia od deski rozdzielczej wzmacniają to pasmo, dając pudełkowaty, stłumiony wokal, brzmiący jak ze studni lub przez dłonie.' } },
+        { range: [300, 400], type: 'cut', phrase: 'hollow voices', gloss: { uk: 'порожні голоси', de: 'hohle Stimmen', pl: 'puste głosy' }, instruments: { en: 'Male vocal chest voice, lower brass, acoustic guitar body', uk: 'Грудний чоловічий голос, низькі духові, тіло акустичної гітари', de: 'Männliche Bruststimme, tiefe Blechbläser, Akustikgitarren-Körper', pl: 'Rejestr piersiowy męskiego wokalu, instrumenty dęte blaszane, pudło rezonansowe gitary' }, desc: {
             en: 'Over-cutting to fix reflections leaves vocals sounding thin, empty, and lacking natural chest resonance.',
             uk: 'Надмірне зрізання для боротьби з відбиттями робить вокал тонким, порожнім і без грудного резонансу.',
-            de: 'Zu starkes Absenken gegen Reflexionen lässt Stimmen dünn, leer und ohne natürlichen Brustkorb-Klang wirken.',
-            pl: 'Zbyt mocne wycięcie dla redukcji odbić zostawia wokale cienkimi, pustymi i bez naturalnego rezonansu klatki.' } },
-        { range: [400, 800], type: 'boost', phrase: 'honky / boxy', instruments: { en: 'Male vocal chest, snare body, midbass driver output', uk: 'Груди чоловічого вокалу, тіло малого барабана, віддача мідбаса', de: 'Männliche Bruststimme, Snare-Körper, Midbass-Ausgabe', pl: 'Pierś męskiego wokalu, ciało werbla, wyjście midbasu' }, desc: {
+            de: 'Zu starkes Absenken gegen Reflexionen lässt Stimmen dünn, leer und ohne natürliches Brustvolumen wirken.',
+            pl: 'Zbyt mocne wycięcie tego pasma dla redukcji odbić zostawia wokale chudymi, pustymi i pozbawionymi naturalnego rezonansu klatki piersiowej.' } },
+        { range: [400, 800], type: 'boost', phrase: 'honky / boxy', gloss: { uk: 'гугнявий / коробковий', de: 'näselnd / topfig', pl: 'nosowy / pudełkowy' }, instruments: { en: 'Male vocal chest, snare body, midbass driver output', uk: 'Груди чоловічого вокалу, тіло малого барабана, віддача мідбаса', de: 'Männliche Bruststimme, Snare-Körper, Midbass-Ausgabe', pl: 'Rejestr piersiowy męskiego wokalu, wypełnienie werbla, pasmo samego przetwornika midbasowego' }, desc: {
             en: "Boxy, cabinet-like coloration — sounds trapped inside a box; typically a midbass enclosure resonance (door panel, pod, kick panel, or box), wherever the driver is mounted.",
-            uk: 'Коробковий призвук — ніби звук замкнений у ящику; зазвичай резонанс корпусу мідбаса (дверна панель, под, кік-панель чи короб), де б драйвер не стояв.',
-            de: 'Kistige, schachtelartige Klangfärbung — wie in einer Box gefangen; meist eine Gehäuseresonanz des Midbass (Türverkleidung, Pod, Kickpanel oder Box), egal wo der Treiber sitzt.',
-            pl: 'Pudełkowate zabarwienie — jakby dźwięk był zamknięty w pudełku; zwykle rezonans obudowy midbasu (panel drzwi, pod, kick panel lub skrzynka), niezależnie od miejsca montażu.' } },
-        { range: [400, 800], type: 'cut', phrase: 'hollow', instruments: { en: 'Male vocal body, acoustic guitar body, piano lower-mid', uk: 'Тіло чоловічого вокалу, тіло акустичної гітари, нижня середина фортепіано', de: 'Körper der Männerstimme, Akustikgitarren-Körper, unterer Klaviermittelbereich', pl: 'Ciało męskiego wokalu, ciało gitary akustycznej, dolna średnica fortepianu' }, desc: {
+            uk: 'Коробковий призвук — ніби звук замкнений у ящику; зазвичай резонанс корпусу мідбаса (дверна панель, подіум, кік-панель чи короб), де б драйвер не стояв.',
+            de: 'Topfige, dosige Klangfärbung — wie in einer Box gefangen; meist eine Gehäuseresonanz des Midbass (Türverkleidung, Pod, Kickpanel oder Gehäuse), egal wo der Treiber sitzt.',
+            pl: 'Pudełkowate zabarwienie — jakby dźwięk był zamknięty w kartonie; zwykle rezonans komory midbasu (boczka drzwi, podu, kick panelu), niezależnie od miejsca montażu.' } },
+        { range: [400, 800], type: 'cut', phrase: 'hollow', gloss: { uk: 'порожньо', de: 'hohl', pl: 'pusto' }, instruments: { en: 'Male vocal body, acoustic guitar body, piano lower-mid', uk: 'Тіло чоловічого вокалу, тіло акустичної гітари, нижня середина фортепіано', de: 'Grundton der Männerstimme, Korpus der Akustikgitarre, unterer Klaviermittelbereich', pl: 'Wypełnienie męskiego wokalu, pudło gitary akustycznej, dolna średnica fortepianu' }, desc: {
             en: 'Hollow lower-midrange — vocals and instruments lose body and sound thin or distant.',
-            uk: 'Порожній нижній мідрейндж — голоси й інструменти втрачають тіло, звучать тонко або віддалено.',
+            uk: 'Порожня нижня середина — голоси й інструменти втрачають тіло, звучать тонко або віддалено.',
             de: 'Hohler unterer Mitteltonbereich — Stimmen und Instrumente verlieren an Körper, klingen dünn oder entfernt.',
-            pl: 'Puste dolne pasmo średnich — wokale i instrumenty tracą ciało, brzmią cienko lub odlegle.' } },
-        { range: [1000, 2000], type: 'boost', phrase: 'nasal / horn-like / plastic', instruments: { en: 'Female vocal presence, horn-loaded tweeter peak, trumpet bite', uk: 'Присутність жіночого вокалу, пік рупорного твітера, різкість труби', de: 'Präsenz weiblicher Stimme, Horn-Hochtöner-Spitze, Trompeten-Biss', pl: 'Obecność żeńskiego wokalu, pik tweetera tubowego, ostrość trąbki' }, desc: {
+            pl: 'Wycofana dolna średnica — wokale i instrumenty tracą wypełnienie i brzmią chudo lub odlegle.' } },
+        { range: [1000, 2000], type: 'boost', phrase: 'nasal / horn-like / plastic', gloss: { uk: 'носовий / рупорний / пластиковий', de: 'nasal / hornartig / plastikartig', pl: 'nosowy / tubowy / plastikowy' }, instruments: { en: 'Female vocal presence, horn-loaded tweeter peak, trumpet bite', uk: 'Присутність жіночого вокалу, пік рупорного твітера, різкість труби', de: 'Präsenz weiblicher Stimme, Horn-Hochtöner-Spitze, Trompeten-Biss', pl: 'Prezencja żeńskiego wokalu, pik tweetera tubowego, ostrość trąbki' }, desc: {
             en: 'Nasal, horn-like resonance — often cone break-up or a pod/tweeter horn peak; can sound plasticky or "cupped".',
-            uk: 'Носовий, рупороподібний резонанс — часто злам конуса чи пік рупора твітера/поду; може звучати пластиково або «крізь долоні».',
-            de: 'Nasale, hornartige Resonanz — oft Konus-Membranbruch oder eine Hornspitze am Pod/Hochtöner; kann plastikartig oder „wie durch die Hand“ klingen.',
-            pl: 'Nosowy, rogopodobny rezonans — często efekt załamania membrany lub piku rogu tweetera/podu; może brzmieć plastikowo lub „przez dłonie”.' } },
-        { range: [1000, 2000], type: 'cut', phrase: 'veiled / lacking presence', instruments: { en: 'Female vocal consonants, snare crack, acoustic guitar pick attack', uk: 'Приголосні жіночого вокалу, тріск малого барабана, атака медіатора гітари', de: 'Konsonanten weiblicher Stimme, Snare-Crack, Plektrum-Attack der Gitarre', pl: 'Spółgłoski żeńskiego wokalu, trzask werbla, atak kostki gitarowej' }, desc: {
+            uk: 'Носовий, рупороподібний резонанс — часто брейкап дифузора чи пік рупора твітера/подіуму; може звучати пластиково або «як з відра».',
+            de: 'Nasale, hornartige Resonanz — oft durch Membranaufbrechen oder einen Peak durch den Pod/Hochtöner; kann plastikartig oder topfig klingen.',
+            pl: 'Nosowy, tubowy rezonans — często efekt break-upu membrany lub piku od tubki tweetera; może brzmieć plastikowo.' } },
+        { range: [1000, 2000], type: 'cut', phrase: 'veiled / lacking presence', gloss: { uk: 'завуальований / брак присутності', de: 'belegt / fehlende Präsenz', pl: 'zawoalowany / brak prezencji' }, instruments: { en: 'Female vocal consonants, snare crack, acoustic guitar pick attack', uk: 'Приголосні жіночого вокалу, тріск малого барабана, атака медіатора гітари', de: 'Konsonanten weiblicher Stimme, Snare-Crack, Plektrum-Attack der Gitarre', pl: 'Spółgłoski żeńskiego wokalu, strzał werbla, atak kostki gitarowej' }, desc: {
             en: 'Veiled, recessed upper-midrange — vocals and lead instruments sound distant or muffled.',
-            uk: 'Завуальований, запалий верхній мідрейндж — вокал і солюючі інструменти звучать віддалено або приглушено.',
-            de: 'Verschleierter, zurückgenommener oberer Mitteltonbereich — Gesang und Lead-Instrumente klingen entfernt oder gedämpft.',
-            pl: 'Zawoalowane, cofnięte górne pasmo średnich — wokal i instrumenty prowadzące brzmią odlegle lub stłumione.' } },
-        { range: [1000, 2000], type: 'cut', phrase: 'plastic / cuppy', instruments: { en: 'Electric guitar, piano core, human voice presence', uk: 'Електрогітара, ядро фортепіано, присутність голосу', de: 'E-Gitarre, Klavier-Kern, Präsenz der Stimme', pl: 'Gitara elektryczna, rdzeń fortepianu, obecność głosu' }, desc: {
+            uk: 'Завуальована, провалена верхня середина — вокал і солюючі інструменти звучать віддалено або приглушено.',
+            de: 'Belegter, zurückgenommener oberer Mitteltonbereich — Gesang und Lead-Instrumente klingen entfernt oder gedämpft.',
+            pl: 'Zawoalowana, wycofana górna średnica — wokal i instrumenty prowadzące brzmią odlegle lub stłumienie.' } },
+        { range: [1000, 2000], type: 'cut', phrase: 'plastic / cuppy', gloss: { uk: 'пластиковий / «як з банки»', de: 'plastikartig / topfig', pl: 'plastikowy / pudełkowy' }, instruments: { en: 'Electric guitar, piano core, human voice presence', uk: 'Електрогітара, ядро фортепіано, присутність голосу', de: 'E-Gitarre, Grundton des Klaviers, Präsenz der Stimme', pl: 'Gitara elektryczna, podstawa fortepianu, prezencja ludzkiego głosu' }, desc: {
             en: 'Scooping this core band destroys center image focus and strips natural timbre from most instruments.',
             uk: 'Вирізання цієї ключової смуги руйнує фокус центрального образу та позбавляє інструменти природного тембру.',
             de: 'Das Absenken dieses Kernbereichs zerstört den Bühnenfokus und beraubt die Instrumente ihrer natürlichen Klangfarbe.',
-            pl: 'Wycięcie tego kluczowego pasma niszczy ostrość sceny na środku i pozbawia instrumenty naturalnej barwy.' } },
-        { range: [2000, 2500], type: 'boost', phrase: 'nasal / tinny / forward', instruments: { en: 'Electric guitar bite, snare crack, female vocal harshness', uk: 'Різкість електрогітари, тріск малого барабана, жорсткість жіночого вокалу', de: 'E-Gitarren-Biss, Snare-Crack, Härte weiblicher Stimme', pl: 'Ostrość gitary elektrycznej, trzask werbla, szorstkość żeńskiego wokalu' }, desc: {
+            pl: 'Wycięcie tego kluczowego pasma psuje ogniskowanie na środku sceny i pozbawia instrumenty naturalnej barwy.' } },
+        { range: [2000, 2500], type: 'boost', phrase: 'nasal / tinny / forward', gloss: { uk: 'носовий / бляшаний / випнутий', de: 'nasal / blechern / vordergründig', pl: 'nosowy / blaszany / wypchnięty' }, instruments: { en: 'Electric guitar bite, snare crack, female vocal harshness', uk: 'Різкість електрогітари, тріск малого барабана, жорсткість жіночого вокалу', de: 'E-Gitarren-Biss, Snare-Crack, Härte weiblicher Stimme', pl: 'Ostrość gitary elektrycznej, trzask werbla, szorstkość żeńskiego wokalu' }, desc: {
             en: 'A-pillar reflections and crossover phase issues make this band aggressively forward, nasal, and ear-fatiguing.',
-            uk: 'Відбиття від стійок і фазові проблеми кросовера роблять цю смугу агресивною, носовою та виснажливою.',
+            uk: 'Відбиття від стійок і фазові проблеми кросовера роблять цю смугу агресивною, носовою та стомлюючою.',
             de: 'A-Säulen-Reflexionen und Phasenprobleme der Weiche machen dieses Band aggressiv aufdringlich, nasal und anstrengend.',
             pl: 'Odbicia od słupków i problemy fazowe zwrotnicy czynią to pasmo agresywnie wypchniętym, nosowym i męczącym.' } },
-        { range: [2000, 3000], type: 'cut', phrase: 'lacking attack / laid back / sweet', instruments: { en: 'Snare drum snap, acoustic guitar pluck, piano hammers', uk: 'Клац малого барабана, щипок акустичної гітари, молоточки фортепіано', de: 'Snare-Snap, Anzupfen der Akustikgitarre, Klavierhämmer', pl: 'Strzał werbla, szarpnięcie gitary akustycznej, młoteczki fortepianu' }, desc: {
+        { range: [2000, 3000], type: 'cut', phrase: 'lacking attack / laid back / sweet', gloss: { uk: 'без атаки / розслаблений / м’який', de: 'ohne Attack / zurückgelehnt / sanft', pl: 'bez ataku / wycofany / łagodny' }, instruments: { en: 'Snare drum snap, acoustic guitar pluck, piano hammers', uk: 'Клац малого барабана, щипок акустичної гітари, молоточки фортепіано', de: 'Snare-Snap, Anzupfen der Akustikgitarre, Klavierhämmer', pl: 'Strzał werbla, szarpnięcie gitary akustycznej, młoteczki fortepianu' }, desc: {
             en: 'Often slightly dipped in cars to reduce listening fatigue, but over-cutting causes dull, lifeless attack.',
             uk: 'Часто трохи приглушується в авто для комфорту, але надмірний зріз дає мляву, тьмяну атаку.',
-            de: 'Im Auto oft leicht gesenkt, um Gehörermüdung zu mindern; zu viel Schnitt killt aber die Dynamik.',
+            de: 'Im Auto oft leicht abgesenkt, um Gehörermüdung zu mindern; zu starke Absenkung macht den Attack jedoch dumpf und leblos.',
             pl: 'Często lekko wycofywane w aucie dla komfortu, ale zbyt mocne cięcie daje matowy, martwy atak.' } },
-        { range: [2500, 4000], type: 'boost', phrase: 'thin / bright / too clear', instruments: { en: 'Cymbal crash fundamentals, upper female vocals, violin bite', uk: 'Основа крешу тарілок, верхній жіночий вокал, різкість скрипки', de: 'Grundton des Crash-Beckens, obere Frauenstimme, Geigen-Biss', pl: 'Podstawa blachy crash, górny żeński wokal, ostrość skrzypiec' }, desc: {
+        { range: [2500, 4000], type: 'boost', phrase: 'thin / bright / too clear', gloss: { uk: 'тонкий / яскравий / надто чіткий', de: 'dünn / hell / zu klar', pl: 'cienki / jasny / zbyt wyraźny' }, instruments: { en: 'Cymbal crash fundamentals, upper female vocals, violin bite', uk: 'Основа крешу тарілок, верхній жіночий вокал, різкість скрипки', de: 'Grundton des Crash-Beckens, obere Frauenstimme, Geigen-Biss', pl: 'Ton podstawowy talerza crash, górny żeński wokal, ostrość skrzypiec' }, desc: {
             en: 'Glare from window reflections creates an abrasive, harsh edge that quickly fatigues the ear.',
             uk: 'Відбиття від вікон створюють різкий, їдкий призвук, який швидко стомлює слух на високій гучності.',
             de: 'Glasreflexionen erzeugen eine scharfe, aggressive Härte, die bei Lautstärke schnell in den Ohren schmerzt.',
             pl: 'Odbicia od szyb tworzą ostry, jazgotliwy nalot, który bardzo szybko męczy słuch przy większej głośności.' } },
-        { range: [2500, 4000], type: 'cut', phrase: 'lacking clarity / detail', instruments: { en: 'Vocal articulation, snare drum crispness, acoustic guitar overtones', uk: 'Артикуляція вокалу, чіткість малого барабана, обертони акустичної гітари', de: 'Gesangsartikulation, Snare-Knackigkeit, Akustikgitarren-Obertöne', pl: 'Artykulacja wokalu, wyrazistość werbla, alikwoty gitary akustycznej' }, desc: {
+        { range: [2500, 4000], type: 'cut', phrase: 'lacking clarity / detail', gloss: { uk: 'брак чіткості / деталей', de: 'fehlende Klarheit / Details', pl: 'brak przejrzystości / detali' }, instruments: { en: 'Vocal articulation, snare drum crispness, acoustic guitar overtones', uk: 'Артикуляція вокалу, чіткість малого барабана, обертони акустичної гітари', de: 'Gesangsartikulation, Snare-Knackigkeit, Akustikgitarren-Obertöne', pl: 'Artykulacja wokalu, wyrazistość werbla, alikwoty gitary akustycznej' }, desc: {
             en: "Causes a 'blanket over speakers' effect, smearing details and dropping the soundstage height downward.",
-            uk: 'Ефект «ковдри на динаміках», який змазує деталі та опускає висоту звукової сцени вниз.',
+            uk: 'Ефект «ковдри на динаміках», який змазує деталі та опускає звукову сцену вниз.',
             de: 'Bewirkt einen „Decke-über-Lautsprechern“-Effekt, verschmiert Details und zieht die Bühnenabbildung räumlich nach unten.',
-            pl: 'Efekt „koca na głośnikach”, który zamazuje detale i znacząco obniża wysokość sceny dźwiękowej ku dołowi.' } },
-        { range: [4000, 5000], type: 'boost', phrase: 'edgy / sharp / sibilant / overly bright', instruments: { en: 'Vocal sibilance (S/T sounds), cymbal crash edge, synth leads', uk: 'Сибілянти вокалу (звуки С/Т), край крешу тарілок, синт-ліди', de: 'Zischlaute der Stimme (S/T-Laute), Crash-Becken-Kante, Synth-Leads', pl: 'Sybilanty wokalu (głoski S/T), krawędź blachy crash, syntezatorowe leady' }, desc: {
+            pl: 'Efekt „koca na głośnikach”, który zamazuje detale i znacząco obniża scenę dźwiękową.' } },
+        { range: [4000, 5000], type: 'boost', phrase: 'edgy / sharp / sibilant / overly bright', gloss: { uk: 'різкий / гострий / сибілянтний / надто яскравий', de: 'kantig / scharf / zischelnd / zu hell', pl: 'ostry / kłujący / syczący / zbyt jasny' }, instruments: { en: 'Vocal sibilance (S/T sounds), cymbal crash edge, synth leads', uk: 'Сибілянти вокалу (звуки С/Т), край крешу тарілок, синт-ліди', de: 'Zischlaute der Stimme (S/T-Laute), Crash-Becken-Kante, Synth-Leads', pl: 'Sybilanty wokalu (głoski S/T), ostrość talerza crash, syntezatorowe leady' }, desc: {
             en: "Severe 'ice pick' harshness where vocal sibilance and cymbals painfully pierce ears in enclosed cabins.",
             uk: 'Болюча різкість, коли сибілянти вокалу та тарілки буквально ріжуть вухо в закритому просторі салону.',
             de: 'Schmerzhafte Schärfe, bei der Zischlaute und Becken im geschlossenen Innenraum förmlich in den Ohren stechen.',
-            pl: 'Bolesna ostrość, gdzie sybilanty wokalu i talerze dosłownie kłują w uszy w zamkniętej kabinie.' } },
-        { range: [5000, 10000], type: 'boost', phrase: 'piercing / sharp / accentuated', instruments: { en: 'Cymbal wash, tambourine, hi-hats, vocal breath', uk: 'Шелест тарілок, бубон, хай-хети, дихання вокалу', de: 'Becken-Wash, Tamburin, Hi-Hats, Atem der Stimme', pl: 'Szum talerzy, tamburyn, hi-haty, oddech wokalu' }, desc: {
+            pl: 'Bolesna ostrość, przez którą sybilanty wokalu i talerze dosłownie kłują w uszy w zamkniętej kabinie.' } },
+        { range: [5000, 10000], type: 'boost', phrase: 'piercing / sharp / accentuated', gloss: { uk: 'пронизливий / гострий / підкреслений', de: 'stechend / scharf / betont', pl: 'przeszywający / ostry / podkreślony' }, instruments: { en: 'Cymbal wash, tambourine, hi-hats, vocal breath', uk: 'Шелест тарілок, бубон, хай-хети, дихання вокалу', de: 'Becken-Wash, Tamburin, Hi-Hats, Atemgeräusche', pl: 'Wybrzmienie talerzy, tamburyn, hi-haty, oddech wokalu' }, desc: {
             en: 'Tweeters aimed directly on-axis or gained too high cause exaggerated hiss and fast listener fatigue.',
-            uk: 'Твітери, спрямовані прямо на слухача або занадто гучні, викликають надмірне шипіння і швидку втому.',
+            uk: 'Твітери, спрямовані прямо на слухача або з надто високим гейном, викликають надмірне шипіння і швидку втому слуху.',
             de: 'Direkt ausgerichtete oder zu laute Hochtöner verursachen übermäßiges Zischeln und schnelle Ermüdung des Gehörs.',
-            pl: 'Tweetery skierowane bezpośrednio na uszy lub zbyt głośne powodują przesadne syczenie i szybkie zmęczenie słuchu.' } },
-        { range: [5000, 10000], type: 'cut', phrase: 'lacking finesse / poor sound drums', instruments: { en: 'Hi-hats, cymbals, snare wire buzz', uk: 'Хай-хети, тарілки, дзвін пружини малого барабана', de: 'Hi-Hats, Becken, Snare-Teppich-Schnarren', pl: 'Hi-haty, talerze, brzęczenie sprężyny werbla' }, desc: {
+            pl: 'Tweetery ukierunkowane w osi (on-axis) lub ze zbyt wysokim gainem powodują przesadne syczenie i szybkie zmęczenie słuchu.' } },
+        { range: [5000, 10000], type: 'cut', phrase: 'lacking finesse / poor sound drums', gloss: { uk: 'брак витонченості / тьмяні ударні', de: 'fehlende Finesse / matte Drums', pl: 'brak finezji / matowe brzmienie perkusji' }, instruments: { en: 'Hi-hats, cymbals, snare wire buzz', uk: 'Хай-хети, тарілки, шерех пружини малого барабана', de: 'Hi-Hats, Becken, Snare-Teppich-Schnarren', pl: 'Hi-haty, talerze, brzęczenie sprężyny werbla' }, desc: {
             en: 'Often caused by off-axis tweeter mounting or thick grilles; collapses stereo width and dulls cymbals.',
-            uk: 'Часто виникає через розворот твітерів або товсті сітки; звужує стереобазу і робить тарілки тьмяними.',
-            de: 'Oft durch Fehlwinkel der Hochtöner oder dicke Gitter verursacht; schrumpft Stereobreite und dämpft Becken.',
-            pl: 'Często przez złe ukierunkowanie tweeterów lub grube maskownice; zwęża bazę stereo i matowi blachy.' } },
-        { range: [5000, 10000], type: 'cut', phrase: 'drum-hits lack power / treble lacking', instruments: { en: 'Percussion attack, cymbal stick impact, synth overtones', uk: 'Атака перкусії, удар палички по тарілці, обертони синтезатора', de: 'Percussion-Attack, Stick-Aufprall auf Becken, Synth-Obertöne', pl: 'Atak perkusji, uderzenie pałki w talerz, alikwoty syntezatora' }, desc: {
+            uk: 'Часто виникає через встановлення твітерів поза віссю або товсті грилі; звужує стереобазу і робить тарілки тьмяними.',
+            de: 'Oft durch Fehlwinkel der Hochtöner oder dicke Gitter verursacht; lässt die Bühnenbreite kollabieren und dämpft Becken.',
+            pl: 'Często spowodowane montażem tweeterów poza osią (off-axis) lub grubymi maskownicami; zwęża scenę i matowi blachy.' } },
+        { range: [5000, 10000], type: 'cut', phrase: 'drum-hits lack power / treble lacking', gloss: { uk: 'удари без сили / брак верхів', de: 'kraftlose Drums / fehlende Höhen', pl: 'uderzenia bez mocy / brak wysokich' }, instruments: { en: 'Percussion attack, cymbal stick impact, synth overtones', uk: 'Атака перкусії, удар палички по тарілці, обертони синтезатора', de: 'Percussion-Attack, Stick-Aufprall auf Becken, Synth-Obertöne', pl: 'Atak perkusji, uderzenie pałki w talerz, alikwoty syntezatora' }, desc: {
             en: 'Transients lose their snap and micro-dynamics disappear, making the system sound distant and lifeless.',
             uk: 'Транзієнти втрачають різкість, зникає мікродинаміка, через що система звучить відсторонено та неживо.',
             de: 'Transienten verlieren ihren Biss und Mikrodynamik verschwindet, wodurch das System distanziert und leblos wirkt.',
-            pl: 'Transjenty tracą swój trzask i znika mikrodynamika, przez co system brzmi z oddali i bez życia.' } },
-        { range: [10000, 20000], type: 'boost', phrase: 'air', instruments: { en: 'Cymbal decay, room reverb tails, triangle', uk: 'Загасання тарілок, хвости реверберації приміщення, трикутник', de: 'Becken-Ausklang, Raumhall-Fahnen, Triangel', pl: 'Wybrzmienie talerzy, ogony pogłosu pomieszczenia, trójkąt' }, desc: {
+            pl: 'Transjenty tracą swój atak i znika mikrodynamika, przez co system brzmi z oddali i bez życia.' } },
+        { range: [10000, 20000], type: 'boost', phrase: 'air', gloss: { uk: 'повітря', de: 'Air / Luftigkeit', pl: 'powietrze' }, instruments: { en: 'Cymbal decay, room reverb tails, triangle', uk: 'Загасання тарілок, хвости реверберації приміщення, трикутник', de: 'Becken-Ausklang, Raumhall-Fahnen, Triangel', pl: 'Wybrzmienie talerzy, wybrzmienia pogłosu, trójkąt' }, desc: {
             en: 'Can add space and breath, but in cars often just amplifies amplifier hiss and wind noise.',
             uk: 'Може додати простору, але в авто часто лише підсилює шум підсилювача та вітру.',
             de: 'Kann Räumlichkeit bringen, verstärkt im Auto aber oft nur das Rauschen von Verstärker und Fahrwind.',
-            pl: 'Może dodać przestrzeni, ale w aucie najczęściej tylko wzmacnia szum wzmacniacza i pęd powietrza.' } },
-        { range: [10000, 20000], type: 'cut', phrase: 'lacking air / sparkle / realism', instruments: { en: 'High cymbal harmonics, recording room ambiance', uk: 'Високі гармоніки тарілок, атмосфера студії запису', de: 'Hohe Becken-Obertöne, Atmosphäre des Aufnahmeraums', pl: 'Wysokie harmoniczne talerzy, atmosfera pomieszczenia nagraniowego' }, desc: {
+            pl: 'Może dodać przestrzeni i oddechu, ale w aucie najczęściej tylko wzmacnia szum wzmacniacza i szum wiatru.' } },
+        { range: [10000, 20000], type: 'cut', phrase: 'lacking air / sparkle / realism', gloss: { uk: 'без повітря / іскри / реалізму', de: 'fehlende Luftigkeit / Glanz / Realismus', pl: 'brak powietrza / blasku / realizmu' }, instruments: { en: 'High cymbal harmonics, recording room ambiance', uk: 'Високі гармоніки тарілок, атмосфера студії запису', de: 'Hohe Becken-Obertöne, Atmosphäre des Aufnahmeraums', pl: 'Wysokie harmoniczne talerzy, akustyka pomieszczenia nagraniowego' }, desc: {
             en: 'Severe off-axis tweeter angles cause early roll-off, closing in the stage and eliminating high-end shimmer.',
             uk: 'Сильний кут розвороту твітерів викликає ранній спад, затискаючи сцену і прибираючи іскристість верхів.',
             de: 'Starke Fehlwinkel der Hochtöner verursachen einen frühen Abfall, verengen die Bühne und schlucken den Hochtonglanz.',
-            pl: 'Mocne odchylenie tweeterów od osi powoduje wczesny spadek, zamykając scenę i zabierając blask na samej górze.' } },
+            pl: 'Mocne odchylenie tweeterów od osi (off-axis) powoduje wczesny roll-off (spadek na górze), zamykając scenę i eliminując najwyższy blask.' } },
     ];
     function matchFreqEntries(freq) {
         const boost = FREQ_ENTRIES.filter(function (e) { return e.type === 'boost' && freq >= e.range[0] && freq < e.range[1]; });
@@ -877,6 +877,10 @@
                         cell += '<div style="margin-top:2px;font-weight:600;">' + qual + ' ' + entry.phrase + '</div>';
                         if (tier !== 'slight') {
                             cell += '<div style="color:var(--text-muted);margin-top:2px;">' + (entry.desc[currentLang] || entry.desc.en) + '</div>';
+                        } else if (currentLang !== 'en' && entry.gloss && entry.gloss[currentLang]) {
+                            // Slight tier shows no full description — but the phrase is English,
+                            // so give a short translation of the term in the active language.
+                            cell += '<div style="color:var(--text-muted);margin-top:2px;">' + entry.gloss[currentLang] + '</div>';
                         }
                     }
                 }
