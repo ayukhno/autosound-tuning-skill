@@ -76,9 +76,11 @@
             min-height: 100vh;
         }
 
+        :root { --container-max: min(1600px, 96vw); }
+        :root[data-width="narrow"] { --container-max: 1100px; }
         .container {
             position: relative;
-            max-width: min(1600px, 96vw);
+            max-width: var(--container-max);
             width: 100%;
             background-color: var(--card-bg);
             border-radius: 16px;
@@ -153,6 +155,7 @@
 
 <div class="container">
     <div style="position:absolute;top:22px;right:26px;z-index:5;display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+        <button id="widthBtn" title="Toggle wide / narrow layout" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 12px;font-size:15px;cursor:pointer;line-height:1;">📱</button>
         <button id="themeBtn" title="Toggle light / dark theme" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 12px;font-size:15px;cursor:pointer;line-height:1;">☀️</button>
         <select id="langSel" title="Language" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 10px;font-size:13px;cursor:pointer;">
             <option value="en">EN</option>
@@ -220,6 +223,10 @@
     let currentTheme = 'dark';
     try { const savedTheme = localStorage.getItem(THEME_LS); if (savedTheme === 'light' || savedTheme === 'dark') currentTheme = savedTheme; } catch (e) {}
     document.documentElement.setAttribute('data-theme', currentTheme);
+    const WIDTH_LS = 'acv_width_v1';
+    let currentWidth = 'wide';
+    try { const savedWidth = localStorage.getItem(WIDTH_LS); if (savedWidth === 'wide' || savedWidth === 'narrow') currentWidth = savedWidth; } catch (e) {}
+    document.documentElement.setAttribute('data-width', currentWidth);
     // Coarse 10-band grid — only used to compute the Compare feature's per-band
     // dB deltas (a fixed grid makes that math simple); NOT used for the
     // right-click guide below, which uses the finer FREQ_ENTRIES list instead.
@@ -719,8 +726,11 @@
             let html = '';
             for (const e of list) {
                 const instr = (typeof e.instruments === 'object') ? (e.instruments[currentLang] || e.instruments.en) : e.instruments;
+                const octW = Math.log2(e.range[1] / e.range[0]);
+                const bandInfo = fmtRange(e.range) + ' · ~' + octW.toFixed(octW < 1 ? 2 : 1) + ' oct';
                 html += '<div style="margin-top:12px;">' +
-                    '<div style="font-weight:600;font-size:14px;color:' + color + ';">' + sign + ' ' + e.phrase + '</div>' +
+                    '<div style="font-weight:600;font-size:14px;color:' + color + ';">' + sign + ' ' + e.phrase +
+                    ' <span style="font-weight:400;font-size:12px;color:var(--hint-color);">(' + bandInfo + ')</span></div>' +
                     '<div style="color:var(--text-color);margin-top:3px;">' + (e.desc[currentLang] || e.desc.en) + '</div>' +
                     '<div style="color:var(--hint-color);font-style:italic;font-size:13.5px;margin-top:3px;">' + s.egWord + ' ' + instr + '</div>' +
                     '</div>';
@@ -1220,6 +1230,20 @@
         const themeBtn = document.getElementById('themeBtn');
         if (themeBtn) themeBtn.addEventListener('click', function () { applyTheme(currentTheme === 'light' ? 'dark' : 'light'); });
         applyTheme(currentTheme);
+
+        // --- Layout width toggle: wide (up to 1600px / 96vw) vs narrow (1100px).
+        // Icon shows the state you'd switch TO. Chart reflows via ResizeObserver. ---
+        function applyWidth(mode) {
+            currentWidth = mode;
+            document.documentElement.setAttribute('data-width', mode);
+            try { localStorage.setItem(WIDTH_LS, mode); } catch (e) {}
+            const wb = document.getElementById('widthBtn');
+            if (wb) wb.textContent = mode === 'wide' ? '📱' : '🖥️';
+            curveChart.resize();
+        }
+        const widthBtn = document.getElementById('widthBtn');
+        if (widthBtn) widthBtn.addEventListener('click', function () { applyWidth(currentWidth === 'wide' ? 'narrow' : 'wide'); });
+        applyWidth(currentWidth);
     })();
 
 </script>
