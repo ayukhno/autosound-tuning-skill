@@ -234,6 +234,23 @@
         [20, 60], [60, 100], [100, 200], [200, 500], [500, 1000],
         [1000, 2000], [2000, 4000], [4000, 6000], [6000, 10000], [10000, 20000],
     ];
+    // Relative tonal-TREND vocabulary for the Compare table, aligned index-for-index
+    // with FREQ_BANDS. A curve-vs-curve delta is a *relative* shift, not an absolute
+    // excess/lack, so these read as directional tendencies ("fuller" / "leaner"),
+    // NOT verdicts ("boomy" / "hollow" — those stay in the right-click guide, where
+    // they describe an absolute boost/cut). Reviewed + translated via the Gemini advisor.
+    const BAND_TREND = [
+        { more: { en: 'deeper, more sub weight', uk: 'глибше, більше сабової ваги', de: 'tiefer, mehr Sub-Fundament', pl: 'głębiej, więcej masy subwoofera' }, less: { en: 'less sub weight, lighter foundation', uk: 'менше ваги саба, легший фундамент', de: 'weniger Sub-Gewicht, leichteres Fundament', pl: 'mniej masy suba, lżejszy fundament' } },
+        { more: { en: 'fuller, more bass punch', uk: 'щільніше, більше басового панчу', de: 'voller, mehr Bass-Punch', pl: 'pełniej, więcej kick basu' }, less: { en: 'leaner, less punch', uk: 'сухіше, менше панчу', de: 'schlanker, weniger Punch', pl: 'szczuplej, mniej uderzenia' } },
+        { more: { en: 'warmer, thicker low-mids', uk: 'тепліше, густіша нижня середина', de: 'wärmer, dickere tiefere Mitten', pl: 'cieplej, grubsza niższa średnica' }, less: { en: 'thinner, cleaner low-mids', uk: 'тонше, чистіша нижня середина', de: 'dünner, sauberere tiefere Mitten', pl: 'chudziej, czystsza niższa średnica' } },
+        { more: { en: 'fuller body, richer lower midrange', uk: 'більше тіла, густіший вокал', de: 'mehr Grundton, voluminöser', pl: 'więcej ciała, pełniejszy wokal' }, less: { en: 'leaner, more open', uk: 'сухіше, більш відкрито', de: 'schlanker, offener', pl: 'smuklej, bardziej otwarcie' } },
+        { more: { en: 'more forward midrange', uk: 'більш виражена середина', de: 'präsenterer Mittelton', pl: 'bardziej wysunięta średnica' }, less: { en: 'more recessed, scooped', uk: 'більш віддалена, провалена', de: 'zurückgenommener, distanzierter', pl: 'bardziej wycofana, cofnięta' } },
+        { more: { en: 'more presence, more forward', uk: 'більше ефекту присутності', de: 'mehr Präsenz, direkter', pl: 'więcej prezencji, bardziej bezpośrednio' }, less: { en: 'more laid-back, distant', uk: 'спокійніше, більш віддалено', de: 'entspannter, distanzierter', pl: 'bardziej zrelaksowanie, z dystansem' } },
+        { more: { en: 'brighter, more bite', uk: 'яскравіше, більше гостроти', de: 'heller, mehr Biss', pl: 'jaśniej, więcej ostrości' }, less: { en: 'softer, calmer', uk: 'м\'якше, спокійніше', de: 'weicher, ruhiger', pl: 'łagodniej, spokojniej' } },
+        { more: { en: 'crisper, more definition', uk: 'чіткіше, краща артикуляція', de: 'knackiger, mehr Definition', pl: 'dobitniej, lepsza definicja' }, less: { en: 'smoother, more subdued', uk: 'гладше, більш стримано', de: 'sanfter, zurückhaltender', pl: 'gładziej, bardziej stonowanie' } },
+        { more: { en: 'more sparkle, brilliance', uk: 'більше іскристості, блиску', de: 'mehr Glanz, Brillanz', pl: 'więcej blasku, iskrzenia' }, less: { en: 'less sparkle, softer highs', uk: 'менше іскристості, м\'якші ВЧ', de: 'weniger Glanz, weichere Höhen', pl: 'mniej blasku, łagodniejsza góra' } },
+        { more: { en: 'more air, more open', uk: 'більше повітря, більш відкрито', de: 'mehr Luftigkeit, offener', pl: 'więcej powietrza, bardziej otwarcie' }, less: { en: 'less air, more closed-in', uk: 'менше повітря, більш закрито', de: 'weniger Luftigkeit, geschlossener', pl: 'mniej powietrza, bardziej zamknięte' } },
+    ];
     const DESC_TOKENS = [
         ['laidback'], ['resonix', 'accurate'], ['harman'], ['audiofrog'],
         ['jazzi'], ['whitledge'], ['emmaref'], ['flat'],
@@ -851,7 +868,7 @@
         html += '</tr></thead><tbody>';
 
         const baseDs = curveChart.data.datasets[baseIdx];
-        FREQ_BANDS.forEach(function (range) {
+        FREQ_BANDS.forEach(function (range, bIdx) {
             const baseAvg = bandAvg(baseDs.data, range[0], range[1]);
             html += '<tr class="cmp-row" data-lo="' + range[0] + '" data-hi="' + range[1] + '" style="cursor:default;"><td style="padding:8px 10px;border-bottom:1px solid var(--border-color);color:var(--text-muted);white-space:nowrap;">' + fmtRange(range) + '</td>' +
                 '<td style="padding:8px 10px;border-bottom:1px solid var(--border-color);color:var(--text-muted);">' + (baseAvg >= 0 ? '+' : '') + baseAvg.toFixed(1) + ' dB</td>';
@@ -864,24 +881,18 @@
                 if (absd < 1) {
                     cell = '<span style="color:#4b5563;">—</span>';
                 } else {
-                    const entry = bestPhraseForBand(range, delta >= 0 ? 'boost' : 'cut');
                     const sign = delta >= 0 ? '+' : '';
-                    // Weight the wording by HOW BIG the difference is: a ~1 dB gap is
-                    // "slightly …" (phrase only, no alarming sentence); only a bigger
-                    // gap earns the full description. Keeps small diffs from reading
-                    // scarier than they are.
-                    const tier = absd < 2.5 ? 'slight' : (absd < 4.5 ? 'moderate' : 'strong');
-                    const qual = tier === 'slight' ? s.intSlight : (tier === 'moderate' ? s.intModerate : s.intStrong);
+                    // A curve-vs-curve delta is a RELATIVE shift, not an absolute
+                    // excess/lack — so describe the DIRECTION of the tonal change
+                    // ("fuller" / "leaner"), never "boomy"/"hollow". The intensity
+                    // qualifier conveys how big the shift is.
+                    const tier = absd < 2.5 ? s.intSlight : (absd < 4.5 ? s.intModerate : s.intStrong);
+                    const tr = BAND_TREND[bIdx];
+                    const dirObj = tr ? (delta >= 0 ? tr.more : tr.less) : null;
+                    const trend = dirObj ? (dirObj[currentLang] || dirObj.en) : '';
                     cell = '<b style="color:' + (delta >= 0 ? '#fb923c' : '#38bdf8') + ';">' + sign + delta.toFixed(1) + ' dB</b>';
-                    if (entry) {
-                        cell += '<div style="margin-top:2px;font-weight:600;">' + qual + ' ' + entry.phrase + '</div>';
-                        if (tier !== 'slight') {
-                            cell += '<div style="color:var(--text-muted);margin-top:2px;">' + (entry.desc[currentLang] || entry.desc.en) + '</div>';
-                        } else if (currentLang !== 'en' && entry.gloss && entry.gloss[currentLang]) {
-                            // Slight tier shows no full description — but the phrase is English,
-                            // so give a short translation of the term in the active language.
-                            cell += '<div style="color:var(--text-muted);margin-top:2px;">' + entry.gloss[currentLang] + '</div>';
-                        }
+                    if (trend) {
+                        cell += '<div style="color:var(--text-muted);margin-top:2px;">' + tier + ' ' + trend + '</div>';
                     }
                 }
                 html += '<td style="padding:8px 10px;border-bottom:1px solid var(--border-color);vertical-align:top;">' + cell + '</td>';
