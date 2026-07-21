@@ -78,7 +78,7 @@ crossover sets · techniques · successful symptom→fix · track markers
 ### Sending channels (by increasing formality)
 
 1. **A GitHub Issue** in the skill's repo per the issue template — the default: transparent, threaded, the history visible to all. **In English** (public repo — see the note above).
-2. **A PR**: the package in `community-inbox/<body>-<date>.md`.
+2. **A PR**: a per-vehicle setup+feedback package in `community-inbox/setups/<body>-<date>.md` (narrative case studies go in `community-inbox/case-studies/` instead).
 3. Without git: the file to the author by messenger/email.
 
 ### Package safety rules
@@ -99,7 +99,7 @@ The same loop processes community contributions (below).
 
 ## The author's side — how experience flows into the skill
 
-- `community-inbox/` is processed by **this maintenance loop** (harvest → correlate → fold): each item is checked against the skill; the origin tag `[source: <body>/<author>]` is kept.
+- `community-inbox/` (both `setups/` and `case-studies/`) is processed by **this maintenance loop** (harvest → correlate → fold): each item is checked against the skill; the origin tag `[source: <body>/<author>]` is kept.
 - **Contradicts our conclusions → a VARIANT, not a deletion** (maintenance loop rule §2: a different geometry/cabin can make the tip right).
 - **Hardware experience accumulates into the skill's profile library** (each new entry = **copy the blank `_TEMPLATE.md` and fill it**, so the structure/discipline is consistent):
   - `knowledge/cars/<body>.md` — the cabin map: PART A body-physics / PART B verify-only anomalies, winning crossover sets, quirks (template `knowledge/cars/_TEMPLATE.md`; worked example — the Passat B8, de-identified);

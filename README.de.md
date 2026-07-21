@@ -56,7 +56,7 @@ Drei Stimmen: **du** auf dem Hörplatz, **Claude**, der den Prozess führt, **Ge
 >
 > **Du:** …Der Bass sitzt auf der Motorhaube! So lassen.
 
-Etwa vierzig Minuten von „es dröhnt" bis „der Bass sitzt auf der Motorhaube" — ein Problem, das sonst Wochen forumsgeleiteten Ausprobierens frisst. Jeder Teilnehmer erkannte etwas, das die anderen übersehen hatten, und die Schleife löste alles davon. Die vollständige technische Version, mit jeder Zahl: [die Fallstudie](case-study-mode-a-bass-2026-07-15.md).
+Etwa vierzig Minuten von „es dröhnt" bis „der Bass sitzt auf der Motorhaube" — ein Problem, das sonst Wochen forumsgeleiteten Ausprobierens frisst. Jeder Teilnehmer erkannte etwas, das die anderen übersehen hatten, und die Schleife löste alles davon. Die vollständige technische Version, mit jeder Zahl: [die Fallstudie](community-inbox/case-studies/case-study-mode-a-bass-2026-07-15.md).
 
 **Die Mathematik dahinter** — eine Skript-Bibliothek, die riesige Datenmengen lokal verarbeitet und dabei keine Modell-Tokens verbrennt:
 
@@ -134,7 +134,7 @@ autosound-tuning-skill/        ein Claude-Code-Plugin
 
 ▶ **[Öffne den Zielkurven-Visualisierer online](https://ayukhno.github.io/autosound-tuning-skill/_curve-visualizer.html?lang=de)** (oder öffne `skills/autosound-tuning/curves.html` lokal) — ziehe deine eigene Kurve hinein oder eine Standardkurve vom [Nono Tuning Tool](https://nonotuningtool.com), rechtsklicke auf einen Punkt im Diagramm für den Frequenzcharakter-Guide, und vergleiche Kurven direkt nebeneinander. Es ist eine einzige eigenständige Datei (funktioniert offline) — mit **Speichern unter** im Browser behältst du deine eigene Kopie; die integrierten Kurven und der Drag-and-drop-Import funktionieren weiterhin.
 
-Die unabhängige Review-Methode (Kritiker/Berater/Schiedsrichter, Anti-Anchoring) ist als `references/core/review-loop.md` gebündelt; die [Fallstudie](case-study-mode-a-bass-2026-07-15.md) zeigt sie an einem echten, schwierigen Fall in Aktion.
+Die unabhängige Review-Methode (Kritiker/Berater/Schiedsrichter, Anti-Anchoring) ist als `references/core/review-loop.md` gebündelt; die [Fallstudie](community-inbox/case-studies/case-study-mode-a-bass-2026-07-15.md) zeigt sie an einem echten, schwierigen Fall in Aktion.
 
 Eine separate, zustandslose Web-Chat-Version der Methode, ganz ohne lokale Installation, liegt im Branch [manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step).
 

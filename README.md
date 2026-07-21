@@ -56,7 +56,7 @@ Three voices: **you** at the listening seat, **Claude** driving the process, **G
 >
 > **You:** …The sub is on the hood! Leaving it.
 
-About forty minutes from "it booms" to "the sub is on the hood" — a problem that usually eats weeks of forum-guided trial and error. Every participant caught something the others missed, and the loop resolved all of it. The full technical version, with every number: [the case study](case-study-mode-a-bass-2026-07-15.md).
+About forty minutes from "it booms" to "the sub is on the hood" — a problem that usually eats weeks of forum-guided trial and error. Every participant caught something the others missed, and the loop resolved all of it. The full technical version, with every number: [the case study](community-inbox/case-studies/case-study-mode-a-bass-2026-07-15.md).
 
 **The math under the hood** — a library of scripts that crunches huge data sets locally, so it never burns model tokens on it:
 
@@ -134,7 +134,7 @@ autosound-tuning-skill/        a Claude Code plugin
 
 ▶ **[Open the target-curve visualizer online](https://ayukhno.github.io/autosound-tuning-skill/_curve-visualizer.html?lang=en)** (or open `skills/autosound-tuning/curves.html` locally) — drag in your own curve or a standard one from the [Nono Tuning Tool](https://nonotuningtool.com), right-click any point on the chart for a frequency-character guide, and compare curves side by side. It's a single self-contained file (works offline) — use your browser's **Save As** to keep your own copy; the built-in curves and drag-drop importing keep working.
 
-The independent-review method (Critic/Advisor/Arbiter, anti-anchoring) is bundled as `references/core/review-loop.md`; the [case study](case-study-mode-a-bass-2026-07-15.md) shows it working on a real hard call.
+The independent-review method (Critic/Advisor/Arbiter, anti-anchoring) is bundled as `references/core/review-loop.md`; the [case study](community-inbox/case-studies/case-study-mode-a-bass-2026-07-15.md) shows it working on a real hard call.
 
 A separate, stateless web-chat version of the method, with no local install, lives on the [manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step) branch.
 
