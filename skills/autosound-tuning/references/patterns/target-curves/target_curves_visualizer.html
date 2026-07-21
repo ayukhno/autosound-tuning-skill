@@ -195,6 +195,7 @@
          curves stay visible while you read the per-band description. -->
     <div id="comparePanel" style="display:none;margin-top:14px;max-height:56vh;overflow:auto;background:var(--card-bg);border:1px solid var(--border-color);border-radius:12px;padding:20px;box-shadow:0 4px 20px rgba(0,0,0,.4);"></div>
     <div id="instrPanel" style="display:none;margin-top:14px;max-height:56vh;overflow:auto;background:var(--card-bg);border:1px solid var(--border-color);border-radius:12px;padding:20px;box-shadow:0 4px 20px rgba(0,0,0,.4);"></div>
+    <div id="instrInfoPanel" style="display:none;margin-top:14px;max-height:56vh;overflow:auto;background:var(--card-bg);border:1px solid var(--border-color);border-radius:12px;padding:20px;box-shadow:0 4px 20px rgba(0,0,0,.4);"></div>
     <div id="dropZone" style="margin-top:14px;padding:14px;border:2px dashed var(--btn-border);border-radius:10px;text-align:center;color:var(--text-muted);cursor:pointer;user-select:none;transition:.15s;">
         ↳ Drop a curve <b>.txt</b> file here (REW/NTT: <code>freq dB</code>) — or click to choose one. Plots instantly, offline.
     </div>
@@ -315,7 +316,9 @@
         { g:'emma2026', e:'🔺', n:{"en": "Triangle", "uk": "Трикутник", "de": "Triangel", "pl": "Trójkąt"}, f:[2000, 20000], h:null },
     ];
     const INSTR_GROUPS_ORDER = ['vocal','perc','strings','winds','keys','emma2024','emma2026'];
-    const INSTR_STR = { groups: {"vocal": {"en": "Vocal", "uk": "Вокал", "de": "Gesang", "pl": "Wokal"}, "perc": {"en": "Percussion", "uk": "Ударні", "de": "Percussion", "pl": "Perkusyjne"}, "strings": {"en": "Strings", "uk": "Струнні", "de": "Streicher", "pl": "Strunowe"}, "winds": {"en": "Winds", "uk": "Духові", "de": "Blasinstrumente", "pl": "Dęte"}, "keys": {"en": "Keys & Other", "uk": "Клавішні та інше", "de": "Tasten & Andere", "pl": "Klawiszowe i inne"}, "emma2024": {"en": "EMMA 2024", "uk": "EMMA 2024", "de": "EMMA 2024", "pl": "EMMA 2024"}, "emma2026": {"en": "EMMA 2026", "uk": "EMMA 2026", "de": "EMMA 2026", "pl": "EMMA 2026"}}, ui: {"instruments": {"en": "Musical instruments", "uk": "Музичні інструменти", "de": "Musikinstrumente", "pl": "Instrumenty muzyczne"}, "ranges": {"en": "Instrument ranges", "uk": "Діапазони інструментів", "de": "Instrumentenbereiche", "pl": "Zakresy instrumentów"}, "selectUpTo": {"en": "Select up to 5", "uk": "Виберіть до 5-ти", "de": "Bis zu 5 auswählen", "pl": "Wybierz do 5"}, "clear": {"en": "Clear", "uk": "Очистити", "de": "Leeren", "pl": "Wyczyść"}, "fundamentals": {"en": "Fundamentals", "uk": "Основні тони", "de": "Grundtöne", "pl": "Tony podstawowe"}, "harmonics": {"en": "Harmonics", "uk": "Гармоніки", "de": "Obertöne", "pl": "Harmoniczne"}} };
+    const INSTR_STR = { groups: {"vocal": {"en": "Vocal", "uk": "Вокал", "de": "Gesang", "pl": "Wokal"}, "perc": {"en": "Percussion", "uk": "Ударні", "de": "Percussion", "pl": "Perkusyjne"}, "strings": {"en": "Strings", "uk": "Струнні", "de": "Streicher", "pl": "Strunowe"}, "winds": {"en": "Winds", "uk": "Духові", "de": "Blasinstrumente", "pl": "Dęte"}, "keys": {"en": "Keys & Other", "uk": "Клавішні та інше", "de": "Tasten & Andere", "pl": "Klawiszowe i inne"}, "emma2024": {"en": "EMMA 2024", "uk": "EMMA 2024", "de": "EMMA 2024", "pl": "EMMA 2024"}, "emma2026": {"en": "EMMA 2026", "uk": "EMMA 2026", "de": "EMMA 2026", "pl": "EMMA 2026"}}, ui: {"instruments": {"en": "Musical instruments", "uk": "Музичні інструменти", "de": "Musikinstrumente", "pl": "Instrumenty muzyczne"}, "ranges": {"en": "Instrument ranges", "uk": "Діапазони інструментів", "de": "Instrumentenbereiche", "pl": "Zakresy instrumentów"}, "selectUpTo": {"en": "Select up to 5", "uk": "Виберіть до 5-ти", "de": "Bis zu 5 auswählen", "pl": "Wybierz do 5"}, "clear": {"en": "Clear", "uk": "Очистити", "de": "Leeren", "pl": "Wyczyść"}, "fundamentals": {"en": "Fundamentals", "uk": "Основні тони", "de": "Grundtöne", "pl": "Tony podstawowe"}, "harmonics": {"en": "Harmonics", "uk": "Гармоніки", "de": "Obertöne", "pl": "Harmoniczne"}, "tipsHint": {"en": "= EQ tips (click the bar)", "uk": "= EQ-підказки (клік по смузі)", "de": "= EQ-Tipps (Balken klicken)", "pl": "= wskazówki EQ (kliknij pasek)"}, "tracksHeader": {"en": "Where it appears — competition test-track libraries", "uk": "Де зустрічається — змагальні тест-бібліотеки", "de": "Wo es vorkommt — Wettbewerbs-Testtrack-Bibliotheken", "pl": "Gdzie występuje — konkursowe biblioteki ścieżek testowych"}, "tracksLicense": {"en": "Official EMMA judge-book material — obtain the tracks from the organizer\u2019s official source. They are NOT distributed here.", "uk": "Офіційний матеріал суддівських збірників EMMA — треки бери з офіційного джерела організатора. Тут вони НЕ поширюються.", "de": "Offizielles EMMA-Judge-Book-Material — die Tracks aus der offiziellen Quelle des Veranstalters beziehen. Sie werden hier NICHT verbreitet.", "pl": "Oficjalny materiał z EMMA judge-book — ścieżki zdobądź z oficjalnego źródła organizatora. NIE są tutaj rozpowszechniane."}} };
+    const INSTR_INFO = {"Trumpet": {"tips": [], "tracks": [{"ref": "EMMA 2026 · T1 (intro)", "n": {"en": "a group of trumpets, exactly center — fast, clean, full", "uk": "група труб, рівно по центру — швидкі, чисті, повні", "de": "eine Gruppe Trompeten, exakt in der Mitte — schnell, sauber, voll", "pl": "grupa trąbek, dokładnie na środku — szybkie, czyste, pełne"}}]}, "Snare": {"tips": [], "tracks": [{"ref": "EMMA 2024 · T11 @2:52", "n": {"en": "snare vs tambourine at DIFFERENT stage levels (height/depth)", "uk": "малий барабан проти бубна на РІЗНИХ рівнях сцени (висота/глибина)", "de": "Snare vs. Tamburin auf VERSCHIEDENEN Bühnenebenen (Höhe/Tiefe)", "pl": "werbel vs tamburyn na RÓŻNYCH poziomach sceny (wysokość/głębokość)"}}]}, "Violin": {"tips": [{"f": [200, 200], "t": {"en": "the soundboard voice", "uk": "голос деки", "de": "die Stimme des Resonanzbodens", "pl": "głos płyty rezonansowej"}}, {"f": [315, 315], "t": {"en": "if weak here it sounds surface-y and unnatural", "uk": "якщо тут слабко, звучить поверхнево і неприродно", "de": "wenn hier schwach, klingt es oberflächlich und unnatürlich", "pl": "jeśli tutaj jest słabo, brzmi powierzchownie i nienaturalnie"}}, {"f": [1000, 4000], "t": {"en": "the character of the instrument", "uk": "характер інструменту", "de": "der Charakter des Instruments", "pl": "charakter instrumentu"}}], "tracks": []}, "Male voice": {"tips": [{"f": [100, 100], "t": {"en": "low notes in the voice (great in reverb-rich recordings)", "uk": "низькі ноти в голосі (чудово в записах з багатим ревербером)", "de": "tiefe Töne in der Stimme (großartig bei hallreichen Aufnahmen)", "pl": "niskie nuty w wokalu (świetne w nagraniach bogatych w pogłos)"}}, {"f": [315, 315], "t": {"en": "the intensity & energy of the voice", "uk": "інтенсивність та енергія голосу", "de": "die Intensität & Energie der Stimme", "pl": "intensywność i energia wokalu"}}, {"f": [1000, 1000], "t": {"en": "voice quality & resolution — go gently, avoid touching 800 Hz and 1.25 kHz", "uk": "якість і роздільна здатність голосу — дійте обережно, не чіпайте 800 Гц і 1.25 кГц", "de": "Stimmqualität & Auflösung — behutsam vorgehen, Berührung von 800 Hz und 1,25 kHz meiden", "pl": "jakość i rozdzielczość wokalu — postępuj delikatnie, nie ruszaj 800 Hz i 1,25 kHz"}}, {"f": [2000, 2000], "t": {"en": "naturalness, live presence of the singer", "uk": "природність, ефект живої присутності вокаліста", "de": "Natürlichkeit, Live-Präsenz des Sängers", "pl": "naturalność, efekt obecności wokalisty na żywo"}}, {"f": [4000, 8000], "t": {"en": "brightness — too much and airiness suffers", "uk": "яскравість — якщо забагато, страждає легкість (повітря)", "de": "Helligkeit — zu viel und die Luftigkeit leidet", "pl": "jasność — zbyt duża i cierpi zwiewność (powietrze)"}}], "tracks": [{"ref": "EMMA 2024 · T9 @0:38", "n": {"en": "a bit to the left and BEHIND the female voice", "uk": "трохи лівіше і ПОЗАДУ жіночого вокалу", "de": "etwas links und HINTER der Frauenstimme", "pl": "trochę w lewo i ZA wokalem kobiecym"}}, {"ref": "EMMA 2024 · T10", "n": {"en": "always center and IN FRONT of the others", "uk": "завжди по центру і ПОПЕРЕДУ інших", "de": "immer mittig und VOR den anderen", "pl": "zawsze na środku i PRZED resztą"}}]}, "Kick drum": {"tips": [{"f": [40, 40], "t": {"en": "depth & softness of the hit", "uk": "глибина та м'якість удару", "de": "Tiefe & Weichheit des Schlags", "pl": "głębia i miękkość uderzenia"}}, {"f": [63, 63], "t": {"en": "weight, heaviness of the hit", "uk": "вага, важкість удару", "de": "Gewicht, Schwere des Schlags", "pl": "waga, ciężar uderzenia"}}, {"f": [80, 80], "t": {"en": "firmness / hardness", "uk": "твердість / жорсткість", "de": "Festigkeit / Härte", "pl": "twardość / sztywność"}}, {"f": [1000, 4000], "t": {"en": "attack & snap (higher harmonics)", "uk": "атака та різкість (вищі гармоніки)", "de": "Attack & Snap (höhere Harmonische)", "pl": "atak i trzask (wyższe harmoniczne)"}}], "tracks": [{"ref": "EMMA 2024 · T9 \"Hungry Bird\"", "n": {"en": "deliberately NOT punchy — soft and deep", "uk": "навмисно НЕ панчевий — м'який і глибокий", "de": "absichtlich NICHT druckvoll — weich und tief", "pl": "celowo NIE punchy — miękki i głęboki"}}, {"ref": "EMMA 2026 · T11 \"Mama Nature\"", "n": {"en": "here the drums should be punchy", "uk": "тут барабани мають бути панчевими", "de": "hier sollten die Drums druckvoll sein", "pl": "tutaj bębny powinny być punchy"}}]}, "Female voice": {"tips": [{"f": [100, 100], "t": {"en": "low notes (low female voices), rich in reverb recordings", "uk": "низькі ноти (низькі жіночі голоси), багаті на реверберацію записи", "de": "tiefe Töne (tiefe Frauenstimmen), hallreiche Aufnahmen", "pl": "niskie nuty (niskie głosy żeńskie), nagrania bogate w pogłos"}}, {"f": [315, 315], "t": {"en": "the intensity & energy of the voice", "uk": "інтенсивність та енергія голосу", "de": "die Intensität & Energie der Stimme", "pl": "intensywność i energia wokalu"}}, {"f": [1000, 1000], "t": {"en": "voice quality & resolution — go gently, avoid 800 Hz and 1.25 kHz", "uk": "якість і роздільна здатність голосу — дійте обережно, уникайте 800 Гц і 1.25 кГц", "de": "Stimmqualität & Auflösung — behutsam vorgehen, 800 Hz und 1,25 kHz meiden", "pl": "jakość i rozdzielczość wokalu — postępuj delikatnie, unikaj 800 Hz i 1,25 kHz"}}, {"f": [2000, 2000], "t": {"en": "naturalness, live presence", "uk": "природність, ефект живої присутності", "de": "Natürlichkeit, Live-Präsenz", "pl": "naturalność, efekt obecności na żywo"}}, {"f": [4000, 8000], "t": {"en": "brightness — too much hurts airiness", "uk": "яскравість — надлишок шкодить легкості", "de": "Helligkeit — zu viel schadet der Luftigkeit", "pl": "jasność — nadmiar szkodzi zwiewności"}}], "tracks": [{"ref": "EMMA 2024 · T9", "n": {"en": "center, the chorus pans L→R", "uk": "центр, хор панорамується зліва направо", "de": "Mitte, der Chor wandert L→R", "pl": "środek, chór panoramuje z lewej na prawą"}}, {"ref": "EMMA 2024 · T11", "n": {"en": "center; backing vocals separated across the stage @0:46/1:25/2:00", "uk": "центр; бек-вокал розділений по сцені @0:46/1:25/2:00", "de": "Mitte; Background-Vocals über die Bühne verteilt @0:46/1:25/2:00", "pl": "środek; chórki rozdzielone na scenie @0:46/1:25/2:00"}}]}, "Electronic bass": {"tips": [{"f": [40, 50], "t": {"en": "low notes, massiveness", "uk": "низькі ноти, масивність", "de": "tiefe Töne, Massivität", "pl": "niskie nuty, masywność"}}, {"f": [100, 100], "t": {"en": "density of the bass", "uk": "щільність басу", "de": "Dichte des Basses", "pl": "gęstość basu"}}, {"f": [315, 315], "t": {"en": "the pluck / note start", "uk": "щипок / початок ноти", "de": "das Zupfen / der Notenstart", "pl": "szarpnięcie / początek nuty"}}], "tracks": [{"ref": "EMMA 2024 · positions", "n": {"en": "plays at each L/LC/C/RC/R position (40–100 Hz)", "uk": "грає на кожній позиції L/LC/C/RC/R (40–100 Гц)", "de": "spielt an jeder L/LC/C/RC/R Position (40–100 Hz)", "pl": "gra na każdej pozycji L/LC/C/RC/R (40–100 Hz)"}}, {"ref": "EMMA 2026 · positions", "n": {"en": "plays at each position (20–500 Hz)", "uk": "грає на кожній позиції (20–500 Гц)", "de": "spielt an jeder Position (20–500 Hz)", "pl": "gra na każdej pozycji (20–500 Hz)"}}, {"ref": "EMMA 2024 · T9 \"Hungry Bird\"", "n": {"en": "hear it separately from the piano bass and the tuba", "uk": "слухайте його окремо від басу фортепіано та туби", "de": "höre es getrennt vom Klavierbass und der Tuba", "pl": "usłysz to oddzielnie od basu fortepianu i tuby"}}, {"ref": "EMMA 2024 · T10 / T11", "n": {"en": "soft, big, deep — not punchy", "uk": "м'який, великий, глибокий — не панчевий", "de": "weich, groß, tief — nicht druckvoll", "pl": "miękki, duży, głęboki — nie punchy"}}]}, "Banjo": {"tips": [], "tracks": [{"ref": "EMMA 2026 · positions", "n": {"en": "each position (160–5500 Hz)", "uk": "кожна позиція (160–5500 Гц)", "de": "jede Position (160–5500 Hz)", "pl": "każda pozycja (160–5500 Hz)"}}]}, "Flute": {"tips": [], "tracks": [{"ref": "EMMA 2024 · positions", "n": {"en": "each position (250 Hz–1 kHz)", "uk": "кожна позиція (250 Гц–1 кГц)", "de": "jede Position (250 Hz–1 kHz)", "pl": "każda pozycja (250 Hz–1 kHz)"}}, {"ref": "EMMA 2024 · T9 @0:28–0:34", "n": {"en": "flute + harpsichord + piano in unison", "uk": "флейта + клавесин + фортепіано в унісон", "de": "Flöte + Cembalo + Klavier unisono", "pl": "flet + klawesyn + fortepian unisono"}}]}, "Piano": {"tips": [], "tracks": [{"ref": "EMMA 2024 · T8", "n": {"en": "far behind and slightly BELOW the singer — judge the body of the piano", "uk": "далеко позаду і трохи НИЖЧЕ вокаліста — оцініть тіло фортепіано", "de": "weit hinten und leicht UNTERHALB des Sängers — beurteile den Körper des Klaviers", "pl": "daleko z tyłu i nieco PONIŻEJ wokalisty — oceniaj ciało fortepianu"}}, {"ref": "EMMA 2024 · T9", "n": {"en": "lower notes of a Yamaha C7, separate from the bass", "uk": "нижні ноти Yamaha C7, окремо від баса", "de": "untere Töne eines Yamaha C7, getrennt vom Bass", "pl": "niższe dźwięki Yamaha C7, oddzielone od basu"}}]}, "Celesta": {"tips": [], "tracks": [{"ref": "EMMA 2024 · positions", "n": {"en": "each position (1–2 kHz)", "uk": "кожна позиція (1–2 кГц)", "de": "jede Position (1–2 kHz)", "pl": "każda pozycja (1–2 kHz)"}}]}, "Triangle": {"tips": [], "tracks": [{"ref": "EMMA 2024 · positions", "n": {"en": "each position (2–4 kHz, harmonics >20 kHz)", "uk": "кожна позиція (2–4 кГц, гармоніки >20 кГц)", "de": "jede Position (2–4 kHz, Harmonische >20 kHz)", "pl": "każda pozycja (2–4 kHz, harmoniczne >20 kHz)"}}, {"ref": "EMMA 2026 · positions", "n": {"en": "each position (2–20 kHz); the SMALLEST image in the focus track", "uk": "кожна позиція (2–20 кГц); НАЙМЕНШИЙ образ у треку фокусування", "de": "jede Position (2–20 kHz); die KLEINSTE Abbildung im Fokus-Track", "pl": "każda pozycja (2–20 kHz); NAJMNIEJSZY obraz w utworze do skupienia"}}]}, "Vibraphone": {"tips": [], "tracks": [{"ref": "EMMA 2026 · positions", "n": {"en": "each position (200–5000 Hz)", "uk": "кожна позиція (200–5000 Гц)", "de": "jede Position (200–5000 Hz)", "pl": "każda pozycja (200–5000 Hz)"}}]}, "Acoustic guitar": {"tips": [{"f": [100, 250], "t": {"en": "soundboard character, density, energy", "uk": "характер деки, щільність, енергія", "de": "Charakter des Resonanzbodens, Dichte, Energie", "pl": "charakter płyty rezonansowej, gęstość, energia"}}, {"f": [630, 630], "t": {"en": "sense of the instrument being real", "uk": "відчуття реальності інструменту", "de": "Gefühl, dass das Instrument echt ist", "pl": "poczucie, że instrument jest prawdziwy"}}, {"f": [800, 2000], "t": {"en": "resolution / clarity of the sound", "uk": "роздільна здатність / ясність звуку", "de": "Auflösung / Klarheit des Klangs", "pl": "rozdzielczość / klarowność dźwięku"}}], "tracks": []}, "Electronic guitar": {"tips": [{"f": [100, 250], "t": {"en": "body character, density", "uk": "характер тіла, щільність", "de": "Körpercharakter, Dichte", "pl": "charakter ciała, gęstość"}}, {"f": [800, 2000], "t": {"en": "resolution / clarity", "uk": "роздільна здатність / ясність", "de": "Auflösung / Klarheit", "pl": "rozdzielczość / klarowność"}}], "tracks": [{"ref": "EMMA 2024 · positions", "n": {"en": "each position (100–250 Hz)", "uk": "кожна позиція (100–250 Гц)", "de": "jede Position (100–250 Hz)", "pl": "każda pozycja (100–250 Hz)"}}, {"ref": "EMMA 2026 · positions", "n": {"en": "each position (60–1200 Hz)", "uk": "кожна позиція (60–1200 Гц)", "de": "jede Position (60–1200 Hz)", "pl": "każda pozycja (60–1200 Hz)"}}, {"ref": "EMMA 2024 · T9", "n": {"en": "left-center, with hall", "uk": "лівіше центру, з відлунням (залом)", "de": "links der Mitte, mit Raum/Hall", "pl": "lewo-środek, z echem (halą)"}}, {"ref": "EMMA 2024 · T10", "n": {"en": "distorted, far behind, right-center", "uk": "спотворений, далеко позаду, правіше центру", "de": "verzerrt, weit hinten, rechts der Mitte", "pl": "przesterowany, daleko z tyłu, z prawej strony środka"}}]}, "Cymbals": {"tips": [{"f": [40, 80], "t": {"en": "fundamental tones — well below the overtones, give weight to the hit", "uk": "основні тони — значно нижче обертонів, надають вагу удару", "de": "Grundtöne — weit unter den Obertönen, geben dem Schlag Gewicht", "pl": "tony podstawowe — znacznie poniżej alikwotów, nadają wagę uderzeniu"}}, {"f": [2000, 2000], "t": {"en": "fullness & naturalness of the cymbals", "uk": "повнота та природність тарілок", "de": "Fülle & Natürlichkeit der Becken", "pl": "pełnia i naturalność talerzy"}}, {"f": [12500, 20000], "t": {"en": "brilliance, sustain and airiness", "uk": "блиск, сустейн і легкість", "de": "Brillanz, Sustain und Luftigkeit", "pl": "blask, wybrzmienie i zwiewność"}}], "tracks": []}, "Double bass": {"tips": [{"f": [40, 50], "t": {"en": "low notes, massiveness of the instrument", "uk": "низькі ноти, масивність інструменту", "de": "tiefe Töne, Massivität des Instruments", "pl": "niskie nuty, masywność instrumentu"}}, {"f": [100, 100], "t": {"en": "density of the bass", "uk": "щільність басу", "de": "Dichte des Basses", "pl": "gęstość basu"}}, {"f": [315, 315], "t": {"en": "the start of the string pluck", "uk": "початок щипка струни", "de": "der Beginn des Saitenzupfens", "pl": "początek szarpnięcia struny"}}, {"f": [500, 2000], "t": {"en": "attack of the playing (harmonics)", "uk": "атака гри (гармоніки)", "de": "Anschlag/Attack des Spiels (Harmonische)", "pl": "atak gry (harmoniczne)"}}], "tracks": []}};
+    const INSTR_CAVEAT = {"en": "In a car a dip here can be a reflection null: if boosting a few dB does nothing, stop — it is a phase/acoustic issue, not EQ.", "uk": "В авто провал тут може бути нулем відбиття: якщо підняття на кілька дБ нічого не дає, зупиніться — це проблема фази/акустики, а не еквалайзера.", "de": "Im Auto kann eine Senke hier eine Reflexionsauslöschung sein: Wenn eine Anhebung um ein paar dB nichts bringt, aufhören — es ist ein Phasen-/Akustikproblem, kein EQ.", "pl": "W aucie dołek tutaj może być zerem odbicia: jeśli podbicie o kilka dB nic nie daje, przestań — to problem fazy/akustyki, a nie EQ."};
     const DESC_TOKENS = [
         ['laidback'], ['resonix', 'accurate'], ['harman'], ['audiofrog'],
         ['jazzi'], ['whitledge'], ['sqcompref'], ['flat'],
@@ -634,35 +637,81 @@
     const INSTR_COLORS = ['#f59e0b', '#22d3ee', '#a3e635', '#f472b6', '#60a5fa'];
     const INSTR_MAX = 5;
     let selectedInstruments = []; // indices into BAND_INSTRUMENTS (max INSTR_MAX)
+    let activeInfoInstr = null;   // BAND_INSTRUMENTS index whose EQ-tips popup is open
+    let instrBarRects = [];       // [{ii, x0, x1, y, h, color}] for click hit-testing
+    function instrInfoFor(it) { return it ? INSTR_INFO[it.n.en] : null; }
     const instrPlugin = {
         id: 'instr',
         afterDatasetsDraw(chart) {
+            instrBarRects = [];
             if (!selectedInstruments.length) return;
             const { ctx, chartArea: area, scales } = chart;
             const x = scales.x;
             if (!x) return;
             const rowH = 16, gap = 5;
             const clamp = (px) => Math.max(area.left, Math.min(area.right, px));
+            // Vertical highlight lines for the active instrument's EQ-tip frequencies.
+            const act = activeInfoInstr !== null ? BAND_INSTRUMENTS[activeInfoInstr] : null;
+            const actInfo = instrInfoFor(act);
+            if (actInfo && actInfo.tips) {
+                ctx.save();
+                ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+                ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+                actInfo.tips.forEach(function (z) {
+                    const cf = Math.sqrt(z.f[0] * z.f[1]);
+                    const px = x.getPixelForValue(cf);
+                    if (px < area.left || px > area.right) return;
+                    ctx.setLineDash([]); ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(245,158,11,0.28)';
+                    ctx.beginPath(); ctx.moveTo(px, area.top); ctx.lineTo(px, area.bottom); ctx.stroke();
+                    ctx.setLineDash([5, 3]); ctx.lineWidth = 1.5; ctx.strokeStyle = '#f59e0b';
+                    ctx.beginPath(); ctx.moveTo(px, area.top); ctx.lineTo(px, area.bottom); ctx.stroke();
+                    const lbl = z.f[0] === z.f[1] ? fmtHz(z.f[0]) : fmtHz(z.f[0]) + '–' + fmtHz(z.f[1]);
+                    ctx.setLineDash([]);
+                    const tw = ctx.measureText(lbl).width;
+                    ctx.fillStyle = '#f59e0b'; ctx.fillRect(px - tw / 2 - 4, area.bottom - 15, tw + 8, 15);
+                    ctx.fillStyle = '#1f2430'; ctx.fillText(lbl, px, area.bottom - 3);
+                });
+                ctx.restore();
+            }
             selectedInstruments.forEach(function (ii, slot) {
                 const it = BAND_INSTRUMENTS[ii];
                 if (!it) return;
                 const color = INSTR_COLORS[slot % INSTR_COLORS.length];
                 const y = area.top + 6 + slot * (rowH + gap);
+                const info = instrInfoFor(it);
                 ctx.save();
                 if (it.h) {
                     const hx0 = clamp(x.getPixelForValue(it.h[0])), hx1 = clamp(x.getPixelForValue(it.h[1]));
                     if (hx1 > hx0) { ctx.fillStyle = color + '33'; ctx.fillRect(hx0, y, hx1 - hx0, rowH); }
                 }
                 const fx0 = clamp(x.getPixelForValue(it.f[0])), fx1 = clamp(x.getPixelForValue(it.f[1]));
-                ctx.fillStyle = color + 'cc'; ctx.fillRect(fx0, y, Math.max(2, fx1 - fx0), rowH);
-                ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.strokeRect(fx0, y, Math.max(2, fx1 - fx0), rowH);
-                const label = it.e + ' ' + (it.n[currentLang] || it.n.en);
+                const fw = Math.max(2, fx1 - fx0);
+                ctx.fillStyle = color + 'cc'; ctx.fillRect(fx0, y, fw, rowH);
+                ctx.strokeStyle = (activeInfoInstr === ii) ? '#fbbf24' : color;
+                ctx.lineWidth = (activeInfoInstr === ii) ? 2 : 1;
+                ctx.strokeRect(fx0, y, fw, rowH);
+                // EQ-tip tick marks on the fundamental bar
+                if (info && info.tips) {
+                    ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 1;
+                    info.tips.forEach(function (z) {
+                        const cf = Math.sqrt(z.f[0] * z.f[1]);
+                        const px = x.getPixelForValue(cf);
+                        if (px >= fx0 && px <= fx1) { ctx.beginPath(); ctx.moveTo(px, y + 2); ctx.lineTo(px, y + rowH - 2); ctx.stroke(); }
+                    });
+                }
+                let label = it.e + ' ' + (it.n[currentLang] || it.n.en);
+                if (info) label += '  ⓘ';
                 ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
                 ctx.textBaseline = 'middle';
-                ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 3;
+                const lx = Math.min(fx0 + 5, area.right - 110), ly = y + rowH / 2;
+                // Dark outline so white text (incl. the ⓘ) stays readable on any bar
+                // color in both light and dark themes.
+                ctx.lineJoin = 'round'; ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(0,0,0,0.65)';
+                ctx.strokeText(label, lx, ly);
                 ctx.fillStyle = '#fff';
-                ctx.fillText(label, Math.min(fx0 + 5, area.right - 90), y + rowH / 2);
+                ctx.fillText(label, lx, ly);
                 ctx.restore();
+                if (info) instrBarRects.push({ ii: ii, x0: Math.min(fx0, clamp(x.getPixelForValue(it.h ? it.h[0] : it.f[0]))), x1: clamp(x.getPixelForValue(it.h ? it.h[1] : it.f[1])), y: y, h: rowH });
             });
         }
     };
@@ -896,6 +945,49 @@
         curveChart.options.plugins.tooltip.enabled = true;
         curveChart.draw();
     }
+    // EQ-tips popup for an instrument (opened by clicking its bar). Lists the key
+    // EQ frequencies + what each does, the in-car caveat, and where the instrument
+    // appears in the competition test tracks. Highlights those freqs on the chart.
+    function hideInstrInfoPanel() {
+        const p = document.getElementById('instrInfoPanel');
+        if (p) p.style.display = 'none';
+        if (activeInfoInstr !== null) {
+            activeInfoInstr = null;
+            if (freqCharMatches === null) curveChart.options.plugins.tooltip.enabled = true;
+            curveChart.draw();
+        }
+    }
+    function renderInstrInfoPanel(ii) {
+        const p = document.getElementById('instrInfoPanel'); if (!p) return;
+        const it = BAND_INSTRUMENTS[ii]; const info = instrInfoFor(it); if (!info) return;
+        const lang = currentLang;
+        const fLabel = (f) => f[0] === f[1] ? fmtHz(f[0]) + ' Hz' : fmtRange(f);
+        let html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
+            '<b style="font-size:16px;">' + it.e + ' ' + (it.n[lang] || it.n.en) + '</b>' +
+            '<button id="instrInfoCloseBtn" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:6px 14px;cursor:pointer;font-size:13px;">' + t().compareClose + '</button></div>';
+        if (info.tips && info.tips.length) {
+            html += '<div>';
+            info.tips.forEach(function (z) {
+                html += '<div style="margin-top:6px;"><b style="color:#f59e0b;">' + fLabel(z.f) + '</b> — ' + (z.t[lang] || z.t.en) + '</div>';
+            });
+            html += '</div>';
+            html += '<div style="margin-top:8px;color:var(--text-muted);font-style:italic;font-size:12.5px;">' + (INSTR_CAVEAT[lang] || INSTR_CAVEAT.en) + '</div>';
+        }
+        if (info.tracks && info.tracks.length) {
+            const U = INSTR_STR.ui;
+            html += '<div style="margin-top:12px;border-top:1px solid var(--border-color);padding-top:8px;">';
+            if (U.tracksHeader) html += '<div style="font-weight:600;color:var(--text-muted);margin-bottom:4px;">' + U.tracksHeader[lang] + '</div>';
+            info.tracks.forEach(function (z) {
+                html += '<div style="margin-top:5px;"><b>' + z.ref + '</b> — ' + (z.n[lang] || z.n.en) + '</div>';
+            });
+            html += '</div>';
+        }
+        p.innerHTML = html;
+        p.style.display = 'block';
+        p.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        const cb = document.getElementById('instrInfoCloseBtn'); if (cb) cb.addEventListener('click', hideInstrInfoPanel);
+    }
+
     (function () {
         const canvas = document.getElementById('curvesChart');
         const wrapper = canvas.parentElement;
@@ -919,9 +1011,41 @@
             renderFreqCharPanel(freq);
             panel.style.display = 'block';
         });
-        canvas.addEventListener('click', hideFreqCharPanel);
+        canvas.addEventListener('click', function (e) {
+            const rect = canvas.getBoundingClientRect();
+            const px = e.clientX - rect.left, py = e.clientY - rect.top;
+            // Did the click land on an instrument bar that has EQ info?
+            let hit = null;
+            for (const r of instrBarRects) {
+                if (px >= r.x0 - 4 && px <= r.x1 + 4 && py >= r.y - 2 && py <= r.y + r.h + 2) { hit = r; break; }
+            }
+            if (hit) {
+                if (activeInfoInstr === hit.ii) { hideInstrInfoPanel(); return; }
+                activeInfoInstr = hit.ii;
+                // Suppress the hover tooltip while the info + frequency highlights are up.
+                curveChart.options.plugins.tooltip.enabled = false;
+                if (curveChart.tooltip) curveChart.tooltip.setActiveElements([], { x: 0, y: 0 });
+                curveChart.setActiveElements([]);
+                curveChart.update('none');
+                renderInstrInfoPanel(hit.ii);
+                return;
+            }
+            hideFreqCharPanel();
+            hideInstrInfoPanel();
+        });
+        canvas.style.cursor = 'default';
+        canvas.addEventListener('mousemove', function (e) {
+            const rect = canvas.getBoundingClientRect();
+            const px = e.clientX - rect.left, py = e.clientY - rect.top;
+            let over = false;
+            for (const r of instrBarRects) { if (px >= r.x0 - 4 && px <= r.x1 + 4 && py >= r.y - 2 && py <= r.y + r.h + 2) { over = true; break; } }
+            canvas.style.cursor = over ? 'pointer' : 'default';
+        });
         document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' && lastFreqCharFreq !== null) hideFreqCharPanel();
+            if (e.key === 'Escape') {
+                if (activeInfoInstr !== null) hideInstrInfoPanel();
+                else if (lastFreqCharFreq !== null) hideFreqCharPanel();
+            }
         });
     })();
 
@@ -1074,7 +1198,12 @@
             '<button id="instrCloseBtn" style="' + bs + '">' + t().compareClose + '</button></div></div>';
         html += '<div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;">' + U.selectUpTo[lang] +
             ' &nbsp;·&nbsp; <span style="display:inline-block;width:22px;height:10px;background:#f59e0bcc;vertical-align:middle;border-radius:2px;"></span> ' + U.fundamentals[lang] +
-            ' &nbsp; <span style="display:inline-block;width:22px;height:10px;background:#f59e0b33;vertical-align:middle;border-radius:2px;"></span> ' + U.harmonics[lang] + '</div>';
+            ' &nbsp; <span style="display:inline-block;width:22px;height:10px;background:#f59e0b33;vertical-align:middle;border-radius:2px;"></span> ' + U.harmonics[lang] +
+            ' &nbsp;·&nbsp; <span style="color:#f59e0b;">ⓘ</span> ' + (U.tipsHint ? U.tipsHint[lang] : '') + '</div>';
+        if (U.tracksLicense) {
+            html += '<div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;padding:8px 10px;border:1px solid var(--border-color);border-radius:8px;">' +
+                (U.tracksHeader ? '<b>' + U.tracksHeader[lang] + '.</b> ' : '') + U.tracksLicense[lang] + '</div>';
+        }
         INSTR_GROUPS_ORDER.forEach(function (gc) {
             const items = [];
             BAND_INSTRUMENTS.forEach(function (it, idx) { if (it.g === gc) items.push({ it: it, idx: idx }); });
@@ -1086,9 +1215,20 @@
                 const full = !checked && selectedInstruments.length >= INSTR_MAX;
                 const hi = o.it.h ? o.it.h[1] : o.it.f[1];
                 const rng = fmtRange([o.it.f[0], hi]);
-                html += '<label style="display:flex;align-items:center;gap:5px;cursor:' + (full ? 'not-allowed' : 'pointer') + ';font-size:13px;' + (full ? 'opacity:.45;' : '') + '">' +
+                const info = INSTR_INFO[o.it.n.en];
+                let nameHtml = o.it.n[lang] || o.it.n.en;
+                let title = '';
+                if (info) {
+                    // Underline + ⓘ marks that EQ tips exist; a plain-text tooltip on hover.
+                    nameHtml = '<span style="text-decoration:underline dotted;text-underline-offset:2px;">' + nameHtml + '</span> <span style="color:#fbbf24;">ⓘ</span>';
+                    const lines = [];
+                    (info.tips || []).forEach(function (z) { lines.push((z.f[0] === z.f[1] ? fmtHz(z.f[0]) + ' Hz' : fmtRange(z.f)) + ' — ' + (z.t[lang] || z.t.en)); });
+                    (info.tracks || []).forEach(function (z) { lines.push('• ' + z.ref + ': ' + (z.n[lang] || z.n.en)); });
+                    title = lines.join('\n').replace(/"/g, '”');
+                }
+                html += '<label' + (title ? ' title="' + title + '"' : '') + ' style="display:flex;align-items:center;gap:5px;cursor:' + (full ? 'not-allowed' : 'pointer') + ';font-size:13px;' + (full ? 'opacity:.45;' : '') + '">' +
                     '<input type="checkbox" class="instr-chk" data-idx="' + o.idx + '"' + (checked ? ' checked' : '') + (full ? ' disabled' : '') + '> ' +
-                    o.it.e + ' ' + (o.it.n[lang] || o.it.n.en) + ' <span style="color:var(--text-muted);">' + rng + '</span></label>';
+                    o.it.e + ' ' + nameHtml + ' <span style="color:var(--text-muted);">' + rng + '</span></label>';
             });
             html += '</div></div>';
         });
