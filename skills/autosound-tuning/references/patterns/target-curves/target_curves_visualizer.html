@@ -164,6 +164,7 @@
             <option value="pl">PL</option>
         </select>
         <button id="compareBtn" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 16px;cursor:pointer;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.4);">Compare curves</button>
+        <button id="clearLoadedBtn" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 16px;cursor:pointer;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.4);display:none;">Clear loaded</button>
         <button id="toggleAllBtn" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 16px;cursor:pointer;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.4);">Hide all curves</button>
     </div>
     <h1 id="mainTitle">Acoustic Target Curve Visualizer</h1>
@@ -430,7 +431,7 @@
                 '<b>SQ-Comp-Ref (project):</b> deep, controlled sub-bass, ultra-smooth roll-off to 200 Hz, presence dip −2 dB @2.5 kHz.',
                 '<b>Flat:</b> 0 dB reference — no tonal shaping, useful as a neutral baseline.',
             ],
-            compareBtn: 'Compare curves', compareTitle: 'Curve comparison',
+            compareBtn: 'Compare curves', clearLoaded: 'Clear loaded', compareTitle: 'Curve comparison',
             compareNeedMore: 'Show (un-hide) at least 2 curves to compare.',
             compareBaseline: 'Baseline:', chooseBaseline: 'Baseline curve (columns are compared against it):',
             bandCol: 'Frequency band', compareClose: 'Close', egWord: 'e.g.',
@@ -459,7 +460,7 @@
                 '<b>SQ-Comp-Ref (проєкт):</b> глибокий, але контрольований суббас, надплавний спад до 200 Гц, яма присутності −2 дБ @2.5 кГц.',
                 '<b>Flat:</b> референс 0 дБ — без тональної корекції, зручно як нейтральна база.',
             ],
-            compareBtn: 'Порівняти криві', compareTitle: 'Порівняння кривих',
+            compareBtn: 'Порівняти криві', clearLoaded: 'Очистити завантажені', compareTitle: 'Порівняння кривих',
             compareNeedMore: 'Покажи (не приховуй) щонайменше 2 криві для порівняння.',
             compareBaseline: 'База:', chooseBaseline: 'Базова крива (стовпчики порівнюються з нею):',
             bandCol: 'Смуга частот', compareClose: 'Закрити', egWord: 'напр.',
@@ -488,7 +489,7 @@
                 '<b>SQ-Comp-Ref (Projekt):</b> tiefer, aber kontrollierter Subbass, ultra-glatter Abfall bis 200 Hz, Präsenzsenke −2 dB @2.5 kHz.',
                 '<b>Flat:</b> 0-dB-Referenz — keine tonale Formung, praktisch als neutrale Basislinie.',
             ],
-            compareBtn: 'Kurven vergleichen', compareTitle: 'Kurvenvergleich',
+            compareBtn: 'Kurven vergleichen', clearLoaded: 'Geladene löschen', compareTitle: 'Kurvenvergleich',
             compareNeedMore: 'Zeige (blende ein) mindestens 2 Kurven zum Vergleichen.',
             compareBaseline: 'Basis:', chooseBaseline: 'Basiskurve (Spalten werden dagegen verglichen):',
             bandCol: 'Frequenzband', compareClose: 'Schließen', egWord: 'z. B.',
@@ -517,7 +518,7 @@
                 '<b>SQ-Comp-Ref (projekt):</b> głęboki, ale kontrolowany subbas, bardzo płynne opadanie do 200 Hz, zapadnięcie obecności −2 dB @2.5 kHz.',
                 '<b>Flat:</b> referencja 0 dB — bez kształtowania tonalnego, przydatna jako neutralna baza.',
             ],
-            compareBtn: 'Porównaj krzywe', compareTitle: 'Porównanie krzywych',
+            compareBtn: 'Porównaj krzywe', clearLoaded: 'Wyczyść wczytane', compareTitle: 'Porównanie krzywych',
             compareNeedMore: 'Pokaż (odkryj) co najmniej 2 krzywe, aby porównać.',
             compareBaseline: 'Punkt odniesienia:', chooseBaseline: 'Krzywa bazowa (kolumny są porównywane względem niej):',
             bandCol: 'Pasmo częstotliwości', compareClose: 'Zamknij', egWord: 'np.',
@@ -1007,6 +1008,13 @@
                 offset: d._manual || 0
             }));
             try { localStorage.setItem(LS, JSON.stringify(st)); } catch (e) {}
+            updateClearLoadedBtn();
+        }
+
+        // Show the "Clear loaded" button only when there are loaded curves to clear.
+        function updateClearLoadedBtn() {
+            const b = document.getElementById('clearLoadedBtn');
+            if (b) b.style.display = (curveChart.data.datasets.length > BUILTINS) ? '' : 'none';
         }
 
         // Keeps the card below the chart in sync when a curve is toggled from the
@@ -1180,6 +1188,20 @@
             persist();
         });
 
+        // Remove all loaded curves at once (keeps the built-ins). Handy when the
+        // localStorage-restored list has piled up over many sessions.
+        const clearBtn = document.getElementById('clearLoadedBtn');
+        if (clearBtn) clearBtn.addEventListener('click', function () {
+            curveChart.data.datasets.length = BUILTINS;
+            curveChart.update();
+            document.querySelectorAll('.info-grid .card').forEach(function (c) {
+                const d = c.querySelector('.card-desc');
+                if (!d || !d.id) c.remove();
+            });
+            n = 0;
+            persist();
+        });
+
         (function restore() {
             let st; try { st = JSON.parse(localStorage.getItem(LS)); } catch (e) { return; }
             if (!Array.isArray(st) || !st.length) return;
@@ -1231,6 +1253,8 @@
             const flatDesc = document.getElementById('flatCardDesc'); if (flatDesc) flatDesc.innerHTML = s.flatCardDesc;
             btn.textContent = hidden ? s.showAll : s.hideAll;
             const cBtn = document.getElementById('compareBtn'); if (cBtn) cBtn.textContent = s.compareBtn;
+            const clBtn = document.getElementById('clearLoadedBtn'); if (clBtn) clBtn.textContent = s.clearLoaded;
+            updateClearLoadedBtn();
 
             document.querySelectorAll('.info-grid .card').forEach(function (c) {
                 const rawName = c.dataset.rawName;
