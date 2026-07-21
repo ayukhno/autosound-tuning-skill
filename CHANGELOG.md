@@ -2,6 +2,12 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
+## [Unreleased]
+
+### Added
+- **Instruments overlay in the curve visualizer:** a new "Instruments" panel (grouped Vocal / Percussion / Strings / Winds / Keys & Other / EMMA 2024 / EMMA 2026, with emoji) lets you pick up to 3 instruments and draws their frequency ranges on the chart — fundamentals solid, harmonics lighter — so you can see where each lives against the target curve. Ranges digitized from the standard instrument-frequency chart and the EMMA 2024/2026 SQ judge test sets; instrument names translated (EN/UA/DE/PL) via the Gemini advisor. Selection persists.
+- Per-curve **color pickers** and a **"Clear" loaded-curves** button (see v2.6.3 visualizer).
+
 ## [v2.6.3] — 2026-07-21
 
 Curve-visualizer release: the target-curve visualizer became a standalone, shareable tool, and the bundled curve was renamed for trademark safety.

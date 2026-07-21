@@ -180,6 +180,7 @@
             <option value="pl">PL</option>
         </select>
         <button id="compareBtn" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 16px;cursor:pointer;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.4);">Compare</button>
+        <button id="instrBtn" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 16px;cursor:pointer;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.4);">Instruments</button>
         <button id="toggleAllBtn" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 16px;cursor:pointer;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.4);">Hide all</button>
         <button id="clearLoadedBtn" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 16px;cursor:pointer;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.4);display:none;">Clear</button>
     </div>
@@ -193,6 +194,7 @@
     <!-- Comparison table sits directly under the chart (in-flow, not a modal) so the
          curves stay visible while you read the per-band description. -->
     <div id="comparePanel" style="display:none;margin-top:14px;max-height:56vh;overflow:auto;background:var(--card-bg);border:1px solid var(--border-color);border-radius:12px;padding:20px;box-shadow:0 4px 20px rgba(0,0,0,.4);"></div>
+    <div id="instrPanel" style="display:none;margin-top:14px;max-height:56vh;overflow:auto;background:var(--card-bg);border:1px solid var(--border-color);border-radius:12px;padding:20px;box-shadow:0 4px 20px rgba(0,0,0,.4);"></div>
     <div id="dropZone" style="margin-top:14px;padding:14px;border:2px dashed var(--btn-border);border-radius:10px;text-align:center;color:var(--text-muted);cursor:pointer;user-select:none;transition:.15s;">
         ↳ Drop a curve <b>.txt</b> file here (REW/NTT: <code>freq dB</code>) — or click to choose one. Plots instantly, offline.
     </div>
@@ -268,6 +270,52 @@
         { more: { en: 'more sparkle, brilliance', uk: 'більше іскристості, блиску', de: 'mehr Glanz, Brillanz', pl: 'więcej blasku, iskrzenia' }, less: { en: 'less sparkle, softer highs', uk: 'менше іскристості, м\'якші ВЧ', de: 'weniger Glanz, weichere Höhen', pl: 'mniej blasku, łagodniejsza góra' } },
         { more: { en: 'more air, more open', uk: 'більше повітря, більш відкрито', de: 'mehr Luftigkeit, offener', pl: 'więcej powietrza, bardziej otwarcie' }, less: { en: 'less air, more closed-in', uk: 'менше повітря, більш закрито', de: 'weniger Luftigkeit, geschlossener', pl: 'mniej powietrza, bardziej zamknięte' } },
     ];
+    // Instrument frequency ranges (approximate, digitized from the well-known instrument-
+    // frequency chart + the EMMA 2024/2026 SQ judge test-track sets). f = fundamental band,
+    // h = harmonic extension (null if none). Names translated via the Gemini advisor.
+    const BAND_INSTRUMENTS = [
+        { g:'vocal', e:'🎤', n:{"en": "Male voice", "uk": "Чоловічий вокал", "de": "Männerstimme", "pl": "Wokal męski"}, f:[90, 1000], h:[1000, 16000] },
+        { g:'vocal', e:'🎤', n:{"en": "Female voice", "uk": "Жіночий вокал", "de": "Frauenstimme", "pl": "Wokal żeński"}, f:[160, 1200], h:[1200, 16000] },
+        { g:'perc', e:'🥁', n:{"en": "Kick drum", "uk": "Бас-бочка", "de": "Bassdrum", "pl": "Bęben basowy"}, f:[40, 120], h:[120, 8000] },
+        { g:'perc', e:'🥁', n:{"en": "Timpani", "uk": "Литаври", "de": "Pauken", "pl": "Kotły"}, f:[40, 350], h:[350, 8000] },
+        { g:'perc', e:'🥁', n:{"en": "Toms", "uk": "Томи", "de": "Toms", "pl": "Tomy"}, f:[60, 400], h:[400, 8000] },
+        { g:'perc', e:'🥁', n:{"en": "Snare", "uk": "Малий барабан", "de": "Snaredrum", "pl": "Werbel"}, f:[100, 500], h:[500, 12000] },
+        { g:'perc', e:'🥁', n:{"en": "Congas", "uk": "Конги", "de": "Congas", "pl": "Kongi"}, f:[80, 400], h:[400, 6000] },
+        { g:'perc', e:'🥁', n:{"en": "Cymbals", "uk": "Тарілки", "de": "Becken", "pl": "Talerze"}, f:[300, 600], h:[600, 16000] },
+        { g:'winds', e:'🎺', n:{"en": "Tuba", "uk": "Туба", "de": "Tuba", "pl": "Tuba"}, f:[30, 380], h:[380, 2000] },
+        { g:'winds', e:'📯', n:{"en": "French horn", "uk": "Валторна", "de": "Waldhorn", "pl": "Waltornia"}, f:[60, 700], h:[700, 6000] },
+        { g:'winds', e:'🎺', n:{"en": "Bass trombone", "uk": "Бас-тромбон", "de": "Bassposaune", "pl": "Puzon basowy"}, f:[55, 500], h:[500, 6000] },
+        { g:'winds', e:'🎺', n:{"en": "Tenor trombone", "uk": "Тенор-тромбон", "de": "Tenorposaune", "pl": "Puzon tenorowy"}, f:[80, 600], h:[600, 6000] },
+        { g:'winds', e:'🎺', n:{"en": "Trumpet", "uk": "Труба", "de": "Trompete", "pl": "Trąbka"}, f:[160, 1000], h:[1000, 9000] },
+        { g:'winds', e:'🎶', n:{"en": "Contrabassoon", "uk": "Контрафагот", "de": "Kontrafagott", "pl": "Kontrafagot"}, f:[30, 300], h:[300, 8000] },
+        { g:'winds', e:'🎶', n:{"en": "Bassoon", "uk": "Фагот", "de": "Fagott", "pl": "Fagot"}, f:[55, 600], h:[600, 8000] },
+        { g:'winds', e:'🎷', n:{"en": "Tenor sax", "uk": "Тенор-саксофон", "de": "Tenorsaxophon", "pl": "Saksofon tenorowy"}, f:[120, 700], h:[700, 12000] },
+        { g:'winds', e:'🎷', n:{"en": "Alto sax", "uk": "Альт-саксофон", "de": "Altsaxophon", "pl": "Saksofon altowy"}, f:[140, 900], h:[900, 12000] },
+        { g:'winds', e:'🎶', n:{"en": "Clarinet", "uk": "Кларнет", "de": "Klarinette", "pl": "Klarnet"}, f:[140, 1000], h:[1000, 12000] },
+        { g:'winds', e:'🎶', n:{"en": "Oboe", "uk": "Гобой", "de": "Oboe", "pl": "Obój"}, f:[250, 1500], h:[1500, 12000] },
+        { g:'winds', e:'🪈', n:{"en": "Flute", "uk": "Флейта", "de": "Flöte", "pl": "Flet"}, f:[250, 2000], h:[2000, 8000] },
+        { g:'winds', e:'🪈', n:{"en": "Piccolo", "uk": "Флейта-піколо", "de": "Pikkoloflöte", "pl": "Flet piccolo"}, f:[500, 4000], h:[4000, 13000] },
+        { g:'strings', e:'🎻', n:{"en": "Double bass", "uk": "Контрабас", "de": "Kontrabass", "pl": "Kontrabas"}, f:[40, 300], h:[300, 5000] },
+        { g:'strings', e:'🎻', n:{"en": "Cello", "uk": "Віолончель", "de": "Cello", "pl": "Wiolonczela"}, f:[65, 700], h:[700, 8000] },
+        { g:'strings', e:'🎻', n:{"en": "Viola", "uk": "Альт", "de": "Bratsche", "pl": "Altówka"}, f:[130, 1000], h:[1000, 8000] },
+        { g:'strings', e:'🎻', n:{"en": "Violin", "uk": "Скрипка", "de": "Violine", "pl": "Skrzypce"}, f:[200, 1300], h:[1300, 13000] },
+        { g:'strings', e:'🎸', n:{"en": "Acoustic guitar", "uk": "Акустична гітара", "de": "Akustikgitarre", "pl": "Gitara akustyczna"}, f:[80, 1000], h:[1000, 5000] },
+        { g:'strings', e:'🎵', n:{"en": "Harp", "uk": "Арфа", "de": "Harfe", "pl": "Harfa"}, f:[30, 3000], h:[3000, 6000] },
+        { g:'keys', e:'🎹', n:{"en": "Piano", "uk": "Фортепіано", "de": "Klavier", "pl": "Fortepian"}, f:[27, 4186], h:[4186, 8000] },
+        { g:'keys', e:'🎹', n:{"en": "Pipe organ", "uk": "Орган", "de": "Orgel", "pl": "Organy"}, f:[16, 8000], h:null },
+        { g:'emma2024', e:'🎸', n:{"en": "Electronic bass", "uk": "Бас-гітара", "de": "E-Bass", "pl": "Gitara basowa"}, f:[40, 100], h:null },
+        { g:'emma2024', e:'🎸', n:{"en": "Electronic guitar", "uk": "Електрогітара", "de": "E-Gitarre", "pl": "Gitara elektryczna"}, f:[100, 250], h:null },
+        { g:'emma2024', e:'🪈', n:{"en": "Flute", "uk": "Флейта", "de": "Flöte", "pl": "Flet"}, f:[250, 1000], h:null },
+        { g:'emma2024', e:'🎹', n:{"en": "Celesta", "uk": "Челеста", "de": "Celesta", "pl": "Czelesta"}, f:[1000, 2000], h:null },
+        { g:'emma2024', e:'🔺', n:{"en": "Triangle", "uk": "Трикутник", "de": "Triangel", "pl": "Trójkąt"}, f:[2000, 4000], h:[4000, 20000] },
+        { g:'emma2026', e:'🎸', n:{"en": "Electronic bass", "uk": "Бас-гітара", "de": "E-Bass", "pl": "Gitara basowa"}, f:[20, 500], h:null },
+        { g:'emma2026', e:'🎸', n:{"en": "Electronic guitar", "uk": "Електрогітара", "de": "E-Gitarre", "pl": "Gitara elektryczna"}, f:[60, 1200], h:null },
+        { g:'emma2026', e:'🪕', n:{"en": "Banjo", "uk": "Банджо", "de": "Banjo", "pl": "Banjo"}, f:[160, 5500], h:null },
+        { g:'emma2026', e:'🎼', n:{"en": "Vibraphone", "uk": "Вібрафон", "de": "Vibraphon", "pl": "Wibrafon"}, f:[200, 5000], h:null },
+        { g:'emma2026', e:'🔺', n:{"en": "Triangle", "uk": "Трикутник", "de": "Triangel", "pl": "Trójkąt"}, f:[2000, 20000], h:null },
+    ];
+    const INSTR_GROUPS_ORDER = ['vocal','perc','strings','winds','keys','emma2024','emma2026'];
+    const INSTR_STR = { groups: {"vocal": {"en": "Vocal", "uk": "Вокал", "de": "Gesang", "pl": "Wokal"}, "perc": {"en": "Percussion", "uk": "Ударні", "de": "Percussion", "pl": "Perkusyjne"}, "strings": {"en": "Strings", "uk": "Струнні", "de": "Streicher", "pl": "Strunowe"}, "winds": {"en": "Winds", "uk": "Духові", "de": "Blasinstrumente", "pl": "Dęte"}, "keys": {"en": "Keys & Other", "uk": "Клавішні та інше", "de": "Tasten & Andere", "pl": "Klawiszowe i inne"}, "emma2024": {"en": "EMMA 2024", "uk": "EMMA 2024", "de": "EMMA 2024", "pl": "EMMA 2024"}, "emma2026": {"en": "EMMA 2026", "uk": "EMMA 2026", "de": "EMMA 2026", "pl": "EMMA 2026"}}, ui: {"instruments": {"en": "Instruments", "uk": "Інструменти", "de": "Instrumente", "pl": "Instrumenty"}, "ranges": {"en": "Instrument ranges", "uk": "Діапазони інструментів", "de": "Instrumentenbereiche", "pl": "Zakresy instrumentów"}, "selectUpTo": {"en": "Select up to 3", "uk": "Виберіть до 3-х", "de": "Bis zu 3 auswählen", "pl": "Wybierz do 3"}, "fundamentals": {"en": "Fundamentals", "uk": "Основні тони", "de": "Grundtöne", "pl": "Tony podstawowe"}, "harmonics": {"en": "Harmonics", "uk": "Гармоніки", "de": "Obertöne", "pl": "Harmoniczne"}} };
     const DESC_TOKENS = [
         ['laidback'], ['resonix', 'accurate'], ['harman'], ['audiofrog'],
         ['jazzi'], ['whitledge'], ['sqcompref'], ['flat'],
@@ -580,6 +628,45 @@
         }
     };
 
+    // Instrument-range overlay: draws a stacked horizontal band per selected
+    // instrument at the top of the plot — fundamentals solid, harmonics lighter —
+    // so you can see where each instrument lives against the target curve.
+    const INSTR_COLORS = ['#f59e0b', '#22d3ee', '#a3e635', '#f472b6'];
+    const INSTR_MAX = 3;
+    let selectedInstruments = []; // indices into BAND_INSTRUMENTS (max INSTR_MAX)
+    const instrPlugin = {
+        id: 'instr',
+        afterDatasetsDraw(chart) {
+            if (!selectedInstruments.length) return;
+            const { ctx, chartArea: area, scales } = chart;
+            const x = scales.x;
+            if (!x) return;
+            const rowH = 18, gap = 6;
+            const clamp = (px) => Math.max(area.left, Math.min(area.right, px));
+            selectedInstruments.forEach(function (ii, slot) {
+                const it = BAND_INSTRUMENTS[ii];
+                if (!it) return;
+                const color = INSTR_COLORS[slot % INSTR_COLORS.length];
+                const y = area.top + 6 + slot * (rowH + gap);
+                ctx.save();
+                if (it.h) {
+                    const hx0 = clamp(x.getPixelForValue(it.h[0])), hx1 = clamp(x.getPixelForValue(it.h[1]));
+                    if (hx1 > hx0) { ctx.fillStyle = color + '33'; ctx.fillRect(hx0, y, hx1 - hx0, rowH); }
+                }
+                const fx0 = clamp(x.getPixelForValue(it.f[0])), fx1 = clamp(x.getPixelForValue(it.f[1]));
+                ctx.fillStyle = color + 'cc'; ctx.fillRect(fx0, y, Math.max(2, fx1 - fx0), rowH);
+                ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.strokeRect(fx0, y, Math.max(2, fx1 - fx0), rowH);
+                const label = it.e + ' ' + (it.n[currentLang] || it.n.en);
+                ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+                ctx.textBaseline = 'middle';
+                ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 3;
+                ctx.fillStyle = '#fff';
+                ctx.fillText(label, Math.min(fx0 + 5, area.right - 90), y + rowH / 2);
+                ctx.restore();
+            });
+        }
+    };
+
     // Canvas overlay: draws a hump for each matched boost entry (top) and a dip
     // for each matched cut entry (bottom), stacked when more than one applies
     // at the clicked frequency. Short labels only — full text lives in the
@@ -660,7 +747,7 @@
     // Render Chart
     const ctx = document.getElementById('curvesChart').getContext('2d');
     const curveChart = new Chart(ctx, {
-        plugins: [freqCharPlugin, compareHoverPlugin],
+        plugins: [freqCharPlugin, compareHoverPlugin, instrPlugin],
         type: 'line',
         data: {
             datasets: [
@@ -965,9 +1052,65 @@
     (function () {
         const compareBtn = document.getElementById('compareBtn');
         compareBtn.addEventListener('click', function () {
+            hideInstrPanel();
             const idxs = visibleDatasetIdxs();
             renderComparePanel(idxs, idxs[0]);
         });
+    })();
+
+    // --- Instruments overlay: pick up to 3 instruments and see their frequency
+    // ranges (fundamentals + harmonics) drawn on the chart. Selection persists. ---
+    const INSTR_LS = 'acv_instr_v1';
+    function persistInstr() { try { localStorage.setItem(INSTR_LS, JSON.stringify(selectedInstruments)); } catch (e) {} }
+    function hideInstrPanel() { const p = document.getElementById('instrPanel'); if (p) p.style.display = 'none'; }
+    function renderInstrPanel() {
+        const p = document.getElementById('instrPanel'); if (!p) return;
+        const lang = currentLang, U = INSTR_STR.ui, G = INSTR_STR.groups;
+        let html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+            '<h2 style="margin:0;font-size:18px;">' + U.ranges[lang] + '</h2>' +
+            '<button id="instrCloseBtn" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:6px 14px;cursor:pointer;font-size:13px;">' + t().compareClose + '</button></div>';
+        html += '<div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;">' + U.selectUpTo[lang] +
+            ' &nbsp;·&nbsp; <span style="display:inline-block;width:22px;height:10px;background:#f59e0bcc;vertical-align:middle;border-radius:2px;"></span> ' + U.fundamentals[lang] +
+            ' &nbsp; <span style="display:inline-block;width:22px;height:10px;background:#f59e0b33;vertical-align:middle;border-radius:2px;"></span> ' + U.harmonics[lang] + '</div>';
+        INSTR_GROUPS_ORDER.forEach(function (gc) {
+            const items = [];
+            BAND_INSTRUMENTS.forEach(function (it, idx) { if (it.g === gc) items.push({ it: it, idx: idx }); });
+            if (!items.length) return;
+            html += '<div style="margin-bottom:12px;"><div style="font-weight:600;margin-bottom:6px;color:var(--text-color);">' + (G[gc][lang] || G[gc].en) + '</div>' +
+                '<div style="display:flex;flex-wrap:wrap;gap:8px 16px;">';
+            items.forEach(function (o) {
+                const checked = selectedInstruments.indexOf(o.idx) !== -1;
+                const full = !checked && selectedInstruments.length >= INSTR_MAX;
+                const hi = o.it.h ? o.it.h[1] : o.it.f[1];
+                const rng = fmtRange([o.it.f[0], hi]);
+                html += '<label style="display:flex;align-items:center;gap:5px;cursor:' + (full ? 'not-allowed' : 'pointer') + ';font-size:13px;' + (full ? 'opacity:.45;' : '') + '">' +
+                    '<input type="checkbox" class="instr-chk" data-idx="' + o.idx + '"' + (checked ? ' checked' : '') + (full ? ' disabled' : '') + '> ' +
+                    o.it.e + ' ' + (o.it.n[lang] || o.it.n.en) + ' <span style="color:var(--text-muted);">' + rng + '</span></label>';
+            });
+            html += '</div></div>';
+        });
+        p.innerHTML = html; p.style.display = 'block';
+        const cb = document.getElementById('instrCloseBtn'); if (cb) cb.addEventListener('click', hideInstrPanel);
+        p.querySelectorAll('.instr-chk').forEach(function (chk) {
+            chk.addEventListener('change', function () {
+                const idx = parseInt(chk.getAttribute('data-idx'), 10);
+                const at = selectedInstruments.indexOf(idx);
+                if (chk.checked) { if (at === -1 && selectedInstruments.length < INSTR_MAX) selectedInstruments.push(idx); }
+                else if (at !== -1) selectedInstruments.splice(at, 1);
+                persistInstr(); curveChart.draw(); renderInstrPanel();
+            });
+        });
+    }
+    (function () {
+        try { const st = JSON.parse(localStorage.getItem(INSTR_LS)); if (Array.isArray(st)) selectedInstruments = st.filter(function (i) { return BAND_INSTRUMENTS[i]; }).slice(0, INSTR_MAX); } catch (e) {}
+        const ib = document.getElementById('instrBtn');
+        if (ib) ib.addEventListener('click', function () {
+            const p = document.getElementById('instrPanel');
+            if (p && p.style.display !== 'none') { hideInstrPanel(); return; }
+            hideComparePanel(); renderInstrPanel();
+            p.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        });
+        if (selectedInstruments.length) curveChart.draw();
     })();
 
     // --- Runtime curve loader + persistence (localStorage) — offline, no CDN ---
@@ -1285,6 +1428,9 @@
             btn.textContent = hidden ? s.showAll : s.hideAll;
             const cBtn = document.getElementById('compareBtn'); if (cBtn) cBtn.textContent = s.compareBtn;
             const clBtn = document.getElementById('clearLoadedBtn'); if (clBtn) clBtn.textContent = s.clearLoaded;
+            const iBtn = document.getElementById('instrBtn'); if (iBtn) iBtn.textContent = INSTR_STR.ui.instruments[lang] || 'Instruments';
+            const iPanel = document.getElementById('instrPanel');
+            if (iPanel && iPanel.style.display !== 'none') renderInstrPanel();
             updateClearLoadedBtn();
 
             document.querySelectorAll('.info-grid .card').forEach(function (c) {
