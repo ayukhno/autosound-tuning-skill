@@ -327,7 +327,7 @@ Two practical ways to build one:
 through the Generator ↔ Critic ↔ Arbiter loop, and export it for REW/your DSP. The more concretely
 you describe the *character* you want, the better the result. Useful things to tell it:
 - Your genres and how you listen (low volume vs. loud, long drives).
-- The direction vs. a reference: e.g. *"start from ResoNix Accurate but +2 dB more sub-bass and calmer highs"*, or *"like EMMA-Ref v3 but with a slightly deeper presence dip for more laid-back vocals"*.
+- The direction vs. a reference: e.g. *"start from ResoNix Accurate but +2 dB more sub-bass and calmer highs"*, or *"like SQ-Comp-Ref but with a slightly deeper presence dip for more laid-back vocals"*.
 - Any complaints about the current sound in the frequency-character language (*boomy, honky, thin, sibilant, no air*…).
 
 Example prompts:
@@ -348,5 +348,5 @@ onto the visualizer.
 **Compare and sanity-check it** against the well-known reference curves — and see what each hump or
 dip means for your instruments — in the interactive comparison tool:
 **[open the curve visualizer online](https://ayukhno.github.io/autosound-tuning-skill/_curve-visualizer.html)**
-(works offline too; drag your `.txt` in, compare it side by side against EMMA-Ref v3 / ResoNix /
+(works offline too; drag your `.txt` in, compare it side by side against SQ-Comp-Ref / ResoNix /
 Audiofrog / Harman / Jazzi / Whitledge, and right-click any point for a frequency-character guide).

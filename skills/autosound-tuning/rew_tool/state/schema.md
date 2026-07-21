@@ -90,7 +90,7 @@ apply.attest(h)                                 # Arbiter entered it in Helix ->
 
 ## Multi-slot registry (`Registry` — issue #5)
 A multi-preset DSP (e.g. Helix Slot 1/2/3) invites a degrading model to anchor on the **wrong slot's**
-gains: the real incident was tuning Slot 3 (EMMA-Ref v3) while the top of a flat state table still
+gains: the real incident was tuning Slot 3 (SQ-Comp-Ref) while the top of a flat state table still
 showed Slot 2 (ResoNix) numbers, so proposed HF filters were computed off a baseline that belonged to
 a different slot. Each preset's snapshots are **already** physically isolated under `<root>/<preset>/`;
 the registry adds the one missing thing — an explicit, machine-checked pointer to the **live** slot.
@@ -107,13 +107,13 @@ the registry adds the one missing thing — an explicit, machine-checked pointer
 ```python
 from state import Registry
 reg = Registry(root)
-reg.set_active("EMMA_Ref_v3")                 # which slot is loaded in the DSP right now
-reg.describe_slot("EMMA_Ref_v3", label="Slot 3")
+reg.set_active("SQ_Comp_Ref")                 # which slot is loaded in the DSP right now
+reg.describe_slot("SQ_Comp_Ref", label="Slot 3")
 print(reg.render())                           # banner + per-slot table (generated dsp-state-current)
 apply.propose(h, delta, registry=reg)         # refuses if h.preset != active slot
 ```
 ```
 python state.py --root <dir> registry show|render
 python state.py --root <dir> registry set-active <preset>
-python state.py --root <dir> registry describe <preset> --label "Slot 3" --note "EMMA-Ref v3"
+python state.py --root <dir> registry describe <preset> --label "Slot 3" --note "SQ-Comp-Ref"
 ```

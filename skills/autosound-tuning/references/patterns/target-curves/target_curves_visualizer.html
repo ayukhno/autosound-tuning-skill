@@ -167,7 +167,7 @@
         <button id="toggleAllBtn" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 16px;cursor:pointer;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.4);">Hide all curves</button>
     </div>
     <h1 id="mainTitle">Acoustic Target Curve Visualizer</h1>
-    <p class="subtitle" id="subtitle">Reference curve for project <b>EMMA-Ref v3</b>. Drag in your own curve, or grab a standard curve from the <a href="https://nonotuningtool.com" target="_blank" rel="noopener" style="color:#a855f7;">Nono Tuning Tool</a> (nonotuningtool.com) — it plots offline once dropped in. Part of the <a href="https://github.com/ayukhno/autosound-tuning-skill" target="_blank" rel="noopener" style="color:#a855f7;">Autosound Tuning Skill</a> project — an AI-guided car-audio tuning workflow that reads what each curve means for your instruments.</p>
+    <p class="subtitle" id="subtitle">Reference curve for project <b>SQ-Comp-Ref</b>. Drag in your own curve, or grab a standard curve from the <a href="https://nonotuningtool.com" target="_blank" rel="noopener" style="color:#a855f7;">Nono Tuning Tool</a> (nonotuningtool.com) — it plots offline once dropped in. Part of the <a href="https://github.com/ayukhno/autosound-tuning-skill" target="_blank" rel="noopener" style="color:#a855f7;">Autosound Tuning Skill</a> project — an AI-guided car-audio tuning workflow that reads what each curve means for your instruments.</p>
 
     <div class="chart-wrapper">
         <canvas id="curvesChart"></canvas>
@@ -186,12 +186,12 @@
 
     <div id="gridWrap" style="position:relative;">
         <div class="info-grid">
-            <div class="card" data-raw-name="EMMA-Ref v3 (Juicy Edition)">
+            <div class="card" data-raw-name="SQ-Comp-Ref (Tight-Sub Edition)">
                 <div class="card-title" style="flex-wrap:wrap;">
                     <span class="dot" style="background-color: #a855f7;"></span>
-                    <span style="flex:1;min-width:0;overflow-wrap:anywhere;">EMMA-Ref v3 (Juicy Edition)</span>
+                    <span style="flex:1;min-width:0;overflow-wrap:anywhere;">SQ-Comp-Ref (Tight-Sub Edition)</span>
                 </div>
-                <div class="card-desc" id="emmaCardDesc"><b>Blends juiciness with SQ accuracy:</b> deep juicy sub-bass (+9.0 dB, similar to Audiofrog), a soft, ultra-smooth roll-off to 200 Hz (fully removes boominess), a presence dip (-2 dB at 2.5 kHz) and a natural HF roll-off (-0.5 dB/oct).</div>
+                <div class="card-desc" id="emmaCardDesc"><b>Our own curve, developed in-house for this project.</b> Blends deep-but-controlled bass with SQ accuracy: a deep sub-bass floor (+9.0 dB, similar to Audiofrog), a soft, ultra-smooth roll-off to 200 Hz (fully removes boominess), a presence dip (-2 dB at 2.5 kHz) and a natural HF roll-off (-0.5 dB/oct).</div>
             </div>
             <div class="card" data-raw-name="Flat">
                 <div class="card-title" style="flex-wrap:wrap;">
@@ -205,7 +205,7 @@
 </div>
 
 <script>
-    // EMMA-Ref v3 reference curve (project). Other curves load via drag-drop.
+    // SQ-Comp-Ref reference curve (project). Other curves load via drag-drop.
     const emmaRefData = [{"x": 20.0, "y": 9.0}, {"x": 20.706, "y": 9.0}, {"x": 21.438, "y": 9.0}, {"x": 22.195, "y": 9.0}, {"x": 22.979, "y": 9.0}, {"x": 23.791, "y": 9.0}, {"x": 24.631, "y": 9.0}, {"x": 25.501, "y": 9.0}, {"x": 26.402, "y": 9.0}, {"x": 27.334, "y": 9.0}, {"x": 28.3, "y": 9.0}, {"x": 29.299, "y": 9.0}, {"x": 30.334, "y": 9.0}, {"x": 31.406, "y": 9.0}, {"x": 32.515, "y": 9.0}, {"x": 33.664, "y": 9.0}, {"x": 34.853, "y": 9.0}, {"x": 36.084, "y": 8.92}, {"x": 37.358, "y": 8.83}, {"x": 38.678, "y": 8.74}, {"x": 40.044, "y": 8.64}, {"x": 41.458, "y": 8.54}, {"x": 42.923, "y": 8.44}, {"x": 44.439, "y": 8.34}, {"x": 46.009, "y": 8.23}, {"x": 47.634, "y": 8.11}, {"x": 49.316, "y": 8.0}, {"x": 51.058, "y": 7.88}, {"x": 52.862, "y": 7.75}, {"x": 54.729, "y": 7.63}, {"x": 56.662, "y": 7.5}, {"x": 58.663, "y": 7.36}, {"x": 60.735, "y": 7.22}, {"x": 62.881, "y": 7.08}, {"x": 65.102, "y": 6.93}, {"x": 67.401, "y": 6.77}, {"x": 69.782, "y": 6.62}, {"x": 72.247, "y": 6.45}, {"x": 74.799, "y": 6.29}, {"x": 77.441, "y": 6.11}, {"x": 80.176, "y": 5.94}, {"x": 83.008, "y": 5.76}, {"x": 85.94, "y": 5.57}, {"x": 88.976, "y": 5.38}, {"x": 92.118, "y": 5.18}, {"x": 95.372, "y": 4.98}, {"x": 98.741, "y": 4.77}, {"x": 102.229, "y": 4.56}, {"x": 105.84, "y": 4.34}, {"x": 109.578, "y": 4.12}, {"x": 113.449, "y": 3.89}, {"x": 117.456, "y": 3.66}, {"x": 121.604, "y": 3.42}, {"x": 125.9, "y": 3.18}, {"x": 130.347, "y": 2.93}, {"x": 134.951, "y": 2.68}, {"x": 139.718, "y": 2.43}, {"x": 144.653, "y": 2.18}, {"x": 149.762, "y": 1.92}, {"x": 155.052, "y": 1.66}, {"x": 160.529, "y": 1.4}, {"x": 166.199, "y": 1.15}, {"x": 172.069, "y": 0.89}, {"x": 178.147, "y": 0.65}, {"x": 184.44, "y": 0.42}, {"x": 190.954, "y": 0.21}, {"x": 197.699, "y": 0.03}, {"x": 204.682, "y": -0.0}, {"x": 211.912, "y": -0.0}, {"x": 219.397, "y": -0.0}, {"x": 227.147, "y": -0.0}, {"x": 235.17, "y": -0.0}, {"x": 243.477, "y": -0.0}, {"x": 252.077, "y": -0.0}, {"x": 260.98, "y": -0.0}, {"x": 270.199, "y": -0.0}, {"x": 279.743, "y": -0.0}, {"x": 289.624, "y": -0.0}, {"x": 299.854, "y": -0.0}, {"x": 310.445, "y": -0.0}, {"x": 321.411, "y": -0.0}, {"x": 332.763, "y": -0.0}, {"x": 344.517, "y": -0.0}, {"x": 356.686, "y": -0.01}, {"x": 369.285, "y": -0.01}, {"x": 382.329, "y": -0.01}, {"x": 395.833, "y": -0.01}, {"x": 409.815, "y": -0.01}, {"x": 424.29, "y": -0.02}, {"x": 439.277, "y": -0.02}, {"x": 454.793, "y": -0.02}, {"x": 470.857, "y": -0.03}, {"x": 487.489, "y": -0.03}, {"x": 504.708, "y": -0.04}, {"x": 522.535, "y": -0.05}, {"x": 540.992, "y": -0.05}, {"x": 560.101, "y": -0.06}, {"x": 579.885, "y": -0.07}, {"x": 600.367, "y": -0.09}, {"x": 621.573, "y": -0.1}, {"x": 643.528, "y": -0.12}, {"x": 666.259, "y": -0.14}, {"x": 689.792, "y": -0.16}, {"x": 714.157, "y": -0.18}, {"x": 739.383, "y": -0.2}, {"x": 765.499, "y": -0.23}, {"x": 792.538, "y": -0.26}, {"x": 820.532, "y": -0.3}, {"x": 849.514, "y": -0.33}, {"x": 879.521, "y": -0.37}, {"x": 910.587, "y": -0.42}, {"x": 942.751, "y": -0.46}, {"x": 976.05, "y": -0.51}, {"x": 1010.526, "y": -0.57}, {"x": 1046.22, "y": -0.65}, {"x": 1083.174, "y": -0.74}, {"x": 1121.434, "y": -0.83}, {"x": 1161.045, "y": -0.92}, {"x": 1202.055, "y": -1.01}, {"x": 1244.514, "y": -1.1}, {"x": 1288.473, "y": -1.2}, {"x": 1333.984, "y": -1.3}, {"x": 1381.103, "y": -1.4}, {"x": 1429.886, "y": -1.49}, {"x": 1480.392, "y": -1.59}, {"x": 1532.682, "y": -1.69}, {"x": 1586.819, "y": -1.79}, {"x": 1642.869, "y": -1.88}, {"x": 1700.898, "y": -1.97}, {"x": 1760.977, "y": -2.06}, {"x": 1823.178, "y": -2.15}, {"x": 1887.576, "y": -2.23}, {"x": 1954.248, "y": -2.3}, {"x": 2023.276, "y": -2.38}, {"x": 2094.742, "y": -2.44}, {"x": 2168.732, "y": -2.5}, {"x": 2245.336, "y": -2.55}, {"x": 2324.645, "y": -2.59}, {"x": 2406.756, "y": -2.63}, {"x": 2491.767, "y": -2.66}, {"x": 2579.781, "y": -2.68}, {"x": 2670.903, "y": -2.7}, {"x": 2765.244, "y": -2.7}, {"x": 2862.918, "y": -2.7}, {"x": 2964.041, "y": -2.7}, {"x": 3068.737, "y": -2.68}, {"x": 3177.13, "y": -2.66}, {"x": 3289.352, "y": -2.64}, {"x": 3405.538, "y": -2.61}, {"x": 3525.828, "y": -2.58}, {"x": 3650.367, "y": -2.54}, {"x": 3779.305, "y": -2.5}, {"x": 3912.797, "y": -2.45}, {"x": 4051.004, "y": -2.41}, {"x": 4194.093, "y": -2.36}, {"x": 4342.236, "y": -2.31}, {"x": 4495.612, "y": -2.26}, {"x": 4654.405, "y": -2.21}, {"x": 4818.807, "y": -2.16}, {"x": 4989.016, "y": -2.12}, {"x": 5165.238, "y": -2.07}, {"x": 5347.683, "y": -2.03}, {"x": 5536.573, "y": -1.99}, {"x": 5732.135, "y": -1.95}, {"x": 5934.605, "y": -1.92}, {"x": 6144.226, "y": -1.89}, {"x": 6361.251, "y": -1.86}, {"x": 6585.943, "y": -1.83}, {"x": 6818.57, "y": -1.81}, {"x": 7059.415, "y": -1.79}, {"x": 7308.766, "y": -1.77}, {"x": 7566.925, "y": -1.76}, {"x": 7834.203, "y": -1.75}, {"x": 8110.921, "y": -1.75}, {"x": 8397.414, "y": -1.74}, {"x": 8694.026, "y": -1.74}, {"x": 9001.115, "y": -1.74}, {"x": 9319.051, "y": -1.75}, {"x": 9648.217, "y": -1.76}, {"x": 9989.01, "y": -1.76}, {"x": 10341.84, "y": -1.77}, {"x": 10707.133, "y": -1.79}, {"x": 11085.329, "y": -1.8}, {"x": 11476.883, "y": -1.82}, {"x": 11882.268, "y": -1.83}, {"x": 12301.972, "y": -1.85}, {"x": 12736.5, "y": -1.87}, {"x": 13186.377, "y": -1.89}, {"x": 13652.144, "y": -1.91}, {"x": 14134.363, "y": -1.93}, {"x": 14633.614, "y": -1.95}, {"x": 15150.501, "y": -1.97}, {"x": 15685.644, "y": -2.0}, {"x": 16239.69, "y": -2.02}, {"x": 16813.306, "y": -2.04}, {"x": 17407.183, "y": -2.07}, {"x": 18022.037, "y": -2.09}, {"x": 18658.608, "y": -2.11}, {"x": 19317.664, "y": -2.14}, {"x": 20000.0, "y": -2.16}];
 
     // Flat 0 dB reference (2 points is enough — Chart.js draws a straight
@@ -213,7 +213,7 @@
     const flatData = [{ x: 20, y: 0 }, { x: 20000, y: 0 }];
 
     // --- i18n: UI + built-in descriptions + frequency-character labels ---
-    // Curve NAMES (EMMA-Ref v3, ResoNix, Harman, Flat, …) stay in English/original
+    // Curve NAMES (SQ-Comp-Ref, ResoNix, Harman, Flat, …) stay in English/original
     // in every language — they're proper nouns, same convention as the rest of
     // the car-audio community. Only prose (descriptions, labels, UI chrome) is translated.
     const LANG_LS = 'acv_lang_v1';
@@ -253,7 +253,7 @@
     ];
     const DESC_TOKENS = [
         ['laidback'], ['resonix', 'accurate'], ['harman'], ['audiofrog'],
-        ['jazzi'], ['whitledge'], ['emmaref'], ['flat'],
+        ['jazzi'], ['whitledge'], ['sqcompref'], ['flat'],
     ];
     function fmtHz(v) { return v >= 1000 ? (v / 1000).toFixed(v % 1000 ? 1 : 0) + 'k' : String(v); }
     function fmtRange(range) { return fmtHz(range[0]) + '–' + fmtHz(range[1]) + ' Hz'; }
@@ -418,7 +418,7 @@
             delTitle: 'Delete curve', loadedPts: n => 'Loaded, ' + n + ' points',
             clickToggleTitle: 'Click to hide / show', noPairsAlert: 'No freq/dB pairs found in file.',
             offsetPrompt: v => 'Suggested normalization offset: ' + v + ' dB (curve will be shifted so the 200–500 Hz band sits near 0 dB). Adjust the value if you want a different reference level, or keep it as is:',
-            emmaCardDesc: '<b>Blends juiciness with SQ accuracy:</b> deep juicy sub-bass (+9.0 dB, similar to Audiofrog), a soft, ultra-smooth roll-off to 200 Hz (fully removes boominess), a presence dip (-2 dB at 2.5 kHz) and a natural HF roll-off (-0.5 dB/oct).',
+            emmaCardDesc: '<b>Our own curve, developed in-house for this project.</b> Blends deep-but-controlled bass with SQ accuracy: a deep sub-bass floor (+9.0 dB, similar to Audiofrog), a soft, ultra-smooth roll-off to 200 Hz (fully removes boominess), a presence dip (-2 dB at 2.5 kHz) and a natural HF roll-off (-0.5 dB/oct).',
             flatCardDesc: '0 dB reference line — the neutral baseline. Useful for reading other curves\' absolute deviation at a glance.',
             descText: [
                 '<b>ResoNix Laid-Back:</b> same signature, more bass and a tamed top end — warmer, less fatiguing.',
@@ -427,7 +427,7 @@
                 '<b>Audiofrog (A. Wehmeyer):</b> the naturalness benchmark — smooth bass, gentle HF roll-off, great timbre.',
                 '<b>Jazzi:</b> a community classic — bass +~10 dB and a presence dip at 2.5 kHz for a deep soundstage.',
                 '<b>Half Whitledge:</b> a warm rock character — meaty midbass, rolled-off top end, dense vocals.',
-                '<b>EMMA-Ref v3 (project):</b> juicy sub-bass, ultra-smooth roll-off to 200 Hz, presence dip −2 dB @2.5 kHz.',
+                '<b>SQ-Comp-Ref (project):</b> deep, controlled sub-bass, ultra-smooth roll-off to 200 Hz, presence dip −2 dB @2.5 kHz.',
                 '<b>Flat:</b> 0 dB reference — no tonal shaping, useful as a neutral baseline.',
             ],
             compareBtn: 'Compare curves', compareTitle: 'Curve comparison',
@@ -447,7 +447,7 @@
             delTitle: 'Видалити криву', loadedPts: n => 'Завантажено, ' + n + ' точок',
             clickToggleTitle: 'Клац — сховати / показати', noPairsAlert: 'У файлі не знайдено пар частота/дБ.',
             offsetPrompt: v => 'Пропонований офсет нормалізації: ' + v + ' дБ (крива зсунеться так, щоб смуга 200–500 Гц була близько до 0 дБ). Зміни значення, якщо потрібен інший рівень відліку, або залиш як є:',
-            emmaCardDesc: '<b>Поєднання соковитості та SQ-точності:</b> глибокий соковитий суббас (+9.0 дБ, як в Audiofrog), м’який, надплавний спад до 200 Гц (повністю прибирає бубніння), яма присутності (-2 дБ на 2.5 кГц) та природний спад ВЧ (-0.5 дБ/окт).',
+            emmaCardDesc: '<b>Наша власна крива, розроблена всередині проєкту.</b> Поєднання глибокого, але контрольованого басу та SQ-точності: глибокий суббас (+9.0 дБ, як в Audiofrog), м’який, надплавний спад до 200 Гц (повністю прибирає бубніння), яма присутності (-2 дБ на 2.5 кГц) та природний спад ВЧ (-0.5 дБ/окт).',
             flatCardDesc: 'Лінія 0 дБ — нейтральна база. Зручно бачити абсолютне відхилення інших кривих одним поглядом.',
             descText: [
                 '<b>ResoNix Laid-Back:</b> той самий почерк, більше басу й притишений верх — тепліше, менш втомлює.',
@@ -456,7 +456,7 @@
                 '<b>Audiofrog (A. Wehmeyer):</b> еталон натуральності — плавний бас, делікатний спад ВЧ, чудові тембри.',
                 '<b>Jazzi:</b> community-класика — бас +~10 дБ і яма присутності на 2.5 кГц для глибокої сцени.',
                 '<b>Half Whitledge:</b> теплий рок-характер — м’ясистий мідбас, завалений верх, щільний вокал.',
-                '<b>EMMA-Ref v3 (проєкт):</b> соковитий суббас, надплавний спад до 200 Гц, яма присутності −2 дБ @2.5 кГц.',
+                '<b>SQ-Comp-Ref (проєкт):</b> глибокий, але контрольований суббас, надплавний спад до 200 Гц, яма присутності −2 дБ @2.5 кГц.',
                 '<b>Flat:</b> референс 0 дБ — без тональної корекції, зручно як нейтральна база.',
             ],
             compareBtn: 'Порівняти криві', compareTitle: 'Порівняння кривих',
@@ -476,7 +476,7 @@
             delTitle: 'Kurve löschen', loadedPts: n => 'Geladen, ' + n + ' Punkte',
             clickToggleTitle: 'Klicken zum Ein-/Ausblenden', noPairsAlert: 'Keine Frequenz/dB-Paare in der Datei gefunden.',
             offsetPrompt: v => 'Vorgeschlagener Normalisierungs-Offset: ' + v + ' dB (die Kurve wird so verschoben, dass der Bereich 200–500 Hz nahe 0 dB liegt). Ändere den Wert bei Bedarf, oder übernimm ihn so:',
-            emmaCardDesc: '<b>Verbindet Fülle mit SQ-Präzision:</b> tiefer, satter Subbass (+9.0 dB, ähnlich wie Audiofrog), ein sanfter, ultra-glatter Abfall bis 200 Hz (beseitigt Dröhnen vollständig), eine Präsenzsenke (-2 dB bei 2.5 kHz) und ein natürlicher Höhenabfall (-0.5 dB/Okt).',
+            emmaCardDesc: '<b>Unsere eigene, projektintern entwickelte Kurve.</b> Verbindet tiefen, aber kontrollierten Bass mit SQ-Präzision: ein tiefes Subbass-Fundament (+9.0 dB, ähnlich wie Audiofrog), ein sanfter, ultra-glatter Abfall bis 200 Hz (beseitigt Dröhnen vollständig), eine Präsenzsenke (-2 dB bei 2.5 kHz) und ein natürlicher Höhenabfall (-0.5 dB/Okt).',
             flatCardDesc: '0-dB-Referenzlinie — die neutrale Basislinie. Praktisch, um die absolute Abweichung anderer Kurven auf einen Blick zu sehen.',
             descText: [
                 '<b>ResoNix Laid-Back:</b> gleicher Charakter, mehr Bass und ein gezähmter Hochtonbereich — wärmer, weniger ermüdend.',
@@ -485,7 +485,7 @@
                 '<b>Audiofrog (A. Wehmeyer):</b> der Maßstab für Natürlichkeit — sanfter Bass, sanfter Höhenabfall, tolles Timbre.',
                 '<b>Jazzi:</b> ein Community-Klassiker — Bass +~10 dB und eine Präsenzsenke bei 2.5 kHz für eine tiefe Bühne.',
                 '<b>Half Whitledge:</b> ein warmer Rock-Charakter — kräftiger Mitteltonbass, abfallender Hochtonbereich, dichter Gesang.',
-                '<b>EMMA-Ref v3 (Projekt):</b> satter Subbass, ultra-glatter Abfall bis 200 Hz, Präsenzsenke −2 dB @2.5 kHz.',
+                '<b>SQ-Comp-Ref (Projekt):</b> tiefer, aber kontrollierter Subbass, ultra-glatter Abfall bis 200 Hz, Präsenzsenke −2 dB @2.5 kHz.',
                 '<b>Flat:</b> 0-dB-Referenz — keine tonale Formung, praktisch als neutrale Basislinie.',
             ],
             compareBtn: 'Kurven vergleichen', compareTitle: 'Kurvenvergleich',
@@ -505,7 +505,7 @@
             delTitle: 'Usuń krzywą', loadedPts: n => 'Wczytano, ' + n + ' punktów',
             clickToggleTitle: 'Kliknij, aby ukryć / pokazać', noPairsAlert: 'Nie znaleziono par częstotliwość/dB w pliku.',
             offsetPrompt: v => 'Proponowane przesunięcie normalizacji: ' + v + ' dB (krzywa zostanie przesunięta tak, aby pasmo 200–500 Hz było blisko 0 dB). Zmień wartość, jeśli chcesz inny poziom odniesienia, albo zostaw bez zmian:',
-            emmaCardDesc: '<b>Łączy soczystość z precyzją SQ:</b> głęboki, soczysty subbas (+9.0 dB, podobnie jak Audiofrog), miękkie, bardzo płynne opadanie do 200 Hz (całkowicie eliminuje dudnienie), zapadnięcie obecności (-2 dB przy 2.5 kHz) oraz naturalny spadek wysokich tonów (-0.5 dB/okt).',
+            emmaCardDesc: '<b>Nasza własna krzywa, opracowana wewnątrz projektu.</b> Łączy głęboki, ale kontrolowany bas z precyzją SQ: głęboki subbas (+9.0 dB, podobnie jak Audiofrog), miękkie, bardzo płynne opadanie do 200 Hz (całkowicie eliminuje dudnienie), zapadnięcie obecności (-2 dB przy 2.5 kHz) oraz naturalny spadek wysokich tonów (-0.5 dB/okt).',
             flatCardDesc: 'Linia referencyjna 0 dB — neutralna baza. Ułatwia odczyt bezwzględnego odchylenia innych krzywych na pierwszy rzut oka.',
             descText: [
                 '<b>ResoNix Laid-Back:</b> ten sam charakter, więcej basu i stonowana góra — cieplej, mniej męcząco.',
@@ -514,7 +514,7 @@
                 '<b>Audiofrog (A. Wehmeyer):</b> wzorzec naturalności — gładki bas, delikatny spadek wysokich tonów, świetna barwa.',
                 '<b>Jazzi:</b> klasyk społeczności — bas +~10 dB i zapadnięcie obecności przy 2.5 kHz dla głębokiej sceny.',
                 '<b>Half Whitledge:</b> ciepły rockowy charakter — mięsisty midbas, opadająca góra, gęsty wokal.',
-                '<b>EMMA-Ref v3 (projekt):</b> soczysty subbas, bardzo płynne opadanie do 200 Hz, zapadnięcie obecności −2 dB @2.5 kHz.',
+                '<b>SQ-Comp-Ref (projekt):</b> głęboki, ale kontrolowany subbas, bardzo płynne opadanie do 200 Hz, zapadnięcie obecności −2 dB @2.5 kHz.',
                 '<b>Flat:</b> referencja 0 dB — bez kształtowania tonalnego, przydatna jako neutralna baza.',
             ],
             compareBtn: 'Porównaj krzywe', compareTitle: 'Porównanie krzywych',
@@ -625,7 +625,7 @@
         data: {
             datasets: [
                 {
-                    label: 'EMMA-Ref v3 (Juicy Edition)',
+                    label: 'SQ-Comp-Ref (Tight-Sub Edition)',
                     data: emmaRefData,
                     borderColor: '#a855f7',
                     borderWidth: 4,
@@ -1184,7 +1184,7 @@
             const mainTitle = document.getElementById('mainTitle'); if (mainTitle) mainTitle.textContent = s.mainTitle;
             const subtitle = document.getElementById('subtitle');
             const readmeUrl = 'https://github.com/ayukhno/autosound-tuning-skill/blob/main/README' + (lang === 'en' ? '' : '.' + lang) + '.md';
-            if (subtitle) subtitle.innerHTML = s.subtitlePre + '<b>EMMA-Ref v3</b>' + s.subtitleMid +
+            if (subtitle) subtitle.innerHTML = s.subtitlePre + '<b>SQ-Comp-Ref</b>' + s.subtitleMid +
                 '<a href="https://nonotuningtool.com" target="_blank" rel="noopener" style="color:#a855f7;">Nono Tuning Tool</a> (nonotuningtool.com)' + s.subtitlePost +
                 ' ' + s.subtitlePromoPre + '<a href="' + readmeUrl + '" target="_blank" rel="noopener" style="color:#a855f7;">Autosound Tuning Skill</a>' + s.subtitlePromoPost;
             const dropZoneEl = document.getElementById('dropZone');
@@ -1198,7 +1198,10 @@
             document.querySelectorAll('.info-grid .card').forEach(function (c) {
                 const rawName = c.dataset.rawName;
                 const descEl = c.querySelector('.card-desc');
-                if (descEl && rawName) {
+                // Built-in cards keep their own detailed description (set above via
+                // emmaCardDesc/flatCardDesc, which carry an id). Only loaded curves
+                // get their description resolved from descFor / the point count.
+                if (descEl && rawName && !descEl.id) {
                     const d = descFor(rawName);
                     if (d) descEl.innerHTML = d;
                     else if (c.dataset.ptsLen) descEl.innerHTML = s.loadedPts(c.dataset.ptsLen);

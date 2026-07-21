@@ -2,7 +2,14 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
-## [v2.6.2] — 2026-07-19
+## [Unreleased]
+
+### Changed
+- **Renamed the bundled target curve `EMMA-Ref v3` → `SQ-Comp-Ref`** (character tag `Tight-Sub Edition`). "EMMA" is a registered trademark of the European Mobile Media Association; the curve is our own, developed in-house, so the name is changed to avoid implying any affiliation. The file is now `curves/SQ-Comp-Ref_0db_REW.txt`; references and the visualizer's built-in curve, descriptions, and match token were updated across all languages. Curve data is unchanged.
+
+### Added
+- **Standalone curve visualizer** (`_curve-visualizer.html` at the repo root, served via GitHub Pages): 4-language UI (EN/UA/DE/PL), light/dark and wide/narrow toggles, a Flat reference curve, an editable normalization offset on import, right-click frequency-character guide (boost/cut characters, per-band descriptions, example instruments, band + octave width), and a curve-comparison table with relative tonal-trend wording. Descriptions and translations were reviewed via the Gemini advisor.
+- **FAQ:** "Can I build my own target curve?"
 
 Field-harvest release from three sessions (2026-07-16/17/19: center realign + Chebyshev O2 + tone-ladder vT1; gain structure vG1/vG1.1; stage/bass session v4.5 + pan/piano rounds vP1/vP2). Twenty-two confirmed lessons folded. No engine changes.
 
@@ -156,7 +163,7 @@ State substrate + field-harvested phase/summation tools + license cleanup + dogf
 - **[provisional] Off-axis tweeter idea-to-try** (`voicing-by-ear.md`): before keeping single-mic software HF cuts on the far/off-axis tweeter, A/B their bypass by ear — target-matching can choke decay/air (field case; geometry-dependent, NOT a rule).
 
 ### Removed
-- **The 6 bundled third-party target curves** (Audiofrog, Harman, Jazzi, ResoNix Accurate, ResoNix Laid-Back, Half Whitledge) — they are other people's published curves and we don't redistribute them. Users download them from the **Nono Tuning Tool** (nonotuningtool.com) and drop them into `target-curves/curves/` or onto the visualizer (which keeps our own character descriptions and auto-matches them by name). The folder `NTT/` was renamed to **`curves/`**; the only bundled curve is now **EMMA-Ref v3** (developed within this project, materialized as `curves/EMMA-Ref_v3_0db_REW.txt`).
+- **The 6 bundled third-party target curves** (Audiofrog, Harman, Jazzi, ResoNix Accurate, ResoNix Laid-Back, Half Whitledge) — they are other people's published curves and we don't redistribute them. Users download them from the **Nono Tuning Tool** (nonotuningtool.com) and drop them into `target-curves/curves/` or onto the visualizer (which keeps our own character descriptions and auto-matches them by name). The folder `NTT/` was renamed to **`curves/`**; the only bundled curve is now **SQ-Comp-Ref** (developed within this project, materialized as `curves/SQ-Comp-Ref_0db_REW.txt`).
 
 ### Notes
 - A token-handshake + `override` "control-plane" was built and then **removed by design** — the substrate stays simple; compliance is model-choice + human-in-the-loop, not scaffolding.

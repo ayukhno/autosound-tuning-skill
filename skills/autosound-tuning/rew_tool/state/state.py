@@ -289,7 +289,7 @@ class Registry:
     pointer.
 
     A multi-preset processor (e.g. Helix Slot 1/2/3) invites a degrading model to anchor on the
-    WRONG slot's gains: the real incident (issue #5) was tuning Slot 3 (EMMA-Ref v3) while the top
+    WRONG slot's gains: the real incident (issue #5) was tuning Slot 3 (SQ-Comp-Ref) while the top
     of a flat state table showed Slot 2 (ResoNix) numbers, so proposed HF filters were computed off
     a −8.0 dB baseline that belonged to a different slot. Each preset's snapshots already live
     physically isolated under `<root>/<preset>/` (PresetHistory); this registry adds the one missing
@@ -345,7 +345,7 @@ class Registry:
         return preset
 
     def describe_slot(self, preset, label=None, note=None):
-        """Attach an optional human label/desc to a slot (e.g. label='Slot 3', note='EMMA-Ref v3')."""
+        """Attach an optional human label/desc to a slot (e.g. label='Slot 3', note='SQ-Comp-Ref')."""
         reg = self.load()
         entry = reg.setdefault("slots", {}).setdefault(preset, {})
         if label is not None:
@@ -523,7 +523,7 @@ def _selftest():
     reg = Registry(root)
     assert set(reg.list_presets()) == {"SQ_Jazzi", "ResoNix"}, reg.list_presets()
     try:
-        reg.set_active("EMMA_Ref_v3")                          # no history → deterministic refusal
+        reg.set_active("SQ_Comp_Ref")                          # no history → deterministic refusal
         raise AssertionError("set_active accepted a preset with no history")
     except ValueError:
         pass

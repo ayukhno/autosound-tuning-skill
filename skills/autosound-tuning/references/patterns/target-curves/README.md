@@ -2,11 +2,11 @@
 
 The comparison tool + this project's reference curve. A target curve is a **starting shape**,
 not a finish and not a level — pick or build one **per project** (the bundled default is
-EMMA-Ref v3). Full guide: [`target_curves_guide.md`](./target_curves_guide.md).
+SQ-Comp-Ref). Full guide: [`target_curves_guide.md`](./target_curves_guide.md).
 
 ## Contents
 - **`curves/`** — loadable target curves (`freq  dB` text, REW/NTT format). Ships with
-  **`EMMA-Ref_v3_0db_REW.txt`**, a reference curve **developed within this project**. Every `.txt`
+  **`SQ-Comp-Ref_0db_REW.txt`**, a reference curve **developed within this project**. Every `.txt`
   dropped here is auto-read by the tools — add your own, or ones you download (below).
 - **`target_curves_guide.md`** — character comparison, how to load a curve, and building your own.
 - **`target_curves_visualizer.html`** — interactive comparison (open in a browser; drag any `.txt` onto it).

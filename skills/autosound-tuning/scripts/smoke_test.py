@@ -69,18 +69,18 @@ def _apply_selftest():
 
 
 def _issue5_scenario():
-    """The real issue-#5 incident, end-to-end: active slot = EMMA-Ref v3, a change aimed at the
+    """The real issue-#5 incident, end-to-end: active slot = SQ-Comp-Ref, a change aimed at the
     ResoNix slot must be REFUSED (you can't compute filters off a neighbour slot's baseline)."""
     import apply
     import state
     root = tempfile.mkdtemp(prefix="autosound_smoke_")
-    state.PresetHistory(root, "EMMA_Ref_v3").snapshot(state._sample_state(), note="emma")
+    state.PresetHistory(root, "SQ_Comp_Ref").snapshot(state._sample_state(), note="emma")
     reso = state.PresetHistory(root, "ResoNix")
     reso.snapshot(state._sample_state(), note="reso")
     reg = state.Registry(root)
-    reg.set_active("EMMA_Ref_v3")
+    reg.set_active("SQ_Comp_Ref")
     banner = reg.render()
-    assert "ACTIVE SLOT IN THE DSP:** `EMMA_Ref_v3`" in banner, "active-slot banner missing/wrong"
+    assert "ACTIVE SLOT IN THE DSP:** `SQ_Comp_Ref`" in banner, "active-slot banner missing/wrong"
     try:
         apply.propose(reso, {"tw-L": {"gain_db": -8.0}}, registry=reg)   # aimed at the NON-active slot
         raise AssertionError("gate did NOT refuse a cross-slot proposal")
@@ -115,7 +115,7 @@ def main():
     print("\n[core tooling — deterministic, offline]")
     check("state.py selftest (versioned hard-params state)", _state_selftest)
     check("apply.py selftest (apply-change gate)", _apply_selftest)
-    check("issue #5 (active=EMMA-Ref v3 → propose to ResoNix REFUSED)", _issue5_scenario)
+    check("issue #5 (active=SQ-Comp-Ref → propose to ResoNix REFUSED)", _issue5_scenario)
     check("gates selftest (side_effect + presweep_safety)", _gates_selftest)
     check("rew_tool selftest (get_fr RTA/sweep phase branch + FR analysis)", _rew_tool_selftest)
 

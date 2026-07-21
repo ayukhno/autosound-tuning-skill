@@ -1,4 +1,4 @@
-# EMMA-Ref v3 (Juicy Edition)
+# SQ-Comp-Ref (Tight-Sub Edition)
 # Developed within the autosound-tuning project
 # https://github.com/ayukhno/autosound-tuning-skill
 # Reference target curve, magnitude only (dB), 0 dB anchored
