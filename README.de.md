@@ -132,7 +132,7 @@ autosound-tuning-skill/        ein Claude-Code-Plugin
     └── curves.html     Zielkurven-Visualisierer
 ```
 
-▶ **[Öffne den Zielkurven-Visualisierer online](https://ayukhno.github.io/autosound-tuning-skill/curve-visualizer.html?lang=de)** (oder öffne `skills/autosound-tuning/curves.html` lokal) — ziehe deine eigene Kurve hinein oder eine Standardkurve vom [Nono Tuning Tool](https://nonotuningtool.com), rechtsklicke auf einen Punkt im Diagramm für den Frequenzcharakter-Guide, und vergleiche Kurven direkt nebeneinander. Es ist eine einzige eigenständige Datei (funktioniert offline) — mit **Speichern unter** im Browser behältst du deine eigene Kopie; die integrierten Kurven und der Drag-and-drop-Import funktionieren weiterhin.
+▶ **[Öffne den Zielkurven-Visualisierer online](https://ayukhno.github.io/autosound-tuning-skill/_curve-visualizer.html?lang=de)** (oder öffne `skills/autosound-tuning/curves.html` lokal) — ziehe deine eigene Kurve hinein oder eine Standardkurve vom [Nono Tuning Tool](https://nonotuningtool.com), rechtsklicke auf einen Punkt im Diagramm für den Frequenzcharakter-Guide, und vergleiche Kurven direkt nebeneinander. Es ist eine einzige eigenständige Datei (funktioniert offline) — mit **Speichern unter** im Browser behältst du deine eigene Kopie; die integrierten Kurven und der Drag-and-drop-Import funktionieren weiterhin.
 
 Die unabhängige Review-Methode (Kritiker/Berater/Schiedsrichter, Anti-Anchoring) ist als `references/core/review-loop.md` gebündelt; die [Fallstudie](case-study-mode-a-bass-2026-07-15.md) zeigt sie an einem echten, schwierigen Fall in Aktion.
 
