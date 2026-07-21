@@ -315,7 +315,7 @@
         { g:'emma2026', e:'🔺', n:{"en": "Triangle", "uk": "Трикутник", "de": "Triangel", "pl": "Trójkąt"}, f:[2000, 20000], h:null },
     ];
     const INSTR_GROUPS_ORDER = ['vocal','perc','strings','winds','keys','emma2024','emma2026'];
-    const INSTR_STR = { groups: {"vocal": {"en": "Vocal", "uk": "Вокал", "de": "Gesang", "pl": "Wokal"}, "perc": {"en": "Percussion", "uk": "Ударні", "de": "Percussion", "pl": "Perkusyjne"}, "strings": {"en": "Strings", "uk": "Струнні", "de": "Streicher", "pl": "Strunowe"}, "winds": {"en": "Winds", "uk": "Духові", "de": "Blasinstrumente", "pl": "Dęte"}, "keys": {"en": "Keys & Other", "uk": "Клавішні та інше", "de": "Tasten & Andere", "pl": "Klawiszowe i inne"}, "emma2024": {"en": "EMMA 2024", "uk": "EMMA 2024", "de": "EMMA 2024", "pl": "EMMA 2024"}, "emma2026": {"en": "EMMA 2026", "uk": "EMMA 2026", "de": "EMMA 2026", "pl": "EMMA 2026"}}, ui: {"instruments": {"en": "Instruments", "uk": "Інструменти", "de": "Instrumente", "pl": "Instrumenty"}, "ranges": {"en": "Instrument ranges", "uk": "Діапазони інструментів", "de": "Instrumentenbereiche", "pl": "Zakresy instrumentów"}, "selectUpTo": {"en": "Select up to 3", "uk": "Виберіть до 3-х", "de": "Bis zu 3 auswählen", "pl": "Wybierz do 3"}, "fundamentals": {"en": "Fundamentals", "uk": "Основні тони", "de": "Grundtöne", "pl": "Tony podstawowe"}, "harmonics": {"en": "Harmonics", "uk": "Гармоніки", "de": "Obertöne", "pl": "Harmoniczne"}} };
+    const INSTR_STR = { groups: {"vocal": {"en": "Vocal", "uk": "Вокал", "de": "Gesang", "pl": "Wokal"}, "perc": {"en": "Percussion", "uk": "Ударні", "de": "Percussion", "pl": "Perkusyjne"}, "strings": {"en": "Strings", "uk": "Струнні", "de": "Streicher", "pl": "Strunowe"}, "winds": {"en": "Winds", "uk": "Духові", "de": "Blasinstrumente", "pl": "Dęte"}, "keys": {"en": "Keys & Other", "uk": "Клавішні та інше", "de": "Tasten & Andere", "pl": "Klawiszowe i inne"}, "emma2024": {"en": "EMMA 2024", "uk": "EMMA 2024", "de": "EMMA 2024", "pl": "EMMA 2024"}, "emma2026": {"en": "EMMA 2026", "uk": "EMMA 2026", "de": "EMMA 2026", "pl": "EMMA 2026"}}, ui: {"instruments": {"en": "Musical instruments", "uk": "Музичні інструменти", "de": "Musikinstrumente", "pl": "Instrumenty muzyczne"}, "ranges": {"en": "Instrument ranges", "uk": "Діапазони інструментів", "de": "Instrumentenbereiche", "pl": "Zakresy instrumentów"}, "selectUpTo": {"en": "Select up to 3", "uk": "Виберіть до 3-х", "de": "Bis zu 3 auswählen", "pl": "Wybierz do 3"}, "fundamentals": {"en": "Fundamentals", "uk": "Основні тони", "de": "Grundtöne", "pl": "Tony podstawowe"}, "harmonics": {"en": "Harmonics", "uk": "Гармоніки", "de": "Obertöne", "pl": "Harmoniczne"}} };
     const DESC_TOKENS = [
         ['laidback'], ['resonix', 'accurate'], ['harman'], ['audiofrog'],
         ['jazzi'], ['whitledge'], ['sqcompref'], ['flat'],
@@ -495,7 +495,7 @@
                 '<b>SQ-Comp-Ref (project):</b> deep, controlled sub-bass, ultra-smooth roll-off to 200 Hz, presence dip −2 dB @2.5 kHz.',
                 '<b>Flat:</b> 0 dB reference — no tonal shaping, useful as a neutral baseline.',
             ],
-            compareBtn: 'Compare', clearLoaded: 'Clear', compareTitle: 'Curve comparison',
+            compareBtn: 'Compare current curves', clearLoaded: 'Clear loaded curves', clearConfirm: 'Remove all loaded curves? The built-in curves stay.', compareTitle: 'Curve comparison',
             compareNeedMore: 'Show (un-hide) at least 2 curves to compare.',
             compareBaseline: 'Baseline:', chooseBaseline: 'Baseline curve (columns are compared against it):',
             bandCol: 'Frequency band', compareClose: 'Close', egWord: 'e.g.',
@@ -524,7 +524,7 @@
                 '<b>SQ-Comp-Ref (проєкт):</b> глибокий, але контрольований суббас, надплавний спад до 200 Гц, яма присутності −2 дБ @2.5 кГц.',
                 '<b>Flat:</b> референс 0 дБ — без тональної корекції, зручно як нейтральна база.',
             ],
-            compareBtn: 'Порівняти', clearLoaded: 'Очистити', compareTitle: 'Порівняння кривих',
+            compareBtn: 'Порівняти поточні криві', clearLoaded: 'Очистити завантажені криві', clearConfirm: 'Прибрати всі завантажені криві? Вбудовані лишаться.', compareTitle: 'Порівняння кривих',
             compareNeedMore: 'Покажи (не приховуй) щонайменше 2 криві для порівняння.',
             compareBaseline: 'База:', chooseBaseline: 'Базова крива (стовпчики порівнюються з нею):',
             bandCol: 'Смуга частот', compareClose: 'Закрити', egWord: 'напр.',
@@ -553,7 +553,7 @@
                 '<b>SQ-Comp-Ref (Projekt):</b> tiefer, aber kontrollierter Subbass, ultra-glatter Abfall bis 200 Hz, Präsenzsenke −2 dB @2.5 kHz.',
                 '<b>Flat:</b> 0-dB-Referenz — keine tonale Formung, praktisch als neutrale Basislinie.',
             ],
-            compareBtn: 'Vergleichen', clearLoaded: 'Leeren', compareTitle: 'Kurvenvergleich',
+            compareBtn: 'Aktuelle Kurven vergleichen', clearLoaded: 'Geladene Kurven löschen', clearConfirm: 'Alle geladenen Kurven entfernen? Die integrierten bleiben.', compareTitle: 'Kurvenvergleich',
             compareNeedMore: 'Zeige (blende ein) mindestens 2 Kurven zum Vergleichen.',
             compareBaseline: 'Basis:', chooseBaseline: 'Basiskurve (Spalten werden dagegen verglichen):',
             bandCol: 'Frequenzband', compareClose: 'Schließen', egWord: 'z. B.',
@@ -582,7 +582,7 @@
                 '<b>SQ-Comp-Ref (projekt):</b> głęboki, ale kontrolowany subbas, bardzo płynne opadanie do 200 Hz, zapadnięcie obecności −2 dB @2.5 kHz.',
                 '<b>Flat:</b> referencja 0 dB — bez kształtowania tonalnego, przydatna jako neutralna baza.',
             ],
-            compareBtn: 'Porównaj', clearLoaded: 'Wyczyść', compareTitle: 'Porównanie krzywych',
+            compareBtn: 'Porównaj bieżące krzywe', clearLoaded: 'Wyczyść wczytane krzywe', clearConfirm: 'Usunąć wszystkie wczytane krzywe? Wbudowane pozostaną.', compareTitle: 'Porównanie krzywych',
             compareNeedMore: 'Pokaż (odkryj) co najmniej 2 krzywe, aby porównać.',
             compareBaseline: 'Punkt odniesienia:', chooseBaseline: 'Krzywa bazowa (kolumny są porównywane względem niej):',
             bandCol: 'Pasmo częstotliwości', compareClose: 'Zamknij', egWord: 'np.',
@@ -1367,6 +1367,7 @@
         // localStorage-restored list has piled up over many sessions.
         const clearBtn = document.getElementById('clearLoadedBtn');
         if (clearBtn) clearBtn.addEventListener('click', function () {
+            if (curveChart.data.datasets.length > BUILTINS && !window.confirm(t().clearConfirm)) return;
             curveChart.data.datasets.length = BUILTINS;
             curveChart.update();
             document.querySelectorAll('.info-grid .card').forEach(function (c) {
