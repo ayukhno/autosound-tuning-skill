@@ -1048,6 +1048,12 @@
                                            // fine-tune buttons can re-apply a new level shift live without a re-run
     let analyzeHoverF = null;              // exact frequency for the bright dashed line (single-feature row hover)
     const ANALYZE_TOL = 1.5, ANALYZE_DMAX = 10, ANALYZE_STRIP_H = 130, ANALYZE_STRIP_GAP = 14;
+    // Bins per octave on the analysis grid (see ANALYZE_GRID) — the smoothing window is
+    // sized in bins, so this is the one place the grid resolution is stated.
+    const ANALYZE_BINS_PER_OCT = 24;
+    // Absolute significance floor for reporting a feature, and a guard row limit for a
+    // pathologically noisy curve. See the cut in analyzeFeatures.
+    const ANALYZE_SEV_FLOOR = 1.2, ANALYZE_MAX_ROWS = 14;
     const analyzePlugin = {
         id: 'analyzePlugin',
         // Skip the NATIVE draw for the two curves under analysis — we redraw them ourselves
@@ -1688,14 +1694,31 @@
     // N=0 -> none (so a pre-smoothed REW export can be loaded as-is); N='psycho' ->
     // variable-octave, narrow at bass (real narrow bass modes ARE audible), ~1/3 oct
     // above 1 kHz where ear resolution coarsens.
+    // The window is taken by INDEX (+/-k bins on the fixed 1/24-oct grid), not by comparing
+    // frequencies. Selecting it as "q.f >= f/2^h && q.f <= f*2^h" looks equivalent but the
+    // float boundary lands inside or outside by rounding, so the tap count actually used on
+    // a 1/6-oct pass measured 5 taps on 115 bins, 4 on 106, 3 on 18 and 2 on one — the
+    // effective smoothing fluttered bin to bin and injected ripple into the very signal the
+    // feature detector then looks for. By index it is exactly constant.
+    // Out-of-range taps use an ODD (antisymmetric) extension, which is exact for a linear
+    // ramp, so a sloped curve end is not dragged toward the interior (measured: +0.27 dB
+    // bias at 20 Hz before, 0.00 after).
     function analyzeSmooth(arr, N) {
         if (!N) return arr.map(function (p) { return { f: p.f, y: p.y }; });
-        return arr.map(function (p) {
+        const n = arr.length;
+        return arr.map(function (p, i) {
             const half = N === 'psycho' ? analyzePsychoHalfOct(p.f) : 1 / (2 * N);
-            const lo = p.f / Math.pow(2, half), hi = p.f * Math.pow(2, half);
-            let s = 0, c = 0;
-            for (const q of arr) { if (q.f >= lo && q.f <= hi) { s += q.y; c++; } }
-            return { f: p.f, y: c ? s / c : p.y };
+            const k = Math.max(0, Math.round(half * ANALYZE_BINS_PER_OCT));
+            if (!k) return { f: p.f, y: p.y };
+            let s = 0;
+            for (let j = i - k; j <= i + k; j++) {
+                if (j >= 0 && j < n) { s += arr[j].y; continue; }
+                const edge = j < 0 ? arr[0].y : arr[n - 1].y;
+                let m = j < 0 ? -j : 2 * (n - 1) - j;
+                if (m < 0) m = 0; else if (m > n - 1) m = n - 1;
+                s += 2 * edge - arr[m].y;
+            }
+            return { f: p.f, y: s / (2 * k + 1) };
         });
     }
     function analyzeMeanBand(arr, lo, hi) {
@@ -1703,8 +1726,23 @@
         for (const p of arr) { if (p.f >= lo && p.f < hi) { s += p.y; c++; } }
         return c ? s / c : 0;
     }
+    // Median over a band. Used for the level anchor: the mean of the delta is dragged by the
+    // very notches being measured (this project's reference car has a -4.9 dB notch and a
+    // +4.4 dB peak inside the 300 Hz-3 kHz anchor band, and legitimate estimators of that
+    // anchor spread over 1.28 dB — which shifts EVERY number in the report). The median is
+    // the least-absolute-deviation optimum and a few deep narrow notches cannot drag it.
+    function analyzeMedianBand(arr, lo, hi) {
+        const v = [];
+        for (const p of arr) if (p.f >= lo && p.f < hi) v.push(p.y);
+        if (!v.length) return 0;
+        v.sort(function (a, b) { return a - b; });
+        const m = v.length >> 1;
+        return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
+    }
     // Fixed audibility weight (baked, no AI): de-emphasize sub-40 Hz and >12 kHz,
     // emphasize 200 Hz-5 kHz where the ear (and judges) are most sensitive.
+    // Kept as-is because the resonance-control grade is calibrated against it (see resW in
+    // analyzeFeatures); ranking uses analyzeAudibRank below.
     function analyzeAudib(f) {
         if (f < 40) return 0.25;
         if (f < 80) return 0.5;
@@ -1713,6 +1751,20 @@
         if (f <= 8000) return 0.85;
         if (f <= 12000) return 0.6;
         return 0.35;
+    }
+    // Ranking weight. The old curve de-rated bass so hard (0.25 / 0.5) that combined with a
+    // width multiplier it pushed this project's reference car's LARGEST deviation (+8.1 dB
+    // at 40 Hz) down to 3rd place and off the end of the report entirely in half of the
+    // numerically-equivalent runs. Softened, and applied symmetrically to peaks and dips —
+    // equal-loudness compression at low frequencies works in both directions.
+    function analyzeAudibRank(f) {
+        if (f < 30) return 0.5;
+        if (f < 60) return 0.75;
+        if (f < 120) return 0.9;
+        if (f <= 6000) return 1.0;
+        if (f <= 10000) return 0.85;
+        if (f <= 14000) return 0.7;
+        return 0.5;
     }
     function analyzeMakeDelta(bArr, aArr) { return bArr.map(function (p, i) { return { f: p.f, y: p.y - aArr[i].y }; }); }
     // Broadband tilt: least-squares fit vs log2(f), restricted to 100 Hz-8 kHz so a
@@ -1761,21 +1813,37 @@
             const f = delta[i].f, h = y;
             const narrow = woct < 0.34;
             const dip = h < 0;
-            const dipPenalty = dip ? 0.55 : 1;
-            const sev = Math.abs(h) * Math.min(woct, 1.2) * analyzeAudib(f) * dipPenalty;
+            // Severity = audible MAGNITUDE only. Two changes vs the original:
+            // the width factor is mild (1.0-1.4x instead of a 4x swing), so a wide shallow
+            // HF ripple can no longer outrank a deep hole; and there is no blanket 0.55 dip
+            // penalty — "how loud is this" and "what may I safely do about it" are separate
+            // axes, and the advice column already carries the second one.
+            const sev = Math.abs(h) * (0.6 + 0.4 * Math.min(woct, 1)) * analyzeAudibRank(f);
+            // Legacy score, used ONLY by the resonance-control grade, so that rebalancing
+            // the ranking above does not silently move that grade's thresholds. The grade
+            // itself is a separate known problem (it is decided by a single feature).
+            const resW = Math.abs(h) * Math.min(woct, 1.2) * analyzeAudib(f) * (dip ? 0.55 : 1);
             let kind, adviceKey;
             // Narrow dip = likely acoustic null/phase — don't chase with EQ. Narrow peak =
             // a real resonance, PEQ-fixable. Broad = tonal, an honest wide EQ move is fair.
             if (dip && narrow) { kind = 'null'; adviceKey = 'analyzeAdviceNull'; }
             else if (!dip && narrow) { kind = 'peak'; adviceKey = 'analyzeAdvicePeak'; }
             else { kind = dip ? 'dip' : 'peak'; adviceKey = dip ? 'analyzeAdviceBroadDip' : 'analyzeAdviceBroadPeak'; }
-            out.push({ f: f, h: h, woct: woct, narrow: narrow, dip: dip, kind: kind, sev: sev, adviceKey: adviceKey });
+            out.push({ f: f, h: h, woct: woct, narrow: narrow, dip: dip, kind: kind, sev: sev, resW: resW, adviceKey: adviceKey });
         }
         out.sort(function (a, b) { return b.sev - a.sev; });
+        // Cut on an ABSOLUTE significance floor, not on a fixed count. The detector fires on
+        // 9-10 candidates for a typical car while the old code hard-capped the report at 8,
+        // so one or two real features were dropped on every single run and WHICH ones was
+        // decided by sub-0.1 differences in the score: the reference car's +8.1 dB at 40 Hz
+        // was detected in 8 of 8 numerically-equivalent runs and shown in only 4. The row
+        // limit below is a guard against a pathologically noisy curve, not the usual cut.
         const kept = [];
         for (const o of out) {
-            if (!kept.some(function (k) { return Math.abs(Math.log2(k.f / o.f)) < 0.2; })) kept.push(o);
-            if (kept.length >= 8) break;
+            if (o.sev < ANALYZE_SEV_FLOOR) continue;
+            if (kept.some(function (k) { return Math.abs(Math.log2(k.f / o.f)) < 0.2; })) continue;
+            kept.push(o);
+            if (kept.length >= ANALYZE_MAX_ROWS) break;
         }
         return kept;
     }
@@ -1996,7 +2064,7 @@
         const Base = analyzeSmooth(analyzeOnGrid(baseDs.data), N);
         const Cmp = analyzeSmooth(analyzeOnGrid(cmpDs.data), N);
         const rawDelta = analyzeMakeDelta(Cmp, Base);
-        const autoAnchor = align ? analyzeMeanBand(rawDelta, 300, 3000) : 0;
+        const autoAnchor = align ? analyzeMedianBand(rawDelta, 300, 3000) : 0;
         // Everything downstream works in ONE unit: how far the compare curve is moved on
         // screen, positive = UP. The auto anchor contributes -autoAnchor (it cancels the
         // measured offset), the fine-tune buttons add their own value with the sign printed
@@ -2087,7 +2155,7 @@
         const bSpread = analyzeBandSpread(delta);
         const bTonal = analyzeGrade(Math.abs(tl) * 4 + bSpread, [2, 4, 7]);
         const feats = analyzeFeatures(delta);
-        const resScore = feats.filter(function (f) { return f.narrow && !f.dip; }).reduce(function (sm, f) { return sm + f.sev; }, 0);
+        const resScore = feats.filter(function (f) { return f.narrow && !f.dip; }).reduce(function (sm, f) { return sm + f.resW; }, 0);
         const resGrade = analyzeGrade(resScore, [1.5, 3.5, 6]);
 
         let h = '<h3 style="margin:0 0 10px;font-size:15px;">' + cmpName +
@@ -2727,6 +2795,13 @@
             };
             window.__refreshTip();
             resetTimer();
+            // Reading a tip shouldn't have it swapped out from under the cursor — pause the
+            // auto-advance on hover, resume (fresh interval) on leave.
+            const box = document.getElementById('tipsBox');
+            if (box) {
+                box.addEventListener('mouseenter', function () { clearInterval(tipTimer); });
+                box.addEventListener('mouseleave', function () { resetTimer(); });
+            }
         })();
     })();
 
