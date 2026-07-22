@@ -568,8 +568,6 @@
             intSlight: 'slightly', intModerate: 'moderately', intStrong: 'clearly',
             analyzeBtn: 'Analyze', analyzeHint: 'Deviation analysis vs a baseline curve', analyzeTitle: 'Deviation analysis', analyzeCurves: 'Curves to compare',
             analyzeBaseline: 'Baseline (reference)', analyzeCompare: 'Compare (evaluate this)',
-            analyzeSmoothing: 'Smoothing', analyzeSmooth112: '1/12 oct',
-            analyzeSmooth16: '1/6 oct', analyzeSmooth13: '1/3 oct', analyzeSmoothPsycho: 'Psychoacoustic',
             analyzeAlign: 'Align level (ignore gain)', analyzeStale: 'Settings changed — click Analyze to refresh.',
             analyzeLevelMatch: 'Level match', analyzeAutoAnchor: 'Auto (300 Hz–3 kHz anchor):',
             analyzeFineTune: 'Fine-tune:', analyzeTotalApplied: 'Total applied:',
@@ -580,10 +578,10 @@
             analyzeSkipped: (n, total) => n + ' of ' + total + ' bands average within ±1.5 dB of the baseline and are not shown above.',
             analyzeAllMatched: 'All bands are within ±1.5 dB of the baseline — well matched, no action.',
             analyzeVerdict: 'Overall verdict', analyzeCoverage: 'Coverage ±1.5 dB', analyzeBroadTonal: 'Broad tonal',
-            analyzeResonanceCtl: 'Resonance control', analyzeTilt: 'Tilt',
+            analyzeResonanceCtl: 'Narrow structure', analyzeTilt: 'Tilt',
             analyzeTipCoverage: 'Percentage of the 100 Hz\u201310 kHz range where the curve stays within \u00b11.5 dB of the baseline. 100% is unrealistic in a car; ~70%+ is a well-matched tune. This grade doesn\u2019t say WHERE the deviations are \u2014 check the band table for that.',
             analyzeTipBroadTonal: 'How far the overall tonal balance drifts from the baseline: the broadband tilt plus the worst band average. This is what you hear first \u2014 a car can have plenty of narrow peaks and dips and still sound right if this overall balance is clean.',
-            analyzeTipResonanceCtl: 'Weighted sum of the narrow peaks found \u2014 cabin resonances a single narrow PEQ cut can actually fix. Narrow dips are excluded on purpose: those are usually acoustic nulls and must not be boosted.',
+            analyzeTipResonanceCtl: 'Weighted total of the narrow, high-Q features found — resonances and nulls alike. This is the part of a response EQ cannot honestly fix; it is solved with placement, phase and crossover. Ringing itself is invisible in magnitude data.',
             analyzeTipTilt: 'Slope of the deviation across 100 Hz\u20138 kHz. Positive = brighter than the baseline, negative = darker. Within \u00b10.1 dB/oct counts as flat. Fix tilt with a broad shelf, not with band-by-band cuts.',
             analyzeTiltFlat: 'flat (well balanced)', analyzeTiltBrighter: 'brighter', analyzeTiltDarker: 'darker',
             analyzeGradeExcellent: 'Excellent', analyzeGradeGood: 'Good', analyzeGradeFair: 'Fair', analyzeGradePoor: 'Poor',
@@ -633,8 +631,6 @@
             intSlight: 'трохи', intModerate: 'помірно', intStrong: 'виразно',
             analyzeBtn: 'Аналіз', analyzeHint: 'Аналіз відхилень відносно базової кривої', analyzeTitle: 'Аналіз відхилень', analyzeCurves: 'Криві для порівняння',
             analyzeBaseline: 'База (референс)', analyzeCompare: 'Порівняти (оцінюємо цю)',
-            analyzeSmoothing: 'Згладжування', analyzeSmooth112: '1/12 окт',
-            analyzeSmooth16: '1/6 окт', analyzeSmooth13: '1/3 окт', analyzeSmoothPsycho: 'Психоакустичне',
             analyzeAlign: 'Вирівняти рівень (ігнорувати гейн)', analyzeStale: 'Параметри змінено — натисни «Аналіз», щоб оновити.',
             analyzeLevelMatch: 'Збіг рівня', analyzeAutoAnchor: 'Авто (якір 300 Гц–3 кГц):',
             analyzeFineTune: 'Точна підгонка:', analyzeTotalApplied: 'Застосовано всього:',
@@ -645,10 +641,10 @@
             analyzeSkipped: (n, total) => n + ' з ' + total + ' смуг у середньому в межах ±1.5 дБ від бази і не показані вище.',
             analyzeAllMatched: 'Усі смуги в межах ±1.5 дБ від бази — добре збігається, дій не потрібно.',
             analyzeVerdict: 'Загальний висновок', analyzeCoverage: 'Покриття ±1.5 дБ', analyzeBroadTonal: 'Тональна точність',
-            analyzeResonanceCtl: 'Контроль резонансів', analyzeTilt: 'Нахил',
+            analyzeResonanceCtl: 'Вузькі особливості', analyzeTilt: 'Нахил',
             analyzeTipCoverage: 'Відсоток діапазону 100 Гц–10 кГц, де крива тримається в межах ±1.5 дБ від бази. 100% в авто нереально; ~70%+ — добре зведений тюн. Ця оцінка не каже, ДЕ саме відхилення — дивись таблицю по смугах.',
             analyzeTipBroadTonal: 'Наскільки загальний тональний баланс відходить від бази: широкосмуговий нахил плюс найгірше середнє по смузі. Це чути першим — машина може мати купу вузьких піків і провалів і все одно звучати правильно, якщо цей загальний баланс чистий.',
-            analyzeTipResonanceCtl: 'Зважена сума знайдених вузьких піків — резонансів салону, які реально лікує одна вузька вирізка PEQ. Вузькі провали свідомо не рахуються: це зазвичай акустичні нулі, їх не можна піднімати.',
+            analyzeTipResonanceCtl: 'Зважена сума знайдених вузьких, високодобротних особливостей — і резонансів, і нулів. Це та частина АЧХ, яку еквалайзер чесно не виправить: тут працюють позиція, фаза і кросовер. Сам дзвін у даних амплітуди не видно.',
             analyzeTipTilt: 'Нахил відхилення на ділянці 100 Гц\u20138 кГц. Плюс = яскравіше за базу, мінус = темніше. У межах \u00b10.1 дБ/окт вважається рівним. Нахил правиться широким шельфом, а не вирізками по смугах.',
             analyzeTiltFlat: 'рівний (добре збалансований)', analyzeTiltBrighter: 'яскравіше', analyzeTiltDarker: 'темніше',
             analyzeGradeExcellent: 'Відмінно', analyzeGradeGood: 'Добре', analyzeGradeFair: 'Задовільно', analyzeGradePoor: 'Погано',
@@ -698,8 +694,6 @@
             intSlight: 'leicht', intModerate: 'mäßig', intStrong: 'deutlich',
             analyzeBtn: 'Analyse', analyzeHint: 'Abweichungsanalyse gegenüber einer Basiskurve', analyzeTitle: 'Abweichungsanalyse', analyzeCurves: 'Zu vergleichende Kurven',
             analyzeBaseline: 'Basis (Referenz)', analyzeCompare: 'Vergleich (diese bewerten)',
-            analyzeSmoothing: 'Glättung', analyzeSmooth112: '1/12 Okt',
-            analyzeSmooth16: '1/6 Okt', analyzeSmooth13: '1/3 Okt', analyzeSmoothPsycho: 'Psychoakustisch',
             analyzeAlign: 'Pegel angleichen (Gain ignorieren)', analyzeStale: 'Einstellungen geändert — auf Analyse klicken, um zu aktualisieren.',
             analyzeLevelMatch: 'Pegelabgleich', analyzeAutoAnchor: 'Auto (Anker 300 Hz–3 kHz):',
             analyzeFineTune: 'Feinabstimmung:', analyzeTotalApplied: 'Gesamt angewendet:',
@@ -710,10 +704,10 @@
             analyzeSkipped: (n, total) => n + ' von ' + total + ' Bändern liegen im Mittel innerhalb von ±1.5 dB der Basis und werden oben nicht angezeigt.',
             analyzeAllMatched: 'Alle Bänder liegen innerhalb von ±1.5 dB der Basis — gut abgestimmt, keine Maßnahme nötig.',
             analyzeVerdict: 'Gesamturteil', analyzeCoverage: 'Abdeckung ±1.5 dB', analyzeBroadTonal: 'Tonale Genauigkeit',
-            analyzeResonanceCtl: 'Resonanzkontrolle', analyzeTilt: 'Neigung',
+            analyzeResonanceCtl: 'Schmale Strukturen', analyzeTilt: 'Neigung',
             analyzeTipCoverage: 'Prozentsatz des Bereichs 100 Hz–10 kHz, in dem die Kurve innerhalb ±1,5 dB der Basis bleibt. 100% sind im Auto unrealistisch; ~70%+ ist ein gut abgestimmtes Setup. Diese Note sagt nicht, WO die Abweichungen liegen — dafür die Bandtabelle prüfen.',
             analyzeTipBroadTonal: 'Wie weit die tonale Gesamtbalance von der Basis abweicht: breitbandige Neigung plus schlechtester Bandmittelwert. Das hört man zuerst — ein Auto kann viele schmale Spitzen und Senken haben und trotzdem richtig klingen, wenn diese Gesamtbalance sauber ist.',
-            analyzeTipResonanceCtl: 'Gewichtete Summe der gefundenen schmalen Spitzen — Innenraumresonanzen, die ein einzelner schmaler PEQ-Cut wirklich beheben kann. Schmale Senken sind bewusst ausgenommen: das sind meist akustische Nullstellen, die nicht angehoben werden dürfen.',
+            analyzeTipResonanceCtl: 'Gewichtete Summe der schmalen, hochgütigen Auffälligkeiten — Resonanzen wie Auslöschungen. Das ist der Teil des Frequenzgangs, den EQ nicht ehrlich korrigiert; dafür sind Position, Phase und Weiche zuständig. Nachschwingen selbst ist in Amplitudendaten unsichtbar.',
             analyzeTipTilt: 'Steigung der Abweichung von 100 Hz bis 8 kHz. Positiv = heller als die Basis, negativ = dunkler. Innerhalb \u00b10,1 dB/Okt gilt als flach. Neigung mit einem breiten Shelf korrigieren, nicht mit Cuts Band f\u00fcr Band.',
             analyzeTiltFlat: 'flach (gut ausgewogen)', analyzeTiltBrighter: 'heller', analyzeTiltDarker: 'dunkler',
             analyzeGradeExcellent: 'Ausgezeichnet', analyzeGradeGood: 'Gut', analyzeGradeFair: 'Mäßig', analyzeGradePoor: 'Schlecht',
@@ -763,8 +757,6 @@
             intSlight: 'lekko', intModerate: 'umiarkowanie', intStrong: 'wyraźnie',
             analyzeBtn: 'Analiza', analyzeHint: 'Analiza odchyleń względem krzywej bazowej', analyzeTitle: 'Analiza odchyleń', analyzeCurves: 'Krzywe do porównania',
             analyzeBaseline: 'Baza (odniesienie)', analyzeCompare: 'Porównaj (oceniamy tę)',
-            analyzeSmoothing: 'Wygładzanie', analyzeSmooth112: '1/12 okt',
-            analyzeSmooth16: '1/6 okt', analyzeSmooth13: '1/3 okt', analyzeSmoothPsycho: 'Psychoakustyczne',
             analyzeAlign: 'Wyrównaj poziom (ignoruj gain)', analyzeStale: 'Ustawienia zmienione — kliknij Analiza, aby odświeżyć.',
             analyzeLevelMatch: 'Dopasowanie poziomu', analyzeAutoAnchor: 'Auto (kotwica 300 Hz–3 kHz):',
             analyzeFineTune: 'Precyzyjna regulacja:', analyzeTotalApplied: 'Zastosowano łącznie:',
@@ -775,10 +767,10 @@
             analyzeSkipped: (n, total) => n + ' z ' + total + ' pasm mieści się średnio w ±1.5 dB od bazy i nie jest pokazanych powyżej.',
             analyzeAllMatched: 'Wszystkie pasma mieszczą się w ±1.5 dB od bazy — dobrze dopasowane, brak działań.',
             analyzeVerdict: 'Ogólny werdykt', analyzeCoverage: 'Pokrycie ±1.5 dB', analyzeBroadTonal: 'Dokładność tonalna',
-            analyzeResonanceCtl: 'Kontrola rezonansów', analyzeTilt: 'Nachylenie',
+            analyzeResonanceCtl: 'Wąskie struktury', analyzeTilt: 'Nachylenie',
             analyzeTipCoverage: 'Procent zakresu 100 Hz–10 kHz, w którym krzywa mieści się w ±1,5 dB od bazy. 100% w aucie jest nierealne; ~70%+ to dobrze zestrojony system. Ta ocena nie mówi, GDZIE są odchyłki — sprawdź tabelę pasm.',
             analyzeTipBroadTonal: 'Jak bardzo ogólny balans tonalny odchodzi od bazy: szerokopasmowe nachylenie plus najgorsza średnia pasma. To słychać najpierw — auto może mieć mnóstwo wąskich szczytów i zapadnięć i wciąż brzmieć dobrze, jeśli ten ogólny balans jest czysty.',
-            analyzeTipResonanceCtl: 'Ważona suma znalezionych wąskich szczytów — rezonansów kabiny, które naprawdę leczy jedno wąskie cięcie PEQ. Wąskie zapadnięcia są celowo pominięte: to zwykle zera akustyczne i nie wolno ich podbijać.',
+            analyzeTipResonanceCtl: 'Ważona suma znalezionych wąskich struktur o wysokim Q — zarówno rezonansów, jak i zer. To ta część charakterystyki, której EQ uczciwie nie naprawi; tu działa pozycja, faza i zwrotnica. Samego dzwonienia nie widać w danych amplitudowych.',
             analyzeTipTilt: 'Nachylenie odchyłki w zakresie 100 Hz\u20138 kHz. Dodatnie = jaśniej niż baza, ujemne = ciemniej. W granicach \u00b10,1 dB/okt uznaje się za płaskie. Nachylenie poprawia się szerokim shelfem, nie cięciami pasmo po paśmie.',
             analyzeTiltFlat: 'płaskie (dobrze zbalansowane)', analyzeTiltBrighter: 'jaśniej', analyzeTiltDarker: 'ciemniej',
             analyzeGradeExcellent: 'Doskonale', analyzeGradeGood: 'Dobrze', analyzeGradeFair: 'Średnio', analyzeGradePoor: 'Słabo',
@@ -1058,6 +1050,8 @@
     let analyzeRawDelta = null, analyzeCmpSmooth = null; // unshifted smoothed delta / compare series, kept so the
                                            // fine-tune buttons can re-apply a new level shift live without a re-run
     let analyzeHoverF = null;              // exact frequency for the bright dashed line (single-feature row hover)
+    let analyzeAltFeats = [];              // the same features re-derived at other grid offsets
+    let analyzeCovSpread = 0;              // half-spread of coverage across those offsets
     const ANALYZE_TOL = 1.5, ANALYZE_DMAX = 10, ANALYZE_STRIP_H = 130, ANALYZE_STRIP_GAP = 14;
     // Bins per octave on the analysis grid (see ANALYZE_GRID) — the smoothing window is
     // sized in bins, so this is the one place the grid resolution is stated.
@@ -1070,6 +1064,9 @@
     // 0.48-oct wide feature. Anything tighter needs a filter that rings more than it
     // fills; anything deeper than a few dB cannot be chased to the bottom at all.
     const ANALYZE_BOOST_MIN_OCT = 0.48, ANALYZE_BOOST_MAX_DB = 3;
+    // The single smoothing the analysis runs at, so nothing the user can click changes what
+    // the report says about a given pair of curves.
+    const ANALYZE_SMOOTH_N = 6;
     const analyzePlugin = {
         id: 'analyzePlugin',
         // Skip the NATIVE draw for the two curves under analysis — we redraw them ourselves
@@ -1707,23 +1704,16 @@
     // resolution regardless of the smoothing the user happened to export with.
     // Sparse curves (the built-in targets are ~190 points) leave most bins empty and fall
     // back to interpolation, which is correct for them — there is nothing to average.
-    function analyzeOnGrid(data) {
+    function analyzeOnGrid(data, grid) {
         const half = Math.pow(2, 1 / 48);
         let k = 0;
-        return ANALYZE_GRID.map(function (f) {
+        return (grid || ANALYZE_GRID).map(function (f) {
             const lo = f / half, hi = f * half;
             while (k < data.length && data[k].x < lo) k++;
             let s = 0, c = 0;
             for (let j = k; j < data.length && data[j].x < hi; j++) { s += data[j].y; c++; }
             return { f: f, y: c ? s / c : interpY(data, f) };
         });
-    }
-    function analyzePsychoHalfOct(f) {
-        const loF = 200, hiF = 1000, loH = 1 / 48, hiH = 1 / 6;
-        if (f <= loF) return loH;
-        if (f >= hiF) return hiH;
-        const tt = (Math.log2(f) - Math.log2(loF)) / (Math.log2(hiF) - Math.log2(loF));
-        return loH + tt * (hiH - loH);
     }
     // 1/N-oct smoothing (log moving average) applied to the ANALYSIS only — chart lines
     // stay raw except for the two curves under active analysis (see analyzePlugin).
@@ -1746,7 +1736,7 @@
         if (!N) return arr.map(function (p) { return { f: p.f, y: p.y }; });
         const n = arr.length;
         return arr.map(function (p, i) {
-            const half = N === 'psycho' ? analyzePsychoHalfOct(p.f) : 1 / (2 * N);
+            const half = 1 / (2 * N);
             const k = Math.max(0, Math.round(half * ANALYZE_BINS_PER_OCT));
             if (!k) return { f: p.f, y: p.y };
             let s = 0;
@@ -1760,6 +1750,16 @@
             return { f: p.f, y: s / (2 * k + 1) };
         });
     }
+    // The grid origin is arbitrary: nothing physical changes if it starts a fraction of a bin
+    // higher. Re-deriving the report at a few sub-bin offsets therefore measures how much of
+    // each printed number is the measurement and how much is the arithmetic. Cheap (the whole
+    // analysis is a few ms) and completely offline, so the panel can state its own precision
+    // instead of printing one decimal it cannot support.
+    const ANALYZE_PHASES = [0.25, 0.5, 0.75];
+    const ANALYZE_PHASE_GRIDS = ANALYZE_PHASES.map(function (ph) {
+        return ANALYZE_GRID.map(function (f) { return f * Math.pow(2, ph / ANALYZE_BINS_PER_OCT); })
+            .filter(function (f) { return f <= 20000; });
+    });
     function analyzeMeanBand(arr, lo, hi) {
         let s = 0, c = 0;
         for (const p of arr) { if (p.f >= lo && p.f < hi) { s += p.y; c++; } }
@@ -1778,24 +1778,12 @@
         const m = v.length >> 1;
         return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
     }
-    // Fixed audibility weight (baked, no AI): de-emphasize sub-40 Hz and >12 kHz,
-    // emphasize 200 Hz-5 kHz where the ear (and judges) are most sensitive.
-    // Kept as-is because the resonance-control grade is calibrated against it (see resW in
-    // analyzeFeatures); ranking uses analyzeAudibRank below.
-    function analyzeAudib(f) {
-        if (f < 40) return 0.25;
-        if (f < 80) return 0.5;
-        if (f < 200) return 0.8;
-        if (f <= 5000) return 1.0;
-        if (f <= 8000) return 0.85;
-        if (f <= 12000) return 0.6;
-        return 0.35;
-    }
-    // Ranking weight. The old curve de-rated bass so hard (0.25 / 0.5) that combined with a
-    // width multiplier it pushed this project's reference car's LARGEST deviation (+8.1 dB
-    // at 40 Hz) down to 3rd place and off the end of the report entirely in half of the
-    // numerically-equivalent runs. Softened, and applied symmetrically to peaks and dips —
-    // equal-loudness compression at low frequencies works in both directions.
+    // Audibility weight (baked, no AI). The original curve de-rated bass so hard (0.25 below
+    // 40 Hz, 0.5 below 80) that combined with a width multiplier it pushed this project's
+    // reference car's LARGEST deviation (+8.1 dB at 40 Hz) down to 3rd place and off the end
+    // of the report entirely in half of the numerically-equivalent runs. Softened, and
+    // applied symmetrically to peaks and dips — equal-loudness compression at low
+    // frequencies works in both directions.
     function analyzeAudibRank(f) {
         if (f < 30) return 0.5;
         if (f < 60) return 0.75;
@@ -1845,11 +1833,17 @@
     function analyzeFeatures(delta) {
         const WIN = 4, PROM = 1.0;
         const out = [];
-        for (let i = WIN; i < delta.length - WIN; i++) {
+        // The window is CLAMPED at the array ends rather than skipping them. Requiring a full
+        // +-4 bins made a feature impossible below 22.45 Hz and above 17.7 kHz, so this
+        // project's reference car's +6.5 dB at 21.8 Hz could never appear in the report.
+        // Two neighbours a side is still required, so an endpoint cannot be a feature by
+        // default just because there is no data beyond it.
+        const EDGE = 2;
+        for (let i = EDGE; i < delta.length - EDGE; i++) {
             const y = delta[i].y;
             let isMax = true, isMin = true;
             for (let k = -WIN; k <= WIN; k++) {
-                if (k === 0) continue;
+                if (k === 0 || i + k < 0 || i + k >= delta.length) continue;
                 const yy = delta[i + k].y;
                 if (yy > y) isMax = false;
                 if (yy < y) isMin = false;
@@ -1857,13 +1851,12 @@
             if (!isMax && !isMin) continue;
             if (Math.abs(y) < ANALYZE_TOL) continue;
             if (analyzeProminence(delta, i, isMax) < PROM) continue;
-            // A local max sitting between two DEEPER dips is not a bump to cut — it is the
-            // one spot that still reaches the target while its neighbourhood falls away, so
-            // the honest story there is the two dips (which get found on their own). Require
-            // the feature to agree with its surroundings: the mean over roughly +/-0.5 oct
-            // must lean the same way as the extremum, otherwise drop it.
-            const ctx = analyzeMeanBand(delta, delta[i].f / 1.41, delta[i].f * 1.41);
-            if ((y >= 0 ? 1 : -1) * ctx < 0) continue;
+            // (A context test used to sit here, rejecting an extremum whose +-0.5 oct mean
+            // leaned the other way — meant to kill a "return to target" peak between two
+            // deeper dips. True topographic prominence already rejects those, verified on
+            // the reference car, while the context test additionally compared against
+            // ABSOLUTE zero and so let a 1 dB level nudge add or remove real features: it
+            // was hiding a genuine -4.1 dB dip at 678 Hz.)
             const thr = isMax ? y - 3 : y + 3;
             let lo = i, hi = i;
             while (lo > 0 && (isMax ? delta[lo].y > thr : delta[lo].y < thr)) lo--;
@@ -1878,10 +1871,6 @@
             // penalty — "how loud is this" and "what may I safely do about it" are separate
             // axes, and the advice column already carries the second one.
             const sev = Math.abs(h) * (0.6 + 0.4 * Math.min(woct, 1)) * analyzeAudibRank(f);
-            // Legacy score, used ONLY by the resonance-control grade, so that rebalancing
-            // the ranking above does not silently move that grade's thresholds. The grade
-            // itself is a separate known problem (it is decided by a single feature).
-            const resW = Math.abs(h) * Math.min(woct, 1.2) * analyzeAudib(f) * (dip ? 0.55 : 1);
             let kind, adviceKey;
             // Narrow dip = likely acoustic null/phase — don't chase with EQ. Narrow peak =
             // a real resonance, PEQ-fixable. Broad = tonal, an honest wide EQ move is fair.
@@ -1898,7 +1887,7 @@
                     : (Math.abs(h) > ANALYZE_BOOST_MAX_DB ? 'analyzeAdviceDipPartial'
                     : 'analyzeAdviceBroadDip');
             }
-            out.push({ f: f, h: h, woct: woct, narrow: narrow, dip: dip, kind: kind, sev: sev, resW: resW, adviceKey: adviceKey });
+            out.push({ f: f, h: h, woct: woct, narrow: narrow, dip: dip, kind: kind, sev: sev, adviceKey: adviceKey });
         }
         out.sort(function (a, b) { return b.sev - a.sev; });
         // Cut on an ABSOLUTE significance floor, not on a fixed count. The detector fires on
@@ -1938,6 +1927,23 @@
         while (a > 0 && delta[a - 1].f >= lo && sgn * delta[a - 1].y >= thr) a--;
         while (b < delta.length - 1 && delta[b + 1].f < hi && sgn * delta[b + 1].y >= thr) b++;
         return [delta[a].f, delta[b].f];
+    }
+    // Half-spread of a feature's depth across the alternative grid offsets. Returns 0 when
+    // the feature is not found in them, which is itself worth knowing — it means the feature
+    // sits on one of the absolute thresholds.
+    function analyzeSpreadOf(f) {
+        let lo = f.h, hi = f.h;
+        for (const list of analyzeAltFeats) {
+            let best = null;
+            for (const g of list) {
+                if (Math.abs(Math.log2(g.f / f.f)) >= 0.2) continue;
+                if (!best || Math.abs(g.f - f.f) < Math.abs(best.f - f.f)) best = g;
+            }
+            if (!best) return null;
+            if (best.h < lo) lo = best.h;
+            if (best.h > hi) hi = best.h;
+        }
+        return (hi - lo) / 2;
     }
     function analyzeCoverageCalc(delta) {
         let n = 0, ok = 0;
@@ -2072,13 +2078,6 @@
             '<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;">' +
                 '<div style="' + fld + '">' + s.analyzeBaseline + '<select id="anzBase" style="' + sel + '">' + analyzeCurveOptions(idxs, defBase) + '</select></div>' +
                 '<div style="' + fld + '">' + s.analyzeCompare + '<select id="anzCmp" style="' + sel + '">' + analyzeCurveOptions(idxs, defCmp) + '</select></div>' +
-                '<div style="' + fld + '">' + s.analyzeSmoothing +
-                    '<select id="anzSmooth" style="' + sel + '">' +
-                        '<option value="12">' + s.analyzeSmooth112 + '</option>' +
-                        '<option value="6" selected>' + s.analyzeSmooth16 + '</option>' +
-                        '<option value="3">' + s.analyzeSmooth13 + '</option>' +
-                        '<option value="psycho">' + s.analyzeSmoothPsycho + '</option>' +
-                    '</select></div>' +
                 '<label style="display:flex;flex-direction:row;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="checkbox" id="anzAlign" checked> ' + s.analyzeAlign + '</label>' +
                 '<button id="anzRunBtn" style="background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-border);border-radius:8px;padding:8px 14px;cursor:pointer;font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,.3);">' + s.analyzeBtn + '</button>' +
             '</div>' +
@@ -2113,8 +2112,7 @@
         const baseSel = document.getElementById('anzBase'), cmpSel = document.getElementById('anzCmp');
         if (baseSel) baseSel.addEventListener('change', function () { resetManual(); markStale(); });
         if (cmpSel) cmpSel.addEventListener('change', function () { resetManual(); markStale(); });
-        const smoothSel = document.getElementById('anzSmooth'), alignChk = document.getElementById('anzAlign');
-        if (smoothSel) smoothSel.addEventListener('change', markStale);
+        const alignChk = document.getElementById('anzAlign');
         if (alignChk) alignChk.addEventListener('change', function () {
             // Auto-align and a manual override are mutually exclusive — (re)enabling auto
             // clears whatever manual nudge was applied, so the two never silently stack.
@@ -2124,14 +2122,17 @@
     }
     function runAnalyze() {
         const baseSel = document.getElementById('anzBase'), cmpSel = document.getElementById('anzCmp');
-        const smoothSel = document.getElementById('anzSmooth'), alignChk = document.getElementById('anzAlign');
         if (!baseSel || !cmpSel) return;
         const baseIdx = parseInt(baseSel.value, 10), cmpIdx = parseInt(cmpSel.value, 10);
         const baseDs = curveChart.data.datasets[baseIdx], cmpDs = curveChart.data.datasets[cmpIdx];
         if (!baseDs || !cmpDs) return;
-        const smoothVal = smoothSel.value;
-        const N = smoothVal === 'psycho' ? 'psycho' : parseInt(smoothVal, 10);
-        const align = alignChk.checked;
+        // Smoothing is a constant of the analysis, not a user choice. It used to be a
+        // dropdown, but width at -3 dB grows with smoothing and width is the only thing
+        // separating NULL ("never boost") from DIP ("a gentle boost is fair") — so a setting
+        // picked for how the graph LOOKED silently flipped the advice on the same notch.
+        const N = ANALYZE_SMOOTH_N;
+        const alignChk = document.getElementById('anzAlign');
+        const align = !alignChk || alignChk.checked;
 
         const Base = analyzeSmooth(analyzeOnGrid(baseDs.data), N);
         const Cmp = analyzeSmooth(analyzeOnGrid(cmpDs.data), N);
@@ -2155,6 +2156,21 @@
         analyzeAutoAnchor = autoAnchor;
         analyzeRawDelta = rawDelta;
         analyzeCmpSmooth = Cmp;
+
+        // Same computation at three other grid offsets; attach the observed spread to each
+        // feature and to the coverage figure so the report can show its own precision.
+        const covs = [analyzeCoverageCalc(delta)];
+        const alt = ANALYZE_PHASE_GRIDS.map(function (g) {
+            const B2 = analyzeSmooth(analyzeOnGrid(baseDs.data, g), N);
+            const C2 = analyzeSmooth(analyzeOnGrid(cmpDs.data, g), N);
+            const r2 = analyzeMakeDelta(C2, B2);
+            const a2 = align ? analyzeMedianBand(r2, 300, 3000) : 0;
+            const d2 = r2.map(function (p) { return { f: p.f, y: p.y + analyzeManualShift - a2 }; });
+            covs.push(analyzeCoverageCalc(d2));
+            return analyzeFeatures(d2);
+        });
+        analyzeAltFeats = alt;
+        analyzeCovSpread = (Math.max.apply(null, covs) - Math.min.apply(null, covs)) / 2;
 
         const lvl = document.getElementById('anzLevelBox');
         if (lvl) lvl.innerHTML = renderAnalyzeLevelControl(-autoAnchor, applied);
@@ -2227,8 +2243,13 @@
         const bSpread = analyzeBandSpread(delta);
         const bTonal = analyzeGrade(Math.abs(tl) * 4 + bSpread, [2, 4, 7]);
         const feats = analyzeFeatures(delta);
-        const resScore = feats.filter(function (f) { return f.narrow && !f.dip; }).reduce(function (sm, f) { return sm + f.resW; }, 0);
-        const resGrade = analyzeGrade(resScore, [1.5, 3.5, 6]);
+        // Counts every NARROW (high-Q) feature, nulls as well as peaks. It used to sum narrow
+        // peaks only, which on this project's reference car meant exactly one feature decided
+        // the grade while two -6 dB nulls contributed nothing and it still read "Excellent".
+        // Named for what it measures: high-Q structure is the part of a response EQ cannot
+        // honestly fix. Ringing itself is not visible in magnitude data at all.
+        const resScore = feats.filter(function (f) { return f.narrow; }).reduce(function (sm, f) { return sm + f.sev; }, 0);
+        const resGrade = analyzeGrade(resScore, [2, 5, 9]);
 
         let h = '<h3 style="margin:0 0 10px;font-size:15px;">' + cmpName +
             ' <span style="color:var(--text-muted);font-weight:400;">' + s.analyzeVs + ' (' + baseName + ')</span></h3>';
@@ -2248,9 +2269,15 @@
             const label = f.kind === 'null' ? s.analyzeLabelNull : (f.dip ? s.analyzeLabelDip : s.analyzeLabelPeak);
             return '<span style="display:inline-block;font-size:11px;font-weight:700;border-radius:6px;padding:2px 7px;white-space:nowrap;color:' + color + ';background:' + bg + ';">' + label + ' ' + fmtHz(Math.round(f.f)) + 'Hz</span>';
         }
-        function bandRow(bandLabel, d, badgeHtml, shiftHtml, instrList, rLo, rHi, hoverF) {
+        function bandRow(bandLabel, d, badgeHtml, shiftHtml, instrList, rLo, rHi, hoverF, spread) {
+            // The +- is not measurement noise, it is how much this number moves when the
+            // analysis grid starts a fraction of a bin higher — i.e. how much of the printed
+            // decimal is arithmetic rather than the car. "?" means the feature did not
+            // survive the re-derivation at all, so it sits on one of the thresholds.
+            const sp = spread === null ? '<span style="opacity:.6;font-weight:400;"> ?</span>'
+                : (spread >= 0.15 ? '<span style="opacity:.6;font-weight:400;"> ±' + spread.toFixed(1) + '</span>' : '');
             const dCell = Math.abs(d) < 1 ? '<span style="color:var(--text-muted);">—</span>' :
-                '<b style="color:' + (d >= 0 ? '#fb923c' : '#38bdf8') + ';">' + (d >= 0 ? '+' : '') + d.toFixed(1) + '</b>';
+                '<b style="color:' + (d >= 0 ? '#fb923c' : '#38bdf8') + ';">' + (d >= 0 ? '+' : '') + d.toFixed(1) + sp + '</b>';
             return '<tr class="anz-row" data-lo="' + rLo.toFixed(1) + '" data-hi="' + rHi.toFixed(1) + '"' + (hoverF !== null ? ' data-f="' + hoverF.toFixed(1) + '"' : '') + ' style="cursor:default;">' +
                 '<td style="padding:8px 10px;border-bottom:1px solid var(--border-color);white-space:nowrap;">' + bandLabel + '</td>' +
                 '<td style="padding:8px 10px;border-bottom:1px solid var(--border-color);">' + dCell + '</td>' +
@@ -2295,7 +2322,7 @@
                 const q = Math.sqrt(Math.pow(2, f.woct)) / (Math.pow(2, f.woct) - 1);
                 const shift = tier + ' ' + trend + '<div style="color:var(--text-muted);margin-top:3px;">' +
                     (s[f.adviceKey] || '') + ' <span style="opacity:.7;white-space:nowrap;">Q\u2248' + q.toFixed(1) + '</span></div>';
-                rows += bandRow(bandLabel, f.h, featBadge(f), shift, analyzeInstrumentsInBand(rLo, rHi), rLo, rHi, f.f);
+                rows += bandRow(bandLabel, f.h, featBadge(f), shift, analyzeInstrumentsInBand(rLo, rHi), rLo, rHi, f.f, analyzeSpreadOf(f));
             });
         });
 
@@ -2326,7 +2353,7 @@
         gradeColor[s.analyzeGradeExcellent] = '#34d399'; gradeColor[s.analyzeGradeGood] = '#8bd5a0';
         gradeColor[s.analyzeGradeFair] = '#f59e0b'; gradeColor[s.analyzeGradePoor] = '#f87171';
         h += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin:6px 0 4px;">' +
-            metric(s.analyzeCoverage, cov + '%', null, s.analyzeTipCoverage) +
+            metric(s.analyzeCoverage, cov + '%' + (analyzeCovSpread >= 0.5 ? '<span style="font-size:13px;opacity:.6;font-weight:400;"> ±' + Math.round(analyzeCovSpread) + '</span>' : ''), null, s.analyzeTipCoverage) +
             metric(s.analyzeBroadTonal, bTonal, gradeColor[bTonal], s.analyzeTipBroadTonal) +
             metric(s.analyzeResonanceCtl, resGrade, gradeColor[resGrade], s.analyzeTipResonanceCtl) +
             metric(s.analyzeTilt, (tl >= 0 ? '+' : '') + tl.toFixed(1) + ' dB/oct', null, s.analyzeTipTilt) +
@@ -2808,17 +2835,16 @@
             if (anzPanel && anzPanel.style.display !== 'none') {
                 const hadResult = !!analyzeDelta;
                 const prevBase = document.getElementById('anzBase'), prevCmp = document.getElementById('anzCmp');
-                const prevSmooth = document.getElementById('anzSmooth'), prevAlign = document.getElementById('anzAlign');
+                const prevAlign = document.getElementById('anzAlign');
                 const vBase = prevBase ? prevBase.value : null, vCmp = prevCmp ? prevCmp.value : null;
-                const vSmooth = prevSmooth ? prevSmooth.value : null, vAlign = prevAlign ? prevAlign.checked : null;
+                const vAlign = prevAlign ? prevAlign.checked : null;
                 renderAnalyzeSetup();
                 // Guard every restore — renderAnalyzeSetup shows a "need 2 visible curves"
                 // message instead of the pickers if visibility changed in the meantime.
                 const nBase = document.getElementById('anzBase'), nCmp = document.getElementById('anzCmp');
-                const nSmooth = document.getElementById('anzSmooth'), nAlign = document.getElementById('anzAlign');
+                const nAlign = document.getElementById('anzAlign');
                 if (vBase !== null && nBase) nBase.value = vBase;
                 if (vCmp !== null && nCmp) nCmp.value = vCmp;
-                if (vSmooth !== null && nSmooth) nSmooth.value = vSmooth;
                 if (vAlign !== null && nAlign) nAlign.checked = vAlign;
                 if (hadResult && nBase && nCmp) runAnalyze();
             }
