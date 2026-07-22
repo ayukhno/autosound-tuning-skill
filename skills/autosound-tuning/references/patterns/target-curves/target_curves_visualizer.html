@@ -577,7 +577,7 @@
             analyzeColBand: 'Band', analyzeColDelta: 'Δ dB', analyzeColFeature: 'Feature',
             analyzeColShift: 'Tonal shift', analyzeColInstr: 'Instruments',
             analyzeBalanced: 'balanced', analyzeVs: 'vs baseline',
-            analyzeSkipped: (n, total) => n + ' of ' + total + ' bands are within ±1.5 dB of the baseline and not shown above.',
+            analyzeSkipped: (n, total) => n + ' of ' + total + ' bands average within ±1.5 dB of the baseline and are not shown above.',
             analyzeAllMatched: 'All bands are within ±1.5 dB of the baseline — well matched, no action.',
             analyzeVerdict: 'Overall verdict', analyzeCoverage: 'Coverage ±1.5 dB', analyzeBroadTonal: 'Broad tonal',
             analyzeResonanceCtl: 'Resonance control', analyzeTilt: 'Tilt',
@@ -642,7 +642,7 @@
             analyzeColBand: 'Смуга', analyzeColDelta: 'Δ дБ', analyzeColFeature: 'Особливість',
             analyzeColShift: 'Тональний зсув', analyzeColInstr: 'Інструменти',
             analyzeBalanced: 'збалансовано', analyzeVs: 'відносно бази',
-            analyzeSkipped: (n, total) => n + ' з ' + total + ' смуг у межах ±1.5 дБ від бази і не показані вище.',
+            analyzeSkipped: (n, total) => n + ' з ' + total + ' смуг у середньому в межах ±1.5 дБ від бази і не показані вище.',
             analyzeAllMatched: 'Усі смуги в межах ±1.5 дБ від бази — добре збігається, дій не потрібно.',
             analyzeVerdict: 'Загальний висновок', analyzeCoverage: 'Покриття ±1.5 дБ', analyzeBroadTonal: 'Тональна точність',
             analyzeResonanceCtl: 'Контроль резонансів', analyzeTilt: 'Нахил',
@@ -707,7 +707,7 @@
             analyzeColBand: 'Band', analyzeColDelta: 'Δ dB', analyzeColFeature: 'Auffälligkeit',
             analyzeColShift: 'Klangliche Verschiebung', analyzeColInstr: 'Instrumente',
             analyzeBalanced: 'ausgewogen', analyzeVs: 'gegenüber Basis',
-            analyzeSkipped: (n, total) => n + ' von ' + total + ' Bändern liegen innerhalb von ±1.5 dB der Basis und werden oben nicht angezeigt.',
+            analyzeSkipped: (n, total) => n + ' von ' + total + ' Bändern liegen im Mittel innerhalb von ±1.5 dB der Basis und werden oben nicht angezeigt.',
             analyzeAllMatched: 'Alle Bänder liegen innerhalb von ±1.5 dB der Basis — gut abgestimmt, keine Maßnahme nötig.',
             analyzeVerdict: 'Gesamturteil', analyzeCoverage: 'Abdeckung ±1.5 dB', analyzeBroadTonal: 'Tonale Genauigkeit',
             analyzeResonanceCtl: 'Resonanzkontrolle', analyzeTilt: 'Neigung',
@@ -772,7 +772,7 @@
             analyzeColBand: 'Pasmo', analyzeColDelta: 'Δ dB', analyzeColFeature: 'Cecha',
             analyzeColShift: 'Zmiana tonalna', analyzeColInstr: 'Instrumenty',
             analyzeBalanced: 'zrównoważone', analyzeVs: 'względem bazy',
-            analyzeSkipped: (n, total) => n + ' z ' + total + ' pasm mieści się w ±1.5 dB od bazy i nie jest pokazanych powyżej.',
+            analyzeSkipped: (n, total) => n + ' z ' + total + ' pasm mieści się średnio w ±1.5 dB od bazy i nie jest pokazanych powyżej.',
             analyzeAllMatched: 'Wszystkie pasma mieszczą się w ±1.5 dB od bazy — dobrze dopasowane, brak działań.',
             analyzeVerdict: 'Ogólny werdykt', analyzeCoverage: 'Pokrycie ±1.5 dB', analyzeBroadTonal: 'Dokładność tonalna',
             analyzeResonanceCtl: 'Kontrola rezonansów', analyzeTilt: 'Nachylenie',
@@ -2238,7 +2238,10 @@
             const bandLabel = fmtRange(bd);
             if (!bf.length) {
                 // No standout feature — just the coarse band average.
-                if (Math.abs(bandAvgV) < 1) { skipped++; return; }
+                // Same tolerance as the detector, the coverage metric and the footer
+                // below. At the old 1.0 dB this printed featureless rows carrying no
+                // badge and no action, which the footer then claimed were hidden.
+                if (Math.abs(bandAvgV) < ANALYZE_TOL) { skipped++; return; }
                 shown++;
                 const tier = Math.abs(bandAvgV) < 2.5 ? s.intSlight : (Math.abs(bandAvgV) < 4.5 ? s.intModerate : s.intStrong);
                 const trObj = BAND_TREND[i] ? (bandAvgV >= 0 ? BAND_TREND[i].more : BAND_TREND[i].less) : null;
