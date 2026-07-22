@@ -2208,8 +2208,11 @@
         let h = '<h3 style="margin:0 0 10px;font-size:15px;">' + cmpName +
             ' <span style="color:var(--text-muted);font-weight:400;">' + s.analyzeVs + ' (' + baseName + ')</span></h3>';
 
+        // Rows are grouped by band, which ascends in frequency; WITHIN a band they now
+        // ascend in frequency too, so the whole table reads monotonically left to right on
+        // the chart instead of jumping around following an invisible severity score.
         const featsByBand = FREQ_BANDS.map(function (bd) {
-            return feats.filter(function (f) { return f.f >= bd[0] && f.f < bd[1]; }).sort(function (a, b) { return b.sev - a.sev; });
+            return feats.filter(function (f) { return f.f >= bd[0] && f.f < bd[1]; }).sort(function (a, b) { return a.f - b.f; });
         });
         h += '<div style="font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin:0 0 8px;">' +
             s.analyzeBandHeader + ' <span style="text-transform:none;">' + s.analyzeHoverHint + '</span></div>';
