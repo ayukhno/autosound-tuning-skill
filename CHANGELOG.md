@@ -2,11 +2,35 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
-## [Unreleased]
+## [v2.7.0] — 2026-07-22
+
+Curve-visualizer release: a deviation-analysis panel, and an audit that made its numbers reproducible.
 
 ### Added
-- **Instruments overlay in the curve visualizer:** a new "Instruments" panel (grouped Vocal / Percussion / Strings / Winds / Keys & Other / EMMA 2024 / EMMA 2026, with emoji) lets you pick up to 3 instruments and draws their frequency ranges on the chart — fundamentals solid, harmonics lighter — so you can see where each lives against the target curve. Ranges digitized from the standard instrument-frequency chart and the EMMA 2024/2026 SQ judge test sets; instrument names translated (EN/UA/DE/PL) via the Gemini advisor. Selection persists.
+- **Deviation analysis in the curve visualizer:** a new "Analyze" panel picks a Baseline (reference) and a Compare curve — same math for Measured-vs-Target or two ALL runs before/after a change — and computes an autonomous, no-AI band-by-band deviation report: broadband tilt (100 Hz–8 kHz fit), coverage %, Broad-tonal and Narrow-structure grades, and per-band PEAK/DIP/NULL features. Reuses the existing 10-band `FREQ_BANDS`/`BAND_TREND` grid and computes "instruments affected" live from `BAND_INSTRUMENTS`, ranked by octave-overlap share (fundamentals first, harmonics only backfilled when fewer than three fundamentals match). Level is aligned by default (median 300 Hz–3 kHz anchor + manual fine-tune, since gain is always re-optimized separately) so the report reads shape, not gain. A delta-bar strip renders under the main chart on a fixed ±10 dB scale, and the two analyzed curves are drawn with the same smoothing and level shift as the report, so chart and report always agree. No L/R comparison — without time-alignment there is nothing actionable in an L/R difference.
+- **Boost advice gated on what an EQ can actually do.** Q = √(2^N)/(2^N−1), so a deficit tighter than Q 3 is never offered a boost, one deeper than 3 dB is capped at "about 3 dB at most, leave the rest", and only a low-Q deficit within 3 dB keeps "a gentle wide boost is fair". Cuts are unchanged — a cut is always physically safe. The Q a tuner would dial is printed on every feature row.
+- **The panel states its own precision.** The report is re-derived at three further sub-bin grid offsets (nothing physical changes when the grid starts a fraction of a bin higher), and each Δ and the coverage figure carry the observed half-spread. Fully offline, ~29 ms.
+- **Reference-track links in the band table:** a "?" badge next to an instrument opens the EMMA test-track references for it, but only where the instrument matched on fundamentals.
+- **Rotating tips box** at the bottom of the page, and hover/click explanations on each verdict tile.
+- **Instruments overlay:** a panel (grouped Vocal / Percussion / Strings / Winds / Keys & Other / EMMA 2024 / EMMA 2026) draws up to 5 instruments' ranges on the chart — fundamentals solid, harmonics lighter — with per-instrument EQ tips. Selection persists.
 - Per-curve **color pickers** and a **"Clear" loaded-curves** button (see v2.6.3 visualizer).
+
+### Fixed
+Audited by re-running the same measurement under combinations of equally defensible arithmetic choices that change nothing physical, and measuring the spread. Every feature is now reported in every run (the largest deviation in the reference measurement, +8.1 dB at 40 Hz, was previously detected 8/8 and shown 4/8), and the arbitrary component of each printed dB figure fell 3–4×. Full method and findings in `deviation-analysis-audit.md`.
+
+- Features are cut on an absolute significance floor instead of a top-8 cap, which silently dropped 1–2 real features per run.
+- Severity rebalanced: mild width factor instead of a 4× swing, softer and symmetric low-frequency weighting, no blanket dip penalty — a wide shallow HF ripple can no longer outrank a deep hole.
+- Prominence is true topographic prominence. The old fixed ±4-bin probe rejected any feature on a broad base however large: a +4.2 dB peak at 554 Hz measured 0.60 dB against a 1.0 dB gate and never reached the report, and its band was then skipped as "within tolerance" because the mean of a +4.2 / −4.1 swing is +0.07 dB.
+- The smoothing window is sized by index, not by comparing frequencies — the float boundary made a 1/6-oct pass use 5 taps on some bins and 2 on others, injecting ripple into the signal the detector reads. Out-of-range taps use an odd extension (20 Hz edge bias +0.27 dB → 0.00).
+- The level anchor is a median rather than a mean; the mean was dragged by the very notches being measured, and defensible estimators spread over 1.28 dB.
+- Curves are resampled onto the analysis grid by bin-averaging, not point-sampling, which threw away every other point of a 1/48-oct export. This also normalises whatever resolution a file arrives at to the grid's own 1/24 oct.
+- Smoothing is fixed at 1/6 oct and the dropdown is gone. Width grows with smoothing and width alone separated NULL ("never boost") from DIP ("a gentle boost is fair"), so a setting picked for how the graph looked flipped the advice on the same notch.
+- The context test is gone — topographic prominence already rejects what it was added for, while it compared against absolute zero and so let a 1 dB level nudge add or remove real features, hiding a genuine −4.1 dB dip at 678 Hz.
+- The detector's extremum window is clamped at the array ends instead of skipping them; a feature was previously impossible below 22.45 Hz and above 17.7 kHz.
+- The "Resonance control" grade counted narrow peaks only — one feature decided it while two −6 dB nulls contributed nothing and it still read "Excellent". Now counts every narrow feature and is named "Narrow structure" for what it measures.
+- Band rows with no feature must clear the same ±1.5 dB tolerance as everything else, so no row is printed without something to act on; the footer says "average within", which is what it actually tests.
+- Rows within a band are ordered by frequency, matching the chart.
+- Large exports are condensed onto a 1/96-oct grid above 3000 points (a 96k-point sweep cost ~2 MB of localStorage against a ~5 MB budget); `interpY` binary-searches instead of scanning, since it runs per dataset on every mouse move.
 
 ## [v2.6.3] — 2026-07-21
 
