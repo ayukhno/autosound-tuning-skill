@@ -857,15 +857,18 @@
         if (!data || !data.length) return null;
         if (f <= data[0].x) return data[0].y;
         if (f >= data[data.length - 1].x) return data[data.length - 1].y;
-        for (let i = 0; i < data.length - 1; i++) {
-            const a = data[i], b = data[i + 1];
-            if (f >= a.x && f <= b.x) {
-                const denom = (Math.log(b.x) - Math.log(a.x)) || 1;
-                const t = (Math.log(f) - Math.log(a.x)) / denom;
-                return a.y + t * (b.y - a.y);
-            }
+        // Binary search, not a scan: this is called once per analysis grid point AND once
+        // per dataset on every mouse move for the crosshair, so a linear walk turned a
+        // 96k-point export into ~96000 comparisons per curve per mouse move.
+        let lo = 0, hi = data.length - 1;
+        while (hi - lo > 1) {
+            const mid = (lo + hi) >> 1;
+            if (data[mid].x <= f) lo = mid; else hi = mid;
         }
-        return data[data.length - 1].y;
+        const a = data[lo], b = data[hi];
+        const denom = (Math.log(b.x) - Math.log(a.x)) || 1;
+        const t = (Math.log(f) - Math.log(a.x)) / denom;
+        return a.y + t * (b.y - a.y);
     }
     const crosshairPlugin = {
         id: 'crosshair',
@@ -1694,7 +1697,27 @@
         for (let f = 20; f <= 20000; f *= step) g.push(f);
         return g;
     })();
-    function analyzeOnGrid(data) { return ANALYZE_GRID.map(function (f) { return { f: f, y: interpY(data, f) }; }); }
+    // Resample onto the analysis grid by AVERAGING every source point that falls in the bin,
+    // not by sampling the interpolated value at the bin centre. A REW export steps in 1/48
+    // oct while the grid is 1/24, so point-sampling silently threw away every other measured
+    // point — worth up to 0.78 dB on this project's reference file, and worst exactly where
+    // it matters, on the flank of the deepest notch. Averaging also normalises whatever
+    // resolution a file happens to arrive at down to the grid's own 1/24 oct, which is the
+    // finest the psychoacoustic setting ever asks for, so the analysis starts from the same
+    // resolution regardless of the smoothing the user happened to export with.
+    // Sparse curves (the built-in targets are ~190 points) leave most bins empty and fall
+    // back to interpolation, which is correct for them — there is nothing to average.
+    function analyzeOnGrid(data) {
+        const half = Math.pow(2, 1 / 48);
+        let k = 0;
+        return ANALYZE_GRID.map(function (f) {
+            const lo = f / half, hi = f * half;
+            while (k < data.length && data[k].x < lo) k++;
+            let s = 0, c = 0;
+            for (let j = k; j < data.length && data[j].x < hi; j++) { s += data[j].y; c++; }
+            return { f: f, y: c ? s / c : interpY(data, f) };
+        });
+    }
     function analyzePsychoHalfOct(f) {
         const loF = 200, hiF = 1000, loH = 1 / 48, hiH = 1 / 6;
         if (f <= loF) return loH;
@@ -2422,6 +2445,26 @@
             });
         }
 
+        // A very high-resolution export (a 96k-point sweep was what prompted this) costs on
+        // every axis at once: ~2 MB of localStorage against a ~5 MB budget, a Chart.js
+        // redraw per frame, and an interpY per dataset per mouse move. Nothing here needs
+        // that: the analysis bins to 1/24 oct and the chart is ~1500 px wide. So condense
+        // onto a 1/96-oct log grid — four times finer than the analysis grid and finer than
+        // one screen pixel per point — averaging whatever falls in each bin. Curves already
+        // at or below the cap are left exactly as they are.
+        const CONDENSE_ABOVE = 3000, CONDENSE_BINS_PER_OCT = 96;
+        function condenseCurve(pts) {
+            if (pts.length <= CONDENSE_ABOVE) return pts;
+            const step = Math.pow(2, 1 / CONDENSE_BINS_PER_OCT), out = [];
+            let i = 0;
+            for (let f = pts[0].x; f <= pts[pts.length - 1].x && i < pts.length; f *= step) {
+                const hi = f * step;
+                let sx = 0, sy = 0, c = 0;
+                while (i < pts.length && pts[i].x < hi) { sx += pts[i].x; sy += pts[i].y; c++; i++; }
+                if (c) out.push({ x: sx / c, y: sy / c });
+            }
+            return out.length > 1 ? out : pts;
+        }
         function parse(text) {
             const pts = []; let name = null;
             for (const line of text.split(/\r?\n/)) {
@@ -2431,7 +2474,10 @@
                 const p = t.split(/[\s,;]+/), f = parseFloat(p[0]), d = parseFloat(p[1]);
                 if (isFinite(f) && isFinite(d)) pts.push({ x: f, y: d });
             }
-            return { name, pts };
+            // interpY and the grid binning both walk the points in ascending order. REW and
+            // NTT always export that way, but a hand-edited file need not.
+            pts.sort(function (a, b) { return a.x - b.x; });
+            return { name, pts: condenseCurve(pts) };
         }
         function refMean(pts) {
             let ref = pts.filter(p => p.x >= 200 && p.x <= 500);

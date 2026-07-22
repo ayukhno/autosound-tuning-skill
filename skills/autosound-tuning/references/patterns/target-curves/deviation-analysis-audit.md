@@ -98,13 +98,16 @@ median 100-10k         +56.49 | median 20-20k +57.22 | energy mean 300-3k +57.50
 Fix: use the **median** (equivalently, the least-absolute-deviation optimum), which a few
 deep narrow notches cannot drag.
 
-### N4 — resampling decimates by point-sampling
+### N4 — resampling decimated by point-sampling — FIXED
 
-The 1/48-oct measurement is resampled onto a 1/24-oct grid by *sampling* the interpolated
-value, so half the measured points are skipped rather than averaged. Difference vs
+The 1/48-oct measurement was resampled onto the 1/24-oct grid by *sampling* the interpolated
+value, so half the measured points were skipped rather than averaged. Difference vs
 bin-averaging: median 0.05 dB, 95th pct 0.38 dB, **max 0.78 dB at 1016 Hz** — right on the
-edge of the deepest notch. Fix: bin-average, or simply do not decimate below the source
-resolution.
+edge of the deepest notch. Now averages every source point falling in the bin, which also
+normalises whatever resolution a file arrives at down to the grid's own 1/24 oct — the
+finest the psychoacoustic setting ever asks for — so the analysis starts from the same
+resolution regardless of the smoothing the file was exported with. Sparse target curves
+leave most bins empty and still fall back to interpolation.
 
 ### N5 — coverage is reported with precision it does not have
 
