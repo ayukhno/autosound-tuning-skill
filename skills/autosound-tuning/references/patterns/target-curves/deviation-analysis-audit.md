@@ -150,10 +150,11 @@ The ±4-bin extremum window makes a feature impossible below **22.45 Hz** and ab
 **17.7 kHz**. This car's **+6.5 dB at 21.8 Hz** can never appear. Fix: clamp the window at
 the array ends.
 
-### N9 — "None" smoothing implies raw data the page never had
+### N9 — "None" smoothing implied raw data the page never had — FIXED
 
-The REW export declares `Smoothing: 1/24 octave` in its own header. Choosing "None" shows
-1/24-smoothed data while implying it is raw. The header is parseable and should be shown.
+The REW export declares `Smoothing: 1/24 octave` in its own header. Choosing "None" showed
+1/24-smoothed data while implying it was raw. The option has been removed; the default was
+already 1/6 oct. Surfacing the header value is still open.
 
 ### N10 — "Resonance control" is a single-feature lottery
 
