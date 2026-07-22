@@ -2049,7 +2049,14 @@
     // from a level you are still adjusting — press Analyze once the level looks right.
     function analyzeApplyShift() {
         if (!analyzeRawDelta || !analyzeCmpSmooth) return;
-        const applied = analyzeManualShift - analyzeAutoAnchor;
+        // Must mirror runAnalyze()'s own condition exactly: the anchor only counts while
+        // Align is actually checked. analyzeAutoAnchor itself never goes stale (it's a fixed
+        // property of rawDelta), but a fine-tune nudge silently unchecks Align — using the
+        // stored anchor unconditionally here made the live preview jump once Analyze was
+        // pressed and runAnalyze recomputed with the anchor correctly zeroed.
+        const alignChk = document.getElementById('anzAlign');
+        const anchor = (alignChk && alignChk.checked) ? analyzeAutoAnchor : 0;
+        const applied = analyzeManualShift - anchor;
         analyzeDelta = analyzeRawDelta.map(function (p) { return { f: p.f, y: p.y + applied }; });
         analyzeCmpSeries = analyzeCmpSmooth.map(function (p) { return { x: p.f, y: p.y + applied }; });
         const tot = document.getElementById('anzMTotal'); if (tot) tot.textContent = analyzeFmtDb(applied);
