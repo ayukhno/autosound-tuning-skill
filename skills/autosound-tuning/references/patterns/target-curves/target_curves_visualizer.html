@@ -591,6 +591,8 @@
             analyzeAdviceNull: 'Likely acoustic null / phase cancellation — do NOT EQ-boost. Check polarity, crossover delay, mic position.',
             analyzeAdvicePeak: 'Narrow resonance — a single tight PEQ cut is the honest fix.',
             analyzeAdviceBroadDip: 'Broad shelf dip — tonal, a gentle wide boost is fair.',
+            analyzeAdviceDipTooNarrow: 'Too narrow to lift honestly — a filter that tight rings more than it fills. Leave it, and check phase / crossover / mic position instead.',
+            analyzeAdviceDipPartial: 'Wide enough to lift, but too deep to chase — take about 3 dB at most and leave the rest.',
             analyzeAdviceBroadPeak: 'Broad tonal bump — a gentle wide cut evens it out.',
             analyzeDiscHeader: 'Read honestly',
             analyzeDiscTarget: 'Target is a hypothesis, not ground truth — a starting reference, tune by ear.',
@@ -654,6 +656,8 @@
             analyzeAdviceNull: 'Ймовірно акустичний нуль / фазове гасіння — НЕ піднімай еквалайзером. Перевір полярність, затримку кросовера, позицію мікрофона.',
             analyzeAdvicePeak: 'Вузький резонанс — чесний фікс: одна точкова вирізка PEQ.',
             analyzeAdviceBroadDip: 'Широкий пологий провал — тональний, доречний обережний широкий підйом.',
+            analyzeAdviceDipTooNarrow: 'Завузький, щоб чесно піднімати — фільтр такої добротності дзвенітиме більше, ніж заповнить. Залиш і краще перевір фазу / кросовер / позицію мікрофона.',
+            analyzeAdviceDipPartial: 'Достатньо широкий, щоб підняти, але надто глибокий, щоб виганяти до нуля — бери щонайбільше близько 3 дБ, решту лиши.',
             analyzeAdviceBroadPeak: 'Широкий тональний горб — доречна обережна широка вирізка.',
             analyzeDiscHeader: 'Читай чесно',
             analyzeDiscTarget: 'Ціль — це гіпотеза, а не істина в останній інстанції: стартовий референс, налаштовуй на слух.',
@@ -717,6 +721,8 @@
             analyzeAdviceNull: 'Wahrscheinlich eine akustische Nullstelle / Phasenauslöschung — NICHT per EQ anheben. Polarität, Weichen-Delay, Mikrofonposition prüfen.',
             analyzeAdvicePeak: 'Schmale Resonanz — ein einzelner, eng gesetzter PEQ-Cut ist der ehrliche Fix.',
             analyzeAdviceBroadDip: 'Breite Senke — tonal bedingt, eine sanfte breite Anhebung ist angemessen.',
+            analyzeAdviceDipTooNarrow: 'Zu schmal für eine ehrliche Anhebung — ein derart enger Filter klingelt mehr, als er auffüllt. Stehen lassen und lieber Phase / Weiche / Mikrofonposition prüfen.',
+            analyzeAdviceDipPartial: 'Breit genug zum Anheben, aber zu tief, um sie auszugleichen — höchstens etwa 3 dB nehmen und den Rest lassen.',
             analyzeAdviceBroadPeak: 'Breite tonale Anhebung — ein sanfter breiter Cut gleicht sie aus.',
             analyzeDiscHeader: 'Ehrlich lesen',
             analyzeDiscTarget: 'Die Zielkurve ist eine Hypothese, keine absolute Wahrheit — ein Startpunkt, nach Gehör feinjustieren.',
@@ -780,6 +786,8 @@
             analyzeAdviceNull: 'Prawdopodobnie zero akustyczne / kasowanie fazowe — NIE podbijaj EQ. Sprawdź polaryzację, opóźnienie zwrotnicy, pozycję mikrofonu.',
             analyzeAdvicePeak: 'Wąski rezonans — uczciwa naprawa to jedno wąskie cięcie PEQ.',
             analyzeAdviceBroadDip: 'Szeroki, płaski dołek — tonalny, delikatne szerokie podbicie jest zasadne.',
+            analyzeAdviceDipTooNarrow: 'Zbyt wąskie, by uczciwie podbić — tak wąski filtr dzwoni bardziej, niż wypełnia. Zostaw i sprawdź raczej fazę / zwrotnicę / pozycję mikrofonu.',
+            analyzeAdviceDipPartial: 'Wystarczająco szerokie, by podbić, ale zbyt głębokie, by je gonić — weź najwyżej około 3 dB, resztę zostaw.',
             analyzeAdviceBroadPeak: 'Szerokie tonalne uwypuklenie — delikatne szerokie cięcie je wyrówna.',
             analyzeDiscHeader: 'Czytaj uczciwie',
             analyzeDiscTarget: 'Krzywa docelowa to hipoteza, nie prawda absolutna — punkt startowy, strojenie ostatecznie na słuch.',
@@ -1054,6 +1062,11 @@
     // Absolute significance floor for reporting a feature, and a guard row limit for a
     // pathologically noisy curve. See the cut in analyzeFeatures.
     const ANALYZE_SEV_FLOOR = 1.2, ANALYZE_MAX_ROWS = 14;
+    // When a deficit may honestly be lifted, per competition practice: only a low-Q one,
+    // and only partly. Q = sqrt(2^N)/(2^N-1) for a bandwidth of N octaves, so Q 3 is a
+    // 0.48-oct wide feature. Anything tighter needs a filter that rings more than it
+    // fills; anything deeper than a few dB cannot be chased to the bottom at all.
+    const ANALYZE_BOOST_MIN_OCT = 0.48, ANALYZE_BOOST_MAX_DB = 3;
     const analyzePlugin = {
         id: 'analyzePlugin',
         // Skip the NATIVE draw for the two curves under analysis — we redraw them ourselves
@@ -1777,11 +1790,32 @@
         }
         return (n * sxy - sx * sy) / (n * sxx - sx * sx);
     }
+    // TRUE topographic prominence: walk out both ways until the curve rises above (peak) or
+    // falls below (dip) the candidate, and take how far it drops/climbs on the shallower
+    // side. The previous version probed the delta at a FIXED +-4 bins, which rejected any
+    // feature sitting on a broad base no matter how large it was: this project's reference
+    // car has a +4.2 dB peak at 554 Hz whose fixed-offset prominence measured 0.60 dB
+    // against the 1.0 dB gate, so it never reached the report — and its 500 Hz-1 kHz band
+    // was then skipped as "within tolerance", because the mean of a +4.2 / -4.1 swing is
+    // +0.07 dB. Same for the -3.5 dB dip at 277 Hz.
+    function analyzeProminence(delta, i, isMax) {
+        const y = delta[i].y, n = delta.length;
+        let lo = y, hi = y, j = i;
+        if (isMax) {
+            while (j > 0 && delta[j - 1].y <= y) { j--; if (delta[j].y < lo) lo = delta[j].y; }
+            j = i;
+            while (j < n - 1 && delta[j + 1].y <= y) { j++; if (delta[j].y < hi) hi = delta[j].y; }
+            return Math.min(y - lo, y - hi);
+        }
+        while (j > 0 && delta[j - 1].y >= y) { j--; if (delta[j].y > lo) lo = delta[j].y; }
+        j = i;
+        while (j < n - 1 && delta[j + 1].y >= y) { j++; if (delta[j].y > hi) hi = delta[j].y; }
+        return Math.min(lo - y, hi - y);
+    }
     // Local extrema on the smoothed delta, requiring the point to be extremal over a
-    // WIDER window (~0.17 oct) AND to stand out from both window edges by a minimum
-    // prominence — otherwise a REW-noise-scale wiggle riding on an otherwise-monotonic
-    // tilt gets mistaken for a real feature (it must have real curvature, not just be
-    // lower/higher than its two immediate neighbors).
+    // WIDER window (~0.17 oct) AND to clear a minimum topographic prominence — otherwise a
+    // REW-noise-scale wiggle riding on an otherwise-monotonic tilt gets mistaken for a real
+    // feature (it must have real curvature, not just be lower/higher than its neighbors).
     function analyzeFeatures(delta) {
         const WIN = 4, PROM = 1.0;
         const out = [];
@@ -1796,8 +1830,7 @@
             }
             if (!isMax && !isMin) continue;
             if (Math.abs(y) < ANALYZE_TOL) continue;
-            const prom = Math.min(Math.abs(y - delta[i - WIN].y), Math.abs(y - delta[i + WIN].y));
-            if (prom < PROM) continue;
+            if (analyzeProminence(delta, i, isMax) < PROM) continue;
             // A local max sitting between two DEEPER dips is not a bump to cut — it is the
             // one spot that still reaches the target while its neighbourhood falls away, so
             // the honest story there is the two dips (which get found on their own). Require
@@ -1828,7 +1861,17 @@
             // a real resonance, PEQ-fixable. Broad = tonal, an honest wide EQ move is fair.
             if (dip && narrow) { kind = 'null'; adviceKey = 'analyzeAdviceNull'; }
             else if (!dip && narrow) { kind = 'peak'; adviceKey = 'analyzeAdvicePeak'; }
-            else { kind = dip ? 'dip' : 'peak'; adviceKey = dip ? 'analyzeAdviceBroadDip' : 'analyzeAdviceBroadPeak'; }
+            else if (!dip) { kind = 'peak'; adviceKey = 'analyzeAdviceBroadPeak'; }
+            else {
+                // A cut is always physically safe, so peaks need no gate. A boost is not: it
+                // is only honest on a low-Q deficit, and even then only partly. Saying
+                // "a gentle wide boost is fair" about a -6 dB, Q~3 notch was the one output
+                // of this panel that could make a car measurably worse.
+                kind = 'dip';
+                adviceKey = woct < ANALYZE_BOOST_MIN_OCT ? 'analyzeAdviceDipTooNarrow'
+                    : (Math.abs(h) > ANALYZE_BOOST_MAX_DB ? 'analyzeAdviceDipPartial'
+                    : 'analyzeAdviceBroadDip');
+            }
             out.push({ f: f, h: h, woct: woct, narrow: narrow, dip: dip, kind: kind, sev: sev, resW: resW, adviceKey: adviceKey });
         }
         out.sort(function (a, b) { return b.sev - a.sev; });
@@ -1852,15 +1895,19 @@
     // edge and −4 dB in the middle. Instead: find the worst point inside the band and grow a
     // contiguous span around it while the deviation keeps the same sign and stays at least
     // half as deep, clamped to the band. Falls back to the full band when the band is flat.
-    function analyzeFocusRange(delta, lo, hi) {
+    function analyzeFocusRange(delta, lo, hi, sgn) {
         let bi = -1, bv = 0;
         for (let i = 0; i < delta.length; i++) {
             const p = delta[i];
             if (p.f < lo || p.f >= hi) continue;
+            // Only the side of zero the printed number describes. Taking the largest |delta|
+            // regardless of sign made the row read "-1.1 dB" (the band mean) while
+            // highlighting a +3.6 dB excursion at the other end of the same band.
+            if (sgn * p.y <= 0) continue;
             if (Math.abs(p.y) > bv) { bv = Math.abs(p.y); bi = i; }
         }
         if (bi < 0 || bv < 0.5) return [lo, hi];
-        const thr = bv / 2, sgn = delta[bi].y >= 0 ? 1 : -1;
+        const thr = bv / 2;
         let a = bi, b = bi;
         while (a > 0 && delta[a - 1].f >= lo && sgn * delta[a - 1].y >= thr) a--;
         while (b < delta.length - 1 && delta[b + 1].f < hi && sgn * delta[b + 1].y >= thr) b++;
@@ -2196,7 +2243,7 @@
                 const tier = Math.abs(bandAvgV) < 2.5 ? s.intSlight : (Math.abs(bandAvgV) < 4.5 ? s.intModerate : s.intStrong);
                 const trObj = BAND_TREND[i] ? (bandAvgV >= 0 ? BAND_TREND[i].more : BAND_TREND[i].less) : null;
                 const trend = trObj ? (trObj[currentLang] || trObj.en) : '';
-                const fr = analyzeFocusRange(delta, lo, hi);
+                const fr = analyzeFocusRange(delta, lo, hi, bandAvgV >= 0 ? 1 : -1);
                 // Instruments are listed for the ACTUAL problem span (focus range / feature
                 // width), not the whole band — that is the range being complained about.
                 rows += bandRow(bandLabel, bandAvgV, '<span style="color:var(--text-muted);">—</span>', tier + ' ' + trend, analyzeInstrumentsInBand(fr[0], fr[1]), fr[0], fr[1], null);
@@ -2214,7 +2261,9 @@
                 const tier = Math.abs(f.h) < 2.5 ? s.intSlight : (Math.abs(f.h) < 4.5 ? s.intModerate : s.intStrong);
                 const trObj = BAND_TREND[i] ? (f.h >= 0 ? BAND_TREND[i].more : BAND_TREND[i].less) : null;
                 const trend = trObj ? (trObj[currentLang] || trObj.en) : '';
-                const shift = tier + ' ' + trend + '<div style="color:var(--text-muted);margin-top:3px;">' + (s[f.adviceKey] || '') + '</div>';
+                const q = Math.sqrt(Math.pow(2, f.woct)) / (Math.pow(2, f.woct) - 1);
+                const shift = tier + ' ' + trend + '<div style="color:var(--text-muted);margin-top:3px;">' +
+                    (s[f.adviceKey] || '') + ' <span style="opacity:.7;white-space:nowrap;">Q\u2248' + q.toFixed(1) + '</span></div>';
                 rows += bandRow(bandLabel, f.h, featBadge(f), shift, analyzeInstrumentsInBand(rLo, rHi), rLo, rHi, f.f);
             });
         });

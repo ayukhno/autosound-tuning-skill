@@ -220,6 +220,56 @@ Two visible consequences worth knowing about:
 a separate `resW` term) so that rebalancing the ranking did not silently move that grade's
 thresholds. Reworking the grade is still open (N10).
 
+## 4b. Second round: features that were never found, and the boost rule
+
+Found by the user looking at the 200–500 Hz row: it printed **−1.1 dB** ("slightly drier")
+while the highlight on the chart sat on a **+3.6 dB** excursion at the top of the same band.
+
+**N11 — prominence was probed at a fixed offset, so broad-based features were invisible.**
+The gate read the delta at exactly ±4 bins (±0.17 oct). A feature sitting on a broad base
+therefore measured almost no step however large it was:
+
+```
+554 Hz peak, +4.2 dB   left probe (494 Hz) +3.6   right probe (622 Hz) -0.1
+                       prominence = min(0.60, 4.24) = 0.60  <  gate 1.00  -> REJECTED
+                       true topographic prominence = 10.2 dB
+```
+
+So a +4.2 dB peak at 554 Hz and a −4.1 dB dip at 690 Hz — an 8.3 dB swing across vocal
+fundamentals — were both absent from the report, and the 500 Hz–1 kHz band was then skipped
+as "within ±1.5 dB" because the mean of that swing is +0.07 dB. Replaced with true
+topographic prominence (walk out until the curve crosses the candidate's level, take the
+shallower side). Feature count 7 → 10, still 4/4 stable across the numerical variants, and
+now every band with real content carries a real feature instead of a band average.
+
+**N12 — the highlight could point at the opposite sign to the number.** `analyzeFocusRange`
+picked the largest |delta| in the band regardless of sign while the row printed the band
+mean. Fixed by passing the sign of the printed number.
+
+**N13 — the boost rule was not tied to what an EQ can actually do.** The panel said
+*"broad shelf dip — a gentle wide boost is fair"* for a −6.0 dB notch at 160 Hz. Per
+competition practice a deficit may only be lifted when it is low-Q, and even then only
+partly. Using `Q = √(2^N)/(2^N − 1)`:
+
+| Q | bandwidth |
+|---|---|
+| 1 | 1.39 oct |
+| 2 | 0.71 oct |
+| 3 | 0.48 oct |
+| 4.3 | 0.34 oct ← the panel's old narrow/broad split |
+
+The old threshold called everything above Q 4.3 "broad" and offered a boost, i.e. it
+recommended lifting notches up to Q 4.3 and of unlimited depth. Now: below 0.48 oct
+(Q > 3) a deficit is never offered a boost; above it, a deficit deeper than 3 dB gets
+"take about 3 dB at most and leave the rest"; only a low-Q deficit within 3 dB keeps the
+original "a gentle wide boost is fair". Cuts are unchanged — a cut is always physically
+safe. The Q a tuner would actually dial is now printed on every feature row.
+
+On the reference car exactly one of the four deficits still qualifies for a boost
+(3.7 kHz, Q 1.3, −2.8 dB). Caveat: Q is derived from the −3 dB width, which is the fragile
+quantity in N7 — it still moves with the smoothing dropdown, so treat the printed Q as
+approximate until N7 is fixed.
+
 ## 5. Downstream: the advice layer (secondary to the above)
 
 Separate from arithmetic trustworthiness, one output is actively dangerous: at 155 Hz the
