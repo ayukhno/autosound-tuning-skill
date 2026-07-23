@@ -2,6 +2,20 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
+## [v2.7.1] — 2026-07-23
+
+The excess-phase EQ-ability gate (`eq_gate.py`) got its first formal validation — a 5-block experiment suite in the research project, cross-model verified (Claude + Gemini), verdict `partially_supported`. No behaviour change to the shipping gate; the update is honest scoping plus a regression lock.
+
+### Changed
+- **`eq_gate.py` provenance rewritten** from the thin "validated on one build (2026-07-13)" to the real validation and its limits: STRONG as a BLOCK detector (90/90 on an analytic minimum- vs non-minimum-phase ground-truth family at matched magnitude, where any depth-only rule is at chance; 20/25 on the VW-B8 real BLOCK anchors on its own), but NOT a certifier (ALLOW means "no phase objection", not "safe to boost"; permissive-side evidence is n=4, one session). Calibration remains install-specific — prefer advising over hard-vetoing until a second install lands.
+
+### Added
+- **`ExcessPhaseGate.s_at(f0)`** — the always-comparable S accessor. `check()`'s `metric` is safe in this class but a subclass adding branches could return a different quantity; aggregating that across cases produced a false "criterion inverts on deep dips" finding in the research suite. Use `s_at()` for any cross-case analysis.
+- **Selftest regression lock**: a deep minimum-phase notch (r=0.98) must never be BLOCKed (WARN → mic-shift is acceptable; a min-phase system has ~zero excess phase at any depth, so S stays near the noise floor). Guards against a depth-based null-guard being added later — an experiment did exactly that and demoted 90/90 to 54/90.
+
+### Known limitation (documented, not fixed)
+- The gate misses 5/25 real BLOCK anchors on its own — shallow dips where single-point in-cabin excess phase is drift-floor-unstable. Catching those needs a spatial check (does the dip survive a same-session MMM per channel), a future enhancement requiring the MMM to be captured in the SAME session as the sweep. Until then WARN→mic-shift (§13) is the safety net.
+
 ## [v2.7.0] — 2026-07-22
 
 Curve-visualizer release: a deviation-analysis panel, and an audit that made its numbers reproducible.

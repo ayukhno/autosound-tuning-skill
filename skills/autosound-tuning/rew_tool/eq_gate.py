@@ -22,8 +22,39 @@ ALLOW); see excess_gate.py for the research/validation harness.
 
 Verdicts: ALLOW < Z_WARN <= WARN (needs a mic-shift cross-check, diagnostic
 §13) < Z_BLOCK <= BLOCK. Scope: phase-based only — taste zones (de-esser
-5-6k etc.) stay manual in the car record. Calibration is PROVISIONAL:
-validated on one build (2026-07-13).
+5-6k etc.) stay manual in the car record.
+
+Validation status (2026-07-23, first formal experiment suite — see the
+research project `sound_AutoSci`, idea `excess-phase-extraction`, 5 blocks,
+cross-model verified Claude+Gemini, verdict partially_supported):
+  - STRONG as a BLOCK detector. On an analytic ground-truth family (minimum-
+    vs non-minimum-phase combs at MATCHED magnitude, where any depth-only
+    rule is at chance) this gate scores 90/90 at the z_warn=5.0 operating
+    point. It never confidently BLOCKs a minimum-phase dip at any depth (a
+    min-phase system has ~zero excess phase, so S stays near the noise floor);
+    at the more conservative default z_warn=4.5, deep min-phase dips tip to
+    WARN (→ mic-shift check) rather than ALLOW — an abstention, not a false
+    block. On the VW-B8 build's real BLOCK anchors it catches 20/25 on its own.
+  - NOT a certifier. ALLOW / absence-of-BLOCK means "no phase objection",
+    never "safe to boost". The permissive side's real evidence is thin
+    (n=4, one session). Treat ALLOW as counsel, keep the human in the loop.
+  - The 5 real BLOCK anchors it misses on its own are shallow dips where
+    single-point in-cabin excess phase is drift-floor-unstable (breathes by
+    orders of magnitude take-to-take). Catching those needs a SPATIAL check
+    (does the dip survive a same-session MMM) — a future enhancement, not a
+    fix; it requires an MMM solo per channel captured in the SAME session as
+    the sweep. Until then, WARN→mic-shift (§13) is the safety net for these.
+  - Calibration remains PROVISIONAL / install-specific: the METHOD is general
+    but Z_WARN/Z_BLOCK/DIP_DB and per-driver trust bands are tuned on one
+    vehicle. Pending a second install (out-of-sample), prefer advising over
+    hard-vetoing — see `as_boost_gate` note.
+
+⚠️ Do NOT add a depth-based null-guard that abstains on deep dips regardless
+of S. An experiment did exactly that and it demoted 90/90 to 54/90 by
+overriding correct confident ALLOWs on deep MINIMUM-phase notches (their S
+sits at the noise floor, as theory requires). If a guard is ever wanted,
+condition it on S (abstain only when S is ALSO near threshold), never on
+depth alone. The `--selftest` locks in the deep-min-phase-ALLOW case.
 
 Excess phase source: REW's native "Excess phase version" (`rew_api.
 excess_phase_version`) — the authoritative path, not a home-brew Hilbert.
@@ -89,8 +120,28 @@ class ExcessPhaseGate:
         self.r = analyze(freqs, mag_db, excess_phase_deg, trust)
         self.z_warn, self.z_block, self.dip_db = z_warn, z_block, dip_db
 
+    def s_at(self, f0):
+        """The phase-anomaly statistic S at f0 — the ALWAYS-comparable value.
+
+        Use this, not `check()`'s `metric`, for any cross-case comparison or
+        aggregation. `metric` is fine here (both branches return an S-family
+        value), but a subclass that adds branches returning a different
+        quantity (e.g. a dB dip depth) would make `metric` non-comparable and
+        silently corrupt any aggregate — that exact trap produced a false
+        "criterion inverts on deep dips" finding in the 2026-07-23 research
+        suite. `s_at()` is immune to it.
+        """
+        i0 = int(np.argmin(np.abs(self.r["g"] - f0)))
+        return float(self.r["s"][i0])
+
     def check(self, f0, q):
-        """-> (verdict, metric, at_freq|None) for a PK boost at (f0, q)."""
+        """-> (verdict, metric, at_freq|None) for a PK boost at (f0, q).
+
+        `metric` is the S statistic on the hot path and S*w on ALLOW — both
+        S-family, so it is comparable AS LONG AS this class is not subclassed
+        with branches returning a different quantity. For safety in any
+        cross-case analysis use `s_at(f0)` instead (see its docstring).
+        """
         from dsp_math import peq_response
         r = self.r
         w = np.abs(20 * np.log10(np.abs(peq_response(r["g"], "PK", f0, 3.0, q))
@@ -158,9 +209,27 @@ def _selftest():
     assert ok_flat == "ALLOW", f"flat region blocked: {ok_flat}"
     assert g_non.as_boost_gate()("PK", f0, 5.0) is False
     assert g_non.as_boost_gate()("LS", f0, 0.71) is True
+
+    # DEEP minimum-phase notch must never be BLOCKED. A min-phase system has
+    # ~zero excess phase at ANY depth, so the point-S sits at the noise floor;
+    # measurement noise can push the region-max S into the WARN band (an
+    # abstention that routes to the §13 mic-shift check — acceptable), but it
+    # must NOT reach BLOCK. This locks out the depth-guard regression that
+    # demoted 90/90 to 54/90 in the 2026-07-23 research suite by confidently
+    # rejecting deep min-phase dips (docstring ⚠️ note).
+    g_deep = comb_case(0.98)          # |1-r|=0.02 -> a very deep min-phase dip
+    v_deep, _, _ = g_deep.check(f0, 5.0)
+    s_deep = g_deep.s_at(f0)
+    assert v_deep != "BLOCK", (
+        f"deep min-phase notch BLOCKED: {v_deep} (point-S {s_deep:.2f} -- a "
+        f"depth-guard regression; min-phase must never confidently block)")
+    assert s_deep < g_deep.z_warn, (
+        f"deep min-phase point-S not at floor: {s_deep:.2f}")
+
     print(f"selftest OK -- min-phase comb r=0.95: {v_min} (S*w {m_min:.1f}); "
           f"non-min-phase r=1.05: {v_non} (S {m_non:.1f} @ {at:.0f} Hz); "
-          f"between-notch ALLOW; shelf pass-through")
+          f"between-notch ALLOW; shelf pass-through; "
+          f"deep min-phase r=0.98: {v_deep} (point-S {s_deep:.2f}, not BLOCK)")
 
 
 if __name__ == "__main__":
