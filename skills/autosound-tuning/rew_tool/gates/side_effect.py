@@ -119,6 +119,72 @@ def _recent_duplicate(title, runner, hours=_DEDUP_HOURS):
     return None
 
 
+def _issue_number(url):
+    import re
+    m = re.search(r"/issues/(\d+)", url or "")
+    return m.group(1) if m else None
+
+
+def _verify_dsp_profile_update(prior_url):
+    """Like verify_feedback_url, plus: the comment must land on the SAME issue as prior_url —
+    otherwise a `gh issue comment` call that silently resolved to the wrong thread would pass."""
+    prior_n = _issue_number(prior_url)
+
+    def _verify(rc, out, err):
+        ok, detail = verify_feedback_url(rc, out, err)
+        if not ok:
+            return ok, detail
+        url = _extract_url(out) or _extract_url(err)
+        n = _issue_number(url)
+        if prior_n and n != prior_n:
+            return False, f"comment landed on issue #{n}, expected #{prior_n} ({prior_url})"
+        return True, detail
+
+    return _verify
+
+
+def post_dsp_profile(profile_file, vendor, model, mode="new", prior_url=None,
+                      runner=_subprocess_runner, dry_run=False):
+    """Contribute a DSP capability profile to the community.
+
+    Deliberately divergent from `post_feedback`'s timing: a profile is offered for contribution
+    RIGHT AFTER an onboarding interview produces or extends it, not deferred to a satisfaction
+    milestone — the facts are valuable independent of whether the tuning project itself succeeds,
+    and waiting risks losing them on an abandoned project.
+
+    mode="new"    -> opens a new Issue "DSP profile: <vendor> · <model>" (same
+                     guarded_run/verify_feedback_url/dedup discipline as post_feedback).
+    mode="update" -> COMMENTS on `prior_url` instead of opening a disconnected duplicate — one
+                     thread per DSP model. Requires `prior_url` (the caller reads it back from the
+                     project's own `_contributed` bookkeeping, never re-resolved by a model).
+    """
+    import os
+    import sys
+    if mode not in ("new", "update"):
+        raise ValueError(f"mode must be 'new' or 'update', got {mode!r}")
+    if not os.path.isfile(profile_file):
+        raise ValueError(f"profile-file not found: {profile_file!r}")
+    if mode == "update" and not prior_url:
+        raise ValueError("mode='update' requires prior_url (the issue thread to comment on)")
+    if runner is _subprocess_runner and shutil.which("gh") is None and not dry_run:
+        raise EnvironmentError("`gh` CLI not found — install/auth it, or use the copy-paste block.")
+
+    if mode == "new":
+        title = f"DSP profile: {vendor} · {model}"
+        if not dry_run:
+            dup = _recent_duplicate(title, runner)
+            if dup:
+                print(f"⛔ SKIP — identical DSP-profile issue already posted "
+                      f"(<{_DEDUP_HOURS:.0f}h): {dup}", file=sys.stderr)
+                return {"skipped": True, "duplicate_url": dup, "title": title}
+        argv = ["gh", "issue", "create", "--repo", FEEDBACK_REPO,
+                "--title", title, "--body-file", profile_file]
+        return guarded_run(argv, verify_feedback_url, runner=runner, dry_run=dry_run)
+
+    argv = ["gh", "issue", "comment", prior_url, "--body-file", profile_file]
+    return guarded_run(argv, _verify_dsp_profile_update(prior_url), runner=runner, dry_run=dry_run)
+
+
 def post_feedback(body_file, car, dsp, runner=_subprocess_runner, dry_run=False):
     """Post the de-identified feedback issue with the repo HARDCODED + returned-URL verified.
 
@@ -221,5 +287,55 @@ def _selftest():
     return 0
 
 
+def _selftest_dsp_profile():
+    import os, tempfile
+    profile = os.path.join(tempfile.mkdtemp(), "profile.json")
+    with open(profile, "w") as f:
+        f.write('{"dsp_profile": {"name": "M6V4", "vendor": "Musway"}}\n')
+
+    good_new = lambda argv: (0, f"https://github.com/{FEEDBACK_REPO}/issues/9\n", "")
+    r = post_dsp_profile(profile, "Musway", "M6V4", mode="new", runner=good_new)
+    assert r["detail"].startswith("verified on"), r
+    assert r["argv"][:3] == ["gh", "issue", "create"], r["argv"]
+    assert r["argv"][r["argv"].index("--title") + 1] == "DSP profile: Musway · M6V4", r["argv"]
+
+    # update mode comments on the prior issue instead of opening a new one.
+    prior = f"https://github.com/{FEEDBACK_REPO}/issues/9"
+    good_comment = lambda argv: (0, f"{prior}#issuecomment-123\n", "")
+    r2 = post_dsp_profile(profile, "Musway", "M6V4", mode="update", prior_url=prior,
+                           runner=good_comment)
+    assert r2["detail"].startswith("verified on"), r2
+    assert r2["argv"] == ["gh", "issue", "comment", prior, "--body-file", profile], r2["argv"]
+
+    # a comment that lands on a DIFFERENT issue than prior_url must be refused, not accepted.
+    wrong_issue = lambda argv: (0, f"https://github.com/{FEEDBACK_REPO}/issues/12#issuecomment-1\n", "")
+    try:
+        post_dsp_profile(profile, "Musway", "M6V4", mode="update", prior_url=prior,
+                          runner=wrong_issue)
+        raise AssertionError("accepted a comment that landed on the wrong issue")
+    except SideEffectRefused:
+        pass
+
+    # mode='update' without prior_url is a deterministic refusal, no command runs.
+    try:
+        post_dsp_profile(profile, "Musway", "M6V4", mode="update", runner=good_comment)
+        raise AssertionError("accepted mode='update' with no prior_url")
+    except ValueError:
+        pass
+
+    # same wrong-repo confabulation guard applies to profile posts.
+    wrong_repo = lambda argv: (0, "https://github.com/someone-else/skill/issues/1\n", "")
+    try:
+        post_dsp_profile(profile, "Musway", "M6V4", mode="new", runner=wrong_repo)
+        raise AssertionError("accepted a profile post landing on the wrong repo")
+    except SideEffectRefused:
+        pass
+
+    print("selftest OK (dsp-profile) — new-mode posts a titled Issue; update-mode comments on "
+          "prior_url instead of duplicating; refused a comment that landed on the wrong issue, "
+          "a missing prior_url, and the wrong-repo confabulation.")
+    return 0
+
+
 if __name__ == "__main__":
-    raise SystemExit(_selftest())
+    raise SystemExit(_selftest() or _selftest_dsp_profile())
