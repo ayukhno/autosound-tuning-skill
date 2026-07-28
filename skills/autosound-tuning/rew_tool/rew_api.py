@@ -203,8 +203,21 @@ def get_equaliser(mid):
     return _get(f"/measurements/{mid}/equaliser")
 
 
-def set_equaliser(mid, equaliser_name):
-    return _post(f"/measurements/{mid}/equaliser", {"name": equaliser_name})
+def set_equaliser(mid, manufacturer, model):
+    """Select the equaliser REW models this measurement's filters against.
+
+    An equaliser is identified by the `{manufacturer, model}` pair `get_equalisers()` returns --
+    the old single-`name` payload here was rejected with `400 "No manufacturer in the request"`,
+    which is why `rew-api-quirks.md` §Writing filters documents the two-field form.
+
+    The choice is load-bearing, not cosmetic: it sets the available filter types and the slot
+    count. "Generic"/"Extended" gives 20 slots and includes crossover and all-pass types, so a
+    whole channel can be modelled; "Generic"/"Configurable PEQ" gives 31 PEQ-only slots;
+    "Audiotec Fischer"/"Full EQ (30 bands)" constrains REW to what a Helix can actually store.
+    """
+    return _post(
+        f"/measurements/{mid}/equaliser", {"manufacturer": manufacturer, "model": model}
+    )
 
 
 def get_equalisers():
