@@ -19,10 +19,10 @@
 > * **1 місце у класі EINSTEIGER 5000 на змаганнях AYA (30.05.2026, Lemgo)**. Цей результат був здобутий за допомогою аналізу графіків та порад від Gemini.
 > * **1 місце у класі AMATEUR 5000 на змаганнях AYA (25.07.2026, Horst)**. Перемога у вищому класі, підкріплена використанням цього скіла.
 > 
-> <p align="center">
->   <img src="assets/awards/aya-may26-einsteiger5000.jpg" width="175" alt="AYA May 2026 Einsteiger 5000">
+> <p align="left">
+>   <img src="assets/awards/aya-may26-einsteiger5000.jpg" width="100" alt="AYA May 2026 Einsteiger 5000">
 >   &nbsp;&nbsp;&nbsp;
->   <img src="assets/awards/aya-jul26-amateur5000.jpg" width="175" alt="AYA Jul 2026 Amateur 5000">
+>   <img src="assets/awards/aya-jul26-amateur5000.jpg" width="100" alt="AYA Jul 2026 Amateur 5000">
 > </p>
 
 ## Зміст
