@@ -24,6 +24,8 @@
 >   &nbsp;&nbsp;&nbsp;
 >   <img src="assets/awards/aya-jul26-amateur5000.jpg" width="100" alt="AYA Jul 2026 Amateur 5000">
 > </p>
+> 
+> *Hier könnte auch deine Auszeichnung stehen!*
 
 ## Inhalt
 
