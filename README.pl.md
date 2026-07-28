@@ -13,6 +13,18 @@
 > [!CAUTION]
 > AI może pomylić się w liczbach. Zawsze sprawdzaj częstotliwości zwrotnic, nachylenia filtrów i wartości EQ w swoim DSP, zanim wyłączysz wyciszenie, zwłaszcza przy głośnikach wysokotonowych, i zaczynaj od niskiej głośności.
 
+> [!TIP]
+> **Nagrody i Osiągnięcia**
+> To podejście zostało stworzone nie tylko dla czystej przyjemności ze słuchania, ale także po to, by wygrywać. Udowodniło już swoją skuteczność w praktyce, przynosząc dwie nagrody:
+> * **1 miejsce w klasie EINSTEIGER 5000 na zawodach AYA (30.05.2026, Lemgo)**. Wynik ten został osiągnięty dzięki analizie wykresów i poradom od Gemini.
+> * **1 miejsce w klasie AMATEUR 5000 na zawodach AYA (25.07.2026, Horst)**. Zwycięstwo w wyższej klasie, w pełni zestrojone za pomocą tego skilla.
+> 
+> <p align="left">
+>   <img src="assets/awards/aya-may26-einsteiger5000.jpg" width="100" alt="AYA May 2026 Einsteiger 5000">
+>   &nbsp;&nbsp;&nbsp;
+>   <img src="assets/awards/aya-jul26-amateur5000.jpg" width="100" alt="AYA Jul 2026 Amateur 5000">
+> </p>
+
 ## Spis treści
 
 - [Dla kogo i dlaczego](#dla-kogo-i-dlaczego)
