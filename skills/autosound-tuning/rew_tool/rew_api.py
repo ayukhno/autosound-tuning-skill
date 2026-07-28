@@ -5,11 +5,16 @@ import base64
 import struct
 
 BASE_URL = "http://localhost:4735"
+# No timeout on urlopen() meant a REW-unreachable call (REW not running, port filtered rather than
+# actively refused, ...) could hang a caller forever -- fatal when that caller is a Qt QThread: the
+# app hangs, gets force-quit, and Qt aborts with "QThread: Destroyed while thread is still running"
+# (hit live via TCC's Read/rename buttons, 2026-07-27). 5s is generous for REW's local API.
+_TIMEOUT_S = 5
 
 
 def _get(path):
     url = BASE_URL + path
-    with urllib.request.urlopen(url) as r:
+    with urllib.request.urlopen(url, timeout=_TIMEOUT_S) as r:
         return json.loads(r.read())
 
 
@@ -18,7 +23,7 @@ def _post(path, data):
     body = json.dumps(data).encode()
     req = urllib.request.Request(url, data=body, method="POST",
                                  headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req) as r:
+    with urllib.request.urlopen(req, timeout=_TIMEOUT_S) as r:
         raw = r.read()
         return json.loads(raw) if raw else {}
 
@@ -28,7 +33,7 @@ def _put(path, data):
     body = json.dumps(data).encode()
     req = urllib.request.Request(url, data=body, method="PUT",
                                  headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req) as r:
+    with urllib.request.urlopen(req, timeout=_TIMEOUT_S) as r:
         raw = r.read()
         return json.loads(raw) if raw else {}
 
@@ -67,6 +72,21 @@ def get_measurements():
 
 def get_measurement(mid):
     return _get(f"/measurements/{mid}")
+
+
+def rename_measurement(mid, title):
+    """Rename a measurement in place (its ordinal id is unchanged; only the title changes).
+
+    `PUT /measurements/{id}` with a `title` body -- the REST-conventional shape, consistent with
+    this API's other resource endpoints (e.g. `set_filters`'s `PUT /measurements/{id}/filters`).
+    No REW doc describes a rename endpoint, so this was written from that convention and then
+    **verified against a live REW instance** (renamed a measurement, confirmed the new title in
+    REW's own UI, 2026-07-28). Added for TCC's capture-order auto-naming feature.
+
+    If a future REW release breaks it, the fallback to try next is
+    `POST /measurements/{id}/command` (see `measurement_command`) with a "Rename"-style command
+    discovered via `GET /measurements/{id}/commands`."""
+    return _put(f"/measurements/{mid}", {"title": title})
 
 
 def find_measurement_id(name, measurements=None, exact=True):
