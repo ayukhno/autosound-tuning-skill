@@ -17,7 +17,7 @@
 > **Awards & Achievements**
 > This approach is designed not just for personal listening pleasure, but for winning. It has already proven its effectiveness in practice, bringing home two awards:
 > * **1st place in EINSTEIGER 5000 class at AYA competition (May 30, 2026, Lemgo)**. This result was achieved through graph analysis and advice from Gemini.
-> * **1st place in AMATEUR 5000 class at AYA competition (July 25, 2026, Horst)**. A victory in the next class, completely tuned using this skill.
+> * **1st place in AMATEUR 5000 class at AYA competition (July 25, 2026, Horst)**. A victory in the next class, achieved using this skill and your own ears.
 > 
 > <p align="left">
 >   <img src="assets/awards/aya-may26-einsteiger5000.jpg" width="100" alt="AYA May 2026 Einsteiger 5000">

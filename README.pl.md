@@ -17,7 +17,7 @@
 > **Nagrody i Osiągnięcia**
 > To podejście zostało stworzone nie tylko dla czystej przyjemności ze słuchania, ale także po to, by wygrywać. Udowodniło już swoją skuteczność w praktyce, przynosząc dwie nagrody:
 > * **1 miejsce w klasie EINSTEIGER 5000 na zawodach AYA (30.05.2026, Lemgo)**. Wynik ten został osiągnięty dzięki analizie wykresów i poradom od Gemini.
-> * **1 miejsce w klasie AMATEUR 5000 na zawodach AYA (25.07.2026, Horst)**. Zwycięstwo w kolejnej klasie, w pełni zestrojone za pomocą tego skilla.
+> * **1 miejsce w klasie AMATEUR 5000 na zawodach AYA (25.07.2026, Horst)**. Zwycięstwo w kolejnej klasie, osiągnięte przy pomocy tego skilla i własnego słuchu.
 > 
 > <p align="left">
 >   <img src="assets/awards/aya-may26-einsteiger5000.jpg" width="100" alt="AYA May 2026 Einsteiger 5000">
