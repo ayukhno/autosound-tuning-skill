@@ -168,7 +168,35 @@ def get_filters(mid):
 
 
 def set_filters(mid, filters):
-    return _put(f"/measurements/{mid}/filters", filters)
+    """Replace a measurement's whole filter set. `filters` is a list of FilterSetting dicts.
+
+    POST with a `{"filters": [...]}` envelope, verified against a live REW (returns
+    `{"message": "Filters set"}`). The previous shape here -- PUT with a bare array -- could never
+    have worked: REW rejects it at the JSON layer with
+    `IllegalStateException: Expected BEGIN_OBJECT but was BEGIN_ARRAY`, because PUT on this path
+    takes a *single* FilterSetting (see `set_filter`), not a collection.
+
+    Each entry needs at least `index` (1-based, matching the slot numbering `get_filters` returns)
+    and `type`; omit `isAuto`, which REW reports but does not accept back. Clear a slot with
+    `{"index": N, "type": "None", "enabled": True}`.
+
+    ⚠️ The gain key is **`gaindB`**, not `gain`. An entry using `gain` is accepted with a 200 and
+    the filter is created at **0 dB** -- silently flat. Verified live: sending `gain: -3.0` stores
+    `gaindB: 0.0`, sending `gaindB: -3.0` stores `gaindB: -3.0`. A proposed EQ cut written the
+    wrong way therefore does nothing at all while reporting success, which is the worst failure
+    mode this API has. A working PK entry:
+    `{"index": 1, "type": "PK", "enabled": True, "frequency": 1000.0, "gaindB": -3.0, "q": 2.0}`.
+    """
+    return _post(f"/measurements/{mid}/filters", {"filters": filters})
+
+
+def set_filter(mid, filt):
+    """Set ONE filter slot, addressed by the `index` inside `filt`.
+
+    PUT on the same path as `set_filters`; REW answers `{"message": "Filter set"}` (singular).
+    Useful for touching a single band without resending the other thirty slots.
+    """
+    return _put(f"/measurements/{mid}/filters", filt)
 
 
 def get_equaliser(mid):
