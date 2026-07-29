@@ -29,7 +29,7 @@ This is the practical face of "the foundation is curve-agnostic" (SKILL.md → S
 
 Measurement name = **`<channel|pair|combo|joint>[ <modifier>]_<version>`**, optionally with a method suffix.
 
-- **Channel / pair / combo / joint codes** → `autosound_context.md §5` (this car: `sw`, `w-L/R`, `m-L/R`, `tw-L/R`, `r-L/R`, `c-H/c-L`; pairs `Ws/Ms/TWs`; combos `ALL`, `ALL+C`; joints `SW+Ws`, `L w+m`, `R m+tw`; full side `L`/`R`).
+- **Channel / pair / combo / joint codes** → `autosound_context.md §5` for the human-readable agreement, `glossary.json` (or `project.json`'s `glossary` key) for the machine copy `rew_tool/naming.py` actually reads (this car: `sw`, `w-L/R`, `m-L/R`, `tw-L/R`, `r-L/R`, `c-H/c-L`; pairs `Ws/Ms/TWs`; combos `ALL`, `ALL+C`; joints `SW+Ws`, `L w+m`, `R m+tw`; full side `L`/`R`). The grammar itself is code, not just this prose — `naming.py generate_name/parse_name/expected_series/validate_series`, so a measurement checklist is derived (phase × glossary × ledger version) instead of hand-typed per project.
 - **Method suffix:** `(rta)` = MMM RTA (for magnitude/tone) · `(sw)` = acoustic sweep (for phase/timing/distortion).
 - **Modifiers:** `FX` = measured with Helix FX on; `c` / `c FX` = front without / with FX.
 - **Transient experiment tags** — while A/B-testing a candidate change, tag the variant in the name (`i`/`INV` = inverted polarity, `+Δτ` = an added delay trial, etc.) so the two readings don't get confused. The tag is **temporary**: once the change is **baked into the base** it drops from the name (the measurement is just `_N+1` at the new config). **`dsp-state-current` is the source of truth for what's in the base** — the name tags only the experiment in flight, not the committed state.
@@ -63,7 +63,24 @@ Rule of thumb: **magnitude / tone / summation / target → `(rta)`**; **phase / 
 
 ## 4a. Config + export backups (git → GitHub) — set up at NEW-PROJECT start
 
-A tune is worth months of work; its artifacts must survive a disk loss. Standard layout (the skill tells the user this at project start, then keeps it fed):
+A tune is worth months of work; its artifacts must survive a disk loss. Standard layout (the skill tells the user this at project start, then keeps it fed).
+
+**The project folder as a whole** (one project = one folder the user points at, a git repo; the machine files are the front-end's whole contract — `project-schema.md`, `state/schema.md`, `state/process-schema.md`):
+
+```
+<project>/
+├── project.json          car/equipment/glossary/hardware facts — machine, this file's §1/§3/§5
+├── dsp_profile.json       DSP capability profile (tiers, fields, EQ band vocabulary)
+├── glossary.json          optional standalone form of project.json's `glossary` key
+├── autosound_context.md, preference-profile.md, tuning-changelog, audit-trail.md   — prose
+├── process/
+│   ├── process-state.json    current phase + plan slice
+│   └── journal.jsonl          append-only process history
+├── state/
+│   ├── registry.json          active-slot pointer (multi-preset DSPs)
+│   └── <preset>/v_NNN.json + HEAD    the hard-params ledger
+└── rew_analitic/          measurements, exports, target curves — detailed below
+```
 
 ```
 rew_analitic/
@@ -87,6 +104,8 @@ Rule of thumb: **what's small + irreplaceable (config binary, analysis md, light
 - **The DSP tool's own file-version (e.g. Helix PC-Tool `SQ_Jazzi v1.30.pct6`) is a SEPARATE numbering from our `vN`** — don't conflate. The `dsp-config/README.md` map bridges the two (which `.pct6` = which `dsp-state vN` + date). Helix saves config as `.pct6` (binary/encrypted, Audiotec-Fischer); it can't be parsed for analysis, so it's a backup/restore artifact only.
 - **Base + voicing** (SKILL.md → Session lifecycle): the OUTPUT base is shared; name voicing presets by intent — `voicing:EMMA` (competition), `voicing:Accurate` (enjoyment), `voicing:off` (neutral base). A config is then "base vN + voicing:X". Switching curves swaps the voicing, not the base. Which presets are worth building (SQ / FULL / SQL / surround / source-input / per-ruleset competition) → `preset-strategy.md`.
 - **Multiple active slots → one machine-checked pointer.** When the DSP holds several presets in physical slots (Helix Slot 1/2/3), which one is *loaded right now* is not a prose note — it's `rew_tool/state/registry.json` (`state.py registry set-active <preset>`). `registry render` generates the multi-slot `dsp-state-current` view (a loud active-slot banner + one isolated row per slot), and the apply gate refuses a change aimed at any non-active slot. This kills the cross-slot anchoring trap (computing filters off a neighbour slot's gains — issue #5).
+- **A DSP hardware-level control (Helix's RearRC/SubRC remote-knob position, RealCenter on/off) is NOT per-preset state.** It's a fact about the device, constant across every preset loaded on it — record it ONCE in `project.json`'s `hardware.controls` (`project.py set-hardware <name> <value>`), never copy it into each preset's ledger by hand. Doing that by hand is exactly how it drifted out of sync between two presets in the field. Optional and profile-declared — a DSP with no such remote (MUSWAY, etc.) simply has none.
+- **The ledger is tier-aware, not `channels`-only** (schema v2): a Helix project's snapshot has BOTH a `channels` (physical outputs) and a `virtual_channels` tier, and `apply.propose`/`diff`/`render` cover both — a delta like `{"virtual_channels": {"VFL": {"gain_db": -1.0}}}` banks the same way a `channels` edit does. `eq` bands are structured objects (`{"type": "PK", "f": 1000, "gain_db": -9, "q": 2}`), not the old inline strings — `state.eq_str(bands)` renders them for chat/the settings sheet. Detail → `rew_tool/state/schema.md`.
 
 ## 6. Target curves & competition vocabulary
 
