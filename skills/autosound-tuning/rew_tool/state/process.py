@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from datetime import datetime, timezone
 
 SCHEMA_VERSION = 1
@@ -337,3 +338,80 @@ class Process:
         with open(self.journal_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(event, ensure_ascii=False) + "\n")
         return event
+
+
+# --------------------------------------------------------------------------- CLI
+# The skill drives its tooling from Bash (SKILL.md's guardrails run `python rew_tool/...`), so the
+# writer needs a command line, not just an importable class -- same reason `state.py` has one.
+
+_USAGE = """usage: process.py <process-dir> <command> [args]
+
+  show                                  print the current state as JSON
+  plan [phase]                          print the plan (default: active phase)
+  enter-phase <phase>                   make a phase current (-1..5)
+  add-step <id> <name> [--project]      add a plan step (--project = situational insert)
+  start <id>                            begin/re-begin a step (a re-begin is attempt N+1)
+  done <id> <evidence> [evidence ...]    mark done; evidence is REQUIRED
+  skip <id> [superseded-by]             supersede a step (kept visible, never deleted)
+  block <id> <reason>                   mark blocked
+  reviewer <vendor> <model> [step]      record a reviewer call
+  target <preset> <curve>               set a preset's active target curve
+  check                                 list done steps that have no evidence
+"""
+
+
+def _main(argv):
+    if len(argv) < 3:
+        print(_USAGE, file=sys.stderr)
+        return 2
+    root, cmd, args = argv[1], argv[2], argv[3:]
+    p = Process(root)
+    try:
+        if cmd == "show":
+            print(json.dumps(p.load(), indent=2, ensure_ascii=False))
+        elif cmd == "plan":
+            phase = args[0] if args else None
+            print(json.dumps(p.plan_for(phase), indent=2, ensure_ascii=False))
+        elif cmd == "enter-phase":
+            p.enter_phase(args[0])
+            print(f"phase {args[0]} is current")
+        elif cmd == "add-step":
+            source = SOURCE_PROJECT if "--project" in args else SOURCE_SKILL
+            positional = [a for a in args if a != "--project"]
+            p.add_step(positional[0], positional[1], source=source)
+            print(f"added {positional[0]}")
+        elif cmd == "start":
+            entry = p.start_attempt(args[0])
+            print(f"{args[0]} in progress (attempt {entry['attempt']})")
+        elif cmd == "done":
+            entry = p.finish_step(args[0], args[1:])
+            print(f"{args[0]} done, evidence: {', '.join(entry['evidence'])}")
+        elif cmd == "skip":
+            p.skip_step(args[0], superseded_by=args[1] if len(args) > 1 else None)
+            print(f"{args[0]} skipped (kept in the plan)")
+        elif cmd == "block":
+            p.block_step(args[0], " ".join(args[1:]))
+            print(f"{args[0]} blocked")
+        elif cmd == "reviewer":
+            p.record_reviewer(args[0], args[1], step=args[2] if len(args) > 2 else None)
+            print(f"reviewer recorded: {args[0]} / {args[1]}")
+        elif cmd == "target":
+            p.set_target(args[0], args[1])
+            print(f"target for {args[0]}: {args[1]}")
+        elif cmd == "check":
+            bad = p.unevidenced_done_steps()
+            for entry in bad:
+                print(f"NO EVIDENCE: {entry['id']} {entry.get('name','')}")
+            print(f"{len(bad)} done step(s) without evidence")
+            return 1 if bad else 0
+        else:
+            print(_USAGE, file=sys.stderr)
+            return 2
+    except (ProcessError, IndexError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(_main(sys.argv))
