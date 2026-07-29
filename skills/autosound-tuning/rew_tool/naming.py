@@ -180,9 +180,27 @@ def parse_name(title, glossary=None):
         "code": code,
         "modifier": modifier,
         "version": version,
+        # Numeric form, so `_01` and `_1` are recognised as the same DSP config version. REW
+        # titles are typed by hand and zero-padding is common; comparing raw strings makes a
+        # captured measurement look missing, which is the checker crying wolf.
+        "version_n": int(version) if version.isdigit() else None,
         "method": method.lower() if method else None,
         "title": title.strip(),
     }
+
+
+def name_key(parsed):
+    """Identity of a measurement for comparison: code, modifier, version, method.
+
+    Matching on this rather than on the raw title is what makes `c_01 (rta)` and `c_1 (rta)` the
+    same measurement, and what lets a checker survive the padding a human happens to type.
+    """
+    if not parsed:
+        return None
+    version = parsed.get("version_n")
+    if version is None:
+        version = parsed.get("version")
+    return (parsed.get("code"), parsed.get("modifier"), version, parsed.get("method"))
 
 
 # The capture plan of `naming-and-structure.md §3`, as a function rather than a table a human
@@ -253,15 +271,15 @@ def validate_series(titles, expected, glossary=None):
         if parsed is None:
             foreign.append(title)
         else:
-            present[parsed["title"]] = parsed
+            present[name_key(parsed)] = parsed
 
     expected = list(expected)
-    missing = [name for name in expected if name not in present]
-    wanted = set(expected)
-    extra = [t for t in present if t not in wanted]
+    wanted = {name_key(parse_name(name, glossary)): name for name in expected}
+    missing = [name for key, name in wanted.items() if key not in present]
+    extra = [p["title"] for key, p in present.items() if key not in wanted]
     return {
         "expected": expected,
-        "found": [name for name in expected if name in present],
+        "found": [name for key, name in wanted.items() if key in present],
         "missing": missing,
         "extra": sorted(extra),
         "foreign": foreign,
