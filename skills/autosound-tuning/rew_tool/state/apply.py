@@ -97,11 +97,19 @@ def _fmt_val(field, val, rate):
         return _state._fmt_filter(val)
     if field == "gain_db" and isinstance(val, (int, float)):
         return f"{val:g} dB"
+    if field == "eq" and isinstance(val, (list, tuple)):
+        # The bands ARE what the human keys into the EQ screen -- a bare `str(list)` would show
+        # them wrapped in Python quotes/brackets, so join them plainly. Empty = say so explicitly
+        # rather than render "[]", since "no bands" is a real, enterable state.
+        return " · ".join(str(b) for b in val) if val else "(no bands)"
     return str(val)
 
 
 _FIELD_LABEL = {"hp": "HP", "lp": "LP", "gain_db": "Gain", "ta_ms": "TA",
-                "polarity": "Polarity", "helix_ch": "Helix ch", "eq_ptr": "EQ", "status": "status"}
+                "polarity": "Polarity", "slot": "Slot", "eq": "EQ bands", "eq_ptr": "EQ export",
+                "status": "status", "descr": "Name", "role": "Role", "order": "Order",
+                "tag": "Tag", "tag_value": "Tag value",
+                "mute": "Mute", "off": "Off", "hidden": "Hidden"}
 
 
 def settings_sheet(diff, rate, preset, version, slot_note=None):
@@ -235,12 +243,22 @@ def _selftest():
     assert len(h.versions()) == n_before, "a refused delta must NOT bank a snapshot"
 
     # adding a NEW full channel is allowed (enabling center).
-    full_c = {"c": {"helix_ch": "B", "hp": {"f": 400, "type": "LR", "slope": 24},
+    full_c = {"c": {"slot": "B", "hp": {"f": 400, "type": "LR", "slope": 24},
                     "lp": {"f": 1200, "type": "LR", "slope": 24}, "gain_db": -9.0,
                     "ta_ms": 6.0, "polarity": "NORM", "eq_ptr": {}}}
     rc = propose(h, full_c, note="enable center")
     assert h.load(rc["version"])["channels"]["c"]["status"] == "proposed"
     assert "NEW channel" in rc["sheet"]
+
+    # ── consumer-UI annotation fields (2026-07-29) are mergeable, not "unknown field" refusals ──
+    ann = propose(h, {"c": {"role": "center", "descr": "Front Center Full", "order": 0,
+                            "eq": ["PK 1000 -9 Q2", "PK 1450 -9 Q2"]}}, note="annotate center")
+    c_after = h.load(ann["version"])["channels"]["c"]
+    assert c_after["role"] == "center" and c_after["order"] == 0, c_after
+    assert c_after["eq"] == ["PK 1000 -9 Q2", "PK 1450 -9 Q2"], c_after
+    # the sheet is what the human keys in, so EQ bands must read as bands -- not a Python list repr.
+    assert "PK 1000 -9 Q2 · PK 1450 -9 Q2" in ann["sheet"], ann["sheet"]
+    assert "['PK" not in ann["sheet"], ann["sheet"]
 
     # ── multi-slot slot-guard (issue #5): propose to a NON-active slot is refused, banks nothing ──
     reg = _state.Registry(root)

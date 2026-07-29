@@ -584,7 +584,7 @@ def _selftest():
     import state as _st
 
     def _mkch(hp, lp):
-        return {"helix_ch": "X",
+        return {"slot": "X",
                 "hp": {"f": hp, "type": "BW", "slope": 12} if hp else "OFF",
                 "lp": {"f": lp, "type": "BW", "slope": 12} if lp else "OFF",
                 "gain_db": -6.0, "ta_ms": 5.0, "polarity": "NORM",

@@ -28,17 +28,38 @@ EQ pointers), the anti-drift anchor and the experimentation engine. Code: `state
   "virtual_eq_ptr": null,
   "note": "sub INV test + w-L trim",                          // per-snapshot label, NOT diffed
   "channels": {
-    "w-L": {"helix_ch": "C",
+    "w-L": {"slot": "C",                                      // hardware slot letter/number (was
+                                                                // "helix_ch" -- renamed vendor-neutral)
+            "descr": "Front L Woofer",                        // optional: full display name (a consumer
+                                                                // UI's tooltip/label, not read by this module)
+            "role": "woofer",                                 // optional: speaker type (output tier only)
+            "order": 1,                                       // optional: display sort key (int)
+            "tag": null, "tag_value": null,                   // optional: feature-flag chip + its value
+                                                                // (e.g. tag="RearRC", tag_value="3/4")
+            "mute": false, "off": false, "hidden": false,      // optional bools; absent = false/unknown
             "hp": {"f": 70, "type": "BW", "slope": 12},       // null / "OFF" when disabled
             "lp": {"f": 270, "type": "BW", "slope": 12},
             "gain_db": -7.8,
             "ta_ms": 5.38,                                    // CANONICAL; samples = round(ms*rate/1000)
             "polarity": "NORM",                               // NORM | INV
+            "phase_deg": null,                                // optional: all-pass/phase angle
+            "eq": ["PK 1000 -9 Q2", "LS 150 +2.5 Q0.71"],     // optional: inline PEQ bands
             "eq_ptr": {"output": "exports/w-L.req", "virtual": null},
             "status": "applied"}                              // proposed | applied | measured  (AD-1)
   }
 }
 ```
+`slot`/`descr`/`role`/`order`/`tag`/`tag_value`/`mute`/`off`/`hidden`/`phase_deg`/`eq` are OPTIONAL
+(2026-07-29 schema pass, aligning with the `autosound-tcc` consumer UI's
+`state/dsp_state.py::GroupRow`) — this module itself only type-checks them when present (`order`
+must be an int, the three booleans must be bool); none are required by `validate()`, matching how
+`eq_ptr`/`status` were already optional. `hp`/`lp`/`gain_db`/`ta_ms`/`polarity` remain the only
+strictly required per-channel fields.
+
+**`eq` vs `eq_ptr`** — both, not either/or: `eq_ptr` says where the authoritative REW export
+lives, `eq` carries the bands themselves so a reader needs no second file. Listing `eq` in the
+schema only makes it legal to carry/merge/diff; DERIVING band strings from measurement data is
+separate, unbuilt work.
 
 ## Invariants
 - **ms is canonical, samples are a view.** Entering 96 kHz samples into a 48 kHz DSP doubles the

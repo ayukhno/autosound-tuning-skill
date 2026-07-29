@@ -37,7 +37,21 @@ import re
 # ── schema ──────────────────────────────────────────────────────────────────
 POLARITIES = ("NORM", "INV")
 STATUSES = ("proposed", "applied", "measured")
-CHANNEL_FIELDS = ("helix_ch", "hp", "lp", "gain_db", "ta_ms", "polarity", "eq_ptr", "status")
+CHANNEL_FIELDS = (
+    "slot", "descr", "role", "order", "tag", "tag_value", "mute", "off", "hidden",
+    "hp", "lp", "gain_db", "ta_ms", "polarity", "phase_deg", "eq", "eq_ptr", "status",
+)
+# `slot` was `helix_ch` before this schema pass (2026-07-29, autosound-tcc SCR "submodule task
+# A6") -- renamed vendor-neutral since a MUSWAY/other DSP has no "helix channel" concept, just a
+# hardware slot letter/number. `descr`/`role`/`order`/`tag`/`tag_value`/`mute`/`off`/`hidden` are
+# new, optional annotations a consumer UI (autosound-tcc) renders -- see
+# autosound-tcc/src/autosound_tcc/state/dsp_state.py's `GroupRow` for exactly how each is read.
+#
+# `eq` (a list of inline PEQ band strings, e.g. ["PK 1000 -9 Q2"]) coexists with the older
+# `eq_ptr` (a pointer to a `.req` export file) rather than replacing it: they answer different
+# questions -- `eq_ptr` says where the authoritative export lives, `eq` carries the bands
+# themselves so a reader needs no second file. Listing `eq` here only makes it a legal field to
+# carry/merge/diff; DERIVING those strings from measurement data is separate, unbuilt work.
 TOP_REQUIRED = ("preset", "sample_rate", "channels")
 _VER_RE = re.compile(r"^v_(\d{3,})$")
 
@@ -80,6 +94,18 @@ def validate(state):
         st = ch.get("status", "proposed")
         if st not in STATUSES:
             raise ValueError(f"{ch_name}.status must be one of {STATUSES}, got {st!r}")
+        # New optional annotations (2026-07-29): absent entirely is fine (same "lenient on
+        # free-text" principle as `note`/`provenance` above) -- only checked WHEN present, since a
+        # wrong type here (e.g. "order": "2" as a string) would silently break a consumer's sort/
+        # display logic rather than raise there.
+        # `bool` is a subclass of `int` in Python, so an explicit bool reject is needed -- an
+        # `"order": true` would otherwise sail through and sort as 1.
+        if "order" in ch and ch["order"] is not None:
+            if isinstance(ch["order"], bool) or not isinstance(ch["order"], int):
+                raise ValueError(f"{ch_name}.order must be an int if present, got {ch['order']!r}")
+        for flag in ("mute", "off", "hidden"):
+            if flag in ch and ch[flag] is not None and not isinstance(ch[flag], bool):
+                raise ValueError(f"{ch_name}.{flag} must be a bool if present, got {ch[flag]!r}")
     return state
 
 
@@ -235,21 +261,26 @@ def render_state(state):
     ]
     prov = state.get("provenance") or {}
     if prov:
-        meta.append(f"provenance: {prov.get('decision', prov.get('round', '—'))}")
+        # `provenance` is documented as an object ({"decision": ...}), but real ledgers in the
+        # wild carry a plain sentence instead -- rendering used to crash outright on those
+        # (`'str' object has no attribute 'get'`). Free-text is the lenient half of the schema,
+        # so accept both shapes rather than refuse a snapshot that is otherwise perfectly valid.
+        detail = prov.get("decision", prov.get("round", "—")) if isinstance(prov, dict) else prov
+        meta.append(f"provenance: {detail}")
     if state.get("note"):
         meta.append(f"note: {state['note']}")
     if state.get("created"):
         meta.append(f"created: {state['created']}")
     lines += ["- " + m for m in meta]
     lines.append("")
-    lines.append("| Channel | Helix | HP | LP | Pol | TA ms | TA smp | Gain dB | Status | EQ (out / virt) |")
+    lines.append("| Channel | Slot | HP | LP | Pol | TA ms | TA smp | Gain dB | Status | EQ (out / virt) |")
     lines.append("|---|---|---|---|---|---|---|---|---|---|")
     for ch_name, ch in state["channels"].items():
         eq = ch.get("eq_ptr") or {}
         eq_s = f"{eq.get('output', '—')} / {eq.get('virtual', '—')}"
         st = ch.get("status", "proposed")
         lines.append(
-            f"| {ch_name} | {ch.get('helix_ch', '—')} | {_fmt_filter(ch['hp'])} | {_fmt_filter(ch['lp'])} "
+            f"| {ch_name} | {ch.get('slot', '—')} | {_fmt_filter(ch['hp'])} | {_fmt_filter(ch['lp'])} "
             f"| {ch['polarity']} | {ch['ta_ms']:g} | {samples_for(ch['ta_ms'], rate)} | {ch['gain_db']:g} "
             f"| {_STATUS_ICON.get(st, '?')} {st} | {eq_s} |"
         )
@@ -454,13 +485,14 @@ def _sample_state():
         "banked_ear_verdicts": [],
         "virtual_eq_ptr": None,
         "channels": {
-            "sub":  {"helix_ch": "K", "hp": {"f": 20, "type": "BE", "slope": 12},
+            "sub":  {"slot": "K", "descr": "Subwoofer", "order": 0, "hp": {"f": 20, "type": "BE", "slope": 12},
                      "lp": {"f": 45, "type": "BW", "slope": 12}, "gain_db": -6.0,
                      "ta_ms": 5.0, "polarity": "NORM", "eq_ptr": {}, "status": "applied"},
-            "w-L":  {"helix_ch": "C", "hp": {"f": 70, "type": "BW", "slope": 12},
+            "w-L":  {"slot": "C", "descr": "Front L Woofer", "order": 1, "hp": {"f": 70, "type": "BW", "slope": 12},
                      "lp": {"f": 270, "type": "BW", "slope": 12}, "gain_db": -7.8,
                      "ta_ms": 5.38, "polarity": "NORM", "eq_ptr": {}, "status": "applied"},
-            "tw-R": {"helix_ch": "H", "hp": {"f": 5000, "type": "BE", "slope": 12},
+            "tw-R": {"slot": "H", "descr": "Front R Tweeter", "order": 2, "mute": False, "off": False,
+                     "hp": {"f": 5000, "type": "BE", "slope": 12},
                      "lp": "OFF", "gain_db": -6.0, "ta_ms": 4.09, "polarity": "NORM",
                      "eq_ptr": {}, "status": "applied"},
         },
@@ -516,6 +548,58 @@ def _selftest():
         raise AssertionError("snapshot accepted an invalid polarity")
     except ValueError:
         pass
+
+    # ── new optional channel annotations (2026-07-29, autosound-tcc schema alignment) ──
+    # slot/descr/order/mute/off round-trip through snapshot/load untouched, per _sample_state().
+    reloaded = h.load("v_001")
+    assert reloaded["channels"]["sub"]["slot"] == "K", reloaded["channels"]["sub"]
+    assert reloaded["channels"]["w-L"]["descr"] == "Front L Woofer", reloaded["channels"]["w-L"]
+    assert reloaded["channels"]["tw-R"]["order"] == 2, reloaded["channels"]["tw-R"]
+    assert reloaded["channels"]["tw-R"]["mute"] is False, reloaded["channels"]["tw-R"]
+
+    # a wrong type on the new fields is refused, same discipline as polarity/gain/ta above.
+    bad_order = _sample_state()
+    bad_order["channels"]["sub"]["order"] = "0"  # must be an int, not a numeric string
+    try:
+        validate(bad_order)
+        raise AssertionError("validate accepted a non-int order")
+    except ValueError:
+        pass
+
+    bad_mute = _sample_state()
+    bad_mute["channels"]["sub"]["mute"] = "yes"  # must be a bool
+    try:
+        validate(bad_mute)
+        raise AssertionError("validate accepted a non-bool mute")
+    except ValueError:
+        pass
+
+    # `bool` subclasses `int`, so a bare isinstance(x, int) would let `true` through and sort as 1.
+    bool_order = _sample_state()
+    bool_order["channels"]["sub"]["order"] = True
+    try:
+        validate(bool_order)
+        raise AssertionError("validate accepted a bool as order")
+    except ValueError:
+        pass
+
+    # `role` + inline `eq` are legal carriable fields (the consumer UI renders both); a snapshot
+    # must round-trip them, and the gate must not refuse them as unknown.
+    with_eq = _sample_state()
+    with_eq["channels"]["w-L"]["role"] = "woofer"
+    with_eq["channels"]["w-L"]["eq"] = ["PK 1000 -9 Q2", "LS 150 +2.5 Q0.71"]
+    with_eq["channels"]["w-L"]["phase_deg"] = 90
+    vq = h.snapshot(with_eq, note="role + inline eq")
+    back = h.load(vq)["channels"]["w-L"]
+    assert back["role"] == "woofer", back
+    assert back["eq"] == ["PK 1000 -9 Q2", "LS 150 +2.5 Q0.71"], back
+    assert back["phase_deg"] == 90, back
+
+    # a real ledger in the wild carries `provenance` as a plain sentence, not the documented
+    # {"decision": ...} object -- render used to crash on that ('str' has no attribute 'get').
+    prov_str = _sample_state()
+    prov_str["provenance"] = "attested-latest 2026-07-23, rebuilt from settled config"
+    assert "attested-latest" in render_state(prov_str), "string provenance must render, not crash"
 
     # ── multi-slot registry (issue #5): active-slot pointer + LOUD banner ──
     h2 = PresetHistory(root, "ResoNix")
