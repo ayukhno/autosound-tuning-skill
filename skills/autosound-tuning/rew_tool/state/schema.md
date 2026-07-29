@@ -3,6 +3,11 @@
 Versioned single-source-of-truth for a preset's **hard params** (crossovers · gains · TA · polarity ·
 EQ pointers), the anti-drift anchor and the experimentation engine. Code: `state.py` (stdlib only).
 
+**Schema v2** (2026-07-29, autosound-tcc sync — see that repo's `docs/SKILL-SYNC-PLAN.md`): the
+ledger is **tier-aware**, EQ bands are **structured objects**, and every snapshot carries
+`schema_version`. No backward compatibility with v1 files is kept — run `migrate_v2.py` once on
+the two hand-edited dogfood ledgers (`data/private/state/{FULL,SQ}/`) and move on.
+
 ## Why it exists
 - **Anti-drift:** one file per snapshot holds *all* hard params together, so nobody ever reads a
   partial picture (the split-artifact bug: gains in a screenshot, EQ in `.req` → "no gain change"
@@ -19,6 +24,7 @@ EQ pointers), the anti-drift anchor and the experimentation engine. Code: `state
 ## Snapshot JSON
 ```jsonc
 {
+  "schema_version": 2,                                        // stamped by snapshot(); every v2 file has it
   "preset": "SQ_Jazzi", "version": "v_002", "created": "…",   // version/created injected by snapshot()
   "sample_rate": 96000,                                       // samples DERIVED from this; ms is canonical
   "target": "Jazzi",
@@ -27,7 +33,7 @@ EQ pointers), the anti-drift anchor and the experimentation engine. Code: `state
   "banked_ear_verdicts": [],
   "virtual_eq_ptr": null,
   "note": "sub INV test + w-L trim",                          // per-snapshot label, NOT diffed
-  "channels": {
+  "channels": {                                                // the REQUIRED tier (physical outputs)
     "w-L": {"slot": "C",                                      // hardware slot letter/number (was
                                                                 // "helix_ch" -- renamed vendor-neutral)
             "descr": "Front L Woofer",                        // optional: full display name (a consumer
@@ -43,23 +49,50 @@ EQ pointers), the anti-drift anchor and the experimentation engine. Code: `state
             "ta_ms": 5.38,                                    // CANONICAL; samples = round(ms*rate/1000)
             "polarity": "NORM",                               // NORM | INV
             "phase_deg": null,                                // optional: all-pass/phase angle
-            "eq": ["PK 1000 -9 Q2", "LS 150 +2.5 Q0.71"],     // optional: inline PEQ bands
+            "eq": [{"type": "PK", "f": 1000, "gain_db": -9, "q": 2, "bypass": false}],  // structured bands
             "eq_ptr": {"output": "exports/w-L.req", "virtual": null},
             "status": "applied"}                              // proposed | applied | measured  (AD-1)
+  },
+  "virtual_channels": {                                        // any OTHER tier the DSP profile declares
+    "VFL": {"slot": "A", "gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM"}   // no hp/lp -- not required here
   }
 }
 ```
-`slot`/`descr`/`role`/`order`/`tag`/`tag_value`/`mute`/`off`/`hidden`/`phase_deg`/`eq` are OPTIONAL
-(2026-07-29 schema pass, aligning with the `autosound-tcc` consumer UI's
-`state/dsp_state.py::GroupRow`) — this module itself only type-checks them when present (`order`
-must be an int, the three booleans must be bool); none are required by `validate()`, matching how
-`eq_ptr`/`status` were already optional. `hp`/`lp`/`gain_db`/`ta_ms`/`polarity` remain the only
-strictly required per-channel fields.
+
+### Tiers (schema v2)
+
+The ledger is **tier-aware**, not `channels`-only: a tier is any top-level key holding a dict of
+row-dicts. `channels` is the one REQUIRED tier (physical outputs) and the only one with a strict
+required-field list (`hp`, `lp`, `gain_db`, `ta_ms`, `polarity`). Any OTHER top-level dict-of-dicts
+key (e.g. `virtual_channels`, or a MUSWAY-style `inputs`) is an additional tier — validated
+leniently (only present fields are type-checked; nothing is required), matching a DSP profile's
+declared groups (`dsp_profile.py`'s `groups[].id`, `physical_outputs` → `channels`, anything else
+→ a same-named top-level key — the convention `autosound-tcc`'s `ProjectView.from_dict` already
+reads by). `state.tier_names(snapshot)` returns every tier present. A tier must exist as a
+(possibly empty) top-level key **before** `apply.propose` can address it by name — intake seeds
+every profile-declared tier, even empty, at the first snapshot.
+
+`slot`/`descr`/`role`/`order`/`tag`/`tag_value`/`mute`/`off`/`hidden`/`phase_deg`/`eq` are all
+OPTIONAL on every tier's rows — only type-checked when present (`order` must be an int, the three
+booleans must be bool), matching how `eq_ptr`/`status` were already optional.
+
+### EQ bands (structured, schema v2)
+
+`eq` is a list of **band objects**, not strings:
+```jsonc
+{"type": "PK", "f": 1000, "gain_db": -9, "q": 2, "bypass": false, "i": 1}
+```
+`type` ∈ `EQ_TYPES` = `PK | LSH | HSH | APF1 | APF2` (TCC-TZ.md §2's authoritative Helix
+vocabulary); `f` is a positive Hz; `gain_db`/`q` are numeric and optional (an all-pass band has no
+gain); `bypass` is an optional bool; `i` is an optional 1-based band-slot index (useful for a
+30-slot Helix EQ / PC-Tool insert order). The old inline string form (`"PK 1000 -9 Q2"`) is now
+**display-only**, generated on demand: `state.eq_str(bands)` / `state.eq_band_str(band)`. Parsing
+the string form back (`state.eq_band_from_str`) exists ONLY for `migrate_v2.py` — it also
+normalizes the `LS`/`HS` shorthand the two hand-authored v1 ledgers actually used to the canonical
+`LSH`/`HSH`.
 
 **`eq` vs `eq_ptr`** — both, not either/or: `eq_ptr` says where the authoritative REW export
-lives, `eq` carries the bands themselves so a reader needs no second file. Listing `eq` in the
-schema only makes it legal to carry/merge/diff; DERIVING band strings from measurement data is
-separate, unbuilt work.
+lives, `eq` carries the bands themselves so a reader needs no second file.
 
 ## Invariants
 - **ms is canonical, samples are a view.** Entering 96 kHz samples into a 48 kHz DSP doubles the
@@ -72,19 +105,23 @@ separate, unbuilt work.
   PC-Tool screen — the artifact that makes the compliant path the easiest path.)
 - **`snapshot` validates and refuses malformed state** (bad polarity, missing crossover, ms absent).
 - **`revert` is forward-only** — it writes a new snapshot copying an old one; history is never destroyed.
+- **Every tier is covered** — `validate`/`diff_states`/`render` all walk `tier_names(state)`, not
+  just `channels`. A virtual-tier change used to be invisible to all three; that was the split-
+  artifact bug this file exists to prevent, just happening to a whole tier instead of one field.
 
 ## API / CLI
 ```python
 from state import PresetHistory
 h = PresetHistory(root, "SQ_Jazzi")
-h.snapshot(state, note="…")   # -> "v_00N"   (validates, advances HEAD)
-h.diff("v_001", "v_002")      # -> structured deltas (only changed fields)
-h.render("v_002")             # -> Markdown settings sheet
+h.snapshot(state, note="…")   # -> "v_00N"   (validates, advances HEAD, stamps schema_version)
+h.diff("v_001", "v_002")      # -> structured deltas, one key per tier (only changed fields)
+h.render("v_002")             # -> Markdown settings sheet (a section per non-`channels` tier)
 h.revert("v_001")             # -> new snapshot == v_001 content
 ```
 ```
 python state.py --root <dir> log|render|diff|revert <preset> [args]
 python state.py selftest
+python migrate_v2.py <root> [<preset> ...]   # one-shot v1 -> v2 (schema_version + structured EQ)
 ```
 
 ## apply-change gate (`apply.py`)
@@ -95,17 +132,24 @@ producer of the clean old→new sheet the Arbiter keys in (bypass = nothing usab
 from state import PresetHistory
 import apply
 h = PresetHistory(root, "SQ_Jazzi")            # HEAD must exist (seed the first state via h.snapshot)
-r = apply.propose(h, {"w-L": {"gain_db": -7.5, "ta_ms": 5.45}, "sub": {"polarity": "INV"}},
+r = apply.propose(h, {"w-L": {"gain_db": -7.5, "ta_ms": 5.45}, "sub": {"polarity": "INV"},
+                      "virtual_channels": {"VFL": {"gain_db": -1.0}}},
                   note="…")                     # -> banks 🟡 snapshot; r["sheet"] = the settings sheet
 print(r["sheet"])                               # channel/param old→new, ms+derived samples, advisories
 apply.attest(h)                                 # Arbiter entered it in Helix -> flip 🟡→🟢 applied (new snapshot)
 ```
+- **Tier-aware delta (schema v2):** a bare `{channel: {field: value}}` delta still means `channels`
+  (unchanged); a delta is read as tier-keyed only when EVERY one of its top-level keys is already a
+  tier the ledger has (`state.tier_names`), so an ordinary channel-name delta is never misread — see
+  `apply._split_by_tier`. A tier the ledger doesn't have yet cannot be addressed this way; intake
+  seeds every profile-declared tier, even empty, up front.
 - **Deterministic refusals (hard):** unknown channel/field (typo), partial edit of a non-existent
-  channel, TA given as samples not `ta_ms`, or any result failing `validate` — a refused delta banks
+  row, TA given as samples not `ta_ms`, or any result failing `validate` — a refused delta banks
   nothing.
 - **Advisories (soft, waivable — the demoted noun-rails):** large gain jump, polarity flip, big
   delay/crossover move → printed ⚠️, never blocking; the ear + measurement rule the acoustic nouns.
-- Lifecycle: `propose` 🟡 → `attest` 🟢 → 📏 after a control measurement confirms effect.
+- Lifecycle: `propose` 🟡 → `attest` 🟢 → 📏 after a control measurement confirms effect — across
+  every tier a proposal touched, not just `channels`.
 - Why it's kept simple: banking a change is genuinely useful (A/B, revert, resume after `/clear`, one
   honest audit trail), so it earns its place on merit — not as a mechanism to police the model.
 
