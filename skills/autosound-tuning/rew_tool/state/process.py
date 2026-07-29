@@ -1,0 +1,339 @@
+"""Machine-readable process state — SCR-004.
+
+Where the tuning method *is* at any moment: which phase, which plan steps, what the reviewer last
+said. Until now that lived only as prose — the `tuning-changelog`'s ▶️ CONTINUE block and
+`audit-trail.md` — which a human reads fine and a front-end cannot.
+
+Same split as the ledger (`state.py`), for the same reason: **history is append-only, the current
+view is derived and rewritable.**
+
+    process/journal.jsonl      append-only events; the source of truth for how we got here
+    process/process-state.json the current slice, rewritten after every transition
+
+Two rules are enforced in code rather than left to discipline, because both failure modes are
+silent and expensive:
+
+* **Steps are never deleted.** Superseding one marks it skipped and leaves it visible, so the
+  attempt history stays legible instead of a plan that quietly rewrites itself.
+* **`step_done` requires evidence** — measurement names, a ledger version, an audit entry. A step
+  marked done with nothing to point at is exactly the drift that resume is supposed to catch: on
+  the next session the reconciler compares the plan against disk, and a done step whose
+  measurement never existed is a flag, not a fact.
+
+`tuning-changelog` and `audit-trail.md` become generated views over the journal, the same move
+`state.py` made for `dsp-state-current`.
+
+stdlib only, py3.9+.
+"""
+from __future__ import annotations
+
+import json
+import os
+from datetime import datetime, timezone
+
+SCHEMA_VERSION = 1
+
+# The method's fixed skeleton (`references/core/process-phases.md`). Phases are the skill's, not
+# the project's: a project never edits this list, only the status of each entry and which one is
+# active. Keys are strings because they land in JSON objects, where "-1" is a key, not a number.
+PHASES = ("-1", "0", "1", "2", "3", "4", "5")
+PHASE_TITLES = {
+    "-1": "Project intake & checklist",
+    "0": "Baseline & target selection",
+    "1": "Crossovers, levels & delays",
+    "2": "EQ & acoustic alignment",
+    "3": "Technical verdict & lock",
+    "4": "Targeted listening → feedback → close",
+    "5": "Variations (cyclical)",
+}
+
+PHASE_TODO, PHASE_CURRENT, PHASE_DONE = "todo", "cur", "done"
+
+STEP_TODO = "todo"
+STEP_IN_PROGRESS = "in_progress"
+STEP_DONE = "done"
+STEP_SKIPPED = "skipped"
+STEP_BLOCKED = "blocked"
+STEP_STATUSES = (STEP_TODO, STEP_IN_PROGRESS, STEP_DONE, STEP_SKIPPED, STEP_BLOCKED)
+
+# A step instantiated from the phase template vs. one inserted because this car needed it.
+SOURCE_SKILL, SOURCE_PROJECT = "skill", "project"
+
+# Journal event types (SCR-004). Adding one is cheap; renaming one breaks every reader.
+EV_PHASE_ENTERED = "phase_entered"
+EV_STEP_ADDED = "step_added"
+EV_ATTEMPT_STARTED = "attempt_started"
+EV_STEP_SKIPPED = "step_skipped"
+EV_STEP_DONE = "step_done"
+EV_STEP_BLOCKED = "step_blocked"
+EV_CRITIC_CALLED = "critic_called"
+EV_CONFIG_CHANGE = "config_change"
+
+
+class ProcessError(ValueError):
+    """A transition the process model refuses — e.g. a done step with no evidence."""
+
+
+def _now():
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _empty_state():
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "updated": _now(),
+        "active_phase": None,
+        "phases": {p: {"status": PHASE_TODO, "title": PHASE_TITLES[p]} for p in PHASES},
+        "plan": [],
+        "reviewer": None,
+        "targets": {},
+    }
+
+
+def validate(state):
+    """Raise `ProcessError` if `state` isn't a shape a reader can trust. Returns it otherwise."""
+    if not isinstance(state, dict):
+        raise ProcessError("process state must be a JSON object")
+    if state.get("schema_version") != SCHEMA_VERSION:
+        raise ProcessError(
+            f"unsupported schema_version {state.get('schema_version')!r} (expected {SCHEMA_VERSION})"
+        )
+    active = state.get("active_phase")
+    if active is not None and active not in PHASES:
+        raise ProcessError(f"unknown phase {active!r}; known: {', '.join(PHASES)}")
+    seen = set()
+    for step in state.get("plan", []):
+        sid = step.get("id")
+        if not sid:
+            raise ProcessError("every plan step needs an id")
+        if sid in seen:
+            raise ProcessError(f"duplicate step id {sid!r}")
+        seen.add(sid)
+        if step.get("status") not in STEP_STATUSES:
+            raise ProcessError(f"step {sid!r} has unknown status {step.get('status')!r}")
+        if step.get("status") == STEP_DONE and not step.get("evidence"):
+            raise ProcessError(f"step {sid!r} is done with no evidence")
+    return state
+
+
+class Process:
+    """Read and advance one project's process state.
+
+    `root` is the project's `process/` directory — the DATA is project-local, the CODE is in the
+    skill, same division as `PresetHistory`.
+    """
+
+    def __init__(self, root):
+        self.dir = root
+        os.makedirs(self.dir, exist_ok=True)
+
+    # -- paths --
+    @property
+    def state_path(self):
+        return os.path.join(self.dir, "process-state.json")
+
+    @property
+    def journal_path(self):
+        return os.path.join(self.dir, "journal.jsonl")
+
+    # -- reads --
+    def load(self):
+        """The current slice. A missing or unreadable file reads as an empty process, not an error:
+        a project that has never run should show an empty plan, not a traceback."""
+        try:
+            with open(self.state_path, encoding="utf-8") as f:
+                state = json.load(f)
+        except (OSError, ValueError):
+            return _empty_state()
+        base = _empty_state()
+        base.update(state)
+        for phase, entry in base["phases"].items():
+            entry.setdefault("title", PHASE_TITLES.get(phase, phase))
+        return base
+
+    def events(self, limit=None, kinds=None):
+        """Journal entries oldest-first. `kinds` filters by event type."""
+        out = []
+        try:
+            with open(self.journal_path, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        event = json.loads(line)
+                    except ValueError:
+                        continue  # a torn last line must not hide the rest of the history
+                    if kinds and event.get("type") not in kinds:
+                        continue
+                    out.append(event)
+        except OSError:
+            return []
+        return out[-limit:] if limit else out
+
+    def step(self, state, step_id):
+        for entry in state.get("plan", []):
+            if entry.get("id") == step_id:
+                return entry
+        return None
+
+    # -- transitions --
+    def enter_phase(self, phase, note=None):
+        """Make `phase` active, marking every earlier phase done and later ones todo.
+
+        Re-entry is normal (Phase 5 is explicitly cyclical), so this is not a one-way ratchet:
+        entering an earlier phase again makes it current and leaves the later ones' history alone.
+        """
+        phase = str(phase)
+        if phase not in PHASES:
+            raise ProcessError(f"unknown phase {phase!r}; known: {', '.join(PHASES)}")
+        state = self.load()
+        previous = state.get("active_phase")
+        if previous and previous != phase:
+            state["phases"][previous]["status"] = PHASE_DONE
+        state["phases"][phase]["status"] = PHASE_CURRENT
+        state["active_phase"] = phase
+        self._write(state)
+        self._append(EV_PHASE_ENTERED, phase=phase, previous=previous, note=note)
+        return state
+
+    def add_step(self, step_id, name, source=SOURCE_SKILL, phase=None):
+        """Add a plan step. Instantiated from the phase template (`skill`) or situational
+        (`project`) — the distinction is what lets the UI show which steps this car needed."""
+        state = self.load()
+        if self.step(state, step_id):
+            raise ProcessError(f"step {step_id!r} already exists; steps are never re-added")
+        entry = {
+            "id": step_id,
+            "name": name,
+            "status": STEP_TODO,
+            "source": source,
+            "attempt": 1,
+            "skip": False,
+            "phase": str(phase) if phase is not None else state.get("active_phase"),
+            "evidence": [],
+        }
+        state["plan"].append(entry)
+        self._write(state)
+        self._append(EV_STEP_ADDED, step=step_id, name=name, source=source)
+        return entry
+
+    def start_attempt(self, step_id):
+        """Begin (or re-begin) a step. A second call is attempt 2 — the redo is recorded, not
+        hidden, so "we tried this twice" survives into the plan the Arbiter reads."""
+        state = self.load()
+        entry = self._require(state, step_id)
+        if entry["status"] == STEP_IN_PROGRESS:
+            return entry
+        if entry["status"] in (STEP_DONE, STEP_SKIPPED):
+            entry["attempt"] = int(entry.get("attempt", 1)) + 1
+        entry["status"] = STEP_IN_PROGRESS
+        entry["skip"] = False
+        self._write(state)
+        self._append(EV_ATTEMPT_STARTED, step=step_id, attempt=entry["attempt"])
+        return entry
+
+    def finish_step(self, step_id, evidence):
+        """Mark a step done. `evidence` is required and must be non-empty.
+
+        Evidence is a list of pointers to something that exists on disk — REW measurement names, a
+        ledger `v_NNN`, an audit-trail entry. This is the rule that makes resume trustworthy: the
+        reconciler can check each done step against reality, and "done" with nothing to check is
+        indistinguishable from a model that merely said so.
+        """
+        if isinstance(evidence, str):
+            evidence = [evidence]
+        evidence = [e for e in (evidence or []) if str(e).strip()]
+        if not evidence:
+            raise ProcessError(
+                f"step {step_id!r} cannot be done without evidence "
+                "(measurement names, ledger vNNN, or an audit entry)"
+            )
+        state = self.load()
+        entry = self._require(state, step_id)
+        entry["status"] = STEP_DONE
+        entry["skip"] = False
+        entry["evidence"] = sorted(set(entry.get("evidence", [])) | set(map(str, evidence)))
+        self._write(state)
+        self._append(EV_STEP_DONE, step=step_id, evidence=entry["evidence"])
+        return entry
+
+    def skip_step(self, step_id, superseded_by=None, reason=None):
+        """Supersede a step. It stays in the plan, dimmed — never removed (SCR-004)."""
+        state = self.load()
+        entry = self._require(state, step_id)
+        entry["status"] = STEP_SKIPPED
+        entry["skip"] = True
+        self._write(state)
+        self._append(EV_STEP_SKIPPED, step=step_id, superseded_by=superseded_by, reason=reason)
+        return entry
+
+    def block_step(self, step_id, reason):
+        """Mark a step blocked — waiting on a measurement, a part, the car being available."""
+        state = self.load()
+        entry = self._require(state, step_id)
+        entry["status"] = STEP_BLOCKED
+        entry["blocked_reason"] = reason
+        self._write(state)
+        self._append(EV_STEP_BLOCKED, step=step_id, reason=reason)
+        return entry
+
+    def record_reviewer(self, vendor, model, phase=None, step=None, outcome=None):
+        """Who reviewed, on what model, when — the advisor panel's "last called" (TCC-Concept §4)."""
+        state = self.load()
+        state["reviewer"] = {
+            "vendor": vendor,
+            "model": model,
+            "at": _now(),
+            "phase": str(phase) if phase is not None else state.get("active_phase"),
+            "step": step,
+            "outcome": outcome,
+        }
+        self._write(state)
+        self._append(EV_CRITIC_CALLED, vendor=vendor, model=model, step=step, outcome=outcome)
+        return state["reviewer"]
+
+    def set_target(self, preset, curve):
+        """The active target curve for a preset — a pointer, the curve itself lives elsewhere."""
+        state = self.load()
+        state["targets"][preset] = curve
+        self._write(state)
+        self._append(EV_CONFIG_CHANGE, field="target", preset=preset, value=curve, impact="voicing")
+        return state["targets"]
+
+    # -- derived views --
+    def plan_for(self, phase=None, state=None):
+        """The plan steps belonging to one phase (default: the active one), in insertion order."""
+        state = state or self.load()
+        phase = str(phase) if phase is not None else state.get("active_phase")
+        return [s for s in state.get("plan", []) if s.get("phase") == phase]
+
+    def unevidenced_done_steps(self, state=None):
+        """Done steps with nothing to point at — the drift check to run on resume."""
+        state = state or self.load()
+        return [s for s in state.get("plan", []) if s.get("status") == STEP_DONE and not s.get("evidence")]
+
+    # -- internals --
+    def _require(self, state, step_id):
+        entry = self.step(state, step_id)
+        if entry is None:
+            raise ProcessError(f"no such step {step_id!r}")
+        return entry
+
+    def _write(self, state):
+        state["updated"] = _now()
+        validate(state)
+        tmp = self.state_path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(state, f, indent=2, ensure_ascii=False)
+            f.write("\n")
+        # Rename rather than write in place: a crash mid-write would otherwise leave truncated
+        # JSON, and the next session would read an empty process and think nothing had happened.
+        os.replace(tmp, self.state_path)
+
+    def _append(self, event_type, **payload):
+        event = {"at": _now(), "type": event_type}
+        event.update({k: v for k, v in payload.items() if v is not None})
+        with open(self.journal_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(event, ensure_ascii=False) + "\n")
+        return event
