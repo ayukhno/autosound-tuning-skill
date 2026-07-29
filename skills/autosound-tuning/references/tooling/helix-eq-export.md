@@ -4,7 +4,7 @@
 Don't enter EQ into Helix by hand (the per-channel EQ can't be viewed/copied all at once). Instead — **export from REW in the Audiotec-Fischer format → import into the Helix PC-Tool as a single file**.
 
 ## The canonical path
-1. In REW (EQ window) set **Equaliser = "Audiotec-Fischer"** (via the API: `set_equaliser(mid, "Audiotec Fischer")`; list — `get_equalisers()`). Then REW keeps the filters within Helix's limits from the start: **30 bands**, types PK / LS_Q / HS_Q.
+1. In REW (EQ window) set **Equaliser = "Audiotec-Fischer"** (via the API: `set_equaliser(mid, "Audiotec Fischer", "Full EQ (30 bands)")` — the payload needs BOTH manufacturer and model, a bare name is rejected `400 "No manufacturer in the request"`; list — `get_equalisers()`). Then REW keeps the filters within Helix's limits from the start: **30 bands**, types PK / LS_Q / HS_Q.
 2. Fit the filters to the target (Method 2: Target Settings + Generic/Extended EQ) — they're already in a Helix-compatible form.
 3. **Export** the filter list → a file in the format below.
 4. Move the file into Parallels (shared folder) → **import into the Helix PC-Tool** on the right channel.

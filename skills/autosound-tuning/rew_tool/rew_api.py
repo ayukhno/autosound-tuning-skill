@@ -5,11 +5,16 @@ import base64
 import struct
 
 BASE_URL = "http://localhost:4735"
+# No timeout on urlopen() meant a REW-unreachable call (REW not running, port filtered rather than
+# actively refused, ...) could hang a caller forever -- fatal when that caller is a Qt QThread: the
+# app hangs, gets force-quit, and Qt aborts with "QThread: Destroyed while thread is still running"
+# (hit live via TCC's Read/rename buttons, 2026-07-27). 5s is generous for REW's local API.
+_TIMEOUT_S = 5
 
 
 def _get(path):
     url = BASE_URL + path
-    with urllib.request.urlopen(url) as r:
+    with urllib.request.urlopen(url, timeout=_TIMEOUT_S) as r:
         return json.loads(r.read())
 
 
@@ -18,7 +23,7 @@ def _post(path, data):
     body = json.dumps(data).encode()
     req = urllib.request.Request(url, data=body, method="POST",
                                  headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req) as r:
+    with urllib.request.urlopen(req, timeout=_TIMEOUT_S) as r:
         raw = r.read()
         return json.loads(raw) if raw else {}
 
@@ -28,7 +33,7 @@ def _put(path, data):
     body = json.dumps(data).encode()
     req = urllib.request.Request(url, data=body, method="PUT",
                                  headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req) as r:
+    with urllib.request.urlopen(req, timeout=_TIMEOUT_S) as r:
         raw = r.read()
         return json.loads(raw) if raw else {}
 
@@ -67,6 +72,21 @@ def get_measurements():
 
 def get_measurement(mid):
     return _get(f"/measurements/{mid}")
+
+
+def rename_measurement(mid, title):
+    """Rename a measurement in place (its ordinal id is unchanged; only the title changes).
+
+    `PUT /measurements/{id}` with a `title` body -- the REST-conventional shape, consistent with
+    this API's other resource endpoints (e.g. `set_filters`'s `PUT /measurements/{id}/filters`).
+    No REW doc describes a rename endpoint, so this was written from that convention and then
+    **verified against a live REW instance** (renamed a measurement, confirmed the new title in
+    REW's own UI, 2026-07-28). Added for TCC's capture-order auto-naming feature.
+
+    If a future REW release breaks it, the fallback to try next is
+    `POST /measurements/{id}/command` (see `measurement_command`) with a "Rename"-style command
+    discovered via `GET /measurements/{id}/commands`."""
+    return _put(f"/measurements/{mid}", {"title": title})
 
 
 def find_measurement_id(name, measurements=None, exact=True):
@@ -148,15 +168,56 @@ def get_filters(mid):
 
 
 def set_filters(mid, filters):
-    return _put(f"/measurements/{mid}/filters", filters)
+    """Replace a measurement's whole filter set. `filters` is a list of FilterSetting dicts.
+
+    POST with a `{"filters": [...]}` envelope, verified against a live REW (returns
+    `{"message": "Filters set"}`). The previous shape here -- PUT with a bare array -- could never
+    have worked: REW rejects it at the JSON layer with
+    `IllegalStateException: Expected BEGIN_OBJECT but was BEGIN_ARRAY`, because PUT on this path
+    takes a *single* FilterSetting (see `set_filter`), not a collection.
+
+    Each entry needs at least `index` (1-based, matching the slot numbering `get_filters` returns)
+    and `type`; omit `isAuto`, which REW reports but does not accept back. Clear a slot with
+    `{"index": N, "type": "None", "enabled": True}`.
+
+    ⚠️ The gain key is **`gaindB`**, not `gain`. An entry using `gain` is accepted with a 200 and
+    the filter is created at **0 dB** -- silently flat. Verified live: sending `gain: -3.0` stores
+    `gaindB: 0.0`, sending `gaindB: -3.0` stores `gaindB: -3.0`. A proposed EQ cut written the
+    wrong way therefore does nothing at all while reporting success, which is the worst failure
+    mode this API has. A working PK entry:
+    `{"index": 1, "type": "PK", "enabled": True, "frequency": 1000.0, "gaindB": -3.0, "q": 2.0}`.
+    """
+    return _post(f"/measurements/{mid}/filters", {"filters": filters})
+
+
+def set_filter(mid, filt):
+    """Set ONE filter slot, addressed by the `index` inside `filt`.
+
+    PUT on the same path as `set_filters`; REW answers `{"message": "Filter set"}` (singular).
+    Useful for touching a single band without resending the other thirty slots.
+    """
+    return _put(f"/measurements/{mid}/filters", filt)
 
 
 def get_equaliser(mid):
     return _get(f"/measurements/{mid}/equaliser")
 
 
-def set_equaliser(mid, equaliser_name):
-    return _post(f"/measurements/{mid}/equaliser", {"name": equaliser_name})
+def set_equaliser(mid, manufacturer, model):
+    """Select the equaliser REW models this measurement's filters against.
+
+    An equaliser is identified by the `{manufacturer, model}` pair `get_equalisers()` returns --
+    the old single-`name` payload here was rejected with `400 "No manufacturer in the request"`,
+    which is why `rew-api-quirks.md` §Writing filters documents the two-field form.
+
+    The choice is load-bearing, not cosmetic: it sets the available filter types and the slot
+    count. "Generic"/"Extended" gives 20 slots and includes crossover and all-pass types, so a
+    whole channel can be modelled; "Generic"/"Configurable PEQ" gives 31 PEQ-only slots;
+    "Audiotec Fischer"/"Full EQ (30 bands)" constrains REW to what a Helix can actually store.
+    """
+    return _post(
+        f"/measurements/{mid}/equaliser", {"manufacturer": manufacturer, "model": model}
+    )
 
 
 def get_equalisers():
