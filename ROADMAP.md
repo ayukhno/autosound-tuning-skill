@@ -7,7 +7,7 @@
 ## Now
 
 - **Guided Setup Wizard** — interactive onboarding instead of manual README steps
-- **Tuning Command Center (TCC)** — shows current tuning state, what to do manually vs. what happens automatically
+- **Tuning Command Center (TCC)** — shows current tuning state, what to do manually vs. what happens automatically. Repo: [autosound-tcc](https://github.com/ayukhno/autosound-tcc). Наразі стадія прототипування.
 
 ## Next
 
