@@ -262,12 +262,18 @@ class PresetHistory:
     """
 
     def __init__(self, root, preset):
+        # No `makedirs` here: asking about a preset must not create it. A consumer UI resolving a
+        # preset name from settings (or `contract.py` auditing a project) constructs this to find
+        # out whether that preset exists at all -- and a stale name left in QSettings then silently
+        # created a directory in the developer's real project data, which is how this was found.
+        # `snapshot()` creates the directory when there is finally something to write into it.
         self.preset = preset
         self.dir = os.path.join(root, preset)
-        os.makedirs(self.dir, exist_ok=True)
 
     # -- versions --
     def versions(self):
+        if not os.path.isdir(self.dir):
+            return []  # never snapshotted -- "no versions", not a crash
         out = []
         for fn in os.listdir(self.dir):
             m = _VER_RE.match(fn[:-5]) if fn.endswith(".json") else None
@@ -319,6 +325,7 @@ class PresetHistory:
         version = self._next_version()
         state["version"] = version
         state["created"] = datetime.datetime.now().isoformat(timespec="seconds")
+        os.makedirs(self.dir, exist_ok=True)  # first snapshot is what creates the preset dir
         with open(self._path(version), "w") as f:
             json.dump(state, f, indent=2, sort_keys=True, ensure_ascii=False)
         self._set_head(version)
@@ -511,8 +518,9 @@ class Registry:
     """
 
     def __init__(self, root):
+        # Read-only construction, same rule as `PresetHistory` above: `get_active()` on a project
+        # with no `state/` yet answers "none", it doesn't materialise the tree.
         self.root = root
-        os.makedirs(root, exist_ok=True)
 
     def _path(self):
         return os.path.join(self.root, "registry.json")
@@ -537,6 +545,7 @@ class Registry:
 
     def _write(self, reg):
         reg["updated"] = datetime.datetime.now().isoformat(timespec="seconds")
+        os.makedirs(self.root, exist_ok=True)
         with open(self._path(), "w") as f:
             json.dump(reg, f, indent=2, sort_keys=True, ensure_ascii=False)
 

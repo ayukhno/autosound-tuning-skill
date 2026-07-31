@@ -125,8 +125,12 @@ class Process:
     """
 
     def __init__(self, root):
+        # Deliberately does NOT create `root`: merely ASKING about a project's process state must
+        # not write to it. `contract.py` constructs this to report "process-state.json: missing",
+        # and a consumer UI runs that check on every launch -- creating an empty `process/` in
+        # whatever folder the user happened to open would be the audit inventing the thing it is
+        # auditing. The write paths (`_write`, `_append`) create the directory instead.
         self.dir = root
-        os.makedirs(self.dir, exist_ok=True)
 
     # -- paths --
     @property
@@ -324,6 +328,7 @@ class Process:
     def _write(self, state):
         state["updated"] = _now()
         validate(state)
+        os.makedirs(self.dir, exist_ok=True)  # first real write is what creates `process/`
         tmp = self.state_path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(state, f, indent=2, ensure_ascii=False)
@@ -335,6 +340,7 @@ class Process:
     def _append(self, event_type, **payload):
         event = {"at": _now(), "type": event_type}
         event.update({k: v for k, v in payload.items() if v is not None})
+        os.makedirs(self.dir, exist_ok=True)
         with open(self.journal_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(event, ensure_ascii=False) + "\n")
         return event
