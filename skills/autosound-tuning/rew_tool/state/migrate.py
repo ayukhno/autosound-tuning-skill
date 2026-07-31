@@ -109,6 +109,30 @@ def fold_identity(data, identity):
     return added
 
 
+def channel_summary(snapshots):
+    """`{tier: {"total": n, "off": n}}` derived from the snapshots being migrated (SCR-016).
+
+    Derived, not invented: the codes are the ones this migration just read, and `off` is a real
+    ledger field. Without this a migrated project opens with an empty "Project params" panel —
+    found by running the real thing, not by a test — even though the count was sitting in the very
+    files being rewritten.
+
+    Newest snapshot wins for a code's `off` flag; the code set is the union across snapshots, so a
+    channel that exists in one preset and not another is still counted once.
+    """
+    seen = {}
+    for snap in snapshots:  # oldest first, so later writes overwrite earlier ones
+        for tier in _state.tier_names(snap):
+            rows = snap.get(tier) or {}
+            for code, row in rows.items():
+                seen.setdefault(tier, {})[code] = bool(row.get("off"))
+    return {
+        tier: {"total": len(codes), "off": sum(1 for is_off in codes.values() if is_off)}
+        for tier, codes in seen.items()
+        if codes
+    }
+
+
 def snapshot_paths(project_dir):
     """Every `v_NNN.json` under `<project>/state/`, oldest first per preset.
 
@@ -144,7 +168,7 @@ def _write_json(path, data):
 def migrate_project(project_dir, dry_run=False):
     """Migrate one project in place. Returns a report dict; writes nothing when `dry_run`."""
     report = {"project_dir": project_dir, "snapshots": [], "identity_fields": 0,
-              "files": [], "warnings": []}
+              "channel_summary": {}, "files": [], "warnings": []}
 
     # 1. Read every snapshot and collect what it was carrying. Oldest first, so a newer snapshot's
     #    value simply overwrites an older one in the accumulator.
@@ -161,6 +185,9 @@ def migrate_project(project_dir, dry_run=False):
     data = proj.load()
     data["schema_version"] = _project.SCHEMA_VERSION
     report["identity_fields"] = fold_identity(data, identity)
+    if not data.get("channel_summary"):
+        data["channel_summary"] = channel_summary(list(migrated.values()))
+    report["channel_summary"] = data.get("channel_summary") or {}
     if dry_run:
         rev = data.get("project_rev", 0) + 1
     else:
@@ -208,6 +235,8 @@ def render_report(report, dry_run=False):
     lines = [f"# 2.x → 3.0 migration — {report['project_dir']}", ""]
     lines.append(f"- project_rev now: **{report['project_rev']}** (stamped onto every snapshot)")
     lines.append(f"- identity fields moved into project.json: {report['identity_fields']}")
+    for tier, counts in (report.get("channel_summary") or {}).items():
+        lines.append(f"  - {tier}: {counts['total']} ({counts['off']} off)")
     lines.append(f"- snapshots {what}: {len(report['snapshots'])}")
     for rel in report["snapshots"]:
         lines.append(f"  - {rel}")
@@ -293,6 +322,10 @@ def _selftest():
     assert by_code["sub"]["descr"] == "Subwoofer (from intake)", by_code["sub"]
     assert by_code["VFL"]["slot"] == "A", by_code  # a virtual row's identity moves too
     assert _project.fact_value(data["hardware"]["controls"]["SubRC"]) == "-4dB", data["hardware"]
+    # SCR-016: the tier counts a consumer's Project-params panel renders, derived from the very
+    # snapshots being migrated rather than left for a human to re-enter.
+    assert data["channel_summary"] == {"channels": {"total": 2, "off": 0},
+                                        "virtual_channels": {"total": 1, "off": 0}}, data
     assert data["project_rev"] > rev_before, data["project_rev"]
 
     # the ledgers are 3.0: no identity, structured EQ, every snapshot stamped with one revision.

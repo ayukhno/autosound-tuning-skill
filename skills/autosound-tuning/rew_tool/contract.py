@@ -112,7 +112,10 @@ def check_dsp_profile(project_dir):
         dsp_profile.validate_profile(data)
     except (OSError, ValueError) as exc:
         return _entry("dsp_profile.json", True, None, False, [str(exc)]), None
-    entry = _entry("dsp_profile.json", True, None, True)
+    # The version lives at the wrapper level, beside `dsp_profile` -- it describes the FILE, and a
+    # profile written before 3.0 simply has none, which reads as "—" rather than as an error.
+    schema = data.get("schema_version") if isinstance(data, dict) else None
+    entry = _entry("dsp_profile.json", True, schema, True)
     oq = dsp_profile.open_questions(data)
     if oq:
         entry["open_questions"] = oq
