@@ -2,7 +2,7 @@
 
 Machine-readable answer to "what is this car/install, objectively": equipment, per-channel driver
 facts, the naming glossary, DSP-hardware controls, and the left-panel Project/System/Car-audio-
-analysis sections. Code: `project.py` (stdlib only). Sibling of the ledger (`state/schema.md`) and
+analysis panels. Code: `project.py` (stdlib only). Sibling of the ledger (`state/schema.md`) and
 the process state (`state/process-schema.md`) — this is the third and last machine-config file
 class (SKILL-SYNC-PLAN.md §0/§3): **config** (mutable, this file), **ledger** (immutable
 snapshots), **process** (append-only journal + current slice).
@@ -64,10 +64,6 @@ machine-readable to render for its Project/System/Car-audio-analysis panels eith
     "pairs": {}, "combos": {}, "joints": {}, "sides": {}
   },
 
-  "param_sections": [                                        // SCR-015: left-panel extra sections
-    {"id": "system", "label": "System params",
-     "params": [["DSP", "Helix DSP Ultra S"], ["REW port", "4735"]]}
-  ],
   "channel_summary": {                                       // SCR-016: project-scoped tier counts
     "virtual_channels": {"total": 8, "off": 1},
     "channels": {"total": 12, "off": 2}

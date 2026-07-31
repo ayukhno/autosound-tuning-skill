@@ -1,4 +1,4 @@
-"""Project-level facts — SCR-001/011/014/015/016/017 (autosound-tcc sync, 2026-07-29).
+"""Project-level facts — SCR-001/011/014/016/017 (autosound-tcc sync, 2026-07-29).
 
 Objective, machine-checkable facts about ONE car+install that used to live only in prose
 (`autosound_context.md`): car/source/DSP/amps/mic/paths/presets, per-channel driver assignments
@@ -6,11 +6,15 @@ Objective, machine-checkable facts about ONE car+install that used to live only 
 reads this file's `glossary` key), DSP-hardware-level controls that are constant across presets
 (RearRC/SubRC/RealCenter — SCR-017: those are knob positions on the device, NOT preset state, so
 they do NOT belong in the per-preset ledger, and they must stay optional since a MUSWAY/other
-vendor has no equivalent), the left-panel's Project/System/Car-audio-analysis sections (SCR-015),
-and a project-scoped channel-tier summary (SCR-016, e.g. "8 virtual channels, 1 off").
+vendor has no equivalent), and a project-scoped channel-tier summary (SCR-016, e.g. "8 virtual channels, 1 off").
 
 Same split as `state/state.py` / `dsp_profile.py`: DATA is project-local (`<project>/project.json`,
-the project-folder root — SKILL-SYNC-PLAN.md D1), CODE is in the skill. `schema_version: 1`.
+the project-folder root — SKILL-SYNC-PLAN.md D1), CODE is in the skill.
+
+This file holds FACTS, never their presentation. A `param_sections` key used to carry ready-made
+label/value rows for a consumer UI's panels — the same DSP/mic/source values that are already
+fields here, in a second, hand-maintained shape. Dropped in schema v3 for the reason `slot` and
+`descr` left the ledger: one fact, one home. A UI renders its panels from the facts.
 
 Provenance (SCR-014): most facts are file-scoped — a top-level `sources` free-text list, the same
 convention `dsp_profile.json` already uses in the wild (confirmed once, rarely revisited). The
@@ -82,7 +86,7 @@ def _empty_project():
         "car": {}, "source": {}, "dsp": {}, "amps": [], "mic": {},
         "paths": {}, "presets": [],
         "channels": [], "hardware": {"controls": {}},
-        "glossary": {}, "param_sections": [], "channel_summary": {},
+        "glossary": {}, "channel_summary": {},
         "_open_questions": [],
     }
 
@@ -105,7 +109,7 @@ def validate(data):
     rev = data.get("project_rev")
     if not isinstance(rev, int) or isinstance(rev, bool) or rev < 0:
         raise ProjectError(f"project_rev must be a non-negative int, got {rev!r}")
-    for key in ("amps", "presets", "channels", "param_sections", "sources", "_open_questions"):
+    for key in ("amps", "presets", "channels", "sources", "_open_questions"):
         if key in data and not isinstance(data[key], list):
             raise ProjectError(f"{key!r} must be a list")
     seen = set()
