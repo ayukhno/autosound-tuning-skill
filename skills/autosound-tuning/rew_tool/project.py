@@ -223,6 +223,38 @@ class Project:
         controls[name] = fact(value, source=source)
         return self.save(data)
 
+    @staticmethod
+    def parse_impact(impact):
+        """One reading of a `config_change` event's `impact`, for every consumer.
+
+        The field is a short string by design (it is written by hand as often as by code), which
+        means somebody has to parse it — and the moment that somebody is a consumer app, the format
+        has two readings and they drift. So the parse lives here, next to the writer:
+
+            "none"                  -> {"kind": "none",            "codes": ()}
+            "remeasure: [w-L, w-R]" -> {"kind": "remeasure",       "codes": ("w-L", "w-R")}
+            "full_rebaseline"       -> {"kind": "full_rebaseline", "codes": ()}   # everything
+            anything else           -> {"kind": "other",           "codes": ()}   # e.g. "voicing"
+
+        `other` is not an error: `process.py::set_target` already writes `impact="voicing"`, and a
+        human writing "check the sub once the amp is back" is doing something reasonable. An
+        unrecognised impact means "a consumer cannot act on this automatically", never "ignore it"
+        — the raw text comes back so it can still be shown.
+        """
+        raw = (impact or "").strip()
+        low = raw.lower()
+        if not raw or low == IMPACT_NONE:
+            return {"kind": "none", "codes": (), "raw": raw}
+        if low == IMPACT_REBASELINE:
+            return {"kind": "full_rebaseline", "codes": (), "raw": raw}
+        if low.startswith("remeasure"):
+            inside = raw.split(":", 1)[1] if ":" in raw else ""
+            codes = tuple(
+                c.strip() for c in inside.strip().strip("[]").split(",") if c.strip()
+            )
+            return {"kind": "remeasure", "codes": codes, "raw": raw}
+        return {"kind": "other", "codes": (), "raw": raw}
+
     def record_change(self, proc, file, what, why=None, source=None, impact=IMPACT_NONE):
         """Log a config-change journal event (SCR-014) for a mid-project correction to ANY machine
         config file (driver swap, amp re-gain, new preset, curve switch, a newly-discovered
@@ -422,6 +454,17 @@ def _selftest():
     events = proc.events(kinds=["config_change"])
     assert events and events[-1]["what"] == "swapped front woofer driver", events
     assert events[-1]["impact"] == "remeasure: [w-L, w-R]", events
+
+    # parse_impact: one reading of the field, so a consumer never invents a second one.
+    assert Project.parse_impact("remeasure: [w-L, w-R]") == {
+        "kind": "remeasure", "codes": ("w-L", "w-R"), "raw": "remeasure: [w-L, w-R]"}
+    assert Project.parse_impact(IMPACT_NONE)["kind"] == "none"
+    assert Project.parse_impact("")["kind"] == "none"
+    assert Project.parse_impact(IMPACT_REBASELINE)["kind"] == "full_rebaseline"
+    # `process.py::set_target` already writes this one, and a human writes prose -- neither is an
+    # error, both are "a consumer cannot act on this automatically".
+    voicing = Project.parse_impact("voicing")
+    assert voicing["kind"] == "other" and voicing["raw"] == "voicing", voicing
 
     # unsupported schema_version is a deterministic refusal.
     bad = proj.load()
