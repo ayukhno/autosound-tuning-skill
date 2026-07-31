@@ -29,6 +29,10 @@ import json
 import os
 
 # ── schema ──────────────────────────────────────────────────────────────────
+# One number across every machine file (see `project.py`'s own note). This file carried no version
+# at all before 3.0 -- which meant a consumer could not tell a profile written by this skill from
+# one hand-authored years earlier, the exact question `contract.py` exists to answer.
+SCHEMA_VERSION = 3
 TOP_REQUIRED = ("name", "vendor", "groups")
 GROUP_REQUIRED = ("id", "label", "fields")
 
@@ -75,9 +79,16 @@ def load_profile(path):
 
 
 def save_profile(path, data):
-    """Validate, then write. Refuses to write a malformed profile (same discipline as
-    state.py's snapshot() — a garbage profile can't be silently banked)."""
+    """Stamp the schema version, validate, then write. Refuses to write a malformed profile (same
+    discipline as state.py's snapshot() — a garbage profile can't be silently banked).
+
+    Stamped at the wrapper level (beside `dsp_profile`, not inside it) so a bundled reference
+    profile keeps the same inner shape it has always had — the version describes the FILE.
+    """
     validate_profile(data)
+    if isinstance(data, dict):
+        data = dict(data)
+        data["schema_version"] = SCHEMA_VERSION
     parent = os.path.dirname(path)
     if parent:
         os.makedirs(parent, exist_ok=True)

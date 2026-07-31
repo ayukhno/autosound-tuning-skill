@@ -3,10 +3,25 @@
 Versioned single-source-of-truth for a preset's **hard params** (crossovers · gains · TA · polarity ·
 EQ pointers), the anti-drift anchor and the experimentation engine. Code: `state.py` (stdlib only).
 
+**Schema v3** (2026-07-31, the 3.0 format break). Two changes on top of v2:
+
+- **Identity left this file.** `slot`, `descr`, `role`, `order`, `hidden` and `tag_value` now live
+  in `project.json` — `channels[]` for the first five, `hardware.controls` for `tag_value`
+  (SCR-001/017). A row here carries only what can differ between two snapshots of the same
+  install; consumers join the two files on the channel `code`. `validate` **refuses** a row still
+  carrying them rather than dropping them silently, so a half-migrated file is loud, not lossy.
+- **Every snapshot stamps `project_rev`** (SCR-024) — the revision of `project.json` in force when
+  the values were banked, so joining an old snapshot to today's facts is detectable instead of
+  silently relabelling history when a driver is replaced.
+
+One number for the whole project: every versioned machine file carries `schema_version: 3`
+(`contract.py`'s `FORMAT_VERSION`). Nothing in 3.x reads a 2.x file — run
+`python state/migrate.py <project-dir>` once and move on. The 2.x skill remains its own release
+for anyone staying there.
+
 **Schema v2** (2026-07-29, autosound-tcc sync — see that repo's `docs/SKILL-SYNC-PLAN.md`): the
-ledger is **tier-aware**, EQ bands are **structured objects**, and every snapshot carries
-`schema_version`. No backward compatibility with v1 files is kept — run `migrate_v2.py` once on
-the two hand-edited dogfood ledgers (`data/private/state/{FULL,SQ}/`) and move on.
+ledger became **tier-aware**, EQ bands became **structured objects**, and every snapshot carried
+`schema_version`.
 
 ## Why it exists
 - **Anti-drift:** one file per snapshot holds *all* hard params together, so nobody ever reads a
@@ -24,7 +39,9 @@ the two hand-edited dogfood ledgers (`data/private/state/{FULL,SQ}/`) and move o
 ## Snapshot JSON
 ```jsonc
 {
-  "schema_version": 2,                                        // stamped by snapshot(); every v2 file has it
+  "schema_version": 3,                                        // stamped by snapshot(); one number per project
+  "project_rev": 7,                                           // SCR-024: project.json revision these
+                                                              //   values were banked against
   "preset": "SQ_Jazzi", "version": "v_002", "created": "…",   // version/created injected by snapshot()
   "sample_rate": 96000,                                       // samples DERIVED from this; ms is canonical
   "target": "Jazzi",
@@ -34,15 +51,13 @@ the two hand-edited dogfood ledgers (`data/private/state/{FULL,SQ}/`) and move o
   "virtual_eq_ptr": null,
   "note": "sub INV test + w-L trim",                          // per-snapshot label, NOT diffed
   "channels": {                                                // the REQUIRED tier (physical outputs)
-    "w-L": {"slot": "C",                                      // hardware slot letter/number (was
-                                                                // "helix_ch" -- renamed vendor-neutral)
-            "descr": "Front L Woofer",                        // optional: full display name (a consumer
-                                                                // UI's tooltip/label, not read by this module)
-            "role": "woofer",                                 // optional: speaker type (output tier only)
-            "order": 1,                                       // optional: display sort key (int)
-            "tag": null, "tag_value": null,                   // optional: feature-flag chip + its value
-                                                                // (e.g. tag="RearRC", tag_value="3/4")
-            "mute": false, "off": false, "hidden": false,      // optional bools; absent = false/unknown
+    "w-L": {                                                  // identity (slot/descr/role/order/hidden)
+                                                                // is NOT here in v3 -- project.json owns it,
+                                                                // joined by this row's key as `code`
+            "tag": null,                                      // optional: WHICH hardware control affects
+                                                                // this row (its VALUE is in project.json's
+                                                                // hardware.controls -- SCR-017)
+            "mute": false, "off": false,                      // optional bools; absent = false/unknown
             "hp": {"f": 70, "type": "BW", "slope": 12},       // null / "OFF" when disabled
             "lp": {"f": 270, "type": "BW", "slope": 12},
             "gain_db": -7.8,
@@ -54,7 +69,7 @@ the two hand-edited dogfood ledgers (`data/private/state/{FULL,SQ}/`) and move o
             "status": "applied"}                              // proposed | applied | measured  (AD-1)
   },
   "virtual_channels": {                                        // any OTHER tier the DSP profile declares
-    "VFL": {"slot": "A", "gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM"}   // no hp/lp -- not required here
+    "VFL": {"gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM"}                // no hp/lp -- not required here
   }
 }
 ```
@@ -72,9 +87,11 @@ reads by). `state.tier_names(snapshot)` returns every tier present. A tier must 
 (possibly empty) top-level key **before** `apply.propose` can address it by name — intake seeds
 every profile-declared tier, even empty, at the first snapshot.
 
-`slot`/`descr`/`role`/`order`/`tag`/`tag_value`/`mute`/`off`/`hidden`/`phase_deg`/`eq` are all
-OPTIONAL on every tier's rows — only type-checked when present (`order` must be an int, the three
-booleans must be bool), matching how `eq_ptr`/`status` were already optional.
+`tag`/`mute`/`off`/`phase_deg`/`eq` are all OPTIONAL on every tier's rows — only type-checked when
+present (the booleans must be bool), matching how `eq_ptr`/`status` were already optional.
+Leniency stops at identity: `slot`/`descr`/`role`/`order`/`hidden`/`tag_value` are **refused** on
+every tier, including virtual ones — a virtual slot's name belongs in `project.json` exactly like a
+physical one's.
 
 ### EQ bands (structured, schema v2)
 
@@ -87,7 +104,7 @@ vocabulary); `f` is a positive Hz; `gain_db`/`q` are numeric and optional (an al
 gain); `bypass` is an optional bool; `i` is an optional 1-based band-slot index (useful for a
 30-slot Helix EQ / PC-Tool insert order). The old inline string form (`"PK 1000 -9 Q2"`) is now
 **display-only**, generated on demand: `state.eq_str(bands)` / `state.eq_band_str(band)`. Parsing
-the string form back (`state.eq_band_from_str`) exists ONLY for `migrate_v2.py` — it also
+the string form back (`state.eq_band_from_str`) exists ONLY for `migrate.py` — it also
 normalizes the `LS`/`HS` shorthand the two hand-authored v1 ledgers actually used to the canonical
 `LSH`/`HSH`.
 
@@ -112,8 +129,9 @@ lives, `eq` carries the bands themselves so a reader needs no second file.
 ## API / CLI
 ```python
 from state import PresetHistory
-h = PresetHistory(root, "SQ_Jazzi")
-h.snapshot(state, note="…")   # -> "v_00N"   (validates, advances HEAD, stamps schema_version)
+h = PresetHistory(root, "SQ_Jazzi")            # project_dir= if <root> isn't <project>/state
+h.snapshot(state, note="…")   # -> "v_00N"   (validates, advances HEAD, stamps schema_version
+                              #               + project_rev read from project.json)
 h.diff("v_001", "v_002")      # -> structured deltas, one key per tier (only changed fields)
 h.render("v_002")             # -> Markdown settings sheet (a section per non-`channels` tier)
 h.revert("v_001")             # -> new snapshot == v_001 content
@@ -121,7 +139,7 @@ h.revert("v_001")             # -> new snapshot == v_001 content
 ```
 python state.py --root <dir> log|render|diff|revert <preset> [args]
 python state.py selftest
-python migrate_v2.py <root> [<preset> ...]   # one-shot v1 -> v2 (schema_version + structured EQ)
+python state/migrate.py <project-dir> [--dry-run]   # one-shot 2.x -> 3.0, whole project
 ```
 
 ## apply-change gate (`apply.py`)

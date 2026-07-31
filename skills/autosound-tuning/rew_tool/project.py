@@ -30,7 +30,13 @@ import os
 import sys
 from datetime import datetime, timezone
 
-SCHEMA_VERSION = 1
+# One number across every machine file this skill writes (project.json, the ledger,
+# process-state.json, dsp_profile.json), moving together with the skill's own major version.
+# "Which format is this project in?" is then one question with one answer, and `contract.py` can
+# reject a whole tree in one comparison instead of consulting a matrix of per-file versions.
+# 3 is the first break: identity left the ledger for `channels[]` here (SCR-001) and snapshots
+# started stamping `project_rev` (SCR-024). 2.x files are read by `state/migrate.py`, not by this.
+SCHEMA_VERSION = 3
 # `state/process.py`'s own event-type constant, mirrored here rather than imported: project.py
 # lives at `rew_tool/` top level, `process.py` under `rew_tool/state/` (a separate, sys.path-
 # synthetic package by convention -- see `rew_tool.py`'s own selftest for the same lazy-import
@@ -68,6 +74,10 @@ def fact_value(x):
 def _empty_project():
     return {
         "schema_version": SCHEMA_VERSION,
+        # SCR-024: bumped on every write (see `Project.save`). A ledger snapshot copies the value
+        # in force when it was taken, so a consumer joining `channels[]` onto an old snapshot can
+        # tell whether it is reading the facts of that day or today's. 0 = nothing written yet.
+        "project_rev": 0,
         "sources": [],
         "car": {}, "source": {}, "dsp": {}, "amps": [], "mic": {},
         "paths": {}, "presets": [],
@@ -88,7 +98,13 @@ def validate(data):
         raise ProjectError("project.json must be a JSON object")
     if data.get("schema_version") != SCHEMA_VERSION:
         raise ProjectError(
-            f"unsupported schema_version {data.get('schema_version')!r} (expected {SCHEMA_VERSION})")
+            f"unsupported schema_version {data.get('schema_version')!r} (expected {SCHEMA_VERSION})"
+            + (" -- 2.x project, run `python rew_tool/state/migrate.py`"
+               if isinstance(data.get("schema_version"), int)
+               and data["schema_version"] < SCHEMA_VERSION else ""))
+    rev = data.get("project_rev")
+    if not isinstance(rev, int) or isinstance(rev, bool) or rev < 0:
+        raise ProjectError(f"project_rev must be a non-negative int, got {rev!r}")
     for key in ("amps", "presets", "channels", "param_sections", "sources", "_open_questions"):
         if key in data and not isinstance(data[key], list):
             raise ProjectError(f"{key!r} must be a list")
@@ -140,8 +156,9 @@ class Project:
     D1), not nested under a `presets/<preset>/` subtree."""
 
     def __init__(self, root):
+        # No `makedirs`: reading a project must not create one (same rule as `Process` and
+        # `PresetHistory`). `save()` creates the folder when there is finally something to put in it.
         self.dir = root
-        os.makedirs(self.dir, exist_ok=True)
 
     @property
     def path(self):
@@ -160,9 +177,19 @@ class Project:
         return base
 
     def save(self, data):
-        """Validate, then write atomically (write-temp-then-rename — same discipline as
-        `process.py`'s `_write`: a crash mid-write must not read back as an empty project)."""
+        """Bump `project_rev`, validate, then write atomically (write-temp-then-rename — same
+        discipline as `process.py`'s `_write`: a crash mid-write must not read back as an empty
+        project).
+
+        The revision counts WRITES, not semantic changes (SCR-024). A consumer only ever needs two
+        things from it — ordering and equality — and deciding "did these facts really change?"
+        would put this module in the business of diffing, with no reader asking for it.
+        """
+        data["schema_version"] = SCHEMA_VERSION
+        rev = data.get("project_rev")
+        data["project_rev"] = (rev if isinstance(rev, int) and not isinstance(rev, bool) else 0) + 1
         validate(data)
+        os.makedirs(self.dir, exist_ok=True)
         tmp = self.path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, sort_keys=True, ensure_ascii=False)
@@ -300,9 +327,13 @@ def _selftest():
     root = tempfile.mkdtemp(prefix="autosound_project_")
     proj = Project(root)
 
-    # a brand-new project reads as an empty skeleton, not an error.
-    empty = proj.load()
+    # a brand-new project reads as an empty skeleton, not an error -- and reading it does not
+    # create the folder (the audit must not invent what it audits).
+    unwritten = os.path.join(root, "never_written")
+    empty = Project(unwritten).load()
+    assert not os.path.exists(unwritten), unwritten
     assert empty["schema_version"] == SCHEMA_VERSION, empty
+    assert empty["project_rev"] == 0, empty
     assert empty["channels"] == [] and empty["hardware"] == {"controls": {}}, empty
 
     # set_channel: SCR-001 driver facts, appended for an unknown code.

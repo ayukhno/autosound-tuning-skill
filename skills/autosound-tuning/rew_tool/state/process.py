@@ -32,7 +32,9 @@ import os
 import sys
 from datetime import datetime, timezone
 
-SCHEMA_VERSION = 1
+# One number across every machine file (see `project.py`'s own note) -- this file's own shape did
+# not change in the 3.0 break, but "which format is this project in?" has to have one answer.
+SCHEMA_VERSION = 3
 
 # The method's fixed skeleton (`references/core/process-phases.md`). Phases are the skill's, not
 # the project's: a project never edits this list, only the status of each entry and which one is

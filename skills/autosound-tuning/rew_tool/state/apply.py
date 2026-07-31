@@ -136,11 +136,12 @@ def _fmt_val(field, val, rate):
     return str(val)
 
 
+# Identity fields are absent on purpose (schema v3): they cannot appear in a ledger diff any
+# more, so a label for them would describe a row this sheet can never contain.
 _FIELD_LABEL = {"hp": "HP", "lp": "LP", "gain_db": "Gain", "ta_ms": "TA",
-                "polarity": "Polarity", "slot": "Slot", "eq": "EQ bands", "eq_ptr": "EQ export",
-                "status": "status", "descr": "Name", "role": "Role", "order": "Order",
-                "tag": "Tag", "tag_value": "Tag value",
-                "mute": "Mute", "off": "Off", "hidden": "Hidden"}
+                "polarity": "Polarity", "eq": "EQ bands", "eq_ptr": "EQ export",
+                "status": "status", "tag": "Tag",
+                "mute": "Mute", "off": "Off"}
 
 
 _DIFF_RESERVED_KEYS = ("from", "to", "preset")
@@ -302,20 +303,28 @@ def _selftest():
     assert len(h.versions()) == n_before, "a refused delta must NOT bank a snapshot"
 
     # adding a NEW full channel is allowed (enabling center).
-    full_c = {"c": {"slot": "B", "hp": {"f": 400, "type": "LR", "slope": 24},
+    full_c = {"c": {"hp": {"f": 400, "type": "LR", "slope": 24},
                     "lp": {"f": 1200, "type": "LR", "slope": 24}, "gain_db": -9.0,
                     "ta_ms": 6.0, "polarity": "NORM", "eq_ptr": {}}}
     rc = propose(h, full_c, note="enable center")
     assert h.load(rc["version"])["channels"]["c"]["status"] == "proposed"
     assert "NEW row" in rc["sheet"]
 
-    # ── consumer-UI annotation fields (2026-07-29) are mergeable, not "unknown field" refusals ──
-    ann = propose(h, {"c": {"role": "center", "descr": "Front Center Full", "order": 0,
-                            "eq": [{"type": "PK", "f": 1000, "gain_db": -9, "q": 2},
+    # ── identity is NOT proposable through the ledger any more (schema v3, SCR-001) ──
+    # A driver's name/slot/role is a project fact; routing it through a tuning delta would bank it
+    # into a snapshot, which is the two-homes-for-one-fact problem v3 removes. `project.py
+    # set-channel` is where these go now.
+    try:
+        propose(h, {"c": {"role": "center", "descr": "Front Center Full"}}, note="identity")
+        raise AssertionError("propose accepted identity fields")
+    except ValueError as exc:
+        assert "unknown field" in str(exc), exc
+
+    # tuning fields on the same row still merge fine, including structured EQ bands.
+    ann = propose(h, {"c": {"eq": [{"type": "PK", "f": 1000, "gain_db": -9, "q": 2},
                                    {"type": "PK", "f": 1450, "gain_db": -9, "q": 2}]}},
-                  note="annotate center")
+                  note="center EQ")
     c_after = h.load(ann["version"])["channels"]["c"]
-    assert c_after["role"] == "center" and c_after["order"] == 0, c_after
     assert c_after["eq"][0]["type"] == "PK" and c_after["eq"][0]["f"] == 1000, c_after
     # the sheet is what the human keys in, so EQ bands must read as bands -- not a Python dict/list repr.
     assert "PK 1000 -9 Q2 · PK 1450 -9 Q2" in ann["sheet"], ann["sheet"]

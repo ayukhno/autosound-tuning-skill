@@ -41,15 +41,19 @@ import project
 # `state/state.py` schema_version this contract expects — kept as a literal constant table
 # (`CONTRACT`) rather than re-deriving it from the module on every run, so a version bump is a
 # one-line diff both repos read (SKILL-SYNC-PLAN.md §2.3's "CONTRACT table" ask).
+# One format number for the whole project (3.0): every versioned machine file carries the same
+# `schema_version`, so "which format is this project in?" is one comparison rather than a matrix.
+FORMAT_VERSION = 3
 CONTRACT = (
-    # (relative path, label, owner, expected schema_version -- None where the format doesn't
-    # version yet, P1 work per SCR-010/009)
-    ("project.json", "project facts", "skill", 1),
-    ("dsp_profile.json", "DSP capability profile", "skill", None),
+    # (relative path, label, owner, expected schema_version -- None where the file carries no
+    # version because it has no envelope to put one in: the glossary lives inside project.json,
+    # the journal is append-only JSONL, the registry is a two-key pointer)
+    ("project.json", "project facts", "skill", FORMAT_VERSION),
+    ("dsp_profile.json", "DSP capability profile", "skill", FORMAT_VERSION),
     ("glossary.json (or project.json.glossary)", "naming glossary", "skill", None),
-    ("process/process-state.json", "process state", "skill", 1),
+    ("process/process-state.json", "process state", "skill", FORMAT_VERSION),
     ("process/journal.jsonl", "process journal (append-only)", "skill", None),
-    ("state/<preset>/HEAD ledger", "hard-params ledger", "skill", 2),
+    ("state/<preset>/HEAD ledger", "hard-params ledger", "skill", FORMAT_VERSION),
     ("state/registry.json", "multi-slot active-slot pointer", "skill", None),
 )
 

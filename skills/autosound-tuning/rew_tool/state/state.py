@@ -26,6 +26,16 @@ Design invariants
       embryo (a confabulated/garbage state can't be silently banked).
     * revert() is forward-only: it writes a NEW snapshot copying an old one, never destroys history.
 
+Schema v3 (2026-07-31, the 3.0 format break) — two changes on top of v2 below:
+    * **Identity left this file.** `slot`/`descr`/`role`/`order`/`hidden`/`tag_value` live in
+      `project.json` (`channels[]`, and `hardware.controls` for `tag_value`); a row here carries
+      only what can differ between two snapshots of the same install. `validate` REFUSES a row
+      still carrying them rather than dropping them silently — see `MOVED_TO_PROJECT_JSON`.
+    * **Every snapshot stamps `project_rev`** (SCR-024): which revision of those facts the values
+      were dialled against, so joining an old snapshot to today's `project.json` can be detected
+      instead of silently relabelling history when a driver gets replaced.
+`state/migrate.py` moves a 2.x project across; nothing here reads 2.x files.
+
 Schema v2 (2026-07-29, autosound-tcc sync): the ledger is TIER-AWARE, not `channels`-only. A tier
 is any top-level key holding a dict of row-dicts -- `channels` (the required physical-outputs
 tier, unchanged key name) plus any other profile-declared tier a project's DSP has (e.g.
@@ -47,19 +57,24 @@ import os
 import re
 
 # ── schema ──────────────────────────────────────────────────────────────────
-SCHEMA_VERSION = 2
+# One number across every machine file (see `project.py`'s own note). 3 is the format break.
+SCHEMA_VERSION = 3
 POLARITIES = ("NORM", "INV")
 STATUSES = ("proposed", "applied", "measured")
 EQ_TYPES = ("PK", "LSH", "HSH", "APF1", "APF2")
 CHANNEL_FIELDS = (
-    "slot", "descr", "role", "order", "tag", "tag_value", "mute", "off", "hidden",
+    "tag", "mute", "off",
     "hp", "lp", "gain_db", "ta_ms", "polarity", "phase_deg", "eq", "eq_ptr", "status",
 )
-# `slot` was `helix_ch` before this schema pass (2026-07-29, autosound-tcc SCR "submodule task
-# A6") -- renamed vendor-neutral since a MUSWAY/other DSP has no "helix channel" concept, just a
-# hardware slot letter/number. `descr`/`role`/`order`/`tag`/`tag_value`/`mute`/`off`/`hidden` are
-# new, optional annotations a consumer UI (autosound-tcc) renders -- see
-# autosound-tcc/src/autosound_tcc/state/dsp_state.py's `GroupRow` for exactly how each is read.
+# Channel IDENTITY is NOT here (schema v3, SCR-001): `slot`, `descr`, `role`, `order`, `hidden`
+# and `tag_value` moved to `project.json` -- `channels[]` for the first five, `hardware.controls`
+# for `tag_value` (SCR-017, a knob position is a property of the DEVICE, constant across presets).
+# A consumer joins the two on the channel `code`; `autosound-tcc`'s `state/dsp_state.py` does
+# exactly that. What stays here is what changes from one snapshot to the next -- the test that
+# decided the split. `tag` stays because it is structural: WHICH control affects this row.
+# In v2 these lived in both files at once, which is a fact with two homes and no arbiter; v3
+# removes them from this side rather than deprecating them, and `state/migrate.py` moves the
+# values across for a 2.x project.
 #
 # `eq` (a list of structured band objects, schema v2) coexists with the older `eq_ptr` (a pointer
 # to a `.req` export file) rather than replacing it: they answer different questions -- `eq_ptr`
@@ -101,7 +116,7 @@ def tier_names(state):
 def eq_band_from_str(raw):
     """Parse one legacy inline EQ band string (e.g. `"PK 1000 -9 Q2"`) into a v2 band object.
 
-    Migration-only (`migrate_v2.py`) -- the band OBJECT is canonical going forward; this exists so
+    Migration-only (`migrate.py`) -- the band OBJECT is canonical going forward; this exists so
     the two hand-authored v1 ledgers upgrade without hand-transcription. Tolerates the `LS`/`HS`
     shorthand actually used in those files (canonical types are `EQ_TYPES`).
     """
@@ -184,6 +199,51 @@ def _validate_eq(tier, ch_name, eq):
             seen_i.add(band["i"])
 
 
+#: Identity fields a v2 row carried that `project.json` owns in v3 (SCR-001/017). Rejected rather
+#: than ignored: silently dropping them on write would make a migration look like it worked while
+#: losing the only copy of a `descr` nobody had entered into `project.json` yet.
+MOVED_TO_PROJECT_JSON = {
+    "slot": "channels[].slot",
+    "descr": "channels[].descr",
+    "role": "channels[].role",
+    "order": "channels[].order",
+    "hidden": "channels[].hidden",
+    "tag_value": "hardware.controls[<tag>].value",
+}
+
+
+def _project_json(project_dir):
+    try:
+        with open(os.path.join(project_dir, "project.json"), encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _project_channels(project_dir):
+    """`project.json`'s `channels[]` keyed by `code` — channel identity (SCR-001).
+
+    Absent file, absent key, or an entry with no `code` all read as "not captured": a project
+    mid-intake renders a `—` in the Slot column, which is honest, rather than failing to render.
+    """
+    channels = _project_json(project_dir).get("channels")
+    if not isinstance(channels, list):
+        return {}
+    return {str(c["code"]): c for c in channels if isinstance(c, dict) and c.get("code")}
+
+
+def _project_rev(project_dir):
+    """`project.json`'s current `project_rev`, or 0 if this project has no facts file yet.
+
+    Read as plain JSON rather than through `project.py`: this module lives one directory down and
+    is imported under a synthetic name by consumers, and one integer is not worth a cross-package
+    import that would only ever be used here.
+    """
+    rev = _project_json(project_dir).get("project_rev")
+    return rev if isinstance(rev, int) and not isinstance(rev, bool) and rev >= 0 else 0
+
+
 def _validate_row(tier, ch_name, ch, required):
     """One tier row's fields, generic across tiers. `required` (only non-empty for `channels`,
     the one tier every DSP profile has) lists fields that must be KEYS on the row; everything else
@@ -192,6 +252,13 @@ def _validate_row(tier, ch_name, ch, required):
     missing = [f for f in required if f not in ch]
     if missing:
         raise ValueError(f"{tier}.{ch_name!r} missing {missing}")
+    moved = sorted(f for f in MOVED_TO_PROJECT_JSON if f in ch)
+    if moved:
+        where = ", ".join(f"{f} -> project.json {MOVED_TO_PROJECT_JSON[f]}" for f in moved)
+        raise ValueError(
+            f"{tier}.{ch_name!r} carries identity field(s) that moved out of the ledger in schema "
+            f"v{SCHEMA_VERSION} ({where}) -- 2.x snapshot, run `python rew_tool/state/migrate.py`"
+        )
     if "hp" in ch:
         _validate_filter("hp", ch_name, ch["hp"])
     if "lp" in ch:
@@ -205,12 +272,7 @@ def _validate_row(tier, ch_name, ch, required):
     st = ch.get("status")
     if st is not None and st not in STATUSES:
         raise ValueError(f"{tier}.{ch_name}.status must be one of {STATUSES}, got {st!r}")
-    # `bool` is a subclass of `int` in Python, so an explicit bool reject is needed -- an
-    # `"order": true` would otherwise sail through and sort as 1.
-    if "order" in ch and ch["order"] is not None:
-        if isinstance(ch["order"], bool) or not isinstance(ch["order"], int):
-            raise ValueError(f"{tier}.{ch_name}.order must be an int if present, got {ch['order']!r}")
-    for flag in ("mute", "off", "hidden"):
+    for flag in ("mute", "off"):
         if flag in ch and ch[flag] is not None and not isinstance(ch[flag], bool):
             raise ValueError(f"{tier}.{ch_name}.{flag} must be a bool if present, got {ch[flag]!r}")
     if "eq" in ch and ch["eq"] is not None:
@@ -234,6 +296,15 @@ def validate(state):
         sv = state["schema_version"]
         if isinstance(sv, bool) or not isinstance(sv, int):
             raise ValueError(f"schema_version must be an int if present, got {sv!r}")
+    # SCR-024: which project revision's facts this snapshot was taken under. Required in v3 —
+    # without it a consumer joining `project.json`'s `channels[]` onto an old snapshot silently
+    # relabels history (replace a driver and every past version reads as having had the new one).
+    # `snapshot()` stamps it, so a hand-built state only has to say which revision it belongs to.
+    rev = state.get("project_rev")
+    if not isinstance(rev, int) or isinstance(rev, bool) or rev < 0:
+        raise ValueError(
+            f"project_rev must be a non-negative int (schema v{SCHEMA_VERSION}, SCR-024), got {rev!r}"
+        )
     for tier in tier_names(state):
         required = ("hp", "lp", "gain_db", "ta_ms", "polarity") if tier == "channels" else ()
         rows = state.get(tier) if tier != "channels" else state["channels"]
@@ -261,7 +332,7 @@ class PresetHistory:
     (e.g. the project's `rew_analitic/state/`) so the same tooling serves any car/project.
     """
 
-    def __init__(self, root, preset):
+    def __init__(self, root, preset, project_dir=None):
         # No `makedirs` here: asking about a preset must not create it. A consumer UI resolving a
         # preset name from settings (or `contract.py` auditing a project) constructs this to find
         # out whether that preset exists at all -- and a stale name left in QSettings then silently
@@ -269,6 +340,13 @@ class PresetHistory:
         # `snapshot()` creates the directory when there is finally something to write into it.
         self.preset = preset
         self.dir = os.path.join(root, preset)
+        # Where `project.json` lives, for the two things the ledger no longer holds itself:
+        # `project_rev` to stamp (SCR-024) and channel identity to render (SCR-001). Defaults to
+        # the parent of `root` because D1's canonical layout IS `<project>/state/<preset>/`; pass
+        # it explicitly when the state root has been pointed somewhere else.
+        self.project_dir = project_dir if project_dir is not None else os.path.dirname(
+            os.path.abspath(root)
+        )
 
     # -- versions --
     def versions(self):
@@ -314,11 +392,22 @@ class PresetHistory:
         with open(self._path(version)) as f:
             return json.load(f)
 
-    def snapshot(self, state, note=None):
-        """Validate, assign the next version, write it, advance HEAD. Returns the version name."""
+    def snapshot(self, state, note=None, project_rev=None, project_dir=None):
+        """Validate, assign the next version, write it, advance HEAD. Returns the version name.
+
+        `project_rev` (SCR-024) is the revision of `project.json` in force when these values were
+        banked. Read from the project's own file by default, since a snapshot is created NOW and
+        the facts it should be read against are the ones true now — including on `revert()`, where
+        old values are being re-applied to today's car. Pass it explicitly to override (a caller
+        that already holds the number, or a migration restoring a historical one); pass
+        `project_dir` to point at a project other than this history's own.
+        """
         state = copy.deepcopy(state)
         state["preset"] = self.preset
         state["schema_version"] = SCHEMA_VERSION
+        if project_rev is None:
+            project_rev = _project_rev(project_dir if project_dir is not None else self.project_dir)
+        state["project_rev"] = project_rev
         if note is not None:
             state["note"] = note
         validate(state)
@@ -346,7 +435,13 @@ class PresetHistory:
         return diff_states(a, b)
 
     def render(self, version=None):
-        return render_state(self.load(version))
+        """The settings sheet, with the Slot column joined back in from `project.json`.
+
+        The slot letter is the single most operational thing on this sheet — it is what the Arbiter
+        types into their DSP software — so moving identity out of the ledger (v3) must not cost the
+        sheet that column. Read at render time, by `code`, exactly like any other consumer.
+        """
+        return render_state(self.load(version), channels=_project_channels(self.project_dir))
 
 
 def _diff_scalar(a, b):
@@ -403,7 +498,7 @@ def _fmt_opt(v, spec="g"):
     return "—" if v is None else str(v)
 
 
-def render_state(state):
+def render_state(state, channels=None):
     """The human-applicable settings sheet, GENERATED from the source of truth.
 
     Never hand-edit this — edit the JSON and re-render. This is also the artifact the future
@@ -412,6 +507,15 @@ def render_state(state):
     """
     rate = state["sample_rate"]
     roles = state.get("roles") or {}
+    channels = channels or {}
+
+    def slot_of(code):
+        """The hardware slot for one row, from `project.json` (v3 identity, SCR-001)."""
+        entry = channels.get(code) or {}
+        value = entry.get("slot")
+        value = value.get("value") if isinstance(value, dict) and "value" in value else value
+        return value if value not in (None, "") else "—"
+
     lines = []
     lines.append(f"# DSP settings sheet — {state.get('preset', '?')} · {state.get('version', '(unsaved)')}")
     lines.append("")
@@ -441,7 +545,7 @@ def render_state(state):
         eq_s = f"{eq.get('output', '—')} / {eq.get('virtual', '—')}"
         st = ch.get("status", "proposed")
         lines.append(
-            f"| {ch_name} | {ch.get('slot', '—')} | {_fmt_filter(ch['hp'])} | {_fmt_filter(ch['lp'])} "
+            f"| {ch_name} | {slot_of(ch_name)} | {_fmt_filter(ch['hp'])} | {_fmt_filter(ch['lp'])} "
             f"| {ch['polarity']} | {ch['ta_ms']:g} | {samples_for(ch['ta_ms'], rate)} | {ch['gain_db']:g} "
             f"| {_STATUS_ICON.get(st, '?')} {st} | {eq_s} |"
         )
@@ -460,7 +564,7 @@ def render_state(state):
             ta_smp = samples_for(ta, rate) if isinstance(ta, (int, float)) else "—"
             bands = eq_str(row.get("eq"))
             lines.append(
-                f"| {name} | {row.get('slot', '—')} | {_fmt_opt(row.get('gain_db'))} "
+                f"| {name} | {slot_of(name)} | {_fmt_opt(row.get('gain_db'))} "
                 f"| {_fmt_opt(ta)} | {ta_smp} | {row.get('polarity', '—')} "
                 f"| {_fmt_opt(row.get('phase_deg'))} | {'MUTE' if row.get('mute') else '—'} "
                 f"| {' · '.join(bands) if bands else '—'} |"
@@ -671,23 +775,28 @@ def _sample_state():
     Carries `preset` itself (normally injected by `snapshot()`) so `validate()` can also be called
     directly on this fixture, as several selftest cases below do -- without it every direct
     `validate()` call raised on the missing key regardless of what it was actually trying to
-    exercise (a latent gap in the pre-schema-v2 selftest)."""
+    exercise (a latent gap in the pre-schema-v2 selftest).
+
+    No `slot`/`descr`/`role`/`order`/`hidden` on any row: schema v3 keeps identity in
+    `project.json` (SCR-001). The rows here are pure tuning state, which is the whole point of the
+    split -- what a snapshot captures is what could have been different last week."""
     return {
         "preset": "SQ_Jazzi",
         "sample_rate": 96000,
+        "project_rev": 1,
         "target": "Jazzi",
         "roles": {"artist": "Gemini", "producer": "Claude", "critic": None},
         "provenance": {"decision": "clean-slate by-ear 2026-06-18"},
         "banked_ear_verdicts": [],
         "virtual_eq_ptr": None,
         "channels": {
-            "sub":  {"slot": "K", "descr": "Subwoofer", "order": 0, "hp": {"f": 20, "type": "BE", "slope": 12},
+            "sub":  {"hp": {"f": 20, "type": "BE", "slope": 12},
                      "lp": {"f": 45, "type": "BW", "slope": 12}, "gain_db": -6.0,
                      "ta_ms": 5.0, "polarity": "NORM", "eq_ptr": {}, "status": "applied"},
-            "w-L":  {"slot": "C", "descr": "Front L Woofer", "order": 1, "hp": {"f": 70, "type": "BW", "slope": 12},
+            "w-L":  {"hp": {"f": 70, "type": "BW", "slope": 12},
                      "lp": {"f": 270, "type": "BW", "slope": 12}, "gain_db": -7.8,
                      "ta_ms": 5.38, "polarity": "NORM", "eq_ptr": {}, "status": "applied"},
-            "tw-R": {"slot": "H", "descr": "Front R Tweeter", "order": 2, "mute": False, "off": False,
+            "tw-R": {"mute": False, "off": False,
                      "hp": {"f": 5000, "type": "BE", "slope": 12},
                      "lp": "OFF", "gain_db": -6.0, "ta_ms": 4.09, "polarity": "NORM",
                      "eq_ptr": {}, "status": "applied"},
@@ -695,11 +804,9 @@ def _sample_state():
         # a second tier (Helix-shaped: no crossover, phase/mute instead) -- present in every
         # fixture so validate/diff/apply are exercised tier-aware by default, not as a bolt-on.
         "virtual_channels": {
-            "VFL": {"slot": "A", "order": 0, "descr": "Front L Full", "gain_db": 0.0,
-                    "ta_ms": 0.0, "polarity": "NORM",
+            "VFL": {"gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM",
                     "eq": [{"type": "LSH", "f": 150, "gain_db": 2.5, "q": 0.71}]},
-            "VFR": {"slot": "B", "order": 1, "descr": "Front R Full", "gain_db": 0.0,
-                    "ta_ms": 0.0, "polarity": "NORM"},
+            "VFR": {"gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM"},
         },
     }
 
@@ -761,22 +868,54 @@ def _selftest():
     except ValueError:
         pass
 
-    # ── new optional channel annotations (2026-07-29, autosound-tcc schema alignment) ──
-    # slot/descr/order/mute/off round-trip through snapshot/load untouched, per _sample_state().
+    # ── schema v3: identity is NOT in the ledger (SCR-001) ──
     reloaded = h.load("v_001")
-    assert reloaded["channels"]["sub"]["slot"] == "K", reloaded["channels"]["sub"]
-    assert reloaded["channels"]["w-L"]["descr"] == "Front L Woofer", reloaded["channels"]["w-L"]
-    assert reloaded["channels"]["tw-R"]["order"] == 2, reloaded["channels"]["tw-R"]
     assert reloaded["channels"]["tw-R"]["mute"] is False, reloaded["channels"]["tw-R"]
+    assert not any(
+        f in row
+        for row in reloaded["channels"].values()
+        for f in MOVED_TO_PROJECT_JSON
+    ), reloaded["channels"]
 
-    # a wrong type on the new fields is refused, same discipline as polarity/gain/ta above.
-    bad_order = _sample_state()
-    bad_order["channels"]["sub"]["order"] = "0"  # must be an int, not a numeric string
+    # a snapshot still carrying identity is REFUSED, not silently stripped: dropping it on write
+    # would lose the only copy of a `descr` nobody had put into project.json yet.
+    for moved_field, moved_value in (("slot", "K"), ("descr", "Sub"), ("role", "sub"),
+                                     ("order", 0), ("hidden", True), ("tag_value", "3/4")):
+        stale = _sample_state()
+        stale["channels"]["sub"][moved_field] = moved_value
+        try:
+            validate(stale)
+            raise AssertionError(f"validate accepted ledger-side {moved_field!r}")
+        except ValueError as exc:
+            assert "moved out of the ledger" in str(exc), exc
+
+    # SCR-024: a snapshot says which project revision its values were dialled against, and
+    # `project_dir=` reads that number from the project's own file rather than being told twice.
+    # This history has no project.json beside it, so the stamp is 0 -- "no facts recorded yet",
+    # not the fixture's own value: what a snapshot records is the revision in force at write time.
+    assert reloaded["project_rev"] == 0, reloaded
+    proj_root = tempfile.mkdtemp(prefix="autosound_state_proj_")
+    with open(os.path.join(proj_root, "project.json"), "w", encoding="utf-8") as f:
+        json.dump({"schema_version": SCHEMA_VERSION, "project_rev": 7,
+                   "channels": [{"code": "sub", "slot": "K", "descr": "Subwoofer"},
+                                {"code": "VFL", "slot": "A"}]}, f)
+    hp2 = PresetHistory(os.path.join(proj_root, "state"), "SQ_Jazzi", project_dir=proj_root)
+    vp = hp2.snapshot(_sample_state(), note="stamped from the project file")
+    assert hp2.load(vp)["project_rev"] == 7, hp2.load(vp)
+
+    # the settings sheet keeps its Slot column -- joined back in from project.json at render time.
+    # It is what the Arbiter types into the DSP, so the v3 move must not cost the sheet that column.
+    sheet = hp2.render(vp)
+    assert "| sub | K |" in sheet, sheet
+    assert "| VFL | A |" in sheet, sheet
+    assert "| w-L | — |" in sheet, sheet  # no project entry yet -> honest dash, not a crash
+    no_rev = _sample_state()
+    del no_rev["project_rev"]
     try:
-        validate(bad_order)
-        raise AssertionError("validate accepted a non-int order")
-    except ValueError:
-        pass
+        validate(no_rev)
+        raise AssertionError("validate accepted a snapshot with no project_rev")
+    except ValueError as exc:
+        assert "project_rev" in str(exc), exc
 
     bad_mute = _sample_state()
     bad_mute["channels"]["sub"]["mute"] = "yes"  # must be a bool
@@ -795,18 +934,17 @@ def _selftest():
     except ValueError:
         pass
 
-    # `role` + structured `eq` bands are legal carriable fields (the consumer UI renders both); a
-    # snapshot must round-trip them, and the gate must not refuse them as unknown.
+    # structured `eq` bands + `phase_deg` are tuning state, so they stay on the row; a snapshot
+    # must round-trip them, and the gate must not refuse them as unknown. (`role` used to be
+    # asserted here too -- it is identity now, and lives in project.json.)
     with_eq = _sample_state()
-    with_eq["channels"]["w-L"]["role"] = "woofer"
     with_eq["channels"]["w-L"]["eq"] = [
         {"type": "PK", "f": 1000, "gain_db": -9, "q": 2},
         {"type": "LSH", "f": 150, "gain_db": 2.5, "q": 0.71},
     ]
     with_eq["channels"]["w-L"]["phase_deg"] = 90
-    vq = h.snapshot(with_eq, note="role + structured eq")
+    vq = h.snapshot(with_eq, note="structured eq")
     back = h.load(vq)["channels"]["w-L"]
-    assert back["role"] == "woofer", back
     assert back["eq"] == [
         {"type": "PK", "f": 1000, "gain_db": -9, "q": 2},
         {"type": "LSH", "f": 150, "gain_db": 2.5, "q": 0.71},
@@ -822,14 +960,16 @@ def _selftest():
     except ValueError:
         pass
 
-    # other tiers have NO required fields (only `channels` does) -- a virtual row with just a
-    # slot/descr/hidden is legal, the lenient half of the tier-aware split.
+    # other tiers have NO required fields (only `channels` does) -- a virtual row carrying just a
+    # gain is legal, the lenient half of the tier-aware split. Lenient about which TUNING fields
+    # are present; not lenient about identity, which is v3's one hard line and applies to every
+    # tier (a virtual slot's `descr` belongs in project.json exactly like a physical one's).
     lenient = _sample_state()
-    lenient["virtual_channels"]["VFR"] = {"slot": "B", "descr": "Front R Full", "hidden": True}
+    lenient["virtual_channels"]["VFR"] = {"gain_db": -1.0}
     validate(lenient)  # must not raise
 
     # EQ display helpers: structured <-> string, including the LS/HS shorthand alias the two
-    # hand-authored v1 ledgers actually use (canonical types are `EQ_TYPES`; migrate_v2.py relies
+    # hand-authored v1 ledgers actually use (canonical types are `EQ_TYPES`; migrate.py relies
     # on this alias to upgrade them without hand-transcription).
     assert eq_band_from_str("LS 150 +2.5 Q0.71") == {
         "type": "LSH", "f": 150.0, "gain_db": 2.5, "q": 0.71}, eq_band_from_str("LS 150 +2.5 Q0.71")
@@ -869,7 +1009,7 @@ def _selftest():
           f"v2 tier-aware), 5.38 ms → 516 smp @96k (258 @48k), revert forward-only (v_001→v_003), "
           f"validation rejected bad polarity + an unknown EQ type, structured EQ round-tripped "
           f"(incl. LS→LSH alias), render emitted a virtual_channels section; registry: 2 slots "
-          f"isolated, active=SQ_Jazzi loud-bannered, set-active refused a history-less slot. "
+          f"isolated, active=SQ_Jazzi loud-bannered, set-active refused a history-less slot; v3: identity refused on every tier, project_rev stamped from project.json (0 without one), settings sheet joined its Slot column back in. "
           f"root={root}")
     return 0
 

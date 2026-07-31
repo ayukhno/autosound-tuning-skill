@@ -26,7 +26,11 @@ machine-readable to render for its Project/System/Car-audio-analysis panels eith
 
 ```jsonc
 {
-  "schema_version": 1,
+  "schema_version": 3,                                       // one number for every machine file
+  "project_rev": 7,                                          // SCR-024: bumped on every write; a ledger
+                                                             //   snapshot copies the value in force when
+                                                             //   it was taken, so a consumer can tell
+                                                             //   whose facts it is joining against
   "sources": ["user, confirmed at intake 2026-07-20", "datasheet: Audiofrog GB25 spec sheet"],
   "car": {"make": "VW", "model": "Passat B8", "year": 2019},
   "source": {"head_unit": "OEM"},
@@ -37,7 +41,10 @@ machine-readable to render for its Project/System/Car-audio-analysis panels eith
   "paths": {"rew_project": null},                          // SCR-018 -- filled once intake records it
   "presets": ["FULL", "SQ"],
 
-  "channels": [                                              // SCR-001: per-channel driver facts
+  "channels": [                                              // SCR-001: per-channel IDENTITY. As of v3
+                                                             //   this is the ONLY home for slot/descr/
+                                                             //   role/order/hidden -- the ledger carries
+                                                             //   tuning state and joins here by `code`
     {"code": "w-L", "slot": "C", "descr": "Front L Woofer", "role": "woofer", "order": 1,
      "driver": {"make": "Audiofrog", "model": "GB25"},
      "fs_hz": {"value": 62, "source": "datasheet", "at": "…"},
