@@ -244,25 +244,42 @@ _USAGE = """usage: project.py <project-dir> <command> [args]
   show                                         print project.json (or an empty skeleton)
   open-questions                               list unresolved facts (dotted paths)
   set-channel <code> [key=value ...]           add/update one channels[] row
+      [--source S]                             values are JSON when they parse as JSON, so
+                                               driver={"make":"Audiofrog","model":"GB25"} works;
+                                               --source wraps fs_hz as a fact()
   set-hardware <name> <value> [--source S]     set a DSP-hardware control (RearRC/SubRC/...)
   record-change <process-dir> <file> <what>    log a config_change journal event
       [--why W] [--source S] [--impact I]
 """
 
 
-def _parse_kv(pairs):
+#: Channel fields the schema keeps as `fact(value, source, at)` because they drift mid-project
+#: (a driver gets replaced, a datasheet number is superseded by a measured one). `--source` on
+#: `set-channel` wraps exactly these; everything else is stored bare, since provenance on a slot
+#: letter is noise.
+CHANNEL_FACT_FIELDS = ("fs_hz",)
+
+
+def _parse_kv(pairs, source=None):
+    """`key=value` pairs from a command line into typed values.
+
+    Values are JSON-decoded when they parse as JSON, so a nested fact is expressible from the
+    shell: `driver={"make":"Audiofrog","model":"GB25"}` stores an OBJECT. It used to store the
+    literal string, which no reader complains about and every reader then renders as a line of
+    JSON where a speaker name should be — found by watching a live intake session route around
+    this command with an inline Python script rather than use it.
+    """
     out = {}
     for pair in pairs:
         if "=" not in pair:
             raise ValueError(f"expected key=value, got {pair!r}")
         k, v = pair.split("=", 1)
-        if v.lower() in ("true", "false"):
-            v = v.lower() == "true"
-        else:
-            try:
-                v = float(v) if "." in v else int(v)
-            except ValueError:
-                pass
+        try:
+            v = json.loads(v)
+        except ValueError:
+            pass  # a genuine free-text value ("Front L Woofer") is kept as-is
+        if source and k in CHANNEL_FACT_FIELDS:
+            v = fact(v, source=source)
         out[k] = v
     return out
 
@@ -299,7 +316,8 @@ def _main(argv):
             for q in open_questions(proj.load()):
                 print(q)
         elif cmd == "set-channel":
-            code, kv = args[0], _parse_kv(args[1:])
+            source = _flag(args, "--source")
+            code, kv = args[0], _parse_kv(args[1:], source=source)
             proj.set_channel(code, **kv)
             print(f"channel {code} updated")
         elif cmd == "set-hardware":
@@ -339,6 +357,15 @@ def _selftest():
     assert empty["schema_version"] == SCHEMA_VERSION, empty
     assert empty["project_rev"] == 0, empty
     assert empty["channels"] == [] and empty["hardware"] == {"controls": {}}, empty
+
+    # the CLI's own value parsing: nested JSON stays structured, and --source wraps a fact field.
+    # (A live intake session wrote an inline Python script rather than use `set-channel`, because
+    # a driver object came back as a literal string -- silent, and unreadable to every consumer.)
+    kv = _parse_kv(['driver={"make":"Audiofrog","model":"GB25"}', "fs_hz=62", "descr=Front L"],
+                    source="datasheet")
+    assert kv["driver"] == {"make": "Audiofrog", "model": "GB25"}, kv
+    assert fact_value(kv["fs_hz"]) == 62 and kv["fs_hz"]["source"] == "datasheet", kv
+    assert kv["descr"] == "Front L", kv  # free text is not JSON and stays as typed
 
     # set_channel: SCR-001 driver facts, appended for an unknown code.
     proj.set_channel("w-L", slot="C", descr="Front L Woofer", role="woofer", order=1,
