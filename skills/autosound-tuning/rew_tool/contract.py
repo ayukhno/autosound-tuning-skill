@@ -149,7 +149,13 @@ def check_process(project_dir):
 
 
 def check_ledgers(project_dir):
-    """One entry per preset directory under `state/` (D1's canonical layout)."""
+    """One entry per preset directory under `state/` (D1's canonical layout).
+
+    Dot-directories are skipped: a consumer app's own scratch (`.tcc/`) or a VCS directory sitting
+    beside the presets is not a preset, and reporting it as one ("no snapshot history yet") sends
+    the reader looking for a ledger that was never supposed to exist. Found live against the
+    dogfood project, which has a `state/.tcc/`.
+    """
     state_mod = _load_vendored("state")
     root = os.path.join(project_dir, "state")
     entries, snapshots = [], {}
@@ -157,7 +163,7 @@ def check_ledgers(project_dir):
         return entries, snapshots
     for preset in sorted(
         n for n in os.listdir(root)
-        if os.path.isdir(os.path.join(root, n))
+        if not n.startswith(".") and os.path.isdir(os.path.join(root, n))
     ):
         h = state_mod.PresetHistory(root, preset)
         head = h.head()
@@ -359,7 +365,12 @@ def _selftest():
     proc = process_mod.Process(os.path.join(root, "process"))
     proc.enter_phase("0")
 
+    # A consumer app's scratch dir sitting next to the presets is not a preset (found live: TCC's
+    # `state/.tcc/` was reported as a ledger with "no snapshot history yet").
+    os.makedirs(os.path.join(root, "state", ".tcc"), exist_ok=True)
+
     report = check_project(root, skip_rew=True)
+    assert not any(f["file"].startswith("state/.tcc") for f in report["files"]), report["files"]
     project_f = next(f for f in report["files"] if f["file"] == "project.json")
     assert project_f["exists"] and project_f["valid"] is True, project_f
     ledger_f = next(f for f in report["files"] if f["file"].startswith("state/SQ_Jazzi/"))
