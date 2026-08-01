@@ -115,19 +115,21 @@ See the FAQ for more detail.
 
 ## Recommended Models, Modes & My Take
 
-The skill supports two ways to run it, ranked by reliability. Pick based on how much the tune matters versus how much setup you want to do:
+Two ways to run it:
 
-| Mode | Setup | Reliability | Trade-off |
-| :--- | :--- | :--- | :--- |
-| **A: Claude + Gemini** | Claude drives (Sonnet 5 / Fable 5), Gemini reviews (a Pro tier — currently 3.1 Pro — for hard acoustic calls, Flash for routine) | Highest | Two AIs to configure; catches more, slower per decision |
-| **B: Solo drive (Claude or Gemini)** | One model drives and reviews itself; escalate to a stronger tier for tough calls (Claude Opus 4.8, or a higher Gemini tier) | Lower, and it depends on which model you pick | One perspective; Gemini solo gives bold, non-standard proposals but needs its numbers double-checked by hand |
+| Mode | Setup | Reliability |
+| :--- | :--- | :--- |
+| **A: Claude + Gemini** | Claude drives, Gemini reviews (a Pro tier for the hard acoustic calls) | Highest — two perspectives, slower per decision |
+| **B: Solo drive** | One model drives and reviews itself | Lower — one perspective, and its numbers want checking by hand |
 
-**My own experience so far** (this is just my experience for now; once more people have tuned with it, I want this to be community experience, not only mine):
+**Which model to drive with** — my experience so far; I would like this to become community experience rather than only mine:
 
-* **Claude drives, Gemini reviews (Mode A):** stable, but moves in small steps, so it can feel a bit slow. You need to pay at least for Claude. Free Gemini works too, but it sometimes hits its limits. One more thing I noticed: Sonnet is reliable but cautious, and tends to stop and ask things that Opus would often just decide on its own, faster. On the plus side, Sonnet is thriftier with tokens, so you hit usage limits less often.
-* **Gemini drives, with Claude or a stronger Gemini model as the reviewer:** much faster. After two full measurement rounds, I already had a first working version. But later in the session, it can start to hallucinate or lose track of earlier decisions, to the point where I wanted to switch back to Claude. I have not tried this with free Gemini, because of the limits — lifting Gemini's free-tier rate limits needs a paid Google Cloud billing account (the [FAQ's cost paths](FAQ.md#subscription-options-quotas--budgets-as-of-july-2026) cover the current deposit / free-credit details, which change often). If you pay for API access either way, Mode A ends up cheaper overall.
-* **The manual step-by-step version (no local scripts):** it works, but the copy-paste process is stressful. You have to be careful not to lose any value along the way. After trying a full session with real memory between messages, it takes effort to go back to this.
-* **Which model to trust as driver, so far:** **Claude Opus** has given the most consistently stable results. **Sonnet 5** works but still comes across as less sure of itself in this role — worth double-checking its calls for now. **Fable 5** has produced the best results of any model: it audited and rebuilt the skill while running a full tuning session (see [audit-fable-2026-07-11.md](audit-fable-2026-07-11.md)), then drove a second full in-car session on the simplified rules — that build is currently the best-sounding result I have. **Gemini** lost some capability as the process rules grew more complex; after the audit simplified them, Gemini 3.1 Pro proved itself again in the **Critic** role, while Gemini as the *driver* under the new rules is still unverified — feedback from the community is welcome here.
+* **Opus — the default for tuning.** It holds a long session together and decides where a weaker model stops to ask. On the hard turns, run it at **Max effort**.
+* **Sonnet — not for a complex tune.** Cautious, and it loses the thread once facts have to be synthesised across a long session. Fine for short, bounded steps.
+* **Fable — for research.** Where the task is to find a new approach rather than apply a known one, it has produced the best ideas here.
+* **Gemini — as the Critic**, on a Pro tier. As a driver under the current rules it is unverified; feedback welcome.
+
+**And all of this moves fast.** Models, tiers and their strengths shift from month to month, so take the above as a starting point rather than a verdict — try them yourself, experiment, and you will find what fits your car and your ear.
 
 ## Full Setup & FAQ
 

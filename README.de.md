@@ -115,19 +115,21 @@ Mehr dazu in der FAQ.
 
 ## Empfohlene Modelle, Modi & meine Erfahrung
 
-Der Skill unterstützt zwei Arten, ihn zu betreiben, nach Zuverlässigkeit geordnet. Wähle danach, wie wichtig diese Abstimmung ist und wie viel Aufwand du in die Einrichtung stecken willst:
+Zwei Betriebsarten:
 
-| Modus | Einrichtung | Zuverlässigkeit | Kompromiss |
-| :--- | :--- | :--- | :--- |
-| **A: Claude + Gemini** | Claude führt (Sonnet 5 / Fable 5), Gemini prüft (eine Pro-Stufe — aktuell 3.1 Pro — für schwierige akustische Entscheidungen, Flash für Routine) | Höchste | Zwei KIs einzurichten; fängt mehr ab, langsamer pro Entscheidung |
-| **B: Solo-Betrieb (Claude oder Gemini)** | Ein Modell führt und prüft sich selbst; Eskalation auf eine stärkere Stufe bei schwierigen Frequenzweichen-Entscheidungen (Claude Opus 4.8 oder eine höhere Gemini-Stufe) | Niedriger, hängt vom gewählten Modell ab | Nur eine Perspektive; Gemini solo liefert mutige, unkonventionelle Vorschläge, deren Zahlen aber von Hand geprüft werden müssen |
+| Modus | Aufbau | Verlässlichkeit |
+| :--- | :--- | :--- |
+| **A: Claude + Gemini** | Claude steuert, Gemini prüft (eine Pro-Stufe für die schwierigen akustischen Entscheidungen) | Am höchsten — zwei Perspektiven, dafür langsamer pro Entscheidung |
+| **B: Solo** | Ein Modell steuert und prüft sich selbst | Geringer — eine Perspektive, und die Zahlen sollte man von Hand nachrechnen |
 
-**Meine eigene Erfahrung bisher** (das ist bisher nur meine eigene Erfahrung; sobald mehr Leute damit abgestimmt haben, soll das hier die Erfahrung der Community widerspiegeln, nicht nur meine):
+**Womit steuern** — bisher meine eigene Erfahrung; ich hätte gern, dass daraus Erfahrung der Community wird:
 
-* **Claude führt, Gemini prüft (Modus A):** stabil, bewegt sich aber in kleinen Schritten, was etwas langsam wirken kann. Du musst mindestens für Claude bezahlen. Kostenloses Gemini funktioniert auch, stößt aber manchmal an seine Grenzen. Noch etwas, das mir aufgefallen ist: Sonnet ist zuverlässig, aber vorsichtig, und hält oft an, um Dinge zu erfragen, die Opus meist selbst entscheidet, schneller. Dafür geht Sonnet sparsamer mit Tokens um, sodass man seltener an die Nutzungslimits stößt.
-* **Gemini führt, mit Claude oder einem stärkeren Gemini-Modell als Prüfer:** deutlich schneller. Nach zwei vollständigen Messrunden hatte ich bereits eine erste funktionierende Version. Später in der Sitzung kann es aber anfangen zu halluzinieren oder frühere Entscheidungen zu vergessen, bis zu dem Punkt, an dem ich zurück zu Claude wechseln wollte. Ich habe das nicht mit kostenlosem Gemini probiert, wegen der Limits — um sie aufzuheben, brauchst du ein bezahltes Google-Cloud-Abrechnungskonto (die [Kostenwege in der FAQ](FAQ.md#subscription-options-quotas--budgets-as-of-july-2026) decken die aktuellen Einzahlungs-/Gratisguthaben-Details ab, die sich oft ändern). Wenn du ohnehin für API-Zugriff zahlst, kommt Modus A insgesamt günstiger.
-* **Die manuelle Schritt-für-Schritt-Version (ohne lokale Skripte):** funktioniert, aber der Copy-paste-Prozess ist nervenaufreibend. Man muss aufpassen, dabei nichts zu verlieren. Nach einer vollen Sitzung mit echtem Gedächtnis zwischen den Nachrichten kostet es Überwindung, dahin zurückzukehren.
-* **Welches Modell bisher am zuverlässigsten als Fahrer ist:** **Claude Opus** hat bisher die stabilsten Ergebnisse geliefert. **Sonnet 5** funktioniert, wirkt in dieser Rolle aber bisher weniger sicher — seine Entscheidungen sollte man vorerst genauer prüfen. **Fable 5** hat die besten Ergebnisse aller Modelle erzielt: Es hat den Skill auditiert und überarbeitet, während es eine vollständige Abstimmungssitzung durchführte (siehe [audit-fable-2026-07-11.md](audit-fable-2026-07-11.md)), und dann eine zweite volle Sitzung im Auto nach den vereinfachten Regeln gefahren — dieser Aufbau ist aktuell mein klanglich bestes Ergebnis. **Gemini** hat mit zunehmender Komplexität der Prozessregeln etwas an Leistungsfähigkeit eingebüßt; nachdem das Audit sie vereinfacht hat, hat sich Gemini 3.1 Pro in der Rolle des **Kritikers** erneut bewährt, während Gemini als *Fahrer* unter den neuen Regeln noch nicht verifiziert ist — Rückmeldungen aus der Community sind hier willkommen.
+* **Opus — die Vorgabe fürs Einmessen.** Es hält eine lange Sitzung zusammen und entscheidet dort, wo ein schwächeres Modell nachfragt. In den kniffligen Kurven mit **Max effort** fahren.
+* **Sonnet — nicht für ein komplexes Einmessen.** Vorsichtig, und es verliert den Faden, sobald Fakten über eine lange Sitzung hinweg zusammengeführt werden müssen. Für kurze, klar abgegrenzte Schritte in Ordnung.
+* **Fable — für Forschungsaufgaben.** Wo ein neuer Ansatz gesucht und nicht ein bekannter angewandt wird, kamen hier die besten Ideen.
+* **Gemini — als Kritiker**, auf einer Pro-Stufe. Als Steuermodell unter den aktuellen Regeln unerprobt; Rückmeldungen willkommen.
+
+**Und das alles ändert sich schnell.** Modelle, Stufen und ihre Stärken verschieben sich von Monat zu Monat — nimm das Obige also als Ausgangspunkt, nicht als Urteil. Probiere selbst, experimentiere, und du wirst finden, was zu deinem Auto und deinem Gehör passt.
 
 ## Vollständiges Setup & FAQ
 

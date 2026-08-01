@@ -115,19 +115,21 @@ Więcej szczegółów w FAQ.
 
 ## Polecane modele, tryby i moje doświadczenie
 
-Skill obsługuje dwa sposoby działania, uszeregowane według niezawodności. Wybierz w zależności od tego, jak ważne jest to konkretne strojenie i ile konfiguracji chcesz wykonać:
+Dwa sposoby pracy:
 
-| Tryb | Konfiguracja | Niezawodność | Kompromis |
-| :--- | :--- | :--- | :--- |
-| **A: Claude + Gemini** | Claude prowadzi (Sonnet 5 / Fable 5), Gemini recenzuje (poziom Pro — obecnie 3.1 Pro — dla trudnych decyzji akustycznych, Flash dla rutyny) | Najwyższa | Dwie AI do skonfigurowania; wyłapuje więcej, wolniej przy każdej decyzji |
-| **B: Solo (Claude lub Gemini)** | Jeden model prowadzi i sam siebie recenzuje; eskalacja do mocniejszego poziomu przy trudnych decyzjach o zwrotnicach (Claude Opus 4.8 lub wyższy poziom Gemini) | Niższa, zależy od wybranego modelu | Tylko jedna perspektywa; Gemini solo daje śmiałe, niestandardowe propozycje, ale trzeba ręcznie sprawdzić liczby |
+| Tryb | Konfiguracja | Niezawodność |
+| :--- | :--- | :--- |
+| **A: Claude + Gemini** | Claude prowadzi, Gemini recenzuje (poziom Pro do trudnych decyzji akustycznych) | Najwyższa — dwie perspektywy, wolniej na decyzję |
+| **B: Solo** | Jeden model prowadzi i sam się recenzuje | Niższa — jedna perspektywa, a liczby warto sprawdzić ręcznie |
 
-**Moje własne doświadczenie jak dotąd** (to na razie tylko moje doświadczenie; gdy więcej osób nastroi z tym skillem, chcę, żeby to było doświadczenie społeczności, a nie tylko moje):
+**Czym prowadzić** — na razie moje własne doświadczenie; chciałbym, żeby stało się doświadczeniem społeczności:
 
-* **Claude prowadzi, Gemini recenzuje (tryb A):** stabilnie, ale porusza się małymi krokami, więc może wydawać się trochę wolne. Trzeba zapłacić przynajmniej za Claude. Darmowy Gemini też działa, ale czasem trafia na swoje limity. Jeszcze jedno, co zauważyłem: Sonnet jest niezawodny, ale ostrożny, i często zatrzymuje się, by pytać o rzeczy, które Opus zwykle rozstrzyga sam, szybciej. Za to Sonnet oszczędniej gospodaruje tokenami, więc rzadziej trafiasz na limity użycia.
-* **Gemini prowadzi, z Claude lub mocniejszym modelem Gemini jako recenzentem:** dużo szybciej. Po dwóch pełnych rundach pomiarowych miałem już pierwszą działającą wersję. Ale później w sesji może zacząć halucynować lub gubić wcześniejsze decyzje, do tego stopnia, że chciałem wrócić do Claude. Nie próbowałem tego z darmowym Gemini, przez limity — żeby je znieść, potrzebne jest płatne konto rozliczeniowe Google Cloud ([ścieżki kosztowe w FAQ](FAQ.md#subscription-options-quotas--budgets-as-of-july-2026) opisują aktualne szczegóły depozytu i darmowych kredytów, które często się zmieniają). Jeśli i tak płacisz za dostęp do API, tryb A wychodzi ogólnie taniej.
-* **Ręczna wersja krok po kroku (bez lokalnych skryptów):** działa, ale sam proces kopiuj-wklej jest nerwowo napięty. Trzeba uważać, żeby po drodze niczego nie zgubić. Po pełnej sesji z prawdziwą pamięcią między wiadomościami trudno się do tego zmusić z powrotem.
-* **Który model jak dotąd jest najbardziej niezawodny jako prowadzący:** **Claude Opus** dawał dotychczas najstabilniejsze wyniki. **Sonnet 5** działa, ale jak dotąd wydaje się mniej pewny siebie w tej roli — warto na razie dokładniej sprawdzać jego decyzje. **Fable 5** dał najlepszy wynik ze wszystkich modeli: przeprowadził audyt i przebudował skill, jednocześnie prowadząc pełną sesję strojenia (zob. [audit-fable-2026-07-11.md](audit-fable-2026-07-11.md)), a potem poprowadził drugą pełną sesję w aucie według uproszczonych zasad — ten strój jest obecnie moim najlepszym wynikiem pod względem brzmienia. **Gemini** stracił trochę możliwości wraz ze wzrostem złożoności regulaminu; po tym, jak audyt go uprościł, Gemini 3.1 Pro znów sprawdziło się w roli **Krytyka**, a Gemini jako *prowadzący* pod nowymi zasadami wciąż nie jest zweryfikowany — czekamy na opinie społeczności.
+* **Opus — domyślny do strojenia.** Utrzymuje spójność długiej sesji i decyduje tam, gdzie słabszy model się zatrzymuje i pyta. Na trudnych zakrętach uruchamiaj go w trybie **Max effort**.
+* **Sonnet — nie do złożonego strojenia.** Ostrożny i gubi wątek, gdy trzeba scalić fakty z długiej sesji. Do krótkich, ograniczonych kroków wystarczy.
+* **Fable — do zadań badawczych.** Tam, gdzie trzeba znaleźć nowe podejście, a nie zastosować znane, dał tu najlepsze pomysły.
+* **Gemini — jako Krytyk**, na poziomie Pro. Jako model prowadzący przy obecnych zasadach niesprawdzony; czekam na opinie.
+
+**A to wszystko szybko się zmienia.** Modele, poziomy i ich mocne strony zmieniają się z miesiąca na miesiąc, więc potraktuj powyższe jako punkt wyjścia, a nie wyrok — próbuj sam, eksperymentuj, a znajdziesz to, co pasuje do twojego auta i twojego ucha.
 
 ## Pełna konfiguracja i FAQ
 
