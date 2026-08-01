@@ -180,6 +180,7 @@ A bass pan test read "both sides at once" while the mid pan was clean: solo L−
 - **RCA-pull test first:** noise persisting with the input RCA removed = amp self-noise (input-referred → drops with the amp knob + DSP make-up upstream adds none); noise vanishing = upstream/ground, the knob won't help.
 - **Noise spectra bypass the channel XO — use as a source locator:** a mid hissing to 16k (LPF 2000) and a tweeter hissing down to 1k (HPF 3625) proves the noise enters after the DSP = inside the amp.
 - **Amp knobs are per-PAIR; the DSP ceiling binds on the hotter channel.** Compute which channel hits the DSP gain ceiling FIRST before choosing the knob position — "minimum for minimum noise" is usually illegal on the hot side.
+- **The amp's pair grouping is an install choice and often does NOT follow the crossover branches.** Get the amp→channel map before reasoning about knobs: a build where one 4-channel amp carries *midbass + centres* and another carries *midrange + tweeters* couples mid↔tweeter on one knob and midbass↔centre on the other — neither pairing is guessable from the crossover diagram, and the ceiling rule above binds along the AMP's pairs, not the branch's.
 - **An amp-knob change invalidates the stored gains of EVERY preset** (presets snapshot DSP gains; the knob is global hardware). Sweep all live presets with the archive delta and re-listen the ear-attested ones.
 - **Ear-attested auxiliary gains are RELATIVE to their host pair** (center vs mids, rear vs fronts): any pair trim must propagate or be consciously re-arbitrated.
 
