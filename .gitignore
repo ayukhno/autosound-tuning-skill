@@ -19,3 +19,9 @@
 *.mdat
 *.pct6
 .gstack/
+
+# Python bytecode cache — machine- and interpreter-version specific, regenerated
+# on every run. Two versions of the same module (cpython-310 and cpython-312)
+# had both been committed; nothing reads a foreign build's cache.
+__pycache__/
+*.pyc
