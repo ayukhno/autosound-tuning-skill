@@ -1,0 +1,31 @@
+# Python dependencies for the skill's own tooling (rew_tool/, scripts/).
+# Everything else it imports is stdlib or a sibling module in rew_tool/.
+#
+#     python3 -m pip install -r requirements.txt
+#
+# The skill is written on a deliberate dependency diet: scipy and matplotlib are
+# imported lazily, at the point of use, and raise a plain-language RuntimeError
+# naming the exact `pip install` to run. So a missing extra degrades one feature
+# rather than breaking a session. This file exists so an installer can put them
+# in up front and nobody meets that wall mid-tune -- not because the lazy
+# imports are a defect.
+#
+# Lower bounds are loose on purpose: this gets installed alongside other
+# projects' environments (autosound-tcc uses its own venv), and exact pins would
+# fight their resolvers. Known-good 2026-07-30: numpy 2.0.2, scipy 1.13.1,
+# matplotlib 3.9.4 on Python 3.12.
+
+# Required. Imported at module scope by curve_view, dsp_math, eq_gate,
+# make_plot and xover_select -- those modules do not import without it.
+numpy>=1.24
+
+# Feature dependency, imported lazily in two places:
+#   - dsp_math.xo_response -> crossover design (Butterworth, Bessel with
+#     norm="mag", Linkwitz-Riley), which is what xover_select.py runs on;
+#   - eq_gate._selftest, to synthesize the test combs (the gate itself is
+#     scipy-free and works without it).
+# PEQ, all-pass and joint-phase math need no scipy.
+scipy>=1.10
+
+# Feature dependency for rew_tool/make_plot.py (plot rendering) only.
+matplotlib>=3.7

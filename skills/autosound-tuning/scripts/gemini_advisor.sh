@@ -30,7 +30,12 @@ PKG="${1:-}"; TRACE="${2:-}"
 [[ -f "$PKG" ]] || die "package not found: $PKG"
 gemini_preflight
 
-PRIMARY_MODEL="${GEMINI_ADVISOR_MODEL:-$(gemini_default_model)}"
+# ADVISOR defaults to PRO. A Flash advisor agrees with whatever it is handed: asked to
+# settle whether a residual was signal or measurement noise, it answered "signal" in
+# section 1 and "noise" in the Q&A of the SAME reply, and endorsed both sides of the
+# open question (field-observed 2026-08-01). Flash remains the automatic fallback when
+# Pro quota is dry -- see the warning in gemini_run().
+PRIMARY_MODEL="${GEMINI_ADVISOR_MODEL:-$(gemini_default_critic_model)}"
 FALLBACK_MODEL="${GEMINI_FALLBACK_MODEL:-$(gemini_default_model)}"
 
 PROMPT_FILE="$(mktemp -t autosound_advisor.XXXXXX)"

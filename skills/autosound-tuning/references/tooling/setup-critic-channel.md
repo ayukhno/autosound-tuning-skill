@@ -129,3 +129,17 @@ Never skip the second perspective just because the `agy`/`gemini` channel isn't 
    Після вставки коду та натискання `Enter` ви успішно увійдете в систему. Напишіть `/quit`, щоб вийти з інтерактивного режиму `agy`. 
    
    Токен збережеться локально, і тепер виклики Радника/Критика через скрипти (наприклад, `scripts/gemini_critic.sh`) працюватимуть автоматично і безперешкодно!
+
+## Which model for which role (updated 2026-08-01)
+
+**Both roles now default to Pro.** The Critic already did; the Advisor was on Flash to save the shared weekly quota, and that turned out to be a false economy on any question about *method*.
+
+Field case: the Advisor was asked to settle whether a per-position residual was a real spatial gradient or measurement noise. The Flash reply called it a genuine gradient in section 1 and explained the same residual as hand-trajectory instability in the Q&A of the same document — **both sides of the one question it existed to answer**, with no acknowledgement of the contradiction. Re-run on `gemini-3.1-pro-high` it settled the question, and additionally overturned the Generator's proposed lever on grounds neither party had raised. Cost of the weak round: one full package cycle.
+
+Rule of thumb: **routine pings and "does this look sane" → Flash is fine; anything that decides whether a method, a metric, or an error bar is valid → Pro.** If quota forces a fallback, the wrapper now says so loudly — treat that round as advisory and re-run before banking anything resting on it.
+
+⚠️ **Model names drift.** `agy models` has moved from display labels (`Gemini 3.1 Pro (High)`) to slug ids (`gemini-3.1-pro-high`); both forms were accepted as of 2026-08-01. List the current names before assuming a pinned name still resolves — an unresolvable name is one of the ways the channel returns an empty reply.
+
+## A reviewer that contradicts itself is a result, not a failure
+
+Read the reply as evidence about the review, not only about the subject. If two sections answer the same question differently, the round did **not** settle it — say so in the ledger and re-run, rather than quoting whichever half agrees with the plan. The same applies to a reviewer that endorses a proposal while missing that it re-opens a banked decision: that is a signal the package omitted context, and the fix is in the package (see the Generator's omission of the live HF split, 2026-08-01), not in the reviewer.

@@ -13,6 +13,9 @@
 > [!CAUTION]
 > AI może pomylić się w liczbach. Zawsze sprawdzaj częstotliwości zwrotnic, nachylenia filtrów i wartości EQ w swoim DSP, zanim wyłączysz wyciszenie, zwłaszcza przy głośnikach wysokotonowych, i zaczynaj od niskiej głośności.
 
+> [!NOTE]
+> **2.x to linia stabilna.** Jest kompletna funkcjonalnie i pozostaje wspierana. Linia 3.x — z GUI i instalatorem — jest w opracowaniu; bez dat.
+
 > [!TIP]
 > **Nagrody i Osiągnięcia**
 > To podejście zostało stworzone nie tylko dla czystej przyjemności ze słuchania, ale także po to, by wygrywać. Udowodniło już swoją skuteczność w praktyce, przynosząc dwie nagrody:

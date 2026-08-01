@@ -2,6 +2,57 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
+## [v2.8.0] — 2026-08-01
+
+The last release of the 2.x line, and the biggest field harvest so far: two competition-season tuning arcs, one event, and eighteen sessions folded back in. Also ships the release that v2.7.1 documented but never tagged, and the TCC-integration groundwork that landed on `main` after v2.7.0.
+
+Most of what follows was learned the expensive way — a wrong verdict, a missed gate, a whole arc measured in a configuration nobody listens to. The rules are written so the next build does not pay again.
+
+### Added — measurement method (`analysis-playbook.md`)
+- **The two-snapshot rule.** A convention that mutes the centre and disables effects protects series comparability *and* can mean the configuration people actually hear is never measured. On one build the centre's own contribution was +4.3…+5.7 dB and sat outside every tonal verdict of the arc. Each series now carries both the legacy invariant and the combat snapshot; **tonal verdicts come only from the combat snapshot.**
+- **Attribute a summed excess before choosing where to cut.** A symmetric cut behaved exactly as modelled on the solo sides and moved the combat curve by nothing — the intermediate snapshot showed the centre alone was +8.0 dB there. For any multi-source excess, capture the middle member first.
+- **Discrete test tones are read at the tone frequencies, never as band medians** — a band summarised as "on target, 1.9 dB spread" hid a +3.0 dB peak sitting on a scored tone.
+- **Measured group delay ≠ filter group delay.** Modelling the banks before accepting a "consolidate the filters" argument saved five ear-attested wins: the side with half the filter count measured the larger GD, because the bulk was door-null acoustics.
+- **Know your own error bars.** Measure the repeatability floor per rig (MMM capture-to-capture, static sweep, 2 cm and 5 cm mic shifts) and quote it whenever a difference is called real. Between-series scatter can run 3-7× the within-series σ when an unrecorded global — master volume, level-dependent tilt compensation — moved between them.
+- **A set with no replicate can still have an error bar.** Above the fill channel's low-pass a full-system capture must equal the power sum of the solo sides at the same place; the residual of that identity is the set's internal inconsistency, free and requiring no extra capture.
+- **Spread within an MMM traversal can be the signal.** MMM measures a volume, so not holding an exact point is the design. Decompose the residual instead of blaming the operator: narrow notch-like structure = undersampled comb (a real averaging failure), broad-shaped structure = a spatial gradient across the volume, i.e. directivity.
+
+### Added — diagnostics (`diagnostic-techniques.md`)
+- **An electrically symmetric move becomes acoustically asymmetric when one side has a non-EQ-able null in the band** — check the filter's skirt against the pair's asymmetry map, not just the target band.
+- **Reinforcing a correct localisation cue can expose a defective one and split the image in two.** Read "the image split" as a cue-conflict signature.
+- **A differentially-fed fill layer depends on level symmetry to stay silent on correlated content** — its acceptance gate must be re-run after any level change on either side, not only at first entry.
+- **Don't accept a band as the mechanism until you've put the band back.** Restoring a suspected cause is cheaper than a new measurement and falsifies more decisively; on one build it killed a model that had been steering work for weeks.
+- **A mono mic with no head cannot answer a binaural question.** Use it as a sniper scope to find a resonance frequency; the ear decides the balance.
+- **Level asymmetry is the last lever, not the first** — path attenuation is already inside any curve measured at the listening position, and if centring needs more than ~0.5-1 dB of near-side cut the bug is in delays/phase.
+- **Choosing the lever:** a broadband channel-gain change drags the crossover region and shifts joint *summation* (a flat gain is phase-neutral — what moves is null depth and joint median, not phase). A shelf placed above the joint reaches the same tonal band and leaves the crossover alone.
+
+### Added — gates and tracks (`test-tracks.md`, `competition.md`)
+- **A mono/centred gate cannot catch an L/R level overshoot; pan-extreme tests can.** One state passed band-passed mono pink and failed the pan test in the same session.
+- **Gate a centre/fill level on an amplitude-panned track, not natural stereo** — a statically summed centre never goes silent on extreme pans, which is why choir-based attestation hid the defect for months.
+- **A moving-source track beats a static one for asymmetry**, and when a source *jumps* rather than glides, separate the author's intent from the system's error by failure shape: all positions shifted one way = level; blurred or doubled = phase/time; position correlating with the source's pitch = narrowband.
+- **Disc identity: the number is not the track.** Regional compilations borrow category names but carry different music, and numbering transfers neither between volumes nor to streaming. Always cite `LIBRARY #N + artist — title`; ask and log the user's actual tracks; verify the track↔criterion mapping from the original-language disc description (a translation turned `Höhe` into "pitch" and sent a whole session's height gates to the wrong tracks).
+- **Competition process:** changes inside 72 hours of the start need same-day measured attestation or a revert · every listening verdict is recorded with the master position · check every ruleset the event runs, because a defect worth zero points on one card is scored on another · cross-validate the ledger's open risks against the judge's card afterwards — a free external test.
+
+### Added — bookkeeping discipline (`process-control.md`)
+- **The record and the hardware drift apart.** Three independent occurrences on one build — an output gain at −5 while the ledger attested +3, a centre gain recorded that existed in no preset, and five harvested lessons filed as "in the inbox" that never arrived. Read the current value off the DSP screen before computing any delta from it, and check a harvest destination actually received what a document says it did.
+- **The system state belongs in the measurement, not in memory** — master, sub, effects, fill channel (plus sweep attenuation and mic position when non-standard) go into the measurement's own notes at capture time; titles stay protocol-clean for name-matching.
+- **Version identifiers are a namespace** — grep the ledger before allocating one, or two unrelated states merge in every later reference.
+
+### Changed — the reviewer channel
+- **The Advisor role now defaults to Pro**, like the Critic. Asked to settle whether a residual was signal or noise, a Flash advisor answered "signal" in one section and "noise" in another of the same reply, endorsing both sides of the only question it existed to answer. Flash remains the automatic fallback when quota is dry, and the fallback now prints a loud warning explaining that a weak round reads like a strong one — treat it as advisory and re-run before banking anything resting on it.
+- **A reviewer that contradicts itself is a result, not a failure** — record that the round did not settle the question rather than quoting the half that agrees with the plan. A reviewer that endorses a proposal which re-opens a banked decision is a signal the *package* omitted context.
+- Documented that model names drift (`agy models` moved from display labels to slug ids; both accepted as of 2026-08-01) — an unresolvable name is one of the ways the channel returns an empty reply.
+
+### Fixed / documented (`rew-api-quirks.md`)
+- **`PUT /measurements/{id}` replaces the notes field**, destroying the capture information REW wrote there itself. Read → filter → append → write back; a state-stamping helper must round-trip and offer `--show` / `--clear`.
+
+### Included from the untagged v2.7.1 and post-v2.7.0 `main`
+- `eq_gate.py` provenance rewritten to its real validation and limits, plus `ExcessPhaseGate.s_at(f0)` and a selftest regression lock (documented as v2.7.1 on 2026-07-23; the tag was never cut).
+- TCC-integration groundwork: machine-readable process state (`process-state.json` + `journal.jsonl`), measurement naming as code (`rew_tool/naming.py`, matching by parsed identity rather than raw title), `rew_api` timeouts and working write endpoints (`set_filters` fixed, `set_equaliser` takes manufacturer+model, `rename_measurement`), the DSP capability-profile mechanism (`dsp_profile.py`, `community-inbox/dsp-profiles`), and declared Python dependencies (`requirements.txt`).
+
+### Note on the line
+2.x is feature-complete and stays supported. The 3.x line — GUI and installer — is in development on a branch; no dates. The READMEs now say so in all four languages.
+
 ## [v2.7.1] — 2026-07-23
 
 The excess-phase EQ-ability gate (`eq_gate.py`) got its first formal validation — a 5-block experiment suite in the research project, cross-model verified (Claude + Gemini), verdict `partially_supported`. No behaviour change to the shipping gate; the update is honest scoping plus a regression lock.

@@ -13,6 +13,9 @@
 > [!CAUTION]
 > KI kann sich bei Zahlen irren. Prüfe Trennfrequenzen, Flankensteilheiten und EQ-Werte in deinem DSP immer manuell nach, bevor du die Stummschaltung aufhebst, besonders bei Hochtönern, und starte bei niedriger Lautstärke.
 
+> [!NOTE]
+> **2.x ist die stabile Linie.** Sie ist funktional abgeschlossen und wird weiter unterstützt. Eine 3.x-Linie — mit GUI und Installer — ist in Entwicklung; ohne Termine.
+
 > [!TIP]
 > **Auszeichnungen & Erfolge**
 > Dieser Ansatz ist nicht nur für den reinen Hörgenuss gedacht, sondern auch um zu gewinnen. Er hat seine Wirksamkeit in der Praxis bereits bewiesen und zwei Auszeichnungen eingebracht:
