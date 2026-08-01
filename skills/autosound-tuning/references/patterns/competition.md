@@ -84,3 +84,11 @@ EMMA judges **4 sections of tonal accuracy: Subbass · Midbass · Midrange · Hi
 **Track 17 (Zero Bit):** silence — no hiss/hum/crackle/fans (engine off).
 
 **The guide's tip:** each instrument in the music tracks — naturally and separately, without affecting the others.
+
+## Process rules earned at events
+
+- **Changes to the competition preset inside 72 hours of the start need same-day measured attestation — or revert.** One build entered an ear-only filter two days before an event; it turned out to be innocent, but that was established **after** the event by calculation, when it should have been established before it by measurement.
+- **Every listening verdict — yours, a judge's, a guest's — is recorded with the master volume position.** Two guest observations on one build were both tied to a level that nobody wrote down, which made it impossible afterwards to separate a balance problem from level-dependent degradation.
+- **The same defect can be worth zero points in one ruleset and real points in another — check every ruleset the event runs.** One card had no standalone bass-image-height criterion (a perfect positional score while the bass image sat on the dash), so height looked free to trade away; another rulebook scores stage height on a moving track, deducting per instrument not at horizon level **at any position**, and scores height and positions separately — so a height↔position trade costs on both sides. For a combined event, resolve the trade rather than assuming the laxer ruleset.
+- **Cross-validate the ledger's open risks against the judge's card after every event — it is a free external test of the process.** On one build the judge independently confirmed five items that were already open in the ledger. Keep the open-risk list explicit so this check is possible.
+- **Judges calibrate the listening level with a meter** (one association's setup disc specifies 74 dB(A) / 84 dB), and publish stage-height references (dashboard height or slightly above for stereo; mirror triangles or half A-pillar height for mono per side). Recover these numbers from the official setup material rather than guessing them.

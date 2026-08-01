@@ -50,3 +50,25 @@ Capture kit + behavioral scorecard pattern: pin the skill commit, `AUTOSOUND_STA
 project, collect `state/` + the session transcripts + `dsp-config/` + the `.mdat`, then audit
 with invocation-greps (**count real `python …py` executions, not token mentions** — mentions
 include the skill's own text and the model's narration; only invocations are ground truth).
+
+## The record and the hardware drift apart — verify, don't compute from memory
+
+Three independent occurrences on one build, each caught only by someone reading a screen:
+
+- a rear channel's output gain sat at **−5** while the ledger's attested value was **+3**;
+- the ledger recorded a centre gain of **+4.0** that existed in **no preset** — the real baseline was +3.0 in both, so every delta computed from +4.0 was wrong;
+- a debrief listed five harvested lessons as "filed in the skill inbox"; the inbox never received them (they sat in the plan document that generated them).
+
+**Rules.** Read the current value off the DSP screen before computing any delta from it. A level "attested in the ledger" is a claim about the past, not a reading of the present. And when a document says work was filed somewhere, check the destination — a harvest queue that is written to but never read from silently becomes a second ledger.
+
+## The system state belongs in the measurement, not in memory
+
+Anything global and level-dependent (master volume, loudness/tilt compensation, a sub level knob, whether the fill channel and effects were on, a non-standard mic position, an attenuated sweep level) must be written into **the measurement's own notes** at capture time. Titles stay protocol-clean — they are the tool-facing identity that name-matching resolves exactly (`naming-and-structure.md`); notes carry the state.
+
+Minimum per block of captures: **master · sub · effects · fill channel**. Add the sweep attenuation for sweeps and the mic position when it is not the usual seat.
+
+⚠️ Writing notes over an API usually **replaces** the field, destroying the capture information the measurement software put there itself. Read → append → write back; never a bare overwrite. (Confirmed by destroying it once.)
+
+## Version identifiers are a namespace — check before you allocate
+
+Banking a change under a version label that already exists silently merges two unrelated states in every later reference. Before writing a new `vN.N` block, grep the ledger for that label. One build hit this when a session's HF work was banked as `v4.5`, a label already held by an earlier entered-and-attested change referenced from eight other places.

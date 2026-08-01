@@ -73,11 +73,16 @@ fi
 
 # Per-CLI default model. agy uses human-readable labels (`agy models`);
 # @google/gemini-cli uses API ids (`gemini models` / the docs).
-# CRITIC defaults to PRO: a Flash critic praises and misses obvious problems
-# (field-observed) — one stronger model beats pages of "don't praise" prompt
-# text. Flash stays the default for routine advisor pings + the FALLBACK when
-# Pro quota is dry (agy Starter: weekly Flash+Pro group limit). Override per
-# role via GEMINI_CRITIC_MODEL / GEMINI_ADVISOR_MODEL.
+# BOTH review roles default to PRO: a Flash reviewer praises, misses obvious
+# problems, and — as an advisor — will endorse both sides of the very question
+# it was asked to settle (field-observed). One stronger model beats pages of
+# "don't praise" prompt text. Flash is the FALLBACK only, for when Pro quota is
+# dry (agy Starter: weekly Flash+Pro group limit); the fallback prints a warning
+# because a weak round reads like a strong one. Override per role via
+# GEMINI_CRITIC_MODEL / GEMINI_ADVISOR_MODEL.
+# ⚠️ Model NAMES drift. `agy models` moved from display labels ("Gemini 3.1 Pro
+# (High)") to slug ids ("gemini-3.1-pro-high"); both forms were accepted as of
+# 2026-08-01. If a call returns empty, list the current names first.
 gemini_default_model() {
   case "$GEMINI_FLAVOR" in
     gemini) echo "gemini-2.5-flash" ;;
@@ -124,7 +129,11 @@ gemini_run() {
   echo ">> ${role}: $primary  [cli=$GEMINI_FLAVOR]" >&2
   out="$(_run_model "$primary" "$pf" || true)"; used="$primary"
   if _is_quota_error "$out"; then
-    echo ">> $primary unavailable/exhausted → falling back to $fallback" >&2
+    echo ">> ⚠️  $primary unavailable/exhausted → FALLING BACK to $fallback" >&2
+    echo ">>    A fallback model is weaker at judging METHOD validity: it tends to agree" >&2
+    echo ">>    with the package it was handed and can endorse both sides of the open" >&2
+    echo ">>    question. Treat this round as advisory, and re-run on the primary model" >&2
+    echo ">>    before banking anything that rests on it." >&2
     out="$(_run_model "$fallback" "$pf" || true)"; used="$fallback (fallback)"
   fi
   if [[ -z "${out//[[:space:]]/}" ]]; then

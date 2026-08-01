@@ -13,6 +13,9 @@
 > [!CAUTION]
 > AI can get numbers wrong. Always double-check crossover frequencies, slopes, and EQ values in your DSP before unmuting, especially on tweeters, and start at a low volume.
 
+> [!NOTE]
+> **2.x is the stable line.** It is feature-complete and stays supported. A 3.x line — with a GUI and an installer — is in development; no dates.
+
 > [!TIP]
 > **Awards & Achievements**
 > This approach is designed not just for personal listening pleasure, but for winning. It has already proven its effectiveness in practice, bringing home two awards:

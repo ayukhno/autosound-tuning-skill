@@ -53,3 +53,6 @@ The two failure modes (and their fixes):
 ## Process hygiene
 - **cwd bug:** run from `/tmp` and reach `rew_api` via `PYTHONPATH` or inline urllib — the project cwd sometimes throws `PermissionError` on import.
 - **Save-all when the UI fails:** there is an API path to save every measurement — see project memory `rew-api-save-all`.
+
+## Notes / annotations
+- **`PUT /measurements/{id}` REPLACES the notes field.** The measurement software writes its own capture information there (averaging count, input RMS, weighted levels, sweep timing reference). A bare PUT with `{"notes": "..."}` destroys it, irreversibly for that measurement — confirmed by destroying it on a real capture. **Read → filter → append → write back.** A helper that stamps system state into notes must round-trip, and should offer a `--show` audit and a `--clear` that removes only its own line.
