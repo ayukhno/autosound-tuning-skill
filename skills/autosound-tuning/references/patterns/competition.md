@@ -92,3 +92,51 @@ EMMA judges **4 sections of tonal accuracy: Subbass · Midbass · Midrange · Hi
 - **The same defect can be worth zero points in one ruleset and real points in another — check every ruleset the event runs.** One card had no standalone bass-image-height criterion (a perfect positional score while the bass image sat on the dash), so height looked free to trade away; another rulebook scores stage height on a moving track, deducting per instrument not at horizon level **at any position**, and scores height and positions separately — so a height↔position trade costs on both sides. For a combined event, resolve the trade rather than assuming the laxer ruleset.
 - **Cross-validate the ledger's open risks against the judge's card after every event — it is a free external test of the process.** On one build the judge independently confirmed five items that were already open in the ledger. Keep the open-risk list explicit so this check is possible.
 - **Judges calibrate the listening level with a meter** (one association's setup disc specifies 74 dB(A) / 84 dB), and publish stage-height references (dashboard height or slightly above for stereo; mirror triangles or half A-pillar height for mono per side). Recover these numbers from the official setup material rather than guessing them.
+
+## The AYA "Sound Tracks" competition disc — 31 tracks, category by category
+
+⚠️ **Index only — the audio is not here and is not ours to pass on.** Buy the disc from AYA. This table exists so a gate can cite a track unambiguously and so you can tell which measure a number is scoring; it does not replace owning it. Other AYA-branded volumes number differently (§ the disc-identity warning above) — check the category in the filename, not the number alone.
+
+| # | Category | Programme |
+|---|---|---|
+| 01 | LEFT RIGHT Check | channel identity |
+| 02 · 28 | PINKNOISE STEREO | level setting / reference |
+| 03 | **TIEFBASS** | Young Jezzy — Put On |
+| 04 | **BASS** | Brother Culture ft Anthony B — Champion Sound |
+| 05 | **BASS** | Christine and the Queen — Christine |
+| 06 | **GRUNDTON** | Nothern Lite — My Pain (Piano Session) |
+| 07 | **GRUNDTON** | Sophie Zelmani — Free Now |
+| 08 | **SYMMETRIE** Bass/Grundton | Petra Magoni, Ferruccio Spinetti — Roxanne (Live) |
+| 09 | **MITTELTON** | Henning May, Amilli — Bang Bang |
+| 10 | **MITTELTON** | Birdy — Skinny Love (Live at the Tabernacle) |
+| 11 | **HOCHTON** | Balladeire — Who's that Girl & Irgendwie Irgendwo Irgendwann |
+| 12 | **HOCHTON** | Percussion-Ensemble — Improvisation |
+| 13 | **SYMMETRIE** Mittelton/Hochton | Tracy Chapman — Give me one Reason |
+| 14 | **AUSGEWOGENHEIT** (balance) | Antoine Villoutreix — Berlin |
+| 15 | **AUSGEWOGENHEIT** | Haelos — DUST |
+| 16 | **TRANSPARENZ** | Henning May, Amilli — Bang Bang |
+| 17 | **TRANSPARENZ** | Emeli Sande — Read All About It, Pt. III |
+| 18 | **AUFLÖSUNG** Bass (resolution) | Glowal — Cries |
+| 19 | **AUFLÖSUNG** Grundton/Mittelton | AIR — All I Need |
+| 20 | **AUFLÖSUNG** Hochton | Percussion-Ensemble — Glockenspiel |
+| 21 | **HÖHE** (stage height) | Yazoo — Ode to Boy — the scored passage is **0:50–1:23** |
+| 22 | **RAUM** (width + depth) | Mozart, Die Zauberflöte — Eine schreckliche Nacht (Drottningholm Palace) |
+| 23-27 | **FOKUS** C · LC · RC · L · R | Daft Punk — Giorgio by Moroder, one position per track |
+| 29 | **DYNAMIK** | Ane Brun — Big In Japan (Live) |
+| 30 | **DIFFERENZIERUNG** | WhoMadeWho — Ember |
+| 31 | **SOUVERÄNITÄT** | Portishead — Roads |
+
+Note the pairs: the same ensemble appears at **#12 (HOCHTON — tonal)** and **#20 (AUFLÖSUNG-HOCHTON — resolution)**, and the same song at **#09 (MITTELTON)** and **#16 (TRANSPARENZ)**. Same material, different question — don't carry a verdict from one to the other.
+
+### Reading a FOKUS set (23-27)
+Five tracks, one amplitude-panned position each. This is the gate that catches a centre/fill channel pulling panned images inward — see `test-tracks.md`. Judge them as a set: LC and RC must sit between C and the outer positions, not collapse toward the middle.
+
+### Reading an AUFLÖSUNG (resolution) track — what the category actually asks
+Measured from the #20 audio (45 note onsets, per-note dominant partial and inter-channel level), because "the bells jump around and I can't find the pattern" is the normal first reaction:
+
+- **Pan spread across the track is wide** — about 27 dB peak to peak. The jumping is the recording.
+- **Pitch does not predict position** (r = −0.13 over 45 notes). It is a percussion *ensemble* spread across the stage, not one instrument whose bars map left-to-right. Looking for a pitch→position rule is looking for something that is not there.
+- **Some pitches are pinned to one place and return to it exactly** — several repeat within 0.1–0.9 dB of inter-channel level. **These are the anchors:** in the car they must not wander between repeats, because in the file there is nothing to wander.
+- **Other pitches appear on BOTH sides**, up to ~17 dB apart across repeats — two similar-toned instruments placed opposite each other. **This is the resolution test proper:** can the system keep them apart as two objects in two places, or do they fuse into one smeared object near the middle?
+
+So a resolution track is judged in two passes: anchors must hold still, and same-pitch pairs must stay separable. Neither is a localisation question, which is why a resolution track can pass an imaging gate and still score badly.
