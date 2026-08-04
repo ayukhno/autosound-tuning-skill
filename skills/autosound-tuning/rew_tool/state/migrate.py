@@ -27,9 +27,9 @@ Idempotent: re-running moves no further fields, and refuses to write any file th
 validate afterwards — a migration that produces an invalid project is worse than one that stops.
 
 Usage:
-    python migrate.py <project-dir>              migrate one project in place
-    python migrate.py <project-dir> --dry-run    report what would change, write nothing
-    python migrate.py selftest
+    python3 migrate.py <project-dir>              migrate one project in place
+    python3 migrate.py <project-dir> --dry-run    report what would change, write nothing
+    python3 migrate.py selftest
 """
 from __future__ import annotations
 
@@ -244,7 +244,7 @@ def render_report(report, dry_run=False):
     for warning in report["warnings"]:
         lines.append(f"- ⚠️ {warning}")
     lines.append("")
-    lines.append("Confirm with: `python rew_tool/contract.py check <project>`")
+    lines.append("Confirm with: `python3 rew_tool/contract.py check <project>`")
     return "\n".join(lines)
 
 

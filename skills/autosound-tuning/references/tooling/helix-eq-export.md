@@ -9,7 +9,7 @@ Don't enter EQ into Helix by hand (the per-channel EQ can't be viewed/copied all
 3. **Export** the filter list → a file in the format below.
 4. Move the file into Parallels (shared folder) → **import into the Helix PC-Tool** on the right channel.
 
-> Alternative — `rew_tool/atf_eq.py` (validated on a REAL export: `rew_tool/testdata/atf_full_eq_sample.txt`, `python atf_eq.py --selftest`): **`format_atf_eq()`** generates this 30-band block from computed PEQs (bypassing the REW export, deviation→PEQ), and **`parse_atf_eq()`** reads it BACK into a structure — for the black-box case (recover an existing Helix EQ from a file when the live DSP can't be read — `diagnostic-techniques.md §22`). CLI: `python atf_eq.py <file>`.
+> Alternative — `rew_tool/atf_eq.py` (validated on a REAL export: `rew_tool/testdata/atf_full_eq_sample.txt`, `python3 atf_eq.py --selftest`): **`format_atf_eq()`** generates this 30-band block from computed PEQs (bypassing the REW export, deviation→PEQ), and **`parse_atf_eq()`** reads it BACK into a structure — for the black-box case (recover an existing Helix EQ from a file when the live DSP can't be read — `diagnostic-techniques.md §22`). CLI: `python3 atf_eq.py <file>`.
 > Another option (and the main path for DSPs **without** file import — Musway, ESX, Zapco, etc.): **REW-EQ-CopyPaste-Assistant** (github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant) — Copy in REW's EQ section → auto-enters the bands via keystrokes into the DSP software's window. For Helix, file import is more convenient (the filter effect shows immediately in REW), but the option exists. Detail → `knowledge/dsp/helix-dsp-ultra-s.md` §EQ transfer.
 
 ## How much EQ to transfer — minimalism > autofill
@@ -17,7 +17,7 @@ The main rule (confirmed in the user's practice): **transfer only the CONSCIOUSL
 
 Because of that, **a convenient path for Helix is copy-paste from the terminal straight into the PC-Tool, even one band at a time** (per-band entry in Helix is quick). So `atf_eq.py`:
 - **`format_atf_eq(bands)`** — generate a block with ONLY the chosen bands (the rest = `None`) → file import, **or**
-- `python atf_eq.py <file>` / parse-print — show the bands (freq·gain·Q·type) for manual per-band entry / copy-paste.
+- `python3 atf_eq.py <file>` / parse-print — show the bands (freq·gain·Q·type) for manual per-band entry / copy-paste.
 
 NTT can also generate Helix files (PC-Tool instead of REW) — faster, but the same over-EQ trap; the advantage of conscious minimalism stands.
 

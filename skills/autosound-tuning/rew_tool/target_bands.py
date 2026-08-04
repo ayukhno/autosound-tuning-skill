@@ -16,7 +16,7 @@ Two matched speakers sum, so each side targets LOWER (by ~6 dB where the LF sum 
 tapering to ~3 dB at HF) so the acoustic SUM lands on the house curve. asymmetric_compensation
 corrects that when L/R gains differ, so the ASYMMETRIC sum still reconstructs the house curve.
 
-stdlib-only. Self-test: `python target_bands.py --selftest`.  Demo: `python target_bands.py --demo`.
+stdlib-only. Self-test: `python3 target_bands.py --selftest`.  Demo: `python3 target_bands.py --demo`.
 """
 from __future__ import annotations
 import math

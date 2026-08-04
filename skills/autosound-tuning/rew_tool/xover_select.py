@@ -353,4 +353,4 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--selftest":
         _selftest()
     else:
-        print("usage: python xover_select.py --selftest")
+        print("usage: python3 xover_select.py --selftest")

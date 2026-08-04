@@ -48,7 +48,7 @@ verifiers, and artifact-producers the human pulls.
 
 Capture kit + behavioral scorecard pattern: pin the skill commit, `AUTOSOUND_STATE_ROOT` into the
 project, collect `state/` + the session transcripts + `dsp-config/` + the `.mdat`, then audit
-with invocation-greps (**count real `python …py` executions, not token mentions** — mentions
+with invocation-greps (**count real `python3 …py` executions, not token mentions** — mentions
 include the skill's own text and the model's narration; only invocations are ground truth).
 
 ## The record and the hardware drift apart — verify, don't compute from memory

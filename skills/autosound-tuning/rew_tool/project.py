@@ -103,7 +103,7 @@ def validate(data):
     if data.get("schema_version") != SCHEMA_VERSION:
         raise ProjectError(
             f"unsupported schema_version {data.get('schema_version')!r} (expected {SCHEMA_VERSION})"
-            + (" -- 2.x project, run `python rew_tool/state/migrate.py`"
+            + (" -- 2.x project, run `python3 rew_tool/state/migrate.py`"
                if isinstance(data.get("schema_version"), int)
                and data["schema_version"] < SCHEMA_VERSION else ""))
     rev = data.get("project_rev")

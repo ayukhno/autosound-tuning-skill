@@ -132,12 +132,12 @@ data = proj.load()                 # -> the whole file (an empty skeleton if non
 open_questions(data)                # -> ["mic.calibration_file", "amps.0.gain_db", ...]
 ```
 ```
-python project.py <project-dir> show
-python project.py <project-dir> open-questions
-python project.py <project-dir> set-channel <code> key=value [key=value ...]
-python project.py <project-dir> set-hardware <name> <value> [--source user]
-python project.py <project-dir> record-change <process-dir> <file> <what> [--why W] [--source S] [--impact I]
-python project.py selftest
+python3 project.py <project-dir> show
+python3 project.py <project-dir> open-questions
+python3 project.py <project-dir> set-channel <code> key=value [key=value ...]
+python3 project.py <project-dir> set-hardware <name> <value> [--source user]
+python3 project.py <project-dir> record-change <process-dir> <file> <what> [--why W] [--source S] [--impact I]
+python3 project.py selftest
 ```
 
 ## Invariants

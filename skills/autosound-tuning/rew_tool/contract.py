@@ -17,7 +17,7 @@ repo's own convention (see `rew_tool.py`'s selftest for the same lazy-import tec
 check is best-effort — REW not running is REPORTED, never a crash.
 
 This file's own directory is ensured on `sys.path` before importing its siblings (`dsp_profile`,
-`naming`, `project`) below — a no-op when run as `python rew_tool/contract.py` (Python already
+`naming`, `project`) below — a no-op when run as `python3 rew_tool/contract.py` (Python already
 puts the script's directory there), but load-bearing when a consumer imports this file by explicit
 path instead (e.g. a host app's isolated-module loader) rather than running it as a script.
 

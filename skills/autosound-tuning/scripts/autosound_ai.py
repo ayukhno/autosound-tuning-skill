@@ -11,9 +11,9 @@ autosound_ai.py — Універсальний кросплатформний і
   4. Перевірку оточення (Doctor mode).
 
 Використання:
-  python scripts/autosound_ai.py critic <package_file.md> [trace.csv]
-  python scripts/autosound_ai.py advisor <package_file.md> [trace.csv]
-  python scripts/autosound_ai.py doctor
+  python3 scripts/autosound_ai.py critic <package_file.md> [trace.csv]
+  python3 scripts/autosound_ai.py advisor <package_file.md> [trace.csv]
+  python3 scripts/autosound_ai.py doctor
 """
 
 import sys
@@ -216,7 +216,7 @@ def run_doctor():
 
 def main():
     if len(sys.argv) < 2:
-        print("Використання: python scripts/autosound_ai.py [critic|advisor|doctor] <package_file.md> [trace.csv]")
+        print("Використання: python3 scripts/autosound_ai.py [critic|advisor|doctor] <package_file.md> [trace.csv]")
         sys.exit(1)
         
     role = sys.argv[1].lower()
@@ -230,7 +230,7 @@ def main():
         sys.exit(1)
         
     if len(sys.argv) < 3:
-        print(f"Вкажіть файл пакету: python scripts/autosound_ai.py {role} <package_file.md> [trace.csv]")
+        print(f"Вкажіть файл пакету: python3 scripts/autosound_ai.py {role} <package_file.md> [trace.csv]")
         sys.exit(1)
         
     pkg_file = sys.argv[2]

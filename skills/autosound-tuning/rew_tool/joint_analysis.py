@@ -429,4 +429,4 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--selftest":
         _selftest()
     else:
-        print("usage: python joint_analysis.py --selftest")
+        print("usage: python3 joint_analysis.py --selftest")

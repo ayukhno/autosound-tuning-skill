@@ -257,7 +257,7 @@ def _validate_row(tier, ch_name, ch, required):
         where = ", ".join(f"{f} -> project.json {MOVED_TO_PROJECT_JSON[f]}" for f in moved)
         raise ValueError(
             f"{tier}.{ch_name!r} carries identity field(s) that moved out of the ledger in schema "
-            f"v{SCHEMA_VERSION} ({where}) -- 2.x snapshot, run `python rew_tool/state/migrate.py`"
+            f"v{SCHEMA_VERSION} ({where}) -- 2.x snapshot, run `python3 rew_tool/state/migrate.py`"
         )
     if "hp" in ch:
         _validate_filter("hp", ch_name, ch["hp"])

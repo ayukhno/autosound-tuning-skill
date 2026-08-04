@@ -6,7 +6,7 @@ to confirm the DETERMINISTIC tooling works here — the issue-#5 multi-slot stat
 apply-change gate, and the side-effect / pre-sweep gates. Offline + stdlib-only, so it's safe to run
 anywhere; the reviewer channel (CLI / API key) is reported as INFO and never fails the smoke.
 
-    python skills/autosound-tuning/scripts/smoke_test.py     # exit 0 = healthy, 1 = a check broke
+    python3 skills/autosound-tuning/scripts/smoke_test.py     # exit 0 = healthy, 1 = a check broke
 
 Set SMOKE_VERBOSE=1 for full tracebacks on failure.
 """

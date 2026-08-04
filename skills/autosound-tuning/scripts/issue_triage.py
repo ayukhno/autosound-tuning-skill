@@ -4,7 +4,7 @@ issue_triage.py — Локальний напівавтоматичний інс
 Інтегрується з GitHub CLI (gh) та використовує логіку autosound_ai.py для виклику Gemini API.
 
 Використання:
-  python skills/autosound-tuning/scripts/issue_triage.py
+  python3 skills/autosound-tuning/scripts/issue_triage.py
 """
 
 import os

@@ -16,7 +16,7 @@ EQ pointers), the anti-drift anchor and the experimentation engine. Code: `state
 
 One number for the whole project: every versioned machine file carries `schema_version: 3`
 (`contract.py`'s `FORMAT_VERSION`). Nothing in 3.x reads a 2.x file — run
-`python state/migrate.py <project-dir>` once and move on. The 2.x skill remains its own release
+`python3 state/migrate.py <project-dir>` once and move on. The 2.x skill remains its own release
 for anyone staying there.
 
 **Schema v2** (2026-07-29, autosound-tcc sync — see that repo's `docs/SKILL-SYNC-PLAN.md`): the
@@ -137,9 +137,9 @@ h.render("v_002")             # -> Markdown settings sheet (a section per non-`c
 h.revert("v_001")             # -> new snapshot == v_001 content
 ```
 ```
-python state.py --root <dir> log|render|diff|revert <preset> [args]
-python state.py selftest
-python state/migrate.py <project-dir> [--dry-run]   # one-shot 2.x -> 3.0, whole project
+python3 state.py --root <dir> log|render|diff|revert <preset> [args]
+python3 state.py selftest
+python3 state/migrate.py <project-dir> [--dry-run]   # one-shot 2.x -> 3.0, whole project
 ```
 
 ## apply-change gate (`apply.py`)
@@ -196,7 +196,7 @@ print(reg.render())                           # banner + per-slot table (generat
 apply.propose(h, delta, registry=reg)         # refuses if h.preset != active slot
 ```
 ```
-python state.py --root <dir> registry show|render
-python state.py --root <dir> registry set-active <preset>
-python state.py --root <dir> registry describe <preset> --label "Slot 3" --note "SQ-Comp-Ref"
+python3 state.py --root <dir> registry show|render
+python3 state.py --root <dir> registry set-active <preset>
+python3 state.py --root <dir> registry describe <preset> --label "Slot 3" --note "SQ-Comp-Ref"
 ```

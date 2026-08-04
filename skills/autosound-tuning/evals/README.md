@@ -5,7 +5,7 @@ capability + recall guards for existing triggers, 10 should-NOT near-misses) for
 the SKILL.md `description` triggering via skill-creator:
 
 ```
-python -m scripts.run_loop --eval-set <this>/trigger-eval-set.json \
+python3 -m scripts.run_loop --eval-set <this>/trigger-eval-set.json \
   --skill-path <skill-dir> --model <session-model> --max-iterations 5 --verbose
 ```
 

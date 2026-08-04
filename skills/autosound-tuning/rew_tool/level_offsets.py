@@ -17,7 +17,7 @@ INPUTS (per driver, all PROJECT data — ask the user, store in autosound_contex
   band   — (f_min, f_max) the driver's working band (from the crossovers)
   n      — distance attenuation exponent (default 2.0; lower it if the cabin is reverberant)
 
-stdlib-only. Self-test: `python level_offsets.py --selftest`.
+stdlib-only. Self-test: `python3 level_offsets.py --selftest`.
 """
 from __future__ import annotations
 import math

@@ -3,7 +3,7 @@
 This is the tab-separated text block REW produces with Equaliser = "Audiotec
 Fischer" and that you paste/import into Helix DSP PC-Tool. Format spec +
 REW→Helix workflow: references/tooling/helix-eq-export.md. Validated against a REAL
-export — testdata/atf_full_eq_sample.txt (run `python atf_eq.py --selftest`).
+export — testdata/atf_full_eq_sample.txt (run `python3 atf_eq.py --selftest`).
 
 Two directions:
   parse_atf_eq(text_or_path) -> list[Band]
@@ -19,8 +19,8 @@ Helix fields, never in this file (helix-eq-export.md).
 
 stdlib-only, py3.9+.
 CLI:
-  python atf_eq.py <file>      parse a block and print its bands
-  python atf_eq.py --selftest  round-trip the bundled real fixture
+  python3 atf_eq.py <file>      parse a block and print its bands
+  python3 atf_eq.py --selftest  round-trip the bundled real fixture
 """
 from __future__ import annotations
 import os

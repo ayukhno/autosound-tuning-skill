@@ -11,9 +11,9 @@ Reads magnitude only (RTA-safe). Measurement titles are resolved by NAME right
 before the pull (rew-api-quirks: ordinal ids are not stable).
 
 CLI (REW running on :4735):
-  python spot_check.py "L_09 (rta)" "R_09 (rta)" --at 160,2540 --peak 2000-3000 --claim 2543.8
-  python spot_check.py "ALL_09 (rta)" --target "Jazzi_0db_REW" --at 2540 --anchor 300-3000
-  python spot_check.py --selftest
+  python3 spot_check.py "L_09 (rta)" "R_09 (rta)" --at 160,2540 --peak 2000-3000 --claim 2543.8
+  python3 spot_check.py "ALL_09 (rta)" --target "Jazzi_0db_REW" --at 2540 --anchor 300-3000
+  python3 spot_check.py --selftest
 """
 import argparse
 import sys

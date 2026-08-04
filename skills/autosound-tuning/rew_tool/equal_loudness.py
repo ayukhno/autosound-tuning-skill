@@ -19,10 +19,10 @@ Generic: no car/DSP specifics. Table = the full ISO 226:2003 Table 1 (20 Hz–12
 the sub range (20–250 Hz) is the primary, field-validated use.
 
 CLI:
-  python equal_loudness.py --spl 40 --freqs 27.4 40 63          # contour SPLs at 40 phon
-  python equal_loudness.py --anchor 27.4 108.2 \
+  python3 equal_loudness.py --spl 40 --freqs 27.4 40 63          # contour SPLs at 40 phon
+  python3 equal_loudness.py --anchor 27.4 108.2 \
       --measure 27.4=108.2 36=108.2 45=109.5 54=106.5           # sub EQ from measurements
-  python equal_loudness.py --selftest
+  python3 equal_loudness.py --selftest
 """
 import argparse
 import math

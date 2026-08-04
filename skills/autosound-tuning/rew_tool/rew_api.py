@@ -369,4 +369,4 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--selftest":
         _selftest()
     else:
-        print("usage: python rew_api.py --selftest")
+        print("usage: python3 rew_api.py --selftest")
