@@ -1,6 +1,6 @@
 # Test tracks for listening checks (ear-driven verification)
 
-> 🧩 **PATTERN REPOSITORY — starting hypotheses, not rules.** A catalog of useful diagnostic tracks: **starting points** for ear checks, not a mandatory list. See [`knowledge-architecture.md`](file:///skills/autosound-tuning/references/core/knowledge-architecture.md).
+> 🧩 **PATTERN REPOSITORY — starting hypotheses, not rules.** A catalog of useful diagnostic tracks: **starting points** for ear checks, not a mandatory list. See [`knowledge-architecture.md`](references/core/knowledge-architecture.md).
 
 A curated library with **diagnostic markers** — to verify hypotheses BY EAR where measurement is unreliable (cabin phase/GD = junk, diagnostic §10; depth/punch/integration/sibilants — ear-driven, staging-depth §7).
 

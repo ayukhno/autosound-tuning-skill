@@ -3,7 +3,7 @@
 The Preference Profile isolates the user's **subjective voicing preferences** from the objective
 engineering. It is seeded at intake and applied **only after** the objective tune is complete
 (Phase 5 voicing). It never overrides measurement-driven engineering.
-See [`knowledge-architecture.md`](file:///skills/autosound-tuning/references/core/knowledge-architecture.md).
+See [`knowledge-architecture.md`](references/core/knowledge-architecture.md).
 
 ## What IS a preference (goes here)
 
@@ -26,11 +26,11 @@ These **shape the engineering**, so they are objective goals, not skippable tast
 
 ## Where it's used
 
-- **Seeded** at intake — [`project-intake.md` §2](file:///skills/autosound-tuning/references/core/project-intake.md).
+- **Seeded** at intake — [`project-intake.md` §2](references/core/project-intake.md).
 - **Held out** of Phases 0–5 (the objective tune).
-- **Applied** in **Phase 5** — [`phase_5_variations.md`](file:///skills/autosound-tuning/references/phases/phase_5_variations.md)
-  via [`voicing-by-ear.md`](file:///skills/autosound-tuning/references/patterns/voicing-by-ear.md),
-  often as a separate voicing preset ([`preset-strategy.md`](file:///skills/autosound-tuning/references/core/preset-strategy.md)).
+- **Applied** in **Phase 5** — [`phase_5_variations.md`](references/phases/phase_5_variations.md)
+  via [`voicing-by-ear.md`](references/patterns/voicing-by-ear.md),
+  often as a separate voicing preset ([`preset-strategy.md`](references/core/preset-strategy.md)).
 
 ## Why separate
 

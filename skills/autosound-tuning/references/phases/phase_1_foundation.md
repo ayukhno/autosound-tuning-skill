@@ -19,7 +19,7 @@ This phase establishes the physical foundation of the tune: crossovers, prelimin
 
 **⚠️ Failure modes:** trusting REW auto-delay (locks onto reflections / prior DSP offsets) → inspect IR onset by hand · assuming the midbass is latest → measure it · detuning crossovers L/R to fix a cabin asymmetry (kills the phantom center) → fix with EQ instead.
 
-**🧩 Common patterns (hypotheses):** filter type by driver spacing (BE4 close/coplanar · LR4 far-apart) → [`filter-types-car-audio.md`](file:///skills/autosound-tuning/references/core/filter-types-car-audio.md); heavy midbass → align to IR peak → [`car-eq-patterns.md`](file:///skills/autosound-tuning/references/patterns/car-eq-patterns.md).
+**🧩 Common patterns (hypotheses):** filter type by driver spacing (BE4 close/coplanar · LR4 far-apart) → [`filter-types-car-audio.md`](references/core/filter-types-car-audio.md); heavy midbass → align to IR peak → [`car-eq-patterns.md`](references/patterns/car-eq-patterns.md).
 
 ---
 
@@ -50,18 +50,18 @@ Equalize the physical flight times of sound from each driver to the microphone.
 * **Selection Guidelines:** Propose filter types based on physical driver characteristics and cabin geometry:
   * **Bessel (BE4):** Exceptional for close, coplanar drivers (e.g., midrange ↔ tweeter on A-pillars).
   * **Linkwitz-Riley (LR4):** Preferred where drivers are physically far apart (e.g., midbass in door ↔ midrange on A-pillar), as it minimizes overlap.
-  * For crossover tradeoffs, refer to [filter-types-car-audio.md](file:///skills/autosound-tuning/references/core/filter-types-car-audio.md).
+  * For crossover tradeoffs, refer to [filter-types-car-audio.md](references/core/filter-types-car-audio.md).
 
 ### 3.5 Preliminary Level Balance (computed from geometry — a starting hypothesis)
 Set an initial **cut-only** per-channel level from physics, then verify by RTA/ear (a start, not a verdict). The nearer / more on-axis driver is louder at the reference seat → cut it.
-* **Method** ([`rew_tool/level_offsets.py`](file:///skills/autosound-tuning/rew_tool/level_offsets.py)): per driver, off-axis loss = band-averaged far-field piston directivity `D(f,θ)=2·J1(ka·sinθ)/(ka·sinθ)`, plus distance loss `10·n·log10(d)`; offsets normalized cut-only (loudest driver cut most). This is why the mid can differ from the tweeter/woofer — the directivity integral depends on the driver's radius, band, and angle.
+* **Method** ([`rew_tool/level_offsets.py`](rew_tool/level_offsets.py)): per driver, off-axis loss = band-averaged far-field piston directivity `D(f,θ)=2·J1(ka·sinθ)/(ka·sinθ)`, plus distance loss `10·n·log10(d)`; offsets normalized cut-only (loudest driver cut most). This is why the mid can differ from the tweeter/woofer — the directivity integral depends on the driver's radius, band, and angle.
 * **Inputs are PROJECT data — ASK the user** (store in `autosound_context.md`, Engineering Profile): per-driver **distance** to the reference ear, **off-axis aiming angle** (pods/pillars: on-axis / cross-fired / to centre), **effective piston radius** (≈ cone/dome size; the **enclosure** sets the LF band edge), cabin **distance exponent `n`** (2 = free field; lower if reverberant).
 * The computed gains are the **start**; the summed RTA (§5 / Phase 2c) and the ear confirm/trim them. Never treat the number as final.
 
 ### 4. Review and Discussion
 Format a Generator proposal package (per the data contract §3) and send it to the Critic. Refine the levels, timing, and crossovers. Upon agreement, the user applies these values to the DSP.
 
-* **Bank the change first, then key it in (Generator):** route every hard-param change (crossover / gain / TA / polarity) through `apply.propose` — it writes the versioned snapshot AND emits the exact **old→new settings sheet** the Arbiter enters; after the Arbiter enters it, `attest` (🟡→🟢). This keeps state on disk (A/B, revert, resume) instead of drifting, and it's what produces the clean sheet. Details: [`rew_tool/state/schema.md`](file:///skills/autosound-tuning/rew_tool/state/schema.md).
+* **Bank the change first, then key it in (Generator):** route every hard-param change (crossover / gain / TA / polarity) through `apply.propose` — it writes the versioned snapshot AND emits the exact **old→new settings sheet** the Arbiter enters; after the Arbiter enters it, `attest` (🟡→🟢). This keeps state on disk (A/B, revert, resume) instead of drifting, and it's what produces the clean sheet. Details: [`rew_tool/state/schema.md`](rew_tool/state/schema.md).
 * **How to apply & save to the DSP (Arbiter):**
   1. Open Helix PC-Tool and load your **existing active baseline setup** (the current active profile you are starting from). Do *not* assume a `.pct6` file of version `v0` exists on disk if this is a fresh start.
   2. Enter the new parameters from the settings sheet (protective/preliminary crossovers, delays, and level adjustments) exactly as emitted by `apply.propose`.
@@ -70,7 +70,7 @@ Format a Generator proposal package (per the data contract §3) and send it to t
 
 ### 5. Generate Band-Specific Targets (Step 5b)
 Once crossovers + levels are set, generate the per-driver targets **locally** with
-[`rew_tool/target_bands.py`](file:///skills/autosound-tuning/rew_tool/target_bands.py) — feed it the
+[`rew_tool/target_bands.py`](rew_tool/target_bands.py) — feed it the
 project's house curve + the per-channel config (crossovers/types + the gains from `level_offsets.py`).
 It bakes in the crossover roll-off, the two-speaker **summation offset** (~6 dB LF → ~3 dB HF), and the
 **asymmetric compensation** (so an asymmetric L/R sum still reconstructs the house curve).

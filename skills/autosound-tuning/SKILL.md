@@ -25,6 +25,19 @@ description: >
 
 You orchestrate an iterative, "token-smart" car-audio tuning process. The method lives in this skill; the specific car (drivers, anomalies, state) lives in the project's `autosound_context.md`.
 
+## 📍 Resolving paths in this skill
+
+Every path below — references, `rew_tool/`, `scripts/` — is relative to the **skill root**: the
+directory holding this SKILL.md. Not to the file you are currently reading, and not to the
+project's working directory (which is the car's project folder, a different place entirely).
+
+To find that root, in order: the directory your harness loaded this SKILL.md from; else
+`$AUTOSOUND_SKILL_ROOT` if a front-end set it; else `<project>/.claude/skills/autosound-tuning`
+or `~/.claude/skills/autosound-tuning`.
+
+**Do not search the disk for it.** The skill is normally installed as a symlink, and `find` does
+not descend into one — a real session lost minutes to `find . -name rew_tool` returning nothing.
+
 ---
 
 ## 🏛️ Three Roles
@@ -48,16 +61,16 @@ Tone: equal colleagues. Accept a correct critique fully; argue disagreements in 
 
 ## ⚠️ Core Guardrails (always on)
 
-* **State lives on disk, not in context.** Re-read `dsp-state-current` before proposing any DSP change; update it right after the user applies one. **Bank every agreed change via `apply.propose`** — it writes the `v_NNN` versioned snapshot AND emits the settings sheet the Arbiter enters (A/B, revert, resume after `/clear`). `apply.propose` addresses ANY tier the ledger has, not just the physical outputs — a virtual-channel change (Helix) banks the same way, e.g. `apply.propose(h, {"virtual_channels": {"VFL": {"gain_db": -1.0}}})`. Long session → re-anchor from disk or `/clear` + resume. Detail → [`process-control.md`](file:///skills/autosound-tuning/references/core/process-control.md).
+* **State lives on disk, not in context.** Re-read `dsp-state-current` before proposing any DSP change; update it right after the user applies one. **Bank every agreed change via `apply.propose`** — it writes the `v_NNN` versioned snapshot AND emits the settings sheet the Arbiter enters (A/B, revert, resume after `/clear`). `apply.propose` addresses ANY tier the ledger has, not just the physical outputs — a virtual-channel change (Helix) banks the same way, e.g. `apply.propose(h, {"virtual_channels": {"VFL": {"gain_db": -1.0}}})`. Long session → re-anchor from disk or `/clear` + resume. Detail → [`process-control.md`](references/core/process-control.md).
 * **Write the PROCESS as it happens, not only the DSP state.** Every phase change → `python3 rew_tool/state/process.py <project>/process enter-phase <N>`; every plan step → `add-step` / `start` / `done <id> <evidence>` (a step can't be marked done without an evidence link — a measurement name, a ledger `vN`, an audit entry — the gate refuses it, same discipline as `apply.propose`); every reviewer call → `reviewer <vendor> <model>`. This is a project's `process/process-state.json` + `journal.jsonl` (project-facts sibling: `project.json`, `python3 rew_tool/project.py`) — the machine record a consumer front-end (or your own next-session resume) actually reads. Narrating the phase/plan in chat or in `tuning-changelog` without also writing the matching event is exactly the gap that leaves resume with nothing real to reconcile against.
-* **Settings land in chat.** All actionable DSP params (crossovers, delays, gains, polarities) as a legible step-by-step list or table directly in chat — never "see the file". **ms/cm is the source of truth; samples are DSP-rate-dependent** — if you give samples, state the assumed rate (native rate: `autosound_context.md`). **Gains/params as ABSOLUTE target values only — never relative phrasing** ("remove the +3" once landed 3 dB off intent). Sheet format + worked example → [`helix-dsp-ultra-s.md`](file:///skills/autosound-tuning/knowledge/dsp/helix-dsp-ultra-s.md).
+* **Settings land in chat.** All actionable DSP params (crossovers, delays, gains, polarities) as a legible step-by-step list or table directly in chat — never "see the file". **ms/cm is the source of truth; samples are DSP-rate-dependent** — if you give samples, state the assumed rate (native rate: `autosound_context.md`). **Gains/params as ABSOLUTE target values only — never relative phrasing** ("remove the +3" once landed 3 dB off intent). Sheet format + worked example → [`helix-dsp-ultra-s.md`](knowledge/dsp/helix-dsp-ultra-s.md).
 * **Fragile signals get a cross-check.** Dirty door IRs, LF onsets, single-point HF reads, phase-math polarity predictions, API index lookups: cross-check (cross-correlation, summation, GUI cursor, re-measure) before quoting the number, and say your confidence.
 * **Round-based cadence.** Iterate by **round**, not by parameter: measure → compute the *whole batch* → one DSP import → one re-measure. Per-parameter loops are only for Level-2 black-box DSPs (`project-intake.md`). EQ: max boost **+6 dB**, only the bands the channel needs, as one batch per review pass (`phase_2_eq.md` §2a).
 * **Reviewer early.** At the session's first tuning proposal, offer to start the reviewer channel if none is active.
-* **Solo driver (mode B/C)?** Load [`driver-discipline.md`](file:///skills/autosound-tuning/references/core/driver-discipline.md) — pull-based control + wrapper-only self-critique.
-* **Don't rebuild existing tools.** Check `rew_tool/` and the project before writing a script — inventory → [`rew-tool-docs.md`](file:///skills/autosound-tuning/references/tooling/rew-tool-docs.md).
-* **Tool seems missing / contradicts docs?** The install is a symlink — `find -L` / canonical path before concluding; on a real discrepancy ask the Arbiter (fix locally + `skill-inbox.md` note, or file an issue and pause) → [`installation.md`](file:///skills/autosound-tuning/references/tooling/installation.md#troubleshooting).
-* **Skill maintenance loop** — only on refactor/close, never per-turn → [`feedback-loop.md`](file:///skills/autosound-tuning/references/core/feedback-loop.md#the-maintenance-loop-harvest--fold).
+* **Solo driver (mode B/C)?** Load [`driver-discipline.md`](references/core/driver-discipline.md) — pull-based control + wrapper-only self-critique.
+* **Don't rebuild existing tools.** Check `rew_tool/` and the project before writing a script — inventory → [`rew-tool-docs.md`](references/tooling/rew-tool-docs.md).
+* **Tool seems missing / contradicts docs?** The install is a symlink — `find -L` / canonical path before concluding; on a real discrepancy ask the Arbiter (fix locally + `skill-inbox.md` note, or file an issue and pause) → [`installation.md`](references/tooling/installation.md#troubleshooting).
+* **Skill maintenance loop** — only on refactor/close, never per-turn → [`feedback-loop.md`](references/core/feedback-loop.md#the-maintenance-loop-harvest--fold).
 
 ---
 
@@ -65,13 +78,13 @@ Tone: equal colleagues. Accept a correct critique fully; argue disagreements in 
 
 Read the top **▶️ CONTINUE** block of `tuning-changelog` at every session start to identify the active phase. Load **ONLY** the active phase's reference file + the next adjacent one. Don't guess the phase; don't load others unless asked.
 
-* **Phase -1: Project Intake & Checklist** ──► [phase_-1_intake.md](file:///skills/autosound-tuning/references/phases/phase_-1_intake.md)
-* **Phase 0: Baseline & Target Selection** ──► [phase_0_baseline.md](file:///skills/autosound-tuning/references/phases/phase_0_baseline.md)
-* **Phase 1: Crossovers, Levels, & Delays** ──► [phase_1_foundation.md](file:///skills/autosound-tuning/references/phases/phase_1_foundation.md)
-* **Phase 2: EQ & Acoustic Alignment** ──► [phase_2_eq.md](file:///skills/autosound-tuning/references/phases/phase_2_eq.md)
-* **Phase 3: Technical Verdict & Lock** ──► [phase_3_control.md](file:///skills/autosound-tuning/references/phases/phase_3_control.md)
-* **Phase 4: Targeted Listening → Feedback → Close** ──► [phase_4_listening.md](file:///skills/autosound-tuning/references/phases/phase_4_listening.md)
-* **Phase 5: Variations (cyclical) — Voicing + Center/Rear** ──► [phase_5_variations.md](file:///skills/autosound-tuning/references/phases/phase_5_variations.md)
+* **Phase -1: Project Intake & Checklist** ──► [phase_-1_intake.md](references/phases/phase_-1_intake.md)
+* **Phase 0: Baseline & Target Selection** ──► [phase_0_baseline.md](references/phases/phase_0_baseline.md)
+* **Phase 1: Crossovers, Levels, & Delays** ──► [phase_1_foundation.md](references/phases/phase_1_foundation.md)
+* **Phase 2: EQ & Acoustic Alignment** ──► [phase_2_eq.md](references/phases/phase_2_eq.md)
+* **Phase 3: Technical Verdict & Lock** ──► [phase_3_control.md](references/phases/phase_3_control.md)
+* **Phase 4: Targeted Listening → Feedback → Close** ──► [phase_4_listening.md](references/phases/phase_4_listening.md)
+* **Phase 5: Variations (cyclical) — Voicing + Center/Rear** ──► [phase_5_variations.md](references/phases/phase_5_variations.md)
 
 ---
 
@@ -79,36 +92,36 @@ Read the top **▶️ CONTINUE** block of `tuning-changelog` at every session st
 
 | Reference | Read when |
 | :--- | :--- |
-| [core/knowledge-architecture.md](file:///skills/autosound-tuning/references/core/knowledge-architecture.md) | Where a piece of knowledge belongs (5-layer model). |
-| [core/preference-profile.md](file:///skills/autosound-tuning/references/core/preference-profile.md) | Subjective voicing vs objective engineering goals. |
-| [tooling/installation.md](file:///skills/autosound-tuning/references/tooling/installation.md) | Install, update, troubleshoot the skill/plugin. |
-| [core/process-phases.md](file:///skills/autosound-tuning/references/core/process-phases.md) | Phase transitions, the 9-stage overview. |
-| [core/happy-paths.md](file:///skills/autosound-tuning/references/core/happy-paths.md) | Short end-to-end session walkthroughs. |
-| [core/project-intake.md](file:///skills/autosound-tuning/references/core/project-intake.md) | New car profile, equipment interview, target choice. |
-| [patterns/target-curves/target_curves_guide.md](file:///skills/autosound-tuning/references/patterns/target-curves/target_curves_guide.md) | Target curves + offsets. |
-| [patterns/target-curves/target_curves_visualizer.html](file:///skills/autosound-tuning/references/patterns/target-curves/target_curves_visualizer.html) | Interactive curve comparison. |
-| [core/naming-and-structure.md](file:///skills/autosound-tuning/references/core/naming-and-structure.md) | Measurement names, .mdat storage, preset structure. |
-| [core/analysis-playbook.md](file:///skills/autosound-tuning/references/core/analysis-playbook.md) | Which REW graph for which decision. |
-| [core/diagnostic-techniques.md](file:///skills/autosound-tuning/references/core/diagnostic-techniques.md) | Anomalies, joint-phase summation, peak-vs-null. |
-| [core/filter-types-car-audio.md](file:///skills/autosound-tuning/references/core/filter-types-car-audio.md) | LR/Bessel/Butterworth, starting crossover points. |
-| [patterns/staging-depth.md](file:///skills/autosound-tuning/references/patterns/staging-depth.md) | Stage depth/height, driver layering. |
-| [core/enclosure-install-diagnostics.md](file:///skills/autosound-tuning/references/core/enclosure-install-diagnostics.md) | Rattles, SBIR vs cabinet resonances, damping. |
-| [core/impedance-ts.md](file:///skills/autosound-tuning/references/core/impedance-ts.md) | T-S params, box design, DVC wiring. |
-| [patterns/competition.md](file:///skills/autosound-tuning/references/patterns/competition.md) | EMMA/AYA/CARMusic SQ prep. |
-| [core/preset-strategy.md](file:///skills/autosound-tuning/references/core/preset-strategy.md) | Multiple DSP slots: base vs voicing presets. |
-| [patterns/test-tracks.md](file:///skills/autosound-tuning/references/patterns/test-tracks.md) | Diagnostic tracks with timestamps. |
-| [patterns/voicing-by-ear.md](file:///skills/autosound-tuning/references/patterns/voicing-by-ear.md) | Symptom-to-fix ear EQ, client taste tuning. |
-| [patterns/method-hashimoto.md](file:///skills/autosound-tuning/references/patterns/method-hashimoto.md) | Slope-first matching, polarity-by-ear, mono-center. |
-| [tooling/helix-phase-allpass.md](file:///skills/autosound-tuning/references/tooling/helix-phase-allpass.md) | Helix phase controls, 2nd-order all-pass. |
-| [tooling/helix-eq-export.md](file:///skills/autosound-tuning/references/tooling/helix-eq-export.md) | PEQ banks in Audiotec-Fischer format. |
-| [tooling/rew-tool-docs.md](file:///skills/autosound-tuning/references/tooling/rew-tool-docs.md) | REW API client scripts, module layout. |
-| [tooling/rew-api-quirks.md](file:///skills/autosound-tuning/references/tooling/rew-api-quirks.md) | float32 encoding, gaindB, loopback offsets. |
-| [tooling/screen-read-dsp.md](file:///skills/autosound-tuning/references/tooling/screen-read-dsp.md) | Reading DSP params off screenshots. |
-| [core/review-loop.md](file:///skills/autosound-tuning/references/core/review-loop.md) | Review cadence, TWO-PASS, deadlocks, audits. |
-| [core/process-control.md](file:///skills/autosound-tuning/references/core/process-control.md) | Operating modes A/B/C, model classes, pull-based control. |
-| [core/driver-discipline.md](file:///skills/autosound-tuning/references/core/driver-discipline.md) | Solo driver (mode B/C): anti-confabulation rules. |
-| [tooling/setup-critic-channel.md](file:///skills/autosound-tuning/references/tooling/setup-critic-channel.md) | CLI setup, .critic-env, models, `--doctor`, ladder. |
-| [core/feedback-loop.md](file:///skills/autosound-tuning/references/core/feedback-loop.md) | Session-close feedback ritual (issues in English). |
+| [core/knowledge-architecture.md](references/core/knowledge-architecture.md) | Where a piece of knowledge belongs (5-layer model). |
+| [core/preference-profile.md](references/core/preference-profile.md) | Subjective voicing vs objective engineering goals. |
+| [tooling/installation.md](references/tooling/installation.md) | Install, update, troubleshoot the skill/plugin. |
+| [core/process-phases.md](references/core/process-phases.md) | Phase transitions, the 9-stage overview. |
+| [core/happy-paths.md](references/core/happy-paths.md) | Short end-to-end session walkthroughs. |
+| [core/project-intake.md](references/core/project-intake.md) | New car profile, equipment interview, target choice. |
+| [patterns/target-curves/target_curves_guide.md](references/patterns/target-curves/target_curves_guide.md) | Target curves + offsets. |
+| [patterns/target-curves/target_curves_visualizer.html](references/patterns/target-curves/target_curves_visualizer.html) | Interactive curve comparison. |
+| [core/naming-and-structure.md](references/core/naming-and-structure.md) | Measurement names, .mdat storage, preset structure. |
+| [core/analysis-playbook.md](references/core/analysis-playbook.md) | Which REW graph for which decision. |
+| [core/diagnostic-techniques.md](references/core/diagnostic-techniques.md) | Anomalies, joint-phase summation, peak-vs-null. |
+| [core/filter-types-car-audio.md](references/core/filter-types-car-audio.md) | LR/Bessel/Butterworth, starting crossover points. |
+| [patterns/staging-depth.md](references/patterns/staging-depth.md) | Stage depth/height, driver layering. |
+| [core/enclosure-install-diagnostics.md](references/core/enclosure-install-diagnostics.md) | Rattles, SBIR vs cabinet resonances, damping. |
+| [core/impedance-ts.md](references/core/impedance-ts.md) | T-S params, box design, DVC wiring. |
+| [patterns/competition.md](references/patterns/competition.md) | EMMA/AYA/CARMusic SQ prep. |
+| [core/preset-strategy.md](references/core/preset-strategy.md) | Multiple DSP slots: base vs voicing presets. |
+| [patterns/test-tracks.md](references/patterns/test-tracks.md) | Diagnostic tracks with timestamps. |
+| [patterns/voicing-by-ear.md](references/patterns/voicing-by-ear.md) | Symptom-to-fix ear EQ, client taste tuning. |
+| [patterns/method-hashimoto.md](references/patterns/method-hashimoto.md) | Slope-first matching, polarity-by-ear, mono-center. |
+| [tooling/helix-phase-allpass.md](references/tooling/helix-phase-allpass.md) | Helix phase controls, 2nd-order all-pass. |
+| [tooling/helix-eq-export.md](references/tooling/helix-eq-export.md) | PEQ banks in Audiotec-Fischer format. |
+| [tooling/rew-tool-docs.md](references/tooling/rew-tool-docs.md) | REW API client scripts, module layout. |
+| [tooling/rew-api-quirks.md](references/tooling/rew-api-quirks.md) | float32 encoding, gaindB, loopback offsets. |
+| [tooling/screen-read-dsp.md](references/tooling/screen-read-dsp.md) | Reading DSP params off screenshots. |
+| [core/review-loop.md](references/core/review-loop.md) | Review cadence, TWO-PASS, deadlocks, audits. |
+| [core/process-control.md](references/core/process-control.md) | Operating modes A/B/C, model classes, pull-based control. |
+| [core/driver-discipline.md](references/core/driver-discipline.md) | Solo driver (mode B/C): anti-confabulation rules. |
+| [tooling/setup-critic-channel.md](references/tooling/setup-critic-channel.md) | CLI setup, .critic-env, models, `--doctor`, ladder. |
+| [core/feedback-loop.md](references/core/feedback-loop.md) | Session-close feedback ritual (issues in English). |
 
 ---
 
@@ -116,11 +129,11 @@ Read the top **▶️ CONTINUE** block of `tuning-changelog` at every session st
 
 A second, independent reviewer prevents single-perspective bias — strongest cross-vendor (**default: Claude drives + Gemini reviews**), but it works with a single AI too. Any reviewer is a **stateless on-demand call** that re-reads state from disk — running clean each call, it doubles as a **drift-watchdog** (proposal contradicts disk state / re-opens a banked decision / wrong phase → likely Generator drift → re-anchor from disk or `/clear` + resume).
 
-* **Which mode this session?** The Arbiter picks A / B / C → [`process-control.md`](file:///skills/autosound-tuning/references/core/process-control.md). Modes B/C additionally load `driver-discipline.md`.
-* **Cadence: ONE reviewer call per round** — package the round's whole batch (crossovers+levels, or the full EQ plan), one critique pass, then the Arbiter. **TWO-PASS (open question first) only at phase gates** (Phase-1 strategy, Phase-3 verdict) **or when the reviewer has fully agreed twice in a row** (the anchoring symptom). Up to 3 rounds is a ceiling, not a norm → [`review-loop.md`](file:///skills/autosound-tuning/references/core/review-loop.md).
-* **How to run:** wrappers `{gemini,claude,codex}_critic.sh` / `_advisor.sh <package.md>`, unified `autosound_ai.py` (any vendor / API / clipboard), or a desktop chat → [`setup-critic-channel.md`](file:///skills/autosound-tuning/references/tooling/setup-critic-channel.md). ⚠️ Run reviewer CLIs **outside** the driver session (inside = deadlock).
+* **Which mode this session?** The Arbiter picks A / B / C → [`process-control.md`](references/core/process-control.md). Modes B/C additionally load `driver-discipline.md`.
+* **Cadence: ONE reviewer call per round** — package the round's whole batch (crossovers+levels, or the full EQ plan), one critique pass, then the Arbiter. **TWO-PASS (open question first) only at phase gates** (Phase-1 strategy, Phase-3 verdict) **or when the reviewer has fully agreed twice in a row** (the anchoring symptom). Up to 3 rounds is a ceiling, not a norm → [`review-loop.md`](references/core/review-loop.md).
+* **How to run:** wrappers `{gemini,claude,codex}_critic.sh` / `_advisor.sh <package.md>`, unified `autosound_ai.py` (any vendor / API / clipboard), or a desktop chat → [`setup-critic-channel.md`](references/tooling/setup-critic-channel.md). ⚠️ Run reviewer CLIs **outside** the driver session (inside = deadlock).
 * **Reviewer unavailable?** Descend the ladder (wait → other vendor → same vendor higher tier → same model context-isolated) — never silently solo → `setup-critic-channel.md` §7.
-* **Models:** treat names as classes; current defaults and per-task classes → [`process-control.md`](file:///skills/autosound-tuning/references/core/process-control.md) §1 notes.
+* **Models:** treat names as classes; current defaults and per-task classes → [`process-control.md`](references/core/process-control.md) §1 notes.
 
 ---
 

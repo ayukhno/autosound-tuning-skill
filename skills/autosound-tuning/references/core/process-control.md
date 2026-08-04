@@ -4,7 +4,7 @@ How to keep a session's *process* honest (state, claims, discipline) without sca
 The control that works is **pull-based**: the Arbiter demands artifacts only a tool produces —
 not model self-discipline. The full anti-confabulation ruleset (pull-based control, solo
 self-critique form, field-observed behaviors → countermeasures) lives in
-[`driver-discipline.md`](file:///skills/autosound-tuning/references/core/driver-discipline.md)
+[`driver-discipline.md`](references/core/driver-discipline.md)
 — **load it only for modes B/C** (solo driver); mode A carries the discipline in tools + the reviewer.
 
 ---
@@ -34,7 +34,7 @@ Notes:
 - **Mode A:** the tools carry it — `apply.propose` (tool-stamped sheet + `v_NNN` snapshot),
   `spot_check.py` before applying a package, reviewer outside the driver session. No extra
   always-on rule text needed.
-- **Modes B/C:** load [`driver-discipline.md`](file:///skills/autosound-tuning/references/core/driver-discipline.md)
+- **Modes B/C:** load [`driver-discipline.md`](references/core/driver-discipline.md)
   — pull-based control, the wrapper-only self-critique rule, and the behavior→countermeasure table.
 
 ## 3. What we deliberately do NOT build

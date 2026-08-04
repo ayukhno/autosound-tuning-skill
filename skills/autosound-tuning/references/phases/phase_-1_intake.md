@@ -14,13 +14,13 @@ This phase bootstraps a brand-new tuning project or a fresh system installation.
 
 **⚠️ Failure modes:** skipping install verification (costs a session) · filing reference seat / competition format as a "preference" (they're engineering) · enforcing a default curve.
 
-**🧩 Patterns / refs:** full flow → [`project-intake.md`](file:///skills/autosound-tuning/references/core/project-intake.md); curve→character → [`voicing-by-ear.md`](file:///skills/autosound-tuning/references/patterns/voicing-by-ear.md).
+**🧩 Patterns / refs:** full flow → [`project-intake.md`](references/core/project-intake.md); curve→character → [`voicing-by-ear.md`](references/patterns/voicing-by-ear.md).
 
 ---
 
 ## Runbook — the authoritative sequence is `project-intake.md §0.5`
 
-Do **not** re-derive the steps here. Run the gated first-start flow in [`project-intake.md §0.5`](file:///skills/autosound-tuning/references/core/project-intake.md) **in order**, clearing each ⛔ gate:
+Do **not** re-derive the steps here. Run the gated first-start flow in [`project-intake.md §0.5`](references/core/project-intake.md) **in order**, clearing each ⛔ gate:
 
 **Language** (§0) → **Reviewer channel** (§0 · Claude+Gemini) → **Interview** (§1–§2) → **REW rig** → ⛔ **Naming/glossary** (before any measurement) → ⛔ **Install verification** (§3 · protective HPFs, ≥1.1×Fs safety minimum) → **Generate project files** (§5 · incl. `preference-profile.md`) → **First baseline** (Phase 0).
 

@@ -14,7 +14,7 @@ This is the core technical execution phase. All operations **MUST** be performed
 
 **⚠️ Failure modes:** boosting into nulls (non-min-phase → wasted headroom/distortion) · 30-band auto-banks (use minimal conscious EQ) · shifting raw channel delays for phase (breaks gross TA) · sneaking client taste in here (that's Phase 5).
 
-**🧩 Refs:** min-vs-non-min phase, summation → [`diagnostic-techniques.md`](file:///skills/autosound-tuning/references/core/diagnostic-techniques.md).
+**🧩 Refs:** min-vs-non-min phase, summation → [`diagnostic-techniques.md`](references/core/diagnostic-techniques.md).
 
 ---
 

@@ -14,7 +14,7 @@ This phase acts as the final technical gate before proceeding to subjective list
 
 **⚠️ Failure modes:** endless review rounds (cap at 3/3 → Disagreement Table) · locking without a backup · a single-perspective verdict (must be cross-vendor).
 
-**🧩 Refs:** [`review-loop.md`](file:///skills/autosound-tuning/references/core/review-loop.md) (loop, deadlock, Disagreement Table §5).
+**🧩 Refs:** [`review-loop.md`](references/core/review-loop.md) (loop, deadlock, Disagreement Table §5).
 
 ---
 
@@ -32,7 +32,7 @@ Instruct the user to run a complete, disciplined series of MMM RTA measurements 
 
 ## 2. Independent Technical Verdicts
 Claude (the Orchestrator) and Gemini (the Critic/Advisor) perform separate, unbiased analyses of the data:
-* **The Data Pull:** Use the REW API to query the measurement files directly, analyzing magnitude trends, joint summation quality, and L/R symmetry. **Include the band-integrated deviation-vs-target scan** on `ALL_final` (mean deviation per half-decade after level-normalizing to the target — method in [`analysis-playbook.md`](file:///skills/autosound-tuning/references/core/analysis-playbook.md)): a **broad tilt ≥~1–1.5 dB off target** — in *any* region (a hot lower-mid over a light midbass, a hot 2–5 kHz, a bloated/shy bass shelf, a rolled/hot top) — is a voicing error even when no single peak is large and the RMS looks done. It is the residual that fatigues on a long listen, so a verdict that only checks peaks/joints/symmetry **misses it**. Flag it here, not after the customer tires of the sound — and flag it as a *broad gentle* fix, never as narrow deep cuts (which would trade fatigue for a dead, over-processed sound).
+* **The Data Pull:** Use the REW API to query the measurement files directly, analyzing magnitude trends, joint summation quality, and L/R symmetry. **Include the band-integrated deviation-vs-target scan** on `ALL_final` (mean deviation per half-decade after level-normalizing to the target — method in [`analysis-playbook.md`](references/core/analysis-playbook.md)): a **broad tilt ≥~1–1.5 dB off target** — in *any* region (a hot lower-mid over a light midbass, a hot 2–5 kHz, a bloated/shy bass shelf, a rolled/hot top) — is a voicing error even when no single peak is large and the RMS looks done. It is the residual that fatigues on a long listen, so a verdict that only checks peaks/joints/symmetry **misses it**. Flag it here, not after the customer tires of the sound — and flag it as a *broad gentle* fix, never as narrow deep cuts (which would trade fatigue for a dead, over-processed sound).
 * **The Verdict:** Each AI issues an independent report assessing target-curve accuracy, joint alignment, and imaging trends. Claude acts as the primary contact, compiling the results for the user.
 * **Deadlock Escalation:** If Claude and Gemini disagree on a critical alignment step, do not engage in endless rounds. If Iteration 3/3 is reached without agreement, compile a standard **Disagreement Table** (Contract §5) and hand the decision to the Arbiter (the User).
 
@@ -41,7 +41,7 @@ Claude (the Orchestrator) and Gemini (the Critic/Advisor) perform separate, unbi
 ## 2.5 Minimum ear assessment + an honest read of the result — MANDATORY before the lock
 
 A config is **not a "tuned version" until it's confirmed by ear** — don't lock on measurements alone. Do a **brief but real listen** (the full pass is Phase 4) covering the two things that matter:
-* **Stage** — a **mono track** must image tight and **dead-centre** (ONE point); + EMMA localization tracks ([`test-tracks.md`](file:///skills/autosound-tuning/references/patterns/test-tracks.md)) for L / C-L / C / C-R / R. Smears or pulls to a side → the L/R timing/level/phase isn't right.
+* **Stage** — a **mono track** must image tight and **dead-centre** (ONE point); + EMMA localization tracks ([`test-tracks.md`](references/patterns/test-tracks.md)) for L / C-L / C / C-R / R. Smears or pulls to a side → the L/R timing/level/phase isn't right.
 * **Overall tonal balance** — a couple of familiar tracks: bass weight & control · vocal naturalness/placement · top-end transparency (no glare/harshness). Is the whole balanced, or is something clearly off?
 
 Then **read the result honestly with the Arbiter** and record it:

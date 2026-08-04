@@ -14,13 +14,13 @@ The **variations** phase: switchable presets layered on the satisfying, locked f
 
 **⚠️ Failure modes:** editing the output/base layer for taste (breaks joints/TA) · voicing before the technical base is locked · not keeping a separate preset (loses the reference A/B).
 
-**🧩 Refs:** [`voicing-by-ear.md`](file:///skills/autosound-tuning/references/patterns/voicing-by-ear.md) · [`preference-profile.md`](file:///skills/autosound-tuning/references/core/preference-profile.md) · [`preset-strategy.md`](file:///skills/autosound-tuning/references/core/preset-strategy.md).
+**🧩 Refs:** [`voicing-by-ear.md`](references/patterns/voicing-by-ear.md) · [`preference-profile.md`](references/core/preference-profile.md) · [`preset-strategy.md`](references/core/preset-strategy.md).
 
 ---
 
 ## Step-by-Step Runbook
 
-For detailed subjective adjustment guidelines and installer secrets, refer to [voicing-by-ear.md](file:///skills/autosound-tuning/references/patterns/voicing-by-ear.md).
+For detailed subjective adjustment guidelines and installer secrets, refer to [voicing-by-ear.md](references/patterns/voicing-by-ear.md).
 
 ### 1. Map Subjective Taste
 Audit the user's preferences across the following classic sound-staging axes:
@@ -47,7 +47,7 @@ Apply minor EQ adjustments to resolve specific listening symptoms. Common exampl
 * **The Base Layer (Output EQ):** Keeps the individual speaker linearizations, crossover slopes, and time delays intact. **Never edit output-layer parameters for subjective taste.**
 * **The Voicing Layer (Virtual EQ):** Apply subjectivevoicing moves **exclusively on the Virtual Layer** (linked L=R EQ). Since virtual moves do not introduce phase discrepancies between left and right channels, they are safe and will not break the crossover joints or time alignment.
 * **Save as a Separate Preset:** Save the final client-voiced profile as a separate DSP preset (e.g., Preset 2: "Enjoyment/Voiced"), leaving the technical baseline untouched on Preset 1 ("Reference/Technical") for easy comparison and A/B testing.
-* **Each preset is its own versioned state history** — run `apply.propose` under that preset name for every voicing move (gain/virtual-EQ pointer/hard-param), so the taste variations are snapshotted, diff-able, and revertible without touching the locked base. The **A/B and "revert this idea"** you want in voicing is exactly `state.diff` / `revert` (one command), which is what makes trying a bold voicing cheap. Schema → [`rew_tool/state/schema.md`](file:///skills/autosound-tuning/rew_tool/state/schema.md).
+* **Each preset is its own versioned state history** — run `apply.propose` under that preset name for every voicing move (gain/virtual-EQ pointer/hard-param), so the taste variations are snapshotted, diff-able, and revertible without touching the locked base. The **A/B and "revert this idea"** you want in voicing is exactly `state.diff` / `revert` (one command), which is what makes trying a bold voicing cheap. Schema → [`rew_tool/state/schema.md`](rew_tool/state/schema.md).
 
 ---
 
@@ -74,7 +74,7 @@ Goal: a sense of **envelopment** without dragging the front stage back.
 - On mostly-mono tracks the rear correctly goes near-silent — don't chase level on those.
 - Rear arrival onsets are usually ILL-POSED (`arrival_triangulate`) — fine for Haas: ±0.5 ms doesn't matter inside an 8–10 ms window.
 
-> Refs: center → [`diagnostic-techniques.md` §20](file:///skills/autosound-tuning/references/core/diagnostic-techniques.md) · rear → [`voicing-by-ear.md` §Rear](file:///skills/autosound-tuning/references/patterns/voicing-by-ear.md).
+> Refs: center → [`diagnostic-techniques.md` §20](references/core/diagnostic-techniques.md) · rear → [`voicing-by-ear.md` §Rear](references/patterns/voicing-by-ear.md).
 
 ---
 

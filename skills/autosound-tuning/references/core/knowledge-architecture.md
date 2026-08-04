@@ -24,12 +24,12 @@ normative method separate from per-project data, and starting hypotheses separat
    Engineering-constraining goals (reference seat, competition format, hard constraints, physical
    ceilings) are **not** preferences — they belong to the Engineering Profile (layer 3). Only pure
    taste (warm↔bright, loudness habit, favourite tracks, curve character) is Preference Profile.
-   Detail: [`preference-profile.md`](file:///skills/autosound-tuning/references/core/preference-profile.md).
+   Detail: [`preference-profile.md`](references/core/preference-profile.md).
 
 ## Evolution (governance)
 
 The methodology changes only via the Owner-approved loop — Observation → Hypothesis → Validation
 → Proposal → Review → **Approval** — never automatically. A new tuning insight starts as a
 *provisional* pattern, and is promoted into Core only after it holds up. See
-[`review-loop.md`](file:///skills/autosound-tuning/references/core/review-loop.md) and the Skill
+[`review-loop.md`](references/core/review-loop.md) and the Skill
 Maintenance Loop in `SKILL.md`.

@@ -14,7 +14,7 @@ This phase establishes the raw baseline measurement of the car's current acousti
 
 **⚠️ Failure modes:** measuring before names are agreed (unusable history) · generating per-band targets now (they depend on Phase-1 crossovers) · applying TA/level tricks during the baseline (stay observational).
 
-**🧩 Refs:** naming/history → [`naming-and-structure.md`](file:///skills/autosound-tuning/references/core/naming-and-structure.md).
+**🧩 Refs:** naming/history → [`naming-and-structure.md`](references/core/naming-and-structure.md).
 
 ---
 
@@ -27,7 +27,7 @@ Before any measurements are taken, establish the channel abbreviations (`sw / w-
 * Suffix **`_N`** = configuration/measurement version (starts at `_1`, NOT "baseline").
 * *Examples:* `m-L_1 (sw)`, `w-R_1 (rta)`.
 
-Give the user copy-paste-ready specifics containing the exact save PATH, short comma-separated measurement names, and a brief explanation of the immediate goal. Follow the history hygiene details in [naming-and-structure.md](file:///skills/autosound-tuning/references/core/naming-and-structure.md).
+Give the user copy-paste-ready specifics containing the exact save PATH, short comma-separated measurement names, and a brief explanation of the immediate goal. Follow the history hygiene details in [naming-and-structure.md](references/core/naming-and-structure.md).
 
 ### 2. Import Target Curve
 Load the chosen house curve into REW.

@@ -60,7 +60,7 @@ Ask in blocks, record the answers right away in `autosound_context.md` (structur
 
 Ask it the way the user thinks of it — a few **branching** questions, in this order:
 
-> 📂 **Route each answer into the right layer** (see [`preference-profile.md`](file:///skills/autosound-tuning/references/core/preference-profile.md)): answers that **shape the engineering** → **Engineering Profile** (`autosound_context.md`): purpose/competition format (#1), reference seat (#2), stage priorities & physical ceilings (#4), hard constraints (#7). **Pure taste** → **Preference Profile** (`preference-profile.md`), applied only in Phase 5: music & loudness (#3), taste axes (#5), curve character (#6).
+> 📂 **Route each answer into the right layer** (see [`preference-profile.md`](references/core/preference-profile.md)): answers that **shape the engineering** → **Engineering Profile** (`autosound_context.md`): purpose/competition format (#1), reference seat (#2), stage priorities & physical ceilings (#4), hard constraints (#7). **Pure taste** → **Preference Profile** (`preference-profile.md`), applied only in Phase 5: music & loudness (#3), taste axes (#5), curve character (#6).
 
 1. **Purpose (the first fork):**
    - **Competition** → which format(s): **EMMA / AYA / CARMusic — one, several, or all.** ⚠️ Formats judge differently and some techniques are **mutually exclusive** (e.g. crossfeed stabilises an EMMA stage but is never used for AYA) → "several/all" = **separate presets**, not one tune (`competition.md`, `preset-strategy.md`). A format names a **GOAL**, not a slope recipe (`knowledge/approaches.md`).

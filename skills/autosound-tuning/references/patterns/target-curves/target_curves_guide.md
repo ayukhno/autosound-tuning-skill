@@ -6,7 +6,7 @@ the well-known reference curves and shows how to load one into NTT / REW.
 
 > 🧩 A target curve is a **hypothesis**: a start, validated by measurement + ear. There is **no
 > default**, and each project ends up with its own curve. See
-> [`knowledge-architecture.md`](file:///skills/autosound-tuning/references/core/knowledge-architecture.md).
+> [`knowledge-architecture.md`](references/core/knowledge-architecture.md).
 
 ## Open the interactive comparison
 `target_curves_visualizer.html` is **fully self-contained — it works OFFLINE** (Chart.js is inlined; no CDN / no internet needed — important when tuning in the car). Open it in a browser:
@@ -27,12 +27,12 @@ the well-known reference curves and shows how to load one into NTT / REW.
 | **ResoNix Accurate** | Balanced SQ reference | A popular, natural competition start — even balance, honest timbre, no extreme moves. |
 | **Half Whitledge** | Warm, half the bass rise | Whitledge warmth with the bass rise ~halved → closer to neutral, lighter and faster. |
 
-Only **SQ-Comp-Ref** ships with the skill (in [`curves/`](file:///skills/autosound-tuning/references/patterns/target-curves/curves)). The five community curves above are **downloaded from the Nono Tuning Tool** ([nonotuningtool.com](https://nonotuningtool.com)) — not redistributed here — then dropped into `curves/` or onto the visualizer.
+Only **SQ-Comp-Ref** ships with the skill (in [`curves/`](references/patterns/target-curves/curves)). The five community curves above are **downloaded from the Nono Tuning Tool** ([nonotuningtool.com](https://nonotuningtool.com)) — not redistributed here — then dropped into `curves/` or onto the visualizer.
 
 ## Building your OWN target (per project)
 
 Narrow by the user's genres/taste — the curve→character table in
-[`voicing-by-ear.md`](file:///skills/autosound-tuning/references/patterns/voicing-by-ear.md) — to
+[`voicing-by-ear.md`](references/patterns/voicing-by-ear.md) — to
 2–3 candidates, then audition by ear (finalized **after** the Phase-0 baseline, with measured reality
 in hand). A competition-oriented curve is often a moderate, collected bass + a gentle HF decline +
 a soft presence pocket (to push the stage behind the glass) — but the exact shape is yours to build
