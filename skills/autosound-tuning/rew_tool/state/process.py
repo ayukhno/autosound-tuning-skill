@@ -88,6 +88,10 @@ EV_CAPTURE_CLOSED = "capture_round_closed"
 # session -- the journal otherwise starts at whatever the model happened to record first, so
 # "when did this session begin, and did it record anything at all" had no answer.
 EV_SESSION_STARTED = "session_started"
+# What the Arbiter ruled, as itself. Their half of the conversation was in no machine file at all:
+# the only surviving trace of an answer was a hand-typed evidence string, and a constraint the user
+# set was invisible to the next session unless it happened to be re-read out of prose (SCR-030).
+EV_USER_DECISION = "user_decision"
 
 
 class ProcessError(ValueError):
@@ -586,6 +590,30 @@ class Process:
             reason=reason,
         )
 
+    def record_decision(self, question, answer, step=None, phase=None, invalidates=None):
+        """The Arbiter answered something, recorded as the answer rather than as prose about it.
+
+        `invalidates` has the same shape as `config_change.impact` on purpose: a ruling that
+        supersedes a measurement ("the 48 kHz baseline no longer counts") should be legible to the
+        same reader that handles a config change. A ruling is NOT a config change, though, and
+        forcing it into that event would lie about where the fact came from.
+
+        Nothing in the current slice changes. An answer is history: what it constrains shows up as
+        the target, the plan step or the config change it leads to.
+        """
+        question, answer = str(question).strip(), str(answer).strip()
+        if not question or not answer:
+            raise ProcessError("a decision needs both the question and the answer as given")
+        self._append(
+            EV_USER_DECISION,
+            question=question,
+            answer=answer,
+            step=step,
+            phase=str(phase) if phase is not None else self.load().get("active_phase"),
+            invalidates=invalidates,
+        )
+        return {"question": question, "answer": answer, "step": step}
+
     def record_session(self, harness, model, resumed=False, phase=None):
         """A working session began. Not a transition -- nothing in the current slice changes.
 
@@ -692,6 +720,7 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
   reviewer <vendor> <model> [step]      record a reviewer call
   target <preset> <curve>               set a preset's active target curve
   session-start <harness> <model> [resumed]   a working session began (written by the front-end)
+  decision <question> <answer> [step] [--invalidates X]   what the Arbiter ruled, as itself
   capture-start <version> [title ...]   open a capture round; titles = what was asked for
   capture-taken <title>                 a measurement came back (unplanned ones are flagged)
   capture-skip <title> <reason>         deliberately NOT taken, and why
@@ -739,6 +768,19 @@ def _main(argv):
         elif cmd == "target":
             p.set_target(args[0], args[1])
             print(f"target for {args[0]}: {args[1]}")
+        elif cmd == "decision":
+            invalidates = None
+            rest = list(args)
+            for i, token in enumerate(rest):
+                if token.startswith("--invalidates"):
+                    invalidates = (
+                        token.split("=", 1)[1] if "=" in token else (rest[i + 1] if len(rest) > i + 1 else None)
+                    )
+                    rest = rest[:i]
+                    break
+            p.record_decision(rest[0], rest[1], step=rest[2] if len(rest) > 2 else None,
+                              invalidates=invalidates)
+            print(f"decision recorded: {rest[1]}")
         elif cmd == "session-start":
             p.record_session(args[0], args[1], resumed=(len(args) > 2 and args[2] == "resumed"))
             print(f"session recorded: {args[0]} / {args[1]}")
