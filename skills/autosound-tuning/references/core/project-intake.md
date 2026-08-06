@@ -10,15 +10,34 @@
 
 > 🖥️ **Before the first question: ask the front-end, not the user.** If a `tcc` MCP server is
 > connected, call `get_tcc_state` and read it as **answered**, not as a suggestion. It reports the
-> project folder, the current phase, and the reviewer the Arbiter chose in the GUI's own controls
-> (`reviewer.model`, `reviewer.reachable`, `reviewer.how`). Everything it reports was set by the
-> user in the app before this conversation started — **do not ask them to confirm it.** Ask only
-> about what the state leaves blank or what contradicts the disk.
+> project folder, the current phase, the **language** the Arbiter is working in (`language`, e.g.
+> `"uk"`), and the reviewer they chose in the GUI's own controls (`reviewer.model`,
+> `reviewer.reachable`, `reviewer.how`). Everything it reports was set by the user in the app
+> before this conversation started — **do not ask them to confirm it.** Ask only about what the
+> state leaves blank or what contradicts the disk.
 >
 > This changes which of the questions below you actually put: with a front-end, the language is the
 > one the app is already speaking and the reviewer channel is already picked, so steps 1 and 2 of
 > the sequence collapse into "note what the state says and move on". With no front-end, ask them
 > exactly as written — this is an "if you are told, do not ask" rule, not a removal.
+>
+> **An answered step is a closed step.** Not asking is only half of it: leave the plan's language /
+> reviewer step open and the panel shows an unfinished intake for the rest of the project, and the
+> next session re-opens the question the app answered before the first one. Record what the state
+> said and close it in the same breath:
+>
+> ```bash
+> python3 rew_tool/state/process.py <project>/process done -1.1 \
+>   "get_tcc_state.language=uk" "autosound_context.md: written in uk"
+> python3 rew_tool/state/process.py <project>/process reviewer google gemini-2.5-pro -1.2
+> python3 rew_tool/state/process.py <project>/process done -1.2 \
+>   "get_tcc_state.reviewer.model=gemini-2.5-pro" "reachable=true"
+> ```
+>
+> The evidence names where the answer came from AND where it now lives on disk — a state read is
+> not by itself a fact a later session can check. A reviewer the state reports as **unreachable**
+> is not done: block that step with the reason (`block -1.2 "clipboard-only until ..."`), because
+> a channel that cannot be called is a channel the method does not have.
 
 > 🌍 **First of all — the local project's language.** Ask the user: *"English, or your native language? (supported: **EN · UK · DE · PL**)"*. From then on, **the whole dialogue AND all generated project files** (`autosound_context`, `tuning-changelog`, `dsp-state-current`, `audit-trail`, `skill-inbox`) — **in the chosen language**. The skill body is English (it's just the method skeleton) — the conversation and artifacts follow the user's language; Claude will manage other languages too, but EN/UK/DE/PL are the officially checked ones.
 
@@ -40,7 +59,7 @@
 A new project's first contact has a fixed order, but the detail is spread across this file + `process-phases.md` Phase 0 — and fresh sessions keep **skipping** a step (the glossary before measuring, the loopback, the reviewer). So run it as ONE sequence; the detail of each step is in the section noted — **this is the order + the gates:**
 
 0. **Read the front-end** (§0) — `get_tcc_state` if a `tcc` server is connected. What it reports is settled; steps 1 and 2 are then a note, not a question.
-1. **Language** (§0) — ask EN/UK/DE/PL **unless the front-end already says which**; the dialogue AND every project file follow it.
+1. **Language** (§0) — ask EN/UK/DE/PL **unless the front-end already says which** (`get_tcc_state.language`); the dialogue AND every project file follow it. Either way the step is **closed with what was decided as its evidence** — an answered question left open is asked again next session.
 2. **Reviewer channel** (§0) — offer it and set it up NOW (the method's core, not an afterthought; `setup-critic-channel.md`). **If the front-end reports one, it is chosen** — record it and check `reviewer.reachable`; only an unreachable one is worth raising, and then as "this reviewer is clipboard-only", not as "which reviewer?".
 3. **Interview** (§1–§2) — equipment (§1) + goals (§2: competition vs for-yourself vs both · **the reference seat — driver / passenger / all** · music & taste) + the curve seed → write `autosound_context.md`.
 4. **REW rig ready** — the mic + its cal files loaded; the sample rate = the DSP's native rate where possible; a **physical loopback** wired (without it, phase/timing reads are unreliable → lean on summation/ear); the right input/output devices selected; the measurement input **doesn't clip** (§3.8); the API answers at `localhost:4735`.
