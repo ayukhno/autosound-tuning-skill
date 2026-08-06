@@ -15,10 +15,17 @@ silent and expensive:
 
 * **Steps are never deleted.** Superseding one marks it skipped and leaves it visible, so the
   attempt history stays legible instead of a plan that quietly rewrites itself.
-* **`step_done` requires evidence** — measurement names, a ledger version, an audit entry. A step
-  marked done with nothing to point at is exactly the drift that resume is supposed to catch: on
-  the next session the reconciler compares the plan against disk, and a done step whose
-  measurement never existed is a flag, not a fact.
+* **`step_done` requires evidence that resolves** (SCR-035) — a REW measurement name in the
+  grammar, a ledger version that exists, or a project file that exists. Prose may accompany those;
+  it may not be the whole of it. A step marked done with nothing to point at is exactly the drift
+  that resume is supposed to catch: on the next session the reconciler compares the plan against
+  disk, and a done step whose measurement never existed is a flag, not a fact.
+
+  Requiring *something* was not enough. Watched end to end: a cheap model closed phases −1 to 3 and
+  reported a finished tune -- crossovers per driver, delays to 0.1 ms, a listening verdict -- with
+  `dsp_profile.json` alone on disk, no ledger, no measurement, the Critic never called. Every step
+  passed, because "baseline measurements analysed" is a non-empty evidence list. Prose is free; a
+  name that has to parse and a path that has to exist are not.
 
 `tuning-changelog` and `audit-trail.md` become generated views over the journal, the same move
 `state.py` made for `dsp-state-current`.
@@ -29,6 +36,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 
@@ -104,6 +112,92 @@ def _require_target(phase, previous, state):
     )
 
 
+# --- evidence that resolves (SCR-035) ---------------------------------------------------------
+#
+# Three shapes count. Each is something a later session can go and check; a sentence is not.
+_LEDGER_RE = re.compile(r"\bv_?(\d{1,4})\b", re.IGNORECASE)
+# Loose on purpose: a path only counts once it is found on disk, so over-matching costs nothing
+# and under-matching would reject a real file over its spelling.
+_PATH_RE = re.compile(r"[\w./\\-]+\.(?:json|jsonl|md|mdat|txt|csv|yml|yaml|req|png|pdf)\b")
+
+
+def _load_naming():
+    """`naming.py` from the same checkout, by path.
+
+    Not `import naming`: that needs `rew_tool/` on `sys.path`, and the consumer front-end loads
+    these modules by explicit path precisely to keep names like `state` off the global import path.
+    Returns None when it cannot be loaded -- an unreadable grammar must not make evidence
+    unrecordable, it just means one of the three shapes cannot be recognised here.
+    """
+    import importlib.util
+
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "naming.py")
+    try:
+        spec = importlib.util.spec_from_file_location("_process_naming", path)
+        if spec is None or spec.loader is None:
+            return None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    except Exception:  # noqa: BLE001 -- any failure here means "cannot tell", never "invalid"
+        return None
+
+
+def _state_root(project_dir):
+    env = os.environ.get("AUTOSOUND_STATE_ROOT")
+    return env if env else os.path.join(project_dir, "state")
+
+
+def _ledger_versions(project_dir):
+    """Every snapshot on disk as a bare number ("7" for `v_007.json`)."""
+    out = set()
+    root = _state_root(project_dir)
+    try:
+        presets = [p for p in os.listdir(root) if os.path.isdir(os.path.join(root, p))]
+    except OSError:
+        return out
+    for preset in presets:
+        try:
+            names = os.listdir(os.path.join(root, preset))
+        except OSError:
+            continue
+        for name in names:
+            match = _LEDGER_RE.match(os.path.splitext(name)[0])
+            if name.endswith(".json") and match:
+                out.add(str(int(match.group(1))))
+    return out
+
+
+def resolves(item, project_dir, versions=None, naming=None):
+    """True when `item` points at something checkable rather than describing one.
+
+    A measurement name is accepted on its grammar alone: whether REW actually holds it is a
+    question only REW can answer, and the front-end that talks to REW checks that (`plan_audit`).
+    Typed here means typed there -- a field to resolve rather than a sentence to grep.
+    """
+    text = str(item).strip()
+    if not text:
+        return False
+    versions = _ledger_versions(project_dir) if versions is None else versions
+    for match in _LEDGER_RE.finditer(text):
+        if str(int(match.group(1))) in versions:
+            return True
+    for match in _PATH_RE.finditer(text):
+        if os.path.exists(os.path.join(project_dir, match.group())):
+            return True
+    naming = _load_naming() if naming is None else naming
+    if naming is not None:
+        # A capture is `<code>_<version> (sw|rta)`, and the METHOD is what makes it one. The
+        # grammar leaves it optional -- it also describes DSP-config version strings -- but here
+        # optional means "banked as v_003" parses as a measurement called "banked as v", and the
+        # sentence walks straight through the gate it was written to stop.
+        for candidate in (text,) + tuple(text.split(" + ")):
+            parsed = naming.parse_name(candidate.strip())
+            if parsed and parsed.get("method"):
+                return True
+    return False
+
+
 def _now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -162,6 +256,11 @@ class Process:
         self.dir = root
 
     # -- paths --
+    @property
+    def project_dir(self):
+        """The project this `process/` belongs to — what evidence paths are resolved against."""
+        return os.path.dirname(os.path.abspath(self.dir))
+
     @property
     def state_path(self):
         return os.path.join(self.dir, "process-state.json")
@@ -269,12 +368,14 @@ class Process:
         return entry
 
     def finish_step(self, step_id, evidence):
-        """Mark a step done. `evidence` is required and must be non-empty.
+        """Mark a step done. `evidence` is required, and at least one item must RESOLVE (SCR-035).
 
-        Evidence is a list of pointers to something that exists on disk — REW measurement names, a
-        ledger `v_NNN`, an audit-trail entry. This is the rule that makes resume trustworthy: the
-        reconciler can check each done step against reality, and "done" with nothing to check is
-        indistinguishable from a model that merely said so.
+        Evidence is a list of pointers to something a later session can check — a REW measurement
+        name in the grammar, a ledger version that exists, a project file that exists. Prose may
+        ride along; it may not be the whole list. This is the rule that makes resume trustworthy:
+        the reconciler compares each done step against reality, and "done" with nothing checkable
+        is indistinguishable from a model that merely said so -- which is exactly what one did,
+        for four phases, with an empty project folder.
         """
         if isinstance(evidence, str):
             evidence = [evidence]
@@ -283,6 +384,17 @@ class Process:
             raise ProcessError(
                 f"step {step_id!r} cannot be done without evidence "
                 "(measurement names, ledger vNNN, or an audit entry)"
+            )
+        versions = _ledger_versions(self.project_dir)
+        naming = _load_naming()
+        if not any(resolves(item, self.project_dir, versions, naming) for item in evidence):
+            raise ProcessError(
+                f"step {step_id!r} has evidence, but none of it resolves: "
+                + "; ".join(repr(str(e)) for e in evidence)
+                + ". At least one item must be checkable rather than described — a REW measurement "
+                "name in the grammar (`tw-L_1 (rta)`), a ledger version that exists (`v_003`), or "
+                "a project file that exists (`autosound_context.md`). Describing the work is not "
+                "recording it: write the artefact first, then close the step against it."
             )
         state = self.load()
         entry = self._require(state, step_id)
@@ -348,6 +460,28 @@ class Process:
         state = state or self.load()
         return [s for s in state.get("plan", []) if s.get("status") == STEP_DONE and not s.get("evidence")]
 
+    def unbacked_done_steps(self, state=None):
+        """Done steps whose evidence resolves to nothing NOW.
+
+        Distinct from having no evidence at all, and worth its own answer: `finish_step` refuses
+        both, so a step here was either closed by an older writer, or closed against a file that
+        has since been moved or deleted. A capture name is not judged -- only REW knows whether it
+        holds one -- so this reports what the disk can actually contradict.
+        """
+        state = state or self.load()
+        versions = _ledger_versions(self.project_dir)
+        naming = _load_naming()
+        out = []
+        for step in state.get("plan", []):
+            if step.get("status") != STEP_DONE or not step.get("evidence"):
+                continue
+            if not any(
+                resolves(item, self.project_dir, versions, naming)
+                for item in step.get("evidence", [])
+            ):
+                out.append(step)
+        return out
+
     # -- internals --
     def _require(self, state, step_id):
         entry = self.step(state, step_id)
@@ -387,12 +521,15 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
   enter-phase <phase>                   make a phase current (-1..5)
   add-step <id> <name> [--project]      add a plan step (--project = situational insert)
   start <id>                            begin/re-begin a step (a re-begin is attempt N+1)
-  done <id> <evidence> [evidence ...]    mark done; evidence is REQUIRED
+  done <id> <evidence> [evidence ...]    mark done; evidence is REQUIRED and must RESOLVE
+                                         (a capture name `c_1 (rta)`, a ledger `v_003` that
+                                          exists, or a project file that exists)
   skip <id> [superseded-by]             supersede a step (kept visible, never deleted)
   block <id> <reason>                   mark blocked
   reviewer <vendor> <model> [step]      record a reviewer call
   target <preset> <curve>               set a preset's active target curve
-  check                                 list done steps that have no evidence
+  check                                 done steps with no evidence, and done steps whose
+                                         evidence resolves to nothing on disk
 """
 
 
@@ -438,8 +575,17 @@ def _main(argv):
             bad = p.unevidenced_done_steps()
             for entry in bad:
                 print(f"NO EVIDENCE: {entry['id']} {entry.get('name','')}")
-            print(f"{len(bad)} done step(s) without evidence")
-            return 1 if bad else 0
+            unbacked = [e for e in p.unbacked_done_steps() if e not in bad]
+            for entry in unbacked:
+                print(
+                    f"UNBACKED: {entry['id']} {entry.get('name','')} "
+                    f"-- evidence resolves to nothing: {'; '.join(map(str, entry['evidence']))}"
+                )
+            print(
+                f"{len(bad)} done step(s) without evidence, "
+                f"{len(unbacked)} whose evidence resolves to nothing"
+            )
+            return 1 if (bad or unbacked) else 0
         else:
             print(_USAGE, file=sys.stderr)
             return 2
