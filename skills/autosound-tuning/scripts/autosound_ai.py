@@ -214,6 +214,35 @@ def run_doctor():
     print(f"================== {'УСПІШНО ✓' if ok else 'ПОТРЕБУЄ ВИПРАВЛЕННЯ ✗'} ==================")
     return ok
 
+def _persist_review(role, text, model, mode):
+    """Write the critique to `<project>/process/reviews/<ts>-<role>.md` and return its path (SCR-027).
+
+    The reasoning used to exist only in the chat stream, so a session rendered from disk showed
+    that a critique happened and how it was resolved but not what was argued -- the part worth
+    reading back a week later, and the part an audit needs. Clipboard mode writes the compiled
+    package to the same place, so a review answered by hand does not look like no review at all.
+
+    Returns a PROJECT-RELATIVE path: it goes into the journal, and an absolute path from one
+    machine is noise on another.
+    """
+    project = os.environ.get("AUTOSOUND_PROJECT_DIR") or CWD
+    stamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+    rel = os.path.join("process", "reviews", f"{stamp}-{role}.md")
+    path = os.path.join(project, rel)
+    header = f"# {role} — {model or 'unknown model'} ({mode})\n\n_{datetime.now().isoformat(timespec='seconds')}_\n\n"
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(header + (text or ""))
+    except OSError as e:
+        print(f">> Не вдалося зберегти текст рецензії: {e}", file=sys.stderr)
+        return None
+    print(f">> Текст рецензії збережено: {rel}", file=sys.stderr)
+    print(f">> Запиши посилання: process.py <project>/process reviewer <vendor> {model} "
+          f"--review {rel}", file=sys.stderr)
+    return rel
+
+
 def main():
     if len(sys.argv) < 2:
         print("Використання: python3 scripts/autosound_ai.py [critic|advisor|doctor] <package_file.md> [trace.csv]")
@@ -315,6 +344,7 @@ def main():
             response_text, api_model = call_gemini_api(api_key, model, compiled_prompt)
             print(response_text)
             print(f"\n— [{role}: {api_model}]")
+            _persist_review(role, response_text, api_model, "api")
             
             # Логування в аудит
             try:
@@ -368,6 +398,7 @@ def main():
             if proc.returncode == 0 and proc.stdout.strip():
                 print(proc.stdout)
                 print(f"\n— [{role}: {model}]")
+                _persist_review(role, proc.stdout, model, "cli")
                 # Логування в аудит
                 try:
                     with open(AUDIT_TRAIL, "a", encoding="utf-8") as f:
@@ -398,6 +429,10 @@ def main():
         print(f"✓ Пакет збережено локально: {manual_file_path}", file=sys.stderr)
     except Exception as e:
         print(f"Не вдалося зберегти файл: {e}", file=sys.stderr)
+
+    # The package, not an answer -- but on the record all the same: a review worked by hand must
+    # not look like no review at all (SCR-027, `mode: clipboard` on the event).
+    _persist_review(role, compiled_prompt, os.environ.get("GEMINI_CRITIC_MODEL", ""), "clipboard")
 
     # Копіювання у буфер обміну
     copied = copy_to_clipboard(compiled_prompt)

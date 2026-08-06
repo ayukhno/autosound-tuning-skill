@@ -39,7 +39,9 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
      "evidence": ["m-L_10 (sw)", "v_007"]}      // REQUIRED once status is done
   ],
   "reviewer": {"vendor": "Gemini", "model": "Gemini 3.1 Pro (High)",
-               "at": "…", "phase": "2", "step": "2.3", "outcome": "apply"},
+               "at": "…", "phase": "2", "step": "2.3", "outcome": "apply",
+               "review": "process/reviews/2026-08-06T21-33-10-critic.md",  // SCR-027: WHAT was argued
+               "mode": "api"},                                            //   api | cli | clipboard
   "targets": {"FULL": "ResoNix", "SQ": "Jazzi #1"},  // pointer per preset; the curve lives elsewhere
   "capture": {                                      // SCR-034: the OPEN capture round, or null.
     "id": "cap_002", "n": 2,                        //   Every round that ever happened is in the

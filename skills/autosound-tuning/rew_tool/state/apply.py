@@ -31,6 +31,9 @@ this way — intake seeds every profile-declared tier, even empty, at the first 
 """
 
 import copy
+import datetime
+import json
+import os
 
 import state as _state
 
@@ -190,6 +193,71 @@ def settings_sheet(diff, rate, preset, version, slot_note=None):
     return "\n".join(lines)
 
 
+
+def delta_rows(diff, rate):
+    """The change, as rows, in the SAME words the settings sheet prints (SCR-026).
+
+    The sheet is built from these; so is the front-end's card. Two renderers over one structure,
+    rather than a front-end diffing two snapshots and guessing at intent -- a `gain_db` that moved
+    could be a level-match trim or a banked decision, and the snapshots do not say which.
+    """
+    rows = []
+    for tier in sorted(k for k in diff if k not in _DIFF_RESERVED_KEYS):
+        for ch, fields in diff[tier].items():
+            if fields.get("__added__"):
+                rows.append({"tier": tier, "channel": ch, "param": None,
+                             "was": None, "value": None, "added": True})
+                continue
+            if fields.get("__removed__"):
+                rows.append({"tier": tier, "channel": ch, "param": None,
+                             "was": None, "value": None, "removed": True})
+                continue
+            for fld, (o, n) in fields.items():
+                if fld == "status":
+                    continue
+                rows.append({
+                    "tier": tier, "channel": ch,
+                    "param": _FIELD_LABEL.get(fld, fld), "field": fld,
+                    # Rendered, not raw: these are the values the Arbiter keys in, and the sheet's
+                    # own formatter is what turns 620.0 into "620 Hz LR36" and ms into samples.
+                    "was": _fmt_val(fld, o, rate), "value": _fmt_val(fld, n, rate),
+                    "was_raw": o, "value_raw": n,
+                })
+    return rows
+
+
+def write_delta(history, diff, rate, version, note=None, advisories=()):
+    """Bank the change beside the snapshot: `<preset>/proposals/<v_NNN>.json` (SCR-026).
+
+    The ledger stores the state AFTER a change; the Arbiter's sheet is about the change itself, and
+    the skill computed it, printed it and threw it away. Retyping numbers into chat is a
+    transcription surface with no gate on it -- the same argument as `dsp-state-current` being
+    generated rather than hand-written, applied to the sheet.
+
+    Best effort by design: a proposal that is banked but whose delta file could not be written must
+    not fail the proposal. The snapshot is the source of truth; this is a view.
+    """
+    out = {
+        "schema_version": _state.SCHEMA_VERSION,
+        "version": version,
+        "from": diff.get("from"),
+        "preset": history.preset,
+        "at": datetime.datetime.now().isoformat(timespec="seconds"),
+        "note": note,
+        "preset_changes": diff.get("preset") or {},
+        "settings": delta_rows(diff, rate),
+        "advisories": list(advisories or ()),
+    }
+    path = os.path.join(history.dir, "proposals", f"{version}.json")
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(out, f, ensure_ascii=False, indent=2)
+    except OSError:
+        return None
+    return path
+
+
 def propose(history, delta, note=None, provenance=None, registry=None, allow_nonactive=False):
     """Gate: validate the delta against current HEAD, bank a 🟡 proposed snapshot, return the sheet.
 
@@ -220,6 +288,7 @@ def propose(history, delta, note=None, provenance=None, registry=None, allow_non
     version = history.snapshot(proposed, note=note or "proposed change")   # validates again + versions
     rate = proposed["sample_rate"]
     sheet = settings_sheet({**d, "to": version}, rate, history.preset, version, slot_note=slot_note)
+    write_delta(history, {**d, "to": version}, rate, version, note=note, advisories=adv)
     if adv:
         sheet += "\n\n⚠️ **Advisories (double-check, not blocking):**\n" + "\n".join("- " + a for a in adv)
     sheet += (f"\n\nAfter entering these in Helix, run `attest {version}` to bank it 🟢 applied, "

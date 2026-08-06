@@ -450,8 +450,18 @@ class Process:
         self._append(EV_STEP_BLOCKED, step=step_id, reason=reason)
         return entry
 
-    def record_reviewer(self, vendor, model, phase=None, step=None, outcome=None):
-        """Who reviewed, on what model, when — the advisor panel's "last called" (TCC-Concept §4)."""
+    def record_reviewer(self, vendor, model, phase=None, step=None, outcome=None,
+                        review=None, mode=None):
+        """Who reviewed, on what model, when — and WHAT THEY ARGUED (SCR-027).
+
+        `review` is a project-relative path to the critique text (`process/reviews/<ts>-<role>.md`).
+        Without it the record said a critique happened and how it was resolved, and lost the
+        reasoning — which is the part worth reading back a week later, and the part an audit needs.
+
+        `mode` distinguishes a channel that ran from one worked by hand: `"clipboard"` means the
+        package was compiled and answered by a human paste, which must not look like no review at
+        all.
+        """
         state = self.load()
         state["reviewer"] = {
             "vendor": vendor,
@@ -460,9 +470,12 @@ class Process:
             "phase": str(phase) if phase is not None else state.get("active_phase"),
             "step": step,
             "outcome": outcome,
+            "review": review,
+            "mode": mode,
         }
         self._write(state)
-        self._append(EV_CRITIC_CALLED, vendor=vendor, model=model, step=step, outcome=outcome)
+        self._append(EV_CRITIC_CALLED, vendor=vendor, model=model, step=step, outcome=outcome,
+                     review=review, mode=mode)
         return state["reviewer"]
 
     # -- capture rounds (SCR-034) --
@@ -717,7 +730,8 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
                                           exists, or a project file that exists)
   skip <id> [superseded-by]             supersede a step (kept visible, never deleted)
   block <id> <reason>                   mark blocked
-  reviewer <vendor> <model> [step]      record a reviewer call
+  reviewer <vendor> <model> [step] [--review PATH] [--mode clipboard]
+                                        record a reviewer call and WHERE its text is
   target <preset> <curve>               set a preset's active target curve
   session-start <harness> <model> [resumed]   a working session began (written by the front-end)
   decision <question> <answer> [step] [--invalidates X]   what the Arbiter ruled, as itself
@@ -763,8 +777,25 @@ def _main(argv):
             p.block_step(args[0], " ".join(args[1:]))
             print(f"{args[0]} blocked")
         elif cmd == "reviewer":
-            p.record_reviewer(args[0], args[1], step=args[2] if len(args) > 2 else None)
-            print(f"reviewer recorded: {args[0]} / {args[1]}")
+            flags = {}
+            rest = []
+            i = 0
+            while i < len(args):
+                token = args[i]
+                if token.startswith("--review") or token.startswith("--mode"):
+                    key = token.lstrip("-").split("=", 1)[0]
+                    if "=" in token:
+                        flags[key] = token.split("=", 1)[1]
+                    else:
+                        i += 1
+                        flags[key] = args[i] if i < len(args) else None
+                else:
+                    rest.append(token)
+                i += 1
+            p.record_reviewer(rest[0], rest[1], step=rest[2] if len(rest) > 2 else None,
+                              review=flags.get("review"), mode=flags.get("mode"))
+            print(f"reviewer recorded: {rest[0]} / {rest[1]}"
+                  + (f" -> {flags['review']}" if flags.get("review") else " (no text recorded)"))
         elif cmd == "target":
             p.set_target(args[0], args[1])
             print(f"target for {args[0]}: {args[1]}")
