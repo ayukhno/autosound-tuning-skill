@@ -79,6 +79,11 @@ EV_STEP_DONE = "step_done"
 EV_STEP_BLOCKED = "step_blocked"
 EV_CRITIC_CALLED = "critic_called"
 EV_CONFIG_CHANGE = "config_change"
+# A capture round: what was asked for, what came back, what was deliberately not taken (SCR-034).
+EV_CAPTURE_ISSUED = "capture_task_issued"
+EV_CAPTURE_TAKEN = "capture_taken"
+EV_CAPTURE_SKIPPED = "capture_skipped"
+EV_CAPTURE_CLOSED = "capture_round_closed"
 
 
 class ProcessError(ValueError):
@@ -198,6 +203,15 @@ def resolves(item, project_dir, versions=None, naming=None):
     return False
 
 
+def _outstanding(round_):
+    """Expected captures of one round that are neither taken nor skipped."""
+    return [
+        title
+        for title in round_.get("expected", [])
+        if title not in round_.get("taken", {}) and title not in round_.get("skipped", {})
+    ]
+
+
 def _now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -211,6 +225,9 @@ def _empty_state():
         "plan": [],
         "reviewer": None,
         "targets": {},
+        # The capture round currently open, or None. Only the ACTIVE one is here, the same way
+        # only the active phase is: every round that ever happened is in the journal (SCR-034).
+        "capture": None,
     }
 
 
@@ -440,6 +457,131 @@ class Process:
         self._append(EV_CRITIC_CALLED, vendor=vendor, model=model, step=step, outcome=outcome)
         return state["reviewer"]
 
+    # -- capture rounds (SCR-034) --
+    def start_capture(self, version, expected=(), phase=None, note=None):
+        """Open a capture round: what was asked for, at which ledger version, in which phase.
+
+        A ROUND, not a version. The task was keyed by the ledger HEAD, which is right for naming
+        the measurements (`_N` is the config they were taken under) and wrong for identifying the
+        pass: two rounds at the same config are then the same thing, and what the Arbiter asks
+        about is "this session's task". Opening a second round while one is open closes the first
+        -- a round nobody closed is a round that ended when the next one began.
+        """
+        state = self.load()
+        previous = state.get("capture")
+        if previous and not previous.get("closed"):
+            self._close_capture(state, previous, reason="superseded")
+        number = int(previous.get("n", 0)) + 1 if previous else 1
+        expected = [str(item) for item in (expected or []) if str(item).strip()]
+        round_ = {
+            "id": "cap_%03d" % number,
+            "n": number,
+            "phase": str(phase) if phase is not None else state.get("active_phase"),
+            "version": str(version),
+            "issued": _now(),
+            "closed": None,
+            "expected": expected,
+            "taken": {},
+            "skipped": {},
+            "note": note,
+        }
+        state["capture"] = round_
+        self._write(state)
+        self._append(
+            EV_CAPTURE_ISSUED,
+            capture=round_["id"],
+            phase=round_["phase"],
+            version=round_["version"],
+            expected=expected,
+            note=note,
+        )
+        return round_
+
+    def record_capture(self, title, at=None):
+        """A measurement was taken. Unplanned ones are recorded too, flagged as such.
+
+        `planned` is the whole point of recording rather than re-deriving: a capture that was not
+        on the list is a fact about the round, and the derivation (`naming.expected_groups`) can
+        only ever say what SHOULD have been taken.
+        """
+        state, round_ = self._require_capture()
+        title = str(title).strip()
+        if not title:
+            raise ProcessError("a capture needs its REW title")
+        planned = title in round_["expected"]
+        round_["taken"][title] = {"at": at or _now(), "planned": planned}
+        round_["skipped"].pop(title, None)  # taken after all
+        self._write(state)
+        self._append(
+            EV_CAPTURE_TAKEN,
+            capture=round_["id"],
+            title=title,
+            planned=planned,
+            version=round_["version"],
+        )
+        return round_
+
+    def skip_capture(self, title, reason):
+        """A capture deliberately NOT taken, and why.
+
+        Skipped and not-yet-taken rendered identically before this, so a tuner who decided a
+        capture was unnecessary had no way to say so and the next session proposed it again.
+        A reason is required for the same reason evidence is: a decision with no record is a
+        decision that has to be made again.
+        """
+        state, round_ = self._require_capture()
+        title, reason = str(title).strip(), str(reason or "").strip()
+        if not reason:
+            raise ProcessError(f"skipping {title!r} needs a reason -- it is a decision, not a gap")
+        round_["skipped"][title] = {"at": _now(), "reason": reason}
+        self._write(state)
+        self._append(EV_CAPTURE_SKIPPED, capture=round_["id"], title=title, reason=reason)
+        return round_
+
+    def close_capture(self, reason=None):
+        """Close the open round. What is neither taken nor skipped stays that way, on the record."""
+        state, round_ = self._require_capture()
+        self._close_capture(state, round_, reason=reason)
+        self._write(state)
+        return round_
+
+    def capture_outstanding(self, state=None):
+        """Expected captures of the OPEN round that are neither taken nor skipped."""
+        state = state or self.load()
+        round_ = state.get("capture") or {}
+        if not round_ or round_.get("closed"):
+            return []
+        return _outstanding(round_)
+
+    def _require_capture(self):
+        state = self.load()
+        round_ = state.get("capture")
+        if not round_ or round_.get("closed"):
+            raise ProcessError(
+                "no capture round is open: `capture-start <version> [expected ...]` first. "
+                "A round says which pass these measurements belong to -- without one they are "
+                "loose titles that only REW remembers."
+            )
+        return state, round_
+
+    def _close_capture(self, state, round_, reason=None):
+        # Worked out BEFORE the round is marked closed: `capture_outstanding` answers about the
+        # open round, and it is the closing event that most needs the answer.
+        outstanding = _outstanding(round_)
+        round_["closed"] = _now()
+        round_["closed_reason"] = reason
+        self._append(
+            EV_CAPTURE_CLOSED,
+            capture=round_["id"],
+            version=round_["version"],
+            taken=sorted(round_.get("taken", {})),
+            skipped=sorted(round_.get("skipped", {})),
+            # Named rather than left to be worked out: a round that ends with expected captures
+            # neither taken nor skipped is the shape план-факт exists to show.
+            outstanding=outstanding,
+            reason=reason,
+        )
+
     def set_target(self, preset, curve):
         """The active target curve for a preset — a pointer, the curve itself lives elsewhere."""
         state = self.load()
@@ -528,6 +670,10 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
   block <id> <reason>                   mark blocked
   reviewer <vendor> <model> [step]      record a reviewer call
   target <preset> <curve>               set a preset's active target curve
+  capture-start <version> [title ...]   open a capture round; titles = what was asked for
+  capture-taken <title>                 a measurement came back (unplanned ones are flagged)
+  capture-skip <title> <reason>         deliberately NOT taken, and why
+  capture-close [reason]                close the round; what is outstanding is named
   check                                 done steps with no evidence, and done steps whose
                                          evidence resolves to nothing on disk
 """
@@ -571,6 +717,31 @@ def _main(argv):
         elif cmd == "target":
             p.set_target(args[0], args[1])
             print(f"target for {args[0]}: {args[1]}")
+        elif cmd == "capture-start":
+            round_ = p.start_capture(args[0], expected=args[1:])
+            print(
+                f"{round_['id']} open at {round_['version']}, "
+                f"{len(round_['expected'])} capture(s) expected"
+            )
+        elif cmd == "capture-taken":
+            round_ = p.record_capture(args[0])
+            entry = round_["taken"][args[0].strip()]
+            print(
+                f"{args[0]} recorded"
+                + ("" if entry["planned"] else " (unplanned -- not on this round's list)")
+            )
+        elif cmd == "capture-skip":
+            p.skip_capture(args[0], " ".join(args[1:]))
+            print(f"{args[0]} skipped: {' '.join(args[1:])}")
+        elif cmd == "capture-close":
+            outstanding = p.capture_outstanding()
+            round_ = p.close_capture(" ".join(args) or None)
+            print(
+                f"{round_['id']} closed: {len(round_['taken'])} taken, "
+                f"{len(round_['skipped'])} skipped, {len(outstanding)} outstanding"
+            )
+            for title in outstanding:
+                print(f"  OUTSTANDING: {title}")
         elif cmd == "check":
             bad = p.unevidenced_done_steps()
             for entry in bad:

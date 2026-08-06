@@ -40,7 +40,15 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
   ],
   "reviewer": {"vendor": "Gemini", "model": "Gemini 3.1 Pro (High)",
                "at": "…", "phase": "2", "step": "2.3", "outcome": "apply"},
-  "targets": {"FULL": "ResoNix", "SQ": "Jazzi #1"}   // pointer per preset; the curve lives elsewhere
+  "targets": {"FULL": "ResoNix", "SQ": "Jazzi #1"},  // pointer per preset; the curve lives elsewhere
+  "capture": {                                      // SCR-034: the OPEN capture round, or null.
+    "id": "cap_002", "n": 2,                        //   Every round that ever happened is in the
+    "phase": "0", "version": "v_003",               //   journal; only the live one is here, the
+    "issued": "…", "closed": null,                  //   same way only the active phase is.
+    "expected": ["tw-L_1 (sw)", "tw-L_1 (rta)"],    // what `naming.expected_groups` asked for
+    "taken": {"tw-L_1 (sw)": {"at": "…", "planned": true}},   // planned=false: not on the list
+    "skipped": {"c_1 (sw)": {"at": "…", "reason": "centre not wired yet"}}
+  }
 }
 ```
 
@@ -48,17 +56,27 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
 
 One JSON object per line, oldest first: `{"at": …, "type": …, …}`. Types:
 `phase_entered` · `step_added` · `attempt_started` · `step_skipped` · `step_done` ·
-`step_blocked` · `critic_called` · `config_change`.
+`step_blocked` · `critic_called` · `config_change` · `capture_task_issued` · `capture_taken` ·
+`capture_skipped` · `capture_round_closed`.
 
 ## Invariants (enforced in code, not by discipline)
 
 - **Steps are never deleted.** Superseding marks `skipped` and leaves the step visible, so the
   attempt history stays legible instead of a plan that quietly rewrites itself. `skip_step` is the
   only way to retire one.
-- **`step_done` requires evidence** — measurement names, a ledger `v_NNN`, an audit entry.
-  `finish_step` raises without it. This is what makes resume trustworthy: the reconciler compares
-  each done step against disk, and a done step with nothing to check is indistinguishable from a
-  model that merely said so. `unevidenced_done_steps()` is that check.
+- **`step_done` requires evidence that RESOLVES** (SCR-035) — a capture name in the grammar
+  (`tw-L_1 (rta)`, method suffix included), a ledger version that exists, or a project file that
+  exists. Prose may ride along; prose alone is refused. This is what makes resume trustworthy: the
+  reconciler compares each done step against disk, and a done step with nothing checkable is
+  indistinguishable from a model that merely said so — which one did, for four phases, with an
+  empty project folder. `unevidenced_done_steps()` and `unbacked_done_steps()` are those checks.
+- **A skipped capture needs a reason** (SCR-034). Skipped and not-yet-taken looked identical
+  before, so a tuner who decided a capture was unnecessary had no way to say so and the next
+  session proposed it again. `skip_capture` raises without one.
+- **Captures belong to a ROUND, not to a version.** The ledger version names the config a
+  measurement was taken under; it cannot tell two passes at the same config apart, and "this
+  session's task" is what the Arbiter asks about. Opening a round while one is open closes the
+  first — a round nobody closed ended when the next one began.
 - **Phases are the skill's, not the project's.** Only status and re-entry change. Phase 5 is
   explicitly cyclical, so `enter_phase` is not a one-way ratchet.
 - **State writes are atomic** (write-temp-then-rename). A torn write would otherwise read back as
