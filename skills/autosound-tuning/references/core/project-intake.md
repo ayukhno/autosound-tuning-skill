@@ -8,6 +8,18 @@
 
 ## 0. Quickstart — what you need to have (a briefing for new hands)
 
+> 🖥️ **Before the first question: ask the front-end, not the user.** If a `tcc` MCP server is
+> connected, call `get_tcc_state` and read it as **answered**, not as a suggestion. It reports the
+> project folder, the current phase, and the reviewer the Arbiter chose in the GUI's own controls
+> (`reviewer.model`, `reviewer.reachable`, `reviewer.how`). Everything it reports was set by the
+> user in the app before this conversation started — **do not ask them to confirm it.** Ask only
+> about what the state leaves blank or what contradicts the disk.
+>
+> This changes which of the questions below you actually put: with a front-end, the language is the
+> one the app is already speaking and the reviewer channel is already picked, so steps 1 and 2 of
+> the sequence collapse into "note what the state says and move on". With no front-end, ask them
+> exactly as written — this is an "if you are told, do not ask" rule, not a removal.
+
 > 🌍 **First of all — the local project's language.** Ask the user: *"English, or your native language? (supported: **EN · UK · DE · PL**)"*. From then on, **the whole dialogue AND all generated project files** (`autosound_context`, `tuning-changelog`, `dsp-state-current`, `audit-trail`, `skill-inbox`) — **in the chosen language**. The skill body is English (it's just the method skeleton) — the conversation and artifacts follow the user's language; Claude will manage other languages too, but EN/UK/DE/PL are the officially checked ones.
 
 - **REW** with the API server enabled (Preferences → API; check: `localhost:4735` responds). A measurement mic **with calibration files** + a way to position it stably at the listening point (LP).
@@ -27,8 +39,9 @@
 
 A new project's first contact has a fixed order, but the detail is spread across this file + `process-phases.md` Phase 0 — and fresh sessions keep **skipping** a step (the glossary before measuring, the loopback, the reviewer). So run it as ONE sequence; the detail of each step is in the section noted — **this is the order + the gates:**
 
-1. **Language** (§0) — ask EN/UK/DE/PL; the dialogue AND every project file follow it.
-2. **Reviewer channel** (§0) — offer it and set it up NOW (the method's core, not an afterthought; `setup-critic-channel.md`).
+0. **Read the front-end** (§0) — `get_tcc_state` if a `tcc` server is connected. What it reports is settled; steps 1 and 2 are then a note, not a question.
+1. **Language** (§0) — ask EN/UK/DE/PL **unless the front-end already says which**; the dialogue AND every project file follow it.
+2. **Reviewer channel** (§0) — offer it and set it up NOW (the method's core, not an afterthought; `setup-critic-channel.md`). **If the front-end reports one, it is chosen** — record it and check `reviewer.reachable`; only an unreachable one is worth raising, and then as "this reviewer is clipboard-only", not as "which reviewer?".
 3. **Interview** (§1–§2) — equipment (§1) + goals (§2: competition vs for-yourself vs both · **the reference seat — driver / passenger / all** · music & taste) + the curve seed → write `autosound_context.md`.
 4. **REW rig ready** — the mic + its cal files loaded; the sample rate = the DSP's native rate where possible; a **physical loopback** wired (without it, phase/timing reads are unreliable → lean on summation/ear); the right input/output devices selected; the measurement input **doesn't clip** (§3.8); the API answers at `localhost:4735`.
 5. **Naming + glossary — AGREE BEFORE ANY MEASUREMENT.** ⛔ **Gate:** don't measure until the channel codes (`sw / w-L/R / m-L/R / tw-L/R / c / r`) AND the convention `<ch>_<vN> (sw|rta)` are set with the user (`naming-and-structure.md §3`). The recurring slip is running off to measure with un-agreed names → an unusable history. **Write it, don't just agree it** — `glossary.json`/`project.json` (§5), the machine copy `naming.py` and a measurement checklist actually read.
