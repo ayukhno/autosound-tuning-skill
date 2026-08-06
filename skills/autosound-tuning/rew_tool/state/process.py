@@ -77,6 +77,33 @@ class ProcessError(ValueError):
     """A transition the process model refuses — e.g. a done step with no evidence."""
 
 
+# Phase 0 selects the target curve and every later phase is measured against it, so leaving 0
+# without one means the whole EQ stage has no reference. Watched happening: the Arbiter named a
+# curve out loud, the model repeated it back and wrote it into a free-text profile field, and
+# `targets` was still `{}` afterwards -- the choice lived in the transcript, and a transcript does
+# not survive a `/clear`. Same shape as `finish_step` refusing an empty evidence list: the refusal
+# is the record's, not the model's.
+_TARGET_REQUIRED_FROM = 1
+
+
+def _require_target(phase, previous, state):
+    """Refuse to move past phase 0 while no target curve has been recorded."""
+    if state.get("targets"):
+        return
+    try:
+        going, came_from = int(phase), int(previous) if previous is not None else -99
+    except (TypeError, ValueError):
+        return
+    if going < _TARGET_REQUIRED_FROM or came_from >= going:
+        return  # not a forward move out of baseline; re-entry and going back are always allowed
+    raise ProcessError(
+        f"phase {phase} needs a target curve: nothing has been recorded with `set-target`. "
+        "Phase 0 chooses it and every later phase is measured against it, so a curve that exists "
+        "only in the conversation is lost on the next session. "
+        "Record it: `set-target <preset> <curve>` (e.g. `set-target FULL EPY`)."
+    )
+
+
 def _now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -196,6 +223,7 @@ class Process:
             raise ProcessError(f"unknown phase {phase!r}; known: {', '.join(PHASES)}")
         state = self.load()
         previous = state.get("active_phase")
+        _require_target(phase, previous, state)
         if previous and previous != phase:
             state["phases"][previous]["status"] = PHASE_DONE
         state["phases"][phase]["status"] = PHASE_CURRENT

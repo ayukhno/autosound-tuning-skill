@@ -10,7 +10,11 @@ This phase establishes the raw baseline measurement of the car's current acousti
 
 **Required evidence:** agreed naming/glossary; a clean base DSP profile (`v0`, zeroed modifiers); **per-driver** `<ch>_1 (sw)` + `<ch>_1 (rta)` for each driver we'll work with; a locked, repeatable MMM pattern.
 
-**✅ Quality gate → Phase 1:** names agreed **before** measuring; target curve imported (shape only, not level); raw baseline captured with all modifiers zeroed; no clipping; MMM pattern locked.
+**✅ Quality gate → Phase 1:** names agreed **before** measuring; target curve imported (shape only, not level) **and recorded** — `python3 rew_tool/state/process.py <project>/process set-target <preset> <curve>`; raw baseline captured with all modifiers zeroed; no clipping; MMM pattern locked.
+
+> ⛔ `enter-phase 1` **refuses** while no target has been recorded. Importing a curve into REW and
+> naming it in chat is not the record: the next session reads `process-state.json`, not this
+> conversation.
 
 **⚠️ Failure modes:** measuring before names are agreed (unusable history) · generating per-band targets now (they depend on Phase-1 crossovers) · applying TA/level tricks during the baseline (stay observational).
 
@@ -30,7 +34,15 @@ Before any measurements are taken, establish the channel abbreviations (`sw / w-
 Give the user copy-paste-ready specifics containing the exact save PATH, short comma-separated measurement names, and a brief explanation of the immediate goal. Follow the history hygiene details in [naming-and-structure.md](references/core/naming-and-structure.md).
 
 ### 2. Import Target Curve
-Load the chosen house curve into REW.
+Load the chosen house curve into REW, **then write down which one it is**:
+
+```
+python3 rew_tool/state/process.py <project>/process set-target <preset> <curve>
+# e.g. …/process set-target FULL EPY
+```
+
+Name it so it resolves later — a bundled curve's name, or the path under
+`rew_analitic/target-curves/<name>/` for an imported one. "The one we agreed" is not a name.
 * **The target curve defines only the SHAPE**, not the absolute level.
 * Anchoring of curves and target levels is handled relative to the measured midrange level.
 * **Do NOT generate per-band targets yet!** Per-band targets depend on the final acoustic crossovers and are generated in Phase 1 (Step 5b) after crossovers are finalized.
