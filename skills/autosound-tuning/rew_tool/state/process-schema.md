@@ -57,7 +57,11 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
 One JSON object per line, oldest first: `{"at": …, "type": …, …}`. Types:
 `phase_entered` · `step_added` · `attempt_started` · `step_skipped` · `step_done` ·
 `step_blocked` · `critic_called` · `config_change` · `capture_task_issued` · `capture_taken` ·
-`capture_skipped` · `capture_round_closed`.
+`capture_skipped` · `capture_round_closed` · `session_started`.
+
+`session_started` is the one event a front-end writes rather than the model: only it knows a
+session was attached at all. Without it a journal whose first entry is a `step_done` cannot tell
+a session that recorded nothing from a session that never happened.
 
 ## Invariants (enforced in code, not by discipline)
 

@@ -84,6 +84,10 @@ EV_CAPTURE_ISSUED = "capture_task_issued"
 EV_CAPTURE_TAKEN = "capture_taken"
 EV_CAPTURE_SKIPPED = "capture_skipped"
 EV_CAPTURE_CLOSED = "capture_round_closed"
+# Who sat down to work, on what model, and when. Written by the front-end when it attaches a
+# session -- the journal otherwise starts at whatever the model happened to record first, so
+# "when did this session begin, and did it record anything at all" had no answer.
+EV_SESSION_STARTED = "session_started"
 
 
 class ProcessError(ValueError):
@@ -582,6 +586,23 @@ class Process:
             reason=reason,
         )
 
+    def record_session(self, harness, model, resumed=False, phase=None):
+        """A working session began. Not a transition -- nothing in the current slice changes.
+
+        This is the anchor план-факт was missing at the start: a journal whose first entry is a
+        `step_done` cannot distinguish a session that recorded nothing from a session that never
+        happened. Written by the front-end, which is the only party that knows a session was
+        attached at all.
+        """
+        self._append(
+            EV_SESSION_STARTED,
+            harness=harness,
+            model=model,
+            resumed=bool(resumed),
+            phase=str(phase) if phase is not None else self.load().get("active_phase"),
+        )
+        return {"harness": harness, "model": model, "resumed": bool(resumed)}
+
     def set_target(self, preset, curve):
         """The active target curve for a preset — a pointer, the curve itself lives elsewhere."""
         state = self.load()
@@ -670,6 +691,7 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
   block <id> <reason>                   mark blocked
   reviewer <vendor> <model> [step]      record a reviewer call
   target <preset> <curve>               set a preset's active target curve
+  session-start <harness> <model> [resumed]   a working session began (written by the front-end)
   capture-start <version> [title ...]   open a capture round; titles = what was asked for
   capture-taken <title>                 a measurement came back (unplanned ones are flagged)
   capture-skip <title> <reason>         deliberately NOT taken, and why
@@ -717,6 +739,9 @@ def _main(argv):
         elif cmd == "target":
             p.set_target(args[0], args[1])
             print(f"target for {args[0]}: {args[1]}")
+        elif cmd == "session-start":
+            p.record_session(args[0], args[1], resumed=(len(args) > 2 and args[2] == "resumed"))
+            print(f"session recorded: {args[0]} / {args[1]}")
         elif cmd == "capture-start":
             round_ = p.start_capture(args[0], expected=args[1:])
             print(
