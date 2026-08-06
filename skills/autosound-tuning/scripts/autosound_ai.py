@@ -238,6 +238,9 @@ def _persist_review(role, text, model, mode):
         print(f">> Не вдалося зберегти текст рецензії: {e}", file=sys.stderr)
         return None
     print(f">> Текст рецензії збережено: {rel}", file=sys.stderr)
+    # Machine-readable twin of the line above: a front-end should not have to parse a sentence,
+    # least of all one that is translated.
+    print(f">> REVIEW_FILE: {rel}", file=sys.stderr)
     print(f">> Запиши посилання: process.py <project>/process reviewer <vendor> {model} "
           f"--review {rel}", file=sys.stderr)
     return rel
