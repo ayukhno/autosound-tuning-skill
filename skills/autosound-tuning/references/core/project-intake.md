@@ -96,6 +96,13 @@ A new/unfamiliar/long-unmeasured install. Each item is cheap; a skipped one cost
 
 ## 4. DSP capability checklist → which toolset is available
 
+> **Before you ask any of this: the answers may already be shipped.** `knowledge/dsp/<vendor>-<model>.md`
+> holds a filled-in, hardware-verified version of this checklist for processors the skill knows.
+> Build the path from what the user just told you — "Helix DSP Ultra S" → `knowledge/dsp/helix-dsp-ultra-s.md`
+> — and read it. Present what it says and ask only what it leaves open. If the file is not there,
+> `ls knowledge/dsp/` once and move on to the interview; do **not** `find` for it (the skill is
+> installed as a symlink, so a plain `find` returns nothing and costs minutes).
+
 > **🔑 The hinge of applicability = whether you can MEASURE PER-CHANNEL, NOT "whether the DSP is readable".** Two questions decide the method branch:
 > 1. **Is the DSP state readable?** (a dump / screen-read `screen-read-dsp.md` / a file export) — you can see the current crossovers/TA/EQ/gains.
 > 2. **Can you measure PER-CHANNEL?** (solo each output — §3.1, a sweep on each driver separately).
