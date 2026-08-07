@@ -85,6 +85,13 @@ AUTOSOUND_ADVISOR_MODEL=gemini-2.5-pro    # a DIFFERENT vendor from the Generato
 whatever the vendor — every documented setup exports them and a front-end already sets them, so
 renaming would have broken working installs to tidy a table. `AUTOSOUND_*` wins when both are set.
 
+**There is no default model any more.** With neither variable set, the script asks an installed CLI
+what it can run and uses the first answer; if nothing answers, it says so and goes to clipboard
+mode. It used to fall back to a named model, which is a promise to keep updating a name — the old
+default was two generations stale before anyone noticed, and a stale default fails as an opaque API
+error instead of "nobody told me which model to use". Same reason the display-label→API-id table is
+gone: **a table of model names is a maintenance commitment**, and this file could not keep it.
+
 `scripts/autosound_ai.py doctor` answers the question that actually matters: which vendor the
 chosen reviewer belongs to, and whether THAT vendor's key or CLI is present. A `claude` on PATH
 does nothing for a Gemini reviewer.

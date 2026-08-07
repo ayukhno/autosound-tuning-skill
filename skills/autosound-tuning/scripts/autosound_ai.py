@@ -218,14 +218,11 @@ def api_key_for(provider):
 
 # Спроба прямого виклику Gemini API через стандартну бібліотеку
 def call_gemini_api(api_key, model, prompt):
-    # Відобразимо аліаси моделей на технічні імена API (актуалізовано для 2026 року)
-    model_map = {
-        "Gemini 3.5 Flash (Medium)": "gemini-2.5-flash",
-        "Gemini 3.1 Pro (High)": "gemini-2.5-pro",
-        "gemini-2.5-flash": "gemini-2.5-flash",
-        "gemini-2.5-pro": "gemini-2.5-pro",
-    }
-    api_model = model_map.get(model, model)
+    # The model name is passed through as given. There used to be an alias table here mapping a
+    # CLI's display labels onto API ids ("Gemini 3.1 Pro (High)" -> gemini-2.5-pro); it was wrong
+    # within a year, because the labels moved on and the table did not. A table of model names is
+    # a promise to keep updating it, and nobody was.
+    api_model = model
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{api_model}:generateContent?key={api_key}"
     headers = {"Content-Type": "application/json"}
     body = {
@@ -279,7 +276,42 @@ def resolve_model(role):
         value = os.environ.get(var)
         if value:
             return value
-    return "gemini-2.5-flash" if critic else "gemini-2.5-pro"
+    # Ask the CLI rather than name a model. A hardcoded default is a model that retires: this file
+    # used to default to `gemini-2.5-*`, which was already two generations stale by the time
+    # anybody noticed, and a stale default fails at call time as an opaque API error rather than
+    # as "nobody told me which model to use".
+    listed = _first_cli_model()
+    if listed:
+        return listed
+    return None
+
+
+def _first_cli_model():
+    """The first model an installed CLI says it can run, or None.
+
+    Preference order is the file's own: google, then anthropic, then openai — the reviewer should
+    be a different vendor from the Generator, and the Generator is Claude in the setup this skill
+    is driven from. Only `agy` can be asked; the others do not list models without a terminal.
+    """
+    if not shutil.which("agy"):
+        return None
+    proc = None
+    # Twice: the first `agy models` in a fresh process often exits 0 with nothing to show, and
+    # part of its output lands on stderr when stdout is a pipe.
+    for _ in range(2):
+        try:
+            proc = subprocess.run(["agy", "models"], capture_output=True, text=True, timeout=20)
+        except Exception:  # noqa: BLE001
+            return None
+        if proc.returncode == 0 and (proc.stdout or proc.stderr or "").strip():
+            break
+    if proc is None:
+        return None
+    for line in ((proc.stdout or "") + "\n" + (proc.stderr or "")).splitlines():
+        selector = line.partition("\t")[0].strip()
+        if selector and " " not in selector:
+            return selector
+    return None
 
 
 def cli_command(provider, binary, model, prompt_path, prompt_text):
@@ -474,8 +506,12 @@ def main():
 
     # 1. Спроба прямого API запиту (пріоритет)
     model = resolve_model(role)
+    if not model:
+        print(">> Не задано модель рецензента і жоден CLI не назвав своєї. "
+              "Встанови AUTOSOUND_CRITIC_MODEL (або AUTOSOUND_ADVISOR_MODEL) — "
+              "переходжу в ручний режим.", file=sys.stderr)
     provider = provider_for(model)
-    api_key = api_key_for(provider)
+    api_key = api_key_for(provider) if model else None
     if api_key:
         print(f">> Підключення до API ({provider}, {model})...", file=sys.stderr)
         try:
