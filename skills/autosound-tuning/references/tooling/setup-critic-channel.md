@@ -62,6 +62,33 @@ GEMINI_ADVISOR_MODEL="Gemini 3.1 Pro (High)"
 # PROJECT_MIRROR=/abs/path/to/project/rew_analitic   # only if CWD differs
 ```
 
+### Any vendor, not only Gemini (SCR-033)
+
+The reviewer's transport is a parameter now. `autosound_ai.py` reads the model name, works out
+whose it is, and takes that vendor's API or CLI — so the Arbiter can pick a Claude or GPT
+reviewer and still get an automated channel rather than the clipboard.
+
+```bash
+AUTOSOUND_CRITIC_MODEL=claude-opus-5      # or gemini-2.5-pro, gpt-5.2, …
+AUTOSOUND_ADVISOR_MODEL=gemini-2.5-pro    # a DIFFERENT vendor from the Generator is the point
+# AUTOSOUND_CRITIC_PROVIDER=anthropic     # only when the name does not give the vendor away
+# AUTOSOUND_CRITIC_BIN=claude             # force one binary, whatever is on PATH
+```
+
+| Vendor | API key | Local CLI | Model names that resolve to it |
+|---|---|---|---|
+| `google` | `GEMINI_API_KEY` | `agy`, `gemini` | anything with `gemini`/`google` — **and anything unrecognised** |
+| `anthropic` | `ANTHROPIC_API_KEY` | `claude` | `claude`, `opus`, `sonnet`, `haiku`, `fable` |
+| `openai` | `OPENAI_API_KEY` | `codex` | `gpt`, `o1`, `o3`, `codex` |
+
+`GEMINI_CRITIC_MODEL` / `GEMINI_ADVISOR_MODEL` still work and mean "the reviewer's model",
+whatever the vendor — every documented setup exports them and a front-end already sets them, so
+renaming would have broken working installs to tidy a table. `AUTOSOUND_*` wins when both are set.
+
+`scripts/autosound_ai.py doctor` answers the question that actually matters: which vendor the
+chosen reviewer belongs to, and whether THAT vendor's key or CLI is present. A `claude` on PATH
+does nothing for a Gemini reviewer.
+
 ## 5. Where the channel reads the project from (no cross-project leaks)
 
 The wrappers inject the **Contract** (protocol) + your **project's `autosound_context.md`** as system framing, resolved **project-local FIRST**:

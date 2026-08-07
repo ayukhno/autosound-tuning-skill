@@ -116,6 +116,106 @@ def copy_to_clipboard(text):
         print(f"Помилка копіювання в буфер: {e}", file=sys.stderr)
     return False
 
+
+# --- the reviewer's transport, as a parameter (SCR-033) -------------------------------------
+#
+# The method is vendor-neutral by design: SKILL.md's three roles call for a DIFFERENT vendor's
+# model as Critic, and the whole point is that it is not the Generator. This file was not --
+# one `call_gemini_api`, one CLI shape -- so a front-end offering the Arbiter a Claude or GPT
+# reviewer had to mark it clipboard-only and apologise.
+#
+# Raw HTTP on purpose: this script must run wherever `python3` does, with nothing installed.
+# Each vendor's SDK would be a dependency the skill cannot assume, so the three call_* functions
+# below speak each API's documented wire format directly.
+
+def _post_json(url, headers, body, timeout=120):
+    req = urllib.request.Request(
+        url, data=json.dumps(body).encode("utf-8"), headers=headers, method="POST"
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+def call_anthropic_api(api_key, model, prompt):
+    """Claude via the Messages API. Returns (text, model).
+
+    No `temperature`/`top_p`: the current Claude models reject them outright (400), and the
+    method steers with prompting anyway. `stop_reason: "refusal"` is a normal 200 response, not
+    an exception -- check it before reading the content blocks, which is why this does not index
+    `content[0]` blindly.
+    """
+    res = _post_json(
+        "https://api.anthropic.com/v1/messages",
+        {
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        },
+        {
+            "model": model,
+            "max_tokens": 16000,
+            "messages": [{"role": "user", "content": prompt}],
+        },
+    )
+    if res.get("stop_reason") == "refusal":
+        raise RuntimeError(
+            "Claude відхилив запит (stop_reason=refusal). Спробуй іншого рецензента."
+        )
+    text = "".join(b.get("text", "") for b in res.get("content", []) if b.get("type") == "text")
+    if not text.strip():
+        raise RuntimeError(f"Порожня відповідь Claude (stop_reason={res.get('stop_reason')!r})")
+    return text, res.get("model", model)
+
+
+def call_openai_api(api_key, model, prompt):
+    """GPT via chat completions. Returns (text, model)."""
+    res = _post_json(
+        "https://api.openai.com/v1/chat/completions",
+        {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        {"model": model, "messages": [{"role": "user", "content": prompt}]},
+    )
+    choices = res.get("choices") or []
+    if not choices:
+        raise RuntimeError("Порожня відповідь OpenAI")
+    return choices[0]["message"]["content"], res.get("model", model)
+
+
+# Which vendor a model name implies. A guess, and a cheap one -- the point of the whole feature is
+# that the Critic is a DIFFERENT vendor from the Generator, so getting this wrong costs a
+# clipboard fallback, not a wrong answer. `AUTOSOUND_CRITIC_PROVIDER` overrides it.
+_PROVIDER_BY_MARKER = (
+    ("gemini", "google"), ("google", "google"),
+    ("claude", "anthropic"), ("opus", "anthropic"), ("sonnet", "anthropic"),
+    ("haiku", "anthropic"), ("fable", "anthropic"),
+    ("gpt", "openai"), ("o1", "openai"), ("o3", "openai"), ("codex", "openai"),
+)
+
+_PROVIDERS = {
+    "google": {"env": ("GEMINI_API_KEY",), "api": None, "cli": ("agy", "gemini")},
+    "anthropic": {"env": ("ANTHROPIC_API_KEY",), "api": None, "cli": ("claude",)},
+    "openai": {"env": ("OPENAI_API_KEY",), "api": None, "cli": ("codex",)},
+}
+
+
+def provider_for(model):
+    forced = os.environ.get("AUTOSOUND_CRITIC_PROVIDER")
+    if forced:
+        return forced.lower()
+    name = (model or "").lower()
+    for marker, vendor in _PROVIDER_BY_MARKER:
+        if marker in name:
+            return vendor
+    return "google"  # the historical default; keeps an unset model behaving as before
+
+
+def api_key_for(provider):
+    for var in _PROVIDERS.get(provider, {}).get("env", ()):
+        key = os.environ.get(var)
+        if key:
+            return key
+    return None
+
+
 # Спроба прямого виклику Gemini API через стандартну бібліотеку
 def call_gemini_api(api_key, model, prompt):
     # Відобразимо аліаси моделей на технічні імена API (актуалізовано для 2026 року)
@@ -147,16 +247,49 @@ def call_gemini_api(api_key, model, prompt):
         raise RuntimeError(f"Помилка запиту до Gemini API: {e}")
 
 # Пошук бінарників для CLI режиму
-def detect_cli():
-    forced_bin = os.environ.get("GEMINI_BIN")
+def detect_cli(provider="google"):
+    """The reviewer's local CLI for one vendor, or None (SCR-033).
+
+    `GEMINI_BIN` still wins, under its historical name: it is what existing setups export, and
+    renaming an env var to tidy a table is how a working install breaks.
+    """
+    forced_bin = os.environ.get("AUTOSOUND_CRITIC_BIN") or os.environ.get("GEMINI_BIN")
     if forced_bin:
         return forced_bin
-    
+
     # Автодетект через shutil.which (надійно знаходить exe/cmd/bat/ps1 на Windows)
-    for binary in ["agy", "gemini"]:
+    for binary in _PROVIDERS.get(provider, {}).get("cli", ()):
         if shutil.which(binary):
             return binary
     return None
+
+
+def resolve_model(role):
+    """Which model the reviewer should use, vendor-neutral first.
+
+    `AUTOSOUND_CRITIC_MODEL` / `AUTOSOUND_ADVISOR_MODEL` are the names to use. The `GEMINI_*`
+    pair is still read because a front-end already sets it (TCC's Critic picker) and every
+    documented setup exports it -- it means "the reviewer model", whatever the vendor.
+    """
+    critic = role == "critic"
+    for var in (
+        "AUTOSOUND_CRITIC_MODEL" if critic else "AUTOSOUND_ADVISOR_MODEL",
+        "GEMINI_CRITIC_MODEL" if critic else "GEMINI_ADVISOR_MODEL",
+    ):
+        value = os.environ.get(var)
+        if value:
+            return value
+    return "gemini-2.5-flash" if critic else "gemini-2.5-pro"
+
+
+def cli_command(provider, binary, model, prompt_path, prompt_text):
+    """Each vendor's CLI takes the prompt its own way: a path, or the text itself."""
+    if provider == "anthropic":
+        return [binary, "--model", model, "-p", prompt_text]
+    if provider == "openai":
+        return [binary, "exec", "--model", model, prompt_text]
+    extra = ["--skip-trust"] if binary == "gemini" else []
+    return [binary, "--model", model] + extra + ["-p", prompt_path]
 
 def run_doctor():
     print("=== ДІАГНОСТИКА СЕРЕДОВИЩА (DOCTOR MODE) ===")
@@ -181,26 +314,29 @@ def run_doctor():
         print("✗ Контекст autosound_context.md НЕ ЗНАЙДЕНО!")
         ok = False
         
-    # 3. Перевірка ключів API
-    api_provider = None
-    if os.environ.get("GEMINI_API_KEY"):
-        print("✓ Знайдено ключ API: GEMINI_API_KEY")
-        api_provider = "Gemini"
-    elif os.environ.get("ANTHROPIC_API_KEY"):
-        print("✓ Знайдено ключ API: ANTHROPIC_API_KEY")
-        api_provider = "Anthropic"
-    elif os.environ.get("OPENAI_API_KEY"):
-        print("✓ Знайдено ключ API: OPENAI_API_KEY")
-        api_provider = "OpenAI"
-    else:
-        print("· Прямих ключів API у системі не знайдено (буде спроба CLI або ручного копіювання)")
+    # 3. Перевірка ключів API — усі показуємо, але вирішує ключ ОБРАНОГО рецензента
+    model = resolve_model("critic")
+    provider = provider_for(model)
+    for vendor, spec in _PROVIDERS.items():
+        for var in spec["env"]:
+            if os.environ.get(var):
+                print(f"✓ Знайдено ключ API: {var} ({vendor})")
+    api_provider = provider if api_key_for(provider) else None
+    if not api_provider:
+        print(f"· Ключа API для рецензента ({provider}) немає — буде CLI або ручне копіювання")
 
-    # 4. Перевірка локальних CLI
-    cli_bin = detect_cli()
-    if cli_bin:
-        print(f"✓ Знайдено локальний CLI: {cli_bin}")
-    else:
-        print("· Локальних CLI інструментів (agy, gemini) не виявлено")
+    # 4. Перевірка локальних CLI — по кожному вендору, бо рецензентом може бути будь-який
+    for vendor in _PROVIDERS:
+        found = detect_cli(vendor)
+        if found:
+            print(f"✓ Знайдено локальний CLI ({vendor}): {found}")
+    # The one that matters is the chosen reviewer's own: a `claude` on PATH does not help a
+    # Gemini reviewer, and reporting the first CLI found is how "автоматичний" came to be
+    # printed for a channel that would have fallen through to the clipboard.
+    cli_bin = detect_cli(provider)
+    if not cli_bin:
+        print(f"· Для рецензента ({provider}) локального CLI не знайдено")
+    print(f"▶ Рецензент: {model} → провайдер {provider}")
 
     # Рекомендація
     if api_provider:
@@ -337,14 +473,18 @@ def main():
     compiled_prompt = "\n".join(compiled_prompt_list)
 
     # 1. Спроба прямого API запиту (пріоритет)
-    api_key = os.environ.get("GEMINI_API_KEY")
+    model = resolve_model(role)
+    provider = provider_for(model)
+    api_key = api_key_for(provider)
     if api_key:
-        print(">> Підключення до Gemini API...", file=sys.stderr)
-        model = os.environ.get("GEMINI_CRITIC_MODEL" if role == "critic" else "GEMINI_ADVISOR_MODEL")
-        if not model:
-            model = "gemini-2.5-flash" if role == "critic" else "gemini-2.5-pro"
+        print(f">> Підключення до API ({provider}, {model})...", file=sys.stderr)
         try:
-            response_text, api_model = call_gemini_api(api_key, model, compiled_prompt)
+            caller = {
+                "google": call_gemini_api,
+                "anthropic": call_anthropic_api,
+                "openai": call_openai_api,
+            }[provider]
+            response_text, api_model = caller(api_key, model, compiled_prompt)
             print(response_text)
             print(f"\n— [{role}: {api_model}]")
             _persist_review(role, response_text, api_model, "api")
@@ -356,24 +496,20 @@ def main():
             except Exception:
                 pass
             return
+        except KeyError:
+            print(f">> Невідомий провайдер {provider!r} — у режим CLI/буфера.", file=sys.stderr)
         except Exception as e:
             print(f">> Помилка виклику API ({e}). Спроба локального CLI або буфера...", file=sys.stderr)
 
-    # 2. Спроба локального CLI (agy або gemini)
-    cli_bin = detect_cli()
+    # 2. Спроба локального CLI (per-vendor: agy/gemini · claude · codex)
+    cli_bin = detect_cli(provider)
     if cli_bin:
-        print(f">> Виклик локального CLI '{cli_bin}'...", file=sys.stderr)
+        print(f">> Виклик локального CLI '{cli_bin}' ({provider})...", file=sys.stderr)
         # Збережемо тимчасовий файл промпту
         temp_prompt_path = os.path.join(os.environ.get("TEMP", os.environ.get("TMPDIR", "/tmp")), f"autosound_{role}.txt")
         try:
             with open(temp_prompt_path, "w", encoding="utf-8") as tf:
                 tf.write(compiled_prompt)
-            
-            model = os.environ.get("GEMINI_CRITIC_MODEL" if role == "critic" else "GEMINI_ADVISOR_MODEL")
-            if not model:
-                model = "gemini-2.5-flash" if cli_bin == "gemini" else ("Gemini 3.5 Flash (Medium)" if role == "critic" else "Gemini 3.1 Pro (High)")
-                
-            extra_args = ["--skip-trust"] if cli_bin == "gemini" else []
 
             # Agent-inside-agent = chronic deadlock (observed ~15/20 field sessions).
             # Best-effort detection: warn, then still try — but ALWAYS with a timeout.
@@ -385,7 +521,7 @@ def main():
                       "рецензента з ОКРЕМОГО термінала або Clipboard Mode. Пробую з таймаутом…",
                       file=sys.stderr)
             cli_timeout = int(os.environ.get("AUTOSOUND_CLI_TIMEOUT", "120"))
-            cmd = [cli_bin, "--model", model] + extra_args + ["-p", temp_prompt_path]
+            cmd = cli_command(provider, cli_bin, model, temp_prompt_path, compiled_prompt)
             # На Windows потрібен shell=True, щоб запускати .cmd обгортки типу gemini.cmd / agy.cmd від npm/scoop
             use_shell = (sys.platform == "win32")
             try:
