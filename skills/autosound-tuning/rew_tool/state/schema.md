@@ -10,6 +10,13 @@ EQ pointers), the anti-drift anchor and the experimentation engine. Code: `state
   (SCR-001/017). A row here carries only what can differ between two snapshots of the same
   install; consumers join the two files on the channel `code`. `validate` **refuses** a row still
   carrying them rather than dropping them silently, so a half-migrated file is loud, not lossy.
+- **A row's key is the channel's id, not its name** (SCR-039, 2026-08-07). The id defaults to the
+  code, so nothing about an existing file changes and no migration runs — the two only diverge
+  once a channel is renamed, and then this file keeps the key it was written with. That is what
+  makes a snapshot immutable in practice: renaming `m-L` to `w-L` used to mean rewriting every
+  historical snapshot or leaving them keyed by a name nobody uses. `project.json` carries the
+  current name and a `previous_names` list; `project_channels` resolves a row key through all
+  three, so a reader never sees an unknown channel it has full identity for.
 - **Every snapshot stamps `project_rev`** (SCR-024) — the revision of `project.json` in force when
   the values were banked, so joining an old snapshot to today's facts is detectable instead of
   silently relabelling history when a driver is replaced.
@@ -52,8 +59,11 @@ ledger became **tier-aware**, EQ bands became **structured objects**, and every 
   "note": "sub INV test + w-L trim",                          // per-snapshot label, NOT diffed
   "channels": {                                                // the REQUIRED tier (physical outputs)
     "w-L": {                                                  // identity (slot/descr/role/order/hidden)
-                                                                // is NOT here in v3 -- project.json owns it,
-                                                                // joined by this row's key as `code`
+                                                                // is NOT here in v3 -- project.json owns it.
+                                                                // This key is the channel's ID (SCR-039),
+                                                                // which DEFAULTS to its code: it reads as
+                                                                // the name, and stops moving if the channel
+                                                                // is ever renamed
             "tag": null,                                      // optional: WHICH hardware control affects
                                                                 // this row (its VALUE is in project.json's
                                                                 // hardware.controls -- SCR-017)

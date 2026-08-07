@@ -193,13 +193,22 @@ def check_ledgers(project_dir):
 
 # ── cross-file checks ──────────────────────────────────────────────────────────
 def cross_check_glossary_vs_ledgers(glossary, snapshots):
+    """Every active channel has a ledger row, and every ledger row is a channel we know.
+
+    A ledger row's key is the channel's id (SCR-039), so after a rename it is the name the channel
+    USED to have while the glossary carries the current one. Both sides are resolved through
+    `resolve_code` before comparing — without it, a rename would report the same channel as both
+    missing from the ledger and foreign to the glossary, which is one correct label looking like
+    two structural faults.
+    """
     issues = []
-    active = set(glossary.channel_codes(active_only=True))
-    known = set(glossary.channel_codes())
+    resolve = glossary.resolve_code
+    active = {resolve(c) for c in glossary.channel_codes(active_only=True)}
+    known = {resolve(c) for c in glossary.channel_codes()}
     for preset, snap in snapshots.items():
         if not snap:
             continue
-        ledger_codes = set(snap.get("channels", {}))
+        ledger_codes = {resolve(c) for c in snap.get("channels", {})}
         missing = sorted(active - ledger_codes)
         foreign = sorted(ledger_codes - known) if known else []
         if missing:
@@ -392,6 +401,16 @@ def _selftest():
 
     # cross-check: the ledger's virtual_channels tier IS declared in this profile -- no complaint.
     assert report["cross_checks"]["tiers_vs_profile"] == [], report["cross_checks"]
+
+    # SCR-039: rename the glossary's `w-L` and the ledger keeps its key (an id, never rewritten).
+    # Compared raw, that one correct rename reads as two structural faults at once -- the channel
+    # missing from every ledger AND a foreign row in every ledger.
+    proj_data = proj.load()
+    proj_data["glossary"] = {"channels": [{"code": "wf-L", "active": True,
+                                            "previous_names": ["w-L"]}]}
+    proj.save(proj_data)
+    renamed = check_project(root, skip_rew=True)["cross_checks"]["glossary_vs_ledgers"]
+    assert not any("wf-L" in n or "w-L" in n for n in renamed), renamed
 
     # a profile that does NOT declare virtual_channels flags the ledger's tier as undeclared.
     musway = {"dsp_profile": {"name": "M6V4", "vendor": "Musway", "groups": [

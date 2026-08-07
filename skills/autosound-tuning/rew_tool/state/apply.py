@@ -58,12 +58,40 @@ def _split_by_tier(current, delta):
     return {"channels": delta}
 
 
-def apply_delta(current, delta):
+def _row_key(rows, name, identity):
+    """The row a delta means, given the name it was addressed to — SCR-039.
+
+    A ledger row's key is the channel's ID, which defaults to its code; the two only differ once a
+    channel has been renamed. A caller then addresses it by the name it goes by now, and the row is
+    sitting under the old one. Without this the delta would look like a brand-new channel: refused
+    if partial (confusing but safe), and silently banked as a SECOND row for the same driver if the
+    caller happened to give a full definition. `identity` is `state.project_channels()`, which maps
+    the id, the current code and every previous name onto one entry.
+
+    Falls through to the name as given whenever there is nothing to resolve — no project file, an
+    unknown channel, or a project that has never renamed anything (i.e. almost always).
+    """
+    if name in rows or not identity:
+        return name
+    entry = identity.get(name)
+    if not isinstance(entry, dict):
+        return name
+    for alias in [entry.get("id"), entry.get("code"), *(entry.get("previous_names") or [])]:
+        if alias and str(alias) in rows:
+            return str(alias)
+    return name
+
+
+def apply_delta(current, delta, identity=None):
     """Merge a delta onto `current`, marking every touched row `proposed`.
 
     Crossover legs (hp/lp) are replaced wholesale. Raises ValueError on the deterministic-refusal
     cases (typos, phantom channels, samples-not-ms) — see `_split_by_tier` for the flat-vs-tier-
     keyed delta shapes this accepts.
+
+    `identity` (optional, `state.project_channels()`) lets a delta address a renamed channel by its
+    current name and still land on the row the ledger has always kept it under — `propose` passes
+    it; a direct caller with no project on disk simply doesn't.
     """
     proposed = copy.deepcopy(current)
     tier_delta = _split_by_tier(current, delta)
@@ -79,7 +107,8 @@ def apply_delta(current, delta):
                                      f"samples (samples are derived at render for the active rate)")
                 raise ValueError(f"{tier}.{ch_name}: unknown field(s) {unknown} — "
                                  f"valid: {sorted(_MERGEABLE)}")
-            if ch_name not in chans:
+            key = _row_key(chans, ch_name, identity)
+            if key not in chans:
                 # Only `channels` (physical outputs) has required fields, so only there does a
                 # brand-new row need a full definition; any other tier may start from a partial one.
                 if tier == "channels":
@@ -88,9 +117,9 @@ def apply_delta(current, delta):
                         raise ValueError(f"{ch_name} is not in the current state — to add a channel "
                                          f"give a full definition (missing {missing}); a partial "
                                          f"edit needs an existing channel (typo?)")
-                chans[ch_name] = {}
-            chans[ch_name].update(fields)
-            chans[ch_name]["status"] = "proposed"
+                chans[key] = {}
+            chans[key].update(fields)
+            chans[key]["status"] = "proposed"
     return proposed
 
 
@@ -280,7 +309,10 @@ def propose(history, delta, note=None, provenance=None, registry=None, allow_non
             slot_note = ("ACTIVE SLOT ✅" if history.preset == active
                          else f"⚠️ NON-ACTIVE SLOT (active={active})")
     current = history.load()  # read-before-edit (raises if no baseline — seed via history.snapshot first)
-    proposed = apply_delta(current, delta)          # deterministic refusals fire here
+    # Channel identity (SCR-039), so a delta addressed to a renamed channel's CURRENT name reaches
+    # the row the ledger keeps under its id instead of banking a second row for the same driver.
+    identity = _state.project_channels(getattr(history, "project_dir", None) or "")
+    proposed = apply_delta(current, delta, identity)   # deterministic refusals fire here
     if provenance is not None:
         proposed["provenance"] = provenance
     d = _state.diff_states(current, proposed)        # note current has no version yet in-memory
@@ -418,11 +450,32 @@ def _selftest():
     r_act = propose(h, {"w-L": {"gain_db": -7.1}}, registry=reg)
     assert "ACTIVE SLOT ✅" in r_act["sheet"], r_act["sheet"]
 
+    # ── SCR-039: a renamed channel is addressed by its CURRENT name and lands on the row the
+    # ledger has always kept under its id. Its own project dir, since this needs a project.json.
+    ren_root = tempfile.mkdtemp(prefix="autosound_apply_rename_")
+    with open(os.path.join(ren_root, "project.json"), "w", encoding="utf-8") as f:
+        json.dump({"schema_version": _state.SCHEMA_VERSION, "project_rev": 2,
+                   "channels": [{"code": "w-L", "id": "m-L", "previous_names": ["m-L"],
+                                 "slot": "C"}]}, f)
+    h3 = _state.PresetHistory(os.path.join(ren_root, "state"), "SQ_Jazzi", project_dir=ren_root)
+    seed = _state._sample_state()
+    seed["channels"] = {"m-L": dict(seed["channels"]["w-L"])}      # the ledger key is the id
+    h3.snapshot(seed, note="baseline written before the rename")
+    r_ren = propose(h3, {"w-L": {"gain_db": -3.5}}, note="addressed by the current name")
+    after = h3.load(r_ren["version"])["channels"]
+    assert set(after) == {"m-L"}, f"a rename must not fork the row: {sorted(after)}"
+    assert after["m-L"]["gain_db"] == -3.5, after
+    # a full definition for a genuinely new channel is still an ADD, not a resolution.
+    full = dict(seed["channels"]["m-L"], gain_db=-1.0)
+    r_new = propose(h3, {"tw-L": full}, note="a real new channel")
+    assert set(h3.load(r_new["version"])["channels"]) == {"m-L", "tw-L"}
+
     print(f"selftest OK — propose banked 🟡 + settings-sheet (old→new, 5.45 ms=523 smp@96k), "
           f"advisory on polarity flip, attest flipped 🟡→🟢 (w-L,sub); tier-keyed delta proposed+"
           f"attested a VIRTUAL-tier row (schema v2 — impossible before this), structured EQ bands "
           f"read as bands not a dict repr; 4 deterministic refusals banked nothing, new-channel add "
-          f"allowed; slot-guard refused a non-active-slot propose (banked nothing) + stamped "
+          f"allowed; a renamed channel's delta landed on its id row rather than forking it "
+          f"(SCR-039); slot-guard refused a non-active-slot propose (banked nothing) + stamped "
           f"ACTIVE/NON-ACTIVE. root={root}")
     return 0
 

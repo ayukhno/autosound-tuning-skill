@@ -46,6 +46,9 @@ machine-readable to render for its Project/System/Car-audio-analysis panels eith
                                                              //   role/order/hidden -- the ledger carries
                                                              //   tuning state and joins here by `code`
     {"code": "w-L", "slot": "C", "descr": "Front L Woofer", "role": "woofer", "order": 1,
+     "id": "m-L", "previous_names": ["m-L"],                 // SCR-039: written only by a rename.
+                                                             //   Absent = id is the code, which is
+                                                             //   every project that never renamed
      "driver": {"make": "Audiofrog", "model": "GB25"},
      "fs_hz": {"value": 62, "source": "datasheet", "at": "…"},
      "impedance_ohm": 4, "hidden": false},
@@ -111,6 +114,36 @@ in a paragraph somebody may or may not re-read.
 Re-measuring the same frequency on the same channels **replaces** its row. An install changes and
 the map is redone; two contradictory rows for one peak would leave a reader picking between them.
 
+### A channel's id is not its name (SCR-039)
+
+`code` used to do three jobs: the ledger's row key, the join key between this file and a snapshot,
+and the label a human reads — and types into every REW measurement title the project will ever
+have. Renaming a channel for an ordinary reason (an `m-L` the install correction turns into a
+woofer, a "rear" pair that is really a centre) then meant rewriting every historical snapshot or
+leaving them keyed by a name nobody uses. Both were done by hand in this project's own dogfood data.
+
+Now:
+
+| field | notes |
+|---|---|
+| `id` | the stable identity. Never displayed. **Defaults to the code**, so it is absent from every project that has never renamed anything — no migration, no format break |
+| `code` | the current name: what a person reads, what a generated REW title uses |
+| `previous_names` | every name it has gone by before, oldest first |
+
+`rename_channel(old, new)` is the whole operation: materialise the id, set the new code, append the
+old name, and rename the glossary entry so tomorrow's titles use the new name. **Snapshots are not
+touched** — their keys are ids, so they stay valid and immutable, which is the point. **REW titles
+are not touched either**, because they cannot be: a title is typed by hand and the captures a
+channel took under its old name are the only ones it has. `naming.Glossary.resolve_code` maps an
+old name to the current one, so `m-L_2 (sw)` and `w-L_2 (sw)` are one measurement — same channel,
+same DSP config version — and a checklist does not ask for work already sitting in REW.
+
+Refused, because both make a capture's owner ambiguous: two channels with the same `id`, and a
+`previous_names` entry that is another channel's live `code`.
+
+A rename is a label being corrected, so its `config_change` impact is normally `none` — no
+measurement is invalidated by it.
+
 ## Provenance (SCR-014)
 
 Two granularities, deliberately not one:
@@ -173,6 +206,7 @@ open_questions(data)                # -> ["mic.calibration_file", "amps.0.gain_d
 python3 project.py <project-dir> show
 python3 project.py <project-dir> open-questions
 python3 project.py <project-dir> set-channel <code> key=value [key=value ...]
+python3 project.py <project-dir> rename-channel <old> <new>        # SCR-039
 python3 project.py <project-dir> set-hardware <name> <value> [--source user]
 python3 project.py <project-dir> record-change <process-dir> <file> <what> [--why W] [--source S] [--impact I]
 python3 project.py selftest
@@ -183,6 +217,10 @@ python3 project.py selftest
 - **Lenient on missing facts, strict on shape** — an unfilled fact is `null`/absent (→
   `_open_questions`), never a validation error; a malformed collection (wrong type, duplicate
   channel `code`) IS refused, same "strict on silent/expensive errors" split as `state.py`.
+- **A channel is addressable by any name it has ever had** (SCR-039) — `resolve_channel` and
+  `set_channel` both look up current code, then id, then `previous_names`, so a caller working from
+  a stale context (as a language model regularly is) updates the right row instead of appending a
+  second channel.
 - **`channels[]` here is per-channel HARDWARE facts (driver/Fs/impedance), not the naming
   glossary** — `glossary.channels` (codes + active flag, consumed by `naming.py`) is a distinct,
   smaller list keyed by the same `code`. Two different questions: "what can this channel be

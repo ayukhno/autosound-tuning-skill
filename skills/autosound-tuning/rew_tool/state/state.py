@@ -221,16 +221,34 @@ def _project_json(project_dir):
     return data if isinstance(data, dict) else {}
 
 
-def _project_channels(project_dir):
-    """`project.json`'s `channels[]` keyed by `code` — channel identity (SCR-001).
+def project_channels(project_dir):
+    """`project.json`'s `channels[]` keyed by every name a ledger row might use — SCR-001/039.
 
-    Absent file, absent key, or an entry with no `code` all read as "not captured": a project
-    mid-intake renders a `—` in the Slot column, which is honest, rather than failing to render.
+    A ledger row's key is the channel's **id** (SCR-039), which for every project that has never
+    renamed anything is simply its code — so the common case is unchanged. After a rename the same
+    row is reachable under three keys: the id the snapshots were written with, the name it goes by
+    now, and any name it went by before. A snapshot is immutable, so the old key is the only one it
+    will ever have, and a reader that could not resolve it would render a channel it has full
+    identity for as unknown.
+
+    Absent file, absent key, or an entry with neither code nor id all read as "not captured": a
+    project mid-intake renders a `—` in the Slot column, which is honest, rather than failing to
+    render.
     """
     channels = _project_json(project_dir).get("channels")
     if not isinstance(channels, list):
         return {}
-    return {str(c["code"]): c for c in channels if isinstance(c, dict) and c.get("code")}
+    out = {}
+    for c in channels:
+        if not isinstance(c, dict):
+            continue
+        keys = [c.get("id"), c.get("code")] + list(c.get("previous_names") or [])
+        for key in keys:
+            # A live code wins over another channel's history: `setdefault` would let whichever row
+            # came first in the file own the name, which is row order deciding identity.
+            if key and (str(key) not in out or key == c.get("code")):
+                out[str(key)] = c
+    return out
 
 
 def _project_rev(project_dir):
@@ -441,7 +459,7 @@ class PresetHistory:
         types into their DSP software — so moving identity out of the ledger (v3) must not cost the
         sheet that column. Read at render time, by `code`, exactly like any other consumer.
         """
-        return render_state(self.load(version), channels=_project_channels(self.project_dir))
+        return render_state(self.load(version), channels=project_channels(self.project_dir))
 
 
 def _diff_scalar(a, b):
@@ -909,6 +927,20 @@ def _selftest():
     assert "| sub | K |" in sheet, sheet
     assert "| VFL | A |" in sheet, sheet
     assert "| w-L | — |" in sheet, sheet  # no project entry yet -> honest dash, not a crash
+
+    # SCR-039: the snapshot above is keyed `sub`/`VFL` forever. Rename `sub` in project.json and
+    # the sheet must still find its slot -- a snapshot is immutable, so its key is the channel's
+    # id, and identity resolves through that id and through the name it used to have.
+    with open(os.path.join(proj_root, "project.json"), "w", encoding="utf-8") as f:
+        json.dump({"schema_version": SCHEMA_VERSION, "project_rev": 8,
+                   "channels": [{"code": "sw", "id": "sub", "previous_names": ["sub"],
+                                 "slot": "K", "descr": "Subwoofer"},
+                                {"code": "VFL", "slot": "A"}]}, f)
+    renamed = hp2.render(vp)
+    assert "| sub | K |" in renamed, renamed
+    identity = project_channels(proj_root)
+    assert identity["sub"] is identity["sw"], "id, current name and old name are one channel"
+
     no_rev = _sample_state()
     del no_rev["project_rev"]
     try:

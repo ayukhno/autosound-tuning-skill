@@ -75,6 +75,38 @@ def fact_value(x):
     return x.get("value") if isinstance(x, dict) and "value" in x else x
 
 
+def channel_id(row):
+    """The channel's STABLE identity (SCR-039) — `id` when the row has one, otherwise its `code`.
+
+    `code` used to do three jobs at once: the ledger's row key, the join key between this file and
+    a snapshot, and the label a human reads (and types into REW). That is fine until something is
+    renamed for an ordinary reason — a `m-L` that turns out to be a woofer, a "rear" pair that is
+    really a centre — at which point every historical snapshot is either rewritten (so much for
+    immutable) or left keyed by a name nobody uses.
+
+    The id splits identity from the name. **It defaults to today's code**, so no existing project
+    changes and no file needs migrating: a project that never renames anything cannot tell the
+    difference. The two only diverge after a rename, and then the ledger keeps keying on the id it
+    always had while `code` carries the current name.
+
+    Returns `""` for a row with neither, which callers treat the same way they already treat a row
+    with no code: not captured, never guessed at.
+    """
+    row = row or {}
+    return str(row.get("id") or row.get("code") or "")
+
+
+def previous_names(row):
+    """Every name this channel has been called before (SCR-039), oldest first.
+
+    Load-bearing rather than sentimental: REW measurement titles are typed by a human and cannot
+    be rewritten retroactively, so the captures a channel took under its old name are the only
+    ones it has. A consumer matching titles to channels resolves through this list.
+    """
+    names = (row or {}).get("previous_names") or []
+    return [str(n) for n in names if str(n).strip()]
+
+
 def _empty_project():
     return {
         "schema_version": SCHEMA_VERSION,
@@ -115,13 +147,42 @@ def validate(data):
     for key in ("amps", "presets", "channels", "sources", "_open_questions"):
         if key in data and not isinstance(data[key], list):
             raise ProjectError(f"{key!r} must be a list")
-    seen = set()
+    by_code, ids = {}, {}
     for ch in data.get("channels", []):
         if not isinstance(ch, dict) or not ch.get("code"):
             raise ProjectError(f"every channels[] entry needs a code, got {ch!r}")
-        if ch["code"] in seen:
+        if ch["code"] in by_code:
             raise ProjectError(f"duplicate channel code {ch['code']!r}")
-        seen.add(ch["code"])
+        by_code[ch["code"]] = ch
+        if "previous_names" in ch and not isinstance(ch["previous_names"], list):
+            raise ProjectError(
+                f"channel {ch['code']!r}: previous_names must be a list of names, got "
+                f"{ch['previous_names']!r}"
+            )
+        cid = channel_id(ch)
+        if cid in ids:
+            raise ProjectError(
+                f"duplicate channel id {cid!r} (channels {ids[cid]!r} and {ch['code']!r}) — an id "
+                "is what every snapshot and every historical capture is keyed on, so two channels "
+                "sharing one would merge their histories (SCR-039)"
+            )
+        ids[cid] = ch["code"]
+    # A previous name is a join key for captures taken before a rename, so it may not also be some
+    # OTHER channel's live name — that is the one shape where a title genuinely cannot be resolved
+    # (code swaps between two channels being the realistic way to get here). Checked in a second
+    # pass because the collision can point forward as easily as back.
+    for ch in data.get("channels", []):
+        for old in previous_names(ch):
+            if old == ch["code"]:
+                raise ProjectError(
+                    f"channel {ch['code']!r} lists its own current code as a previous name"
+                )
+            if by_code.get(old) not in (None, ch):
+                raise ProjectError(
+                    f"channel {ch['code']!r} lists {old!r} as a previous name, but {old!r} is the "
+                    "current code of another channel — a capture titled with it could belong to "
+                    "either (SCR-039)"
+                )
     if "hardware" in data and not isinstance(data["hardware"], dict):
         raise ProjectError("hardware must be an object")
     if "glossary" in data and not isinstance(data["glossary"], dict):
@@ -265,15 +326,97 @@ class Project:
         """Add or update one `channels[]` row by `code` (SCR-001) — `slot`/`descr`/`role`/`order`/
         `driver`/`fs_hz`/`impedance_ohm`/`hidden`, whatever the caller has; wrap `fact()`-worthy
         fields (e.g. `fs_hz`) before calling. An unknown code is appended, not refused — intake
-        builds this list one confirmed fact at a time."""
+        builds this list one confirmed fact at a time.
+
+        A name the channel used to have resolves to the same row (SCR-039) rather than appending a
+        second one: the caller is as often a language model working from a stale context as it is
+        intake, and "record this driver against m-L" after m-L became w-L means the woofer, not a
+        new channel."""
         data = self.load()
         rows = data.setdefault("channels", [])
-        row = next((r for r in rows if r.get("code") == code), None)
+        row = self.resolve_channel(code, data)
         if row is None:
             row = {"code": code}
             rows.append(row)
         row.update(fields)
         return self.save(data)
+
+    def resolve_channel(self, name, data=None):
+        """The `channels[]` row a name or id refers to — including a name it used to have (SCR-039).
+
+        The whole point of the id/name split, from a consumer's side. Three lookups, in a fixed
+        order so the answer never depends on row order: current `code` first (what a person means
+        today), then `id` (what the ledger and every snapshot key on), then `previous_names` (what
+        an old REW title says). `None` when nothing matches — an unknown code is not this module's
+        to invent.
+
+        Current-code-before-id matters in exactly one case: A was renamed to B's old name. Then
+        "B" is A's live code and someone else's dead id, and the live name is the one a human
+        typing it today means.
+        """
+        rows = (data or self.load()).get("channels") or []
+        rows = [r for r in rows if isinstance(r, dict)]
+        for match in (lambda r: r.get("code") == name,
+                      lambda r: channel_id(r) == name,
+                      lambda r: name in previous_names(r)):
+            row = next((r for r in rows if match(r)), None)
+            if row is not None:
+                return row
+        return None
+
+    def rename_channel(self, old, new, data=None):
+        """Give one channel a new name, keeping its identity and its history (SCR-039).
+
+        What actually happens: the row's `id` is materialised (it was implicitly the old code all
+        along), `code` becomes the new name, and the old name joins `previous_names`. The ledger is
+        NOT touched — its row keys are ids, so every snapshot ever taken stays valid and immutable,
+        which is the entire reason this exists. Neither are REW titles, which cannot be rewritten
+        anyway; they resolve through `previous_names` from here on.
+
+        The glossary entry (`glossary.channels[]`, keyed by the same name — `naming.Glossary`) is
+        renamed in step, since a title generated tomorrow should carry the new name. Renaming to a
+        name already in use is refused rather than merged: two channels' histories are not one.
+
+        Returns the updated row. The caller decides whether this deserves a `config_change` event
+        (`record_change`) — a rename corrects a label, so its `impact` is normally `none`: no
+        measurement is invalidated, they simply carry the old name.
+        """
+        data = data or self.load()
+        row = self.resolve_channel(old, data)
+        if row is None:
+            raise ProjectError(f"no channel {old!r} to rename")
+        if not str(new or "").strip():
+            raise ProjectError("a channel needs a name to be renamed to")
+        new = str(new).strip()
+        if new == row.get("code"):
+            return row
+        clash = self.resolve_channel(new, data)
+        if clash is not None and clash is not row:
+            raise ProjectError(
+                f"cannot rename {row['code']!r} to {new!r}: that name is already "
+                f"{'in use' if clash.get('code') == new else 'the history of another channel'} "
+                f"(channel {clash.get('code')!r})"
+            )
+        was = str(row.get("code"))
+        row.setdefault("id", channel_id(row))
+        row["code"] = new
+        history = [n for n in previous_names(row) if n != new]
+        if was not in history:
+            history.append(was)
+        row["previous_names"] = history
+        for entry in (data.get("glossary") or {}).get("channels") or []:
+            if isinstance(entry, dict) and entry.get("code") == was:
+                entry["code"] = new
+                # The glossary carries its own copy of the history because it is also read
+                # standalone (`glossary.json`, `naming.Glossary.for_project`), where `channels[]`
+                # is not there to consult — and it is the glossary that has to recognise the old
+                # name in an existing REW title.
+                seen = [n for n in (entry.get("previous_names") or []) if n != new]
+                if was not in seen:
+                    seen.append(was)
+                entry["previous_names"] = seen
+        self.save(data)
+        return row
 
     def add_flaw(self, **fields):
         """Add (or replace, by frequency + channels) one acoustic-flaw entry — SCR-015.
@@ -374,6 +517,9 @@ _USAGE = """usage: project.py <project-dir> <command> [args]
       [--source S]                             values are JSON when they parse as JSON, so
                                                driver={"make":"Audiofrog","model":"GB25"} works;
                                                --source wraps fs_hz as a fact()
+  rename-channel <old> <new>                   rename a channel, keeping its identity and its
+                                               captures (SCR-039). <old> may be a name it used
+                                               to have; snapshots are not rewritten
   set-hardware <name> <value> [--source S]     set a DSP-hardware control (RearRC/SubRC/...)
   record-change <process-dir> <file> <what>    log a config_change journal event
       [--why W] [--source S] [--impact I]
@@ -456,6 +602,17 @@ def _main(argv):
             code, kv = args[0], _parse_kv(args[1:], source=source)
             proj.set_channel(code, **kv)
             print(f"channel {code} updated")
+        elif cmd == "rename-channel":
+            old, new = args[0], args[1]
+            # The name it goes by BEFORE the call, so a no-op doesn't report a rename that never
+            # happened (`rename-channel w-L w-L` is a plausible thing to type twice).
+            was = (proj.resolve_channel(old) or {}).get("code")
+            row = proj.rename_channel(old, new)
+            if was == row["code"]:
+                print(f"channel {row['code']} already goes by that name — nothing written")
+            else:
+                print(f"channel {was} is now {row['code']} (id {channel_id(row)}, unchanged) — "
+                      f"snapshots and existing captures keep the old name and still resolve")
         elif cmd == "set-hardware":
             source = _flag(args, "--source")
             name, value = args[0], args[1]
@@ -561,6 +718,72 @@ def _selftest():
     except ProjectError:
         pass
 
+    # -- SCR-039: a channel's id is not its name. Its own project, so a rename here cannot quietly
+    # change what the assertions above and below are talking about.
+    ren = Project(os.path.join(root, "rename"))
+    ren.set_channel("m-L", slot="C", descr="Front L Mid", role="mid")
+    ren.set_channel("tw-L", slot="D")
+    before = ren.load()
+    # id defaults to the code, so a project that never renames anything is byte-identical to one
+    # written before this existed -- the point of the whole design (no fourth format break).
+    assert "id" not in next(c for c in before["channels"] if c["code"] == "m-L"), before
+    assert channel_id({"code": "m-L"}) == "m-L"
+    assert channel_id({"code": "w-L", "id": "m-L"}) == "m-L"
+
+    row = ren.rename_channel("m-L", "w-L")
+    assert row["code"] == "w-L", row
+    assert channel_id(row) == "m-L", "the id is what the ledger keys on; a rename must not move it"
+    assert previous_names(row) == ["m-L"], row
+    assert row["descr"] == "Front L Mid", "a rename is a label change, not a new channel"
+
+    # all three lookups reach the same row -- current name, id, and the name REW titles still carry.
+    assert ren.resolve_channel("w-L") is not None
+    assert ren.resolve_channel("m-L")["code"] == "w-L", "an old capture's code must still resolve"
+    assert ren.resolve_channel("nope") is None
+    # and a write addressed to the old name updates it rather than appending a second channel.
+    ren.set_channel("m-L", impedance_ohm=4)
+    assert len(ren.load()["channels"]) == 2, ren.load()["channels"]
+    assert ren.resolve_channel("w-L")["impedance_ohm"] == 4
+
+    # renaming onto a name in use would merge two histories; renaming back is fine.
+    try:
+        ren.rename_channel("w-L", "tw-L")
+        raise AssertionError("rename_channel accepted a name already in use")
+    except ProjectError:
+        pass
+    ren.rename_channel("w-L", "m-L")
+    back = ren.resolve_channel("m-L")
+    assert back["code"] == "m-L" and channel_id(back) == "m-L", back
+    assert previous_names(back) == ["w-L"], back
+    ren.rename_channel("m-L", "w-L")  # leave it renamed for the glossary check below
+
+    # the glossary follows the rename: a title generated tomorrow carries the new name.
+    g = ren.load()
+    g["glossary"] = {"channels": [{"code": "w-L", "active": True}, {"code": "tw-L", "active": True}]}
+    ren.save(g)
+    ren.rename_channel("w-L", "wf-L")
+    codes = [c["code"] for c in ren.load()["glossary"]["channels"]]
+    assert codes == ["wf-L", "tw-L"], codes
+
+    # a previous name that is ANOTHER channel's live code is refused: a capture titled with it
+    # could belong to either, and the map exists to make that join unambiguous.
+    bad = ren.load()
+    next(c for c in bad["channels"] if c["code"] == "tw-L")["previous_names"] = ["wf-L"]
+    try:
+        validate(bad)
+        raise AssertionError("validate accepted a previous name that is another channel's code")
+    except ProjectError:
+        pass
+    # as is a duplicate id -- two channels sharing one would merge their snapshots.
+    bad = ren.load()
+    for c in bad["channels"]:
+        c["id"] = "same"
+    try:
+        validate(bad)
+        raise AssertionError("validate accepted a duplicate channel id")
+    except ProjectError:
+        pass
+
     # set_hardware_control: SCR-017 -- a DSP-level knob position, recorded ONCE, not per-preset.
     proj.set_hardware_control("RearRC", "3/4", source="user")
     proj.set_hardware_control("RealCenter", "ON", source="user")
@@ -610,7 +833,8 @@ def _selftest():
         pass
 
     print(f"selftest OK — channels[] round-tripped driver/fs_hz facts (SCR-001), duplicate code "
-          f"refused, hardware.controls recorded ONCE not per-preset (SCR-017), open_questions "
+          f"refused, a rename kept the channel's id and resolved its old captures (SCR-039), "
+          f"hardware.controls recorded ONCE not per-preset (SCR-017), open_questions "
           f"found a bare null + an unfilled fact() wrapper, record_change landed in the project's "
           f"own process journal. root={root}")
     return 0

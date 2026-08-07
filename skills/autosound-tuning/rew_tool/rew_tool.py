@@ -584,8 +584,10 @@ def _selftest():
     import state as _st
 
     def _mkch(hp, lp):
-        return {"slot": "X",
-                "hp": {"f": hp, "type": "BW", "slope": 12} if hp else "OFF",
+        # No `slot` here: identity left the ledger in schema v3 (SCR-001) and `validate` refuses it.
+        # This fixture had carried one since before that break, so the selftest died on its own
+        # snapshot rather than on anything it meant to test.
+        return {"hp": {"f": hp, "type": "BW", "slope": 12} if hp else "OFF",
                 "lp": {"f": lp, "type": "BW", "slope": 12} if lp else "OFF",
                 "gain_db": -6.0, "ta_ms": 5.0, "polarity": "NORM",
                 "eq_ptr": {}, "status": "applied"}

@@ -96,19 +96,62 @@ class Glossary:
         ]
 
     def is_active(self, code):
+        code = self.resolve_code(code)
         for c in self.channels:
             if c.get("code") == code:
                 return bool(c.get("active", True))
         return True  # a code we don't know about isn't ours to exclude
+
+    def resolve_code(self, code):
+        """The name a channel goes by TODAY, given any name it has ever gone by — SCR-039.
+
+        A REW title is typed by a human and cannot be rewritten afterwards, so a channel renamed
+        mid-project (a `m-L` that turned out to be a woofer) keeps its old captures under the old
+        name forever. Those captures are still that channel's, taken at that DSP config version, so
+        a checker that cannot resolve them reports missing work that is sitting right there.
+
+        An unknown code comes back unchanged — a name this glossary never heard of is not ours to
+        reinterpret (the same rule `is_active` follows). A live code always wins over some other
+        channel's history, so a name that was handed on resolves to whoever holds it now.
+        """
+        if not code:
+            return code
+        for c in self.channels:
+            if c.get("code") == code:
+                return code
+        for c in self.channels:
+            if code in (c.get("previous_names") or []) and c.get("code"):
+                return c["code"]
+        return code
+
+    def former_codes(self):
+        """Every name that is no longer any channel's current one (SCR-039).
+
+        Parsing fodder only: these are never generated into a capture plan (that would ask for a
+        measurement under a name the project has retired), but a title already in REW carries one,
+        and `parse_name` has to be able to split it off the modifier.
+        """
+        live = {c.get("code") for c in self.channels}
+        return [
+            str(old)
+            for c in self.channels
+            for old in (c.get("previous_names") or [])
+            if str(old) and str(old) not in live
+        ]
 
     def all_codes(self):
         """Every code the grammar may legally use, longest first.
 
         Longest-first matters for parsing: `ALL+C` must win over `ALL`, and `L w+m` over `L`, or a
         joint gets read as a side plus a stray modifier.
+
+        Retired names (SCR-039) are in here for the same reason: `m-L FX_2 (sw)` was a legal title
+        the day it was typed, and it still has to parse into a code and a modifier rather than one
+        run-on body.
         """
         codes = (
             self.channel_codes()
+            + self.former_codes()
             + list(self.pairs)
             + list(self.combos)
             + list(self.joints)
@@ -178,6 +221,10 @@ def parse_name(title, glossary=None):
     version = match.group("version")
     return {
         "code": code,
+        # The channel's name TODAY (SCR-039). Equal to `code` for every title but one taken before
+        # a rename — `code` stays as typed, because that is what REW shows and what a person
+        # looking at the two side by side has to be able to match up.
+        "code_current": glossary.resolve_code(code) if glossary else code,
         "modifier": modifier,
         "version": version,
         # Numeric form, so `_01` and `_1` are recognised as the same DSP config version. REW
@@ -194,13 +241,21 @@ def name_key(parsed):
 
     Matching on this rather than on the raw title is what makes `c_01 (rta)` and `c_1 (rta)` the
     same measurement, and what lets a checker survive the padding a human happens to type.
+
+    The code used is the channel's current name (SCR-039), so `m-L_2 (sw)` taken before a rename
+    and `w-L_2 (sw)` taken after it are ONE measurement: same channel, same DSP config version,
+    same method. A rename is a label being corrected, not a reason to re-measure — and a checker
+    that disagreed would mark work undone that is already on disk. `parse_name` needs a glossary
+    for this; without one the code as typed is all there is, which is the same answer it has always
+    given.
     """
     if not parsed:
         return None
     version = parsed.get("version_n")
     if version is None:
         version = parsed.get("version")
-    return (parsed.get("code"), parsed.get("modifier"), version, parsed.get("method"))
+    code = parsed.get("code_current") or parsed.get("code")
+    return (code, parsed.get("modifier"), version, parsed.get("method"))
 
 
 # The capture plan of `naming-and-structure.md §3`, as a function rather than a table a human
@@ -333,7 +388,59 @@ _USAGE = """usage: naming.py <project-dir> <command> [args]
   parse <title>                  split a title into code/modifier/version/method
   expect <phase> <version>       the capture series a phase expects
   check <phase> <version>        compare that series against what REW currently holds
+  selftest                       run this module's own checks (no project needed)
 """
+
+
+def _selftest():
+    """The grammar's own checks, and SCR-039's: a renamed channel keeps its captures.
+
+    Run as `python3 naming.py . selftest` — the project argument is ignored, since nothing here
+    touches disk.
+    """
+    assert generate_name("w-L", 2, "sw") == "w-L_2 (sw)"
+    assert generate_name("ALL+C", "final", "rta") == "ALL+C_final (rta)"
+
+    plain = Glossary({"channels": [{"code": "w-L", "active": True}]})
+    assert parse_name("w-L_2 (sw)", plain)["code"] == "w-L"
+    assert parse_name("not a measurement") is None
+    # `_01` and `_1` are the same DSP config version -- a human types the padding, not the tool.
+    assert name_key(parse_name("c_01 (rta)", plain)) == name_key(parse_name("c_1 (rta)", plain))
+
+    # -- SCR-039: `m-L` was renamed to `w-L`; its captures still say `m-L` and always will.
+    g = Glossary({"channels": [
+        {"code": "w-L", "active": True, "previous_names": ["m-L"]},
+        {"code": "tw-L", "active": True},
+    ]})
+    assert g.resolve_code("m-L") == "w-L"
+    assert g.resolve_code("w-L") == "w-L"
+    assert g.resolve_code("sub") == "sub", "an unknown code is not ours to reinterpret"
+    assert g.former_codes() == ["m-L"], g.former_codes()
+    assert "m-L" in g.all_codes(), "an old title still has to parse into code + modifier"
+    assert g.is_active("m-L") is True, "activity is the channel's, whatever it is called"
+
+    old = parse_name("m-L_2 (sw)", g)
+    assert old["code"] == "m-L", "the title says what REW shows, unedited"
+    assert old["code_current"] == "w-L", old
+    assert name_key(old) == name_key(parse_name("w-L_2 (sw)", g)), \
+        "one channel, one config version, one method -- a rename does not make it two measurements"
+    # the modifier still splits off an old code, which is why former names are in `all_codes`.
+    assert parse_name("m-L FX_2 (sw)", g)["modifier"] == "FX"
+    # without a glossary there is no history to consult, and the answer is what it always was.
+    assert parse_name("m-L_2 (sw)")["code_current"] == "m-L"
+
+    # the checker: a capture taken under the old name is FOUND, not missing. Getting this wrong
+    # means telling a tuner to re-measure something already sitting in REW.
+    verdict = validate_series(["m-L_2 (sw)", "tw-L_2 (sw)"],
+                              ["w-L_2 (sw)", "tw-L_2 (sw)"], g)
+    assert verdict["missing"] == [], verdict
+    assert verdict["complete"], verdict
+    # and a plan is never generated under a retired name.
+    assert "m-L" not in expected_series("0", g, 2)[0], expected_series("0", g, 2)
+
+    print("selftest OK — grammar round-trips, padding-insensitive version match, and a renamed "
+          "channel's old captures resolve to it (SCR-039)")
+    return 0
 
 
 def _main(argv):
@@ -341,6 +448,8 @@ def _main(argv):
         print(_USAGE, file=sys.stderr)
         return 2
     project, cmd, args = argv[1], argv[2], argv[3:]
+    if cmd == "selftest":
+        return _selftest()
     g = Glossary.for_project(project)
     try:
         if cmd == "codes":
