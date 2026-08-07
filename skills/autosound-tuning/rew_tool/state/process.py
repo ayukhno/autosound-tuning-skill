@@ -84,6 +84,9 @@ EV_CAPTURE_ISSUED = "capture_task_issued"
 EV_CAPTURE_TAKEN = "capture_taken"
 EV_CAPTURE_SKIPPED = "capture_skipped"
 EV_CAPTURE_CLOSED = "capture_round_closed"
+# What the arithmetic said about the curves themselves (SCR-040). A separate event from
+# `capture_taken`: one says a measurement came back, the other says it is usable.
+EV_CAPTURE_VERIFIED = "capture_verified"
 # Who sat down to work, on what model, and when. Written by the front-end when it attaches a
 # session -- the journal otherwise starts at whatever the model happened to record first, so
 # "when did this session begin, and did it record anything at all" had no answer.
@@ -410,6 +413,20 @@ class Process:
                 f"step {step_id!r} cannot be done without evidence "
                 "(measurement names, ledger vNNN, or an audit entry)"
             )
+        # A step that asked for captures is done when they came back AND passed (SCR-040). The
+        # refusal is the record's, not the model's judgement: "I looked at the graphs and they seem
+        # fine" is exactly the sentence this gate exists to stop being load-bearing.
+        state_now = self.load()
+        round_ = state_now.get("capture") or {}
+        if round_ and not round_.get("closed") and round_.get("step") == step_id:
+            unusable = self.unusable_captures(state_now)
+            if unusable:
+                raise ProcessError(
+                    f"step {step_id!r} asked for captures that are not usable yet: "
+                    + ", ".join(unusable)
+                    + ". Run `capture-check` (and re-take what it fails) before closing the step — "
+                    "a capture that exists is not a capture that can be analysed."
+                )
         versions = _ledger_versions(self.project_dir)
         naming = _load_naming()
         if not any(resolves(item, self.project_dir, versions, naming) for item in evidence):
@@ -479,7 +496,7 @@ class Process:
         return state["reviewer"]
 
     # -- capture rounds (SCR-034) --
-    def start_capture(self, version, expected=(), phase=None, note=None):
+    def start_capture(self, version, expected=(), phase=None, note=None, step=None):
         """Open a capture round: what was asked for, at which ledger version, in which phase.
 
         A ROUND, not a version. The task was keyed by the ledger HEAD, which is right for naming
@@ -498,6 +515,9 @@ class Process:
             "id": "cap_%03d" % number,
             "n": number,
             "phase": str(phase) if phase is not None else state.get("active_phase"),
+            # The plan step this round satisfies (SCR-040). Without it a retake is a loose
+            # measurement; with it, it is visibly attempt N of the step that asked for it.
+            "step": step,
             "version": str(version),
             "issued": _now(),
             "closed": None,
@@ -514,6 +534,7 @@ class Process:
             phase=round_["phase"],
             version=round_["version"],
             expected=expected,
+            step=step,
             note=note,
         )
         return round_
@@ -558,6 +579,84 @@ class Process:
         self._write(state)
         self._append(EV_CAPTURE_SKIPPED, capture=round_["id"], title=title, reason=reason)
         return round_
+
+    def _load_verifier(self):
+        """`verify.py` from the same checkout, by path — same reason `_load_naming` does it."""
+        import importlib.util
+
+        path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "verify.py")
+        try:
+            spec = importlib.util.spec_from_file_location("_process_verify", path)
+            if spec is None or spec.loader is None:
+                return None
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module
+        except Exception:  # noqa: BLE001 -- unavailable arithmetic is "cannot tell", never "bad"
+            return None
+
+    def check_captures(self, titles=None, verifier=None):
+        """Run the skill's own verdict over the open round and record it (SCR-040).
+
+        The arithmetic lives in `verify.py` and is called here rather than reimplemented by a
+        front-end: two implementations of "is this curve usable" would drift, and the one that
+        drifts is the one nobody runs standalone.
+
+        Each verdict pins REW's `uuid`. The title is not identity -- re-take `sw_1 (sw)` and the
+        name is unchanged while the data is not, so a verdict keyed by title would outlive the
+        graph it judged. A measurement REW no longer holds records no uuid and reads as not ok.
+        """
+        state, round_ = self._require_capture()
+        verifier = self._load_verifier() if verifier is None else verifier
+        if verifier is None:
+            raise ProcessError(
+                "verify.py could not be loaded — cannot check captures. "
+                "The curves are still there; this is the checker, not the data."
+            )
+        wanted = [str(t) for t in (titles or round_.get("expected") or [])]
+        if not wanted:
+            raise ProcessError("this round expects no captures — nothing to check")
+        verdicts = verifier.verify(wanted)
+        for verdict in verdicts:
+            title = verdict["name"]
+            entry = round_.setdefault("taken", {}).setdefault(
+                title, {"at": _now(), "planned": title in round_.get("expected", [])}
+            )
+            entry["verified"] = {
+                "ok": bool(verdict.get("valid")),
+                "exists": bool(verdict.get("exists")),
+                "uuid": (verdict.get("stats") or {}).get("uuid"),
+                "at": _now(),
+                "issues": list(verdict.get("issues") or []),
+            }
+        self._write(state)
+        self._append(
+            EV_CAPTURE_VERIFIED,
+            capture=round_["id"],
+            step=round_.get("step"),
+            ok=sorted(v["name"] for v in verdicts if v.get("valid")),
+            bad=sorted(v["name"] for v in verdicts if not v.get("valid")),
+        )
+        return round_
+
+    def unusable_captures(self, state=None):
+        """Expected captures of the open round that are missing, unchecked, or checked and bad.
+
+        The list a step's own gate reads: "done" means every capture it asked for came back AND
+        passed, so an unchecked capture counts against it exactly as a failed one does.
+        """
+        state = state or self.load()
+        round_ = state.get("capture") or {}
+        if not round_ or round_.get("closed"):
+            return []
+        out = []
+        for title in round_.get("expected", []):
+            if title in (round_.get("skipped") or {}):
+                continue  # a decision, and decisions are recorded, not re-litigated
+            entry = (round_.get("taken") or {}).get(title)
+            if not entry or not (entry.get("verified") or {}).get("ok"):
+                out.append(title)
+        return out
 
     def close_capture(self, reason=None):
         """Close the open round. What is neither taken nor skipped stays that way, on the record."""
@@ -735,7 +834,9 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
   target <preset> <curve>               set a preset's active target curve
   session-start <harness> <model> [resumed]   a working session began (written by the front-end)
   decision <question> <answer> [step] [--invalidates X]   what the Arbiter ruled, as itself
-  capture-start <version> [title ...]   open a capture round; titles = what was asked for
+  capture-start <version> [title ...] [--step ID]   open a capture round; titles = what was
+                                         asked for, --step binds it to the plan step it satisfies
+  capture-check [title ...]             run the verdict over the round and record it (SCR-040)
   capture-taken <title>                 a measurement came back (unplanned ones are flagged)
   capture-skip <title> <reason>         deliberately NOT taken, and why
   capture-close [reason]                close the round; what is outstanding is named
@@ -816,11 +917,32 @@ def _main(argv):
             p.record_session(args[0], args[1], resumed=(len(args) > 2 and args[2] == "resumed"))
             print(f"session recorded: {args[0]} / {args[1]}")
         elif cmd == "capture-start":
-            round_ = p.start_capture(args[0], expected=args[1:])
+            step = None
+            rest = list(args)
+            if "--step" in rest:
+                i = rest.index("--step")
+                step = rest[i + 1] if len(rest) > i + 1 else None
+                rest = rest[:i] + rest[i + 2:]
+            round_ = p.start_capture(rest[0], expected=rest[1:], step=step)
             print(
                 f"{round_['id']} open at {round_['version']}, "
                 f"{len(round_['expected'])} capture(s) expected"
             )
+        elif cmd == "capture-check":
+            round_ = p.check_captures(args or None)
+            for title in round_.get("expected", []):
+                verdict = ((round_.get("taken") or {}).get(title) or {}).get("verified") or {}
+                if verdict.get("ok"):
+                    print(f"OK      {title}")
+                elif title in (round_.get("skipped") or {}):
+                    print(f"SKIP    {title}")
+                else:
+                    reason = "; ".join(verdict.get("issues") or ["не перевірено"])
+                    print(f"UNUSABLE {title} — {reason}")
+            left = p.unusable_captures()
+            print(f"{len(round_.get('expected', [])) - len(left)}/"
+                  f"{len(round_.get('expected', []))} придатні")
+            return 1 if left else 0
         elif cmd == "capture-taken":
             round_ = p.record_capture(args[0])
             entry = round_["taken"][args[0].strip()]

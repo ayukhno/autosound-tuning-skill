@@ -66,6 +66,12 @@ def verdict(name, measurements=None, f_low=20, f_high=20000):
         out["issues"].append(str(exc).split(" (have:")[0].strip('"'))
         return out
     out["exists"] = True
+    # REW's own identity for this measurement. Its ordinal id is explicitly unstable (a reorder or
+    # a delete reshuffles it), so a consumer recording "this graph was checked" has to pin the
+    # uuid -- otherwise a re-take under the same title inherits the old verdict (SCR-040).
+    entry = (ms.get(mid) or {})
+    out["stats"]["uuid"] = entry.get("uuid")
+    out["stats"]["date"] = entry.get("date")
 
     try:
         freqs, mag, phase = _api.get_fr(mid)
