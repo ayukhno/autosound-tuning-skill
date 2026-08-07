@@ -12,6 +12,11 @@ Design invariants
       per-row fields are meaningful for it. A consumer renders whatever groups+fields are declared
       — it never assumes a fixed two-tier (virtual/output) shape. Absence of a group means the DSP
       genuinely doesn't have that tier (e.g. MUSWAY has no virtual_channels group at all).
+    * `max_count` per group is how many slots that tier PHYSICALLY has (SCR-042) — a model fact,
+      like everything else here, not a count of what one car wired up. Optional and `null` until
+      confirmed, but load-bearing when present: without it a consumer can only count the rows it
+      was given, so a 12-output Helix with two slots spare reads "10/10" instead of "10/12" and
+      the spares are invisible in the one panel whose job is showing the rig entire.
     * Unconfirmed facts are `null`, not omitted — `open_questions()` walks the whole structure and
       surfaces every null plus any declared `_open_questions` freeform notes. This is what makes
       profile-building incremental: a re-run only asks about what's still null.
@@ -43,12 +48,40 @@ def _unwrap(data):
     return data.get("dsp_profile", data) if isinstance(data, dict) else data
 
 
+def ledger_tier(group_id):
+    """The ledger's (and `project.json`'s `tier`) top-level key for a profile group id.
+
+    One convention with two spellings, which is exactly why it lives in a function. `state/state.py`
+    schema v2 keeps the physical-output tier under the key `channels` — the one tier every DSP
+    profile has, and named that way since before there were tiers — while the profile calls the
+    same thing `physical_outputs`. Every other group id names its own key unchanged.
+
+    Both sides of SCR-042 depend on agreeing here: a `channels[]` entry that spelled its tier
+    `physical_outputs` would match no ledger tier and the spare slot it describes would stay
+    invisible, silently, which is the failure the field exists to fix.
+    """
+    return "channels" if group_id == "physical_outputs" else group_id
+
+
+def tier_keys(data):
+    """Every ledger tier key this profile declares, in `groups` order (see `ledger_tier`)."""
+    return [ledger_tier(g["id"]) for g in _unwrap(data).get("groups", []) if isinstance(g, dict)]
+
+
 def _validate_group(g):
     missing = [f for f in GROUP_REQUIRED if f not in g]
     if missing:
         raise ValueError(f"group {g.get('id', '?')!r} missing {missing}")
     if not isinstance(g["fields"], list) or not g["fields"]:
         raise ValueError(f"group {g['id']!r}.fields must be a non-empty list")
+    # `max_count` is optional and null-until-confirmed (SCR-042), but a present one is a physical
+    # slot count, so 0/negative/float/bool are all refusals rather than something to coerce.
+    n = g.get("max_count")
+    if "max_count" in g and n is not None:
+        if not isinstance(n, int) or isinstance(n, bool) or n < 1:
+            raise ValueError(
+                f"group {g['id']!r}.max_count must be a positive int or null (how many slots this "
+                f"tier physically has), got {n!r}")
 
 
 def validate_profile(data):
@@ -123,6 +156,8 @@ def find_bundled(vendor, model, bundled_dir):
 # filling in.
 CAPABILITY_CHECKLIST = (
     "Is there a virtual/group layer above the per-channel one?",
+    "How many slots does EACH tier physically have (`max_count`)? Count the processor's own "
+    "outputs/virtual channels/inputs, not the ones this car uses — the spares are the point",
     "EQ: bands per channel, types (PK/shelf/all-pass), file import + format",
     "Crossovers: types (LR/BW/BE), orders, independent HP/LP",
     "Delays: step and limits; polarity per-channel; a phase control (all-pass)",
@@ -530,6 +565,35 @@ def _selftest():
     except ValueError:
         pass
 
+    # ── SCR-042: how many slots the tier physically has, and what the ledger calls that tier ──
+    # The real case: a Helix Ultra S with 10 outputs wired reads "10/10" without this, when it is
+    # a 12-output processor with two slots spare.
+    counted = copy.deepcopy(helix)
+    counted["dsp_profile"]["groups"][0]["max_count"] = 8    # virtual A-H
+    counted["dsp_profile"]["groups"][1]["max_count"] = 12   # outputs B-K, 12 physical
+    validate_profile(counted)
+    assert open_questions(counted) == [], open_questions(counted)
+
+    # a slot count is a count: 0, negative, float and bool are refusals, null is "not asked yet".
+    for bad_count in (0, -1, 2.5, True, "12"):
+        broken_count = copy.deepcopy(counted)
+        broken_count["dsp_profile"]["groups"][1]["max_count"] = bad_count
+        try:
+            validate_profile(broken_count)
+            raise AssertionError(f"validate_profile accepted max_count={bad_count!r}")
+        except ValueError:
+            pass
+    nulled = copy.deepcopy(counted)
+    nulled["dsp_profile"]["groups"][1]["max_count"] = None
+    validate_profile(nulled)  # null is legal -- and surfaces itself as an open question
+    assert "groups.1.max_count" in open_questions(nulled), open_questions(nulled)
+
+    # the ledger calls the physical-output tier `channels`; every other group id is its own key.
+    assert ledger_tier("physical_outputs") == "channels"
+    assert ledger_tier("virtual_channels") == "virtual_channels"
+    assert ledger_tier("inputs") == "inputs"
+    assert tier_keys(helix) == ["virtual_channels", "channels"], tier_keys(helix)
+
     # MUSWAY has genuinely no virtual_channels group — that must be representable, not an error.
     musway = _musway_stub()
     validate_profile(musway)
@@ -609,7 +673,9 @@ def _selftest():
     resumed = _unwrap(load_draft(proj, "Musway", "M6V4"))
     assert resumed["sample_rate_hz"] == 96000, resumed
 
-    print(f"selftest OK — validate rejects malformed groups, MUSWAY's missing virtual_channels "
+    print(f"selftest OK — max_count validated as a physical slot count (null = still open, 0/float/"
+          f"bool/str refused) and physical_outputs mapped to the ledger's `channels` key (SCR-042); "
+          f"validate rejects malformed groups, MUSWAY's missing virtual_channels "
           f"tier is representable (not an error), open_questions found the null field + freeform "
           f"note, find_bundled matched exactly and refused a sibling/partial name, diff_profile "
           f"isolated the one changed field, content_hash is stable across _contributed stamping; "

@@ -43,16 +43,27 @@ machine-readable to render for its Project/System/Car-audio-analysis panels eith
 
   "channels": [                                              // SCR-001: per-channel IDENTITY. As of v3
                                                              //   this is the ONLY home for slot/descr/
-                                                             //   role/order/hidden -- the ledger carries
-                                                             //   tuning state and joins here by `code`
+                                                             //   role/order/tier/hidden -- the ledger
+                                                             //   carries tuning state, joins here by `code`
     {"code": "w-L", "slot": "C", "descr": "Front L Woofer", "role": "woofer", "order": 1,
+     "tier": "channels",                                     // SCR-042: the LEDGER tier key, not the
+                                                             //   profile's group id -- physical outputs
+                                                             //   are "channels", never "physical_outputs"
      "id": "m-L", "previous_names": ["m-L"],                 // SCR-039: written only by a rename.
                                                              //   Absent = id is the code, which is
                                                              //   every project that never renamed
      "driver": {"make": "Audiofrog", "model": "GB25"},
      "fs_hz": {"value": 62, "source": "datasheet", "at": "…"},
      "impedance_ohm": 4, "hidden": false},
-    {"code": "vrf", "slot": "F", "hidden": true}             // SCR-003: no physical driver assigned
+    {"code": "vrf", "slot": "F", "hidden": true,             // SCR-003: no physical driver assigned
+     "role": "unused", "tier": "virtual_channels"}           // SCR-042: which tier it is spare OF.
+                                                             //   Slot letters REPEAT across tiers (this
+                                                             //   Helix: virtual A-H, outputs B-K), so
+                                                             //   "F" alone is ambiguous and a guess
+                                                             //   files a spare output among the
+                                                             //   virtual channels. `role: "unused"` is
+                                                             //   not a substitute -- it is what loses
+                                                             //   the tier in the first place
   ],
 
   "hardware": {                                              // SCR-017: DSP-level, NOT per-preset
@@ -143,6 +154,33 @@ Refused, because both make a capture's owner ambiguous: two channels with the sa
 
 A rename is a label being corrected, so its `config_change` impact is normally `none` — no
 measurement is invalidated by it.
+
+### A spare slot says which tier it is spare of (SCR-042)
+
+Rows in a consumer's channel panel are built from the ledger, and **a slot with nothing wired to it
+has no ledger row** — there is no tuning state to record for it. `project.json` does carry those
+slots, correctly marked (`hidden: true`, `role: "unused"`), so the fix is not new data but a field
+that says which tier each one belongs to.
+
+| field | notes |
+|---|---|
+| `tier` | the **ledger tier key**: `channels` for a physical output, `virtual_channels` / `inputs` / whatever else that DSP's profile declares. Optional — a project written before this renders exactly as it did |
+
+**It is the ledger key, not the profile's group id.** The profile calls the physical-output tier
+`physical_outputs`; the ledger has always called it `channels`. `dsp_profile.ledger_tier()` is the
+one place that conversion lives, and `validate()` refuses `tier: "physical_outputs"` outright —
+it would match no tier, and the row would simply never render, without an error.
+
+**Why it cannot be inferred:** slot letters repeat across tiers. On a Helix Ultra S the virtual tier
+runs A–H and the outputs run B–K, so `slot: "F"` is a legal address in both, and guessing files a
+spare output among the virtual channels — a wrong row in the one panel whose job is showing the rig
+as it actually is. `role` is no help either: an unused virtual slot is written `role: "unused"`,
+which is precisely what loses the tier.
+
+The companion is **`max_count` per group in `dsp_profile.json`** — how many slots that tier
+physically has. Without it a consumer can only count the rows it was given, so a 12-output Helix
+with ten wired reads `10/10` instead of `10/12`. It is a DSP-model fact like the rest of that file,
+null until confirmed, and it makes the spares visible as spares whether or not `tier` is filled in.
 
 ## Provenance (SCR-014)
 

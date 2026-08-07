@@ -218,13 +218,18 @@ def cross_check_glossary_vs_ledgers(glossary, snapshots):
     return issues
 
 
-def cross_check_tiers_vs_profile(profile_data, snapshots):
+def cross_check_tiers_vs_profile(profile_data, snapshots, project_data=None):
+    """Every tier named by a ledger or by a `channels[]` entry must be one the profile declares.
+
+    Both halves matter for the same reason (SCR-042): a tier name that matches nothing does not
+    fail, it disappears — the rows keyed under it are simply never rendered. The `channels[]` half
+    is the newer one and the likelier to rot, since a spare slot's `tier` is the ONLY thing tying
+    it to a tier and there is no ledger row to contradict a typo.
+    """
     if not profile_data:
         return []
     state_mod = _load_vendored("state")
-    prof = profile_data.get("dsp_profile", profile_data)
-    declared = {("channels" if g["id"] == "physical_outputs" else g["id"])
-                for g in prof.get("groups", [])}
+    declared = set(dsp_profile.tier_keys(profile_data))
     issues = []
     for preset, snap in snapshots.items():
         if not snap:
@@ -233,6 +238,15 @@ def cross_check_tiers_vs_profile(profile_data, snapshots):
         extra = sorted(present - declared)
         if extra:
             issues.append(f"{preset}: ledger tier(s) not declared in dsp_profile.json: {extra}")
+    for ch in (project_data or {}).get("channels", []) or []:
+        if not isinstance(ch, dict):
+            continue
+        tier = ch.get("tier")
+        if tier and tier not in declared:
+            issues.append(
+                f"project.json: channel {ch.get('code')!r} names tier {tier!r}, which "
+                f"dsp_profile.json does not declare (declared: {sorted(declared)}) — the row would "
+                "render nowhere")
     return issues
 
 
@@ -273,7 +287,7 @@ def check_project(project_dir, skip_rew=False):
 
     cross = {
         "glossary_vs_ledgers": cross_check_glossary_vs_ledgers(glossary, snapshots),
-        "tiers_vs_profile": cross_check_tiers_vs_profile(profile_data, snapshots),
+        "tiers_vs_profile": cross_check_tiers_vs_profile(profile_data, snapshots, project_data),
         "rew": ({"reachable": False, "note": "skipped (--no-rew)"} if skip_rew
                 else cross_check_rew(process_state, glossary, snapshots)),
     }
@@ -402,6 +416,16 @@ def _selftest():
     # cross-check: the ledger's virtual_channels tier IS declared in this profile -- no complaint.
     assert report["cross_checks"]["tiers_vs_profile"] == [], report["cross_checks"]
 
+    # SCR-042: a spare slot's `tier` is the only thing tying it to a tier -- no ledger row exists
+    # to contradict a typo -- so a tier the profile does not declare has to be caught here.
+    proj.set_channel("off-out-L", slot="L", hidden=True, role="unused", tier="channels")
+    assert check_project(root, skip_rew=True)["cross_checks"]["tiers_vs_profile"] == [], \
+        "a spare slot on a declared tier must not be flagged"
+    proj.set_channel("off-out-L", tier="outputs")  # plausible, declared nowhere
+    tier_issues = check_project(root, skip_rew=True)["cross_checks"]["tiers_vs_profile"]
+    assert any("off-out-L" in n and "outputs" in n for n in tier_issues), tier_issues
+    proj.set_channel("off-out-L", tier="channels")  # back to consistent for the checks below
+
     # SCR-039: rename the glossary's `w-L` and the ledger keeps its key (an id, never rewritten).
     # Compared raw, that one correct rename reads as two structural faults at once -- the channel
     # missing from every ledger AND a foreign row in every ledger.
@@ -429,8 +453,9 @@ def _selftest():
 
     print(f"selftest OK — empty project reports missing files without crashing; a seeded project "
           f"(project.json+glossary, dsp_profile.json, ledger, process) validates at the right "
-          f"schema versions; cross-checks caught a glossary/ledger mismatch and a profile missing "
-          f"the virtual_channels tier; REW check reported as skipped, not attempted. root={root}")
+          f"schema versions; cross-checks caught a glossary/ledger mismatch, a profile missing "
+          f"the virtual_channels tier, and a spare slot naming an undeclared tier (SCR-042); "
+          f"REW check reported as skipped, not attempted. root={root}")
     return 0
 
 

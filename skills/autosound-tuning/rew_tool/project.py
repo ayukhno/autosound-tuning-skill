@@ -159,6 +159,23 @@ def validate(data):
                 f"channel {ch['code']!r}: previous_names must be a list of names, got "
                 f"{ch['previous_names']!r}"
             )
+        # `tier` is the LEDGER tier key (`dsp_profile.ledger_tier`), not the profile's group id:
+        # `channels` for physical outputs, `virtual_channels`/`inputs`/... for the rest. Optional
+        # (a project written before SCR-042 stays valid), but refused when spelled as the group id
+        # — `physical_outputs` would match no tier and simply drop the row from every panel, which
+        # is the silent failure this field exists to end.
+        if "tier" in ch and ch["tier"] is not None:
+            if not isinstance(ch["tier"], str) or not ch["tier"].strip():
+                raise ProjectError(
+                    f"channel {ch['code']!r}: tier must be a non-empty string (the ledger tier key "
+                    f"this channel belongs to), got {ch['tier']!r}"
+                )
+            if ch["tier"] == "physical_outputs":
+                raise ProjectError(
+                    f"channel {ch['code']!r}: tier is the LEDGER key, so the physical-output tier "
+                    "is spelled 'channels', not 'physical_outputs' (the profile's group id). See "
+                    "dsp_profile.ledger_tier — SCR-042"
+                )
         cid = channel_id(ch)
         if cid in ids:
             raise ProjectError(
@@ -324,9 +341,19 @@ class Project:
 
     def set_channel(self, code, **fields):
         """Add or update one `channels[]` row by `code` (SCR-001) — `slot`/`descr`/`role`/`order`/
-        `driver`/`fs_hz`/`impedance_ohm`/`hidden`, whatever the caller has; wrap `fact()`-worthy
-        fields (e.g. `fs_hz`) before calling. An unknown code is appended, not refused — intake
-        builds this list one confirmed fact at a time.
+        `tier`/`driver`/`fs_hz`/`impedance_ohm`/`hidden`, whatever the caller has; wrap
+        `fact()`-worthy fields (e.g. `fs_hz`) before calling. An unknown code is appended, not
+        refused — intake builds this list one confirmed fact at a time.
+
+        `tier` (SCR-042) is the ledger tier key this channel belongs to — `channels` for a physical
+        output, `virtual_channels`/`inputs`/… for the rest; `dsp_profile.ledger_tier()` converts a
+        profile group id to it. Cheap for a channel that has a ledger row (it is the key that row
+        already sits under) and load-bearing for one that does not: an unused slot has no tuning
+        state, so `tier` is the only thing that says which tier it is a spare slot OF. It cannot be
+        inferred, because slot letters repeat across tiers — on a Helix the virtual tier runs A–H
+        and the outputs B–K, so `slot: "F"` is a legal address in both, and a guess would file a
+        spare output among the virtual channels. `role: "virtual"` is not a substitute: an unused
+        virtual slot is written `role: "unused"`, which is what loses the tier in the first place.
 
         A name the channel used to have resolves to the same row (SCR-039) rather than appending a
         second one: the caller is as often a language model working from a stale context as it is
@@ -703,6 +730,40 @@ def _selftest():
     vfr = next(c for c in data["channels"] if c["code"] == "vfr")
     assert vfr["hidden"] is True, vfr
 
+    # -- SCR-042: a spare slot says which tier it is spare OF. The case that motivated it: slot
+    # letters repeat across tiers, so these two are both legal "F" and only `tier` tells them apart.
+    proj.set_channel("off-out-F", slot="F", hidden=True, role="unused", tier="channels")
+    proj.set_channel("off-virt-F", slot="F", hidden=True, role="unused", tier="virtual_channels")
+    data = proj.load()
+    spares = {c["code"]: c for c in data["channels"] if c.get("role") == "unused"}
+    assert spares["off-out-F"]["tier"] == "channels", spares
+    assert spares["off-virt-F"]["tier"] == "virtual_channels", spares
+    assert spares["off-out-F"]["slot"] == spares["off-virt-F"]["slot"] == "F", spares
+
+    # the profile's group id is NOT the ledger key, and the wrong spelling must not round-trip:
+    # it would match no tier and the row would vanish from every panel without a word.
+    wrong = proj.load()
+    next(c for c in wrong["channels"] if c["code"] == "off-out-F")["tier"] = "physical_outputs"
+    try:
+        validate(wrong)
+        raise AssertionError("validate accepted the profile group id as a channels[] tier")
+    except ProjectError as exc:
+        assert "channels" in str(exc), exc
+
+    # an empty/non-string tier is refused too; a project written before SCR-042 (no tier at all)
+    # stays valid -- the field is additive, not a migration.
+    blank = proj.load()
+    next(c for c in blank["channels"] if c["code"] == "off-out-F")["tier"] = "  "
+    try:
+        validate(blank)
+        raise AssertionError("validate accepted a blank tier")
+    except ProjectError:
+        pass
+    legacy = proj.load()
+    for c in legacy["channels"]:
+        c.pop("tier", None)
+    validate(legacy)  # must not raise
+
     # updating an existing code merges fields rather than duplicating the row.
     proj.set_channel("w-L", order=2)
     data = proj.load()
@@ -832,7 +893,9 @@ def _selftest():
     except ProjectError:
         pass
 
-    print(f"selftest OK — channels[] round-tripped driver/fs_hz facts (SCR-001), duplicate code "
+    print(f"selftest OK — two spare slots sharing slot 'F' stayed apart by tier and the profile's "
+          f"group id was refused as one (SCR-042), a tier-less project still validates; "
+          f"channels[] round-tripped driver/fs_hz facts (SCR-001), duplicate code "
           f"refused, a rename kept the channel's id and resolved its old captures (SCR-039), "
           f"hardware.controls recorded ONCE not per-preset (SCR-017), open_questions "
           f"found a bare null + an unfilled fact() wrapper, record_change landed in the project's "
