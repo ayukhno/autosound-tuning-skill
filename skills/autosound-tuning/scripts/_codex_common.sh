@@ -19,6 +19,10 @@ if [[ -d "$AUTOSOUND_DIR" ]]; then AUDIT="$AUTOSOUND_DIR/audit-trail.md"
 else AUDIT="$PROJECT_MIRROR/audit-trail.md"; fi
 
 CODEX_BIN="${CODEX_BIN:-codex}"
+# How hard the reviewer thinks. Codex's own default is lower, and a Critic that never disagrees is
+# worse than no Critic. Same value and same reasoning as `autosound_ai.py`'s CRITIC_EFFORT; its own
+# variable because these scripts run standalone, with no Python involved.
+AUTOSOUND_CRITIC_EFFORT="${AUTOSOUND_CRITIC_EFFORT:-xhigh}"
 
 die() { echo "${SCRIPT_NAME:-codex}: $*" >&2; exit 1; }
 
@@ -32,12 +36,14 @@ _run_codex() {
   local prompt_file="$1" model="${2:-}"
   local out_f; out_f="$(mktemp -t codex_out.XXXXXX)"
   
+  local effort=(-c "model_reasoning_effort=$AUTOSOUND_CRITIC_EFFORT")
+
   if [[ -n "$model" ]]; then
     # Run codex non-interactively with model, save clean output to temp file
-    "$CODEX_BIN" exec -m "$model" --ephemeral --output-last-message "$out_f" - < "$prompt_file" >/dev/null 2>&1
+    "$CODEX_BIN" exec "${effort[@]}" -m "$model" --ephemeral --output-last-message "$out_f" - < "$prompt_file" >/dev/null 2>&1
   else
     # Run codex non-interactively with default model, save clean output to temp file
-    "$CODEX_BIN" exec --ephemeral --output-last-message "$out_f" - < "$prompt_file" >/dev/null 2>&1
+    "$CODEX_BIN" exec "${effort[@]}" --ephemeral --output-last-message "$out_f" - < "$prompt_file" >/dev/null 2>&1
   fi
   
   cat "$out_f"

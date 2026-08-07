@@ -73,7 +73,19 @@ AUTOSOUND_CRITIC_MODEL=claude-opus-5      # or gemini-2.5-pro, gpt-5.2, …
 AUTOSOUND_ADVISOR_MODEL=gemini-2.5-pro    # a DIFFERENT vendor from the Generator is the point
 # AUTOSOUND_CRITIC_PROVIDER=anthropic     # only when the name does not give the vendor away
 # AUTOSOUND_CRITIC_BIN=claude             # force one binary, whatever is on PATH
+# AUTOSOUND_CRITIC_EFFORT=xhigh           # how hard the reviewer thinks; default xhigh
 ```
+
+**Effort defaults to `xhigh`, not to each CLI's own default.** A Critic that rubber-stamps is worse
+than no Critic, and the failure this channel exists to catch — a model that closed four phases in
+one sitting and reported a finished tune on a car nobody had sat in — is exactly what a cheap
+reviewer looks like: it never disagrees. It is not `max`: a review is a one-shot call on a package
+that is already written, and on a metered key the difference is the Arbiter's money.
+
+**Google is the exception, deliberately.** `agy` publishes each effort tier as its own model
+(`gemini-3.1-pro-high` vs `gemini-3.1-pro-low`) instead of taking a flag, so for that vendor the
+effort IS the model name — pick the `(High)` variant. Nothing is passed on the command line there;
+a flag would be rejected and the channel would break for one vendor only, quietly.
 
 | Vendor | API key | Local CLI | Model names that resolve to it |
 |---|---|---|---|

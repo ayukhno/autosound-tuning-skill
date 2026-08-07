@@ -314,12 +314,31 @@ def _first_cli_model():
     return None
 
 
+# How hard the reviewer is asked to think. A Critic that rubber-stamps is worse than no Critic —
+# the failure this whole channel exists to catch (a model that closed four phases in one sitting
+# and reported a finished tune on a car nobody had sat in) is exactly what a cheap reviewer looks
+# like: it never disagrees. So the floor is the top practical tier rather than each CLI's default.
+#
+# `max` is deliberately NOT the default: a reviewer is a one-shot call on a package that is already
+# written, not the open-ended reasoning `max` is for, and on a metered key it is the Arbiter's money.
+# `AUTOSOUND_CRITIC_EFFORT` overrides for a reviewer worth paying more (or less) for.
+CRITIC_EFFORT = os.environ.get("AUTOSOUND_CRITIC_EFFORT", "xhigh").strip().lower()
+
+
 def cli_command(provider, binary, model, prompt_path, prompt_text):
-    """Each vendor's CLI takes the prompt its own way: a path, or the text itself."""
+    """Each vendor's CLI takes the prompt its own way: a path, or the text itself.
+
+    Effort is a third axis they disagree on. Anthropic and OpenAI take it as a flag; Google does
+    NOT — `agy` publishes each tier as its own model (`gemini-3.1-pro-high` vs `-low`), so for that
+    vendor the effort IS the model name and a flag would be rejected. Passing it anyway is how a
+    reviewer channel breaks for one vendor only, silently, in a way nobody notices until the
+    critique stops arriving.
+    """
     if provider == "anthropic":
-        return [binary, "--model", model, "-p", prompt_text]
+        return [binary, "--model", model, "--effort", CRITIC_EFFORT, "-p", prompt_text]
     if provider == "openai":
-        return [binary, "exec", "--model", model, prompt_text]
+        return [binary, "exec", "--model", model,
+                "-c", f"model_reasoning_effort={CRITIC_EFFORT}", prompt_text]
     extra = ["--skip-trust"] if binary == "gemini" else []
     return [binary, "--model", model] + extra + ["-p", prompt_path]
 
