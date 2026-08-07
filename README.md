@@ -105,6 +105,8 @@ Inside your active Claude Code session, run these commands **one by one** (do no
 
 *Then start tuning by saying:* **"tune a new car from scratch"**.
 
+> **Before that first message, set the model and the effort** — they are fixed for the session and nothing raises them later. As of August 2026 that is **Claude Opus at `xhigh`**, with **Gemini Pro (High)** as the reviewer; see [the pair that is actually supported](#the-pair-that-is-actually-supported--as-of-august-2026) for why the cheaper combinations fail quietly rather than loudly.
+
 > **Triggering — include a car-audio word.** The skill wakes on *what you ask*, so a bare `resume` on its own won't fire it (too generic — it could mean any project). Add one domain word: **"resume my car-audio tune"**, **"continue tuning the car"**, **"what's my current DSP / crossover state"** (or in your language — «продовжити тюн авто», „Auto-DSP weiter einmessen", „wróćmy do strojenia car audio"). Same for a fresh start: name the car/audio, not just "help me".
 
 **Starting under Gemini as the driver:** not quite as fast as Claude Code, at least not yet. There is no plugin installer for it, but the quickest path is to point an agentic Gemini session (Antigravity CLI, or any Gemini setup with file and shell access) at the repo and ask it directly:
@@ -115,19 +117,38 @@ See the FAQ for more detail.
 
 ## Recommended Models, Modes & My Take
 
-The skill supports two ways to run it, ranked by reliability. Pick based on how much the tune matters versus how much setup you want to do:
+### The pair that is actually supported — as of August 2026
+
+**Generator: Claude Opus, at `xhigh` effort. Reviewer: Gemini Pro (High).**
+
+That is the one combination this method has been driven with end to end. Anything else — another model, another vendor, or the same model asked to think less — is an experiment you are running, and worth reading as one.
+
+This is not a requirement, and the skill does not depend on it. It is plain Markdown and Python, and the free, clipboard and web-chat paths exist on purpose ([no Critic set up at all](FAQ.md#fallback-direct-api-setup-no-cli-or-nodejs-required), [the AI Studio version](FAQ.md#do-you-have-a-version-running-on-google-ai-studio)). What the line above says is which configuration has evidence behind it — not which one the code will accept.
+
+It is worth stating because of the *shape* of the failure. **A weaker model does not stop with an error — it agrees with you.** One documented run closed phases −1 through 3 in a single sitting and reported crossover points, delays to 0.1 ms, EQ "within ±0.5 dB", and a listening verdict — on a car nobody had sat in. Nothing in that transcript looked broken. It simply wasn't a tune.
+
+Two notes on reading those names:
+
+* **`xhigh` is part of the recommendation, not a preference.** Set it where you set the model (`/model` inside Claude Code, or `claude --effort xhigh` at launch). Nothing raises effort on its own mid-session, so a session started cheap stays cheap however hard the work turns out to be.
+* **For Gemini through `agy`, the effort tier *is* the model name** — `gemini-3.1-pro-high`, not `-low`. `(High)` is the whole instruction; `(Low)` is a different reviewer, not a cheaper one. Details in [setup-critic-channel.md](skills/autosound-tuning/references/tooling/setup-critic-channel.md).
+
+The date is part of the claim. Model names move fast, and an undated recommendation is exactly the kind that goes stale without anyone noticing — if you are reading this well after August 2026, check what the current equivalents are.
+
+### The two ways to run it
+
+Ranked by reliability. Pick based on how much the tune matters versus how much setup you want to do:
 
 | Mode | Setup | Reliability | Trade-off |
 | :--- | :--- | :--- | :--- |
-| **A: Claude + Gemini** | Claude drives (Sonnet 5 / Fable 5), Gemini reviews (a Pro tier — currently 3.1 Pro — for hard acoustic calls, Flash for routine) | Highest | Two AIs to configure; catches more, slower per decision |
-| **B: Solo drive (Claude or Gemini)** | One model drives and reviews itself; escalate to a stronger tier for tough calls (Claude Opus 4.8, or a higher Gemini tier) | Lower, and it depends on which model you pick | One perspective; Gemini solo gives bold, non-standard proposals but needs its numbers double-checked by hand |
+| **A: Claude + Gemini** | The supported pair above: Claude Opus drives at `xhigh`, Gemini Pro (High) reviews | Highest | Two AIs to configure; catches more, slower per decision |
+| **B: Solo drive (Claude or Gemini)** | One model drives and reviews itself | Lower, and it depends on which model you pick | One perspective; a model reviewing itself agrees with itself, which is the failure above with nothing left to catch it |
 
 **My own experience so far** (this is just my experience for now; once more people have tuned with it, I want this to be community experience, not only mine):
 
-* **Claude drives, Gemini reviews (Mode A):** stable, but moves in small steps, so it can feel a bit slow. You need to pay at least for Claude. Free Gemini works too, but it sometimes hits its limits. One more thing I noticed: Sonnet is reliable but cautious, and tends to stop and ask things that Opus would often just decide on its own, faster. On the plus side, Sonnet is thriftier with tokens, so you hit usage limits less often.
+* **Claude drives, Gemini reviews (Mode A):** stable, but moves in small steps, so it can feel a bit slow. You need to pay at least for Claude. Free Gemini works too, but it sometimes hits its limits. One more thing I noticed: Sonnet is reliable but cautious, and tends to stop and ask things that Opus would often just decide on its own, faster. Sonnet is also thriftier with tokens, so you hit usage limits less often — but that saving is the trade the section above is about, and I would not make it on a tune I cared about.
 * **Gemini drives, with Claude or a stronger Gemini model as the reviewer:** much faster. After two full measurement rounds, I already had a first working version. But later in the session, it can start to hallucinate or lose track of earlier decisions, to the point where I wanted to switch back to Claude. I have not tried this with free Gemini, because of the limits — lifting Gemini's free-tier rate limits needs a paid Google Cloud billing account (the [FAQ's cost paths](FAQ.md#subscription-options-quotas--budgets-as-of-july-2026) cover the current deposit / free-credit details, which change often). If you pay for API access either way, Mode A ends up cheaper overall.
 * **The manual step-by-step version (no local scripts):** it works, but the copy-paste process is stressful. You have to be careful not to lose any value along the way. After trying a full session with real memory between messages, it takes effort to go back to this.
-* **Which model to trust as driver, so far:** **Claude Opus** has given the most consistently stable results. **Sonnet 5** works but still comes across as less sure of itself in this role — worth double-checking its calls for now. **Fable 5** has produced the best results of any model: it audited and rebuilt the skill while running a full tuning session (see [audit-fable-2026-07-11.md](audit-fable-2026-07-11.md)), then drove a second full in-car session on the simplified rules — that build is currently the best-sounding result I have. **Gemini** lost some capability as the process rules grew more complex; after the audit simplified them, Gemini 3.1 Pro proved itself again in the **Critic** role, while Gemini as the *driver* under the new rules is still unverified — feedback from the community is welcome here.
+* **How I arrived at the pair above:** **Claude Opus** has given the most consistently stable results as the driver, which is why it is the one named. **Sonnet 5** works but still comes across as less sure of itself in this role — worth double-checking its calls. **Fable 5** produced the single best result of any model: it audited and rebuilt the skill while running a full tuning session, then drove a second full in-car session on the simplified rules — that build is still the best-sounding result I have. I have not named it above only because it is one deep run rather than the repeated end-to-end use Opus has; if you have it, it is a well-founded experiment, not a downgrade. **Gemini** lost some capability as the process rules grew more complex; after the audit simplified them, Gemini 3.1 Pro proved itself again in the **Critic** role — which is the seat it is recommended in — while Gemini as the *driver* under the new rules is still unverified. Feedback from the community is welcome on all of this; it is what would turn a one-person recommendation into a real one.
 
 ## Full Setup & FAQ
 

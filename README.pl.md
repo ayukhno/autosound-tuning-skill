@@ -105,6 +105,8 @@ Uruchom poniższe polecenia w aktywnej sesji Claude Code **jedno po drugim** (ni
 
 *Następnie rozpocznij strojenie, mówiąc:* **"tune a new car from scratch"** (lub po polsku: *"nastrój nowe auto od zera"*).
 
+> **Ustaw model i wysiłek przed pierwszą wiadomością** — obowiązują przez całą sesję i nic ich potem nie podniesie. Na sierpień 2026 jest to **Claude Opus na `xhigh`** oraz **Gemini Pro (High)** jako recenzent; dlaczego tańsze kombinacje zawodzą po cichu, a nie głośno, opisuje [para, która jest faktycznie wspierana](#para-która-jest-faktycznie-wspierana--stan-na-sierpień-2026).
+
 > **Wyzwalanie — dodaj słowo o car audio.** Skill budzi się na to, *o co pytasz*, więc samo `resume` go nie uruchomi (zbyt ogólne — może dotyczyć dowolnego projektu). Dodaj jedno słowo domenowe: **„wróćmy do strojenia car audio"**, **„kontynuuj strojenie auta"**, **„jaki jest obecny stan DSP / zwrotnic"**. Tak samo przy starcie od zera: nazwij auto/audio, nie tylko „pomóż mi".
 
 **Start z Gemini jako prowadzącym:** jeszcze nie tak szybko jak z Claude Code, przynajmniej na razie. Nie ma do tego instalatora wtyczki, ale najszybsza droga to skierować agentową sesję Gemini (Antigravity CLI lub dowolny Gemini z dostępem do plików i powłoki) na repozytorium i poprosić wprost:
@@ -115,19 +117,38 @@ Więcej szczegółów w FAQ.
 
 ## Polecane modele, tryby i moje doświadczenie
 
-Skill obsługuje dwa sposoby działania, uszeregowane według niezawodności. Wybierz w zależności od tego, jak ważne jest to konkretne strojenie i ile konfiguracji chcesz wykonać:
+### Para, która jest faktycznie wspierana — stan na sierpień 2026
+
+**Generator: Claude Opus, na wysiłku `xhigh`. Recenzent: Gemini Pro (High).**
+
+To jedyna kombinacja, którą ta metoda została przejechana od początku do końca. Wszystko inne — inny model, inny dostawca albo ten sam model poproszony, by myślał mniej — to eksperyment, który przeprowadzasz ty, i tak warto czytać jego wynik.
+
+To nie jest wymóg, a skill od tej pary nie zależy. To zwykły Markdown i Python, a darmowe ścieżki, schowek i czat webowy istnieją celowo ([całkiem bez skonfigurowanego Krytyka](FAQ.md#fallback-direct-api-setup-no-cli-or-nodejs-required), [wersja na AI Studio](FAQ.md#do-you-have-a-version-running-on-google-ai-studio)). Powyższa linijka mówi, za którą konfiguracją stoją dowody — nie którą przyjmie kod.
+
+Warto to powiedzieć ze względu na *kształt* awarii. **Słabszy model nie zatrzymuje się z błędem — on się z tobą zgadza.** Udokumentowany przebieg zamknął fazy od −1 do 3 za jednym posiedzeniem i zaraportował punkty podziału, opóźnienia z dokładnością do 0,1 ms, EQ „w granicach ±0,5 dB" i werdykt odsłuchowy — o aucie, w którym nikt nie siedział. Nic w tym zapisie nie wyglądało na zepsute. To po prostu nie było strojenie.
+
+Dwie uwagi o czytaniu tych nazw:
+
+* **`xhigh` jest częścią rekomendacji, a nie preferencją.** Ustaw go tam, gdzie wybierasz model (`/model` w Claude Code albo `claude --effort xhigh` przy starcie). Nic nie podnosi wysiłku samo w środku sesji — sesja rozpoczęta tanio taka zostanie, choćby praca okazała się dowolnie trudna.
+* **Dla Gemini przez `agy` poziom wysiłku *jest* nazwą modelu** — `gemini-3.1-pro-high`, a nie `-low`. `(High)` to cała instrukcja; `(Low)` to inny recenzent, a nie tańszy. Szczegóły w [setup-critic-channel.md](skills/autosound-tuning/references/tooling/setup-critic-channel.md).
+
+Data jest częścią twierdzenia. Nazwy modeli zmieniają się szybko, a rekomendacja bez daty właśnie dlatego psuje się niezauważona — jeśli czytasz to znacznie później niż w sierpniu 2026, sprawdź, co jest dziś odpowiednikiem.
+
+### Dwa sposoby działania
+
+Uszeregowane według niezawodności. Wybierz w zależności od tego, jak ważne jest to konkretne strojenie i ile konfiguracji chcesz wykonać:
 
 | Tryb | Konfiguracja | Niezawodność | Kompromis |
 | :--- | :--- | :--- | :--- |
-| **A: Claude + Gemini** | Claude prowadzi (Sonnet 5 / Fable 5), Gemini recenzuje (poziom Pro — obecnie 3.1 Pro — dla trudnych decyzji akustycznych, Flash dla rutyny) | Najwyższa | Dwie AI do skonfigurowania; wyłapuje więcej, wolniej przy każdej decyzji |
-| **B: Solo (Claude lub Gemini)** | Jeden model prowadzi i sam siebie recenzuje; eskalacja do mocniejszego poziomu przy trudnych decyzjach o zwrotnicach (Claude Opus 4.8 lub wyższy poziom Gemini) | Niższa, zależy od wybranego modelu | Tylko jedna perspektywa; Gemini solo daje śmiałe, niestandardowe propozycje, ale trzeba ręcznie sprawdzić liczby |
+| **A: Claude + Gemini** | Para powyżej: Claude Opus prowadzi na `xhigh`, Gemini Pro (High) recenzuje | Najwyższa | Dwie AI do skonfigurowania; wyłapuje więcej, wolniej przy każdej decyzji |
+| **B: Solo (Claude lub Gemini)** | Jeden model prowadzi i sam siebie recenzuje | Niższa, zależy od wybranego modelu | Tylko jedna perspektywa; model recenzujący samego siebie sam ze sobą się zgadza — to dokładnie ta awaria co wyżej, i nie ma już komu jej wyłapać |
 
 **Moje własne doświadczenie jak dotąd** (to na razie tylko moje doświadczenie; gdy więcej osób nastroi z tym skillem, chcę, żeby to było doświadczenie społeczności, a nie tylko moje):
 
-* **Claude prowadzi, Gemini recenzuje (tryb A):** stabilnie, ale porusza się małymi krokami, więc może wydawać się trochę wolne. Trzeba zapłacić przynajmniej za Claude. Darmowy Gemini też działa, ale czasem trafia na swoje limity. Jeszcze jedno, co zauważyłem: Sonnet jest niezawodny, ale ostrożny, i często zatrzymuje się, by pytać o rzeczy, które Opus zwykle rozstrzyga sam, szybciej. Za to Sonnet oszczędniej gospodaruje tokenami, więc rzadziej trafiasz na limity użycia.
+* **Claude prowadzi, Gemini recenzuje (tryb A):** stabilnie, ale porusza się małymi krokami, więc może wydawać się trochę wolne. Trzeba zapłacić przynajmniej za Claude. Darmowy Gemini też działa, ale czasem trafia na swoje limity. Jeszcze jedno, co zauważyłem: Sonnet jest niezawodny, ale ostrożny, i często zatrzymuje się, by pytać o rzeczy, które Opus zwykle rozstrzyga sam, szybciej. Sonnet oszczędniej też gospodaruje tokenami, więc rzadziej trafiasz na limity użycia — ale ta oszczędność to dokładnie ten kompromis, o którym mowa wyżej, i przy strojeniu, na którym mi zależy, bym go nie zrobił.
 * **Gemini prowadzi, z Claude lub mocniejszym modelem Gemini jako recenzentem:** dużo szybciej. Po dwóch pełnych rundach pomiarowych miałem już pierwszą działającą wersję. Ale później w sesji może zacząć halucynować lub gubić wcześniejsze decyzje, do tego stopnia, że chciałem wrócić do Claude. Nie próbowałem tego z darmowym Gemini, przez limity — żeby je znieść, potrzebne jest płatne konto rozliczeniowe Google Cloud ([ścieżki kosztowe w FAQ](FAQ.md#subscription-options-quotas--budgets-as-of-july-2026) opisują aktualne szczegóły depozytu i darmowych kredytów, które często się zmieniają). Jeśli i tak płacisz za dostęp do API, tryb A wychodzi ogólnie taniej.
 * **Ręczna wersja krok po kroku (bez lokalnych skryptów):** działa, ale sam proces kopiuj-wklej jest nerwowo napięty. Trzeba uważać, żeby po drodze niczego nie zgubić. Po pełnej sesji z prawdziwą pamięcią między wiadomościami trudno się do tego zmusić z powrotem.
-* **Który model jak dotąd jest najbardziej niezawodny jako prowadzący:** **Claude Opus** dawał dotychczas najstabilniejsze wyniki. **Sonnet 5** działa, ale jak dotąd wydaje się mniej pewny siebie w tej roli — warto na razie dokładniej sprawdzać jego decyzje. **Fable 5** dał najlepszy wynik ze wszystkich modeli: przeprowadził audyt i przebudował skill, jednocześnie prowadząc pełną sesję strojenia (zob. [audit-fable-2026-07-11.md](audit-fable-2026-07-11.md)), a potem poprowadził drugą pełną sesję w aucie według uproszczonych zasad — ten strój jest obecnie moim najlepszym wynikiem pod względem brzmienia. **Gemini** stracił trochę możliwości wraz ze wzrostem złożoności regulaminu; po tym, jak audyt go uprościł, Gemini 3.1 Pro znów sprawdziło się w roli **Krytyka**, a Gemini jako *prowadzący* pod nowymi zasadami wciąż nie jest zweryfikowany — czekamy na opinie społeczności.
+* **Jak doszedłem do pary powyżej:** **Claude Opus** dawał dotychczas najstabilniejsze wyniki jako prowadzący — i dlatego to on jest wymieniony. **Sonnet 5** działa, ale wydaje się mniej pewny siebie w tej roli — warto dokładniej sprawdzać jego decyzje. **Fable 5** dał najlepszy pojedynczy wynik ze wszystkich modeli: przeprowadził audyt i przebudował skill, jednocześnie prowadząc pełną sesję strojenia, a potem poprowadził drugą pełną sesję w aucie według uproszczonych zasad — ten strój wciąż jest moim najlepszym wynikiem pod względem brzmienia. Nie wymieniłem go wyżej tylko dlatego, że to jeden głęboki przebieg, a nie powtarzalne użycie od początku do końca, jakie ma za sobą Opus; jeśli go masz, to dobrze uzasadniony eksperyment, a nie zejście w dół. **Gemini** stracił trochę możliwości wraz ze wzrostem złożoności regulaminu; po tym, jak audyt go uprościł, Gemini 3.1 Pro znów sprawdziło się w roli **Krytyka** — i w tym fotelu jest polecany — a Gemini jako *prowadzący* pod nowymi zasadami wciąż nie jest zweryfikowany. Opinie społeczności są mile widziane w całej tej sprawie: to one zamieniłyby rekomendację jednej osoby w prawdziwą.
 
 ## Pełna konfiguracja i FAQ
 

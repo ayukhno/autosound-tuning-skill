@@ -10,6 +10,7 @@ Have a question that isn't here? Open a [discussion or issue](../../issues) and 
   - [Our Mission & Vision](#our-mission--vision)
   - [Why We Need Specialized AI & Local State](#why-we-need-specialized-ai--local-state)
   - [The 5-Step Tuning Journey](#the-5-step-tuning-journey)
+  - [Which models is this actually supported on?](#which-models-is-this-actually-supported-on-as-of-august-2026)
   - [Subscription Options, Quotas, & Budgets (As of July 2026)](#subscription-options-quotas--budgets-as-of-july-2026)
   - [Why a full session uses fewer tokens than you'd expect](#why-a-full-session-uses-fewer-tokens-than-youd-expect)
 - [First-Time Setup (Claude Code)](#first-time-setup-windows-claude-code--antigravity)
@@ -66,6 +67,25 @@ Regardless of whether you use our automated scripts (Level 2) or simply follow o
 5. **Tailoring to Taste (Voicing & Variations)**
    We build subtle variations and presets tailored to your preferences (e.g., a high-energy rock preset, a highly detailed jazz preset, or a relaxed daily driving profile).
 
+### Which models is this actually supported on? (As of August 2026)
+
+**Generator: Claude Opus, at `xhigh` effort. Reviewer: Gemini Pro (High).**
+
+Read the next section — the money one — with that in mind, because the cheaper paths below are real and they are also where this choice gets made.
+
+**Any model can run the skill; that is the point of it being plain Markdown and Python.** But the method has been driven end to end with exactly one combination, and the others are experiments — a different model, a different vendor, or the same model asked to think less.
+
+The thing to understand before you economise is that **a downgrade does not fail loudly. It agrees with you.** One documented run closed phases −1 through 3 in a single sitting and reported crossover points, delays to 0.1 ms, EQ "within ±0.5 dB", and a listening verdict — for a car nobody had sat in. There is no error message for that. It reads like a finished tune, and the only way to catch it is to already know what a real one costs in time and measurements.
+
+Practical notes:
+
+* **Effort is not a preference, it is half the recommendation.** `xhigh` on the Generator; set it where you set the model (`/model` inside Claude Code, or `claude --effort xhigh` at launch). Nothing raises effort on its own mid-session — a session started cheap stays cheap no matter how hard the work turns out to be.
+* **For Gemini via `agy`, the effort tier *is* the model name.** `gemini-3.1-pro-high`, not `gemini-3.1-pro-low`. `(High)` is the whole instruction, and `(Low)` is a different reviewer rather than a discounted one. The Critic channel defaults to `xhigh` for the same reason — see [setup-critic-channel.md](skills/autosound-tuning/references/tooling/setup-critic-channel.md).
+* **The Critic is the wrong place to save money.** A reviewer that never disagrees is not a cheap reviewer, it is an absent one, and it costs you the single check that catches the failure above.
+* **A free Critic is still worth having.** Clipboard Mode into a free web chat is a genuine reviewer and far better than none — the warning here is about a *quiet, capable-sounding* downgrade, not about being on a budget.
+
+**The date is part of the claim.** Model names move fast, and an undated recommendation goes stale without anyone noticing. If you are reading this well after August 2026, check what the current equivalents are rather than trusting these names.
+
 ### Subscription Options, Quotas, & Budgets (As of July 2026)
 
 > [!WARNING]
@@ -74,14 +94,14 @@ Regardless of whether you use our automated scripts (Level 2) or simply follow o
 In car audio, enthusiasts easily spend hundreds or thousands of dollars on physical hardware (where a single premium sound dampening sheet or a high-quality RCA cable costs $20–$50). When it comes to tuning your system with this AI tool, you have three flexible financial paths depending on your budget, tolerance for rate limits, and preference for automation:
 
 * **Option 1 (Recommended Baseline): Claude ($20/mo) + Free Gemini as Advisor/Critic**
-  You pay $20 for a 1-month Claude Pro subscription (using Claude as the strict, highly structured, and systematic "driver" of the tuning process) and connect Gemini as the Critic/Advisor for free (via Clipboard Mode or standard free API keys from Google AI Studio). 
+  You pay $20 for a 1-month Claude Pro subscription (using Claude as the strict, highly structured, and systematic "driver" of the tuning process) and connect Gemini as the Critic/Advisor for free (via Clipboard Mode or standard free API keys from Google AI Studio). This is the shape of the [supported pair](#which-models-is-this-actually-supported-on-as-of-august-2026) — spend the subscription on Opus at `xhigh` rather than on more messages from a cheaper tier. 
   * **Pros:** Highly precise, 100% protection against mathematical errors, costs just $20. You simply cancel the subscription once your car is tuned.
   * **Cons:** The free-tier Gemini API can occasionally hit Rate Limits (RPM/TPM quotas) during rapid, back-to-back testing.
 
 * **Option 2 (Budget Compromise): Gemini Solo ($10 deposit)**
   You set up a paid billing account on [Google Cloud Console Billing](https://console.cloud.google.com/billing) and deposit $10 (the minimum required deposit to activate paid API tiers, which unlocks $300 in free credits for new accounts). You then run Gemini "solo" as your main tuner. 
   * **Pros:** Extremely cost-efficient ($10). **Indeed, having Gemini in the driver's seat yields the most amazing acoustic insights and non-standard tuning solutions.**
-  * **Cons:** Due to the risk of "memory drift" under heavy contexts, you will need to manually double-check any variables or parameters the AI references (for example, when it suggests changing a crossover frequency from 200 Hz to 250 Hz when you actually have 230 Hz set, or no filter at all) and start every new tuning phase with a clean session using the `/clear + resume` command.
+  * **Cons:** Due to the risk of "memory drift" under heavy contexts, you will need to manually double-check any variables or parameters the AI references (for example, when it suggests changing a crossover frequency from 200 Hz to 250 Hz when you actually have 230 Hz set, or no filter at all) and start every new tuning phase with a clean session using the `/clear + resume` command. This is also solo drive: one model proposing and approving its own work, with no second opinion to catch the failure described [just above](#which-models-is-this-actually-supported-on-as-of-august-2026).
 
 * **Option 3 (Professional & Seamless): Both Paid (Claude Pro $20 + Paid Gemini Cloud API)**
   You keep a paid Claude Pro subscription ($20) for the main structured "driver" agent and use a funded [Google Cloud Console Billing](https://console.cloud.google.com/billing) account for the Gemini API Critic/Advisor.

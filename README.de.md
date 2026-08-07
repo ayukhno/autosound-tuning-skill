@@ -105,6 +105,8 @@ Führe diese Befehle in deiner aktiven Claude-Code-Sitzung **nacheinander, einze
 
 *Dann starte das Tuning mit:* **"tune a new car from scratch"** (oder auf Deutsch: *"stimme ein neues Auto von Grund auf ab"*).
 
+> **Lege Modell und Effort vor der ersten Nachricht fest** — beide gelten für die ganze Sitzung, und nichts hebt sie später an. Stand August 2026 ist das **Claude Opus mit `xhigh`** und **Gemini Pro (High)** als Prüfer; warum die günstigeren Kombinationen leise statt laut versagen, steht unter [dem tatsächlich unterstützten Paar](#das-tatsächlich-unterstützte-paar--stand-august-2026).
+
 > **Auslösen — nenne ein Car-Audio-Wort.** Der Skill reagiert auf das, *was du fragst*, ein bloßes `resume` allein weckt ihn also nicht (zu allgemein — könnte jedes Projekt meinen). Füge ein Domänenwort hinzu: **„Auto-DSP weiter einmessen"**, **„zurück zur Car-HiFi-Abstimmung"**, **„was ist mein aktueller DSP-/Trennfrequenz-Stand"**. Genauso beim Neustart: nenne Auto/Audio, nicht nur „hilf mir".
 
 **Start mit Gemini als Fahrer:** noch nicht ganz so schnell wie mit Claude Code, zumindest bisher. Es gibt keinen Plugin-Installer dafür, aber der schnellste Weg ist, eine agentische Gemini-Sitzung (Antigravity CLI oder ein beliebiges Gemini-Setup mit Datei- und Shell-Zugriff) direkt auf das Repository anzusetzen und zu bitten:
@@ -115,19 +117,38 @@ Mehr dazu in der FAQ.
 
 ## Empfohlene Modelle, Modi & meine Erfahrung
 
-Der Skill unterstützt zwei Arten, ihn zu betreiben, nach Zuverlässigkeit geordnet. Wähle danach, wie wichtig diese Abstimmung ist und wie viel Aufwand du in die Einrichtung stecken willst:
+### Das tatsächlich unterstützte Paar — Stand August 2026
+
+**Generator: Claude Opus, mit Effort `xhigh`. Prüfer: Gemini Pro (High).**
+
+Das ist die eine Kombination, mit der diese Methode von Anfang bis Ende gefahren wurde. Alles andere — ein anderes Modell, ein anderer Anbieter oder dasselbe Modell, das weniger nachdenken soll — ist ein Experiment, das du durchführst, und sollte auch so gelesen werden.
+
+Es ist keine Voraussetzung, und der Skill hängt nicht davon ab. Er besteht aus reinem Markdown und Python, und die kostenlosen Wege, die Zwischenablage und der Web-Chat existieren mit Absicht ([ganz ohne eingerichteten Kritiker](FAQ.md#fallback-direct-api-setup-no-cli-or-nodejs-required), [die AI-Studio-Version](FAQ.md#do-you-have-a-version-running-on-google-ai-studio)). Die Zeile oben sagt, für welche Konfiguration es Belege gibt — nicht, welche der Code akzeptiert.
+
+Erwähnenswert ist das wegen der *Form* des Fehlers. **Ein schwächeres Modell bricht nicht mit einer Fehlermeldung ab — es stimmt dir zu.** Ein dokumentierter Durchlauf schloss die Phasen −1 bis 3 in einer einzigen Sitzung ab und meldete Trennfrequenzen, Laufzeiten auf 0,1 ms genau, EQ „innerhalb ±0,5 dB" und ein Hörurteil — über ein Auto, in dem niemand gesessen hatte. Nichts daran sah kaputt aus. Es war nur keine Abstimmung.
+
+Zwei Hinweise zum Lesen dieser Namen:
+
+* **`xhigh` ist Teil der Empfehlung, keine Vorliebe.** Stelle es dort ein, wo du das Modell wählst (`/model` in Claude Code oder `claude --effort xhigh` beim Start). Nichts erhöht den Effort mitten in der Sitzung von selbst — eine billig gestartete Sitzung bleibt billig, wie schwer die Arbeit auch wird.
+* **Bei Gemini über `agy` *ist* die Effort-Stufe der Modellname** — `gemini-3.1-pro-high`, nicht `-low`. `(High)` ist die ganze Anweisung; `(Low)` ist ein anderer Prüfer, kein günstigerer. Details in [setup-critic-channel.md](skills/autosound-tuning/references/tooling/setup-critic-channel.md).
+
+Das Datum gehört zur Aussage. Modellnamen ändern sich schnell, und genau eine undatierte Empfehlung veraltet, ohne dass es jemand merkt — wenn du das deutlich nach August 2026 liest, prüfe, was die aktuellen Entsprechungen sind.
+
+### Die zwei Betriebsarten
+
+Nach Zuverlässigkeit geordnet. Wähle danach, wie wichtig diese Abstimmung ist und wie viel Aufwand du in die Einrichtung stecken willst:
 
 | Modus | Einrichtung | Zuverlässigkeit | Kompromiss |
 | :--- | :--- | :--- | :--- |
-| **A: Claude + Gemini** | Claude führt (Sonnet 5 / Fable 5), Gemini prüft (eine Pro-Stufe — aktuell 3.1 Pro — für schwierige akustische Entscheidungen, Flash für Routine) | Höchste | Zwei KIs einzurichten; fängt mehr ab, langsamer pro Entscheidung |
-| **B: Solo-Betrieb (Claude oder Gemini)** | Ein Modell führt und prüft sich selbst; Eskalation auf eine stärkere Stufe bei schwierigen Frequenzweichen-Entscheidungen (Claude Opus 4.8 oder eine höhere Gemini-Stufe) | Niedriger, hängt vom gewählten Modell ab | Nur eine Perspektive; Gemini solo liefert mutige, unkonventionelle Vorschläge, deren Zahlen aber von Hand geprüft werden müssen |
+| **A: Claude + Gemini** | Das Paar von oben: Claude Opus führt mit `xhigh`, Gemini Pro (High) prüft | Höchste | Zwei KIs einzurichten; fängt mehr ab, langsamer pro Entscheidung |
+| **B: Solo-Betrieb (Claude oder Gemini)** | Ein Modell führt und prüft sich selbst | Niedriger, hängt vom gewählten Modell ab | Nur eine Perspektive; ein Modell, das sich selbst prüft, stimmt sich selbst zu — genau der Fehler von oben, und niemand mehr da, der ihn abfängt |
 
 **Meine eigene Erfahrung bisher** (das ist bisher nur meine eigene Erfahrung; sobald mehr Leute damit abgestimmt haben, soll das hier die Erfahrung der Community widerspiegeln, nicht nur meine):
 
-* **Claude führt, Gemini prüft (Modus A):** stabil, bewegt sich aber in kleinen Schritten, was etwas langsam wirken kann. Du musst mindestens für Claude bezahlen. Kostenloses Gemini funktioniert auch, stößt aber manchmal an seine Grenzen. Noch etwas, das mir aufgefallen ist: Sonnet ist zuverlässig, aber vorsichtig, und hält oft an, um Dinge zu erfragen, die Opus meist selbst entscheidet, schneller. Dafür geht Sonnet sparsamer mit Tokens um, sodass man seltener an die Nutzungslimits stößt.
+* **Claude führt, Gemini prüft (Modus A):** stabil, bewegt sich aber in kleinen Schritten, was etwas langsam wirken kann. Du musst mindestens für Claude bezahlen. Kostenloses Gemini funktioniert auch, stößt aber manchmal an seine Grenzen. Noch etwas, das mir aufgefallen ist: Sonnet ist zuverlässig, aber vorsichtig, und hält oft an, um Dinge zu erfragen, die Opus meist selbst entscheidet, schneller. Sonnet geht außerdem sparsamer mit Tokens um, sodass man seltener an die Nutzungslimits stößt — aber genau diese Ersparnis ist der Handel, um den es im Abschnitt oben geht, und bei einer Abstimmung, die mir wichtig ist, würde ich ihn nicht eingehen.
 * **Gemini führt, mit Claude oder einem stärkeren Gemini-Modell als Prüfer:** deutlich schneller. Nach zwei vollständigen Messrunden hatte ich bereits eine erste funktionierende Version. Später in der Sitzung kann es aber anfangen zu halluzinieren oder frühere Entscheidungen zu vergessen, bis zu dem Punkt, an dem ich zurück zu Claude wechseln wollte. Ich habe das nicht mit kostenlosem Gemini probiert, wegen der Limits — um sie aufzuheben, brauchst du ein bezahltes Google-Cloud-Abrechnungskonto (die [Kostenwege in der FAQ](FAQ.md#subscription-options-quotas--budgets-as-of-july-2026) decken die aktuellen Einzahlungs-/Gratisguthaben-Details ab, die sich oft ändern). Wenn du ohnehin für API-Zugriff zahlst, kommt Modus A insgesamt günstiger.
 * **Die manuelle Schritt-für-Schritt-Version (ohne lokale Skripte):** funktioniert, aber der Copy-paste-Prozess ist nervenaufreibend. Man muss aufpassen, dabei nichts zu verlieren. Nach einer vollen Sitzung mit echtem Gedächtnis zwischen den Nachrichten kostet es Überwindung, dahin zurückzukehren.
-* **Welches Modell bisher am zuverlässigsten als Fahrer ist:** **Claude Opus** hat bisher die stabilsten Ergebnisse geliefert. **Sonnet 5** funktioniert, wirkt in dieser Rolle aber bisher weniger sicher — seine Entscheidungen sollte man vorerst genauer prüfen. **Fable 5** hat die besten Ergebnisse aller Modelle erzielt: Es hat den Skill auditiert und überarbeitet, während es eine vollständige Abstimmungssitzung durchführte (siehe [audit-fable-2026-07-11.md](audit-fable-2026-07-11.md)), und dann eine zweite volle Sitzung im Auto nach den vereinfachten Regeln gefahren — dieser Aufbau ist aktuell mein klanglich bestes Ergebnis. **Gemini** hat mit zunehmender Komplexität der Prozessregeln etwas an Leistungsfähigkeit eingebüßt; nachdem das Audit sie vereinfacht hat, hat sich Gemini 3.1 Pro in der Rolle des **Kritikers** erneut bewährt, während Gemini als *Fahrer* unter den neuen Regeln noch nicht verifiziert ist — Rückmeldungen aus der Community sind hier willkommen.
+* **Wie ich zu dem Paar oben gekommen bin:** **Claude Opus** hat als Fahrer bisher die stabilsten Ergebnisse geliefert — deshalb wird es dort genannt. **Sonnet 5** funktioniert, wirkt in dieser Rolle aber weniger sicher — seine Entscheidungen sollte man genauer prüfen. **Fable 5** hat das beste Einzelergebnis aller Modelle erzielt: Es hat den Skill auditiert und überarbeitet, während es eine vollständige Abstimmungssitzung durchführte, und dann eine zweite volle Sitzung im Auto nach den vereinfachten Regeln gefahren — dieser Aufbau ist immer noch mein klanglich bestes Ergebnis. Oben steht es nur deshalb nicht, weil es ein einzelner tiefer Durchlauf ist und nicht der wiederholte Einsatz von Anfang bis Ende, den Opus hinter sich hat; wenn du es hast, ist es ein gut begründetes Experiment und kein Rückschritt. **Gemini** hat mit zunehmender Komplexität der Prozessregeln etwas an Leistungsfähigkeit eingebüßt; nachdem das Audit sie vereinfacht hat, hat sich Gemini 3.1 Pro in der Rolle des **Kritikers** erneut bewährt — und genau auf diesem Platz wird es empfohlen —, während Gemini als *Fahrer* unter den neuen Regeln noch nicht verifiziert ist. Rückmeldungen aus der Community sind zu all dem willkommen: Sie würden aus der Empfehlung einer einzelnen Person eine echte machen.
 
 ## Vollständiges Setup & FAQ
 
