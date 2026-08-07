@@ -132,23 +132,23 @@ Zwei Hinweise zum Lesen dieser Namen:
 * **`xhigh` ist Teil der Empfehlung, keine Vorliebe.** Stelle es dort ein, wo du das Modell wählst (`/model` in Claude Code oder `claude --effort xhigh` beim Start). Nichts erhöht den Effort mitten in der Sitzung von selbst — eine billig gestartete Sitzung bleibt billig, wie schwer die Arbeit auch wird.
 * **Bei Gemini über `agy` *ist* die Effort-Stufe der Modellname** — `gemini-3.1-pro-high`, nicht `-low`. `(High)` ist die ganze Anweisung; `(Low)` ist ein anderer Prüfer, kein günstigerer. Details in [setup-critic-channel.md](skills/autosound-tuning/references/tooling/setup-critic-channel.md).
 
-Das Datum gehört zur Aussage. Modellnamen ändern sich schnell, und genau eine undatierte Empfehlung veraltet, ohne dass es jemand merkt — wenn du das deutlich nach August 2026 liest, prüfe, was die aktuellen Entsprechungen sind.
+Das Datum gehört zur Aussage: genau eine undatierte Empfehlung veraltet, ohne dass es jemand merkt.
 
-### Die zwei Betriebsarten
+### Zwei Betriebsarten
 
-Nach Zuverlässigkeit geordnet. Wähle danach, wie wichtig diese Abstimmung ist und wie viel Aufwand du in die Einrichtung stecken willst:
+| Modus | Aufbau | Verlässlichkeit |
+| :--- | :--- | :--- |
+| **A: Claude + Gemini** | Claude steuert, Gemini prüft (eine Pro-Stufe für die schwierigen akustischen Entscheidungen) | Am höchsten — zwei Perspektiven, dafür langsamer pro Entscheidung |
+| **B: Solo** | Ein Modell steuert und prüft sich selbst | Geringer — eine Perspektive, und die Zahlen sollte man von Hand nachrechnen |
 
-| Modus | Einrichtung | Zuverlässigkeit | Kompromiss |
-| :--- | :--- | :--- | :--- |
-| **A: Claude + Gemini** | Das Paar von oben: Claude Opus führt mit `xhigh`, Gemini Pro (High) prüft | Höchste | Zwei KIs einzurichten; fängt mehr ab, langsamer pro Entscheidung |
-| **B: Solo-Betrieb (Claude oder Gemini)** | Ein Modell führt und prüft sich selbst | Niedriger, hängt vom gewählten Modell ab | Nur eine Perspektive; ein Modell, das sich selbst prüft, stimmt sich selbst zu — genau der Fehler von oben, und niemand mehr da, der ihn abfängt |
+**Womit steuern** — bisher meine eigene Erfahrung; ich hätte gern, dass daraus Erfahrung der Community wird:
 
-**Meine eigene Erfahrung bisher** (das ist bisher nur meine eigene Erfahrung; sobald mehr Leute damit abgestimmt haben, soll das hier die Erfahrung der Community widerspiegeln, nicht nur meine):
+* **Opus — die Vorgabe fürs Einmessen.** Es hält eine lange Sitzung zusammen und entscheidet dort, wo ein schwächeres Modell nachfragt. `xhigh` ist die Untergrenze; in den kniffligen Kurven mit **Max effort** fahren.
+* **Sonnet — nicht für ein komplexes Einmessen.** Vorsichtig, und es verliert den Faden, sobald Fakten über eine lange Sitzung hinweg zusammengeführt werden müssen. Für kurze, klar abgegrenzte Schritte in Ordnung.
+* **Fable — für Forschungsaufgaben.** Wo ein neuer Ansatz gesucht und nicht ein bekannter angewandt wird, kamen hier die besten Ideen.
+* **Gemini — als Kritiker**, auf einer Pro-Stufe. Als Steuermodell unter den aktuellen Regeln unerprobt; Rückmeldungen willkommen.
 
-* **Claude führt, Gemini prüft (Modus A):** stabil, bewegt sich aber in kleinen Schritten, was etwas langsam wirken kann. Du musst mindestens für Claude bezahlen. Kostenloses Gemini funktioniert auch, stößt aber manchmal an seine Grenzen. Noch etwas, das mir aufgefallen ist: Sonnet ist zuverlässig, aber vorsichtig, und hält oft an, um Dinge zu erfragen, die Opus meist selbst entscheidet, schneller. Sonnet geht außerdem sparsamer mit Tokens um, sodass man seltener an die Nutzungslimits stößt — aber genau diese Ersparnis ist der Handel, um den es im Abschnitt oben geht, und bei einer Abstimmung, die mir wichtig ist, würde ich ihn nicht eingehen.
-* **Gemini führt, mit Claude oder einem stärkeren Gemini-Modell als Prüfer:** deutlich schneller. Nach zwei vollständigen Messrunden hatte ich bereits eine erste funktionierende Version. Später in der Sitzung kann es aber anfangen zu halluzinieren oder frühere Entscheidungen zu vergessen, bis zu dem Punkt, an dem ich zurück zu Claude wechseln wollte. Ich habe das nicht mit kostenlosem Gemini probiert, wegen der Limits — um sie aufzuheben, brauchst du ein bezahltes Google-Cloud-Abrechnungskonto (die [Kostenwege in der FAQ](FAQ.md#subscription-options-quotas--budgets-as-of-july-2026) decken die aktuellen Einzahlungs-/Gratisguthaben-Details ab, die sich oft ändern). Wenn du ohnehin für API-Zugriff zahlst, kommt Modus A insgesamt günstiger.
-* **Die manuelle Schritt-für-Schritt-Version (ohne lokale Skripte):** funktioniert, aber der Copy-paste-Prozess ist nervenaufreibend. Man muss aufpassen, dabei nichts zu verlieren. Nach einer vollen Sitzung mit echtem Gedächtnis zwischen den Nachrichten kostet es Überwindung, dahin zurückzukehren.
-* **Wie ich zu dem Paar oben gekommen bin:** **Claude Opus** hat als Fahrer bisher die stabilsten Ergebnisse geliefert — deshalb wird es dort genannt. **Sonnet 5** funktioniert, wirkt in dieser Rolle aber weniger sicher — seine Entscheidungen sollte man genauer prüfen. **Fable 5** hat das beste Einzelergebnis aller Modelle erzielt: Es hat den Skill auditiert und überarbeitet, während es eine vollständige Abstimmungssitzung durchführte, und dann eine zweite volle Sitzung im Auto nach den vereinfachten Regeln gefahren — dieser Aufbau ist immer noch mein klanglich bestes Ergebnis. Oben steht es nur deshalb nicht, weil es ein einzelner tiefer Durchlauf ist und nicht der wiederholte Einsatz von Anfang bis Ende, den Opus hinter sich hat; wenn du es hast, ist es ein gut begründetes Experiment und kein Rückschritt. **Gemini** hat mit zunehmender Komplexität der Prozessregeln etwas an Leistungsfähigkeit eingebüßt; nachdem das Audit sie vereinfacht hat, hat sich Gemini 3.1 Pro in der Rolle des **Kritikers** erneut bewährt — und genau auf diesem Platz wird es empfohlen —, während Gemini als *Fahrer* unter den neuen Regeln noch nicht verifiziert ist. Rückmeldungen aus der Community sind zu all dem willkommen: Sie würden aus der Empfehlung einer einzelnen Person eine echte machen.
+**Und das alles ändert sich schnell.** Modelle, Stufen und ihre Stärken verschieben sich von Monat zu Monat — nimm das Obige also als Ausgangspunkt, nicht als Urteil. Probiere selbst, experimentiere, und du wirst finden, was zu deinem Auto und deinem Gehör passt. Was sich *nicht* ändert, ist die Form des Fehlers: was du auch wählst, ein Modell, das weniger nachdenken soll, sagt es dir nicht.
 
 ## Vollständiges Setup & FAQ
 

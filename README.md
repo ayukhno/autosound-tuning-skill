@@ -132,23 +132,23 @@ Two notes on reading those names:
 * **`xhigh` is part of the recommendation, not a preference.** Set it where you set the model (`/model` inside Claude Code, or `claude --effort xhigh` at launch). Nothing raises effort on its own mid-session, so a session started cheap stays cheap however hard the work turns out to be.
 * **For Gemini through `agy`, the effort tier *is* the model name** — `gemini-3.1-pro-high`, not `-low`. `(High)` is the whole instruction; `(Low)` is a different reviewer, not a cheaper one. Details in [setup-critic-channel.md](skills/autosound-tuning/references/tooling/setup-critic-channel.md).
 
-The date is part of the claim. Model names move fast, and an undated recommendation is exactly the kind that goes stale without anyone noticing — if you are reading this well after August 2026, check what the current equivalents are.
+The date is part of the claim — an undated recommendation is exactly the kind that goes stale without anyone noticing.
 
-### The two ways to run it
+### Two ways to run it
 
-Ranked by reliability. Pick based on how much the tune matters versus how much setup you want to do:
+| Mode | Setup | Reliability |
+| :--- | :--- | :--- |
+| **A: Claude + Gemini** | Claude drives, Gemini reviews (a Pro tier for the hard acoustic calls) | Highest — two perspectives, slower per decision |
+| **B: Solo drive** | One model drives and reviews itself | Lower — one perspective, and its numbers want checking by hand |
 
-| Mode | Setup | Reliability | Trade-off |
-| :--- | :--- | :--- | :--- |
-| **A: Claude + Gemini** | The supported pair above: Claude Opus drives at `xhigh`, Gemini Pro (High) reviews | Highest | Two AIs to configure; catches more, slower per decision |
-| **B: Solo drive (Claude or Gemini)** | One model drives and reviews itself | Lower, and it depends on which model you pick | One perspective; a model reviewing itself agrees with itself, which is the failure above with nothing left to catch it |
+**Which model to drive with** — my experience so far; I would like this to become community experience rather than only mine:
 
-**My own experience so far** (this is just my experience for now; once more people have tuned with it, I want this to be community experience, not only mine):
+* **Opus — the default for tuning.** It holds a long session together and decides where a weaker model stops to ask. `xhigh` is the floor; on the hard turns, run it at **Max effort**.
+* **Sonnet — not for a complex tune.** Cautious, and it loses the thread once facts have to be synthesised across a long session. Fine for short, bounded steps.
+* **Fable — for research.** Where the task is to find a new approach rather than apply a known one, it has produced the best ideas here.
+* **Gemini — as the Critic**, on a Pro tier. As a driver under the current rules it is unverified; feedback welcome.
 
-* **Claude drives, Gemini reviews (Mode A):** stable, but moves in small steps, so it can feel a bit slow. You need to pay at least for Claude. Free Gemini works too, but it sometimes hits its limits. One more thing I noticed: Sonnet is reliable but cautious, and tends to stop and ask things that Opus would often just decide on its own, faster. Sonnet is also thriftier with tokens, so you hit usage limits less often — but that saving is the trade the section above is about, and I would not make it on a tune I cared about.
-* **Gemini drives, with Claude or a stronger Gemini model as the reviewer:** much faster. After two full measurement rounds, I already had a first working version. But later in the session, it can start to hallucinate or lose track of earlier decisions, to the point where I wanted to switch back to Claude. I have not tried this with free Gemini, because of the limits — lifting Gemini's free-tier rate limits needs a paid Google Cloud billing account (the [FAQ's cost paths](FAQ.md#subscription-options-quotas--budgets-as-of-july-2026) cover the current deposit / free-credit details, which change often). If you pay for API access either way, Mode A ends up cheaper overall.
-* **The manual step-by-step version (no local scripts):** it works, but the copy-paste process is stressful. You have to be careful not to lose any value along the way. After trying a full session with real memory between messages, it takes effort to go back to this.
-* **How I arrived at the pair above:** **Claude Opus** has given the most consistently stable results as the driver, which is why it is the one named. **Sonnet 5** works but still comes across as less sure of itself in this role — worth double-checking its calls. **Fable 5** produced the single best result of any model: it audited and rebuilt the skill while running a full tuning session, then drove a second full in-car session on the simplified rules — that build is still the best-sounding result I have. I have not named it above only because it is one deep run rather than the repeated end-to-end use Opus has; if you have it, it is a well-founded experiment, not a downgrade. **Gemini** lost some capability as the process rules grew more complex; after the audit simplified them, Gemini 3.1 Pro proved itself again in the **Critic** role — which is the seat it is recommended in — while Gemini as the *driver* under the new rules is still unverified. Feedback from the community is welcome on all of this; it is what would turn a one-person recommendation into a real one.
+**And all of this moves fast.** Models, tiers and their strengths shift from month to month, so take the above as a starting point rather than a verdict — try them yourself, experiment, and you will find what fits your car and your ear. What does *not* move is the shape of the failure: whatever you pick, a model asked to think less will not tell you so.
 
 ## Full Setup & FAQ
 
