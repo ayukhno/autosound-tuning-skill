@@ -87,6 +87,9 @@ def _empty_project():
         "paths": {}, "presets": [],
         "channels": [], "hardware": {"controls": {}},
         "glossary": {}, "channel_summary": {},
+        # SCR-015: the phase-0 Acoustic Flaw Map as data. What this cabin and this install do to
+        # the sound -- and, per entry, what may and may not be done about it.
+        "acoustics": {"flaws": []},
         "_open_questions": [],
     }
 
@@ -124,6 +127,64 @@ def validate(data):
     if "glossary" in data and not isinstance(data["glossary"], dict):
         raise ProjectError("glossary must be an object")
     return data
+
+
+# What a flaw IS. A closed list because a front-end colours by it and a model picks from it: free
+# text here would be a field nobody can render and everybody words differently.
+FLAW_KINDS = (
+    "room_gain", "modal_peak", "cabin_null", "sbir", "floor_bounce",
+    "driver_resonance", "non_min_phase", "thd_spike", "pair_suckout",
+)
+# What may be DONE about it -- the load-bearing half. Closed for the same reason, and because the
+# whole point of writing the map down is that "don't EQ-boost this null" survives the session that
+# discovered it.
+FLAW_ACTIONS = ("notch", "leave", "no_boost", "geometry", "delay", "crossover")
+
+
+def validate_flaw(entry):
+    """Raise `ProjectError` unless this is a flaw a later session can act on.
+
+    The one rule with teeth: **a dip cannot be notched**. A cabin null or an SBIR notch is
+    interference, not minimum-phase -- cutting it does nothing and boosting it burns headroom
+    against physics, which is exactly the mistake the map exists to prevent. Everything else is
+    shape: a frequency, a signed level, a kind and an action from the lists above, a reason, and
+    evidence, because a flaw with no measurement behind it is a rumour.
+    """
+    if not isinstance(entry, dict):
+        raise ProjectError("a flaw must be an object")
+    f = entry.get("f_hz")
+    if not isinstance(f, (int, float)) or isinstance(f, bool) or f <= 0:
+        raise ProjectError(f"f_hz must be a positive Hz, got {f!r}")
+    level = entry.get("level_db")
+    if not isinstance(level, (int, float)) or isinstance(level, bool):
+        raise ProjectError(
+            f"level_db must be a number: the FEATURE, signed — + a hump, - a dip. Not the "
+            f"correction you would apply to it (got {level!r})"
+        )
+    if entry.get("kind") not in FLAW_KINDS:
+        raise ProjectError(
+            f"kind must be one of {', '.join(FLAW_KINDS)} (got {entry.get('kind')!r})"
+        )
+    if entry.get("action") not in FLAW_ACTIONS:
+        raise ProjectError(
+            f"action must be one of {', '.join(FLAW_ACTIONS)} (got {entry.get('action')!r})"
+        )
+    if level < 0 and entry.get("action") == "notch":
+        raise ProjectError(
+            f"{f:g} Hz is a dip ({level:g} dB) and cannot be notched: a null is interference, not "
+            "minimum-phase — cutting it changes nothing and boosting it burns headroom against "
+            "physics. Use `leave`/`no_boost`, or `geometry`/`delay`/`crossover` if the fix is one "
+            "of those. If you meant a HUMP you intend to cut, `level_db` is the feature itself "
+            f"({abs(level):g}, positive), not the correction you would apply to it."
+        )
+    if not str(entry.get("why") or "").strip():
+        raise ProjectError("a flaw needs `why` — the next session reads the reason, not the number")
+    if not [e for e in (entry.get("evidence") or []) if str(e).strip()]:
+        raise ProjectError(
+            "a flaw needs evidence (the capture it was read off) — a flaw with no measurement "
+            "behind it is a rumour, and the map is consumed as fact"
+        )
+    return entry
 
 
 def open_questions(data):
@@ -214,6 +275,40 @@ class Project:
         row.update(fields)
         return self.save(data)
 
+    def add_flaw(self, **fields):
+        """Add (or replace, by frequency + channels) one acoustic-flaw entry — SCR-015.
+
+        Replacing rather than appending on a repeat: re-measuring the same peak after an install
+        change should correct the map, not leave two contradictory rows for a reader to pick
+        between. A genuinely different finding at the same frequency belongs to different channels
+        and therefore lands beside it.
+        """
+        entry = dict(fields)
+        entry.setdefault("channels", [])
+        validate_flaw(entry)
+        entry["at"] = _now()
+        data = self.load()
+        flaws = data.setdefault("acoustics", {}).setdefault("flaws", [])
+        key = (round(float(entry["f_hz"]), 1), tuple(sorted(entry.get("channels") or [])))
+        for i, existing in enumerate(list(flaws)):
+            same = (
+                round(float(existing.get("f_hz", -1)), 1),
+                tuple(sorted(existing.get("channels") or [])),
+            )
+            if same == key:
+                flaws[i] = entry
+                break
+        else:
+            flaws.append(entry)
+        flaws.sort(key=lambda e: float(e.get("f_hz", 0)))
+        self.save(data)
+        return entry
+
+    def flaws(self, data=None):
+        """The map, lowest frequency first. Empty until phase 0 builds it."""
+        data = data or self.load()
+        return list((data.get("acoustics") or {}).get("flaws") or [])
+
     def set_hardware_control(self, name, value, source=None):
         """A DSP-hardware-level knob position (e.g. `RearRC`/`SubRC`/`RealCenter` — SCR-017),
         constant across this DSP's presets, so it lives here ONCE — not copy-pasted into every
@@ -282,6 +377,15 @@ _USAGE = """usage: project.py <project-dir> <command> [args]
   set-hardware <name> <value> [--source S]     set a DSP-hardware control (RearRC/SubRC/...)
   record-change <process-dir> <file> <what>    log a config_change journal event
       [--why W] [--source S] [--impact I]
+  flaw <f_hz> <level_db> <kind> <action>       add/replace an acoustic-flaw entry (SCR-015)
+      [--q Q] [--bw-oct B] [--channels a,b]    level_db is the FEATURE, signed: + a hump,
+                                                 - a dip. NOT the correction you would apply
+      --why W --evidence "t1,t2"               kind: room_gain|modal_peak|cabin_null|sbir|
+                                                 floor_bounce|driver_resonance|non_min_phase|
+                                                 thd_spike|pair_suckout
+                                               action: notch|leave|no_boost|geometry|delay|
+                                                 crossover  (a dip can never be `notch`)
+  flaws                                        print the map, lowest frequency first
 """
 
 
@@ -365,6 +469,36 @@ def _main(argv):
             proc = _load_process(process_dir)
             proj.record_change(proc, file, what, why=why, source=source, impact=impact)
             print(f"config_change recorded: {file} — {what}")
+        elif cmd == "flaw":
+            # Each flag is read ONCE: `_flag` pops what it finds, so asking twice (the classic
+            # `float(x) if x else None`) hands back None on the second call.
+            q = _flag(args, "--q")
+            bw = _flag(args, "--bw-oct")
+            channels = _flag(args, "--channels") or ""
+            why = _flag(args, "--why")
+            evidence = _flag(args, "--evidence") or ""
+            entry = proj.add_flaw(
+                f_hz=float(args[0]),
+                level_db=float(args[1]),
+                kind=args[2],
+                action=args[3],
+                q=float(q) if q else None,
+                bw_oct=float(bw) if bw else None,
+                channels=[c.strip() for c in channels.split(",") if c.strip()],
+                why=why,
+                evidence=[e.strip() for e in evidence.split(",") if e.strip()],
+            )
+            width = f" Q{entry['q']:g}" if entry.get("q") else (
+                f" {entry['bw_oct']:g}oct" if entry.get("bw_oct") else "")
+            print(f"{entry['f_hz']:g} Hz{width} {entry['level_db']:+g} dB "
+                  f"[{entry['kind']}] -> {entry['action']}")
+        elif cmd == "flaws":
+            for entry in proj.flaws():
+                width = f" Q{entry['q']:g}" if entry.get("q") else (
+                    f" {entry['bw_oct']:g}oct" if entry.get("bw_oct") else "")
+                who = ", ".join(entry.get("channels") or []) or "—"
+                print(f"{entry['f_hz']:>7.6g} Hz{width:>8} {entry['level_db']:+6g} dB  "
+                      f"{entry['kind']:<16} {entry['action']:<10} {who:<12} {entry.get('why','')}")
         else:
             print(_USAGE, file=sys.stderr)
             return 2

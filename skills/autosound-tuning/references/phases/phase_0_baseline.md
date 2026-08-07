@@ -70,7 +70,23 @@ From the SAME `_1` captures (no extra measuring), build the install/cabin flaw m
 
 4. **Distortion floor map (per driver):** `rew_api.get_distortion` on each `<ch>_1 (sw)` (THD comes free with the sweep). Mark where in-band THD exceeds ~1 % (caution) / ~3 % (avoid) — **crossover corners in Phase 1 need low measured THD with margin**, which replaces datasheet-only floors; in-band spikes are install findings for the car record. Below-HPF rows are noise — ignore. **⚠️ Disqualify null-artifact spikes before blaming mechanics:** in a deep interference null the fundamental drops 20+ dB while the harmonics (radiated at 2f/3f, outside the null) don't → THD % explodes with a *quiet* fundamental. Rule: a THD spike counts as a driver/install fault only if the fundamental there is within ~10 dB of its neighbors; high-THD-only-where-the-fundamental-collapses + clean THD at loud neighboring points = healthy driver, null artifact (field case: a woofer's 4.4 % @ 160 Hz at fundamental 53 dB vs 0.2-0.5 % at 100-125 Hz at 81-84 dB — mechanics cleared).
 
-**Record the map** in the project's car record (PART-B style: each item phrased as a check) + `autosound_context.md`; log in the changelog. **Downstream consumption (the map is not a report — it binds):** Phase 1 crossover corners avoid landing joints inside multipath pockets / non-min-phase zones; Phase 2 EQ passes the gate; imaging work knows which symptoms are electrically unfixable BEFORE chasing them.
+**Record the map as DATA, not only as prose** (SCR-015). Each finding gets a row:
+
+```bash
+python3 rew_tool/project.py <project> flaw <f_hz> <level_db> <kind> <action> \
+  [--q Q | --bw-oct B] [--channels w-R,w-L] --why "..." --evidence "w-R_1 (sw)"
+```
+
+`level_db` is the **feature** — `+` a hump, `−` a dip — not the correction you would apply to it.
+`kind` and `action` come from closed lists (`project.py flaws` prints the map; the usage text lists
+both), because a front-end colours by `action` and "what may NOT be done here" has to survive the
+session that discovered it. **A dip can never be `notch`**: a null is interference, not
+minimum-phase, so cutting it changes nothing and boosting it burns headroom against physics — the
+writer refuses it, which is the one rule in this map with teeth. Re-measuring the same frequency on
+the same channels REPLACES its row rather than appending a second, contradictory one.
+
+Then also record it in the car record (PART-B style: each item phrased as a check) +
+`autosound_context.md`; log in the changelog. **Downstream consumption (the map is not a report — it binds):** Phase 1 crossover corners avoid landing joints inside multipath pockets / non-min-phase zones; Phase 2 EQ passes the gate; imaging work knows which symptoms are electrically unfixable BEFORE chasing them.
 
 ### 4. Gain Staging & Environmental Hygiene
 * Check for clipping (DSP outputs vs. amplifier inputs). Measurements must remain clean and undistorted.

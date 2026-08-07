@@ -69,9 +69,47 @@ machine-readable to render for its Project/System/Car-audio-analysis panels eith
     "channels": {"total": 12, "off": 2}
   },
 
+  "acoustics": {                                             // SCR-015: the phase-0 flaw map, as data
+    "flaws": [
+      {"f_hz": 73, "q": 3.5, "level_db": 9,                  // level_db = the FEATURE: + hump, - dip
+       "kind": "driver_resonance", "action": "notch",        //   NOT the correction you would apply
+       "channels": ["w-R"], "why": "right-woofer resonance",
+       "evidence": ["w-R_1 (sw)"], "at": "…"},
+      {"f_hz": 250, "level_db": -12, "kind": "cabin_null",   // a dip can NEVER be `notch`
+       "action": "no_boost", "channels": ["w-R"],
+       "why": "interference, not min-phase",
+       "evidence": ["w-R_1 (sw)"], "at": "…"}
+    ]
+  },
+
   "_open_questions": ["source.head_unit trim level"]
 }
 ```
+
+### `acoustics.flaws[]` — what this cabin does, and what may be done about it (SCR-015)
+
+The phase-0 Acoustic Flaw Map (`phase_0_baseline.md §3.5`) as machine data rather than prose, so a
+front-end can render it and a later phase can consult it without re-reading a case study.
+
+| field | notes |
+|---|---|
+| `f_hz` | centre frequency, required, positive |
+| `q` / `bw_oct` | width, either form, optional |
+| `level_db` | **the feature**, signed: `+` a hump, `−` a dip. Not the correction |
+| `kind` | `room_gain` · `modal_peak` · `cabin_null` · `sbir` · `floor_bounce` · `driver_resonance` · `non_min_phase` · `thd_spike` · `pair_suckout` |
+| `action` | `notch` · `leave` · `no_boost` · `geometry` · `delay` · `crossover` |
+| `channels` | the codes it was measured on |
+| `why` | one line — the next session reads the reason, not the number |
+| `evidence` | the captures it was read off; a flaw with no measurement behind it is a rumour |
+
+Both lists are closed: a consumer colours by `action`, and "what may NOT be done here" is the half
+that has to survive the session that found it. **`level_db < 0` with `action: "notch"` is refused**
+— a null is interference, not minimum-phase; cutting it changes nothing and boosting it burns
+headroom against physics. That refusal is the map's whole reason for existing in code rather than
+in a paragraph somebody may or may not re-read.
+
+Re-measuring the same frequency on the same channels **replaces** its row. An install changes and
+the map is redone; two contradictory rows for one peak would leave a reader picking between them.
 
 ## Provenance (SCR-014)
 
