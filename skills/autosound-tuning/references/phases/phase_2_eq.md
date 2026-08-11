@@ -10,6 +10,8 @@ This is the core technical execution phase. All operations **MUST** be performed
 
 **Required evidence:** a **fresh re-measurement of the applied `v1` system** (`_2`, each channel **post-crossover** — not the raw `_1` baseline): per-channel FR + excess-phase (min vs non-min phase); joint summation (uninverted vs inverted); summed-group MMM (Ws/Ms/TWs, L vs R, SW+Ws).
 
+> ⛔ **Entry precondition:** `enter-phase 2` refuses while the profile does not describe what the EQ can actually do — `parametric_eq` (and a tier's own `eq`, where its `fields` declare one). Filters are sized against those limits; inventing them is how a 30-band answer lands on a 10-band processor. `dsp_profile.py set-field`, then `finalize`.
+
 **✅ Quality gate → Phase 3:** peaks cut / nulls untouched; joints aligned by **summation** (APF/fine delay, not raw-delay shifts); summed groups match target; final target EQ on the **virtual layer** only; strict order 2a→2d held; **one critic checkpoint passed on the round's full package** (add a second, after 2b, only when joint alignment was reworked).
 
 **⚠️ Failure modes:** boosting into nulls (non-min-phase → wasted headroom/distortion) · 30-band auto-banks (use minimal conscious EQ) · shifting raw channel delays for phase (breaks gross TA) · sneaking client taste in here (that's Phase 5).

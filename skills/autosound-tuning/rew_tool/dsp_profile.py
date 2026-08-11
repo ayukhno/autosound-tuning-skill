@@ -19,7 +19,11 @@ Design invariants
       the spares are invisible in the one panel whose job is showing the rig entire.
     * Unconfirmed facts are `null`, not omitted — `open_questions()` walks the whole structure and
       surfaces every null plus any declared `_open_questions` freeform notes. This is what makes
-      profile-building incremental: a re-run only asks about what's still null.
+      profile-building incremental: a re-run only asks about what's still open. The "not omitted"
+      half used to be a hope: a field the interview never reached was simply ABSENT, and a walk
+      over nulls cannot see an absence, so a profile that knew almost nothing reported nothing
+      left to ask. `missing_facts()` closes that — what a profile must describe is derived from
+      what it declares, so the two kinds of unanswered are reported as one list.
     * A profile is the DSP MODEL's facts, not one car's install — no personal data, safe to
       contribute to the community as-is (see `gates/side_effect.py::post_dsp_profile`).
     * JSON, not YAML — this module stays stdlib-only (matches `rew_api.py`/`state.py`), and a
@@ -394,8 +398,69 @@ def finalize(project_dir):
 
 
 # ── incremental interview support ──────────────────────────────────────────────
+# ── what a profile is expected to describe, given what it declares ────────────────────────────
+# "Unconfirmed facts are `null`, not omitted" is this module's own stated invariant, and nothing
+# enforced it — so a field the interview never reached was ABSENT, and `open_questions()` walks
+# nulls. Result, on a real project (2026-08-11): a Helix profile with no `sample_rate_hz`, no
+# `max_count`, no EQ or crossover description at all reported `_open_questions: []` and `open-
+# questions -> []`. The mechanism that exists to make onboarding incremental was reporting a
+# profile that knows almost nothing as a profile with nothing left to ask.
+#
+# What must be described is DERIVED from what the profile itself declares, rather than being a new
+# list to keep in sync: a group's `fields` already says which capabilities this DSP has, and each
+# of those has a block that explains how it behaves. No new vocabulary — `FIELD_VOCABULARY` is the
+# vocabulary, and SCR-043 made it trustworthy.
+_FACTS_ALWAYS = {
+    "sample_rate_hz": "the DSP's native rate — every delay in samples is computed from it, so a "
+                      "wrong or missing rate makes every alignment number wrong",
+}
+# field token in ANY group -> the top-level block that has to describe it
+_FACTS_BY_FIELD = {
+    "ta_ms": "delay",
+    "phase_deg": "phase_control",
+    "polarity": "polarity",
+    "eq": "parametric_eq",
+}
+# ...and per group, given that group's own fields
+_GROUP_FACTS_ALWAYS = {
+    "max_count": "how many slots this tier physically has (SCR-042) — without it a consumer can "
+                 "only count the rows it was given, and the spares are invisible",
+}
+_GROUP_FACTS_BY_FIELD = {"hp": "crossover_filters", "lp": "crossover_filters", "eq": "eq"}
+
+
+def missing_facts(data):
+    """Dotted paths a profile is expected to carry and does not have at all.
+
+    Absent is not the same as null, and this module's whole incremental-interview story assumes
+    they are: `null` means "asked, not answered yet", and a key that was never created means the
+    question was never asked. Both are open questions; only one of them was being reported.
+    """
+    profile = _unwrap(data)
+    groups = [g for g in profile.get("groups", []) if isinstance(g, dict)]
+    declared = {f for g in groups for f in (g.get("fields") or []) if isinstance(f, str)}
+    out = [key for key in _FACTS_ALWAYS if key not in profile]
+    out += [
+        block for field, block in _FACTS_BY_FIELD.items()
+        if field in declared and block not in profile
+    ]
+    for i, group in enumerate(groups):
+        fields = {f for f in (group.get("fields") or []) if isinstance(f, str)}
+        for key in _GROUP_FACTS_ALWAYS:
+            if key not in group:
+                out.append(f"groups.{i}.{key}")
+        for field, block in _GROUP_FACTS_BY_FIELD.items():
+            # A tier that declares no crossover legs is not missing a crossover description.
+            if field in fields and block not in group:
+                out.append(f"groups.{i}.{block}")
+    return sorted(set(out))
+
+
 def open_questions(data):
-    """Every still-null field (dotted path) plus any declared `_open_questions` freeform notes.
+    """Every unanswered fact (dotted path) plus any declared `_open_questions` freeform notes.
+
+    Unanswered means BOTH still-null and never-created — see `missing_facts` for why the second
+    kind had been invisible.
 
     Drives incremental onboarding: a resumed interview asks only about what this returns, not
     the whole checklist again.
@@ -417,6 +482,7 @@ def open_questions(data):
                 walk(f"{prefix}{i}.", v)
 
     walk("", profile)
+    out += [path for path in missing_facts(data) if path not in out]
     return out
 
 
@@ -593,11 +659,22 @@ def _selftest():
             "vendor": "Audiotec-Fischer",
             "groups": [
                 {"id": "virtual_channels", "label": "Virtual channels", "no_crossover": True,
-                 "fields": ["gain_db", "ta_ms", "polarity", "phase_deg", "mute", "eq"]},
+                 "fields": ["gain_db", "ta_ms", "polarity", "phase_deg", "mute", "eq"],
+                 "eq": {"bands_per_channel": 30, "band_types": ["PK", "LSH", "HSH"]}},
                 {"id": "physical_outputs", "label": "Output channels",
-                 "fields": ["hp", "lp", "gain_db", "ta_ms", "polarity", "phase_deg", "eq"]},
+                 "fields": ["hp", "lp", "gain_db", "ta_ms", "polarity", "phase_deg", "eq"],
+                 "eq": {"bands_per_channel": 30, "band_types": ["PK", "LSH", "HSH"]},
+                 "crossover_filters": {"types": {"LR": {"orders_db_per_oct": [12, 24]}}}},
             ],
+            # A COMPLETE profile, so `open_questions` on it is empty below -- which is also this
+            # fixture's job: it is the worked example of what "described" means. Each block is here
+            # because some group's `fields` declares the capability it explains (see
+            # `missing_facts`), not because a list somewhere says so.
             "sample_rate_hz": 96000,
+            "delay": {"step_ms": 0.01, "scope": ["per driver output"]},
+            "polarity": {"scope": ["per driver output"]},
+            "phase_control": {"scope": "per driver output", "implementation": "all-pass"},
+            "parametric_eq": {"q_range": [0.5, 15.0], "gain_range_db": [-30.0, 12.0]},
         }
     }
     validate_profile(helix)  # must not raise
@@ -635,6 +712,34 @@ def _selftest():
         raise AssertionError("validate_profile accepted a non-string fields token")
     except ValueError:
         pass
+
+    # ── absent is unanswered too, not just null ────────────────────────────────────────────────
+    # The interview is incremental because `open_questions()` says what is left. It walked nulls,
+    # and a question never asked leaves no null behind — so a real Helix profile carrying neither
+    # `sample_rate_hz` nor any EQ/crossover description reported an empty list.
+    bare = {"dsp_profile": {"name": "M6V4", "vendor": "Musway", "groups": [
+        {"id": "physical_outputs", "label": "Outputs", "fields": ["hp", "lp", "gain_db", "ta_ms"]},
+    ]}}
+    validate_profile(bare)  # still a VALID profile: incomplete is not malformed
+    questions = open_questions(bare)
+    # Always expected...
+    assert "sample_rate_hz" in questions, questions
+    assert "groups.0.max_count" in questions, questions
+    # ...and these only because the group's own `fields` declare the capability.
+    assert "delay" in questions, questions
+    assert "groups.0.crossover_filters" in questions, questions
+    # A tier that declares no EQ and no phase control is not missing their descriptions.
+    assert "parametric_eq" not in questions, questions
+    assert "phase_control" not in questions, questions
+    assert "groups.0.eq" not in questions, questions
+    # Answered is answered: a fact that is present stops being asked about.
+    answered = copy.deepcopy(bare)
+    answered["dsp_profile"]["sample_rate_hz"] = 96000
+    assert "sample_rate_hz" not in open_questions(answered)
+    # ...but present-and-null is still open, which is the case that always worked.
+    nulled = copy.deepcopy(bare)
+    nulled["dsp_profile"]["sample_rate_hz"] = None
+    assert open_questions(nulled).count("sample_rate_hz") == 1, open_questions(nulled)
 
     # ── SCR-042: how many slots the tier physically has, and what the ledger calls that tier ──
     # The real case: a Helix Ultra S with 10 outputs wired reads "10/10" without this, when it is
@@ -676,7 +781,10 @@ def _selftest():
     oq = open_questions(musway)
     assert "sample_rate_hz" in oq, oq
     assert any("vendor software" in q for q in oq), oq
-    assert open_questions(helix) == [], "a fully-confirmed profile should have no open questions"
+    # Complete in every capability it declares, and still owing its two slot counts (SCR-042) --
+    # the `counted` copy below closes exactly those, and asserts an empty list afterwards.
+    assert open_questions(helix) == ["groups.0.max_count", "groups.1.max_count"], \
+        open_questions(helix)
 
     # find_bundled: exact match only, no sibling/fuzzy match.
     tmp = tempfile.mkdtemp(prefix="dsp_profiles_")

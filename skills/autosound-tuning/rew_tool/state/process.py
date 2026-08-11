@@ -180,6 +180,79 @@ def _require_flaw_map(phase, previous, project_dir):
     )
 
 
+# Which profile facts a phase cannot honestly run without. The other half of "learning instead of
+# softer gates" (ARCHITECTURE-NOTES §4): the phase -1 gate has always wanted a VALID profile rather
+# than a complete one -- `open_questions` is deliberately not part of `contract.py`'s `ok`, so a DSP
+# nobody knows everything about can start -- and the missing piece was that an open question was
+# never raised again at the step that depends on it. It sat 🟡 in a report forever.
+#
+# Phase-scoped, not step-scoped, for the same reason `_CAPTURE_PLAN` is: a phase's needs are a
+# property of the method and identical on every car, while a step's name is written per project.
+# Group-scoped paths (`groups.N.x`) are matched by their last segment.
+_PHASE_FACTS = {
+    "1": ("sample_rate_hz", "delay", "crossover_filters"),
+    "2": ("parametric_eq", "eq"),
+}
+
+
+def _load_dsp_profile_module():
+    """`dsp_profile.py` from the same checkout, by path — same reason as `_load_naming`."""
+    import importlib.util
+
+    path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "dsp_profile.py"
+    )
+    try:
+        spec = importlib.util.spec_from_file_location("_process_dsp_profile", path)
+        if spec is None or spec.loader is None:
+            return None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    except Exception:  # noqa: BLE001 — an unloadable sibling must not make the gate crash
+        return None
+
+
+def _require_profile_facts(phase, previous, project_dir):
+    """Refuse to enter a phase whose arithmetic needs a fact the profile has never recorded.
+
+    The one that hurts is `sample_rate_hz`: phase 1 converts every delay into samples, and a rate
+    nobody wrote down is a rate somebody assumes. Observed on a real project (2026-08-11) — a Helix
+    profile with no rate, no slot counts and no EQ or crossover description at all, reporting
+    nothing open because those keys were absent rather than null.
+    """
+    wanted = _PHASE_FACTS.get(str(phase))
+    if not wanted:
+        return
+    try:
+        going, came_from = int(phase), int(previous) if previous is not None else -99
+    except (TypeError, ValueError):
+        return
+    if came_from >= going:
+        return  # re-entry and going back are always allowed, same rule as the other two gates
+    module = _load_dsp_profile_module()
+    if module is None:
+        return
+    try:
+        with open(os.path.join(project_dir, "dsp_profile.json")) as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return  # no readable profile at all is contract.py's complaint, not this gate's
+    blocking = [path for path in module.missing_facts(data) if path.split(".")[-1] in wanted]
+    if not blocking:
+        return
+    raise ProcessError(
+        f"phase {phase} needs facts the DSP profile has never recorded: "
+        + ", ".join(blocking)
+        + ". These are not paperwork: phase 1 turns delays into samples with `sample_rate_hz`, and "
+        "phase 2 sizes its filters against what the EQ can actually do. A number nobody wrote down "
+        "is a number the next session assumes. "
+        "Ask the Arbiter and record each one: "
+        "`dsp_profile.py set-field <project> <path> <value>` — then `finalize`. "
+        "Everything still open is listed by `dsp_profile.py open-questions <project>/dsp_profile.json`."
+    )
+
+
 # --- evidence that resolves (SCR-035) ---------------------------------------------------------
 #
 # Three shapes count. Each is something a later session can go and check; a sentence is not.
@@ -404,6 +477,7 @@ class Process:
         previous = state.get("active_phase")
         _require_target(phase, previous, state)
         _require_flaw_map(phase, previous, self.project_dir)
+        _require_profile_facts(phase, previous, self.project_dir)
         if previous and previous != phase:
             state["phases"][previous]["status"] = PHASE_DONE
         state["phases"][phase]["status"] = PHASE_CURRENT
@@ -941,13 +1015,34 @@ def _selftest():
     with open(os.path.join(root, "project.json"), "w") as f:
         json.dump({"acoustics": {"flaws": [{"f_hz": 160, "level_db": -12,
                                             "kind": "cabin_null", "action": "leave"}]}}, f)
-    proc.enter_phase("1")
+    proc.enter_phase("1")  # no dsp_profile.json yet: that gate has no opinion either
     assert proc.load()["active_phase"] == "1"
+
+    # SCR-045: a phase does not start on facts nobody recorded. Phase 1 turns delays into samples.
+    proc.enter_phase("0")
+    profile = {"dsp_profile": {"name": "M6V4", "vendor": "Musway", "groups": [
+        {"id": "physical_outputs", "label": "Outputs",
+         "fields": ["hp", "lp", "gain_db", "ta_ms"], "max_count": 6,
+         "crossover_filters": {"types": {"LR": {"orders_db_per_oct": [24]}}}},
+    ], "delay": {"step_ms": 0.02}}}
+    with open(os.path.join(root, "dsp_profile.json"), "w") as f:
+        json.dump(profile, f)
+    refuses("entering phase 1 with no sample rate on record", lambda: proc.enter_phase("1"))
+    profile["dsp_profile"]["sample_rate_hz"] = 48000
+    with open(os.path.join(root, "dsp_profile.json"), "w") as f:
+        json.dump(profile, f)
+    proc.enter_phase("1")
+    # ...and phase 2 asks for what phase 2 needs, not for everything at once: this profile
+    # declares no `eq` field, so there is nothing for it to owe.
+    proc.enter_phase("2")
+    assert proc.load()["active_phase"] == "2"
 
     print(
         "selftest OK — evidence refused when empty and when it resolves to nothing (SCR-035), "
         "phase 0 refused to exit without a target (SCR-036) and without a flaw map (SCR-044), "
-        "an unreadable project.json left the flaw gate silent, and a recorded map opened phase 1. "
+        "an unreadable project.json left the flaw gate silent, and a recorded map opened phase 1; "
+        "phase 1 refused a profile with no `sample_rate_hz` (SCR-045) and phase 2 asked only for "
+        "what a profile declaring no EQ actually owes. "
         f"root={root}"
     )
     return 0
