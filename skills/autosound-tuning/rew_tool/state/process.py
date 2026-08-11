@@ -128,6 +128,58 @@ def _require_target(phase, previous, state):
     )
 
 
+# Phase 0 §3.5 PRODUCES the acoustic flaw map, and phase 2 is supposed to EQ against it — what may
+# be cut, what must be left, what is not an EQ problem at all. SCR-015 built the writer
+# (`project.py flaw`, closed `action` list, refuses a dip recorded as notchable) and the consumer
+# panel. Nothing forced the write, and the predictable happened on a real project (2026-08-11): the
+# step "Acoustic flaw map: distortion floor + raw pair coherence" was closed `done`, `acoustics`
+# was absent from `project.json`, and the findings — "w-L 160 Hz and w-R 250-315 Hz are acoustic
+# nulls, settled by absolute harmonic SPL" — sat in a journal decision as prose. Analysis nobody
+# can compute against is analysis that will be redone or, worse, guessed at.
+_FLAW_MAP_REQUIRED_FROM = 1
+
+
+def _flaw_map_entries(project_dir):
+    """`acoustics.flaws[]` from `project.json`, or None if the file cannot be read.
+
+    Read as plain JSON rather than through `project.py`: this module is imported BY consumers that
+    already load these files their own way, and a gate that cannot run because an import failed is
+    a gate that silently stops gating. None means "no opinion" for the same reason.
+    """
+    try:
+        with open(os.path.join(project_dir, "project.json")) as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return None
+    profile = data.get("project", data)
+    return list(((profile.get("acoustics") or {}).get("flaws")) or [])
+
+
+def _require_flaw_map(phase, previous, project_dir):
+    """Refuse to move past phase 0 while the flaw map is empty (SCR-044)."""
+    try:
+        going, came_from = int(phase), int(previous) if previous is not None else -99
+    except (TypeError, ValueError):
+        return
+    if going < _FLAW_MAP_REQUIRED_FROM or came_from >= going:
+        return  # re-entry and going back are always allowed, same rule as the target gate
+    if _flaw_map_entries(project_dir) is None:
+        return  # no readable project.json at all is contract.py's complaint, not this one
+    if _flaw_map_entries(project_dir):
+        return
+    raise ProcessError(
+        f"phase {phase} needs the acoustic flaw map: `acoustics.flaws[]` in project.json is empty. "
+        "Phase 0 measures what this cabin does to the sound and phase 2 equalises against it — "
+        "which features may be cut, which must be left alone, which are not EQ problems at all. "
+        "In the transcript that knowledge is lost on the next session; the panel that should show "
+        "it renders nothing. "
+        "Record each one: `project.py <dir> flaw <f_hz> <level_db> <kind> <action> "
+        "[--q N|--bw-oct N] [--channels a,b] [--why ...] [--evidence ...]`. "
+        "A feature you decided to leave alone is still an entry — `action=leave` is in the list "
+        "precisely so that decision is recorded rather than implied by its absence."
+    )
+
+
 # --- evidence that resolves (SCR-035) ---------------------------------------------------------
 #
 # Three shapes count. Each is something a later session can go and check; a sentence is not.
@@ -351,6 +403,7 @@ class Process:
         state = self.load()
         previous = state.get("active_phase")
         _require_target(phase, previous, state)
+        _require_flaw_map(phase, previous, self.project_dir)
         if previous and previous != phase:
             state["phases"][previous]["status"] = PHASE_DONE
         state["phases"][phase]["status"] = PHASE_CURRENT
@@ -842,10 +895,67 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
   capture-close [reason]                close the round; what is outstanding is named
   check                                 done steps with no evidence, and done steps whose
                                          evidence resolves to nothing on disk
+  selftest                              this module's own gates, on a throwaway project
 """
 
 
+def _selftest():
+    """The refusals, exercised. This module is the one with the most of them — evidence must exist
+    and must resolve (SCR-035), a round's captures must be usable (SCR-040), phase 0 must record a
+    target (SCR-036) and now its flaw map (SCR-044) — and it was the only one of the seven with no
+    selftest at all, so every one of those gates was a thing nobody had run since it was written.
+    """
+    import tempfile
+
+    root = tempfile.mkdtemp(prefix="autosound_process_")
+    proc = Process(os.path.join(root, "process"))
+    proc.enter_phase("-1")
+    proc.enter_phase("0")  # backwards/into baseline is always free
+
+    def refuses(what, fn):
+        try:
+            fn()
+        except ProcessError:
+            return
+        raise AssertionError(f"process accepted {what}")
+
+    proc.add_step("s1", "A step")
+    refuses("a done step with no evidence", lambda: proc.finish_step("s1", []))
+    refuses("evidence that resolves to nothing",
+            lambda: proc.finish_step("s1", ["I looked at the graphs and they seemed fine"]))
+    with open(os.path.join(root, "autosound_context.md"), "w") as f:
+        f.write("# context\n")
+    proc.finish_step("s1", ["autosound_context.md"])  # a file that exists resolves
+
+    # SCR-036: no target curve, no phase 1.
+    refuses("leaving phase 0 with no target", lambda: proc.enter_phase("1"))
+    proc.set_target("FULL", "EPY")
+
+    # SCR-044: a project.json whose flaw map is empty does not leave phase 0 either -- and one
+    # that cannot be read at all is contract.py's complaint, not this gate's, so it stays quiet.
+    proc.enter_phase("1")  # no project.json yet: no opinion
+    proc.enter_phase("0")
+    with open(os.path.join(root, "project.json"), "w") as f:
+        json.dump({"acoustics": {"flaws": []}}, f)
+    refuses("leaving phase 0 with an empty flaw map", lambda: proc.enter_phase("1"))
+    with open(os.path.join(root, "project.json"), "w") as f:
+        json.dump({"acoustics": {"flaws": [{"f_hz": 160, "level_db": -12,
+                                            "kind": "cabin_null", "action": "leave"}]}}, f)
+    proc.enter_phase("1")
+    assert proc.load()["active_phase"] == "1"
+
+    print(
+        "selftest OK — evidence refused when empty and when it resolves to nothing (SCR-035), "
+        "phase 0 refused to exit without a target (SCR-036) and without a flaw map (SCR-044), "
+        "an unreadable project.json left the flaw gate silent, and a recorded map opened phase 1. "
+        f"root={root}"
+    )
+    return 0
+
+
 def _main(argv):
+    if len(argv) == 2 and argv[1] == "selftest":
+        return _selftest()
     if len(argv) < 3:
         print(_USAGE, file=sys.stderr)
         return 2

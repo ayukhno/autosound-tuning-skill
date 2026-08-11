@@ -10,7 +10,7 @@ This phase establishes the raw baseline measurement of the car's current acousti
 
 **Required evidence:** agreed naming/glossary; a clean base DSP profile (`v0`, zeroed modifiers); **per-driver** `<ch>_1 (sw)` + `<ch>_1 (rta)` for each driver we'll work with; a locked, repeatable MMM pattern.
 
-**✅ Quality gate → Phase 1:** names agreed **before** measuring; target curve imported (shape only, not level) **and recorded** — `python3 rew_tool/state/process.py <project>/process set-target <preset> <curve>`; raw baseline captured with all modifiers zeroed; no clipping; MMM pattern locked.
+**✅ Quality gate → Phase 1:** names agreed **before** measuring; target curve imported (shape only, not level) **and recorded** — `python3 rew_tool/state/process.py <project>/process set-target <preset> <curve>`; raw baseline captured with all modifiers zeroed; no clipping; MMM pattern locked; **the acoustic flaw map recorded** (§3.5) — `python3 rew_tool/project.py <project> flaw <f_hz> <level_db> <kind> <action> …`, one entry per feature, and a feature you decided to leave alone is still an entry (`action=leave`). `enter-phase 1` refuses while `acoustics.flaws[]` is empty: phase 2 equalises against this map, and in the transcript it is lost by the next session.
 
 > ⛔ `enter-phase 1` **refuses** while no target has been recorded. Importing a curve into REW and
 > naming it in chat is not the record: the next session reads `process-state.json`, not this
