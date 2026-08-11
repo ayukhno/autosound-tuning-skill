@@ -74,6 +74,16 @@ def _validate_group(g):
         raise ValueError(f"group {g.get('id', '?')!r} missing {missing}")
     if not isinstance(g["fields"], list) or not g["fields"]:
         raise ValueError(f"group {g['id']!r}.fields must be a non-empty list")
+    unknown = [f for f in g["fields"] if not isinstance(f, str) or f not in FIELD_VOCABULARY]
+    if unknown:
+        raise ValueError(
+            f"group {g['id']!r}.fields has token(s) no consumer knows: "
+            + ", ".join(_field_token_hint(f) for f in unknown)
+            + ". The vocabulary is closed: "
+            + ", ".join(sorted(FIELD_VOCABULARY))
+            + ". A capability that fits none of these belongs in `_open_questions`, not a new "
+              "token — a consumer renders exactly these and an invented name renders as nothing."
+        )
     # `max_count` is optional and null-until-confirmed (SCR-042), but a present one is a physical
     # slot count, so 0/negative/float/bool are all refusals rather than something to coerce.
     n = g.get("max_count")
@@ -180,6 +190,42 @@ FIELD_VOCABULARY = {
     "eq": 'a list of PEQ band objects, e.g. [{"type": "PK", "f": 1000, "gain_db": -2.0, '
           '"q": 2.0}] — structured objects, not the pre-v2 inline string form',
 }
+
+# Wrong spellings that are plausible enough to be typed on purpose, and too far from the canonical
+# token for `difflib` to reach ("delay" -> "ta_ms" is a synonym, not a typo). Refusing without
+# naming the right spelling is what makes a validator something to work around; SCR-042 landed
+# because `validate()` said the word it wanted, not because the docs got more insistent.
+FIELD_NEAR_MISSES = {
+    "delay": "ta_ms",
+    "delay_ms": "ta_ms",
+    "ta": "ta_ms",
+    "time_alignment": "ta_ms",
+    "time_alignment_ms": "ta_ms",
+    "distance_cm": "ta_ms",  # a distance is not a delay: convert, don't declare
+    "level_db": "gain_db",
+    "volume_db": "gain_db",
+    "invert": "polarity",
+    "inverted": "polarity",
+    "phase": "phase_deg",
+    "allpass": "phase_deg",
+    "bands": "eq",
+    "peq_bands": "eq",
+    "xover": "hp/lp",  # one leg each, so this one is a split rather than a rename
+    "crossover": "hp/lp",
+}
+
+
+def _field_token_hint(token):
+    """`'delay_ms'` -> `"'delay_ms' (did you mean 'ta_ms'?)"`."""
+    import difflib
+
+    if not isinstance(token, str):
+        return f"{token!r} (not a string)"
+    suggestion = FIELD_NEAR_MISSES.get(token)
+    if suggestion is None:
+        close = difflib.get_close_matches(token, list(FIELD_VOCABULARY), n=1, cutoff=0.6)
+        suggestion = close[0] if close else None
+    return f"{token!r}" + (f" (did you mean {suggestion!r}?)" if suggestion else "")
 
 
 # ── the writer: an interview that survives a lost session ──────────────────────
@@ -528,9 +574,9 @@ def _musway_stub():
             "vendor": "Musway",
             "groups": [
                 {"id": "physical_outputs", "label": "Output channels",
-                 "fields": ["hp", "lp", "gain_db", "delay_ms", "polarity"]},
+                 "fields": ["hp", "lp", "gain_db", "ta_ms", "polarity"]},
                 {"id": "inputs", "label": "Inputs", "no_crossover": True,
-                 "fields": ["gain_db", "eq", "delay_ms"]},
+                 "fields": ["gain_db", "eq", "ta_ms"]},
             ],
             "sample_rate_hz": None,
             "_open_questions": ["confirm from vendor software UI, not just user memory"],
@@ -547,9 +593,9 @@ def _selftest():
             "vendor": "Audiotec-Fischer",
             "groups": [
                 {"id": "virtual_channels", "label": "Virtual channels", "no_crossover": True,
-                 "fields": ["gain_db", "delay_ms", "polarity", "phase_deg", "mute", "eq"]},
+                 "fields": ["gain_db", "ta_ms", "polarity", "phase_deg", "mute", "eq"]},
                 {"id": "physical_outputs", "label": "Output channels",
-                 "fields": ["hp", "lp", "gain_db", "delay_ms", "polarity", "phase_deg", "eq"]},
+                 "fields": ["hp", "lp", "gain_db", "ta_ms", "polarity", "phase_deg", "eq"]},
             ],
             "sample_rate_hz": 96000,
         }
@@ -562,6 +608,31 @@ def _selftest():
     try:
         validate_profile(bad)
         raise AssertionError("validate_profile accepted a group with no fields")
+    except ValueError:
+        pass
+
+    # ── the field vocabulary is closed, and now it is enforced ────────────────────────────────
+    # It had been declared closed since SCR-010 and checked nowhere: a group could declare
+    # `delay_ms`, validate clean, be banked, and then render as nothing in every consumer forever.
+    # The same class of silent-wrong as SCR-042, and the same fix — refuse, and say which spelling.
+    for wrong, wanted in (("delay_ms", "ta_ms"), ("level_db", "gain_db"), ("nonsense", None)):
+        invented = copy.deepcopy(helix)
+        invented["dsp_profile"]["groups"][0]["fields"] = ["gain_db", wrong]
+        try:
+            validate_profile(invented)
+            raise AssertionError(f"validate_profile accepted fields token {wrong!r}")
+        except ValueError as exc:
+            assert wrong in str(exc), exc
+            # A refusal that doesn't name the right token is a refusal to be worked around.
+            assert wanted is None or wanted in str(exc), exc
+
+    # A non-string in `fields` is the tool-call round-trip failure maybe_decode_json exists for,
+    # arriving one level deeper -- refused here rather than crashing a consumer's renderer.
+    typed = copy.deepcopy(helix)
+    typed["dsp_profile"]["groups"][0]["fields"] = ["gain_db", 7]
+    try:
+        validate_profile(typed)
+        raise AssertionError("validate_profile accepted a non-string fields token")
     except ValueError:
         pass
 
