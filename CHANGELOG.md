@@ -2,6 +2,35 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
+## [v3.0.1] — 2026-08-13 · tagged, not yet the default install
+
+Everything v3.0.0 said, plus the defects a live audit of the marketplace found in it.
+
+### Fixed
+
+- **The phase 0 gate named a subcommand that does not exist.** `process.py … set-target` appears
+  three times in `phase_0_baseline.md` and once in the refusal that sends you there; the command
+  is `target`, and `set-target` exits 2 with a usage error. A refusal that instructs an invalid
+  command teaches its reader that refusals are noise, which is the opposite of what a gate is for.
+  **This is why v3.0.0 should not be installed — v3.0.1 replaces it.**
+- **A post-sweep quality gate** (issue #9). `flag_remeasure_candidates` had sat unreachable since
+  before 2.8: every capture is now compared against the cleanest capture of the SAME driver, and
+  one that is `REMEASURE_MARGIN_DB` (15 dB) worse is flagged by `capture-check`. Relative, never
+  absolute — an absolute pre-echo threshold was tried and condemned two good sweeps.
+- **A stale reviewer-model label is recognised.** 2.x's own `.critic-env.example` shipped
+  `GEMINI_CRITIC_MODEL="Gemini 3.5 Flash (Medium)"`; 3.0 removed the alias table that translated
+  it, so the caption went to the API verbatim and the reviewer silently fell back to the
+  clipboard. Recognised by shape rather than by a table of names.
+
+### Changed
+
+- **One entry in the marketplace again.** `autosound-tuning-next` is withdrawn: both entries
+  shipped a skill with the same `name`, so installing both left two active with near-identical
+  triggers and no warning. A machine runs one method. Trying 3.x is a local clone of the tag plus
+  `marketplace add <path>` — the same mechanism already documented for staying on 2.x.
+- **The installer** (`install.sh`) installs the skill's own Python dependencies up front, which is
+  the reason `INSTALLER-TZ.md` §0 gives for having an installer at all.
+
 ## [v3.0.0] — 2026-08-12 · tagged, not yet the default install
 
 > Tagged so it can be installed deliberately (`autosound-tuning-next` in the marketplace).
