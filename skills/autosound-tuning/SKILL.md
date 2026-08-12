@@ -76,7 +76,7 @@ Tone: equal colleagues. Accept a correct critique fully; argue disagreements in 
 
 ## 🧭 Phase Sliding Window
 
-Read the top **▶️ CONTINUE** block of `tuning-changelog` at every session start to identify the active phase. Load **ONLY** the active phase's reference file + the next adjacent one. Don't guess the phase; don't load others unless asked.
+Read the active phase from `process/process-state.json` (`python3 rew_tool/state/process.py <project>/process show`) — the same source step 2 names. `tuning-changelog`'s ▶️ CONTINUE block is the human-readable cross-check to read alongside it, and where they disagree the machine file wins. (This line used to say the opposite of step 2, twenty-three lines apart.) Load **ONLY** the active phase's reference file + the next adjacent one. Don't guess the phase; don't load others unless asked.
 
 * **Phase -1: Project Intake & Checklist** ──► [phase_-1_intake.md](references/phases/phase_-1_intake.md)
 * **Phase 0: Baseline & Target Selection** ──► [phase_0_baseline.md](references/phases/phase_0_baseline.md)

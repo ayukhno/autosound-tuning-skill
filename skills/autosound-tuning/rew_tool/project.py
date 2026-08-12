@@ -126,6 +126,24 @@ def _empty_project():
     }
 
 
+def _validate_acoustics(data):
+    """Every flaw in the map, on every write.
+
+    `validate_flaw` existed and was called from `add_flaw` alone, so any other path to disk — a
+    model editing the file, a merge, any load-modify-`save()` — banked whatever it liked. A dip
+    marked `notch` with no `why` and no `evidence` passed three separate refusals by not going
+    through them (found by audit, 2026-08-12), and TCC then coloured it "correctable".
+    """
+    flaws = ((data.get("acoustics") or {}).get("flaws")) or []
+    if not isinstance(flaws, list):
+        raise ProjectError(f"acoustics.flaws must be a list, got {type(flaws).__name__}")
+    for index, entry in enumerate(flaws):
+        try:
+            validate_flaw(dict(entry) if isinstance(entry, dict) else entry)
+        except (ProjectError, ValueError, TypeError) as exc:
+            raise ProjectError(f"acoustics.flaws[{index}]: {exc}") from exc
+
+
 def validate(data):
     """Raise `ProjectError` on a malformed file; return `data` unchanged if OK.
 
@@ -204,6 +222,7 @@ def validate(data):
         raise ProjectError("hardware must be an object")
     if "glossary" in data and not isinstance(data["glossary"], dict):
         raise ProjectError("glossary must be an object")
+    _validate_acoustics(data)
     return data
 
 
@@ -749,6 +768,22 @@ def _selftest():
     assert wl["fs_hz"]["source"] == "datasheet", wl
     vfr = next(c for c in data["channels"] if c["code"] == "vfr")
     assert vfr["hidden"] is True, vfr
+
+    # -- the flaw map is validated on every write, not only by add_flaw (2026-08-12) -----------
+    # `validate_flaw` was called from `add_flaw` alone, so any other path to disk banked whatever
+    # it liked: a dip marked notchable, with no `why` and no `evidence`, passed three refusals by
+    # not going through them -- and the consumer then coloured it "correctable".
+    flawed_root = tempfile.mkdtemp(prefix="autosound_project_flaws_")
+    flawed = Project(flawed_root)
+    bad_map = {"schema_version": SCHEMA_VERSION, "project_rev": 1,
+               "acoustics": {"flaws": [{"f_hz": 250, "level_db": -12, "kind": "cabin_null",
+                                        "action": "notch", "channels": ["w-R"]}]}}
+    try:
+        flawed.save(dict(bad_map))
+        raise AssertionError("save() banked a dip recorded as notchable")
+    except ProjectError as exc:
+        assert "notch" in str(exc) or "0" in str(exc), exc
+    assert not os.path.isfile(flawed.path), "a refused save must not have written anything"
 
     # -- an unreadable project.json is not an empty one ----------------------------------------
     # Every mutator here is load-modify-save, so returning the skeleton for a file that exists and

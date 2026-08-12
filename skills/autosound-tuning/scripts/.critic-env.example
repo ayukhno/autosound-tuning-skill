@@ -4,8 +4,12 @@
 
 # ---- Default: real Antigravity (agy) ----
 GEMINI_BIN=agy
-GEMINI_CRITIC_MODEL="Gemini 3.5 Flash (Medium)"
-GEMINI_ADVISOR_MODEL="Gemini 3.1 Pro (High)"
+# Critic = Pro, Advisor = Flash. These were the other way round in this file until 2026-08-12,
+# which handed anyone who copied it the rubber-stamp reviewer the docs spend paragraphs warning
+# about ("a Flash critic praises"). The reviewer is the role that must NOT agree with you; the
+# advisor answers routine questions, where Flash is the right trade.
+GEMINI_CRITIC_MODEL="Gemini 3.1 Pro (High)"
+GEMINI_ADVISOR_MODEL="Gemini 3.5 Flash (Medium)"
 
 # ---- Fallback: @google/gemini-cli via a FREE API KEY (cross-platform) ----
 # gemini-cli's free OAuth sign-in is deprecated (IneligibleTierError) → use a key.

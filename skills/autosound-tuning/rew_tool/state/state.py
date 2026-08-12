@@ -108,7 +108,13 @@ def tier_names(state):
     for k, v in state.items():
         if k in _NON_TIER_KEYS or k == "channels":
             continue
-        if isinstance(v, dict) and all(isinstance(row, dict) for row in v.values()):
+        # A dict here IS a tier. It used to have to be a dict of dicts, so ONE stray value
+        # ("comment": "temp note") demoted the whole key to unknown metadata — and `validate`
+        # never looks at unknown keys, so the tier passed validation and then vanished from
+        # `validate`, `diff_states` and `render` at once. That is the split-artifact failure this
+        # module documents as killed, re-armed by a single line (found by audit, 2026-08-12).
+        # The bad ROW is now `validate`'s problem, which is the right place for it.
+        if isinstance(v, dict):
             out.append(k)
     return out
 
@@ -308,6 +314,18 @@ def validate(state):
     for k in TOP_REQUIRED:
         if k not in state:
             raise ValueError(f"state missing required key {k!r}")
+    for tier in tier_names(state):
+        rows = state.get(tier)
+        if not isinstance(rows, dict):
+            continue  # `channels` is always named by `tier_names`; a missing one is caught below
+        for name, row in rows.items():
+            if not isinstance(row, dict):
+                raise ValueError(
+                    f"{tier}.{name} is {type(row).__name__}, not a channel row. A tier holds rows "
+                    "and nothing else — a note or a comment beside them used to demote the whole "
+                    "tier to unknown metadata, after which it was invisible to validate, diff and "
+                    "render alike. Put free text in the snapshot's own `note`."
+                )
     if not isinstance(state["sample_rate"], (int, float)) or state["sample_rate"] <= 0:
         raise ValueError(f"sample_rate must be a positive Hz, got {state['sample_rate']!r}")
     if "schema_version" in state and state["schema_version"] is not None:
@@ -1036,6 +1054,23 @@ def _selftest():
     assert "ResoNix" in banner, "every slot must still be listed (isolated rows)"
     active_row = [ln for ln in banner.splitlines() if ln.startswith("| SQ_Jazzi")][0]
     assert "✅" in active_row, active_row
+
+    # -- one stray value must not hide a whole tier (2026-08-12) --------------------------------
+    # `tier_names` required a dict OF DICTS, so a single non-dict value demoted the key to unknown
+    # metadata -- and `validate` never looks at unknown keys, so the tier passed and then vanished
+    # from validate, diff and render at once. That is the split-artifact bug this module exists to
+    # prevent, re-armed by one line.
+    strayed = {
+        "preset": "SQ", "sample_rate": 96000, "project_rev": 1, "schema_version": SCHEMA_VERSION,
+        "channels": {"w-L": {"gain_db": -7.8, "polarity": "NORM"}},
+        "virtual_channels": {"VFL": {"gain_db": 0.0}, "comment": "temp note"},
+    }
+    assert "virtual_channels" in tier_names(strayed), tier_names(strayed)
+    try:
+        validate(strayed)
+        raise AssertionError("validate accepted a note sitting where a channel row goes")
+    except ValueError as exc:
+        assert "comment" in str(exc), exc
 
     print(f"selftest OK — 3 snapshots, diff caught the channels+virtual_channels changes (schema "
           f"v2 tier-aware), 5.38 ms → 516 smp @96k (258 @48k), revert forward-only (v_001→v_003), "

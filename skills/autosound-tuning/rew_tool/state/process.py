@@ -494,6 +494,16 @@ class Process:
         state = self.load()
         if self.step(state, step_id):
             raise ProcessError(f"step {step_id!r} already exists; steps are never re-added")
+        phase_key = str(phase) if phase is not None else state.get("active_phase")
+        if phase_key not in PHASES:
+            # A step whose phase is not one of the skeleton's is a step in NO phase: `plan_for`
+            # only ever asks for real ones, so it is written, counted by nothing and displayed
+            # nowhere — not in `plan`, not in a consumer front-end (found by audit, 2026-08-12).
+            raise ProcessError(
+                f"step {step_id!r} names phase {phase_key!r}, which is not a phase. "
+                f"Known: {', '.join(PHASES)}. A step outside them is written and then invisible "
+                "to every reader, including this project's own plan."
+            )
         entry = {
             "id": step_id,
             "name": name,
@@ -501,7 +511,7 @@ class Process:
             "source": source,
             "attempt": 1,
             "skip": False,
-            "phase": str(phase) if phase is not None else state.get("active_phase"),
+            "phase": phase_key,
             "evidence": [],
         }
         state["plan"].append(entry)
@@ -1019,6 +1029,13 @@ def _selftest():
                                             "kind": "cabin_null", "action": "leave"}]}}, f)
     proc.enter_phase("1")  # no dsp_profile.json yet: that gate has no opinion either
     assert proc.load()["active_phase"] == "1"
+
+    # -- a step must live in a phase that exists (2026-08-12) ----------------------------------
+    # `plan_for` only ever asks for real phases, so a step in phase "6" is written, counted by
+    # nothing and displayed nowhere -- in the plan or in a consumer front-end.
+    refuses("a step in a phase that is not a phase",
+            lambda: proc.add_step("ghost", "A step nowhere", phase="6"))
+    assert proc.step(proc.load(), "ghost") is None
 
     # SCR-045: a phase does not start on facts nobody recorded. Phase 1 turns delays into samples.
     proc.enter_phase("0")
