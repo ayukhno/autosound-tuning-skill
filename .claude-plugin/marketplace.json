@@ -6,8 +6,7 @@
     "url": "https://github.com/ayukhno"
   },
   "metadata": {
-    "description": "Autosound Tuning Skill — a portable method for tuning a car-audio DSP with REW. One entry: the supported line.",
-    "version": "2.8.1"
+    "description": "Autosound Tuning Skill — a portable method for tuning a car-audio DSP with REW. One entry: the supported line."
   },
   "plugins": [
     {
