@@ -113,6 +113,30 @@ Führe diese Befehle in deiner aktiven Claude-Code-Sitzung **nacheinander, einze
 
 Mehr dazu in der FAQ.
 
+### Auf der 2.x-Linie bleiben
+
+`main` trägt immer die aktuelle Linie, und `/plugin marketplace update` folgt `main` überallhin — auch über einen Hauptversionswechsel hinweg. Wer auf 2.x bleiben möchte, installiert nicht aus dem Marketplace-Repository, sondern richtet Claude Code auf einen lokalen Checkout des Branches `2.x`.
+
+Einmalig im Terminal klonen:
+
+```bash
+git clone -b 2.x https://github.com/ayukhno/autosound-tuning-skill.git ~/autosound-2x
+```
+
+Danach in der Claude-Code-Sitzung, ein Befehl nach dem anderen:
+
+```bash
+/plugin marketplace add ~/autosound-2x
+```
+
+```bash
+/plugin install autosound-tuning
+```
+
+Ein lokaler Pfad wird **referenziert, nicht kopiert** — dieser Checkout *ist* die Plugin-Quelle. `git -C ~/autosound-2x pull` ist also der Weg, 2.x-Fixes zu übernehmen, und nichts hebt dich auf eine neuere Linie, bevor du es selbst entscheidest. Das letzte 2.x-Release trägt den Tag [`v2.8.1`](https://github.com/ayukhno/autosound-tuning-skill/releases/tag/v2.8.1); `git -C ~/autosound-2x checkout v2.8.1` fixiert genau diesen Stand.
+
+Um später zum normalen Kanal zurückzukehren: den lokalen Marketplace entfernen und `ayukhno/autosound-tuning-skill` erneut hinzufügen.
+
 ## Empfohlene Modelle, Modi & meine Erfahrung
 
 Zwei Betriebsarten:
