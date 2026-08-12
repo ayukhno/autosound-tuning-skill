@@ -215,6 +215,14 @@ def _validate_eq(tier, ch_name, eq):
 #: `tag_value` appear nowhere in v2.8.1 and came from the development states between the releases.
 #: Leaving it off this list meant a real v2.8.1 ledger sailed through validation, migrated
 #: "successfully", and arrived with an empty Slot column (2026-08-12).
+def migration_command(project_dir="<project-dir>"):
+    """The migration, as a line somebody can paste — see `state/process.py::migration_command`.
+    Duplicated rather than imported: this module is loaded by consumers that put neither `state/`
+    nor its parent on `sys.path`, and a hint that cannot be produced is worse than a long line."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    return f"python3 {os.path.join(here, 'migrate.py')} {project_dir}"
+
+
 MOVED_TO_PROJECT_JSON = {
     "helix_ch": "channels[].slot",
     "slot": "channels[].slot",
@@ -289,7 +297,8 @@ def _validate_row(tier, ch_name, ch, required):
         where = ", ".join(f"{f} -> project.json {MOVED_TO_PROJECT_JSON[f]}" for f in moved)
         raise ValueError(
             f"{tier}.{ch_name!r} carries identity field(s) that moved out of the ledger in schema "
-            f"v{SCHEMA_VERSION} ({where}) -- 2.x snapshot, run `python3 rew_tool/state/migrate.py`"
+            f"v{SCHEMA_VERSION} ({where}) -- 2.x snapshot. Migrate once:\n    "
+            + migration_command()
         )
     if "hp" in ch:
         _validate_filter("hp", ch_name, ch["hp"])

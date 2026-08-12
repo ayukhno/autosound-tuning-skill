@@ -427,13 +427,40 @@ def _empty_state():
     }
 
 
+#: Versions this file wrote before 3.0. A file at one of these is not corrupt, it is old — and
+#: the difference decides whether the reader is told to fix something or to migrate.
+_MIGRATABLE_SCHEMA_VERSIONS = (1, 2)
+
+
+def migration_command(project_dir="<project-dir>"):
+    """The migration, as a line somebody can paste.
+
+    An absolute path, not `rew_tool/state/migrate.py`. That relative form only resolves for
+    someone standing inside a checkout of the skill; the people who need this most installed it as
+    a plugin and have no such directory anywhere near their project.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    return f"python3 {os.path.join(here, 'migrate.py')} {project_dir}"
+
+
 def validate(state):
     """Raise `ProcessError` if `state` isn't a shape a reader can trust. Returns it otherwise."""
     if not isinstance(state, dict):
         raise ProcessError("process state must be a JSON object")
-    if state.get("schema_version") != SCHEMA_VERSION:
+    found = state.get("schema_version")
+    if found != SCHEMA_VERSION:
+        if found in _MIGRATABLE_SCHEMA_VERSIONS:
+            # Named, with a command that runs. This used to say only "unsupported schema_version 1
+            # (expected 3)", which stops every write — `add-step`, `done`, `enter-phase`, every
+            # `capture-*` — with no way out stated, while `show` and `plan` still read fine, so it
+            # looks half-alive rather than out of date (2026-08-12).
+            raise ProcessError(
+                f"this project's process state is schema v{found}; 3.0 reads v{SCHEMA_VERSION}. "
+                f"Nothing is wrong with it — it is a 2.x project. Migrate once and carry on:\n"
+                f"    {migration_command()}"
+            )
         raise ProcessError(
-            f"unsupported schema_version {state.get('schema_version')!r} (expected {SCHEMA_VERSION})"
+            f"unsupported schema_version {found!r} (expected {SCHEMA_VERSION})"
         )
     active = state.get("active_phase")
     if active is not None and active not in PHASES:

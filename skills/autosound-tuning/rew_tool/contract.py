@@ -44,6 +44,12 @@ import project
 # One format number for the whole project (3.0): every versioned machine file carries the same
 # `schema_version`, so "which format is this project in?" is one comparison rather than a matrix.
 FORMAT_VERSION = 3
+#: Row fields the ledger owned in 2.x and `project.json` owns now — the same list as
+#: `state/state.py::MOVED_TO_PROJECT_JSON`, spelled out here for the same reason `CONTRACT` is:
+#: this module deliberately does not import the state layer, so that a checker still runs on a
+#: project whose ledger code is the thing that is broken. `helix_ch` is the one that matters —
+#: the only identity field the RELEASED 2.x line ever wrote.
+_MOVED_OUT_OF_LEDGER = ("helix_ch", "slot", "descr", "role", "order", "hidden", "tag_value")
 #: What phase −1 cannot be left without. Not every row of CONTRACT: the registry is only for a
 #: multi-slot DSP, and the journal is written by the first event rather than by intake.
 _GATE_REQUIRED = (
@@ -326,13 +332,83 @@ def check_project(project_dir, skip_rew=False):
         missing.append("state/<preset>/ (first ledger snapshot)")
     complete = ok and not missing
     return {"project_dir": project_dir, "ok": ok, "complete": complete, "missing": missing,
-            "files": files, "cross_checks": cross}
+            "legacy": looks_like_2x(project_dir, files), "files": files, "cross_checks": cross}
+
+
+def looks_like_2x(project_dir, files):
+    """Is this a project the 2.x line wrote, rather than one intake never touched?
+
+    The two look identical to a file-existence check and need OPPOSITE advice, which is how a user
+    months into a tune came to be told they had never started one and should run intake — a wrong
+    instruction, and a destructive one, since intake re-asks questions they already answered
+    (2026-08-12).
+
+    Three tells, any one of which settles it. A `schema_version` below the current one on any file
+    that carries one; a ledger row holding an identity field the ledger no longer owns (`helix_ch`
+    above all — the only one the released 2.x line wrote); or ledgers present while `project.json`,
+    a file 2.x had no concept of, is absent.
+    """
+    for entry in files:
+        version = entry.get("schema_version")
+        if isinstance(version, int) and not isinstance(version, bool) and version < FORMAT_VERSION:
+            return True
+    has_ledger = any(f["file"].startswith("state/") and f["exists"] for f in files)
+    has_project = any(f["file"] == "project.json" and f["exists"] for f in files)
+    if has_ledger and not has_project:
+        return True
+    for path in _ledger_snapshots(project_dir):
+        try:
+            with open(path, encoding="utf-8") as handle:
+                snap = json.load(handle)
+        except (OSError, ValueError):
+            continue
+        for key, rows in snap.items():
+            if not isinstance(rows, dict):
+                continue
+            for row in rows.values():
+                if isinstance(row, dict) and any(f in row for f in _MOVED_OUT_OF_LEDGER):
+                    return True
+    return False
+
+
+def _ledger_snapshots(project_dir):
+    """Every `v_NNN.json` under `state/`. Its own walker rather than `migrate.snapshot_paths`:
+    importing the migration from the checker would make the checker depend on the thing it is
+    supposed to tell you to run."""
+    root = os.path.join(project_dir, "state")
+    if not os.path.isdir(root):
+        return []
+    out = []
+    for preset in sorted(n for n in os.listdir(root) if not n.startswith(".")):
+        directory = os.path.join(root, preset)
+        if not os.path.isdir(directory):
+            continue
+        out.extend(os.path.join(directory, fn) for fn in sorted(os.listdir(directory))
+                   if fn.endswith(".json") and fn.startswith("v_"))
+    return out
 
 
 # ── rendering ───────────────────────────────────────────────────────────────────
+def _migration_command(project_dir):
+    here = os.path.dirname(os.path.abspath(__file__))
+    return f"python3 {os.path.join(here, 'state', 'migrate.py')} {project_dir}"
+
+
 def render_report(report):
     lines = [f"# Project contract check — {report['project_dir']}", ""]
-    if report.get("missing"):
+    if report.get("legacy"):
+        # BEFORE the file table, and before any talk of intake. This is the one thing a reader in
+        # this situation has to act on, and everything below it is a consequence of it.
+        lines.append(
+            "**This is a 2.x project.** 3.0 reads a different format, so the rows below will "
+            "look broken or missing until it is migrated. Nothing is lost — migrate once:"
+        )
+        lines.append("")
+        lines.append(f"    {_migration_command(report['project_dir'])}")
+        lines.append("")
+        lines.append("Do NOT run intake: it would re-ask what this project already answered.")
+        lines.append("")
+    elif report.get("missing"):
         lines.append(
             "**Not ready for phase 0** — intake has not produced: "
             + ", ".join(report["missing"])
@@ -511,12 +587,37 @@ def _selftest():
     # mismatch. Two separate facts, which is the whole point of splitting them.
     assert report["missing"] == [], report["missing"]
     assert report["complete"] is False and report["ok"] is False, report
+    assert report["legacy"] is False, "a 3.0 project must not be mistaken for a 2.x one"
+
+    # A 2.x project and an un-intaken one look identical to a file-existence check and need
+    # OPPOSITE advice. Telling somebody months into a tune to run intake is not just unhelpful, it
+    # re-asks what they already answered (2026-08-12).
+    legacy_root = tempfile.mkdtemp(prefix="autosound_contract_2x_")
+    legacy_preset = os.path.join(legacy_root, "state", "FULL")
+    os.makedirs(legacy_preset)
+    with open(os.path.join(legacy_preset, "v_001.json"), "w", encoding="utf-8") as handle:
+        json.dump({"preset": "FULL", "version": "v_001", "sample_rate": 96000,
+                   "channels": {"w-L": {"helix_ch": "C", "gain_db": -2.0}}}, handle)
+    with open(os.path.join(legacy_preset, "HEAD"), "w", encoding="utf-8") as handle:
+        handle.write("v_001\n")
+
+    legacy = check_project(legacy_root, skip_rew=True)
+    assert legacy["legacy"] is True, legacy
+    rendered = render_report(legacy)
+    assert "This is a 2.x project" in rendered, rendered
+    assert "migrate.py" in rendered and "Do NOT run intake" in rendered, rendered
+    assert "intake has not produced" not in rendered, "the wrong advice must not survive"
+
+    # ...and an EMPTY folder is not a 2.x project: it is one nobody has started.
+    assert check_project(tempfile.mkdtemp(prefix="autosound_contract_new_"),
+                         skip_rew=True)["legacy"] is False
 
     print(f"selftest OK — empty project reports missing files without crashing; a seeded project "
           f"(project.json+glossary, dsp_profile.json, ledger, process) validates at the right "
           f"schema versions; cross-checks caught a glossary/ledger mismatch, a profile missing "
           f"the virtual_channels tier, and a spare slot naming an undeclared tier (SCR-042); "
-          f"REW check reported as skipped, not attempted. root={root}")
+          f"REW check reported as skipped, not attempted; a 2.x project is recognised as one and "
+          f"told to migrate rather than to re-run intake. root={root}")
     return 0
 
 
