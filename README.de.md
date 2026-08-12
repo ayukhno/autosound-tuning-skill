@@ -14,7 +14,7 @@
 > KI kann sich bei Zahlen irren. Prüfe Trennfrequenzen, Flankensteilheiten und EQ-Werte in deinem DSP immer manuell nach, bevor du die Stummschaltung aufhebst, besonders bei Hochtönern, und starte bei niedriger Lautstärke.
 
 > [!NOTE]
-> **2.x ist die stabile Linie.** Sie ist funktional abgeschlossen und wird weiter unterstützt. Eine 3.x-Linie — mit GUI und Installer — ist in Entwicklung; ohne Termine.
+> **2.x ist das, was Sie bekommen, und es bleibt unterstützt.** Eine 3.x-Linie existiert und ist getaggt — maschinenlesbare Projektdateien, ein aufgezeichneter Prozess, eine Desktop-App — aber sie ist nicht die Standardinstallation und wird es erst, wenn eine vollständige Abstimmungssitzung damit durchlaufen wurde. Installation und Update liefern 2.x; [3.x ausprobieren](#die-3x-linie-ausprobieren) ist eine bewusste Entscheidung.
 
 > [!TIP]
 > **Auszeichnungen & Erfolge**
@@ -114,6 +114,39 @@ Führe diese Befehle in deiner aktiven Claude-Code-Sitzung **nacheinander, einze
 > Clone https://github.com/ayukhno/autosound-tuning-skill, read `skills/autosound-tuning/SKILL.md`, and follow that method as your operating instructions for this session.
 
 Mehr dazu in der FAQ.
+
+### Die 3.x-Linie ausprobieren
+
+Getaggt und installierbar, aber nicht der Standard und noch nicht durch eine vollständige
+Abstimmung belegt. Es ist ein **Formatbruch**: maschinenlesbare Projektdateien statt Prosa, ein
+aufgezeichneter Prozess, Phasen-Gates und eine Desktop-App, die sie liest. Ein 2.x-Projekt öffnet
+sich darin nicht — siehe unten.
+
+Ein Skill pro Rechner. 3.x zu installieren heißt, 2.x zu ersetzen, nicht beide zu betreiben: zwei
+Plugins mit gleichnamigem Skill bleiben beide aktiv, ohne Warnung, und welches antwortet, ist
+offen. Deshalb derselbe lokale Klon wie im Abschnitt darunter, den Sie selbst steuern:
+
+```bash
+git clone -b v3.0.1 https://github.com/ayukhno/autosound-tuning-skill.git ~/autosound-3x
+python3 -m pip install --user -r ~/autosound-3x/skills/autosound-tuning/requirements.txt
+```
+
+Dann in Claude Code, nachdem der aus dem Marketplace installierte Skill entfernt wurde:
+
+```
+/plugin marketplace add ~/autosound-3x
+```
+
+**Bestehende Projekte bleiben auf 2.x und bleiben dort lesbar.** 3.x konvertiert sie nicht; es
+importiert den AKTUELLEN Zustand des Autos in ein NEUES Projekt und lässt das alte unberührt:
+
+```bash
+python3 ~/autosound-3x/skills/autosound-tuning/rew_tool/state/migrate.py <alt> --into <neu>
+```
+
+Kanäle mit ihren Ausgangs-Slots, Trennfrequenzen, Laufzeiten, Pegel, Polarität, EQ und das
+DSP-Profil ziehen um. Journal, Prozesszustand und ältere Snapshots bleiben zurück — bewusst: 2.x
+hielt nicht fest, welche Fakten wann galten, ihre Historie mitzunehmen hieße, Herkunft zu erfinden.
 
 ### Auf der 2.x-Linie bleiben
 

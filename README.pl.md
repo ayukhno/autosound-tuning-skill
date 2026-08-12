@@ -14,7 +14,7 @@
 > AI może pomylić się w liczbach. Zawsze sprawdzaj częstotliwości zwrotnic, nachylenia filtrów i wartości EQ w swoim DSP, zanim wyłączysz wyciszenie, zwłaszcza przy głośnikach wysokotonowych, i zaczynaj od niskiej głośności.
 
 > [!NOTE]
-> **2.x to linia stabilna.** Jest kompletna funkcjonalnie i pozostaje wspierana. Linia 3.x — z GUI i instalatorem — jest w opracowaniu; bez dat.
+> **2.x to to, co dostajesz, i pozostaje wspierana.** Linia 3.x istnieje i jest otagowana — maszynowo czytelne pliki projektu, zapisany proces, aplikacja desktopowa — ale nie jest instalacją domyślną i nie stanie się nią, dopóki nie przeprowadzi się na niej pełnej sesji strojenia. Instalacja i aktualizacja dają 2.x; [wypróbowanie 3.x](#wypróbowanie-linii-3x) to świadoma decyzja.
 
 > [!TIP]
 > **Nagrody i Osiągnięcia**
@@ -114,6 +114,39 @@ Uruchom poniższe polecenia w aktywnej sesji Claude Code **jedno po drugim** (ni
 > Clone https://github.com/ayukhno/autosound-tuning-skill, read `skills/autosound-tuning/SKILL.md`, and follow that method as your operating instructions for this session.
 
 Więcej szczegółów w FAQ.
+
+### Wypróbowanie linii 3.x
+
+Otagowana i możliwa do zainstalowania, ale nie domyślna i jeszcze niepotwierdzona pełną sesją
+strojenia. To **zerwanie formatu**: maszynowo czytelne pliki projektu zamiast prozy, zapisany
+proces, bramki faz i aplikacja desktopowa, która to czyta. Projekt 2.x się w niej nie otworzy —
+patrz niżej.
+
+Jeden skill na maszynę. Zainstalowanie 3.x oznacza zastąpienie 2.x, a nie prowadzenie obu: dwie
+wtyczki z jednakowo nazwanym skillem pozostają obie aktywne, bez ostrzeżenia, i nie wiadomo, która
+odpowie. Dlatego ta sama droga lokalnego klonu co w sekcji poniżej, którą kontrolujesz:
+
+```bash
+git clone -b v3.0.1 https://github.com/ayukhno/autosound-tuning-skill.git ~/autosound-3x
+python3 -m pip install --user -r ~/autosound-3x/skills/autosound-tuning/requirements.txt
+```
+
+Następnie w Claude Code, po usunięciu skilla zainstalowanego z marketplace:
+
+```
+/plugin marketplace add ~/autosound-3x
+```
+
+**Istniejące projekty zostają na 2.x i tam pozostają czytelne.** 3.x ich nie konwertuje; importuje
+OBECNY stan samochodu do NOWEGO projektu, nie ruszając starego:
+
+```bash
+python3 ~/autosound-3x/skills/autosound-tuning/rew_tool/state/migrate.py <stary> --into <nowy>
+```
+
+Kanały wraz z literami wyjść, zwrotnice, opóźnienia, wzmocnienia, polaryzacja, EQ i profil DSP
+przechodzą dalej. Dziennik, stan procesu i starsze migawki zostają — świadomie: 2.x nie zapisywała,
+które fakty obowiązywały kiedy, więc przeniesienie historii oznaczałoby wymyślenie pochodzenia.
 
 ### Jak pozostać na linii 2.x
 

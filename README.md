@@ -14,7 +14,7 @@
 > AI can get numbers wrong. Always double-check crossover frequencies, slopes, and EQ values in your DSP before unmuting, especially on tweeters, and start at a low volume.
 
 > [!NOTE]
-> **2.x is the stable line.** It is feature-complete and stays supported. A 3.x line — with a GUI and an installer — is in development; no dates.
+> **2.x is what you get, and it stays supported.** A 3.x line exists and is tagged — machine-readable project files, a recorded process, a desktop app — but it is not the default install and will not become one until a full tuning session has been run on it end to end. Installing or updating gives you 2.x; [trying 3.x](#trying-the-3x-line) is a deliberate act.
 
 > [!TIP]
 > **Awards & Achievements**
@@ -114,6 +114,39 @@ Inside your active Claude Code session, run these commands **one by one** (do no
 > Clone https://github.com/ayukhno/autosound-tuning-skill, read `skills/autosound-tuning/SKILL.md`, and follow that method as your operating instructions for this session.
 
 See the FAQ for more detail.
+
+### Trying the 3.x line
+
+Tagged and installable, but not the default and not yet proven by a full tune. It is a **format
+break**: machine-readable project files instead of prose, a recorded process, phase gates, and a
+desktop app that reads them. A 2.x project does not open in it — see below.
+
+One skill per machine. Installing 3.x means replacing 2.x, not running both: two plugins that ship
+a skill of the same name leave both active with no warning, and which one answers is anybody's
+guess. So this uses the same local-clone route as the section above, which you control:
+
+```bash
+git clone -b v3.0.1 https://github.com/ayukhno/autosound-tuning-skill.git ~/autosound-3x
+python3 -m pip install --user -r ~/autosound-3x/skills/autosound-tuning/requirements.txt
+```
+
+Then in Claude Code, after removing the marketplace-installed skill:
+
+```
+/plugin marketplace add ~/autosound-3x
+```
+
+**Your existing projects stay on 2.x and stay readable there.** 3.x does not convert them; it
+imports the car's CURRENT state into a NEW project and leaves the old one untouched:
+
+```bash
+python3 ~/autosound-3x/skills/autosound-tuning/rew_tool/state/migrate.py <old-project> --into <new-project>
+```
+
+Channels and their output slots, crossovers, delays, gains, polarity, EQ and the DSP profile move
+across. The journal, the process state and older snapshots stay behind — deliberately: 2.x
+recorded nothing about which facts were in force when, so carrying its history would mean
+inventing provenance.
 
 ### Staying on the 2.x line
 
