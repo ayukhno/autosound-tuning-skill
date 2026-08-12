@@ -217,6 +217,16 @@ def api_key_for(provider):
 
 
 # Спроба прямого виклику Gemini API через стандартну бібліотеку
+def _looks_like_a_display_label(model):
+    """Is this a picker's caption rather than an API id.
+
+    Shape, not a list: every API id in every vendor's catalogue is lowercase and hyphenated, and
+    every display label has a space or a bracket in it. Checking the shape stays true after the
+    names move on, which is exactly what the alias table could not do.
+    """
+    return bool(model) and (" " in str(model) or "(" in str(model))
+
+
 def call_gemini_api(api_key, model, prompt):
     # The model name is passed through as given. There used to be an alias table here mapping a
     # CLI's display labels onto API ids ("Gemini 3.1 Pro (High)" -> gemini-2.5-pro); it was wrong
@@ -531,6 +541,20 @@ def main():
               "переходжу в ручний режим.", file=sys.stderr)
     provider = provider_for(model)
     api_key = api_key_for(provider) if model else None
+    if api_key and _looks_like_a_display_label(model):
+        # 2.x's OWN `.critic-env.example` shipped `GEMINI_CRITIC_MODEL="Gemini 3.5 Flash (Medium)"`
+        # — a picker's display label, which an alias table used to translate. That table is gone
+        # for good reasons (a table of model names is a promise to keep updating it, and nobody
+        # was), but the env files written from that example are still on people's disks. Sending
+        # the label to the API gets an opaque 4xx and a silent fall through to the clipboard, so
+        # the reviewer just quietly stops being automatic (found 2026-08-12).
+        print(
+            f"· «{model}» — це підпис зі списку, а не ідентифікатор моделі для API.\n"
+            f"  Так писав приклад із 2.x; тепер потрібен саме ідентифікатор, напр. `gemini-3-pro`.\n"
+            f"  Виправте змінну (`AUTOSOUND_CRITIC_MODEL` / `GEMINI_CRITIC_MODEL`) — інакше "
+            f"рецензент мовчки перейде на CLI або буфер обміну.",
+            file=sys.stderr,
+        )
     if api_key:
         print(f">> Підключення до API ({provider}, {model})...", file=sys.stderr)
         try:
