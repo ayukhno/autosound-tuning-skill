@@ -2,7 +2,11 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
-## [v3.0.0] — unreleased
+## [v3.0.0] — 2026-08-12 · tagged, not yet the default install
+
+> Tagged so it can be installed deliberately (`autosound-tuning-next` in the marketplace).
+> The default entry still delivers 2.8.1 and will until the pin is moved, which happens
+> after a full tuning session has been run on 3.0 end to end.
 
 **A format break, and the line the GUI runs on.** 2.x is unaffected and stays supported: the
 marketplace entry names an exact commit, so an update cannot carry an existing install across.
