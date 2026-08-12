@@ -10,7 +10,7 @@ This phase bootstraps a brand-new tuning project or a fresh system installation.
 
 **Required evidence:** the user interview (no guessing); driver `Fs` (datasheet/ask); routing · electrical polarity · gain · noise checks.
 
-**✅ Quality gate → Phase 0:** language set; `autosound_context.md` (Engineering Profile) + `preference-profile.md` created; **the machine files exist and validate** — `project.json`, `dsp_profile.json`, the glossary, and a first ledger snapshot with every profile-declared tier populated (`python3 rew_tool/contract.py check <project>` reports clean) — a prose-only intake is not a complete one, since a consumer front-end has nothing to render without them; install verified + protective HPFs set for fragile drivers; a candidate target curve **seeded** (no default).
+**✅ Quality gate → Phase 0:** language set; `autosound_context.md` (Engineering Profile) + `preference-profile.md` created; **the machine files exist and validate** — `project.json`, `dsp_profile.json`, the glossary, and a first ledger snapshot with every profile-declared tier populated (`python3 rew_tool/contract.py check <project> --gate` exits 0 — **`--gate`, not plain `check`**: plain `check` answers "is anything here wrong", which an EMPTY project satisfies, and this gate is asking whether everything it needs exists) — a prose-only intake is not a complete one, since a consumer front-end has nothing to render without them; install verified + protective HPFs set for fragile drivers; a candidate target curve **seeded** (no default).
 
 **⚠️ Failure modes:** skipping install verification (costs a session) · filing reference seat / competition format as a "preference" (they're engineering) · enforcing a default curve.
 

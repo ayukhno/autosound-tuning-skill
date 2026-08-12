@@ -90,12 +90,48 @@ def _validate_group(g):
         )
     # `max_count` is optional and null-until-confirmed (SCR-042), but a present one is a physical
     # slot count, so 0/negative/float/bool are all refusals rather than something to coerce.
+    # (See `_validate_rate` for the same argument about `sample_rate_hz`.)
     n = g.get("max_count")
     if "max_count" in g and n is not None:
         if not isinstance(n, int) or isinstance(n, bool) or n < 1:
             raise ValueError(
                 f"group {g['id']!r}.max_count must be a positive int or null (how many slots this "
                 f"tier physically has), got {n!r}")
+
+
+#: Rates a DSP actually runs at. Not a closed list of the world's rates -- a closed list of the
+#: ones that are not a typo. A profile claiming 96 kHz as `"96 kHz-ish"` or as `96` (kHz, not Hz)
+#: is the same defect wearing two costumes, and phase 1 turns both into sample counts.
+_PLAUSIBLE_RATES_HZ = (32000, 44100, 48000, 88200, 96000, 176400, 192000)
+
+
+def _validate_rate(profile):
+    """`sample_rate_hz` must be a rate, not a sentence.
+
+    SCR-045 made a MISSING rate an open question and a phase-1 refusal, because a delay in samples
+    is computed from it. The audit found the obvious hole the same night: it checked presence, not
+    type, so `"96 kHz-ish"` passed the gate built for exactly that incident (2026-08-12). A string
+    is not a rate; 96 is not a rate in Hz; and a rate no DSP runs at is a number somebody typed
+    from memory.
+    """
+    if "sample_rate_hz" not in profile:
+        return
+    rate = profile["sample_rate_hz"]
+    if rate is None:
+        return  # null is "not confirmed yet", which `open_questions` already reports
+    if isinstance(rate, bool) or not isinstance(rate, (int, float)):
+        raise ValueError(
+            f"profile.sample_rate_hz must be a number in HERTZ, got {rate!r}. Every delay in "
+            "samples is computed from it — a value that is not a number makes every alignment "
+            f"number wrong. Common rates: {', '.join(str(r) for r in _PLAUSIBLE_RATES_HZ)}."
+        )
+    if rate not in _PLAUSIBLE_RATES_HZ:
+        raise ValueError(
+            f"profile.sample_rate_hz = {rate!r} is not a rate any DSP runs at. In HERTZ, not kHz "
+            f"(96000, not 96). Known: {', '.join(str(r) for r in _PLAUSIBLE_RATES_HZ)}. If this "
+            "processor genuinely runs at something else, add it to `_PLAUSIBLE_RATES_HZ` in the "
+            "same commit as the profile — a rate nobody has seen deserves a second reader."
+        )
 
 
 def validate_profile(data):
@@ -108,6 +144,7 @@ def validate_profile(data):
         raise ValueError("profile.name must be a non-empty string")
     if not isinstance(profile["vendor"], str) or not profile["vendor"].strip():
         raise ValueError("profile.vendor must be a non-empty string")
+    _validate_rate(profile)
     groups = profile["groups"]
     if not isinstance(groups, list) or not groups:
         raise ValueError("profile.groups must be a non-empty list")

@@ -124,8 +124,10 @@ def _require_target(phase, previous, state):
         f"phase {phase} needs a target curve: nothing has been recorded with `set-target`. "
         "Phase 0 chooses it and every later phase is measured against it, so a curve that exists "
         "only in the conversation is lost on the next session. "
-        "Record it: `set-target <preset> <curve>` (e.g. `set-target FULL EPY`)."
-    )
+        # The command is `target`, and this line said `set-target` — a refusal that instructs a
+        # command which does not exist teaches the reader that the refusal is noise (2026-08-12).
+        "Record it: `python3 rew_tool/state/process.py <project>/process target <preset> <curve>`"
+        " (e.g. `target FULL EPY`).")
 
 
 # Phase 0 §3.5 PRODUCES the acoustic flaw map, and phase 2 is supposed to EQ against it — what may

@@ -44,6 +44,15 @@ import project
 # One format number for the whole project (3.0): every versioned machine file carries the same
 # `schema_version`, so "which format is this project in?" is one comparison rather than a matrix.
 FORMAT_VERSION = 3
+#: What phase −1 cannot be left without. Not every row of CONTRACT: the registry is only for a
+#: multi-slot DSP, and the journal is written by the first event rather than by intake.
+_GATE_REQUIRED = (
+    "project.json",
+    "dsp_profile.json",
+    "glossary.json (or project.json.glossary)",
+    "process/process-state.json",
+)
+
 CONTRACT = (
     # (relative path, label, owner, expected schema_version -- None where the file carries no
     # version because it has no envelope to put one in: the glossary lives inside project.json,
@@ -298,12 +307,36 @@ def check_project(project_dir, skip_rew=False):
     }
     ok = all(f["valid"] is not False for f in files) and not cross["glossary_vs_ledgers"] and \
         not cross["tiers_vs_profile"]
-    return {"project_dir": project_dir, "ok": ok, "files": files, "cross_checks": cross}
+    # `ok` and `complete` answer two different questions, and conflating them made the phase −1
+    # gate endorse its own bypass: an EMPTY project has nothing broken, so `ok` was True, and the
+    # gate names this check as its verifier (found 2026-08-12 — `check_project(<empty dir>)`
+    # returned `ok=True` with every file absent).
+    #
+    # `ok`       — nothing here is WRONG. A fresh folder qualifies, and should: intake has not run.
+    # `complete` — everything the method needs before phase 0 EXISTS and is valid. That is the
+    #              gate's question, and only that one.
+    missing = [f["file"] for f in files if not f["exists"] and f["file"] in _GATE_REQUIRED]
+    # The ledger has no fixed row name — `check_ledgers` reports one row per preset directory, and
+    # a project with no `state/` at all reports none. Absence of the row IS the missing ledger,
+    # which a name-based check cannot see.
+    if not any(f["file"].startswith("state/") and f["exists"] for f in files):
+        missing.append("state/<preset>/ (first ledger snapshot)")
+    complete = ok and not missing
+    return {"project_dir": project_dir, "ok": ok, "complete": complete, "missing": missing,
+            "files": files, "cross_checks": cross}
 
 
 # ── rendering ───────────────────────────────────────────────────────────────────
 def render_report(report):
     lines = [f"# Project contract check — {report['project_dir']}", ""]
+    if report.get("missing"):
+        lines.append(
+            "**Not ready for phase 0** — intake has not produced: "
+            + ", ".join(report["missing"])
+            + ". (`--gate` exits non-zero on this; plain `check` reports only whether what EXISTS "
+              "is wrong.)"
+        )
+        lines.append("")
     lines.append("| File | Exists | Schema | Valid | Issues |")
     lines.append("|---|---|---|---|---|")
     for f in report["files"]:
@@ -357,11 +390,16 @@ def _main(argv):
     project_dir = argv[2]
     as_json = "--json" in argv
     skip_rew = "--no-rew" in argv
+    # `--gate` is the phase −1 question: is everything the method needs actually here. Without it
+    # the caller gets "nothing is wrong", which an empty folder satisfies.
+    gate = "--gate" in argv
     report = check_project(project_dir, skip_rew=skip_rew)
     if as_json:
         print(json.dumps(report, indent=2, ensure_ascii=False))
     else:
         print(render_report(report))
+    if gate:
+        return 0 if report["complete"] else 1
     return 0 if report["ok"] else 1
 
 
@@ -455,6 +493,21 @@ def _selftest():
     # render_report doesn't crash on either shape and mentions the cross-check findings.
     text = render_report(report2)
     assert "virtual_channels" in text, text
+
+    # -- `ok` and `complete` are different questions (2026-08-12) -------------------------------
+    # An empty project has nothing WRONG with it, so `ok` is True and should be. The phase -1 gate
+    # names this check as its verifier, and on that reading the gate endorsed its own bypass.
+    empty = check_project(tempfile.mkdtemp(prefix="autosound_contract_empty_"), skip_rew=True)
+    assert empty["ok"] is True, empty
+    assert empty["complete"] is False, empty
+    assert "project.json" in empty["missing"], empty["missing"]
+    # The ledger has no fixed row name, so its absence is detected by absence of any state/ row.
+    assert any("ledger" in name for name in empty["missing"]), empty["missing"]
+    # ...and a project the selftest itself seeded owes nothing: `missing` is empty even though
+    # `complete` is False here, because this fixture also carries a deliberate glossary/ledger
+    # mismatch. Two separate facts, which is the whole point of splitting them.
+    assert report["missing"] == [], report["missing"]
+    assert report["complete"] is False and report["ok"] is False, report
 
     print(f"selftest OK — empty project reports missing files without crashing; a seeded project "
           f"(project.json+glossary, dsp_profile.json, ledger, process) validates at the right "
