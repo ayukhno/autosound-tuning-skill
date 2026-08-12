@@ -115,7 +115,9 @@ See the FAQ for more detail.
 
 ### Staying on the 2.x line
 
-`main` always carries the current line, and `/plugin marketplace update` follows `main` wherever it goes — including across a major version. If you want to stay on 2.x, don't install from the marketplace repo; point Claude Code at a local checkout of the `2.x` branch instead.
+**You are already on it, and an update will not move you.** The marketplace entry names an exact commit rather than a branch, so `/plugin marketplace update` cannot carry you across a major version; an explicit `/plugin update` brings you to whatever commit that entry names, which is 2.8.1.
+
+The route below is for controlling it yourself: a local checkout of the `2.x` branch, which also takes 2.x patches the moment they land rather than when a pin moves.
 
 Clone it once, in your terminal:
 

@@ -115,7 +115,9 @@ Więcej szczegółów w FAQ.
 
 ### Jak pozostać na linii 2.x
 
-Gałąź `main` zawsze niesie bieżącą linię, a `/plugin marketplace update` podąża za `main` wszędzie — również przez zmianę wersji głównej. Jeśli chcesz pozostać na 2.x, nie instaluj z repozytorium marketplace: wskaż Claude Code lokalny klon gałęzi `2.x`.
+**Już na niej jesteś, a aktualizacja cię z niej nie ruszy.** Wpis w marketplace wskazuje konkretny commit, a nie gałąź, więc `/plugin marketplace update` nie może przenieść cię przez zmianę wersji głównej; jawne `/plugin update` doprowadzi cię do commita wskazanego we wpisie, czyli 2.8.1.
+
+Droga poniżej jest dla tych, którzy chcą sterować tym sami: lokalny klon gałęzi `2.x`, który dodatkowo przyjmuje poprawki 2.x od razu.
 
 Sklonuj raz, w terminalu:
 

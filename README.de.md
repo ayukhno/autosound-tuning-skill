@@ -115,7 +115,9 @@ Mehr dazu in der FAQ.
 
 ### Auf der 2.x-Linie bleiben
 
-`main` trägt immer die aktuelle Linie, und `/plugin marketplace update` folgt `main` überallhin — auch über einen Hauptversionswechsel hinweg. Wer auf 2.x bleiben möchte, installiert nicht aus dem Marketplace-Repository, sondern richtet Claude Code auf einen lokalen Checkout des Branches `2.x`.
+**Du bist bereits darauf, und ein Update verschiebt dich nicht.** Der Marketplace-Eintrag nennt einen exakten Commit statt eines Branches, deshalb kann `/plugin marketplace update` dich nicht über einen Hauptversionswechsel tragen; ein ausdrückliches `/plugin update` bringt dich zu dem Commit, den der Eintrag nennt — 2.8.1.
+
+Der Weg unten ist für alle, die es selbst steuern wollen: ein lokaler Checkout des Branches `2.x`, der 2.x-Korrekturen außerdem sofort übernimmt.
 
 Einmalig im Terminal klonen:
 
