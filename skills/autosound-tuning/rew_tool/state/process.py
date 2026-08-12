@@ -91,11 +91,6 @@ EV_CAPTURE_VERIFIED = "capture_verified"
 # session -- the journal otherwise starts at whatever the model happened to record first, so
 # "when did this session begin, and did it record anything at all" had no answer.
 EV_SESSION_STARTED = "session_started"
-#: A phase gate found something missing and let the move through anyway. Only ever emitted for a
-#: MIGRATED project — see `_gates_are_advisory`. On the record rather than on stderr alone,
-#: because "we went into phase 2 without a flaw map" is exactly the kind of thing a later reader
-#: needs to know and nobody remembers.
-EV_GATE_WAIVED = "gate_waived"
 # What the Arbiter ruled, as itself. Their half of the conversation was in no machine file at all:
 # the only surviving trace of an answer was a hand-typed evidence string, and a constraint the user
 # set was invisible to the next session unless it happened to be re-read out of prose (SCR-030).
@@ -226,24 +221,6 @@ def _require_intake(phase, previous, project_dir):
         "`python3 rew_tool/contract.py check <project> --gate` to see it yourself; finish the "
         "intake flow in `references/core/project-intake.md §0.5` rather than working around this."
     )
-
-
-def _gates_are_advisory(project_dir):
-    """Do this project's phase gates warn instead of refuse.
-
-    True only for a project the migration brought across from 2.x, and only because it says so
-    itself: `migrate.py` stamps `migrated_from` into `project.json`. Inferring it from "has a
-    ledger" or "has a long journal" would eventually soften a project nobody migrated, which is
-    the one case these gates are for.
-    """
-    path = os.path.join(project_dir, "project.json")
-    try:
-        with open(path, encoding="utf-8") as handle:
-            data = json.load(handle)
-    except (OSError, ValueError):
-        return False
-    body = data.get("project") if isinstance(data.get("project"), dict) else data
-    return bool(body.get("migrated_from"))
 
 
 def _load_sibling(name):
@@ -456,14 +433,17 @@ _MIGRATABLE_SCHEMA_VERSIONS = (1, 2)
 
 
 def migration_command(project_dir="<project-dir>"):
-    """The migration, as a line somebody can paste.
+    """The way across, as a line somebody can paste.
 
-    An absolute path, not `rew_tool/state/migrate.py`. That relative form only resolves for
-    someone standing inside a checkout of the skill; the people who need this most installed it as
-    a plugin and have no such directory anywhere near their project.
+    An absolute path, not `rew_tool/state/migrate.py`: that relative form only resolves for
+    someone standing inside a checkout, and the people who need this most installed the skill as
+    a plugin and have no such directory near their project.
+
+    It IMPORTS into a new project rather than converting this one. The old project is left exactly
+    as it is and still opens in 2.x, which is where its history stays readable.
     """
     here = os.path.dirname(os.path.abspath(__file__))
-    return f"python3 {os.path.join(here, 'migrate.py')} {project_dir}"
+    return f"python3 {os.path.join(here, 'migrate.py')} {project_dir} --into <new-project-dir>"
 
 
 def validate(state):
@@ -585,37 +565,21 @@ class Process:
             raise ProcessError(f"unknown phase {phase!r}; known: {', '.join(PHASES)}")
         state = self.load()
         previous = state.get("active_phase")
-        waived = []
-        for gate in (lambda: _require_intake(phase, previous, self.project_dir),
-                     lambda: _require_target(phase, previous, state),
-                     lambda: _require_flaw_map(phase, previous, self.project_dir),
-                     lambda: _require_profile_facts(phase, previous, self.project_dir)):
-            try:
-                gate()
-            except ProcessError as refusal:
-                # A project that came from 2.x is let through, loudly. These gates were written
-                # after it was already being tuned, and every one of them asks for a file or a
-                # fact the older line never collected — so on a migrated project they do not
-                # protect a beginner from a fabricated tune, they stop somebody months in from
-                # continuing work that is real (user, 2026-08-12: "пускати вперед, але
-                # попереджати чого бракує").
-                #
-                # NOT softened for a project started under 3.0. The gates exist because a cheap
-                # model once closed phases −1 to 3 and reported a finished tune with
-                # `dsp_profile.json` alone on disk; turning them into advice everywhere would
-                # hand that back.
-                if not _gates_are_advisory(self.project_dir):
-                    raise
-                waived.append(str(refusal))
+        # No exemptions. A project brought over from 2.x is a NEW project — `migrate.py --into`
+        # imports the car's current state and nothing else — so it starts at phase −1 and earns
+        # each gate like any other. There was briefly a softened path for projects migrated in
+        # place; the in-place migration is gone, and a waiver nothing can grant is a waiver that
+        # only waits to be granted by mistake (2026-08-12).
+        _require_intake(phase, previous, self.project_dir)
+        _require_target(phase, previous, state)
+        _require_flaw_map(phase, previous, self.project_dir)
+        _require_profile_facts(phase, previous, self.project_dir)
         if previous and previous != phase:
             state["phases"][previous]["status"] = PHASE_DONE
         state["phases"][phase]["status"] = PHASE_CURRENT
         state["active_phase"] = phase
         self._write(state)
         self._append(EV_PHASE_ENTERED, phase=phase, previous=previous, note=note)
-        for refusal in waived:
-            print(f"⚠️  phase {phase}: {refusal}", file=sys.stderr)
-            self._append(EV_GATE_WAIVED, phase=phase, reason=refusal)
         return state
 
     def add_step(self, step_id, name, source=SOURCE_SKILL, phase=None):
@@ -1233,32 +1197,13 @@ def _selftest():
     proc.enter_phase("2")
     assert proc.load()["active_phase"] == "2"
 
-    # A MIGRATED project is let through the same gates with a warning, and the waiver goes on the
-    # record. Every one of these gates asks for something the 2.x line never collected, so on a
-    # project months into a tune they stop real work rather than prevent a fabricated one (user,
-    # 2026-08-12). A project nobody migrated is NOT softened — that is the whole distinction.
-    import tempfile as _tempfile
-
-    legacy = _tempfile.mkdtemp(prefix="autosound_process_2x_")
-    legacy_proc = Process(os.path.join(legacy, "process"))
-    refuses("a fresh project is still refused", lambda: legacy_proc.enter_phase("1"))
-    with open(os.path.join(legacy, "project.json"), "w", encoding="utf-8") as handle:
-        json.dump({"schema_version": 3, "project_rev": 1, "migrated_from": "2.x"}, handle)
-    legacy_proc.enter_phase("1")  # same missing files, now a warning
-    assert legacy_proc.load()["active_phase"] == "1", legacy_proc.load()
-    waived = [json.loads(line) for line in open(legacy_proc.journal_path, encoding="utf-8")
-              if json.loads(line)["type"] == EV_GATE_WAIVED]
-    assert waived, "a waived gate that leaves no trace is a gate nobody can audit later"
-    assert "intake has not produced" in waived[0]["reason"], waived[0]
-
     print(
         "selftest OK — evidence refused when empty and when it resolves to nothing (SCR-035), "
         "phase -1 refused to end on a folder intake never touched, "
         "phase 0 refused to exit without a target (SCR-036) and without a flaw map (SCR-044) "
         "and opened once the map was recorded; "
         "phase 1 refused a profile with no `sample_rate_hz` (SCR-045) and phase 2 asked only for "
-        "what a profile declaring no EQ actually owes; a migrated project passed the same gates "
-        "with a journalled warning while a fresh one was still refused. "
+        "what a profile declaring no EQ actually owes. "
         f"root={root}"
     )
     return 0

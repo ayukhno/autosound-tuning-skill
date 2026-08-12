@@ -391,7 +391,8 @@ def _ledger_snapshots(project_dir):
 # ── rendering ───────────────────────────────────────────────────────────────────
 def _migration_command(project_dir):
     here = os.path.dirname(os.path.abspath(__file__))
-    return f"python3 {os.path.join(here, 'state', 'migrate.py')} {project_dir}"
+    return (f"python3 {os.path.join(here, 'state', 'migrate.py')} {project_dir} "
+            f"--into <new-project-dir>")
 
 
 def render_report(report):
@@ -401,12 +402,14 @@ def render_report(report):
         # this situation has to act on, and everything below it is a consequence of it.
         lines.append(
             "**This is a 2.x project.** 3.0 reads a different format, so the rows below will "
-            "look broken or missing until it is migrated. Nothing is lost — migrate once:"
+            "look broken or missing. Nothing is lost and nothing here will be changed — import "
+            "this car's current state into a NEW 3.0 project, and keep this one for its history:"
         )
         lines.append("")
         lines.append(f"    {_migration_command(report['project_dir'])}")
         lines.append("")
-        lines.append("Do NOT run intake: it would re-ask what this project already answered.")
+        lines.append("Do NOT run intake here, and do not convert this folder — the import leaves "
+                     "it untouched and still openable in 2.x.")
         lines.append("")
     elif report.get("missing"):
         lines.append(

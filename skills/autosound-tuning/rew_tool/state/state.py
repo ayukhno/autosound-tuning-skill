@@ -220,7 +220,7 @@ def migration_command(project_dir="<project-dir>"):
     Duplicated rather than imported: this module is loaded by consumers that put neither `state/`
     nor its parent on `sys.path`, and a hint that cannot be produced is worse than a long line."""
     here = os.path.dirname(os.path.abspath(__file__))
-    return f"python3 {os.path.join(here, 'migrate.py')} {project_dir}"
+    return f"python3 {os.path.join(here, 'migrate.py')} {project_dir} --into <new-project-dir>"
 
 
 MOVED_TO_PROJECT_JSON = {

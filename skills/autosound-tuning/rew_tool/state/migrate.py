@@ -216,108 +216,100 @@ def _write_json(path, data):
     os.replace(tmp, path)
 
 
-def migrate_project(project_dir, dry_run=False):
-    """Migrate one project in place. Returns a report dict; writes nothing when `dry_run`."""
-    report = {"project_dir": project_dir, "snapshots": [], "identity_fields": 0,
-              "channel_summary": {}, "files": [], "warnings": []}
+def import_current_state(old_dir, new_dir, dry_run=False):
+    """Carry a 2.x project's CURRENT state into a fresh 3.0 project. History stays behind.
 
-    # 1. Read every snapshot and collect what it was carrying. Oldest first, so a newer snapshot's
-    #    value simply overwrites an older one in the accumulator.
-    migrated, identity = {}, {}
-    for path in snapshot_paths(project_dir):
+    The supported way across, chosen over an in-place migration (user, 2026-08-12). What moves is
+    what a car actually is right now: which channel is on which output, its crossovers, delay,
+    gain, polarity and EQ, plus the DSP profile. What does not move is the journal, the process
+    state and every snapshot but the newest.
+
+    That asymmetry is the point, and it is not a shortcut:
+
+    - **It removes a lie the in-place migration had to tell.** 2.x recorded nothing about which
+      facts were in force when, so migrating history meant stamping every old snapshot with one
+      invented revision — provenance that reads as real and is not.
+    - **The new project is a NEW project**, so it goes through phase −1 and 0 in 3.0 like any
+      other. Intake is a review rather than an interrogation, because the answers are already
+      filled in — and the flaw map and target curve, which 2.x never collected, get recorded
+      properly instead of being waived.
+    - **The old project is untouched.** It still opens in 2.x, which is where its history is
+      readable. Nothing here can lose it, because nothing here writes to it.
+    """
+    report = {"project_dir": new_dir, "source": old_dir, "snapshots": [], "identity_fields": 0,
+              "channel_summary": {}, "files": [], "warnings": [], "imported_from": old_dir}
+    paths = snapshot_paths(old_dir)
+    if not paths:
+        raise SystemExit(f"no ledger snapshots under {os.path.join(old_dir, 'state')} — "
+                         f"nothing to import. A 2.x project keeps them in `state/<preset>/v_NNN.json`.")
+
+    # Identity is accumulated across ALL snapshots (a `descr` may only appear in an old one), but
+    # only the NEWEST snapshot per preset becomes a ledger in the new project.
+    identity, newest = {}, {}
+    for path in paths:
         snap, found = migrate_snapshot(_read_json(path))
-        migrated[path] = snap
         for code, fields in found.items():
             identity.setdefault(code, {}).update(fields)
+        newest[os.path.basename(os.path.dirname(path))] = (path, snap)
 
-    # 2. PRE-FLIGHT: every snapshot must validate before anything is written.
-    #
-    #    Order matters here and it was wrong. `project.json` used to be saved first and the
-    #    snapshots validated one at a time afterwards, so a single bad row left a project with a
-    #    3.0 `project.json` beside untouched 2.x ledgers — a shape neither version reads cleanly,
-    #    produced by a command whose whole promise is "refuses to write a project that does not
-    #    validate afterwards". Found by feeding it a snapshot with an out-of-vocabulary `status`
-    #    (2026-08-12).
-    #
-    #    A provisional `project_rev` stands in, because the real one is only assigned by saving
-    #    `project.json` — which is exactly what must not happen yet. Everything else about the
-    #    snapshot is checked for real.
-    for path, snap in migrated.items():
-        probe = copy.deepcopy(snap)
-        probe["project_rev"] = 0
-        try:
-            _state.validate(probe)
-        except (ValueError, KeyError) as exc:
-            raise SystemExit(
-                f"migration stopped BEFORE writing anything — {os.path.relpath(path, project_dir)} "
-                f"does not become a valid 3.0 snapshot:\n    {exc}\n"
-                f"Nothing in the project has been changed."
-            ) from exc
-
-    # 3. Fold identity into project.json and write it. Saving is what assigns the new revision,
-    #    and every snapshot is then stamped with that one number.
-    proj = _project.Project(project_dir)
+    proj = _project.Project(new_dir)
     data = proj.load()
     data["schema_version"] = _project.SCHEMA_VERSION
-    # The one flag the phase gates read. A project brought across from 2.x is let through them
-    # with a warning instead of a refusal: every gate asks for a file or a fact the older line
-    # never collected, so on this project they would stop real work rather than prevent a
-    # fabricated tune (see `process.py::_gates_are_advisory`). Written here because this is the
-    # only place that KNOWS — inferring it later from the shape of a project would eventually
-    # soften one nobody migrated.
-    data.setdefault("migrated_from", "2.x")
     report["identity_fields"] = fold_identity(data, identity)
     if not data.get("channel_summary"):
-        data["channel_summary"] = channel_summary(list(migrated.values()))
+        data["channel_summary"] = channel_summary([snap for _p, snap in newest.values()])
     report["channel_summary"] = data.get("channel_summary") or {}
-    if dry_run:
-        rev = data.get("project_rev", 0) + 1
-    else:
+    # Where this came from, on the record. Not a flag anything BEHAVES on — the new project is a
+    # new project — just the provenance a later reader will want.
+    data.setdefault("imported_from", os.path.abspath(old_dir))
+
+    for preset, (path, snap) in sorted(newest.items()):
+        snap["version"] = "v_001"
+        snap["project_rev"] = 1
+        snap["note"] = (f"imported from {os.path.relpath(path, old_dir)} in {old_dir} — "
+                        f"the state this car was in when it moved to 3.0")
+        _state.validate(snap)  # before a single byte is written
+        report["snapshots"].append(f"{preset}/v_001.json (was {os.path.basename(path)})")
+
+    if not dry_run:
         proj.save(data)
-        rev = proj.load()["project_rev"]
-    report["project_rev"] = rev
+        for preset, (_path, snap) in sorted(newest.items()):
+            preset_dir = os.path.join(new_dir, "state", preset)
+            os.makedirs(preset_dir, exist_ok=True)
+            snap["project_rev"] = proj.load()["project_rev"]
+            _write_json(os.path.join(preset_dir, "v_001.json"), snap)
+            with open(os.path.join(preset_dir, "HEAD"), "w", encoding="utf-8") as handle:
+                handle.write("v_001\n")
+    report["project_rev"] = proj.load()["project_rev"] if not dry_run else 1
     report["files"].append("project.json")
 
-    # 4. Write the snapshots, all stamped with that revision (see the module docstring on why
-    #    history collapses to a single revision here).
-    for path, snap in migrated.items():
-        snap["project_rev"] = rev
-        _state.validate(snap)  # refuse to write a file that isn't actually 3.0
-        if not dry_run:
-            _write_json(path, snap)
-        report["snapshots"].append(os.path.relpath(path, project_dir))
-
-    # 5. The remaining machine files carry a version; nothing else in them changed.
-    process_state = os.path.join(project_dir, "process", "process-state.json")
-    if os.path.isfile(process_state):
-        state = _read_json(process_state)
-        state["schema_version"] = _process.SCHEMA_VERSION
-        _process.validate(state)
-        if not dry_run:
-            _write_json(process_state, state)
-        report["files"].append("process/process-state.json")
-
-    profile_path = os.path.join(project_dir, "dsp_profile.json")
-    if os.path.isfile(profile_path):
-        profile = _read_json(profile_path)
+    old_profile = os.path.join(old_dir, "dsp_profile.json")
+    if os.path.isfile(old_profile):
+        profile = _read_json(old_profile)
         renames = rename_profile_fields(profile)
         if renames:
             report["field_renames"] = renames
         try:
             _dsp_profile.validate_profile(profile)
         except ValueError as exc:
-            report["warnings"].append(f"dsp_profile.json left alone — it does not validate: {exc}")
+            report["warnings"].append(
+                f"dsp_profile.json NOT imported — it does not validate: {exc}")
         else:
             if not dry_run:
-                _dsp_profile.save_profile(profile_path, profile)  # stamps schema_version
+                _dsp_profile.save_profile(os.path.join(new_dir, "dsp_profile.json"), profile)
             report["files"].append("dsp_profile.json")
 
+    report["warnings"].append(
+        "History stayed behind on purpose: the journal, the process state and older snapshots are "
+        "still in the old project, which still opens in 2.x. This project starts at phase −1.")
     return report
 
 
 def render_report(report, dry_run=False):
-    what = "would migrate" if dry_run else "migrated"
-    lines = [f"# 2.x → 3.0 migration — {report['project_dir']}", ""]
+    what = "would import" if dry_run else "imported"
+    lines = [f"# 2.x → 3.0 import — {report['project_dir']}", ""]
+    if report.get("source"):
+        lines.append(f"- from: {report['source']} (untouched — it still opens in 2.x)")
     lines.append(f"- project_rev now: **{report['project_rev']}** (stamped onto every snapshot)")
     lines.append(f"- identity fields moved into project.json: {report['identity_fields']}")
     for rename in report.get("field_renames") or []:
@@ -344,7 +336,34 @@ def _main(argv=None):
         print(f"no such project directory: {project_dir}", file=sys.stderr)
         return 2
     dry_run = "--dry-run" in argv
-    report = migrate_project(project_dir, dry_run=dry_run)
+    if "--into" not in argv:
+        # In-place migration is deliberately NOT offered. It had to invent provenance (one made-up
+        # revision stamped across a history that recorded none), it left the project owing every
+        # 3.0 gate a fact 2.x never collected, and it wrote into the only copy of a tune somebody
+        # was in the middle of. Importing the current state into a new project costs a review of
+        # intake and risks nothing (user, 2026-08-12).
+        print(
+            "in-place migration is not supported. Import this project's CURRENT state into a new "
+            "3.0 project instead — the old one stays untouched and still opens in 2.x:\n\n"
+            f"    python3 {os.path.abspath(__file__)} {project_dir} --into <new-project-dir>\n\n"
+            "Add --dry-run to see what would move. What moves: channels and their output letters, "
+            "crossovers, delays, gains, polarity, EQ, and the DSP profile. What stays behind: the "
+            "journal, the process state, and every snapshot but the newest.",
+            file=sys.stderr,
+        )
+        return 2
+    at = argv.index("--into")
+    if at + 1 >= len(argv):
+        print("--into needs a directory for the new project", file=sys.stderr)
+        return 2
+    new_dir = argv[at + 1]
+    if os.path.abspath(new_dir) == os.path.abspath(project_dir):
+        print("--into must name a DIFFERENT directory: the point is that the old one is left "
+              "alone", file=sys.stderr)
+        return 2
+    if not dry_run:
+        os.makedirs(new_dir, exist_ok=True)
+    report = import_current_state(project_dir, new_dir, dry_run=dry_run)
     print(render_report(report, dry_run=dry_run))
     return 0
 
@@ -418,22 +437,30 @@ def _selftest():
         }
     })
 
-    # a fact the human already answered in project.json must NOT be clobbered by an old snapshot.
-    proj = _project.Project(root)
+    # The NEW project, where the car lands. A fact somebody already answered there must not be
+    # clobbered by an old snapshot.
+    new_root = tempfile.mkdtemp(prefix="autosound_import_new_")
+    proj = _project.Project(new_root)
     seeded = proj.load()
     seeded["channels"] = [{"code": "sub", "descr": "Subwoofer (from intake)"}]
     proj.save(seeded)
     rev_before = proj.load()["project_rev"]
 
-    # --dry-run leaves every byte alone.
+    # --dry-run writes nothing, into either project.
     before = _read_json(os.path.join(preset_dir, "v_001.json"))
-    migrate_project(root, dry_run=True)
+    import_current_state(root, new_root, dry_run=True)
     assert _read_json(os.path.join(preset_dir, "v_001.json")) == before, "dry run wrote something"
+    assert not os.path.exists(os.path.join(new_root, "state")), "dry run created a ledger"
 
-    report = migrate_project(root)
+    report = import_current_state(root, new_root)
 
-    # identity landed in project.json, newest snapshot winning, intake's own answer untouched.
-    data = _project.Project(root).load()
+    # The OLD project is untouched — that is the whole reason this is an import and not an
+    # in-place migration: it cannot lose a tune somebody is in the middle of.
+    assert _read_json(os.path.join(preset_dir, "v_001.json")) == before, "the source was modified"
+    assert "helix_ch" in before["channels"]["w-L"], before["channels"]["w-L"]
+
+    # identity landed in the new project.json, newest snapshot winning, intake's answer untouched.
+    data = _project.Project(new_root).load()
     by_code = {r["code"]: r for r in data["channels"]}
     assert by_code["w-L"]["descr"] == "Front L Woofer (corrected)", by_code["w-L"]
     # `helix_ch` -> `slot`: the DSP output letter, the one thing on a 2.x row the Arbiter types
@@ -454,15 +481,22 @@ def _selftest():
 
     # the profile's 2.x token was renamed, the file now validates, and the run said so.
     assert report.get("field_renames"), report
-    profile = _read_json(os.path.join(root, "dsp_profile.json"))
+    profile = _read_json(os.path.join(new_root, "dsp_profile.json"))
     fields = [f for g in profile["dsp_profile"]["groups"] for f in g["fields"]]
     assert "delay_ms" not in fields and fields.count("ta_ms") == 2, fields
+    # ...and the SOURCE profile still says what it always said.
+    old_fields = [f for g in _read_json(os.path.join(root, "dsp_profile.json"))["dsp_profile"]
+                  ["groups"] for f in g["fields"]]
+    assert old_fields.count("delay_ms") == 2, old_fields
     _dsp_profile.validate_profile(profile)  # raises if the migration left it broken
     assert "dsp_profile.json" in report["files"], report
 
-    # the ledgers are 3.0: no identity, structured EQ, every snapshot stamped with one revision.
-    hist = _state.PresetHistory(os.path.join(root, "state"), "SQ_Jazzi", project_dir=root)
-    for version in ("v_001", "v_002"):
+    # the imported ledger is 3.0: no identity, structured EQ, one snapshot — the newest.
+    hist = _state.PresetHistory(os.path.join(new_root, "state"), "SQ_Jazzi", project_dir=new_root)
+    assert hist.load("v_001")["note"].startswith("imported from"), hist.load("v_001")["note"]
+    assert not os.path.exists(os.path.join(new_root, "state", "SQ_Jazzi", "v_002.json")), \
+        "history must stay behind: only the current state is imported"
+    for version in ("v_001",):
         snap = hist.load(version)
         _state.validate(snap)
         assert snap["schema_version"] == _state.SCHEMA_VERSION, snap
@@ -477,23 +511,29 @@ def _selftest():
         assert snap["channels"]["sub"]["tag"] == "SubRC", snap  # `tag` is structural, it stays
 
     # the settings sheet still prints slots -- they now come from project.json.
-    sheet = hist.render("v_002")
+    sheet = hist.render("v_001")
     assert "| w-L | C |" in sheet, sheet
 
-    # idempotent: a second run moves no further fields and changes no snapshot content (only
-    # project_rev moves, because saving project.json is a write and the counter counts writes).
-    snap_before = hist.load("v_002")
-    again = migrate_project(root)
-    after = hist.load("v_002")
+    # Re-running into the SAME new project is safe: nothing further moves, and the ledger content
+    # does not change (only project_rev, because saving project.json is a write and the counter
+    # counts writes).
+    snap_before = hist.load("v_001")
+    again = import_current_state(root, new_root)
+    after = hist.load("v_001")
     assert {k: v for k, v in after.items() if k != "project_rev"} == {
         k: v for k, v in snap_before.items() if k != "project_rev"}, after
     assert again["identity_fields"] == 0, again
 
+    # ...and importing into the source itself is refused: the point is that the old one is left
+    # alone, and a caller who conflates them has misunderstood the whole shape.
+    assert _main([root]) == 2, "in-place must not be silently accepted"
+
     print(f"selftest OK — a 2.x project (string EQ incl. LS shorthand, `helix_ch` as the released "
           f"2.x line wrote it, identity on ledger rows, "
-          f"tag_value beside its tag) migrated to 3.0: identity moved into project.json with the "
+          f"tag_value beside its tag) IMPORTED into a new 3.0 project, source untouched: identity "
+          f"moved into project.json with the "
           f"newest snapshot winning and intake's own answer left intact, tag_value became a "
-          f"hardware control, every snapshot stamped project_rev={report['project_rev']} and "
+          f"hardware control, the current state landed as v_001 at project_rev={report['project_rev']} and "
           f"validated, the settings sheet kept its Slot column, --dry-run wrote nothing, a re-run "
           f"moved no further fields. root={root}")
     return 0
