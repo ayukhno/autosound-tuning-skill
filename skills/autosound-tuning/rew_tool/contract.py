@@ -91,7 +91,12 @@ def check_project_json(project_dir):
     path = os.path.join(project_dir, "project.json")
     if not os.path.isfile(path):
         return _entry("project.json", False, issues=["missing -- run intake"]), None
-    data = project.Project(project_dir).load()
+    try:
+        data = project.Project(project_dir).load()
+    except project.ProjectError as exc:
+        # Unreadable is a REPORT here, not a crash: diagnostics exists to say what is wrong with a
+        # project, and a checker that dies on the worst case is a checker that is absent for it.
+        return _entry("project.json", True, None, False, [str(exc)]), None
     try:
         project.validate(data)
         entry = _entry("project.json", True, data.get("schema_version"), True)

@@ -308,13 +308,33 @@ class Project:
         return os.path.join(self.dir, "project.json")
 
     def load(self):
-        """The current facts, or an empty skeleton if this project has none yet — a brand-new
-        project folder reads as "nothing known", not an error."""
+        """The current facts, or an empty skeleton if this project has none yet.
+
+        **A file that exists and cannot be read is NOT "nothing known".** Both used to return the
+        skeleton, and that is data loss with extra steps: every mutator here is load-modify-save,
+        so one `set_channel` against an unreadable file wrote the skeleton over it — the whole
+        project replaced by an empty one, `project_rev` back to 1, no error anywhere (found by
+        audit and reproduced, 2026-08-12). Atomic writes never protected against this; the write
+        was perfectly atomic and perfectly wrong.
+
+        A brand-new folder still reads as "nothing known", because that is true.
+        """
+        if not os.path.isfile(self.path):
+            return _empty_project()
         try:
             with open(self.path, encoding="utf-8") as f:
                 data = json.load(f)
-        except (OSError, ValueError):
-            return _empty_project()
+        except (OSError, ValueError) as exc:
+            raise ProjectError(
+                f"{self.path} exists and cannot be read: {exc}. Refusing to treat it as an empty "
+                "project — the next write would replace it. Fix or move the file; a copy of the "
+                "last good one may be in your editor's backups or in git."
+            ) from exc
+        if not isinstance(data, dict):
+            raise ProjectError(
+                f"{self.path} is valid JSON but not an object ({type(data).__name__}). Refusing "
+                "to treat it as an empty project — the next write would replace it."
+            )
         base = _empty_project()
         base.update(data)
         return base
@@ -730,6 +750,35 @@ def _selftest():
     vfr = next(c for c in data["channels"] if c["code"] == "vfr")
     assert vfr["hidden"] is True, vfr
 
+    # -- an unreadable project.json is not an empty one ----------------------------------------
+    # Every mutator here is load-modify-save, so returning the skeleton for a file that exists and
+    # failed to parse meant one `set_channel` replaced the whole project -- atomically, silently,
+    # `project_rev` back to 1. Reproduced before fixing (2026-08-12).
+    broken_root = tempfile.mkdtemp(prefix="autosound_project_broken_")
+    broken_path = os.path.join(broken_root, "project.json")
+    with open(broken_path, "w") as f:
+        f.write('{"schema_version": 3, "channels": [ {"code": "w-L"} ,,, ]}')
+    before = open(broken_path).read()
+    broken = Project(broken_root)
+    for what, call in (("load", broken.load),
+                       ("set_channel", lambda: broken.set_channel("w-R", tier="channels"))):
+        try:
+            call()
+            raise AssertionError(f"{what} accepted an unreadable project.json")
+        except ProjectError:
+            pass
+    assert open(broken_path).read() == before, "the write must not have touched the file"
+    # Valid JSON that is not an object is the same danger by another route.
+    with open(broken_path, "w") as f:
+        f.write('["not", "an", "object"]')
+    try:
+        broken.load()
+        raise AssertionError("load accepted a JSON array as a project")
+    except ProjectError:
+        pass
+    # ...while a folder with no project.json at all still reads as "nothing known", because it is.
+    assert Project(tempfile.mkdtemp()).load().get("channels") == []
+
     # -- SCR-042: a spare slot says which tier it is spare OF. The case that motivated it: slot
     # letters repeat across tiers, so these two are both legal "F" and only `tier` tells them apart.
     proj.set_channel("off-out-F", slot="F", hidden=True, role="unused", tier="channels")
@@ -893,7 +942,7 @@ def _selftest():
     except ProjectError:
         pass
 
-    print(f"selftest OK — two spare slots sharing slot 'F' stayed apart by tier and the profile's "
+    print(f"selftest OK — an unreadable project.json is refused rather than replaced (load AND write); two spare slots sharing slot 'F' stayed apart by tier and the profile's "
           f"group id was refused as one (SCR-042), a tier-less project still validates; "
           f"channels[] round-tripped driver/fs_hz facts (SCR-001), duplicate code "
           f"refused, a rename kept the channel's id and resolved its old captures (SCR-039), "
