@@ -135,20 +135,45 @@ def _pre_echo_db(ir, fs):
     return 20 * math.log10(pre / peak) if pre > 0 else -120.0
 
 
-def flag_remeasure_candidates(captures, margin_db=15.0):
-    scored = []
-    for c in captures:
-        scored.append((c["name"], c["driver"], _pre_echo_db(c["ir"], c["fs"])))
+#: How far above its OWN driver's cleanest capture a sweep's pre-echo may sit before it is worth
+#: re-taking, in dB. A doctrine value, not an implementation detail (issue #9): it is the width of
+#: the band between "this room has reflections" and "something happened during this sweep".
+#:
+#: RELATIVE on purpose. An absolute pre-echo threshold does not work here and it has been tried:
+#: `verify.py` gates on nothing from the impulse precisely because `pre_ringing_dB` on a real car
+#: sweep includes the loopback reference and earlier arrivals, and gating on it marked both of a
+#: real project's good sweeps unusable. The same driver measured twice in the same car is the only
+#: fair comparison, which is what makes this check safe to make mandatory.
+REMEASURE_MARGIN_DB = 15.0
+
+
+def remeasure_verdicts(scored, margin_db=REMEASURE_MARGIN_DB):
+    """`[(name, driver, pre_echo_db)]` -> a verdict per capture, comparing each driver to itself.
+
+    Split out from `flag_remeasure_candidates` so a caller that already has the pre-echo numbers
+    does not have to hand over impulse responses to get them recomputed — `verify.py` reads every
+    capture's impulse anyway, and holding a quarter-million samples per title to re-derive one
+    number is the reason this rule stayed a library function nobody called (issue #9).
+    """
     best = {}
-    for _, drv, pe in scored:
+    for _name, drv, pe in scored:
         if pe is not None:
             best[drv] = min(best.get(drv, pe), pe)
     out = []
     for name, drv, pe in scored:
-        delta = (pe - best[drv]) if pe is not None else 0.0
+        if pe is None:
+            out.append({"name": name, "driver": drv, "pre_echo_db": None,
+                        "delta_db": None, "remeasure": False})
+            continue
+        delta = pe - best[drv]
         out.append({"name": name, "driver": drv, "pre_echo_db": round(pe, 1),
                     "delta_db": round(delta, 1), "remeasure": delta >= margin_db})
     return out
+
+
+def flag_remeasure_candidates(captures, margin_db=REMEASURE_MARGIN_DB):
+    scored = [(c["name"], c["driver"], _pre_echo_db(c["ir"], c["fs"])) for c in captures]
+    return remeasure_verdicts(scored, margin_db=margin_db)
 
 
 def _best_lag(a, b, fs, max_lag_ms=8.0):

@@ -31,6 +31,7 @@ if _HERE not in sys.path:  # same convention as contract.py: importable by path,
     sys.path.insert(0, _HERE)
 
 import analysis as _analysis  # noqa: E402
+import joint_analysis as _joint  # noqa: E402
 import rew_api as _api  # noqa: E402
 
 # An FR flat to within a fraction of a dB across the whole band is not a loudspeaker in a car; it
@@ -127,7 +128,50 @@ def verify(names, f_low=20, f_high=20000):
              "issues": [f"REW unreachable: {exc}"], "stats": {}}
             for n in names
         ]
-    return [verdict(n, measurements, f_low=f_low, f_high=f_high) for n in names]
+    verdicts = [verdict(n, measurements, f_low=f_low, f_high=f_high) for n in names]
+    return _flag_outlier_sweeps(verdicts)
+
+
+def _driver_of(title):
+    """`w-L_02 (sw)` -> `w-L`. The skill's own naming convention, and the only thing that makes
+    "the same driver measured twice" a question this module can ask."""
+    return str(title).split("_", 1)[0].strip()
+
+
+def _flag_outlier_sweeps(verdicts):
+    """Compare each capture's pre-echo against the CLEANEST capture of the same driver.
+
+    The post-sweep half of the quality gate (issue #9). `presweep_safety.require_safe()` is
+    mandatory before a sweep; nothing was mandatory after one, so whether a capture that floated
+    got noticed depended on the Generator remembering that `flag_remeasure_candidates` exists. It
+    is called from here now, through the rule it shares with `joint_analysis`.
+
+    Relative, never absolute — see `REMEASURE_MARGIN_DB`. And it needs two captures of one driver
+    to say anything at all: with one, there is nothing to be an outlier of, and the verdict is
+    silence rather than a guess.
+
+    A flagged capture is NOT marked invalid. It exists and it is readable; what it is, is worse
+    than its own sibling by a margin that says something happened during it. That is a judgement
+    for the Arbiter — `capture-check` reports it, and re-taking is their call.
+    """
+    scored, by_name = [], {v["name"]: v for v in verdicts}
+    for v in verdicts:
+        pre = (v.get("stats") or {}).get("pre_ringing_dB")
+        if v.get("exists") and isinstance(pre, (int, float)):
+            scored.append((v["name"], _driver_of(v["name"]), float(pre)))
+    if len(scored) < 2:
+        return verdicts
+    for flag in _joint.remeasure_verdicts(scored):
+        target = by_name.get(flag["name"])
+        if target is None or not flag["remeasure"]:
+            continue
+        target["remeasure"] = True
+        target["stats"]["pre_echo_delta_db"] = flag["delta_db"]
+        target["issues"].append(
+            f"pre-echo is {flag['delta_db']} dB worse than the cleanest capture of "
+            f"{flag['driver']} — worth re-taking before it is analysed"
+        )
+    return verdicts
 
 
 def summary(verdicts):
@@ -183,5 +227,42 @@ def _main(argv):
     return 0 if all(v["valid"] for v in verdicts) else 1
 
 
+def _selftest():
+    """The outlier rule, offline. Everything else here needs REW, which a selftest must not."""
+    def cap(name, pre):
+        return {"name": name, "exists": True, "valid": True, "issues": [],
+                "stats": {} if pre is None else {"pre_ringing_dB": pre}}
+
+    assert _driver_of("w-L_02 (sw)") == "w-L", _driver_of("w-L_02 (sw)")
+    assert _driver_of("tw-R_01") == "tw-R"
+
+    # Two captures of one driver, 24 dB apart: the worse one is flagged, the cleaner is not, and
+    # a different driver's capture is judged only against its own.
+    out = _flag_outlier_sweeps([cap("w-L_01 (sw)", -42.0), cap("w-L_02 (sw)", -18.0),
+                                cap("w-R_01 (sw)", -30.0)])
+    flagged = {v["name"]: v.get("remeasure", False) for v in out}
+    assert flagged == {"w-L_01 (sw)": False, "w-L_02 (sw)": True, "w-R_01 (sw)": False}, flagged
+    worse = next(v for v in out if v["name"] == "w-L_02 (sw)")
+    assert worse["valid"] is True, "a floated sweep is readable — re-taking it is the Arbiter's call"
+    assert "24.0 dB worse" in worse["issues"][0], worse["issues"]
+    assert worse["stats"]["pre_echo_delta_db"] == 24.0
+
+    # One capture of a driver is never an outlier: there is nothing to be an outlier OF.
+    assert not _flag_outlier_sweeps([cap("w-L_01 (sw)", -18.0)])[0].get("remeasure", False)
+    # ...and neither is a pair inside the margin.
+    close = _flag_outlier_sweeps([cap("m-L_01 (sw)", -40.0), cap("m-L_02 (sw)", -32.0)])
+    assert not any(v.get("remeasure") for v in close), close
+    # An RTA capture has no impulse, so no pre-echo, so no verdict — not a failing one.
+    assert not any(v.get("remeasure") for v in
+                   _flag_outlier_sweeps([cap("c_01 (rta)", None), cap("c_01 (sw)", -12.0)]))
+
+    print("selftest OK — the post-sweep gate compares a driver against ITSELF: a 24 dB outlier "
+          "flagged and still readable, a close pair left alone, a lone capture and an RTA (no "
+          "impulse) judged not at all.")
+    return 0
+
+
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "selftest":
+        sys.exit(_selftest())
     sys.exit(_main(sys.argv))
