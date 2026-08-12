@@ -50,8 +50,11 @@ _GATE_REQUIRED = (
     "project.json",
     "dsp_profile.json",
     "glossary.json (or project.json.glossary)",
-    "process/process-state.json",
 )
+#: NOT in the list, deliberately: `process/process-state.json` is written BY `enter_phase`, so
+#: requiring it of a phase transition is a gate demanding its own output. The phase −1 doc lists
+#: the intake ARTEFACTS — the project's facts, the DSP's capabilities, the names, the first
+#: snapshot — and the process file is the bookkeeping that records the transition itself.
 
 CONTRACT = (
     # (relative path, label, owner, expected schema_version -- None where the file carries no

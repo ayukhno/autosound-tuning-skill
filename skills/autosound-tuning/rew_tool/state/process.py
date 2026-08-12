@@ -182,6 +182,64 @@ def _require_flaw_map(phase, previous, project_dir):
     )
 
 
+#: Leaving phase −1 means intake is done. `references/phases/phase_-1_intake.md` has said so from
+#: the beginning — project.json, dsp_profile.json, the glossary, a first ledger snapshot, a clean
+#: contract check — and nothing enforced it, so a brand-new folder walked to phase 1 with none of
+#: them (measured 2026-08-12: `enter-phase -1`, `enter-phase 0`, `set-target`, `enter-phase 1`,
+#: all OK, on an empty directory). The gate was a paragraph.
+_INTAKE_REQUIRED_FROM = 0
+
+
+def _require_intake(phase, previous, project_dir):
+    """Refuse to leave phase −1 until the machine files intake is supposed to produce exist.
+
+    Deliberately the SAME answer `contract.py check --gate` gives, computed by the same code —
+    two implementations of "is intake finished" would eventually disagree, and the one nobody runs
+    would be the one that says yes.
+    """
+    try:
+        going, came_from = int(phase), int(previous) if previous is not None else -99
+    except (TypeError, ValueError):
+        return
+    if going < _INTAKE_REQUIRED_FROM or came_from >= going:
+        return  # re-entry and going back are always allowed, same rule as every gate here
+    contract = _load_sibling("contract.py")
+    if contract is None:
+        return  # cannot check is not the same as failed
+    try:
+        report = contract.check_project(project_dir, skip_rew=True)
+    except Exception:  # noqa: BLE001 — a checker that raises must not become a wall
+        return
+    missing = report.get("missing") or []
+    if not missing:
+        return
+    raise ProcessError(
+        f"phase {phase} cannot start: intake has not produced "
+        + ", ".join(missing)
+        + ". This is the phase −1 quality gate, and it is the whole reason a consumer front-end "
+        "has something to render — a prose-only intake is not a complete one. Run "
+        "`python3 rew_tool/contract.py check <project> --gate` to see it yourself; finish the "
+        "intake flow in `references/core/project-intake.md §0.5` rather than working around this."
+    )
+
+
+def _load_sibling(name):
+    """Load a `rew_tool/` module by path. Same reason as `_load_naming`: these are loaded by path
+    everywhere so that names like `state` stay off the global import path."""
+    import importlib.util
+
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), name)
+    try:
+        spec = importlib.util.spec_from_file_location(f"_process_{name[:-3]}", path)
+        if spec is None or spec.loader is None:
+            return None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    except Exception:  # noqa: BLE001
+        return None
+
+
 # Which profile facts a phase cannot honestly run without. The other half of "learning instead of
 # softer gates" (ARCHITECTURE-NOTES §4): the phase -1 gate has always wanted a VALID profile rather
 # than a complete one -- `open_questions` is deliberately not part of `contract.py`'s `ok`, so a DSP
@@ -477,6 +535,7 @@ class Process:
             raise ProcessError(f"unknown phase {phase!r}; known: {', '.join(PHASES)}")
         state = self.load()
         previous = state.get("active_phase")
+        _require_intake(phase, previous, self.project_dir)
         _require_target(phase, previous, state)
         _require_flaw_map(phase, previous, self.project_dir)
         _require_profile_facts(phase, previous, self.project_dir)
@@ -985,6 +1044,39 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
 """
 
 
+def _seed_intake(root):
+    """Write the files phase −1 is supposed to produce, so a fixture can get past its own gate.
+
+    Deliberately built through the real writers rather than as literals: if `project.py` or
+    `state.py` change what a valid file looks like, this fixture finds out at the same moment the
+    rest of the skill does.
+    """
+    project_mod = _load_sibling("project.py")
+    profile_mod = _load_sibling("dsp_profile.py")
+    state_mod = _load_sibling(os.path.join("state", "state.py"))
+    if not all((project_mod, profile_mod, state_mod)):
+        return
+    proj = project_mod.Project(root)
+    proj.save({
+        "schema_version": project_mod.SCHEMA_VERSION,
+        "channels": [{"code": "w-L", "tier": "channels"}],
+        "glossary": {"schema_version": 1, "channels": [{"code": "w-L", "active": True}]},
+    })
+    profile_mod.save_profile(os.path.join(root, "dsp_profile.json"), {"dsp_profile": {
+        "name": "Fixture", "vendor": "Fixture", "sample_rate_hz": 96000,
+        "delay": {"step_ms": 0.01}, "polarity": {"scope": []},
+        "groups": [{"id": "physical_outputs", "label": "Outputs", "max_count": 2,
+                    "fields": ["hp", "lp", "gain_db", "ta_ms", "polarity"],
+                    "crossover_filters": {"types": {"LR": {"orders_db_per_oct": [24]}}}}],
+    }})
+    history = state_mod.PresetHistory(os.path.join(root, "state"), "FULL", project_dir=root)
+    history.snapshot({
+        "preset": "FULL", "sample_rate": 96000,
+        "channels": {"w-L": {"hp": None, "lp": None, "gain_db": 0.0, "ta_ms": 0.0,
+                             "polarity": "NORM"}},
+    }, note="fixture intake")
+
+
 def _selftest():
     """The refusals, exercised. This module is the one with the most of them — evidence must exist
     and must resolve (SCR-035), a round's captures must be usable (SCR-040), phase 0 must record a
@@ -994,9 +1086,10 @@ def _selftest():
     import tempfile
 
     root = tempfile.mkdtemp(prefix="autosound_process_")
+    _seed_intake(root)  # the phase -1 gate is real now; a fixture has to pass it like anyone else
     proc = Process(os.path.join(root, "process"))
     proc.enter_phase("-1")
-    proc.enter_phase("0")  # backwards/into baseline is always free
+    proc.enter_phase("0")
 
     def refuses(what, fn):
         try:
@@ -1017,18 +1110,31 @@ def _selftest():
     refuses("leaving phase 0 with no target", lambda: proc.enter_phase("1"))
     proc.set_target("FULL", "EPY")
 
-    # SCR-044: a project.json whose flaw map is empty does not leave phase 0 either -- and one
-    # that cannot be read at all is contract.py's complaint, not this gate's, so it stays quiet.
-    proc.enter_phase("1")  # no project.json yet: no opinion
-    proc.enter_phase("0")
-    with open(os.path.join(root, "project.json"), "w") as f:
-        json.dump({"acoustics": {"flaws": []}}, f)
+    # SCR-044: the seeded project has every file intake owes and still no flaw map, so phase 1
+    # is refused for that alone -- which is the case worth having, now that the intake gate can no
+    # longer be satisfied by the files simply being absent.
     refuses("leaving phase 0 with an empty flaw map", lambda: proc.enter_phase("1"))
-    with open(os.path.join(root, "project.json"), "w") as f:
-        json.dump({"acoustics": {"flaws": [{"f_hz": 160, "level_db": -12,
-                                            "kind": "cabin_null", "action": "leave"}]}}, f)
-    proc.enter_phase("1")  # no dsp_profile.json yet: that gate has no opinion either
+    _load_sibling("project.py").Project(root).add_flaw(
+        f_hz=160, level_db=-12, kind="cabin_null", action="leave",
+        why="fixture: a feature decided against is still an entry",
+        evidence=["w-L_01 (sw)"],
+    )
+    proc.enter_phase("1")
     assert proc.load()["active_phase"] == "1"
+
+    # -- the phase -1 gate is a gate, not a paragraph (2026-08-12) ------------------------------
+    # An empty folder used to walk to phase 1 with no project.json, no profile, no glossary and no
+    # ledger: `enter-phase -1`, `enter-phase 0`, `set-target`, `enter-phase 1`, all OK. The quality
+    # gate was documented and enforced by nobody.
+    bare = Process(os.path.join(tempfile.mkdtemp(prefix="autosound_intake_"), "process"))
+    bare.enter_phase("-1")
+    try:
+        bare.enter_phase("0")
+        raise AssertionError("phase 0 started on a folder intake had never touched")
+    except ProcessError as exc:
+        assert "project.json" in str(exc), exc
+    # ...and going nowhere is still free: re-entering -1 is not a forward move.
+    bare.enter_phase("-1")
 
     # -- a step must live in a phase that exists (2026-08-12) ----------------------------------
     # `plan_for` only ever asks for real phases, so a step in phase "6" is written, counted by
@@ -1058,8 +1164,9 @@ def _selftest():
 
     print(
         "selftest OK — evidence refused when empty and when it resolves to nothing (SCR-035), "
-        "phase 0 refused to exit without a target (SCR-036) and without a flaw map (SCR-044), "
-        "an unreadable project.json left the flaw gate silent, and a recorded map opened phase 1; "
+        "phase -1 refused to end on a folder intake never touched, "
+        "phase 0 refused to exit without a target (SCR-036) and without a flaw map (SCR-044) "
+        "and opened once the map was recorded; "
         "phase 1 refused a profile with no `sample_rate_hz` (SCR-045) and phase 2 asked only for "
         "what a profile declaring no EQ actually owes. "
         f"root={root}"
