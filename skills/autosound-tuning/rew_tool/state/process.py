@@ -121,11 +121,13 @@ def _require_target(phase, previous, state):
     if going < _TARGET_REQUIRED_FROM or came_from >= going:
         return  # not a forward move out of baseline; re-entry and going back are always allowed
     raise ProcessError(
-        f"phase {phase} needs a target curve: nothing has been recorded with `set-target`. "
+        f"phase {phase} needs a target curve: nothing has been recorded with `target`. "
         "Phase 0 chooses it and every later phase is measured against it, so a curve that exists "
         "only in the conversation is lost on the next session. "
-        # The command is `target`, and this line said `set-target` — a refusal that instructs a
-        # command which does not exist teaches the reader that the refusal is noise (2026-08-12).
+        # `target`, not `set-target`. Both this sentence and phase_0_baseline.md named a
+        # subcommand that does not exist, so following the gate as written produced a usage error
+        # — and a refusal that instructs an invalid command teaches its reader that refusals are
+        # noise, which is the opposite of what a gate is for (2026-08-12).
         "Record it: `python3 rew_tool/state/process.py <project>/process target <preset> <curve>`"
         " (e.g. `target FULL EPY`).")
 
