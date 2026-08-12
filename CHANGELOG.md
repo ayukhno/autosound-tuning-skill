@@ -2,6 +2,21 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
+## [v2.8.1] — 2026-08-12
+
+A packaging fix, plus the field notes that landed on `main` after v2.8.0 was tagged.
+
+### Fixed
+- **Both plugin manifests now declare the version they actually ship.** `plugin.json` still said `2.6.3` and `marketplace.json` `2.1.2`, so anyone installing the plugin was handed 2.8.0 files while `/plugin list` showed a version two releases stale — and a version-comparing updater would have seen no reason to move.
+
+### Added
+- **The AYA competition disc is indexed**, with how to read a resolution track (`competition.md`).
+- **The VW Passat B8 card records the signal chain** and what it binds.
+
+### Changed
+- The README's model-recommendation section is cut down to what a reader can act on (all four languages).
+- Python bytecode caches are no longer tracked.
+
 ## [v2.8.0] — 2026-08-01
 
 The last release of the 2.x line, and the biggest field harvest so far: two competition-season tuning arcs, one event, and eighteen sessions folded back in. Also ships the release that v2.7.1 documented but never tagged, and the TCC-integration groundwork that landed on `main` after v2.7.0.
