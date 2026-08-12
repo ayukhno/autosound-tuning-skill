@@ -230,11 +230,42 @@ def migrate_project(project_dir, dry_run=False):
         for code, fields in found.items():
             identity.setdefault(code, {}).update(fields)
 
-    # 2. Fold identity into project.json and write it. Saving is what assigns the new revision,
+    # 2. PRE-FLIGHT: every snapshot must validate before anything is written.
+    #
+    #    Order matters here and it was wrong. `project.json` used to be saved first and the
+    #    snapshots validated one at a time afterwards, so a single bad row left a project with a
+    #    3.0 `project.json` beside untouched 2.x ledgers — a shape neither version reads cleanly,
+    #    produced by a command whose whole promise is "refuses to write a project that does not
+    #    validate afterwards". Found by feeding it a snapshot with an out-of-vocabulary `status`
+    #    (2026-08-12).
+    #
+    #    A provisional `project_rev` stands in, because the real one is only assigned by saving
+    #    `project.json` — which is exactly what must not happen yet. Everything else about the
+    #    snapshot is checked for real.
+    for path, snap in migrated.items():
+        probe = copy.deepcopy(snap)
+        probe["project_rev"] = 0
+        try:
+            _state.validate(probe)
+        except (ValueError, KeyError) as exc:
+            raise SystemExit(
+                f"migration stopped BEFORE writing anything — {os.path.relpath(path, project_dir)} "
+                f"does not become a valid 3.0 snapshot:\n    {exc}\n"
+                f"Nothing in the project has been changed."
+            ) from exc
+
+    # 3. Fold identity into project.json and write it. Saving is what assigns the new revision,
     #    and every snapshot is then stamped with that one number.
     proj = _project.Project(project_dir)
     data = proj.load()
     data["schema_version"] = _project.SCHEMA_VERSION
+    # The one flag the phase gates read. A project brought across from 2.x is let through them
+    # with a warning instead of a refusal: every gate asks for a file or a fact the older line
+    # never collected, so on this project they would stop real work rather than prevent a
+    # fabricated tune (see `process.py::_gates_are_advisory`). Written here because this is the
+    # only place that KNOWS — inferring it later from the shape of a project would eventually
+    # soften one nobody migrated.
+    data.setdefault("migrated_from", "2.x")
     report["identity_fields"] = fold_identity(data, identity)
     if not data.get("channel_summary"):
         data["channel_summary"] = channel_summary(list(migrated.values()))
@@ -247,7 +278,7 @@ def migrate_project(project_dir, dry_run=False):
     report["project_rev"] = rev
     report["files"].append("project.json")
 
-    # 3. Write the snapshots, all stamped with that revision (see the module docstring on why
+    # 4. Write the snapshots, all stamped with that revision (see the module docstring on why
     #    history collapses to a single revision here).
     for path, snap in migrated.items():
         snap["project_rev"] = rev
@@ -256,7 +287,7 @@ def migrate_project(project_dir, dry_run=False):
             _write_json(path, snap)
         report["snapshots"].append(os.path.relpath(path, project_dir))
 
-    # 4. The remaining machine files carry a version; nothing else in them changed.
+    # 5. The remaining machine files carry a version; nothing else in them changed.
     process_state = os.path.join(project_dir, "process", "process-state.json")
     if os.path.isfile(process_state):
         state = _read_json(process_state)
