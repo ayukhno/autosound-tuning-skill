@@ -208,7 +208,15 @@ def _validate_eq(tier, ch_name, eq):
 #: Identity fields a v2 row carried that `project.json` owns in v3 (SCR-001/017). Rejected rather
 #: than ignored: silently dropping them on write would make a migration look like it worked while
 #: losing the only copy of a `descr` nobody had entered into `project.json` yet.
+#:
+#: `helix_ch` is the one that RENAMED on the way out, and it is the one that matters most: it is
+#: the DSP output letter, the thing the Arbiter types into the processor. It was also the only
+#: identity field the RELEASED 2.x line ever wrote — `slot`/`descr`/`role`/`order`/`hidden`/
+#: `tag_value` appear nowhere in v2.8.1 and came from the development states between the releases.
+#: Leaving it off this list meant a real v2.8.1 ledger sailed through validation, migrated
+#: "successfully", and arrived with an empty Slot column (2026-08-12).
 MOVED_TO_PROJECT_JSON = {
+    "helix_ch": "channels[].slot",
     "slot": "channels[].slot",
     "descr": "channels[].descr",
     "role": "channels[].role",

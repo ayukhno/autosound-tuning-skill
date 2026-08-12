@@ -52,6 +52,14 @@ import dsp_profile as _dsp_profile  # noqa: E402
 import project as _project  # noqa: E402
 
 
+#: 2.x row field -> the `project.json` field it becomes, where the NAME changed too.
+#: `MOVED_TO_PROJECT_JSON` covers the fields that kept their name; this covers the one that did
+#: not — and it is the one the released 2.x line actually used. `helix_ch` holds the DSP output
+#: letter; `slot` is the same fact under the vendor-neutral name 3.0 gave it (a MUSWAY has slots
+#: too, and calling the column "Helix" was always wrong for anything else).
+RENAMED_TO_PROJECT_JSON = {"helix_ch": "slot"}
+
+
 def migrate_snapshot(raw):
     """Pure transform: one 2.x snapshot -> 3.0, returned with the identity it gave up.
 
@@ -67,11 +75,23 @@ def migrate_snapshot(raw):
             eq = row.get("eq")
             if isinstance(eq, list) and eq and isinstance(eq[0], str):
                 row["eq"] = [_state.eq_band_from_str(s) for s in eq]
+            renamed = {}
             for field in _state.MOVED_TO_PROJECT_JSON:
-                if field in row:
-                    value = row.pop(field)
-                    if value is not None:
-                        identity.setdefault(code, {})[field] = value
+                if field not in row:
+                    continue
+                value = row.pop(field)
+                if value is None:
+                    continue
+                target = RENAMED_TO_PROJECT_JSON.get(field)
+                if target is None:
+                    identity.setdefault(code, {})[field] = value
+                else:
+                    renamed[target] = value
+            # Renamed fields fill gaps only. A row carrying BOTH `helix_ch` and `slot` keeps
+            # `slot`: whatever wrote the newer name did so deliberately, and the old one beside it
+            # is leftover.
+            for target, value in renamed.items():
+                identity.setdefault(code, {}).setdefault(target, value)
             # `tag` stays on the row (it is structural: WHICH control affects this channel), but a
             # `tag_value` that travelled with it needs the tag name to find its new home.
             if "tag_value" in identity.get(code, {}) and row.get("tag"):
@@ -107,6 +127,37 @@ def fold_identity(data, identity):
                 row[field] = value
                 added += 1
     return added
+
+
+def rename_profile_fields(profile):
+    """Rewrite field tokens 2.x wrote to the names 3.0's vocabulary knows. Returns what changed.
+
+    3.0 closed `FIELD_VOCABULARY`, and the token it refuses most often is `delay_ms` — which is
+    what 2.x's OWN examples wrote (its `dsp_profile.py` selftest fixture and MUSWAY stub both use
+    it). So a profile written exactly as the released skill demonstrated is invalid at 3.0, and
+    the migration used to leave it that way with a warning: the run reported success and
+    `contract.py check` called the profile broken from then on, forever, until somebody hand-edited
+    a file they had no reason to suspect (2026-08-12).
+
+    Only the near-miss table is applied — the same mapping the validator already uses to say "did
+    you mean". Renaming on a guess would be worse than refusing: a token nobody recognises may be
+    a real capability this profile is the only record of.
+    """
+    # The file is `{"dsp_profile": {...}}`; a hand-written one is sometimes the body alone. Both
+    # shapes exist in the wild and `validate_profile` accepts either, so this has to as well —
+    # reading only the top level found no groups and silently renamed nothing.
+    body = profile.get("dsp_profile") if isinstance(profile.get("dsp_profile"), dict) else profile
+    renames = []
+    for index, group in enumerate(body.get("groups") or []):
+        fields = group.get("fields")
+        if not isinstance(fields, list):
+            continue
+        for at, token in enumerate(fields):
+            better = _dsp_profile.FIELD_NEAR_MISSES.get(token)
+            if better and token not in _dsp_profile.FIELD_VOCABULARY:
+                fields[at] = better
+                renames.append(f"groups.{index}.fields: {token} -> {better}")
+    return renames
 
 
 def channel_summary(snapshots):
@@ -218,6 +269,9 @@ def migrate_project(project_dir, dry_run=False):
     profile_path = os.path.join(project_dir, "dsp_profile.json")
     if os.path.isfile(profile_path):
         profile = _read_json(profile_path)
+        renames = rename_profile_fields(profile)
+        if renames:
+            report["field_renames"] = renames
         try:
             _dsp_profile.validate_profile(profile)
         except ValueError as exc:
@@ -235,6 +289,8 @@ def render_report(report, dry_run=False):
     lines = [f"# 2.x → 3.0 migration — {report['project_dir']}", ""]
     lines.append(f"- project_rev now: **{report['project_rev']}** (stamped onto every snapshot)")
     lines.append(f"- identity fields moved into project.json: {report['identity_fields']}")
+    for rename in report.get("field_renames") or []:
+        lines.append(f"  - dsp_profile.json field renamed: {rename}")
     for tier, counts in (report.get("channel_summary") or {}).items():
         lines.append(f"  - {tier}: {counts['total']} ({counts['off']} off)")
     lines.append(f"- snapshots {what}: {len(report['snapshots'])}")
@@ -270,20 +326,36 @@ def _selftest():
     preset_dir = os.path.join(root, "state", "SQ_Jazzi")
     os.makedirs(preset_dir)
 
-    # A 2.x project as it actually looks in the wild: no schema_version, EQ as strings (incl. the
-    # LS shorthand), identity sitting on the ledger rows, `tag_value` beside its `tag`.
+    # A 2.x project as it actually looks in the wild. Two shapes on purpose, because two exist:
+    #
+    #   `w-L` and `sub` carry `helix_ch` — the ONLY identity field the RELEASED 2.x line ever
+    #   wrote (`CHANNEL_FIELDS` at v2.8.1). This fixture used to use `slot` throughout, which no
+    #   released version produced: the migration was being tested against a development state and
+    #   passed while a real v2.8.1 project migrated to an empty Slot column (2026-08-12).
+    #
+    #   `VFL` carries `slot`/`descr`/`hidden`, the shape the development states between releases
+    #   wrote. Some projects are in it, so it stays covered.
+    #
+    # Also 2.x-authentic: no schema_version, EQ as strings (incl. the LS shorthand), `tag_value`
+    # beside its `tag`.
     v1 = {
         "preset": "SQ_Jazzi", "version": "v_001", "sample_rate": 96000,
         "channels": {
-            "w-L": {"slot": "C", "descr": "Front L Woofer", "role": "woofer", "order": 1,
+            "w-L": {"helix_ch": "C", "descr": "Front L Woofer", "role": "woofer", "order": 1,
                     "hp": {"f": 70, "type": "BW", "slope": 12},
                     "lp": {"f": 270, "type": "BW", "slope": 12},
                     "gain_db": -7.8, "ta_ms": 5.38, "polarity": "NORM",
                     "eq": ["PK 1000 -9 Q2", "LS 150 +2.5 Q0.71"]},
-            "sub": {"slot": "K", "tag": "SubRC", "tag_value": "-4dB",
+            "sub": {"helix_ch": "K", "tag": "SubRC", "tag_value": "-4dB",
                     "hp": {"f": 20, "type": "BE", "slope": 12},
                     "lp": {"f": 45, "type": "BW", "slope": 12},
                     "gain_db": -6.0, "ta_ms": 5.0, "polarity": "NORM"},
+            # Both names at once — a project half-touched by a development build. The newer name
+            # wins; the leftover must not overwrite it.
+            "w-R": {"helix_ch": "OLD", "slot": "D",
+                    "hp": {"f": 70, "type": "BW", "slope": 12},
+                    "lp": {"f": 270, "type": "BW", "slope": 12},
+                    "gain_db": -7.8, "ta_ms": 5.30, "polarity": "NORM"},
         },
         "virtual_channels": {
             "VFL": {"slot": "A", "descr": "Front L Full", "hidden": False,
@@ -299,6 +371,21 @@ def _selftest():
     _write_json(os.path.join(preset_dir, "v_002.json"), v2)
     with open(os.path.join(preset_dir, "HEAD"), "w", encoding="utf-8") as f:
         f.write("v_002\n")
+
+    # A DSP profile written exactly as the RELEASED 2.x skill demonstrated it — its own MUSWAY
+    # stub used `delay_ms`, which 3.0's closed vocabulary refuses. Migration must fix the token,
+    # not warn about it and move on.
+    _write_json(os.path.join(root, "dsp_profile.json"), {
+        "dsp_profile": {
+            "name": "M6V4", "vendor": "Musway", "sample_rate_hz": 96000,
+            "groups": [
+                {"id": "physical_outputs", "label": "Output channels",
+                 "fields": ["hp", "lp", "gain_db", "delay_ms", "polarity"]},
+                {"id": "inputs", "label": "Inputs", "no_crossover": True,
+                 "fields": ["gain_db", "eq", "delay_ms"]},
+            ],
+        }
+    })
 
     # a fact the human already answered in project.json must NOT be clobbered by an old snapshot.
     proj = _project.Project(root)
@@ -318,15 +405,29 @@ def _selftest():
     data = _project.Project(root).load()
     by_code = {r["code"]: r for r in data["channels"]}
     assert by_code["w-L"]["descr"] == "Front L Woofer (corrected)", by_code["w-L"]
+    # `helix_ch` -> `slot`: the DSP output letter, the one thing on a 2.x row the Arbiter types
+    # into the processor. It used to be carried nowhere at all — the migration reported success
+    # and left the Slot column empty (2026-08-12).
     assert by_code["w-L"]["slot"] == "C" and by_code["w-L"]["order"] == 1, by_code["w-L"]
+    assert by_code["sub"]["slot"] == "K", by_code["sub"]
     assert by_code["sub"]["descr"] == "Subwoofer (from intake)", by_code["sub"]
+    # both names on one row: the newer one wins, the leftover does not overwrite it.
+    assert by_code["w-R"]["slot"] == "D", by_code["w-R"]
     assert by_code["VFL"]["slot"] == "A", by_code  # a virtual row's identity moves too
     assert _project.fact_value(data["hardware"]["controls"]["SubRC"]) == "-4dB", data["hardware"]
     # SCR-016: the tier counts a consumer's Project-params panel renders, derived from the very
     # snapshots being migrated rather than left for a human to re-enter.
-    assert data["channel_summary"] == {"channels": {"total": 2, "off": 0},
+    assert data["channel_summary"] == {"channels": {"total": 3, "off": 0},
                                         "virtual_channels": {"total": 1, "off": 0}}, data
     assert data["project_rev"] > rev_before, data["project_rev"]
+
+    # the profile's 2.x token was renamed, the file now validates, and the run said so.
+    assert report.get("field_renames"), report
+    profile = _read_json(os.path.join(root, "dsp_profile.json"))
+    fields = [f for g in profile["dsp_profile"]["groups"] for f in g["fields"]]
+    assert "delay_ms" not in fields and fields.count("ta_ms") == 2, fields
+    _dsp_profile.validate_profile(profile)  # raises if the migration left it broken
+    assert "dsp_profile.json" in report["files"], report
 
     # the ledgers are 3.0: no identity, structured EQ, every snapshot stamped with one revision.
     hist = _state.PresetHistory(os.path.join(root, "state"), "SQ_Jazzi", project_dir=root)
@@ -357,7 +458,8 @@ def _selftest():
         k: v for k, v in snap_before.items() if k != "project_rev"}, after
     assert again["identity_fields"] == 0, again
 
-    print(f"selftest OK — a 2.x project (string EQ incl. LS shorthand, identity on ledger rows, "
+    print(f"selftest OK — a 2.x project (string EQ incl. LS shorthand, `helix_ch` as the released "
+          f"2.x line wrote it, identity on ledger rows, "
           f"tag_value beside its tag) migrated to 3.0: identity moved into project.json with the "
           f"newest snapshot winning and intake's own answer left intact, tag_value became a "
           f"hardware control, every snapshot stamped project_rev={report['project_rev']} and "
