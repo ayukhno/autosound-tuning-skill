@@ -7,14 +7,19 @@
   },
   "metadata": {
     "description": "Autosound Tuning Skill — a portable method for tuning a car-audio DSP with REW.",
-    "version": "2.1.2"
+    "version": "2.8.1"
   },
   "plugins": [
     {
       "name": "autosound-tuning",
-      "source": "./",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/ayukhno/autosound-tuning-skill.git",
+        "ref": "main",
+        "sha": "b8d634799b4bcfcf9e72c3f78497125beecbdfce"
+      },
       "description": "Tune a car-audio DSP with REW — intake → crossovers → time alignment → phase → EQ → imaging → taste voicing, via a Generator-Critic-Arbiter review loop. Any car, any DSP. Bundles the review-loop method (independent multi-AI review + anti-anchoring).",
-      "version": "2.1.2",
+      "version": "2.8.1",
       "author": {
         "name": "ayukhno"
       },

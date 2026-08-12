@@ -2,6 +2,81 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
+## [v3.0.0] — unreleased
+
+**A format break, and the line the GUI runs on.** 2.x is unaffected and stays supported: the
+marketplace entry names an exact commit, so an update cannot carry an existing install across.
+Moving to 3.0 is a decision somebody makes, not something that arrives.
+
+### Added
+
+- **`project.json`** — project-level facts as a machine file, with one home per fact: the car, the
+  equipment, the channel roster and its identity, the glossary, hardware controls, and the
+  acoustic flaw map (SCR-001/011/014/015/016/017). Channel identity moved here out of the ledger,
+  so a rename keeps a channel's history instead of orphaning its captures (SCR-039).
+- **`contract.py`** — one whole-project check: every machine file's existence, schema version and
+  validity, plus the cross-file questions no single file can answer (a glossary that disagrees
+  with a ledger, a profile missing a tier, a spare slot naming a tier that does not exist,
+  SCR-042). `--gate` answers the narrower question of whether phase 0 may start.
+- **A recorded process.** Capture rounds are written down rather than derived (SCR-034), the
+  Arbiter's rulings are events (SCR-030/031), the change and the critique are files rather than
+  text retyped into chat (SCR-026/027), and the journal can say a session happened at all.
+- **`state/migrate.py`** — the one-way door, as an IMPORT: `migrate.py <old> --into <new>` builds a
+  fresh 3.0 project from a 2.x one, carrying the car's current state (channels, their output
+  slots, crossovers, delays, gains, polarity, EQ, and the DSP profile). The old project is not
+  touched and still opens in 2.x.
+- **A GUI**, in its own repository, reading these files: `autosound-tcc`.
+
+### Changed
+
+- **One format number for the whole project.** Every machine file carries `schema_version: 3`, so
+  "which format is this project in" is one comparison rather than a matrix.
+- **The ledger is tier-aware** and EQ is structured band objects rather than strings.
+- **Phases have gates.** A phase does not start on facts nobody recorded: intake must have
+  produced its files, phase 0 cannot be left without a recorded target curve (SCR-036) or an
+  acoustic flaw map (SCR-044), and phase 1 asks the profile for the facts it is about to use
+  (SCR-045). Evidence for a finished step has to RESOLVE — a ledger version that exists, a file
+  that exists, a measurement the glossary knows — not merely describe (SCR-035). The reason is on
+  the record: a cheap model closed phases −1 to 3 and reported a finished tune, with
+  `dsp_profile.json` alone on disk and the Critic never called.
+- **The DSP profile's field vocabulary is closed** and enforced. A token no consumer knows renders
+  as nothing, so it is refused with the name it probably meant.
+- **No default reviewer model, and no table of model names.** A hardcoded default is a model that
+  retires; a table is a promise to keep updating it, and neither was kept. The reviewer is named
+  or asked for.
+
+### Fixed
+
+- The migration carried six identity fields that no released 2.x version ever wrote, and did not
+  carry `helix_ch` — the DSP output letter, the one identity field the released line did use. It
+  reported success and left the Slot column empty. Its selftest passed throughout, because the
+  fixture was a development shape rather than a released one.
+- A 2.x project was reported as one intake had never touched, with advice to run intake — which
+  would re-ask what the project already answered. It is recognised and told to import instead.
+- The migration was not atomic: `project.json` was written before the snapshots were validated.
+- `delay_ms`, the field token 2.x's own examples wrote, is renamed to `ta_ms` on import rather
+  than left to fail validation forever.
+
+### Upgrading
+
+Existing 2.x installs are pinned and will not move. To try 3.0, install it deliberately; to bring
+a car across, use `migrate.py <old> --into <new>` and keep the old project for its history.
+
+## [v2.8.1] — 2026-08-12
+
+A packaging fix, plus the field notes that landed on `main` after v2.8.0 was tagged.
+
+### Fixed
+- **Both plugin manifests now declare the version they actually ship.** `plugin.json` still said `2.6.3` and `marketplace.json` `2.1.2`, so anyone installing the plugin was handed 2.8.0 files while `/plugin list` showed a version two releases stale — and a version-comparing updater would have seen no reason to move.
+
+### Added
+- **The AYA competition disc is indexed**, with how to read a resolution track (`competition.md`).
+- **The VW Passat B8 card records the signal chain** and what it binds.
+
+### Changed
+- The README's model-recommendation section is cut down to what a reader can act on (all four languages).
+- Python bytecode caches are no longer tracked.
+
 ## [v2.8.0] — 2026-08-01
 
 The last release of the 2.x line, and the biggest field harvest so far: two competition-season tuning arcs, one event, and eighteen sessions folded back in. Also ships the release that v2.7.1 documented but never tagged, and the TCC-integration groundwork that landed on `main` after v2.7.0.

@@ -115,6 +115,32 @@ Inside your active Claude Code session, run these commands **one by one** (do no
 
 See the FAQ for more detail.
 
+### Staying on the 2.x line
+
+**You are already on it, and an update will not move you.** The marketplace entry names an exact commit rather than a branch, so `/plugin marketplace update` cannot carry you across a major version — that only happens when the entry is deliberately re-pointed, and it is announced when it is.
+
+The route below is for controlling it yourself: a local checkout of the `2.x` branch, which also takes 2.x patches the moment they land rather than when a pin moves. Point Claude Code at it instead of the marketplace repo.
+
+Clone it once, in your terminal:
+
+```bash
+git clone -b 2.x https://github.com/ayukhno/autosound-tuning-skill.git ~/autosound-2x
+```
+
+Then, inside your Claude Code session, one command at a time:
+
+```bash
+/plugin marketplace add ~/autosound-2x
+```
+
+```bash
+/plugin install autosound-tuning
+```
+
+A local path is **referenced, not copied** — that checkout *is* the plugin source. So `git -C ~/autosound-2x pull` is how you take 2.x fixes, and nothing moves you onto a newer line until you decide to. The last 2.x release is tagged [`v2.8.1`](https://github.com/ayukhno/autosound-tuning-skill/releases/tag/v2.8.1); `git -C ~/autosound-2x checkout v2.8.1` pins you to that exact state.
+
+To rejoin the normal channel later, remove the local marketplace and add `ayukhno/autosound-tuning-skill` again.
+
 ## Recommended Models, Modes & My Take
 
 ### The pair that is actually supported — as of August 2026
