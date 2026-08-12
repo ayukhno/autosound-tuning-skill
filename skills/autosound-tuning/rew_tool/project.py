@@ -236,6 +236,20 @@ FLAW_KINDS = (
 # whole point of writing the map down is that "don't EQ-boost this null" survives the session that
 # discovered it.
 FLAW_ACTIONS = ("notch", "leave", "no_boost", "geometry", "delay", "crossover")
+#: How sure we are. A tune generates suspicions constantly and they had nowhere to go: the
+#: PART B pair-coherence findings on the live project sat in prose for a week, explicitly marked
+#: "measured before TA, re-check afterwards", because recording them as facts would have been a
+#: lie and there was no third option (user, 2026-08-12).
+#:
+#: Absent means `confirmed` — every map written before this field existed was written as fact, and
+#: rewriting history to say otherwise would be its own lie.
+FLAW_STATUSES = ("hypothesis", "confirmed")
+DEFAULT_FLAW_STATUS = "confirmed"
+
+
+def flaw_status(entry):
+    """This flaw's status, defaulting for the files that predate the field."""
+    return (entry or {}).get("status") or DEFAULT_FLAW_STATUS
 
 
 def validate_flaw(entry):
@@ -273,6 +287,11 @@ def validate_flaw(entry):
             "physics. Use `leave`/`no_boost`, or `geometry`/`delay`/`crossover` if the fix is one "
             "of those. If you meant a HUMP you intend to cut, `level_db` is the feature itself "
             f"({abs(level):g}, positive), not the correction you would apply to it."
+        )
+    if entry.get("status") is not None and entry["status"] not in FLAW_STATUSES:
+        raise ProjectError(
+            f"status must be one of {', '.join(FLAW_STATUSES)} or absent (got "
+            f"{entry.get('status')!r}). Absent means {DEFAULT_FLAW_STATUS}."
         )
     if not str(entry.get("why") or "").strip():
         raise ProjectError("a flaw needs `why` — the next session reads the reason, not the number")
@@ -589,7 +608,10 @@ _USAGE = """usage: project.py <project-dir> <command> [args]
   set-hardware <name> <value> [--source S]     set a DSP-hardware control (RearRC/SubRC/...)
   record-change <process-dir> <file> <what>    log a config_change journal event
       [--why W] [--source S] [--impact I]
-  flaw <f_hz> <level_db> <kind> <action>       add/replace an acoustic-flaw entry (SCR-015)
+  flaw <f_hz> <level_db> <kind> <action> [--status hypothesis]
+                                               add/replace an acoustic-flaw entry (SCR-015).
+                                               A hypothesis is a finding not yet settled — say so
+                                               rather than banking it as fact or losing it to prose
       [--q Q] [--bw-oct B] [--channels a,b]    level_db is the FEATURE, signed: + a hump,
                                                  - a dip. NOT the correction you would apply
       --why W --evidence "t1,t2"               kind: room_gain|modal_peak|cabin_null|sbir|
@@ -713,8 +735,9 @@ def _main(argv):
             )
             width = f" Q{entry['q']:g}" if entry.get("q") else (
                 f" {entry['bw_oct']:g}oct" if entry.get("bw_oct") else "")
+            mark = "" if flaw_status(entry) == DEFAULT_FLAW_STATUS else f" ({flaw_status(entry)})"
             print(f"{entry['f_hz']:g} Hz{width} {entry['level_db']:+g} dB "
-                  f"[{entry['kind']}] -> {entry['action']}")
+                  f"[{entry['kind']}]{mark} -> {entry['action']}")
         elif cmd == "flaws":
             for entry in proj.flaws():
                 width = f" Q{entry['q']:g}" if entry.get("q") else (
@@ -768,6 +791,30 @@ def _selftest():
     assert wl["fs_hz"]["source"] == "datasheet", wl
     vfr = next(c for c in data["channels"] if c["code"] == "vfr")
     assert vfr["hidden"] is True, vfr
+
+    # -- a finding that is not settled yet says so (2026-08-12) --------------------------------
+    # A tune generates suspicions constantly. The pair-coherence findings on a live project sat in
+    # prose for a week -- "measured before TA, re-check afterwards" -- because banking them as
+    # fact would have been a lie and there was no third option.
+    status_root = tempfile.mkdtemp(prefix="autosound_project_status_")
+    sp = Project(status_root)
+    sp.add_flaw(f_hz=175, level_db=-31.7, kind="pair_suckout", action="leave",
+                channels=["w-L", "w-R"], status="hypothesis",
+                why="raw _01 coherence, before any TA -- re-check after alignment",
+                evidence=["Ws pair coherence 40-500 Hz"])
+    sp.add_flaw(f_hz=152, level_db=-12, kind="cabin_null", action="no_boost", channels=["w-L"],
+                why="settled by absolute harmonic SPL", evidence=["w-L_01 (sw)"])
+    got = {f["f_hz"]: flaw_status(f) for f in sp.flaws()}
+    assert got == {175.0: "hypothesis", 152.0: "confirmed"}, got
+    # Absent means confirmed: a map written before the field existed was written as fact, and
+    # re-labelling history would be its own lie.
+    assert flaw_status({"f_hz": 1}) == DEFAULT_FLAW_STATUS
+    try:
+        sp.add_flaw(f_hz=90, level_db=-3, kind="cabin_null", action="leave", status="maybe",
+                    why="x", evidence=["y"])
+        raise AssertionError("add_flaw accepted a status outside the list")
+    except ProjectError as exc:
+        assert "hypothesis" in str(exc), exc
 
     # -- the flaw map is validated on every write, not only by add_flaw (2026-08-12) -----------
     # `validate_flaw` was called from `add_flaw` alone, so any other path to disk banked whatever

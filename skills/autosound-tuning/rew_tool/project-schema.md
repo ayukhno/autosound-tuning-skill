@@ -117,7 +117,9 @@ front-end can render it and a later phase can consult it without re-reading a ca
 | `evidence` | the captures it was read off; a flaw with no measurement behind it is a rumour |
 
 Both lists are closed: a consumer colours by `action`, and "what may NOT be done here" is the half
-that has to survive the session that found it. **`level_db < 0` with `action: "notch"` is refused**
+that has to survive the session that found it. `status` is `hypothesis` or `confirmed`, and **absent means confirmed** — every map written before the field existed was written as fact. A hypothesis is a finding the session raised and has not settled: the pair-coherence dips measured before time alignment are the worked example, since they are expected to move once TA lands. It still needs `why` and `evidence` — a hypothesis is a question with a measurement behind it, not a guess.
+
+**`level_db < 0` with `action: "notch"` is refused**
 — a null is interference, not minimum-phase; cutting it changes nothing and boosting it burns
 headroom against physics. That refusal is the map's whole reason for existing in code rather than
 in a paragraph somebody may or may not re-read.
