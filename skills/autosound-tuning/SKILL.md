@@ -99,6 +99,7 @@ Read the active phase from `process/process-state.json` (`python3 rew_tool/state
 | [core/process-phases.md](references/core/process-phases.md) | Phase transitions, the 9-stage overview. |
 | [core/happy-paths.md](references/core/happy-paths.md) | Short end-to-end session walkthroughs. |
 | [core/project-intake.md](references/core/project-intake.md) | New car profile, equipment interview, target choice. |
+| [core/intake-from-prose.md](references/core/intake-from-prose.md) | A project whose state is in prose and has no ledger — READ it across, never re-interview. `contract.py check` says when this is the case. |
 | [patterns/target-curves/target_curves_guide.md](references/patterns/target-curves/target_curves_guide.md) | Target curves + offsets. |
 | [patterns/target-curves/target_curves_visualizer.html](references/patterns/target-curves/target_curves_visualizer.html) | Interactive curve comparison. |
 | [core/naming-and-structure.md](references/core/naming-and-structure.md) | Measurement names, .mdat storage, preset structure. |

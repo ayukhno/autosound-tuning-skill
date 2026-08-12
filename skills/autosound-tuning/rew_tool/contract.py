@@ -331,8 +331,48 @@ def check_project(project_dir, skip_rew=False):
     if not any(f["file"].startswith("state/") and f["exists"] for f in files):
         missing.append("state/<preset>/ (first ledger snapshot)")
     complete = ok and not missing
+    prose = looks_like_prose(project_dir, files)
+    if prose:
+        # The per-file hint is "run intake", which is right for an empty folder and wrong here —
+        # and a table that contradicts the banner above it teaches the reader to trust neither.
+        for entry in files:
+            entry["issues"] = [
+                "not written yet — it is in the prose above" if "run intake" in issue else issue
+                for issue in (entry.get("issues") or [])
+            ]
     return {"project_dir": project_dir, "ok": ok, "complete": complete, "missing": missing,
-            "legacy": looks_like_2x(project_dir, files), "files": files, "cross_checks": cross}
+            "legacy": looks_like_2x(project_dir, files), "prose": prose,
+            "files": files, "cross_checks": cross}
+
+
+#: The files a pre-ledger project keeps its state in. Before `state/state.py` existed (v2.1.0) —
+#: and in projects that simply never adopted it — the tune lived in prose: the context file, the
+#: audit trail, the changelog with its ▶️ CONTINUE block. SCR-004 and SCR-008 were written to
+#: replace exactly these, which is why 3.0 has no reader for them.
+_PROSE_STATE_FILES = ("autosound_context.md", "audit-trail.md", "tuning-changelog.md",
+                      "tuning-changelog.txt")
+
+
+def looks_like_prose(project_dir, files):
+    """A project whose state is prose, with no machine files at all.
+
+    Indistinguishable from an empty folder to a file-existence check, and it needs the OPPOSITE
+    advice: not "run intake", which would re-ask what a competition-winning tune already answered,
+    and not "migrate", because there is no ledger to migrate (found on a real project, 2026-08-13).
+
+    Deliberately narrow: prose present AND nothing machine-readable. A 3.0 project that also keeps
+    an `autosound_context.md` around is not this.
+    """
+    if any(entry.get("exists") for entry in files):
+        return False
+    found = []
+    for name in _PROSE_STATE_FILES:
+        for candidate in (os.path.join(project_dir, name),
+                          os.path.join(project_dir, "rew_analitic", name)):
+            if os.path.isfile(candidate):
+                found.append(os.path.relpath(candidate, project_dir))
+                break
+    return found
 
 
 def looks_like_2x(project_dir, files):
@@ -397,7 +437,23 @@ def _migration_command(project_dir):
 
 def render_report(report):
     lines = [f"# Project contract check — {report['project_dir']}", ""]
-    if report.get("legacy"):
+    if report.get("prose"):
+        # Before the file table and before any mention of intake. A tune already exists here; the
+        # only thing missing is a machine-readable form of it.
+        lines.append(
+            "**This project's state is in prose** — "
+            + ", ".join(f"`{name}`" for name in report["prose"])
+            + " — and 3.0 reads machine files. There is nothing to migrate (no ledger was ever "
+              "written) and nothing to re-ask: everything below already exists, in sentences."
+        )
+        lines.append("")
+        lines.append("Bring it across by READING those files rather than interviewing again: the "
+                     "channel map becomes `project.json.channels[]`, the DSP settings become the "
+                     "first ledger snapshot, the naming convention becomes the glossary, and the "
+                     "cabin anomalies become `acoustics.flaws[]`. Confirm each before it is "
+                     "written. The prose files are not modified.")
+        lines.append("")
+    elif report.get("legacy"):
         # BEFORE the file table, and before any talk of intake. This is the one thing a reader in
         # this situation has to act on, and everything below it is a consequence of it.
         lines.append(

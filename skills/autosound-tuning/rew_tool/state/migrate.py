@@ -240,6 +240,24 @@ def import_current_state(old_dir, new_dir, dry_run=False):
               "channel_summary": {}, "files": [], "warnings": [], "imported_from": old_dir}
     paths = snapshot_paths(old_dir)
     if not paths:
+        # Two very different projects land here, and telling them apart is the difference between
+        # a useful sentence and a dead end. A project with prose state HAS a tune — it just never
+        # had a ledger, because it predates one. Sending its owner away with "nothing to import"
+        # reads as "your work does not count" (found on a competition-winning project, 2026-08-13).
+        prose = [name for name in ("autosound_context.md", "audit-trail.md",
+                                   "tuning-changelog.md", "tuning-changelog.txt")
+                 for base in (old_dir, os.path.join(old_dir, "rew_analitic"))
+                 if os.path.isfile(os.path.join(base, name))]
+        if prose:
+            raise SystemExit(
+                f"{old_dir} keeps its state in prose ({', '.join(sorted(set(prose)))}), not in a "
+                f"ledger — so there is nothing for this script to read, and nothing wrong.\n\n"
+                f"Bringing it across is a READING job, not a conversion: open the project in a "
+                f"3.x session and follow `references/core/intake-from-prose.md`. The channel map "
+                f"becomes project.json, the DSP settings become the first snapshot, the naming "
+                f"convention becomes the glossary, the cabin anomalies become the flaw map — each "
+                f"confirmed before it is written, and the prose left exactly as it is."
+            )
         raise SystemExit(f"no ledger snapshots under {os.path.join(old_dir, 'state')} — "
                          f"nothing to import. A 2.x project keeps them in `state/<preset>/v_NNN.json`.")
 
