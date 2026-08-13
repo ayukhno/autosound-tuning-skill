@@ -431,8 +431,13 @@ elif [ -d "$SKILL_HOME" ] && [ ! -L "$SKILL_HOME" ]; then
   warn "move it aside and re-run if you want this script to manage it."
 elif [ -d "$SKILL_SRC/.git" ]; then
   say "  already installed — updating to $SKILL_REF"
-  run git -C "$SKILL_SRC" fetch --tags --quiet origin
-  run git -c advice.detachedHead=false -C "$SKILL_SRC" checkout --quiet "$SKILL_REF"
+  # Fetch the ref BY NAME. The checkout was made with `--depth 1 --branch <tag>`, so it contains
+  # that tag and nothing else: `fetch --tags` brings tags only, and asking for a branch then fails
+  # with "pathspec 'main' did not match any file(s) known to git" — which made --skill-ref work on
+  # a first install and break on every update (2026-08-13). FETCH_HEAD is whatever was just
+  # fetched, so this handles a tag, a branch or a sha the same way.
+  run git -C "$SKILL_SRC" fetch --quiet --depth 1 origin "$SKILL_REF"
+  run git -c advice.detachedHead=false -C "$SKILL_SRC" checkout --quiet FETCH_HEAD
 else
   say "  installing into $SKILL_SRC, linked from $SKILL_HOME"
   run mkdir -p "$(dirname "$SKILL_HOME")"
