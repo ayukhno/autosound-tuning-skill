@@ -30,6 +30,8 @@
 set -euo pipefail
 
 SKILL_REPO="https://github.com/ayukhno/autosound-tuning-skill.git"
+#: The same repository without the `.git` — what a person opens in a browser, not what git clones.
+SKILL_REPO_URL="${SKILL_REPO%.git}"
 TCC_REPO="https://github.com/ayukhno/autosound-tcc"
 SKILL_HOME="${HOME}/.claude/skills/autosound-tuning"
 # The repo lives beside the skill and the skill POINTS at it. Cloning and then moving the
@@ -895,3 +897,13 @@ if [ -s "$NEXT_STEPS" ]; then
         }'
   printf '\n'
 fi
+
+# Last thing on screen, and deliberately after the steps: where this came from and where to say
+# something about it. Somebody who has just installed two programs from a URL they were told to
+# trust should not have to search for the projects they now have on their disk (user, after a
+# clean install, 2026-08-13).
+printf '\033[1m==> Where this lives\033[0m\n'
+say "  the tuning method   $SKILL_REPO_URL"
+say "  the desktop app     $TCC_REPO"
+say "  something wrong, or an idea — open an issue in whichever of the two it belongs to."
+say ""
