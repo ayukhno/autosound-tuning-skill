@@ -97,8 +97,6 @@ find_uv() {
 PATH_STEP_ADDED=0
 add_to_path() {
   _dir="$1"
-  [ "$PATH_STEP_ADDED" = 1 ] && return 0   # the app and claude share ~/.local/bin; say it once
-  PATH_STEP_ADDED=1
   case "$SHELL" in
     */bash) _rc="$HOME/.bash_profile" ;;
     */fish) _rc="" ;;   # fish has its own syntax and its own config; not ours to guess at
@@ -110,8 +108,11 @@ add_to_path() {
               ">fish_add_path $_dir"
     return
   fi
-  if [ -f "$_rc" ] && grep -qF '.local/bin' "$_rc" 2>/dev/null; then
-    say "  $_rc already mentions .local/bin — not touching it"
+  # Per DIRECTORY, not once overall. Homebrew puts the reviewer in /opt/homebrew/bin while the
+  # app and claude are in ~/.local/bin, and a single-shot guard meant the second directory was
+  # silently never added — `agy` installed and then not found (2026-08-13).
+  if [ -f "$_rc" ] && grep -qF "$_dir" "$_rc" 2>/dev/null; then
+    say "  $_rc already mentions $_dir — not touching it"
   else
     # Write the directory we were ASKED about, not a hardcoded one — announcing
     # "adding /opt/homebrew/bin" and then writing ~/.local/bin is how a fix becomes a lie.
@@ -124,6 +125,8 @@ add_to_path() {
     say "  adding $_dir to $_rc"
     run sh -c "printf '\n# added by the autosound installer\nexport PATH=\"$_written:\$PATH\"\n' >> '$_rc'"
   fi
+  [ "$PATH_STEP_ADDED" = 1 ] && return 0   # one "open a new terminal" is enough, however many dirs
+  PATH_STEP_ADDED=1
   next_step "Pick up the change. A script cannot alter the PATH of the terminal that started it," \
             "so this shell still cannot find what was installed — open a new terminal, or run:" \
             ">source $_rc"
@@ -538,6 +541,11 @@ if [ "$WANT_REVIEWER" = 1 ]; then
     if [ "$DRY_RUN" = 0 ] && command -v agy >/dev/null 2>&1; then
       xattr -dr com.apple.quarantine "$(command -v agy)" 2>/dev/null || true
     fi
+    # Homebrew writes /etc/paths.d/homebrew, which macOS only reads in a LOGIN shell — so the
+    # reviewer can be installed and still not be found in the window it was installed from.
+    for _d in /opt/homebrew/bin /usr/local/bin; do
+      if [ -x "$_d/agy" ] && ! user_shell_sees "$_d"; then add_to_path "$_d"; fi
+    done
     next_step "Sign the reviewer in — once, and it needs one thing from you first: the Project" \
               "ID (not the name, not the number) from aistudio.google.com/app/apikey. Then run" \
               "this, paste the ID, and open the link it prints:" \
