@@ -95,15 +95,32 @@ find_uv() {
 # the PATH of the terminal that launched it — no script can — so the next step says how to pick it
 # up rather than pretending it already took effect.
 PATH_STEP_ADDED=0
+profile_rc() {
+  case "$SHELL" in
+    */bash) printf '%s' "$HOME/.bash_profile" ;;
+    */fish) printf '' ;;   # fish has its own syntax and its own config; not ours to guess at
+    *)      printf '%s' "$HOME/.zshrc" ;;
+  esac
+}
+# Two different questions, and confusing them is what made a good install read as a broken one:
+# `user_shell_sees` is about the terminal that STARTED this script — which no script can change,
+# so right after an install the answer is always no. `profile_has` is about every terminal opened
+# afterwards, which is the one the user actually cares about.
+profile_has() {
+  _prc="$(profile_rc)"
+  [ -n "$_prc" ] && [ -f "$_prc" ] || return 1
+  # Look for what we WRITE as well as the expanded path: the line says $HOME/.local/bin.
+  case "$1" in
+    "$HOME"/*) _pw="\$HOME/${1#$HOME/}" ;;
+    *)         _pw="$1" ;;
+  esac
+  grep -qF "$_pw" "$_prc" 2>/dev/null || grep -qF "$1" "$_prc" 2>/dev/null
+}
 add_to_path() {
   _dir="$1"
-  case "$SHELL" in
-    */bash) _rc="$HOME/.bash_profile" ;;
-    */fish) _rc="" ;;   # fish has its own syntax and its own config; not ours to guess at
-    *)      _rc="$HOME/.zshrc" ;;
-  esac
+  _rc="$(profile_rc)"
   if [ -z "$_rc" ]; then
-    next_step "Add $_dir to your PATH — your shell is fish, whose config this script will not" \
+    next_step 110 "Add $_dir to your PATH — your shell is fish, whose config this script will not" \
               "guess at:" \
               ">fish_add_path $_dir"
     return
@@ -115,12 +132,11 @@ add_to_path() {
     "$HOME"/*) _written="\$HOME/${_dir#$HOME/}" ;;
     *)         _written="$_dir" ;;
   esac
-  # Look for what we WRITE, not for the expanded path. The line says $HOME/.local/bin; searching
-  # for /Users/someone/.local/bin never matched it, so a second caller wrote the same line again
-  # (seen twice in one run, 2026-08-13).
-  if [ -f "$_rc" ] && { grep -qF "$_written" "$_rc" 2>/dev/null || grep -qF "$_dir" "$_rc" 2>/dev/null; }; then
-    say "  $_rc already has $_dir — not touching it"
-  else
+  # Silent when the line is already there. It used to announce "already has … — not touching it"
+  # directly under a warning that the folder was not on the PATH, which reads as the script
+  # arguing with itself; the caller says what the state means for the tool it is about
+  # (2026-08-13, from a clean-machine log).
+  if ! profile_has "$_dir"; then
     # Write the directory we were ASKED about, not a hardcoded one — announcing
     # "adding /opt/homebrew/bin" and then writing ~/.local/bin is how a fix becomes a lie.
     # Kept as literal $HOME when it is under the home directory, so the profile stays portable
@@ -130,12 +146,36 @@ add_to_path() {
   fi
   [ "$PATH_STEP_ADDED" = 1 ] && return 0   # one "open a new terminal" is enough, however many dirs
   PATH_STEP_ADDED=1
-  next_step "Pick up the change. A script cannot alter the PATH of the terminal that started it," \
+  next_step 110 "Pick up the change. A script cannot alter the PATH of the terminal that started it," \
             "so this shell still cannot find what was installed — open a new terminal, or run:" \
             ">source $_rc"
 }
 
-next_step() { printf '@@\n' >> "$NEXT_STEPS"; for l in "$@"; do printf '%s\n' "$l" >> "$NEXT_STEPS"; done; }
+# Steps are emitted in the order the SCRIPT does things, which is not the order a person does
+# them: on a clean machine the list opened with "set the reviewer up by hand" and had "open a new
+# terminal" at number 2 — while numbers 3 and 7 both needed number 2 to have happened first
+# (real log, 2026-08-13). So each step carries a rank, and the summary sorts by it. Ranks under
+# 200 are "before this thing works at all"; 200 and over are "when you have time".
+NEXT_RANK_NOW=1        # 100s: required, in the order they must actually be done
+NEXT_RANK_LATER=2      # 200s: optional, or things the tune runs fine without
+next_step() {
+  _rank="$1"; shift
+  printf '@@%s\n' "$_rank" >> "$NEXT_STEPS"
+  for l in "$@"; do printf '%s\n' "$l" >> "$NEXT_STEPS"; done
+}
+# The reviewer has two ways of ending up missing — no Homebrew, or no CLI found afterwards — and
+# both used to queue their own "set up the reviewer" step, so the list said the same thing twice
+# in different words, pointing at the same file (items 1 and 4 of that log).
+REVIEWER_STEP_ADDED=0
+reviewer_setup_step() {
+  [ "$REVIEWER_STEP_ADDED" = 1 ] && return 0
+  REVIEWER_STEP_ADDED=1
+  next_step 220 \
+    "Add the second AI (Gemini) as reviewer. One model proposing and a different vendor's" \
+    "arguing is what makes this method worth running — but the tune works without it, and" \
+    "reviews fall back to the clipboard. Setup, including a free browser-only route:" \
+    ">open $SKILL_HOME/references/tooling/setup-critic-channel.md"
+}
 
 # macOS ships /usr/bin/git and /usr/bin/python3 as shims that exist whether or not the Command Line
 # Tools behind them do. `command -v` therefore ALWAYS finds them, the "git is not installed" branch
@@ -542,17 +582,25 @@ if [ "$WANT_REVIEWER" = 1 ]; then
   if [ "$WANT_REVIEWER" = 1 ] && ! have brew; then
     # NOT `NONINTERACTIVE=1`. That switch does not mean "do not pause", it means "never prompt" —
     # so instead of asking for the password it refuses outright. Homebrew needs a real terminal
-    # for both its RETURN pause and sudo, and `curl | bash` has already taken stdin, so hand it
-    # /dev/tty explicitly. `|| true` because the reviewer is optional and must never take the
-    # install down with it; the check below decides what to say.
-    say "  installing Homebrew first — it will ask for your admin password"
-    if [ "$DRY_RUN" = 0 ]; then
-      # `printf '\n' |` answers Homebrew's own "Press RETURN to continue" — a keystroke asking
-      # again for something already consented to two questions ago. sudo does not read the
-      # password from stdin, it opens /dev/tty itself, so the prompt still works.
-      sh -c 'printf "\n" | /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"' || true
+    # for both its RETURN pause and its sudo check, and `curl … | bash` has already taken stdin.
+    #
+    # The previous form piped `printf '\n'` in to answer the RETURN pause, which GUARANTEED the
+    # thing it was trying to avoid: with stdin a pipe, Homebrew announces "Running in
+    # non-interactive mode because `stdin` is not a TTY", skips the password prompt entirely and
+    # dies on "Need sudo access on macOS" — on an account that IS an administrator. Measured on a
+    # clean machine 2026-08-13: via the documented `curl … | bash` one-liner, the reviewer could
+    # never install, on any Mac. So hand it /dev/tty and let it ask; one RETURN is a cheap price
+    # for a step that otherwise cannot happen at all. `|| true` because the reviewer is optional
+    # and must never take the install down with it.
+    if [ "$DRY_RUN" = 1 ]; then
+      say "  would run: /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\" < /dev/tty"
+    elif (: < /dev/tty) 2>/dev/null; then
+      say "  installing Homebrew first — press RETURN when it asks, then give your admin password"
+      /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" < /dev/tty || true
     else
-      say "  would run: /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+      # No terminal at all: piped into a script with no tty, or CI. Homebrew cannot ask for a
+      # password here and neither can we, so say so plainly instead of letting it fail obscurely.
+      warn "no terminal available to enter an admin password; skipping Homebrew and the reviewer."
     fi
     for d in /opt/homebrew/bin /usr/local/bin; do
       [ -x "$d/brew" ] && export PATH="$d:$PATH"
@@ -580,15 +628,13 @@ if [ "$WANT_REVIEWER" = 1 ]; then
     else
       warn "the reviewer installed but `agy` is not on this script's PATH either — odd; report it"
     fi
-    next_step "Sign the reviewer in — once, and it needs one thing from you first: the Project" \
+    next_step 210 "Sign the reviewer in — once, and it needs one thing from you first: the Project" \
               "ID (not the name, not the number) from aistudio.google.com/app/apikey. Then run" \
               "this, paste the ID, and open the link it prints:" \
               ">agy"
   elif [ "$WANT_REVIEWER" = 1 ]; then
     warn "Homebrew is not available — the reviewer was not installed. Nothing else is affected."
-    next_step "Set the reviewer up by hand when you have time. The steps, including a free" \
-              "browser-only route that needs no CLI at all:" \
-              ">open $SKILL_HOME/references/tooling/setup-critic-channel.md"
+    reviewer_setup_step
   fi
 fi
 
@@ -673,11 +719,17 @@ if [ "$MODE" = "tcc" ] && [ "$DRY_RUN" = 0 ]; then
   if have autosound-tcc && user_shell_sees "$TCC_DIR"; then
     say "  ✓ autosound-tcc installed"
   elif [ -x "$TCC_AT" ] || have autosound-tcc; then
-    # It used to say "✓ installed" here. It is installed, and typing its name still answers
-    # "command not found", which is a worse first minute than an honest warning.
-    warn "autosound-tcc is installed at $TCC_AT but that folder is not on your PATH."
+    # It used to say "✓ installed" here, and typing its name still answered "command not found",
+    # which is a worse first minute than an honest warning. But the warning then fired even when
+    # the profile was already correct and only THIS shell was stale — a state that needs no alarm
+    # at all, just the last step. So: fix the profile first, then say which of the two it is.
     add_to_path "$TCC_DIR"
-    ok=0
+    if profile_has "$TCC_DIR"; then
+      say "  ✓ autosound-tcc installed — new terminals will find it (see the last step below)"
+    else
+      warn "autosound-tcc is installed at $TCC_AT but that folder is not on your PATH."
+      ok=0
+    fi
   else
     warn "autosound-tcc is not installed"
     ok=0
@@ -690,10 +742,15 @@ fi
 CLAUDE_BIN="$(command -v claude 2>/dev/null || true)"
 if [ -z "$CLAUDE_BIN" ] && [ -x "$HOME/.local/bin/claude" ]; then CLAUDE_BIN="$HOME/.local/bin/claude"; fi
 if [ -n "$CLAUDE_BIN" ]; then
-  if ! user_shell_sees "$(dirname "$CLAUDE_BIN")"; then
-    warn "claude is installed at $CLAUDE_BIN but that folder is not on your PATH."
-    add_to_path "$(dirname "$CLAUDE_BIN")"
-    ok=0
+  CLAUDE_DIR="$(dirname "$CLAUDE_BIN")"
+  if ! user_shell_sees "$CLAUDE_DIR"; then
+    add_to_path "$CLAUDE_DIR"
+    if profile_has "$CLAUDE_DIR"; then
+      say "  ✓ claude installed — new terminals will find it (see the last step below)"
+    else
+      warn "claude is installed at $CLAUDE_BIN but that folder is not on your PATH."
+      ok=0
+    fi
   fi
   # The only account this whole thing needs. GitHub is not one: both repositories are public and
   # nothing here pushes, so `git clone https://…` is anonymous and there is no token to arrange.
@@ -701,14 +758,14 @@ if [ -n "$CLAUDE_BIN" ]; then
     say "  ✓ claude is signed in"
   else
     warn "claude is installed but not signed in."
-    next_step "Sign in to Claude. This is the one step nothing can do for you: the session is" \
+    next_step 120 "Sign in to Claude. This is the one step nothing can do for you: the session is" \
               "yours, not this tool's." \
               ">claude auth login"
     ok=0
   fi
 else
   warn "claude is not installed; nothing can run a session without it"
-  next_step "Install Claude Code, then sign in:" \
+  next_step 120 "Install Claude Code, then sign in:" \
             ">curl -fsSL https://claude.ai/install.sh | sh" \
             ">claude auth login"
   ok=0
@@ -732,7 +789,7 @@ if [ -n "$reviewers_on_path" ]; then
   # unknown binary that may prompt or hang, so the claim is narrowed to what was established, and
   # the skill's own doctor — which does test a live round trip — is offered.
   say "  ✓ found a reviewer CLI ($reviewers_on_path)"
-  next_step "Check the reviewer really answers. Finding the command is not the same as it" \
+  next_step 215 "Check the reviewer really answers. Finding the command is not the same as it" \
             "working, and a wrapper pointing at a CLI you no longer have looks identical:" \
             ">$SKILL_HOME/scripts/gemini_critic.sh --doctor"
 elif [ -n "$reviewers_off_path" ]; then
@@ -741,21 +798,18 @@ elif [ -n "$reviewers_off_path" ]; then
   PATH_FIX_NEEDED=1
 else
   say "  – no reviewer CLI found. Reviews fall back to the clipboard, which works."
-  next_step "Add a second AI as reviewer, when you have a spare hour. One model proposing and a" \
-            "different vendor's arguing is what makes this method worth running; Gemini is the" \
-            "one it is built around. Setup, and the omp route if you prefer it:" \
-            ">open ~/.claude/skills/autosound-tuning/references/tooling/setup-critic-channel.md"
+  reviewer_setup_step
 fi
 
 # REW is not ours to install, but it is the one thing without which nothing measures. A closed REW
 # at install time is normal, so this is worded as a reminder rather than a fault.
 if ! curl -fsS --max-time 2 -o /dev/null http://localhost:4735/version 2>/dev/null; then
-  next_step "Switch on REW's API — nothing can read a measurement without it. In REW open" \
+  next_step 130 "Switch on REW's API — nothing can read a measurement without it. In REW open" \
             "Preferences → API and tick \"Start the API when REW starts\", so it is on every" \
             "time. That panel then reads \"API server is running on port 4735\"."
 fi
 
-next_step "Optional, and worth it: a free GitHub account. Your project folder is weeks of" \
+next_step 230 "Optional, and worth it: a free GitHub account. Your project folder is weeks of" \
           "decisions — the ledger, the journal, the config backups — and the skill offers to" \
           "keep it in a private repository when you start one. The sweeps stay on your disk."
 
@@ -763,13 +817,13 @@ next_step "Optional, and worth it: a free GitHub account. Your project folder is
 # The first tune is a step like any other, and it goes last so the list ends where the person
 # actually wants to be.
 if [ "$MODE" = "tcc" ]; then
-  next_step "Start. Make a folder for the car — everything about it lives there — and open it:" \
+  next_step 190 "Start. Make a folder for the car — everything about it lives there — and open it:" \
             ">mkdir -p ~/Autosound/my-car" \
             ">autosound-tcc --project-dir ~/Autosound/my-car" \
             "Then say what you want, in the panel on the right, in any language:" \
             "\"let's tune this car from scratch\"."
 else
-  next_step "Start. Make a folder for the car — everything about it lives there — and open it:" \
+  next_step 190 "Start. Make a folder for the car — everything about it lives there — and open it:" \
             ">mkdir -p ~/Autosound/my-car && cd ~/Autosound/my-car" \
             ">claude" \
             "Then say what you want, in any language: \"tune a new car from scratch\"."
@@ -780,9 +834,27 @@ if [ "$ok" = 1 ]; then say "Installed."; else say "Installed, with the warnings 
 
 if [ -s "$NEXT_STEPS" ]; then
   printf '\n\033[1m==> What to do next\033[0m\n'
-  awk '/^@@$/ { n++; first=1; print ""; next }
-       first == 1 { printf "  %d. %s\n", n, $0; first=0; next }
-       /^>/ { printf "         %s\n", substr($0, 2); next }
-       { printf "     %s\n", $0 }' "$NEXT_STEPS"
+  # Emitted in the script's order, printed in the person's: each block is folded onto one line
+  # behind its rank, sorted, then unfolded. \036 separates rank from block, \037 the block's own
+  # lines — both unprintable, so neither can occur in a step's text.
+  _us="$(printf '\036')"
+  awk 'function flush() { if (open) printf "%s\036%s\n", rank, block }
+       /^@@/ { flush(); rank = substr($0, 3) + 0; block = ""; open = 1; next }
+       open  { block = block $0 "\037" }
+       END   { flush() }' "$NEXT_STEPS" \
+    | sort -t"$_us" -k1,1n -s \
+    | awk -F"$_us" '
+        {
+          if ($1 < 200 && group != 1) { printf "\n  Do these, in this order:\n"; group = 1 }
+          else if ($1 >= 200 && group != 2) { printf "\n  When you have time:\n"; group = 2 }
+          n++
+          c = split($2, L, "\037")
+          printf "\n"
+          for (i = 1; i < c; i++) {
+            if (i == 1)                        printf "   %d. %s\n", n, L[i]
+            else if (substr(L[i], 1, 1) == ">") printf "          %s\n", substr(L[i], 2)
+            else                                printf "      %s\n", L[i]
+          }
+        }'
   printf '\n'
 fi
