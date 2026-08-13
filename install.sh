@@ -191,6 +191,20 @@ if [ "$UNINSTALL" = 1 ]; then
         say "  removing $USER_SITE"
         run rm -rf "$USER_SITE"
       fi
+      # Named rather than deleted. `env`/`env.fish` are the cargo-dist PATH snippet, written by
+      # uv's installer and by others of the same family (rustup among them), and nothing in the
+      # file says which. Removing a file this script cannot prove it created is the mistake that
+      # cost a Homebrew uv earlier today. They are inert unless sourced.
+      leftovers=""
+      for f in env env.fish; do
+        [ -e "$HOME/.local/bin/$f" ] && leftovers="$leftovers ~/.local/bin/$f"
+      done
+      if [ -n "$leftovers" ]; then
+        say ""
+        say "  Left behind, on purpose:$leftovers"
+        say "  A PATH snippet uv writes, and so do other installers — nothing identifies whose it"
+        say "  is, so it is yours to delete. It does nothing unless a shell sources it."
+      fi
       say ""
       say "  Gone. The Command Line Tools stay — nothing here installed them."
       say "  If you added ~/.local/bin to ~/.zshrc by hand, that line is still there."
