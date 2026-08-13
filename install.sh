@@ -113,8 +113,16 @@ add_to_path() {
   if [ -f "$_rc" ] && grep -qF '.local/bin' "$_rc" 2>/dev/null; then
     say "  $_rc already mentions .local/bin — not touching it"
   else
+    # Write the directory we were ASKED about, not a hardcoded one — announcing
+    # "adding /opt/homebrew/bin" and then writing ~/.local/bin is how a fix becomes a lie.
+    # Kept as literal $HOME when it is under the home directory, so the profile stays portable
+    # between machines with different usernames.
+    case "$_dir" in
+      "$HOME"/*) _written="\$HOME/${_dir#$HOME/}" ;;
+      *)         _written="$_dir" ;;
+    esac
     say "  adding $_dir to $_rc"
-    run sh -c "printf '\n# added by the autosound installer\nexport PATH=\"\$HOME/.local/bin:\$PATH\"\n' >> '$_rc'"
+    run sh -c "printf '\n# added by the autosound installer\nexport PATH=\"$_written:\$PATH\"\n' >> '$_rc'"
   fi
   next_step "Pick up the change. A script cannot alter the PATH of the terminal that started it," \
             "so this shell still cannot find what was installed — open a new terminal, or run:" \
@@ -495,19 +503,34 @@ fi
 # ── the reviewer, only if it was asked for above ──────────────────────────────
 if [ "$WANT_REVIEWER" = 1 ]; then
   step "The reviewer (Gemini, through Google's Antigravity CLI)"
-  if ! have brew; then
-    # NONINTERACTIVE is Homebrew's own documented switch: it skips the "press RETURN" pause that
-    # would hang here, and still asks sudo for a password on the terminal, which is correct — it
-    # writes to /opt/homebrew. NOT YET RUN on a machine without Homebrew; if it stops, the message
-    # it stops with is the useful thing to send.
+  # Homebrew writes to /opt/homebrew and needs sudo, which needs an Administrator account. Asking
+  # first, because the alternative is what happened on a real machine: the installer ran, Homebrew
+  # printed "Need sudo access on macOS", and the whole thing stopped there — no uv, no app, no
+  # summary, because an OPTIONAL extra had failed (2026-08-13).
+  if ! have brew && ! id -Gn 2>/dev/null | tr ' ' '\n' | grep -qx admin; then
+    warn "Homebrew needs an Administrator account and this one is not; skipping the reviewer."
+    WANT_REVIEWER=0
+  fi
+  if [ "$WANT_REVIEWER" = 1 ] && ! have brew; then
+    # NOT `NONINTERACTIVE=1`. That switch does not mean "do not pause", it means "never prompt" —
+    # so instead of asking for the password it refuses outright. Homebrew needs a real terminal
+    # for both its RETURN pause and sudo, and `curl | bash` has already taken stdin, so hand it
+    # /dev/tty explicitly. `|| true` because the reviewer is optional and must never take the
+    # install down with it; the check below decides what to say.
     say "  installing Homebrew first — it will ask for your admin password"
-    run sh -c 'NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
+    if [ "$DRY_RUN" = 0 ]; then
+      sh -c '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" < /dev/tty' || true
+    else
+      say "  would run: /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+    fi
     for d in /opt/homebrew/bin /usr/local/bin; do
       [ -x "$d/brew" ] && export PATH="$d:$PATH"
     done
   fi
-  if have brew; then
-    run brew install --cask antigravity-cli
+  if [ "$WANT_REVIEWER" = 1 ] && have brew; then
+    # Same reasoning: a cask that fails to install is a missing reviewer, not a failed install.
+    if [ "$DRY_RUN" = 0 ]; then brew install --cask antigravity-cli || true
+    else say "  would run: brew install --cask antigravity-cli"; fi
     # Gatekeeper quarantines anything a browser or a cask brought in; the CLI then refuses to
     # start with a dialog that reads like malware and is not (setup-critic-channel.md §1).
     if [ "$DRY_RUN" = 0 ] && command -v agy >/dev/null 2>&1; then
@@ -517,8 +540,8 @@ if [ "$WANT_REVIEWER" = 1 ]; then
               "ID (not the name, not the number) from aistudio.google.com/app/apikey. Then run" \
               "this, paste the ID, and open the link it prints:" \
               ">agy"
-  else
-    warn "Homebrew is still not available — the reviewer was not installed."
+  elif [ "$WANT_REVIEWER" = 1 ]; then
+    warn "Homebrew is not available — the reviewer was not installed. Nothing else is affected."
     next_step "Set the reviewer up by hand when you have time. The steps, including a free" \
               "browser-only route that needs no CLI at all:" \
               ">open $SKILL_HOME/references/tooling/setup-critic-channel.md"
