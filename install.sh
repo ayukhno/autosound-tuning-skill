@@ -258,6 +258,17 @@ if [ "$UNINSTALL" = 1 ]; then
       # uv's installer and by others of the same family (rustup among them), and nothing in the
       # file says which. Removing a file this script cannot prove it created is the mistake that
       # cost a Homebrew uv earlier today. They are inert unless sourced.
+      # Homebrew is named, not removed. This script can install it, so by the same rule that made
+      # it take back its own PATH line it ought to take this back too — but Homebrew is a package
+      # manager with everything else on the machine hanging off it, and there is no way from here
+      # to tell a Homebrew this installer put there from one that was already in use. Naming it
+      # with the command is the honest middle.
+      if have brew; then
+        say ""
+        say "  Homebrew is left alone. If this installer put it there and you want it gone too,"
+        say "  its own uninstaller removes it and everything in it, Antigravity included:"
+        say "    /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/uninstall.sh)\""
+      fi
       leftovers=""
       for f in env env.fish; do
         [ -e "$HOME/.local/bin/$f" ] && leftovers="$leftovers ~/.local/bin/$f"
