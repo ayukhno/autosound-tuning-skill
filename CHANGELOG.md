@@ -2,6 +2,78 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
+## [v3.0.3] — 2026-08-13 · tagged, not yet the default install
+
+What the first from-scratch install on a second Mac found. Every item below was a defect nobody
+could have seen on a machine that already had everything — which is what the author's laptop is.
+
+### Fixed
+
+- **Homebrew could never install through the documented one-liner, on any Mac.** The code piped
+  `printf '\n'` into Homebrew's installer to answer its RETURN pause, which guaranteed the thing
+  it was avoiding: with stdin a pipe, Homebrew announces "Running in non-interactive mode because
+  `stdin` is not a TTY", skips the password prompt and dies on "Need sudo access on macOS" — on an
+  account that IS an administrator. So the Gemini reviewer, which the installer itself calls
+  "where most of the value is", was never installed for anyone who followed the instructions. It
+  now gets `/dev/tty` and asks. **The install pauses there for a RETURN and your admin password.**
+- **The summary argued with itself.** "autosound-tcc is installed but that folder is not on your
+  PATH", and directly under it "your .zshrc already has it — not touching it". Both were true: the
+  profile was correct and only the running shell was stale, which is the ordinary state right
+  after an install and needs no alarm. It now answers the question a person actually has — will a
+  new terminal find it — and says either "installed" or a warning, never both.
+- **"What to do next" was a puzzle.** Two of its seven items were the same reviewer setup in
+  different words; "open a new terminal" was number 2 while numbers 3 and 7 both needed it done
+  first; required steps were mixed in with optional ones. The list is now sorted into "do these,
+  in this order" and "when you have time", and the two reviewer paths can only queue one step.
+- **`--dry-run` described the machine instead of the plan.** It ended with "Installed, with the
+  warnings above" about an install that had not happened, reported a reviewer as "not installed"
+  directly under "would run: <the Homebrew installer>", and skipped the list of everything it
+  would download — which is the half of a dry run people want.
+- **Not being signed in to Claude was reported as a warning**, so a completely successful install
+  ended with "Installed, with the warnings above". Every first install on every machine is in that
+  state, and the script says so itself two sections earlier.
+
+### Added
+
+- **`omp` is installed in the same Homebrew visit as the reviewer.** It is what fills TCC's model
+  picker with anything that is not Claude; without it that dialog opens empty.
+- **The summary ends with both repositories** and where to open an issue.
+- **The macOS app bundle gets TCC's icon.** The artwork ships inside the TCC package, and the
+  builder reads it from the installed package rather than keeping a second copy here.
+
+## [v3.0.2] — 2026-08-13 · tagged, not yet the default install
+
+Tagged without an entry at the time; written up here. Two threads: the installers became real,
+and the reviewer channel learned to tell "configured" from "works".
+
+### Added
+
+- **Installers, and the one-liner that runs them.** `install.sh` for macOS/Linux, `install.ps1`
+  mirrored from it for Windows — **not yet run on Windows, and it says so in its own header** —
+  and `install.cmd` so a double-click or a `cmd` prompt works. `--uninstall` removes what the
+  script installed and never a project; `--uninstall --all` also names Homebrew rather than
+  removing a package manager it cannot prove it owns.
+- **`gemini_critic.sh --doctor`** reports the channel and the project as two separate verdicts, so
+  "the reviewer works" and "this folder has not been through intake" stop being one answer. The
+  smoke test can now fail: it makes a live one-line call rather than declaring success because a
+  binary exists.
+- **The enable-the-API step in `setup-critic-channel.md`**, which had never been written down.
+
+### Fixed
+
+- **A project whose state is prose is told what it is**, instead of being sent to redo intake.
+- **Reviewer model ids are slugs only.** A caption where an id belongs went to the API verbatim
+  and fell back to the clipboard silently.
+- **A long series of first-install defects** found by running the script on a clean M1: the PATH
+  line written twice, the second directory never added at all, a question asked twice mid-scroll,
+  an optional extra taking the whole install down with it, an off-PATH reviewer reported as a
+  missing one, `--skill-ref` working on a first install and breaking on every update.
+
+### Changed
+
+- **The 3.x line is no longer described as "in development"**, in all four languages.
+- **The catalogue's version number is dropped** — it described the wrong thing.
+
 ## [v3.0.1] — 2026-08-13 · tagged, not yet the default install
 
 Everything v3.0.0 said, plus the defects a live audit of the marketplace found in it.
