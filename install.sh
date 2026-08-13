@@ -23,6 +23,7 @@
 #   ./install.sh --tcc               the skill and the desktop app
 #   ./install.sh --dry-run           say what it would do, change nothing
 #   ./install.sh --skill-ref v3.0.0  a specific skill version (default: the newest 3.x tag)
+#   ./install.sh --uninstall         remove what this script installed — NEVER your projects
 set -euo pipefail
 
 SKILL_REPO="https://github.com/ayukhno/autosound-tuning-skill.git"
@@ -36,6 +37,7 @@ SKILL_HOME="${HOME}/.claude/skills/autosound-tuning"
 SKILL_SRC="${HOME}/.claude/skills/.autosound-tuning-src"
 
 MODE=""
+UNINSTALL=0
 DRY_RUN=0
 SKILL_REF=""
 ASSUME_YES=0
@@ -43,6 +45,7 @@ ASSUME_YES=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --terminal) MODE="terminal" ;;
+    --uninstall) UNINSTALL=1 ;;
     --tcc)      MODE="tcc" ;;
     --dry-run)  DRY_RUN=1 ;;
     --yes|-y)   ASSUME_YES=1 ;;
@@ -65,14 +68,71 @@ run() {
 
 # Ask before anything that reaches the network or writes outside this script's own scratch.
 # Defaults to NO: an installer that proceeds on a stray keypress is one nobody can run carefully.
+#
+# Reads from /dev/tty, not stdin. The documented way to run this is
+# `curl -fsSL … | bash -s -- --tcc`, which occupies stdin with the script itself — so a plain
+# `read` gets EOF and every question silently answers "no", skipping the very installs it was
+# asked to do. INSTALLER-TZ §2.2 concluded from this that a shell installer must not ask at all;
+# the narrower fix is to ask the TERMINAL rather than stdin, which keeps the confirmations that
+# stop this script fetching things behind somebody's back.
 confirm() {
   [ "$ASSUME_YES" = 1 ] && return 0
   [ "$DRY_RUN" = 1 ] && { say "  would ask: $1"; return 1; }
-  if [ ! -t 0 ]; then warn "not a terminal, so not asking — skipping: $1"; return 1; fi
-  printf '  %s [y/N] ' "$1"
-  read -r answer
+  if ! ( : < /dev/tty ) 2>/dev/null; then
+    warn "no terminal to ask on — skipping: $1"
+    warn "re-run with --yes to accept, or without a pipe to be asked"
+    return 1
+  fi
+  printf '  %s [y/N] ' "$1" > /dev/tty
+  read -r answer < /dev/tty
   case "$answer" in [yY]*) return 0 ;; *) return 1 ;; esac
 }
+
+# ── uninstall ─────────────────────────────────────────────────────────────────
+if [ "$UNINSTALL" = 1 ]; then
+  step "Removing what this script installed"
+  say "  Your PROJECT FOLDERS are never touched — not by this, not with --yes, not ever."
+  say "  They hold measurements that took hours in a car and cannot be reproduced."
+  say ""
+
+  # The skill, but ONLY the checkout this script made. A symlink pointing anywhere else is
+  # somebody's working tree and stays, for the same reason install refuses to overwrite it.
+  if [ -L "$SKILL_HOME" ]; then
+    target="$(readlink "$SKILL_HOME")"
+    case "$target" in
+      "$SKILL_SRC"/*)
+        say "  removing the link and the checkout it points at"
+        run rm -f "$SKILL_HOME"
+        run rm -rf "$SKILL_SRC"
+        ;;
+      *) warn "$SKILL_HOME points at $target — not ours, left alone" ;;
+    esac
+  elif [ -d "$SKILL_HOME" ]; then
+    warn "$SKILL_HOME is a real directory this script did not create — left alone"
+  else
+    say "  no skill installed by this script"
+  fi
+
+  if have uv && uv tool list 2>/dev/null | grep -q '^autosound-tcc'; then
+    say "  removing autosound-tcc"
+    run uv tool uninstall autosound-tcc
+  else
+    say "  autosound-tcc not installed by uv"
+  fi
+
+  APP="$HOME/Applications/Autosound TCC.app"
+  if [ -d "$APP" ]; then say "  removing $APP"; run rm -rf "$APP"; fi
+
+  # Deliberately NOT removed, and each for a reason:
+  #   * numpy/scipy/matplotlib — shared with everything else that uses this interpreter.
+  #   * Claude Code — installed by its own installer, and probably used for other work.
+  #   * ~/.claude — the user's own configuration.
+  say ""
+  say "  Left in place on purpose: the Python packages (shared with everything else using that"
+  say "  interpreter), Claude Code (its own installer owns it), and ~/.claude (yours)."
+  say "  Every tuning project you have is untouched."
+  exit 0
+fi
 
 # ── what is already here ──────────────────────────────────────────────────────
 step "Looking at what you already have"
@@ -80,13 +140,18 @@ for tool in git uv claude python3; do
   if have "$tool"; then say "  ✓ $tool  $(command -v "$tool")"; else say "  – $tool  not found"; fi
 done
 
-if [ -z "$MODE" ]; then
-  if [ ! -t 0 ]; then echo "no --terminal or --tcc given and nothing to ask on" >&2; exit 2; fi
+if [ -z "$MODE" ] && [ "$UNINSTALL" = 0 ]; then
+  if ! ( : < /dev/tty ) 2>/dev/null; then
+    echo "no --terminal or --tcc given and no terminal to ask on." >&2
+    echo "  curl -fsSL <url> | bash -s -- --terminal    the method only" >&2
+    echo "  curl -fsSL <url> | bash -s -- --tcc         with the desktop app" >&2
+    exit 2
+  fi
   say ""
-  say "  1) Terminal only — the tuning method, no desktop app (~nothing to download)"
+  say "  1) Terminal only — the tuning method, no desktop app (~30 MB)"
   say "  2) Terminal + TCC — plus the desktop app with the DSP tree, plan and curves (~680 MB)"
-  printf '  Which? [1/2] '
-  read -r choice
+  printf '  Which? [1/2] ' > /dev/tty
+  read -r choice < /dev/tty
   case "$choice" in 2) MODE="tcc" ;; *) MODE="terminal" ;; esac
 fi
 say ""

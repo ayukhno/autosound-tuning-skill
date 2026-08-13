@@ -19,12 +19,14 @@
 #   .\install.ps1 -Tcc                the skill and the desktop app
 #   .\install.ps1 -DryRun             say what it would do, change nothing
 #   .\install.ps1 -SkillRef v3.0.1    a specific skill version (default: the newest 3.x tag)
+#   .\install.ps1 -Uninstall          remove what this script installed — NEVER your projects
 
 [CmdletBinding()]
 param(
     [switch]$Terminal,
     [switch]$Tcc,
     [switch]$DryRun,
+    [switch]$Uninstall,
     [switch]$Yes,
     [string]$SkillRef = ""
 )
@@ -57,6 +59,44 @@ function Confirm-Step {
     if ($DryRun) { Say "would ask: $Question"; return $false }
     $answer = Read-Host "  $Question [y/N]"
     return $answer -match '^[yY]'
+}
+
+# ── uninstall ─────────────────────────────────────────────────────────────────
+if ($Uninstall) {
+    Step "Removing what this script installed"
+    Say "Your PROJECT FOLDERS are never touched — not by this, not with -Yes, not ever."
+    Say "They hold measurements that took hours in a car and cannot be reproduced."
+    Write-Host ""
+
+    if (Test-Path $SkillHome) {
+        $item = Get-Item $SkillHome -Force
+        $target = ($item.Target -join "")
+        if ($item.LinkType -in @("SymbolicLink","Junction") -and $target -like "$SkillSrc*") {
+            Say "removing the junction and the checkout it points at"
+            # Remove-Item on a junction deletes the LINK, not the target — but only with -Force
+            # and without -Recurse descending into it, which is why the two go separately.
+            Run { Remove-Item $SkillHome -Force } "remove junction"
+            Run { Remove-Item $SkillSrc -Recurse -Force } "remove checkout"
+        } elseif ($item.LinkType) {
+            Warn "$SkillHome points at $target — not ours, left alone"
+        } else {
+            Warn "$SkillHome is a real directory this script did not create — left alone"
+        }
+    } else { Say "no skill installed by this script" }
+
+    if ((Have uv) -and ((uv tool list 2>$null) -join "`n") -match '^autosound-tcc') {
+        Say "removing autosound-tcc"
+        Run { uv tool uninstall autosound-tcc } "uv tool uninstall"
+    } else { Say "autosound-tcc not installed by uv" }
+
+    $lnk = Join-Path ([System.Environment]::GetFolderPath("Programs")) "Autosound TCC.lnk"
+    if (Test-Path $lnk) { Say "removing the Start Menu shortcut"; Run { Remove-Item $lnk -Force } "remove shortcut" }
+
+    Write-Host ""
+    Say "Left in place on purpose: the Python packages (shared with everything else using that"
+    Say "interpreter), Claude Code (its own installer owns it), and ~\.claude (yours)."
+    Say "Every tuning project you have is untouched."
+    exit 0
 }
 
 # ── what is already here ──────────────────────────────────────────────────────
