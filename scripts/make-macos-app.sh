@@ -32,6 +32,21 @@ fi
 
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 
+# The icon belongs to TCC and ships inside its package, so this repository keeps no second copy to
+# fall out of step. Finding it: the console script's shebang names the interpreter `uv` built the
+# tool with, and that interpreter can say where the package landed. Guessing the uv layout with a
+# glob would break the first time uv changes it.
+ICON_NAME=""
+_py="$(sed -n '1s/^#!//p' "$BIN" 2>/dev/null | awk '{print $1}')"
+if [ -x "$_py" ]; then
+  _icns="$("$_py" -c 'import autosound_tcc.app as a; print(a.APP_ICNS if a.APP_ICNS.is_file() else "")' 2>/dev/null || true)"
+  if [ -n "$_icns" ] && [ -f "$_icns" ]; then
+    cp "$_icns" "$APP_DIR/Contents/Resources/AutosoundTCC.icns"
+    ICON_NAME="AutosoundTCC"
+  fi
+fi
+[ -n "$ICON_NAME" ] || echo "note: no icon found in the installed package — the bundle gets the generic one." >&2
+
 cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -43,7 +58,8 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
   <key>CFBundleVersion</key>         <string>1</string>
   <key>CFBundleShortVersionString</key> <string>1.0</string>
   <key>CFBundlePackageType</key>     <string>APPL</string>
-  <key>CFBundleExecutable</key>      <string>autosound-tcc</string>
+  <key>CFBundleExecutable</key>      <string>autosound-tcc</string>${ICON_NAME:+
+  <key>CFBundleIconFile</key>        <string>$ICON_NAME</string>}
   <key>NSHighResolutionCapable</key> <true/>
   <!-- A regular foreground app: it owns a menu bar and a Dock tile. Without this a bundle around
        a script can end up as an accessory, which is how a window ends up with no way back to it
