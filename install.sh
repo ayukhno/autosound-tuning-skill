@@ -771,11 +771,14 @@ if [ -n "$CLAUDE_BIN" ]; then
   if "$CLAUDE_BIN" auth status 2>/dev/null | grep -q '"loggedIn": *true'; then
     say "  ✓ claude is signed in"
   else
-    warn "claude is installed but not signed in."
+    # Not a warning, and it must not set `ok`. Every first install on every machine ends here —
+    # the script says so itself two sections up ("they cannot log in for you") — so flagging it
+    # made a completely successful run end with "Installed, with the warnings above." The step
+    # below is where it belongs; this line just names the state.
+    say "  – claude is not signed in yet; that is step 2 below"
     next_step 120 "Sign in to Claude. This is the one step nothing can do for you: the session is" \
               "yours, not this tool's." \
               ">claude auth login"
-    ok=0
   fi
 else
   warn "claude is not installed; nothing can run a session without it"
