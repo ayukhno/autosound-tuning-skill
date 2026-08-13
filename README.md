@@ -9,8 +9,10 @@ through crossovers, time alignment, phase and EQ, one checked change at a time.
   into REW for you to export
 - **Diagnoses before it fixes**: maps the cabin's reflections, nulls and driver distortion from
   your baseline sweeps before it proposes a single change
-- **Never touches your processor**: you type every number into the DSP yourself, so nothing
-  changes in the car without you
+- **Never touches your processor**: nothing changes in the car unless you put it there. That
+  does not mean retyping everything: REW exports your EQ as a file the Helix PC-Tool imports in
+  one go, and a [copy-paste helper](https://github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant)
+  covers processors without file import, such as Musway, ESX and Zapco
 - **Knows the craft**: target curves, a phase-first EQ order, a step-by-step process, and which
   test track to listen to for what
 - **Learns your setup**: accumulates knowledge about your car and gear, only with your consent
