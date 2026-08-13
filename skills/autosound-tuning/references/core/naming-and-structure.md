@@ -64,7 +64,7 @@ Rule of thumb: **magnitude / tone / summation / target → `(rta)`**; **phase / 
 
 ## 4a. Config + export backups (git → GitHub) — set up at NEW-PROJECT start
 
-A tune is worth months of work; its artifacts must survive a disk loss. Standard layout (the skill tells the user this at project start, then keeps it fed).
+A tune is worth weeks of work; its artifacts must survive a disk loss. Standard layout (the skill tells the user this at project start, then keeps it fed).
 
 **The project folder as a whole** (one project = one folder the user points at, a git repo; the machine files are the front-end's whole contract — `project-schema.md`, `state/schema.md`, `state/process-schema.md`):
 
