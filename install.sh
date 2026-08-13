@@ -255,9 +255,23 @@ if [ "$UNINSTALL" = 1 ]; then
         say "  A PATH snippet uv writes, and so do other installers — nothing identifies whose it"
         say "  is, so it is yours to delete. It does nothing unless a shell sources it."
       fi
+      # We write this line now, so we take it back. Only ours: it is found by the marker comment
+      # this script puts above it, never by matching PATH lines generally — somebody else's PATH
+      # edit in their own shell profile is not ours to delete.
+      for _rc in "$HOME/.zshrc" "$HOME/.bash_profile" "$HOME/.bashrc"; do
+        if [ -f "$_rc" ] && grep -qF '# added by the autosound installer' "$_rc"; then
+          say "  removing the PATH line this installer added to $_rc"
+          if [ "$DRY_RUN" = 0 ]; then
+            _tmp="$(mktemp)"
+            grep -vF -e '# added by the autosound installer' \
+                     -e 'export PATH="$HOME/.local/bin:$PATH"' "$_rc" > "$_tmp" && mv "$_tmp" "$_rc"
+          fi
+        fi
+      done
       say ""
       say "  Gone. The Command Line Tools stay — nothing here installed them."
-      say "  If you added ~/.local/bin to ~/.zshrc by hand, that line is still there."
+      say "  A PATH line you added yourself is left alone; only the one marked as this"
+      say "  installer's is removed."
     else
       say "  Left alone."
     fi
@@ -293,6 +307,24 @@ if [ -z "$MODE" ] && [ "$UNINSTALL" = 0 ]; then
   read -r choice < /dev/tty
   case "$choice" in 2) MODE="tcc" ;; *) MODE="terminal" ;; esac
 fi
+# The reviewer is asked for HERE, next to the mode, because it is the same kind of question — what
+# do you want — and because its answer changes the download list below. A second vendor arguing
+# with the first is most of what makes this method work, so it is worth one question; and it is
+# genuinely optional, so it is worth asking rather than assuming.
+WANT_REVIEWER=0
+if [ "$UNINSTALL" = 0 ] && ! have agy && ! have omp && ! have gemini; then
+  say ""
+  say "  A second AI reviews the first — one proposes a change, the other argues with it, you"
+  say "  decide. It is most of the value here, and it is optional."
+  if ! have brew; then
+    say "  Setting it up means installing Homebrew first: a package manager, a few hundred MB,"
+    say "  and it will ask for your admin password. Say no and everything else still works."
+  fi
+  # No DRY_RUN guard: `confirm` already answers "would ask" and declines in a dry run, and with
+  # --yes it accepts — which is what makes `--yes --dry-run` able to preview this branch at all.
+  if confirm "Set up Gemini as the reviewer?"; then WANT_REVIEWER=1; fi
+fi
+
 say ""
 say "Installing: $([ "$MODE" = tcc ] && echo 'the skill and TCC' || echo 'the skill only')"
 
@@ -310,6 +342,12 @@ if [ "$DRY_RUN" = 0 ]; then
   if [ "$MODE" = "tcc" ]; then
     if ! have uv; then say "    • uv, and a Python of its own   astral.sh/uv/install.sh"; fi
     say "    • the desktop app               github.com/ayukhno/autosound-tcc"
+  fi
+  if [ "$WANT_REVIEWER" = 1 ]; then
+    if ! have brew; then
+      say "    • Homebrew                      brew.sh, and it will ask for your password"
+    fi
+    say "    • Antigravity, Google's CLI     the Gemini reviewer, via Homebrew"
   fi
   if [ "$MODE" = "tcc" ]; then
     say "    • a shortcut on your Desktop     pointing at the app it builds"
@@ -451,6 +489,39 @@ else
     run sh -c 'curl -fsSL https://claude.ai/install.sh | sh'
   else
     say "  Skipped. When you want it:  curl -fsSL https://claude.ai/install.sh | sh"
+  fi
+fi
+
+# ── the reviewer, only if it was asked for above ──────────────────────────────
+if [ "$WANT_REVIEWER" = 1 ]; then
+  step "The reviewer (Gemini, through Google's Antigravity CLI)"
+  if ! have brew; then
+    # NONINTERACTIVE is Homebrew's own documented switch: it skips the "press RETURN" pause that
+    # would hang here, and still asks sudo for a password on the terminal, which is correct — it
+    # writes to /opt/homebrew. NOT YET RUN on a machine without Homebrew; if it stops, the message
+    # it stops with is the useful thing to send.
+    say "  installing Homebrew first — it will ask for your admin password"
+    run sh -c 'NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
+    for d in /opt/homebrew/bin /usr/local/bin; do
+      [ -x "$d/brew" ] && export PATH="$d:$PATH"
+    done
+  fi
+  if have brew; then
+    run brew install --cask antigravity-cli
+    # Gatekeeper quarantines anything a browser or a cask brought in; the CLI then refuses to
+    # start with a dialog that reads like malware and is not (setup-critic-channel.md §1).
+    if [ "$DRY_RUN" = 0 ] && command -v agy >/dev/null 2>&1; then
+      xattr -dr com.apple.quarantine "$(command -v agy)" 2>/dev/null || true
+    fi
+    next_step "Sign the reviewer in — once, and it needs one thing from you first: the Project" \
+              "ID (not the name, not the number) from aistudio.google.com/app/apikey. Then run" \
+              "this, paste the ID, and open the link it prints:" \
+              ">agy"
+  else
+    warn "Homebrew is still not available — the reviewer was not installed."
+    next_step "Set the reviewer up by hand when you have time. The steps, including a free" \
+              "browser-only route that needs no CLI at all:" \
+              ">open $SKILL_HOME/references/tooling/setup-critic-channel.md"
   fi
 fi
 
