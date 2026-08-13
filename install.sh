@@ -259,6 +259,34 @@ fi
 say ""
 say "Installing: $([ "$MODE" = tcc ] && echo 'the skill and TCC' || echo 'the skill only')"
 
+# ONE question, here, instead of two buried forty lines apart. The rule was never to fetch and run
+# anything without asking, and that rule stands — but a prompt that arrives mid-scroll, after the
+# person has already chosen --tcc and while somebody else's installer is printing, collects a
+# reflex `y` rather than a decision. Everything that will be downloaded is named once, before any
+# of it happens, while they are still reading.
+if [ "$DRY_RUN" = 0 ]; then
+  say ""
+  say "  This downloads and runs, from the internet:"
+  say "    • the tuning method             github.com/ayukhno/autosound-tuning-skill"
+  say "    • numpy, scipy, matplotlib      pypi.org, into your own user site"
+  if ! have claude; then say "    • Claude Code                   claude.ai/install.sh"; fi
+  if [ "$MODE" = "tcc" ]; then
+    if ! have uv; then say "    • uv, and a Python of its own   astral.sh/uv/install.sh"; fi
+    say "    • the desktop app               github.com/ayukhno/autosound-tcc"
+  fi
+  say ""
+  say "  It touches no project folder and logs you in nowhere."
+  if confirm "Go ahead?"; then
+    # Consent given once, in full. The per-step prompts would now be asking the same question
+    # again in a worse moment, so they are satisfied.
+    ASSUME_YES=1
+  else
+    say ""
+    say "  Nothing installed. Re-run when you want to."
+    exit 0
+  fi
+fi
+
 # ── git: required, and not something to install behind someone's back ─────────
 if ! usable git; then
   step "git is required and is not installed"
