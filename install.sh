@@ -166,14 +166,16 @@ confirm() {
     warn "re-run with --yes to accept, or without a pipe to be asked"
     return 1
   fi
-  # Only when stdout is redirected. The prompt itself goes to /dev/tty so it survives
-  # `curl | bash`, which means a `| tee` transcript would otherwise record an installer that ran
-  # things with no question visible. On a plain terminal both would land on screen and the person
-  # would read the same question twice.
-  [ -t 1 ] || say "  asking: $1"
   printf '  %s [y/N] ' "$1" > /dev/tty
   read -r answer < /dev/tty
-  case "$answer" in [yY]*) return 0 ;; *) return 1 ;; esac
+  # The prompt goes to /dev/tty so it survives `curl | bash`, which means a `| tee` transcript
+  # would show an installer that ran things with no question in sight. Recorded AFTERWARDS, with
+  # the answer: printing the question first put it on screen twice under tee, once from the log
+  # and once from the terminal, which is how a two-line question turned into a wall.
+  case "$answer" in
+    [yY]*) [ -t 1 ] || say "  $1 yes"; return 0 ;;
+    *)     [ -t 1 ] || say "  $1 no";  return 1 ;;
+  esac
 }
 
 # ── uninstall ─────────────────────────────────────────────────────────────────
@@ -322,11 +324,11 @@ fi
 WANT_REVIEWER=0
 if [ "$UNINSTALL" = 0 ] && ! have agy && ! have omp && ! have gemini; then
   say ""
-  say "  A second AI reviews the first — one proposes a change, the other argues with it, you"
-  say "  decide. It is most of the value here, and it is optional."
+  say "  Optional: a second AI (Gemini) that argues with the first before you type anything into"
+  say "  the DSP. It is where most of the value is."
   if ! have brew; then
-    say "  Setting it up means installing Homebrew first: a package manager, a few hundred MB,"
-    say "  and it will ask for your admin password. Say no and everything else still works."
+    say "  Needs Homebrew: a few hundred MB, and your admin password. Saying no changes nothing"
+    say "  else, and you can add it later."
   fi
   # No DRY_RUN guard: `confirm` already answers "would ask" and declines in a dry run, and with
   # --yes it accepts — which is what makes `--yes --dry-run` able to preview this branch at all.
