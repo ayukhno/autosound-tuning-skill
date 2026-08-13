@@ -1,0 +1,7 @@
+
+# Windows entry points must arrive with CRLF: a batch file with LF endings can misparse its own
+# labels, and the symptom looks like a broken script rather than a broken checkout.
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+# ...and the shell installer must NOT, on any platform, or bash chokes on the carriage returns.
+*.sh  text eol=lf
