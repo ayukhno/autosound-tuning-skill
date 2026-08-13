@@ -100,12 +100,13 @@ against a dead disk. A free account covers it.
 Install in a terminal, with one line:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/main/install.sh | bash -s -- --terminal
+curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/main/install.sh | bash
 ```
 
-To install the [TCC desktop app](https://github.com/ayukhno/autosound-tcc) as well, use `--tcc`
-instead of `--terminal`. The installer explains each step before it runs it, and installs Claude
-Code itself if you do not have it.
+It asks which of two sizes you want: the method on its own, or the method plus the
+[TCC desktop app](https://github.com/ayukhno/autosound-tcc). Then it lists everything it is about
+to download, and where each piece comes from, and asks once before any of it happens. It installs
+Claude Code too, if you do not have it.
 
 Then make a folder for the car, and start:
 
