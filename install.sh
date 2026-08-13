@@ -127,7 +127,11 @@ confirm() {
     warn "re-run with --yes to accept, or without a pipe to be asked"
     return 1
   fi
-  say "  asking: $1"
+  # Only when stdout is redirected. The prompt itself goes to /dev/tty so it survives
+  # `curl | bash`, which means a `| tee` transcript would otherwise record an installer that ran
+  # things with no question visible. On a plain terminal both would land on screen and the person
+  # would read the same question twice.
+  [ -t 1 ] || say "  asking: $1"
   printf '  %s [y/N] ' "$1" > /dev/tty
   read -r answer < /dev/tty
   case "$answer" in [yY]*) return 0 ;; *) return 1 ;; esac
