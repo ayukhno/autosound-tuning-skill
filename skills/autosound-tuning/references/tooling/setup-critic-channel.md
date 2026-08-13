@@ -28,6 +28,11 @@ brew install --cask antigravity-cli      # the REAL agy — NOT a symlink to gem
   ```
   The CLI will prompt for your **Google Cloud Project ID** and then provide a verification link with an OAuth code.
   - **Google Cloud Project ID:** Retrieve the exact **Project ID** from your [Google AI Studio (Projects)](https://aistudio.google.com/app/apikey) details modal (not the project name or number).
+  - **Enable the API in that project — a missing step until 2026-08-13, and the channel cannot work without it.** A fresh account logs in fine, `agy models` lists models, and the first real call comes back:
+    > `Error: Agent Platform API has not been used in project <id> before or it is disabled.`
+
+    Open `https://console.developers.google.com/apis/api/aiplatform.googleapis.com/overview?project=<YOUR_PROJECT_ID>`, press **Enable**, and give it a few minutes to propagate. The error carries that link already, with your project filled in.
+  - **Watch the billing on that project.** The calls run through *your* Google Cloud project, not past it, whatever the free-tier wording elsewhere suggests. If you keep separate balances in AI Studio and Cloud, this is the Cloud one.
   - **OAuth Verification Code:** Open the generated URL in a browser, log in with your Google account, copy the code, and paste it back into your terminal.
   The authorization token will be saved and persist across sessions. (Do not smoke-test `agy --version`/`-p` before completing this login, as they will hang/re-trigger OAuth).
 - **Quota:** Antigravity's free *Starter* tier is a **WEEKLY** Flash+Pro group limit. At 0% the channel returns empty for ~a week (`agy` shows the countdown) — fall back to manual channel (§6) when it's dry.
