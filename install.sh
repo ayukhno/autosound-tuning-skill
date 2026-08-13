@@ -61,6 +61,19 @@ step() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 warn() { printf '  ! %s\n' "$*" >&2; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# macOS ships /usr/bin/git and /usr/bin/python3 as shims that exist whether or not the Command Line
+# Tools behind them do. `command -v` therefore ALWAYS finds them, the "git is not installed" branch
+# below could never fire on a Mac, and a genuinely clean machine failed inside `git clone` instead
+# of being told to run xcode-select. Ask xcode-select directly: it answers without popping the
+# install dialog, which `git --version` would do during a mere detection pass.
+usable() {
+  have "$1" || return 1
+  case "$(uname -s)" in
+    Darwin) case "$1" in git|python3) xcode-select -p >/dev/null 2>&1 ;; *) return 0 ;; esac ;;
+    *) return 0 ;;
+  esac
+}
+
 run() {
   if [ "$DRY_RUN" = 1 ]; then say "  would run: $*"; return 0; fi
   "$@"
@@ -137,7 +150,9 @@ fi
 # ── what is already here ──────────────────────────────────────────────────────
 step "Looking at what you already have"
 for tool in git uv claude python3; do
-  if have "$tool"; then say "  ✓ $tool  $(command -v "$tool")"; else say "  – $tool  not found"; fi
+  if usable "$tool"; then say "  ✓ $tool  $(command -v "$tool")"
+  elif have "$tool"; then say "  – $tool  a macOS shim only — the Command Line Tools are not installed"
+  else say "  – $tool  not found"; fi
 done
 
 if [ -z "$MODE" ] && [ "$UNINSTALL" = 0 ]; then
@@ -158,7 +173,7 @@ say ""
 say "Installing: $([ "$MODE" = tcc ] && echo 'the skill and TCC' || echo 'the skill only')"
 
 # ── git: required, and not something to install behind someone's back ─────────
-if ! have git; then
+if ! usable git; then
   step "git is required and is not installed"
   case "$(uname -s)" in
     Darwin) say "  Run this, click Install in the dialog, then run this script again:"
@@ -214,11 +229,20 @@ fi
 # `curve_view`, `dsp_math`, `eq_gate`, `make_plot` and `xover_select` — without it they do not
 # import at all. `scipy` and `matplotlib` are lazy, and cost one feature rather than a session.
 step "What the skill's tools need"
-REQS="$(cd "$(dirname "$SKILL_HOME")" 2>/dev/null && cd "$(readlink "$SKILL_HOME" 2>/dev/null || echo "$SKILL_HOME")" 2>/dev/null && pwd)/requirements.txt"
+# Resolve through the symlink when there is one. The `|| SKILL_REAL=` is load-bearing: under
+# `set -e` an assignment whose command substitution fails takes the whole script down, and on a
+# machine with no ~/.claude/skills yet — every clean install, and EVERY --dry-run, where the clone
+# above only printed itself — the first `cd` fails. The installer used to die here without a word,
+# one line after printing this step's header (found on a clean M1, 2026-08-13).
+SKILL_REAL="$(cd "$(dirname "$SKILL_HOME")" 2>/dev/null && cd "$(readlink "$SKILL_HOME" 2>/dev/null || echo "$SKILL_HOME")" 2>/dev/null && pwd)" || SKILL_REAL=""
+REQS="${SKILL_REAL:-$SKILL_HOME}/requirements.txt"
 [ -f "$REQS" ] || REQS="$SKILL_HOME/requirements.txt"
-if [ ! -f "$REQS" ]; then
+# A dry run has no requirements.txt on disk because nothing was cloned. That is not "nothing to
+# install" — a real run would have it — so do not say so, and go on to report the interpreter,
+# which is the most useful thing a dry run can tell you about this step.
+if [ ! -f "$REQS" ] && [ "$DRY_RUN" != 1 ]; then
   warn "no requirements.txt beside the skill — skipping (nothing to install from)"
-elif ! have python3; then
+elif ! usable python3; then
   warn "no python3 — the skill's tools cannot run at all until there is one"
 else
   # WHICH interpreter: the one `python3` resolves to, because that is literally how the method
@@ -229,6 +253,7 @@ else
   # with "Permission denied", which is correct and must not be worked around with sudo. `--user`
   # writes to ~/Library/Python/3.9/…, which that interpreter already has on its path. Inside a
   # venv the reverse holds: `--user` is refused outright. So ask the interpreter which it is.
+  [ -f "$REQS" ] || say "  not on disk yet — the clone above puts it at $REQS"
   PY_BIN="$(command -v python3)"
   say "  target interpreter: $PY_BIN ($("$PY_BIN" -V 2>&1))"
   if "$PY_BIN" -c 'import sys; sys.exit(0 if sys.prefix != sys.base_prefix else 1)' 2>/dev/null; then
