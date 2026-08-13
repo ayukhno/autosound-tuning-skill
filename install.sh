@@ -126,7 +126,7 @@ add_to_path() {
     # Kept as literal $HOME when it is under the home directory, so the profile stays portable
     # between machines with different usernames.
     say "  adding $_dir to $_rc"
-    run sh -c "printf '\n# added by the autosound installer\nexport PATH=\"$_written:\$PATH\"\n' >> '$_rc'"
+    run sh -c "printf '# added by the autosound installer\nexport PATH=\"$_written:\$PATH\"\n' >> '$_rc'"
   fi
   [ "$PATH_STEP_ADDED" = 1 ] && return 0   # one "open a new terminal" is enough, however many dirs
   PATH_STEP_ADDED=1
@@ -289,9 +289,13 @@ if [ "$UNINSTALL" = 1 ]; then
         if [ -f "$_rc" ] && grep -qF '# added by the autosound installer' "$_rc"; then
           say "  removing the PATH line this installer added to $_rc"
           if [ "$DRY_RUN" = 0 ]; then
+            # By MARKER, not by content: the line under it names whatever directory was added,
+            # and matching a hardcoded ~/.local/bin left an orphaned /opt/homebrew/bin export
+            # behind with nothing to explain it (caught in a two-cycle test, 2026-08-13).
             _tmp="$(mktemp)"
-            grep -vF -e '# added by the autosound installer' \
-                     -e 'export PATH="$HOME/.local/bin:$PATH"' "$_rc" > "$_tmp" && mv "$_tmp" "$_rc"
+            awk '/^# added by the autosound installer$/ { skip = 1; next }
+                 skip == 1 { skip = 0; next }
+                 { print }' "$_rc" > "$_tmp" && mv "$_tmp" "$_rc"
           fi
         fi
       done
