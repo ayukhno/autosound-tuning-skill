@@ -422,6 +422,9 @@ if true; then
       say "    • Homebrew                      brew.sh, and it will ask for your password"
     fi
     say "    • Antigravity, Google's CLI     the Gemini reviewer, via Homebrew"
+    if ! have omp; then
+      say "    • omp                           the CLI that offers TCC any non-Claude model"
+    fi
   fi
   if [ "$MODE" = "tcc" ]; then
     say "    • a shortcut on your Desktop     pointing at the app it builds"
@@ -615,6 +618,15 @@ if [ "$WANT_REVIEWER" = 1 ]; then
     # Same reasoning: a cask that fails to install is a missing reviewer, not a failed install.
     if [ "$DRY_RUN" = 0 ]; then brew install --cask antigravity-cli || true
     else say "  would run: brew install --cask antigravity-cli"; fi
+    # omp, in the same Homebrew visit. It is what fills TCC's generator picker with anything that
+    # is not Claude: without it the "models…" dialog opens EMPTY, with an install command in a
+    # label the user cannot even copy (seen on the first real install, 2026-08-13). Not a second
+    # question — it is on the disclosed list above, under the same one consent — and not a
+    # separate Homebrew visit, because the expensive part (installing brew itself) is already
+    # paid for by the line above. Optional in the same way the reviewer is: `|| true`, and TCC
+    # runs Claude through the Agent SDK whether or not this lands.
+    if [ "$DRY_RUN" = 0 ]; then brew install can1357/tap/omp || true
+    else say "  would run: brew install can1357/tap/omp"; fi
     # Gatekeeper quarantines anything a browser or a cask brought in; the CLI then refuses to
     # start with a dialog that reads like malware and is not (setup-critic-channel.md §1).
     if [ "$DRY_RUN" = 0 ] && command -v agy >/dev/null 2>&1; then
