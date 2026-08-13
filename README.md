@@ -84,6 +84,13 @@ Three things it cannot get for you, because they are yours:
 A second AI as reviewer is optional and is where most of the value comes from. Without one the
 skill runs solo and tells you so, and you can add one later.
 
+**A GitHub account is worth having, and it is not needed to install.** Installing asks you to log
+in nowhere, and both repositories are public. The reason to have one is your own project: it is
+months of work, and it holds measurements that cannot be taken again once the car has been apart.
+So when you start a new project the method sets up a git backup for it and keeps feeding it, and
+pointing that at a **private** repository on GitHub is the cheapest insurance there is against a
+dead disk or a stolen laptop. A free account covers it.
+
 ## Getting started
 
 Install in a terminal, with one line:
