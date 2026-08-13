@@ -67,13 +67,22 @@ a **Generator ↔ Critic ↔ Arbiter** review loop: one AI proposes, another cha
 
 ## What you need
 
-| | why | notes |
-| :-- | :-- | :-- |
-| **[Claude Code](https://claude.com/claude-code)** | the skill runs inside it | a paid Claude subscription is required; the [FAQ covers the plans and what a session costs](FAQ.md#subscription-options-quotas--budgets-as-of-july-2026) |
-| **[REW](https://www.roomeqwizard.com/)**, with its API on | this is where measurements come from | open *Preferences → API* in REW and check that `localhost:4735` answers |
-| **a calibrated measurement microphone** | ears alone cannot see a 40 Hz null | XLR with a physical loopback is best for phase; [UMIK-1 vs XLR in the FAQ](FAQ.md#measuring-phase--time-alignment-umik-1-vs-xlr-microphones) |
-| **a DSP you can type into** | the skill proposes, you enter | any processor works; the one shipped device profile so far is Helix DSP Ultra S |
-| **a second AI as reviewer** | optional, and most of the value | without one it runs solo and says so; [how to add one](FAQ.md) |
+**A clean machine is the expected case.** The installer below brings Claude Code, Python and the
+method with it. Nothing has to be installed first.
+
+Three things it cannot get for you, because they are yours:
+
+- **[REW](https://www.roomeqwizard.com/)**, with its API switched on. Install it, then open
+  *Preferences → API* and check that `localhost:4735` answers. Everything the skill knows about
+  your car arrives through it.
+- **A calibrated measurement microphone, and a DSP you can type into.** Any processor works. For
+  phase and timing, XLR with a physical loopback beats USB:
+  [why, in the FAQ](FAQ.md#measuring-phase--time-alignment-umik-1-vs-xlr-microphones).
+- **A paid Claude subscription.** See
+  [the plans and what a session costs](FAQ.md#subscription-options-quotas--budgets-as-of-july-2026).
+
+A second AI as reviewer is optional and is where most of the value comes from. Without one the
+skill runs solo and tells you so, and you can add one later.
 
 ## Getting started
 
