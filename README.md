@@ -72,9 +72,10 @@ method with it. Nothing has to be installed first.
 
 Three things it cannot get for you, because they are yours:
 
-- **[REW](https://www.roomeqwizard.com/)**, with its API switched on. Install it, then open
-  *Preferences → API* and check that `localhost:4735` answers. Everything the skill knows about
-  your car arrives through it.
+- **[REW](https://www.roomeqwizard.com/)**, with its API switched on. Install it, open
+  *Preferences → API*, and tick **Start the API when REW starts** so it comes up with REW every
+  time. That same panel then reads *"API server is running on port 4735"*, which is the whole
+  check. Everything the skill knows about your car arrives through it.
 - **A calibrated measurement microphone, and a DSP you can type into.** Any processor works. For
   phase and timing, XLR with a physical loopback beats USB:
   [why, in the FAQ](FAQ.md#measuring-phase--time-alignment-umik-1-vs-xlr-microphones).
