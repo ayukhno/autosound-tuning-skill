@@ -171,7 +171,7 @@ gemini_run() {
 # so setup traps surface in ONE command instead of serially (a real cold-start hit
 # ~6 papercuts here). Invoked via the wrappers' `--doctor` flag.
 gemini_doctor() {
-  local ok=1 envf bin
+  local ok=1 chan_ok=0 envf bin
   echo "== Gemini reviewer channel — doctor =="
   if [[ -z "${GEMINI_BIN:-}" ]]; then
     echo "✗ CLI: none on PATH. Fix: brew install --cask antigravity-cli (agy, default) OR npm i -g @google/gemini-cli"; ok=0
@@ -203,8 +203,18 @@ gemini_doctor() {
       echo "✗ smoke: the reviewer answered, but not with what it was asked for →"
       printf '%s' "$out" | head -3 | sed 's/^/    /'
       ok=0
-    else echo "✓ smoke: $(printf '%s' "$out" | head -1)"; fi
+    else echo "✓ smoke: $(printf '%s' "$out" | head -1)"; chan_ok=1; fi
   fi
-  echo "== $([[ $ok = 1 ]] && echo 'ALL GOOD ✓' || echo 'ISSUES ABOVE ✗ — fix and re-run --doctor') =="
+  # The channel and the project are two verdicts, and merging them read badly at the exact moment
+  # the hard part started working: "✓ smoke: channel works" followed by "ISSUES ABOVE ✗", where
+  # the issues were two project files missing because the doctor was run from a home directory
+  # rather than from a car (2026-08-13).
+  if [[ $ok = 1 ]]; then echo "== ALL GOOD ✓ =="
+  elif [[ ${chan_ok:-1} = 1 ]]; then
+    echo "== The reviewer channel works ✓ — the ✗ above are project files, and this is not a"
+    echo "   project folder. Run this again from inside a car's folder to check those too. =="
+  else
+    echo "== ISSUES ABOVE ✗ — fix and re-run --doctor =="
+  fi
   [[ $ok = 1 ]]
 }
