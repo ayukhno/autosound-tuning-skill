@@ -24,6 +24,9 @@
 #   ./install.sh --dry-run           say what it would do, change nothing
 #   ./install.sh --skill-ref v3.0.0  a specific skill version (default: the newest 3.x tag)
 #   ./install.sh --uninstall         remove what this script installed — NEVER your projects
+#   ./install.sh --uninstall --all   also remove uv, Claude Code and ~/.claude, and every
+#                                    --user pip package. For resetting a test machine; on a
+#                                    working one each of those is a real loss. Asks first.
 set -euo pipefail
 
 SKILL_REPO="https://github.com/ayukhno/autosound-tuning-skill.git"
@@ -38,6 +41,7 @@ SKILL_SRC="${HOME}/.claude/skills/.autosound-tuning-src"
 
 MODE=""
 UNINSTALL=0
+REMOVE_ALL=0
 DRY_RUN=0
 SKILL_REF=""
 ASSUME_YES=0
@@ -46,6 +50,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --terminal) MODE="terminal" ;;
     --uninstall) UNINSTALL=1 ;;
+    --all)      REMOVE_ALL=1 ;;
     --tcc)      MODE="tcc" ;;
     --dry-run)  DRY_RUN=1 ;;
     --yes|-y)   ASSUME_YES=1 ;;
@@ -67,6 +72,16 @@ have() { command -v "$1" >/dev/null 2>&1; }
 # per step: first line is the sentence, lines starting with ">" are commands to copy.
 NEXT_STEPS="$(mktemp)"
 trap 'rm -f "$NEXT_STEPS"' EXIT
+# uv installs itself into ~/.local/bin, which is exactly the folder that is NOT on PATH on a fresh
+# machine. Trusting `command -v uv` made --uninstall report "autosound-tcc not installed by uv"
+# about a TCC it had installed twenty minutes earlier, and walk away leaving it there (2026-08-13).
+UV=""
+find_uv() {
+  UV="$(command -v uv 2>/dev/null || true)"
+  [ -n "$UV" ] || { [ -x "$HOME/.local/bin/uv" ] && UV="$HOME/.local/bin/uv"; }
+  [ -n "$UV" ]
+}
+
 next_step() { printf '@@\n' >> "$NEXT_STEPS"; for l in "$@"; do printf '%s\n' "$l" >> "$NEXT_STEPS"; done; }
 
 # macOS ships /usr/bin/git and /usr/bin/python3 as shims that exist whether or not the Command Line
@@ -134,9 +149,9 @@ if [ "$UNINSTALL" = 1 ]; then
     say "  no skill installed by this script"
   fi
 
-  if have uv && uv tool list 2>/dev/null | grep -q '^autosound-tcc'; then
+  if find_uv && "$UV" tool list 2>/dev/null | grep -q '^autosound-tcc'; then
     say "  removing autosound-tcc"
-    run uv tool uninstall autosound-tcc
+    run "$UV" tool uninstall autosound-tcc
   else
     say "  autosound-tcc not installed by uv"
   fi
@@ -144,13 +159,50 @@ if [ "$UNINSTALL" = 1 ]; then
   APP="$HOME/Applications/Autosound TCC.app"
   if [ -d "$APP" ]; then say "  removing $APP"; run rm -rf "$APP"; fi
 
-  # Deliberately NOT removed, and each for a reason:
-  #   * numpy/scipy/matplotlib — shared with everything else that uses this interpreter.
-  #   * Claude Code — installed by its own installer, and probably used for other work.
-  #   * ~/.claude — the user's own configuration.
-  say ""
-  say "  Left in place on purpose: the Python packages (shared with everything else using that"
-  say "  interpreter), Claude Code (its own installer owns it), and ~/.claude (yours)."
+  # Without --all these stay, and each for a reason: the Python packages are shared with anything
+  # else using that interpreter, Claude Code belongs to its own installer and is probably used for
+  # other work, and ~/.claude is the person's own configuration. --all exists for one job —
+  # resetting a test machine to run the install again — so it asks first, in full sentences,
+  # because on a working machine every line of it is a real loss.
+  if [ "$REMOVE_ALL" = 1 ]; then
+    USER_SITE="$(python3 -m site --user-base 2>/dev/null || true)"
+    say ""
+    say "  --all also removes, and none of these were made only for tuning:"
+    say "    • uv, its downloaded Pythons and tools   ~/.local/bin/uv, ~/.local/share/uv"
+    say "    • Claude Code and ALL of its configuration, history, skills and plugins   ~/.claude"
+    [ -n "$USER_SITE" ] && say "    • every package you ever pip-installed with --user   $USER_SITE"
+    say ""
+    say "  Your project folders are still untouched. Nothing below reaches them."
+    if confirm "Remove all of that too?"; then
+      # ONLY the copy this script would have installed. Using the uv that `find_uv` resolves off
+      # PATH deleted a Homebrew-managed uv in testing — an installer must never remove a tool it
+      # did not install, however confident it is that it knows what the tool is (2026-08-13).
+      if [ -e "$HOME/.local/bin/uv" ] || [ -d "$HOME/.local/share/uv" ]; then
+        say "  removing uv from ~/.local"
+        run rm -rf "$HOME/.local/bin/uv" "$HOME/.local/bin/uvx" "$HOME/.local/share/uv"
+      elif find_uv; then
+        say "  leaving $UV alone — this script did not install it"
+      fi
+      if [ -e "$HOME/.local/bin/claude" ] || [ -d "$HOME/.claude" ]; then
+        say "  removing Claude Code and ~/.claude"
+        run rm -rf "$HOME/.local/bin/claude" "$HOME/.claude"
+      fi
+      if [ -n "$USER_SITE" ] && [ -d "$USER_SITE" ]; then
+        say "  removing $USER_SITE"
+        run rm -rf "$USER_SITE"
+      fi
+      say ""
+      say "  Gone. The Command Line Tools stay — nothing here installed them."
+      say "  If you added ~/.local/bin to ~/.zshrc by hand, that line is still there."
+    else
+      say "  Left alone."
+    fi
+  else
+    say ""
+    say "  Left in place on purpose: the Python packages (shared with everything else using that"
+    say "  interpreter), Claude Code (its own installer owns it), and ~/.claude (yours)."
+    say "  Re-run with --uninstall --all to remove those too."
+  fi
   say "  Every tuning project you have is untouched."
   exit 0
 fi
@@ -309,8 +361,8 @@ fi
 # ── TCC ───────────────────────────────────────────────────────────────────────
 if [ "$MODE" = "tcc" ]; then
   step "uv (installs its own Python, which is why it is the recommended route)"
-  if have uv; then
-    say "  ✓ $(uv --version)"
+  if find_uv; then
+    say "  ✓ $("$UV" --version)"
   elif confirm "Install uv (curl -LsSf https://astral.sh/uv/install.sh | sh)?"; then
     run sh -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'
     export PATH="$HOME/.local/bin:$PATH"
@@ -329,7 +381,8 @@ if [ "$MODE" = "tcc" ]; then
   # 3.9.6 on a stock macOS — and refused with "does not satisfy Python>=3.11", which reads as a
   # broken package rather than a missing Python. Naming a version makes uv fetch one, which is the
   # entire reason uv is the recommended route (found by running this, 2026-08-12).
-  run uv tool install --python 3.12 --upgrade "autosound-tcc[gui,claude] @ git+${TCC_REPO}"
+  find_uv || UV=uv
+  run "$UV" tool install --python 3.12 --upgrade "autosound-tcc[gui,claude] @ git+${TCC_REPO}"
 
   # Where uv actually put it, which is not always `~/.local/bin`.
   TCC_BIN="$(command -v autosound-tcc || true)"
@@ -339,9 +392,9 @@ if [ "$MODE" = "tcc" ]; then
   if [ "$(uname -s)" = "Darwin" ]; then
     step "A double-clickable app"
     # NOT relative to $0: under `curl … | bash` that is "bash", so dirname gives whatever folder
-    # the person happened to be standing in and the bundle was silently skipped for everyone who
-    # installed the recommended way (found on a clean M1, 2026-08-13 — it looked for
-    # ~/Projects/scripts/make-macos-app.sh). The clone above always has it.
+    # the person happened to be standing in, so the bundle was silently skipped for everyone who
+    # installed the recommended way — it looked for scripts/make-macos-app.sh under their current
+    # working directory (found on a clean M1, 2026-08-13). The clone above always has it.
     builder="$SKILL_SRC/scripts/make-macos-app.sh"
     [ -f "$builder" ] || builder="$(cd "$(dirname "$0")" 2>/dev/null && pwd)/scripts/make-macos-app.sh"
     if [ "$DRY_RUN" = 1 ]; then
