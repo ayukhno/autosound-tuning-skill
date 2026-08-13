@@ -484,7 +484,15 @@ fi
 reviewers_on_path="$(for b in agy omp gemini; do have "$b" && printf '%s ' "$b"; done)"
 reviewers_off_path="$(for b in agy omp gemini; do have "$b" || { [ -x "$HOME/.local/bin/$b" ] && printf '%s ' "$b"; }; done)"
 if [ -n "$reviewers_on_path" ]; then
-  say "  ✓ a reviewer route is available ($reviewers_on_path)"
+  # Found, not verified, and the difference is not pedantic: a real machine carried an `agy` that
+  # was three lines of `exec gemini "$@"` with no gemini installed behind it, and this line called
+  # it a working reviewer (2026-08-13). Actually invoking the CLI to check would mean running an
+  # unknown binary that may prompt or hang, so the claim is narrowed to what was established, and
+  # the skill's own doctor — which does test a live round trip — is offered.
+  say "  ✓ found a reviewer CLI ($reviewers_on_path)"
+  next_step "Check the reviewer really answers. Finding the command is not the same as it" \
+            "working, and a wrapper pointing at a CLI you no longer have looks identical:" \
+            ">$SKILL_HOME/scripts/gemini_critic.sh --doctor"
 elif [ -n "$reviewers_off_path" ]; then
   warn "$(printf '%s' "$reviewers_off_path")is installed in ~/.local/bin, which is not on your PATH,"
   warn "so nothing can call it. The PATH step below fixes this and the app in one line."
