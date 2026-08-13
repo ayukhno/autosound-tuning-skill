@@ -404,7 +404,10 @@ say "Installing: $([ "$MODE" = tcc ] && echo 'the skill and TCC' || echo 'the sk
 # person has already chosen --tcc and while somebody else's installer is printing, collects a
 # reflex `y` rather than a decision. Everything that will be downloaded is named once, before any
 # of it happens, while they are still reading.
-if [ "$DRY_RUN" = 0 ]; then
+# Printed in a dry run too, and that is the whole point of one: "say what you would do" without
+# the list of what it would download is the least useful half. Only the QUESTION is skipped —
+# there is nothing to consent to when nothing will happen.
+if true; then
   say ""
   say "  This downloads and runs, from the internet:"
   say "    • the tuning method             github.com/ayukhno/autosound-tuning-skill"
@@ -426,14 +429,16 @@ if [ "$DRY_RUN" = 0 ]; then
   say "    • one line in your shell profile so your shell can find what it installed"
   say ""
   say "  It touches no project folder and logs you in nowhere."
-  if confirm "Go ahead?"; then
-    # Consent given once, in full. The per-step prompts would now be asking the same question
-    # again in a worse moment, so they are satisfied.
-    ASSUME_YES=1
-  else
-    say ""
-    say "  Nothing installed. Re-run when you want to."
-    exit 0
+  if [ "$DRY_RUN" = 0 ]; then
+    if confirm "Go ahead?"; then
+      # Consent given once, in full. The per-step prompts would now be asking the same question
+      # again in a worse moment, so they are satisfied.
+      ASSUME_YES=1
+    else
+      say ""
+      say "  Nothing installed. Re-run when you want to."
+      exit 0
+    fi
   fi
 fi
 
@@ -632,6 +637,11 @@ if [ "$WANT_REVIEWER" = 1 ]; then
               "ID (not the name, not the number) from aistudio.google.com/app/apikey. Then run" \
               "this, paste the ID, and open the link it prints:" \
               ">agy"
+  elif [ "$WANT_REVIEWER" = 1 ] && [ "$DRY_RUN" = 1 ]; then
+    # In a dry run there is no brew because nothing was installed, and reporting that as a
+    # failure ("the reviewer was not installed") tells the reader about a machine rather than
+    # about the plan they asked to see.
+    say "  would run: brew install --cask antigravity-cli, once the Homebrew above is in place"
   elif [ "$WANT_REVIEWER" = 1 ]; then
     warn "Homebrew is not available — the reviewer was not installed. Nothing else is affected."
     reviewer_setup_step
@@ -697,6 +707,10 @@ fi
 # ── did it work ───────────────────────────────────────────────────────────────
 step "Checking"
 ok=1
+# These check the machine as it is RIGHT NOW. In a dry run that is a machine nothing above was
+# done to, so "claude is not installed" sits directly under "would run: …claude.ai/install.sh"
+# and reads as a contradiction. Say which of the two the reader is looking at.
+[ "$DRY_RUN" = 1 ] && say "  (the machine as it stands — nothing above was actually done)"
 if [ -f "$SKILL_HOME/rew_tool/contract.py" ]; then
   say "  ✓ skill installed, and it is the 3.x line"
   if python3 -c "import numpy" 2>/dev/null; then
@@ -830,7 +844,15 @@ else
 fi
 
 say ""
-if [ "$ok" = 1 ]; then say "Installed."; else say "Installed, with the warnings above."; fi
+if [ "$DRY_RUN" = 1 ]; then
+  # It used to end a dry run with "Installed, with the warnings above." — a sentence about an
+  # install that did not happen, under checks made against a machine nothing had touched.
+  say "Nothing was installed — this was a dry run."
+elif [ "$ok" = 1 ]; then
+  say "Installed."
+else
+  say "Installed, with the warnings above."
+fi
 
 if [ -s "$NEXT_STEPS" ]; then
   printf '\n\033[1m==> What to do next\033[0m\n'
