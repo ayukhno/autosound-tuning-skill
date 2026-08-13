@@ -61,6 +61,14 @@ step() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 warn() { printf '  ! %s\n' "$*" >&2; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# Anything the person still has to do lands here instead of being announced mid-log. A single
+# instruction inside eighty lines of install output is an instruction nobody carries out: the
+# `claude auth login` line was printed and lost on a real first install (2026-08-13). One record
+# per step: first line is the sentence, lines starting with ">" are commands to copy.
+NEXT_STEPS="$(mktemp)"
+trap 'rm -f "$NEXT_STEPS"' EXIT
+next_step() { printf '@@\n' >> "$NEXT_STEPS"; for l in "$@"; do printf '%s\n' "$l" >> "$NEXT_STEPS"; done; }
+
 # macOS ships /usr/bin/git and /usr/bin/python3 as shims that exist whether or not the Command Line
 # Tools behind them do. `command -v` therefore ALWAYS finds them, the "git is not installed" branch
 # below could never fire on a Mac, and a genuinely clean machine failed inside `git clone` instead
@@ -215,8 +223,25 @@ elif [ -d "$SKILL_SRC/.git" ]; then
 else
   say "  installing into $SKILL_SRC, linked from $SKILL_HOME"
   run mkdir -p "$(dirname "$SKILL_HOME")"
-  run git -c advice.detachedHead=false clone --quiet --branch "$SKILL_REF" --depth 1 \
-      "$SKILL_REPO" "$SKILL_SRC"
+  # Not `run`, because this one call needs its stderr filtered. A shallow clone of an ANNOTATED
+  # tag makes git print `warning: refs/tags/vX.Y.Z <sha> is not a commit!` — it is complaining that
+  # the tag OBJECT is not a commit, which is what an annotated tag is. Verified harmless: HEAD
+  # lands on exactly what the tag peels to. Dropped because the word "warning" during a first
+  # install reads as something the person did wrong. Every other line of stderr survives, and a
+  # real failure still stops the script.
+  if [ "$DRY_RUN" = 1 ]; then
+    say "  would run: git clone --branch $SKILL_REF --depth 1 $SKILL_REPO $SKILL_SRC"
+  else
+    _err="$(mktemp)"
+    if git -c advice.detachedHead=false clone --quiet --branch "$SKILL_REF" --depth 1 \
+         "$SKILL_REPO" "$SKILL_SRC" 2>"$_err"; then
+      grep -v 'is not a commit!' "$_err" >&2 || true
+    else
+      cat "$_err" >&2; rm -f "$_err"
+      echo "clone failed — see above" >&2; exit 1
+    fi
+    rm -f "$_err"
+  fi
   if [ "$DRY_RUN" = 0 ]; then
     rm -f "$SKILL_HOME"
     ln -s "$SKILL_SRC/skills/autosound-tuning" "$SKILL_HOME"
@@ -258,11 +283,11 @@ else
   say "  target interpreter: $PY_BIN ($("$PY_BIN" -V 2>&1))"
   if "$PY_BIN" -c 'import sys; sys.exit(0 if sys.prefix != sys.base_prefix else 1)' 2>/dev/null; then
     say "  a virtualenv — installing into it"
-    run "$PY_BIN" -m pip install --quiet -r "$REQS" \
+    run "$PY_BIN" -m pip install --quiet --no-warn-script-location --disable-pip-version-check -r "$REQS" \
       || warn "install failed — see above"
   else
     say "  a system interpreter — installing into your user site, never into /Library"
-    run "$PY_BIN" -m pip install --quiet --user -r "$REQS" \
+    run "$PY_BIN" -m pip install --quiet --user --no-warn-script-location --disable-pip-version-check -r "$REQS" \
       || warn "install failed — see above"
   fi
 fi
@@ -290,10 +315,15 @@ if [ "$MODE" = "tcc" ]; then
     run sh -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'
     export PATH="$HOME/.local/bin:$PATH"
   else
-    say "  Skipped — TCC cannot be installed without it. The skill above still works."
-    exit 0
+    # Was `exit 0`, which threw away the checks AND the next-steps list: someone who declined uv
+    # ended up with a working skill, no confirmation of it, and no idea what to do (2026-08-13).
+    # Declining the app is not a reason to stop talking to them — degrade to the terminal install.
+    say "  Skipped — TCC needs it. Carrying on with the method alone, which is fully usable."
+    MODE="terminal"
   fi
+fi
 
+if [ "$MODE" = "tcc" ]; then
   step "Tuning Command Center"
   # `--python` is not optional here. Without it `uv tool install` used the system interpreter —
   # 3.9.6 on a stock macOS — and refused with "does not satisfy Python>=3.11", which reads as a
@@ -308,7 +338,12 @@ if [ "$MODE" = "tcc" ]; then
 
   if [ "$(uname -s)" = "Darwin" ]; then
     step "A double-clickable app"
-    builder="$(cd "$(dirname "$0")" && pwd)/scripts/make-macos-app.sh"
+    # NOT relative to $0: under `curl … | bash` that is "bash", so dirname gives whatever folder
+    # the person happened to be standing in and the bundle was silently skipped for everyone who
+    # installed the recommended way (found on a clean M1, 2026-08-13 — it looked for
+    # ~/Projects/scripts/make-macos-app.sh). The clone above always has it.
+    builder="$SKILL_SRC/scripts/make-macos-app.sh"
+    [ -f "$builder" ] || builder="$(cd "$(dirname "$0")" 2>/dev/null && pwd)/scripts/make-macos-app.sh"
     if [ "$DRY_RUN" = 1 ]; then
       say "  would build ~/Applications/Autosound TCC.app"
     elif [ -x "$builder" ] && [ -n "$TCC_BIN" ]; then
@@ -339,10 +374,18 @@ elif [ "$DRY_RUN" = 0 ]; then
   ok=0
 fi
 if [ "$MODE" = "tcc" ] && [ "$DRY_RUN" = 0 ]; then
-  if have autosound-tcc || [ -x "$HOME/.local/bin/autosound-tcc" ]; then
+  TCC_AT="${UV_TOOL_BIN_DIR:-$HOME/.local/bin}/autosound-tcc"
+  if have autosound-tcc; then
     say "  ✓ autosound-tcc installed"
+  elif [ -x "$TCC_AT" ]; then
+    # It used to say "✓ installed" here. It is installed, and typing its name still answers
+    # "command not found", which is a worse first minute than an honest warning.
+    warn "autosound-tcc is installed at $TCC_AT but that folder is not on your PATH."
+    next_step "Let your shell find the app. Run this once, then open a new terminal:" \
+              ">echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.zshrc"
+    ok=0
   else
-    warn "autosound-tcc is not on PATH — uv may need: uv tool update-shell (then a new terminal)"
+    warn "autosound-tcc is not installed"
     ok=0
   fi
 fi
@@ -352,12 +395,17 @@ if have claude; then
   if claude auth status 2>/dev/null | grep -q '"loggedIn": *true'; then
     say "  ✓ claude is signed in"
   else
-    warn "claude is installed but NOT signed in — run \`claude auth login\` (or just \`claude\`)."
-    warn "this is the one step that cannot be automated: the session is yours, not this tool's."
+    warn "claude is installed but not signed in."
+    next_step "Sign in to Claude. This is the one step nothing can do for you: the session is" \
+              "yours, not this tool's." \
+              ">claude auth login"
     ok=0
   fi
 else
   warn "claude is not installed; nothing can run a session without it"
+  next_step "Install Claude Code, then sign in:" \
+            ">curl -fsSL https://claude.ai/install.sh | sh" \
+            ">claude auth login"
   ok=0
 fi
 
@@ -366,15 +414,49 @@ fi
 if have agy || have omp || have gemini; then
   say "  ✓ a reviewer route is available ($(for b in agy omp gemini; do have $b && printf '%s ' $b; done))"
 else
-  say "  – no reviewer CLI found (agy / omp / gemini). Reviews will fall back to the clipboard,"
-  say "    which works; a second vendor reviewing the first is what makes the loop worth having."
+  say "  – no reviewer CLI found. Reviews fall back to the clipboard, which works."
+  next_step "Add a second AI as reviewer, when you have a spare hour. One model proposing and a" \
+            "different vendor's arguing is what makes this method worth running; Gemini is the" \
+            "one it is built around. Setup, and the omp route if you prefer it:" \
+            ">open ~/.claude/skills/autosound-tuning/references/tooling/setup-critic-channel.md"
+fi
+
+# REW is not ours to install, but it is the one thing without which nothing measures. A closed REW
+# at install time is normal, so this is worded as a reminder rather than a fault.
+if ! curl -fsS --max-time 2 -o /dev/null http://localhost:4735/version 2>/dev/null; then
+  next_step "Switch on REW's API — nothing can read a measurement without it. In REW open" \
+            "Preferences → API and tick \"Start the API when REW starts\", so it is on every" \
+            "time. That panel then reads \"API server is running on port 4735\"."
+fi
+
+next_step "Optional, and worth it: a free GitHub account. Your project folder is weeks of" \
+          "decisions — the ledger, the journal, the config backups — and the skill offers to" \
+          "keep it in a private repository when you start one. The sweeps stay on your disk."
+
+
+# The first tune is a step like any other, and it goes last so the list ends where the person
+# actually wants to be.
+if [ "$MODE" = "tcc" ]; then
+  next_step "Start. Make a folder for the car — everything about it lives there — and open it:" \
+            ">mkdir -p ~/Autosound/my-car" \
+            ">autosound-tcc --project-dir ~/Autosound/my-car" \
+            "Then say what you want, in the panel on the right, in any language:" \
+            "\"let's tune this car from scratch\"."
+else
+  next_step "Start. Make a folder for the car — everything about it lives there — and open it:" \
+            ">mkdir -p ~/Autosound/my-car && cd ~/Autosound/my-car" \
+            ">claude" \
+            "Then say what you want, in any language: \"tune a new car from scratch\"."
 fi
 
 say ""
-if [ "$ok" = 1 ]; then
-  say "Done. Open a project folder and run:"
-  [ "$MODE" = "tcc" ] && say "    autosound-tcc --project-dir ." || true
-  say "    claude          # then ask it to tune your car"
-else
-  say "Finished with the warnings above — read them before starting a session."
+if [ "$ok" = 1 ]; then say "Installed."; else say "Installed, with the warnings above."; fi
+
+if [ -s "$NEXT_STEPS" ]; then
+  printf '\n\033[1m==> What to do next\033[0m\n'
+  awk '/^@@$/ { n++; first=1; print ""; next }
+       first == 1 { printf "  %d. %s\n", n, $0; first=0; next }
+       /^>/ { printf "         %s\n", substr($0, 2); next }
+       { printf "     %s\n", $0 }' "$NEXT_STEPS"
+  printf '\n'
 fi
