@@ -478,8 +478,17 @@ fi
 
 # The reviewer is a second model on purpose — cross-vendor review is the point — but it is
 # optional and it is not this script's to install. Reported, never arranged.
-if have agy || have omp || have gemini; then
-  say "  ✓ a reviewer route is available ($(for b in agy omp gemini; do have $b && printf '%s ' $b; done))"
+# Same blindness as uv had: a reviewer sitting in ~/.local/bin while that folder is off PATH is
+# not a working reviewer, because the skill invokes it by bare name — but "none found" is the
+# wrong thing to tell someone who installed one. Distinguish the two.
+reviewers_on_path="$(for b in agy omp gemini; do have "$b" && printf '%s ' "$b"; done)"
+reviewers_off_path="$(for b in agy omp gemini; do have "$b" || { [ -x "$HOME/.local/bin/$b" ] && printf '%s ' "$b"; }; done)"
+if [ -n "$reviewers_on_path" ]; then
+  say "  ✓ a reviewer route is available ($reviewers_on_path)"
+elif [ -n "$reviewers_off_path" ]; then
+  warn "$(printf '%s' "$reviewers_off_path")is installed in ~/.local/bin, which is not on your PATH,"
+  warn "so nothing can call it. The PATH step below fixes this and the app in one line."
+  PATH_FIX_NEEDED=1
 else
   say "  – no reviewer CLI found. Reviews fall back to the clipboard, which works."
   next_step "Add a second AI as reviewer, when you have a spare hour. One model proposing and a" \
