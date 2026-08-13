@@ -80,19 +80,27 @@ fi
 # dry (agy Starter: weekly Flash+Pro group limit); the fallback prints a warning
 # because a weak round reads like a strong one. Override per role via
 # GEMINI_CRITIC_MODEL / GEMINI_ADVISOR_MODEL.
-# ⚠️ Model NAMES drift. `agy models` moved from display labels ("Gemini 3.1 Pro
-# (High)") to slug ids ("gemini-3.1-pro-high"); both forms were accepted as of
-# 2026-08-01. If a call returns empty, list the current names first.
+# ⚠️ Model NAMES drift, and the drift finished. `agy models` prints two columns —
+# the slug id on the left, the display label on the right — and BOTH were accepted
+# until they were not. On agy 1.1.12 the label is rejected outright:
+#
+#   Error: invalid model selection (--model "Gemini 3.5 Flash (Medium)"):
+#   model … is not recognized as a known model or custom model in settings
+#
+# even though that exact label is what `agy models` shows. Slug ids only, then
+# (found on a clean install, 2026-08-13). `agy models` remains the way to check;
+# as of that date it also offers gemini-3.6-flash-* , which is newer than the
+# advisor default here and has not been used for a tune.
 gemini_default_model() {
   case "$GEMINI_FLAVOR" in
     gemini) echo "gemini-2.5-flash" ;;
-    *)      echo "Gemini 3.5 Flash (Medium)" ;;
+    *)      echo "gemini-3.5-flash-medium" ;;
   esac
 }
 gemini_default_critic_model() {
   case "$GEMINI_FLAVOR" in
     gemini) echo "gemini-2.5-pro" ;;
-    *)      echo "Gemini 3.1 Pro (High)" ;;
+    *)      echo "gemini-3.1-pro-high" ;;
   esac
 }
 
@@ -188,6 +196,13 @@ gemini_doctor() {
     out="$(_run_model "$(gemini_default_model)" "$sf" || true)"; rm -f "$sf"
     if [[ -z "${out//[[:space:]]/}" ]]; then echo "✗ smoke: EMPTY → quota exhausted (agy weekly Starter tier?) or lost auth. agy: run 'agy' in a REAL terminal to log in / check the weekly countdown. gemini: set GEMINI_API_KEY (the OAuth tier is deprecated)."; ok=0
     elif _is_quota_error "$out"; then echo "✗ smoke: model/quota error → $(printf '%s' "$out" | head -1)"; ok=0
+    # The smoke asked for exact words; anything else is a failure, however cheerful it looks.
+    # This used to pass ANY non-empty reply, so `Error: invalid model selection …` was reported
+    # as "✓ smoke: Error: …" in the same run that ended with ISSUES ABOVE (2026-08-13).
+    elif ! printf '%s' "$out" | grep -qi 'channel works'; then
+      echo "✗ smoke: the reviewer answered, but not with what it was asked for →"
+      printf '%s' "$out" | head -3 | sed 's/^/    /'
+      ok=0
     else echo "✓ smoke: $(printf '%s' "$out" | head -1)"; fi
   fi
   echo "== $([[ $ok = 1 ]] && echo 'ALL GOOD ✓' || echo 'ISSUES ABOVE ✗ — fix and re-run --doctor') =="
