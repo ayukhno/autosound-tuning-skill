@@ -42,6 +42,14 @@ SKILL_SRC="${HOME}/.claude/skills/.autosound-tuning-src"
 MODE=""
 UNINSTALL=0
 REMOVE_ALL=0
+# Saved before anything is installed: the uv step exports ~/.local/bin into THIS script's PATH so
+# the rest of the run can call what it just installed. That made the summary print "✓
+# autosound-tcc installed" to somebody whose own shell could not find it, because the check was
+# asking the wrong PATH (2026-08-13).
+PATH_AS_INHERITED="$PATH"
+user_shell_sees() {
+  case ":$PATH_AS_INHERITED:" in *:"$1":*) return 0 ;; *) return 1 ;; esac
+}
 DRY_RUN=0
 SKILL_REF=""
 ASSUME_YES=0
@@ -119,6 +127,7 @@ confirm() {
     warn "re-run with --yes to accept, or without a pipe to be asked"
     return 1
   fi
+  say "  asking: $1"
   printf '  %s [y/N] ' "$1" > /dev/tty
   read -r answer < /dev/tty
   case "$answer" in [yY]*) return 0 ;; *) return 1 ;; esac
@@ -441,10 +450,11 @@ elif [ "$DRY_RUN" = 0 ]; then
   ok=0
 fi
 if [ "$MODE" = "tcc" ] && [ "$DRY_RUN" = 0 ]; then
-  TCC_AT="${UV_TOOL_BIN_DIR:-$HOME/.local/bin}/autosound-tcc"
-  if have autosound-tcc; then
+  TCC_DIR="${UV_TOOL_BIN_DIR:-$HOME/.local/bin}"
+  TCC_AT="$TCC_DIR/autosound-tcc"
+  if have autosound-tcc && user_shell_sees "$TCC_DIR"; then
     say "  ✓ autosound-tcc installed"
-  elif [ -x "$TCC_AT" ]; then
+  elif [ -x "$TCC_AT" ] || have autosound-tcc; then
     # It used to say "✓ installed" here. It is installed, and typing its name still answers
     # "command not found", which is a worse first minute than an honest warning.
     warn "autosound-tcc is installed at $TCC_AT but that folder is not on your PATH."
@@ -481,8 +491,12 @@ fi
 # Same blindness as uv had: a reviewer sitting in ~/.local/bin while that folder is off PATH is
 # not a working reviewer, because the skill invokes it by bare name — but "none found" is the
 # wrong thing to tell someone who installed one. Distinguish the two.
-reviewers_on_path="$(for b in agy omp gemini; do have "$b" && printf '%s ' "$b"; done)"
-reviewers_off_path="$(for b in agy omp gemini; do have "$b" || { [ -x "$HOME/.local/bin/$b" ] && printf '%s ' "$b"; }; done)"
+# The trailing `true` is not decoration. When none of the three is present the loop's last command
+# fails, the substitution inherits that status, and `set -e` kills the script mid-summary — which
+# is exactly what happened on a machine with no reviewer installed: the log ended after the claude
+# line and the whole next-steps list was never printed (2026-08-13). Second time today.
+reviewers_on_path="$(for b in agy omp gemini; do have "$b" && printf '%s ' "$b"; done; true)"
+reviewers_off_path="$(for b in agy omp gemini; do have "$b" || { [ -x "$HOME/.local/bin/$b" ] && printf '%s ' "$b"; }; done; true)"
 if [ -n "$reviewers_on_path" ]; then
   # Found, not verified, and the difference is not pedantic: a real machine carried an `agy` that
   # was three lines of `exec gemini "$@"` with no gemini installed behind it, and this line called
