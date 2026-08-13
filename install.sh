@@ -90,6 +90,37 @@ find_uv() {
   [ -n "$UV" ]
 }
 
+# Telling somebody to paste a line into a file they have never opened is not help, it is a
+# handoff. The line is written here instead. What CANNOT be done from a child process is change
+# the PATH of the terminal that launched it — no script can — so the next step says how to pick it
+# up rather than pretending it already took effect.
+PATH_STEP_ADDED=0
+add_to_path() {
+  _dir="$1"
+  [ "$PATH_STEP_ADDED" = 1 ] && return 0   # the app and claude share ~/.local/bin; say it once
+  PATH_STEP_ADDED=1
+  case "$SHELL" in
+    */bash) _rc="$HOME/.bash_profile" ;;
+    */fish) _rc="" ;;   # fish has its own syntax and its own config; not ours to guess at
+    *)      _rc="$HOME/.zshrc" ;;
+  esac
+  if [ -z "$_rc" ]; then
+    next_step "Add $_dir to your PATH — your shell is fish, whose config this script will not" \
+              "guess at:" \
+              ">fish_add_path $_dir"
+    return
+  fi
+  if [ -f "$_rc" ] && grep -qF '.local/bin' "$_rc" 2>/dev/null; then
+    say "  $_rc already mentions .local/bin — not touching it"
+  else
+    say "  adding $_dir to $_rc"
+    run sh -c "printf '\n# added by the autosound installer\nexport PATH=\"\$HOME/.local/bin:\$PATH\"\n' >> '$_rc'"
+  fi
+  next_step "Pick up the change. A script cannot alter the PATH of the terminal that started it," \
+            "so this shell still cannot find what was installed — open a new terminal, or run:" \
+            ">source $_rc"
+}
+
 next_step() { printf '@@\n' >> "$NEXT_STEPS"; for l in "$@"; do printf '%s\n' "$l" >> "$NEXT_STEPS"; done; }
 
 # macOS ships /usr/bin/git and /usr/bin/python3 as shims that exist whether or not the Command Line
@@ -171,6 +202,12 @@ if [ "$UNINSTALL" = 1 ]; then
 
   APP="$HOME/Applications/Autosound TCC.app"
   if [ -d "$APP" ]; then say "  removing $APP"; run rm -rf "$APP"; fi
+  # The Desktop shortcut goes with it, or it stays behind pointing at nothing. Only if it is a
+  # symlink — this script only ever makes one of those, and a real folder there is somebody else's.
+  if [ -L "$HOME/Desktop/Autosound TCC.app" ]; then
+    say "  removing the Desktop shortcut"
+    run rm -f "$HOME/Desktop/Autosound TCC.app"
+  fi
 
   # Without --all these stay, and each for a reason: the Python packages are shared with anything
   # else using that interpreter, Claude Code belongs to its own installer and is probably used for
@@ -274,6 +311,10 @@ if [ "$DRY_RUN" = 0 ]; then
     if ! have uv; then say "    • uv, and a Python of its own   astral.sh/uv/install.sh"; fi
     say "    • the desktop app               github.com/ayukhno/autosound-tcc"
   fi
+  if [ "$MODE" = "tcc" ]; then
+    say "    • a shortcut on your Desktop     pointing at the app it builds"
+  fi
+  say "    • one line in your shell profile so your shell can find what it installed"
   say ""
   say "  It touches no project folder and logs you in nowhere."
   if confirm "Go ahead?"; then
@@ -456,6 +497,13 @@ if [ "$MODE" = "tcc" ]; then
       say "  would build ~/Applications/Autosound TCC.app"
     elif [ -x "$builder" ] && [ -n "$TCC_BIN" ]; then
       run "$builder" "$HOME/Applications" "$TCC_BIN"
+      # A symlink rather than a Finder alias: it double-clicks the same, and `rm` removes it,
+      # where an alias is an opaque blob only Finder can make sense of. The person asked for an
+      # icon they can see without opening a folder first, and ~/Applications is not on the Desktop.
+      if [ "$DRY_RUN" = 0 ] && [ -d "$HOME/Desktop" ] && [ ! -e "$HOME/Desktop/Autosound TCC.app" ]; then
+        ln -s "$HOME/Applications/Autosound TCC.app" "$HOME/Desktop/Autosound TCC.app" 2>/dev/null \
+          && say "  and a shortcut on your Desktop"
+      fi
     else
       warn "skipped: $([ -n "$TCC_BIN" ] && echo "no $builder" || echo "autosound-tcc not found")"
     fi
@@ -490,18 +538,28 @@ if [ "$MODE" = "tcc" ] && [ "$DRY_RUN" = 0 ]; then
     # It used to say "✓ installed" here. It is installed, and typing its name still answers
     # "command not found", which is a worse first minute than an honest warning.
     warn "autosound-tcc is installed at $TCC_AT but that folder is not on your PATH."
-    next_step "Let your shell find the app. Run this once, then open a new terminal:" \
-              ">echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.zshrc"
+    add_to_path "$TCC_DIR"
     ok=0
   else
     warn "autosound-tcc is not installed"
     ok=0
   fi
 fi
-if have claude; then
+# Resolved the same way as the app, and for the same reason: in --terminal mode nothing exports
+# ~/.local/bin into this script's PATH, so `have claude` was false immediately after the official
+# installer had put claude there, and the summary said "claude is not installed" about a Claude it
+# had just watched install itself.
+CLAUDE_BIN="$(command -v claude 2>/dev/null || true)"
+if [ -z "$CLAUDE_BIN" ] && [ -x "$HOME/.local/bin/claude" ]; then CLAUDE_BIN="$HOME/.local/bin/claude"; fi
+if [ -n "$CLAUDE_BIN" ]; then
+  if ! user_shell_sees "$(dirname "$CLAUDE_BIN")"; then
+    warn "claude is installed at $CLAUDE_BIN but that folder is not on your PATH."
+    add_to_path "$(dirname "$CLAUDE_BIN")"
+    ok=0
+  fi
   # The only account this whole thing needs. GitHub is not one: both repositories are public and
   # nothing here pushes, so `git clone https://…` is anonymous and there is no token to arrange.
-  if claude auth status 2>/dev/null | grep -q '"loggedIn": *true'; then
+  if "$CLAUDE_BIN" auth status 2>/dev/null | grep -q '"loggedIn": *true'; then
     say "  ✓ claude is signed in"
   else
     warn "claude is installed but not signed in."
