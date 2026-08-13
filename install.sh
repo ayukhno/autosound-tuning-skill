@@ -111,17 +111,20 @@ add_to_path() {
   # Per DIRECTORY, not once overall. Homebrew puts the reviewer in /opt/homebrew/bin while the
   # app and claude are in ~/.local/bin, and a single-shot guard meant the second directory was
   # silently never added — `agy` installed and then not found (2026-08-13).
-  if [ -f "$_rc" ] && grep -qF "$_dir" "$_rc" 2>/dev/null; then
-    say "  $_rc already mentions $_dir — not touching it"
+  case "$_dir" in
+    "$HOME"/*) _written="\$HOME/${_dir#$HOME/}" ;;
+    *)         _written="$_dir" ;;
+  esac
+  # Look for what we WRITE, not for the expanded path. The line says $HOME/.local/bin; searching
+  # for /Users/someone/.local/bin never matched it, so a second caller wrote the same line again
+  # (seen twice in one run, 2026-08-13).
+  if [ -f "$_rc" ] && { grep -qF "$_written" "$_rc" 2>/dev/null || grep -qF "$_dir" "$_rc" 2>/dev/null; }; then
+    say "  $_rc already has $_dir — not touching it"
   else
     # Write the directory we were ASKED about, not a hardcoded one — announcing
     # "adding /opt/homebrew/bin" and then writing ~/.local/bin is how a fix becomes a lie.
     # Kept as literal $HOME when it is under the home directory, so the profile stays portable
     # between machines with different usernames.
-    case "$_dir" in
-      "$HOME"/*) _written="\$HOME/${_dir#$HOME/}" ;;
-      *)         _written="$_dir" ;;
-    esac
     say "  adding $_dir to $_rc"
     run sh -c "printf '\n# added by the autosound installer\nexport PATH=\"$_written:\$PATH\"\n' >> '$_rc'"
   fi
@@ -535,7 +538,10 @@ if [ "$WANT_REVIEWER" = 1 ]; then
     # install down with it; the check below decides what to say.
     say "  installing Homebrew first — it will ask for your admin password"
     if [ "$DRY_RUN" = 0 ]; then
-      sh -c '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" < /dev/tty' || true
+      # `printf '\n' |` answers Homebrew's own "Press RETURN to continue" — a keystroke asking
+      # again for something already consented to two questions ago. sudo does not read the
+      # password from stdin, it opens /dev/tty itself, so the prompt still works.
+      sh -c 'printf "\n" | /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"' || true
     else
       say "  would run: /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
     fi
@@ -554,9 +560,17 @@ if [ "$WANT_REVIEWER" = 1 ]; then
     fi
     # Homebrew writes /etc/paths.d/homebrew, which macOS only reads in a LOGIN shell — so the
     # reviewer can be installed and still not be found in the window it was installed from.
-    for _d in /opt/homebrew/bin /usr/local/bin; do
-      if [ -x "$_d/agy" ] && ! user_shell_sees "$_d"; then add_to_path "$_d"; fi
-    done
+    _agy="$(command -v agy 2>/dev/null || true)"
+    if [ -n "$_agy" ]; then
+      _agydir="$(dirname "$_agy")"
+      if user_shell_sees "$_agydir"; then
+        say "  your shell already looks in $_agydir"
+      else
+        add_to_path "$_agydir"
+      fi
+    else
+      warn "the reviewer installed but `agy` is not on this script's PATH either — odd; report it"
+    fi
     next_step "Sign the reviewer in — once, and it needs one thing from you first: the Project" \
               "ID (not the name, not the number) from aistudio.google.com/app/apikey. Then run" \
               "this, paste the ID, and open the link it prints:" \
