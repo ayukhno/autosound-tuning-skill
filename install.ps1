@@ -13,6 +13,14 @@
 # executed on a Windows machine. It prints what it is about to do at every step so that a first
 # run shows exactly where it stops. Please report where it does.
 #
+# BEHIND install.sh SINCE 2026-08-17. The macOS script was rebuilt into two blocks — one consent
+# screen (everything is the default; --terminal / --no-reviewer / --github opt out or in), an
+# unattended middle, and a sign-in block at the end that runs `claude auth login` and offers the
+# reviewer's and GitHub's sign-ins — and it no longer uses Homebrew: agy comes from
+# `irm https://antigravity.google/cli/install.ps1 | iex`, omp from `irm https://omp.sh/install.ps1
+# | iex`, gh from its GitHub release. This file still describes the older flow. Mirror the new one
+# before running it anywhere; the shape to copy is in install.sh's header.
+#
 # Usage:
 #   .\install.ps1                     ask which of the two
 #   .\install.ps1 -Terminal           the skill only
