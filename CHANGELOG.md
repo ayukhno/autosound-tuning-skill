@@ -2,6 +2,58 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
+## [v3.0.4] — 2026-08-17 · tagged, not yet the default install
+
+The installer, rebuilt around the person installing rather than around the packages. The one-liner
+executes `install.sh` from `main`, so that part is live for everyone the moment it is pushed; the
+app-builder fix below travels with this tag, because the clone is the tag.
+
+### Changed
+
+- **`install.sh` asks everything at the start and does the sign-ins at the end — two blocks, nothing
+  in between.** A real first install (2026-08-13) had twelve points where the person had to act,
+  spread over the whole run: three questions, a RETURN and an admin password twelve minutes in
+  (Homebrew), and seven "what to do next" steps. Now: one screen that names every download and
+  asks once, the Mac password right after it (only when Apple's Command Line Tools are missing),
+  and — after ten to twenty unattended minutes — a sign-in block that runs `claude auth login` in
+  the browser for you and offers the reviewer's and GitHub's sign-ins on Enter. `--yes` prints the
+  sign-ins as commands instead of running them.
+- **Homebrew is gone from the install.** Google publishes `agy` through its own installer
+  (`antigravity.google/cli/install.sh` → `~/.local/bin`, quarantine cleared), and `omp` through
+  `omp.sh/install.sh`; neither needed a package manager, and Homebrew was the only reason the
+  install stopped for a password, needed an administrator, or put a second directory on PATH.
+  Every tool now lands in `~/.local/bin`, so one PATH line covers all of them.
+- **Apple's Command Line Tools install without a dialog and without a second run.** On a Mac
+  without them the old script exited with "run `xcode-select --install` and run this again". They
+  are now installed the way Homebrew's installer does it — `softwareupdate` with the one password
+  asked at the start, kept alive for the download — and the script continues. Non-administrators
+  get Apple's own installer window and the script waits for it instead of exiting.
+- **Everything is the default; opting out is a flag.** No "which size?" question: a first install
+  gets the method, the TCC app and the Gemini reviewer, because that is the configuration the
+  method is written for. `--terminal` leaves the app out, `--no-reviewer` the reviewer, and the
+  consent screen says so before asking. `omp` is no longer installed by default (`--with-omp`): it
+  is the metered route, offered as an experiment, and the recommended pair does not use it.
+- **One optional question, up front: back projects up to GitHub?** (SCR-049 §2.) Yes installs
+  GitHub's `gh` straight from its releases and offers `gh auth login --web` in the sign-in block;
+  the closing advice is a how-to, not a claim that the method already scripts the backup.
+- **Every message re-read as a first-time reader.** Paths print as `~/…`; the reviewer's installer
+  is kept quiet unless it fails (its ordinary log lines all begin "ERROR: logging before
+  google.Init"); the app installer prints one line instead of thirty-six package names; the
+  "Start" screen says what to click and what to type, and the terminal path says to open a NEW
+  window instead of explaining PATH.
+- **`--uninstall` is manifest-driven.** The script records what it installed
+  (`~/.local/share/autosound/installer-manifest`) and `--uninstall --all` removes exactly that —
+  agy, gh, omp only when they were ours — plus Claude Code's whole native install
+  (`~/.local/share/claude`, `~/.claude.json`), uv's cache, and TCC's own settings and log, which
+  a "reset the test machine" run left behind before.
+
+### Fixed
+
+- **The app bundle lost its icon whenever uv wrote a `#!/bin/sh` trampoline instead of a python
+  shebang** (long home paths, folders with spaces): `make-macos-app.sh` read the shebang alone,
+  found `/bin/sh`, and gave up. It now reads the trampoline's `exec` line and, failing that, asks
+  `uv tool dir`. This tag is what carries it to installs — the builder comes from the clone.
+
 ## [v3.0.3] — 2026-08-13 · tagged, not yet the default install
 
 What the first from-scratch install on a second Mac found. Every item below was a defect nobody
