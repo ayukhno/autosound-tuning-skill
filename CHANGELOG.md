@@ -10,8 +10,9 @@ All notable changes to the autosound-tuning skill. The skill is co-developed wit
   rebuilt `install.sh` — the same two blocks, the same defaults, the same flags in PowerShell
   spelling (`-Terminal`, `-NoReviewer`, `-GitHub`, `-WithOmp`, `-DryRun`, `-Yes`, `-Uninstall
   -All`, plus `-Log <file>` for a transcript) — and it was run on Windows 11 (25H2, a Parallels
-  VM) on 2026-08-17: a fresh unattended install and `-Uninstall -All`, twice over, transcripts read
-  line by line. What Windows needs that macOS does not: **Git for Windows** (git for the method,
+  VM) on 2026-08-17: a fresh unattended install and `-Uninstall -All`, twice over, then the
+  interactive form with all three sign-ins (Claude in the browser, agy's TUI, gh's device code) —
+  transcripts read line by line. What Windows needs that macOS does not: **Git for Windows** (git for the method,
   Git Bash for Claude Code's Bash tool), through winget or the official installer — the one
   permission (UAC) dialog, once, machine-wide; **a real `python3`**, because Windows ships only a
   Store shortcut by that name — uv installs Python 3.12 with `--default`, so `python3.exe` sits in

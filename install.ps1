@@ -24,9 +24,9 @@
 # a skill directory it did not create.
 #
 # Run on Windows 11 (25H2, a Parallels VM) on 2026-08-17: a fresh unattended install and
-# -Uninstall -All, twice over, transcripts read line by line. Not yet exercised there: the
-# interactive sign-in block (Enter to open the browser), and REW detection on a machine that has
-# REW. Windows PowerShell 5.1 (what every Windows ships) or PowerShell 7 -- no syntax newer than
+# -Uninstall -All, twice over, then the interactive form with all three sign-ins (Claude in the
+# browser, agy's TUI, gh's device code) -- transcripts read line by line. Not yet exercised there:
+# REW detection on a machine that has REW. Windows PowerShell 5.1 (what every Windows ships) or PowerShell 7 -- no syntax newer than
 # 5.1 is used here on purpose. Run it through install.cmd (double-click), or:
 #
 #   irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/main/install.ps1 | iex
@@ -273,6 +273,7 @@ $Arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "amd64" 
 
 # -- uninstall --------------------------------------------------------------------------------
 if ($Uninstall) {
+    Sync-ProcessPath
     Step "Removing what this script installed"
     Say "Your PROJECT FOLDERS are never touched -- not by this, not with -Yes, not ever."
     Say "They hold measurements that took hours in a car and cannot be reproduced."
@@ -379,6 +380,10 @@ if ($Uninstall) {
 # =============================================================================================
 Step "Autosound tuning -- installer"
 
+# See the machine as a NEW window would: a PowerShell started from a console that was open before
+# an earlier install inherits that console's PATH, and reported Git for Windows as missing --
+# and promised a permission dialog -- on a machine that had it (VM, third run, 2026-08-17).
+Sync-ProcessPath
 $HaveGit    = [bool](Have git)
 $HaveClaude = [bool](Find-Bin claude)
 $HaveUv     = [bool](Find-Bin uv)
@@ -860,7 +865,8 @@ if ($DryRun) {
     if ($GhBin) {
         if (Test-Quiet { & $GhBin auth status }) { Say "$n. GitHub: OK   signed in" }
         else {
-            Say "$n. GitHub -- optional. Your browser opens with a one-time code; sign in and paste it."
+            Say "$n. GitHub -- optional. Your browser opens with a one-time code: sign in, paste it, and answer"
+            Say "   Yes when gh asks to authenticate Git with your GitHub credentials."
             if ($interactive -and (Offer "Enter = sign in now / s = later:")) {
                 & $GhBin auth login --hostname github.com --git-protocol https --web
             } else { $GhSkipped = $true; Say "   Later, in a terminal:  gh auth login --web" }
