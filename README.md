@@ -34,8 +34,8 @@ then Amateur 5000 in July with the skill itself and my own ears.
 > [!NOTE]
 > **Prefer a window to a terminal?** [TCC](https://github.com/ayukhno/autosound-tcc), the companion
 > desktop app, runs this same method in a desktop window: the DSP tree, your REW curves, the plan,
-> and the AI in a side panel. It installs from the same command below. It is early, and the method
-> in a terminal is the proven path.
+> and the AI in a side panel. The one line below installs it too, unless you say otherwise. It is
+> early, and the method in a terminal is the proven path.
 
 ## Table of contents
 
@@ -67,48 +67,71 @@ a **Generator ↔ Critic ↔ Arbiter** review loop: one AI proposes, another cha
 
 ## What you need
 
-**A clean machine is the expected case.** The installer below brings Claude Code, Python and the
-method with it. Nothing has to be installed first.
+**A clean machine is the expected case.** The installer below brings Claude Code, Python, the
+method, the desktop app and the Gemini reviewer with it. Nothing has to be installed first.
 
 Three things it cannot get for you, because they are yours:
 
-- **[REW](https://www.roomeqwizard.com/)**, with its API switched on. Install it, open
-  *Preferences → API*, and tick **Start the API when REW starts** so it comes up with REW every
-  time. That same panel then reads *"API server is running on port 4735"*, which is the whole
-  check. Everything the skill knows about your car arrives through it.
+- **[REW](https://www.roomeqwizard.com/)**, with its API switched on. Everything the skill knows
+  about your car arrives through it. On macOS: open *Preferences → API*, tick **Start the API when
+  REW starts** and press **Start server**; the panel then reads *"API server is running on port
+  4735"*, and from then on it comes up with REW. On Windows that box does not exist, so the
+  installer puts a **REW (API on)** shortcut on your Desktop that starts REW with the API on —
+  start REW from it.
 - **A calibrated measurement microphone, and a DSP you can type into.** Any processor works. For
   phase and timing, XLR with a physical loopback beats USB:
   [why, in the FAQ](FAQ.md#measuring-phase--time-alignment-umik-1-vs-xlr-microphones).
-- **A paid Claude subscription.** See
+- **A paid Claude subscription (Pro or Max).** See
   [the plans and what a session costs](FAQ.md#subscription-options-quotas--budgets-as-of-july-2026).
 
-A second AI as reviewer is optional and is where most of the value comes from. Without one the
-skill runs solo and tells you so, and you can add one later.
+A second AI as reviewer is optional and is where most of the value comes from. The installer
+brings Google's `agy` for it and offers the sign-in at the end; without one the skill runs solo and
+tells you so, and you can add one later.
 
 **A GitHub account is worth having, and it is not needed to install.** Installing asks you to log
 in nowhere, and both repositories are public. The reason to have one is your own project, and it
 is not the raw sweeps: those run 16 to 112 MB apiece, they stay on your disk, and if you ever
-needed them again you would re-measure. What the method commits is everything you *concluded* —
-the ledger of every crossover, delay, gain and filter, the journal of how you got there, the DSP
+needed them again you would re-measure. What is worth keeping is everything you *concluded* — the
+ledger of every crossover, delay, gain and filter, the journal of how you got there, the DSP
 config backups that restore the tune, the target curves and the analysis notes. Small files, and
-no amount of re-measuring brings them back. So it sets up a git backup when you start a project
-and keeps feeding it; pointing that at a **private** repository is the cheapest insurance there is
-against a dead disk. A free account covers it.
+no amount of re-measuring brings them back. The installer asks whether you want them backed up to
+a **private** GitHub repository, and if so puts GitHub's `gh` in place and signs it in; the backup
+itself happens when you tell the AI to back the project up — it knows what stays out. A free
+account covers it.
 
 ## Getting started
 
-Install in a terminal, with one line:
+One line installs everything: Claude Code, the method, the
+[TCC desktop app](https://github.com/ayukhno/autosound-tcc) and Gemini as the reviewer. It shows
+what is already on the machine, lists everything it will download and where from, asks once — and
+then runs on its own for ten to twenty minutes. The one interruption comes right after that
+question: on a Mac that has never been used for programming it asks for your Mac password, once,
+for Apple's Command Line Tools; on Windows it shows one permission dialog, for Git. At the end it
+signs you in, in your browser: Claude first (that one is required), then the reviewer and GitHub
+if you want them — each on Enter, or later.
+
+**macOS** — open Terminal (⌘-Space, type "terminal", Enter) and paste:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/main/install.sh | bash
 ```
 
-It asks which of two sizes you want: the method on its own, or the method plus the
-[TCC desktop app](https://github.com/ayukhno/autosound-tcc). Then it lists everything it is about
-to download, and where each piece comes from, and asks once before any of it happens. It installs
-Claude Code too, if you do not have it.
+**Windows** — open PowerShell (Start, type "powershell", Enter) and paste:
 
-Then make a folder for the car, and start:
+```powershell
+irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/main/install.ps1 | iex
+```
+
+To leave something out: `--terminal` (no app), `--no-reviewer` or `--no-github`, after `bash -s --`
+on macOS; on Windows the same three as `-Terminal`, `-NoReviewer`, `-NoGitHub` on the form
+`& ([scriptblock]::Create((irm <that url>))) -Terminal`. Running the same line again updates
+everything; `--uninstall` / `-Uninstall` removes what it installed and never a project folder.
+
+Then start. Make a folder for the car — everything about that car will live in it, so copying the
+folder copies the whole tune — and open it either way:
+
+**In a terminal.** Open a *new* terminal window (the one you installed from cannot see what was
+just installed), then:
 
 ```sh
 mkdir -p ~/Autosound/my-car && cd ~/Autosound/my-car
@@ -120,7 +143,13 @@ claude
 
 *Then start tuning by saying:* **"tune a new car from scratch"**.
 
-Everything about that car lives in that one folder, so copying the folder copies the whole tune.
+**In the app.** Double-click **Autosound TCC** on your Desktop, *Browse…* to the folder (a new,
+empty one is right), pick the models — Claude Opus (SDK) as *AI main*, Gemini Pro (High) as *AI
+critic* — press *Open*, and say the same thing in the panel on the right, in any language:
+*"let's tune this car from scratch"*.
+
+The two are one project, not two: the method writes the project's files and the app reads them,
+so you can work in the window one day and the terminal the next.
 
 > **Triggering: include a car-audio word.** The skill wakes on *what you ask*, so a bare `resume`
 > will not fire it, because it could mean any project. Add one domain word: **"resume my car-audio
