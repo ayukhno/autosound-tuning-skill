@@ -979,6 +979,10 @@ if ($GhIn) {
     Say "* Backing a car's record up to a private GitHub repository is free insurance against a"
     Say "  dead disk. Re-run this with -GitHub when you want it."
 }
+if ($RewApi -and $RewExe -and $RewExe -ne "found") {
+    Say "* Next time, start REW from the `"REW (API on)`" shortcut on your Desktop: on Windows the API"
+    Say "  does not stay on by itself between launches, and that shortcut starts REW with it on."
+}
 Say "* Update everything: run this same install line again."
 
 Step "Where this lives"
