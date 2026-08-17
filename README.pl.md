@@ -18,10 +18,11 @@
 
 > [!TIP]
 > **Nagrody i Osiągnięcia**
-> To podejście zostało stworzone nie tylko dla czystej przyjemności ze słuchania, ale także po to, by wygrywać. Udowodniło już swoją skuteczność w praktyce, przynosząc trzy nagrody:
+> To podejście zostało stworzone nie tylko dla czystej przyjemności ze słuchania, ale także po to, by wygrywać. Udowodniło już swoją skuteczność w praktyce, przynosząc cztery nagrody:
 > * **1 miejsce w klasie EINSTEIGER 5000 na zawodach AYA (30.05.2026, Lemgo)**. Wynik ten został osiągnięty dzięki analizie wykresów i poradom od Gemini.
 > * **1 miejsce w klasie AMATEUR 5000 na zawodach AYA (25.07.2026, Horst)**. Zwycięstwo w kolejnej klasie, osiągnięte przy pomocy tego skilla i własnego słuchu.
-> * **2 miejsce w klasie AMATEUR 5000 na zawodach AYA (15.08.2026, Schmallenberg)** — i tego samego dnia, na tym samym strojeniu, 3 miejsce w SQ Entry Unlimited na EMMA Sound Off 2026. Inny sędzia dźwięku niż w lipcu; jego karta ocen jest wejściem do kolejnej rundy.
+> * **2 miejsce w klasie AMATEUR 5000 na zawodach AYA (15.08.2026, Schmallenberg)**. Inny sędzia dźwięku niż w lipcu; jego karta ocen jest wejściem do kolejnej rundy.
+> * **3 miejsce w SQ Entry Unlimited na EMMA Sound Off 2026 (15.08.2026, Schmallenberg)**. Pierwszy start według regulaminu EMMA, tego samego dnia i na tym samym strojeniu co AYA powyżej.
 > 
 > <p align="left">
 >   <img src="assets/awards/aya-may26-einsteiger5000.jpg" width="100" alt="AYA May 2026 Einsteiger 5000">

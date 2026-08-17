@@ -10,7 +10,7 @@ All notable changes to the autosound-tuning skill. The skill is co-developed wit
 ### ⚠️ Carry into 3.x when the lines are merged
 2.x is frozen; this entry exists so the merge does not lose it. `main` (3.x) has the same "Awards & Achievements" block with two bullets and two images — apply the same three-line change there:
 1. copy `assets/awards/aya-aug26-amateur5000.jpg` and `assets/awards/emma-aug26-entry-unlimited.jpg`;
-2. "two awards" → "three awards" + the third bullet, in `README.md`, `README.uk.md`, `README.de.md`, `README.pl.md`;
+2. "two awards" → "four awards" + the third (AYA) and fourth (EMMA) bullets, in `README.md`, `README.uk.md`, `README.de.md`, `README.pl.md`;
 3. the third and fourth `<img>` (plaque `width="100"`, trophy `width="60"`, each with the `&nbsp;` spacer) after `aya-jul26-amateur5000.jpg`.
 Diff to cherry-pick: the commit that adds this entry on branch `2.x`.
 
