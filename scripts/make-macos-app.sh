@@ -33,11 +33,25 @@ fi
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 
 # The icon belongs to TCC and ships inside its package, so this repository keeps no second copy to
-# fall out of step. Finding it: the console script's shebang names the interpreter `uv` built the
-# tool with, and that interpreter can say where the package landed. Guessing the uv layout with a
-# glob would break the first time uv changes it.
+# fall out of step. Finding it: the console script names the interpreter `uv` built the tool
+# with, and that interpreter can say where the package landed. Guessing the uv layout with a glob
+# would break the first time uv changes it.
+#
+# Two shapes of console script. When the interpreter's path is short and plain, uv writes it as
+# the shebang. When it is long or has awkward characters — a long username, a folder with a space
+# — uv writes a `#!/bin/sh` trampoline whose SECOND line is `'''exec' '<python>' "$0" "$@"`.
+# Reading only the shebang made the icon depend on the length of the home path (found in a
+# sandbox with a long one, 2026-08-17: Resources/ empty, "no icon found").
 ICON_NAME=""
 _py="$(sed -n '1s/^#!//p' "$BIN" 2>/dev/null | awk '{print $1}')"
+case "$_py" in
+  *python*) ;;
+  *) _py="$(sed -n "2s/^'''exec' '\([^']*\)'.*/\1/p" "$BIN" 2>/dev/null)" ;;
+esac
+# Last resort: ask uv itself where its tools live.
+if [ ! -x "$_py" ] && command -v uv >/dev/null 2>&1; then
+  _py="$(uv tool dir 2>/dev/null)/autosound-tcc/bin/python"
+fi
 if [ -x "$_py" ]; then
   _icns="$("$_py" -c 'import autosound_tcc.app as a; print(a.APP_ICNS if a.APP_ICNS.is_file() else "")' 2>/dev/null || true)"
   if [ -n "$_icns" ] && [ -f "$_icns" ]; then
