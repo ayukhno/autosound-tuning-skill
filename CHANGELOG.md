@@ -2,6 +2,33 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
+## [Unreleased]
+
+### Added
+
+- **A Windows installer that has run on Windows.** `install.ps1` is now the mirror of the
+  rebuilt `install.sh` — the same two blocks, the same defaults, the same flags in PowerShell
+  spelling (`-Terminal`, `-NoReviewer`, `-GitHub`, `-WithOmp`, `-DryRun`, `-Yes`, `-Uninstall
+  -All`, plus `-Log <file>` for a transcript) — and it was run on Windows 11 (25H2, a Parallels
+  VM) on 2026-08-17: a fresh unattended install and `-Uninstall -All`, twice over, transcripts read
+  line by line. What Windows needs that macOS does not: **Git for Windows** (git for the method,
+  Git Bash for Claude Code's Bash tool), through winget or the official installer — the one
+  permission (UAC) dialog, once, machine-wide; **a real `python3`**, because Windows ships only a
+  Store shortcut by that name — uv installs Python 3.12 with `--default`, so `python3.exe` sits in
+  `~\.local\bin` at the front of the user PATH; the method's packages into the user site with
+  `--break-system-packages`, since uv marks its Pythons EXTERNALLY-MANAGED and pip refuses even
+  `--user` without it; a junction instead of a symlink for the skill (no Developer Mode); Desktop
+  and Start Menu shortcuts pointing at TCC's new windowed launcher, with TCC's `.ico`. The upstream
+  one-liners (Claude Code, uv, agy, omp) run in a child PowerShell, so an `exit` in their code
+  cannot end this script. `install.cmd` (double-click) is ASCII-only now and passes options through.
+- What the transcripts caught and the script no longer does: stop to ask "Are you sure?" when
+  removing the junction (`Remove-Item` on a junction under Windows PowerShell 5.1; now
+  `Directory.Delete`, which removes the link and never the target); paint red
+  `NativeCommandError` blocks for git's annotated-tag warning, for `gh auth status` when nobody is
+  signed in, and for `import numpy` when it is missing; fail the `gh` download on a machine whose
+  `%TEMP%` is an 8.3 short path PowerShell cannot resolve (downloads now go under
+  `~\.cache\autosound-installer`).
+
 ## [v3.0.4] — 2026-08-17 · tagged, not yet the default install
 
 The installer, rebuilt around the person installing rather than around the packages. The one-liner
