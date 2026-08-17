@@ -18,14 +18,17 @@
 
 > [!TIP]
 > **Auszeichnungen & Erfolge**
-> Dieser Ansatz ist nicht nur für den reinen Hörgenuss gedacht, sondern auch um zu gewinnen. Er hat seine Wirksamkeit in der Praxis bereits bewiesen und zwei Auszeichnungen eingebracht:
+> Dieser Ansatz ist nicht nur für den reinen Hörgenuss gedacht, sondern auch um zu gewinnen. Er hat seine Wirksamkeit in der Praxis bereits bewiesen und drei Auszeichnungen eingebracht:
 > * **1. Platz in der Klasse EINSTEIGER 5000 beim AYA-Wettbewerb (30.05.2026, Lemgo)**. Dieses Ergebnis wurde durch Diagrammanalysen und Ratschläge von Gemini erzielt.
 > * **1. Platz in der Klasse AMATEUR 5000 beim AYA-Wettbewerb (25.07.2026, Horst)**. Ein Sieg in der nächsten Klasse, der mit Hilfe dieses Skills und dem eigenen Gehör errungen wurde.
+> * **2. Platz in der Klasse AMATEUR 5000 beim AYA-Wettbewerb (15.08.2026, Schmallenberg)** — und am selben Tag, mit derselben Abstimmung, 3. Platz in SQ Entry Unlimited beim EMMA Sound Off 2026. Ein anderer Klangjuror als im Juli; seine Bewertungskarte ist der Ausgangspunkt für die nächste Runde.
 > 
 > <p align="left">
 >   <img src="assets/awards/aya-may26-einsteiger5000.jpg" width="100" alt="AYA May 2026 Einsteiger 5000">
 >   &nbsp;&nbsp;&nbsp;
 >   <img src="assets/awards/aya-jul26-amateur5000.jpg" width="100" alt="AYA Jul 2026 Amateur 5000">
+>   &nbsp;&nbsp;&nbsp;
+>   <img src="assets/awards/aya-aug26-amateur5000.jpg" width="100" alt="AYA Aug 2026 Amateur 5000, 2nd place">
 > </p>
 > 
 > *Hier könnte auch deine Auszeichnung stehen!*

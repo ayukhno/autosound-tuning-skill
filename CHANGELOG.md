@@ -2,6 +2,18 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
+## [Unreleased] — docs only, on the frozen 2.x line
+
+### Added
+- **Third award in the README, all four languages** (en/uk/de/pl): 2nd place, AYA Amateur 5000, 2026-08-15 Schmallenberg — same day, same tune, 3rd place SQ Entry Unlimited at EMMA Sound Off 2026. Asset: `assets/awards/aya-aug26-amateur5000.jpg`.
+
+### ⚠️ Carry into 3.x when the lines are merged
+2.x is frozen; this entry exists so the merge does not lose it. `main` (3.x) has the same "Awards & Achievements" block with two bullets and two images — apply the same three-line change there:
+1. copy `assets/awards/aya-aug26-amateur5000.jpg`;
+2. "two awards" → "three awards" + the third bullet, in `README.md`, `README.uk.md`, `README.de.md`, `README.pl.md`;
+3. the third `<img>` (with the `&nbsp;` spacer) after `aya-jul26-amateur5000.jpg`.
+Diff to cherry-pick: the commit that adds this entry on branch `2.x`.
+
 ## [v2.8.1] — 2026-08-12
 
 A packaging fix, plus the field notes that landed on `main` after v2.8.0 was tagged.
