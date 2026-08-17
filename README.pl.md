@@ -29,6 +29,8 @@
 >   <img src="assets/awards/aya-jul26-amateur5000.jpg" width="100" alt="AYA Jul 2026 Amateur 5000">
 >   &nbsp;&nbsp;&nbsp;
 >   <img src="assets/awards/aya-aug26-amateur5000.jpg" width="100" alt="AYA Aug 2026 Amateur 5000, 2nd place">
+>   &nbsp;&nbsp;&nbsp;
+>   <img src="assets/awards/emma-aug26-entry-unlimited.jpg" width="60" alt="EMMA Sound Off 2026 SQ Entry Unlimited, 3rd place">
 > </p>
 > 
 > *Tutaj może być też twoja nagroda!*
