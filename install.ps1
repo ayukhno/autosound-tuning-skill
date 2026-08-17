@@ -874,11 +874,12 @@ Step "Start"
 $n = 1
 if (-not $RewApi) {
     if ($RewApp) {
-        Say "$n. In REW: Preferences -> API -> tick `"Start the API when REW starts`", then restart REW."
-        Say "   That panel then reads `"API server is running on port 4735`". Nothing measures without it."
+        Say "$n. In REW: Preferences -> API: tick `"Start the API when REW starts`" and press `"Start server`"."
+        Say "   The panel then reads `"API server is running on port 4735`" -- no restart needed. Nothing"
+        Say "   measures without it."
     } else {
-        Say "$n. Install REW from roomeqwizard.com. Then in REW: Preferences -> API -> tick"
-        Say "   `"Start the API when REW starts`" and restart it. Nothing measures without it."
+        Say "$n. Install REW from roomeqwizard.com. Then in REW: Preferences -> API: tick"
+        Say "   `"Start the API when REW starts`" and press `"Start server`". Nothing measures without it."
     }
     $n++
 }

@@ -1041,11 +1041,12 @@ step "Start"
 n=1
 if [ "$REW_API" = 0 ]; then
   if [ "$REW_APP" = 1 ] || ! on_mac; then
-    say "  $n. In REW: Preferences → API → tick \"Start the API when REW starts\", then restart REW."
-    say "     That panel then reads \"API server is running on port 4735\". Nothing measures without it."
+    say "  $n. In REW: Preferences → API: tick \"Start the API when REW starts\" and press \"Start server\"."
+    say "     The panel then reads \"API server is running on port 4735\" — no restart needed. Nothing"
+    say "     measures without it."
   else
-    say "  $n. Install REW from roomeqwizard.com. Then in REW: Preferences → API → tick"
-    say "     \"Start the API when REW starts\" and restart it. Nothing measures without it."
+    say "  $n. Install REW from roomeqwizard.com. Then in REW: Preferences → API: tick"
+    say "     \"Start the API when REW starts\" and press \"Start server\". Nothing measures without it."
   fi
   n=$((n + 1))
 fi
