@@ -22,6 +22,13 @@ All notable changes to the autosound-tuning skill. The skill is co-developed wit
   and Start Menu shortcuts pointing at TCC's new windowed launcher, with TCC's `.ico`. The upstream
   one-liners (Claude Code, uv, agy, omp) run in a child PowerShell, so an `exit` in their code
   cannot end this script. `install.cmd` (double-click) is ASCII-only now and passes options through.
+- **On Windows, a "REW (API on)" shortcut on the Desktop.** REW's Windows API tab has no
+  "start the API when REW starts" box — only a Start-server button to press on every launch — and
+  REW's own help names the alternative, `roomeqwizard.exe -api`. When REW is installed the
+  installer makes that shortcut (its exe found at the default path or through the uninstall
+  entry), the Start step points at it, and `-Uninstall` removes only a shortcut that is that
+  (user's screenshot of the Windows panel, 2026-08-17). The macOS text keeps the checkbox, which
+  exists there.
 - What the transcripts caught and the script no longer does: stop to ask "Are you sure?" when
   removing the junction (`Remove-Item` on a junction under Windows PowerShell 5.1; now
   `Directory.Delete`, which removes the link and never the target); paint red

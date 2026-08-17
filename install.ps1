@@ -94,6 +94,7 @@ $ProgramsDir  = [Environment]::GetFolderPath("Programs")
 if (-not $ProgramsDir) { $ProgramsDir = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs" }
 $DesktopLnk   = Join-Path $DesktopDir "Autosound TCC.lnk"
 $ProgramsLnk  = Join-Path $ProgramsDir "Autosound TCC.lnk"
+$RewLnk       = Join-Path $DesktopDir "REW (API on).lnk"
 # Downloads go under the profile, not under %TEMP%: on the first Windows test machine %TEMP% was
 # an 8.3 short path (C:\Users\OB8CD~1.YUK\...) that PowerShell then refused to resolve, so the gh
 # download failed at the very first step. The profile path itself was fine.
@@ -234,19 +235,33 @@ function Test-RewApi {
         return [bool]$ok
     } catch { return $false }
 }
-function Test-RewApp {
+# REW's executable, when REW is installed: the default place first, then wherever its uninstall
+# entry says. The path matters beyond detection -- on Windows REW's API tab has no "start the API
+# when REW starts" box (the macOS one does), only a Start-server button to press on every launch,
+# and REW's own help names the alternative: run `roomeqwizard.exe -api`. So the installer puts a
+# "REW (API on)" shortcut on the Desktop that does exactly that (user's screenshot, 2026-08-17).
+function Get-RewExe {
     foreach ($p in @((Join-Path $env:ProgramFiles "REW\roomeqwizard.exe"), (Join-Path $env:ProgramFiles "REW\REW.exe"))) {
-        if (Test-Path $p) { return $true }
+        if (Test-Path $p) { return $p }
     }
-    # Or by its uninstall entry, wherever it was installed.
     foreach ($k in @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
                      "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
                      "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*")) {
-        $hit = Get-ItemProperty $k -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like "REW*" -or $_.DisplayName -like "Room EQ Wizard*" }
-        if ($hit) { return $true }
+        $hit = Get-ItemProperty $k -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like "REW*" -or $_.DisplayName -like "Room EQ Wizard*" } | Select-Object -First 1
+        if ($hit) {
+            foreach ($cand in @($hit.InstallLocation, $hit.DisplayIcon)) {
+                if (-not $cand) { continue }
+                $cand = "$cand" -replace ',\d+$', '' -replace '"', ''
+                if ($cand -like "*.exe" -and (Test-Path $cand)) { return $cand }
+                $exe = Join-Path $cand "roomeqwizard.exe"
+                if (Test-Path $exe) { return $exe }
+            }
+            return "found"   # installed, executable not located: detection still counts
+        }
     }
-    return $false
+    return $null
 }
+function Test-RewApp { return [bool](Get-RewExe) }
 function Get-ClaudeStatus {  # "email (plan)" when signed in, else $null
     $c = Find-Bin claude
     if (-not $c) { return $null }
@@ -304,6 +319,14 @@ if ($Uninstall) {
     } else { Say "autosound-tcc is not installed" }
     foreach ($lnk in @($DesktopLnk, $ProgramsLnk)) {
         if (Test-Path $lnk) { Say "removing $(Pretty $lnk)"; Run { Remove-Item $lnk -Force } "remove shortcut" | Out-Null }
+    }
+    if (Test-Path $RewLnk) {
+        # Only when it is the one this script makes: REW's exe with -api. Anything else there is
+        # somebody's own shortcut with the same name.
+        $r = (New-Object -ComObject WScript.Shell).CreateShortcut($RewLnk)
+        if ($r.TargetPath -like "*roomeqwizard*" -and $r.Arguments -match '-api') {
+            Say "removing $(Pretty $RewLnk)"; Run { Remove-Item $RewLnk -Force } "remove REW shortcut" | Out-Null
+        }
     }
 
     # Without -All these stay, and each for a reason: Git for Windows, Claude Code, agy and gh
@@ -391,7 +414,8 @@ $HaveAgy    = [bool](Find-Bin agy)
 $HaveGh     = [bool](Find-Bin gh)
 $HaveOmp    = [bool](Find-Bin omp)
 $HavePy3    = Test-Path (Join-Path $LocalBin "python3.exe")
-$RewApp     = Test-RewApp
+$RewExe     = Get-RewExe
+$RewApp     = [bool]$RewExe
 $RewApi     = Test-RewApi
 
 Say "Already on this machine:"
@@ -403,7 +427,7 @@ if ($WantReviewer) {
     if ($HaveAgy) { Say "  OK   Gemini reviewer (agy)" } else { Say "  --   Gemini reviewer (agy)              will install" }
 }
 if ($RewApi)      { Say "  OK   REW, and its API is on" }
-elseif ($RewApp)  { Say "  OK   REW -- its API is off; the last screen says where to switch it on" }
+elseif ($RewApp)  { Say "  OK   REW -- its API is off; a shortcut that starts REW with it on goes on your Desktop" }
 else              { Say "  --   REW not found -- install it from roomeqwizard.com; nothing measures without it" }
 
 # One optional question, here because the answer changes the download list below (SCR-049).
@@ -689,6 +713,28 @@ if ($Mode -eq "tcc" -and ($TccExe -or $DryRun)) {
     }
 }
 
+# -- REW with its API on, one double-click away ------------------------------------------------
+# Whether or not the API happens to be on right now: on Windows nothing keeps it on for the next
+# launch, so the shortcut is worth having either way.
+if ($RewExe -and $RewExe -ne "found") {
+    Step "REW -- a shortcut that starts it with the API on"
+    if ($DryRun) {
+        Say "would create `"REW (API on)`" on the Desktop -> $RewExe -api"
+    } else {
+        try {
+            $ws = New-Object -ComObject WScript.Shell
+            $r = $ws.CreateShortcut($RewLnk)
+            $r.TargetPath = $RewExe
+            $r.Arguments = "-api"
+            $r.WorkingDirectory = Split-Path $RewExe
+            $r.IconLocation = "$RewExe,0"
+            $r.Description = "REW with its API server started (port 4735)"
+            $r.Save()
+            Say "OK   `"REW (API on)`" on your Desktop -> roomeqwizard.exe -api"
+        } catch { Warn "the REW shortcut was not created: $($_.Exception.Message)" }
+    }
+}
+
 # -- the reviewer: Gemini, through Google's own CLI ---------------------------------------------
 $AgyBin = $null
 if ($WantReviewer) {
@@ -879,13 +925,17 @@ if ($DryRun) {
 Step "Start"
 $n = 1
 if (-not $RewApi) {
-    if ($RewApp) {
-        Say "$n. In REW: Preferences -> API: tick `"Start the API when REW starts`" and press `"Start server`"."
-        Say "   The panel then reads `"API server is running on port 4735`" -- no restart needed. Nothing"
-        Say "   measures without it."
+    if ($RewApp -and (Test-Path $RewLnk)) {
+        Say "$n. Start REW from the `"REW (API on)`" shortcut on your Desktop -- it starts REW with the API"
+        Say "   switched on. (Inside REW the same is Preferences -> API -> `"Start server`", every time.)"
+        Say "   Nothing measures without it."
+    } elseif ($RewApp) {
+        Say "$n. Start REW with its API on: in REW, Preferences -> API -> press `"Start server`" (every"
+        Say "   time REW starts), or run  `"$RewExe`" -api  -- REW's own switch. Nothing measures without it."
     } else {
-        Say "$n. Install REW from roomeqwizard.com. Then in REW: Preferences -> API: tick"
-        Say "   `"Start the API when REW starts`" and press `"Start server`". Nothing measures without it."
+        Say "$n. Install REW from roomeqwizard.com, then run this installer once more: it puts a"
+        Say "   `"REW (API on)`" shortcut on your Desktop. (Or in REW: Preferences -> API -> `"Start server`","
+        Say "   every time.) Nothing measures without it."
     }
     $n++
 }
