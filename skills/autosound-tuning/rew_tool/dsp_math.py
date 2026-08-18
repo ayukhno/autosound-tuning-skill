@@ -67,8 +67,23 @@ def _biquad_h(freqs_hz, b0, b1, b2, a0, a1, a2):
     return (b0 + b1 * z1 + b2 * z2) / (a0 + a1 * z1 + a2 * z2)
 
 
+#: The ledger spells the shelves `LSH`/`HSH` (`state.EQ_TYPES`); the fitter and the older callers
+#: here say `LS`/`HS`. One table, so a band read straight out of a ledger renders as the filter it
+#: names instead of falling through to the wrong branch.
+_SHELF_KINDS = {"LS": "LS", "LSH": "LS", "HS": "HS", "HSH": "HS"}
+
+
 def peq_response(freqs_hz, kind, f0, gain_db, q):
-    """kind: 'PK' | 'LS' | 'HS'. Complex response."""
+    """kind: 'PK' | 'LS'/'LSH' | 'HS'/'HSH'. Complex response.
+
+    Anything else is refused. It used to fall through to the high shelf — `PK` was one branch,
+    `LS` another, and *everything else* the third — so an `APF2` band handed in here came back as
+    a shelf with no error anywhere (SCR-050, 2026-08-18). An all-pass has its own functions below;
+    `eq_complex` is the one place that dispatches by kind.
+    """
+    if kind != "PK" and kind not in _SHELF_KINDS:
+        raise ValueError(f"peq_response: unknown EQ kind {kind!r} (PK, LS/LSH, HS/HSH; "
+                         f"an all-pass goes through apf1_response/apf2_response)")
     A = 10.0 ** (gain_db / 40.0)
     w0 = 2 * np.pi * f0 / FS
     cw, sw = np.cos(w0), np.sin(w0)
@@ -80,7 +95,7 @@ def peq_response(freqs_hz, kind, f0, gain_db, q):
         # shelves with S=1 (RBJ), q arg ignored
         alpha = sw / 2.0 * np.sqrt(max((A + 1 / A) * (1 / 1.0 - 1) + 2, 0.0))
         tsa = 2 * np.sqrt(A) * alpha
-        if kind == "LS":
+        if _SHELF_KINDS[kind] == "LS":
             c = (A * ((A + 1) - (A - 1) * cw + tsa),
                  2 * A * ((A - 1) - (A + 1) * cw),
                  A * ((A + 1) - (A - 1) * cw - tsa),
@@ -97,9 +112,24 @@ def peq_response(freqs_hz, kind, f0, gain_db, q):
     return _biquad_h(freqs_hz, *c)
 
 
+def apf1_response(freqs_hz, f0):
+    """1st-order allpass (APF1 in an EQ slot): unit magnitude, phase 0 → −180° through `f0`.
+
+    −90° at `f0`, and that is the whole filter — one number to type. The same analog convention
+    as `apf2_response` (phase lag, negative going), so the two stack and compare directly; where
+    the second order turns a full 360°, this turns half of it, which is what makes it the right
+    tool for a joint that needs a quarter turn and not a half (SCR-050 item 4, 2026-08-18).
+    """
+    x = np.asarray(freqs_hz, dtype=float) / f0
+    phase = -2.0 * np.arctan(x)
+    return np.exp(1j * phase)
+
+
 def apf2_response(freqs_hz, f0, q):
-    """2nd-order allpass (APF2 in the Helix PEQ bank): unit magnitude, phase only."""
-    x = freqs_hz / f0
+    """2nd-order allpass (APF2 in the Helix PEQ bank): unit magnitude, phase only.
+
+    0 → −360° through `f0`, −180° AT `f0`, and `q` sets how much of the turn happens near it."""
+    x = np.asarray(freqs_hz, dtype=float) / f0
     phase = -2.0 * np.arctan2(x / q, 1.0 - x * x)
     return np.exp(1j * phase)
 
@@ -292,10 +322,31 @@ def greedy_eq_fit(freqs_hz, resid_db, weight, n_bands=4,
     return bands, resid
 
 
+#: The all-pass kinds, spelled as the ledger spells them (`state.EQ_TYPES`).
+APF_KINDS = ("APF1", "APF2")
+
+
 def eq_complex(freqs_hz, bands):
+    """Complex response of a whole EQ bank: `[(kind, f0, gain_db, q), ...]` multiplied out.
+
+    Dispatches by kind, and refuses a kind it does not know. Until 2026-08-18 every band went
+    through `peq_response`, whose fall-through branch is the high shelf — so a bank carrying an
+    `APF1`/`APF2` band (both legitimate ledger types) rendered the all-pass as a shelf, silently.
+    Reachable the moment anything hands a ledger's own bands to the simulator (SCR-050 item 5).
+    For an all-pass the gain is ignored (it has none) and `q` is read only by the second order.
+    """
+    freqs_hz = np.asarray(freqs_hz, dtype=float)
     h = np.ones_like(freqs_hz, dtype=complex)
     for kind, f0, g, q in bands:
-        h *= peq_response(freqs_hz, kind, f0, g, q)
+        if kind == "APF1":
+            h = h * apf1_response(freqs_hz, f0)
+        elif kind == "APF2":
+            h = h * apf2_response(freqs_hz, f0, q)
+        elif kind == "PK" or kind in _SHELF_KINDS:
+            h = h * peq_response(freqs_hz, kind, f0, g, q)
+        else:
+            raise ValueError(f"eq_complex: unknown EQ kind {kind!r} in band "
+                             f"{(kind, f0, g, q)!r}; known: PK, LS/LSH, HS/HSH, APF1, APF2")
     return h
 
 
@@ -330,3 +381,97 @@ def load_ntt_txt(path):
                 except ValueError:
                     continue
     return np.array(fr), np.array(mg)
+
+
+# ---------- selftest ----------
+
+def _selftest():
+    """The all-pass functions against the physics, and `eq_complex` against its own kinds.
+
+    Every number below is a closed-form fact about the filter, not a value read off a previous
+    run: a selftest that agrees with the implementation instead of checking it would have passed
+    on the day `eq_complex` rendered an APF as a high shelf.
+    """
+    f = np.geomspace(2.0, 40000.0, 4000)
+    deg = lambda h: np.degrees(np.unwrap(np.angle(h)))  # noqa: E731
+
+    # APF1: unit magnitude, -90 deg exactly at f0, one half turn overall, phase lag only.
+    f0 = 100.0
+    h1 = apf1_response(f, f0)
+    assert np.allclose(np.abs(h1), 1.0, atol=1e-12), "APF1 is not unit magnitude"
+    at_f0 = np.degrees(np.angle(apf1_response(np.array([f0]), f0)))[0]
+    assert abs(at_f0 + 90.0) < 1e-9, f"APF1 phase at f0 = {at_f0:.4f}, expected -90"
+    p1 = deg(h1)
+    assert p1[0] > -3.0 and p1[-1] < -177.0, f"APF1 span {p1[0]:.2f} .. {p1[-1]:.2f}, expected 0 .. -180"
+    assert np.all(np.diff(p1) < 0), "APF1 phase must fall monotonically with frequency"
+    # Far below f0 an APF1 is a pure delay of 1/(pi*f0): 3.18 ms at 100 Hz. That is the whole
+    # reason the method aligns a joint with an APF and not with raw delay -- the delay is
+    # confined to the band around and below f0 instead of moving the driver's every arrival.
+    tau_s = 1.0 / (np.pi * f0)
+    low = 2.0
+    ph_low = np.degrees(np.angle(apf1_response(np.array([low]), f0)))[0]
+    assert abs(ph_low - (-360.0 * low * tau_s)) < 1e-3, (ph_low, -360.0 * low * tau_s)
+
+    # APF2: unit magnitude, -180 deg exactly at f0, one full turn overall, steeper for higher Q.
+    for q in (0.5, 0.7, 1.0, 2.0, 4.0):
+        h2 = apf2_response(f, f0, q)
+        assert np.allclose(np.abs(h2), 1.0, atol=1e-12), f"APF2 q={q} is not unit magnitude"
+        at2 = np.degrees(np.angle(apf2_response(np.array([f0]), f0, q)))[0]
+        assert abs(abs(at2) - 180.0) < 1e-9, f"APF2 phase at f0 = {at2:.4f}, expected -180"
+        p2 = deg(h2)
+        # The two ends against the filter's own asymptotes: far below f0 the lag is 2x/q radians
+        # (x = f/f0), far above it is a full turn short of 2/(xq). Low Q starts turning earlier --
+        # at 2 Hz an APF2(100 Hz, Q 0.5) already lags 4.6 deg -- so a fixed "near zero" would be
+        # wrong about the physics, not about the code.
+        lo_asym = -np.degrees(2.0 * (f[0] / f0) / q)
+        hi_asym = -360.0 + np.degrees(2.0 * (f0 / f[-1]) / q)
+        assert abs(p2[0] - lo_asym) < 0.05, (q, p2[0], lo_asym)
+        assert abs(p2[-1] - hi_asym) < 0.05, (q, p2[-1], hi_asym)
+        assert np.all(np.diff(p2) < 0), f"APF2 q={q} phase must fall monotonically"
+    just_above = np.array([f0 * 2 ** (1 / 6)])
+    steep = np.degrees(np.unwrap(np.angle(apf2_response(np.array([f0, just_above[0]]), f0, 4.0))))
+    gentle = np.degrees(np.unwrap(np.angle(apf2_response(np.array([f0, just_above[0]]), f0, 0.7))))
+    assert steep[1] < gentle[1] < -180.0, ("higher Q turns faster near f0", steep, gentle)
+    # Two first-order sections at one f0 ARE a second-order all-pass with Q = 0.5. If the two
+    # functions did not share a convention this identity would break first.
+    assert np.allclose(apf1_response(f, f0) ** 2, apf2_response(f, f0, 0.5), atol=1e-12), \
+        "APF1^2 != APF2(Q=0.5): the two all-pass functions disagree about their convention"
+
+    # eq_complex: an all-pass band renders as the all-pass, the ledger's shelf spellings render as
+    # the shelves they name, and a kind nobody knows is refused rather than drawn as a shelf.
+    assert np.allclose(eq_complex(f, [("APF2", f0, 0.0, 0.7)]), apf2_response(f, f0, 0.7))
+    assert np.allclose(eq_complex(f, [("APF1", f0, 0.0, None)]), apf1_response(f, f0))
+    ap_only = eq_complex(f, [("APF1", 80.0, 0.0, None), ("APF2", 300.0, 0.0, 1.0)])
+    assert np.allclose(np.abs(ap_only), 1.0, atol=1e-12), "a bank of all-passes has unit magnitude"
+    ls = peq_response(f, "LS", 200.0, 6.0, 0.71)
+    hs = peq_response(f, "HS", 200.0, 6.0, 0.71)
+    assert np.allclose(eq_complex(f, [("LSH", 200.0, 6.0, 0.71)]), ls), "LSH is the low shelf"
+    assert np.allclose(eq_complex(f, [("HSH", 200.0, 6.0, 0.71)]), hs), "HSH is the high shelf"
+    assert not np.allclose(ls, hs), "the two shelves are different filters (sanity)"
+    for bad in ("APF3", "XX", "LSX", None):
+        try:
+            eq_complex(f, [(bad, 100.0, 0.0, 1.0)])
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"eq_complex accepted unknown kind {bad!r}")
+    try:
+        peq_response(f, "APF2", 100.0, 0.0, 1.0)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("peq_response rendered an all-pass as a shelf again")
+    # ...and the fitter's own vocabulary still works untouched.
+    assert np.allclose(eq_complex(f, [("PK", 1000.0, -3.0, 2.0)]),
+                       peq_response(f, "PK", 1000.0, -3.0, 2.0))
+    print("selftest[dsp_math] OK -- APF1 (-90 deg at f0, 0..-180, 1/(pi f0) delay far below f0), "
+          "APF2 (-180 deg at f0, 0..-360, Q steepens), APF1^2 == APF2(Q=0.5), "
+          "eq_complex renders APF/LSH/HSH as themselves and refuses an unknown kind.")
+
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] in ("selftest", "--selftest"):
+        _selftest()
+    else:
+        print("usage: python3 dsp_math.py selftest")

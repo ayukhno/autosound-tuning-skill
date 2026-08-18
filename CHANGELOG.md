@@ -36,6 +36,27 @@ All notable changes to the autosound-tuning skill. The skill is co-developed wit
   signed in, and for `import numpy` when it is missing; fail the `gh` download on a machine whose
   `%TEMP%` is an 8.3 short path PowerShell cannot resolve (downloads now go under
   `~\.cache\autosound-installer`).
+- **`dsp_math.apf1_response(freqs, f0)` — the first-order all-pass** (SCR-050 item 4,
+  2026-08-18). Unit magnitude, −90° exactly at `f0`, 0 → −180° overall; far below `f0` it is a
+  pure delay of 1/(π·f0), which is the whole reason the method aligns a joint with an all-pass
+  and not with raw delay. Same convention as `apf2_response` — the selftest holds them to
+  `apf1² ≡ apf2(Q 0.5)`, the identity two cascaded first-order sections satisfy — so the two stack
+  and compare directly. TCC's curve window applies both to a measured trace and draws the
+  predicted sum live; the maths lives here and only here.
+- **`dsp_math.py selftest`** — the module had none. It pins the all-pass functions to closed-form
+  facts (the phase at `f0`, the asymptotes, monotonic lag, the delay far below `f0`) and
+  `eq_complex` to its own kinds, so a wrong branch fails on numbers and not on somebody's memory.
+
+### Fixed
+
+- **`eq_complex` rendered an all-pass band as a HIGH SHELF, silently** (SCR-050 item 5). Every
+  band went through `peq_response`, whose kind handling was `PK` → peaking, `LS` → low shelf and
+  *everything else* → high shelf, with no guard — so a bank carrying `APF1`/`APF2` (both
+  legitimate `EQ_TYPES`) came back as a shelf with no error anywhere; the ledger's own `LSH`
+  spelling took the same wrong turn. `eq_complex` now dispatches by kind (`PK`, `LS`/`LSH`,
+  `HS`/`HSH`, `APF1`, `APF2`) and **raises on a kind it does not know**, and `peq_response`
+  refuses anything but a peak or a shelf. Reachable the moment anything hands a ledger's bands to
+  the simulator; found while scoping TCC's all-pass, not reported from the field.
 
 ## [v3.0.4] — 2026-08-17 · tagged, not yet the default install
 
