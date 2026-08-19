@@ -104,8 +104,12 @@ def _rew_tool_selftest():
     post-pull smoke catches a regression even with no live measurement."""
     import rew_api
     import analysis
+    import resonalyze_ir
     _quiet(rew_api._selftest)
     _quiet(analysis._selftest)
+    # REW IR → Resonalyze v7: fractional t = 0 kept to <0.02 sample, integer case
+    # bit-exact, the Validate() port, the refusals (offline, synthetic IR)
+    assert _quiet(resonalyze_ir._selftest) == 0, "resonalyze_ir.py selftest returned non-zero"
 
 
 def main():
@@ -117,7 +121,7 @@ def main():
     check("apply.py selftest (apply-change gate)", _apply_selftest)
     check("issue #5 (active=SQ-Comp-Ref → propose to ResoNix REFUSED)", _issue5_scenario)
     check("gates selftest (side_effect + presweep_safety)", _gates_selftest)
-    check("rew_tool selftest (get_fr RTA/sweep phase branch + FR analysis)", _rew_tool_selftest)
+    check("rew_tool selftest (get_fr RTA/sweep phase branch + FR analysis + REW→Resonalyze IR)", _rew_tool_selftest)
 
     # reviewer channel — INFO only; machine/project-dependent, never fails the smoke.
     print("\n[reviewer channel — informational]")
