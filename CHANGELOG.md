@@ -6,6 +6,20 @@ All notable changes to the autosound-tuning skill. The skill is co-developed wit
 
 ### Fixed
 
+- **A re-run asked what it already knew** (user, 2026-08-19, re-running to pick up the icon fix).
+  The GitHub question came again although `gh` was installed — it is a question about a download,
+  so with the command already on the machine there is nothing to decide, and it is skipped (the
+  option line still names `--no-github`, so the choice stays visible). The Gemini reviewer offered
+  its sign-in on every run, unlike Claude and GitHub either side of it, which check first: there
+  is now an `agy_status`, read off `~/.gemini/` — the credentials file for whether, the account
+  file for who, and the credentials themselves never opened — so a signed-in reviewer reports
+  `✓ signed in as …` and the Google setup screens are not walked again.
+- **The Desktop shortcut kept the blank icon even after the bundle was fixed** — it took a Get
+  Info to refresh. Finder caches an icon against the item that has it, so a link first drawn when
+  the app had no icon keeps that tile. The installer now REPLACES its own shortcut instead of
+  leaving it: a link made a moment ago is an item Finder has never drawn, so it asks Launch
+  Services, which the builder has just told. Only a symlink pointing at our own app is ever
+  removed; anything else on the Desktop under that name is somebody's file and stays.
 - **The app on the Desktop had no icon — a blank white tile** (user, 2026-08-19, installing on a
   second Mac from the README's own one-liner). Two causes, both closed. **Launch Services was
   never told the bundle exists**: Finder does not read an `Info.plist` to draw an icon, it asks

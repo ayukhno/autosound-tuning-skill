@@ -304,6 +304,18 @@ rew_app_found() {
   # Anywhere else: Spotlight, by bundle id. Silent and fast when Spotlight is on; empty when off.
   [ -n "$(mdfind "kMDItemCFBundleIdentifier == 'roomeqwizard*'" 2>/dev/null | head -1)" ]
 }
+agy_status() {  # prints the signed-in Google account when there is one; fails otherwise
+  # Read off disk, not by running `agy`: the CLI is interactive — it opens its own screen and
+  # waits — so there is nothing to ask it that does not take over the terminal. What it writes
+  # when a sign-in succeeds is an OAuth credentials file, and beside it the account it belongs
+  # to. Only the account is read here; the credentials are never opened, printed or checked for
+  # anything but existence.
+  [ -s "$HOME/.gemini/oauth_creds.json" ] || return 1
+  _a="$(sed -n 's/.*"active": *"\([^"]*\)".*/\1/p' "$HOME/.gemini/google_accounts.json" \
+        2>/dev/null | head -1)"
+  printf '%s' "${_a:-signed in}"
+}
+
 claude_status() {  # prints "email (plan)" when signed in; fails otherwise
   _c="$(find_bin claude || true)"; [ -n "$_c" ] || return 1
   _s="$("$_c" auth status 2>/dev/null || true)"
@@ -483,6 +495,14 @@ fi
 # One optional question, and it goes here because the answer changes the download list below.
 # Private by default, never automatic: pushing somebody's car, DSP and measurements anywhere is an
 # outward-facing action, and it needs their word (SCR-049).
+# ...and only when there is something to decide. `gh` already on the machine means the answer was
+# given on an earlier run (or by whoever installed it), and asking again on every re-run is a
+# question with no download behind it — a re-run to fix an icon walked the person back through it
+# (user, 2026-08-19). Nothing outward-facing rides on this: the installer never pushes a project
+# anywhere; it installs a command, and that command is already here (SCR-049 is about the pushing).
+if [ "$WANT_GITHUB" = "ask" ] && [ "$HAVE_GH" = 1 ]; then
+  WANT_GITHUB=1
+fi
 if [ "$WANT_GITHUB" = "ask" ]; then
   say ""
   say "  Optional: back each car's record up to a free, private GitHub repository — the ledger of"
@@ -799,12 +819,21 @@ if [ "$MODE" = "tcc" ]; then
         # afterwards: Finder draws a shortcut from the target's registered icon, so a link made
         # before the registration is a link drawn with the blank placeholder — which is exactly
         # what a second Mac showed on a clean install (user, 2026-08-19).
-        if [ -d "$HOME/Desktop" ] && [ ! -e "$DESKTOP_LINK" ]; then
+        # An EXISTING shortcut of ours is replaced, not left alone. Finder caches an icon against
+        # the item that has it, so a link first drawn when the bundle had no icon keeps the blank
+        # tile even after the bundle is fixed and registered — it took a Get Info to refresh
+        # (user, 2026-08-19, re-running with the icon fix in). A link made a moment ago is an item
+        # Finder has never drawn, so it asks Launch Services, which now has the answer.
+        # Only ever a SYMLINK, and only one pointing at our own app: anything else on the Desktop
+        # under that name is somebody's file and stays.
+        if [ -L "$DESKTOP_LINK" ] && [ "$(readlink "$DESKTOP_LINK")" = "$APP" ]; then
+          rm -f "$DESKTOP_LINK"
+        fi
+        if [ -d "$HOME/Desktop" ] && [ ! -e "$DESKTOP_LINK" ] && [ ! -L "$DESKTOP_LINK" ]; then
           ln -s "$APP" "$DESKTOP_LINK" 2>/dev/null && _shortcut=", and a shortcut on your Desktop"
         elif [ -L "$DESKTOP_LINK" ]; then
           _shortcut=", and the shortcut on your Desktop"
         fi
-        [ -L "$DESKTOP_LINK" ] && touch -h "$DESKTOP_LINK" 2>/dev/null
         say "  ✓ \"Autosound TCC.app\" in ~/Applications$_shortcut"
         # A warning, not an aside in brackets. It used to be one, and it scrolled past unread on
         # the one install where it mattered: the person sees a blank white icon days later and has
@@ -1034,7 +1063,14 @@ else
   # 2. The reviewer — optional, once. Its first run is Google's own setup (colours, workspace
   # trust, the browser sign-in, and on some accounts a Project ID), so it is described in full
   # and then handed the terminal.
-  if [ -n "$AGY_BIN" ]; then
+  if [ -n "$AGY_BIN" ] && [ -n "$(agy_status || true)" ]; then
+    # Already signed in — the same courtesy Claude and GitHub get two steps either side of this
+    # one. It used to offer the sign-in on every run, so a re-run to fix something else walked
+    # the person back through Google's setup screens (user, 2026-08-19, re-running to fix an
+    # icon).
+    say "  $n. Gemini reviewer: ✓ signed in as $(agy_status)"
+    n=$((n + 1))
+  elif [ -n "$AGY_BIN" ]; then
     say "  $n. Gemini reviewer — optional, once. Have a Google account ready. What happens:"
     say "       agy opens; press Enter through its two setup screens; your browser asks you to sign"
     say "       in with Google. If it then asks for a Project ID, copy it from"
