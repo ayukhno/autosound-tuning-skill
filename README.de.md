@@ -2,253 +2,345 @@
 
 🇬🇧 [English](README.md) · 🇩🇪 **Deutsch** · 🇵🇱 [Polski](README.pl.md) · 🇺🇦 [Українська](README.uk.md) · ❓ [FAQ](FAQ.md) · <img src="assets/icons/roadmap.svg" width="14" height="14" valign="middle" alt="Roadmap" /> [Roadmap (EN, Entwurf)](ROADMAP.md)
 
-**In einem Satz:** ein Claude-Skill, der dich zu klarem, transparentem, ausgewogenem Klang in *deinem* Auto führt. Er bringt das ganze Handwerk auf dein konkretes Setup, liest deine REW-Messungen und hilft dir, jede Änderung zu wählen.
+**In einem Satz:** ein KI-Assistent für das Einmessen deines Autos. Er liest deine REW-Messungen und
+führt dich durch Trennfrequenzen, Laufzeitkorrektur, Phase und EQ — eine geprüfte Änderung nach der
+anderen.
 
-- **Arbeitet mit REW**: holt Messungen über die API, schreibt berechnete EQ-Filter zurück in REW, von wo du sie in dein DSP exportierst
-- **Diagnostiziert, bevor korrigiert wird**: ermittelt EQ-fähige Frequenzen, akustische Reflexionen (Phasenauslöschungen) und Verzerrungsgrenzen jedes Treibers aus deiner Grundmessung, bevor eine Weichen- oder EQ-Änderung vorgeschlagen wird
-- **Kennt das Handwerk**: Zielkurven, Abstimmpraktiken, ein Schritt-für-Schritt-Prozess
-- **Test-Tracks**: worauf zu achten ist und auf welchem Track (Beschreibungen, kein Audio)
-- **Lernt dein Setup**: sammelt Wissen über Auto und Geräte, nur mit deiner Zustimmung
+- **Arbeitet mit REW**: holt deine Messungen über die API und schreibt die berechneten EQ-Filter
+  zurück nach REW, von wo du sie exportierst
+- **Diagnostiziert, bevor es korrigiert**: findet Reflexionen, Auslöschungen und Verzerrung der
+  Chassis in den ersten Sweeps, bevor auch nur eine Änderung vorgeschlagen wird
+- **Fasst deinen Prozessor nie an**: im Auto ändert sich nichts, was du nicht selbst einträgst. Das
+  heißt aber nicht, alles abzutippen: REW exportiert deinen EQ als Datei, die das Helix PC-Tool in
+  einem Zug importiert, und für Prozessoren ohne Dateiimport gibt es einen
+  [Copy-Paste-Helfer](https://github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant) — Musway, ESX,
+  Zapco
+- **Kennt das Handwerk**: Zielkurven, die Reihenfolge „erst Phase, dann EQ", einen Schritt-für-
+  Schritt-Prozess und welcher Testtrack wofür taugt
+- **Lernt dein Setup**: sammelt Wissen über Auto und Technik — nur mit deiner Zustimmung
+
+Mit dieser Methode eingemessen, holte mein eigenes Auto **2026 zwei Klassensiege bei AYA-Wettbewerben**:
+Einsteiger 5000 im Mai, mit der Graphenanalyse-und-Gemini-Arbeitsweise, aus der später dieser Skill
+wurde, dann Amateur 5000 im Juli mit dem Skill selbst und den eigenen Ohren.
+
+<p align="left">
+  <img src="assets/awards/aya-may26-einsteiger5000.jpg" width="100" alt="AYA May 2026 Einsteiger 5000">
+  &nbsp;&nbsp;&nbsp;
+  <img src="assets/awards/aya-jul26-amateur5000.jpg" width="100" alt="AYA Jul 2026 Amateur 5000">
+</p>
 
 > [!CAUTION]
-> KI kann sich bei Zahlen irren. Prüfe Trennfrequenzen, Flankensteilheiten und EQ-Werte in deinem DSP immer manuell nach, bevor du die Stummschaltung aufhebst, besonders bei Hochtönern, und starte bei niedriger Lautstärke.
+> KI kann sich bei Zahlen irren. Prüfe Trennfrequenzen, Flankensteilheiten und EQ-Werte immer in
+> deinem DSP, bevor du stummschaltest — besonders bei Hochtönern — und fang leise an.
 
 > [!NOTE]
-> **2.x ist das, was Sie bekommen, und es bleibt unterstützt.** Eine 3.x-Linie existiert und ist getaggt — maschinenlesbare Projektdateien, ein aufgezeichneter Prozess, eine Desktop-App — aber sie ist nicht die Standardinstallation und wird es erst, wenn eine vollständige Abstimmungssitzung damit durchlaufen wurde. Installation und Update liefern 2.x; [3.x ausprobieren](#die-3x-linie-ausprobieren) ist eine bewusste Entscheidung.
-
-> [!TIP]
-> **Auszeichnungen & Erfolge**
-> Dieser Ansatz ist nicht nur für den reinen Hörgenuss gedacht, sondern auch um zu gewinnen. Er hat seine Wirksamkeit in der Praxis bereits bewiesen und zwei Auszeichnungen eingebracht:
-> * **1. Platz in der Klasse EINSTEIGER 5000 beim AYA-Wettbewerb (30.05.2026, Lemgo)**. Dieses Ergebnis wurde durch Diagrammanalysen und Ratschläge von Gemini erzielt.
-> * **1. Platz in der Klasse AMATEUR 5000 beim AYA-Wettbewerb (25.07.2026, Horst)**. Ein Sieg in der nächsten Klasse, der mit Hilfe dieses Skills und dem eigenen Gehör errungen wurde.
-> 
-> <p align="left">
->   <img src="assets/awards/aya-may26-einsteiger5000.jpg" width="100" alt="AYA May 2026 Einsteiger 5000">
->   &nbsp;&nbsp;&nbsp;
->   <img src="assets/awards/aya-jul26-amateur5000.jpg" width="100" alt="AYA Jul 2026 Amateur 5000">
-> </p>
-> 
-> *Hier könnte auch deine Auszeichnung stehen!*
+> **Lieber ein Fenster als ein Terminal?** [TCC](https://github.com/ayukhno/autosound-tcc), die
+> begleitende Desktop-App, fährt dieselbe Methode in einem Fenster: DSP-Baum, deine REW-Kurven, der
+> Plan und die KI in einer Seitenleiste. Die eine Zeile unten installiert sie mit, sofern du nichts
+> anderes sagst. Sie ist jung — der erprobte Weg ist die Methode im Terminal.
 
 ## Inhalt
 
-- [Für wen & Warum](#für-wen--warum)
-- [Wie echte Arbeit und Synergie zwischen verschiedenen KIs aussieht](#wie-echte-arbeit-und-synergie-zwischen-verschiedenen-kis-aussieht)
-- [Erste Schritte](#erste-schritte)
-- [Empfohlene Modelle, Modi & meine Erfahrung](#empfohlene-modelle-modi--meine-erfahrung)
-- [Vollständiges Setup & FAQ](#vollständiges-setup--faq)
+- [Für wen das ist](#für-wen-das-ist)
+- [Was du brauchst](#was-du-brauchst)
+- [Loslegen](#loslegen)
+- [Wie eine Sitzung wirklich klingt](#wie-eine-sitzung-wirklich-klingt)
+- [Welche Modelle](#welche-modelle)
+- [Die Mathematik darunter](#die-mathematik-darunter)
 - [Was hier drin ist](#was-hier-drin-ist)
-- [Deine Erfahrung beitragen](#deine-erfahrung-beitragen)
-- [Unterstützung](#unterstützung)
+- [Erfahrung beitragen](#erfahrung-beitragen)
+- [Unterstützen](#unterstützen)
 - [Lizenz](#lizenz)
 
-## Für wen & Warum
+## Für wen das ist
 
-* **Für wen:** Für alle, die den Sound im Auto aufbauen und dieses Handwerk lernen. Es ist dein Exoskelett: Es trägt das Wissen und die Erfahrung des Handwerks, du bringst die Ohren und die Hände am DSP mit.
-* **Warum:** Abstimmen ist eine Lawine: zu viele Methoden, Parameter und Faustregeln, um sie im Kopf zu behalten, und man verliert sich leicht in einem Detail und damit das Gesamtbild. Der Skill ist dein Navigator: Er hält das Wissen bereit, weist auf die wenigen Änderungen hin, die wirklich zählen, und behält den Kompromiss zwischen Bühnenabbildung und tonaler Balance im Blick. Dein Ohr ist der letzte Richter.
+Für alle, die den Klang im eigenen Auto aufbauen und das Handwerk lernen. Er ist dein Exoskelett: er
+trägt das Wissen und die Erfahrung, du bringst die Ohren und die Hände am DSP mit.
 
-Er deckt eine komplette Abstimmung ab: von einem neuen Projekt über Frequenzweichen, Laufzeitkorrektur, Phase, kanalgetrennten und summierten EQ und die Bühnenabbildung bis hin zum Voicing nach Geschmack — plus die optionalen räumlichen Ebenen (ein komplementäres **Center-Fill** und ein differenzielles **Rear-Fill**, beides feldvalidierte Rezepte). Jede Änderung durchläuft eine **Generator ↔ Kritiker ↔ Schiedsrichter**-Review-Schleife: eine KI schlägt vor, eine andere widerspricht, du entscheidest.
+Einmessen ist eine Lawine. Es gibt mehr Methoden, Parameter und Faustregeln, als ein Mensch im Kopf
+behält, und man taucht schnell in ein Detail ab und verliert das Ganze. Der Skill hält das Wissen,
+zeigt auf die wenigen Änderungen, die zählen, und behält den Kompromiss zwischen Bühne und
+tonaler Balance im Blick. Der letzte Richter ist dein Ohr.
 
-## Wie echte Arbeit und Synergie zwischen verschiedenen KIs aussieht
+Er deckt ein komplettes Tuning ab: vom neuen Projekt über Trennfrequenzen, Laufzeit, Phase, EQ pro
+Kanal und in Summe bis zur Abbildung und zum Abstimmen nach Geschmack — dazu die optionalen
+räumlichen Schichten (ein komplementärer **Center-Fill** und ein differenzieller **Rear-Fill**,
+beide im Feld erprobt). Jede Änderung läuft durch die Schleife **Generator ↔ Kritiker ↔
+Schiedsrichter**: eine KI schlägt vor, eine andere widerspricht, du entscheidest.
 
-Drei Stimmen: **du** auf dem Hörplatz, **Claude**, der den Prozess führt, **Gemini**, das jeden Schritt hinterfragt.
+## Was du brauchst
 
-> **Du (Schiedsrichter):** Der Kontrabass dröhnt ein bisschen. Und als ich die Delays nach Gehör verschoben habe, klang der Bass besser — sollen wir meine Werte eintragen?
+**Eine frische Maschine ist der Normalfall.** Der Installer unten bringt Claude Code, Python, die
+Methode, die Desktop-App und den Gemini-Reviewer mit. Vorher muss nichts installiert sein.
+
+Drei Dinge kann er dir nicht besorgen, weil sie dir gehören:
+
+- **[REW](https://www.roomeqwizard.com/)**, mit eingeschalteter API. Alles, was der Skill über dein
+  Auto weiß, kommt dadurch. Unter macOS: *Preferences → API* öffnen, **Start the API when REW
+  starts** anhaken und **Start server** drücken; das Feld zeigt dann *"API server is running on port
+  4735"*, und ab da kommt sie mit REW hoch. Unter Windows gibt es dieses Häkchen nicht, deshalb legt
+  der Installer eine Verknüpfung **REW (API on)** auf den Desktop, die REW mit eingeschalteter API
+  startet — starte REW darüber.
+- **Ein kalibriertes Messmikrofon und ein DSP, in den du Werte eintippen kannst.** Jeder Prozessor
+  geht. Für Phase und Laufzeit schlägt XLR mit physischem Loopback die USB-Lösung:
+  [warum, im FAQ](FAQ.md#measuring-phase--time-alignment-umik-1-vs-xlr-microphones).
+- **Ein bezahltes Claude-Abo (Pro oder Max).** Siehe
+  [die Tarife und was eine Sitzung kostet](FAQ.md#subscription-options-quotas--budgets-as-of-july-2026).
+
+Eine zweite KI als Reviewer ist optional — und genau daher kommt der größte Teil des Nutzens. Der
+Installer bringt dafür Googles `agy` mit und bietet die Anmeldung am Ende an; ohne Reviewer läuft
+der Skill allein und sagt dir das auch, und du kannst ihn später nachrüsten.
+
+**Ein GitHub-Konto lohnt sich und ist zum Installieren nicht nötig.** Die Installation meldet dich
+nirgends an, beide Repositories sind öffentlich. Der Grund für ein Konto ist dein eigenes Projekt —
+und zwar nicht die rohen Sweeps: die sind 16 bis 112 MB pro Stück, bleiben auf deiner Platte, und
+wenn du sie je wieder bräuchtest, würdest du neu messen. Bewahrenswert ist alles, was du
+*geschlossen* hast: das Register jeder Trennfrequenz, Laufzeit, Verstärkung und jedes Filters, das
+Journal des Wegs dorthin, die DSP-Backups, die das Tuning wiederherstellen, die Zielkurven und die
+Analysenotizen. Kleine Dateien, die kein Nachmessen zurückbringt. Der Installer fragt, ob sie in ein
+**privates** GitHub-Repository gesichert werden sollen, und legt dafür GitHubs `gh` bereit und
+meldet es an; das Sichern selbst passiert, wenn du der KI sagst, sie soll das Projekt sichern — sie
+weiß, was draußen bleibt. Ein kostenloses Konto reicht.
+
+## Loslegen
+
+Eine Zeile installiert alles: Claude Code, die Methode, die
+[TCC-Desktop-App](https://github.com/ayukhno/autosound-tcc), Gemini als Reviewer und `omp` — das ist
+es, was der App andere Modelle als Claude anbieten lässt. Sie zeigt, was schon auf der Maschine ist,
+listet alles auf, was sie herunterlädt und woher, fragt einmal — und läuft dann zehn bis zwanzig
+Minuten allein weiter. Die eine Unterbrechung kommt direkt nach dieser Frage: auf einem Mac, mit dem
+nie programmiert wurde, fragt sie einmal nach deinem Mac-Passwort für Apples Command Line Tools;
+unter Windows zeigt sie einen Berechtigungsdialog, für Git. Am Ende meldet sie dich im Browser an:
+zuerst Claude (das ist Pflicht), dann Reviewer und GitHub, wenn du sie willst — jeweils mit Enter,
+oder später.
+
+**macOS** — Terminal öffnen (⌘-Leertaste, "terminal" tippen, Enter) und einfügen:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/main/install.sh | bash
+```
+
+**Windows** — PowerShell öffnen (Start, "powershell" tippen, Enter) und einfügen:
+
+```powershell
+irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/main/install.ps1 | iex
+```
+
+Um etwas wegzulassen: `--terminal` (ohne App), `--no-reviewer`, `--no-github` oder `--no-omp`, unter
+macOS nach `bash -s --`; unter Windows dieselben vier als `-Terminal`, `-NoReviewer`, `-NoGitHub`,
+`-NoOmp` in der Form `& ([scriptblock]::Create((irm <diese URL>))) -Terminal`. Dieselbe Zeile
+nochmals ausgeführt **aktualisiert** alles; `--uninstall` / `-Uninstall` entfernt, was der Installer
+angelegt hat — und nie einen Projektordner.
+
+Dann geht es los. Leg einen Ordner für das Auto an — alles zu diesem Auto lebt darin, eine Kopie des
+Ordners ist also eine Kopie des ganzen Tunings — und öffne ihn auf einem der beiden Wege:
+
+**Im Terminal.** Öffne ein *neues* Terminalfenster (das, aus dem du installiert hast, sieht das
+gerade Installierte nicht), dann:
+
+```sh
+mkdir -p ~/Autosound/my-car && cd ~/Autosound/my-car
+```
+
+```sh
+claude
+```
+
+*Dann starte das Tuning mit:* **„messen wir ein neues Auto von Grund auf ein"**.
+
+**In der App.** Doppelklick auf **Autosound TCC** auf dem Desktop, *Browse…* zum Ordner (ein neuer,
+leerer ist richtig), die Modelle wählen — Claude Opus (SDK) als *AI main*, Gemini Pro (High) als
+*AI critic* — *Open* drücken und dasselbe im Panel rechts sagen, in jeder Sprache:
+*„lass uns dieses Auto von Grund auf einmessen"*.
+
+Das ist ein Projekt, nicht zwei: die Methode schreibt die Projektdateien, die App liest sie — du
+kannst einen Tag im Fenster und den nächsten im Terminal arbeiten.
+
+> **Auslösen: nimm ein Car-Audio-Wort dazu.** Der Skill wacht davon auf, *was du fragst*, ein nacktes
+> `resume` weckt ihn also nicht — das könnte jedes Projekt meinen. Nimm ein Fachwort dazu:
+> **„Auto-DSP weiter einmessen"**, **„weiter mit dem Einmessen"**, **„wie ist der aktuelle DSP-/
+> Trennfrequenz-Stand"** — oder in deiner Sprache („продовжити тюн авто", "wróćmy do strojenia car
+> audio", "resume my car-audio tune"). Dasselbe für den Neustart: nenne das Auto oder den Klang,
+> nicht nur „hilf mir".
+
+> **Modell und Aufwand vor der ersten Nachricht setzen.** Beide sind für die Sitzung fest, und
+> nichts hebt sie später an. Stand August 2026: **Claude Opus auf `xhigh`**, mit **Gemini Pro
+> (High)** als Reviewer. [Warum die billigeren Kombinationen leise versagen](#welche-modelle).
+
+<details>
+<summary>Andere Wege hinein: Gemini als Fahrer, oder das 2.x-Plugin, das du vielleicht schon hast</summary>
+
+**Mit Gemini am Steuer.** Einen Plugin-Installer gibt es nicht, aber du kannst eine agentische
+Gemini-Sitzung (Antigravity CLI oder ein beliebiges Gemini mit Datei- und Shell-Zugriff) auf das
+Repository richten:
+
+> Clone https://github.com/ayukhno/autosound-tuning-skill, read `skills/autosound-tuning/SKILL.md`,
+> and follow that method as your operating instructions for this session.
+
+**Schon das 2.x-Plugin installiert?** Dann bist du auf der 2.x-Linie, sie bleibt unterstützt, und
+kein Update holt dich davon herunter: der Marketplace-Eintrag nennt einen exakten Commit statt eines
+Branches. Deine bestehenden Projekte bleiben dort lesbar.
+
+Die Zeile oben installiert 3.x, die ein Projekt als maschinenlesbare Dateien statt als Prosa
+speichert, den Prozess mitschreibt — und die TCC liest. Ein Skill pro Maschine: zwei Plugins, die
+einen Skill gleichen Namens mitbringen, bleiben beide aktiv, und welches antwortet, ist Glückssache.
+Also zuerst das Plugin entfernen, in Claude Code:
+
+```
+/plugin uninstall autosound-tuning
+```
+
+```
+/plugin marketplace remove autosound-tuning-skill
+```
+
+Deine 2.x-Projekte werden nicht konvertiert. 3.x importiert den **aktuellen** Stand des Autos in ein
+**neues** Projekt und lässt das alte unberührt:
+
+```sh
+python3 ~/.claude/skills/.autosound-tuning-src/skills/autosound-tuning/rew_tool/state/migrate.py <old-project> --into <new-project>
+```
+
+Kanäle samt Ausgängen, Trennfrequenzen, Laufzeiten, Pegel, Polarität, EQ und das DSP-Profil ziehen
+mit um. Journal und ältere Snapshots bleiben bewusst zurück: 2.x hat nie festgehalten, welche Fakten
+wann galten — ihre Historie mitzunehmen hieße, sie zu erfinden.
+</details>
+
+## Wie eine Sitzung wirklich klingt
+
+Drei Stimmen: **du** auf dem Hörplatz, **Claude** führt den Prozess, **Gemini** widerspricht bei
+jedem Schritt.
+
+> **Du (Schiedsrichter):** Der Kontrabass dröhnt etwas. Und als ich die Laufzeiten nach Gehör
+> verschoben habe, wurde der Bass besser — tragen wir meine Werte ein?
 >
-> **Claude (Generator):** Erst gegen frische Messungen geprüft: deine Delays sind bereits optimal — dein Ohr mochte etwas anderes. Die wahren Übeltäter sind zwei schmale Türresonanzen und eine zu laute linke Seite. Ich schlage drei chirurgische Schnitte vor.
+> **Claude (Generator):** Erst gegen frische Messungen geprüft: deine Laufzeiten sind bereits
+> optimal — deinem Ohr hat etwas anderes gefallen. Die wahren Übeltäter sind zwei schmale
+> Türresonanzen und eine heiße linke Seite. Ich schlage drei chirurgische Absenkungen vor.
 >
-> **Gemini (Kritiker):** Einwand: einer dieser Schnitte liegt mitten im Übergangsbereich der Weiche — er kann die Summation dort stören.
+> **Gemini (Kritiker):** Einspruch: eine dieser Absenkungen liegt in einem Übergangsbereich — das
+> kann die Summation dort zerstören.
 >
-> **Claude:** Auf den Messungen geprüft — dieser Übergang wird dadurch sogar *besser*. Aber dein Zweifel hat mich genauer hinschauen lassen, und du liegst richtig: es ist nicht nur der Tiefmitteltöner, der Mitteltöner ist dort auch zu laut. Überarbeiteter Plan: jeder Treiber bekommt seinen eigenen Schnitt.
+> **Claude:** An den Messungen geprüft — dieser Übergang wird sogar *besser*. Aber dein Zweifel hat
+> mich tiefer schauen lassen, und du liegst richtig: es ist nicht nur der Tiefmitteltöner, auch der
+> Mitteltöner ist dort heiß. Neuer Plan: jedes Chassis bekommt seine eigene Absenkung.
 >
 > **Gemini:** Jetzt einverstanden.
 >
-> **Du:** Eingetragen. Das Dröhnen ist weg… aber der Subwoofer spielt jetzt von hinten!
+> **Du:** Eingetragen. Das Dröhnen ist weg… aber der Subwoofer ortet jetzt hinter mir!
 >
-> **Claude:** Mein Fehler — zwei meiner Filter überlappen sich und schneiden tiefer als beabsichtigt. Einer wird abgeschwächt.
+> **Claude:** Mein Fehler — zwei meiner Filter überlappen und senken tiefer ab als gewollt. Ich
+> entschärfe einen.
 >
-> **Du:** Der Bass ist wieder vorn — aber er sitzt tief. Ich will ihn oben auf der Windschutzscheibe, wo er vorher war.
+> **Du:** Der Bass ist wieder vorn — sitzt aber tief. Ich will ihn oben an der Scheibe, wie vorher.
 >
-> **Claude:** Der alte Defekt war es, der das Bild oben gehalten hat. Wir bringen den Defekt nicht zurück — stattdessen eine sanfte, symmetrische EQ-Anhebung auf beiden Mitteltönern, damit die Höhe zurückkehrt, ohne die Schieflage.
+> **Claude:** Die alte Höhe kam von genau diesem Fehler. Den holen wir nicht zurück — stattdessen
+> eine sanfte symmetrische EQ-Anhebung auf beiden Mitteltönern, damit die Höhe ohne Schieflage
+> zurückkommt.
 >
-> **Du:** …Der Bass sitzt auf der Motorhaube! So lassen.
+> **Du:** …Der Sub steht auf der Motorhaube! So bleibt es.
 
-Etwa vierzig Minuten von „es dröhnt" bis „der Bass sitzt auf der Motorhaube" — ein Problem, das sonst Wochen forumsgeleiteten Ausprobierens frisst. Jeder Teilnehmer erkannte etwas, das die anderen übersehen hatten, und die Schleife löste alles davon. Die vollständige technische Version, mit jeder Zahl: [die Fallstudie](community-inbox/case-studies/case-study-mode-a-bass-2026-07-15.md).
+Etwa vierzig Minuten von „es dröhnt" bis „der Sub steht auf der Haube" — bei einem Problem, das sonst
+Wochen an Forum-Trial-and-Error frisst. Jeder Beteiligte hat etwas gefangen, das die anderen
+übersehen haben. Die vollständige technische Fassung, mit allen Zahlen, steht in der
+[Fallstudie](community-inbox/case-studies/case-study-mode-a-bass-2026-07-15.md).
 
-**Die Mathematik dahinter** — eine Skript-Bibliothek, die riesige Datenmengen lokal verarbeitet und dabei keine Modell-Tokens verbrennt:
+## Welche Modelle
 
-- **Eine Innenraum- und Einbau-Fehlerkarte, erstellt vor jedem Tuning** — Türresonanzen, Reflexionen und L/R-„Taschen", die kein Stereo-EQ füllen kann, werden aus den ersten Messungen kartiert — so plant der EQ *um den Innenraum herum*, statt gegen ihn zu kämpfen;
-- **Mehrskaliges Kurvenlesen** — jede Kurve wird auf drei „Distanzen" gelesen (Trend → Form → Feinstruktur), und jeder Befund geht an das Werkzeug, dem er gehört: Voicing, Verifikation, ein chirurgischer Schnitt oder „lass es, das ist der Raum";
-- **Jitter-robuste Phasensummation** — Korrekturen an Weichenübergängen werden unter kleinem Delay-/Pegel-Drift bewertet, damit sie die reale Welt überstehen, statt nur an einem Rasierklingen-Optimum zu gewinnen;
-- **Hardware-verifizierte Filtermodelle** — jeder vorgeschlagene EQ/All-Pass wird an deinen *gemessenen* Antworten simuliert, bevor du ihn einträgst;
-- **Ein Excess-Phase-„Boost-Fähigkeit"-Gate** — unterscheidet eine füllbare Senke von einer Interferenz-Auslöschung: kein Treiber muss je gegen die Physik kämpfen;
-- **Vier-Schätzer-Ankunftstriangulation** — vier unabhängige Zeitmessungen müssen übereinstimmen, bevor ein Delay angefasst wird;
-- **Grundton-bewusstes Verzerrungslesen** — THD-Spitzen werden gegen den Pegel des Grundtons geprüft, damit eine Rauminterferenz nie als defekter Treiber fehldiagnostiziert wird.
+**Generator: Claude Opus, Aufwand `xhigh`. Reviewer: Gemini Pro (High).** Das ist die eine
+Kombination, mit der diese Methode durchgehend gefahren wurde. Alles andere ist ein Experiment, das
+du fährst — und so sollte man es auch lesen.
 
-## Erste Schritte
-
-Dieser Skill läuft als Plugin für **Claude Code** (den offiziellen Terminal-Agenten von Anthropic). Falls du ihn noch nicht hast, findest du unten in der FAQ Copy-paste-Installationsschritte für macOS/Windows; eine bezahlte Claude-Subscription ist erforderlich, die Kostenwege stehen in der FAQ. Dort steht auch, [warum eine volle Sitzung weniger Tokens braucht, als man erwarten würde](FAQ.md#why-a-full-session-uses-fewer-tokens-than-youd-expect).
-
-Führe diese Befehle in deiner aktiven Claude-Code-Sitzung **nacheinander, einzeln** aus (kopiere und füge sie nicht zusammen ein):
-
-```bash
-/plugin marketplace add ayukhno/autosound-tuning-skill
-```
-
-```bash
-/plugin install autosound-tuning
-```
-
-```bash
-/reload-plugins
-```
-
-*Dann starte das Tuning mit:* **"tune a new car from scratch"** (oder auf Deutsch: *"stimme ein neues Auto von Grund auf ab"*).
-
-> **Lege Modell und Effort vor der ersten Nachricht fest** — beide gelten für die ganze Sitzung, und nichts hebt sie später an. Stand August 2026 ist das **Claude Opus mit `xhigh`** und **Gemini Pro (High)** als Prüfer; warum die günstigeren Kombinationen leise statt laut versagen, steht unter [dem tatsächlich unterstützten Paar](#das-tatsächlich-unterstützte-paar--stand-august-2026).
-
-> **Auslösen — nenne ein Car-Audio-Wort.** Der Skill reagiert auf das, *was du fragst*, ein bloßes `resume` allein weckt ihn also nicht (zu allgemein — könnte jedes Projekt meinen). Füge ein Domänenwort hinzu: **„Auto-DSP weiter einmessen"**, **„zurück zur Car-HiFi-Abstimmung"**, **„was ist mein aktueller DSP-/Trennfrequenz-Stand"**. Genauso beim Neustart: nenne Auto/Audio, nicht nur „hilf mir".
-
-**Start mit Gemini als Fahrer:** noch nicht ganz so schnell wie mit Claude Code, zumindest bisher. Es gibt keinen Plugin-Installer dafür, aber der schnellste Weg ist, eine agentische Gemini-Sitzung (Antigravity CLI oder ein beliebiges Gemini-Setup mit Datei- und Shell-Zugriff) direkt auf das Repository anzusetzen und zu bitten:
-
-> Clone https://github.com/ayukhno/autosound-tuning-skill, read `skills/autosound-tuning/SKILL.md`, and follow that method as your operating instructions for this session.
-
-Mehr dazu in der FAQ.
-
-### Die 3.x-Linie ausprobieren
-
-Getaggt und installierbar, aber nicht der Standard und noch nicht durch eine vollständige
-Abstimmung belegt. Es ist ein **Formatbruch**: maschinenlesbare Projektdateien statt Prosa, ein
-aufgezeichneter Prozess, Phasen-Gates und eine Desktop-App, die sie liest. Ein 2.x-Projekt öffnet
-sich darin nicht — siehe unten.
-
-Ein Skill pro Rechner. 3.x zu installieren heißt, 2.x zu ersetzen, nicht beide zu betreiben: zwei
-Plugins mit gleichnamigem Skill bleiben beide aktiv, ohne Warnung, und welches antwortet, ist
-offen. Deshalb derselbe lokale Klon wie im Abschnitt darunter, den Sie selbst steuern:
-
-```bash
-git clone -b v3.0.1 https://github.com/ayukhno/autosound-tuning-skill.git ~/autosound-3x
-python3 -m pip install --user -r ~/autosound-3x/skills/autosound-tuning/requirements.txt
-```
-
-Dann in Claude Code, nachdem der aus dem Marketplace installierte Skill entfernt wurde:
-
-```
-/plugin marketplace add ~/autosound-3x
-```
-
-**Bestehende Projekte bleiben auf 2.x und bleiben dort lesbar.** 3.x konvertiert sie nicht; es
-importiert den AKTUELLEN Zustand des Autos in ein NEUES Projekt und lässt das alte unberührt:
-
-```bash
-python3 ~/autosound-3x/skills/autosound-tuning/rew_tool/state/migrate.py <alt> --into <neu>
-```
-
-Kanäle mit ihren Ausgangs-Slots, Trennfrequenzen, Laufzeiten, Pegel, Polarität, EQ und das
-DSP-Profil ziehen um. Journal, Prozesszustand und ältere Snapshots bleiben zurück — bewusst: 2.x
-hielt nicht fest, welche Fakten wann galten, ihre Historie mitzunehmen hieße, Herkunft zu erfinden.
-
-### Auf der 2.x-Linie bleiben
-
-**Du bist bereits darauf, und ein Update verschiebt dich nicht.** Der Marketplace-Eintrag nennt einen exakten Commit statt eines Branches, deshalb kann `/plugin marketplace update` dich nicht über einen Hauptversionswechsel tragen — das geschieht nur, wenn der Eintrag bewusst umgehängt wird, und das wird angekündigt.
-
-Der Weg unten ist für alle, die es selbst steuern wollen: ein lokaler Checkout des Branches `2.x`, der 2.x-Korrekturen außerdem sofort übernimmt und nicht erst, wenn ein Pin weiterrückt. Richte Claude Code darauf statt auf das Marketplace-Repository.
-
-Einmalig im Terminal klonen:
-
-```bash
-git clone -b 2.x https://github.com/ayukhno/autosound-tuning-skill.git ~/autosound-2x
-```
-
-Danach in der Claude-Code-Sitzung, ein Befehl nach dem anderen:
-
-```bash
-/plugin marketplace add ~/autosound-2x
-```
-
-```bash
-/plugin install autosound-tuning
-```
-
-Ein lokaler Pfad wird **referenziert, nicht kopiert** — dieser Checkout *ist* die Plugin-Quelle. `git -C ~/autosound-2x pull` ist also der Weg, 2.x-Fixes zu übernehmen, und nichts hebt dich auf eine neuere Linie, bevor du es selbst entscheidest. Das letzte 2.x-Release trägt den Tag [`v2.8.1`](https://github.com/ayukhno/autosound-tuning-skill/releases/tag/v2.8.1); `git -C ~/autosound-2x checkout v2.8.1` fixiert genau diesen Stand.
-
-Um später zum normalen Kanal zurückzukehren: den lokalen Marketplace entfernen und `ayukhno/autosound-tuning-skill` erneut hinzufügen.
-
-## Empfohlene Modelle, Modi & meine Erfahrung
-
-### Das tatsächlich unterstützte Paar — Stand August 2026
-
-**Generator: Claude Opus, mit Effort `xhigh`. Prüfer: Gemini Pro (High).**
-
-Das ist die eine Kombination, mit der diese Methode von Anfang bis Ende gefahren wurde. Alles andere — ein anderes Modell, ein anderer Anbieter oder dasselbe Modell, das weniger nachdenken soll — ist ein Experiment, das du durchführst, und sollte auch so gelesen werden.
-
-Es ist keine Voraussetzung, und der Skill hängt nicht davon ab. Er besteht aus reinem Markdown und Python, und die kostenlosen Wege, die Zwischenablage und der Web-Chat existieren mit Absicht ([ganz ohne eingerichteten Kritiker](FAQ.md#fallback-direct-api-setup-no-cli-or-nodejs-required), [die AI-Studio-Version](FAQ.md#do-you-have-a-version-running-on-google-ai-studio)). Die Zeile oben sagt, für welche Konfiguration es Belege gibt — nicht, welche der Code akzeptiert.
-
-Erwähnenswert ist das wegen der *Form* des Fehlers. **Ein schwächeres Modell bricht nicht mit einer Fehlermeldung ab — es stimmt dir zu.** Ein dokumentierter Durchlauf schloss die Phasen −1 bis 3 in einer einzigen Sitzung ab und meldete Trennfrequenzen, Laufzeiten auf 0,1 ms genau, EQ „innerhalb ±0,5 dB" und ein Hörurteil — über ein Auto, in dem niemand gesessen hatte. Nichts daran sah kaputt aus. Es war nur keine Abstimmung.
-
-Zwei Hinweise zum Lesen dieser Namen:
-
-* **`xhigh` ist Teil der Empfehlung, keine Vorliebe.** Stelle es dort ein, wo du das Modell wählst (`/model` in Claude Code oder `claude --effort xhigh` beim Start). Nichts erhöht den Effort mitten in der Sitzung von selbst — eine billig gestartete Sitzung bleibt billig, wie schwer die Arbeit auch wird.
-* **Bei Gemini über `agy` *ist* die Effort-Stufe der Modellname** — `gemini-3.1-pro-high`, nicht `-low`. `(High)` ist die ganze Anweisung; `(Low)` ist ein anderer Prüfer, kein günstigerer. Details in [setup-critic-channel.md](skills/autosound-tuning/references/tooling/setup-critic-channel.md).
-
-Das Datum gehört zur Aussage: genau eine undatierte Empfehlung veraltet, ohne dass es jemand merkt.
-
-### Zwei Betriebsarten
+Es zählt wegen der *Form* des Versagens. **Ein schwächeres Modell hält nicht mit einem Fehler an, es
+stimmt dir zu.** Ein dokumentierter Lauf schloss die Phasen −1 bis 3 in einer Sitzung und meldete
+Trennfrequenzen, Laufzeiten auf 0,1 ms genau, EQ „innerhalb ±0,5 dB" und ein Hörurteil — zu einem
+Auto, in dem niemand gesessen hatte. Nichts in diesem Protokoll sah kaputt aus. Es war nur kein
+Einmessen.
 
 | Modus | Aufbau | Verlässlichkeit |
 | :--- | :--- | :--- |
-| **A: Claude + Gemini** | Claude steuert, Gemini prüft (eine Pro-Stufe für die schwierigen akustischen Entscheidungen) | Am höchsten — zwei Perspektiven, dafür langsamer pro Entscheidung |
-| **B: Solo** | Ein Modell steuert und prüft sich selbst | Geringer — eine Perspektive, und die Zahlen sollte man von Hand nachrechnen |
+| **A: Claude + Gemini** | Claude führt, Gemini prüft | Am höchsten: zwei Perspektiven, langsamer pro Entscheidung |
+| **B: Solo** | ein Modell führt und prüft sich selbst | Geringer: eine Perspektive, und die Zahlen will man von Hand nachrechnen |
 
-**Womit steuern** — bisher meine eigene Erfahrung; ich hätte gern, dass daraus Erfahrung der Community wird:
+Womit fahren, nach meiner bisherigen Erfahrung:
 
-* **Opus — die Vorgabe fürs Einmessen.** Es hält eine lange Sitzung zusammen und entscheidet dort, wo ein schwächeres Modell nachfragt. `xhigh` ist die Untergrenze; in den kniffligen Kurven mit **Max effort** fahren.
-* **Sonnet — nicht für ein komplexes Einmessen.** Vorsichtig, und es verliert den Faden, sobald Fakten über eine lange Sitzung hinweg zusammengeführt werden müssen. Für kurze, klar abgegrenzte Schritte in Ordnung.
-* **Fable — für Forschungsaufgaben.** Wo ein neuer Ansatz gesucht und nicht ein bekannter angewandt wird, kamen hier die besten Ideen.
-* **Gemini — als Kritiker**, auf einer Pro-Stufe. Als Steuermodell unter den aktuellen Regeln unerprobt; Rückmeldungen willkommen.
+* **Opus**, die Voreinstellung fürs Einmessen. Hält eine lange Sitzung zusammen und entscheidet
+  dort, wo ein schwächeres Modell stehen bleibt und fragt. `xhigh` ist die Untergrenze; in schweren
+  Kurven auf Max.
+* **Sonnet**, nicht für ein komplexes Tuning. Vorsichtig, und verliert den Faden, sobald Fakten über
+  eine lange Sitzung zusammengeführt werden müssen. Gut für kurze, abgegrenzte Schritte.
+* **Fable**, für die Recherche. Wo es darum geht, einen neuen Ansatz zu finden statt einen bekannten
+  anzuwenden, kamen hier die besten Ideen von ihm.
+* **Gemini**, als Kritiker, auf einer Pro-Stufe. Als Fahrer unter den aktuellen Regeln nicht
+  verifiziert.
 
-**Und das alles ändert sich schnell.** Modelle, Stufen und ihre Stärken verschieben sich von Monat zu Monat — nimm das Obige also als Ausgangspunkt, nicht als Urteil. Probiere selbst, experimentiere, und du wirst finden, was zu deinem Auto und deinem Gehör passt. Was sich *nicht* ändert, ist die Form des Fehlers: was du auch wählst, ein Modell, das weniger nachdenken soll, sagt es dir nicht.
+Modelle und Stufen verschieben sich von Monat zu Monat — nimm das als Startpunkt, nicht als Urteil,
+und probiere selbst. Was sich nicht verschiebt, ist die Form des Versagens: was du auch wählst, ein
+Modell, das weniger denken soll, sagt es dir nicht. Details zur Einrichtung, samt einem kostenlosen
+Browser-Reviewer über Google AI Studio, stehen im [FAQ](FAQ.md).
 
-## Vollständiges Setup & FAQ
+## Die Mathematik darunter
 
-Brauchst du Hilfe bei der Einrichtung von Claude Code, der Ausführung unter **Windows**, der Konfiguration des **Gemini Critic** (einschließlich eines kostenlosen, browserbasierten Arbeitsbereichs über **Google AI Studio**) oder der Auswahl des Mikrofons?
+Eine Bibliothek lokaler Skripte kaut die großen Datenmengen durch, damit die Modelle keine Token
+darauf verwenden:
 
-Sieh dir unsere **[FAQ.md](FAQ.md)** an.
+- **Eine Fehlerkarte von Innenraum und Einbau, erstellt vor jedem Tuning.** Türauslöschungen,
+  Reflexionen und Links/Rechts-„Taschen", die kein Stereo-EQ füllt, werden in den ersten Sweeps
+  gefunden — damit der EQ-Plan *um* den Innenraum herum arbeitet, statt gegen ihn.
+- **Vier unabhängige Laufzeit-Lesungen müssen übereinstimmen**, bevor eine Laufzeit angefasst wird.
+- **Kein Chassis muss gegen die Physik kämpfen.** Eine füllbare Senke und eine Interferenz-
+  auslöschung sehen im Diagramm gleich aus; ein Phasentest trennt sie, und angehoben wird nur die
+  füllbare.
+- **Jedes vorgeschlagene Filter wird auf deinen eigenen gemessenen Kurven simuliert**, bevor du es
+  eintippst, und unter kleinem Laufzeit- und Pegeldrift bewertet — damit es die reale Welt übersteht
+  und nicht nur an einem Messerpunkt gewinnt.
 
 ## Was hier drin ist
 
 ```
 autosound-tuning-skill/        ein Claude-Code-Plugin
 └── skills/autosound-tuning/    der Skill
-    ├── SKILL.md        Einstiegspunkt — Prozessübersicht, Sitzungs-Lebenszyklus, Rollen
-    ├── references/     Docs bei Bedarf (Phasen, Diagnostik, EQ, Filter, Bühne,
-    │                   Test-Tracks, REW API, Helix, die Review-Methode, Intake …)
+    ├── SKILL.md        Einstiegspunkt — Prozesskarte, Sitzungsablauf, Rollen
+    ├── references/     Dokumente auf Abruf (Phasen, Diagnostik, EQ, Filter, Bühne,
+    │                   Testtracks, REW-API, Helix, Review-Methode, Intake …)
     ├── knowledge/      gesammelte Auto- und DSP-Profile (cars/, dsp/)
-    ├── rew_tool/       Brücke zur REW API, Analyse, Zielkurven-Generierung, versionierter Zustand
-    ├── scripts/        Kritiker/Berater-Kanal-Wrapper (Gemini, Claude, Codex)
-    └── curves.html     Zielkurven-Visualisierer
+    ├── rew_tool/       REW-API-Brücke, Analyse, Zielkurven, versionierter Zustand
+    ├── scripts/        Wrapper für die Kritiker-/Berater-Kanäle (Gemini, Claude, Codex)
+    └── curves.html     Zielkurven-Visualizer
 ```
 
-▶ **[Öffne den Zielkurven-Visualisierer online](https://ayukhno.github.io/autosound-tuning-skill/_curve-visualizer.html?lang=de)** (oder öffne `skills/autosound-tuning/curves.html` lokal) — ziehe deine eigene Kurve hinein oder eine Standardkurve vom [Nono Tuning Tool](https://nonotuningtool.com), rechtsklicke auf einen Punkt im Diagramm für den Frequenzcharakter-Guide, und vergleiche Kurven direkt nebeneinander. Es ist eine einzige eigenständige Datei (funktioniert offline) — mit **Speichern unter** im Browser behältst du deine eigene Kopie; die integrierten Kurven und der Drag-and-drop-Import funktionieren weiterhin.
+▶ **[Zielkurven-Visualizer online öffnen](https://ayukhno.github.io/autosound-tuning-skill/_curve-visualizer.html?lang=de)** — zieh deine eigene Kurve hinein oder eine Standardkurve aus dem [Nono Tuning Tool](https://nonotuningtool.com), Rechtsklick auf einen Punkt zeigt den Frequenzcharakter, und Kurven lassen sich nebeneinander vergleichen. Eine einzige eigenständige Datei, funktioniert also offline; mit „Speichern unter" eine Kopie behalten.
 
-Die unabhängige Review-Methode (Kritiker/Berater/Schiedsrichter, Anti-Anchoring) ist als `references/core/review-loop.md` gebündelt; die [Fallstudie](community-inbox/case-studies/case-study-mode-a-bass-2026-07-15.md) zeigt sie an einem echten, schwierigen Fall in Aktion.
+Die Methode der unabhängigen Begutachtung (Kritiker/Berater/Schiedsrichter, Anti-Anchoring) ist in
+`references/core/review-loop.md` beschrieben. Eine zustandslose Web-Chat-Fassung der Methode, ohne
+lokale Installation, liegt im Branch
+[manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step).
 
-Eine separate, zustandslose Web-Chat-Version der Methode, ganz ohne lokale Installation, liegt im Branch [manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step).
+## Erfahrung beitragen
 
-## Deine Erfahrung beitragen
+Der Skill lernt aus jedem Tuning: er sammelt Rückmeldung direkt im Terminal während der Arbeit, nicht
+über ein Formular. Zum Abschluss, wenn du mit dem Klang zufrieden bist, fragt er, was geholfen hat,
+was danebenlag und auf welche DSP- oder Auto-Eigenheit du gestoßen bist. Danach bietet er **nur mit
+deiner ausdrücklichen Zustimmung** an, die *verallgemeinerbaren* Lehren zu teilen — damit die
+gemeinsame Methode und die `knowledge/`-Bibliothek wachsen.
 
-Der Skill lernt aus jeder Abstimmung: Er sammelt dieses Feedback direkt im Terminal, während du arbeitest, nicht über ein Formular. Zum Abschluss, sobald du mit dem Klang zufrieden bist, fragt er, was geholfen hat, was nicht passte und welche DSP-/Auto-Eigenheit dir begegnet ist. Mit **deiner ausdrücklichen Zustimmung** bietet er dann an, die *verallgemeinerbaren* Erkenntnisse zu teilen, um die gemeinsame Methode und die `knowledge/`-Bibliothek wachsen zu lassen.
+Erfasst werden **nur Methode und Geräteklassen**: Verhalten des Innenraums, Klasse der Technik,
+welche Techniken funktioniert haben. **Nie persönliche Daten, nie vollständige Messungen.** Du siehst
+genau, was geteilt wird, und stimmst pro Punkt zu. Bestätigte Lehren fließen mit Nennung in den Skill
+ein.
 
-Er erfasst **nur Methode und Geräteklassen**: Innenraumverhalten, DSP-/Geräteklasse, welche Techniken funktioniert haben. **Niemals persönliche Daten, niemals vollständige Messungen;** du siehst genau, was geteilt wird, und stimmst pro Punkt zu. Bestätigte Erkenntnisse werden mit Namensnennung eingearbeitet.
+## Unterstützen
 
-## Unterstützung
+Der Skill ist **kostenlos und offen** (CC BY-SA) und bleibt es. Nichts steht hinter einer Bezahlung.
+Wenn er geholfen hat und du danke sagen möchtest, gibt es zwei freiwillige Wege:
 
-Der Skill ist **kostenlos und offen** (CC BY-SA) — und bleibt es; nichts ist hinter einer Bezahlung versteckt. Wenn er geholfen hat und du Danke sagen möchtest, gibt es zwei freiwillige Kanäle:
-
-💜 **[GitHub Sponsors](https://github.com/sponsors/ayukhno)** · ☕ **[Monobank-Spendenkasse](https://send.monobank.ua/jar/8wThVcodjm)** — ein Tippen, kein Konto; akzeptiert Apple Pay, Google Pay, Visa, Mastercard.
+💜 **[GitHub Sponsors](https://github.com/sponsors/ayukhno)** · ☕ **[Monobank-Sparglas](https://send.monobank.ua/jar/8wThVcodjm)** — ein Tipp, kein Konto nötig; nimmt Apple Pay, Google Pay, Visa, Mastercard.
 
 ## Lizenz
 
-[CC BY-SA 4.0](LICENSE): nutze, passe an, teile; halte Ableitungen offen und nenne die Quelle. Es ist ein Methoden-/Wissenswerk, daher hält Share-Alike die gesammelte Erfahrung der Community offen.
+[CC BY-SA 4.0](LICENSE): nutzen, anpassen, weitergeben; Ableitungen offen halten und Urheber nennen.
+Es ist eine Methoden- und Wissensarbeit, deshalb hält Share-alike die Erfahrung der Community offen.
 
-Code und Skripte (`rew_tool/`, `scripts/` und andere .py/.sh-Dateien) stehen unter der [MIT-Lizenz](LICENSE-CODE). Assets Dritter sind in [LICENSES/NOTICE.md](LICENSES/NOTICE.md) aufgeführt.
+Code und Skripte (`rew_tool/`, `scripts/` und weitere .py/.sh-Dateien) stehen unter der
+[MIT-Lizenz](LICENSE-CODE). Materialien Dritter sind in [LICENSES/NOTICE.md](LICENSES/NOTICE.md)
+aufgeführt.
