@@ -2,6 +2,25 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
+## [v3.0.7] — 2026-08-19 · which REW has the API
+
+### Fixed
+
+- **Nothing in this method measures without REW's API, and the version a web search gives you does
+  not have one.** A tester installed REW on Windows from the first search result — the release
+  build, V5.31.3, July 2024 — and found no API tab in its preferences at all. The API is in the
+  **beta** builds (5.40), whose downloads live at AV NIRVANA, the REW forum. Both READMEs, all four
+  languages, and both installers now name the beta and link
+  [roomeqwizard.com/beta.html](https://www.roomeqwizard.com/beta.html): in the plan line before
+  anything is downloaded, and again in the closing steps — including the case where REW is already
+  installed, where the tell is "no API tab at all".
+- **A correction to what we told Windows users.** We had been saying Windows REW has no "Start the
+  API when REW starts" box and that the Desktop shortcut worked around it. That was never a
+  platform difference — it was a version one: the machine we saw had the release build, which has
+  no API tab whatsoever. On a beta the panel is identical on both platforms, checkbox included.
+  The `REW (API on)` shortcut stays, described now as what it is: one click that cannot be
+  forgotten.
+
 ## [v3.0.6] — 2026-08-19 · the reviewer can find its own contract
 
 ### Fixed
