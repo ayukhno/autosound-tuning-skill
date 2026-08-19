@@ -59,6 +59,13 @@ had is a full tune driven end to end from the app.
 
 ### Added
 
+- **The 3.x line is the front page.** README, FAQ and the German, Polish and Ukrainian
+  translations describe the one-line install and the desktop app instead of the 2.x plugin. The
+  plugin route is kept as a clearly-labelled note that says which line it gives you, and the
+  marketplace still pins 2.8.1, so nobody already on 2.x is moved. The translations were
+  re-translated from the new English rather than patched — the section structure changed under
+  them.
+
 - **REW → Resonalyze: `rew_tool/resonalyze_ir.py` writes a REW loopback-referenced sweep as the
   impulse-response JSON (format v7) that [Resonalyze](https://github.com/DIMOSUS/Resonalyze) saves
   itself**, so a REW-with-loopback measurement set opens in its Virtual DSP / Auto delay / Auto
