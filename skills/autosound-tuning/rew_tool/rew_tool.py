@@ -7,6 +7,7 @@ Usage: python3 rew_tool.py [--curves-dir PATH]
 import sys
 import os
 import argparse
+import cmath
 import math
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -294,6 +295,111 @@ def _parse_joint(spec):
     return lo, hi, fc, pair
 
 
+def _parse_apf(spec):
+    """'ch,APF1,f0' | 'ch,APF2,f0,Q' → (ch, kind, f0, q_or_None).
+
+    A candidate all-pass to VERIFY — one the Arbiter dialled by hand in TCC's curve window while
+    watching the predicted sum (SCR-050 item 2), not one this tool computed. `APF1`/`APF2` are the
+    ledger's own band types (`state.EQ_TYPES`); the Helix "Phase" angle is deliberately not
+    accepted here — it is one vendor's control and takes an angle, not an f0."""
+    parts = [p.strip() for p in spec.split(",")]
+    if len(parts) < 3:
+        raise ValueError(f"all-pass '{spec}': треба 'ch,APF1,f0' або 'ch,APF2,f0,Q'")
+    ch, kind = parts[0], parts[1].upper()
+    if kind not in ("APF1", "APF2"):
+        raise ValueError(f"all-pass '{spec}': тип має бути APF1 або APF2, не '{parts[1]}'")
+    f0 = float(parts[2])
+    if not f0 > 0:
+        raise ValueError(f"all-pass '{spec}': f0 має бути > 0 Гц")
+    if kind == "APF1":
+        if len(parts) > 3 and parts[3]:
+            raise ValueError(f"all-pass '{spec}': APF1 не має Q")
+        return ch, kind, f0, None
+    if len(parts) < 4 or not parts[3]:
+        raise ValueError(f"all-pass '{spec}': APF2 потребує Q ('ch,APF2,f0,Q')")
+    q = float(parts[3])
+    if not q > 0:
+        raise ValueError(f"all-pass '{spec}': Q має бути > 0")
+    return ch, kind, f0, q
+
+
+def _apf_label(kind, f0, q):
+    return f"{kind} {f0:g} Hz" + (f" Q {q:g}" if q is not None else "")
+
+
+def _apf_rotation(kind, f0, q, freqs):
+    """The candidate's complex response on `freqs` — from `dsp_math`, the ONE implementation of
+    the filter (numpy; imported here so the plain analyze-joints path stays pure Python)."""
+    import numpy as np
+    import dsp_math
+
+    f = np.asarray(freqs, dtype=float)
+    h = dsp_math.apf1_response(f, f0) if kind == "APF1" else dsp_math.apf2_response(f, f0, q)
+    return [complex(v) for v in h]
+
+
+def _rotate_trace(mag_db, phase_deg, rotation):
+    """A (mag, phase) trace with a unit-magnitude rotation applied: the phase moves, the level
+    does not — which is what makes it an all-pass, and what the Critic is asked to check."""
+    n = min(len(mag_db), len(phase_deg), len(rotation))
+    return (list(mag_db[:n]),
+            [phase_deg[k] + math.degrees(cmath.phase(rotation[k])) for k in range(n)])
+
+
+def _worst_null(f, a, b, pol=1, tau_ms=0.0):
+    """(worst null in dB against |a|+|b|, at which Hz) of a + pol·b·delay, at ONE setting.
+
+    `align_by_summation` searches the delay; this reads the joint AS IT STANDS — the solos were
+    captured under the DSP's current delays, so tau=0, pol=+1 is "no further change"."""
+    worst, where = 0.0, None
+    tau = tau_ms / 1000.0
+    for k in range(len(f)):
+        sk = a[k] + pol * b[k] * cmath.exp(-1j * 2 * math.pi * f[k] * tau)
+        ceil = abs(a[k]) + abs(b[k])
+        if ceil > 0:
+            r = 20 * math.log10(abs(sk) / ceil) if abs(sk) > 0 else -120.0
+            if r < worst:
+                worst, where = r, f[k]
+    return round(worst, 2), (round(where, 1) if where is not None else None)
+
+
+def _check_candidate(hz, mA, pA, mB, pB, band, lo, hi, candidates):
+    """What a hand-dialled all-pass does to THIS joint, three ways, on the measured solos.
+
+    `now`: the joint as it stands (no change). `with_apf`: the candidate applied and nothing else
+    moved — the reading TCC's predicted sum showed. `with_apf_and_delay`: the candidate plus the
+    best further delay/polarity, so the reader can tell "the rotation fixes it" from "the rotation
+    plus a delay change would". Same band, same measured pair of solos as the row above it — the
+    trust label of that row applies to all three."""
+    keep = ja._in_band(hz, band)
+    f = [hz[k] for k in keep]
+    A = ja._complex_trace(mA, pA)
+    B = ja._complex_trace(mB, pB)
+    a = [A[k] for k in keep]
+    b = [B[k] for k in keep]
+    now_db, now_hz = _worst_null(f, a, b)
+    mA2, pA2, mB2, pB2 = mA, pA, mB, pB
+    applied = []
+    if lo in candidates:
+        kind, f0, q = candidates[lo]
+        mA2, pA2 = _rotate_trace(mA, pA, _apf_rotation(kind, f0, q, hz))
+        applied.append(f"{_apf_label(kind, f0, q)} on {lo}")
+    if hi in candidates:
+        kind, f0, q = candidates[hi]
+        mB2, pB2 = _rotate_trace(mB, pB, _apf_rotation(kind, f0, q, hz))
+        applied.append(f"{_apf_label(kind, f0, q)} on {hi}")
+    A2 = ja._complex_trace(mA2, pA2)
+    B2 = ja._complex_trace(mB2, pB2)
+    with_db, with_hz = _worst_null(f, [A2[k] for k in keep], [B2[k] for k in keep])
+    al2 = ja.align_by_summation(hz, mA2, pA2, mB2, pB2, band=band)
+    return {"applied": applied,
+            "now_null_db": now_db, "now_null_hz": now_hz,
+            "with_null_db": with_db, "with_null_hz": with_hz,
+            "with_delay_null_db": al2["residual_null_db"],
+            "with_delay_ms": al2["delay_ms"], "with_polarity": al2["polarity"],
+            "helps": with_db > now_db + 0.5}
+
+
 def _edge_f(edge):
     """A crossover edge (hp/lp) → its frequency, or None when disabled/OFF/null."""
     if isinstance(edge, dict):
@@ -354,10 +460,18 @@ def _joints_from_state(state_root, preset=None, ver_state=None):
     return preset, snap.get("version"), joints
 
 
-def analyze_joints(joint_specs, ver="2", band_oct=1.0):
+def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None):
     """Batch joint/group analysis: walk every adjacent joint in ONE pass and
     render one consolidated table (polarity + drift-immune delay + residual +
     APF suggestion per joint), reusing joint_analysis.py unchanged.
+
+    `candidates` = {channel: (kind, f0, q)} — all-passes to VERIFY rather than
+    propose (SCR-050 item 2): the ones the Arbiter dialled by hand in TCC's
+    curve window against the predicted sum. Every joint touching such a
+    channel gets one more line — the joint as it stands, with the candidate
+    and nothing else changed, and with the candidate plus the best further
+    delay — under the SAME trust gate as the row above it: no pair → the
+    candidate is UNVERIFIED too; gate tripped → nothing is computed for it.
 
     Honesty (matches the Phase-2b method + the core phase guardrail): a joint's
     computed delay/polarity/APF is trustworthy ONLY when the complex solos
@@ -382,13 +496,21 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0):
     print("  align_by_summation = дрейф-імунна полярність+затримка з сумування; "
           "trust = чи комплексні solo відтворюють виміряну пару.")
     print("  ⚠️ Без пари (nopair) або BLOCK → НЕ вводь обчислену затримку/APF: "
-          "перекинь полярність і переміряй сумування.\n")
+          "перекинь полярність і переміряй сумування.")
+    candidates = dict(candidates or {})
+    if candidates:
+        print("  ↳ кандидати all-pass (виставлені вручну, ПЕРЕВІРЯЄМО, не пропонуємо): "
+              + "; ".join(f"{ch}: {_apf_label(*spec)}" for ch, spec in candidates.items())
+              + " — null «зараз» → «з APF» (без інших змін) → «з APF + найкраща затримка»,"
+                " довіра та сама, що в рядку стику.")
+    print()
     hdr = (f"  {'Joint':<15}{'fc':>6}{'band':>12}{'trust':>12}"
            f"{'pol':>5}{'delay_ms':>9}{'resid':>7}{'APF f0/Q':>10}  verdict")
     print(hdr)
     print("  " + "-" * 96)
 
     rows = []
+    touched = set()
     for lo, hi, fc, pair_name in joint_specs:
         band = (fc / (2 ** band_oct), fc * (2 ** band_oct))
         band_s = f"{band[0]:.0f}-{band[1]:.0f}"
@@ -443,6 +565,28 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0):
                      "polarity": al["polarity"], "delay_ms": al["delay_ms"],
                      "residual_null_db": al["residual_null_db"],
                      "needs_allpass": al["needs_allpass"], "verdict": verdict})
+        if lo in candidates or hi in candidates:
+            # The hand-dialled all-pass against THIS joint's measured solos. Printed under the
+            # row it belongs to and carrying that row's trust: a candidate on an UNVERIFIED
+            # joint is an UNVERIFIED candidate, however good the number looks.
+            touched.update(ch for ch in (lo, hi) if ch in candidates)
+            cand = _check_candidate(fA, mA, pA, mB2, pB2, band, lo, hi, candidates)
+            trust_word = ("phase-verified" if trusted is True
+                          else "UNVERIFIED (nopair) — confirm by summation")
+            where_now = f" @ {cand['now_null_hz']:.0f} Hz" if cand["now_null_hz"] else ""
+            where_with = f" @ {cand['with_null_hz']:.0f} Hz" if cand["with_null_hz"] else ""
+            print(f"  {'':<15}  ↳ {'; '.join(cand['applied'])}: null now "
+                  f"{cand['now_null_db']:+.1f} dB{where_now} → with APF "
+                  f"{cand['with_null_db']:+.1f} dB{where_with} (no other change) → "
+                  f"with APF + best delay {cand['with_delay_null_db']:+.1f} dB "
+                  f"({'NORM' if cand['with_polarity'] == 1 else 'INV'} "
+                  f"{cand['with_delay_ms']:+.2f} ms)  "
+                  f"{'HELPS' if cand['helps'] else 'does not help'} — {trust_word}")
+            rows[-1]["candidate"] = cand
+    for ch in candidates:
+        if ch not in touched:
+            print(f"  ↳ кандидат на {ch} ({_apf_label(*candidates[ch])}): жоден стик у списку "
+                  f"не торкається {ch} — нема з чим перевірити.")
 
     print(f"\n  Порядок вирівнювання (метод §2b): midbass(ref) → sub → mid → tweeter, "
           f"тоді L↔R. Вводь через APF/Helix-phase, не raw-delay.")
@@ -572,6 +716,54 @@ def _selftest():
         assert rows_b[0]["verdict"] == "blocked", rows_b
         print(f"selftest[joints] OK — recovered pol=INV, delay={rows[0]['delay_ms']}ms "
               f"(≈−{tau}); nopair→UNVERIFIED; bad-pair→BLOCK (no delay emitted).")
+
+        # ── a hand-dialled all-pass, VERIFIED not proposed (SCR-050 item 2). hi = lo rotated by
+        #    an APF2 at 400 Hz: the joint nulls at 400 in phase. The candidate is the SAME APF2
+        #    on lo — it un-rotates the pair, so the null closes with no delay change at all;
+        #    the same candidate on hi doubles the rotation and does not help. ─────────────
+        import cmath as _cm
+        def _ap2_deg(f, f0, q):
+            x = f / f0
+            return math.degrees(-2.0 * math.atan2(x / q, 1.0 - x * x))
+        phB_rot = [_ap2_deg(f, 400.0, 1.0) for f in hz]
+        jfr[10] = (hz, magA, phA)
+        jfr[11] = (hz, magA, phB_rot)
+        del jmeas["12"]
+        rows_c = analyze_joints([("w-L", "m-L", 400.0, None)], ver="2",
+                                candidates={"w-L": ("APF2", 400.0, 1.0)})
+        cand = rows_c[0]["candidate"]
+        # −39.5 dB and not −inf: the grid's nearest point to 400 Hz is 402 Hz, where the
+        # rotation is a shade under 180°. A real joint never cancels bit-for-bit either.
+        assert cand["now_null_db"] < -30.0 and abs(cand["now_null_hz"] - 400.0) < 10.0, cand
+        assert cand["with_null_db"] > -0.5, ("the same rotation on lo closes the null", cand)
+        assert cand["helps"] is True and cand["applied"] == ["APF2 400 Hz Q 1 on w-L"], cand
+        assert rows_c[0]["trust"] is None, "no pair → the candidate is UNVERIFIED like its row"
+        rows_w = analyze_joints([("w-L", "m-L", 400.0, None)], ver="2",
+                                candidates={"m-L": ("APF2", 400.0, 1.0)})
+        wrong = rows_w[0]["candidate"]
+        assert wrong["with_null_db"] < -30.0 and wrong["helps"] is False, wrong
+        # ...and a first-order candidate on the same joint MOVES the null instead of closing it:
+        # APF2 − APF1 leaves 0° far below f0, −90° at f0 (−3 dB there) and a full −180° far
+        # above, so the band's worst point walks up to the top edge — the exact "does it fix the
+        # joint or move the problem" that a candidate line exists to show.
+        rows_1 = analyze_joints([("w-L", "m-L", 400.0, None)], ver="2",
+                                candidates={"w-L": ("APF1", 400.0, None)})
+        one = rows_1[0]["candidate"]
+        assert -25.0 < one["with_null_db"] < -10.0 and one["with_null_hz"] > 600.0, one
+        assert one["helps"] is True, "shallower than −39.5 counts as help, and the line says where"
+        assert _parse_apf("m-L,apf2,300,0.71") == ("m-L", "APF2", 300.0, 0.71)
+        assert _parse_apf("w-L, APF1, 80") == ("w-L", "APF1", 80.0, None)
+        for bad in ("m-L,APF3,300,1", "m-L,APF2,300", "m-L,APF1,80,0.7", "m-L,APF2,-5,1"):
+            try:
+                _parse_apf(bad)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError(f"_parse_apf accepted {bad!r}")
+        print("selftest[joints:candidate] OK — hand-dialled APF2 on lo closes the 400 Hz null "
+              f"({cand['now_null_db']:+.1f} → {cand['with_null_db']:+.1f} dB, no delay change), "
+              "the same APF2 on hi does not help, an APF1 moves the null to the band's top, "
+              "bad specs refused.")
     finally:
         api.get_measurements, api.get_fr = orig_gm2, orig_fr2
         api.find_measurement_id = orig_find_id
@@ -643,6 +835,9 @@ def main():
                     help="Версія solo-замірів (назва = <ch>_<ver> (sw)); дефолт 2")
     pj.add_argument("--band-oct", type=float, default=1.0,
                     help="Півширина смуги стику в октавах навколо fc (дефолт 1.0)")
+    pj.add_argument("--apf", action="append", default=[], metavar="ch,APF1,f0 | ch,APF2,f0,Q",
+                    help="Кандидат all-pass ПЕРЕВІРИТИ (не запропонувати): виставлений вручну "
+                         "в TCC. Напр. --apf 'm-L,APF2,300,0.71'. Повторюваний, один на канал.")
     sub.add_parser("selftest", help="Офлайн-перевірка batch/joints режимів (без REW)")
     args = parser.parse_args()
 
@@ -678,7 +873,13 @@ def main():
             if not specs:
                 print("  Жодного стику не отримано (порожній state?).")
                 sys.exit(1)
-            analyze_joints(specs, ver=args.ver, band_oct=args.band_oct)
+            candidates = {}
+            for ch, kind, f0, q in (_parse_apf(a) for a in args.apf):
+                if ch in candidates:
+                    raise ValueError(f"--apf: канал {ch} названо двічі; один кандидат на канал")
+                candidates[ch] = (kind, f0, q)
+            analyze_joints(specs, ver=args.ver, band_oct=args.band_oct,
+                           candidates=candidates)
         except ValueError as e:
             print(f"Помилка: {e}")
             sys.exit(1)
