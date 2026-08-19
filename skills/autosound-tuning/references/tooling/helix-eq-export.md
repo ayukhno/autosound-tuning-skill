@@ -4,9 +4,20 @@
 Don't enter EQ into Helix by hand (the per-channel EQ can't be viewed/copied all at once). Instead — **export from REW in the Audiotec-Fischer format → import into the Helix PC-Tool as a single file**.
 
 ## The canonical path
-1. In REW (EQ window) set **Equaliser = "Audiotec-Fischer"** (via the API: `set_equaliser(mid, "Audiotec Fischer", "Full EQ (30 bands)")` — the payload needs BOTH manufacturer and model, a bare name is rejected `400 "No manufacturer in the request"`; list — `get_equalisers()`). Then REW keeps the filters within Helix's limits from the start: **30 bands**, types PK / LS_Q / HS_Q.
+1. In REW (EQ window) set **Equaliser = "Audiotec-Fischer"** (via the API: `set_equaliser(mid, "Audiotec Fischer", "Full EQ (30 bands)")` — the payload needs BOTH manufacturer and model, a bare name is rejected `400 "No manufacturer in the request"`; list — `get_equalisers()`). Then REW keeps the filters within Helix's limits from the start: **30 bands**, types PK / LS_Q / HS_Q
+   — plus **`Modal`**, REW's room-mode filter, which this equaliser also accepts and writes into the bank
+   (verified 2026-08-19). A modal row is a bell: it carries Fc / Gain / **Q** and its `TargetT60(ms)` is
+   REW's own metadata (the filter has no Q of its own in REW's model — the API refuses `q` for it — and
+   the Q it writes is neither 1/T60 nor any textbook identity: for `120 Hz −6 dB T60 300 ms` it writes
+   **Q 11.59**, which is what the filter actually realizes, matching `π·f0·T60/ln(1000)·10^(gain/40)`).
+   **Read the Q column, never derive from T60**; the Helix has no modal slot, so such a band enters as PK.
 2. Fit the filters to the target (Method 2: Target Settings + Generic/Extended EQ) — they're already in a Helix-compatible form.
-3. **Export** the filter list → a file in the format below.
+3. **Copy the filter list to the clipboard from the EQ window** → that is the block below.
+   ⚠️ **Not** `File → Export → Filter settings as text` — verified 2026-08-19 (REW 5.40 β132): that
+   menu writes REW's OWN layout (`Filter Settings file` / `Filter 1: ON PK Fc … Gain … Q …`), which
+   the PC-Tool does not import. The tab-separated `Audiotec_Fischer_Full_EQ_(30_bands)` bank comes
+   from the EQ window's copy-to-clipboard with this equaliser selected (paste into a file, or read it
+   with `pbpaste`). Both real files: `autosound-measurements/hardware/helix/dsp-ultra-s/formats/`.
 4. Move the file into Parallels (shared folder) → **import into the Helix PC-Tool** on the right channel.
 
 > Alternative — `rew_tool/atf_eq.py` (validated on a REAL export: `rew_tool/testdata/atf_full_eq_sample.txt`, `python3 atf_eq.py --selftest`): **`format_atf_eq()`** generates this 30-band block from computed PEQs (bypassing the REW export, deviation→PEQ), and **`parse_atf_eq()`** reads it BACK into a structure — for the black-box case (recover an existing Helix EQ from a file when the live DSP can't be read — `diagnostic-techniques.md §22`). CLI: `python3 atf_eq.py <file>`.
