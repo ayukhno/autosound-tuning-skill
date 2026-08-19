@@ -68,6 +68,9 @@ ENV_FILE_USED = load_env_file()
 # Optional cross-project canon dir (UNSET by default; set AUTOSOUND_DIR in env/.critic-env).
 AUTOSOUND_DIR = os.environ.get("AUTOSOUND_DIR", "")
 
+# Де живе сам скіл: <skill>/scripts/autosound_ai.py -> <skill>
+SKILL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 # Пошук файлів контракту та контексту
 def find_file(filename, fallback_dir=None):
     # Спочатку шукаємо локально в rew_analitic
@@ -83,6 +86,14 @@ def find_file(filename, fallback_dir=None):
         fallback_path = os.path.join(fallback_dir, filename)
         if os.path.isfile(fallback_path):
             return fallback_path
+    # І нарешті — у самому скілі. Контракт (`data-contract-template.md`) НАЛЕЖИТЬ методу, а не
+    # проєкту: він їде разом зі скілом в `assets/`. Доки цієї гілки не було, на чистій установці
+    # рецензент не міг знайти його НІКОЛИ — жодна тека проєкту його не має, бо ніхто його туди не
+    # копіює, — і критик коротко замикався на "not ready" незалежно від стану проєкту (user, на
+    # свіжій Windows, 2026-08-19). Ця гілка остання: копія в проєкті, якщо вона є, і далі важливіша.
+    skill_path = os.path.join(SKILL_DIR, "assets", filename)
+    if os.path.isfile(skill_path):
+        return skill_path
     return None
 
 CONTRACT = find_file("data-contract-template.md", AUTOSOUND_DIR or None)
@@ -471,7 +482,8 @@ def main():
         
     # Префлайт перевірка локальних файлів
     if not CONTRACT or not os.path.isfile(CONTRACT):
-        print(f"Помилка: Не знайдено контракт data-contract-template.md у '{PROJECT_MIRROR}' чи в AUTOSOUND_DIR.", file=sys.stderr)
+        _assets = os.path.join(SKILL_DIR, "assets")
+        print(f"Помилка: Не знайдено контракт data-contract-template.md — ні в '{PROJECT_MIRROR}', ні в проєкті, ні в AUTOSOUND_DIR, ні у скілі ('{_assets}').", file=sys.stderr)
         sys.exit(1)
     if not CONTEXT or not os.path.isfile(CONTEXT):
         print(f"Помилка: Не знайдено контекст проекту autosound_context.md у '{PROJECT_MIRROR}' чи в AUTOSOUND_DIR.", file=sys.stderr)
