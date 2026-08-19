@@ -12,9 +12,16 @@ All notable changes to the autosound-tuning skill. The skill is co-developed wit
   so with the command already on the machine there is nothing to decide, and it is skipped (the
   option line still names `--no-github`, so the choice stays visible). The Gemini reviewer offered
   its sign-in on every run, unlike Claude and GitHub either side of it, which check first: there
-  is now an `agy_status`, read off `~/.gemini/` — the credentials file for whether, the account
-  file for who, and the credentials themselves never opened — so a signed-in reviewer reports
-  `✓ signed in as …` and the Google setup screens are not walked again.
+  is now an `agy_status`, read off disk (never by running `agy`, which is interactive and takes
+  over the terminal) — so a signed-in reviewer reports it and the Google setup screens are not
+  walked again. **Three signals, not one**: the first version looked only at
+  `~/.gemini/oauth_creds.json` and still offered the sign-in on a Mac that had done it — that file
+  is the shape Google's own `gemini` CLI writes, which `agy` is a fork of and shares a folder with,
+  so a machine with only `agy` on it need not have one. Also read: `agy`'s own state file, which
+  records that its setup screens were walked, and `GEMINI_API_KEY`/`GOOGLE_API_KEY`, which the
+  reviewer runs on just as well. An account name prints as "signed in as …"; the weaker signals
+  print as "already set up" with the command to check it, because claiming a sign-in the script
+  cannot see would be worse than one extra line. No credential file is opened for its contents.
 - **The Desktop shortcut kept the blank icon even after the bundle was fixed** — it took a Get
   Info to refresh. Finder caches an icon against the item that has it, so a link first drawn when
   the app had no icon keeps that tile. The installer now REPLACES its own shortcut instead of

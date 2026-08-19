@@ -266,20 +266,32 @@ function Get-RewExe {
     return $null
 }
 function Test-RewApp { return [bool](Get-RewExe) }
-function Get-AgyStatus {  # the signed-in Google account, else $null
+function Get-AgyStatus {  # the account, or "set up", when the reviewer is already configured
     # Read off disk, not by running `agy`: the CLI is interactive -- it opens its own screen and
-    # waits -- so there is nothing to ask it that does not take over the terminal. A successful
-    # sign-in leaves an OAuth credentials file and, beside it, the account it belongs to. Only the
-    # account is read; the credentials are never opened.
+    # waits -- so there is nothing to ask it that does not take over the terminal.
+    #
+    # THREE signals, because the sign-in does not land in one place (macOS, 2026-08-19: a machine
+    # that had signed in was offered the sign-in again, because only the first was checked).
+    # oauth_creds.json is the shape Google's own gemini-cli writes and agy shares its folder with;
+    # antigravity_state.pbtxt is agy's own, and records that its setup screens were walked; an API
+    # key in the environment is a way the reviewer runs just as well as a login.
+    # Only the ACCOUNT is ever read -- no credential file is opened for its contents.
     $creds = Join-Path $HOME ".gemini\oauth_creds.json"
-    if (-not (Test-Path $creds)) { return $null }
-    if ((Get-Item $creds).Length -le 0) { return $null }
-    $accounts = Join-Path $HOME ".gemini\google_accounts.json"
-    if (Test-Path $accounts) {
-        $raw = (Get-Content $accounts -Raw -ErrorAction SilentlyContinue)
-        if ($raw -match '"active"\s*:\s*"([^"]*)"') { return $Matches[1] }
+    if ((Test-Path $creds) -and ((Get-Item $creds).Length -gt 0)) {
+        $accounts = Join-Path $HOME ".gemini\google_accounts.json"
+        if (Test-Path $accounts) {
+            $raw = (Get-Content $accounts -Raw -ErrorAction SilentlyContinue)
+            if ($raw -match '"active"\s*:\s*"([^"]*)"') { return $Matches[1] }
+        }
+        return "set up"
     }
-    return "signed in"
+    $state = Join-Path $HOME ".gemini\antigravity\antigravity_state.pbtxt"
+    if (Test-Path $state) {
+        $raw = (Get-Content $state -Raw -ErrorAction SilentlyContinue)
+        if ($raw -match 'agent_onboarding_completed:\s*true') { return "set up" }
+    }
+    if ($env:GEMINI_API_KEY -or $env:GOOGLE_API_KEY) { return "an API key in your environment" }
+    return $null
 }
 function Get-ClaudeStatus {  # "email (plan)" when signed in, else $null
     $c = Find-Bin claude
@@ -920,11 +932,15 @@ if ($DryRun) {
         }
         $n++
     }
-    if ($AgyBin -and (Get-AgyStatus)) {
-        # Already signed in -- the same courtesy Claude and GitHub get either side of this step.
-        # It used to offer the sign-in on every run, so a re-run to fix something else walked the
-        # person back through Google's setup screens (user, 2026-08-19, on macOS).
-        Say "$n. Gemini reviewer: OK   signed in as $(Get-AgyStatus)"
+    $agySeen = Get-AgyStatus
+    if ($AgyBin -and $agySeen) {
+        # Already set up -- the same courtesy Claude and GitHub get either side of this step. It
+        # used to offer the sign-in on every run, so a re-run to fix something else walked the
+        # person back through Google's setup screens (user, 2026-08-19, on macOS). Two sentences,
+        # because an account name is a sign-in and the other signals are "configured, and here is
+        # how to check" -- claiming a sign-in this script cannot see would be worse.
+        if ($agySeen -like "*@*") { Say "$n. Gemini reviewer: OK   signed in as $agySeen" }
+        else { Say "$n. Gemini reviewer: OK   already set up ($agySeen). To check it:  agy" }
         $n++
     }
     elseif ($AgyBin) {

@@ -304,16 +304,36 @@ rew_app_found() {
   # Anywhere else: Spotlight, by bundle id. Silent and fast when Spotlight is on; empty when off.
   [ -n "$(mdfind "kMDItemCFBundleIdentifier == 'roomeqwizard*'" 2>/dev/null | head -1)" ]
 }
-agy_status() {  # prints the signed-in Google account when there is one; fails otherwise
+agy_status() {  # prints the account, or "set up", when the reviewer is already configured
   # Read off disk, not by running `agy`: the CLI is interactive — it opens its own screen and
-  # waits — so there is nothing to ask it that does not take over the terminal. What it writes
-  # when a sign-in succeeds is an OAuth credentials file, and beside it the account it belongs
-  # to. Only the account is read here; the credentials are never opened, printed or checked for
-  # anything but existence.
-  [ -s "$HOME/.gemini/oauth_creds.json" ] || return 1
-  _a="$(sed -n 's/.*"active": *"\([^"]*\)".*/\1/p' "$HOME/.gemini/google_accounts.json" \
-        2>/dev/null | head -1)"
-  printf '%s' "${_a:-signed in}"
+  # waits — so there is nothing to ask it that does not take over the terminal.
+  #
+  # THREE signals, because the sign-in does not land in one place. The first version of this
+  # looked only at `oauth_creds.json` and still offered the sign-in on a Mac that had done it
+  # (user, 2026-08-19) — that file is the shape Google's own `gemini` CLI writes, which agy is a
+  # fork of and shares a config folder with; a machine with only agy on it need not have one.
+  # So also: agy's own state file, which records that its setup screens have been walked, and an
+  # API key in the environment, which is a way the reviewer runs just as well as a login.
+  #
+  # Only the ACCOUNT is ever read. No credential file is opened for its contents — the two
+  # `[ -s ]` tests ask whether a file exists and is not empty, and nothing more.
+  _a=""
+  if [ -s "$HOME/.gemini/oauth_creds.json" ]; then
+    _a="$(sed -n 's/.*"active": *"\([^"]*\)".*/\1/p' "$HOME/.gemini/google_accounts.json" \
+          2>/dev/null | head -1)"
+    printf '%s' "${_a:-set up}"
+    return 0
+  fi
+  if grep -q 'agent_onboarding_completed: *true' \
+       "$HOME/.gemini/antigravity/antigravity_state.pbtxt" 2>/dev/null; then
+    printf 'set up'
+    return 0
+  fi
+  if [ -n "${GEMINI_API_KEY:-}${GOOGLE_API_KEY:-}" ]; then
+    printf 'an API key in your environment'
+    return 0
+  fi
+  return 1
 }
 
 claude_status() {  # prints "email (plan)" when signed in; fails otherwise
@@ -1063,12 +1083,19 @@ else
   # 2. The reviewer — optional, once. Its first run is Google's own setup (colours, workspace
   # trust, the browser sign-in, and on some accounts a Project ID), so it is described in full
   # and then handed the terminal.
-  if [ -n "$AGY_BIN" ] && [ -n "$(agy_status || true)" ]; then
-    # Already signed in — the same courtesy Claude and GitHub get two steps either side of this
-    # one. It used to offer the sign-in on every run, so a re-run to fix something else walked
-    # the person back through Google's setup screens (user, 2026-08-19, re-running to fix an
-    # icon).
-    say "  $n. Gemini reviewer: ✓ signed in as $(agy_status)"
+  _agy_seen="$(agy_status || true)"
+  if [ -n "$AGY_BIN" ] && [ -n "$_agy_seen" ]; then
+    # Already set up — the same courtesy Claude and GitHub get two steps either side of this one.
+    # It used to offer the sign-in on every run, so a re-run to fix something else walked the
+    # person back through Google's setup screens (user, 2026-08-19, re-running to fix an icon).
+    #
+    # Two sentences, because the three signals do not say the same thing: an account name is a
+    # sign-in, the rest is "configured, and here is how to check". Claiming a sign-in this script
+    # cannot see would be worse than one extra line.
+    case "$_agy_seen" in
+      *@*) say "  $n. Gemini reviewer: ✓ signed in as $_agy_seen" ;;
+      *)   say "  $n. Gemini reviewer: ✓ already set up ($_agy_seen). To check it:  agy" ;;
+    esac
     n=$((n + 1))
   elif [ -n "$AGY_BIN" ]; then
     say "  $n. Gemini reviewer — optional, once. Have a Google account ready. What happens:"
