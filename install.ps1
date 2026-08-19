@@ -266,6 +266,21 @@ function Get-RewExe {
     return $null
 }
 function Test-RewApp { return [bool](Get-RewExe) }
+function Get-AgyStatus {  # the signed-in Google account, else $null
+    # Read off disk, not by running `agy`: the CLI is interactive -- it opens its own screen and
+    # waits -- so there is nothing to ask it that does not take over the terminal. A successful
+    # sign-in leaves an OAuth credentials file and, beside it, the account it belongs to. Only the
+    # account is read; the credentials are never opened.
+    $creds = Join-Path $HOME ".gemini\oauth_creds.json"
+    if (-not (Test-Path $creds)) { return $null }
+    if ((Get-Item $creds).Length -le 0) { return $null }
+    $accounts = Join-Path $HOME ".gemini\google_accounts.json"
+    if (Test-Path $accounts) {
+        $raw = (Get-Content $accounts -Raw -ErrorAction SilentlyContinue)
+        if ($raw -match '"active"\s*:\s*"([^"]*)"') { return $Matches[1] }
+    }
+    return "signed in"
+}
 function Get-ClaudeStatus {  # "email (plan)" when signed in, else $null
     $c = Find-Bin claude
     if (-not $c) { return $null }
@@ -434,7 +449,11 @@ if ($RewApi)      { Say "  OK   REW, and its API is on" }
 elseif ($RewApp)  { Say "  OK   REW -- its API is off; a shortcut that starts REW with it on goes on your Desktop" }
 else              { Say "  --   REW not found -- install it from roomeqwizard.com; nothing measures without it" }
 
-# One optional question, here because the answer changes the download list below (SCR-049).
+# One optional question, here because the answer changes the download list below (SCR-049) -- and
+# only when there is something to decide. `gh` already on the machine means the answer was given on
+# an earlier run, and asking again is a question with no download behind it (user, 2026-08-19).
+# Nothing outward-facing rides on it: the installer never pushes a project anywhere.
+if ($WantGitHub -eq "ask" -and $HaveGh) { $WantGitHub = "1" }
 if ($WantGitHub -eq "ask") {
     Write-Host ""
     Say "Optional: back each car's record up to a free, private GitHub repository -- the ledger of"
@@ -901,7 +920,14 @@ if ($DryRun) {
         }
         $n++
     }
-    if ($AgyBin) {
+    if ($AgyBin -and (Get-AgyStatus)) {
+        # Already signed in -- the same courtesy Claude and GitHub get either side of this step.
+        # It used to offer the sign-in on every run, so a re-run to fix something else walked the
+        # person back through Google's setup screens (user, 2026-08-19, on macOS).
+        Say "$n. Gemini reviewer: OK   signed in as $(Get-AgyStatus)"
+        $n++
+    }
+    elseif ($AgyBin) {
         Say "$n. Gemini reviewer -- optional, once. Have a Google account ready. What happens:"
         Say "     agy opens; press Enter through its two setup screens; your browser asks you to sign"
         Say "     in with Google. If it then asks for a Project ID, copy it from"

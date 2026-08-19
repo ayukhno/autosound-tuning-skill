@@ -6,7 +6,8 @@ All notable changes to the autosound-tuning skill. The skill is co-developed wit
 
 ### Fixed
 
-- **A re-run asked what it already knew** (user, 2026-08-19, re-running to pick up the icon fix).
+- **A re-run asked what it already knew** (user, 2026-08-19, re-running to pick up the icon fix;
+  fixed in `install.sh` first, then mirrored into `install.ps1` before the Windows test).
   The GitHub question came again although `gh` was installed — it is a question about a download,
   so with the command already on the machine there is nothing to decide, and it is skipped (the
   option line still names `--no-github`, so the choice stays visible). The Gemini reviewer offered
