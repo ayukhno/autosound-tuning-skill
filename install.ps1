@@ -37,7 +37,7 @@
 #   .\install.ps1 -Terminal           the method only, no desktop app (~700 MB less)
 #   .\install.ps1 -NoReviewer         without the Gemini reviewer
 #   .\install.ps1 -GitHub             with the GitHub CLI (default: asks); -NoGitHub: without
-#   .\install.ps1 -WithOmp            also omp, which offers TCC every non-Claude model (metered)
+#   .\install.ps1 -NoOmp              without omp, which offers TCC every non-Claude model
 #   .\install.ps1 -DryRun             say what it would do, change nothing
 #   .\install.ps1 -Yes                yes to every question; sign-ins are printed, not run
 #   .\install.ps1 -SkillRef v3.0.4    a specific skill version (default: the newest 3.x tag)
@@ -50,7 +50,8 @@ param(
     [switch]$Terminal,
     [switch]$Tcc,
     [switch]$NoReviewer,
-    [switch]$WithOmp,
+    [switch]$WithOmp,   # kept: the way to ask for omp before it came with the app
+    [switch]$NoOmp,
     [switch]$GitHub,
     [switch]$NoGitHub,
     [switch]$DryRun,
@@ -109,7 +110,7 @@ Autosound tuning -- installer for Windows
   install.ps1 -Terminal           the method only, no desktop app (~700 MB less)
   install.ps1 -NoReviewer         without the Gemini reviewer
   install.ps1 -GitHub             with the GitHub CLI (default: asks); -NoGitHub: without
-  install.ps1 -WithOmp            also omp, which offers TCC every non-Claude model (metered)
+  install.ps1 -NoOmp              without omp, which offers TCC every non-Claude model (metered)
   install.ps1 -DryRun             say what it would do, change nothing
   install.ps1 -Yes                yes to every question; sign-ins are printed, not run
   install.ps1 -SkillRef v3.0.4    a specific skill version (default: the newest 3.x tag)
@@ -125,7 +126,10 @@ Through the one-liner, options go on the scriptblock:
 
 $Mode         = if ($Terminal -and -not $Tcc) { "terminal" } else { "tcc" }   # -Tcc is the default, kept for old command lines
 $WantReviewer = -not $NoReviewer
-$WantOmp      = [bool]$WithOmp
+# omp comes WITH the app now (2026-08-19, same change as install.sh): it is what fills TCC's
+# model picker with everything that is not Claude, so it belongs with the app and means
+# nothing without it. -NoOmp leaves it out; -Terminal never brings it.
+$WantOmp      = if ($NoOmp) { $false } elseif ($WithOmp) { $true } else { $Mode -eq "tcc" }
 $WantGitHub   = if ($GitHub) { "1" } elseif ($NoGitHub) { "0" } else { "ask" }
 
 # -- small tools ------------------------------------------------------------------------------
@@ -475,6 +479,7 @@ $opts = @()
 if ($Mode -eq "tcc")   { $opts += "-Terminal (no app)" }
 if ($WantReviewer)     { $opts += "-NoReviewer" }
 if ($WantGitHub -eq "1") { $opts += "-NoGitHub" }
+if ($WantOmp)          { $opts += "-NoOmp" }
 if ($opts.Count -gt 0) { Say "To leave something out, answer n and re-run with an option: $($opts -join ', '). -Help lists them all." }
 if (-not $DryRun) {
     if (-not (Ask "Go ahead?" "n")) {
@@ -768,7 +773,7 @@ if ($WantReviewer) {
     }
 }
 
-# -- omp: only when asked ----------------------------------------------------------------------
+# -- omp: with the app, unless it was turned down ------------------------------------------------
 if ($WantOmp) {
     Step "omp -- every non-Claude model for TCC's picker (metered)"
     if (Find-Bin omp) { Say "OK   already here" }

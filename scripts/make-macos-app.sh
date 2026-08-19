@@ -53,7 +53,21 @@ if [ ! -x "$_py" ] && command -v uv >/dev/null 2>&1; then
   _py="$(uv tool dir 2>/dev/null)/autosound-tcc/bin/python"
 fi
 if [ -x "$_py" ]; then
-  _icns="$("$_py" -c 'import autosound_tcc.app as a; print(a.APP_ICNS if a.APP_ICNS.is_file() else "")' 2>/dev/null || true)"
+  # `find_spec`, which LOCATES the package without executing a line of it. It used to
+  # `import autosound_tcc.app`, and that module imports `app_log`, `config` and `macos_identity`
+  # at its top: an icon lookup that runs the app's logging setup is an icon lookup that can fail
+  # for reasons that have nothing to do with icons, and it failed SILENTLY (`2>/dev/null`), which
+  # is how a bundle ends up with the blank white placeholder and nobody knows why (2026-08-19).
+  # Nothing here can fail but the file being absent.
+  _icns="$("$_py" - <<'PY' 2>/dev/null || true
+import importlib.util
+from pathlib import Path
+
+spec = importlib.util.find_spec("autosound_tcc")
+icns = Path(spec.origin).parent / "assets" / "app-icon.icns" if spec and spec.origin else None
+print(icns if icns and icns.is_file() else "")
+PY
+)"
   if [ -n "$_icns" ] && [ -f "$_icns" ]; then
     cp "$_icns" "$APP_DIR/Contents/Resources/AutosoundTCC.icns"
     ICON_NAME="AutosoundTCC"
@@ -103,6 +117,19 @@ chmod +x "$APP_DIR/Contents/MacOS/autosound-tcc"
 # Touch the bundle so Finder notices it changed — otherwise a rebuilt app keeps the old icon and
 # the old name until the icon cache happens to refresh.
 touch "$APP_DIR"
+
+# ...and TELL Launch Services about it, which the touch alone does not do. Finder does not read a
+# bundle's `Info.plist` to draw its icon; it asks Launch Services, and a bundle a script created a
+# second ago is not in that database yet. Until something scans it, the app — and every alias to
+# it — is drawn with the blank white placeholder, which is what a fresh install showed on a second
+# Mac (user, 2026-08-19, with the screenshot: the app was built correctly, its `.icns` was in
+# place, and the Desktop shortcut still had no icon).
+#
+# `-f` registers this one bundle; it is not the `-kill -r -domain local -domain user` sledgehammer
+# that rebuilds the whole database and takes minutes. Best effort: a macOS that moved the tool
+# leaves the bundle exactly as correct as it was, only unregistered.
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+[ -x "$LSREGISTER" ] && "$LSREGISTER" -f "$APP_DIR" >/dev/null 2>&1 || true
 
 echo "Built: $APP_DIR"
 echo "It runs: $BIN"

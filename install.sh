@@ -28,7 +28,7 @@
 #   ./install.sh --terminal          the method only, no desktop app (~700 MB less)
 #   ./install.sh --no-reviewer       without the Gemini reviewer
 #   ./install.sh --github            with the GitHub CLI (default: asks); --no-github: without
-#   ./install.sh --with-omp          also omp, which offers TCC every non-Claude model (metered)
+#   ./install.sh --no-omp            without omp, which offers TCC every non-Claude model
 #   ./install.sh --dry-run           say what it would do, change nothing
 #   ./install.sh --yes               yes to every question; sign-ins are printed, not run
 #   ./install.sh --skill-ref v3.0.3  a specific skill version (default: the newest 3.x tag)
@@ -62,7 +62,14 @@ DESKTOP_LINK="${HOME}/Desktop/Autosound TCC.app"
 
 MODE="tcc"
 WANT_REVIEWER=1
-WANT_OMP=0
+#: Resolved after the options are read, because it follows the MODE: omp is what fills TCC's model
+#: picker with everything that is not Claude, so it belongs with the app and means nothing without
+#: it. It was opt-in (`--with-omp`) and that was wrong in the one way an option cannot fix — the
+#: person who would want it is the person who does not know the flag exists, and a clean install
+#: left them with a picker that offers two vendors and no clue why (user, 2026-08-19, installing
+#: on a second Mac from the README's own one-liner). Now: on with the app, `--no-omp` to leave it
+#: out, and named on the one screen that lists everything before anything downloads.
+WANT_OMP="auto"
 WANT_GITHUB="ask"
 UNINSTALL=0
 REMOVE_ALL=0
@@ -85,7 +92,7 @@ Autosound tuning — installer for macOS (and Linux)
   install.sh --terminal          the method only, no desktop app (~700 MB less)
   install.sh --no-reviewer       without the Gemini reviewer
   install.sh --github            with the GitHub CLI (default: asks); --no-github: without
-  install.sh --with-omp          also omp, which offers TCC every non-Claude model (metered)
+  install.sh --no-omp            without omp, which offers TCC every non-Claude model (metered)
   install.sh --dry-run           say what it would do, change nothing
   install.sh --yes               yes to every question; sign-ins are printed, not run
   install.sh --skill-ref v3.0.3  a specific skill version (default: the newest 3.x tag)
@@ -104,7 +111,8 @@ while [ $# -gt 0 ]; do
     --tcc)         MODE="tcc" ;;
     --no-reviewer) WANT_REVIEWER=0 ;;
     --reviewer)    WANT_REVIEWER=1 ;;
-    --with-omp)    WANT_OMP=1 ;;
+    --with-omp)    WANT_OMP=1 ;;   # kept: it was the way to ask for omp before it was default
+    --no-omp)      WANT_OMP=0 ;;
     --github)      WANT_GITHUB=1 ;;
     --no-github)   WANT_GITHUB=0 ;;
     --uninstall)   UNINSTALL=1 ;;
@@ -117,6 +125,14 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+
+# omp follows the app — see `WANT_OMP` above. `--terminal` is the method in a plain terminal, where
+# the model is Claude Code's own and a picker for TCC's models has nothing to pick for.
+# An `if`, not `[ … ] && …`: this script runs under `set -e`, where a top-level test that comes out
+# false is an exit status and ends the install.
+if [ "$WANT_OMP" = "auto" ]; then
+  if [ "$MODE" = "tcc" ]; then WANT_OMP=1; else WANT_OMP=0; fi
+fi
 
 # ── small tools ───────────────────────────────────────────────────────────────
 say()    { printf '%s\n' "$*"; }
@@ -528,6 +544,7 @@ _opts=""
 [ "$MODE" = "tcc" ]       && _opts="$_opts --terminal (no app),"
 [ "$WANT_REVIEWER" = 1 ]  && _opts="$_opts --no-reviewer,"
 [ "$WANT_GITHUB" = 1 ]    && _opts="$_opts --no-github,"
+[ "$WANT_OMP" = 1 ]       && _opts="$_opts --no-omp,"
 if [ -n "$_opts" ]; then
   say "  To leave something out, answer n and re-run with an option:${_opts%,}. --help lists them all."
 fi
@@ -778,13 +795,26 @@ if [ "$MODE" = "tcc" ]; then
       if [ "$_brc" = 0 ]; then
         _shortcut=""
         # A symlink rather than a Finder alias: it double-clicks the same, and `rm` removes it.
+        # Made AFTER the builder has registered the bundle with Launch Services, and touched
+        # afterwards: Finder draws a shortcut from the target's registered icon, so a link made
+        # before the registration is a link drawn with the blank placeholder — which is exactly
+        # what a second Mac showed on a clean install (user, 2026-08-19).
         if [ -d "$HOME/Desktop" ] && [ ! -e "$DESKTOP_LINK" ]; then
           ln -s "$APP" "$DESKTOP_LINK" 2>/dev/null && _shortcut=", and a shortcut on your Desktop"
         elif [ -L "$DESKTOP_LINK" ]; then
           _shortcut=", and the shortcut on your Desktop"
         fi
+        [ -L "$DESKTOP_LINK" ] && touch -h "$DESKTOP_LINK" 2>/dev/null
         say "  ✓ \"Autosound TCC.app\" in ~/Applications$_shortcut"
-        case "$_bout" in *"no icon"*) say "  (with the generic icon — TCC's own was not found in the installed package)" ;; esac
+        # A warning, not an aside in brackets. It used to be one, and it scrolled past unread on
+        # the one install where it mattered: the person sees a blank white icon days later and has
+        # no way back to the line that explained it (user, 2026-08-19).
+        case "$_bout" in
+          *"no icon"*)
+            warn "the app has no icon — TCC's own was not found in the installed package."
+            warn "Everything works; to fix just the icon, re-run this installer."
+            ;;
+        esac
       else
         printf '%s\n' "$_bout" >&2
         warn "the double-clickable app was not built; the command still works:  autosound-tcc"
@@ -829,7 +859,7 @@ if [ "$WANT_REVIEWER" = 1 ]; then
   fi
 fi
 
-# ── omp: only when asked ──────────────────────────────────────────────────────
+# ── omp: with the app, unless it was turned down ──────────────────────────────
 if [ "$WANT_OMP" = 1 ]; then
   step "omp — every non-Claude model for TCC's picker (metered)"
   if find_bin omp >/dev/null; then

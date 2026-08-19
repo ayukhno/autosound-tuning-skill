@@ -4,6 +4,30 @@ All notable changes to the autosound-tuning skill. The skill is co-developed wit
 
 ## [Unreleased]
 
+### Fixed
+
+- **The app on the Desktop had no icon — a blank white tile** (user, 2026-08-19, installing on a
+  second Mac from the README's own one-liner). Two causes, both closed. **Launch Services was
+  never told the bundle exists**: Finder does not read an `Info.plist` to draw an icon, it asks
+  Launch Services, and a bundle a script created seconds ago is not in that database — so the app
+  and every alias to it were drawn with the placeholder. `make-macos-app.sh` now registers the
+  bundle it built (`lsregister -f`, one bundle, not the minutes-long full rebuild), and the
+  installer touches the Desktop shortcut after making it. And **the icon lookup imported the app
+  to find a data file**: `import autosound_tcc.app` runs that module's logging and config imports,
+  so anything wrong in them lost the icon *silently* (the probe's errors went to `/dev/null`). It
+  now uses `importlib.util.find_spec`, which locates the package without executing a line of it.
+  The "no icon" note is a warning at last, not an aside in brackets that scrolls past unread.
+
+### Changed
+
+- **omp comes with the app now; `--no-omp` / `-NoOmp` leaves it out.** It was opt-in behind
+  `--with-omp`, which is wrong in the one way an option cannot fix: the person who wants omp is
+  the person who does not know the flag exists, and a clean install left them with TCC's model
+  picker offering two vendors and no clue why (user, 2026-08-19). It follows the app rather than
+  the method — `--terminal` never brings it, because a picker for TCC's models has nothing to pick
+  for in a plain terminal — and it is named on the one screen that lists everything before
+  anything downloads, so consent is still given once, in full. `--with-omp`/`-WithOmp` still work.
+
 ### Added
 
 - **REW → Resonalyze: `rew_tool/resonalyze_ir.py` writes a REW loopback-referenced sweep as the
