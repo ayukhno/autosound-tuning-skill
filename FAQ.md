@@ -13,9 +13,9 @@ Have a question that isn't here? Open a [discussion or issue](../../issues) and 
   - [Which models is this actually supported on?](#which-models-is-this-actually-supported-on-as-of-august-2026)
   - [Subscription Options, Quotas, & Budgets (As of July 2026)](#subscription-options-quotas--budgets-as-of-july-2026)
   - [Why a full session uses fewer tokens than you'd expect](#why-a-full-session-uses-fewer-tokens-than-youd-expect)
-- [First-Time Setup (Claude Code)](#first-time-setup-windows-claude-code--antigravity)
-  - [Quick Installation (macOS & Windows)](#quick-installation-claude-code)
-  - [Authentication & Plugin Setup](#authentication--plugin-setup-cross-platform)
+- [First-Time Setup (macOS & Windows)](#first-time-setup-macos--windows)
+  - [The installer does the setup](#the-installer-does-the-setup)
+  - [Signing in, and starting](#signing-in-and-starting)
 - [Setting up the Gemini/Antigravity Critic (Standalone)](#setting-up-the-geminiantigravity-critic-standalone-setup)
   - [macOS & Windows Setup (Antigravity CLI - Recommended)](#macos--windows-setup-using-antigravity-cli---recommended)
   - [Fallback: Direct API Setup (No CLI/Node.js)](#fallback-direct-api-setup-no-cli-or-nodejs-required)
@@ -122,103 +122,57 @@ Practical takeaway: a structured tuning session on a strong model is dominated b
 
 ---
 
-## First-Time Setup (Windows, Claude Code & Antigravity)
+## First-Time Setup (macOS & Windows)
 
 To get started, you will need a laptop, a calibrated microphone setup, and a DSP.
 
 > [!IMPORTANT]
-> **Subscription:** You will need a paid **Claude Pro** subscription ($20/mo) because Claude Code (the CLI agent) requires API access that isn't available on the free tier. ChatGPT Plus plans cannot be transferred.
+> **Subscription:** You will need a paid **Claude Pro or Max** subscription because Claude Code (the CLI agent) requires access that isn't available on the free tier. ChatGPT Plus plans cannot be transferred.
 
-#### Quick Installation (Claude Code)
+#### The installer does the setup
 
-Choose the instructions for your operating system:
+One line installs Claude Code, Python, the tuning method, the desktop app, Google's `agy` for the Gemini reviewer and `omp` (which is what lets the app offer models other than Claude), on a clean machine. It shows what is already there, lists everything it will download, asks once, then runs on its own; the sign-ins come at the end, in your browser (Claude first — required; the reviewer and GitHub if you want them).
 
 <details>
 <summary><b>For macOS</b></summary>
 
 1. **Open Terminal** (press **Cmd + Space**, type `Terminal`, and hit **Enter**).
-2. **Install Claude Code** by running this command:
+2. **Paste this line:**
    ```bash
-   curl -fsSL https://claude.ai/install.sh | sh
+   curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/main/install.sh | bash
    ```
-3. **Verify Git (Required for plugins)**. macOS usually comes with Git pre-installed. Verify it by running:
-   ```bash
-   git --version
-   ```
-   *(If prompted to install Xcode Command Line Tools, click "Install" to let macOS set up Git automatically).*
-4. **Create a project folder and launch Claude:**
-   ```bash
-   mkdir car-audio-tuning && cd car-audio-tuning && claude
-   ```
+3. On a Mac that has never been used for programming it asks for your **Mac password once**, right after the "Go ahead?" question, for Apple's Command Line Tools (git). Nothing else needs it. Then wait — ten to twenty minutes, nothing to press.
+4. At the end it opens your browser for the Claude sign-in (a Pro or Max account), then offers the Gemini reviewer's sign-in and GitHub's — press **Enter** to do one now, **s** to leave it for later.
 
 </details>
 
 <details>
 <summary><b>For Windows</b></summary>
 
-1. **Open Windows PowerShell** (press **Win + R**, type `powershell`, and hit **Enter**). If you are already in a standard Command Prompt (CMD), type `powershell` first to switch to the PowerShell environment.
-2. **Install Claude Code** by running this command:
+1. **Open Windows PowerShell** (press **Win**, type `powershell`, and hit **Enter**).
+2. **Paste this line:**
    ```powershell
-   irm https://claude.ai/install.ps1 | iex
+   irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/main/install.ps1 | iex
    ```
-3. **Add Claude to PATH (Required for Windows)**. If PowerShell says `claude` is not recognized, run these two short commands in PowerShell. We split them so they are short, easy to copy-paste without terminal formatting/line-wrap issues, and they work instantly without restarting your window:
-   * **Step A** (Enables it for the current window instantly):
-     ```powershell
-     $env:Path += ";$HOME\.local\bin"
-     ```
-   * **Step B** (Saves it permanently for future sessions and reboots):
-     ```powershell
-     [Environment]::SetEnvironmentVariable("Path", $env:Path, "User")
-     ```
-4. **Verify Git (Required for plugins)**. Run this command in PowerShell to make sure Git is installed and recognized:
-   ```powershell
-   git --version
-   ```
-   * **If it is NOT recognized** (or you don't have Git installed), run this command in PowerShell to install it instantly using the built-in Windows Package Manager (`winget`):
-     ```powershell
-     winget install Git.Git --silent --accept-source-agreements --accept-package-agreements
-     ```
-     *Once installation completes, update your path in the active window by running:*
-     ```powershell
-     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-     ```
-   * **If Git is installed but you see an "unsafe location/directory" error** when trying to install plugins later, run this command in PowerShell to trust your local directories:
-     ```powershell
-     git config --global --add safe.directory *
-     ```
-5. **Install Python (Required for Windows scripts):**
-   Windows does not come with Python pre-installed. Run this command in PowerShell to install it instantly:
-   ```powershell
-   winget install Python.Python.3.11
-   ```
-   *Once installation completes, completely restart your PowerShell window or editor to apply the new PATH changes.*
-6. **Create a project folder and launch Claude:**
-   Run these commands in PowerShell:
-   ```powershell
-   mkdir car-audio-tuning; cd car-audio-tuning; claude
-   ```
+3. If Git for Windows is not installed yet, Windows shows **one permission dialog** for it — click **Yes**. Nothing else needs administrator rights; everything else goes into your user profile. Then wait, five to fifteen minutes.
+4. The sign-ins at the end are the same as on macOS. The reviewer's doctor script later runs in **Git Bash** (Start Menu → Git → Git Bash), which the installer brought.
+
+To leave something out, run the one-liner in this form with the options you want: `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/main/install.ps1))) -Terminal` (no desktop app), `-NoReviewer`, `-NoGitHub`, `-NoOmp`. Prefer a double-click? [Download the repository ZIP](https://github.com/ayukhno/autosound-tuning-skill/archive/refs/heads/main.zip), *Extract All*, and double-click `install.cmd`.
 
 </details>
 
+Running the same line again **updates** everything. `--uninstall` (macOS, after `bash -s --`) / `-Uninstall` (Windows) removes what the installer put there and never a project folder.
+
 ---
 
-#### Authentication & Plugin Setup (Cross-Platform)
+#### Signing in, and starting
 
-Once you run the `claude` command in your terminal:
+* **Claude:** the installer runs `claude auth login` for you at the end. If you skipped it, run that command in a terminal: a browser window opens, you sign in with your Claude account (Pro or Max) and click **Authorize**.
+* **The reviewer (Gemini):** run `agy` once — see the next section — or press Enter when the installer offers it.
+* **Start:** make one folder per car and open it either in the app (double-click **Autosound TCC** on your Desktop, *Browse…* to the folder, pick the models, *Open*) or in a terminal (`cd` into it, run `claude`), then say *"tune a new car from scratch"*.
 
-* **Select login method:** When prompted, select **`1. Claude account with subscription · Pro, Max, Team, or Enterprise`**.
-* **Authenticate:** A browser window will open automatically. Log in with your Claude credentials, **copy the temporary authorization code** from the website, and paste it back into your terminal to complete the login. *(Note: You must have already created an account and purchased at least a **Claude Pro** subscription on [claude.ai](https://claude.ai) beforehand).*
-* **Install the tuning skill** by running these commands **one by one** inside your active Claude Code session (do not copy and paste them together):
-  ```
-  /plugin marketplace add ayukhno/autosound-tuning-skill
-  ```
-  ```
-  /plugin install autosound-tuning
-  ```
-  ```
-  /reload-plugins
-  ```
-* Start the session by typing this inside Claude Code: *"tune a new car from scratch."*
+> [!NOTE]
+> **The 2.x plugin route** (`/plugin marketplace add ayukhno/autosound-tuning-skill` → `/plugin install autosound-tuning` → `/reload-plugins` inside Claude Code) still works and still gives you the 2.x line. The installer above gives you 3.x. One skill per machine — see the README's *Other ways in* for switching.
 
 ## Setting up the Gemini/Antigravity Critic (Standalone Setup)
 
@@ -232,23 +186,18 @@ Google's official **Antigravity CLI (`agy`)** is the recommended default method 
 
 #### 1. Install the CLI:
 
-* **For macOS:** Install via Homebrew:
+**The installer from [First-Time Setup](#first-time-setup-macos--windows) already did this** unless you passed `--no-reviewer` / `-NoReviewer`. By hand, it is Google's own installer — no Homebrew, no package manager, no administrator rights; it puts `agy` in your user profile and clears macOS's quarantine flag itself:
+
+* **For macOS:**
   ```bash
-  brew install --cask antigravity-cli
+  curl -fsSL https://antigravity.google/cli/install.sh | bash
   ```
-  *Bypass Gatekeeper Security (Required):* Run this command in Terminal to trust the utility and prevent *"cannot be opened because developer cannot be verified"* errors:
-  ```bash
-  xattr -dr com.apple.quarantine "$(command -v agy)"
-  ```
-* **For Windows (PowerShell):** Run this command in Windows PowerShell:
+* **For Windows (PowerShell):**
   ```powershell
   irm https://antigravity.google/cli/install.ps1 | iex
   ```
-  *Once installation completes, update your path in the active window by running:*
-  ```powershell
-  $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-  ```
-  *(Or simply close your current PowerShell window and open a new one to apply the changes).*
+
+Either way, open a **new** terminal window afterwards so it is on your PATH.
 
 #### 2. Perform a one-time login:
 In your standard terminal (Terminal.app on Mac, or PowerShell on Windows), simply run:
