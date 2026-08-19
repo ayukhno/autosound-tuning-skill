@@ -6,6 +6,33 @@ All notable changes to the autosound-tuning skill. The skill is co-developed wit
 
 ### Added
 
+- **REW → Resonalyze: `rew_tool/resonalyze_ir.py` writes a REW loopback-referenced sweep as the
+  impulse-response JSON (format v7) that [Resonalyze](https://github.com/DIMOSUS/Resonalyze) saves
+  itself**, so a REW-with-loopback measurement set opens in its Virtual DSP / Auto delay / Auto
+  crossover with nothing retyped — the file-level bridge offered in
+  [DIMOSUS/Resonalyze#86](https://github.com/DIMOSUS/Resonalyze/issues/86) (item 6 — the "second
+  cabin" dataset, published in this format as the first set of
+  [autosound-measurements](https://github.com/ayukhno/autosound-measurements), the new public data
+  repository: per-driver loopback IRs of real cabins, moving-mic RTA, DSP states, hardware facts; CC BY 4.0). Three things the file must get right, and where each was
+  checked: the **level** — REW's IR endpoint peak-normalises every IR to ±1.0 by default, which
+  silently destroys the level relation between channels (a sub's IR peak really sits ~18 dB under a
+  woofer's); the module pulls `?normalised=false` and carries fractions of full scale, so relative
+  levels are exact for a set measured at one gain; the **time base** — Resonalyze wants the loopback
+  reference AT sample 0 of the transfer IR, while REW anchors its grid on the mic-IR peak (an integer
+  sample) and lets t = 0 fall at a fractional index, so the transfer IR is rotated by the exact
+  fraction with a linear-phase FFT shift (an integer case stays a bit-exact roll; rounding would
+  cost up to 0.5 sample = 1.8 mm, and Resonalyze's arrival estimator resolves ~0.1 sample);
+  and the **format** — every document is checked with a field-for-field port of the app's own
+  `ImpulseResponseFile.Validate()`, and eight Passat B8 files were then loaded through Resonalyze's
+  reader compiled verbatim (`ImpulseResponseFile.LoadAsync`, commit d11186e) and read back by its
+  `TimeAlignmentAnalysis` to REW's own delays within ±0.01 ms (2026-08-19). Refuses anything not on
+  the loopback base (`timingReference ≠ Loopback`, a timing offset). Each file carries a `rewSource`
+  block (title, uuid, REW date and delay, peak dBFS, the shift, the protective high-pass in force)
+  that their reader ignores; protective HPFs are NOT removed — Resonalyze compensates them at capture
+  time, so a file-based consumer must de-embed, and the manifest says which channels need it.
+  `--selftest` (offline, in the smoke test); the two REW facts (peak-normalised default, fractional
+  t = 0) are in `rew-api-quirks.md` — the first one had already bitten the 2026-08-18 cross-check
+  harness, which summed peak-normalised IRs.
 - **A Windows installer that has run on Windows.** `install.ps1` is now the mirror of the
   rebuilt `install.sh` — the same two blocks, the same defaults, the same flags in PowerShell
   spelling (`-Terminal`, `-NoReviewer`, `-GitHub`, `-WithOmp`, `-DryRun`, `-Yes`, `-Uninstall
