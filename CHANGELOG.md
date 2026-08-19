@@ -2,6 +2,19 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
+## [v3.0.6] — 2026-08-19 · the reviewer can find its own contract
+
+### Fixed
+
+- **The Critic short-circuited with `not_ready` on every clean install, and would have done so
+  for ever.** `autosound_ai.py` looked for `data-contract-template.md` in `<project>/rew_analitic`,
+  the project root and `$AUTOSOUND_DIR` — and that file is in none of those on a fresh machine,
+  because it is the METHOD's document and ships in the skill's own `assets/`. Nothing copies it
+  into a project. So the preflight could never pass, whatever the project's state (user, on a
+  fresh Windows install, 2026-08-19: the reviewer reported "not ready" on a project that had
+  everything else). The skill's own copy is now the LAST place looked, so a project that keeps an
+  edited contract still wins. TCC's own preflight was corrected the same way, in the same hour.
+
 ## [v3.0.5] — 2026-08-19 · the beta the first outside tester gets
 
 The release that makes 3.x the way in: the front page, the FAQ and all three translations now
