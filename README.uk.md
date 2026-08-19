@@ -74,11 +74,15 @@ Einsteiger 5000 у травні — з тим аналізом графіків 
 
 Три речі, яких він тобі не дістане, бо вони твої:
 
-- **[REW](https://www.roomeqwizard.com/)** з увімкненим API. Усе, що скіл знає про твоє авто,
-  приходить через нього. На macOS: відкрий *Preferences → API*, постав галочку **Start the API when
-  REW starts** і натисни **Start server**; панель тоді пише *"API server is running on port 4735"*,
-  і далі API піднімається разом із REW. На Windows такої галочки немає, тому інсталятор кладе на
-  робочий стіл ярлик **REW (API on)**, який запускає REW з увімкненим API — запускай REW із нього.
+- **[REW](https://www.roomeqwizard.com/) — бета-збірка** з увімкненим API. Усе, що скіл знає про
+  твоє авто, приходить через нього, а **API є тільки в бетах**: у релізній версії (V5.31.3, липень
+  2024) вкладки *API* в налаштуваннях немає взагалі — а саме її і знаходить пошук. Бери збірку тут:
+  [roomeqwizard.com/beta.html](https://www.roomeqwizard.com/beta.html) — самі файли лежать на
+  AV NIRVANA, форумі REW. Далі в REW: відкрий *Preferences → API*, постав галочку **Start the API
+  when REW starts** і натисни **Start server**; панель тоді пише *"API server is running on port
+  4735"*, і далі API піднімається разом із REW. Ця панель однакова на macOS і на Windows; на Windows
+  інсталятор ще й кладе на робочий стіл ярлик **REW (API on)**, який запускає REW з увімкненим API
+  в один клік.
 - **Калібрований вимірювальний мікрофон і DSP, у який можна вводити значення.** Підійде будь-який
   процесор. Для фази й таймінгу XLR із фізичним лупбеком кращий за USB:
   [чому — у FAQ](FAQ.md#measuring-phase--time-alignment-umik-1-vs-xlr-microphones).

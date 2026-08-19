@@ -74,11 +74,15 @@ metodę, aplikację desktopową i recenzenta Gemini. Nic nie musi być zainstalo
 
 Trzech rzeczy nie załatwi za ciebie, bo są twoje:
 
-- **[REW](https://www.roomeqwizard.com/)** z włączonym API. Wszystko, co skill wie o twoim aucie,
-  przychodzi tą drogą. Na macOS: otwórz *Preferences → API*, zaznacz **Start the API when REW
-  starts** i naciśnij **Start server**; panel pokaże wtedy *"API server is running on port 4735"*, a
-  od tej pory API wstaje razem z REW. Na Windows tego pola nie ma, więc instalator kładzie na
-  pulpicie skrót **REW (API on)**, który uruchamia REW z włączonym API — uruchamiaj REW z niego.
+- **[REW](https://www.roomeqwizard.com/) — wersja beta**, z włączonym API. Wszystko, co skill wie o
+  twoim aucie, przychodzi tą drogą, a **API jest tylko w betach**: wersja wydana (V5.31.3, lipiec
+  2024) w ogóle nie ma zakładki *API* w ustawieniach — i to właśnie ją podsuwa wyszukiwarka. Weź
+  build stąd: [roomeqwizard.com/beta.html](https://www.roomeqwizard.com/beta.html) — same pliki są
+  na AV NIRVANA, forum REW. Dalej w REW: otwórz *Preferences → API*, zaznacz **Start the API when
+  REW starts** i naciśnij **Start server**; panel pokaże wtedy *"API server is running on port
+  4735"*, a od tej pory API wstaje razem z REW. Ten panel jest taki sam na macOS i na Windows; na
+  Windows instalator kładzie dodatkowo na pulpicie skrót **REW (API on)**, który uruchamia REW z
+  włączonym API jednym kliknięciem.
 - **Skalibrowany mikrofon pomiarowy i DSP, do którego można wpisywać wartości.** Każdy procesor się
   nadaje. Dla fazy i czasu XLR z fizyczną pętlą zwrotną bije USB:
   [dlaczego, w FAQ](FAQ.md#measuring-phase--time-alignment-umik-1-vs-xlr-microphones).

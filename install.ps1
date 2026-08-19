@@ -240,10 +240,15 @@ function Test-RewApi {
     } catch { return $false }
 }
 # REW's executable, when REW is installed: the default place first, then wherever its uninstall
-# entry says. The path matters beyond detection -- on Windows REW's API tab has no "start the API
-# when REW starts" box (the macOS one does), only a Start-server button to press on every launch,
-# and REW's own help names the alternative: run `roomeqwizard.exe -api`. So the installer puts a
-# "REW (API on)" shortcut on the Desktop that does exactly that (user's screenshot, 2026-08-17).
+# entry says. The path matters beyond detection: `roomeqwizard.exe -api` is REW's own switch for
+# starting with the API up, so the installer puts a "REW (API on)" shortcut on the Desktop.
+#
+# Corrected 2026-08-19: this used to say Windows had no "start the API when REW starts" box and
+# the macOS build did. It was not a platform difference -- it was a VERSION difference. The API
+# arrived in the 5.40 betas; the release build (V5.31.3) has no API tab at all, which is what the
+# first Windows machine had. On a beta the panel is identical on both platforms (user's
+# screenshot). The shortcut stays: it is one click that cannot be forgotten, and it works whether
+# or not the box is ticked.
 function Get-RewExe {
     foreach ($p in @((Join-Path $env:ProgramFiles "REW\roomeqwizard.exe"), (Join-Path $env:ProgramFiles "REW\REW.exe"))) {
         if (Test-Path $p) { return $p }
@@ -459,7 +464,7 @@ if ($WantReviewer) {
 }
 if ($RewApi)      { Say "  OK   REW, and its API is on" }
 elseif ($RewApp)  { Say "  OK   REW -- its API is off; a shortcut that starts REW with it on goes on your Desktop" }
-else              { Say "  --   REW not found -- install it from roomeqwizard.com; nothing measures without it" }
+else              { Say "  --   REW not found -- install a BETA from roomeqwizard.com/beta.html (the release has no API)" }
 
 # One optional question, here because the answer changes the download list below (SCR-049) -- and
 # only when there is something to decide. `gh` already on the machine means the answer was given on
@@ -973,14 +978,22 @@ Step "Start"
 $n = 1
 if (-not $RewApi) {
     if ($RewApp -and (Test-Path $RewLnk)) {
-        Say "$n. Start REW from the `"REW (API on)`" shortcut on your Desktop -- it starts REW with the API"
-        Say "   switched on. (Inside REW the same is Preferences -> API -> `"Start server`", every time.)"
-        Say "   Nothing measures without it."
+        Say "$n. In REW: Preferences -> API: tick `"Start the API when REW starts`" and press `"Start server`"."
+        Say "   The panel then reads `"API server is running on port 4735`" -- no restart needed."
+        Say "   Or start REW from the `"REW (API on)`" shortcut on your Desktop, which does the same in one"
+        Say "   click. Nothing measures without it."
+        Say "   No `"API`" tab in REW's preferences at all? That is the RELEASE build (V5.31.3), which has"
+        Say "   no API -- and it is what a web search gives you. Get a beta: roomeqwizard.com/beta.html"
+        Say "   (downloads at AV NIRVANA, the REW forum), then run this installer once more."
     } elseif ($RewApp) {
-        Say "$n. Start REW with its API on: in REW, Preferences -> API -> press `"Start server`" (every"
-        Say "   time REW starts), or run  `"$RewExe`" -api  -- REW's own switch. Nothing measures without it."
+        Say "$n. In REW: Preferences -> API: tick `"Start the API when REW starts`" and press `"Start server`","
+        Say "   or run  `"$RewExe`" -api  -- REW's own switch. Nothing measures without it."
+        Say "   No `"API`" tab in REW's preferences at all? That is the RELEASE build (V5.31.3), which has"
+        Say "   no API. Get a beta: roomeqwizard.com/beta.html (downloads at AV NIRVANA, the REW forum)."
     } else {
-        Say "$n. Install REW from roomeqwizard.com, then run this installer once more: it puts a"
+        Say "$n. Install REW -- it must be a BETA build: the release version (V5.31.3, July 2024) has no"
+        Say "   API at all, and that is the one a web search hands you. roomeqwizard.com/beta.html,"
+        Say "   downloads at AV NIRVANA, the REW forum. Then run this installer once more: it puts a"
         Say "   `"REW (API on)`" shortcut on your Desktop. (Or in REW: Preferences -> API -> `"Start server`","
         Say "   every time.) Nothing measures without it."
     }

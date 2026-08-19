@@ -509,7 +509,7 @@ if [ "$WANT_REVIEWER" = 1 ]; then
 fi
 if [ "$REW_API" = 1 ]; then say "    ✓ REW, and its API is on"
 elif [ "$REW_APP" = 1 ]; then say "    ✓ REW — its API is off; the last screen says where to switch it on"
-elif on_mac; then say "    – REW not found — install it from roomeqwizard.com; nothing measures without it"
+elif on_mac; then say "    – REW not found — install a BETA from roomeqwizard.com/beta.html (the release has no API)"
 fi
 
 # One optional question, and it goes here because the answer changes the download list below.
@@ -1137,9 +1137,16 @@ if [ "$REW_API" = 0 ]; then
     say "  $n. In REW: Preferences → API: tick \"Start the API when REW starts\" and press \"Start server\"."
     say "     The panel then reads \"API server is running on port 4735\" — no restart needed. Nothing"
     say "     measures without it."
+    # The one that costs an evening: the API is a beta feature, and Preferences has no API tab at
+    # all in the release build. Somebody who searched the web for REW has the release build and is
+    # now looking for a tab that is not there (user, on Windows, 2026-08-19).
+    say "     No \"API\" tab there? That is the RELEASE build (V5.31.3), which has no API. Get a beta:"
+    say "     roomeqwizard.com/beta.html — the downloads are at AV NIRVANA, the REW forum."
   else
-    say "  $n. Install REW from roomeqwizard.com. Then in REW: Preferences → API: tick"
-    say "     \"Start the API when REW starts\" and press \"Start server\". Nothing measures without it."
+    say "  $n. Install REW — and it must be a BETA build: the release version (V5.31.3, July 2024)"
+    say "     has no API at all, and that is the one a web search gives you. roomeqwizard.com/beta.html,"
+    say "     downloads hosted at AV NIRVANA. Then in REW: Preferences → API: tick \"Start the API"
+    say "     when REW starts\" and press \"Start server\". Nothing measures without it."
   fi
   n=$((n + 1))
 fi

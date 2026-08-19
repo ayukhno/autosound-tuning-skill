@@ -75,12 +75,16 @@ Methode, die Desktop-App und den Gemini-Reviewer mit. Vorher muss nichts install
 
 Drei Dinge kann er dir nicht besorgen, weil sie dir gehören:
 
-- **[REW](https://www.roomeqwizard.com/)**, mit eingeschalteter API. Alles, was der Skill über dein
-  Auto weiß, kommt dadurch. Unter macOS: *Preferences → API* öffnen, **Start the API when REW
+- **[REW](https://www.roomeqwizard.com/) — eine Beta-Version**, mit eingeschalteter API. Alles, was
+  der Skill über dein Auto weiß, kommt dadurch, und **die API gibt es nur in den Betas**: die
+  Release-Version (V5.31.3, Juli 2024) hat in den Einstellungen überhaupt keinen *API*-Reiter — und
+  genau die findet die Websuche. Hol die Version hier:
+  [roomeqwizard.com/beta.html](https://www.roomeqwizard.com/beta.html) — die Dateien liegen bei
+  AV NIRVANA, dem REW-Forum. Dann in REW: *Preferences → API* öffnen, **Start the API when REW
   starts** anhaken und **Start server** drücken; das Feld zeigt dann *"API server is running on port
-  4735"*, und ab da kommt sie mit REW hoch. Unter Windows gibt es dieses Häkchen nicht, deshalb legt
-  der Installer eine Verknüpfung **REW (API on)** auf den Desktop, die REW mit eingeschalteter API
-  startet — starte REW darüber.
+  4735"*, und ab da kommt sie mit REW hoch. Dieses Feld ist unter macOS und Windows gleich; unter
+  Windows legt der Installer zusätzlich eine Verknüpfung **REW (API on)** auf den Desktop, die REW
+  mit eingeschalteter API in einem Klick startet.
 - **Ein kalibriertes Messmikrofon und ein DSP, in den du Werte eintippen kannst.** Jeder Prozessor
   geht. Für Phase und Laufzeit schlägt XLR mit physischem Loopback die USB-Lösung:
   [warum, im FAQ](FAQ.md#measuring-phase--time-alignment-umik-1-vs-xlr-microphones).
