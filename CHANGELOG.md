@@ -2,7 +2,14 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
-## [Unreleased]
+## [v3.0.5] — 2026-08-19 · the beta the first outside tester gets
+
+The release that makes 3.x the way in: the front page, the FAQ and all three translations now
+describe the one-line install instead of the 2.x plugin, and the installer behind that line has
+been run from scratch on a second Mac and on Windows 11 (UTM) the same day, with everything those
+two runs found fixed here. Still a beta, and the README says so in as many words: what it has not
+had is a full tune driven end to end from the app.
+
 
 ### Fixed
 
