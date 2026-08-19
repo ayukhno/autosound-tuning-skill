@@ -11,7 +11,8 @@ body:
         installer printed, or the output of `claude --version` and `python3 --version`.
 
         Nothing here should carry personal data: no names, plates, addresses, or photos. Versions,
-        paths and log lines are what this is for.
+        paths and log lines are what this is for — and note that a path contains your computer's
+        user name (`/Users/<you>/…`). This is a public repository; edit those out if you mind.
   - type: textarea
     id: what
     attributes:
