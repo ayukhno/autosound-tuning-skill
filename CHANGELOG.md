@@ -46,6 +46,19 @@ All notable changes to the autosound-tuning skill. The skill is co-developed wit
 - **`dsp_math.py selftest`** — the module had none. It pins the all-pass functions to closed-form
   facts (the phase at `f0`, the asymptotes, monotonic lag, the delay far below `f0`) and
   `eq_complex` to its own kinds, so a wrong branch fails on numbers and not on somebody's memory.
+- **`analyze-joints --apf "ch,APF2,f0,Q"` (or `ch,APF1,f0`) — a hand-dialled all-pass VERIFIED,
+  not proposed** (SCR-050 items 1–2, 2026-08-19). TCC's curve window now lets the Arbiter put an
+  `APF1`/`APF2` on a measured driver and watch the predicted sum move; until now that number had
+  nowhere to go. Every joint touching the channel gets one more line under its row — the joint's
+  worst null as it stands, with the candidate and nothing else changed (the reading TCC showed),
+  and with the candidate plus the best further delay — under the same trust gate as the row: no
+  measured pair → the candidate is UNVERIFIED too; gate tripped → nothing computed. The selftest
+  holds it to a synthetic joint: the right APF2 on the right branch closes a −39 dB null with no
+  delay change, the same APF2 on the other branch does not help, and an APF1 on an APF2-shaped
+  joint MOVES the null to the top of the band instead of closing it — the exact "fixes it or
+  moves the problem" a Critic is asked about. The data-contract package gained an `Origin:` line
+  so a hand-dialled candidate enters the review as a candidate, never as something checked; the
+  Helix phase ANGLE is deliberately not accepted (one vendor's control, `helix-phase-allpass.md`).
 
 ### Fixed
 

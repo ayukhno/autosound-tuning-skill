@@ -58,6 +58,9 @@ Digitized anomalies: <numbers: FR / phase / impulse>  (+ attached trace)
 Hypothesis: <the cause of the problem>
 
 Proposal: <a specific filter/action: type, frequency, Q, channel>
+Origin: <Generator-computed (analyze-joints / repair_joint_apf) | Arbiter, hand-dialled in TCC's
+         curve window against the predicted sum — SIMULATED on the sweeps in hand, not yet
+         verified by a summation sweep>
 
 Expected effect:
   • The filter's direct action: <e.g. APF — phase rotation, 0 dB in FR>
@@ -71,6 +74,8 @@ What I ask you to challenge first: <ONE specific thing>
 ```
 
 > ⚠️ **The "Expected effect" field must separate** the filter's direct action from the summation result. An all-pass filter is amplitude-flat (0 dB); any FR change comes *through source summation*, not from the filter itself. This field catches exactly this class of error.
+>
+> **`Origin` (SCR-050):** a hand-dialled all-pass — the Arbiter watching TCC's predicted sum and typing an `APF1`/`APF2` per driver — enters the package as a *candidate to be checked*, in the ledger's own words (`APF2 250 Hz Q 0.71 on m-L`), never as something already verified. The Critic's question on it is the one it is good at: does this rotation fix the joint, or move the problem along the band and drag the timing around `f0` with it? Before packaging, the Generator runs `rew_tool.py analyze-joints … --apf "m-L,APF2,250,0.71"` and quotes the line it prints (now → with APF → with APF + best delay, same trust gate). Only `APF1`/`APF2` come this way; a Helix phase ANGLE stays a hand-set `phase_deg` in the ledger and is not simulated.
 
 -----
 
