@@ -2,6 +2,20 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
+## [v3.0.8] — 2026-08-19 · the reviewer was signed in all along
+
+### Fixed
+
+- **The Gemini sign-in was offered again on a machine that had done it** — still, after the first
+  fix. That fix looked at the Antigravity **IDE**'s state file, `~/.gemini/antigravity/`. This
+  installer installs the **CLI**, and on a machine that only ever had `agy` there is no
+  `antigravity/` folder at all: the user's `~/.gemini` on Windows 11 held exactly `antigravity-cli`
+  and `config` (screenshot, 2026-08-19). Two more signals, both read off disk and neither opening a
+  credential file: the CLI's own `antigravity-cli/jetski_state.pbtxt`, which records the
+  post-onboarding screens that were walked, and `config/projects/*.json`, which is written once a
+  project has been chosen — something that only happens after signing in. Checked against four
+  shapes of machine, including one that has never signed in, where the sign-in is still offered.
+
 ## [v3.0.7] — 2026-08-19 · which REW has the API
 
 ### Fixed

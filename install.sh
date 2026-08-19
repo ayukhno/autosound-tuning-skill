@@ -308,15 +308,23 @@ agy_status() {  # prints the account, or "set up", when the reviewer is already 
   # Read off disk, not by running `agy`: the CLI is interactive — it opens its own screen and
   # waits — so there is nothing to ask it that does not take over the terminal.
   #
-  # THREE signals, because the sign-in does not land in one place. The first version of this
-  # looked only at `oauth_creds.json` and still offered the sign-in on a Mac that had done it
-  # (user, 2026-08-19) — that file is the shape Google's own `gemini` CLI writes, which agy is a
-  # fork of and shares a config folder with; a machine with only agy on it need not have one.
-  # So also: agy's own state file, which records that its setup screens have been walked, and an
-  # API key in the environment, which is a way the reviewer runs just as well as a login.
+  # SEVERAL signals, because the sign-in does not land in one place, and every version of this
+  # function so far has missed one:
+  #   1. `oauth_creds.json` — the shape Google's own `gemini` CLI writes. agy is a fork of it and
+  #      shares the folder, but a machine with ONLY agy on it need not have this file (that was
+  #      the first miss: a Mac that had signed in was offered the sign-in again, 2026-08-19).
+  #   2. `antigravity/antigravity_state.pbtxt` — the Antigravity **IDE**'s state.
+  #   3. `antigravity-cli/jetski_state.pbtxt` — the **CLI**'s own, and the second miss: this
+  #      installer installs the CLI, not the IDE, so on a machine that only ever had `agy` there
+  #      is no `antigravity/` folder at all and only this one exists (user, on Windows 11,
+  #      2026-08-19: `~/.gemini` held exactly `antigravity-cli` and `config`). It records the
+  #      post-onboarding screens that were walked.
+  #   4. `config/projects/` — agy writes a project file once one has been chosen, which is a
+  #      thing that only happens after signing in.
+  #   5. An API key in the environment: a way the reviewer runs just as well as a login.
   #
-  # Only the ACCOUNT is ever read. No credential file is opened for its contents — the two
-  # `[ -s ]` tests ask whether a file exists and is not empty, and nothing more.
+  # Only the ACCOUNT is ever read. No credential file is opened for its contents — the `[ -s ]`
+  # tests ask whether a file exists and is not empty, and nothing more.
   _a=""
   if [ -s "$HOME/.gemini/oauth_creds.json" ]; then
     _a="$(sed -n 's/.*"active": *"\([^"]*\)".*/\1/p' "$HOME/.gemini/google_accounts.json" \
@@ -326,6 +334,15 @@ agy_status() {  # prints the account, or "set up", when the reviewer is already 
   fi
   if grep -q 'agent_onboarding_completed: *true' \
        "$HOME/.gemini/antigravity/antigravity_state.pbtxt" 2>/dev/null; then
+    printf 'set up'
+    return 0
+  fi
+  if grep -q 'POST_ONBOARDING_STEP_TYPE' \
+       "$HOME/.gemini/antigravity-cli/jetski_state.pbtxt" 2>/dev/null; then
+    printf 'set up'
+    return 0
+  fi
+  if [ -n "$(find "$HOME/.gemini/config/projects" -name '*.json' 2>/dev/null | head -1)" ]; then
     printf 'set up'
     return 0
   fi

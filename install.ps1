@@ -275,11 +275,18 @@ function Get-AgyStatus {  # the account, or "set up", when the reviewer is alrea
     # Read off disk, not by running `agy`: the CLI is interactive -- it opens its own screen and
     # waits -- so there is nothing to ask it that does not take over the terminal.
     #
-    # THREE signals, because the sign-in does not land in one place (macOS, 2026-08-19: a machine
-    # that had signed in was offered the sign-in again, because only the first was checked).
-    # oauth_creds.json is the shape Google's own gemini-cli writes and agy shares its folder with;
-    # antigravity_state.pbtxt is agy's own, and records that its setup screens were walked; an API
-    # key in the environment is a way the reviewer runs just as well as a login.
+    # SEVERAL signals, because the sign-in does not land in one place and every version of this so
+    # far has missed one:
+    #   1. oauth_creds.json -- what Google's own gemini-cli writes; agy shares the folder, but a
+    #      machine with only agy on it need not have the file (macOS, 2026-08-19: a machine that
+    #      had signed in was offered the sign-in again, because only this was checked).
+    #   2. antigravity\antigravity_state.pbtxt -- the Antigravity IDE's state.
+    #   3. antigravity-cli\jetski_state.pbtxt -- the CLI's own, and the second miss: this installer
+    #      installs the CLI, so a machine that only ever had agy has no antigravity\ folder at all
+    #      (user, Windows 11, 2026-08-19: ~\.gemini held exactly antigravity-cli and config).
+    #   4. config\projects\*.json -- written once a project has been chosen, which happens after
+    #      signing in.
+    #   5. An API key in the environment: a way the reviewer runs just as well as a login.
     # Only the ACCOUNT is ever read -- no credential file is opened for its contents.
     $creds = Join-Path $HOME ".gemini\oauth_creds.json"
     if ((Test-Path $creds) -and ((Get-Item $creds).Length -gt 0)) {
@@ -294,6 +301,17 @@ function Get-AgyStatus {  # the account, or "set up", when the reviewer is alrea
     if (Test-Path $state) {
         $raw = (Get-Content $state -Raw -ErrorAction SilentlyContinue)
         if ($raw -match 'agent_onboarding_completed:\s*true') { return "set up" }
+    }
+    $cliState = Join-Path $HOME ".gemini\antigravity-cli\jetski_state.pbtxt"
+    if (Test-Path $cliState) {
+        $raw = (Get-Content $cliState -Raw -ErrorAction SilentlyContinue)
+        if ($raw -match 'POST_ONBOARDING_STEP_TYPE') { return "set up" }
+    }
+    $projects = Join-Path $HOME ".gemini\config\projects"
+    if (Test-Path $projects) {
+        if (Get-ChildItem $projects -Filter *.json -ErrorAction SilentlyContinue | Select-Object -First 1) {
+            return "set up"
+        }
     }
     if ($env:GEMINI_API_KEY -or $env:GOOGLE_API_KEY) { return "an API key in your environment" }
     return $null
