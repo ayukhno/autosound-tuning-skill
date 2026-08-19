@@ -1,5 +1,8 @@
 blank_issues_enabled: true
 contact_links:
+  - name: The desktop app (TCC), not the method
+    url: https://github.com/ayukhno/autosound-tcc/issues/new/choose
+    about: The window, the installer, the panels — the app lives in its own repository.
   - name: Discussion / question
     url: https://github.com/ayukhno/autosound-tuning-skill/discussions
     about: General questions about the tuning method or using the skill.

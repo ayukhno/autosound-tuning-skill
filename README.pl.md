@@ -47,6 +47,7 @@ skill — a potem Amateur 5000 w lipcu, już samym skillem i własnym słuchem.
 - [Które modele wybrać](#które-modele-wybrać)
 - [Matematyka pod maską](#matematyka-pod-maską)
 - [Co tu jest](#co-tu-jest)
+- [Jak zgłosić problem](#jak-zgłosić-problem)
 - [Podziel się doświadczeniem](#podziel-się-doświadczeniem)
 - [Wsparcie](#wsparcie)
 - [Licencja](#licencja)
@@ -307,6 +308,14 @@ Metoda niezależnej recenzji (Krytyk/Doradca/Arbiter, przeciw zakotwiczeniu) jes
 `references/core/review-loop.md`. Bezstanowa wersja metody do zwykłego czatu w przeglądarce, bez
 lokalnej instalacji, znajduje się w gałęzi
 [manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step).
+
+## Jak zgłosić problem
+
+Wszystko, co się zepsuło, policzyło źle albo cię zatrzymało: **[otwórz issue](https://github.com/ayukhno/autosound-tuning-skill/issues/new/choose)**
+— formularz zgłoszenia bety ma pola na przebieg i na wersje. To skrzynka metody; problemy z
+aplikacją desktopową trafiają [do jej repozytorium](https://github.com/ayukhno/autosound-tcc/issues/new/choose),
+a połowę tego formularza TCC wypełni sam (*Diagnostyka → Instalacja → Zgłoś problem*).
+Na issue da się odpowiedzieć, na wiadomość w komunikatorze prawie nie.
 
 ## Podziel się doświadczeniem
 

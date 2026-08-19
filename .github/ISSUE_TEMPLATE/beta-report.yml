@@ -1,0 +1,53 @@
+name: Beta report — something broke
+description: A crash, a wrong number, a window that will not open, a step that did not work.
+title: "[beta] "
+labels: ["beta"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **If you use the desktop app (TCC), it fills in most of this for you**: the repair window
+        → **Installation** → **Report a problem**. From a terminal session, paste what the
+        installer printed, or the output of `claude --version` and `python3 --version`.
+
+        Nothing here should carry personal data: no names, plates, addresses, or photos. Versions,
+        paths and log lines are what this is for.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, and what happened instead of what you expected.
+      placeholder: |
+        The critic reported "not_ready" on a project that has everything, and the session
+        carried on without a review.
+    validations:
+      required: true
+  - type: textarea
+    id: install
+    attributes:
+      label: Installation block
+      description: "TCC: Diagnostics → Installation → Copy. Terminal: versions and how you installed."
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log (optional)
+      description: "TCC: Diagnostics → Log → Copy. Terminal: the last lines before it went wrong."
+      render: text
+    validations:
+      required: false
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where it happened
+      options:
+        - The method (what the AI proposed)
+        - Installing or updating
+        - The AI session itself
+        - REW / measurements
+        - The window (TCC)
+        - Somewhere else / not sure
+    validations:
+      required: false

@@ -46,6 +46,7 @@ then Amateur 5000 in July with the skill itself and my own ears.
 - [Which models to use](#which-models-to-use)
 - [The math under the hood](#the-math-under-the-hood)
 - [What's in here](#whats-in-here)
+- [Reporting a problem](#reporting-a-problem)
 - [Contributing your experience](#contributing-your-experience)
 - [Support](#support)
 - [License](#license)
@@ -299,6 +300,14 @@ autosound-tuning-skill/        a Claude Code plugin
 The independent-review method (Critic/Advisor/Arbiter, anti-anchoring) is written up in
 `references/core/review-loop.md`. A stateless web-chat version of the method, with no local
 install, lives on the [manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step) branch.
+
+## Reporting a problem
+
+Anything that broke, was wrong, or stopped you: **[open an issue](https://github.com/ayukhno/autosound-tuning-skill/issues/new/choose)**
+— the beta-report form has fields for what happened and for the versions. It is the method's own
+inbox; problems with the desktop app go [in the app's repository](https://github.com/ayukhno/autosound-tcc/issues/new/choose),
+and TCC fills half that form in for you (*Diagnostics → Installation → Report a problem*). An issue
+is answerable, and a message in a chat is not.
 
 ## Contributing your experience
 

@@ -48,6 +48,7 @@ wurde, dann Amateur 5000 im Juli mit dem Skill selbst und den eigenen Ohren.
 - [Welche Modelle](#welche-modelle)
 - [Die Mathematik darunter](#die-mathematik-darunter)
 - [Was hier drin ist](#was-hier-drin-ist)
+- [Ein Problem melden](#ein-problem-melden)
 - [Erfahrung beitragen](#erfahrung-beitragen)
 - [Unterstützen](#unterstützen)
 - [Lizenz](#lizenz)
@@ -319,6 +320,14 @@ Die Methode der unabhängigen Begutachtung (Kritiker/Berater/Schiedsrichter, Ant
 `references/core/review-loop.md` beschrieben. Eine zustandslose Web-Chat-Fassung der Methode, ohne
 lokale Installation, liegt im Branch
 [manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step).
+
+## Ein Problem melden
+
+Alles, was kaputtging, falsch war oder dich aufgehalten hat: **[ein Issue eröffnen](https://github.com/ayukhno/autosound-tuning-skill/issues/new/choose)**
+— das Beta-Report-Formular hat Felder für den Hergang und für die Versionen. Das ist der Posteingang
+der Methode; Probleme mit der Desktop-App gehören [in deren Repository](https://github.com/ayukhno/autosound-tcc/issues/new/choose),
+und TCC füllt die Hälfte des Formulars selbst aus (*Diagnose → Installation → Problem melden*).
+Ein Issue lässt sich beantworten, eine Chat-Nachricht kaum.
 
 ## Erfahrung beitragen
 
