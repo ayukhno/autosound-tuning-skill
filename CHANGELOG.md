@@ -2,9 +2,34 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
-## [Unreleased] — docs only, on the frozen 2.x line
+## [v2.8.2] — 2026-08-20 · the noise floor of our own measurements
+
+Docs only, as the frozen 2.x line requires — four field lessons and one README change.
+The four came from the 3.x line (v3.0.9) and are **backported unchanged**; the reference
+text is byte-identical on both branches, so a future merge has nothing to reconcile.
 
 ### Added
+
+- **A measured floor for the whole measurement history** (`diagnostic-techniques.md` §7).
+  Hand-held repeats 25 s apart differ by **0.9–2.4 dB RMS** over 100 Hz–16 kHz, arrivals
+  wandering **±2 samples** and drifting five over a quarter of an hour; on a tripod,
+  **0.18–0.25 dB RMS** and **0.09 samples**. Any old single-point difference smaller than
+  that was never evidence. With it: the gain set once, three drift controls a block
+  (**0.43 samples per °C** on a 0.9 m path at 96 kHz), no ventilating between captures,
+  and every A/B ratioed against the reference **nearest in time**.
+- **The frequency above which a dip stops meaning anything** (`diagnostic-techniques.md`
+  §13, `phase_2_eq.md`). A car's Schroeder frequency is **150–200 Hz**; above it pressure
+  at a point is Rayleigh-distributed and a measured value is much more likely to be too
+  low than too high. So **"never fill nulls" finally has a scope** — below it a dip can be
+  a legitimate target, above it a deep single-point dip is the expected outcome of where
+  the microphone was. The same statistics make a measured peak more trustworthy than a
+  measured dip, which is a better argument for cut-first than headroom.
+- **The mic-shift test with a number attached, and a form that survives a hand**
+  (`diagnostic-techniques.md` §13). Six positions in the ear ellipsoid, kept separately
+  rather than averaged. The **anchors** are the requirement, not the tripod.
+- **Near-field against in-car: telling a driver from its cabin**
+  (`enclosure-install-diagnostics.md` §4b), with the corollary that exonerated a pair of
+  enclosures and the sealed-pod arithmetic.
 - **Third award in the README, all four languages** (en/uk/de/pl): 2nd place, AYA Amateur 5000, 2026-08-15 Schmallenberg — same day, same tune, 3rd place SQ Entry Unlimited at EMMA Sound Off 2026. Assets: `assets/awards/aya-aug26-amateur5000.jpg` (plaque, cut out onto white like the earlier two) and `assets/awards/emma-aug26-entry-unlimited.jpg` (the EMMA trophy).
 
 ### ⚠️ Carry into 3.x when the lines are merged
