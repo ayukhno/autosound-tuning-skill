@@ -2,7 +2,7 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
-## [Unreleased] — the noise floor of our own measurements, and where a dip stops meaning anything
+## [v3.0.9] — 2026-08-20 · the noise floor of our own measurements, and where a dip stops meaning anything
 
 ### Added
 
