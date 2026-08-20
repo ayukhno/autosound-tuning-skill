@@ -2,6 +2,39 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
+## [Unreleased] — the noise floor of our own measurements, and where a dip stops meaning anything
+
+### Added
+
+- **A measured floor for the whole measurement history.** Hand-held repeats 25 s apart differ by
+  **0.9–2.4 dB RMS** over 100 Hz–16 kHz with arrivals wandering **±2 samples** and drifting five over
+  a quarter of an hour; on a tripod, **0.18–0.25 dB RMS** and **0.09 samples**. Every inter-channel
+  delay taken hand-held carries that, invisibly — and any old single-point difference smaller than it
+  was never evidence. With it: the gain set once, drift controls three times a block (cabin
+  temperature moves an arrival by **0.43 samples per °C** on a 0.9 m path at 96 kHz), no ventilating
+  between captures, and every A/B ratioed against the reference **nearest in time** (74 s apart:
+  0.16 dB RMS; thirteen minutes apart: 0.95 dB). `diagnostic-techniques.md` §7.
+- **The frequency below which a dip means something, and above which it does not.** A car's Schroeder
+  frequency is **150–200 Hz** (Strauß/Treichel + Kessler, DAGA 2010; the bound itself is Geddes &
+  Blind, AES 76 paper 2127, 1984). Above it sound pressure at a point is Rayleigh-distributed, so a
+  measured value is **much more likely to be too low than too high** — a deep single-point dip up
+  there is the expected outcome of where the microphone was. Never boost on that evidence, whatever
+  the gate says; and the same statistics make a measured peak more trustworthy than a measured dip,
+  which is a better argument for cut-first than headroom. `diagnostic-techniques.md` §13,
+  `phase_2_eq.md`.
+- **The mic-shift test, now with a number attached and a form that survives a hand.** Nine sweeps in
+  97 s on one channel: the dip near 800 Hz sat at 800/818/800 Hz across three returns to the centre
+  (**1.0 %**) and at 688…1080 Hz across six positions (**9–14 %**). It is the *anchors* that are
+  mandatory, not the tripod — without repeats at one position there is no floor to judge the spread
+  against. Six positions in the ear ellipsoid, kept separately rather than averaged, because
+  averaging is what destroys the signal the test reads. `diagnostic-techniques.md` §13.
+- **Near-field against in-car: the cheapest way to tell a driver from its cabin.** Two door woofers
+  that measure as a matched pair in near-field (1.55 dB RMS apart) behave from the listening seat
+  like different instruments — the near one +9.9 dB at 100 Hz and −8.9 at 160, the far one shelved
+  down 9–19 dB from 250 up. Also the corollary that exonerated a pair of enclosures: soft-material
+  treatments moved a mid's near-field by 0.23–0.27 dB RMS, i.e. nothing, while the grille and the
+  A-pillar cover moved it by 4 and 7 dB. `enclosure-install-diagnostics.md` §4b.
+
 ## [v3.0.8] — 2026-08-19 · the reviewer was signed in all along
 
 ### Fixed
