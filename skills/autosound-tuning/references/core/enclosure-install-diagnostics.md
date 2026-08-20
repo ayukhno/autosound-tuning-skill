@@ -36,6 +36,53 @@ Four cheap tests; none is sufficient alone, together they're a verdict:
 
 A full channel retune (XO/TA/EQ) + a check of the joint summation with the neighbors + the lateral. The old calibration for this channel is invalid (see `naming-and-structure` "is the raw data still valid").
 
+## 4b. Near-field vs in-car: separating the driver from the cabin (2026-08-20)
+
+The cheapest decomposition in the whole method, and it settles arguments that otherwise
+run for months. **One near-field capture per driver (7–15 cm, on axis, pointed at the
+cone) beside the in-car capture from the listening position.** Near-field is dominated by
+direct sound by 20+ dB, so it measures the DRIVER; the difference between the two is what
+the cabin does to it. Level is not comparable between them — normalise at a band where
+both are well behaved (40–80 Hz for a woofer) and read the SHAPE.
+
+Worked example, and the reason to bother (VW Passat B8, door woofers):
+
+- **Near-field: the two door woofers are a matched pair** — 1.55 dB RMS apart over
+  40 Hz–2 kHz once a 1.8 dB level difference is removed. Nothing wrong with either driver.
+- **In-car minus near-field**, normalised at 40–80 Hz: the **near** door (beside the
+  listening position) runs **+9.9 dB at 100 Hz, +6.3 at 125, −8.9 at 160** — nineteen
+  decibels of swing inside half an octave; the **far** door is flat at the bottom and
+  **shelved down 9–19 dB from 250 Hz up** (−19 at 400).
+
+Two identical drivers, mirrored placement, one cabin, and acoustically they are not the
+same instrument. **This is why a stereo-minded auto-tuner finds no consistent solution on
+some cars** — the two channels it expects to be each other's mirror are different systems.
+Measure it before spending a session trying to match them.
+
+**Corollary for the enclosure question:** if near-field in the car ≈ near-field outside the
+car, the pod and its damping are exonerated and the argument is over. Measured on the same
+car: every soft-material treatment (mat, ring, wadding in the tail) moved the mid's
+near-field response by **0.23–0.27 dB RMS** — i.e. nothing. What DID move it was hard
+geometry: removing the mid's grille gained **+4.1 dB at 7.7 kHz**, and removing the
+tweeter's A-pillar cover dropped raggedness **1.94 → 1.43 dB RMS** with up to **7.1 dB at
+3.25 kHz**. The install damage lives in the first few centimetres, and it lands on the
+tweeter far harder than on the mid — the trim edges are comparable to a tweeter's
+wavelength and small against a mid's.
+
+⚠️ One car, and the near-field captures were hand-held. Shape and raggedness are
+trustworthy at that quality; absolute levels are not. Treat the numbers as the shape of
+the effect, not as constants.
+
+**Opening a sealed pod is a trade, not a gain.** Same car: a pod opened with a hole gained
+**+4 dB at 250–315 Hz and lost 10 dB at 125** — rear radiation escaping and subtracting.
+It also makes excursion worse where it matters: less output for the same cone motion below
+200 Hz. And the ceiling of any enlargement is fixed by the driver: with free-air Fs 110 Hz
+and 195 Hz installed, `Vas/Vb = 2.14`, so doubling the volume buys Fc 158 Hz and an
+infinite sealed volume buys 110 Hz — all of it near and below Fc, i.e. below where a mid is
+usually crossed. **Decide it with an impedance sweep, not by ear**: one clean peak below
+the old Fc means the new volume works as a sealed box; a smeared or double peak means the
+cavity is coupled to the cabin and you built a vent.
+
 ## 5. An independent audit by a fresh model (a practice that paid off)
 
 A cold-start audit by ANOTHER model (a sub-agent without our anchors) on the full measurement history found what we'd missed over 10+ rounds: an unused ETC, a progressive EQ regression of presence across versions, our own filter that deepened a cabin null. Method: give the raw data + the log + a direct mandate "challenge our conclusion, find what was missed", each point falsifiable. Run it on big reversals or when "we've already tried everything".
