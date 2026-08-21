@@ -2,7 +2,25 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
-## [v3.1.0] — 2026-08-22 · a tool that cannot say "not here" will be believed everywhere
+## What the version number means
+
+**Major** — the product changes in principle. **Minor** — a version, which is to say **a release**:
+the moment 3.x is handed to users rather than worked on. **Patch** — ongoing fixes between releases.
+
+Two consequences worth stating, because both have already caused a question:
+
+- Every `3.0.x` tag so far is **work, not a release.** The plugin catalogue
+  (`.claude-plugin/marketplace.json`) therefore still serves the last released line, **2.8.1** — that
+  is deliberate and not a forgotten pin. 3.x becomes the catalogue's line at the moment **3.1.0**
+  ships, and that same moment is what gives the method its own installation path independent of any
+  consumer.
+- The number answers *"is this a release?"*, **not** *"how risky is the upgrade?"* When a patch
+  changes a return contract — `eq_gate.check` gaining a fourth verdict, `arrival_triangulate`
+  emptying fields — the warning belongs in this file's **Upgrading** note and in the release body,
+  where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
+  danger in words.
+
+## [v3.0.11] — 2026-08-22 · a tool that cannot say "not here" will be believed everywhere
 
 Harvested from one working session in which a competent operator made six errors and **five were
 the same error**: a tool returned a confident-looking number outside the conditions it is valid in,
