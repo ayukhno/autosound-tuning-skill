@@ -144,9 +144,23 @@ def relative_delay_xcorr(ir_a, ir_b, sample_rate, max_lag_ms=5.0, window_ms=10.0
     Robust to impulse SHAPE — unlike an onset/threshold pick, which is fragile on
     a dirty/ragged impulse (a door midbass) and can be off by multiples (real
     bug: 3.5 ms vs ~0.9 ms on the GUI cursor). Returns the lag that best aligns
-    B onto A: **positive = B arrives LATER than A**. Both IRs are cropped to a
-    SHARED window around the earlier leading edge (one time base → the relative
-    delay is preserved) to bound the cost. Always cross-check vs the REW GUI
+    B onto A: **positive = B arrives LATER than A**.
+
+    ⚠️ PRECONDITION, and it is the one that actually bites: the two IRs must already
+    SHARE a time base (a loopback/synchronised reference, or one common Time Offset —
+    `rew-api-quirks.md` "Timing", `diagnostic-techniques §10`). This function cannot
+    supply one. Feed it IRs that each carry their own zero and it returns a confident
+    number about nothing: REW hands back every impulse CENTRED ON ITS OWN PEAK, so a
+    caller who takes the sample array and drops the time axis is correlating data that
+    is already aligned, and gets ~0.0000 ms for every pair (real, 2026-08-21 — the
+    conclusion drawn was that this function lies; the arrays were peak-centred). The
+    cropping below shares ONE window between the two inputs, which PRESERVES a relative
+    delay that is already there; it does not create one.
+
+    Returns `{delay_ms, lag_samples, max_lag_ms, basis}` where `basis` is "shared" or
+    **"SUSPECT"** — the latter when both inputs peak at the SAME index, the signature of
+    per-measurement centring. SUSPECT is not a small caveat: it means the answer is
+    probably about the export, not about the car. Always cross-check vs the REW GUI
     cursor before stating the number."""
     n = min(len(ir_a), len(ir_b))
     if n == 0:
@@ -170,8 +184,14 @@ def relative_delay_xcorr(ir_a, ir_b, sample_rate, max_lag_ms=5.0, window_ms=10.0
             s = sum(a[i] * b[i + lag] for i in range(-lag, m))
         if best_corr is None or s > best_corr:
             best_corr, best_lag = s, lag
+    # Both impulses peaking at the SAME index is what per-measurement peak-centring
+    # looks like from in here -- the one failure this function cannot detect from the
+    # lag alone, because the lag it then reports is a truthful 0 about untruthful data.
+    pa = max(range(len(ir_a[:n])), key=lambda i: abs(ir_a[i]))
+    pb = max(range(len(ir_b[:n])), key=lambda i: abs(ir_b[i]))
     return {"delay_ms": round(best_lag / sample_rate * 1000.0, 4),
-            "lag_samples": best_lag, "max_lag_ms": max_lag_ms}
+            "lag_samples": best_lag, "max_lag_ms": max_lag_ms,
+            "basis": "SUSPECT" if pa == pb else "shared"}
 
 
 def etc_envelope(ir):
@@ -235,6 +255,18 @@ def arrival_triangulate(times, ir, spread_ok_ms=0.15):
                         out["etc_peak_ms"]) if v is not None]
     out["spread_ms"] = round(max(vals) - min(vals), 3)
     out["verdict"] = "TRUSTED" if out["spread_ms"] <= spread_ok_ms else "ILL-POSED"
+    # ILL-POSED means the four estimators do not agree on what "the start" IS, so none of
+    # them answers the question -- and a caller who reads one anyway gets a number that
+    # looks like a measurement. On a sub, `edge30_ms` came back as -8.16 ms (2026-08-21):
+    # nonsense, but nonsense shaped like milliseconds. The verdict now empties the fields
+    # instead of merely labelling them, so reading a rejected estimator is a DELIBERATE
+    # act (`rejected[...]`), never an accident. `spread_ms` stays -- it is the evidence
+    # FOR the verdict, not an estimate of arrival.
+    if out["verdict"] == "ILL-POSED":
+        out["rejected"] = {k: out[k] for k in
+                           ("peak_ms", "edge20_ms", "edge30_ms", "etc_peak_ms")}
+        for k in out["rejected"]:
+            out[k] = None
     return out
 
 
@@ -299,6 +331,30 @@ def _selftest():
     tri_s = arrival_triangulate(t_ax, slow)
     assert tri_s["verdict"] == "ILL-POSED", tri_s
     assert len(step_response([1.0, -0.5])) == 2
+
+    # An ILL-POSED verdict must EMPTY the estimators, not merely label them. The sub that
+    # produced `edge30_ms = -8.16 ms` on 2026-08-21 is the reason: nonsense shaped like
+    # milliseconds is read as milliseconds.
+    ragged = [0.0] * 400
+    for i in range(100, 400):            # a slow, long-ringing low-frequency impulse
+        ragged[i] = math.sin(2 * math.pi * 45 * (i - 100) / fs) * (1 - (i - 100) / 300.0)
+    tri_r = arrival_triangulate([i / fs for i in range(400)], ragged)
+    assert tri_r["verdict"] == "ILL-POSED", tri_r
+    assert all(tri_r[k] is None for k in
+               ("peak_ms", "edge20_ms", "edge30_ms", "etc_peak_ms")), tri_r
+    assert tri_r["spread_ms"] > 0 and set(tri_r["rejected"]), \
+        "the evidence for the verdict, and the rejected values, must both survive"
+    # ...while a TRUSTED one still answers.
+    assert tri_c["peak_ms"] is not None and "rejected" not in tri_c, tri_c
+
+    # xcorr must SAY when its precondition is broken. Two impulses centred on the same
+    # index is what a per-measurement time reference looks like from inside the function.
+    same = list(clean)
+    assert relative_delay_xcorr(clean, same, fs)["basis"] == "SUSPECT", \
+        "peak-centred inputs must be flagged, not answered with a truthful 0"
+    moved = [clean[i - 40] if 0 <= i - 40 < len(clean) else 0.0
+             for i in range(len(clean))]
+    assert relative_delay_xcorr(clean, moved, fs)["basis"] == "shared"
 
     print(f"selftest OK — first_arrival {fa['arrival_time_ms']} ms avoids the reflection "
           f"(global peak {pk['peak_time_ms']} ms); xcorr {res['delay_ms']} ms (+) / "

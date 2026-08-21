@@ -118,7 +118,19 @@ class ExcessPhaseGate:
     def __init__(self, freqs, mag_db, excess_phase_deg, trust,
                  z_warn=Z_WARN, z_block=Z_BLOCK, dip_db=DIP_DB):
         self.r = analyze(freqs, mag_db, excess_phase_deg, trust)
+        # KEPT, and not decoration: `analyze`'s grid deliberately runs half an octave BELOW
+        # trust[0] and an octave above trust[1] (smoothing needs the margin), while the MAD
+        # normaliser is computed on the trust band ALONE. So a query outside the band divides
+        # by a scale that was never calibrated for it and comes back looking like any other
+        # confident verdict. Field cost, 2026-08-21: three of five BLOCKs on this car were
+        # out-of-band; re-run inside the band, two of them fell from S=4.2/4.7 to 1.3/1.2.
+        self.trust = (float(trust[0]), float(trust[1]))
         self.z_warn, self.z_block, self.dip_db = z_warn, z_block, dip_db
+
+    def in_scope(self, f0):
+        """Is f0 inside the CALIBRATED band? Outside it this gate has no vote --
+        neither a permission nor an objection."""
+        return self.trust[0] <= float(f0) <= self.trust[1]
 
     def s_at(self, f0):
         """The phase-anomaly statistic S at f0 — the ALWAYS-comparable value.
@@ -137,11 +149,20 @@ class ExcessPhaseGate:
     def check(self, f0, q):
         """-> (verdict, metric, at_freq|None) for a PK boost at (f0, q).
 
+        `verdict` is ALLOW / WARN / BLOCK / **OUT_OF_SCOPE**. The last one is not a
+        weak ALLOW: it means the question was asked outside the band this gate was
+        calibrated on, so it has no vote at all and whatever governs there (the flaw
+        map\'s `no_boost` zones, §13\'s mic-shift) governs alone. Record it by that
+        NAME, never as ALLOW -- "ALLOW 1.2 @ 145 Hz" reads as permission a month
+        later, and on this car 145 Hz is a cabin null the map says never to boost.
+
         `metric` is the S statistic on the hot path and S*w on ALLOW — both
         S-family, so it is comparable AS LONG AS this class is not subclassed
         with branches returning a different quantity. For safety in any
         cross-case analysis use `s_at(f0)` instead (see its docstring).
         """
+        if not self.in_scope(f0):
+            return "OUT_OF_SCOPE", None, None
         from dsp_math import peq_response
         r = self.r
         w = np.abs(20 * np.log10(np.abs(peq_response(r["g"], "PK", f0, 3.0, q))
@@ -158,6 +179,8 @@ class ExcessPhaseGate:
     def as_boost_gate(self, block_on_warn=True):
         """Callable for dsp_math.greedy_eq_fit(boost_gate=...): PK boosts only
         (shelves keep the static-zone/budget rules); True = allowed."""
+        # OUT_OF_SCOPE is deliberately NOT in `bad`: a gate with no vote must not veto.
+        # Out there the boost is governed by the flaw map, not by silence from this object.
         bad = {"BLOCK", "WARN"} if block_on_warn else {"BLOCK"}
 
         def fn(kind, f0, q):
@@ -225,6 +248,18 @@ def _selftest():
         f"depth-guard regression; min-phase must never confidently block)")
     assert s_deep < g_deep.z_warn, (
         f"deep min-phase point-S not at floor: {s_deep:.2f}")
+
+    # OUT_OF_SCOPE: a query outside the calibrated band gets no verdict at all -- and
+    # crucially does NOT come back as a confident BLOCK, the way it did on 2026-08-21.
+    lo, hi = g_non.trust
+    for f_out in (lo * 0.7, hi * 1.5):
+        v_out, m_out, at_out = g_non.check(f_out, 4.0)
+        assert v_out == "OUT_OF_SCOPE" and m_out is None and at_out is None, \
+            (f_out, v_out, m_out, at_out)
+    assert g_non.check(lo, 4.0)[0] != "OUT_OF_SCOPE", "the band edge is INSIDE the band"
+    # ...and an abstention must never act as a veto in the boolean adapter.
+    assert g_non.as_boost_gate()("PK", lo * 0.7, 4.0) is True, \
+        "a gate with no vote must not block"
 
     print(f"selftest OK -- min-phase comb r=0.95: {v_min} (S*w {m_min:.1f}); "
           f"non-min-phase r=1.05: {v_non} (S {m_non:.1f} @ {at:.0f} Hz); "

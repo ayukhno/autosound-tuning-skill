@@ -104,6 +104,7 @@ Read the active phase from `process/process-state.json` (`python3 rew_tool/state
 | [patterns/target-curves/target_curves_visualizer.html](references/patterns/target-curves/target_curves_visualizer.html) | Interactive curve comparison. |
 | [core/naming-and-structure.md](references/core/naming-and-structure.md) | Measurement names, .mdat storage, preset structure. |
 | [core/analysis-playbook.md](references/core/analysis-playbook.md) | Which REW graph for which decision. |
+| [core/estimator-scope.md](references/core/estimator-scope.md) | When a number is NOT an answer: where each tool abstains, why a measurement is not a setting, what survives a "from scratch". |
 | [core/diagnostic-techniques.md](references/core/diagnostic-techniques.md) | Anomalies, joint-phase summation, peak-vs-null. |
 | [core/filter-types-car-audio.md](references/core/filter-types-car-audio.md) | LR/Bessel/Butterworth, starting crossover points. |
 | [patterns/staging-depth.md](references/patterns/staging-depth.md) | Stage depth/height, driver layering. |

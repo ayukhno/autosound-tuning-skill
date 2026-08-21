@@ -25,6 +25,8 @@ A "new project run" isn't always from scratch. Classify it first; it decides how
 
 This is the practical face of "the foundation is curve-agnostic" (SKILL.md → Session lifecycle): hardware defines the instrument, the curve only voices it.
 
+- **A measured constant of the RIG is not an inherited setting, and survives any "from scratch".** Electronic latency of the chain, temperature-drift rate, microphone calibration, a driver's measured Fs/T-S — these describe the apparatus, not the tune. The test is one question: *would this number be the same after a factory reset of the DSP?* Latency, drift, mic cal, Fs — yes. Corners, delays, gains, EQ — no. Only the second kind is what a from-scratch restart discards; refusing the first kind costs a re-measurement for nothing (real hesitation, 2026-08-21, over `electronicLatencyMs` that was sitting in the capture manifest). Scope and the rest of this doctrine → [`estimator-scope.md`](estimator-scope.md).
+
 ## 3. Measurement naming (REW)
 
 Measurement name = **`<channel|pair|combo|joint>[ <modifier>]_<version>`**, optionally with a method suffix.

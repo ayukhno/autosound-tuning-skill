@@ -2,6 +2,56 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
+## [v3.1.0] — 2026-08-22 · a tool that cannot say "not here" will be believed everywhere
+
+Harvested from one working session in which a competent operator made six errors and **five were
+the same error**: a tool returned a confident-looking number outside the conditions it is valid in,
+and nothing in the returned value said so. Three of the five were already documented — in this very
+reference set — and the prose did not fire at the moment the number was read. Prose warns the
+reader; a value warns the user, and under load a session is a user, not a reader. So scope moved
+out of the docstrings and into the return values.
+
+### Added
+
+- **`references/core/estimator-scope.md`** — the seam this release is about: the abstention
+  convention; a table of **where each tool is SILENT**, so step order can be *derived* instead of
+  asked (it was asked twice, by round trip); *a measurement is not a setting* (a best-fit τ is not
+  a time alignment, a gate statistic is not a permission, a pocket measured before alignment is not
+  a pocket); and what survives a "from scratch".
+- **What a "from scratch" restart discards** — decisions, never instrument facts, with a
+  one-question test: *would this number be the same after a factory reset of the DSP?* Latency,
+  drift, mic calibration, Fs — yes. Corners, delays, gains, EQ — no. Added to
+  `naming-and-structure.md §2`, where the restart trigger is defined; a real session nearly
+  discarded a measured `electronicLatencyMs` that was sitting in its own capture manifest.
+
+### Changed
+
+- **`eq_gate.ExcessPhaseGate.check` returns `OUT_OF_SCOPE`** outside its calibrated band, with no
+  metric attached. The grid deliberately runs half an octave below `trust[0]` while the MAD
+  normaliser is computed on the trust band alone — so an out-of-band query divided by a scale never
+  calibrated for it and came back indistinguishable from a valid verdict. Field cost: three of five
+  BLOCKs on one car were out-of-band; re-run inside the band, two fell from S=4.2/4.7 to 1.3/1.2.
+  `OUT_OF_SCOPE` is not a weak ALLOW and must be recorded by that name — *"ALLOW 1.2 @ 145 Hz"*
+  reads as permission a month later, where the flaw map says never to boost. Nor is it a veto:
+  `as_boost_gate` treats it as no objection, because a tool with no vote does not get one.
+- **`analysis.arrival_triangulate` empties its estimators on ILL-POSED** instead of labelling them.
+  A sub returned `edge30_ms = -8.16 ms` — nonsense, but nonsense shaped like milliseconds. The
+  values move to `rejected` so reading one is deliberate; `spread_ms` stays, being the evidence for
+  the verdict rather than an estimate of arrival.
+- **`analysis.relative_delay_xcorr` states its precondition and detects the break.** The two IRs
+  must already share a time base; the function cannot supply one. Fed per-measurement-centred data
+  it returns a truthful `0.0000 ms` about untruthful input — which happened, and was diagnosed as
+  the function lying. It now reports `basis: "shared" | "SUSPECT"`, flagging the same-peak-index
+  signature of per-measurement centring. The old docstring's *"one time base → the relative delay
+  is preserved"* described the shared crop and read as a promise the function never made.
+- **Pair coherence / Δφ climb (§26) now carries its precondition: align the pair first.** The test
+  asks what a delay cannot track, which is only a question once the delay is gone — and Phase 0
+  captures solos with modifiers zeroed, so nothing is aligned by default and the pair's geometric
+  offset (1.2–1.4 ms on the source build) sits inside the number as divergence. Measured cost of
+  skipping it: a *"−18.96 dB pocket, deepest in the pair"* that was **−1.9 dB** once aligned, and
+  would have pushed a crossover corner out of a healthy region. Stated in both `phase_0_baseline.md`
+  and `diagnostic-techniques.md §26`.
+
 ## [v3.0.10] — 2026-08-21 · a stray file that could delete a channel, and the checker that never said so
 
 ### Fixed
