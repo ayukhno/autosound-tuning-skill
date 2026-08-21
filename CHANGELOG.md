@@ -2,6 +2,24 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
+## [v3.0.10] — 2026-08-21 · a stray file that could delete a channel, and the checker that never said so
+
+### Fixed
+
+- **A standalone `glossary.json` silently SHADOWS `project.json`'s `glossary` key, and the contract
+  checker called it valid.** `naming.Glossary.for_project` returns the standalone file the moment it
+  exists and never opens `project.json` — deliberate precedence (SCR-011), and unchanged here. What
+  was missing was the alarm: `contract.check_glossary` inspected the *already-resolved* glossary, so
+  it could not see that two sources existed and disagreed. Observed in the field on 2026-08-21, when
+  a consumer's test fixture (seven channels) landed on a live project (eight) and the **centre
+  channel ceased to exist** for every name check and every derived measurement checklist — while the
+  one command whose job is integrity reported `present: true, valid: true`. The check now compares
+  both sources and names the codes that the shadow hides. The **empty** standalone file is the worst
+  form, not the absent one — everything vanishes and the old code would have answered "no glossary
+  yet, go write one" to a project that already had a complete one; the shadow now decides validity
+  and replaces that line. Locked in by `contract.py selftest`, both directions: a disagreeing
+  standalone is invalid, an agreeing one is not an error.
+
 ## [v3.0.9] — 2026-08-20 · the noise floor of our own measurements, and where a dip stops meaning anything
 
 ### Added

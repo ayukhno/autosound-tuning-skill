@@ -149,8 +149,40 @@ def check_glossary(project_dir):
     glossary = naming.Glossary.for_project(project_dir)
     present = bool(glossary.channels or glossary.pairs or glossary.combos
                    or glossary.joints or glossary.sides)
-    entry = _entry("glossary.json (or project.json.glossary)", present, None, present or None,
-                    [] if present else ["no glossary yet -- naming/measurement checks are inert"])
+    # TWO SOURCES, ONE WINNER, NO WORD ABOUT IT: `naming.Glossary.for_project` returns the
+    # standalone `glossary.json` the moment that file exists and never opens `project.json`.
+    # So any stray write of a standalone file SHADOWS the project's own glossary silently --
+    # observed 2026-08-21, when a consumer's test fixture (7 channels) landed on a live project
+    # (8 channels) and the centre channel simply ceased to exist for every name check and every
+    # derived checklist, while this checker reported present/valid. The precedence itself is
+    # deliberate (SCR-011) and is NOT changed here: a documented rule other projects lean on is
+    # worse to flip quietly than to leave. What was missing is the alarm.
+    shadow = None
+    standalone = os.path.join(project_dir, "glossary.json")
+    if os.path.isfile(standalone) and os.path.isfile(os.path.join(project_dir, "project.json")):
+        try:
+            with open(os.path.join(project_dir, "project.json"), encoding="utf-8") as f:
+                inline = (json.load(f) or {}).get("glossary") or {}
+        except (OSError, ValueError):
+            inline = {}
+        hidden = naming.Glossary(inline)
+        if (hidden.channels or hidden.pairs or hidden.combos or hidden.joints or hidden.sides) \
+                and hidden.channel_codes() != glossary.channel_codes():
+            lost = [c for c in hidden.channel_codes() if c not in glossary.channel_codes()]
+            shadow = ("glossary.json SHADOWS project.json's `glossary` key and they disagree"
+                      + (" -- channels only in project.json: " + ", ".join(lost) if lost else "")
+                      + ". The standalone file wins (naming.Glossary.for_project); delete it, or"
+                      " reconcile the two, before trusting any name check.")
+    # An EMPTY standalone file over a real glossary is the worst form of this, not an absent
+    # one: everything vanishes. So the shadow decides `valid`, and it also replaces the generic
+    # "no glossary yet" line -- that line would send the reader off to write a glossary they
+    # already have.
+    if shadow:
+        return _entry("glossary.json (or project.json.glossary)", True, None, False, [shadow]), \
+            glossary
+    issues = [] if present else ["no glossary yet -- naming/measurement checks are inert"]
+    entry = _entry("glossary.json (or project.json.glossary)", present, None,
+                   present or None, issues)
     return entry, glossary
 
 
@@ -670,6 +702,28 @@ def _selftest():
     # ...and an EMPTY folder is not a 2.x project: it is one nobody has started.
     assert check_project(tempfile.mkdtemp(prefix="autosound_contract_new_"),
                          skip_rew=True)["legacy"] is False
+
+    # A STANDALONE glossary.json shadowing project.json's `glossary` key, dropping a channel:
+    # the incident of 2026-08-21 in miniature (a consumer's test fixture landed on a live
+    # project and the centre channel vanished from every name check while this checker still
+    # said "present"). The shadow must be NAMED, and the lost code named with it.
+    gl_path = os.path.join(root, "glossary.json")
+    live = project.Project(root).load()["glossary"]["channels"]
+    with open(gl_path, "w", encoding="utf-8") as f:
+        json.dump({"channels": live[:-1]}, f)   # ...emptied, the worst form: everything vanishes
+    shadowed = check_project(root, skip_rew=True)
+    gl_entry = next(e for e in shadowed["files"] if e["file"].startswith("glossary.json"))
+    assert gl_entry["valid"] is False, gl_entry
+    assert any("SHADOWS" in i and live[-1]["code"] in i for i in gl_entry["issues"]), gl_entry
+    assert not any("no glossary yet" in i for i in gl_entry["issues"]), \
+        "a shadowed project HAS a glossary -- do not send the reader off to write one"
+    # ...and an AGREEING standalone file is not an error -- the precedence is legitimate.
+    with open(gl_path, "w", encoding="utf-8") as f:
+        json.dump({"channels": live}, f)
+    agree = next(e for e in check_project(root, skip_rew=True)["files"]
+                 if e["file"].startswith("glossary.json"))
+    assert agree["valid"] is True and agree["issues"] == [], agree
+    os.remove(gl_path)
 
     print(f"selftest OK — empty project reports missing files without crashing; a seeded project "
           f"(project.json+glossary, dsp_profile.json, ledger, process) validates at the right "
