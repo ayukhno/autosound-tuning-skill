@@ -1,0 +1,38 @@
+name: checks
+
+# The first CI in this repo. Its whole value is that RED MEANS BROKEN, so it deliberately runs a
+# small, deterministic set rather than everything imaginable: the installer-consistency check and
+# the rew_tool modules' own selftests. No network beyond installing dependencies, no REW, no
+# fixtures downloaded at run time. A check that blinks gets ignored within a week, and an ignored
+# CI is worse than none -- it launders "nobody looked" into a green tick.
+#
+# Dependencies are NOT pinned. A break caused by a new numpy or scipy is real information: these
+# tools ship to people who will install current versions, so we would rather learn it here.
+
+on:
+  push:
+  pull_request:
+
+# A newer push supersedes an in-flight run on the same ref; stale runs are noise, not signal.
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  selftests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # dsp_math and eq_gate import scipy by name, and since v3.0.12 the dsp_math selftest DESIGNS
+      # crossovers, which needs it. This is the step whose absence turned a consumer's suite red on
+      # that upgrade -- it is stated here rather than assumed.
+      - name: install dependencies
+        run: python -m pip install --upgrade pip numpy scipy
+
+      - name: selftests and installer consistency
+        run: scripts/run-selftests.sh

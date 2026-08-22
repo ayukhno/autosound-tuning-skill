@@ -33,10 +33,14 @@ Before opening a PR, make sure you have:
   `python3 scripts/installer-consistency.py` — it compares the constants that must match and fails
   when they drift. It checks values, not logic: a pass does not mean the three files still *do* the
   same thing, so read all three anyway.
+- **Run `scripts/run-selftests.sh`** — the installer check plus every `rew_tool` module's own
+  selftest, 20 in all. It needs `numpy` and `scipy` (`dsp_math` and `eq_gate` import scipy by name,
+  and the `dsp_math` selftest designs crossovers). CI runs this exact script on push and PR, so a
+  green run here is a green run there.
 
 PR checklist:
 - [ ] Tests / smoke test pass locally (if applicable)
-- [ ] `scripts/installer-consistency.py` passes (if any installer changed)
+- [ ] `scripts/run-selftests.sh` passes locally (it includes the installer check)
 - [ ] Description explains the change and motivation
 - [ ] Documentation / CHANGELOG updated (if needed)
 
