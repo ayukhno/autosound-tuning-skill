@@ -9,10 +9,15 @@ the moment 3.x is handed to users rather than worked on. **Patch** — ongoing f
 
 Two consequences worth stating, because both have already caused a question:
 
-- Every `3.0.x` tag so far is **work, not a release.** The plugin catalogue
-  (`.claude-plugin/marketplace.json`) therefore still serves the last released line, **2.8.1** — that
-  is deliberate and not a forgotten pin. 3.x becomes the catalogue's line at the moment **3.1.0**
-  ships, and that same moment is what gives the method its own installation path independent of any
+- Every `3.0.x` tag is **work, not a release — but say for whom.** There are two audiences and the
+  tags reach them differently. The plugin catalogue (`.claude-plugin/marketplace.json`) is pinned by
+  SHA to the last released line, **2.8.1**; it does not move when a tag is cut, and that pin is
+  deliberate, not forgotten. The **installers and TCC's updater track tags**: both take the newest
+  tag matching `SKILL_TAG_GLOB` (`install.sh`, `install.ps1`) or the same glob in TCC's updater, so
+  a `3.0.x` tag is on somebody's machine as soon as it is pushed, with no intervening step. To a
+  catalogue user a `3.0.x` tag is invisible; to an installer user it *is* the release. Cut one with
+  that in mind — the Upgrading note is the only warning that audience gets. **3.1.0** is the moment
+  the catalogue moves too, and that is what gives the method an installation path independent of any
   consumer.
 - The number answers *"is this a release?"*, **not** *"how risky is the upgrade?"* When a patch
   changes a return contract — `eq_gate.check` gaining a fourth verdict, `arrival_triangulate`

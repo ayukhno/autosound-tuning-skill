@@ -78,6 +78,10 @@ try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::S
 
 $SkillRepo    = "https://github.com/ayukhno/autosound-tuning-skill.git"
 $SkillRepoUrl = $SkillRepo -replace '\.git$', ''
+# Which tags this installer considers installable — the supported line, stated once so a consumer
+# can READ the policy instead of re-deriving it from the pipeline below. Same rule as install.sh's
+# SKILL_TAG_GLOB and TCC's updater; when the supported line moves, this is the line that moves.
+$SkillTagGlob = "v3.*"
 $TccRepo      = "https://github.com/ayukhno/autosound-tcc"
 $SkillHome    = Join-Path $HOME ".claude\skills\autosound-tuning"
 # The checkout lives beside the skill and the skill points at it (a junction) -- see install.sh
@@ -644,7 +648,7 @@ if (-not $SkillRef) {
     # installer should put you on a release unless you say otherwise.
     $tags = @()
     if (Have git) {
-        $tags = @((& git ls-remote --tags --refs $SkillRepo "v3.*" 2>$null) |
+        $tags = @((& git ls-remote --tags --refs $SkillRepo $SkillTagGlob 2>$null) |
                   ForEach-Object { ($_ -split "/")[-1] } |
                   Sort-Object { [version]($_ -replace '^v', '') })
     }

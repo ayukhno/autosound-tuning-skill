@@ -41,6 +41,10 @@ set -euo pipefail
 SKILL_REPO="https://github.com/ayukhno/autosound-tuning-skill.git"
 #: The same repository without the `.git` — what a person opens in a browser, not what git clones.
 SKILL_REPO_URL="${SKILL_REPO%.git}"
+# Which tags this installer considers installable — the supported line, stated once so a consumer
+# can READ the policy instead of re-deriving it from the pipeline below. It is the same rule
+# install.ps1 and TCC's updater apply; when the supported line moves, this is the line that moves.
+SKILL_TAG_GLOB="v3.*"
 TCC_REPO="https://github.com/ayukhno/autosound-tcc"
 SKILL_HOME="${HOME}/.claude/skills/autosound-tuning"
 # The repo lives beside the skill and the skill POINTS at it. Cloning and then moving the
@@ -709,7 +713,7 @@ step "The tuning method"
 if [ -z "$SKILL_REF" ]; then
   # The newest 3.x tag. Asked for by name rather than "main": main is where development lands,
   # and an installer should put you on a release unless you say otherwise.
-  SKILL_REF="$(git ls-remote --tags --refs "$SKILL_REPO" 'v3.*' 2>/dev/null \
+  SKILL_REF="$(git ls-remote --tags --refs "$SKILL_REPO" "$SKILL_TAG_GLOB" 2>/dev/null \
       | awk -F/ '{print $NF}' | sort -V | tail -1)" || SKILL_REF=""
   [ -z "$SKILL_REF" ] && SKILL_REF="main"
 fi
