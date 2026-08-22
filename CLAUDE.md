@@ -8,14 +8,14 @@ backporting an already-verified fix: do them, report to the cockpit afterwards. 
 `~/dev/autosound_projects/OPEN.md` at the start of a session** — the lines marked for this repo are
 there.
 
-**The user stays in this window for substance** — his words: *"по суті я буду в кожній з сесій, так
-як і по релізах (перше та друге число у версії)"*. Substance is anything that changes what the
-method *advises* or what it can *record*. Also his: the first and second numbers of the version
+**The user stays in this window for substance** — their words: *"по суті я буду в кожній з сесій,
+так як і по релізах (перше та друге число у версії)"*. Substance is anything that changes what the
+method *advises* or what it can *record*. Also theirs: the first and second numbers of the version
 (`3.1.0`, `4.0.0` — a release), moving the plugin catalogue, anything touching the live car, and
 anything public and irreversible.
 
-So this is **not** "sessions no longer talk to the user". They do not pull him in over mechanics.
-When he asks here, answer here — do not forward a conversation that is already happening. The
+So this is **not** "sessions no longer talk to the user". They do not pull the user in over
+mechanics. When they ask here, answer here — do not forward a conversation that is already happening. The
 cockpit gets the background, not the dialogue.
 
 Two consequences worth stating, because both have already been got wrong here:
