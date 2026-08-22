@@ -32,6 +32,7 @@
 #   ./install.sh --dry-run           say what it would do, change nothing
 #   ./install.sh --yes               yes to every question; sign-ins are printed, not run
 #   ./install.sh --skill-ref v3.0.3  a specific skill version (default: the newest 3.x tag)
+#   ./install.sh --tcc-ref v0.1.12   a specific app version (default: the newest app tag)
 #   ./install.sh --uninstall         remove what this script installed — NEVER your projects
 #   ./install.sh --uninstall --all   also uv, Claude Code and ~/.claude, agy/gh/omp when this
 #                                    script installed them, and every --user pip package. For
@@ -45,6 +46,10 @@ SKILL_REPO_URL="${SKILL_REPO%.git}"
 # can READ the policy instead of re-deriving it from the pipeline below. It is the same rule
 # install.ps1 and TCC's updater apply; when the supported line moves, this is the line that moves.
 SKILL_TAG_GLOB="v3.*"
+# The app's supported line. It is `v*` and not `v3.*` because the app versions independently of the
+# method -- they are different products that ship together, and pinning them to one number is the
+# coupling SCR-055 is arguing about, not a thing to bake in here.
+TCC_TAG_GLOB="v*"
 TCC_REPO="https://github.com/ayukhno/autosound-tcc"
 SKILL_HOME="${HOME}/.claude/skills/autosound-tuning"
 # The repo lives beside the skill and the skill POINTS at it. Cloning and then moving the
@@ -80,6 +85,9 @@ REMOVE_ALL=0
 DRY_RUN=0
 ASSUME_YES=0
 SKILL_REF=""
+# Same idea for the app: empty means "the newest release", not "whatever is on main".
+# Resolved beside the install itself, where the app is actually asked for.
+TCC_REF=""
 # Saved before anything is installed: the uv step exports ~/.local/bin into THIS script's PATH so
 # the rest of the run can call what it just installed. That made the summary print "✓
 # autosound-tcc installed" to somebody whose own shell could not find it, because the check was
@@ -100,6 +108,7 @@ Autosound tuning — installer for macOS (and Linux)
   install.sh --dry-run           say what it would do, change nothing
   install.sh --yes               yes to every question; sign-ins are printed, not run
   install.sh --skill-ref v3.0.3  a specific skill version (default: the newest 3.x tag)
+  install.sh --tcc-ref v0.1.12   a specific app version (default: the newest app tag)
   install.sh --uninstall         remove what this script installed — NEVER your projects
   install.sh --uninstall --all   also uv, Claude Code and ~/.claude, agy/gh/omp when this script
                                  installed them, and every --user pip package. Asks first.
@@ -124,6 +133,7 @@ while [ $# -gt 0 ]; do
     --dry-run)     DRY_RUN=1 ;;
     --yes|-y)      ASSUME_YES=1 ;;
     --skill-ref)   SKILL_REF="${2:-}"; shift ;;
+    --tcc-ref)     TCC_REF="${2:-}"; shift ;;
     --help|-h)     usage; exit 0 ;;
     *) echo "unknown option: $1 (try --help)" >&2; exit 2 ;;
   esac
@@ -830,7 +840,25 @@ if [ "$MODE" = "tcc" ]; then
   # 3.9.6 on a stock macOS — and refused with "does not satisfy Python>=3.11", which reads as a
   # broken package rather than a missing Python (2026-08-12).
   [ -n "$UV" ] || UV=uv
-  if run "$UV" tool install --quiet --python 3.12 --upgrade "autosound-tcc[gui,claude] @ git+${TCC_REPO}"; then
+  # The app is asked for BY TAG, exactly as the method is above. With no ref, `git+URL` means HEAD
+  # of the default branch: a fresh install handed somebody unfinished work, and the app's own
+  # update button -- which pins the newest tag -- then read that build as ahead of every release.
+  # The two ways of getting the app have to agree, or "update" and "install" mean different
+  # things on the same machine (SCR-054).
+  if [ -z "$TCC_REF" ]; then
+    TCC_REF="$(git ls-remote --tags --refs "$TCC_REPO" "$TCC_TAG_GLOB" 2>/dev/null \
+        | awk -F/ '{print $NF}' | sort -V | tail -1)" || TCC_REF=""
+  fi
+  if [ -n "$TCC_REF" ]; then
+    TCC_SPEC="autosound-tcc[gui,claude] @ git+${TCC_REPO}@${TCC_REF}"
+    say "  version $TCC_REF"
+  else
+    # No network, or a repository with no tags yet. The default branch is still an install that
+    # works, and saying so is better than stopping over a version number.
+    TCC_SPEC="autosound-tcc[gui,claude] @ git+${TCC_REPO}"
+    warn "could not read the app's releases -- installing from the default branch instead"
+  fi
+  if run "$UV" tool install --quiet --python 3.12 --upgrade "$TCC_SPEC"; then
     # Where uv actually put it, which is not always `~/.local/bin`.
     TCC_BIN="$(command -v autosound-tcc 2>/dev/null || true)"
     [ -z "$TCC_BIN" ] && [ -x "${UV_TOOL_BIN_DIR:-$LOCAL_BIN}/autosound-tcc" ] \
@@ -842,39 +870,21 @@ if [ "$MODE" = "tcc" ]; then
   fi
 
   if on_mac; then
-    # NOT relative to $0: under `curl … | bash` that is "bash", so dirname gives whatever folder the
-    # person happened to be standing in (found on a clean M1, 2026-08-13). The clone above always
-    # has the builder.
-    builder="$SKILL_SRC/scripts/make-macos-app.sh"
-    [ -f "$builder" ] || builder="$(cd "$(dirname "$0")" 2>/dev/null && pwd)/scripts/make-macos-app.sh"
+    # The app builds ITSELF: `autosound-tcc --install-desktop` makes the bundle in ~/Applications,
+    # registers it with Launch Services and puts the shortcut on the Desktop (SCR-056). What this
+    # replaces was two guesses across a repository boundary. The builder was a script in THIS repo
+    # found by path -- `$SKILL_SRC/scripts/…` with a fallback to `dirname $0`, which under
+    # `curl … | bash` is whatever folder the person was standing in, and it once failed to be found
+    # on a clean M1 (2026-08-13). And the icon came out of TCC's own package, read by name from
+    # here; renaming it there would have removed the icon silently, with no error on either side.
+    # Now the half that owns those details does the work, and this script reads an exit code.
+    # Needs the app at v0.1.13 or newer, which is what the tag resolution above installs.
     if [ "$DRY_RUN" = 1 ]; then
       say "  would build \"$(pretty "$APP")\" and a shortcut on your Desktop"
-    elif [ -x "$builder" ] && [ -n "$TCC_BIN" ]; then
-      # The builder's own report (path, unsigned-and-that-is-fine) is for whoever runs it by hand;
-      # here one line says the same thing. Its one note worth passing on is a missing icon.
-      _bout="$("$builder" "$HOME/Applications" "$TCC_BIN" 2>&1)" && _brc=0 || _brc=$?
+    elif [ -n "$TCC_BIN" ]; then
+      _bout="$("$TCC_BIN" --install-desktop 2>&1)" && _brc=0 || _brc=$?
       if [ "$_brc" = 0 ]; then
-        _shortcut=""
-        # A symlink rather than a Finder alias: it double-clicks the same, and `rm` removes it.
-        # Made AFTER the builder has registered the bundle with Launch Services, and touched
-        # afterwards: Finder draws a shortcut from the target's registered icon, so a link made
-        # before the registration is a link drawn with the blank placeholder — which is exactly
-        # what a second Mac showed on a clean install (user, 2026-08-19).
-        # An EXISTING shortcut of ours is replaced, not left alone. Finder caches an icon against
-        # the item that has it, so a link first drawn when the bundle had no icon keeps the blank
-        # tile even after the bundle is fixed and registered — it took a Get Info to refresh
-        # (user, 2026-08-19, re-running with the icon fix in). A link made a moment ago is an item
-        # Finder has never drawn, so it asks Launch Services, which now has the answer.
-        # Only ever a SYMLINK, and only one pointing at our own app: anything else on the Desktop
-        # under that name is somebody's file and stays.
-        if [ -L "$DESKTOP_LINK" ] && [ "$(readlink "$DESKTOP_LINK")" = "$APP" ]; then
-          rm -f "$DESKTOP_LINK"
-        fi
-        if [ -d "$HOME/Desktop" ] && [ ! -e "$DESKTOP_LINK" ] && [ ! -L "$DESKTOP_LINK" ]; then
-          ln -s "$APP" "$DESKTOP_LINK" 2>/dev/null && _shortcut=", and a shortcut on your Desktop"
-        elif [ -L "$DESKTOP_LINK" ]; then
-          _shortcut=", and the shortcut on your Desktop"
-        fi
+        _shortcut=""; [ -L "$DESKTOP_LINK" ] && _shortcut=", and a shortcut on your Desktop"
         say "  ✓ \"Autosound TCC.app\" in ~/Applications$_shortcut"
         # A warning, not an aside in brackets. It used to be one, and it scrolled past unread on
         # the one install where it mattered: the person sees a blank white icon days later and has
@@ -889,8 +899,6 @@ if [ "$MODE" = "tcc" ]; then
         printf '%s\n' "$_bout" >&2
         warn "the double-clickable app was not built; the command still works:  autosound-tcc"
       fi
-    elif [ -n "$TCC_BIN" ]; then
-      warn "no app builder at $builder — the command still works:  autosound-tcc"
     fi
   fi
 fi
