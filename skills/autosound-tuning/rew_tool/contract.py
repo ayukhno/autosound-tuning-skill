@@ -314,15 +314,44 @@ def cross_check_rew(process_state, glossary, snapshots):
         titles = [m.get("title", "") for m in rew_api.get_measurements().values()]
     except Exception as exc:  # noqa: BLE001 -- deliberately broad: any REW-unreachable reason
         return {"reachable": False, "note": f"REW not reachable ({exc}) -- skipped"}
-    phase = (process_state or {}).get("active_phase")
-    if not phase:
-        return {"reachable": True, "note": "no active phase in process-state -- skipped"}
-    version = next((_ledger_version_number(s) for s in snapshots.values() if s), None)
-    if not version:
-        return {"reachable": True, "note": "no ledger version to check REW titles against"}
-    expected = naming.expected_series(phase, glossary, version)
+
+    # Checked FIRST and unconditionally, because it does not depend on a phase, a round or a
+    # version: a title is supposed to be one measurement's stable identity (`naming-and-structure`
+    # section 3a) and REW does not enforce it. A live session held two `m-L_0 (sw)-EP` and nothing
+    # said so; `find_measurement_id` would have raised only at the moment of use, if ever
+    # (inbox 3.5). Everything below this line trusts titles, so it is checked before them.
+    out = {"reachable": True}
+    dups = {}
+    for t in titles:
+        if t:
+            dups[t] = dups.get(t, 0) + 1
+    dups = {t: n for t, n in dups.items() if n > 1}
+    if dups:
+        out["duplicate_titles"] = dups
+
+    # WHAT IS EXPECTED COMES FROM THE OPEN CAPTURE ROUND, NOT FROM LEDGER HEAD (inbox 3.11).
+    # Deriving it from HEAD's version number asks "does REW hold the series for v_008?" of a
+    # project whose baseline is set 0 -- so it reported `0/16 captured -- MISSING [...]` forever,
+    # and a genuinely missing round would have been indistinguishable from that noise. The round
+    # also carries the list it actually asked for, which beats re-deriving one.
+    #
+    # With no round open, this check ABSTAINS. Nothing has been asked for, so nothing can be
+    # missing; saying "0/16" there is a tool answering outside the conditions it is valid in,
+    # which is the failure `references/core/estimator-scope.md` exists to prevent.
+    round_ = (process_state or {}).get("capture") or {}
+    if not round_ or round_.get("closed"):
+        out["note"] = ("no capture round open -- nothing is expected of REW right now"
+                       if not round_ else
+                       f"last capture round {round_.get('id')} is closed -- nothing outstanding")
+        return out
+    expected = [str(x) for x in (round_.get("expected") or []) if str(x).strip()]
+    if not expected:
+        out["note"] = f"capture round {round_.get('id')} asked for nothing explicit -- skipped"
+        return out
     verdict = naming.validate_series(titles, expected, glossary)
-    return {"reachable": True, "phase": phase, "version": version, **verdict}
+    out.update({"phase": round_.get("phase"), "version": round_.get("version"),
+                "round": round_.get("id"), **verdict})
+    return out
 
 
 # ── the whole report ────────────────────────────────────────────────────────────
@@ -524,11 +553,14 @@ def render_report(report):
         lines.append(f"- ⚠️ {note}")
     rew = cross["rew"]
     if rew.get("reachable"):
+        for title, n in sorted(rew.get("duplicate_titles", {}).items()):
+            lines.append(f"- ⚠️ REW holds {n} measurements titled `{title}` — a title is supposed "
+                         f"to be one measurement's identity; resolve before capturing further")
         if "note" in rew:
             lines.append(f"- REW: {rew['note']}")
         else:
-            lines.append(f"- REW (phase {rew['phase']}, v{rew['version']}): "
-                         f"{len(rew['found'])}/{len(rew['expected'])} captured"
+            lines.append(f"- REW (round {rew['round']}, phase {rew['phase']}, "
+                         f"v{rew['version']}): {len(rew['found'])}/{len(rew['expected'])} captured"
                          + ("" if rew["complete"] else f" — MISSING {rew['missing']}"))
     else:
         lines.append(f"- REW: {rew.get('note', 'not reachable')}")

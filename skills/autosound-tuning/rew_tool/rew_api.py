@@ -1,4 +1,5 @@
 import urllib.request
+import urllib.error
 import urllib.parse
 import json
 import base64
@@ -12,28 +13,64 @@ BASE_URL = "http://localhost:4735"
 _TIMEOUT_S = 5
 
 
+def _open(req_or_url):
+    """urlopen, but a 4xx/5xx carries REW's OWN explanation instead of just its number.
+
+    `HTTPError` is a response object: the server's body is sitting on it, and reading it is the
+    difference between "HTTP Error 400: Bad Request" and REW telling you exactly what it wanted.
+    A live case: `excess_phase_version` failed with a bare 400, and only a hand-rolled probe
+    revealed the body -- "The request is missing parameters: append lf tail, append hf tail,
+    include cal" -- which named the fix outright. That body had been arriving all along and being
+    dropped on the floor (field session 2026-08-21, inbox 3.7).
+
+    The body is read ONCE here, because HTTPError's stream cannot be read twice; callers that
+    catch the error get it from the message and from `.rew_body`.
+    """
+    try:
+        return urllib.request.urlopen(req_or_url, timeout=_TIMEOUT_S)
+    except urllib.error.HTTPError as e:
+        try:
+            body = e.read().decode("utf-8", "replace").strip()
+        except Exception:                      # a body that cannot be read is not the real error
+            body = ""
+        e.rew_body = body
+        if body:
+            # REW answers errors as JSON with a "message"; fall back to the raw text if not.
+            try:
+                said = json.loads(body).get("message") or body
+            except ValueError:
+                said = body
+            e.msg = f"{e.msg} -- REW said: {said}"
+        raise
+
+
 def _get(path):
     url = BASE_URL + path
-    with urllib.request.urlopen(url, timeout=_TIMEOUT_S) as r:
+    with _open(url) as r:
         return json.loads(r.read())
 
 
-def _post(path, data):
+def _body_request(path, data, method):
     url = BASE_URL + path
     body = json.dumps(data).encode()
-    req = urllib.request.Request(url, data=body, method="POST",
+    req = urllib.request.Request(url, data=body, method=method,
                                  headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=_TIMEOUT_S) as r:
+    with _open(req) as r:
         raw = r.read()
         return json.loads(raw) if raw else {}
 
 
+def _post(path, data):
+    return _body_request(path, data, "POST")
+
+
 def _put(path, data):
-    url = BASE_URL + path
-    body = json.dumps(data).encode()
-    req = urllib.request.Request(url, data=body, method="PUT",
-                                 headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=_TIMEOUT_S) as r:
+    return _body_request(path, data, "PUT")
+
+
+def _delete(path):
+    req = urllib.request.Request(BASE_URL + path, method="DELETE")
+    with _open(req) as r:
         raw = r.read()
         return json.loads(raw) if raw else {}
 
@@ -87,6 +124,46 @@ def rename_measurement(mid, title):
     `POST /measurements/{id}/command` (see `measurement_command`) with a "Rename"-style command
     discovered via `GET /measurements/{id}/commands`."""
     return _put(f"/measurements/{mid}", {"title": title})
+
+
+def delete_measurement(mid):
+    """Remove a measurement from the live REW session. `DELETE /measurements/{id}`.
+
+    Verified live (REW answered `{"message": "Measurement 75 deleted"}`, 2026-08-21). Written
+    because a session had to hand-roll it after an accidental duplicate `-EP` version, which is
+    the usual reason to need it at all.
+
+    ⚠️ **Ordinal ids are not stable** -- a delete RESHUFFLES every id after it, which is the same
+    hazard `find_measurement_id` exists for, made sharper: resolve the title to an id immediately
+    before deleting, delete ONE, and resolve again before the next. Never collect a list of ids
+    and then delete them in a loop; after the first, the rest point at other measurements.
+
+    There is no undo. The caller decides whether a thing should go -- this only carries it out.
+    """
+    return _delete(f"/measurements/{mid}")
+
+
+def duplicate_titles(measurements=None):
+    """Titles held by more than one measurement in the live session: `{title: [ids]}`.
+
+    The whole identity model rests on a title being one measurement's stable name
+    (`naming-and-structure.md` section 3a) -- and REW does not enforce it. A session ended up with
+    two measurements both called `m-L_0 (sw)-EP`, and `find_measurement_id` would have raised on
+    the ambiguity only at the moment of use, if it was ever used: silent until then, and the
+    invariant everything else rests on was already broken (inbox 3.5).
+
+    Cheap enough to run before any capture round is declared closed. Empty dict = the invariant
+    holds right now.
+    """
+    if measurements is None:
+        measurements = get_measurements()
+    seen = {}
+    for mid, m in measurements.items():
+        title = (m or {}).get("title")
+        if title is None:
+            continue
+        seen.setdefault(title, []).append(mid)
+    return {t: ids for t, ids in seen.items() if len(ids) > 1}
 
 
 def find_measurement_id(name, measurements=None, exact=True):
@@ -360,8 +437,48 @@ def _selftest():
     finally:
         _post = _origp
 
+    # duplicate_titles: the invariant everything else rests on (inbox 3.5)
+    ms = {"1": {"title": "m-L_0 (sw)"}, "7": {"title": "m-L_0 (sw)-EP"},
+          "9": {"title": "m-L_0 (sw)-EP"}, "4": {"title": None}, "5": {}}
+    dups = duplicate_titles(ms)
+    assert dups == {"m-L_0 (sw)-EP": ["7", "9"]}, dups
+    assert duplicate_titles({"1": {"title": "a"}, "2": {"title": "b"}}) == {}, "clean must be empty"
+
+    # _open: an HTTP error must arrive carrying REW's own explanation, not just its number
+    # (inbox 3.7 -- the body was always there and was being dropped).
+    class _FakeError(urllib.error.HTTPError):
+        def __init__(self, body):
+            self._body = body.encode()
+            super().__init__("http://x", 400, "Bad Request", {}, None)
+
+        def read(self):
+            return self._body
+
+    _orig_open = urllib.request.urlopen
+    try:
+        said = "The request is missing parameters: append lf tail, append hf tail, include cal"
+        urllib.request.urlopen = lambda *a, **k: (_ for _ in ()).throw(
+            _FakeError(json.dumps({"message": said})))
+        try:
+            _get("/anything")
+        except urllib.error.HTTPError as e:
+            assert said in str(e), f"REW's explanation was dropped: {e}"
+            assert getattr(e, "rew_body", None), "rew_body should carry the raw body"
+        else:
+            raise AssertionError("the error was swallowed entirely")
+
+        # A body that is not JSON is still better than nothing, and must not raise on the way out.
+        urllib.request.urlopen = lambda *a, **k: (_ for _ in ()).throw(_FakeError("plain text"))
+        try:
+            _get("/anything")
+        except urllib.error.HTTPError as e:
+            assert "plain text" in str(e), e
+    finally:
+        urllib.request.urlopen = _orig_open
+
     print("rew_api selftest OK — get_fr handles sweep/RTA phase branch; "
-          "excess/min-phase + smooth command wrappers post correct bodies")
+          "excess/min-phase + smooth command wrappers post correct bodies; "
+          "duplicate titles are found; an HTTP error carries REW's own explanation")
 
 
 if __name__ == "__main__":

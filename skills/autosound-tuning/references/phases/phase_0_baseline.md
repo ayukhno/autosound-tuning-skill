@@ -72,6 +72,23 @@ From the SAME `_1` captures (no extra measuring), build the install/cabin flaw m
 
 4. **Distortion floor map (per driver):** `rew_api.get_distortion` on each `<ch>_1 (sw)` (THD comes free with the sweep). Mark where in-band THD exceeds ~1 % (caution) / ~3 % (avoid) — **crossover corners in Phase 1 need low measured THD with margin**, which replaces datasheet-only floors; in-band spikes are install findings for the car record. Below-HPF rows are noise — ignore. **⚠️ Disqualify null-artifact spikes before blaming mechanics:** in a deep interference null the fundamental drops 20+ dB while the harmonics (radiated at 2f/3f, outside the null) don't → THD % explodes with a *quiet* fundamental. Rule: a THD spike counts as a driver/install fault only if the fundamental there is within ~10 dB of its neighbors; high-THD-only-where-the-fundamental-collapses + clean THD at loud neighboring points = healthy driver, null artifact (field case: a woofer's 4.4 % @ 160 Hz at fundamental 53 dB vs 0.2-0.5 % at 100-125 Hz at 81-84 dB — mechanics cleared).
 
+**These four are a LIST, not a sequence — pick the order by what is blocked.** They are numbered
+for reference, and a session read the numbering as an order, ran all four, and only then learned
+that the first one cannot speak about the joint it needed (inbox 3.6). Each artifact has a
+frequency scope and a Phase-1 decision that consumes it; that is what decides what to do first:
+
+| artifact | scope | SILENT about | the Phase-1 decision that consumes it |
+|---|---|---|---|
+| 1. EQ-ability map | the `eq_gate` calibrated band — **not below ~150 Hz**, where it returns `OUT_OF_SCOPE` with no metric (`estimator-scope.md`) | anything sub-territory | Phase-2 EQ fits (`boost_gate=`), **not** the sub↔midbass joint |
+| 2. Pair coherence | each pair's own band, wherever the pair overlaps | one channel alone; anything before the pair is aligned | whether a pocket is multipath — i.e. whether to spend a crossover corner or an APF on it at all |
+| 3. Three-distance reads | full band, per channel and per pair's L−R | phase and timing entirely | voicing territory vs point-EQ vs null-suspect — the routing every later EQ decision starts from |
+| 4. Distortion floor | full band, per driver | anything about summation | how low a driver may be crossed, and whether a "flaw" is really the driver protesting |
+
+**The usual first Phase-1 decision is the sub↔midbass joint, and artifact 1 is silent there.** If
+that is your first decision, artifacts 2 and 4 are on its critical path and artifact 1 is not — do
+them first and let the EQ-ability map follow. Reading the list top-to-bottom cost a session exactly
+that, and the cost is real work: the excess-phase versions are one REW round trip per channel.
+
 **Record the map as DATA, not only as prose** (SCR-015). Each finding gets a row:
 
 ```bash

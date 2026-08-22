@@ -230,10 +230,21 @@ def validate(data):
 
 # What a flaw IS. A closed list because a front-end colours by it and a model picks from it: free
 # text here would be a field nobody can render and everybody words differently.
+#: Time-domain INSTALL properties. Added 2026-08-22 because the map had no row shape for one and
+#: the finding went into prose instead -- exactly what SCR-015 exists to prevent (inbox 3.12). The
+#: case: one door's energy lags its own wavefront by ~1.1 ms relative to the other. That is a real,
+#: measured property of the install and the time-domain face of anomalies already in the map as
+#: frequency rows -- but every other `kind` is a frequency feature and `f_hz` is required, so there
+#: was nowhere to put it that was not a lie.
+#:
+#: These rows carry `t_ms` instead of `level_db`, and `f_hz` is OPTIONAL (a lag may or may not be
+#: confined to a band). ⚠️ A consumer that assumes every flaw has `f_hz` and `level_db` must skip
+#: these -- check the kind, not the field.
+TIME_DOMAIN_KINDS = ("energy_lag", "ringing", "decay_asymmetry")
 FLAW_KINDS = (
     "room_gain", "modal_peak", "cabin_null", "sbir", "floor_bounce",
     "driver_resonance", "non_min_phase", "thd_spike", "pair_suckout",
-)
+) + TIME_DOMAIN_KINDS
 # What may be DONE about it -- the load-bearing half. Closed for the same reason, and because the
 # whole point of writing the map down is that "don't EQ-boost this null" survives the session that
 # discovered it.
@@ -265,15 +276,35 @@ def validate_flaw(entry):
     """
     if not isinstance(entry, dict):
         raise ProjectError("a flaw must be an object")
+    time_domain = entry.get("kind") in TIME_DOMAIN_KINDS
     f = entry.get("f_hz")
-    if not isinstance(f, (int, float)) or isinstance(f, bool) or f <= 0:
-        raise ProjectError(f"f_hz must be a positive Hz, got {f!r}")
-    level = entry.get("level_db")
-    if not isinstance(level, (int, float)) or isinstance(level, bool):
-        raise ProjectError(
-            f"level_db must be a number: the FEATURE, signed — + a hump, - a dip. Not the "
-            f"correction you would apply to it (got {level!r})"
-        )
+    if time_domain:
+        # `f_hz` optional: an energy lag may be broadband. If given it still has to be a frequency.
+        if f is not None and (not isinstance(f, (int, float)) or isinstance(f, bool) or f <= 0):
+            raise ProjectError(f"f_hz, when given, must be a positive Hz, got {f!r}")
+        t = entry.get("t_ms")
+        if not isinstance(t, (int, float)) or isinstance(t, bool):
+            raise ProjectError(
+                f"a {entry['kind']} needs `t_ms` — the measured time, signed, and signed against "
+                f"the channel named in `channels` (+ later, - earlier). It is the whole content of "
+                f"a time-domain row; `level_db` does not describe it (got {t!r})"
+            )
+        if entry.get("level_db") is not None and not isinstance(entry["level_db"], (int, float)):
+            raise ProjectError("level_db, when given on a time-domain row, must be a number")
+    else:
+        if not isinstance(f, (int, float)) or isinstance(f, bool) or f <= 0:
+            raise ProjectError(f"f_hz must be a positive Hz, got {f!r}")
+        level = entry.get("level_db")
+        if not isinstance(level, (int, float)) or isinstance(level, bool):
+            raise ProjectError(
+                f"level_db must be a number: the FEATURE, signed — + a hump, - a dip. Not the "
+                f"correction you would apply to it (got {level!r})"
+            )
+        if entry.get("t_ms") is not None:
+            raise ProjectError(
+                f"t_ms belongs to a time-domain kind ({', '.join(TIME_DOMAIN_KINDS)}), not to "
+                f"{entry.get('kind')!r}"
+            )
     if entry.get("kind") not in FLAW_KINDS:
         raise ProjectError(
             f"kind must be one of {', '.join(FLAW_KINDS)} (got {entry.get('kind')!r})"
@@ -282,7 +313,9 @@ def validate_flaw(entry):
         raise ProjectError(
             f"action must be one of {', '.join(FLAW_ACTIONS)} (got {entry.get('action')!r})"
         )
-    if level < 0 and entry.get("action") == "notch":
+    level = entry.get("level_db")
+    if isinstance(level, (int, float)) and not isinstance(level, bool) \
+            and level < 0 and entry.get("action") == "notch":
         raise ProjectError(
             f"{f:g} Hz is a dip ({level:g} dB) and cannot be notched: a null is interference, not "
             "minimum-phase — cutting it changes nothing and boosting it burns headroom against "
@@ -519,12 +552,22 @@ class Project:
         entry["at"] = _now()
         data = self.load()
         flaws = data.setdefault("acoustics", {}).setdefault("flaws", [])
-        key = (round(float(entry["f_hz"]), 1), tuple(sorted(entry.get("channels") or [])))
+        # Identity of a row: its position plus who it is about. For a frequency feature that is
+        # the frequency; a time-domain row may have no frequency at all, so it is keyed by its
+        # KIND instead -- one energy_lag per channel set, which is what such a property is.
+        # (Found by the new time-domain rows walking straight into `entry["f_hz"]` here: the
+        # comment on TIME_DOMAIN_KINDS warns consumers about exactly this, and the first consumer
+        # to trip over it was this file.)
+        def _key(e):
+            who = tuple(sorted(e.get("channels") or []))
+            if e.get("kind") in TIME_DOMAIN_KINDS:
+                return ("kind", e.get("kind"), who)
+            f_hz = e.get("f_hz")
+            return ("f", round(float(f_hz), 1) if f_hz is not None else None, who)
+
+        key = _key(entry)
         for i, existing in enumerate(list(flaws)):
-            same = (
-                round(float(existing.get("f_hz", -1)), 1),
-                tuple(sorted(existing.get("channels") or [])),
-            )
+            same = _key(existing)
             if same == key:
                 flaws[i] = entry
                 break
@@ -611,6 +654,8 @@ _USAGE = """usage: project.py <project-dir> <command> [args]
   record-change <process-dir> <file> <what>    log a config_change journal event
       [--why W] [--source S] [--impact I]
   flaw <f_hz> <level_db> <kind> <action> [--status hypothesis]
+  flaw --t-ms <ms> <kind> <action>       a TIME-domain install property (energy_lag,
+                                         ringing, decay_asymmetry): no frequency, no dB
                                                add/replace an acoustic-flaw entry (SCR-015).
                                                A hypothesis is a finding not yet settled — say so
                                                rather than banking it as fact or losing it to prose
@@ -724,6 +769,20 @@ def _main(argv):
             channels = _flag(args, "--channels") or ""
             why = _flag(args, "--why")
             evidence = _flag(args, "--evidence") or ""
+            t_ms = _flag(args, "--t-ms")
+            # A time-domain row has no frequency and no dB, so it cannot use the positional form:
+            #   flaw --t-ms 1.1 energy_lag geometry --channels m-L --why … --evidence …
+            if t_ms is not None:
+                entry = proj.add_flaw(
+                    kind=args[0], action=args[1], t_ms=float(t_ms),
+                    channels=[c.strip() for c in channels.split(",") if c.strip()],
+                    why=why,
+                    evidence=[e.strip() for e in evidence.split(",") if e.strip()],
+                )
+                mark = ("" if flaw_status(entry) == DEFAULT_FLAW_STATUS
+                        else f" ({flaw_status(entry)})")
+                print(f"{entry['t_ms']:+g} ms [{entry['kind']}]{mark} -> {entry['action']}")
+                return 0
             entry = proj.add_flaw(
                 f_hz=float(args[0]),
                 level_db=float(args[1]),
@@ -745,6 +804,12 @@ def _main(argv):
                 width = f" Q{entry['q']:g}" if entry.get("q") else (
                     f" {entry['bw_oct']:g}oct" if entry.get("bw_oct") else "")
                 who = ", ".join(entry.get("channels") or []) or "—"
+                if entry.get("kind") in TIME_DOMAIN_KINDS:
+                    where = "broadband" if entry.get("f_hz") is None else f"{entry['f_hz']:.6g} Hz"
+                    print(f"{where:>10}{'':>8} {entry['t_ms']:+6g} ms  "
+                          f"{entry['kind']:<16} {entry['action']:<10} {who:<12} "
+                          f"{entry.get('why','')}")
+                    continue
                 print(f"{entry['f_hz']:>7.6g} Hz{width:>8} {entry['level_db']:+6g} dB  "
                       f"{entry['kind']:<16} {entry['action']:<10} {who:<12} {entry.get('why','')}")
         else:
@@ -817,6 +882,35 @@ def _selftest():
         raise AssertionError("add_flaw accepted a status outside the list")
     except ProjectError as exc:
         assert "hypothesis" in str(exc), exc
+
+    # -- time-domain install properties (inbox 3.12) -------------------------------------------
+    # The row shape that did not exist: one door's energy lagging the other's is a real install
+    # property with no frequency and no dB, and it went into prose because every kind was a
+    # frequency feature. f_hz optional, t_ms required, level_db not applicable.
+    sp.add_flaw(kind="energy_lag", action="geometry", t_ms=1.1, channels=["m-L"],
+                why="left door's energy lags its own wavefront vs the right; four pair-delay "
+                    "estimators spread 4.3 ms with a sign flip between two of them",
+                evidence=["m-L_1 (sw)", "m-R_1 (sw)"])
+    lag = [f for f in sp.flaws() if f["kind"] == "energy_lag"]
+    assert len(lag) == 1 and lag[0]["t_ms"] == 1.1, lag
+    assert lag[0].get("f_hz") is None, "a broadband lag must not be forced to invent a frequency"
+    try:
+        sp.add_flaw(kind="energy_lag", action="geometry", why="x", evidence=["y"])
+        raise AssertionError("a time-domain row was accepted with no t_ms")
+    except ProjectError as exc:
+        assert "t_ms" in str(exc), exc
+    try:
+        sp.add_flaw(f_hz=109, level_db=-6, kind="cabin_null", action="leave", t_ms=1.1,
+                    why="x", evidence=["y"])
+        raise AssertionError("t_ms was accepted on a frequency-domain kind")
+    except ProjectError as exc:
+        assert "time-domain" in str(exc), exc
+    # A frequency-domain row still needs both, exactly as before.
+    try:
+        sp.add_flaw(kind="cabin_null", action="leave", why="x", evidence=["y"])
+        raise AssertionError("a frequency row was accepted with no f_hz")
+    except ProjectError as exc:
+        assert "f_hz" in str(exc), exc
 
     # -- the flaw map is validated on every write, not only by add_flaw (2026-08-12) -----------
     # `validate_flaw` was called from `add_flaw` alone, so any other path to disk banked whatever
