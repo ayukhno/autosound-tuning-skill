@@ -26,28 +26,38 @@ def _scipy_signal():
 
 
 def _design(order_db_per_oct, wn, btype, ftype):
+    """Second-order sections, never (b, a).
+
+    The transfer-function form breaks down for a high-order filter at a low normalised frequency:
+    the polynomial coefficients span many orders of magnitude and evaluating them loses the answer
+    to floating point. Measured on this module's own grid before the fix (error at the filter's own
+    corner, where every family has a defined value): BW42 at 80 Hz was off by -30.1 dB, BE42 at
+    63 Hz by -28.0, BE36 at 40 Hz by +13.2. That band is where a sub/midbass joint lives and steep
+    slopes are exactly what gets chosen there, so the worst errors sat on the most-used settings.
+    Cascaded second-order sections are conditioned per section and give 0.000 dB across the whole
+    grid. Found 2026-08-22 (see the selftest's corner anchor, which is what would have caught it)."""
     sig = _scipy_signal()
     n = max(1, round(order_db_per_oct / 6))
     if ftype == "BE":
         # norm="mag" (-3 dB at the corner) matches REW's BE shapes, verified
         # against REW predicted responses 2026-07-12 (norm="phase" gave up to
         # 27 dB transfer-function error on BE12/BE18 channels)
-        return sig.bessel(n, wn, btype=btype, norm="mag")
-    return sig.butter(n, wn, btype=btype)
+        return sig.bessel(n, wn, btype=btype, norm="mag", output="sos")
+    return sig.butter(n, wn, btype=btype, output="sos")
 
 
 def xo_response(freqs_hz, corner_hz, order_db_per_oct, kind, ftype):
     """Complex response of one HPF/LPF slot. kind: 'hp'|'lp'. ftype: 'BW'|'BE'|'LR'."""
-    freqz = _scipy_signal().freqz
+    sosfreqz = _scipy_signal().sosfreqz
     wn = min(max(corner_hz / (FS / 2.0), 1e-4), 0.999)
     btype = "highpass" if kind == "hp" else "lowpass"
     w = 2 * np.pi * freqs_hz / FS
     if ftype == "LR":
-        b, a = _design(max(6, order_db_per_oct // 2), wn, btype, "BW")
-        _, h = freqz(b, a, worN=w)
+        sos = _design(max(6, order_db_per_oct // 2), wn, btype, "BW")
+        _, h = sosfreqz(sos, worN=w)
         return h * h
-    b, a = _design(order_db_per_oct, wn, btype, ftype)
-    _, h = freqz(b, a, worN=w)
+    sos = _design(order_db_per_oct, wn, btype, ftype)
+    _, h = sosfreqz(sos, worN=w)
     return h
 
 
@@ -548,11 +558,35 @@ def _selftest():
             f"{ftype}{order} at {fc:g} Hz returned |tau|={abs(tau):.4f} ms, "
             f"but the near-tie set holds one at {want_tau:.4f} ms")
 
+    # ---- the corner is where we SAY it is -------------------------------------------------
+    # Everything above pins the joint's BEHAVIOUR (inversion, near-tie, compactness) and none of
+    # it pins the corner to anything outside the module: shift `_design`'s cutoff by 50% and the
+    # whole suite still passes, because `xover_select` scores a realization against a target
+    # computed by the same broken function -- the ruler and the part are one object, so the fit
+    # reads 0.00 dB at the wrong frequency. Found 2026-08-22 by injecting exactly that.
+    #
+    # The anchor is a definition, not a measurement: LR is BW squared, so it is -6.02 dB at its
+    # own corner for EVERY order, while BW is -3.01 there. BE is -3.01 too, and that is not a
+    # coincidence to be tolerated but the `norm="mag"` choice in `_design` -- made deliberately
+    # because norm="phase" gave up to 27 dB of transfer-function error against REW's own BE
+    # shapes (2026-07-12). So this line also stops that choice being reverted silently.
+    for fc in (80.0, 500.0, 3000.0):
+        at_fc = np.array([fc])
+        for order in (12, 24, 36):
+            for kind in ("hp", "lp"):
+                for ftype, want in (("LR", -6.0206), ("BW", -3.0103), ("BE", -3.0103)):
+                    got = 20 * np.log10(abs(xo_response(at_fc, fc, order, kind, ftype)[0]))
+                    assert abs(got - want) < 0.05, (
+                        f"{ftype}{order} {kind} at its own corner {fc:g} Hz reads {got:+.3f} dB, "
+                        f"expected {want:+.3f} -- the corner is not where the caller asked for it "
+                        f"(or BE's norm= changed)")
+
     print("selftest[dsp_math] OK -- APF1 (-90 deg at f0, 0..-180, 1/(pi f0) delay far below f0), "
           "APF2 (-180 deg at f0, 0..-360, Q steepens), APF1^2 == APF2(Q=0.5), "
           "eq_complex renders APF/LSH/HSH as themselves and refuses an unknown kind, "
           "align_delay_polarity inverts at odd-order LR joints and breaks near-ties "
-          "across both polarities by smallest |tau|.")
+          "across both polarities by smallest |tau|, and every crossover sits at the corner it "
+          "was asked for (LR -6.02 dB, BW/BE -3.01 dB, 54 combinations).")
 
 
 if __name__ == "__main__":

@@ -40,6 +40,54 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [v3.0.14] — 2026-08-22 · every steep low crossover this module drew was wrong
+
+`xo_response` designed its filters in transfer-function form and evaluated them with `freqz`. For a
+high-order filter at a low normalised frequency that form breaks down: the polynomial coefficients
+span many orders of magnitude and the answer is lost to floating point. Measured against the one
+value every family has by definition — its gain at its own corner, −6.02 dB for LR (it is BW
+squared), −3.01 dB for BW and for BE under the `norm="mag"` this module deliberately uses:
+
+| | 40 Hz | 63 Hz | 80 Hz | 125 Hz | 250 Hz+ |
+|---|---|---|---|---|---|
+| BW36 hp | −17.2 | −0.7 | +0.5 | −0.1 | 0.00 |
+| BW42 hp | +0.4 | −14.4 | **−30.1** | −7.0 | 0.00 |
+| BE36 hp | **+13.2** | −7.5 | +1.4 | −0.1 | 0.00 |
+| BE42 hp | −6.7 | **−28.0** | −27.9 | −5.1 | 0.00 |
+
+Above 250 Hz the error is zero, which is why nothing noticed. Below it, the error sat on precisely
+the settings a sub/midbass joint uses — that band is where steep slopes get chosen. Across an octave
+either side of the corner the old curve differed from the true one by up to **75 dB** (BW42 at
+80 Hz). Fixed by designing and evaluating as cascaded second-order sections (`output="sos"`,
+`sosfreqz`), which is conditioned per section: **0.000 dB across the entire hardware grid.**
+
+**Why the selftest suite passed anyway, and what now stops it.** Every existing check pinned the
+joint's *behaviour* — inversion at odd-order LR joints, the near-tie rule, compactness — and none
+tied the corner to anything outside the module. `xover_select` reports `fit=0.00 dB` while scoring a
+realization against a target computed by the same broken function: the ruler and the part were one
+object. The selftest now asserts the corner gain for all 54 combinations of family × order × hp/lp ×
+corner, which is a definition rather than a stored number, and it fails on any future drift of
+`_design` — including a silent revert of BE's `norm="mag"`, itself a choice verified against REW in
+July.
+
+Found by a reviewer injecting a 50 % corner shift into `_design` and observing that all 20 checks
+still passed. The bug this exposed was not the injected one.
+
+### Upgrading
+
+**Numbers change.** No API moved — same call, same return type — but `xo_response`, and everything
+downstream of it, returns *different values* for high-order filters below ~250 Hz. Affected:
+`xover_select` (crossover choice and its reported fit), `align_joint` / `align_delay_polarity` where
+the joint is a steep low one, and any predicted summation in that band.
+
+- **A stored crossover recommendation from an earlier version, at a low steep joint, should be
+  re-derived rather than trusted.** It was computed against a curve that did not describe the
+  hardware.
+- **Delays and polarities solved at such a joint deserve a re-check.** The inputs to that solution
+  were wrong by tens of dB near the corner, so a previously "correct" answer there was correct about
+  the wrong filter.
+- Nothing above ~250 Hz changes, at any order. A build whose joints all sit higher is unaffected.
+
 ## [v3.0.13] — 2026-08-22 · four external rules, three attributions the draft got wrong, and the first CI
 
 Four published findings folded into the reference set — and the useful part of the work turned out
