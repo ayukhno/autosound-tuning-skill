@@ -28,9 +28,15 @@ Before opening a PR, make sure you have:
 - Updated the documentation if behavior changed.
 - Run the smoke test (and evals, if relevant) and fixed any failures.
 - Added a CHANGELOG entry for user-visible changes.
+- **Touched an installer? Touch all three.** `install.sh`, `install.ps1` and `install.cmd` carry the
+  same decisions in three languages, and a change made in one is a divergence, not a fix. Run
+  `python3 scripts/installer-consistency.py` — it compares the constants that must match and fails
+  when they drift. It checks values, not logic: a pass does not mean the three files still *do* the
+  same thing, so read all three anyway.
 
 PR checklist:
 - [ ] Tests / smoke test pass locally (if applicable)
+- [ ] `scripts/installer-consistency.py` passes (if any installer changed)
 - [ ] Description explains the change and motivation
 - [ ] Documentation / CHANGELOG updated (if needed)
 
