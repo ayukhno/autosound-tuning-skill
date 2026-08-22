@@ -143,10 +143,14 @@ def apply_realization(freqs, h_raw, realization):
 
 def align_joint(freqs, h_lo, h_hi, band, *, max_delay_ms=3.0):
     """Delay (applied to h_hi) + polarity maximizing coherent summation in band.
-    Near-tie delays resolve to the smallest |tau| (impulse compactness)."""
-    pol, tau, null = align_delay_polarity(freqs, h_lo, h_hi, band,
-                                          max_delay_ms=max_delay_ms)
-    return {"polarity": pol, "delay_ms": round(tau, 2), "worst_null_db": round(null, 2)}
+    Near-tie candidates — ACROSS both polarities — resolve to the smallest |tau|
+    (impulse compactness). `polarity_margin_db` says how much the chosen polarity
+    actually beat the other: below a few tenths the summation did not decide it,
+    and at an odd-order LR joint the inverted answer is the correct one anyway."""
+    pol, tau, null, margin = align_delay_polarity(freqs, h_lo, h_hi, band,
+                                                  max_delay_ms=max_delay_ms)
+    return {"polarity": pol, "delay_ms": round(tau, 2), "worst_null_db": round(null, 2),
+            "polarity_margin_db": round(margin, 2)}
 
 
 def repair_joint_apf(freqs, h_lo, h_hi_aligned, band, *, min_gain_db=0.5,
@@ -217,8 +221,8 @@ def select_neighbor_pair(freqs, branches_lo, branches_hi, fits_lo, fits_hi,
     best = None
     for i, (bl, fl) in enumerate(zip(branches_lo, fits_lo)):
         for j, (bh, fh) in enumerate(zip(branches_hi, fits_hi)):
-            pol, tau, null = align_delay_polarity(freqs, bl, bh, band,
-                                                  max_delay_ms=max_delay_ms)
+            pol, tau, null, margin = align_delay_polarity(freqs, bl, bh, band,
+                                                          max_delay_ms=max_delay_ms)
             s = bl[m] + pol * bh[m] * np.exp(-2j * np.pi * freqs[m] * tau / 1000.0)
             sm = mag_db(s)
             anchor = np.median(sm - house_mag_db[m])
@@ -227,6 +231,7 @@ def select_neighbor_pair(freqs, branches_lo, branches_hi, fits_lo, fits_hi,
             if best is None or score < best[0]:
                 best = (score, i, j, {"polarity": pol, "delay_ms": round(tau, 2),
                                       "worst_null_db": round(null, 2),
+                                      "polarity_margin_db": round(margin, 2),
                                       "sum_vs_house_rms_db": round(rms, 2)})
     return best[1], best[2], best[3]
 

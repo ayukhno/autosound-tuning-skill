@@ -137,29 +137,55 @@ def apf2_response(freqs_hz, f0, q):
 # ---------- deterministic inner solvers ----------
 
 def align_delay_polarity(freqs_hz, A, B, band, max_delay_ms=3.0, step_ms=0.01,
-                         polarities=(1, -1)):
+                         polarities=(1, -1), tie_frac=0.005):
     """Delay tau (applied to B) and polarity maximizing sum energy in band.
-    Vectorized over the full tau grid. Returns (pol, tau_ms, residual_null_db)."""
+    Vectorized over the full tau grid.
+    Returns (pol, tau_ms, residual_null_db, polarity_margin_db).
+
+    The near-tie rule spans BOTH polarities, which is the whole point: among
+    candidates within `tie_frac` of the best sum, the smallest |tau| wins, and a
+    flipped candidate half a period away is a lobe like any other. Applying the
+    rule inside each polarity and then settling the two with a bare `>` — as this
+    did until 2026-08-22 — let a 0.001 dB difference choose a polarity AND a lobe,
+    the one place the function refused its own "fractions of a dB decide nothing".
+    tau = 0 is the prior here because both branches come from one measurement on
+    one time base; that is also why no "prefer non-inverted" margin is imported
+    from tools that align raw arrivals — at an ODD-order Linkwitz-Riley joint the
+    inverted connection is the correct one (LR36 wins by only 0.17 dB in the
+    selftest), and such a margin would break it.
+
+    `polarity_margin_db` is how much the chosen polarity beats the other one at
+    its own best tau — the number that says whether summation decided the choice
+    or merely reported it. It goes NEGATIVE when the near-tie rule deliberately
+    takes the marginally weaker polarity because that one is more compact, which
+    is the rule working, not a fault. `inf` when only one polarity was searched."""
     m = (freqs_hz >= band[0]) & (freqs_hz <= band[1])
     f, a, b = freqs_hz[m], A[m], B[m]
     taus = np.arange(-max_delay_ms, max_delay_ms + step_ms / 2, step_ms) / 1000.0
     rot = np.exp(-2j * np.pi * np.outer(taus, f))          # (n_tau, n_f)
-    best = None
-    for pol in polarities:
-        s = a[None, :] + pol * b[None, :] * rot
-        e = np.sum(np.abs(s) ** 2, axis=1)
-        # among near-ties (within 0.5% of max) prefer the smallest |tau|:
-        # same summation with a more compact impulse
-        near = np.where(e >= 0.995 * np.max(e))[0]
-        k = near[np.argmin(np.abs(taus[near]))]
-        if best is None or e[k] > best[0]:
-            best = (e[k], pol, taus[k])
-    _, pol, tau = best
+    energies = np.array([np.sum(np.abs(a[None, :] + pol * b[None, :] * rot) ** 2, axis=1)
+                         for pol in polarities])           # (n_pol, n_tau)
+    ip, it = np.where(energies >= (1.0 - tie_frac) * energies.max())
+    # Smallest |tau| among the near-ties. An EXACT |tau| draw is a real coin flip -- a
+    # Butterworth joint offers (+1, -tau) and (-1, +tau) with the same sum and the same
+    # null -- so it is settled by a convention rather than by the 1e-15 that separates
+    # them: keep the driver non-inverted. Nothing acoustic is lost, and the same set of
+    # measurements stops producing a different polarity on different days.
+    # |tau| is compared in whole grid steps: `arange` is not bit-symmetric about zero
+    # (|-1.320| and |+1.320| can differ by 5e-16), and without quantising, that last bit
+    # decides the draw before the convention below ever runs.
+    steps = np.rint(np.abs(taus[it]) / (step_ms / 1000.0)).astype(int)
+    inverted = np.array([0 if polarities[i] > 0 else 1 for i in ip])
+    j = np.lexsort((-energies[ip, it], inverted, steps))[0]
+    pol, tau = polarities[ip[j]], taus[it[j]]
+    peak = energies.max(axis=1)
+    margin_db = (float("inf") if len(polarities) < 2
+                 else float(10 * np.log10(peak[ip[j]] / np.delete(peak, ip[j]).max())))
     s = a + pol * b * np.exp(-2j * np.pi * f * tau)
     ceil = np.abs(a) + np.abs(b)
     ok = ceil > 0
     null_db = float(np.min(20 * np.log10(np.abs(s[ok]) / ceil[ok] + 1e-12)))
-    return pol, tau * 1000.0, null_db
+    return pol, tau * 1000.0, null_db, margin_db
 
 
 # Jitter set field-validated in the v4.x/vC1 loop: deep interference nulls
@@ -464,9 +490,69 @@ def _selftest():
     # ...and the fitter's own vocabulary still works untouched.
     assert np.allclose(eq_complex(f, [("PK", 1000.0, -3.0, 2.0)]),
                        peq_response(f, "PK", 1000.0, -3.0, 2.0))
+    # ---- align_delay_polarity: the physics decides the polarity, not a preference ----
+    # An Nth-order Linkwitz-Riley joint is two cascaded Butterworth of order N/2, so the
+    # branches differ by N/2 * 180 deg at fc: 12 and 36 dB/oct (2nd and 6th order) sum
+    # only with one branch INVERTED, 24 dB/oct (4th) sums in phase. Closed-form, not a
+    # value read off a run -- and the guard against ever importing a "prefer
+    # non-inverted" margin from a tool that aligns raw arrivals instead of two branches
+    # of one measurement. At 36 dB/oct the correct inverted answer leads by ~0.17 dB;
+    # any such margin above that would silently invert this result.
+    fx = np.geomspace(10.0, 24000.0, 20000)
+    for fc in (200.0, 3000.0):
+        for order, want in ((12, -1), (24, +1), (36, -1)):
+            lo = xo_response(fx, fc, order, "lp", "LR")
+            hi = xo_response(fx, fc, order, "hp", "LR")
+            pol, tau, _null, margin = align_delay_polarity(fx, lo, hi, (fc / 4, fc * 4))
+            assert pol == want, f"LR{order} at {fc:g} Hz chose polarity {pol:+d}, expected {want:+d}"
+            assert abs(tau) < 0.02, f"LR{order} at {fc:g} Hz wants tau=0, got {tau:+.3f} ms"
+            assert margin > 0, f"LR{order} at {fc:g} Hz: chosen polarity should lead, margin {margin:+.3f} dB"
+
+    # An exact |tau| draw is settled by convention, and the convention costs nothing: a
+    # Butterworth joint offers (+1, -tau) and (-1, +tau) with the SAME residual null, so
+    # the assertion is that the mirror is equally good and that we return the plain one.
+    for fc in (80.0, 300.0, 3000.0):
+        for order in (6, 18, 30):
+            lo = xo_response(fx, fc, order, "lp", "BW")
+            hi = xo_response(fx, fc, order, "hp", "BW")
+            band = (fc / 4, fc * 4)
+            pol, tau, null, _m = align_delay_polarity(fx, lo, hi, band)
+            assert pol == +1, f"BW{order} at {fc:g} Hz: an exact draw must stay non-inverted, got {pol:+d}"
+            mirror = align_delay_polarity(fx, lo, hi, band, polarities=(-1,))
+            # tolerances are the grid's own: half a search step, and a hundredth of a dB
+            # -- `arange` is not bit-symmetric about zero, so the mirror lands a few last
+            # bits away rather than exactly opposite.
+            assert abs(mirror[2] - null) < 0.01, (
+                f"BW{order} at {fc:g} Hz: the mirror should be equally good, "
+                f"{mirror[2]:.4f} vs {null:.4f} dB")
+            assert abs(abs(mirror[1]) - abs(tau)) < 0.005, (fc, order, mirror[1], tau)
+            assert mirror[3] == float("inf"), "a single-polarity search has no margin to report"
+
+    # The near-tie rule spans BOTH polarities: whatever comes back must be the smallest
+    # |tau| among every candidate within tie_frac of the best sum -- the property that a
+    # bare `>` between the two polarities used to break.
+    for fc, order, ftype in ((200.0, 42, "BW"), (800.0, 42, "BW"), (3000.0, 24, "LR")):
+        lo = xo_response(fx, fc, order, "lp", ftype)
+        hi = xo_response(fx, fc, order, "hp", ftype)
+        band = (fc / 4, fc * 4)
+        pol, tau, _null, _m = align_delay_polarity(fx, lo, hi, band)
+        m_ = (fx >= band[0]) & (fx <= band[1])
+        ff, aa, bb = fx[m_], lo[m_], hi[m_]
+        tg = np.arange(-3.0, 3.0 + 0.005, 0.01) / 1000.0
+        rot = np.exp(-2j * np.pi * np.outer(tg, ff))
+        en = np.array([np.sum(np.abs(aa[None, :] + q * bb[None, :] * rot) ** 2, axis=1)
+                       for q in (1, -1)])
+        ip, it = np.where(en >= 0.995 * en.max())
+        want_tau = np.abs(tg[it]).min() * 1000.0
+        assert abs(abs(tau) - want_tau) < 1e-9, (
+            f"{ftype}{order} at {fc:g} Hz returned |tau|={abs(tau):.4f} ms, "
+            f"but the near-tie set holds one at {want_tau:.4f} ms")
+
     print("selftest[dsp_math] OK -- APF1 (-90 deg at f0, 0..-180, 1/(pi f0) delay far below f0), "
           "APF2 (-180 deg at f0, 0..-360, Q steepens), APF1^2 == APF2(Q=0.5), "
-          "eq_complex renders APF/LSH/HSH as themselves and refuses an unknown kind.")
+          "eq_complex renders APF/LSH/HSH as themselves and refuses an unknown kind, "
+          "align_delay_polarity inverts at odd-order LR joints and breaks near-ties "
+          "across both polarities by smallest |tau|.")
 
 
 if __name__ == "__main__":

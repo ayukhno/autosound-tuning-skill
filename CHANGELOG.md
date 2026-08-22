@@ -20,6 +20,56 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [v3.0.12] — 2026-08-22 · fractions of a dB were still allowed to choose a polarity
+
+`align_delay_polarity` carried its own rule and then broke it. Among near-ties it preferred the
+smallest `|tau|` — "the same summation with a more compact impulse" — but that rule ran *inside*
+each polarity, and the two polarities were then settled by a bare `>` on band energy. A candidate
+winning by 0.001 dB took both the polarity and the lobe. On a survey of 117 crossover
+configurations, **18 were decided that way**: same `|tau|`, same residual null, the two answers
+differing by 0.000 dB, the winner picked by floating-point noise.
+
+The near-tie rule now spans both polarities, so a flipped candidate half a period away is treated
+as the lobe it is. An exact `|tau|` draw — a Butterworth joint genuinely offers `(+1, -tau)` and
+`(-1, +tau)` with the same sum and the same null — is settled by convention rather than by the
+1e-15 separating them: **the driver stays non-inverted.** Nothing acoustic is lost, and one set of
+measurements stops yielding a different polarity on different days.
+
+### Why no "prefer non-inverted" margin
+
+The obvious fix — the one an auto-alignment tool that works from raw arrivals uses, a 0.5 dB
+preference for the plain connection — is wrong here and was measured to be wrong before it was
+rejected. At an **odd-order Linkwitz-Riley joint the inverted connection is the correct one**, and
+at 36 dB/oct it leads by only **0.17 dB**: any margin above that would silently invert a correct
+result. That prior belongs to tools aligning two independent arrivals; here both branches come
+from one measurement on one time base, so `tau = 0` is the prior and compactness already carries
+it. The selftest now pins the physics — LR 12 and 36 dB/oct inverted, 24 dB/oct not — so the
+margin cannot be reintroduced quietly.
+
+### Added
+- `polarity_margin_db`, on `align_joint` and `select_neighbor_pair` results: how far the chosen
+  polarity beat the other at its own best delay. **Below a few tenths, summation did not decide
+  the polarity** — it reported one. The value goes negative when the near-tie rule deliberately
+  takes the marginally weaker polarity because it is more compact; that is the rule working.
+- Selftest coverage for all of the above, written as closed-form facts about the filters rather
+  than values read off a run.
+
+### Fixed
+- `|tau|` is compared in whole grid steps. `arange` is not bit-symmetric about zero, so `|-1.320|`
+  and `|+1.320|` differed by 5e-16 — enough for the last bit to settle a draw before any stated
+  rule ran.
+
+### Upgrading
+
+`dsp_math.align_delay_polarity` now returns **four** values, `(pol, tau_ms, null_db,
+polarity_margin_db)`, where it returned three. Both in-repo callers are updated; any external
+`pol, tau, null = align_delay_polarity(...)` must add the fourth name. The dict-returning
+`align_joint` and `select_neighbor_pair` are additive — a new key, nothing renamed.
+
+Polarity results may differ from v3.0.11 at joints where the two answers were equally good. In
+every case observed the residual null is unchanged to the hundredth of a dB; what changes is which
+of two identical solutions is reported, and it is now stable across runs.
+
 ## [v3.0.11] — 2026-08-22 · a tool that cannot say "not here" will be believed everywhere
 
 Harvested from one working session in which a competent operator made six errors and **five were
