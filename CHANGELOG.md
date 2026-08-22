@@ -40,6 +40,84 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [v3.0.17] — 2026-08-22 · the field session's six open asks, and a check that does not measure with its own ruler
+
+### The tools answer, or say they cannot
+
+**`rew_api` errors now carry REW's own explanation.** An `HTTPError` *is* the response — the
+server's body is sitting on it — and dropping it turned `The request is missing parameters: append
+lf tail, append hf tail, include cal` into a bare 400 that named nothing. A session lost time
+hand-probing for what had been arriving all along. All four verbs go through one opener now; the
+raw body is also left on `.rew_body`.
+
+**`delete_measurement(mid)`** — REW has supported it all along and a session had to hand-roll it
+after an accidental duplicate. Its docstring carries the hazard that outweighs the call: a delete
+**reshuffles every ordinal after it**, so resolve → delete → resolve. Never collect ids and loop.
+
+**`duplicate_titles()`, and `contract.py check` runs it first and unconditionally.** The identity
+model rests on a title being one measurement's stable name; REW does not enforce it; a live session
+held two `m-L_0 (sw)-EP` and nothing said so. `find_measurement_id` would have raised on the
+ambiguity only at the moment of use, if it ever came. Everything else in that check trusts titles,
+so this is checked before them.
+
+**The REW checklist reads the OPEN capture round, and abstains when there is none.** It used to
+derive what it expected from ledger HEAD, so a project on a set-0 baseline reported
+`0/16 captured — MISSING [...]` forever and a genuinely missing round would have been invisible in
+that noise. The round already carries the list it asked for, which beats re-deriving one. With no
+round open it now says so rather than answering: nothing was asked for, so nothing can be missing —
+the same rule `references/core/estimator-scope.md` states for every other estimator here.
+
+### The method says what it is silent about
+
+**Phase-0's four artifacts are a LIST, not a sequence.** A session read the numbering as an order,
+ran all four, and only afterwards learned that the EQ-ability map is silent below ~150 Hz — so it is
+not on the critical path to the sub↔midbass joint, which is usually the first Phase-1 decision.
+`phase_0_baseline.md` now gives each artifact its scope, **what it is silent about**, and which
+Phase-1 decision consumes it, so the order is chosen by what is blocked.
+
+**The flaw map has a row shape for time-domain install properties** — `energy_lag`, `ringing`,
+`decay_asymmetry`, carrying `t_ms`, with `f_hz` optional. One door's energy lagging the other's by
+~1.1 ms is a real measured property of an install with no frequency and no dB; for want of a row it
+went into prose, which is exactly what SCR-015 exists to prevent.
+
+### A check that does not measure with its own ruler
+
+Two more anchors on `dsp_math`, after v3.0.14's corner check turned out to leave gaps that others
+found by asking *what would still pass?*
+
+- **Phase at the corner cannot depend on where the corner is** — the response scales with
+  frequency. Needs no per-family constant, which every obvious alternative does. Compared as a
+  ratio, never as a difference of angles: at 24 dB/oct the corner phase is ±180°, and two identical
+  answers land either side of the wrap, which a naive max−min reads as 360° of drift in a module
+  that is perfectly correct.
+- **The whole grid is checked against an independent ZPK reference** — poles and zeros multiplied
+  directly in the z plane, no polynomial anywhere in the path. This is the strongest of the four: it
+  confirms the SOS rewrite by a third route instead of by SOS agreeing with itself, and it catches
+  the 30 dB/oct orders that the corner and phase anchors are both blind to. This module: 0.000000 dB
+  / 0.0000°. The pre-v3.0.14 form: 77.6 dB and a half turn.
+
+**`scripts/windows-install-test.md`** writes down the Windows pass that has only ever been spoken,
+including the upgrade case (a VM on an old build has no `--install-desktop` at all, so the run works
+only because the app is replaced before the call — a sequence never executed) and one *wrong* worry,
+recorded so nobody pays for it twice.
+
+### Upgrading
+
+**New API surface, nothing removed or renamed.** `rew_api.delete_measurement` and
+`rew_api.duplicate_titles` are additions. Existing calls are unchanged.
+
+Two things a consumer may notice:
+
+- **`contract.py check`'s REW section reports differently.** Where it used to print
+  `N/M captured — MISSING [...]` derived from ledger HEAD, it now prints the open capture round's
+  verdict, or a note saying nothing is outstanding. A front-end that parsed the old line, or that
+  treated its absence as an error, should read the new keys: `round`, and `duplicate_titles` when
+  present.
+- **Flaw rows are no longer guaranteed to have `f_hz` and `level_db`.** A row whose `kind` is one of
+  `energy_lag` / `ringing` / `decay_asymmetry` carries `t_ms` instead. **Check the kind, not the
+  field** — the first consumer to trip over this was `project.py` itself, whose deduplication keyed
+  on `entry["f_hz"]` directly.
+
 ## [v3.0.16] — 2026-08-22 · a fresh install and the app's update button finally mean the same thing
 
 Two consumer requests, landed together because they change the same two files and the same install
