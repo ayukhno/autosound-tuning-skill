@@ -41,6 +41,7 @@
 #   .\install.ps1 -DryRun             say what it would do, change nothing
 #   .\install.ps1 -Yes                yes to every question; sign-ins are printed, not run
 #   .\install.ps1 -SkillRef v3.0.4    a specific skill version (default: the newest 3.x tag)
+#   .\install.ps1 -TccRef v0.1.12     a specific app version (default: the newest app tag)
 #   .\install.ps1 -Uninstall          remove what this script installed -- NEVER your projects
 #   .\install.ps1 -Uninstall -All     also uv, Claude Code and ~\.claude, agy/gh/omp when this
 #                                     script installed them, and every --user pip package. Asks first.
@@ -57,6 +58,7 @@ param(
     [switch]$DryRun,
     [switch]$Yes,
     [string]$SkillRef = "",
+    [string]$TccRef = "",
     [switch]$Uninstall,
     [switch]$All,
     [switch]$Help,
@@ -114,6 +116,7 @@ Autosound tuning -- installer for Windows
   install.ps1 -DryRun             say what it would do, change nothing
   install.ps1 -Yes                yes to every question; sign-ins are printed, not run
   install.ps1 -SkillRef v3.0.4    a specific skill version (default: the newest 3.x tag)
+  install.ps1 -TccRef v0.1.12     a specific app version (default: the newest app tag)
   install.ps1 -Uninstall          remove what this script installed -- NEVER your projects
   install.ps1 -Uninstall -All     also uv, Claude Code and ~\.claude, agy/gh/omp when this
                                   script installed them, and every --user pip package. Asks first.
@@ -730,7 +733,29 @@ if ($Mode -eq "tcc") {
         Say "the app and what it needs, about 700 MB -- a few minutes, no output until it is done..."
         # `--python` is not optional: without it uv picks whatever interpreter it finds, and the
         # failure reads as a broken package rather than a missing Python.
-        if (Run { & $Uv tool install --quiet --python 3.12 --upgrade "autosound-tcc[gui,claude] @ git+$TccRepo" } "uv tool install autosound-tcc[gui,claude]") {
+        # BY TAG, exactly as the method is above -- and exactly as install.sh does it. With no
+        # ref, `git+URL` means HEAD of the default branch, so a fresh install handed somebody
+        # unfinished work while the app's own update button offered the newest release. The two
+        # ways of getting the app have to agree (SCR-054).
+        if (-not $TccRef) {
+            $tccTags = @()
+            if (Get-Command git -ErrorAction SilentlyContinue) {
+                $tccTags = @((& git ls-remote --tags --refs $TccRepo "v*" 2>$null) |
+                             ForEach-Object { ($_ -split "/")[-1] } |
+                             Sort-Object { [version]($_ -replace '^v', '') })
+            }
+            if ($tccTags.Count -gt 0) { $TccRef = $tccTags[-1] }
+        }
+        if ($TccRef) {
+            $TccSpec = "autosound-tcc[gui,claude] @ git+$TccRepo@$TccRef"
+            Say "version $TccRef"
+        } else {
+            # No network, no git, or no tags yet. The default branch still installs, and saying so
+            # is better than stopping over a version number.
+            $TccSpec = "autosound-tcc[gui,claude] @ git+$TccRepo"
+            Warn "could not read the app's releases -- installing from the default branch instead"
+        }
+        if (Run { & $Uv tool install --quiet --python 3.12 --upgrade $TccSpec } "uv tool install autosound-tcc[gui,claude]") {
             Sync-ProcessPath
             # The windowed launcher when the package has one (no console window behind the app),
             # the console one otherwise.

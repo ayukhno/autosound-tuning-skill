@@ -32,6 +32,7 @@
 #   ./install.sh --dry-run           say what it would do, change nothing
 #   ./install.sh --yes               yes to every question; sign-ins are printed, not run
 #   ./install.sh --skill-ref v3.0.3  a specific skill version (default: the newest 3.x tag)
+#   ./install.sh --tcc-ref v0.1.12   a specific app version (default: the newest app tag)
 #   ./install.sh --uninstall         remove what this script installed — NEVER your projects
 #   ./install.sh --uninstall --all   also uv, Claude Code and ~/.claude, agy/gh/omp when this
 #                                    script installed them, and every --user pip package. For
@@ -76,6 +77,9 @@ REMOVE_ALL=0
 DRY_RUN=0
 ASSUME_YES=0
 SKILL_REF=""
+# Same idea for the app: empty means "the newest release", not "whatever is on main".
+# Resolved beside the install itself, where the app is actually asked for.
+TCC_REF=""
 # Saved before anything is installed: the uv step exports ~/.local/bin into THIS script's PATH so
 # the rest of the run can call what it just installed. That made the summary print "✓
 # autosound-tcc installed" to somebody whose own shell could not find it, because the check was
@@ -96,6 +100,7 @@ Autosound tuning — installer for macOS (and Linux)
   install.sh --dry-run           say what it would do, change nothing
   install.sh --yes               yes to every question; sign-ins are printed, not run
   install.sh --skill-ref v3.0.3  a specific skill version (default: the newest 3.x tag)
+  install.sh --tcc-ref v0.1.12   a specific app version (default: the newest app tag)
   install.sh --uninstall         remove what this script installed — NEVER your projects
   install.sh --uninstall --all   also uv, Claude Code and ~/.claude, agy/gh/omp when this script
                                  installed them, and every --user pip package. Asks first.
@@ -120,6 +125,7 @@ while [ $# -gt 0 ]; do
     --dry-run)     DRY_RUN=1 ;;
     --yes|-y)      ASSUME_YES=1 ;;
     --skill-ref)   SKILL_REF="${2:-}"; shift ;;
+    --tcc-ref)     TCC_REF="${2:-}"; shift ;;
     --help|-h)     usage; exit 0 ;;
     *) echo "unknown option: $1 (try --help)" >&2; exit 2 ;;
   esac
@@ -826,7 +832,25 @@ if [ "$MODE" = "tcc" ]; then
   # 3.9.6 on a stock macOS — and refused with "does not satisfy Python>=3.11", which reads as a
   # broken package rather than a missing Python (2026-08-12).
   [ -n "$UV" ] || UV=uv
-  if run "$UV" tool install --quiet --python 3.12 --upgrade "autosound-tcc[gui,claude] @ git+${TCC_REPO}"; then
+  # The app is asked for BY TAG, exactly as the method is above. With no ref, `git+URL` means HEAD
+  # of the default branch: a fresh install handed somebody unfinished work, and the app's own
+  # update button -- which pins the newest tag -- then read that build as ahead of every release.
+  # The two ways of getting the app have to agree, or "update" and "install" mean different
+  # things on the same machine (SCR-054).
+  if [ -z "$TCC_REF" ]; then
+    TCC_REF="$(git ls-remote --tags --refs "$TCC_REPO" 'v*' 2>/dev/null \
+        | awk -F/ '{print $NF}' | sort -V | tail -1)" || TCC_REF=""
+  fi
+  if [ -n "$TCC_REF" ]; then
+    TCC_SPEC="autosound-tcc[gui,claude] @ git+${TCC_REPO}@${TCC_REF}"
+    say "  version $TCC_REF"
+  else
+    # No network, or a repository with no tags yet. The default branch is still an install that
+    # works, and saying so is better than stopping over a version number.
+    TCC_SPEC="autosound-tcc[gui,claude] @ git+${TCC_REPO}"
+    warn "could not read the app's releases -- installing from the default branch instead"
+  fi
+  if run "$UV" tool install --quiet --python 3.12 --upgrade "$TCC_SPEC"; then
     # Where uv actually put it, which is not always `~/.local/bin`.
     TCC_BIN="$(command -v autosound-tcc 2>/dev/null || true)"
     [ -z "$TCC_BIN" ] && [ -x "${UV_TOOL_BIN_DIR:-$LOCAL_BIN}/autosound-tcc" ] \
