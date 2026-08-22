@@ -62,10 +62,11 @@ def xo_response(freqs_hz, corner_hz, order_db_per_oct, kind, ftype):
 
 
 # hardware grid (helix-dsp-ultra-s.yaml), CHEBYSHEV excluded: ripple unconfirmed
+XO_BW_ORDERS = (6, 12, 18, 24, 30, 36, 42)
 XO_OPTIONS = (
     [("LR", o) for o in (12, 24, 36)]
-    + [("BW", o) for o in (6, 12, 18, 24, 30, 36, 42)]
-    + [("BE", o) for o in (6, 12, 18, 24, 30, 36, 42)]
+    + [("BW", o) for o in XO_BW_ORDERS]
+    + [("BE", o) for o in XO_BW_ORDERS]
 )
 
 
@@ -581,12 +582,44 @@ def _selftest():
                         f"expected {want:+.3f} -- the corner is not where the caller asked for it "
                         f"(or BE's norm= changed)")
 
+    # ---- and the SLOPE is the one that was asked for ---------------------------------------
+    # The corner anchor above pins the family and the frequency but NOT the steepness: a
+    # Butterworth is -3.01 dB at its own corner for EVERY order, so if the `n = round(order/6)`
+    # mapping ever drifted, all 54 assertions above would stay green while every filter came out
+    # the wrong order. Raised by a consumer reading the anchor (TCC, 2026-08-22) -- the right
+    # reading of a new test is "what would still pass".
+    #
+    # Asymptotically a filter falls at its nominal order, so measure an octave of the stopband
+    # well away from the corner. Tolerance 1.2 dB/oct: the measured spread is 0.71 at worst (BE
+    # approaches its asymptote more slowly than BW), while drifting `n` by ONE step moves the
+    # slope by 6 dB/oct -- five times the tolerance.
+    # The measured octave must sit at 4x-8x the corner, not 2x-4x: a Bessel reaches its asymptote
+    # more slowly than a Butterworth and reads ~7 dB/oct shallow in the nearer octave. And it must
+    # stay far from Nyquist, where the bilinear transform warps the response STEEPER -- measuring
+    # BW42's lp slope over 8-16 kHz reads 46.7 dB/oct, which is the test being wrong, not the
+    # filter. Both edges found by writing the check badly first.
+    nyq_safe = FS / 20.0
+    for ftype, orders in (("LR", (12, 24, 36)), ("BW", XO_BW_ORDERS), ("BE", XO_BW_ORDERS)):
+        for order in orders:
+            for fc in (63.0, 500.0, 2000.0):
+                bands = [("hp", fc / 8, fc / 4)]
+                if fc * 8 <= nyq_safe:
+                    bands.append(("lp", fc * 4, fc * 8))
+                for kind, f1, f2 in bands:
+                    g = lambda x: 20 * np.log10(abs(  # noqa: E731
+                        xo_response(np.array([x]), fc, order, kind, ftype)[0]))
+                    slope = abs(g(f2) - g(f1))
+                    assert abs(slope - order) < 1.2, (
+                        f"{ftype}{order} {kind} at {fc:g} Hz falls at {slope:.2f} dB/oct, "
+                        f"expected {order} -- the order mapping drifted")
+
     print("selftest[dsp_math] OK -- APF1 (-90 deg at f0, 0..-180, 1/(pi f0) delay far below f0), "
           "APF2 (-180 deg at f0, 0..-360, Q steepens), APF1^2 == APF2(Q=0.5), "
           "eq_complex renders APF/LSH/HSH as themselves and refuses an unknown kind, "
           "align_delay_polarity inverts at odd-order LR joints and breaks near-ties "
           "across both polarities by smallest |tau|, and every crossover sits at the corner it "
-          "was asked for (LR -6.02 dB, BW/BE -3.01 dB, 54 combinations).")
+          "was asked for (LR -6.02 dB, BW/BE -3.01 dB, 54 combinations) and falls at the "
+          "order it was asked for (+-1.2 dB/oct over an octave of stopband).")
 
 
 if __name__ == "__main__":

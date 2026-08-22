@@ -37,18 +37,25 @@ run_one "installers" scripts/installer-consistency.py
 
 echo
 echo "rew_tool selftests ($PY)"
-for f in "$TOOL"/*.py; do
+# find, not a glob: rew_tool has subpackages (state/, gates/) and a plain "$TOOL"/*.py silently
+# skipped six modules that all have working selftests -- state/{state,process,migrate,apply} and
+# gates/{presweep_safety,side_effect}. Reported by TCC on 2026-08-22, who were running four of them
+# and none of the eleven this script did. Two partial sets, each believing it was the whole.
+while IFS= read -r f; do
   grep -q selftest "$f" || continue
-  name="$(basename "$f")"
+  name="${f#"$TOOL"/}"
   case "$name" in
     # takes a project argument first; it is ignored by the selftest, but argv must carry it
     naming.py)                 run_one "$name" "$f" . selftest ;;
+    __init__.py)               continue ;;
     *)
       if grep -q -- '--selftest' "$f"; then run_one "$name" "$f" --selftest
       else                                  run_one "$name" "$f" selftest
       fi ;;
   esac
-done
+done <<EOF
+$(find "$TOOL" -name '*.py' | sort)
+EOF
 
 echo
 if [ "$fail" -ne 0 ]; then

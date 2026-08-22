@@ -40,6 +40,51 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [v3.0.15] — 2026-08-22 · if you are on LR, v3.0.14 did not change your numbers
+
+A correction to the previous release's Upgrading note, and two holes it left.
+
+**LR is not affected at all — 0.0000 dB.** v3.0.14's note said "high-order filters below ~250 Hz"
+and left readers to work out which. Measured properly, old module against new across the full
+hardware grid (3 families × every order × hp/lp × 11 corners from 40 Hz to 2.5 kHz, comparing only
+where the filter passes above −40 dB): **LR 0.0000 dB, BW up to 96.9, BE up to 104.1.** The reason
+is structural: the LR path designs a *half-order* Butterworth prototype and squares it, so the order
+handed to the designer is always low and the transfer-function form never breaks down. Since LR is
+the default for joints, most builds were never affected — including, checked directly, a live
+5-channel tune whose legs are all LR24. **What to re-derive: BW or BE at 36 dB/oct or steeper with a
+corner below ~250 Hz.** Nothing else.
+
+**The corner anchor did not pin steepness.** A Butterworth is −3.01 dB at its own corner for *every*
+order, so if the `n = round(order/6)` mapping ever drifted, all 54 corner assertions would have
+stayed green while every filter came out the wrong order. Raised by a consumer reading the new test
+and asking what would still pass — the right question about any test. The selftest now also measures
+an octave of stopband and requires the filter to fall at its nominal order (±1.2 dB/oct, against a
+6 dB/oct step if `n` drifts). Verified by injecting a BE-only order drift, which the older polarity
+assertion does not cover: caught.
+
+Writing that check badly first taught two things worth keeping: measure the octave at **4×–8×** the
+corner, because a Bessel approaches its asymptote more slowly than a Butterworth and reads ~7 dB/oct
+shallow in the nearer octave; and keep the upper edge far from Nyquist, where the bilinear transform
+warps the response *steeper* (BW42's lp slope over 8–16 kHz reads 46.7 dB/oct — the test being
+wrong, not the filter).
+
+**`run-selftests.sh` was globbing, not recursing**, so it silently skipped every module in
+`rew_tool`'s subpackages: `state/{state,process,migrate,apply}` and `gates/{presweep_safety,
+side_effect}`. All six have working selftests and all six pass. Found by the consumer that runs four
+of them and none of the eleven this script was running — two partial sets, each believing it was the
+whole. The count goes 20 → **26**.
+
+**Hardware profile:** the Helix DSP Ultra S EQ limits are now recorded — Q 0.5–50, and in Fine EQ
+mode Q 0.5–15 with a 1 Hz frequency step (user-verified in PC-Tool). Noted alongside it: that
+ceiling is what the *hardware* allows, not what the method should use — §13's spatial-validity Q
+ceiling is the binding one in a cabin.
+
+### Upgrading
+
+Nothing to do. No API and no numbers change: v3.0.14 fixed the arithmetic, this release corrects what
+was said about who it affected and closes two gaps in the checks. If you deferred re-deriving
+crossovers after v3.0.14, the list above is shorter than you were told — **LR joints need nothing.**
+
 ## [v3.0.14] — 2026-08-22 · every steep low crossover this module drew was wrong
 
 `xo_response` designed its filters in transfer-function form and evaluated them with `freqz`. For a
