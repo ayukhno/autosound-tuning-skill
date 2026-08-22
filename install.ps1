@@ -84,6 +84,8 @@ $SkillRepoUrl = $SkillRepo -replace '\.git$', ''
 # can READ the policy instead of re-deriving it from the pipeline below. Same rule as install.sh's
 # SKILL_TAG_GLOB and TCC's updater; when the supported line moves, this is the line that moves.
 $SkillTagGlob = "v3.*"
+# The app's supported line -- `v*`, not `v3.*`: the app versions independently of the method.
+$TccTagGlob   = "v*"
 $TccRepo      = "https://github.com/ayukhno/autosound-tcc"
 $SkillHome    = Join-Path $HOME ".claude\skills\autosound-tuning"
 # The checkout lives beside the skill and the skill points at it (a junction) -- see install.sh
@@ -744,7 +746,7 @@ if ($Mode -eq "tcc") {
         if (-not $TccRef) {
             $tccTags = @()
             if (Get-Command git -ErrorAction SilentlyContinue) {
-                $tccTags = @((& git ls-remote --tags --refs $TccRepo "v*" 2>$null) |
+                $tccTags = @((& git ls-remote --tags --refs $TccRepo $TccTagGlob 2>$null) |
                              ForEach-Object { ($_ -split "/")[-1] } |
                              Sort-Object { [version]($_ -replace '^v', '') })
             }
@@ -777,27 +779,22 @@ if ($Mode -eq "tcc" -and ($TccExe -or $DryRun)) {
     if ($DryRun) {
         Say "would create `"Autosound TCC`" shortcuts on the Desktop and in the Start Menu"
     } else {
-        # The icon ships inside TCC's package; the app's own Python says where it landed.
-        $ico = ""
-        $tccPy = Join-Path (Join-Path (& $Uv tool dir 2>$null) "autosound-tcc") "Scripts\python.exe"
-        if (Test-Path $tccPy) {
-            $ico = (& $tccPy -c "import autosound_tcc.app as a; p = getattr(a, 'APP_ICO', None); print(p if p and p.is_file() else '')" 2>$null)
-        }
-        try {
-            $ws = New-Object -ComObject WScript.Shell
-            foreach ($lnk in @($DesktopLnk, $ProgramsLnk)) {
-                $s = $ws.CreateShortcut($lnk)
-                # Points at the INSTALLED launcher, so `uv tool upgrade` updates the shortcut's
-                # target too -- the same reason the macOS bundle execs rather than copies.
-                $s.TargetPath = $TccExe
-                $s.WorkingDirectory = $HOME
-                $s.Description = "Autosound Tuning Command Center"
-                if ($ico) { $s.IconLocation = "$ico,0" }
-                $s.Save()
-            }
+        # The app makes its OWN shortcuts: `autosound-tcc --install-desktop` writes both .lnk files
+        # pointing at the installed launcher, with TCC's own icon (SCR-056). What this replaces
+        # reached across the repository boundary to read `autosound_tcc.app.APP_ICO` by name out of
+        # a private module -- rename it there and the icon would have disappeared here with no
+        # error on either side. The half that owns the icon now places it, and this script reads an
+        # exit code. Needs the app at v0.1.13 or newer, which the tag resolution above installs.
+        $out = (& $TccExe --install-desktop 2>&1 | Out-String).Trim()
+        if ($LASTEXITCODE -eq 0) {
             Say "OK   `"Autosound TCC`" on your Desktop and in the Start Menu"
-            if (-not $ico) { Say "     (with the generic icon -- TCC's own was not found in the installed package)" }
-        } catch { Warn "the shortcuts were not created: $($_.Exception.Message). The command still works:  autosound-tcc" }
+            if ($out -match "no icon") {
+                Say "     (with the generic icon -- TCC's own was not found in the installed package)"
+            }
+        } else {
+            if ($out) { Write-Host $out }
+            Warn "the shortcuts were not created. The command still works:  autosound-tcc"
+        }
     }
 }
 

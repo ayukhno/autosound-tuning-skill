@@ -99,6 +99,22 @@ def main():
         else:
             checked.append(f"tag glob agrees ({sh_glob})")
 
+    # 2b. the app's supported line, added with SCR-054. It is `v*` where the skill's is `v3.*`,
+    # and that difference is intentional -- so this checks the two files agree, not that the two
+    # globs match each other.
+    sh_tglob, err = one(r'^TCC_TAG_GLOB="([^"]+)"', sh, "TCC_TAG_GLOB", "install.sh")
+    if err:
+        problems.append(err)
+    ps_tglob, err = one(r'^\$TccTagGlob\s*=\s*"([^"]+)"', ps1, "$TccTagGlob", "install.ps1")
+    if err:
+        problems.append(err)
+    if sh_tglob and ps_tglob:
+        if sh_tglob != ps_tglob:
+            problems.append(f"app tag glob differs — install.sh {sh_tglob!r} vs "
+                            f"install.ps1 {ps_tglob!r}")
+        else:
+            checked.append(f"app tag glob agrees ({sh_tglob})")
+
     # 3. install.cmd hardcodes the URL it fetches install.ps1 from; it must be THIS repo's, on main
     ps1url, err = one(r'^set "PS1URL=(\S+)"', cmd, "PS1URL", "install.cmd")
     if err:

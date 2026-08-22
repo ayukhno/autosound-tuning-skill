@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # Build "Autosound TCC.app" — a macOS bundle around the already-installed `autosound-tcc`.
 #
+# ⚠️ SUPERSEDED, and no longer called by anything (SCR-056, 2026-08-22). The installer now runs
+# `autosound-tcc --install-desktop`, which does this from inside the app's own package — so the
+# icon and the bundle layout are maintained where they are owned instead of in two places that
+# drift apart silently. Kept only for a machine whose app predates v0.1.13; expect it to fall
+# behind what the app itself produces, and prefer the app's own command.
+#
 # **This is not a distributable installer and it needs no Apple Developer account.** A `.app` is a
 # folder with a fixed layout; building one for yourself is free. The $99/year buys code signing
 # and notarisation, which exist so that OTHER people do not see a Gatekeeper warning — not so that
