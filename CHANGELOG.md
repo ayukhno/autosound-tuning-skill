@@ -70,6 +70,20 @@ Polarity results may differ from v3.0.11 at joints where the two answers were eq
 every case observed the residual null is unchanged to the hundredth of a dB; what changes is which
 of two identical solutions is reported, and it is now stable across runs.
 
+**The `dsp_math` self-test now needs `scipy`, where it did not before.** It pins the physics by
+*designing* crossovers rather than asserting on constants, and design is the one thing in this
+module that requires scipy — `xo_response` appears six times in the self-test and appeared zero
+times in v3.0.11. Nothing in the shipped code changed its dependencies: the crossover functions
+always needed scipy, and everything else here (PEQ/APF responses, alignment, robust metrics,
+greedy EQ fit) still runs without it. But a consumer that wires `python3 dsp_math.py selftest`
+into a test gate will see that gate go red on upgrade, with a message about a dependency it never
+chose. Declare `scipy` wherever that gate's dependencies live.
+
+Stated as a rule for later notes: **a self-test moving into a subset that needs an optional
+dependency is a consumer-visible change of the same class as a changed return contract**, because
+self-tests are what consumers wire into their gates. Reported by TCC on the v3.0.11 → v3.0.12 bump
+(1 failed / 1231 passed before declaring it, 1232 passed after).
+
 ## [v3.0.11] — 2026-08-22 · a tool that cannot say "not here" will be believed everywhere
 
 Harvested from one working session in which a competent operator made six errors and **five were
