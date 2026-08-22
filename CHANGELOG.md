@@ -19,15 +19,21 @@ Two consequences worth stating, because both have already caused a question:
   that in mind — the Upgrading note is the only warning that audience gets. **3.1.0** is the moment
   the catalogue moves too, and that is what gives the method an installation path independent of any
   consumer.
-- **A published tag is never moved. A forgotten note ships as the next patch.** This follows from the
-  point above: where the tag *is* the release, moving it makes one version number name two different
-  sets of code, and whoever installed in between has something other than what the number says — the
-  version stops identifying anything at exactly the place where it is the only identifier. So a
-  missing Upgrading note is not a reason to retag; it is a reason to cut `x.y.z+1` carrying it. The
-  cost is one spent number, which is nothing against two builds sharing a name. **Write the Upgrading
-  note before tagging, not after** — that is the cheaper half of the same rule. Learned by doing it
-  wrong: `v3.0.12` was force-moved from `2e71dd2` to `addc9b9` on 2026-08-22 to pick up a note that
-  should have been written first.
+- **A published tag is never moved. A forgotten note ships as the next patch.** Two costs, and it is
+  worth being exact about which, because the obvious one does not apply here. **It is not that
+  installed users get stuck:** both installers fetch the ref *by name* from the remote
+  (`git fetch --depth 1 origin "$SKILL_REF"` → `checkout FETCH_HEAD`, and a first install is
+  `clone --branch <tag> --depth 1`), so a moved tag is picked up correctly on the next update, and
+  TCC's updater re-resolves from `ls-remote` the same way. What it actually costs: **(a)
+  diagnosability** — two different sets of code wear one number, so the version can no longer tell
+  you what is on somebody's disk, which is the entire job of a version; and **(b) local clones**,
+  where it genuinely bites: a plain `git fetch` does not move an existing tag, so every developer
+  checkout and every vendored copy keeps silently showing the old commit until someone runs
+  `fetch --tags --force`. So a missing Upgrading note is not a reason to retag; it is a reason to cut
+  `x.y.z+1` carrying it. The cost is one spent number, which is nothing against two builds sharing a
+  name. **Write the Upgrading note before tagging, not after** — the cheaper half of the same rule.
+  Learned by doing it wrong: `v3.0.12` was force-moved from `2e71dd2` to `addc9b9` on 2026-08-22, and
+  a consumer's vendored checkout showed the stale commit within the hour.
 - The number answers *"is this a release?"*, **not** *"how risky is the upgrade?"* When a patch
   changes a return contract — `eq_gate.check` gaining a fourth verdict, `arrival_triangulate`
   emptying fields — the warning belongs in this file's **Upgrading** note and in the release body,
