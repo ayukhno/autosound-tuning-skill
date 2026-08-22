@@ -636,6 +636,59 @@ def _selftest():
                     f"{ftype}{order} {kind}: phase at its own corner moves {drift:.2f} deg "
                     f"across corner frequencies -- the response is not scaling with frequency")
 
+    # ---- against an INDEPENDENT reference, not against ourselves ---------------------------
+    # The three anchors above are definitions, which is what makes them honest, but they are also
+    # all evaluated through the same code path they are checking. This one is not: it designs in
+    # ZPK -- poles and zeros, which stay well conditioned where the polynomial form falls apart --
+    # and evaluates by multiplying factors directly in the z plane. No polynomial anywhere in the
+    # path, which is the whole point: `output="zpk"` buys nothing if the result is handed back to
+    # `freqz(b, a)`.
+    #
+    # It is the strongest of the four. It confirms the SOS rewrite by a third route rather than
+    # by SOS agreeing with itself, and it catches the 30 dB/oct orders that both the corner anchor
+    # and the phase anchor are blind to (they read 4.5 dB and 0.2 deg of error there while the
+    # in-band phase was drifting by tens of degrees). Measured: this module 0.000000 dB / 0.0000
+    # deg against the reference; the pre-v3.0.14 form, 77.6 dB and a full half turn.
+    sig = _scipy_signal()
+
+    def _reference(freqs, fc, order, kind, ftype):
+        btype = "highpass" if kind == "hp" else "lowpass"
+        wn = min(max(fc / (FS / 2.0), 1e-4), 0.999)
+        zz = np.exp(1j * 2 * np.pi * freqs / FS)
+
+        def one(order_db):
+            n = max(1, round(order_db / 6))
+            if ftype == "BE":
+                z, pl, k = sig.bessel(n, wn, btype=btype, norm="mag", output="zpk")
+            else:
+                z, pl, k = sig.butter(n, wn, btype=btype, output="zpk")
+            return k * (np.prod(zz[:, None] - z, axis=1) / np.prod(zz[:, None] - pl, axis=1))
+
+        if ftype == "LR":
+            h = one(max(6, order // 2))
+            return h * h
+        return one(order)
+
+    fx = np.geomspace(20.0, 20000.0, 800)
+    for ftype, orders in (("LR", (12, 24, 36)), ("BW", XO_BW_ORDERS), ("BE", XO_BW_ORDERS)):
+        for order in orders:
+            for kind in ("hp", "lp"):
+                for fc in (40.0, 125.0, 500.0, 2500.0):
+                    want = _reference(fx, fc, order, kind, ftype)
+                    got = xo_response(fx, fc, order, kind, ftype)
+                    # Only where the filter passes something: 100 dB of disagreement deep in a
+                    # stopband is arithmetic noise nobody hears or acts on.
+                    band = 20 * np.log10(np.abs(want)) > -40.0
+                    if not band.any():
+                        continue
+                    dmag = np.max(np.abs(20 * np.log10(np.abs(got[band]))
+                                         - 20 * np.log10(np.abs(want[band]))))
+                    dphase = np.max(np.abs(np.degrees(np.angle(got[band] / want[band]))))
+                    assert dmag < 0.01 and dphase < 0.1, (
+                        f"{ftype}{order} {kind} at {fc:g} Hz differs from a zpk reference by "
+                        f"{dmag:.3f} dB / {dphase:.2f} deg -- the evaluation path is losing the "
+                        f"answer, as the transfer-function form did before v3.0.14")
+
     print("selftest[dsp_math] OK -- APF1 (-90 deg at f0, 0..-180, 1/(pi f0) delay far below f0), "
           "APF2 (-180 deg at f0, 0..-360, Q steepens), APF1^2 == APF2(Q=0.5), "
           "eq_complex renders APF/LSH/HSH as themselves and refuses an unknown kind, "
@@ -643,7 +696,8 @@ def _selftest():
           "across both polarities by smallest |tau|, and every crossover sits at the corner it "
           "was asked for (LR -6.02 dB, BW/BE -3.01 dB, 54 combinations) and falls at the "
           "order it was asked for (+-1.2 dB/oct over an octave of stopband), and its phase at its own "
-          "corner does not depend on where that corner is.")
+          "corner does not depend on where that corner is; and the whole grid matches an "
+          "independent zpk reference to 0.000 dB / 0.00 deg.")
 
 
 if __name__ == "__main__":
