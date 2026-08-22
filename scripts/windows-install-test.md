@@ -51,7 +51,7 @@ Reference starting state from a real VM (2026-08-22): method `3.0.11`, TCC `0.1.
 Windows 11, uv 0.12.5, python 3.12.14 — that machine had `agy`/`gemini`/`codex` absent, which is
 fine: the reviewer step is optional and must not stop the run.
 
-### Result, 2026-08-22 — §1 and §2 pass
+### Result, 2026-08-22 — §1, §1a and §2 pass
 
 Run on a VM older than this plan expected: the method at **3.0.4**, and an app so old it had
 neither an update panel nor `--install-desktop`.
@@ -64,8 +64,26 @@ neither an update panel nor `--install-desktop`.
 - **`$LASTEXITCODE` after `& $TccExe --install-desktop 2>&1 | Out-String` behaves** — the success
   branch ran. Confirmed in practice, not only in theory.
 
+**§1a, the upgrade case, is the one that mattered** and the machine was older than this plan's own
+reference: method **3.0.4**, an app with neither an update panel nor `--install-desktop`. The method
+went to 3.0.16, the app to 0.1.14 **by tag**, and the shortcuts were created — so the ordering
+worked on a machine where, at the moment the run started, the installed app was physically incapable
+of making them.
+
 Still outstanding: the shortcut-target check (§2.5), twenty seconds of looking at the icons, then
 §3 and §4.
+
+**Two bugs this plan found on the app's side**, both fixed in its v0.1.15 — worth recording because
+neither would have been found by a test that only checked its own success:
+
+1. `autosound-tcc --version` started the app instead of printing (above).
+2. **A console window flashed** three times a session. Not from the app's own calls — those all
+   asked for no window — but from **grandchildren**: the agent CLI launches `python3` and `git`, and
+   a console program launched by a parent that has no console gets one of its own. Fixed at the
+   process level rather than per call site. ⚠️ **This class can reach us**: `rew_tool`'s scripts are
+   console programs, and when they are launched from inside a GUI context it is their grandparent's
+   setting that decides whether a window appears. Nothing to change here today — the fix belongs
+   where the process is spawned — but the mechanism is worth knowing before blaming a script.
 
 ## 2. Real install
 
@@ -96,7 +114,9 @@ This is the SCR-056 test:
 ```
 
 Expected: the app installs, and **no shortcuts are created**, because `--install-desktop` does not
-exist before v0.1.13. It must **say so** — a warning, not silence and not a crash. There is no
+exist before v0.1.13. **The pass condition is not "no shortcuts" — it is "it said why there are
+none."** Silence and a crash are both failures, and silence is the worse of the two: it looks like
+success. There is no
 fallback by decision, not by oversight (v3.0.16's Upgrading note).
 
 ## 4. Uninstall
