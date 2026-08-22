@@ -33,7 +33,12 @@ that matters most — the app being **upgraded before** its `--install-desktop` 
 sitting on TCC 0.1.11 has no `--install-desktop` at all; the run only works because the app is
 replaced first. That sequence has never been executed.
 
-Record the starting state (`autosound-tcc --version` prints it), run the same command as §2, then:
+Record the starting state with **`uv tool list`**. ⚠️ Not `autosound-tcc --version`: that flag did
+not exist on builds before 2026-08-22 and `parse_known_args` swallowed it silently, so it *started
+the app* — with its MCP server — instead of printing anything. (Found by running this very plan;
+fixed on the app's side, but every older build is still out there.)
+
+Then run the same command as §2, and check:
 
 | check | pass |
 |---|---|
@@ -45,6 +50,22 @@ Record the starting state (`autosound-tcc --version` prints it), run the same co
 Reference starting state from a real VM (2026-08-22): method `3.0.11`, TCC `0.1.11` (`eeac97cc`),
 Windows 11, uv 0.12.5, python 3.12.14 — that machine had `agy`/`gemini`/`codex` absent, which is
 fine: the reviewer step is optional and must not stop the run.
+
+### Result, 2026-08-22 — §1 and §2 pass
+
+Run on a VM older than this plan expected: the method at **3.0.4**, and an app so old it had
+neither an update panel nor `--install-desktop`.
+
+- §1 dry run: `version v3.0.16` ✓ · `version v0.1.14` ✓ (**SCR-054 works**) · no "could not read
+  the app's releases" ✓ · "would create shortcuts" ✓
+- §2 real: `version v0.1.14` → `OK installed` → `OK "Autosound TCC" on your Desktop and in the
+  Start Menu`, no warnings and no "(with the generic icon)" — **SCR-056 works**, and specifically
+  in the order that had never been executed: replace the app first, then call it.
+- **`$LASTEXITCODE` after `& $TccExe --install-desktop 2>&1 | Out-String` behaves** — the success
+  branch ran. Confirmed in practice, not only in theory.
+
+Still outstanding: the shortcut-target check (§2.5), twenty seconds of looking at the icons, then
+§3 and §4.
 
 ## 2. Real install
 

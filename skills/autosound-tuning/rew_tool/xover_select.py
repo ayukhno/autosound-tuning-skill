@@ -68,6 +68,10 @@ def realize_driver(freqs, rta_mag_db, target_mag_db, *, hp_slot=None, lp_slot=No
     """Find electrical XO + level trim + EQ realizing an acoustic target.
 
     hp_slot/lp_slot: (lo_hz, hi_hz, step_hz) hardware search ranges, or None.
+        ⚠️ `step_hz` must be a WHOLE number of Hz on a DSP whose corner is settable in 1 Hz steps
+        (Helix DSP Ultra S, user-verified 2026-08-22). A fractional step searches corners the
+        hardware cannot be set to, and the winner then has to be rounded afterwards -- which moves
+        it off the optimum that was just computed. Check the DSP profile before choosing a step.
     min_hp_order: datasheet/installed-Fs protection floor (dB/oct), e.g. 12.
     no_boost_zones: static (lo, hi) Hz zones (car-record knowledge).
     boost_gate: eq_gate.ExcessPhaseGate.as_boost_gate() — measurement-driven
