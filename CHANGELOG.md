@@ -2,6 +2,36 @@
 
 All notable changes to the autosound-tuning skill. The skill is co-developed with real tuning sessions: each refactor harvests confirmed lessons from the field and folds them in.
 
+## [v2.8.3] — 2026-08-22 · the line the catalogue serves gets the crossover fix
+
+**The first code change on the frozen 2.x line, and the freeze is why it is here rather than
+waiting.** 2.x is docs-only by convention. This is a correctness fix to a function that was wrong by
+tens of dB, on the line the plugin catalogue actually serves — so leaving it frozen would mean
+everyone installing the method the normal way keeps the defect while the fix sits on a line they are
+not on. Backported unchanged from 3.x (v3.0.14).
+
+`xo_response` designed its filters in transfer-function form and evaluated them with `freqz`. For a
+high-order filter at a low normalised frequency that form breaks down: the coefficients span many
+orders of magnitude and the answer is lost to floating point. Measured against the one value every
+family has by definition — its gain at its own corner, −6.02 dB for LR (it is BW squared), −3.01 dB
+for BW and for BE under the `norm="mag"` this module deliberately uses — **BW42 at 80 Hz was off by
+−30.1 dB, BE42 at 63 Hz by −28.0, BE36 at 40 Hz by +13.2.** Across an octave either side of the
+corner the old curve differed from the true one by up to 75 dB.
+
+Above 250 Hz the error is exactly zero, which is why nothing noticed. Below it, it sat on precisely
+the settings a sub/midbass joint uses, since that band is where steep slopes get chosen. Fixed by
+designing and evaluating as cascaded second-order sections, which is conditioned per section.
+
+**LR is unaffected — 0.0000 dB at every order.** The LR path designs a half-order Butterworth
+prototype and squares it, so the order handed to the designer is always low and the form never
+breaks down. Since LR is the default for joints, most tunes were never touched. **What to re-derive:
+BW or BE at 36 dB/oct or steeper with a corner below ~250 Hz.**
+
+`dsp_math` was the one module of nineteen on this line with **no selftest**, which is how a 30 dB
+error survived. It has one now: every crossover must sit at the corner it was asked for and fall at
+the order it was asked for. Verified that this line and 3.x now agree to **0.00000000 dB** across
+the whole hardware grid, so the two do not drift apart on the thing that was just fixed.
+
 ## [v2.8.2] — 2026-08-20 · the noise floor of our own measurements
 
 Docs only, as the frozen 2.x line requires — four field lessons and one README change.

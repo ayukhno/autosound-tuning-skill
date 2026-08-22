@@ -32,22 +32,22 @@ def _design(order_db_per_oct, wn, btype, ftype):
         # norm="mag" (-3 dB at the corner) matches REW's BE shapes, verified
         # against REW predicted responses 2026-07-12 (norm="phase" gave up to
         # 27 dB transfer-function error on BE12/BE18 channels)
-        return sig.bessel(n, wn, btype=btype, norm="mag")
-    return sig.butter(n, wn, btype=btype)
+        return sig.bessel(n, wn, btype=btype, norm="mag", output="sos")
+    return sig.butter(n, wn, btype=btype, output="sos")
 
 
 def xo_response(freqs_hz, corner_hz, order_db_per_oct, kind, ftype):
     """Complex response of one HPF/LPF slot. kind: 'hp'|'lp'. ftype: 'BW'|'BE'|'LR'."""
-    freqz = _scipy_signal().freqz
+    sosfreqz = _scipy_signal().sosfreqz
     wn = min(max(corner_hz / (FS / 2.0), 1e-4), 0.999)
     btype = "highpass" if kind == "hp" else "lowpass"
     w = 2 * np.pi * freqs_hz / FS
     if ftype == "LR":
-        b, a = _design(max(6, order_db_per_oct // 2), wn, btype, "BW")
-        _, h = freqz(b, a, worN=w)
+        sos = _design(max(6, order_db_per_oct // 2), wn, btype, "BW")
+        _, h = sosfreqz(sos, worN=w)
         return h * h
-    b, a = _design(order_db_per_oct, wn, btype, ftype)
-    _, h = freqz(b, a, worN=w)
+    sos = _design(order_db_per_oct, wn, btype, ftype)
+    _, h = sosfreqz(sos, worN=w)
     return h
 
 
@@ -330,3 +330,47 @@ def load_ntt_txt(path):
                 except ValueError:
                     continue
     return np.array(fr), np.array(mg)
+
+
+# ---------- selftest ----------
+
+def _selftest():
+    """The crossover corners and slopes, against their definitions.
+
+    This module was the one of nineteen with no selftest, which is why the transfer-function form
+    it used to design with could be wrong by 30 dB at 80 Hz for years without anything saying so.
+    Both assertions below are definitions, not values read off a run.
+    """
+    for fc in (63.0, 500.0, 2000.0):
+        at_fc = np.array([fc])
+        for order in (12, 24, 36):
+            for kind in ("hp", "lp"):
+                # LR is BW squared, so -6.02 dB at its own corner; BW and BE (norm="mag") -3.01.
+                for ftype, want in (("LR", -6.0206), ("BW", -3.0103), ("BE", -3.0103)):
+                    got = 20 * np.log10(abs(xo_response(at_fc, fc, order, kind, ftype)[0]))
+                    assert abs(got - want) < 0.05, (
+                        f"{ftype}{order} {kind} at its own corner {fc:g} Hz reads {got:+.3f} dB, "
+                        f"expected {want:+.3f}")
+                # ... and falls at its nominal order. Measured at 4x-8x the corner (a Bessel
+                # reaches its asymptote later than a Butterworth) and kept well below Nyquist,
+                # where the bilinear transform warps the response steeper.
+                f1, f2 = (fc / 8, fc / 4) if kind == "hp" else (fc * 4, fc * 8)
+                if f2 > FS / 20.0:
+                    continue
+                for ftype in ("LR", "BW", "BE"):
+                    g = lambda x: 20 * np.log10(abs(  # noqa: E731
+                        xo_response(np.array([x]), fc, order, kind, ftype)[0]))
+                    slope = abs(g(f2) - g(f1))
+                    assert abs(slope - order) < 1.2, (
+                        f"{ftype}{order} {kind} at {fc:g} Hz falls at {slope:.2f} dB/oct, "
+                        f"expected {order}")
+    print("selftest[dsp_math] OK -- every crossover sits at the corner it was asked for "
+          "(LR -6.02 dB, BW/BE -3.01 dB) and falls at the order it was asked for.")
+
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] in ("selftest", "--selftest"):
+        _selftest()
+    else:
+        print("usage: python3 dsp_math.py selftest")
