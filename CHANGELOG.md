@@ -40,6 +40,81 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [v3.0.13] — 2026-08-22 · four external rules, three attributions the draft got wrong, and the first CI
+
+Four published findings folded into the reference set — and the useful part of the work turned out
+to be checking them against the primary texts instead of the note that summarised them. Three
+claims did not survive.
+
+**§2 gains a fourth failure class: the directivity dip** (Wehmeyer, *"A Straightforward Stereo
+Tuning Process"*, pp. 28-30). A crossover above the woofer's beaming limit leaves a hole in the
+*reflected* field; the mic sums direct and reflected and shows a dip; filling it flattens the RTA
+and makes the direct sound — where the image lives — bright. It is the only one of the four classes
+where EQ actively makes things worse, and its treatment is the crossover frequency, not a filter.
+§16's crossover rule (3) now carries the mechanism and his worked cases. His zone table is a figure
+and is **cited, not reproduced** — inventing its boundaries would be the easiest lie in the file.
+
+**A new §34, the mute-one-channel test** (same source, p. 52): a dip present on the sum and absent
+from either channel alone is inter-channel phase, and his verdict is narrower than "fix it with
+delay" — either it is a delay error or it cannot be fixed at all. With the >6 dB peak exception, the
+"resist the urge to equalize with both playing" rule, and the deliberate-damage corollary.
+
+**§13 gains the MMM boundary under its own author's name.** Jean-Luc Ohl: "missing the time and
+phase information … not a tool to set up crossovers, time align speakers". Our doctrine already drew
+that line; what was missing is that the method's own proponent draws it too.
+
+**A Q ceiling on corrective filters, stated as ours.** The mechanism is Wehmeyer's — five mic
+positions in a 7″ circle, 25+ dB apart above 1 kHz, and what fails to track the average after
+smoothing is always *narrow*, so narrowness (not frequency) predicts "property of the position".
+The rule we take from it: do not deploy a filter narrower than the features that survive spatial
+averaging. Better than borrowing a number, §13 already captures six separated positions, so the
+ceiling is **measurable per car** rather than assumed.
+
+**§23: the peak is the starting estimate, phase agreement is the final criterion** — adopted
+partially from DIMOSUS (Resonalyze #88). The arrival difference stays what we drive to zero; what
+changes is the tie-break, where estimators disagree beyond placement scatter. This generalises §28's
+existing rule from "the LF pair" to "any pair whose estimators disagree".
+
+### Three corrections, all against the primary sources
+
+- **"MMM is not for the cabin"** forbids more than *any* of the three sources do, and would outlaw
+  the use we actually make of it. Narrowed to "not for timing/phase".
+- **"rooms of 30 m³ or more" is not Ohl's number.** It is a conclusion of Critchley & Dunbavin (IOA
+  Spring Conference, 2008) which he quotes. Attributed to them.
+- **"Q ≤ 6 (Wehmeyer)" is not in either Wehmeyer text we hold.** It reached the draft through a
+  paraphrase. The observation is his and stays under his name; the ceiling is ours; the number is
+  ours to set. The sources' disagreement on smoothing (his article says 1/12, the paraphrase says
+  1/6, Ohl recommends 1/6 for an unrelated reason) is recorded rather than averaged away.
+
+### Tooling: the installers stop being three unchecked copies, and the repo gets CI
+
+`scripts/installer-consistency.py` compares the five decisions `install.sh`, `install.ps1` and
+`install.cmd` must share — skill repo, TCC repo, tag glob, `install.cmd`'s hardcoded `PS1URL`, and
+the `tcc` default mode — and fails when they drift. In one evening the same class of drift was found
+three times by hand; each time by someone reading carefully, which is the mechanism that fails on
+the day nobody does.
+
+`scripts/run-selftests.sh` runs that check plus **every** `rew_tool` module's own selftest — 20 in
+all. `.github/workflows/checks.yml` runs that exact script on push and PR. The set is deliberately
+small and offline so that **red means broken**: no REW, no network beyond `pip`, no downloaded
+fixtures.
+
+### Upgrading
+
+**No code contracts changed in this release.** No function's return shape moved, nothing was renamed
+or removed; a consumer pinned to v3.0.12 can take this without reading further.
+
+Two things worth knowing anyway:
+
+- **`scripts/run-selftests.sh` is now the single entry point for the skill's own checks**, and it
+  runs all 19 `rew_tool` selftests, not a subset. A consumer wiring the skill's selftests into its
+  own gate can call this one script instead of maintaining its own list — and will pick up modules
+  that list did not have. It honours `PYTHON=…`, and it still needs `numpy` and `scipy` (unchanged
+  since v3.0.12).
+- **The Q ceiling and the phase tie-break are doctrine, not code.** They change what a session
+  *recommends*, not what any function returns. A consumer that renders advice may notice narrower
+  filters being declined and pairs accepted on phase agreement rather than on an arrival number.
+
 ## [v3.0.12] — 2026-08-22 · fractions of a dB were still allowed to choose a polarity
 
 `align_delay_polarity` carried its own rule and then broke it. Among near-ties it preferred the
