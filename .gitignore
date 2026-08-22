@@ -25,3 +25,6 @@
 # had both been committed; nothing reads a foreign build's cache.
 __pycache__/
 *.pyc
+
+# Working arrangements of the author's own sessions — internal process, not part of the method.
+CLAUDE.local.md
