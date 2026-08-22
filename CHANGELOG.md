@@ -40,6 +40,54 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [v3.0.16] — 2026-08-22 · a fresh install and the app's update button finally mean the same thing
+
+Two consumer requests, landed together because they change the same two files and the same install
+path.
+
+**SCR-054 — the app is installed BY TAG, the way the method already was.** `git+URL` with no ref
+means HEAD of the default branch, so a fresh install handed somebody whatever was on the app's
+`main` at that moment, including unfinished work — while the app's own update button, since its
+v0.1.12, pins the newest release tag. Two ways of getting the same app, disagreeing on one machine:
+the installed build could be *newer* than every release, and the button then had nothing to offer.
+Both installers now resolve the newest app tag and pin it, with `--tcc-ref` / `-TccRef` beside the
+existing `--skill-ref` for anyone who wants an older one. No tags or no network is not a failure —
+it installs from the default branch as before and says so.
+
+**SCR-056 — the app makes its own shortcuts.** Two guesses across a repository boundary, replaced by
+one call to `autosound-tcc --install-desktop`. The macOS bundle was built by a script in *this*
+repo, located by path (`$SKILL_SRC/scripts/…`, falling back to `dirname $0` — which under
+`curl … | bash` is whatever folder the person was standing in, and once failed to be found on a
+clean M1). The Windows icon was worse: `install.ps1` ran the app's own interpreter to read
+`autosound_tcc.app.APP_ICO` by name out of a private module, so a rename on their side would have
+removed the icon here with no error on either side. The half that owns the bundle layout and the
+icon now places them, and this script reads an exit code. `scripts/make-macos-app.sh` is kept and
+marked superseded.
+
+**The catalogue moved for the first time since 2.8.1** — to **v2.8.3**, which carries the crossover
+fix backported from v3.0.14. Its pin had been `ref: "main"` / `sha b8d6347`, a commit from when
+`main` *was* the 2.x line, and that commit carries the broken `xo_response`: every plugin install
+was handing out the defect while the fix shipped on lines the catalogue does not serve. It moved for
+a correctness fix, not a release — **3.x still becomes the catalogue's line at 3.1.0.**
+
+Also: the app's tag glob is a named constant in both installers (`TCC_TAG_GLOB` / `$TccTagGlob`)
+rather than a literal in a pipeline, and `installer-consistency.py` checks it — six shared decisions
+now. The two globs deliberately DIFFER (`v*` for the app, `v3.*` for the method, because the two
+version independently); the check compares the two files against each other, not the two globs.
+
+### Upgrading
+
+**The installer now requires the app at v0.1.13 or newer**, which is what its own tag resolution
+installs — so a normal run is unaffected. The exception is a deliberate `--tcc-ref` / `-TccRef`
+below v0.1.13: that build has no `--install-desktop`, so it installs and runs, but no shortcut or
+app bundle is created. There is no fallback path; the only machines running older builds are the
+author's own.
+
+⚠️ **The Windows half of both changes is UNVERIFIED.** `install.ps1` was written as the mirror of
+`install.sh` and has not been executed — there is no PowerShell on the machine that wrote it. The
+macOS and Linux halves were run (`bash -n`, `--help`, and a dry run resolving both tags live). Treat
+a Windows install from this version as the first test of it, and prefer `-DryRun` first.
+
 ## [v3.0.15] — 2026-08-22 · if you are on LR, v3.0.14 did not change your numbers
 
 A correction to the previous release's Upgrading note, and two holes it left.
