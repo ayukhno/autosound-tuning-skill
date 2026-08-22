@@ -889,6 +889,11 @@ if [ "$MODE" = "tcc" ]; then
         # A warning, not an aside in brackets. It used to be one, and it scrolled past unread on
         # the one install where it mattered: the person sees a blank white icon days later and has
         # no way back to the line that explained it (user, 2026-08-19).
+        # ⚠️ This matches TCC's OUTPUT by phrase, which is the same coupling SCR-056 removed at the
+        # module level, reduced to a string: reword it there and this warning silently stops
+        # appearing, with no error on either side. The two words "no icon" are load-bearing and
+        # they know it (a comment on their side says so). If it ever needs to be firmer, they have
+        # offered a machine-readable signal -- take it, and free the phrase on both sides.
         case "$_bout" in
           *"no icon"*)
             warn "the app has no icon — TCC's own was not found in the installed package."

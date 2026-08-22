@@ -613,13 +613,37 @@ def _selftest():
                         f"{ftype}{order} {kind} at {fc:g} Hz falls at {slope:.2f} dB/oct, "
                         f"expected {order} -- the order mapping drifted")
 
+    # ---- and the PHASE at the corner cannot depend on WHERE the corner is ------------------
+    # Both anchors above are magnitude-only, and magnitude was the smaller half of the damage: in
+    # the broken module the response's PHASE drifted by thousands of degrees in-band while the
+    # corner gain looked plausible. This one needs no per-family constant, which the obvious
+    # alternatives all do -- BW's corner phase is -45 deg x n, LR's is -90 deg x the HALVED order
+    # (its prototype is `max(6, order//2)`), and BE under norm="mag" has no closed form at all,
+    # only stored numbers. The property instead: a digital filter's response scales with
+    # frequency, so its phase AT its own corner is the same wherever that corner is put.
+    #
+    # Compared as a ratio, never as a difference of angles: at 24 dB/oct the corner phase is
+    # +-180 deg and two identical answers land on opposite sides of the wrap, which a naive
+    # max-min reads as 360 deg of drift in a module that is perfectly correct.
+    for ftype, orders in (("LR", (12, 24, 36)), ("BW", XO_BW_ORDERS), ("BE", XO_BW_ORDERS)):
+        for order in orders:
+            for kind in ("hp", "lp"):
+                units = [(lambda h: h / abs(h))(
+                    xo_response(np.array([fc]), fc, order, kind, ftype)[0])
+                    for fc in (40.0, 63.0, 125.0, 500.0, 2500.0)]
+                drift = max(abs(np.degrees(np.angle(u / units[0]))) for u in units)
+                assert drift < 0.5, (
+                    f"{ftype}{order} {kind}: phase at its own corner moves {drift:.2f} deg "
+                    f"across corner frequencies -- the response is not scaling with frequency")
+
     print("selftest[dsp_math] OK -- APF1 (-90 deg at f0, 0..-180, 1/(pi f0) delay far below f0), "
           "APF2 (-180 deg at f0, 0..-360, Q steepens), APF1^2 == APF2(Q=0.5), "
           "eq_complex renders APF/LSH/HSH as themselves and refuses an unknown kind, "
           "align_delay_polarity inverts at odd-order LR joints and breaks near-ties "
           "across both polarities by smallest |tau|, and every crossover sits at the corner it "
           "was asked for (LR -6.02 dB, BW/BE -3.01 dB, 54 combinations) and falls at the "
-          "order it was asked for (+-1.2 dB/oct over an octave of stopband).")
+          "order it was asked for (+-1.2 dB/oct over an octave of stopband), and its phase at its own "
+          "corner does not depend on where that corner is.")
 
 
 if __name__ == "__main__":

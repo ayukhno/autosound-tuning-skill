@@ -788,6 +788,8 @@ if ($Mode -eq "tcc" -and ($TccExe -or $DryRun)) {
         $out = (& $TccExe --install-desktop 2>&1 | Out-String).Trim()
         if ($LASTEXITCODE -eq 0) {
             Say "OK   `"Autosound TCC`" on your Desktop and in the Start Menu"
+            # See install.sh: this matches TCC's OUTPUT by phrase. The two words are load-bearing
+            # on both sides by agreement, not by anything enforcing it.
             if ($out -match "no icon") {
                 Say "     (with the generic icon -- TCC's own was not found in the installed package)"
             }
