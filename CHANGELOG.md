@@ -68,6 +68,15 @@ Two consequences worth stating, because both have already caused a question:
   a real export it was missing a trailing tab on shelf rows. The two formats also differ in
   precision (frequency 1 dp against 2, a PK's Q 2 dp against 3), which is exactly the class of
   thing that ruler could never have caught.
+- **Chebyshev on this DSP is enterable and NOT modellable, and that is a stronger fact than the
+  one recorded.** I had it as asked-and-declined ("no info, not important"). Wrong: an experiment
+  was run and could not identify the mathematics, so it was deferred permanently. The difference
+  matters to whoever meets the field next — "not important" invites a cheap retry, "somebody
+  measured and the maths did not fall out" says the opposite. The consequence is bigger than one
+  null: with the ripple unidentified the filter is not DETERMINED, so the hardware accepts one and
+  we cannot predict, model or check it. `dsp_math.XO_OPTIONS` already excluded the family from
+  every search; `resonalyze_vc` now reports such an edge as unverifiable instead of passing it,
+  because family and slope alone do not determine a filter whose own parameters are unstated.
 - **`in_scope: false` — a tier the DSP HAS and the method does not tune.** The Helix's input stage
   exists, but it is not a tuning tier: it forms the input signal from a factory head unit's
   speaker-level outputs, and on optical / Bluetooth / USB it is not in the path at all. Recovering

@@ -502,6 +502,21 @@ def _check_crossovers(leg, channel, group):
                 f"{edge['type']} is offered at {'/'.join(str(o) for o in orders)} dB/oct, "
                 f"not {edge['slope']}", [f"{edge['type']} is offered"]))
         else:
+            # A family whose own parameters are unstated is NOT determined by family and slope
+            # alone. Chebyshev is the live case: the hardware offers it, and `ripple_db` is null
+            # because an experiment was run and could not identify the maths (user, 2026-08-23) —
+            # so we cannot say what this filter DOES, only that it can be entered. Reporting that
+            # as `ok` would be the profile getting more agreeable where it is least understood.
+            missing = [k for k, v in (spec or {}).items() if v is None]
+            if missing:
+                out.append(_verdict(
+                    channel, field, wanted, UNKNOWN,
+                    f"{edge['type']}{edge['slope']} can be ENTERED, but this family's "
+                    f"{', '.join(missing)} is unstated, so what the filter does is not "
+                    f"determined — it cannot be modelled, predicted or checked against a target",
+                    [f"{edge['type']}{edge['slope']} is offered"],
+                    [f"crossover_filters.types.{edge['type']}.{k}" for k in missing]))
+                continue
             out.append(_check_corner(channel, field, wanted, edge, xo,
                                      [f"{edge['type']}{edge['slope']} is offered"]))
     return out
@@ -1280,6 +1295,28 @@ def _selftest():
         "right": {"hasSource": False}}]), profile=floored)
     hp_low = [c for c in live_10["legs"][0]["checks"] if c["field"] == "hp"][0]
     assert hp_low["verdict"] == UNSUPPORTED and "20-20480" in hp_low["reason"], hp_low
+
+    # A family the hardware offers but whose parameters are unstated is ENTERABLE and not
+    # MODELLABLE, and those are different answers. Chebyshev's ripple is null because an
+    # experiment could not identify the maths -- so the honest verdict is "cannot be checked",
+    # never a clean pass. Asked the other way: without this, a Chebyshev crossover would report
+    # exactly like a Butterworth one, in the one family we understand least.
+    cheby = json.loads(json.dumps(profile))
+    cheby["dsp_profile"]["groups"][0]["crossover_filters"]["types"]["CHEBYSHEV"] = {
+        "orders_db_per_oct": [6, 12, 18, 24, 30, 36, 42], "ripple_db": None}
+    cheb = convert(_session(pairs=[{"mono": True, "left": dict(
+        _session()["pairs"][1]["left"],
+        highPassEdge={"family": "Chebyshev", "frequencyHz": 65, "slopeDbPerOctave": 36,
+                      "rippleDb": 1}), "right": {"hasSource": False}}]), profile=cheby)
+    ch = [c for c in cheb["legs"][0]["checks"] if c["field"] == "hp"][0]
+    assert ch["verdict"] == UNKNOWN and ch["enterable"] is None, ch
+    assert "ripple_db" in ch["reason"] and "cannot be modelled" in ch["reason"], ch
+    assert ch["unverified"] == ["crossover_filters.types.CHEBYSHEV.ripple_db"], ch
+    # ...and the same edge in a family whose parameters ARE stated still passes, so this is about
+    # the missing parameter and not about refusing anything unfamiliar.
+    assert [c for c in convert(_session(pairs=[{"mono": True, "left": dict(
+        _session()["pairs"][1]["left"]), "right": {"hasSource": False}}]),
+        profile=cheby)["legs"][0]["checks"] if c["field"] == "hp"][0]["verdict"] != UNSUPPORTED
 
     # BW36 at 65 Hz is a filter this DSP has, at a corner on its 1 Hz grid.
     hp_36 = verdicts("w-L", "hp")[0]

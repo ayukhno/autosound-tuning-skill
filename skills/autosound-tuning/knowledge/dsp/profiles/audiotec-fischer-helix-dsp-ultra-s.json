@@ -116,7 +116,7 @@
                 42
               ],
               "ripple_db": null,
-              "ripple_db_note": "ASKED and declined, 2026-08-23: 'no info and not important'. Stays null because the value is genuinely unknown — but do not re-ask, and do not read the 6-42 dB/oct from the same conversation into this field. That answer was about the SLOPE ladder (which corroborates orders_db_per_oct above) and says nothing about passband ripple."
+              "ripple_db_note": "MEASURED AND NOT IDENTIFIED — deferred permanently, not merely unasked. An experiment was run and could not identify the mathematics (user, 2026-08-23), so this is a closed line of enquiry rather than a lookup nobody has done: do not re-ask, and do not expect a cheap retry. The consequence is bigger than one null: with the ripple unidentified the filter is not DETERMINED, so a Chebyshev crossover on this processor can be entered and cannot be modelled, predicted or checked against a target. `dsp_math.XO_OPTIONS` already excludes the family from any search for that reason; `resonalyze_vc` reports such an edge as unverifiable rather than passing it. Also do not read the 6-42 dB/oct beside it into this field — that answer was about the SLOPE ladder and shares only a conversation with this question."
             },
             "LR": {
               "orders_db_per_oct": [
