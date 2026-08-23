@@ -103,16 +103,28 @@ def _fmt(x, nd):
     return "" if x is None else f"{x:.{nd}f}"
 
 
-def format_atf_eq(bands) -> str:
-    """Render bands as the 30-row ATF block ready to paste into Helix PC-Tool.
+def bank_header(n_bands=N_BANDS):
+    """The bank's first line, which NAMES ITS OWN SIZE — `Audiotec_Fischer_Full_EQ_(30_bands)`.
 
-    Any band numbers you don't supply are emitted as empty (`None`) rows, so
-    the output is always exactly 30 bands. Precision matches what Helix needs,
-    not REW's byte-for-byte output (Helix parses by field, not by text).
+    Parametrised because the vendor is Audiotec-Fischer and the models are Helix, MATCH and BRAX:
+    the format is the vendor's, but the band count is the MODEL's, and it is written into the
+    header and into the row count. So a processor with a different bank size needs a different
+    first line, not the same file with fewer rows — which is why callers pass the count from the
+    DSP profile (`eq.bands_per_channel`) rather than inheriting this default.
+    """
+    return f"Audiotec_Fischer_Full_EQ_({n_bands}_bands)"
+
+
+def format_atf_eq(bands, n_bands=N_BANDS) -> str:
+    """Render bands as the ATF block ready to paste into the vendor's PC-Tool.
+
+    Any band numbers you don't supply are emitted as empty (`None`) rows, so the output is always
+    exactly `n_bands` rows — the bank is a fixed-size form, not a list. Precision matches what the
+    DSP needs, not REW's byte-for-byte output (it parses by field, not by text).
     """
     by_num = {b.number: b for b in bands}
-    out = [BANK_HEADER, COL_HEADER + "\t"]   # real export has a trailing tab here
-    for n in range(1, N_BANDS + 1):
+    out = [bank_header(n_bands), COL_HEADER + "\t"]   # real export has a trailing tab here
+    for n in range(1, n_bands + 1):
         b = by_num.get(n)
         if b is None or b.type == "None":
             out.append(f"{n}\tTrue\tAuto\tNone\t")
@@ -122,8 +134,15 @@ def format_atf_eq(bands) -> str:
             out.append(f"{n}\t{en}\t{b.control}\tPK\t{_fmt(b.freq,1)}\t"
                        f"{_fmt(b.gain,1)}\t{_fmt(b.q,2)}\t{_fmt(b.bandwidth,2)}\t")
         elif b.type in _SHELVES:
+            # Trailing tab, like every other row type. Two real REW exports disagree here: the
+            # bundled fixture has no trailing tab on shelf rows, the user's 2026-08-23 sample does
+            # — and his is the internally consistent one, since the header, the PK rows and the
+            # empty rows all end with a tab. Either parses (the trailing tab is an empty final
+            # field), so this is about matching what REW writes, not about correctness. Recorded
+            # rather than silently chosen; if a future export settles it the other way, that is
+            # one character here and a note.
             out.append(f"{n}\t{en}\t{b.control}\t{b.type}\t{_fmt(b.freq,1)}\t"
-                       f"{_fmt(b.gain,1)}\t{_fmt(b.q,1)}")
+                       f"{_fmt(b.gain,1)}\t{_fmt(b.q,1)}\t")
         elif b.type == "AP2":
             out.append(f"{n}\t{en}\t{b.control}\tAP2\t{_fmt(b.freq,1)}\t\t{_fmt(b.q,2)}")
         elif b.type == "AP1":
@@ -142,6 +161,33 @@ def _selftest():
     rt = active_bands(parse_atf_eq(format_atf_eq(bands)))
     key = lambda b: (b.number, b.type, b.enabled, b.control, b.freq, b.gain, b.q, b.bandwidth)
     assert [key(b) for b in act] == [key(b) for b in rt], "round-trip mismatch"
+
+    # BYTE-exact against a reference this module did not write. The semantic round-trip above
+    # cannot see a text difference — it parses our own output with our own parser, so any
+    # formatting drift round-trips perfectly and reports success. That is the implementation
+    # marking its own homework, and it hid a missing trailing tab on shelf rows until the user
+    # pasted a real REW export on 2026-08-23.
+    reference = (
+        "Audiotec_Fischer_Full_EQ_(30_bands)\n"
+        "Number\tEnabled\tControl\tType\tFrequency(Hz)\tGain(dB)\tQ\tBandwidth(Hz)"
+        "\tTargetT60(ms)\t\n"
+        "1\tTrue\tAuto\tPK\t20.0\t1.0\t2.50\t8.00\t\n"
+        "2\tTrue\tManual\tLS_Q\t25.0\t-3.3\t0.7\t\n"
+        "3\tTrue\tManual\tHS_Q\t31.5\t-12.0\t2.0\t\n"
+        + "".join(f"{n}\tTrue\tAuto\tNone\t\n" for n in range(4, 31))
+    )
+    emitted = format_atf_eq(parse_atf_eq(reference))
+    assert emitted == reference, (
+        "emitted text differs from a real REW export:\n"
+        + "\n".join(f"  line {i+1}\n    REW:  {a!r}\n    ours: {b!r}"
+                    for i, (a, b) in enumerate(zip(reference.split("\n"),
+                                                   emitted.split("\n"))) if a != b))
+
+    # A bank whose size is the MODEL's, not the format's — Audiotec-Fischer is the vendor behind
+    # Helix, MATCH and BRAX, and the count is written into the header as well as the row count.
+    small = format_atf_eq([Band(1, "PK", freq=100.0, gain=-3.0, q=2.0, bandwidth=50.0)], 10)
+    assert small.startswith("Audiotec_Fischer_Full_EQ_(10_bands)\n"), small.split("\n")[0]
+    assert len(small.rstrip("\n").split("\n")) == 12, "header + columns + 10 rows"
     print(f"selftest OK — parsed {len(bands)} rows, {len(act)} active, round-trip stable")
 
 

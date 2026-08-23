@@ -52,6 +52,22 @@ Two consequences worth stating, because both have already caused a question:
   Arbiter is deciding, and re-graded as the work changes: a missing gain STEP blocks nothing until
   somebody enters a half-decibel trim, and then it always was a stopper. `resonalyze_vc.py`'s gap
   roll-up carries the grade, the quantified cost and the ask.
+- **A channel's EQ to the clipboard, in the DSP's own format** — `eq_export.export_eq(profile,
+  eq_rows, crossovers=…)`, one call so a window never learns a format. Audiotec-Fischer (Helix /
+  MATCH / BRAX) writes the vendor's `Full EQ (N bands)` bank, with N from the profile rather than a
+  constant, because the size is in the header and a hardcoded 30 emits a header that lies. For
+  anything else, REW's own **Generic / Extended** block — a real pasteable format, not a table to
+  type from — and the flavour follows the content: Extended when there is a crossover to carry
+  inline, Generic when there is not. **Crossovers never go into an Audiotec-Fischer bank** (it is
+  EQ only; this vendor keeps them as separate device fields) and never go to a tier whose profile
+  says it has none, which is how a virtual channel is excluded without special-casing the word.
+  `format_name` comes back with the text, and nothing is dropped without a reason.
+- **`atf_eq` and `generic_eq` are now byte-checked against real REW exports.** The ATF selftest was
+  a semantic round-trip — parse, format, parse, compare values — which cannot see a formatting
+  difference, because it re-reads our own output with our own parser and passes either way. Against
+  a real export it was missing a trailing tab on shelf rows. The two formats also differ in
+  precision (frequency 1 dp against 2, a PK's Q 2 dp against 3), which is exactly the class of
+  thing that ruler could never have caught.
 - **The ask-rule applied beyond the converter.** `dsp_profile.gaps()` turns each unanswered fact
   into `{key, what, governs, ask}` — and deliberately does NOT grade, because this module cannot
   see the work: `channel_gain.step_db` is nothing while every trim is a whole number and a stopper
