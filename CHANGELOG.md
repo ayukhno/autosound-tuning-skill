@@ -40,6 +40,47 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [Unreleased]
+
+Written now rather than at tag time, which is this repo's own rule and the one it has broken
+before: a forgotten note ships as the next patch.
+
+- **The method ships a DSP profile library** — `knowledge/dsp/profiles/`, with
+  `dsp_profile.find_bundled(vendor, model)` defaulting to it. It took a directory argument since it
+  was written while the method shipped none, so every consumer built a private library and one
+  processor ended up described four times in three serialisations. First entry is the Helix DSP
+  Ultra S, contributed by `autosound-tcc` and diffed field by field before landing.
+- **`dsp_profile.py refresh <project> [--write]`** brings a project's `dsp_profile.json` back in
+  line with the library — a command that can be re-run, not a paste that fixes today and diverges
+  again next month. It refuses to approximate: no exact vendor+model match changes nothing.
+  `list-bundled` enumerates the library.
+- **`rew_api` no longer substitutes a different quantity for a missing IR time base.** It reads
+  `startTime` or raises. `delay` is the ARRIVAL, one second of sweep pre-roll away from the buffer
+  origin, and it is exactly `timeOfIRPeakSeconds` — so a reconstruction from it would inherit the
+  peak instability that the same measurements warn about. The dimensionally correct formula is
+  recorded in the docstring as deliberately unused, so nobody restores it as a helpful fix.
+- **`rew-api-quirks.md` gains what a live REW actually does with time** (measured, 19 captures
+  across two sessions): the timing offset is folded into `delay`; `timingReference` reads
+  `"Loopback"` whether the offset is 0 or 7.7 ms, so it is not the guard it looks like; the IR peak
+  is not a timing anchor (it moved 3.6 ns between two reads of one *stored* measurement); the text
+  export quantises `Start time` to the sample grid and carries no offset at all; and the pre-roll
+  is not a constant — 1.000000 s on twelve channels, 1.000003273 s on the sub.
+- **A repeatability floor for sequential per-driver measurement**, which is a method fact rather
+  than a code one: ~1 sample of drift across 6 captures over 18 minutes, per-capture rather than
+  per-clock, present with no offset applied. Over eight channels that is 1–2 samples — below what
+  matters for a woofer, not obviously below what matters for a tweeter. Hence the new rule:
+  re-measure channel 1 at the end whenever inter-channel timing is load-bearing.
+
+### Upgrading
+
+**`rew_api.get_impulse_response` can now raise `KeyError`** where it previously returned a
+plausible-looking time base. That is the point — the old fallbacks placed sample 0 a second away
+from the truth in one direction or the other — but a caller that never handled an exception there
+should look. In practice REW supplies `startTime` on that endpoint, so the raise is a guard rather
+than a behaviour change on any working rig.
+
+Nothing else removed or renamed; two new modules and one new command, all additive.
+
 ## [v3.0.18] — 2026-08-23 · somebody else's tune, read back as ours — and refused where the hardware cannot follow
 
 ### A Virtual DSP session becomes ledger rows
