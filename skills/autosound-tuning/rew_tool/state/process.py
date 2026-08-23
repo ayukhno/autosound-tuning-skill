@@ -82,6 +82,11 @@ EV_CONFIG_CHANGE = "config_change"
 # A capture round: what was asked for, what came back, what was deliberately not taken (SCR-034).
 EV_CAPTURE_ISSUED = "capture_task_issued"
 EV_CAPTURE_TAKEN = "capture_taken"
+#: A capture round was declared RAW -- swept with protective filters that are not part of the tune
+#: (`rew_tool/protective.py`). Journalled rather than only stored, because it changes how every
+#: phase decision made from those measurements is read, and a round whose classification changed
+#: silently is a round nobody can re-litigate.
+EV_CAPTURE_PROTECTIVE = "capture_protective"
 EV_CAPTURE_SKIPPED = "capture_skipped"
 EV_CAPTURE_CLOSED = "capture_round_closed"
 # What the arithmetic said about the curves themselves (SCR-040). A separate event from
@@ -798,6 +803,62 @@ class Process:
         )
         return round_
 
+    def set_protective(self, channel, legs):
+        """Declare what was in the chain for one channel of the OPEN round, and that it was RAW.
+
+        Working-by-default is the rule (`protective.py`): a round nobody marks measured the system
+        as configured, and nothing is de-embedded. This is how a round says otherwise.
+
+        It lives on the ROUND rather than on a measurement because that is the granularity it
+        actually has -- one protective set covers the sweeps of one pass, and it differs by channel
+        within that pass (100 Hz on a mid, 1 kHz on a tweeter, nothing on a woofer). And it lives
+        here rather than in a file of its own because the round already carries `phase` and
+        `version`, which is exactly what a reader needs to know whether de-embedding is even
+        appropriate: a phase-0 read wants it, a verification against a banked version does not.
+
+        `legs` is `{"hp": ..., "lp": ...}` in the ledger's crossover vocabulary, or `"OFF"` to say
+        plainly that this channel was swept with nothing in the chain. `"OFF"` is an ANSWER and is
+        stored; leaving a channel out is a different thing and stays unanswered.
+        """
+        state, round_ = self._require_capture()
+        channel = str(channel).strip()
+        if not channel:
+            raise ProcessError("a protective record needs the channel it applies to")
+        if legs != "OFF":
+            if not isinstance(legs, dict) or not any(k in legs for k in ("hp", "lp")):
+                raise ProcessError(
+                    f"{channel}: protective legs must be \"OFF\" or {{hp, lp}} in the ledger's "
+                    f"crossover vocabulary ({{f, type, slope}} per leg), got {legs!r}. \"OFF\" "
+                    f"means it was swept with nothing in the chain, which is an answer; omitting "
+                    f"the channel means nobody said, which is not")
+            for kind in ("hp", "lp"):
+                leg = legs.get(kind)
+                if leg in (None, "OFF"):
+                    continue
+                missing = [k for k in ("f", "type", "slope") if k not in leg]
+                if missing:
+                    raise ProcessError(f"{channel}.{kind}: a protective leg needs {missing} — "
+                                       f"without them the filter cannot be taken back out")
+        round_.setdefault("protective", {})[channel] = legs
+        self._write(state)
+        self._append(EV_CAPTURE_PROTECTIVE, capture=round_["id"], channel=channel, legs=legs,
+                     phase=round_["phase"], version=round_["version"])
+        return round_
+
+    def protective_record(self, state=None):
+        """The open round's protective record, in the shape `protective.legs_of` reads.
+
+        `{"series": <round id>, "phase": ..., "channels": {...}}`. `None` when no round is open --
+        which a caller must not read as "there was no protection", only as "there is no round to
+        ask about".
+        """
+        round_ = (state or self.load()).get("capture")
+        if not round_:
+            return None
+        return {"series": round_["id"], "phase": round_.get("phase"),
+                "version": round_.get("version"),
+                "channels": dict(round_.get("protective") or {})}
+
     def skip_capture(self, title, reason):
         """A capture deliberately NOT taken, and why.
 
@@ -1198,6 +1259,40 @@ def _selftest():
     # declares no `eq` field, so there is nothing for it to owe.
     proc.enter_phase("2")
     assert proc.load()["active_phase"] == "2"
+
+    # -- protective filters on a capture round (2026-08-23) --------------------
+    # It lives on the ROUND because that is the granularity it has: one protective set per pass,
+    # differing by channel inside it. And the round already carries `phase` and `version`, which
+    # is what a reader needs to know whether de-embedding is appropriate at all.
+    pr = proc                       # the fixture that already passed the phase -1 intake gate
+    pr.start_capture("0", expected=["m-L_0 (sw)"], phase="0")
+    pr.set_protective("m-L", {"hp": {"f": 100, "type": "LR", "slope": 24}})
+    pr.set_protective("w-L", "OFF")
+    rec = pr.protective_record()
+    assert rec["channels"]["m-L"]["hp"]["f"] == 100, rec
+    # "OFF" is an ANSWER and is stored; a channel nobody spoke for stays absent, and the two must
+    # not collapse -- the whole de-embed decision turns on telling them apart.
+    assert rec["channels"]["w-L"] == "OFF", rec
+    assert "tw-L" not in rec["channels"], "an unanswered channel must not be invented as OFF"
+    # The round carries what a reader needs to decide whether de-embedding applies at all.
+    assert rec["phase"] == "0" and rec["version"] == "0", rec
+
+    # A leg that cannot be reconstructed is refused at write time, not discovered at read time.
+    for bad in ({"hp": {"f": 100, "type": "LR"}}, {"hp": {"type": "LR", "slope": 24}}, "maybe", 5):
+        try:
+            pr.set_protective("m-R", bad)
+        except ProcessError:
+            pass
+        else:
+            raise AssertionError(f"protective legs {bad!r} must be refused")
+    assert "m-R" not in pr.protective_record()["channels"], "a refused write leaves no trace"
+
+    # It is journalled, because it changes how every phase decision from those sweeps is read.
+    kinds = [e.get("type") or e.get("event") or e.get("kind") for e in pr.events()]
+    assert EV_CAPTURE_PROTECTIVE in kinds, kinds
+    # No open round is "no round to ask about", never "there was no protection".
+    pr.close_capture(reason="done")
+    assert pr.protective_record()["channels"]["m-L"]["hp"]["f"] == 100, "a closed round still says"
 
     print(
         "selftest OK — evidence refused when empty and when it resolves to nothing (SCR-035), "
