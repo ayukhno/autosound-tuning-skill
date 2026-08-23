@@ -101,9 +101,11 @@ inferred. Four facts, each of which changes what a caller should read.
   the same conclusion independently — DIMOSUS's #107.)
 - **The offset is stated three times and one of them can lie.** `timingOffset`, `timingRefTime`
   (exactly its negative, verified to 2.2e-16 over six captures), and in prose inside `notes`.
-  `notes` is **user-editable free text**: a hand-edited measurement read 5.0000 ms to a naive
-  `with ([\d.]+) ms` while the truth was 4.0, because editing the note does not touch the numeric
-  field. Cross-check the number against `timingOffset`; a structure check alone misses a
+  `notes` is **user-editable free text**: with a note deliberately edited to say 5.0000 ms, a naive
+  `with ([\d.]+) ms` read 5.0000 while the truth was 4.0, because editing the note does not touch
+  the numeric field. ⚠️ That was a TEST — the user edited a test measurement to see what an export
+  carries, and reverted it afterwards, so do not go looking for it on the rig. It establishes that
+  the two CAN diverge, which is all a cross-check needs; it says nothing about how often they do. Cross-check the number against `timingOffset`; a structure check alone misses a
   number-only edit. RTA measurements return `null` for every timing field — they have no IR.
 - **The text export is strictly worse for timing.** It carries no timing offset at all, and its
   `Start time` is rounded to the integer sample grid — −96124.000000 samples against

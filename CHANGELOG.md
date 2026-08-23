@@ -60,7 +60,9 @@ before: a forgotten note ships as the next patch.
   that moved. Compares timing reference AND offset as a pair, sample rate and sweep range.
   **`timingReference` is not evidence of a shared time base** — it says `"Loopback"` whether the
   offset is 0 or 7.7 ms. Verified against a live REW: three offset groups in one set, all claiming
-  `Loopback`, plus a real hand-edited measurement whose notes said 5 ms while the field said 4.
+  `Loopback`, plus a note deliberately edited to say 5 ms beside a field saying 4 — a test of what
+  an export carries, since reverted, which establishes that the two CAN diverge and nothing about
+  how often.
   It separates *comparable* from *agree* — a batch can be internally consistent and still have
   nothing stating what it agrees on, which is safe to compare within and not across days.
 - **A DSP profile group's `fields` is null-until-confirmed.** It had to be a non-empty list, so

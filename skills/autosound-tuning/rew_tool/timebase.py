@@ -23,11 +23,14 @@ What "the same way" means here, and each one is a real way to be wrong:
 Three more facts this module encodes, all measured rather than reasoned (fork session, 19 captures
 across two sessions, 2026-08-23; see `references/tooling/rew-api-quirks.md`):
 
-  * **`notes` is user-editable free text and it can lie.** REW writes the offset into the prose,
-    and editing that prose does NOT change `timingOffset`. Live example, again #78: the notes read
-    `with 5.0000 ms … timing offset` while the numeric field said `0.004`. So the prose is read
-    here only to CROSS-CHECK the number, and a disagreement is reported as a fact about the file
-    rather than resolved — the numeric field wins, always.
+  * **`notes` is user-editable free text and it can diverge from the field.** REW writes the
+    offset into the prose, and editing that prose does NOT change `timingOffset`. Demonstrated
+    deliberately rather than met in the wild: the user hand-edited a TEST measurement's notes to
+    read `with 5.0000 ms … timing offset` beside a `timingOffset` of `0.004`, to check what an
+    export carries — and has since reverted it, so the example no longer reproduces on that rig.
+    What is established is the CAPABILITY, not a frequency: REW does not keep the two in step, so
+    the prose is read here only to CROSS-CHECK the number, and a disagreement is reported as a
+    fact about the file rather than resolved. The numeric field wins, always.
   * **`delay` is the arrival, not the buffer origin**, and it is exactly `timeOfIRPeakSeconds`.
     Anchor on `timeOfIRStartSeconds`, which sits on the integer sample grid and is bit-stable.
   * **RTA measurements have no impulse response**, so every timing field is `null`. That is not a
@@ -255,10 +258,9 @@ def read_batch(ids=None, title_contains=None):
         listing = rew_api.get_measurements()
         wanted = [(mid, rec.get("title")) for mid, rec in listing.items()
                   if not title_contains or title_contains in (rec.get("title") or "")]
-    out = []
-    for mid, _title in wanted:
-        out.append(timing_of(rew_api._get(f"/measurements/{mid}"), mid=mid))
-    return out
+    # Through the exported reader, not `_get` directly: the batch path and a consumer asking about
+    # one measurement must not become two readings of the same fields.
+    return [rew_api.get_timing(mid) for mid, _title in wanted]
 
 
 # ── report ─────────────────────────────────────────────────────────────────────
@@ -377,8 +379,10 @@ def _selftest():
     # ...and the reference really is identical, so a checker comparing only it would pass this.
     assert len({t["reference"] for t in split["measurements"]}) == 1, "the trap must be intact"
 
-    # The notes can lie, and the NUMBER wins. Taken from a real hand-edited measurement (#78):
-    # the prose said 5.0000 ms while timingOffset said 0.004.
+    # The notes can diverge from the field, and the NUMBER wins. Modelled on the user's own
+    # deliberate test edit (a test measurement, since reverted): prose 5.0000 ms, field 0.004.
+    # Synthetic here on purpose — a selftest must not depend on a live rig holding a given state,
+    # least of all one somebody is going to undo.
     lying = timing_of(_rec(timingOffset=0.004, notes=(
         "DELAY -1.2934 ms\\nrelative to Loopback from X to Y\\n"
         "with 5.0000 ms TESTMARKER1 (1.372 m, 4 ft 6 in) timing offset")), mid=78)

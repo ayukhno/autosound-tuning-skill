@@ -201,6 +201,36 @@ def get_measurement_by_name(name, exact=True):
     return mid, ms[mid]
 
 
+def get_timing(mid):
+    """One measurement's TIME BASE, as the authoritative fields say it — the shared entry point.
+
+    Exported deliberately, rather than left as something each consumer digs out of a raw record:
+    the skill's own `timebase.py` and `autosound-tcc` both need this, and two readings of REW's
+    timing fields is exactly how the two halves of a project come to disagree about when a sweep
+    happened. One function, one set of rules, both callers.
+
+    The rules, each measured on a live REW rather than reasoned (2026-08-23, 19 captures):
+
+      * **`offset_s` is authoritative.** REW also writes the offset into `notes` as prose, and
+        editing that prose does not change the field — so the number here is what was applied.
+        `notes_offset_s` is returned beside it purely so a caller can CROSS-CHECK and notice that
+        somebody edited one; it is never the answer.
+      * **`reference` is not evidence of a shared time base.** It reads `"Loopback"` whether the
+        offset is 0 or 7.7 ms. Comparing two measurements means comparing the PAIR.
+      * **`ir_start_s` is the anchor, not `ir_peak_s`.** The start sits on the integer sample grid
+        and is bit-stable; the peak wanders ~2.6 microseconds per capture and moved 3.6 ns between
+        two reads of one STORED measurement. `delay` is the arrival and equals the peak, a whole
+        second of sweep pre-roll away from the buffer origin — never a substitute for a start time.
+      * **An RTA has no impulse response**, so every timing field is null and `has_ir` is False.
+        That is a measurement which cannot take part in a timing comparison, which is a different
+        statement from one that disagrees.
+
+    Returns the dict `timebase.timing_of` produces. Read-only: REW may be mid-session.
+    """
+    import timebase
+    return timebase.timing_of(_get(f"/measurements/{mid}"), mid=mid)
+
+
 def get_fr(mid):
     data = _get(f"/measurements/{mid}/frequency-response")
     mag = decode_floats(data["magnitude"])
@@ -472,6 +502,34 @@ def _selftest():
         else:
             raise AssertionError(
                 f"no startTime must raise, not substitute a different quantity: {missing}")
+
+    # ── get_timing: the entry point both the skill and autosound-tcc read timing through ─────
+    # Pinned here because it is a CONTRACT with another repo, not an internal helper: the whole
+    # point of exporting it is that there is one reading of REW's timing fields rather than two.
+    _orig_get = _get
+    try:
+        _get = lambda path: {                     # a sweep, shaped as a live REW serves one
+            "title": "m-L (sw)", "timingReference": "Loopback", "timingOffset": 0.004,
+            "timeOfIRStartSeconds": -0.0013541666666666667,
+            "timeOfIRPeakSeconds": -0.0012934015520478237,
+            "delay": -0.001293405194978555, "sampleRate": 96000,
+            "notes": "DELAY -1.2934 ms\nrelative to Loopback from X to Y\n"
+                     "with 4.0000 ms (1.372 m, 4 ft 6 in) timing offset",
+        }
+        t = get_timing(78)
+        assert t["id"] == 78 and t["offset_s"] == 0.004, t
+        assert t["reference"] == "Loopback" and t["has_ir"] is True, t
+        # The prose is a cross-check, never the answer -- and here it agrees.
+        assert t["notes_offset_s"] == 0.004 and t["notes_agrees"] is True, t
+        # The anchor is the START. `delay` equals the PEAK, which is a different quantity.
+        assert t["ir_start_s"] != t["ir_peak_s"], t
+        assert abs(t["ir_peak_s"] - (-0.001293405194978555)) < 1e-8, "delay IS the peak"
+
+        _get = lambda path: {"title": "ALL (rta)", "sampleRate": 96000}
+        rta = get_timing(9)
+        assert rta["has_ir"] is False and rta["offset_s"] is None, rta
+    finally:
+        _get = _orig_get
 
     # command wrappers post the right path/body (mock _post — no live REW)
     global _post
