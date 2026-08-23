@@ -422,6 +422,49 @@ def run_doctor():
     print(f"================== {'УСПІШНО ✓' if ok else 'ПОТРЕБУЄ ВИПРАВЛЕННЯ ✗'} ==================")
     return ok
 
+#: This script's own repository. A review is a PROJECT's record and must never land here, however
+#: the script was launched — and the skill folder is the likeliest place to launch it from by hand,
+#: because that is where the script lives.
+_OWN_REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def _review_target():
+    """Where a review belongs, or None — resolved from what it is ABOUT, not from where we stand.
+
+    The old rule was `AUTOSOUND_PROJECT_DIR or CWD`, and the fallback is what broke: run the
+    advisor by hand from the skill folder and a project's review lands in the METHOD's git
+    repository (observed 2026-08-23, found by `autosound-tcc` while cleaning its tree). Next time
+    it would be whatever repository the shell happened to be in — on a bad day the Resonalyze fork,
+    where an untracked file sits in a tree shared with its author.
+
+    It is the same shape as the context lookup that started that investigation: a path derived from
+    where the PROCESS is standing rather than from what it is ABOUT. So `CWD` is accepted only when
+    it actually looks like a project, and never when it is this repository.
+
+    Refusing is safe here in a way it usually is not: in every mode the review text has already
+    reached the terminal or the clipboard, so nothing is lost by declining to file it — while
+    filing it in the wrong git tree is silent and somebody else finds it days later.
+    """
+    stated = os.environ.get("AUTOSOUND_PROJECT_DIR")
+    if stated:
+        return stated
+    here = os.path.abspath(CWD)
+    if here == _OWN_REPO or here.startswith(_OWN_REPO + os.sep):
+        print(">> Рецензію НЕ збережено: скрипт запущено всередині репозиторію методу, а рецензія "
+              "належить ПРОЕКТУ. Задайте AUTOSOUND_PROJECT_DIR=<тека проекту> і повторіть — "
+              "текст вище не втрачено.", file=sys.stderr)
+        return None
+    looks_like_project = any(os.path.exists(os.path.join(here, name))
+                             for name in ("project.json", "rew_analitic", "process", ".tcc"))
+    if not looks_like_project:
+        print(f">> Рецензію НЕ збережено: {here} не схожа на теку проекту (нема project.json, "
+              f"rew_analitic/, process/ чи .tcc/), а писати запис проекту в довільну теку — це те, "
+              f"як він потім знаходиться в чужому git. Задайте AUTOSOUND_PROJECT_DIR.",
+              file=sys.stderr)
+        return None
+    return here
+
+
 def _persist_review(role, text, model, mode):
     """Write the critique to `<project>/process/reviews/<ts>-<role>.md` and return its path (SCR-027).
 
@@ -433,7 +476,9 @@ def _persist_review(role, text, model, mode):
     Returns a PROJECT-RELATIVE path: it goes into the journal, and an absolute path from one
     machine is noise on another.
     """
-    project = os.environ.get("AUTOSOUND_PROJECT_DIR") or CWD
+    project = _review_target()
+    if project is None:
+        return None
     stamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
     rel = os.path.join("process", "reviews", f"{stamp}-{role}.md")
     path = os.path.join(project, rel)
