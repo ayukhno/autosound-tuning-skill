@@ -219,14 +219,43 @@ def get_group_delay(mid):
     return freqs, gd
 
 
+def _ir_start_time(data):
+    """The time of sample 0, from REW's own fields — never reconstructed from the array.
+
+    `startTime` is the answer whenever REW gives it. The interesting part is what happens when it
+    does not, because the old fallback chain (`startTime` -> `delay` -> `0.0`) substituted two
+    quantities that are NOT the same thing and said nothing:
+
+    * **`delay` has the timing offset folded in.** Measured against a live REW on six captures
+      (2026-08-23): `physical arrival = delay + timingOffset`, exact to the last digit on
+      integer-sample offsets — 4 ms = 384.0 samples at 96 kHz. So `delay` alone is displaced by
+      whatever offset the rig carries, and the displacement looks like a plausible delay rather
+      than like an error. Worse, `timingReference` reads `"Loopback"` whether the offset is 0 or
+      7.7 ms, so the field that looks like the guard is not one.
+    * **`0.0` claims the IR starts at t = 0**, which for a REW sweep is about a second wrong — it
+      carries ~1 s of pre-roll holding the Farina harmonic images.
+
+    A check whose input is missing must FAIL rather than report no objection
+    (`references/core/estimator-scope.md`), and that applies to a time base most of all: every
+    arrival, every alignment and every crossover decision downstream inherits this number. So the
+    offset is ADDED when the fallback is used, and a document carrying neither field raises
+    instead of quietly starting the clock at zero.
+    """
+    if "startTime" in data:
+        return float(data["startTime"])
+    if "delay" in data:
+        return float(data["delay"]) + float(data.get("timingOffset") or 0.0)
+    raise KeyError(
+        "impulse response carries neither 'startTime' nor 'delay': there is no time base to read, "
+        "and assuming 0.0 would place sample 0 about a second early on a REW sweep")
+
+
 def get_impulse_response(mid):
     data = _get(f"/measurements/{mid}/impulse-response")
     # REW returns the samples under "data" (not "impulseResponse" — that key
     # doesn't exist on this endpoint; the old code KeyError'd here).
     ir = decode_floats(data.get("data") or data["impulseResponse"])
-    # Timing comes straight from REW ("startTime"/"delay") — don't reconstruct
-    # it from the array; that gave junk timing (see rew-api-quirks.md).
-    start_time = data.get("startTime", data.get("delay", 0.0))
+    start_time = _ir_start_time(data)
     sample_rate = data.get("sampleRate", 48000)
     dt = 1.0 / sample_rate
     times = [start_time + i * dt for i in range(len(ir))]
@@ -417,6 +446,24 @@ def _selftest():
         assert len(m) == 3 and len(f) == 3, "RTA: magnitude/freqs still returned"
     finally:
         _get = _orig
+
+    # ── the IR time base (2026-08-23) ─────────────────────────────────────────
+    # Measured on a live REW: `physical arrival = delay + timingOffset`, and `timingReference`
+    # says "Loopback" whether the offset is 0 or 7.7 ms — so the field that looks like the guard
+    # is not one. The old chain startTime -> delay -> 0.0 silently swapped in two different
+    # quantities, and every arrival downstream inherits whichever it got.
+    assert _ir_start_time({"startTime": -1.0021, "delay": 0.5}) == -1.0021, "startTime wins"
+    # 4 ms at 96 kHz: delay alone would be displaced by exactly the offset.
+    got = _ir_start_time({"delay": -1.0, "timingOffset": 0.004})
+    assert abs(got - (-0.996)) < 1e-12, got
+    assert _ir_start_time({"delay": -1.0}) == -1.0, "no offset stated is offset zero"
+    assert _ir_start_time({"delay": -1.0, "timingOffset": None}) == -1.0, "null offset is zero"
+    try:
+        _ir_start_time({"sampleRate": 96000})
+    except KeyError:
+        pass
+    else:
+        raise AssertionError("a document with no time base must raise, not start the clock at 0")
 
     # command wrappers post the right path/body (mock _post — no live REW)
     global _post

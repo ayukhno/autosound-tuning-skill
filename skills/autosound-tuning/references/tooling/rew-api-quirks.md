@@ -59,3 +59,53 @@ The two failure modes (and their fixes):
 
 ## Notes / annotations
 - **`PUT /measurements/{id}` REPLACES the notes field.** The measurement software writes its own capture information there (averaging count, input RMS, weighted levels, sweep timing reference). A bare PUT with `{"notes": "..."}` destroys it, irreversibly for that measurement — confirmed by destroying it on a real capture. **Read → filter → append → write back.** A helper that stamps system state into notes must round-trip, and should offer a `--show` audit and a `--clear` that removes only its own line.
+
+## Timing: read the START, add the OFFSET (measured on a live REW, 2026-08-23)
+
+Six captures in the reference car (REW #77–82, 96 kHz, loopback reference), measured rather than
+inferred. Four facts, each of which changes what a caller should read.
+
+- **`timingOffset` is folded into `delay` already.** `physical arrival = delay + timingOffset`,
+  exact to the last digit on integer-sample offsets (4 ms = 384.0 samples at 96 kHz; four captures
+  all gave `IRstart + offset = 254.0000000000` samples). The only residual seen was on
+  7.7003 ms = 739.2288 samples, and it was precisely the fractional part — REW stores the start on
+  the sample grid. **The trap: `timingReference` reads `"Loopback"` whether the offset is 0 or
+  7.7 ms**, so the field that looks like the guard is not one. An offset set once and forgotten
+  shifts every channel imported afterwards, and it looks like a plausible delay, not an error.
+  `rew_api._ir_start_time` prefers `startTime`, adds the offset when it must fall back to `delay`,
+  and raises rather than assuming `0.0` — which for a sweep would be about a second wrong.
+- **Anchor on the IR START, never the peak.** `timeOfIRStartSeconds` is on the integer sample grid
+  and bit-stable; `timeOfIRPeakSeconds` is not a timing anchor and failed three independent ways:
+  it wandered ~2.6 µs per capture, left 3.3–6.7 µs of residue after undoing a known offset, and
+  **moved 3.6 ns between two reads of the SAME stored measurement** while the start stayed
+  bit-identical. Three zero-offset captures of one speaker: start 254.0000 / 254.0000 / 253.0000
+  samples, peak 260.1532 / 259.5590 / 258.9090. (Ours already comply: `analysis.first_arrival`
+  walks the leading edge and its selftest pins that it ignores a louder later reflection;
+  `resonalyze_ir` rotates on `startTime` and records the peak only as metadata. Upstream reached
+  the same conclusion independently — DIMOSUS's #107.)
+- **The offset is stated three times and one of them can lie.** `timingOffset`, `timingRefTime`
+  (exactly its negative, verified to 2.2e-16 over six captures), and in prose inside `notes`.
+  `notes` is **user-editable free text**: a hand-edited measurement read 5.0000 ms to a naive
+  `with ([\d.]+) ms` while the truth was 4.0, because editing the note does not touch the numeric
+  field. Cross-check the number against `timingOffset`; a structure check alone misses a
+  number-only edit. RTA measurements return `null` for every timing field — they have no IR.
+- **The text export is strictly worse for timing.** It carries no timing offset at all, and its
+  `Start time` is rounded to the integer sample grid — −96124.000000 samples against
+  −96124.166686 from the API for the same measurement, 0.167 sample (1.736 µs) of quantisation.
+  Every other field matches exactly, so it is rounding, not a different definition. The notes never
+  reach it: three exports taken while the notes were being heavily edited came out byte-identical.
+
+### The repeatability floor for SEQUENTIAL per-driver measurement
+
+Measuring one speaker repeatedly, the IR start moved **1 sample across 6 captures over 18 minutes**
+— 10.4 µs, ≈3.6 mm of apparent path — and that is an upper bound, since the start is
+sample-quantised. Two properties make it a method problem rather than a curiosity: the drift is
+**per-capture, not per-clock** (17 idle minutes moved the arrival 0.5 µs, while consecutive
+captures moved it ~2.6 µs each), and it is present with **no timing offset applied at all**, proved
+with a deliberate zero-offset control block.
+
+So when drivers are measured one after another, later channels carry accumulated drift against
+earlier ones: over eight channels, order 1–2 samples. Below what matters for a woofer; **not
+obviously below what matters for tweeter alignment.** State it as the floor rather than claiming
+better, and **re-measure channel 1 at the end** whenever a session's inter-channel timing is
+load-bearing — that control capture is what turns the floor from an assumption into a number.
