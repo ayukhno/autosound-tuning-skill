@@ -1220,6 +1220,25 @@ def _selftest():
     assert [c for leg in green["legs"] for c in leg["checks"]
             if c["channel"] == "w-R" and c["field"] == "lp"][0]["verdict"] == OK
 
+    # A DORMANT edge is never validated, and the pair of assertions matters more than either.
+    # The sub's dormant `highPassEdge` is 10 Hz, BELOW the Helix's 20 Hz corner floor. Checking it
+    # would refuse a tune over a filter that is not applied — the mirror of silently rounding an
+    # impossible value, and just as wrong. But if that same edge were LIVE, 10 Hz must be caught:
+    # a converter that ignores dormant edges by never checking 10 Hz at all would pass both halves
+    # of this test while being broken. Only the two together say "dormant, therefore unchecked"
+    # rather than "unchecked, therefore fine".
+    floored = json.loads(json.dumps(profile))
+    floored["dsp_profile"]["groups"][0]["crossover_filters"]["corner_freq_range_hz"] = [20, 20480]
+    quiet = convert(doc, profile=floored, proj=_Proj())
+    assert quiet["legs"][0]["dormant"]["hp"]["f"] == 10.0, quiet["legs"][0]["dormant"]
+    assert not [c for c in quiet["legs"][0]["checks"] if c["field"] == "hp"], \
+        "a dormant edge must not be validated at all"
+    live_10 = convert(_session(pairs=[{"mono": True, "left": dict(
+        _session()["pairs"][0]["left"], crossoverKind="BandPass"),
+        "right": {"hasSource": False}}]), profile=floored)
+    hp_low = [c for c in live_10["legs"][0]["checks"] if c["field"] == "hp"][0]
+    assert hp_low["verdict"] == UNSUPPORTED and "20-20480" in hp_low["reason"], hp_low
+
     # BW36 at 65 Hz is a filter this DSP has, at a corner on its 1 Hz grid.
     hp_36 = verdicts("w-L", "hp")[0]
     assert hp_36["enterable"] is not False, hp_36
