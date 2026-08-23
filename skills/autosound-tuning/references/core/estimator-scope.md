@@ -34,6 +34,51 @@ as permission a month later, and on the source build 145 Hz is a cabin null the 
 never to boost. An abstention must also never act as a veto: a tool with no vote does not get
 to block, either (`as_boost_gate` deliberately treats `OUT_OF_SCOPE` as no objection).
 
+## 1a. An abstention is half an answer — ASK, and say what it costs
+
+Abstaining stops a tool being believed where it has no vote. It does not get the tuner any closer
+to an answer, and on its own it quietly moves the work onto whoever reads the output: they now
+have to work out **what** is missing, **who** can supply it, and **whether it matters**. Left
+there long enough, "unknown" becomes wallpaper — a column of question marks nobody acts on,
+which is the same fate as a warning nobody reads.
+
+So a tool that abstains for want of an INPUT must, in the same breath:
+
+1. **Name the missing fact precisely** — the profile key, the field, the measurement. Not "the
+   profile is incomplete": `channel_gain.step_db`. A gap that cannot be named cannot be filled,
+   and it is indistinguishable from a shrug.
+2. **Say what it costs** — what is blocked outright, what is merely unverified, and what is
+   unaffected. This is the part that decides whether the Arbiter interrupts the session or writes
+   it on a list, and it is the part most often left out.
+3. **Address it to the Arbiter, when only they can supply it.** A fact that lives on a PC-Tool
+   screen, in the car, or in the tuner's own decision is not going to be derived. Asking is the
+   only path, and asking late is what makes it expensive.
+4. **Roll repeats up.** Thirty-six identical "not stated" lines are one missing fact, and printed
+   per item they bury the one finding that actually blocks.
+
+**Grade the ask by what it stops, because that is what the Arbiter is deciding:**
+
+| grade | when | what it looks like |
+|---|---|---|
+| **STOPPER** | the work cannot proceed, or would proceed on a guess | ask immediately, name what halts, and wait |
+| **DEGRADED** | it proceeds, but a specific check cannot run | ask now, state what is going unchecked meanwhile |
+| **SLOW** | nothing is blocked; the answer makes a derived thing observed | put it in the queue, do not interrupt |
+
+⚠️ **The grade is about the WORK, not about how interesting the fact is.** A missing crossover
+range blocks nothing when every corner is far inside any plausible range — that is SLOW, however
+much it looks like a hole. A missing channel-gain step blocks nothing either, until somebody
+enters a half-decibel trim, and then it was always a STOPPER. **Re-grade when the work changes;
+a gap does not keep the grade it was born with.**
+
+⚠️ **And never let an ask become a guess with a question mark after it.** "Presumably 0.1 dB —
+confirm?" is how a plausible number enters the record: the next reader keeps the number and drops
+the query. State the gap, state the cost, propose nothing.
+
+Worked example — `resonalyze_vc.py` reading a tune against an incomplete DSP profile. It reports
+`enterable: null` per field, each verdict naming the profile key that would settle it, and rolls
+them up: *"`parametric_eq.freq_range_hz` not stated → 36 checks on eq"*. Four named gaps instead
+of fifty-three shrugs. That framing is what got them answered in an afternoon rather than filed.
+
 ## 2. Where each tool is SILENT — so step order can be derived, not asked
 
 Sequencing questions ("do I need the excess-phase gate before the sub↔midbass joint?") are

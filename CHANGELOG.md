@@ -42,6 +42,16 @@ Two consequences worth stating, because both have already caused a question:
 
 ## [Unreleased]
 
+- **An abstention is half an answer — a tool that cannot run must ASK, and say what it costs**
+  (`references/core/estimator-scope.md §1a`, the user's rule). Saying "unknown" stops a tool being
+  believed where it has no vote, and then quietly moves the work onto whoever reads the output:
+  they must work out what is missing, who can supply it, and whether it matters. Left there,
+  "unknown" becomes wallpaper. So an abstention for want of an INPUT now names the missing fact
+  precisely, says what it costs, addresses the Arbiter when only they can supply it, and rolls
+  repeats up. Graded by what it STOPS — stopper / degraded / slow — because that is what the
+  Arbiter is deciding, and re-graded as the work changes: a missing gain STEP blocks nothing until
+  somebody enters a half-decibel trim, and then it always was a stopper. `resonalyze_vc.py`'s gap
+  roll-up carries the grade, the quantified cost and the ask.
 - **`channels[].tier` is for every channel, not only spares** — and `project.py backfill-tiers`
   fills it by READING the ledger's row keys, never by inferring. A channel's tier cannot change
   between snapshots, so by schema v3's own test it is identity and belongs in `project.json`;

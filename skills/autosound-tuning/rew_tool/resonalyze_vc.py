@@ -828,11 +828,37 @@ def profile_gaps(legs):
     for leg in legs:
         for check in leg["checks"]:
             for key in check.get("unverified") or []:
-                entry = gaps.setdefault(key, {"key": key, "checks": 0, "fields": set()})
+                entry = gaps.setdefault(key, {"key": key, "checks": 0, "fields": set(),
+                                              "channels": set()})
                 entry["checks"] += 1
                 entry["fields"].add(check["field"].split("[")[0])
-    return [dict(g, fields=sorted(g["fields"]))
-            for g in sorted(gaps.values(), key=lambda g: -g["checks"])]
+                entry["channels"].add(check["channel"])
+    out = []
+    for g in sorted(gaps.values(), key=lambda g: -g["checks"]):
+        out.append(dict(g, fields=sorted(g["fields"]), channels=sorted(g["channels"]),
+                        **_grade(g["key"], sorted(g["fields"]), g["checks"])))
+    return out
+
+
+#: What a caller can do about each gap, graded by what it STOPS — `estimator-scope.md §1a`. The
+#: grade is about the work, not about how interesting the fact is, and it is deliberately NOT
+#: stored per profile key: the same missing step is SLOW while every value sits on a whole number
+#: and a STOPPER the moment somebody enters a half-decibel trim. It is computed from what this
+#: session actually asks for, every run.
+def _grade(key, fields, count):
+    leaf = key.split(".")[-1]
+    who = "the Arbiter — it is read off the DSP's own screen, not derived from anything we hold"
+    if leaf.endswith("_step_hz") or leaf.endswith("_step_db") or leaf.endswith("step_ms"):
+        return {"grade": "DEGRADED", "ask": who,
+                "cost": f"{count} value(s) on {', '.join(fields)} are within every stated range "
+                        f"but cannot be checked against the entry grid — a value off the grid "
+                        f"would be accepted here and refused by the DSP"}
+    if leaf.endswith("_range_hz") or leaf.endswith("range_db") or leaf.endswith("max_ms"):
+        return {"grade": "DEGRADED", "ask": who,
+                "cost": f"{count} value(s) on {', '.join(fields)} pass every stated limit, but "
+                        f"nothing bounds them — an out-of-range value would go unremarked"}
+    return {"grade": "DEGRADED", "ask": who,
+            "cost": f"{count} check(s) on {', '.join(fields)} could not run at all"}
 
 
 def exit_code(result):
@@ -911,8 +937,9 @@ def report(result):
         lines.append(f"Not verifiable against this profile ({summary[UNKNOWN]} checks) -- these "
                      "are gaps in the profile, not faults in the session:")
         for gap in gaps:
-            lines.append(f"  {gap['key']} not stated"
-                         f"  ->  {gap['checks']} checks on {', '.join(gap['fields'])}")
+            lines.append(f"  [{gap['grade']}] {gap['key']} not stated")
+            lines.append(f"      cost: {gap['cost']}")
+            lines.append(f"      ask : {gap['ask']}")
         lines.append("")
 
     lines.append(f"{summary['legs']} legs · {summary[OK]} enterable · "
@@ -1326,6 +1353,15 @@ def _selftest():
         assert not loose, f"unknowns naming no missing key: {loose}"
         assert sum(g["checks"] for g in case["profile_gaps"]) == case["summary"][UNKNOWN], \
             (case["profile_gaps"], case["summary"])
+        # Every gap says what it COSTS and who to ask -- `estimator-scope.md §1a`. An abstention
+        # that names no consequence gets filed rather than answered, which is the same fate as a
+        # warning nobody reads.
+        for gap in case["profile_gaps"]:
+            assert gap["grade"] in ("STOPPER", "DEGRADED", "SLOW"), gap
+            assert gap["cost"] and gap["ask"], gap
+            assert str(gap["checks"]) in gap["cost"], \
+                "the cost must be quantified, not adjectival"
+            assert gap["channels"], "a gap names the channels it touches"
     # ...and a verdict that IS enterable claims nothing it did not check.
     for leg in green["legs"]:
         for check in leg["checks"]:
