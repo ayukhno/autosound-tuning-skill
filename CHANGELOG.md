@@ -54,6 +54,15 @@ before: a forgotten note ships as the next patch.
   line with the library — a command that can be re-run, not a paste that fixes today and diverges
   again next month. It refuses to approximate: no exact vendor+model match changes nothing.
   `list-bundled` enumerates the library.
+- **`rew_tool/timebase.py` — were these measurements captured the same way?** A batch
+  comparability gate, asked for because a project accumulates captures across sessions and nothing
+  ever checked that the batches agree; a mismatch does not announce itself, it reads as a driver
+  that moved. Compares timing reference AND offset as a pair, sample rate and sweep range.
+  **`timingReference` is not evidence of a shared time base** — it says `"Loopback"` whether the
+  offset is 0 or 7.7 ms. Verified against a live REW: three offset groups in one set, all claiming
+  `Loopback`, plus a real hand-edited measurement whose notes said 5 ms while the field said 4.
+  It separates *comparable* from *agree* — a batch can be internally consistent and still have
+  nothing stating what it agrees on, which is safe to compare within and not across days.
 - **A DSP profile group's `fields` is null-until-confirmed.** It had to be a non-empty list, so
   the only way to make a profile validate was to name some controls — and because `missing_facts`
   derives its checklist FROM the declared tokens, under-declaring did not merely assert controls
