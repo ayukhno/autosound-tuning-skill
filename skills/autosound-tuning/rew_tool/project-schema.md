@@ -157,6 +157,34 @@ Refused, because both make a capture's owner ambiguous: two channels with the sa
 A rename is a label being corrected, so its `config_change` impact is normally `none` — no
 measurement is invalidated by it.
 
+### Every channel says which tier it is in (SCR-042, widened 2026-08-23)
+
+**`tier` is written for EVERY channel, not only the spares.** It arrived for spares, because a
+spare has no ledger row and nothing else could say which tier it is spare OF; a working channel
+was left to be placed by its ledger row's key. That was schema v3's split applied inconsistently
+rather than a boundary: a channel's tier **cannot change between snapshots** — no amount of tuning
+moves `w-L` from an output to a virtual channel — so by this format's own test it is identity, and
+identity lives here. Leaving it in the ledger for working channels put one fact in two different
+homes depending on a property of the channel, which is the thing v3 removed identity to stop.
+
+What that cost, found by `autosound-tcc` on a real project (2026-08-23): a project **seeded** from
+a fully described car has every channel and no ledger yet. With the tier living only in ledger
+keys, not one working channel could be placed, and a completely described car drew an empty rig
+panel. On the reference Passat it was 6 channels placed out of 20 — and all six were spares.
+
+**Filling it is a READ, never an inference.** `project.py backfill-tiers` takes each tier from the
+ledger's own row keys, which is the source that is authoritative today, and resolves a row through
+`code`, then `id`, then `previous_names` (SCR-039). A channel with no ledger row and no `tier`
+stays **unplaced**. `role` would place most of them — `virtual`, or the presence of a driver — and
+that is exactly the inference this field exists to refuse: slot letters repeat across tiers, so a
+wrong placement is invisible once written. An already-stated `tier` is never overwritten from the
+ledger.
+
+Order matters when seeding: `project_seed` copies `channels[]` verbatim, so backfill the SOURCE
+before seeding and the tiers travel. A project already seeded from a tier-less source cannot be
+backfilled — it has no ledger to read — and needs the tiers copied from the source once it has
+them.
+
 ### A spare slot says which tier it is spare of (SCR-042)
 
 Rows in a consumer's channel panel are built from the ledger, and **a slot with nothing wired to it

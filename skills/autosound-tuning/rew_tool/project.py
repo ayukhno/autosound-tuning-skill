@@ -366,6 +366,13 @@ def open_questions(data):
     return out
 
 
+#: Top-level ledger keys that hold metadata rather than a tier of rows. Mirrored from
+#: `state/state.py`'s own list rather than imported, for the same reason `EVENT_CONFIG_CHANGE` is:
+#: one constant is not worth a cross-directory import. A dict-of-dicts under any OTHER key is a
+#: tier (`state.tier_names`).
+_LEDGER_NON_TIERS = ("roles", "provenance", "virtual_eq_ptr", "banked_ear_verdicts")
+
+
 class Project:
     """Read/write one project's `project.json`. `root` is the project folder itself — the file
     sits at its top level, alongside `dsp_profile.json`, `process/`, `state/` (SKILL-SYNC-PLAN.md
@@ -431,6 +438,69 @@ class Project:
             json.dump(data, f, indent=2, sort_keys=True, ensure_ascii=False)
         os.replace(tmp, self.path)
         return data
+
+    def backfill_tiers(self, state_root=None, write=True):
+        """Write `tier` onto every channel the LEDGER already places. Reads, never guesses.
+
+        `tier` was introduced for spare slots (SCR-042), because a spare has no ledger row and so
+        nothing else says which tier it is spare OF. A WORKING channel was left to be placed by its
+        ledger row's tier key — and that was the split applied inconsistently rather than a
+        boundary. A channel's tier cannot change between snapshots: no amount of tuning moves
+        `w-L` from an output to a virtual channel. By schema v3's own test — the ledger holds what
+        differs between two snapshots, `project.json` holds identity — tier is identity, for a
+        working channel exactly as much as for a spare.
+
+        What that cost, found by `autosound-tcc` on a real seeded project (2026-08-23): a project
+        seeded from a fully described car has 20 channels and no ledger yet, so with the tier
+        living only in ledger keys, not one working channel could be placed and the rig panel drew
+        empty. A car that is completely described looked like no car at all.
+
+        The fill is not a guess and must never become one. Every tier written here is READ from the
+        ledger's own row keys — the source that is authoritative today. A channel with no row and
+        no `tier` stays unplaced, which is honest: `role` would place most of them (`virtual`, or
+        the presence of a driver) and that is precisely the inference this schema refuses, because
+        slot letters repeat across tiers and a wrong placement is invisible once written.
+
+        Returns `{code: tier}` for what was filled (or would be, when `write` is false).
+        """
+        import glob as _glob
+
+        data = self.load()
+        rows = [r for r in (data.get("channels") or []) if isinstance(r, dict)]
+        by_key = {}
+        root = state_root or os.path.join(self.dir, "state")
+        for path in sorted(_glob.glob(os.path.join(root, "*", "v_*.json"))):
+            try:
+                with open(path, encoding="utf-8") as f:
+                    snap = json.load(f)
+            except (OSError, ValueError):
+                continue
+            for tier, tier_rows in snap.items():
+                if tier in _LEDGER_NON_TIERS or not isinstance(tier_rows, dict):
+                    continue
+                if not all(isinstance(v, dict) for v in tier_rows.values()):
+                    continue
+                for key in tier_rows:
+                    by_key[key] = tier
+
+        filled = {}
+        for row in rows:
+            if row.get("tier"):
+                continue
+            # The ledger keys on the channel's ID, which defaults to its code (SCR-039), so both
+            # are tried — and a renamed channel resolves through neither, which is why
+            # `previous_names` is consulted too rather than leaving it unplaced.
+            for name in [row.get("code"), channel_id(row), *previous_names(row)]:
+                if name and name in by_key:
+                    filled[row["code"]] = by_key[name]
+                    break
+        if write and filled:
+            for row in rows:
+                if row["code"] in filled:
+                    row["tier"] = filled[row["code"]]
+            self.save(data)
+        return filled
+
 
     def set_channel(self, code, **fields):
         """Add or update one `channels[]` row by `code` (SCR-001) — `slot`/`descr`/`role`/`order`/
@@ -643,6 +713,10 @@ _USAGE = """usage: project.py <project-dir> <command> [args]
 
   show                                         print project.json (or an empty skeleton)
   open-questions                               list unresolved facts (dotted paths)
+  backfill-tiers [--dry-run]                   write `tier` onto every channel the LEDGER
+                                               already places — READ from its row keys,
+                                               never inferred. A channel with no row and
+                                               no tier stays unplaced rather than guessed
   set-channel <code> [key=value ...]           add/update one channels[] row
       [--source S]                             values are JSON when they parse as JSON, so
                                                driver={"make":"Audiofrog","model":"GB25"} works;
@@ -732,6 +806,23 @@ def _main(argv):
         elif cmd == "open-questions":
             for q in open_questions(proj.load()):
                 print(q)
+        elif cmd == "backfill-tiers":
+            filled = proj.backfill_tiers(write="--dry-run" not in args)
+            if not filled:
+                print("nothing to fill — every channel with a ledger row already names its tier")
+            else:
+                for code, tier in sorted(filled.items()):
+                    print(f"  {code} -> {tier}")
+                print(("would fill " if "--dry-run" in args else "filled ")
+                      + f"{len(filled)} channel(s) from the ledger's own row keys")
+            # Exclude what was (or would be) filled: on a dry run the file is unchanged, so
+            # reading it back would list the very channels just reported as fillable.
+            unplaced = [c["code"] for c in (proj.load().get("channels") or [])
+                        if isinstance(c, dict) and not c.get("tier")
+                        and c.get("code") not in filled]
+            if unplaced:
+                print(f"still unplaced (no ledger row, no tier — NOT guessed): "
+                      f"{', '.join(unplaced)}")
         elif cmd == "set-channel":
             source = _flag(args, "--source")
             code, kv = args[0], _parse_kv(args[1:], source=source)
@@ -956,6 +1047,43 @@ def _selftest():
         pass
     # ...while a folder with no project.json at all still reads as "nothing known", because it is.
     assert Project(tempfile.mkdtemp()).load().get("channels") == []
+
+    # -- tier is identity for EVERY channel, not only spares (2026-08-23, autosound-tcc).
+    # A project seeded from a fully described car has no ledger yet, so with the tier living only
+    # in ledger row keys not one working channel could be placed and the rig panel drew empty:
+    # a completely described car looked like no car at all.
+    tier_root = tempfile.mkdtemp(prefix="autosound_project_tiers_")
+    tproj = Project(tier_root)
+    tproj.save({"channels": [{"code": "w-L"}, {"code": "VFL"}, {"code": "c"},
+                             {"code": "off-x", "role": "unused", "tier": "channels"}]})
+    ledger = os.path.join(tier_root, "state", "SQ")
+    os.makedirs(ledger, exist_ok=True)
+    with open(os.path.join(ledger, "v_001.json"), "w", encoding="utf-8") as f:
+        json.dump({"schema_version": 3, "preset": "SQ", "sample_rate": 96000,
+                   "roles": {"artist": "x"},                       # metadata, NOT a tier
+                   "channels": {"w-L": {"gain_db": 0}},
+                   "virtual_channels": {"VFL": {"gain_db": 0}}}, f)
+
+    filled = tproj.backfill_tiers(write=False)
+    assert filled == {"w-L": "channels", "VFL": "virtual_channels"}, filled
+    # `roles` is a dict but metadata, not a tier -- reading it as one would invent a tier named
+    # "roles" and place a channel into it.
+    assert "roles" not in filled.values(), filled
+    # `c` has no ledger row, so it stays UNPLACED. `role` would place most channels and that is
+    # exactly the inference this schema refuses: slot letters repeat across tiers, so a wrong
+    # placement is invisible once written.
+    assert "c" not in filled, "a channel with no row must not be guessed into a tier"
+    assert not any(ch.get("tier") for ch in tproj.load()["channels"]
+                   if ch["code"] == "w-L"), "write=False must not write"
+
+    tproj.backfill_tiers()
+    got = {ch["code"]: ch.get("tier") for ch in tproj.load()["channels"]}
+    assert got == {"w-L": "channels", "VFL": "virtual_channels", "c": None,
+                   "off-x": "channels"}, got
+    assert tproj.backfill_tiers() == {}, "idempotent -- a filled tier is not refilled"
+    # An already-stated tier is never overwritten from the ledger: project.json is identity's home.
+    tproj.set_channel("c", tier="virtual_channels")
+    assert tproj.backfill_tiers() == {}, "a stated tier wins over anything the ledger implies"
 
     # -- SCR-042: a spare slot says which tier it is spare OF. The case that motivated it: slot
     # letters repeat across tiers, so these two are both legal "F" and only `tier` tells them apart.

@@ -40,6 +40,19 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [Unreleased]
+
+- **`channels[].tier` is for every channel, not only spares** — and `project.py backfill-tiers`
+  fills it by READING the ledger's row keys, never by inferring. A channel's tier cannot change
+  between snapshots, so by schema v3's own test it is identity and belongs in `project.json`;
+  leaving it in ledger keys for working channels put one fact in two homes depending on a property
+  of the channel. Found by `autosound-tcc` on a real **seeded** project: with no ledger yet, not
+  one working channel could be placed and a fully described car drew an empty rig panel — 6 of 20
+  placed on the reference car, all six of them spares. A channel with no ledger row and no `tier`
+  stays unplaced rather than guessed: `role` would place most of them, and that inference is what
+  the field exists to refuse, because slot letters repeat across tiers and a wrong placement is
+  invisible once written. Seed order matters — backfill the source first and the tiers travel.
+
 ## [v3.0.19] — 2026-08-23 · reading somebody else's tune, and a library to check it against
 
 Written before the tag and read back against `git log` before cutting it — which caught two
