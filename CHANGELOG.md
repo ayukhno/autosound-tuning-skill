@@ -54,6 +54,15 @@ before: a forgotten note ships as the next patch.
   line with the library — a command that can be re-run, not a paste that fixes today and diverges
   again next month. It refuses to approximate: no exact vendor+model match changes nothing.
   `list-bundled` enumerates the library.
+- **`rew_api.get_timing(mid)` — one exported reader of a measurement's time base**, for the
+  method and for `autosound-tcc` alike, instead of each consumer digging the fields out of a raw
+  record. Two readings of REW's timing fields is how the two halves of a project come to disagree
+  about when a sweep happened — and that disagreement would look like a driver that moved. The
+  rules travel with the fields, so a caller cannot take the numbers without them: `offset_s` is
+  authoritative and the prose in `notes` is only a cross-check; `reference` alone is not evidence
+  of a shared time base; `ir_start_s` is the anchor and `ir_peak_s` is not; an RTA has no IR, which
+  is not a disagreement. Its contract is pinned in `rew_api`'s selftest because it crosses a repo
+  boundary.
 - **`rew_tool/timebase.py` — were these measurements captured the same way?** A batch
   comparability gate, asked for because a project accumulates captures across sessions and nothing
   ever checked that the batches agree; a mismatch does not announce itself, it reads as a driver
