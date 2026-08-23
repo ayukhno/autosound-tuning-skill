@@ -433,9 +433,14 @@ def _review_target():
 
     The old rule was `AUTOSOUND_PROJECT_DIR or CWD`, and the fallback is what broke: run the
     advisor by hand from the skill folder and a project's review lands in the METHOD's git
-    repository (observed 2026-08-23, found by `autosound-tcc` while cleaning its tree). Next time
-    it would be whatever repository the shell happened to be in — on a bad day the Resonalyze fork,
-    where an untracked file sits in a tree shared with its author.
+    repository (observed 2026-08-23, found by `autosound-tcc` while cleaning its tree). In
+    principle it would be whatever repository the shell happened to be in.
+
+    ⚠️ That second sentence is the LIMIT of what was established. An earlier version of this note
+    named the Resonalyze fork as the bad case; the fork was checked and is clean, and nobody has
+    shown a reason anyone would run this script from there. It was somebody's illustration and I
+    repeated it as a live risk — the ninth instance that day of a plausible statement standing next
+    to a true one, and the only one I did not construct but merely passed on unchecked.
 
     It is the same shape as the context lookup that started that investigation: a path derived from
     where the PROCESS is standing rather than from what it is ABOUT. So `CWD` is accepted only when
