@@ -1174,12 +1174,13 @@ def _selftest():
     # The derived pairing must stay labelled as derived. A plausible number becomes a measured
     # fact simply by sitting in a field that only records measured facts.
     assert "DERIVED" in peq["mode_note"], peq["mode_note"]
-    # Assert the SUBSTANCE, not a phrase: the derived pairing must still be flagged as open. An
-    # earlier version matched the literal word "co-occur" and broke the day the question was
-    # reworded after a screenshot narrowed it — a test that fails on editing rather than on
-    # regression trains people to edit the test.
-    assert any(q.startswith("parametric_eq:") for q in inner["_open_questions"]), \
-        inner["_open_questions"]
+    # Pin the DURABLE fact, not a transient one. Two earlier versions of this assertion pinned
+    # first a literal phrase and then the EXISTENCE of an open question — and the second broke the
+    # day the question was answered, which is a test failing on success. An open question is by
+    # definition temporary; what lasts is that this DSP has more than one EQ mode and the block
+    # records which limits belong together, so a reader cannot take the union for one mode's
+    # ceiling by accident.
+    assert "mode_note" in peq and "Fine EQ" in peq["mode_note"], peq.get("mode_note")
 
     # refresh: a COMMAND, so the facts stop diverging instead of being pasted a fifth time.
     with tempfile.TemporaryDirectory() as proj:

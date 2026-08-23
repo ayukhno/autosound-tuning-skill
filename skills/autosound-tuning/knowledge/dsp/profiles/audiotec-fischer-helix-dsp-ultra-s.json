@@ -2,7 +2,6 @@
   "dsp_profile": {
     "_open_questions": [
       "DSP compute budget: with up to 60 bands stacked (30 virtual-channel + 30 output) plus crossover + phase + delay, is there a practical ceiling before the 2x295MHz DSP saturates?",
-      "parametric_eq: in the PC-Tool panel that displays frequency as 25.00 Hz ('Parametric EQ'), what is the Q ceiling — 15 or 50? A screenshot has established the 0.01 Hz display there; the Q limit in that same panel is what turns the recorded union into an observation. Also unestablished: whether a 0.01 Hz DISPLAY means a 0.01 Hz entry step.",
       "groups_enumerated: three tiers are now known — virtual_channels, physical_outputs, inputs. Is that ALL of them? He named the input tier when asked; he did not say the list was complete, and 'he stopped naming tiers' is not the same statement. One word closes this."
     ],
     "channel_gain": {
@@ -176,13 +175,13 @@
         40000.0
       ],
       "freq_step_hz": 0.01,
-      "gain_note": "the EQ BAND's gain. The channel trim is `channel_gain` below and the two must never stand in for each other.",
+      "gain_note": "the EQ BAND's gain. Step 0.1 dB, corroborated on the same 2026-08-23 panel (Gain 0.1 dB). The channel trim is `channel_gain` below, and the two are now measured as different in all three of range (-30..+12 against -30..+5), step (0.1 against 1.0) and resolution — from his own screen, so 'they must never stand in for each other' is a measurement rather than a caution.",
       "gain_range_db": [
         -30.0,
         12.0
       ],
       "gain_step_db": 0.1,
-      "mode_note": "THE UNION OF THE PC-TOOL MODES (the user's rule, 2026-08-23: take the full range everywhere, because it can be entered by hand). Fine EQ pairs a 1 Hz step with Q 0.5-15. UNSETTLED, and deliberately left so: this profile's own `sources` line reads the other mode as Q 0.5-50 WITH a 0.01 Hz step -- which would make this pair directly observed -- while the note it replaces said the pair 'exists in no single screen'. Two current records disagree about whether one screen shows both. The numbers are not in doubt: each is separately user-verified (Q 0.5-50 and Fine EQ's 1 Hz on 2026-08-22; the 0.01 Hz step on 2026-07-10, before Fine EQ was known; 10-40000 Hz on 2026-08-23). What is unconfirmed is only whether they co-occur in one mode, and one PC-Tool pass settles it: in EACH mode, the frequency step AND the Q range together. Until then treat this pair as DERIVED, not measured -- a plausible number becomes a measured fact simply by sitting in a field that only records measured facts. Either way the block answers 'is this enterable on the HARDWARE', so a value it passes may still need a mode switch at the PC-Tool screen. That direction is recoverable; refusing a setting the hardware accepts means a valid tune is never tried and nobody learns why. PARTIALLY OBSERVED 2026-08-23: a PC-Tool screenshot of the panel whose selector reads 'Parametric EQ' shows Band 1 at Freq 25.00 Hz — so THAT panel displays frequency to 0.01 Hz. It does not settle two things and must not be read as doing so: the Q CEILING in that same panel (the shot shows Q 4.3, which is a value somebody entered, not a limit), and whether display resolution equals entry step. The remaining glance is now one field wide: in the panel that shows 25.00 Hz, what does the Q field accept at the top — 15 or 50?",
+      "mode_note": "OBSERVED, not derived, 2026-08-23. The PC-Tool panel whose selector reads 'Parametric EQ' was photographed in ONE state with every field visible at once: Freq 26.01 Hz, Gain 0.1 dB, Q 50. So the frequency field ACCEPTS two decimals (not merely displays them — that was the open reservation) and Q reaches 50 in that same panel. The pair recorded here therefore co-occurs in a single mode, and the union stops being an inference. Fine EQ pairs a 1 Hz step with Q 0.5-15; this panel is the other one. PROVENANCE: this supersedes the DERIVED label required while the pair was unobserved — that requirement was SATISFIED, not dropped, and the distinction matters because a requirement quietly abandoned looks identical afterwards to one that was met. What the panel does NOT establish, so it does not travel with this: the BOTTOM of the Q range (0.5 is recorded from elsewhere; nothing here shows it), and whether some third mode has different limits again — which no longer matters, since the question was only whether this pair exists in one mode.",
       "q_convention": "Rbj",
       "q_note": "What the METHOD should use is narrower still than what the hardware takes, and that is not a hardware question -- see the spatial-validity Q ceiling in the method's diagnostic reference.",
       "q_range": [
@@ -215,7 +214,8 @@
       "user, confirmed in PC-Tool: EQ 10-40000 Hz, crossover corner 20-20480 Hz on every channel, 2026-08-23",
       "the method's own file is the authority on all of the above: autosound-tuning/knowledge/dsp/helix-dsp-ultra-s.md -- what is here is the machine-readable half the gates read, and it is synced FROM there, never the other way",
       "bundled into the method's profile library 2026-08-23 from autosound-tcc's src/autosound_tcc/dsp_profiles/helix-dsp-ultra-s.json, which is where these facts were first assembled -- authorship theirs, diffed field by field before landing",
-      "user, PC-Tool on his own unit, 2026-08-23: channel gain step 1.0 dB; an INPUT tier exists (unused on his car); Chebyshev slope ladder 6-42 dB/oct corroborated. Chebyshev ripple asked and declined as unknown and unneeded."
+      "user, PC-Tool on his own unit, 2026-08-23: channel gain step 1.0 dB; an INPUT tier exists (unused on his car); Chebyshev slope ladder 6-42 dB/oct corroborated. Chebyshev ripple asked and declined as unknown and unneeded.",
+      "user, PC-Tool on his own unit, 2026-08-23: the 'Parametric EQ' panel photographed in one state — Freq 26.01 Hz, Gain 0.1 dB, Q 50 together — which observes the freq_step_hz / q_range pair that had been recorded as derived from the full-range ruling."
     ],
     "vendor": "Audiotec-Fischer"
   }

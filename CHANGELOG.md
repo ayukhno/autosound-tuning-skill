@@ -68,6 +68,14 @@ Two consequences worth stating, because both have already caused a question:
   a real export it was missing a trailing tab on shelf rows. The two formats also differ in
   precision (frequency 1 dp against 2, a PK's Q 2 dp against 3), which is exactly the class of
   thing that ruler could never have caught.
+- **The PEQ mode pairing is OBSERVED, and the derived label is retired as SATISFIED.** The
+  "Parametric EQ" panel was photographed in one state with every field visible together — Freq
+  26.01 Hz, Gain 0.1 dB, Q 50 — which settles both halves at once: the frequency field ACCEPTS two
+  decimals rather than merely displaying them, and Q reaches 50 in that same panel. So the union
+  recorded earlier co-occurs in one mode and stops being an inference. Said as *satisfied* rather
+  than dropped, because a requirement quietly abandoned looks identical afterwards to one that was
+  met. The same shot corroborates the EQ band's 0.1 dB step, so the band gain and the channel trim
+  are now measured as different in range, step and resolution rather than argued to be.
 - **The ask-rule applied beyond the converter.** `dsp_profile.gaps()` turns each unanswered fact
   into `{key, what, governs, ask}` — and deliberately does NOT grade, because this module cannot
   see the work: `channel_gain.step_db` is nothing while every trim is a whole number and a stopper
