@@ -3,8 +3,11 @@
 This is a separate artifact from `state/state.py`'s per-project ledger (channel gains/crossovers/
 delay for ONE car). A profile answers "does this DSP even have virtual channels? does it have
 per-input EQ?" — the schema-level facts a project's data model must be built against, so the same
-UI/tooling can serve a Helix (virtual + physical tiers, no crossover on virtual) and a MUSWAY (no
-virtual tier at all, but per-input Optic/USB/BT gain+EQ) without per-DSP code.
+UI/tooling can serve a Helix (virtual + physical tiers, no crossover on virtual) and a processor
+with no virtual tier at all but per-input gain and EQ, without per-DSP code. (The second half of
+that sentence deliberately names no model: it used to say MUSWAY and assert specifics that trace
+back to one recollection, never re-checked in the vendor software. An illustration does not need a
+real unit, and a docstring's opening paragraph is where an unverified one does the most damage.)
 
 Design invariants
     * `groups` is the load-bearing field: an ordered list of the tiers/categories this DSP model
