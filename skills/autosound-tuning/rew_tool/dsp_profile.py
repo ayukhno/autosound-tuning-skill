@@ -1111,7 +1111,12 @@ def _selftest():
     # The derived pairing must stay labelled as derived. A plausible number becomes a measured
     # fact simply by sitting in a field that only records measured facts.
     assert "DERIVED" in peq["mode_note"], peq["mode_note"]
-    assert any("co-occur" in q for q in inner["_open_questions"]), inner["_open_questions"]
+    # Assert the SUBSTANCE, not a phrase: the derived pairing must still be flagged as open. An
+    # earlier version matched the literal word "co-occur" and broke the day the question was
+    # reworded after a screenshot narrowed it — a test that fails on editing rather than on
+    # regression trains people to edit the test.
+    assert any(q.startswith("parametric_eq:") for q in inner["_open_questions"]), \
+        inner["_open_questions"]
 
     # refresh: a COMMAND, so the facts stop diverging instead of being pasted a fifth time.
     with tempfile.TemporaryDirectory() as proj:
