@@ -660,18 +660,33 @@ def _check_gain(leg, channel, inner):
                          "profile has no 'channel_gain' block; parametric_eq's gain range "
                          "describes EQ bands, not the channel trim, so it cannot stand in",
                          unverified=["channel_gain"])]
+    # Range and step are checked SEPARATELY and reported separately. Lumping them meant a profile
+    # that states the range and not the step reported BOTH as unverified -- naming a fact that is
+    # in the file and was used, in the very list a consumer renders as "these were not checked".
+    # An over-broad gap report is the same failure as an over-broad pass, one direction along.
     rng, step = gain.get("range_db"), gain.get("step_db")
-    if isinstance(rng, list) and len(rng) == 2 and not (rng[0] <= value <= rng[1]):
+    verified, unverified = [], []
+    if isinstance(rng, list) and len(rng) == 2:
+        if not (rng[0] <= value <= rng[1]):
+            return [_verdict(channel, "gain_db", wanted, UNSUPPORTED,
+                             f"outside the DSP's {_g(rng[0])}..{_g(rng[1])} dB range")]
+        verified.append(f"within {_g(rng[0])}..{_g(rng[1])} dB")
+    else:
+        unverified.append("channel_gain.range_db")
+    if step is None:
+        unverified.append("channel_gain.step_db")
+    elif not _on_grid(value, step):
         return [_verdict(channel, "gain_db", wanted, UNSUPPORTED,
-                         f"outside the DSP's {_g(rng[0])}..{_g(rng[1])} dB range")]
-    if step is not None and not _on_grid(value, step):
-        return [_verdict(channel, "gain_db", wanted, UNSUPPORTED,
-                         f"not a multiple of the DSP's {_g(step)} dB step")]
-    if not isinstance(rng, list) or step is None:
+                         f"not a multiple of the DSP's {_g(step)} dB step", verified)]
+    else:
+        verified.append(f"on the {_g(step)} dB step")
+    if unverified:
         return [_verdict(channel, "gain_db", wanted, UNKNOWN,
-                         "channel_gain states no complete range_db + step_db",
-                         unverified=["channel_gain.range_db", "channel_gain.step_db"])]
-    return [_verdict(channel, "gain_db", wanted, OK, "within the DSP's channel-gain range")]
+                         (("; ".join(verified) + " -- but ") if verified else "")
+                         + "the profile states no "
+                         + ", ".join(k.split(".")[-1] for k in unverified),
+                         verified, unverified)]
+    return [_verdict(channel, "gain_db", wanted, OK, "; ".join(verified), verified)]
 
 
 def _check_polarity(leg, channel, inner):
@@ -1272,6 +1287,29 @@ def _selftest():
     # and borrowing one for the other is a check that looks green while measuring nothing.
     gain = verdicts("w-L", "gain_db")[0]
     assert gain["verdict"] == UNKNOWN and "channel_gain" in gain["reason"], gain
+
+    # A half-stated limit reports only the half that is missing. With the range declared and the
+    # step absent, naming the RANGE as unverified would put a fact that is in the file — and was
+    # used — into the list a consumer renders as "these were not checked". An over-broad gap
+    # report is the same failure as an over-broad pass, one direction along. (TCC, 2026-08-23.)
+    ranged_gain = json.loads(json.dumps(profile))
+    ranged_gain["dsp_profile"]["channel_gain"] = {"range_db": [-30.0, 5.0]}
+    half = [c for leg in convert(doc, profile=ranged_gain, proj=_Proj())["legs"]
+            for c in leg["checks"] if c["field"] == "gain_db"][0]
+    assert half["verdict"] == UNKNOWN, half
+    assert half["unverified"] == ["channel_gain.step_db"], half
+    assert "within -30..5 dB" in half["verified"], half
+    # ...and with both stated it goes green; without that, the assertion above also passes on a
+    # checker that can never say yes.
+    ranged_gain["dsp_profile"]["channel_gain"]["step_db"] = 0.1
+    full = [c for leg in convert(doc, profile=ranged_gain, proj=_Proj())["legs"]
+            for c in leg["checks"] if c["field"] == "gain_db"][0]
+    assert full["verdict"] == OK and not full["unverified"], full
+    # A gain the hardware refuses is still refused, range-only profile or not.
+    ranged_gain["dsp_profile"]["channel_gain"]["range_db"] = [-30.0, -5.0]
+    over = [c for leg in convert(doc, profile=ranged_gain, proj=_Proj())["legs"]
+            for c in leg["checks"] if c["field"] == "gain_db"][0]
+    assert over["verdict"] == UNSUPPORTED, over
 
     # No profile at all means every field is unknown -- and specifically NOT ok.
     blind = convert(doc, profile=None, proj=_Proj())
