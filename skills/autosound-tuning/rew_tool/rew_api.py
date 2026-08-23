@@ -220,34 +220,41 @@ def get_group_delay(mid):
 
 
 def _ir_start_time(data):
-    """The time of sample 0, from REW's own fields — never reconstructed from the array.
+    """The time of sample 0, from REW's own `startTime` — or a raise. There is no substitute.
 
-    `startTime` is the answer whenever REW gives it. The interesting part is what happens when it
-    does not, because the old fallback chain (`startTime` -> `delay` -> `0.0`) substituted two
-    quantities that are NOT the same thing and said nothing:
+    `startTime` is the buffer origin. **`delay` is NOT the same quantity displaced by an offset —
+    it is the ARRIVAL, a whole second away.** Measured across six captures (2026-08-23):
+    `delay - startTime = 1.000000 s` every time, structurally, because REW puts the peak at index
+    96000 and 96000 / 96000 Hz = 1 s of pre-roll. So `delay = startTime + peakIndex / sampleRate`.
 
-    * **`delay` has the timing offset folded in.** Measured against a live REW on six captures
-      (2026-08-23): `physical arrival = delay + timingOffset`, exact to the last digit on
-      integer-sample offsets — 4 ms = 384.0 samples at 96 kHz. So `delay` alone is displaced by
-      whatever offset the rig carries, and the displacement looks like a plausible delay rather
-      than like an error. Worse, `timingReference` reads `"Loopback"` whether the offset is 0 or
-      7.7 ms, so the field that looks like the guard is not one.
-    * **`0.0` claims the IR starts at t = 0**, which for a REW sweep is about a second wrong — it
-      carries ~1 s of pre-roll holding the Farina harmonic images.
+    Substituting it costs a second, and the error is not subtle downstream: on a real capture
+    (#78) `startTime` gives `i0 = -startTime * fs = +96124.2` samples, while `delay + offset`
+    gives **-259.8** — 96384 samples out and indexing before the buffer begins.
 
-    A check whose input is missing must FAIL rather than report no objection
-    (`references/core/estimator-scope.md`), and that applies to a time base most of all: every
-    arrival, every alignment and every crossover decision downstream inherits this number. So the
-    offset is ADDED when the fallback is used, and a document carrying neither field raises
-    instead of quietly starting the clock at zero.
+    A dimensionally correct reconstruction does exist —
+    `startTime = delay + timingOffset - peakIndex / sampleRate`, using the reported `peakIndex`
+    rather than assuming this rig's 96000 — and it is deliberately NOT used. `delay` is exactly
+    `timeOfIRPeakSeconds` (they agree to 1e-16 on all six captures), so anything rebuilt from it
+    inherits the peak's instability: ~2.6 µs of wander per capture, and 3.6 ns of movement between
+    two reads of the SAME stored measurement with no re-measurement in between. Rebuilding the most
+    load-bearing number in the module out of the one quantity the measurements say not to trust is
+    a worse failure than refusing.
+
+    So: a check whose input is missing FAILS (`references/core/estimator-scope.md`). Every arrival,
+    alignment and crossover decision downstream inherits this number.
+
+    History, because the shape of the mistake is the lesson: the original chain was
+    `startTime` -> `delay` -> `0.0`, and the first replacement kept the `delay` rung and merely
+    added the offset to it — fixing the offset error while leaving the second-sized one untouched,
+    because "delay" reads like a time base and the offset was the bug in hand. Caught by the fork
+    session on measured data, 2026-08-23.
     """
     if "startTime" in data:
         return float(data["startTime"])
-    if "delay" in data:
-        return float(data["delay"]) + float(data.get("timingOffset") or 0.0)
     raise KeyError(
-        "impulse response carries neither 'startTime' nor 'delay': there is no time base to read, "
-        "and assuming 0.0 would place sample 0 about a second early on a REW sweep")
+        "impulse response carries no 'startTime': there is no time base to read. `delay` is not a "
+        "substitute — it is the arrival, one second of pre-roll away from the buffer origin, and "
+        "it is the unstable peak-derived quantity besides")
 
 
 def get_impulse_response(mid):
@@ -453,17 +460,18 @@ def _selftest():
     # is not one. The old chain startTime -> delay -> 0.0 silently swapped in two different
     # quantities, and every arrival downstream inherits whichever it got.
     assert _ir_start_time({"startTime": -1.0021, "delay": 0.5}) == -1.0021, "startTime wins"
-    # 4 ms at 96 kHz: delay alone would be displaced by exactly the offset.
-    got = _ir_start_time({"delay": -1.0, "timingOffset": 0.004})
-    assert abs(got - (-0.996)) < 1e-12, got
-    assert _ir_start_time({"delay": -1.0}) == -1.0, "no offset stated is offset zero"
-    assert _ir_start_time({"delay": -1.0, "timingOffset": None}) == -1.0, "null offset is zero"
-    try:
-        _ir_start_time({"sampleRate": 96000})
-    except KeyError:
-        pass
-    else:
-        raise AssertionError("a document with no time base must raise, not start the clock at 0")
+    # `delay` must NOT stand in for it. Real capture #78: delay - startTime is exactly 1.000000 s
+    # (REW's peak sits at index 96000 = 1 s of pre-roll), so the substitution is a second out and
+    # `i0 = -t*fs` lands at -259.8 samples instead of +96124.2 -- before the buffer begins.
+    for missing in ({"delay": 0.0027065948, "timingOffset": 0.004, "sampleRate": 96000},
+                    {"delay": -1.0}, {"sampleRate": 96000}, {}):
+        try:
+            _ir_start_time(missing)
+        except KeyError:
+            pass
+        else:
+            raise AssertionError(
+                f"no startTime must raise, not substitute a different quantity: {missing}")
 
     # command wrappers post the right path/body (mock _post — no live REW)
     global _post

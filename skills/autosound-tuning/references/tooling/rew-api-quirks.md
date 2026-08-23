@@ -72,8 +72,18 @@ inferred. Four facts, each of which changes what a caller should read.
   the sample grid. **The trap: `timingReference` reads `"Loopback"` whether the offset is 0 or
   7.7 ms**, so the field that looks like the guard is not one. An offset set once and forgotten
   shifts every channel imported afterwards, and it looks like a plausible delay, not an error.
-  `rew_api._ir_start_time` prefers `startTime`, adds the offset when it must fall back to `delay`,
-  and raises rather than assuming `0.0` — which for a sweep would be about a second wrong.
+  `rew_api._ir_start_time` reads `startTime` or RAISES — see the next point for why there is no
+  fallback.
+- **`delay` is the ARRIVAL, not the buffer origin, and it is a whole second away.** Measured on
+  six captures: `delay − startTime = 1.000000 s` every time — structurally, because REW puts the
+  peak at index 96000 and 96000 / 96000 Hz = 1 s of pre-roll. So
+  `delay = startTime + peakIndex / sampleRate`. Substituting one for the other on capture #78 turns
+  `i0 = −startTime·fs = +96124.2` samples into **−259.8** — 96384 samples out, and indexing before
+  the buffer begins. A dimensionally correct reconstruction exists
+  (`startTime = delay + timingOffset − peakIndex / sampleRate`, using the reported `peakIndex`, not
+  this rig's 96000) and is deliberately not used: **`delay` is exactly `timeOfIRPeakSeconds`**
+  (1e-16 agreement on all six), so anything rebuilt from it inherits the peak instability below.
+  Rebuilding the most load-bearing number out of the least trustworthy one is worse than refusing.
 - **Anchor on the IR START, never the peak.** `timeOfIRStartSeconds` is on the integer sample grid
   and bit-stable; `timeOfIRPeakSeconds` is not a timing anchor and failed three independent ways:
   it wandered ~2.6 µs per capture, left 3.3–6.7 µs of residue after undoing a known offset, and
