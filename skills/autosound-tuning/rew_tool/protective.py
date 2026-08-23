@@ -22,12 +22,27 @@ below its own; the numbers above are within 1.5 degrees of each other at the sam
 that de-embedded only high-passes would clean half the problem and look like it had cleaned all of
 it, which is worse than cleaning nothing.
 
-## What must be recorded, and the distinction that matters
+## What gets recorded, and why the DEFAULT is "working"
 
-Per capture series, per channel: the legs that were in force. **An empty record is not "there was
-no filter"** — it is "nobody said", and the two must never collapse into each other. `"OFF"` is an
-answer; a missing key is a question. Same rule as the ledger's own crossover legs, whose vocabulary
-this reuses rather than inventing a second one.
+**Any capture is a working capture unless somebody says otherwise** (the user, 2026-08-23). It
+measures the system as configured, whatever filters are in it are part of the tune, and nothing is
+de-embedded. Raw captures — a driver behind protection, before its crossover exists — are the
+exception and there are usually one or two of them, so they are the ones that carry a flag.
+
+That is the right way round: the common case costs no clicks, and a record only exists where it
+says something. The record is per capture series, per channel, in the ledger's own crossover
+vocabulary (`{f, type, slope}` / `"OFF"`), so there is no second dialect to keep in step.
+
+⚠️ **The hole this leaves, named rather than papered over.** With "working" as the default, an
+absent record means two different things: *this measured the tune* (intended) and *this was raw
+and nobody pressed the button* (a mistake). The second is silent, and it is expensive — every
+phase decision at a nearby junction is then out by ~50 degrees with nothing complaining.
+
+It cannot be caught by looking at the filter, because a protective `LR4 @100` and a designed one
+are identical. It CAN be caught by when the capture happened: a **baseline** sweep is taken before
+any crossover has been designed, so a baseline capture with crossovers in force is protection
+almost by definition. `should_de_embed(..., baseline=True)` returns `"check"` for exactly that
+case — the one place a forgotten button is recoverable.
 
 The flag belongs to the CAPTURE, not to the filter. The same 1 kHz high-pass can be protection
 today and part of the finished crossover next week; what makes it protective is that it was not
@@ -98,6 +113,41 @@ def legs_of(record, channel):
     return {"hp": entry.get("hp", "OFF"), "lp": entry.get("lp", "OFF")}
 
 
+def should_de_embed(record, channel, *, baseline=None):
+    """Decide what to do with one channel's capture. `(action, detail)`.
+
+    * `("no", reason)` — a working capture: it measured the system as configured, so whatever
+      filters were in it belong there. This is the DEFAULT and it is an answer, not a shrug.
+    * `("yes", legs)` — marked raw, and here is what to take out.
+    * `("check", reason)` — it looks raw and is not marked. See below.
+
+    `baseline` is the caller's answer to "was this taken before any crossover was designed?" — from
+    the capture phase or the measurement's own `_N` version, which this module deliberately does
+    not go looking for. Pass `True` for a phase-0 style capture.
+
+    **Why `"check"` exists.** With "working" as the sensible default, a forgotten flag is silent
+    and costs ~50 degrees at a nearby junction. Nothing in the data can reveal it — a protective
+    `LR4 @100` and a designed one are the same filter. But a baseline sweep happens BEFORE a
+    crossover exists, so filters in force during one are protection almost by definition. That is
+    the single place the omission is recoverable, and it is worth a question rather than a guess:
+    the answer is a person's, since only they know whether the button was missed.
+    """
+    legs = legs_of(record, channel)
+    if legs is not None and any(_live(legs.get(k)) for k in ("hp", "lp")):
+        return "yes", legs
+    if legs is not None:
+        return "no", ("marked raw, and the record says nothing was in the chain — measured "
+                      "unfiltered, so there is nothing to remove")
+    if baseline:
+        return "check", (
+            f"{channel!r} was captured at baseline — before any crossover was designed — and is "
+            f"not marked raw. If a protective filter was in the chain it is unrecorded, and every "
+            f"phase decision near it will be out by tens of degrees with nothing to show for it. "
+            f"Was protection in force? If it was, record it; if it was not, say so explicitly.")
+    return "no", ("not marked raw, so this measured the system as configured — whatever filters "
+                  "are in it are part of the tune and must NOT be removed")
+
+
 def _live(leg):
     """A leg that actually filters, or None. `"OFF"`/null/missing all mean no filter."""
     if not isinstance(leg, dict) or leg.get("f") in (None, 0):
@@ -145,9 +195,11 @@ def de_embed(freqs_hz, measured, legs, *, max_boost_db=MAX_BOOST_DB):
     """
     if legs is None:
         raise ProtectiveError(
-            "no protective record for this capture — what was in the chain was never written "
-            "down. Correcting an unknown chain produces data that LOOKS corrected, which is worse "
-            "than leaving it measured. Record it at capture, or read the curve as REW gave it")
+            "no protective record for this capture. Under the working-by-default rule that means "
+            "it measured the system AS CONFIGURED, so there is nothing to take out and this "
+            "function should not have been called — ask `should_de_embed` first. If the capture "
+            "really was raw, the flag was missed, and correcting an unknown chain would produce "
+            "data that merely LOOKS corrected")
     freqs = np.asarray(freqs_hz, float)
     measured = np.asarray(measured, dtype=complex)
     prot = response(freqs, legs)
@@ -236,9 +288,34 @@ def _selftest():
     try:
         de_embed(freqs, measured, None)
     except ProtectiveError as exc:
-        assert "never written down" in str(exc), exc
+        assert "should not have been called" in str(exc), exc
     else:
         raise AssertionError("an unrecorded chain must be refused, not silently uncorrected")
+
+    # -- working by default, raw by exception (the user, 2026-08-23) ------------
+    # The common case costs no clicks and is an ANSWER: a capture nobody marked measured the
+    # system as configured, so its filters belong to the tune and must not be removed.
+    act, why = should_de_embed({"channels": {}}, "m-L")
+    assert act == "no" and "part of the tune" in why, (act, why)
+    # A marked one carries what to take out.
+    marked = {"channels": {"m-L": {"hp": {"f": 100, "type": "LR", "slope": 24}}}}
+    act, got = should_de_embed(marked, "m-L")
+    assert act == "yes" and got["hp"]["f"] == 100, (act, got)
+    # Marked and explicitly empty is also an answer -- measured unfiltered, nothing to remove.
+    act, why = should_de_embed({"channels": {"w-L": "OFF"}}, "w-L")
+    assert act == "no" and "nothing was in the chain" in why, (act, why)
+
+    # THE HOLE, and the one place it is recoverable. A default of "working" makes a forgotten flag
+    # silent, and it costs ~50 deg. Nothing in the data can reveal it -- a protective LR4@100 and a
+    # designed one are identical. But a BASELINE sweep predates any crossover, so filters in force
+    # during one are protection almost by definition.
+    act, why = should_de_embed({"channels": {}}, "m-L", baseline=True)
+    assert act == "check" and "not marked raw" in why, (act, why)
+    assert "Was protection in force?" in why, "the check must ASK, not decide"
+    # ...and a baseline capture that IS marked needs no question -- otherwise the guard would fire
+    # on every correctly-recorded baseline and be trained away within a week.
+    assert should_de_embed(marked, "m-L", baseline=True)[0] == "yes"
+    assert should_de_embed({"channels": {"w-L": "OFF"}}, "w-L", baseline=True)[0] == "no"
     same, info_off = de_embed(freqs, measured, {"hp": "OFF", "lp": "OFF"})
     assert np.allclose(same, measured) and info_off["applied"] == [], info_off
     assert "measured fact and not a no-op" in info_off["note"], info_off
