@@ -512,6 +512,23 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None):
     rows = []
     touched = set()
     for lo, hi, fc, pair_name in joint_specs:
+        # An octave either side of the declared corner. Investigated 2026-08-23 and deliberately
+        # LEFT ALONE — the note is here because this is where the next person will have the idea.
+        #
+        # The tempting change is "bound the band by the ELECTRICAL legs instead". As a rule it is
+        # sound, but only once the right pair is picked: **the two legs that FACE EACH OTHER across
+        # this junction**. For sub/w that is the sub's LPF and the midbass's HPF (88 and 86 on the
+        # reference car) — NOT the midbass's own LPF (215), which belongs to the next junction
+        # along. Taking both legs from one channel put the window's top at 215, where the sub is
+        # already 46 dB down: not overlap, but a region where the junction has finished happening.
+        #
+        # And with the right pair the change buys nothing here: every defining corner on all three
+        # junctions already falls inside this window (88/86 in 35–140, 215/460 in 160–640,
+        # 2000/3625 in 1750–7000). The window is not OPTIMAL — at fc 70 the action is 86–140 and
+        # the lower half is mostly quiet — but no measurement we have distinguishes the two, and
+        # the sum-loss dip at 117 Hz was seen by this window and by the cross-check's independent
+        # implementation alike. **Optimality with no failing case is the change that looks like
+        # progress and cannot be tested.**
         band = (fc / (2 ** band_oct), fc * (2 ** band_oct))
         band_s = f"{band[0]:.0f}-{band[1]:.0f}"
         jl = f"{lo}↔{hi}"
