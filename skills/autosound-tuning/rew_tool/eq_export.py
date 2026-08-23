@@ -59,6 +59,38 @@ LEDGER_TO_GENERIC = dict(LEDGER_TO_ATF)
 
 ATF_VENDOR = "audiotec-fischer"
 
+#: The formats this library can WRITE, as a caller-visible list. A GUI or an agent picks one by
+#: name; `None` means "decide from the profile's vendor", which is the normal case.
+#:
+#: Deliberately a registry rather than a chain of `if vendor ==`: a format we do not have is not a
+#: gap to be filled by guessing at a vendor's syntax, it is one the tuner will hand us
+#: (user, 2026-08-23) -- and when he does, it lands here beside the others instead of inside the
+#: dispatch. `register_format` is how it gets added mid-session without editing this file.
+FORMATS = {
+    "atf": "Audiotec-Fischer Full EQ (Helix / MATCH / BRAX) -- EQ only, size from the profile",
+    "generic": "REW Generic -- 20 slots, neutral, crossovers in a separate section (not written)",
+    "extended": "REW Generic/Extended -- 20 slots, crossovers INLINE, whole channel in one paste",
+}
+
+#: The DEFAULT when a DSP has no writer of its own (user, 2026-08-23: "беремо Generic"). Extended
+#: is used in its place only when there is a crossover to carry, because plain Generic has nowhere
+#: to put one -- and the swap is reported in `notes` rather than done quietly.
+DEFAULT_FORMAT = "generic"
+
+_EXTRA_WRITERS = {}
+
+
+def register_format(name, writer, description=""):
+    """Add a format at runtime -- for one the tuner supplies during a session.
+
+    `writer(inner, rows, legs, dropped, why) -> Export`. Registering is how a real vendor format
+    reaches us: this module will not invent one, because a guessed import syntax produces a file
+    that looks right and fails quietly.
+    """
+    _EXTRA_WRITERS[name] = writer
+    FORMATS[name] = description or f"supplied at runtime ({name})"
+    return name
+
 
 @dataclass
 class Export:
@@ -107,7 +139,8 @@ def tier_has_crossover(group):
     return "hp" in fields or "lp" in fields
 
 
-def export_eq(profile, eq_rows, *, crossovers=None, group_id="physical_outputs", channel=None):
+def export_eq(profile, eq_rows, *, crossovers=None, fmt=None, group_id="physical_outputs",
+              channel=None):
     """Render one channel for the clipboard.
 
     `eq_rows` is the ledger's own list -- `[{"type": "PK", "f": 2551, "gain_db": -14.1, "q": 1.5}]`
@@ -123,6 +156,21 @@ def export_eq(profile, eq_rows, *, crossovers=None, group_id="physical_outputs",
     vendor = str(inner.get("vendor") or "").strip().lower()
     rows = list(eq_rows or [])
     legs, dropped = _legs(crossovers, group, group_id)
+
+    # An explicit `fmt` wins over the vendor. A person who picked a format in a dropdown has said
+    # something the profile cannot contradict -- they may be pasting into something else entirely.
+    if fmt is not None:
+        if fmt in _EXTRA_WRITERS:
+            return _EXTRA_WRITERS[fmt](inner, rows, legs, dropped, f"caller asked for {fmt!r}")
+        if fmt == "atf":
+            size = (eq or {}).get("bands_per_channel") or atf_eq.N_BANDS
+            return _export_atf(inner, eq, rows, legs, dropped, size)
+        if fmt in ("generic", "extended"):
+            return _export_generic(inner, rows, legs, dropped, why=f"caller asked for {fmt!r}",
+                                   flavour=(generic_eq.EXTENDED if fmt == "extended"
+                                            else generic_eq.GENERIC))
+        raise ValueError(f"unknown format {fmt!r} -- have {', '.join(sorted(FORMATS))}. A format "
+                         f"we do not hold is one to be supplied (`register_format`), never guessed")
 
     if vendor == ATF_VENDOR:
         size = (eq or {}).get("bands_per_channel")
@@ -193,8 +241,13 @@ def _export_atf(inner, eq, rows, legs, dropped, size):
                   left_out=dropped, notes=notes)
 
 
-def _export_generic(inner, rows, legs, dropped, why):
-    """REW's own neutral block. **Extended when there is a crossover to carry, Generic when not.**"""
+def _export_generic(inner, rows, legs, dropped, why, flavour=None):
+    """REW's own neutral block.
+
+    The default is plain **Generic**. Extended is substituted only when there is a crossover to
+    carry, because Generic has literally nowhere to put one -- and the substitution is reported,
+    not done quietly. An explicit `flavour` from the caller wins over both.
+    """
     size = generic_eq.N_BANDS
     bands = []
     for row in rows:
@@ -228,13 +281,27 @@ def _export_generic(inner, rows, legs, dropped, why):
             freq=leg.get("f"), shape=shape, slope=leg.get("slope")))
         written_legs += 1
 
-    flavour = generic_eq.EXTENDED if written_legs else generic_eq.GENERIC
+    swapped = flavour is None and written_legs
+    if flavour is None:
+        flavour = generic_eq.EXTENDED if written_legs else generic_eq.GENERIC
+    if flavour == generic_eq.GENERIC and written_legs:
+        # Asked for plain Generic with crossovers in hand: they cannot go inline, and this writer
+        # does not emit the trailing section, so they do not travel. Said out loud.
+        for b in [b for b in bands if b.is_crossover]:
+            dropped.append({"item": {"crossover": b.type, "f": b.freq}, "why":
+                            "plain Generic keeps crossovers in a Compound_filters section this "
+                            "writer does not emit -- ask for 'extended' to carry them inline"})
+        bands = [b for b in bands if not b.is_crossover]
+        written_legs = 0
     notes = [f"REW's own neutral format, used because {why}. It pastes, but it is not "
              f"{inner.get('name') or 'this DSP'}'s native import -- confirm the processor accepted "
              f"it rather than assuming, since a partial success looks like a success."]
     if len(bands) < size:
         notes.append(f"{size - len(bands)} of the {size} slots are emitted EMPTY, so pasting "
                      f"REPLACES the block rather than adding to it.")
+    if swapped:
+        notes.append(f"Flavour switched from the default {generic_eq.GENERIC} to "
+                     f"{generic_eq.EXTENDED}: plain Generic has nowhere to put a crossover.")
     if written_legs:
         notes.append(f"{written_legs} crossover leg(s) are in this block as inline rows -- pasting "
                      f"it changes WHAT THE DRIVER PLAYS, not only its EQ.")
@@ -242,6 +309,111 @@ def _export_generic(inner, rows, legs, dropped, why):
                   format_name=f"REW Generic - {flavour} ({size} slots)",
                   written=len(bands) - written_legs, crossovers=written_legs, bank_size=size,
                   left_out=dropped, notes=notes)
+
+
+# -- import: the other direction ------------------------------------------------
+#: Wire spelling -> the ledger's vocabulary. The inverse of `LEDGER_TO_ATF`, written out rather
+#: than inverted at import time so an asymmetry (a wire type we read but never write, or the
+#: reverse) is visible here instead of implied.
+WIRE_TO_LEDGER = {"PK": "PK", "LS_Q": "LSH", "HS_Q": "HSH", "AP1": "APF1", "AP2": "APF2"}
+#: Crossover family, wire -> ledger. `BU` is Butterworth, `L-R` Linkwitz-Riley.
+WIRE_TO_XO = {v: k for k, v in generic_eq.SHAPES.items()}
+
+
+@dataclass
+class Imported:
+    """What a pasted block turned out to hold."""
+
+    #: Ledger-shaped EQ rows, ready for a channel's `eq`.
+    eq: list = field(default_factory=list)
+    #: Ledger-shaped `{"hp": {...}, "lp": {...}}`, only for legs the block actually carried.
+    crossovers: dict = field(default_factory=dict)
+    format_name: str = ""
+    #: `{"item": ..., "why": ...}` -- rows understood but NOT returned, e.g. crossovers for a tier
+    #: that has none. Never silent.
+    ignored: list = field(default_factory=list)
+    notes: list = field(default_factory=list)
+
+
+def sniff(text):
+    """Which format a pasted block is, from its first line. `None` when nothing recognises it."""
+    first = (text or "").lstrip().split("\n", 1)[0].strip()
+    if first.startswith("Audiotec_Fischer_Full_EQ_"):
+        return "atf"
+    if first == generic_eq.EXTENDED:
+        return "extended"
+    if first == generic_eq.GENERIC:
+        return "generic"
+    return None
+
+
+def import_eq(text, profile=None, *, fmt=None, group_id="physical_outputs"):
+    """Read a pasted block into ledger rows. The mirror of `export_eq`, and a separate call.
+
+    Two directions rather than one function with a flag, because they answer different questions
+    and fail differently: an export asks "what does this DSP take?", an import asks "what is this
+    text?" — and the second has to cope with a block somebody pasted from anywhere.
+
+    `fmt` forces the reader; by default the block's own first line decides (`sniff`). `profile` is
+    optional and used for one thing only: deciding whether crossovers in the block belong to this
+    tier at all. Without it they are returned, because refusing to hand back something the text
+    plainly contains would be the tool overruling the person who pasted it.
+    """
+    kind = fmt or sniff(text)
+    if kind is None:
+        raise ValueError(
+            "unrecognised block: the first line is neither an Audiotec-Fischer bank header nor "
+            f"{generic_eq.GENERIC!r}/{generic_eq.EXTENDED!r}. Pass `fmt=` if you know what it is; "
+            "guessing at a layout would read numbers out of the wrong columns")
+
+    ignored, notes = [], []
+    if kind == "atf":
+        bands = atf_eq.active_bands(atf_eq.parse_atf_eq(text))
+        raw_xo = []
+        name = "Audiotec-Fischer Full EQ"
+    else:
+        parsed, compounds = generic_eq.parse_generic(text)
+        bands = [b for b in generic_eq.active_bands(parsed) if not b.is_crossover]
+        raw_xo = [(b.type, b.freq, b.shape, b.slope)
+                  for b in generic_eq.active_bands(parsed) if b.is_crossover]
+        raw_xo += [(c.kind, c.freq, c.shape, c.slope) for c in compounds]
+        name = f"REW Generic/{generic_eq.EXTENDED if kind == 'extended' else generic_eq.GENERIC}"
+
+    eq = []
+    for b in bands:
+        mapped = WIRE_TO_LEDGER.get(b.type)
+        if mapped is None:
+            ignored.append({"item": b, "why": f"no ledger band type for {b.type!r}"})
+            continue
+        row = {"type": mapped, "f": b.freq, "i": b.number}
+        if b.gain is not None:
+            row["gain_db"] = b.gain
+        if b.q is not None:
+            row["q"] = b.q
+        if not b.enabled:
+            row["bypass"] = True
+        eq.append(row)
+
+    crossovers = {}
+    if raw_xo:
+        group = _group(profile, group_id)[1] if profile is not None else None
+        if group is not None and not tier_has_crossover(group):
+            ignored.append({"item": f"{len(raw_xo)} crossover leg(s)", "why":
+                            f"the {group_id!r} tier has no crossover in this DSP's profile — "
+                            f"read from the block, but there is nowhere to put them"})
+        else:
+            for kind_, freq, shape, slope in raw_xo:
+                leg = "hp" if kind_ == "High_pass" else "lp"
+                mapped = WIRE_TO_XO.get(shape)
+                if mapped is None:
+                    ignored.append({"item": {leg: (freq, shape, slope)}, "why":
+                                    f"no ledger crossover type for shape {shape!r}"})
+                    continue
+                crossovers[leg] = {"f": freq, "type": mapped, "slope": slope}
+            if crossovers:
+                notes.append("This block sets crossovers as well as EQ. Applying it changes WHAT "
+                             "THE DRIVER PLAYS — confirm before writing it to the channel.")
+    return Imported(eq=eq, crossovers=crossovers, format_name=name, ignored=ignored, notes=notes)
 
 
 # -- selftest ------------------------------------------------------------------
@@ -330,7 +502,55 @@ def _selftest():
     empty = export_eq(_profile(), [])
     assert empty.written == 0 and empty.text.count("\tNone\t") == 30
 
-    print(f"selftest OK -- ATF '{atf.format_name}' never carries a crossover (2 reported, not "
+    # -- the format is a PARAMETER, and the default is Generic ------------------
+    forced = export_eq(_profile(), rows, fmt="extended", crossovers=xo)
+    assert forced.text.split("\n")[0] == "Extended" and forced.crossovers == 2, forced.format_name
+    # Plain Generic asked for WITH crossovers in hand does not smuggle them in and does not
+    # silently upgrade: it drops them and names the flavour that would carry them.
+    forced_plain = export_eq(_profile(vendor="Musway"), rows, fmt="generic", crossovers=xo)
+    assert forced_plain.text.split("\n")[0] == "Generic" and forced_plain.crossovers == 0
+    assert any("'extended'" in lo["why"] for lo in forced_plain.left_out), forced_plain.left_out
+    try:
+        export_eq(_profile(), rows, fmt="nosuch")
+    except ValueError as exc:
+        assert "never guessed" in str(exc), exc
+    else:
+        raise AssertionError("an unknown format must be refused")
+    register_format("dummy", lambda inner, r, l, d, why: Export("X", "dummy"), "test")
+    assert export_eq(_profile(), rows, fmt="dummy").text == "X" and "dummy" in FORMATS
+
+    # -- import: the mirror, and a real round-trip ------------------------------
+    assert sniff(atf.text) == "atf" and sniff(ext.text) == "extended"
+    assert sniff(plain.text) == "generic" and sniff("nonsense") is None
+    try:
+        import_eq("nonsense")
+    except ValueError as exc:
+        assert "guessing at a layout" in str(exc), exc
+    else:
+        raise AssertionError("an unrecognised block must be refused, not guessed at")
+
+    # What went out must come back: ledger -> wire -> ledger, through the format's own reader.
+    trip = import_eq(ext.text)
+    assert [(r["type"], r["f"], r.get("gain_db"), r.get("q")) for r in trip.eq] == [
+        ("PK", 2551.0, -14.1, 1.5), ("LSH", 60.0, 2.0, 0.7), ("APF2", 1200.0, None, 1.7)], trip.eq
+    assert trip.crossovers == {"hp": {"f": 350.0, "type": "LR", "slope": 24},
+                               "lp": {"f": 4000.0, "type": "BW", "slope": 36}}, trip.crossovers
+    assert any("WHAT THE DRIVER PLAYS" in n for n in trip.notes), trip.notes
+    atf_trip = import_eq(atf.text)
+    assert [r["type"] for r in atf_trip.eq] == ["PK", "LSH", "APF2"], atf_trip.eq
+    assert not atf_trip.crossovers, "an ATF bank has none to give"
+
+    byp = export_eq(_profile(), [{"type": "PK", "f": 100, "gain_db": -3, "q": 2, "bypass": True}])
+    assert import_eq(byp.text).eq[0]["bypass"] is True, import_eq(byp.text).eq
+
+    # On import, a tier with no crossover of its own has the block's legs READ and then set aside
+    # -- reported, not returned into a field that does not exist.
+    novirt = import_eq(ext.text, _profile(vendor="Musway", no_crossover=True,
+                                          fields=["gain_db", "eq"]))
+    assert not novirt.crossovers and len(novirt.ignored) == 1, novirt
+    assert "nowhere to put them" in novirt.ignored[0]["why"], novirt.ignored
+
+    print(f"selftest OK -- import and export both ways, round-trip exact; ATF '{atf.format_name}' never carries a crossover (2 reported, not "
           f"smuggled); Generic flavour follows content (Generic without, Extended with, LR->L-R "
           f"BW->BU); a tier whose profile says it has no crossover gets none, `fields: null` does "
           f"not count as saying so; undeclared and overflow bands refused by name")
