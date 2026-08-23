@@ -61,13 +61,66 @@ def xo_response(freqs_hz, corner_hz, order_db_per_oct, kind, ftype):
     return h
 
 
-# hardware grid (helix-dsp-ultra-s.yaml), CHEBYSHEV excluded: ripple unconfirmed
+# ── enterable vs modellable: two questions, and they must not share one list ───────────────────
+#
+# **ENTERABLE** is a fact about a PROCESSOR — can the device be given this filter? It lives in the
+# project's `dsp_profile.json` under `crossover_filters.types`, differs per model, and is the right
+# question when VALIDATING something a person already chose.
+#
+# **MODELLABLE** is a fact about US — do we have a realisation we trust? It lives here, is the same
+# for every DSP, and is the right question when PROPOSING. A search that offers a filter we cannot
+# predict is worse than one that offers nothing: the tuner enters it and neither of us knows what
+# it did.
+#
+# Conflating them is how a Chebyshev crossover would come to be recommended. The Helix offers the
+# family; an experiment was run and could not identify its mathematics (user, 2026-08-23), so the
+# ripple is unidentified and the filter is not DETERMINED. Enterable, not modellable. It is the
+# same shape as the sub's 20-300 Hz UI range in mirror image -- there, one field answering two
+# questions would have REFUSED something possible; here it would PROPOSE something unpredictable.
+
+#: Families this module has a trusted realisation for. OURS, not any device's.
+MODELLABLE_FAMILIES = ("LR", "BW", "BE")
+
+#: Orders the Butterworth/Bessel realisations cover.
 XO_BW_ORDERS = (6, 12, 18, 24, 30, 36, 42)
+
+#: A DEFAULT search space, and it is the reference car's grid rather than a universal truth: LR at
+#: 12/24/36 is what a Helix DSP Ultra S offers, not a property of Linkwitz-Riley. Prefer
+#: `options_for(profile_types)` whenever a profile is in hand -- this constant is what to use when
+#: none is, and it is deliberately the narrower of the two so that being wrong means proposing too
+#: little.
 XO_OPTIONS = (
     [("LR", o) for o in (12, 24, 36)]
     + [("BW", o) for o in XO_BW_ORDERS]
     + [("BE", o) for o in XO_BW_ORDERS]
 )
+
+
+def options_for(profile_types, families=MODELLABLE_FAMILIES):
+    """The search space for THIS DSP: what it can be given AND what we can predict.
+
+    `profile_types` is a `dsp_profile` group's `crossover_filters.types` -- `{"LR": {...}, ...}` --
+    passed as a plain dict so this module stays free of the profile schema.
+
+    A family the profile declares and we cannot realise is dropped, which is the point. A family
+    we can realise and the profile does not declare is dropped too: proposing a filter the device
+    will not accept wastes a tuner's trip to the car.
+
+    A family whose own parameters are unstated (`ripple_db: null`) is NOT modellable regardless of
+    the list -- the filter is not determined by family and order alone, so there is nothing to
+    realise. That check is here rather than at the call site because forgetting it is silent.
+    """
+    out = []
+    for family in families:
+        spec = (profile_types or {}).get(family)
+        if not isinstance(spec, dict):
+            continue
+        if any(value is None for key, value in spec.items() if key != "orders_db_per_oct"):
+            continue
+        for order in spec.get("orders_db_per_oct") or ():
+            if isinstance(order, int):
+                out.append((family, order))
+    return out
 
 
 # ---------- biquad EQ (RBJ cookbook, digital, matches Helix PEQ bank) ----------
@@ -688,6 +741,26 @@ def _selftest():
                         f"{ftype}{order} {kind} at {fc:g} Hz differs from a zpk reference by "
                         f"{dmag:.3f} dB / {dphase:.2f} deg -- the evaluation path is losing the "
                         f"answer, as the transfer-function form did before v3.0.14")
+
+    # -- enterable vs modellable (2026-08-23) ---------------------------------
+    # A search must offer only what the device accepts AND we can predict. Chebyshev is the live
+    # case: the Helix offers it, an experiment could not identify its maths, so proposing one would
+    # hand the tuner a filter neither of us can account for.
+    helix = {"LR": {"orders_db_per_oct": [12, 24, 36]},
+             "BW": {"orders_db_per_oct": [6, 12, 24, 42]},
+             "CHEBYSHEV": {"orders_db_per_oct": [6, 12, 24], "ripple_db": None}}
+    opts = options_for(helix)
+    assert ("CHEBYSHEV", 12) not in opts, "an unmodellable family must never be proposed"
+    assert ("LR", 36) in opts and ("BW", 42) in opts, opts
+    assert ("LR", 48) not in opts, "a device that does not offer it must not be searched"
+    assert ("BE", 12) not in opts, "a family the profile omits is not ours to add"
+    # ...and the exclusion is about the UNSTATED PARAMETER, not about the name: the same family
+    # with a ripple stated is modellable, so this does not quietly blacklist anything unfamiliar.
+    stated = dict(helix, CHEBYSHEV={"orders_db_per_oct": [12], "ripple_db": 1.0})
+    assert ("CHEBYSHEV", 12) in options_for(stated, families=("CHEBYSHEV",)), \
+        "a determined filter is modellable once its parameters are stated"
+    # The default constant stays the reference car's grid and must not silently widen.
+    assert ("CHEBYSHEV", 12) not in XO_OPTIONS and ("LR", 48) not in XO_OPTIONS
 
     print("selftest[dsp_math] OK -- APF1 (-90 deg at f0, 0..-180, 1/(pi f0) delay far below f0), "
           "APF2 (-180 deg at f0, 0..-360, Q steepens), APF1^2 == APF2(Q=0.5), "

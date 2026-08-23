@@ -85,6 +85,33 @@ Worked example — `resonalyze_vc.py` reading a tune against an incomplete DSP p
 them up: *"`parametric_eq.freq_range_hz` not stated → 36 checks on eq"*. Four named gaps instead
 of fifty-three shrugs. That framing is what got them answered in an afternoon rather than filed.
 
+## 1b. ENTERABLE and MODELLABLE are two questions — never one field
+
+A capability list gets asked two different things by two different callers, and they need opposite
+answers:
+
+* a tool that **VALIDATES** something a person already chose asks *can the device be given this?*
+* a tool that **PROPOSES** asks *can we predict what it does?*
+
+Chebyshev on a Helix answers yes to the first and no to the second: the processor accepts the
+family, an experiment was run and could not identify its mathematics, so the ripple is unidentified
+and the filter is not DETERMINED. Validating an entered one as enterable is correct. Recommending
+one is not — a search that offers a filter we cannot predict is worse than a search that offers
+nothing, because the tuner enters it and then neither party can account for the result.
+
+**They live in different places, and that is the whole fix.** *Enterable* is a fact about a
+PROCESSOR and belongs in its `dsp_profile.json`. *Modellable* is a fact about US — which
+realisations this code has and trusts — and belongs in `dsp_math.MODELLABLE_FAMILIES`. Putting
+"we cannot model this" into a device profile would be recording our own limitation in a file that
+describes somebody's hardware, identical across every copy of that profile and stale the day our
+maths improves. `dsp_math.options_for(profile_types)` is the intersection, and a proposing tool
+should search that rather than either list alone.
+
+This is the sub's 20–300 Hz UI range in mirror image. There, one field answering two questions
+would have made a tool REFUSE something possible; here it makes a tool PROPOSE something
+unpredictable. Same defect, opposite damage — so when a list is about to be consulted, ask which
+of the two questions is being put to it.
+
 ## 2. Where each tool is SILENT — so step order can be derived, not asked
 
 Sequencing questions ("do I need the excess-phase gate before the sub↔midbass joint?") are
