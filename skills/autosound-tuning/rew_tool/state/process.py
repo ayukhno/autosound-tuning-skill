@@ -1134,6 +1134,11 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
                                          asked for, --step binds it to the plan step it satisfies
   capture-check [title ...]             run the verdict over the round and record it (SCR-040)
   capture-taken <title>                 a measurement came back (unplanned ones are flagged)
+  capture-protective <ch> OFF           this round was RAW for that channel: what was in the
+  capture-protective <ch> --hp 100 LR 24    chain and is NOT part of the tune, so it can be taken
+      [--lp 4000 BW 36]                 back out before a phase decision. OFF = swept with nothing,
+                                        which is an ANSWER; not running this at all means the
+                                        round measured the system as configured
   capture-skip <title> <reason>         deliberately NOT taken, and why
   capture-close [reason]                close the round; what is outstanding is named
   check                                 done steps with no evidence, and done steps whose
@@ -1287,6 +1292,29 @@ def _selftest():
             raise AssertionError(f"protective legs {bad!r} must be refused")
     assert "m-R" not in pr.protective_record()["channels"], "a refused write leaves no trace"
 
+    # The CLI verb, because autosound-tcc cannot reach a Python method here: it routes every
+    # process WRITE through this command line under an exclusive lock, so a verb that only exists
+    # in-process is a writer they cannot use.
+    import subprocess
+    _mod = os.path.abspath(__file__)
+    def _cli(*argv):
+        return subprocess.run([sys.executable, _mod, pr.dir, *argv],
+                              capture_output=True, text=True)
+    out = _cli("capture-protective", "tw-L", "--hp", "1000", "LR", "24")
+    assert out.returncode == 0, out.stderr
+    assert pr.protective_record()["channels"]["tw-L"]["hp"]["f"] == 1000.0, out.stdout
+    assert _cli("capture-protective", "c", "OFF").returncode == 0
+    assert pr.protective_record()["channels"]["c"] == "OFF"
+    both = _cli("capture-protective", "m-R", "--hp", "100", "LR", "24", "--lp", "4000", "BW", "36")
+    assert both.returncode == 0, both.stderr
+    assert pr.protective_record()["channels"]["m-R"]["lp"]["slope"] == 36, both.stdout
+    # A half-given leg is refused on the command line too, with the reason -- not silently dropped
+    # to a partial record that cannot be undone later.
+    bad = _cli("capture-protective", "m-L", "--hp", "100", "LR")
+    assert bad.returncode != 0 and "cannot be taken back out" in (bad.stderr + bad.stdout), bad
+    empty = _cli("capture-protective", "m-L")
+    assert empty.returncode != 0 and "is a different thing" in (empty.stderr + empty.stdout), empty
+
     # It is journalled, because it changes how every phase decision from those sweeps is read.
     kinds = [e.get("type") or e.get("event") or e.get("kind") for e in pr.events()]
     assert EV_CAPTURE_PROTECTIVE in kinds, kinds
@@ -1413,6 +1441,39 @@ def _main(argv):
                 f"{args[0]} recorded"
                 + ("" if entry["planned"] else " (unplanned -- not on this round's list)")
             )
+        elif cmd == "capture-protective":
+            # Out-of-process on purpose: `autosound-tcc` routes every process WRITE through this
+            # CLI under an exclusive lock, because its window and its model's MCP surface can both
+            # write. One implementation of "record a move" beats an in-process copy that drifts.
+            if not args:
+                raise ProcessError("capture-protective needs a channel")
+            channel, rest = args[0], args[1:]
+            if rest and rest[0].upper() == "OFF":
+                legs = "OFF"
+            else:
+                legs, i = {}, 0
+                while i < len(rest):
+                    kind = rest[i].lstrip("-").lower()
+                    if kind not in ("hp", "lp"):
+                        raise ProcessError(
+                            f"expected --hp or --lp (or a bare OFF), got {rest[i]!r}")
+                    if i + 3 >= len(rest):
+                        raise ProcessError(
+                            f"--{kind} needs three values: f type slope, e.g. --{kind} 100 LR 24. "
+                            f"A leg missing any of them cannot be taken back out later")
+                    legs[kind] = {"f": float(rest[i + 1]), "type": rest[i + 2].upper(),
+                                  "slope": int(rest[i + 3])}
+                    i += 4
+                if not legs:
+                    raise ProcessError(
+                        "give --hp/--lp, or the bare word OFF to say this channel was swept with "
+                        "nothing in the chain. Saying nothing at all is a different thing and is "
+                        "recorded by NOT running this command")
+            round_ = p.set_protective(channel, legs)
+            shown = "OFF" if legs == "OFF" else ", ".join(
+                f"{k.upper()} {v['f']:g} {v['type']}{v['slope']}" for k, v in sorted(legs.items()))
+            print(f"{round_['id']} {channel}: protective {shown} — this round is RAW for that "
+                  f"channel, so its sweeps are de-embedded before any phase decision")
         elif cmd == "capture-skip":
             p.skip_capture(args[0], " ".join(args[1:]))
             print(f"{args[0]} skipped: {' '.join(args[1:])}")
