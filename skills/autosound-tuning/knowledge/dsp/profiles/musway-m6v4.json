@@ -1,0 +1,24 @@
+{
+  "dsp_profile": {
+    "_open_questions": [
+      "Crossover slope ladder: the user RECALLS a plain 6 dB/oct ladder up to 48 dB/oct with no named-type (LR/BW/BE) restriction, unlike the Helix's LR-only-at-12/24/36. Unverified -- a hypothesis to check in the vendor app, NEVER a grid to search. It is the claim this profile exists to make checkable, and it is the one claim here that has already been quoted as evidence when it was not.",
+      "Whether this DSP exposes tiers beyond the output channels -- a virtual-channel tier, per-input (Optic/USB/BT) gain and EQ -- is UNKNOWN. `groups_enumerated: false` is what says so to a machine; this line says why.",
+      "How many output channels the hardware physically has. The model name suggests six; a model name is not a measurement, so max_count stays null."
+    ],
+    "groups": [
+      {
+        "fields": null,
+        "id": "physical_outputs",
+        "label": "Output channels",
+        "max_count": null
+      }
+    ],
+    "groups_enumerated": false,
+    "name": "M6V4",
+    "sample_rate_hz": null,
+    "sources": [
+      "user's memory of past use, 2026-07-10, contributed from AutoSci's dsp_profiles/musway-m6v4.yaml on 2026-08-23 -- NOT verified against a datasheet or the vendor software UI, and not re-confirmed since. Every enterable fact is null for that reason: what was remembered is in _open_questions, where no consumer can execute it."
+    ],
+    "vendor": "Musway"
+  }
+}

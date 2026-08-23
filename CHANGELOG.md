@@ -66,6 +66,17 @@ before: a forgotten note ships as the next patch.
   the other asks it. ⚠️ **Consumers iterating `group["fields"]` must read it as
   `(group.get("fields") or [])`** — a null will otherwise raise. Found by the AutoSci session
   trying to contribute an honest profile stub and being unable to.
+- **`groups_enumerated` — the tier LIST gets the same tri-state.** `fields: null` fixed a tier's
+  controls and left the identical defect one level up: `groups` must be non-empty, so an honest
+  stub names the one tier it knows and thereby asserts every other tier does not exist. `true`
+  means the list is complete and an absent group IS a claim that the DSP lacks it; `false` means
+  there may be more; absent/null means nobody has said, and `open-questions` asks. Existing
+  profiles will therefore report one new open question until somebody answers it — including our
+  own Helix, which is correct: nobody has confirmed it has no per-input tier.
+- **Second library entry: Musway M6V4**, contributed by the AutoSci session and deliberately almost
+  empty — name, vendor, one tier, everything else `null`, and what was remembered kept in
+  `_open_questions` where no consumer can execute it. It is the shape a low-confidence entry should
+  take: the label goes per FACT, not per file.
 - **`rew_api` no longer substitutes a different quantity for a missing IR time base.** It reads
   `startTime` or raises. `delay` is the ARRIVAL, one second of sweep pre-roll away from the buffer
   origin, and it is exactly `timeOfIRPeakSeconds` — so a reconstruction from it would inherit the

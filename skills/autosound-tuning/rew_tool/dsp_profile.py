@@ -13,10 +13,13 @@ Design invariants
     * `groups` is the load-bearing field: an ordered list of the tiers/categories this DSP model
       actually exposes (e.g. virtual_channels, physical_outputs, inputs), each declaring which
       per-row fields are meaningful for it. A consumer renders whatever groups+fields are declared
-      — it never assumes a fixed two-tier (virtual/output) shape. **Absence of a group is a
-      positive claim** that the DSP does not have that tier; `fields: null` is the other thing,
-      "this tier exists and nobody has enumerated its controls yet". The two must not be confused,
-      because the first silently answers a question and the second asks it. (An earlier version of
+      — it never assumes a fixed two-tier (virtual/output) shape. Three different "not there"s,
+      and conflating any two of them answers a question nobody asked:
+      **`groups_enumerated: true`** makes the absence of a group a positive claim that the DSP
+      lacks that tier; `false` says there may be more; absent/null means nobody has said, and
+      `missing_facts` asks. **`fields: null`** is a tier that exists whose controls are not
+      enumerated. **An absent group under `groups_enumerated: true`** is the only one of the three
+      that asserts anything. (An earlier version of
       this paragraph illustrated the point with specific MUSWAY facts — no virtual tier, per-input
       Optic/USB/BT gain+EQ — which traced back to one person's recollection, never re-checked in
       the vendor software. The design rationale should not rest on an unverified example, so it
@@ -127,6 +130,15 @@ def _validate_group(g):
 _PLAUSIBLE_RATES_HZ = (32000, 44100, 48000, 88200, 96000, 176400, 192000)
 
 
+def _validate_groups_enumerated(profile):
+    value = profile.get(GROUPS_ENUMERATED)
+    if GROUPS_ENUMERATED in profile and value is not None and not isinstance(value, bool):
+        raise ValueError(
+            f"{GROUPS_ENUMERATED} must be true, false or null (true = the tier list is complete, "
+            f"so an absent group MEANS the DSP lacks that tier; false = there may be more; null = "
+            f"nobody has said), got {value!r}")
+
+
 def _validate_rate(profile):
     """`sample_rate_hz` must be a rate, not a sentence.
 
@@ -156,6 +168,22 @@ def _validate_rate(profile):
         )
 
 
+#: Whether `groups` is a COMPLETE list of this DSP's tiers. Tri-state on purpose:
+#: `True` — enumerated, so the absence of a group is a positive claim that the tier does not exist;
+#: `False` — these are the tiers we know of, there may be more;
+#: absent/`None` — nobody has said, and `missing_facts` asks.
+#:
+#: `fields: null` fixed a tier's CONTROLS and left the TIER LIST with the same defect one level up:
+#: `groups` must be non-empty, so an honest stub has to name at least one tier, and naming one is
+#: what makes every other tier read as absent — i.e. as a positive claim nobody made. Raised by the
+#: AutoSci session, 2026-08-23, from inside the very entry that was meant to be the honest one:
+#: declaring only `physical_outputs` asserted that a Musway has no virtual tier and no per-input
+#: controls, which is exactly the claim retracted from this module's docstring hours earlier,
+#: re-entering through a different door. Prose was the only guard, and prose is what had already
+#: failed in every other case that day.
+GROUPS_ENUMERATED = "groups_enumerated"
+
+
 def validate_profile(data):
     """Raise ValueError on malformed profile; return `data` unchanged if OK."""
     profile = _unwrap(data)
@@ -167,6 +195,7 @@ def validate_profile(data):
     if not isinstance(profile["vendor"], str) or not profile["vendor"].strip():
         raise ValueError("profile.vendor must be a non-empty string")
     _validate_rate(profile)
+    _validate_groups_enumerated(profile)
     groups = profile["groups"]
     if not isinstance(groups, list) or not groups:
         raise ValueError("profile.groups must be a non-empty list")
@@ -575,6 +604,10 @@ def missing_facts(data):
     groups = [g for g in profile.get("groups", []) if isinstance(g, dict)]
     declared = {f for g in groups for f in (g.get("fields") or []) if isinstance(f, str)}
     out = [key for key in _FACTS_ALWAYS if key not in profile]
+    # Whether the tier LIST is complete is itself a fact, and an unanswered one has to be asked --
+    # otherwise every profile silently claims its `groups` is exhaustive just by existing.
+    if GROUPS_ENUMERATED not in profile:
+        out.append(GROUPS_ENUMERATED)
     out += [
         block for field, block in _FACTS_BY_FIELD.items()
         if field in declared and block not in profile
@@ -929,8 +962,41 @@ def _selftest():
     counted = copy.deepcopy(helix)
     counted["dsp_profile"]["groups"][0]["max_count"] = 8    # virtual A-H
     counted["dsp_profile"]["groups"][1]["max_count"] = 12   # outputs B-K, 12 physical
+    # ...and somebody has to SAY the tier list is complete. Leaving it unsaid is now an open
+    # question rather than a silent claim of exhaustiveness (see GROUPS_ENUMERATED).
+    counted["dsp_profile"][GROUPS_ENUMERATED] = True
     validate_profile(counted)
     assert open_questions(counted) == [], open_questions(counted)
+
+    # ── the tier LIST is tri-state too (2026-08-23, AutoSci) ──────────────────
+    # `fields: null` fixed a tier's controls and left this defect one level up: `groups` must be
+    # non-empty, so an honest stub names the one tier it knows and thereby asserts the others do
+    # not exist. Same comparison shape as the `fields` test -- the silent version must ask FEWER
+    # questions, which is the whole defect.
+    unsaid = copy.deepcopy(counted)
+    del unsaid["dsp_profile"][GROUPS_ENUMERATED]
+    validate_profile(unsaid)
+    assert GROUPS_ENUMERATED in open_questions(unsaid), open_questions(unsaid)
+    assert GROUPS_ENUMERATED in missing_facts(unsaid), missing_facts(unsaid)
+    partial = copy.deepcopy(unsaid)
+    partial["dsp_profile"][GROUPS_ENUMERATED] = False
+    validate_profile(partial)
+    assert open_questions(partial) == [], \
+        "saying the list is INCOMPLETE answers the question -- it does not reopen it"
+    for bad in ("yes", 1, []):
+        broken_enum = copy.deepcopy(counted)
+        broken_enum["dsp_profile"][GROUPS_ENUMERATED] = bad
+        try:
+            validate_profile(broken_enum)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"{GROUPS_ENUMERATED}={bad!r} must be refused")
+    # null is a legal "nobody has said", and it is still ASKED.
+    nulled_enum = copy.deepcopy(counted)
+    nulled_enum["dsp_profile"][GROUPS_ENUMERATED] = None
+    validate_profile(nulled_enum)
+    assert GROUPS_ENUMERATED in open_questions(nulled_enum), open_questions(nulled_enum)
 
     # a slot count is a count: 0, negative, float and bool are refusals, null is "not asked yet".
     for bad_count in (0, -1, 2.5, True, "12"):
@@ -965,7 +1031,8 @@ def _selftest():
     assert any("vendor software" in q for q in oq), oq
     # Complete in every capability it declares, and still owing its two slot counts (SCR-042) --
     # the `counted` copy below closes exactly those, and asserts an empty list afterwards.
-    assert open_questions(helix) == ["groups.0.max_count", "groups.1.max_count"], \
+    assert open_questions(helix) == ["groups.0.max_count", "groups.1.max_count",
+                                     GROUPS_ENUMERATED], \
         open_questions(helix)
 
     # find_bundled: exact match only, no sibling/fuzzy match.
