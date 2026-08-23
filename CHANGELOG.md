@@ -86,6 +86,16 @@ Two consequences worth stating, because both have already caused a question:
   nobody will enumerate, and a list carrying permanent dead entries is one people stop reading —
   the failure §1a exists to prevent. So it is kept, declared, and skipped when counting what is
   unanswered. Expect no ledger rows for such a tier; their absence is not an incomplete project.
+- **`rew_tool/protective.py` — de-embedding the filter that was only there to protect the driver.**
+  A sweep taken behind a protective high-pass carries that filter's phase far past its corner, and
+  the junction decision downstream reads it as the car: the same data, same engine, read −49° with
+  protection in and +3° with it out. `de_embed` divides the chain back out; `matters_at` says how
+  many degrees are still unwound. Two things it insists on: **low-passes count as much as
+  high-passes** (LR4 @100 leaves 52° at 320 Hz, LR4 @500 leaves 53.5° at 160 — a tool cleaning only
+  high-passes would look finished at half the job), and **an unrecorded chain is refused** rather
+  than silently left uncorrected, because a correction over an unknown chain produces data that
+  looks corrected. The 40 dB boost cap is reported, not hidden: below a protective corner the
+  filter has almost no output and dividing by it would return hiss shaped like a driver.
 - **The PEQ mode pairing is OBSERVED, and the derived label is retired as SATISFIED.** The
   "Parametric EQ" panel was photographed in one state with every field visible together — Freq
   26.01 Hz, Gain 0.1 dB, Q 50 — which settles both halves at once: the frequency field ACCEPTS two
