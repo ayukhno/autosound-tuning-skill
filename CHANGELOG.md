@@ -40,7 +40,7 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
-## [Unreleased]
+## [v3.0.20] — 2026-08-23 · reading somebody else's tune, and the filter that was only there to protect the driver
 
 - **An abstention is half an answer — a tool that cannot run must ASK, and say what it costs**
   (`references/core/estimator-scope.md §1a`, the user's rule). Saying "unknown" stops a tool being
@@ -86,6 +86,31 @@ Two consequences worth stating, because both have already caused a question:
   nobody will enumerate, and a list carrying permanent dead entries is one people stop reading —
   the failure §1a exists to prevent. So it is kept, declared, and skipped when counting what is
   unanswered. Expect no ledger rows for such a tier; their absence is not an incomplete project.
+- **Recording a protective capture, and where it lives.** `protective.should_de_embed()` answers
+  `no` / `yes` / **`check`**: any capture is a WORKING capture unless somebody says otherwise — it
+  measured the system as configured and nothing is removed — and raw captures carry the flag. The
+  hole that leaves is named rather than smoothed: a forgotten flag is silent and costs ~50°, and
+  no inspection of the filter can reveal it, since a protective `LR4 @100` and a designed one are
+  identical. A **baseline** sweep predates any crossover, so `baseline=True` turns an unmarked one
+  into a question for a person. The record itself lives on the **capture round** in `process.py`,
+  which already carried `phase` and `version` — so whether de-embedding applies is READ, not
+  inferred from a title: phase 0/1 wants it, a verification against a banked version does not.
+  New CLI verb **`capture-protective <ch> OFF | --hp 100 LR 24 [--lp 4000 BW 36]`**, because a
+  consumer that writes to the process out-of-process cannot reach a Python method.
+- **`eq_export.import_eq()` — the other direction.** A separate call from `export_eq`, because an
+  export asks *what does this DSP take* and an import asks *what is this text* and must cope with
+  a block pasted from anywhere. `sniff()` names a block from its first line and an unrecognised one
+  is REFUSED, since guessing a layout reads numbers out of the wrong columns. Returns ledger-shaped
+  rows plus crossovers, and flags that applying them changes what the driver plays. The format is a
+  parameter (`fmt`); `register_format()` takes one supplied at runtime.
+- **The junction scoring window is NOT changing, and the reasoning is recorded at the line where
+  the idea recurs.** A cross-check reported that our window missed a sum-loss dip at 117 Hz; it did
+  not — both implementations use 35–140 at fc 70 and both reported it. The replacement I proposed
+  was worse than the thing it replaced: bounding the band by "the electrical legs" is sound only
+  with the pair that FACE each other across the junction, and I took both legs from one channel,
+  which would have put the window's top where the sub is 46 dB down. Also recorded: the window is
+  not optimal, and that is still not a reason to change it — optimality with no failing case is the
+  change that looks like progress and cannot be tested.
 - **`rew_tool/protective.py` — de-embedding the filter that was only there to protect the driver.**
   A sweep taken behind a protective high-pass carries that filter's phase far past its corner, and
   the junction decision downstream reads it as the car: the same data, same engine, read −49° with
@@ -96,6 +121,10 @@ Two consequences worth stating, because both have already caused a question:
   than silently left uncorrected, because a correction over an unknown chain produces data that
   looks corrected. The 40 dB boost cap is reported, not hidden: below a protective corner the
   filter has almost no output and dividing by it would return hiss shaped like a driver.
+- **Helix channel gain: step 1.0 dB** (user-verified), and it is COARSER than the EQ band's 0.1.
+  With the ranges already differing (−30…+5 against −30…+12), the band gain and the channel trim
+  are now measured as different in range, step and resolution — "they must never stand in for each
+  other" stopped being a caution and became three measurements.
 - **The PEQ mode pairing is OBSERVED, and the derived label is retired as SATISFIED.** The
   "Parametric EQ" panel was photographed in one state with every field visible together — Freq
   26.01 Hz, Gain 0.1 dB, Q 50 — which settles both halves at once: the frequency field ACCEPTS two
@@ -128,6 +157,30 @@ Two consequences worth stating, because both have already caused a question:
   stays unplaced rather than guessed: `role` would place most of them, and that inference is what
   the field exists to refuse, because slot letters repeat across tiers and a wrong placement is
   invisible once written. Seed order matters — backfill the source first and the tiers travel.
+
+### Upgrading
+
+**Nothing removed or renamed; three things a caller can notice.**
+
+- **`dsp_math.options_for(profile_types)` is the new search space, and it is an INTERSECTION** —
+  what the DSP can be given AND what this code can predict. A proposing tool that used to see
+  Chebyshev in a profile's `crossover_filters.types` will stop seeing it, deliberately: the family
+  is enterable and not modellable, so recommending one hands the tuner a filter nobody can account
+  for. `XO_OPTIONS` still exists as a default for callers with no profile, now documented as the
+  reference car's grid rather than a universal truth.
+- **`resonalyze_vc` returns `enterable: null` where it used to return a pass**, for any crossover
+  family whose own parameters are unstated. Today that is Chebyshev, whose `ripple_db` is null. A
+  caller treating anything-not-refused as approved will now see a third state; that is the point.
+- **Two new DSP-profile fields, both tri-state and both additive.** `groups_enumerated` says
+  whether the tier list is complete — until it is answered, an absent tier means "nobody said"
+  rather than "the DSP lacks one", so **every existing profile gains one open question** until
+  somebody answers it, which is correct rather than noise. `in_scope: false` marks a tier the DSP
+  HAS and the method does not tune; `open_questions` skips such a group, so a stage nobody will
+  ever enumerate stops appearing on a list people are supposed to read.
+
+**New and purely additive:** `rew_tool/protective.py`, `rew_tool/eq_export.py`,
+`rew_tool/generic_eq.py`, `process.py`'s `set_protective` / `protective_record` and the
+`capture-protective` CLI verb, `project.py`'s `backfill-tiers`.
 
 ## [v3.0.19] — 2026-08-23 · reading somebody else's tune, and a library to check it against
 
