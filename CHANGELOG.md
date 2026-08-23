@@ -114,6 +114,16 @@ before: a forgotten note ships as the next patch.
   matters for a woofer, not obviously below what matters for a tweeter. Hence the new rule:
   re-measure channel 1 at the end whenever inter-channel timing is load-bearing.
 
+- **Two provenance corrections in the knowledge files, which change what the method CLAIMS rather
+  than what it does.** The Helix EQ's "Q 0.5–50 with a 0.01 Hz step" pairing is now labelled as
+  DERIVED from the user's full-range ruling rather than measured: each of the three numbers is
+  separately user-verified, but nobody has yet seen them hold at once in one PC-Tool mode, and
+  anything copied from that line into a machine-readable profile must carry the derived label —
+  a plausible number becomes a measured fact simply by sitting in a field that only records
+  measured facts. And `dsp_profile.py`'s opening paragraph no longer illustrates its design
+  rationale with MUSWAY specifics that traced to one unverified recollection; the retraction had
+  reached the paragraph making the argument and not the summary above it, where most readers stop.
+
 ### Upgrading
 
 **`rew_api.get_impulse_response` can now raise `KeyError`** where it previously returned a
