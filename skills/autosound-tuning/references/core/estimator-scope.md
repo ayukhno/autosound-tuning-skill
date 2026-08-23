@@ -42,6 +42,12 @@ have to work out **what** is missing, **who** can supply it, and **whether it ma
 there long enough, "unknown" becomes wallpaper — a column of question marks nobody acts on,
 which is the same fate as a warning nobody reads.
 
+**This applies to a missing INPUT, and only to that.** A tool silent because it is out of its
+domain (§2) is a different thing: nobody can supply "the excess-phase gate's opinion below 150 Hz",
+because it does not have one — something else governs there, and the table in §2 says what. Asking
+the Arbiter for a fact that does not exist is worse than silence, since it reads as a real gap and
+gets a real answer invented for it. **Ask only where an answer exists and somebody holds it.**
+
 So a tool that abstains for want of an INPUT must, in the same breath:
 
 1. **Name the missing fact precisely** — the profile key, the field, the measurement. Not "the

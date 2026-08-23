@@ -52,6 +52,20 @@ Two consequences worth stating, because both have already caused a question:
   Arbiter is deciding, and re-graded as the work changes: a missing gain STEP blocks nothing until
   somebody enters a half-decibel trim, and then it always was a stopper. `resonalyze_vc.py`'s gap
   roll-up carries the grade, the quantified cost and the ask.
+- **The ask-rule applied beyond the converter.** `dsp_profile.gaps()` turns each unanswered fact
+  into `{key, what, governs, ask}` — and deliberately does NOT grade, because this module cannot
+  see the work: `channel_gain.step_db` is nothing while every trim is a whole number and a stopper
+  the moment somebody wants half a decibel. A library that guessed urgency would be inventing it.
+  `timebase.compare()` DOES grade, because it can see the batch. And §1a now states the boundary:
+  the rule is for a missing INPUT only — a tool silent because it is out of its domain has no
+  answer for anybody to supply, and asking for one is worse than silence, since it reads as a real
+  gap and gets a real answer invented for it.
+- **`timebase`: silence is not disagreement.** Grouping captures by their stated terms treated an
+  unstated offset as a DIFFERENT offset, so one silent capture manufactured a mismatch the batch
+  had no evidence for — and the silence then graded itself unimportant on the grounds that the
+  batch "already" mismatched, which was circular. Only captures that state their terms are
+  grouped; the silent ones are reported as unknowns, and they are a STOPPER when others did state
+  theirs, because that is the comparison somebody is about to make.
 - **`channels[].tier` is for every channel, not only spares** — and `project.py backfill-tiers`
   fills it by READING the ledger's row keys, never by inferring. A channel's tier cannot change
   between snapshots, so by schema v3's own test it is identity and belongs in `project.json`;

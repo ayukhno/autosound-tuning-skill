@@ -626,6 +626,69 @@ def missing_facts(data):
     return sorted(set(out))
 
 
+#: What each unanswered profile fact GOVERNS, and who can answer it. Deliberately not a grade:
+#: see `gaps()`. Keyed by the dotted path's leaf, since the same fact means the same thing whatever
+#: group it hangs under.
+_GOVERNS = {
+    "sample_rate_hz": "every delay expressed in samples — a wrong or missing rate makes each one "
+                      "wrong, and it is the first thing phase 1 needs",
+    "max_count": "how many slots the tier physically has, so spare capacity is visible at all",
+    "fields": "which controls this tier has — and it gates what else gets ASKED, so leaving it "
+              "unanswered hides every question about the controls nobody has named",
+    "groups_enumerated": "whether the tier list is complete; until it is answered, an absent tier "
+                         "means 'nobody said', not 'the DSP lacks one'",
+    "corner_freq_range_hz": "the bounds a crossover corner is checked against",
+    "corner_freq_step_hz": "the grid a crossover corner must land on",
+    "freq_range_hz": "the bounds an EQ band's centre frequency is checked against",
+    "freq_step_hz": "the grid an EQ band's centre frequency must land on",
+    "q_range": "the bounds an EQ band's Q is checked against",
+    "q_step": "the grid an EQ band's Q must land on",
+    "gain_range_db": "the bounds an EQ band's gain is checked against",
+    "gain_step_db": "the grid a gain must land on",
+    "range_db": "the bounds a channel trim is checked against",
+    "step_db": "the grid a channel trim must land on",
+    "max_ms": "the delay ceiling — without it a delay is on the grid and otherwise unbounded",
+    "step_ms": "the grid a delay must land on",
+    "ripple_db": "the passband ripple of a Chebyshev edge",
+}
+
+
+def gaps(data):
+    """Every unanswered fact as something a caller can ACT on — `estimator-scope.md §1a`.
+
+    `open_questions()` returns dotted paths, which is right for a checklist and useless as an ask:
+    a reader still has to work out what the fact governs and who could possibly know. This returns
+    `{key, what, governs, ask}` for each, so the question can be put to somebody.
+
+    **It deliberately does not GRADE.** §1a grades by what a gap STOPS, and this module cannot see
+    the work: `channel_gain.step_db` is nothing at all while every trim is a whole number and a
+    stopper the moment somebody wants half a decibel. Only the caller holding the values knows
+    which — `resonalyze_vc.profile_gaps` grades because it is looking at a specific tune. A library
+    that guessed the grade would be inventing urgency, and an urgency that turns out to be wrong is
+    how a list of asks stops being read.
+
+    Freeform `_open_questions` notes come through as themselves: somebody already wrote those as
+    questions, and rephrasing them here would lose what they were careful about.
+    """
+    profile = _unwrap(data)
+    freeform = set(profile.get("_open_questions") or [])
+    out = []
+    for key in open_questions(data):
+        if key in freeform:
+            out.append({"key": None, "what": key, "governs": None,
+                        "ask": "whoever wrote this note, or the Arbiter"})
+            continue
+        leaf = key.split(".")[-1]
+        out.append({
+            "key": key,
+            "what": f"{key} is not stated",
+            "governs": _GOVERNS.get(leaf),
+            "ask": "the Arbiter — a DSP capability is read off the device's own software, "
+                   "never derived from anything we hold",
+        })
+    return out
+
+
 def open_questions(data):
     """Every unanswered fact (dotted path) plus any declared `_open_questions` freeform notes.
 

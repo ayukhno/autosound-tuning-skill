@@ -145,8 +145,15 @@ def compare(timings):
     untimed = [t for t in timings if not t["has_ir"]]
 
     findings, unknowns = [], []
+    # Only captures that STATE their terms are grouped. An unstated offset is not a different
+    # offset: grouping by `None` made an unknown masquerade as a disagreement, so a batch where one
+    # capture was silent reported a mismatch it had no evidence for — and then the silence graded
+    # itself SLOW on the grounds that the batch "already" mismatched, which was circular. Unknown
+    # and different are the two things this whole module exists to keep apart.
+    stated = [t for t in timed if t["offset_s"] is not None and t["reference"] is not None]
+    silent = [t for t in timed if t not in stated]
     groups = {}
-    for t in timed:
+    for t in stated:
         groups.setdefault(_group_key(t), []).append(t)
 
     if len(groups) > 1:
@@ -159,8 +166,8 @@ def compare(timings):
 
     # The specific trap, called out by name whenever it is what happened: one reference, several
     # offsets. Every UI shows "Loopback" and the captures are still not on one clock.
-    refs = {t["reference"] for t in timed}
-    offsets = {t["offset_s"] for t in timed}
+    refs = {t["reference"] for t in stated}
+    offsets = {t["offset_s"] for t in stated}
     if len(refs) == 1 and len(offsets) > 1:
         findings.append({
             "kind": "same-reference-different-offset",
@@ -217,12 +224,45 @@ def compare(timings):
         "terms": _describe(next(iter(groups))) if len(groups) == 1 else None,
         # True when nothing DISAGREES -- distinct from `comparable`, which also requires that the
         # terms were actually stated. A batch can be internally consistent and still unverifiable.
+        # Nothing DISAGREES. Distinct from `comparable`, which also needs the terms to be stated:
+        # a batch can be internally consistent and still unverifiable.
         "agree": len(groups) <= 1 and not findings,
+        "stated": len(stated),
         "findings": findings,
-        "unknowns": [{"what": what, "count": len(who), "who": who}
+        "unknowns": [_ask(what, who, len(timed), len(stated), bool(findings))
                      for what, who in sorted(rolled.items(), key=lambda kv: -len(kv[1]))],
         "measurements": timings,
     }
+
+
+def _ask(what, who, timed, stated, already_mismatched):
+    """One unknown as something the Arbiter can act on — `estimator-scope.md §1a`.
+
+    This module CAN grade, unlike `dsp_profile.gaps()`, because it can see the work: it knows how
+    many captures are in the batch and whether anything already disagrees. The grade is about what
+    the gap stops, not about how interesting it is — an unstated offset on a batch nobody is
+    comparing across days costs nothing, and the same gap is a stopper the moment two batches meet.
+    """
+    count = len(who)
+    if stated and count < timed:
+        grade, cost = "STOPPER", (
+            f"{count} of {timed} capture(s): the other {stated} state their terms and these do "
+            f"not, so any comparison crossing that line is a guess — and it is the comparison "
+            f"somebody is about to make")
+    elif already_mismatched:
+        grade, cost = "SLOW", (f"{count} of {timed} capture(s): the batch is already known not to "
+                               f"match on other grounds, so this changes no decision today")
+    elif count == timed:
+        grade, cost = "DEGRADED", (
+            f"all {count} capture(s): they agree with each other, so comparing WITHIN this batch "
+            f"is safe — but nothing states what they agree on, so they cannot be trusted against "
+            f"a batch captured on another day")
+    else:
+        grade, cost = "DEGRADED", (
+            f"{count} of {timed} capture(s) cannot be placed on the batch's footing")
+    return {"what": what, "count": count, "who": who, "grade": grade, "cost": cost,
+            "ask": "the Arbiter — REW holds it per measurement, and only whoever ran the capture "
+                   "knows what the rig was set to"}
 
 
 def _describe(key):
@@ -291,7 +331,9 @@ def report(result):
                 lines.append(f"          {m}")
     for u in result["unknowns"]:
         who = ", ".join(u["who"]) if u["count"] <= 3 else f"all {u['count']}"
-        lines.append(f"  ?         {u['what']} — {who}")
+        lines.append(f"  [{u['grade']}] {u['what']} — {who}")
+        lines.append(f"      cost: {u['cost']}")
+        lines.append(f"      ask : {u['ask']}")
 
     if result["findings"]:
         lines.append("")
@@ -428,6 +470,30 @@ def _selftest():
     many = compare([timing_of(_rec(timingOffset=None, notes=""), mid=i) for i in range(8)])
     assert all(u["count"] == 8 for u in many["unknowns"]), many["unknowns"]
     assert "all 8" in report(many), report(many)
+    # Every unknown is actionable: graded by what it STOPS, with a quantified cost and someone to
+    # ask (`estimator-scope.md §1a`). Whole batch silent = DEGRADED: safe within, not across days.
+    for u in many["unknowns"]:
+        assert u["grade"] == "DEGRADED" and str(u["count"]) in u["cost"] and u["ask"], u
+    # ...but a batch where SOME state their terms and some do not is a STOPPER, because the
+    # comparison crossing that line is the one somebody is about to make.
+    split_terms = compare([timing_of(_rec(), mid=1),
+                           timing_of(_rec(timingOffset=None, notes=""), mid=2)])
+    assert any(u["grade"] == "STOPPER" for u in split_terms["unknowns"]), split_terms["unknowns"]
+    # And once the batch is known not to match on other grounds, the same gap decides nothing
+    # today — grading it urgent would spend the Arbiter's attention on a question that changes
+    # no outcome.
+    moot = compare([timing_of(_rec(timingOffset=0.004), mid=1),
+                    timing_of(_rec(timingOffset=0.004, sampleRate=48000), mid=2),
+                    timing_of(_rec(timingOffset=None, notes=""), mid=3)])
+    assert any(f["kind"] == "sample_rate-differs" for f in moot["findings"]), moot["findings"]
+    assert all(u["grade"] == "STOPPER" for u in moot["unknowns"]), moot["unknowns"]
+    # An unstated offset must NOT read as a different offset: one silent capture beside one
+    # stated must not manufacture a split-batch finding out of an unknown.
+    quiet_one = compare([timing_of(_rec(), mid=1),
+                         timing_of(_rec(timingOffset=None, notes=""), mid=2)])
+    assert not any(f["kind"] == "split-batch" for f in quiet_one["findings"]), \
+        "silence is not disagreement"
+    assert quiet_one["stated"] == 1, quiet_one
 
     # A float round-trip must not read as a mismatch, and a real one still must.
     assert compare([timing_of(_rec(timingOffset=0.004), mid=1),
