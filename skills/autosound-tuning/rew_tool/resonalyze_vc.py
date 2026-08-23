@@ -851,8 +851,7 @@ def report(result):
                  f" {scene['stereo_near_side']} (near) side")
     lines.append("              ^ the AIM of Auto delay / gain balance, already inside the "
                  "per-leg numbers below")
-    target = scene.get("target") or {}
-    lines.append(f"  target      {target.get('preset')} at {scene['target_level_db']:+g} dB")
+    lines.append(f"  target      {_target_line(scene)}")
     named = profile["name"] if profile else "NONE GIVEN -- nothing below has been checked"
     lines.append(f"  profile     {named}")
     lines.append("")
@@ -908,6 +907,34 @@ def report(result):
         lines.append("BLOCKED: nothing was rounded to fit. Decide each 'NO' above by hand -- "
                      "a substitute filter is a tuning decision, not a conversion.")
     return "\n".join(lines)
+
+
+def _target_line(scene):
+    """The aiming curve as its NUMBERS, with the preset name demoted to a label.
+
+    Resonalyze stores a flat numeric mirror beside the preset name on purpose: "presets are a
+    starting point whose numbers can change between versions, while a session has to open aiming
+    at exactly the curve it was tuned against". So a provenance line reading `CarBass` can come to
+    mean a different curve after an upstream release, while the tilt and the shelf triples cannot.
+    The blob itself is carried verbatim and never parsed into a row -- the target is a project-wide
+    overlay the host owns, not a per-channel filter, and the ledger rightly has nowhere to put it.
+    """
+    target = scene.get("target") or {}
+    level = f"{scene['target_level_db']:+g} dB"
+    if not isinstance(target, dict) or not target:
+        return f"none at {level}"
+    parts = [f"tilt {_g(target.get('tiltDbPerOctave', 0))} dB/oct"]
+    for label, prefix in (("bass", "bassShelf"), ("treble", "trebleShelf"),
+                          ("presence", "presence")):
+        gain = target.get(f"{prefix}GainDb")
+        if gain is None:
+            continue
+        parts.append(f"{label} {gain:+g} dB @{_g(target.get(f'{prefix}FrequencyHz'))} Hz"
+                     f"/{_g(target.get(f'{prefix}WidthOctaves'))} oct")
+    label = target.get("preset")
+    return (" · ".join(parts) + f" at {level}"
+            + (f"   (preset label {label!r} -- the numbers above are what binds)"
+               if label else ""))
 
 
 def _leg_str(leg):
@@ -991,7 +1018,11 @@ def _session(**over):
         "format": FORMAT, "version": 7, "savedAtUtc": "2026-08-22T21:20:19Z", "channels": [],
         "calibrationId": "90deg", "stereoSceneOffsetMs": 0.25, "stereoRightHandDrive": False,
         "stereoLevelDifferenceDb": -1.0, "targetLevelDb": -4.0,
-        "target": {"preset": "CarBass"}, "smoothingInverseOctaves": 6,
+        "target": {"preset": "CarBass", "tiltDbPerOctave": 0, "bassShelfGainDb": 9,
+                   "bassShelfFrequencyHz": 100, "bassShelfWidthOctaves": 0.8,
+                   "trebleShelfGainDb": -2, "trebleShelfFrequencyHz": 12000,
+                   "trebleShelfWidthOctaves": 0.7, "toleranceDb": 3},
+        "smoothingInverseOctaves": 6,
         "pairs": [
             {"mono": True, "enabled": True, "bypass": False,
              "left": side("Resonalyze-IR-2026-08-20_12-40-42_sw.json",
@@ -1018,6 +1049,12 @@ def _session(**over):
                                          "slopeDbPerOctave": 36, "rippleDb": 1},
                            lowPassEdge={"family": "LinkwitzRiley", "frequencyHz": 350,
                                         "slopeDbPerOctave": 24, "rippleDb": 0.1})},
+            # A leg no project answers to. Every consumer's importer needs the MISS in its
+            # fixture: binding is the easy path and the unbound leg is the one a dialog exists
+            # for, so a fixture where everything resolves tests the half that never fails.
+            {"mono": True, "enabled": True, "bypass": False,
+             "left": side("Resonalyze-IR-2026-08-20_12-44-02_nosuch.json", crossoverKind="Off"),
+             "right": dict(empty)},
         ],
     }
     doc.update(over)
@@ -1047,13 +1084,29 @@ def _profile():
     }}
 
 
+#: A synthetic v7 session on disk, for consumers who need a file rather than this module's
+#: builder (autosound-tcc's importer tests). SYNTHETIC on purpose: a real session carries
+#: somebody's tune and the absolute paths of their machine, and this repo is public.
+FIXTURE = os.path.join(_HERE, "testdata", "virtual-dsp-session-v7.json")
+
+
+def _fixture_text():
+    """The fixture's exact bytes, from the same builder the selftest runs on.
+
+    One source, two consumers. A fixture hand-maintained beside a builder is two descriptions of
+    one format that agree until the day they do not -- and the drift shows up as somebody else's
+    test passing against a file this module no longer produces.
+    """
+    return json.dumps(_session(), indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+
+
 def _selftest():
     doc = _session()
     legs = legs_of(doc)
 
     # The mono pair's empty right side is not a channel, and a mono pair yields ONE row.
-    assert len(legs) == 3, [f"{l['pair']}.{l['side']}" for l in legs]
-    sub, w_l, w_r = legs
+    assert len(legs) == 4, [f"{l['pair']}.{l['side']}" for l in legs]
+    sub, w_l, w_r, orphan = legs
 
     # A dormant edge stays out of the row. The sub's file carries HP BW 10/24 while its kind is
     # LowPass -- importing it would invent a subsonic filter that is not in the tune.
@@ -1127,7 +1180,8 @@ def _selftest():
             return None
 
     bind_channels(legs, _Proj())
-    assert [leg["channel"] for leg in legs] == ["sw", "w-L", "w-R"], legs
+    assert [leg["channel"] for leg in legs] == ["sw", "w-L", "w-R", None], legs
+    assert orphan["channel_hint"] == "nosuch" and "channel_bound_by" not in orphan, orphan
     # A measurement tag falls away at the `-`, but only after the full name has been tried.
     tagged = [{"channel_hint": "m_L-ctl1", "display_name": ""}]
     bind_channels(tagged, _Proj())
@@ -1136,6 +1190,7 @@ def _selftest():
     # ── the verdicts ──────────────────────────────────────────────────────────
     profile = _profile()
     result = convert(doc, profile=profile, proj=_Proj(), source_path="<selftest>")
+    assert result["summary"]["unbound"] == 1, result["summary"]
 
     def verdicts(channel, field):
         return [c for leg in result["legs"] for c in leg["checks"]
@@ -1262,14 +1317,32 @@ def _selftest():
 
     # An unbound leg is visible as unbound and never silently filed under a guess.
     loose = convert(doc, profile=profile, proj=None)
-    assert loose["summary"]["unbound"] == 3, loose["summary"]
+    assert loose["summary"]["unbound"] == 4, loose["summary"]
     assert all(leg["channel"] is None for leg in loose["legs"])
     assert "UNBOUND" in report(loose)
 
     text = report(result)
     assert "BLOCKED" in text and "LR48" in text and "NOT live" in text, text
+    # The aiming curve is reported by its NUMBERS; the preset name is a label that can come to
+    # mean a different curve after an upstream release.
+    assert "tilt 0 dB/oct" in text and "bass +9 dB @100 Hz" in text, text
+    assert "preset label 'CarBass' -- the numbers above are what binds" in text, text
 
-    print(f"selftest OK -- {len(legs)} legs from 2 pairs; LR48 refused (not rounded to LR36); "
+    # The on-disk fixture other repos test against IS this builder's output. If someone edits
+    # either one alone, this fails and names the command that reconciles them -- which is the only
+    # reason a second copy of a format description is safe to keep at all.
+    if os.path.exists(FIXTURE):
+        with open(FIXTURE) as f:
+            on_disk = f.read()
+        assert on_disk == _fixture_text(), (
+            f"{FIXTURE} has drifted from _session(); regenerate:\n"
+            f"    python3 {os.path.basename(__file__)} --write-fixture")
+        assert convert(load_session(FIXTURE), profile=profile,
+                       proj=_Proj())["summary"]["blocked"], "the fixture must still refuse LR48"
+    else:
+        raise AssertionError(f"missing fixture {FIXTURE} -- write it with --write-fixture")
+
+    print(f"selftest OK -- {len(legs)} legs from {len(doc['pairs'])} pairs; LR48 refused (not rounded to LR36); "
           f"dormant HP 10 Hz withheld; delay unverifiable without max_ms; "
           f"no profile => {blind['summary'][UNKNOWN]} unknown, 0 ok")
 
@@ -1277,5 +1350,10 @@ def _selftest():
 if __name__ == "__main__":
     if "--selftest" in sys.argv:
         _selftest()
+    elif "--write-fixture" in sys.argv:
+        os.makedirs(os.path.dirname(FIXTURE), exist_ok=True)
+        with open(FIXTURE, "w") as _f:
+            _f.write(_fixture_text())
+        print(f"wrote {FIXTURE}")
     else:
         sys.exit(main())
