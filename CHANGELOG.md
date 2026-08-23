@@ -54,6 +54,18 @@ before: a forgotten note ships as the next patch.
   line with the library — a command that can be re-run, not a paste that fixes today and diverges
   again next month. It refuses to approximate: no exact vendor+model match changes nothing.
   `list-bundled` enumerates the library.
+- **A DSP profile group's `fields` is null-until-confirmed.** It had to be a non-empty list, so
+  the only way to make a profile validate was to name some controls — and because `missing_facts`
+  derives its checklist FROM the declared tokens, under-declaring did not merely assert controls
+  nobody had confirmed: it **deleted the questions** about the ones left out. A tier written as
+  `["hp", "lp"]` to get past the validator reads to every consumer as "this DSP's outputs have
+  crossover legs and no gain, no delay, no polarity and no EQ", and `open-questions` then says
+  nothing about any of them. `fields: null` now means "this tier exists, its controls are not
+  enumerated yet", and `open_questions` reports it. Absence of a GROUP remains a positive claim
+  that the tier does not exist; the two must not be confused, because one answers a question and
+  the other asks it. ⚠️ **Consumers iterating `group["fields"]` must read it as
+  `(group.get("fields") or [])`** — a null will otherwise raise. Found by the AutoSci session
+  trying to contribute an honest profile stub and being unable to.
 - **`rew_api` no longer substitutes a different quantity for a missing IR time base.** It reads
   `startTime` or raises. `delay` is the ARRIVAL, one second of sweep pre-roll away from the buffer
   origin, and it is exactly `timeOfIRPeakSeconds` — so a reconstruction from it would inherit the

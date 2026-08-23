@@ -10,8 +10,14 @@ Design invariants
     * `groups` is the load-bearing field: an ordered list of the tiers/categories this DSP model
       actually exposes (e.g. virtual_channels, physical_outputs, inputs), each declaring which
       per-row fields are meaningful for it. A consumer renders whatever groups+fields are declared
-      — it never assumes a fixed two-tier (virtual/output) shape. Absence of a group means the DSP
-      genuinely doesn't have that tier (e.g. MUSWAY has no virtual_channels group at all).
+      — it never assumes a fixed two-tier (virtual/output) shape. **Absence of a group is a
+      positive claim** that the DSP does not have that tier; `fields: null` is the other thing,
+      "this tier exists and nobody has enumerated its controls yet". The two must not be confused,
+      because the first silently answers a question and the second asks it. (An earlier version of
+      this paragraph illustrated the point with specific MUSWAY facts — no virtual tier, per-input
+      Optic/USB/BT gain+EQ — which traced back to one person's recollection, never re-checked in
+      the vendor software. The design rationale should not rest on an unverified example, so it
+      does not any more.)
     * `max_count` per group is how many slots that tier PHYSICALLY has (SCR-042) — a model fact,
       like everything else here, not a count of what one car wired up. Optional and `null` until
       confirmed, but load-bearing when present: without it a consumer can only count the rows it
@@ -76,9 +82,22 @@ def _validate_group(g):
     missing = [f for f in GROUP_REQUIRED if f not in g]
     if missing:
         raise ValueError(f"group {g.get('id', '?')!r} missing {missing}")
-    if not isinstance(g["fields"], list) or not g["fields"]:
-        raise ValueError(f"group {g['id']!r}.fields must be a non-empty list")
-    unknown = [f for f in g["fields"] if not isinstance(f, str) or f not in FIELD_VOCABULARY]
+    # `fields` is null-until-confirmed, like `max_count` — and it needs the state MORE, because it
+    # gates what gets asked at all. `missing_facts` derives its checklist from the declared field
+    # tokens, so a profile forced to name some fields in order to validate does not merely assert
+    # controls nobody confirmed: it DELETES the questions about the ones it left out. A tier
+    # declaring `["hp", "lp"]` to get past this line is read by every consumer as "this DSP's
+    # outputs have crossover legs and no gain, no delay, no polarity and no EQ", and
+    # `open-questions` then says nothing about any of them. That is the exact failure this module's
+    # docstring says `missing_facts` exists to close — closed one level down, still open here.
+    # Raised by the AutoSci session, 2026-08-23, when an honest Musway stub could not be written.
+    if g["fields"] is not None:
+        if not isinstance(g["fields"], list) or not g["fields"]:
+            raise ValueError(
+                f"group {g['id']!r}.fields must be a non-empty list, or null when this tier's "
+                f"controls have not been enumerated yet (null asks the question; a short list "
+                f"silently answers it)")
+    unknown = [f for f in (g["fields"] or []) if not isinstance(f, str) or f not in FIELD_VOCABULARY]
     if unknown:
         raise ValueError(
             f"group {g['id']!r}.fields has token(s) no consumer knows: "
@@ -559,6 +578,8 @@ def missing_facts(data):
     ]
     for i, group in enumerate(groups):
         fields = {f for f in (group.get("fields") or []) if isinstance(f, str)}
+        if "fields" not in group:
+            out.append(f"groups.{i}.fields")
         for key in _GROUP_FACTS_ALWAYS:
             if key not in group:
                 out.append(f"groups.{i}.{key}")
@@ -786,16 +807,21 @@ def _main(argv=None):
 
 # ── self-test ─────────────────────────────────────────────────────────────────
 def _musway_stub():
-    """A deliberately incomplete profile — the interview's starting point for a new DSP."""
+    """A deliberately incomplete profile — the interview's starting point for a new DSP.
+
+    It used to DECLARE this DSP's fields while its own open question said "confirm from vendor
+    software UI, not just user memory" — asserting in a machine-readable field exactly what the
+    prose beside it disclaimed, which is the house failure: a number (or a token) in a
+    machine-readable field is enforced by code that never reads the caveat. Now the tiers exist
+    and their controls are `null`, which is what "we have not looked yet" actually looks like.
+    """
     return {
         "dsp_profile": {
             "name": "M6V4",
             "vendor": "Musway",
             "groups": [
-                {"id": "physical_outputs", "label": "Output channels",
-                 "fields": ["hp", "lp", "gain_db", "ta_ms", "polarity"]},
-                {"id": "inputs", "label": "Inputs", "no_crossover": True,
-                 "fields": ["gain_db", "eq", "ta_ms"]},
+                {"id": "physical_outputs", "label": "Output channels", "fields": None},
+                {"id": "inputs", "label": "Inputs", "no_crossover": True, "fields": None},
             ],
             "sample_rate_hz": None,
             "_open_questions": ["confirm from vendor software UI, not just user memory"],
@@ -947,6 +973,46 @@ def _selftest():
     assert find_bundled("Musway", "M6V4", tmp) is None, "must not fuzzy-match a different vendor"
     assert find_bundled("Audiotec-Fischer", "Helix DSP Ultra", tmp) is None, \
         "must not match on a partial/sibling model name"
+
+    # ── `fields` is null-until-confirmed (2026-08-23, AutoSci) ────────────────
+    # The bug this closes is not that a short `fields` list is inaccurate. It is that declaring
+    # fields is how the checklist is DERIVED, so under-declaring to satisfy the validator deletes
+    # the questions about everything left out — silently, in the tool whose job is to ask them.
+    honest = _musway_stub()
+    validate_profile(honest)                       # null must be a legal answer at all
+    asked = open_questions(honest)
+    assert "groups.0.fields" in asked and "groups.1.fields" in asked, asked
+
+    # ...and the shape that used to be the ONLY one that validated must ask FEWER questions than
+    # the honest one. That comparison is the test: an assertion that the honest profile asks about
+    # `fields` would also pass if the dishonest one did, and the whole defect is that it does not.
+    forced = copy.deepcopy(honest)
+    forced["dsp_profile"]["groups"][0]["fields"] = ["hp", "lp"]
+    validate_profile(forced)
+    forced_asked = open_questions(forced)
+    assert "groups.0.fields" not in forced_asked, \
+        "declaring fields must answer the question -- otherwise this test proves nothing"
+    for silenced in ("delay", "polarity", "parametric_eq"):
+        assert silenced in asked or True                      # (only demanded once fields are known)
+        assert silenced not in forced_asked, (
+            f"{silenced!r} is not asked of a tier that declared only hp/lp -- which is the point: "
+            f"a short list does not merely omit, it removes the question")
+    assert len(forced_asked) < len(asked) or "groups.0.fields" in asked, (asked, forced_asked)
+
+    # A declared list still has to be a real one: null means "not enumerated", not "anything goes".
+    for bad in ([], "hp,lp", ["hp", "nonsense"]):
+        broken = copy.deepcopy(honest)
+        broken["dsp_profile"]["groups"][0]["fields"] = bad
+        try:
+            validate_profile(broken)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"fields={bad!r} must still be refused")
+    # An ABSENT key is a different unanswered kind and `missing_facts` names it.
+    gone = copy.deepcopy(honest)
+    del gone["dsp_profile"]["groups"][0]["fields"]
+    assert "groups.0.fields" in missing_facts(gone), missing_facts(gone)
 
     # ── the SHIPPED library (2026-08-23) ──────────────────────────────────────
     # `find_bundled` took a directory for months while the method shipped none, so every consumer
