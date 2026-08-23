@@ -40,10 +40,11 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
-## [Unreleased]
+## [v3.0.19] — 2026-08-23 · reading somebody else's tune, and a library to check it against
 
-Written now rather than at tag time, which is this repo's own rule and the one it has broken
-before: a forgotten note ships as the next patch.
+Written before the tag and read back against `git log` before cutting it — which caught two
+omissions, so the rule has two halves: write it early, and re-read it, because a note is not
+a place things file themselves.
 
 - **The method ships a DSP profile library** — `knowledge/dsp/profiles/`, with
   `dsp_profile.find_bundled(vendor, model)` defaulting to it. It took a directory argument since it
