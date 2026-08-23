@@ -40,6 +40,95 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [v3.0.18] — 2026-08-23 · somebody else's tune, read back as ours — and refused where the hardware cannot follow
+
+### A Virtual DSP session becomes ledger rows
+
+**`rew_tool/resonalyze_vc.py`** — the return leg of `resonalyze_ir.py`. That one writes REW
+measurements INTO [Resonalyze](https://github.com/DIMOSUS/Resonalyze); this reads a tune back out.
+A `resonalyze-virtual-crossover` v7 session becomes schema-v3 ledger rows —
+`{hp, lp, gain_db, ta_ms, polarity, eq, status: "proposed"}`, one per sourced leg — each with a
+machine-readable per-field verdict against the project's own `dsp_profile.json`. The occasion was
+Resonalyze's author sending his tune of the reference car over our measurements; the point is that
+**anybody's** Virtual DSP session can be read as a proposal against our ledger, through one
+function a terminal and a GUI both call.
+
+**Nothing is rounded to fit.** His plan uses Linkwitz-Riley 48 dB/oct on eight edges; a Helix DSP
+Ultra S offers LR at 12/24/36. Each of those comes back `enterable: false` with the value he asked
+for intact. Substituting the LR36 the hardware does have would be a tuning decision wearing a
+conversion's clothes — and the point was proved the same day, when the first human attempt at an
+"obvious" substitution picked a slope Resonalyze itself cannot model.
+
+**A capability the profile does not state is `unknown`, never `ok`** — `estimator-scope.md`'s rule
+applied to a profile instead of an estimator. Every such verdict names the profile key that would
+settle it, and they roll up into `profile_gaps`, so a long list of shrugs reads as a few missing
+facts. That is what surfaced the four gaps in our own Helix profile, all of which are now closed.
+
+Four traps it exists to get right, each of which a plain reading gets wrong: `crossoverKind`
+decides which edge is live and the **dormant edge still holds values** (often the constructor
+default, and on the sub a 10 Hz high-pass his tune does not apply); `stereoSceneOffsetMs` and
+`stereoLevelDifferenceDb` are the **aim** of his auto-alignment, already inside each leg's numbers,
+and the SIGN of both encodes the drive layout rather than a value; `IsTransparent` is derived, not
+a bypass; and v7 keeps `enabled`/`bypass` on the **pair** only, so a side-first read hands back a
+muted leg as playing.
+
+### A new project starts from the car you already described
+
+**`rew_tool/project_seed.py`** — system parameters travel from an existing project instead of being
+retyped. Ported from `autosound-tcc` with its classification intact, and moved here because
+`project-schema.md` and `project.py` are here: the code that WRITES `project.json` belongs where
+the schema is, or the two drift and the copy outside the schema drifts silently. **The system**
+travels; **the findings** (`acoustics.flaws`, `_open_questions`) are offered but off by default,
+because their `evidence` names measurements that exist only in the source project; **the project's
+own** stays behind. An allowlist, not a blocklist — whatever the schema grows next stays put until
+somebody decides it travels. `Seeded.profile_open` counts what the inherited profile still does not
+state, so a `null` cannot read as settled.
+
+### The Helix profile, and a rule for every profile after it
+
+Four capability facts, user-verified in PC-Tool: **channel level −30 … +5 dB** on both tiers —
+deliberately *not* the EQ row's −30 … +12, which is band gain, and the asymmetry is why it had to
+be measured rather than inferred; **EQ frequency 10–40000 Hz**; **crossover corner 20–20480 Hz**;
+**delay ceiling 20.82 ms**.
+
+And the rule they produced, which outlives them: **record the FULL range, because it can be entered
+by hand.** The sub channel's UI offers 20–300 Hz and a higher corner types in fine, so 300 is not a
+limit. Generalised, it dissolved what looked like a three-file contradiction over the PEQ's
+frequency step — two coherent readings of two different UI *modes*, neither of them the hardware.
+The trade-off is stated in the profile itself: a profile now answers "enterable on this hardware",
+not "enterable in the mode you are in", and that is the recoverable direction. Refusing a setting
+the hardware accepts means a valid tune is never tried and nobody learns why.
+
+### Also in this tag
+
+- **The crossover corner steps in 1 Hz**, not 0.01 — the 0.01 belongs to the parametric EQ's own
+  frequency control. Not only documentation: `xover_select` searches corners on a caller-supplied
+  `step_hz`, so a fractional step searched settings the hardware cannot be set to and then rounded
+  the winner off the optimum it had just computed.
+- **The Windows installer path ran end to end for the first time**, on a VM whose method was at
+  3.0.4 and whose app had neither an update panel nor `--install-desktop`: the method resolved to
+  3.0.16 and the app to 0.1.14 by tag, and both shortcuts were created — so "replace the app, then
+  call it" worked on a machine where the installed app could not have made them when the run began.
+- Repo conventions moved to `CLAUDE.md`, and the session process that is nobody's business but ours
+  moved out of this public repository into an untracked file.
+
+### Upgrading
+
+**Two new modules; nothing removed, renamed, or changed in an existing return contract.** The
+selftest suite goes 26 → 28 (`scripts/run-selftests.sh`, the same command CI runs).
+
+Three things worth knowing before you rely on them:
+
+- **`resonalyze_vc.py` emits rows and stops.** It does not write a ledger snapshot, and it should
+  not: banking rows is `state/apply.py`'s gated job and a tuning decision. Gate your own writes on
+  `summary["blocked"]`.
+- **`enterable` is three-valued** — `true` / `false` / `null`. `null` is not a soft yes; it means
+  the profile does not state that limit, so nothing was checked. Treat it as "ask", never as "pass".
+- **A DSP profile now claims the hardware's full range, not the current UI mode's.** Under the
+  full-range rule a checker can accept a value some UI mode will not offer — a Q of 30 that Fine EQ
+  refuses, say. The tuner meets that at the PC-Tool screen and switches mode. If you were relying
+  on a profile to describe one mode exactly, it never did, and now it says so.
+
 ## [v3.0.17] — 2026-08-22 · the field session's six open asks, and a check that does not measure with its own ruler
 
 ### The tools answer, or say they cannot
