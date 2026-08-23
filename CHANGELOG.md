@@ -68,6 +68,15 @@ Two consequences worth stating, because both have already caused a question:
   a real export it was missing a trailing tab on shelf rows. The two formats also differ in
   precision (frequency 1 dp against 2, a PK's Q 2 dp against 3), which is exactly the class of
   thing that ruler could never have caught.
+- **`in_scope: false` — a tier the DSP HAS and the method does not tune.** The Helix's input stage
+  exists, but it is not a tuning tier: it forms the input signal from a factory head unit's
+  speaker-level outputs, and on optical / Bluetooth / USB it is not in the path at all. Recovering
+  a flat input by undoing what a head unit already did — its EQ, its delays, its all-passes — is a
+  different problem, and this method does not solve it. Deleting the group would have asserted the
+  hardware lacks the stage; leaving it in scope made `open-questions` ask forever about controls
+  nobody will enumerate, and a list carrying permanent dead entries is one people stop reading —
+  the failure §1a exists to prevent. So it is kept, declared, and skipped when counting what is
+  unanswered. Expect no ledger rows for such a tier; their absence is not an incomplete project.
 - **The PEQ mode pairing is OBSERVED, and the derived label is retired as SATISFIED.** The
   "Parametric EQ" panel was photographed in one state with every field visible together — Freq
   26.01 Hz, Gain 0.1 dB, Q 50 — which settles both halves at once: the frequency field ACCEPTS two

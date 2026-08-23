@@ -116,6 +116,7 @@ def _validate_group(g):
     # `max_count` is optional and null-until-confirmed (SCR-042), but a present one is a physical
     # slot count, so 0/negative/float/bool are all refusals rather than something to coerce.
     # (See `_validate_rate` for the same argument about `sample_rate_hz`.)
+    _validate_in_scope(g)
     n = g.get("max_count")
     if "max_count" in g and n is not None:
         if not isinstance(n, int) or isinstance(n, bool) or n < 1:
@@ -128,6 +129,14 @@ def _validate_group(g):
 #: ones that are not a typo. A profile claiming 96 kHz as `"96 kHz-ish"` or as `96` (kHz, not Hz)
 #: is the same defect wearing two costumes, and phase 1 turns both into sample counts.
 _PLAUSIBLE_RATES_HZ = (32000, 44100, 48000, 88200, 96000, 176400, 192000)
+
+
+def _validate_in_scope(group):
+    value = group.get(IN_SCOPE)
+    if IN_SCOPE in group and not isinstance(value, bool):
+        raise ValueError(
+            f"group {group.get('id', '?')!r}.{IN_SCOPE} must be true or false (false = the DSP has "
+            f"this tier and the method does not tune it), got {value!r}")
 
 
 def _validate_groups_enumerated(profile):
@@ -182,6 +191,17 @@ def _validate_rate(profile):
 #: re-entering through a different door. Prose was the only guard, and prose is what had already
 #: failed in every other case that day.
 GROUPS_ENUMERATED = "groups_enumerated"
+
+#: A tier the DSP HAS and this method does not tune. `false` says so; absent/`true` is in scope.
+#:
+#: Not the same as absent-from-`groups`, and the difference is the point: the Helix's input stage
+#: exists, and un-processing what a factory head unit already did to the signal is a different
+#: problem that this method does not solve (user, 2026-08-23). Deleting the tier would assert the
+#: hardware lacks it; leaving it in scope makes `open_questions` ask forever about controls nobody
+#: will ever enumerate — and a list that always has two dead entries is a list people stop reading,
+#: which is the failure `estimator-scope.md` 1a exists to prevent. So: kept, declared, and skipped
+#: when counting what is still unanswered.
+IN_SCOPE = "in_scope"
 
 
 def validate_profile(data):
@@ -613,6 +633,8 @@ def missing_facts(data):
         if field in declared and block not in profile
     ]
     for i, group in enumerate(groups):
+        if group.get(IN_SCOPE) is False:
+            continue
         fields = {f for f in (group.get("fields") or []) if isinstance(f, str)}
         if "fields" not in group:
             out.append(f"groups.{i}.fields")
@@ -703,6 +725,11 @@ def open_questions(data):
 
     def walk(prefix, obj):
         if isinstance(obj, dict):
+            # A tier this method does not tune is not a source of open questions: nobody is going
+            # to enumerate the controls of a stage we have declared out of scope, so asking
+            # forever only teaches people to skim the list.
+            if obj.get(IN_SCOPE) is False:
+                return
             for k, v in obj.items():
                 if k == "_open_questions":
                     continue
@@ -1146,6 +1173,36 @@ def _selftest():
     gone = copy.deepcopy(honest)
     del gone["dsp_profile"]["groups"][0]["fields"]
     assert "groups.0.fields" in missing_facts(gone), missing_facts(gone)
+
+    # ── a tier the DSP HAS and the method does not tune (2026-08-23) ─────────
+    # The distinction that earns the field: deleting the group would assert the hardware lacks the
+    # stage, and leaving it in scope makes `open_questions` ask forever about controls nobody will
+    # enumerate. A list with two permanent dead entries is a list people stop reading, which is the
+    # failure `estimator-scope.md` 1a is about.
+    scoped = copy.deepcopy(counted)
+    scoped["dsp_profile"]["groups"].append(
+        {"id": "inputs", "label": "Input stage", "fields": None, "max_count": None,
+         IN_SCOPE: False})
+    validate_profile(scoped)
+    assert open_questions(scoped) == [], open_questions(scoped)
+    assert not any("groups.2" in path for path in missing_facts(scoped)), missing_facts(scoped)
+    # ...but the SAME tier in scope asks about both, so the silence above is the flag working and
+    # not the walk simply missing a third group.
+    in_scope = copy.deepcopy(scoped)
+    in_scope["dsp_profile"]["groups"][2][IN_SCOPE] = True
+    assert set(open_questions(in_scope)) == {"groups.2.fields", "groups.2.max_count"}, \
+        open_questions(in_scope)
+    # And it is still a DECLARED tier either way -- out of scope is not out of existence.
+    assert tier_keys(scoped)[-1] == "inputs", tier_keys(scoped)
+    for bad in ("no", 0, None):
+        broken_scope = copy.deepcopy(scoped)
+        broken_scope["dsp_profile"]["groups"][2][IN_SCOPE] = bad
+        try:
+            validate_profile(broken_scope)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"{IN_SCOPE}={bad!r} must be refused")
 
     # ── the SHIPPED library (2026-08-23) ──────────────────────────────────────
     # `find_bundled` took a directory for months while the method shipped none, so every consumer

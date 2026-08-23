@@ -1,8 +1,7 @@
 {
   "dsp_profile": {
     "_open_questions": [
-      "DSP compute budget: with up to 60 bands stacked (30 virtual-channel + 30 output) plus crossover + phase + delay, is there a practical ceiling before the 2x295MHz DSP saturates?",
-      "groups_enumerated: three tiers are now known — virtual_channels, physical_outputs, inputs. Is that ALL of them? He named the input tier when asked; he did not say the list was complete, and 'he stopped naming tiers' is not the same statement. One word closes this."
+      "DSP compute budget: with up to 60 bands stacked (30 virtual-channel + 30 output) plus crossover + phase + delay, is there a practical ceiling before the 2x295MHz DSP saturates?"
     ],
     "channel_gain": {
       "note": "the same range on both tiers (user, PC-Tool, 2026-08-23). Deliberately NOT the EQ band's -30..+12: they are different controls and the asymmetry is the proof. Step 1.0 dB (user, PC-Tool on his own unit, 2026-08-23) — note it is COARSER than the EQ band's 0.1 dB, another reason the two must not stand in for each other.",
@@ -162,12 +161,14 @@
       {
         "fields": null,
         "id": "inputs",
-        "label": "Inputs",
+        "in_scope": false,
+        "label": "Input stage (high-level) — OUT OF METHOD SCOPE",
         "max_count": null,
         "no_crossover": true,
-        "note": "The tier EXISTS on this processor (user, 2026-08-23). He does not use it on his own car — which is a fact about that INSTALL and belongs in its project.json, not here: a dsp_profile records what the MODEL can do. Recording 'we don't use it' as 'it hasn't got one' is how a capability disappears for everybody. `fields: null` because nobody has enumerated its controls."
+        "note": "The stage EXISTS on this processor, and it is NOT a tuning tier like the other two. Its job is forming the INPUT signal when the source is a factory head unit's speaker-level outputs. On optical, Bluetooth or USB it is not in the path at all (user, 2026-08-23). OUT OF SCOPE for this method, deliberately and not for now: undoing what a factory head unit already did — its EQ, its delays, its all-passes — to recover a flat input is a different problem from tuning a system, and this method does not solve it. So expect NO ledger rows for this tier, and do not read its absence from a ledger as an incomplete project. Recorded rather than deleted because the hardware fact is true and belongs in a MODEL profile; what is scoped out is our work on it, not its existence."
       }
     ],
+    "groups_enumerated": true,
     "name": "Helix DSP Ultra S",
     "parametric_eq": {
       "freq_range_hz": [
@@ -215,7 +216,8 @@
       "the method's own file is the authority on all of the above: autosound-tuning/knowledge/dsp/helix-dsp-ultra-s.md -- what is here is the machine-readable half the gates read, and it is synced FROM there, never the other way",
       "bundled into the method's profile library 2026-08-23 from autosound-tcc's src/autosound_tcc/dsp_profiles/helix-dsp-ultra-s.json, which is where these facts were first assembled -- authorship theirs, diffed field by field before landing",
       "user, PC-Tool on his own unit, 2026-08-23: channel gain step 1.0 dB; an INPUT tier exists (unused on his car); Chebyshev slope ladder 6-42 dB/oct corroborated. Chebyshev ripple asked and declined as unknown and unneeded.",
-      "user, PC-Tool on his own unit, 2026-08-23: the 'Parametric EQ' panel photographed in one state — Freq 26.01 Hz, Gain 0.1 dB, Q 50 together — which observes the freq_step_hz / q_range pair that had been recorded as derived from the full-range ruling."
+      "user, PC-Tool on his own unit, 2026-08-23: the 'Parametric EQ' panel photographed in one state — Freq 26.01 Hz, Gain 0.1 dB, Q 50 together — which observes the freq_step_hz / q_range pair that had been recorded as derived from the full-range ruling.",
+      "user, 2026-08-23: the input stage is high-level capture from a factory head unit only, bypassed on optical/BT/USB, and un-processing a head unit's output is a separate problem the method does not address — so the tier list is complete at three, of which two are tuned."
     ],
     "vendor": "Audiotec-Fischer"
   }
