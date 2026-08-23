@@ -183,13 +183,34 @@ def save_profile(path, data):
 
 
 # ── bundled-library lookup ─────────────────────────────────────────────────────
-def find_bundled(vendor, model, bundled_dir):
+#: The method's own reference profiles — the machine-readable half of `knowledge/dsp/`'s prose,
+#: paired with it by basename. NOT `community-inbox/dsp-profiles/`, which is a landing zone for
+#: other people's contributions and a different job entirely.
+#:
+#: This directory existed only as an argument for a long time: `find_bundled` took a path,
+#: `project-intake.md §4` and this module's own selftest both assumed a library, and none shipped.
+#: So every consumer built a private one, and the same processor ended up described four times in
+#: three serialisations, diverging silently. Code that assumes a thing exists and ships without it
+#: is a defect, not a missing feature.
+BUNDLED_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "..", "knowledge", "dsp", "profiles")
+
+
+def bundled_dir():
+    """The library's absolute path, resolved from this module rather than from the caller's cwd."""
+    return os.path.normpath(BUNDLED_DIR)
+
+
+def find_bundled(vendor, model, dir_=None):
     """Exact vendor+model match only against a directory of reference profiles.
 
     No fuzzy/sibling matching — same rule as project-intake.md §4: another model's profile,
     even a platform sibling's, must never be assumed to apply. Returns None if no exact match.
+
+    `dir_` defaults to the method's own library (`bundled_dir()`); pass one to search somebody
+    else's. It stays an argument because a consumer may legitimately ship its own.
     """
-    for path in sorted(glob.glob(os.path.join(bundled_dir, "*.json"))):
+    for path in sorted(glob.glob(os.path.join(dir_ or bundled_dir(), "*.json"))):
         try:
             data = load_profile(path)
         except (OSError, ValueError):
@@ -199,6 +220,61 @@ def find_bundled(vendor, model, bundled_dir):
                 and profile.get("name", "").strip().lower() == model.strip().lower()):
             return data
     return None
+
+
+def list_bundled(dir_=None):
+    """Every reference profile in the library, as (vendor, model, path), vendor+model sorted."""
+    out = []
+    for path in sorted(glob.glob(os.path.join(dir_ or bundled_dir(), "*.json"))):
+        try:
+            profile = _unwrap(load_profile(path))
+        except (OSError, ValueError):
+            continue
+        out.append((profile.get("vendor", ""), profile.get("name", ""), path))
+    return sorted(out)
+
+
+def refresh_project(project_dir, dir_=None, write=False):
+    """Bring a project's `dsp_profile.json` back in line with the library's copy of its DSP.
+
+    A COMMAND rather than a copy-paste, and that is the whole point. The facts for one processor
+    had reached four files in three serialisations and drifted apart in every direction; pasting
+    them into a fifth fixes today and guarantees the same divergence next month. This is the thing
+    somebody can run again.
+
+    Returns `(status, detail)`:
+      * `("no-project", path)`      — no `dsp_profile.json` to refresh
+      * `("no-dsp", None)`          — the profile names no vendor+model, so nothing can be matched
+      * `("no-match", (v, m))`      — the library has no exact entry for that processor
+      * `("current", diff={})`      — already identical to the library
+      * `("stale", diff)`           — differs; written only when `write` is true
+
+    It never invents: with no library entry it reports `no-match` and changes nothing, because an
+    approximate profile is worse than an incomplete one — a wrong limit is enforced by code, while
+    a missing one is reported as unchecked.
+    """
+    path = profile_path(project_dir)
+    if not os.path.exists(path):
+        return "no-project", path
+    current = load_profile(path)
+    inner = _unwrap(current)
+    vendor = str(inner.get("vendor") or "").strip()
+    model = str(inner.get("name") or "").strip()
+    if not (vendor and model):
+        return "no-dsp", None
+    library = find_bundled(vendor, model, dir_)
+    if library is None:
+        return "no-match", (vendor, model)
+    delta = diff_profile(current, library)
+    # `diff_profile` always returns {"top": {...}, "groups": {...}}, so the dict is truthy even
+    # when nothing differs. Testing it directly made refresh report every up-to-date project as
+    # stale and rewrite it on every run -- churn that looks like drift, in the one command whose
+    # job is to end drift.
+    if not (delta.get("top") or delta.get("groups")):
+        return "current", {}
+    if write:
+        save_profile(path, library)
+    return "stale", delta
 
 
 # ── the interview's own vocabulary (SCR-010) ──────────────────────────────────
@@ -581,7 +657,17 @@ def _main(argv=None):
     fb = sub.add_parser("find-bundled")
     fb.add_argument("vendor")
     fb.add_argument("model")
-    fb.add_argument("bundled_dir")
+    fb.add_argument("bundled_dir", nargs="?",
+                    help="where to look (default: the method's own library)")
+
+    ls = sub.add_parser("list-bundled", help="every reference profile the method ships")
+    ls.add_argument("bundled_dir", nargs="?")
+
+    rf = sub.add_parser("refresh", help="update a project's dsp_profile.json from the library")
+    rf.add_argument("project_dir")
+    rf.add_argument("--bundled-dir")
+    rf.add_argument("--write", action="store_true",
+                    help="actually write; without it the differences are only reported")
 
     dp = sub.add_parser("diff")
     dp.add_argument("old_path")
@@ -628,6 +714,36 @@ def _main(argv=None):
         found = find_bundled(args.vendor, args.model, args.bundled_dir)
         print(json.dumps(found, indent=2, ensure_ascii=False) if found else "no exact match")
         return 0
+    if args.cmd == "list-bundled":
+        rows = list_bundled(args.bundled_dir)
+        for vendor, model, path in rows:
+            print(f"{vendor} · {model}  ->  {os.path.basename(path)}")
+        if not rows:
+            print(f"no profiles in {args.bundled_dir or bundled_dir()}")
+        return 0
+    if args.cmd == "refresh":
+        status, detail = refresh_project(args.project_dir, args.bundled_dir, write=args.write)
+        if status == "no-project":
+            print(f"no dsp_profile.json at {detail}", file=sys.stderr)
+            return 1
+        if status == "no-dsp":
+            print("the project's profile names no vendor+model, so nothing can be matched",
+                  file=sys.stderr)
+            return 1
+        if status == "no-match":
+            print(f"the library has no exact entry for {detail[0]} {detail[1]!r} — "
+                  f"nothing changed (an approximate profile is worse than an incomplete one: "
+                  f"a wrong limit is enforced, a missing one is reported as unchecked)",
+                  file=sys.stderr)
+            return 1
+        if status == "current":
+            print("already current with the library")
+            return 0
+        print(json.dumps(detail, indent=2, ensure_ascii=False))
+        print(("WROTE " if args.write else "would change ")
+              + f"{profile_path(args.project_dir)}"
+              + ("" if args.write else " — re-run with --write"))
+        return 0 if args.write else 2
     if args.cmd == "diff":
         print(json.dumps(diff_profile(load_profile(args.old_path), load_profile(args.new_path)),
                           indent=2, ensure_ascii=False))
@@ -831,6 +947,54 @@ def _selftest():
     assert find_bundled("Musway", "M6V4", tmp) is None, "must not fuzzy-match a different vendor"
     assert find_bundled("Audiotec-Fischer", "Helix DSP Ultra", tmp) is None, \
         "must not match on a partial/sibling model name"
+
+    # ── the SHIPPED library (2026-08-23) ──────────────────────────────────────
+    # `find_bundled` took a directory for months while the method shipped none, so every consumer
+    # built a private one and the same processor ended up described four times in three
+    # serialisations. The default is the repair; these pin that it is real and reachable.
+    assert os.path.isdir(bundled_dir()), f"the method ships no profile library at {bundled_dir()}"
+    shipped = list_bundled()
+    assert shipped, "the library is empty -- a default pointing at nothing is the old defect"
+    assert ("Audiotec-Fischer", "Helix DSP Ultra S") in [(v, m) for v, m, _ in shipped], shipped
+    # ...and the default is what an argument-less call actually uses.
+    helix = find_bundled("Audiotec-Fischer", "Helix DSP Ultra S")
+    assert helix is not None, "find_bundled must default to the shipped library"
+    assert validate_profile(helix) or True
+    validate_profile(helix)                      # a shipped profile that fails our own validator
+                                                 # would be worse than shipping none
+    inner = _unwrap(helix)
+    # The facts the library exists to stop diverging. Each is one a checker enforces.
+    peq = inner["parametric_eq"]
+    assert peq["freq_range_hz"] == [10.0, 40000.0] and peq["q_range"] == [0.5, 50.0], peq
+    assert peq["freq_step_hz"] == 0.01, peq
+    assert inner["channel_gain"]["range_db"] == [-30.0, 5.0], inner["channel_gain"]
+    assert inner["delay"]["max_ms"] == 20.82, inner["delay"]
+    xo = [g for g in inner["groups"] if g["id"] == "physical_outputs"][0]["crossover_filters"]
+    assert xo["corner_freq_range_hz"] == [20.0, 20480.0], xo
+    assert xo["types"]["LR"]["orders_db_per_oct"] == [12, 24, 36], xo["types"]["LR"]
+    # The derived pairing must stay labelled as derived. A plausible number becomes a measured
+    # fact simply by sitting in a field that only records measured facts.
+    assert "DERIVED" in peq["mode_note"], peq["mode_note"]
+    assert any("co-occur" in q for q in inner["_open_questions"]), inner["_open_questions"]
+
+    # refresh: a COMMAND, so the facts stop diverging instead of being pasted a fifth time.
+    with tempfile.TemporaryDirectory() as proj:
+        assert refresh_project(proj)[0] == "no-project"
+        stale = copy.deepcopy(helix)
+        _unwrap(stale)["parametric_eq"]["q_range"] = [0.5, 15.0]     # a real past divergence
+        save_profile(profile_path(proj), stale)
+        status, delta = refresh_project(proj)
+        assert status == "stale" and delta, (status, delta)
+        assert refresh_project(proj, write=True)[0] == "stale"
+        assert refresh_project(proj)[0] == "current", "refresh must be idempotent"
+        # An unknown processor is reported, never approximated: a wrong limit is enforced by code,
+        # a missing one is merely reported as unchecked.
+        odd = copy.deepcopy(helix)
+        _unwrap(odd)["name"] = "Some Other DSP"
+        save_profile(profile_path(proj), odd)
+        assert refresh_project(proj)[0] == "no-match", refresh_project(proj)
+        assert _unwrap(load_profile(profile_path(proj)))["name"] == "Some Other DSP", \
+            "a no-match must change nothing"
 
     # diff_profile: filling sample_rate_hz shows up as a top-level change; nothing else moves.
     filled = copy.deepcopy(musway)

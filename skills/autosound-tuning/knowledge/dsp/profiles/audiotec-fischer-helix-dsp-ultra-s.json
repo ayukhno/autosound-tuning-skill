@@ -1,0 +1,212 @@
+{
+  "dsp_profile": {
+    "_open_questions": [
+      "Chebyshev ripple parameter: is it user-settable, and what range?",
+      "DSP compute budget: with up to 60 bands stacked (30 virtual-channel + 30 output) plus crossover + phase + delay, is there a practical ceiling before the 2x295MHz DSP saturates?",
+      "channel_gain step_db: the range is user-verified, the step is not -- so a gain is checked against the range and reported as 'step not declared' rather than passed",
+      "parametric_eq: do the 0.01 Hz step and the Q 0.5-50 ceiling co-occur in ONE PC-Tool mode? The recorded pair is the union and may be derived rather than observed -- see mode_note"
+    ],
+    "channel_gain": {
+      "note": "the same range on both tiers (user, PC-Tool, 2026-08-23). Deliberately NOT the EQ band's -30..+12: they are different controls and the asymmetry is the proof.",
+      "range_db": [
+        -30.0,
+        5.0
+      ],
+      "scope": [
+        "per driver output",
+        "per virtual channel"
+      ]
+    },
+    "delay": {
+      "max_ms": 20.82,
+      "note": "the ceiling is per tier AND the two tiers SUM -- enter a delay in one layer only, keep the other at 0 (user, PC-Tool, 2026-07-15).",
+      "scope": [
+        "per driver output",
+        "per virtual channel"
+      ],
+      "step_ms": 0.01
+    },
+    "features": [
+      {
+        "key": "RealCenter"
+      },
+      {
+        "key": "DynamicBass"
+      },
+      {
+        "key": "SubXpander"
+      },
+      {
+        "key": "ActiveToneControl"
+      },
+      {
+        "key": "RemoteToneControl"
+      },
+      {
+        "key": "SubRC"
+      },
+      {
+        "key": "RearRC"
+      }
+    ],
+    "groups": [
+      {
+        "eq": {
+          "band_types": [
+            "PK",
+            "LSH",
+            "HSH",
+            "APF1",
+            "APF2"
+          ],
+          "bands_per_channel": 30
+        },
+        "fields": [
+          "gain_db",
+          "ta_ms",
+          "polarity",
+          "phase_deg",
+          "mute",
+          "eq_bypass",
+          "eq"
+        ],
+        "id": "virtual_channels",
+        "label": "Virtual channels",
+        "max_count": 8,
+        "no_crossover": true,
+        "row_id_style": "letter"
+      },
+      {
+        "crossover_filters": {
+          "corner_freq_note": "20-20480 Hz on EVERY channel, the sub included (user, PC-Tool, 2026-08-23). The sub channel's UI OFFERS 20-300, and higher can still be entered by hand -- so 300 is advisory, not a bound, and must not be written as one: refusing a legitimate sub crossover above 300 Hz is the same class of error as silently rounding LR48 to LR36, inverted.",
+          "corner_freq_range_hz": [
+            20.0,
+            20480.0
+          ],
+          "corner_freq_step_hz": 1.0,
+          "types": {
+            "BE": {
+              "orders_db_per_oct": [
+                6,
+                12,
+                18,
+                24,
+                30,
+                36,
+                42
+              ]
+            },
+            "BW": {
+              "orders_db_per_oct": [
+                6,
+                12,
+                18,
+                24,
+                30,
+                36,
+                42
+              ]
+            },
+            "CHEBYSHEV": {
+              "orders_db_per_oct": [
+                6,
+                12,
+                18,
+                24,
+                30,
+                36,
+                42
+              ],
+              "ripple_db": null
+            },
+            "LR": {
+              "orders_db_per_oct": [
+                12,
+                24,
+                36
+              ]
+            },
+            "SELF_DEFINED": {
+              "q_range": [
+                0.5,
+                2.0
+              ]
+            }
+          }
+        },
+        "eq": {
+          "band_types": [
+            "PK",
+            "LSH",
+            "HSH",
+            "APF1",
+            "APF2"
+          ],
+          "bands_per_channel": 30
+        },
+        "fields": [
+          "hp",
+          "lp",
+          "gain_db",
+          "ta_ms",
+          "polarity",
+          "phase_deg",
+          "mute",
+          "eq"
+        ],
+        "id": "physical_outputs",
+        "label": "Output channels",
+        "max_count": 12,
+        "row_id_style": "letter"
+      }
+    ],
+    "name": "Helix DSP Ultra S",
+    "parametric_eq": {
+      "freq_range_hz": [
+        10.0,
+        40000.0
+      ],
+      "freq_step_hz": 0.01,
+      "gain_note": "the EQ BAND's gain. The channel trim is `channel_gain` below and the two must never stand in for each other.",
+      "gain_range_db": [
+        -30.0,
+        12.0
+      ],
+      "gain_step_db": 0.1,
+      "mode_note": "THE UNION OF THE PC-TOOL MODES (the user's rule, 2026-08-23: take the full range everywhere, because it can be entered by hand). Fine EQ pairs a 1 Hz step with Q 0.5-15. UNSETTLED, and deliberately left so: this profile's own `sources` line reads the other mode as Q 0.5-50 WITH a 0.01 Hz step -- which would make this pair directly observed -- while the note it replaces said the pair 'exists in no single screen'. Two current records disagree about whether one screen shows both. The numbers are not in doubt: each is separately user-verified (Q 0.5-50 and Fine EQ's 1 Hz on 2026-08-22; the 0.01 Hz step on 2026-07-10, before Fine EQ was known; 10-40000 Hz on 2026-08-23). What is unconfirmed is only whether they co-occur in one mode, and one PC-Tool pass settles it: in EACH mode, the frequency step AND the Q range together. Until then treat this pair as DERIVED, not measured -- a plausible number becomes a measured fact simply by sitting in a field that only records measured facts. Either way the block answers 'is this enterable on the HARDWARE', so a value it passes may still need a mode switch at the PC-Tool screen. That direction is recoverable; refusing a setting the hardware accepts means a valid tune is never tried and nobody learns why.",
+      "q_convention": "Rbj",
+      "q_note": "What the METHOD should use is narrower still than what the hardware takes, and that is not a hardware question -- see the spatial-validity Q ceiling in the method's diagnostic reference.",
+      "q_range": [
+        0.5,
+        50.0
+      ],
+      "q_step": 0.1,
+      "shelf_note": "PC-Tool's LS_Q/HS_Q at Q=0.7071 is identical to an RBJ shelf at S=1 (0.000 dB), so model them in REW with its 'LS Q'/'HS Q' types -- REW's plain 'Low shelf'/'High shelf' is a different definition and will not match. Note also that shelf Q is NEVER rescaled between PEQ Q conventions (a shelf Q sets a knee, not a bandwidth): anything converting Q for a non-RBJ target must skip shelves or it silently widens every one of them."
+    },
+    "phase_control": {
+      "cross_reference": "autosound-tuning skill's GEMINI.md independently documents this as APF2 (2nd-order all-pass) at the channel's own crossover frequency -- likely-correct, not independently re-confirmed here",
+      "implementation": "all-pass filter; exact order/frequency mapping not confirmed from the PC-Tool UI itself",
+      "scope": "per driver output, all drivers except midbass (midbass is the fixed alignment reference)"
+    },
+    "polarity": {
+      "note": "double-inversion possible (driver stage + virtual channel stage); net effect cancels if both are inverted",
+      "scope": [
+        "per driver output",
+        "per virtual channel"
+      ]
+    },
+    "sample_rate_hz": 96000,
+    "sources": [
+      "raw/papers/HELIX_DSP-ULTRA-S_11-04-2024.pdf (hardware I/O + electrical specs, page 16 'Technische Daten')",
+      "user, confirmed directly from the PC-Tool software UI, 2026-07-10 (filter grid, gain/freq/Q resolution)",
+      "user, confirmed real channel model + feature toggles during TCC concept design, 2026-07-25",
+      "user, confirmed in PC-Tool: delay ceiling 20.82 ms on BOTH tiers and they SUM, 2026-07-15",
+      "user, confirmed in PC-Tool: EQ Q 0.5-50 (Fine EQ 0.5-15), frequency step 0.01 Hz (Fine EQ 1 Hz), 2026-08-22/23",
+      "user, confirmed in PC-Tool: channel gain -30..+5 dB, the same on both tiers, 2026-08-23",
+      "user, confirmed in PC-Tool: EQ 10-40000 Hz, crossover corner 20-20480 Hz on every channel, 2026-08-23",
+      "the method's own file is the authority on all of the above: autosound-tuning/knowledge/dsp/helix-dsp-ultra-s.md -- what is here is the machine-readable half the gates read, and it is synced FROM there, never the other way",
+      "bundled into the method's profile library 2026-08-23 from autosound-tcc's src/autosound_tcc/dsp_profiles/helix-dsp-ultra-s.json, which is where these facts were first assembled -- authorship theirs, diffed field by field before landing"
+    ],
+    "vendor": "Audiotec-Fischer"
+  }
+}
