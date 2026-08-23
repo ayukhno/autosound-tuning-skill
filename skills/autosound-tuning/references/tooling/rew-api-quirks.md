@@ -77,7 +77,13 @@ inferred. Four facts, each of which changes what a caller should read.
 - **`delay` is the ARRIVAL, not the buffer origin, and it is a whole second away.** Measured on
   six captures: `delay − startTime = 1.000000 s` every time — structurally, because REW puts the
   peak at index 96000 and 96000 / 96000 Hz = 1 s of pre-roll. So
-  `delay = startTime + peakIndex / sampleRate`. Substituting one for the other on capture #78 turns
+  `delay = startTime + peakIndex / sampleRate`. **The pre-roll is a property of the sweep, not a
+  constant to subtract:** across the 13 published measurements of the 2026-08-20 set the difference
+  is 1.000000 s on twelve channels and **1.000003273 s on the sub** (96000.3 samples). Anyone
+  hard-coding 1.0 s would therefore be right twelve times and quietly wrong on `sw` — which is why
+  a reconstruction must use the reported `peakIndex`, and why not reconstructing at all is safer
+  still. (Six captures measured by the fork session, thirteen independently by the cockpit.)
+  Substituting one for the other on capture #78 turns
   `i0 = −startTime·fs = +96124.2` samples into **−259.8** — 96384 samples out, and indexing before
   the buffer begins. A dimensionally correct reconstruction exists
   (`startTime = delay + timingOffset − peakIndex / sampleRate`, using the reported `peakIndex`, not
