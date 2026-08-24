@@ -40,7 +40,7 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
-## [Unreleased]
+## [v3.0.21] — 2026-08-24 · the filter that protected the driver is taken back out before the joint is read
 
 - **De-embedding protective filters is doctrine, and the terminal path now does it.** The user's
   ruling (2026-08-24): a joint-phase decision read through a protective filter that has not been
