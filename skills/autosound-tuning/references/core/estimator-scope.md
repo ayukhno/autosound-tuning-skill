@@ -124,6 +124,7 @@ answerable from the table below and should not cost a round trip.
 | `arrival_triangulate` | clean, band-limited drivers (mids, tweeters) | sub and door midbass (ILL-POSED) | delays for those come from summation, so the joint search cannot wait on onsets |
 | single-point dips as evidence | below the Schroeder frequency (~150–200 Hz in a car) | above it — Rayleigh statistics, a dip is more likely mic position than car | above it, a peak outranks a dip; six-point mic-shift decides (§13) |
 | MMM | tone, spatial truth | phase, timing, anything at one point | never mix an MMM magnitude with a point-sweep phase |
+| joint delay / polarity / APF (`analyze-joints`) | solos whose protective chain is recorded on the capture round, or working captures | a **baseline** solo nobody marked — `check`, no number | record the round first (`capture-protective`); a phase read through an unrecorded `LR4 @100` is out by tens of degrees and looks fine (`project-intake.md §3`) |
 
 ## 3. A measurement is not a setting
 

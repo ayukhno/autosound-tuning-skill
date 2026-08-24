@@ -285,6 +285,44 @@ def _resample_complex(freqs, mag_db, phase_deg, query_freqs):
     return mag_q, ph_q
 
 
+def _protective_verdict(record, channel, baseline):
+    """What to do with one solo before its phase is read: `("no"|"yes"|"check", detail)`.
+
+    Doctrine (2026-08-24, `project-intake.md §3`): a protective filter is IN the recording and a
+    joint decision read through it is invalid. Working-by-default: a capture nobody marked measured
+    the system as configured, so nothing is removed. The one recoverable omission is a BASELINE
+    solo with no record -- that is a question for a person (`check`), never a number.
+    """
+    if record is None and not baseline:
+        return "no", "no protective record consulted; not a baseline, so read as a working capture"
+    import protective as prot                     # numpy; imported here to keep the plain path pure
+    return prot.should_de_embed(record, channel, baseline=baseline)
+
+
+def _legs_label(legs):
+    parts = []
+    for kind in ("hp", "lp"):
+        leg = (legs or {}).get(kind)
+        if isinstance(leg, dict) and leg.get("f"):
+            parts.append(f"{kind.upper()} {leg['f']:g} {leg.get('type', 'LR')}{leg['slope']}")
+    return " + ".join(parts) or "nothing"
+
+
+def _de_embed_trace(freqs, mag_db, phase_deg, legs):
+    """Take a recorded protective chain back out of a (mag_db, phase_deg) solo. Returns
+    `(mag_db, phase_deg, info)`; `info` carries the boost cap, which is reported, not hidden."""
+    import numpy as np
+    import protective as prot
+    n = min(len(freqs), len(mag_db), len(phase_deg))
+    f = np.asarray(freqs[:n], dtype=float)
+    h = 10.0 ** (np.asarray(mag_db[:n], dtype=float) / 20.0) * np.exp(
+        1j * np.radians(np.asarray(phase_deg[:n], dtype=float)))
+    corrected, info = prot.de_embed(f, h, legs)
+    amp = np.abs(corrected)
+    mag = np.where(amp > 0, 20.0 * np.log10(np.maximum(amp, 1e-30)), -120.0)
+    return [float(v) for v in mag], [float(v) for v in np.degrees(np.angle(corrected))], info
+
+
 def _parse_joint(spec):
     """'lo,hi,fc[,pairMeasurementName]' → (lo, hi, fc, pair_or_None)."""
     parts = [p.strip() for p in spec.split(",")]
@@ -460,7 +498,8 @@ def _joints_from_state(state_root, preset=None, ver_state=None):
     return preset, snap.get("version"), joints
 
 
-def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None):
+def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
+                   protective_record=None, baseline=None):
     """Batch joint/group analysis: walk every adjacent joint in ONE pass and
     render one consolidated table (polarity + drift-immune delay + residual +
     APF suggestion per joint), reusing joint_analysis.py unchanged.
@@ -483,6 +522,12 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None):
       • no pair given → still compute the alignment but flag it UNVERIFIED —
         confirm by summation before entering it.
 
+    `protective_record` is the capture round's record of what protected each driver during the
+    sweep (`process.py protective_record_for(ver)`), in the shape `protective.legs_of` reads.
+    A solo marked raw is de-embedded BEFORE its phase is read; an unmarked BASELINE solo is
+    refused as `check` (the Arbiter's question, not a number); anything else is a working
+    capture and left alone. `baseline` defaults from the record's phase, else from `ver == "1"`.
+
     Speed: ONE get_measurements() for the whole batch; per joint, two FR pulls
     (the two solo sweeps) + an optional pair pull — every joint in one command
     instead of hand-driving joint_analysis.py pair-by-pair.
@@ -498,6 +543,28 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None):
     print("  ⚠️ Без пари (nopair) або BLOCK → НЕ вводь обчислену затримку/APF: "
           "перекинь полярність і переміряй сумування.")
     candidates = dict(candidates or {})
+    if baseline is None:
+        # The round's phase decides; a round that never learnt its phase (opened before any phase
+        # was entered) falls back to the naming convention, `_1` = baseline -- otherwise a partly
+        # marked round would turn every forgotten channel into a working capture, which is the
+        # exact hole `check` exists to close.
+        phase = protective_record.get("phase") if protective_record else None
+        v = str(ver).strip()
+        baseline = (str(phase) in ("0", "-1") if phase is not None
+                    else (v.isdigit() and int(v) == 1))          # `_01` and `_1` are one version
+    if protective_record:
+        marked = ", ".join(f"{ch}: {_legs_label(legs) if legs != 'OFF' else 'bare'}"
+                           for ch, legs in sorted(protective_record.get("channels", {}).items()))
+        print(f"  Захисні фільтри: запис раунду {protective_record.get('series')} "
+              f"(фаза {protective_record.get('phase')}, _{protective_record.get('version')}): "
+              f"{marked or 'жоден канал не позначений'}. Позначені як raw — де-ембед перед фазою.")
+    elif baseline:
+        print("  Захисні фільтри: запису раунду нема, а solo базові (_1) — кожен канал без "
+              "позначки повертає CHECK, не число. Дай --process <project>/process або познач "
+              "раунд (`capture-protective`).")
+    else:
+        print("  Захисні фільтри: запис не читався — solo рахуються робочими захватами "
+              "(фільтри в них частина тюну).")
     if candidates:
         print("  ↳ кандидати all-pass (виставлені вручну, ПЕРЕВІРЯЄМО, не пропонуємо): "
               + "; ".join(f"{ch}: {_apf_label(*spec)}" for ch, spec in candidates.items())
@@ -541,6 +608,36 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None):
         if pA is None or pB is None:
             print(f"  {jl:<15}{fc:>6.0f}  — потрібен sweep із фазою (RTA не має фази)")
             continue
+        # The phase is read on the DRIVER, not on the driver behind whatever protected it during
+        # the sweep -- an LR4 @100 still leaves ~52 deg at 320 Hz, and a real junction read -49 deg
+        # with it in and +3 deg with it out. Marked raw -> take it out; unmarked baseline -> ask.
+        refused, notes = None, []
+        for ch, side in ((lo, "lo"), (hi, "hi")):
+            action, detail = _protective_verdict(protective_record, ch, baseline)
+            if action == "check":
+                refused = (ch, detail)
+                break
+            if action == "yes":
+                if side == "lo":
+                    mA, pA, info = _de_embed_trace(fA, mA, pA, detail)
+                else:
+                    mB, pB, info = _de_embed_trace(fB, mB, pB, detail)
+                cap = ""
+                if info.get("capped_below_hz"):
+                    cap = f"; phase NOT recovered below {info['capped_below_hz']:.0f} Hz"
+                if info.get("capped_above_hz"):
+                    cap += f"; phase NOT recovered above {info['capped_above_hz']:.0f} Hz"
+                notes.append(f"{ch}: de-embedded {_legs_label(detail)}{cap}")
+        if refused:
+            ch, why = refused
+            print(f"  {jl:<15}{fc:>6.0f}{band_s:>12}{'PROTECTIVE?':>12}"
+                  f"{'?':>5}{'—':>9}{'—':>7}{'—':>10}  CHECK: {ch} — {why}")
+            rows.append({"joint": jl, "fc": fc, "trust": None, "polarity": None,
+                         "delay_ms": None, "verdict": "check protective",
+                         "channel": ch, "ask": why})
+            continue
+        for note in notes:
+            print(f"  {'':<15}  ↳ {note}")
         mB2, pB2 = _resample_complex(fB, mB, pB, fA)
 
         trusted, trust_lbl, js_call = None, "—(nopair)", ""
@@ -781,6 +878,42 @@ def _selftest():
               f"({cand['now_null_db']:+.1f} → {cand['with_null_db']:+.1f} dB, no delay change), "
               "the same APF2 on hi does not help, an APF1 moves the null to the band's top, "
               "bad specs refused.")
+
+        # ── protective filters (doctrine 2026-08-24): the phase is read on the DRIVER. ───────
+        # hi carries an LR4 @100 protective high-pass IN the recording, on top of INV + tau.
+        # The anchor is tau itself -- known by construction, not by this code -- so the test does
+        # not share the implementation's ruler.
+        import numpy as _np
+        import protective as _prot
+        legs = {"hp": {"f": 100, "type": "LR", "slope": 24}, "lp": "OFF"}
+        H = _prot.response(_np.asarray(hz, dtype=float), legs)
+        magB_p = [20 * math.log10(abs(v)) for v in H]
+        phB_p = [180.0 - 360.0 * f * (tau / 1000.0) + math.degrees(cmath.phase(v))
+                 for f, v in zip(hz, H)]
+        jmeas["10"], jmeas["11"] = {"title": "w-L_1 (sw)"}, {"title": "m-L_1 (sw)"}
+        jfr[10], jfr[11] = (hz, magA, phA), (hz, magB_p, phB_p)
+        rec_raw = {"series": "cap_001", "phase": "0", "version": "1",
+                   "channels": {"m-L": legs, "w-L": "OFF"}}
+        rows_p = analyze_joints([("w-L", "m-L", 400.0, None)], ver="1", protective_record=rec_raw)
+        assert rows_p[0]["polarity"] == -1 and abs(rows_p[0]["delay_ms"] + tau) < 0.05, rows_p
+        # The same data with the record saying the chain was BARE: nothing is removed and the
+        # protective phase is read as the driver's -- the answer moves by a measurable amount,
+        # which is what makes the previous assertion mean something.
+        rec_off = dict(rec_raw, channels={"m-L": "OFF", "w-L": "OFF"})
+        rows_o = analyze_joints([("w-L", "m-L", 400.0, None)], ver="1", protective_record=rec_off)
+        bias = abs(rows_o[0]["delay_ms"] - rows_p[0]["delay_ms"])
+        assert bias > 0.05, ("de-embedding must change the read, else the test proves nothing", bias)
+        # An unmarked BASELINE solo is a question, not a number...
+        rows_c = analyze_joints([("w-L", "m-L", 400.0, None)], ver="1", protective_record=None)
+        assert rows_c[0]["verdict"] == "check protective" and rows_c[0]["delay_ms"] is None, rows_c
+        assert rows_c[0]["channel"] == "w-L", "the first unmarked channel is the one asked about"
+        # ...and an unmarked NON-baseline solo is a working capture: left alone, computed.
+        jmeas["10"], jmeas["11"] = {"title": "w-L_2 (sw)"}, {"title": "m-L_2 (sw)"}
+        rows_w = analyze_joints([("w-L", "m-L", 400.0, None)], ver="2", protective_record=None)
+        assert rows_w[0]["delay_ms"] is not None and rows_w[0]["verdict"] != "check protective"
+        print(f"selftest[joints:protective] OK — LR4@100 de-embedded → delay {rows_p[0]['delay_ms']:+.3f} "
+              f"(≈−{tau}); left in → off by {bias:.2f} ms; unmarked baseline → CHECK; "
+              "unmarked _2 → working capture.")
     finally:
         api.get_measurements, api.get_fr = orig_gm2, orig_fr2
         api.find_measurement_id = orig_find_id
@@ -852,6 +985,13 @@ def main():
                     help="Версія solo-замірів (назва = <ch>_<ver> (sw)); дефолт 2")
     pj.add_argument("--band-oct", type=float, default=1.0,
                     help="Півширина смуги стику в октавах навколо fc (дефолт 1.0)")
+    pj.add_argument("--process", default=None, metavar="DIR",
+                    help="the project's process/ dir: the capture round's protective record for "
+                         "--ver is read from it and solos marked raw are de-embedded before their "
+                         "phase is read (default: $AUTOSOUND_PROJECT_DIR/process when set)")
+    pj.add_argument("--baseline", action="store_true",
+                    help="treat the solos as a BASELINE capture even if the record does not say "
+                         "so: an unmarked channel then returns CHECK instead of a number")
     pj.add_argument("--apf", action="append", default=[], metavar="ch,APF1,f0 | ch,APF2,f0,Q",
                     help="Кандидат all-pass ПЕРЕВІРИТИ (не запропонувати): виставлений вручну "
                          "в TCC. Напр. --apf 'm-L,APF2,300,0.71'. Повторюваний, один на канал.")
@@ -895,8 +1035,21 @@ def main():
                 if ch in candidates:
                     raise ValueError(f"--apf: канал {ch} названо двічі; один кандидат на канал")
                 candidates[ch] = (kind, f0, q)
+            record = None
+            proc_dir = args.process or (
+                os.path.join(os.environ["AUTOSOUND_PROJECT_DIR"], "process")
+                if os.environ.get("AUTOSOUND_PROJECT_DIR") else None)
+            if proc_dir:
+                state_dir = os.path.join(os.path.dirname(__file__), "state")
+                if state_dir not in sys.path:
+                    sys.path.insert(0, state_dir)
+                from process import Process
+                record = Process(proc_dir).protective_record_for(args.ver)
+                if record is None:
+                    print(f"  У {proc_dir} нема раунду зйому для _{args.ver}.")
             analyze_joints(specs, ver=args.ver, band_oct=args.band_oct,
-                           candidates=candidates)
+                           candidates=candidates, protective_record=record,
+                           baseline=True if args.baseline else None)
         except ValueError as e:
             print(f"Помилка: {e}")
             sys.exit(1)

@@ -30,6 +30,8 @@ This phase establishes the physical foundation of the tune: crossovers, prelimin
 ### 1. Use the Phase-0 per-driver baseline
 Phase 0 already captured each isolated driver raw (`<ch>_1 (sw)` + `<ch>_1 (rta)`, protective HPFs, clean `v0`) — the sweep carries IR/phase/distortion/GD, the MMM carries FR magnitude. **Analyze that baseline here; do not re-collect it.** (Only re-measure a driver if its baseline is missing or the install changed.)
 
+* **De-embed before reading phase (doctrine 2026-08-24).** The `_1` solos were taken behind protective filters, and those filters are in the recording. `python3 rew_tool/rew_tool.py analyze-joints --process <project>/process --ver 1 …` takes them back out from the capture round's record before any delay / polarity / APF is computed, and answers **`check`** for a channel nobody recorded — that is the Arbiter's question, not a number to enter. One home for the rule: [`project-intake.md §3`](references/core/project-intake.md).
+
 > [!IMPORTANT]
 > **Set a consistent Time Offset on the sweeps BEFORE reading phase:**
 > Set a shared Time Offset ≈ the physical arrival of the reference speaker, applied to all sweeps. This keeps the phase flat and readable (especially at HF) instead of wrapping into a dense linear ramp. Read `rew-api-quirks.md` "Timing" for details.

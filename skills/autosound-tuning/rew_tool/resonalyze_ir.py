@@ -391,6 +391,27 @@ def _parse_hpf(spec):
     return {"hz": float(hz), "family": fam, "slopeDbPerOct": int(slope)}
 
 
+def _hpf_from_record(record, channel):
+    """The protective high-pass the capture round recorded for `channel`, in `--hpf` shape.
+
+    ONE source for one fact (2026-08-24): the round's record (`process.py capture-protective`)
+    is where the chain in force during a sweep is written down, and the v7 manifest repeats it
+    rather than being told separately. Returns `(state, value)`: `("raw", {...})` for a recorded
+    high-pass, `("bare", None)` when the record says nothing was in the chain, `("unknown", None)`
+    when nobody recorded the channel -- a manifest must then carry nothing rather than a guess.
+    A recorded LOW-pass has no slot in this format and is reported in the manifest note instead.
+    """
+    import protective as prot
+    legs = prot.legs_of(record, channel)
+    if legs is None:
+        return "unknown", None
+    hp = legs.get("hp")
+    if not isinstance(hp, dict) or not hp.get("f"):
+        return "bare", None
+    return "raw", {"hz": float(hp["f"]), "family": str(hp.get("type", "LR")),
+                   "slopeDbPerOct": int(hp["slope"])}
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--title", action="append", default=[],
@@ -404,6 +425,10 @@ def main(argv=None):
     ap.add_argument("--averages", type=int, default=1)
     ap.add_argument("--hpf", action="append", default=[],
                     help="protective high-pass in force during the sweep: NAME=HZ:FAMILY:SLOPE, e.g. m_L=100:LR:24")
+    ap.add_argument("--process", default=None, metavar="DIR",
+                    help="the project's process/ dir: each title's protective high-pass is read "
+                         "from the capture round recorded for its _N version (capture-protective), "
+                         "so the manifest and the round never disagree; --hpf still overrides")
     ap.add_argument("--note", default=None, help="free-text provenance note for the manifest")
     ap.add_argument("--rew", default=None, help="REW API base URL (default http://localhost:4735)")
     ap.add_argument("--selftest", action="store_true")
@@ -421,6 +446,9 @@ def main(argv=None):
         "converter": CONVERTER, "converterVersion": CONVERTER_VERSION,
         "createdAtUtc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "rewApi": rew_api.BASE_URL, "note": args.note,
+        "protectiveSource": ("the capture round's record (process.py capture-protective), "
+                             "--hpf overriding where given" if args.process else
+                             "--hpf only; no process round consulted"),
         "timeBase": "transferRealSamples[0] is the loopback reference (t = 0); "
                     "sweepDeconvolutionRealSamples is REW's buffer as served (t_i = startTimeS + i / sampleRate)",
         "amplitude": "fraction of full scale (REW percent / 100, normalised=false) — relative channel "
@@ -428,10 +456,32 @@ def main(argv=None):
         "files": {},
     }
     jobs = []
+    proc = None
+    if args.process:
+        _state_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state")
+        if _state_dir not in sys.path:
+            sys.path.insert(0, _state_dir)
+        from process import Process
+        import naming
+        proc = Process(args.process)
     for spec in args.title:
         title, _, name = spec.partition("=")
         mid = rew_api.find_measurement_id(title)
-        jobs.append((mid, name or title))
+        name = name or title
+        if proc is not None:
+            parsed = naming.parse_name(title)
+            record = proc.protective_record_for(parsed["version"]) if parsed else None
+            state, from_round = (_hpf_from_record(record, parsed["code"]) if parsed and record
+                                 else ("unknown", None))
+            if name in hpf and from_round and hpf[name] != from_round:
+                ap.error(f"{name}: --hpf {hpf[name]} disagrees with the round's record "
+                         f"{from_round} for {title!r}; one fact, one source -- fix the round")
+            if name not in hpf and state == "raw":
+                hpf[name] = from_round
+            print(f"{name:8} protective from round: {state}"
+                  + (f" {from_round['hz']:g}:{from_round['family']}:{from_round['slopeDbPerOct']}"
+                     if from_round else ""), file=sys.stderr)
+        jobs.append((mid, name))
     for spec in args.id:
         mid, _, name = spec.partition("=")
         jobs.append((mid, name or f"rew_{mid}"))
@@ -475,6 +525,13 @@ def _synthetic_ir(n, fs, t_peak_s, start_time_s, width_s=0.4e-3):
 
 
 def _selftest():
+    # One fact, one source: the round's record maps onto the manifest's --hpf shape, and the
+    # three states stay distinct -- "bare" and "unknown" must never both come out as None-and-move-on.
+    _rec = {"channels": {"m_L": {"hp": {"f": 100, "type": "LR", "slope": 24}}, "w_L": "OFF"}}
+    assert _hpf_from_record(_rec, "m_L") == ("raw", {"hz": 100.0, "family": "LR", "slopeDbPerOct": 24})
+    assert _hpf_from_record(_rec, "w_L") == ("bare", None)
+    assert _hpf_from_record(_rec, "tw_L") == ("unknown", None)
+    assert _hpf_from_record(None, "m_L") == ("unknown", None)
     fs, n = 96000, 1 << 15
     # 1. fractional t0: peak at +4.7788 ms, t = 0 at index 1000.37
     start = -1000.37 / fs

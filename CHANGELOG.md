@@ -40,6 +40,38 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [Unreleased]
+
+- **De-embedding protective filters is doctrine, and the terminal path now does it.** The user's
+  ruling (2026-08-24): a joint-phase decision read through a protective filter that has not been
+  taken back out is invalid — an `LR4 @100` still leaves ~52° at 320 Hz, and the same junction read
+  −49° with the protection in and +3° with it out. The rule has ONE home, `project-intake.md §3`,
+  as the after-the-sweep half of the block that already said how to set protection (a second home
+  for one subject is how two copies drift); phases 0, 1 and 2b point at it, and `estimator-scope.md
+  §2` carries the abstention. **`analyze-joints --process <project>/process`** reads the capture
+  round's protective record for `--ver` (new `process.py protective_record_for(version)`, replayed
+  from the journal so a round closed sessions ago still counts), de-embeds a solo marked raw before
+  its phase is read — boost cap reported per channel — and answers **`check protective`** for an
+  unmarked *baseline* solo: the Arbiter's question, not a number. An unmarked later solo is a
+  working capture and is left alone, because there the filter is the tune. The selftest anchors on
+  a delay known by construction: the LR4 left in moves the answer by a measurable amount, so the
+  correction is shown to do something rather than shown to agree with itself. `$AUTOSOUND_PROJECT_DIR`
+  supplies the default.
+- **One fact, one home: `resonalyze_ir.py --process`** fills each title's protective high-pass
+  from the same round record instead of being told again by `--hpf`; an explicit `--hpf` that
+  disagrees with the round is refused, and the manifest's `protectiveSource` says where the facts
+  came from. Before this the round and the v7 manifest were two places one fact was written.
+- `scripts/autosound_ai.py` writes a review under the PROJECT, never under whatever folder the
+  session was standing in — a real review landed in the method's own repo (found by TCC); the CWD
+  is used only when it looks like a project and never inside the skill's tree.
+- `protective.py`'s docstring described a fork-checkout hazard as something seen; it was an
+  illustration, and the fork is clean — the example is now generic.
+
+**Upgrading:** `analyze_joints()` gained two keyword arguments (`protective_record`, `baseline`),
+defaults preserve the old behaviour except for **`_1` solos with no record, which now come back
+`check protective` instead of a number** — pass `--process` (or record the round) to get the number
+back, de-embedded. Rows may now carry `verdict: "check protective"` with `channel` and `ask`.
+
 ## [v3.0.20] — 2026-08-23 · reading somebody else's tune, and the filter that was only there to protect the driver
 
 - **An abstention is half an answer — a tool that cannot run must ASK, and say what it costs**

@@ -859,6 +859,39 @@ class Process:
                 "version": round_.get("version"),
                 "channels": dict(round_.get("protective") or {})}
 
+    def protective_record_for(self, version):
+        """The protective record of the round captured at ledger `version`, open or closed.
+
+        Replayed from the journal rather than read from the state slice, because the slice only
+        holds the OPEN round and the solos a joint decision reads (`<ch>_1 (sw)`) are usually from
+        a round closed sessions ago. Two rounds at one version: the LAST one wins, since a retake
+        supersedes what it retook. `None` when no round was ever opened at that version -- which a
+        caller must not read as "nothing was in the chain", only as "nobody recorded a round".
+        """
+        def key(v):
+            # `_01` and `_1` are one DSP config version (`naming.parse_name` says the same): REW
+            # titles are typed by hand and zero-padding is common, and a string compare here would
+            # make a recorded round invisible to the solos it was recorded for.
+            v = str(v).strip()
+            return int(v) if v.isdigit() else v
+
+        version = key(version)
+        rounds, order = {}, []
+        for event in self.events(kinds=(EV_CAPTURE_ISSUED, EV_CAPTURE_PROTECTIVE)):
+            if key(event.get("version")) != version:
+                continue
+            cid = event.get("capture")
+            if event.get("type") == EV_CAPTURE_ISSUED:
+                rounds[cid] = {"series": cid, "phase": event.get("phase"),
+                               "version": str(event.get("version")), "channels": {}}
+                order.append(cid)
+            elif cid in rounds and event.get("channel"):
+                rounds[cid]["channels"][event["channel"]] = event.get("legs")
+        if not order:
+            live = self.protective_record()
+            return live if live and key(live.get("version")) == version else None
+        return rounds[order[-1]]
+
     def skip_capture(self, title, reason):
         """A capture deliberately NOT taken, and why.
 
@@ -1281,6 +1314,15 @@ def _selftest():
     assert "tw-L" not in rec["channels"], "an unanswered channel must not be invented as OFF"
     # The round carries what a reader needs to decide whether de-embedding applies at all.
     assert rec["phase"] == "0" and rec["version"] == "0", rec
+    # The by-VERSION reader is what `analyze-joints --process` uses, and the solos it reads are
+    # usually from a round closed sessions ago -- so it must find the record in the journal, not
+    # only in the open slice, and must say None for a version nobody ever opened a round at.
+    by_ver = pr.protective_record_for("0")
+    assert by_ver and by_ver["channels"]["m-L"]["hp"]["f"] == 100 and by_ver["phase"] == "0", by_ver
+    assert by_ver["channels"]["w-L"] == "OFF" and "tw-L" not in by_ver["channels"], by_ver
+    assert pr.protective_record_for("7") is None, "no round at that version must read as None"
+    assert pr.protective_record_for("00")["channels"]["m-L"]["hp"]["f"] == 100, \
+        "`_00` and `_0` are one version -- a zero-padded title must still find its round"
 
     # A leg that cannot be reconstructed is refused at write time, not discovered at read time.
     for bad in ({"hp": {"f": 100, "type": "LR"}}, {"hp": {"type": "LR", "slope": 24}}, "maybe", 5):
