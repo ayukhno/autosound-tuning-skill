@@ -42,6 +42,12 @@ Two consequences worth stating, because both have already caused a question:
 
 ## [v3.0.21] — 2026-08-24 · the filter that protected the driver is taken back out before the joint is read
 
+> **This patch does not pass the 3.1.0 gate.** That gate is the user's: `virtual-first` codified as the
+> main path, *after* the port has run on a live tune. De-embedding protective filters is a separate
+> ruling made the same day, and it ships on the 3.0.x line as work. The tag body should have said this
+> and did not; a published tag is never moved, so it says it here and rides as the next patch.
+
+
 - **De-embedding protective filters is doctrine, and the terminal path now does it.** The user's
   ruling (2026-08-24): a joint-phase decision read through a protective filter that has not been
   taken back out is invalid — an `LR4 @100` still leaves ~52° at 320 Hz, and the same junction read
