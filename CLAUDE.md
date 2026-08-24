@@ -27,6 +27,16 @@ There is no PowerShell on the author's machine, so the Windows half of any insta
 unverified until somebody runs `scripts/windows-install-test.md`. Say so in the release note when it
 applies.
 
+## Ported maths carries its upstream in the header
+
+A port of somebody else's DSP (Resonalyze's sum-loss metric is the first) starts with a block
+`# upstream: OWNER/REPO path @ <sha> (LICENCE) -- <symbols>` and one `# deviation: … -- see …` line
+per thing we do differently, in that block, not in a docstring a screen below. `scripts/upstream-drift.py`
+lists the upstream commits that touched the file since the sha; **a difference listed as a deviation is
+ours, an unlisted one is a drift** — and a deviation recorded anywhere the checker does not look is the
+one somebody will "fix back". The licence text goes verbatim into `LICENSES/NOTICE.md`.
+
+## Tests
 ## Tests
 
 - **`scripts/run-selftests.sh` is the single entry point** — the installer check plus every

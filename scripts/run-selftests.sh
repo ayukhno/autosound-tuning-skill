@@ -34,6 +34,9 @@ run_one() {                       # name, then the argv to hand the module
 
 echo "installer consistency"
 run_one "installers" scripts/installer-consistency.py
+# The upstream-drift checker's own mechanics (a throwaway git repo, no network). The real check
+# against the upstream is `scripts/upstream-drift.py --fork <clone> --fetch`, run by a person.
+run_one "upstream-drift" scripts/upstream-drift.py --selftest
 
 echo
 echo "rew_tool selftests ($PY)"

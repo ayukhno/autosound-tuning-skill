@@ -102,6 +102,16 @@ Two consequences worth stating, because both have already caused a question:
   is the post-sweep capture gate, and the two questions must not share a name (it was overwritten
   for one minute and restored from git).
 
+- **`scripts/upstream-drift.py` — has the upstream a port was taken from moved?** Reads every
+  `# upstream: OWNER/REPO path @ sha` header under `rew_tool`, lists the commits that touched that
+  file since the sha (a local clone via `--fork`, or the GitHub compare API through `gh` with no
+  clone), and prints the port's declared `# deviation:` lines beside it — because a difference
+  listed in the header is ours and one not listed is a drift, in either direction. Exit 2 on drift,
+  distinct from 1 on error, so CI can warn without failing. Its selftest builds a throwaway git
+  repository; the real check is a person's command. **First run found real drift the same day:**
+  upstream `5d24924` touched `VirtualCrossoverAnalysis.cs` two commits after the pin — read, and
+  recorded in the header's commit history as the checker intends.
+
 **Upgrading:** `align_delay_polarity` is unchanged. `align_sum_loss` is new and returns SIX values,
 not four; `sum_loss` returns a dict.
 

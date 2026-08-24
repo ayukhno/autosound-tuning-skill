@@ -285,7 +285,10 @@ def robust_worst_null(freqs_hz, A, B, band, perturbations=ROBUST_PERT):
 
 
 # ---------- sum loss: the junction metric ported from Resonalyze ----------
-# upstream: DIMOSUS/Resonalyze dsp/VirtualCrossoverAnalysis.cs @ 1da56dd (MIT) --
+# upstream: DIMOSUS/Resonalyze dsp/VirtualCrossoverAnalysis.cs @ 5d24924 (MIT) --
+# reviewed: 5d24924 (#117, 2026-08-24) adds per-frequency arrival coherence and only CALLS
+#           DetailedLoss; the definition, the constants and SumLossCurve are untouched. The
+#           port was made at 1da56dd and re-pinned after reading that diff.
 # `DetailedLoss`, `SumLossCurve`, `DipExcessPenaltyWeight`, `MinBinAmplitudeRatio`,
 # `SumLossLevelGateDb`. A port of the DEFINITION (formula and constants), written
 # fresh in numpy; see LICENSES/NOTICE.md. Checked against our own earlier Python
