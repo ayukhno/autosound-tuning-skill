@@ -40,6 +40,39 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [Unreleased]
+
+- **The junction sum-loss metric, ported from Resonalyze** (`dsp_math.sum_loss`, `sum_loss_score`,
+  `align_sum_loss`; upstream `dsp/VirtualCrossoverAnalysis.cs @ 1da56dd`, MIT, see
+  `LICENSES/NOTICE.md`). Per bin, the complex sum against the phase-blind magnitude sum in dB
+  (≤ 0, level- and shape-independent); the average is over LOG frequency; the dip is the minimum
+  of a 1/6-octave moving mean, so a single-bin modal notch cannot pose as the junction's dip; the
+  ranking score is `avg + 0.5·(dip − avg)` — the notch's excess over the average, so a uniformly
+  lossy joint is not punished twice. Two definitions kept apart on purpose: the SEARCH one (every
+  in-band bin votes) and the READ-OUT one (`level_gate_db=25`: a bin 25 dB under its local ±1-octave
+  peak is NaN — the phase arithmetic of two noise floors). The user's ruling: sum loss sits NEXT TO
+  the worst null, neither replaces the other, so `align_sum_loss` returns both.
+  **Ported as a definition, and one part of it had to change to survive the port:** their 1/f bin
+  weight *is* a log-frequency average, but only on a uniform-Hz FFT grid; on the geometric grids
+  this module works on it counts the bottom twice. `_log_weights` uses d(ln f) per bin, which is
+  their 1/f on a linear grid and a constant on a geometric one — the selftest evaluates one pair
+  on both grids and requires them to agree, because a metric that depends on the ruler is not a
+  metric. Every other anchor is a fact about waves: identical → 0 dB, inverted → the −60 dB floor,
+  a pure delay dips at exactly 1/(2τ), a 20 dB level change moves nothing.
+- **The near-tie rule was re-litigated against the new twin and KEPT.** On a flat synthetic
+  pair with τ = 0.37 ms, `align_delay_polarity` answers 0.33: the energy surface is flat to
+  within 0.5 % for four steps either side, and "smallest |τ| wins" takes the most compact
+  correction the measurement cannot tell from the optimum. For an hour this looked like a bias
+  toward zero and a fix was written (candidates as lobes only) — and withdrawn: the 0.04 ms is
+  "wrong" only because the fixture knows its own τ; in the car that difference is noise, and
+  buying it with delay is optimality with no failing case (`rew_tool.py`'s own note on the
+  junction window). `align_sum_loss` follows the same doctrine (`tie_db` 0.02 dB ≈ the twin's
+  0.5 % energy); its selftest pins the metric's optimum on the true delay with the tie off and
+  the doctrine's answer within the tie plateau with it on — two different claims, tested apart.
+
+**Upgrading:** `align_delay_polarity` is unchanged. `align_sum_loss` is new and returns SIX values,
+not four; `sum_loss` returns a dict.
+
 ## [v3.0.21] — 2026-08-24 · the filter that protected the driver is taken back out before the joint is read
 
 > **This patch does not pass the 3.1.0 gate.** That gate is the user's: `virtual-first` codified as the

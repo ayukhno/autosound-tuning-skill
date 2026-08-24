@@ -230,7 +230,13 @@ def align_delay_polarity(freqs_hz, A, B, band, max_delay_ms=3.0, step_ms=0.01,
     energies = np.array([np.sum(np.abs(a[None, :] + pol * b[None, :] * rot) ** 2, axis=1)
                          for pol in polarities])           # (n_pol, n_tau)
     ip, it = np.where(energies >= (1.0 - tie_frac) * energies.max())
-    # Smallest |tau| among the near-ties. An EXACT |tau| draw is a real coin flip -- a
+    # Smallest |tau| among the near-ties. This is DOCTRINE, not a bias (re-litigated and kept
+    # 2026-08-24): on a flat synthetic pair with tau = 0.37 ms it answers 0.33, because the
+    # energy surface is flat to within 0.5 % for four steps either side and the rule takes the
+    # most compact correction the measurement cannot tell from the optimum. The 0.04 ms is only
+    # "wrong" because the fixture knows its own tau; in the car that difference is noise, and
+    # buying it with delay is optimality with no failing case. A test that demands the exact
+    # synthetic tau is therefore the wrong test (it was written, failed, and was withdrawn). An EXACT |tau| draw is a real coin flip -- a
     # Butterworth joint offers (+1, -tau) and (-1, +tau) with the same sum and the same
     # null -- so it is settled by a convention rather than by the 1e-15 that separates
     # them: keep the driver non-inverted. Nothing acoustic is lost, and the same set of
@@ -276,6 +282,172 @@ def robust_worst_null(freqs_hz, A, B, band, perturbations=ROBUST_PERT):
         n = float(np.min(20 * np.log10(np.abs((a + bb)[sig]) / (c[sig] + 1e-12) + 1e-12)))
         worst = min(worst, n)
     return worst
+
+
+# ---------- sum loss: the junction metric ported from Resonalyze ----------
+# upstream: DIMOSUS/Resonalyze dsp/VirtualCrossoverAnalysis.cs @ 1da56dd (MIT) --
+# `DetailedLoss`, `SumLossCurve`, `DipExcessPenaltyWeight`, `MinBinAmplitudeRatio`,
+# `SumLossLevelGateDb`. A port of the DEFINITION (formula and constants), written
+# fresh in numpy; see LICENSES/NOTICE.md. Checked against our own earlier Python
+# reading of the same metric (sound_AutoSci resonalyze-cross-check), which agreed
+# with the C# to tenths of a dB on six real junctions.
+#
+# Why a second junction metric next to `align_delay_polarity`'s energy maximum:
+# the energy of |A+B|^2 is dominated by wherever the pair is LOUD, so a junction
+# can score well while a genuine cancellation notch sits inside its band. Sum
+# loss measures the gap between the complex sum and the phase-blind magnitude
+# sum, bin by bin, in dB (<= 0): 0 dB is perfect in-phase addition everywhere,
+# and the number is independent of level and of the drivers' own shape. The
+# 1/f weight makes it an average over LOG frequency, so a wide top octave does
+# not outvote the narrow bottom one; the dip reads the minimum of a 1/6-octave
+# moving mean, so a single-bin modal notch cannot pose as the junction's dip
+# while a real cancellation trough still reads at full depth.
+SUM_LOSS_MIN_RATIO = 1e-3          # -60 dB floor on |A+B| / (|A|+|B|) per bin
+SUM_LOSS_DIP_OCTAVES = 1.0 / 6.0   # width of the moving mean the dip reads
+SUM_LOSS_DIP_WEIGHT = 0.5          # score = avg + 0.5 * (dip - avg): the EXCESS over the average
+SUM_LOSS_LEVEL_GATE_DB = 25.0      # display/read-out gate: a point > 25 dB under its local peak is NaN
+SUM_LOSS_LEVEL_GATE_OCTAVES = 1.0  # ... "local" = within +-1 octave
+
+
+def _log_weights(freqs_hz):
+    """Per-bin weight for a LOG-frequency average, whatever the grid: d(ln f) per bin.
+
+    Resonalyze weights each FFT bin by 1/f -- which IS the log-frequency average, but only on
+    its own uniform-Hz grid. On the geometric grids this module works on, a bare 1/f would
+    count the bottom twice (the bins are already denser there per Hz) and the metric would
+    change with the grid it was evaluated on. d(ln f) = df/f reduces to their 1/f on a linear
+    grid and to a constant on a geometric one, so the number is a property of the pair, not of
+    the ruler."""
+    f = np.asarray(freqs_hz, dtype=float)
+    if len(f) < 2:
+        return np.ones(len(f))
+    return np.gradient(np.log(f))
+
+
+def sum_loss(freqs_hz, A, B, band, *, level_gate_db=None,
+             dip_octaves=SUM_LOSS_DIP_OCTAVES, min_ratio=SUM_LOSS_MIN_RATIO):
+    """Junction sum loss of two complex responses over `band`.
+
+    Returns a dict: `avg_db` (the per-bin loss averaged over LOG frequency -- their 1/f
+    weight on a linear FFT grid, made grid-independent here, see `_log_weights`), `dip_db` (minimum of the `dip_octaves` moving mean of the per-bin loss) and
+    `dip_hz` (where it sits), `score_db` (`avg + 0.5 * (dip - avg)` -- the ranking figure
+    Resonalyze's search uses, penalising the notch's EXCESS over the average so a uniformly
+    lossy junction is not punished twice), `curve_db` per in-band bin (NaN where gated),
+    `freqs_hz` of those bins, and `gated_bins`.
+
+    `level_gate_db=None` is the SEARCH definition (every in-band bin counts, as in their
+    `DetailedLoss`). `level_gate_db=25` is the READ-OUT definition (their `SumLossCurve`):
+    a bin whose |A|+|B| sits more than 25 dB below the loudest |A|+|B| within +-1 octave is
+    NaN and skipped -- there the "loss" is the phase arithmetic of two noise floors. Use the
+    gate when reporting a curve, not when comparing candidates: a gate that moves with the
+    candidate is a ruler that moves with the part.
+
+    `A` and `B` are complex responses on `freqs_hz`, already carrying whatever delay,
+    polarity and chain the caller wants judged. Level does not matter (a ratio); shape does
+    not matter (a ratio per bin). Both responses zero at a bin -> that bin is skipped.
+    """
+    f = np.asarray(freqs_hz, dtype=float)
+    A = np.asarray(A, dtype=complex)
+    B = np.asarray(B, dtype=complex)
+    m = (f >= band[0]) & (f <= band[1])
+    f, a, b = f[m], A[m], B[m]
+    mag_sum = np.abs(a) + np.abs(b)
+    usable = mag_sum > 0
+    if level_gate_db is not None:
+        # The loudest |A|+|B| within +-gate_octaves of each bin, then the 25 dB floor under it.
+        ratio = 2.0 ** SUM_LOSS_LEVEL_GATE_OCTAVES
+        local_peak = np.array([mag_sum[(f >= fc / ratio) & (f <= fc * ratio)].max() for fc in f])
+        usable &= mag_sum >= local_peak * 10.0 ** (-level_gate_db / 20.0)
+    empty = {"avg_db": None, "dip_db": None, "dip_hz": None, "score_db": None,
+             "curve_db": np.full(len(f), np.nan), "freqs_hz": f, "n_bins": 0,
+             "gated_bins": int((~usable).sum())}
+    if not usable.any():
+        return empty
+    fu, au, bu, su = f[usable], a[usable], b[usable], mag_sum[usable]
+    loss = 20.0 * np.log10(np.maximum(np.abs(au + bu) / su, min_ratio))
+    w = _log_weights(fu)
+    avg = float(np.sum(w * loss) / np.sum(w))
+    # Minimum of the moving mean over [fc / 2^(oct/2), fc * 2^(oct/2)]: unweighted, like theirs.
+    half = 2.0 ** (dip_octaves / 2.0)
+    dip, dip_hz = 0.0, None
+    for k, fc in enumerate(fu):
+        win = (fu >= fc / half) & (fu <= fc * half)
+        v = float(loss[win].mean())
+        if v < dip:
+            dip, dip_hz = v, float(fc)
+    curve = np.full(len(f), np.nan)
+    curve[usable] = loss
+    return {"avg_db": avg, "dip_db": float(dip), "dip_hz": dip_hz,
+            "score_db": sum_loss_score(avg, dip),
+            "curve_db": curve, "freqs_hz": f, "n_bins": int(usable.sum()),
+            "gated_bins": int((~usable).sum())}
+
+
+def sum_loss_score(avg_db, dip_db, weight=SUM_LOSS_DIP_WEIGHT):
+    """The ranking figure: the average plus `weight` times the dip's EXCESS over it (<= avg).
+
+    Penalising the excess rather than the dip itself leaves a uniformly lossy candidate
+    unpunished twice; the average alone cannot tell a smooth -0.7 dB from a -0.7 dB average
+    hiding a -5 dB cancellation notch. Higher (closer to 0) is better."""
+    return float(avg_db + weight * (dip_db - avg_db))
+
+
+def align_sum_loss(freqs_hz, A, B, band, max_delay_ms=3.0, step_ms=0.01,
+                   polarities=(1, -1), tie_db=0.02):
+    """Delay tau (applied to B) and polarity that maximise the sum-loss SCORE in `band`.
+
+    The sum-loss twin of `align_delay_polarity`, returning the same first four values
+    `(pol, tau_ms, dip_db, polarity_margin_db)` plus `avg_db` and `score_db` at the optimum,
+    so a caller can print both metrics side by side -- the user's ruling (2026-08-24): sum
+    loss sits NEXT TO the worst null, neither replaces the other.
+
+    Same tie rule as its twin: among candidates within `tie_db` of the best score, the smallest
+    |tau| wins across BOTH polarities, an exact |tau| draw keeps the driver non-inverted, and
+    no "prefer non-inverted" margin is imported -- at an odd-order Linkwitz-Riley joint the
+    inverted connection is the correct one. `polarity_margin_db` is by how much the chosen
+    polarity's best score beats the other polarity's best; negative when the tie rule took the
+    marginally weaker but more compact candidate on purpose.
+    """
+    f = np.asarray(freqs_hz, dtype=float)
+    A = np.asarray(A, dtype=complex)
+    B = np.asarray(B, dtype=complex)
+    m = (f >= band[0]) & (f <= band[1])
+    fb, ab, bb = f[m], A[m], B[m]
+    taus = np.arange(-max_delay_ms, max_delay_ms + step_ms / 2, step_ms) / 1000.0
+    rot = np.exp(-2j * np.pi * np.outer(taus, fb))                    # (n_tau, n_f)
+    mag_sum = np.abs(ab) + np.abs(bb)
+    usable = mag_sum > 0
+    fu = fb[usable]
+    w = _log_weights(fu)
+    half = 2.0 ** (SUM_LOSS_DIP_OCTAVES / 2.0)
+    windows = [(fu >= fc / half) & (fu <= fc * half) for fc in fu]
+    scores = np.empty((len(polarities), len(taus)))
+    avgs = np.empty_like(scores)
+    dips = np.empty_like(scores)
+    for ip, pol in enumerate(polarities):
+        s = ab[None, :] + pol * bb[None, :] * rot                       # (n_tau, n_f)
+        loss = 20.0 * np.log10(np.maximum(np.abs(s[:, usable]) / mag_sum[usable],
+                                          SUM_LOSS_MIN_RATIO))
+        avg = loss @ w / w.sum()
+        # Moving 1/6-oct mean per tau, minimum over centres; 0 is the ceiling (loss <= 0).
+        dip = np.zeros(len(taus))
+        for win in windows:
+            dip = np.minimum(dip, loss[:, win].mean(axis=1))
+        avgs[ip], dips[ip] = avg, dip
+        scores[ip] = avg + SUM_LOSS_DIP_WEIGHT * (dip - avg)
+    # The twin's doctrine, verbatim: among every grid point within the tie of the best score,
+    # the most compact correction wins -- a difference the score cannot resolve is not bought
+    # with delay. `tie_db` 0.02 dB is the sum-loss reading of the twin's 0.5 % energy.
+    ip_, it_ = np.where(scores >= scores.max() - tie_db)
+    steps = np.rint(np.abs(taus[it_]) / (step_ms / 1000.0)).astype(int)
+    inverted = np.array([0 if polarities[i] > 0 else 1 for i in ip_])
+    j = np.lexsort((-scores[ip_, it_], inverted, steps))[0]
+    ip, it = ip_[j], it_[j]
+    peak = scores.max(axis=1)
+    margin = (float("inf") if len(polarities) < 2
+              else float(peak[ip] - np.delete(peak, ip).max()))
+    return (polarities[ip], float(taus[it] * 1000.0), float(dips[ip, it]), margin,
+            float(avgs[ip, it]), float(scores[ip, it]))
 
 
 def apf_search(freqs_hz, A, B, band, apply_to="hi", n_f0=48,
@@ -482,6 +654,70 @@ def _selftest():
     run: a selftest that agrees with the implementation instead of checking it would have passed
     on the day `eq_complex` rendered an APF as a high shelf.
     """
+    # ---- sum loss: anchored to the DEFINITION, never to a stored number ---------------------
+    fs_ = np.geomspace(20.0, 20000.0, 3000)
+    band = (100.0, 1000.0)
+    flat = np.ones(len(fs_), dtype=complex)
+    r = sum_loss(fs_, flat, flat, band)
+    assert abs(r["avg_db"]) < 1e-9 and r["dip_db"] == 0.0 and r["score_db"] == 0.0, r
+    # A ratio: scaling one side by 20 dB changes nothing, and so does scaling both.
+    r2 = sum_loss(fs_, flat * 10.0, flat, band)
+    assert abs(r2["avg_db"] - r["avg_db"]) < 1e-9 and r2["dip_db"] == r["dip_db"], r2
+    # Inverted: every bin at the -60 dB floor (the ratio is exactly 0 before the floor).
+    r3 = sum_loss(fs_, flat, -flat, band)
+    assert abs(r3["avg_db"] + 60.0) < 1e-6 and abs(r3["dip_db"] + 60.0) < 1e-6, r3
+    # A pure delay: the sum cancels where f*tau = 1/2, so the dip must sit at 1/(2 tau) --
+    # a fact about waves, and the one place the metric's dip is nailed to a frequency.
+    tau = 1.0e-3
+    delayed = flat * np.exp(-2j * np.pi * fs_ * tau)
+    r4 = sum_loss(fs_, flat, delayed, band)
+    assert abs(r4["dip_hz"] - 1.0 / (2 * tau)) / (1.0 / (2 * tau)) < 0.03, r4["dip_hz"]
+    assert -60.0 < r4["avg_db"] < 0.0 and r4["dip_db"] < r4["avg_db"], r4
+    assert abs(r4["score_db"] - (r4["avg_db"] + 0.5 * (r4["dip_db"] - r4["avg_db"]))) < 1e-12
+    # Grid independence: the same pair on a linear grid and on a geometric one must agree --
+    # the metric is a property of the pair, not of the ruler it is read with.
+    lin = np.arange(100.0, 1000.0 + 0.5, 1.0)
+    d_lin = np.exp(-2j * np.pi * lin * tau)
+    r4l = sum_loss(lin, np.ones(len(lin), dtype=complex), d_lin, band)
+    assert abs(r4l["avg_db"] - r4["avg_db"]) < 0.15, (r4l["avg_db"], r4["avg_db"])
+    # A one-bin notch cannot pose as the dip: the 1/6-octave mean dilutes it by the window's
+    # bin count, so the dip reads a fraction of the notch and the average barely moves.
+    notched = flat.copy()
+    k = int(np.argmin(np.abs(fs_ - 300.0)))
+    notched[k] = -flat[k] * (1 - 2e-3)          # |A+B|/(|A|+|B|) ~ 1e-3 at one bin: -60 dB
+    r5 = sum_loss(fs_, flat, notched, band)
+    n_win = int(((fs_ >= 300 / 2 ** (1 / 12)) & (fs_ <= 300 * 2 ** (1 / 12))).sum())
+    assert -60.0 / n_win * 1.5 < r5["dip_db"] < -60.0 / n_win * 0.5, (r5["dip_db"], n_win)
+    assert r5["avg_db"] > -0.5, r5["avg_db"]
+    # The read-out gate: bins 25 dB under their local peak are NaN and do not vote. Build a
+    # pair that is flat to 600 Hz and 40 dB down above it, with the loss made bad up there.
+    # The quiet stretch (600-1000) sits inside ONE octave of the loud part, so every quiet bin
+    # sees a loud neighbour and is gated; a quiet region wider than an octave would NOT be --
+    # by design, a tilted response is judged region by region (first draft of this test got
+    # exactly that wrong and blamed the code).
+    quiet = flat.copy()
+    quiet[fs_ > 600.0] *= 1e-2
+    bad_hi = quiet.copy()
+    bad_hi[fs_ > 600.0] *= -1.0                 # inverted only where it is 40 dB down
+    r6 = sum_loss(fs_, quiet, bad_hi, band)                       # search definition: counts
+    r7 = sum_loss(fs_, quiet, bad_hi, band, level_gate_db=25.0)   # read-out: gated
+    assert r6["avg_db"] < -5.0 and r7["avg_db"] > -1e-6, (r6["avg_db"], r7["avg_db"])
+    assert r7["gated_bins"] > 0 and np.isnan(r7["curve_db"]).sum() == r7["gated_bins"], r7["gated_bins"]
+    # The search recovers a known delay and polarity from the score, and prints both metrics.
+    tau_ms = 0.37
+    B_ = -flat * np.exp(-2j * np.pi * fs_ * tau_ms / 1000.0)
+    # The metric's optimum sits on the true delay (tie off), and the doctrine's answer sits
+    # within the tie plateau of it -- the tie rule takes the most compact correction the score
+    # cannot tell from the optimum, which on a flat pair is a few grid steps toward zero.
+    pol0, tau0, *_ = align_sum_loss(fs_, flat, B_, band, tie_db=0.0)
+    assert pol0 == -1 and abs(tau0 + tau_ms) < 0.011, (pol0, tau0)
+    pol, tau_hat, dip_at, margin, avg_at, score_at = align_sum_loss(fs_, flat, B_, band)
+    assert pol == -1 and 0.0 <= (tau_ms - abs(tau_hat)) < 0.06, (pol, tau_hat)
+    assert avg_at > -0.05 and dip_at > -0.1 and margin > 0, (avg_at, dip_at, margin)
+    # ...and agrees with the energy-max twin on a clean case, so the two rulers can be read together.
+    pol_e, tau_e, _, _ = align_delay_polarity(fs_, flat, B_, band)
+    assert pol_e == pol and abs(tau_e - tau_hat) < 0.06, (pol_e, tau_e, tau_hat)
+
     f = np.geomspace(2.0, 40000.0, 4000)
     deg = lambda h: np.degrees(np.unwrap(np.angle(h)))  # noqa: E731
 
