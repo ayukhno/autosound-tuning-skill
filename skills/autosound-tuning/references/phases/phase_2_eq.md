@@ -49,7 +49,7 @@ Align the relative phase response of the channels in their overlap regions.
 2. **Crossover Filters applied:** Compare with crossovers enabled to analyze phase rotation introduced purely by the filters.
 3. **Fine Alignment:** Align joints in the following physical sequence:
    $$\text{Midbass (Reference)} \longrightarrow \text{Subwoofer} \longrightarrow \text{Midrange} \longrightarrow \text{Tweeter}$$
-   Then, align Left ↔ Right for mono summation.
+   Then, align Left ↔ Right for mono summation. **Two subs:** align `sw-f` ↔ `sw-r` FIRST as a pair (their shared band, by summation on `SWs_N (sw)`), then treat `SWs` as the subwoofer above — `analyze-joints --from-state` already reads the pair as one member.
 4. **Tools & Methods:**
    * Align joints using **All-pass filters (APF)** or Helix Phase controls rather than shifting raw channel delays, which can break the gross time arrival.
    * The sub-to-midbass joint (~60 Hz) yields the largest subjective SQ gain. Verify carefully.
@@ -69,7 +69,7 @@ Align the summed acoustic groups to match the target.
 Measure and analyze the MMM RTA of the following combinations:
 * **Ws, Ms, TWs** (L+R sums of each band pair).
 * **L vs. R** (full left side vs. full right side, excluding the subwoofer).
-* **SW + Ws** (subwoofer plus both midbasses).
+* **SW + Ws** (subwoofer plus both midbasses; two subs: `SWs` and `SWs+Ws`).
 
 ### Correction Rules
 * **Band-to-band alignment:** Adjust levels so they sum smoothly. An overlap hump is a summation issue, not a hot driver.

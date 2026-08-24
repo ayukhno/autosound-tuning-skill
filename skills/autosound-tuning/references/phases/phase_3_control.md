@@ -24,7 +24,7 @@ This phase acts as the final technical gate before proceeding to subjective list
 Instruct the user to run a complete, disciplined series of MMM RTA measurements using the locked spatial pattern. Collect and save the following:
 * **Each individual channel:** `sw_final`, `w-L_final`, `w-R_final`, `m-L_final`, `m-R_final`, `tw-L_final`, `tw-R_final`.
 * **The summed band pairs (L+R):** `Ws_final`, `Ms_final`, `TWs_final`.
-* **The low-frequency joint:** `sw+Ws_final` (Subwoofer + both Midbasses).
+* **The low-frequency joint:** `sw+Ws_final` (Subwoofer + both Midbasses; two subs: `SWs_final` and `SWs+Ws_final`).
 * **The individual sides:** Left-side-only (no sub), Right-side-only (no sub).
 * **The complete front system:** `ALL_final` (all front channels active together).
 

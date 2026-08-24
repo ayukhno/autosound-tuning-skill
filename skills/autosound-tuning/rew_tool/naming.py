@@ -8,6 +8,8 @@ has.
     name = <channel|pair|combo|joint>[ <modifier>]_<version>[ (<method>)]
 
     sw_1 (sw)        w-L_2 (rta)      ALL+C_25 (rta)      L w+m_3 (sw)      tw-R_final (rta)
+    sw-f_1 (sw)      sw-r_1 (sw)      SWs_1 (sw)          SWs+Ws_2 (rta)      (two subwoofers:
+                     front and rear are channels, `SWs` is their pair, `SWs+Ws` the joint)
 
 * **`_N` is the DSP config version the measurement was taken under**, not a counter. Bump it when
   the config changes; that is what lets "before vs after" line up. `final` is allowed (phase 3).
@@ -307,7 +309,9 @@ def _codes_for(scope, glossary):
     if scope == "combos_all":
         return [c for c in glossary.combos if c == "ALL"] or list(glossary.combos)[:1]
     if scope == "joints_sw_ws":
-        return [j for j in glossary.joints if j.upper().startswith("SW+")]
+        # `SW+Ws` with one sub, `SWs+Ws` with two: the joint whose lower member is the sub or
+        # the sub pair. Matching `SW+` alone missed the pair (found 2026-08-24).
+        return [j for j in glossary.joints if j.upper().startswith("SW") and "+" in j]
     return []
 
 
@@ -418,6 +422,16 @@ def _selftest():
     assert g.former_codes() == ["m-L"], g.former_codes()
     assert "m-L" in g.all_codes(), "an old title still has to parse into code + modifier"
     assert g.is_active("m-L") is True, "activity is the channel's, whatever it is called"
+
+    # -- Two subwoofers (2026-08-24): `sw-f`/`sw-r` are channels, `SWs` their pair, `SWs+Ws` the
+    #    joint the phase-2/3 plans read -- and it is all glossary DATA, so the grammar needs nothing
+    #    new; this pins that the plan generator sees it through the same scopes as one sub.
+    two = Glossary({"channels": [{"code": "sw-f"}, {"code": "sw-r"}, {"code": "w-L"}, {"code": "w-R"}],
+                    "pairs": {"SWs": ["sw-f", "sw-r"], "Ws": ["w-L", "w-R"]},
+                    "joints": {"SWs+Ws": ["SWs", "Ws"]}})
+    s2 = expected_series("2", two, 2)
+    assert "SWs_2 (rta)" in s2 and "SWs+Ws_2 (rta)" in s2 and "sw-f_2 (sw)" in s2, s2
+    assert parse_name("SWs+Ws_2 (rta)", two)["code"] == "SWs+Ws"
 
     old = parse_name("m-L_2 (sw)", g)
     assert old["code"] == "m-L", "the title says what REW shows, unedited"

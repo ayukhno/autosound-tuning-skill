@@ -40,6 +40,21 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [Unreleased]
+
+- **Two subwoofers have a vocabulary, and it is additive** (the user's ask, 2026-08-24). One sub
+  stays `sw`. A front and a rear sub are `sw-f` and `sw-r`, their pair is `SWs` (like `Ws`), and
+  the joint to the woofers is `SWs+Ws` — all glossary DATA (`pairs`, `joints`), so no old title
+  changes and no live project is touched. What had to change in CODE was the two places that
+  would have read two subs as a lo/hi junction between drivers that have none: `predict.py` now
+  enters them as one member (`SWs`, their sum) at the junction and reports their mutual alignment
+  under `pairs`; `analyze-joints --from-state` does the same, with the measured `SWs_N (sw)` as
+  that member's solo. `naming.py`'s `joints_sw_ws` scope matched `SW+` and so could not see
+  `SWs+Ws` — fixed and pinned. Prose: `naming-and-structure.md` (the rule and the capture table),
+  `project-intake.md` (the code list), phases 0 (capture `SWs_1 (sw)` from the tripod), 1
+  (`is_stereo: true` on each sub for `target_bands`), 2b (align `sw-f` ↔ `sw-r` as a pair first),
+  2c and 3 (the group lists).
+
 ## [v3.0.22] — 2026-08-24 · the sum-loss metric, the predictor, the verifier, and the drift checker
 
 > Work on the 3.0.x line, not the 3.1.0 gate: that gate is `virtual-first` codified as the main

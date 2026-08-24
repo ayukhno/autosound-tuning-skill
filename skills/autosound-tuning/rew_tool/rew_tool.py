@@ -447,7 +447,7 @@ def _edge_f(edge):
 
 
 def _is_sub(ch):
-    return ch.lower().startswith(("sw", "sub"))
+    return ch.lower().startswith(("sw", "sub"))     # `sw`, `sw-f`, `sw-r`, `sub`: all subs
 
 
 def _side_of(ch):
@@ -482,11 +482,20 @@ def _joints_from_state(state_root, preset=None, ver_state=None):
     channels = snap.get("channels", {})
     edges = {ch: (_edge_f(cfg.get("hp")), _edge_f(cfg.get("lp")))
              for ch, cfg in channels.items()}
+    # Two or more subs (`sw-f`, `sw-r`) are a PAIR sharing one band, not a lo/hi junction: they
+    # enter the map as one member, `SWs`, whose solo is the measured pair `SWs_N (sw)` and whose
+    # LPF is the highest of theirs. Sorting them by LPF would invent a crossover between drivers
+    # that have none.
+    subs = [ch for ch in channels if _side_of(ch) == "sub"]
+    if len(subs) > 1:
+        edges["SWs"] = (None, max((edges[c][1] for c in subs if edges[c][1] is not None),
+                                  default=None))
+        print(f"  Два саби ({', '.join(subs)}) → член стику 'SWs' (їхня сума); solo для нього — "
+              f"виміряна пара 'SWs_<ver> (sw)'. Взаємне вирівнювання сабів — пара, не стик.")
 
     joints, seen = [], set()
     for side in ("L", "R"):
-        grp = [ch for ch in channels
-               if _side_of(ch) == side or _side_of(ch) == "sub"]
+        grp = ([ "SWs"] if len(subs) > 1 else subs) + [ch for ch in channels if _side_of(ch) == side]
         # sort by high edge (lp); a full-range top (lp=None, e.g. tweeter) → last
         grp.sort(key=lambda ch: edges[ch][1] if edges[ch][1] is not None else float("inf"))
         for lo, hi in zip(grp, grp[1:]):
@@ -946,6 +955,18 @@ def _selftest():
     _st.PresetHistory(tmp, "TESTP").snapshot(sstate, note="t")
     _st.Registry(tmp).set_active("TESTP")
     preset, ver_s, sp = _joints_from_state(tmp)          # active-slot path (no --preset)
+    # Two subs in the ledger: the map has SWs↔w per side and never sw-f↔sw-r.
+    two = dict(sstate, channels={"sw-f": _mkch(None, 80), "sw-r": _mkch(None, 80),
+                                 "w-L": _mkch(80, 300), "m-L": _mkch(300, None),
+                                 "w-R": _mkch(80, 300), "m-R": _mkch(300, None)})
+    _st.PresetHistory(tmp, "TWO").snapshot(two, note="two subs")
+    _st.Registry(tmp).set_active("TWO")
+    _, _, sp2 = _joints_from_state(tmp)
+    got2 = sorted((lo, hi) for lo, hi, _, _ in sp2)
+    assert got2 == [("SWs", "w-L"), ("SWs", "w-R"), ("w-L", "m-L"), ("w-R", "m-R")], got2
+    assert all(fc == 80.0 for lo, hi, fc, _ in sp2 if lo == "SWs"), sp2
+    _st.Registry(tmp).set_active("TESTP")
+
     jset = {(lo, hi, fc) for lo, hi, fc, _ in sp}
     assert preset == "TESTP", preset
     for j in [("sub", "w-L", 45.0), ("w-L", "m-L", 270.0), ("m-L", "tw-L", 2800.0),

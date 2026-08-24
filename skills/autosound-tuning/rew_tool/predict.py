@@ -80,14 +80,21 @@ def _db(h):
     return 20.0 * np.log10(np.maximum(np.abs(h), 1e-12))
 
 
+SUB_GROUP = "SWs"       # the name of two (or more) subwoofers summed: a PAIR, like Ws, not a junction
+
+
+def _is_sub(code):
+    return code.lower().startswith(("sw", "sub"))
+
+
 def _side_of(code):
     c = code.lower()
+    if _is_sub(code):
+        return "mono"       # a sub feeds both sides -- `sw-f` and `sw-r` alike (they are not L/R)
     if c.endswith("-l") or c.endswith("_l"):
         return "L"
     if c.endswith("-r") or c.endswith("_r"):
         return "R"
-    if c.startswith(("sw", "sub")):
-        return "mono"
     return "other"          # centre / rear: Phase 5, left out of the front sums
 
 
@@ -293,17 +300,32 @@ def load_project_state(project_dir, preset=None, version=None):
     return preset, snap
 
 
+def sub_group(chains):
+    """The subwoofer codes that play, and whether they are one driver or a PAIR.
+
+    Two subs (`sw-f`, `sw-r`) are not a lo/hi junction -- they share one band and sum in parallel,
+    like `w-L`/`w-R`. Their relation is a pair alignment (reported under `pairs` as `SWs`), and the
+    junction to the woofers is `SWs↔w`, read on their SUM. Sorting them by LPF and calling the
+    lower one "lo" would have invented a crossover between two drivers that have none."""
+    subs = [ch for ch in chains if _is_sub(ch) and not chains[ch].get("muted")]
+    return subs
+
+
 def joints_from_chains(chains):
     """Adjacent pairs per side from the crossovers -- the same rule `analyze-joints --from-state`
-    uses: sort a side's members (plus the mono ones) by their low-pass corner, and the joint
-    frequency is the lower member's LPF. A member with no LPF is the top."""
-    edges = {ch: (c.get("hp", {}) or {}).get("f") if not c.get("muted") else None
-             for ch, c in chains.items()}
+    uses: sort a side's members (plus the sub, or the sub GROUP) by their low-pass corner, and the
+    joint frequency is the lower member's LPF. A member with no LPF is the top. Two or more subs
+    enter as one member, `SWs`, whose LPF is the highest of theirs."""
     lps = {ch: (c.get("lp") or {}).get("f") if not c.get("muted") else None
            for ch, c in chains.items()}
+    subs = sub_group(chains)
+    if len(subs) > 1:
+        lps[SUB_GROUP] = max((lps[c] for c in subs if lps[c] is not None), default=None)
+    members = [ch for ch in chains if not chains[ch].get("muted") and not _is_sub(ch)]
+    sub_members = [SUB_GROUP] if len(subs) > 1 else subs
     joints, seen = [], set()
     for side in ("L", "R"):
-        grp = [ch for ch in chains if _side_of(ch) in (side, "mono") and not chains[ch].get("muted")]
+        grp = sub_members + [ch for ch in members if _side_of(ch) == side]
         grp.sort(key=lambda ch: lps[ch] if lps[ch] is not None else float("inf"))
         for lo, hi in zip(grp, grp[1:]):
             fc = lps[lo]
@@ -329,13 +351,32 @@ def predict(freqs, solos, chains, joints=None, band_oct=1.0):
         if code not in solos:
             notes.append(f"{code}: ledger row present, no solo -- left out")
 
+    # Two or more subs: their SUM is a member of its own (`SWs`), read at the junction and
+    # reported as a pair -- their mutual alignment over the band they share.
+    pairs = []
+    subs = [c for c in processed if _is_sub(c)]
+    if len(subs) > 1:
+        processed[SUB_GROUP] = sum(processed[c] for c in subs)
+        chains = dict(chains, **{SUB_GROUP: {"muted": False, "gain_db": 0.0, "polarity": "NORM",
+                                             "ta_ms": 0.0, "hp": None, "lp": None, "eq": [],
+                                             "group_of": subs}})
+        top = max(((chains[c].get("lp") or {}).get("f") or 0.0) for c in subs) or f[-1]
+        band = (float(f[0]), float(top))
+        a, b = subs[0], subs[1]
+        sl = dsp_math.sum_loss(f, processed[a], processed[b], band)
+        pairs.append({"pair": SUB_GROUP, "members": subs, "band": [band[0], band[1]],
+                      "sum_loss_avg_db": sl["avg_db"], "sum_loss_dip_db": sl["dip_db"],
+                      "sum_loss_dip_hz": sl["dip_hz"], "sum_loss_score_db": sl["score_db"],
+                      "note": ("the subs' mutual alignment over their shared band -- a pair, "
+                               "not a junction; more than two are read as the first two")})
+
     sides = {}
     for side in ("L", "R"):
-        members = [c for c in processed if _side_of(c) in (side, "mono")]
+        members = [c for c in processed if c != SUB_GROUP and _side_of(c) in (side, "mono")]
         sides[side] = {"members": members,
                        "sum": (sum(processed[c] for c in members) if members
                                else np.zeros(len(f), dtype=complex))}
-    front = [c for c in processed if _side_of(c) != "other"]
+    front = [c for c in processed if c != SUB_GROUP and _side_of(c) != "other"]
     left_out = [c for c in processed if _side_of(c) == "other"]
     if left_out:
         notes.append(f"{', '.join(left_out)}: centre/rear -- loaded, not summed (Phase 5)")
@@ -373,8 +414,8 @@ def predict(freqs, solos, chains, joints=None, band_oct=1.0):
         lr.append({"band": [lo_f, hi_f], "delta_db": float(np.sum(w * d) / np.sum(w))})
 
     return {"freqs_hz": f, "processed": processed, "chains": {c: chains[c] for c in processed},
-            "sides": sides, "all": all_sum, "junctions": junctions, "lr_delta": lr,
-            "notes": notes}
+            "sides": sides, "all": all_sum, "junctions": junctions, "pairs": pairs,
+            "lr_delta": lr, "notes": notes}
 
 
 # ---------------------------------------------------------------- output
@@ -392,6 +433,7 @@ def to_json(result, decimate=1):
                   for s, v in result["sides"].items()},
         "all_mag_db": [round(float(x), 3) for x in _db(result["all"])[::decimate]],
         "junctions": result["junctions"],
+        "pairs": result.get("pairs", []),
         "lr_delta": result["lr_delta"],
         "notes": result["notes"],
         "not_modelled": ["phase_deg (vendor phase angle)", "virtual tier routing",
@@ -405,7 +447,7 @@ def render(result):
     for c, chain in result["chains"].items():
         lines.append(f"  {c:6} {chain_label(chain)}")
     lines.append("")
-    lines.append(f"  {'junction':14}{'fc':>6}{'band':>12}{'sum-loss avg':>13}{'dip':>8}"
+    lines.append(f"  {'junction/pair':14}{'fc':>6}{'band':>12}{'sum-loss avg':>13}{'dip':>8}"
                  f"{'@Hz':>7}{'score':>7} | {'worst null':>10}{'@Hz':>7}")
     lines.append("  " + "-" * 88)
     for j in result["junctions"]:
@@ -416,6 +458,11 @@ def render(result):
             f"{j['sum_loss_avg_db']:>+13.2f}{j['sum_loss_dip_db']:>+8.1f}"
             f"{(j['sum_loss_dip_hz'] or 0):>7.0f}{j['sum_loss_score_db']:>+7.2f} | "
             f"{j['worst_null_db']:>+10.1f}{(j['worst_null_hz'] or 0):>7.0f}")
+    for pr in result.get("pairs", []):
+        lines.append(f"  {pr['pair']:14}{'pair':>6}{'%.0f-%.0f' % (pr['band'][0], pr['band'][1]):>12}"
+                     f"{pr['sum_loss_avg_db']:>+13.2f}{pr['sum_loss_dip_db']:>+8.1f}"
+                     f"{(pr['sum_loss_dip_hz'] or 0):>7.0f}{pr['sum_loss_score_db']:>+7.2f} | "
+                     f"{'(' + '+'.join(pr['members']) + ')':>18}")
     lines.append("")
     lines.append("  L-R level difference (dB, + = left louder): " + "  ".join(
         f"{b['band'][0]:.0f}-{b['band'][1]:.0f}:{b['delta_db']:+.1f}" for b in result["lr_delta"]))
@@ -640,6 +687,29 @@ def _selftest():
     assert abs(lr[(20, 60)]) < 0.3, lr            # ...and not where only the shared sub plays
     fcs = sorted(jj["fc"] for jj in r3["junctions"])
     assert fcs == [80.0, 80.0, 300.0, 300.0], fcs
+
+    # 4b. Two subwoofers are a PAIR, not a junction: `sw-f`/`sw-r` sum into `SWs`, the junctions
+    #     are SWs↔w-L and SWs↔w-R (never sw-f↔sw-r), and the pair's own alignment is reported.
+    sub_row = {"hp": "OFF", "lp": {"f": 80, "type": "LR", "slope": 24}, "gain_db": 0,
+               "ta_ms": 0, "polarity": "NORM"}
+    chains4 = {"sw-f": chain_from_row(sub_row), "sw-r": chain_from_row(dict(sub_row, ta_ms=1.0)),
+               "w-L": chain_from_row(w_row), "w-R": chain_from_row(w_row)}
+    sf = np.exp(-2j * np.pi * f * 2.0e-3)          # the front sub arrives 1 ms before the rear one,
+    sr = np.exp(-2j * np.pi * f * 1.0e-3)          # and the ledger delays the rear by 1.0 -> aligned
+    r4 = predict(f, {"sw-f": sf, "sw-r": sr, "w-L": sw, "w-R": sw}, chains4)
+    j4 = sorted((jj["lo"], jj["hi"]) for jj in r4["junctions"])
+    assert j4 == [("SWs", "w-L"), ("SWs", "w-R")], j4
+    assert r4["pairs"] and r4["pairs"][0]["pair"] == "SWs" and r4["pairs"][0]["members"] == ["sw-f", "sw-r"]
+    assert r4["pairs"][0]["sum_loss_avg_db"] > -0.01, r4["pairs"][0]     # aligned subs: no loss
+    assert "SWs" not in r4["sides"]["L"]["members"] and "sw-f" in r4["sides"]["L"]["members"]
+    r4b = predict(f, {"sw-f": sf, "sw-r": sr, "w-L": sw, "w-R": sw},
+                  dict(chains4, **{"sw-r": chain_from_row(sub_row)}))     # the rear left un-delayed
+    # 1 ms apart at a sub: 29 deg at 80 Hz -> -0.28 dB at the top of the band and less below, so
+    # the pair reads a small but definite loss. (A first draft demanded "< -1 dB" -- a number that
+    # felt right and had no arithmetic behind it.)
+    pb = r4b["pairs"][0]
+    assert pb["sum_loss_avg_db"] < -0.05 and pb["sum_loss_dip_db"] < -0.2, pb
+    assert "SWs" in render(r4)
 
     # 5. A v7 file round-trips: an impulse at sample k reads as a pure delay of k/fs.
     import resonalyze_ir as ri
