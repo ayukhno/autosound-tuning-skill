@@ -70,6 +70,22 @@ Two consequences worth stating, because both have already caused a question:
   0.5 % energy); its selftest pins the metric's optimum on the true delay with the tie off and
   the doctrine's answer within the tie plateau with it on — two different claims, tested apart.
 
+- **`rew_tool/predict.py` — the full-state predictor, the `virtual-first` path's engine.** The
+  solos on one time base (Resonalyze v7 files, or `<ch>_N (sw)` from a live REW refused unless on
+  the loopback base with no offset) × the ledger's chains (gain · polarity · delay · crossover ·
+  EQ, from the active slot's HEAD, or from an anchors-style JSON to reproduce an experiment) → every
+  channel's processed response, the per-side and whole-front complex sums, every junction the
+  crossovers imply read with BOTH rulers (sum loss avg / 1/6-oct dip / score, and the method's
+  worst null), and the L−R level difference per band. JSON, a table, an optional plot. It predicts
+  and stops; believing it is `verify.py`'s question. **Reproduces stage 0 of the plan to machine
+  precision:** on the real set-02 solos and both anchors states (v10.7 and G1), every channel agrees
+  with `sound_AutoSci`'s `stage0_predict.py` to 3·10⁻¹⁴ dB and 2·10⁻¹⁴°. Deliberately not modelled
+  and said in the output: a vendor phase angle (`phase_deg` is REFUSED — express it as `APF1`/`APF2`
+  in `eq`), the virtual tier's routing, centre and rear in the sums. The selftest anchors on waves:
+  an aligned LR24 pair sums to 0 dB on both rulers and the un-aligned one nulls at the half period;
+  a v7 impulse at sample k reads as a pure delay of k/fs; a ledger row and an anchors entry describe
+  one chain.
+
 **Upgrading:** `align_delay_polarity` is unchanged. `align_sum_loss` is new and returns SIX values,
 not four; `sum_loss` returns a dict.
 
