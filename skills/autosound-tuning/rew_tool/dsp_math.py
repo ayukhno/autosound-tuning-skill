@@ -291,6 +291,12 @@ def robust_worst_null(freqs_hz, A, B, band, perturbations=ROBUST_PERT):
 # fresh in numpy; see LICENSES/NOTICE.md. Checked against our own earlier Python
 # reading of the same metric (sound_AutoSci resonalyze-cross-check), which agreed
 # with the C# to tenths of a dB on six real junctions.
+# deviation: d(ln f) per bin instead of their bare 1/f weight -- see `_log_weights`
+#            (their 1/f is a log-frequency average only on a uniform-Hz FFT grid).
+# deviation: candidates tie-break by our own near-tie rule (smallest |tau| within
+#            0.02 dB), not by their AlignmentSelection gates -- see `align_sum_loss`.
+# A `# deviation:` line is where a drift checker must look before calling a
+# difference from upstream a drift: an unlisted difference is one; a listed one is ours.
 #
 # Why a second junction metric next to `align_delay_polarity`'s energy maximum:
 # the energy of |A+B|^2 is dominated by wherever the pair is LOUD, so a junction
