@@ -17,7 +17,7 @@ What it produces, per run:
     because neither replaces the other (the same ruling);
   * the L-R level difference per band, the level half of the image.
 
-It PREDICTS and stops. Whether the prediction is to be believed is `verify.py`'s question -- the
+It PREDICTS and stops. Whether the prediction is to be believed is `verify_prediction.py`'s question -- the
 delta against a measurement taken on the same terms -- and what to change is the tuner's.
 
 Where the solos come from, and the one thing they must share:

@@ -86,6 +86,22 @@ Two consequences worth stating, because both have already caused a question:
   a v7 impulse at sample k reads as a pure delay of k/fs; a ledger row and an anchors entry describe
   one chain.
 
+- **`rew_tool/verify_prediction.py` — predicted against measured, on the same terms.** The
+  model-trust metric the virtual-first path rests on. Per junction it compares the INTERFERENCE
+  term — the measured pair minus the power sum of the two measured solos — with the same term
+  predicted, because level cancels out of it (SPL reference, the sub knob, a mic-gain change all
+  move solos and pair together) and what is left is delay, polarity and crossover phase: the part
+  a desk design decides. Criterion is stage 0's: |mean Δ| ≤ 1 dB in every junction sub-band →
+  `TRUSTED`, else `NOT trusted at <junction>` and what that can mean. Each channel's processed
+  shape and the whole front are compared after ONE offset, and the offset is reported as the
+  calibration fact it is. **Same base or no comparison:** an RTA fills the nulls a point
+  prediction shows (set-02: +27 dB at 165 Hz), so RTA rows are refused unless `--allow-rta`, and
+  then the verdict says so — run live against the `_47` MMM set the G1 prediction reads `NOT
+  trusted at sw↔w-L` in exactly the 111–176 Hz band that null sits in, with the right side inside
+  the criterion: the tool now prints the lesson stage 0 was learned from. Not `verify.py` — that
+  is the post-sweep capture gate, and the two questions must not share a name (it was overwritten
+  for one minute and restored from git).
+
 **Upgrading:** `align_delay_polarity` is unchanged. `align_sum_loss` is new and returns SIX values,
 not four; `sum_loss` returns a dict.
 
