@@ -40,7 +40,11 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
-## [Unreleased]
+## [v3.0.22] — 2026-08-24 · the sum-loss metric, the predictor, the verifier, and the drift checker
+
+> Work on the 3.0.x line, not the 3.1.0 gate: that gate is `virtual-first` codified as the main
+> path AFTER a run on a live tune. These are the tools that run will use.
+
 
 - **The junction sum-loss metric, ported from Resonalyze** (`dsp_math.sum_loss`, `sum_loss_score`,
   `align_sum_loss`; upstream `dsp/VirtualCrossoverAnalysis.cs @ 1da56dd`, MIT, see
