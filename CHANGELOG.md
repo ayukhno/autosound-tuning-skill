@@ -40,7 +40,10 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
-## [Unreleased]
+## [v3.0.23] — 2026-08-24 · two subwoofers have names
+
+> A 3.0.x patch for the author's own test rigs (the `v3.*` installer audience), not the 3.1.0 gate.
+
 
 - **Two subwoofers have a vocabulary, and it is additive** (the user's ask, 2026-08-24). One sub
   stays `sw`. A front and a rear sub are `sw-f` and `sw-r`, their pair is `SWs` (like `Ws`), and
