@@ -859,28 +859,72 @@ class Process:
                 "version": round_.get("version"),
                 "channels": dict(round_.get("protective") or {})}
 
+    @staticmethod
+    def _version_key(v):
+        # `_01` and `_1` are one DSP config version (`naming.parse_name` says the same): REW
+        # titles are typed by hand and zero-padding is common, and a string compare here would
+        # make a recorded round invisible to the solos it was recorded for.
+        v = str(v).strip()
+        return int(v) if v.isdigit() else v
+
+    @staticmethod
+    def _title_version(title):
+        """The `_N` of a measurement title (`m-L_49 (sw)` -> `49`), or None. Same grammar as
+        `naming.parse_name`: the version is what follows the LAST underscore, digits or `final`."""
+        m = re.search(r"_(\d+|final)(?:\s*\([A-Za-z]+\))?\s*$", str(title))
+        return m.group(1) if m else None
+
+    def capture_rounds(self):
+        """Every round ever opened, oldest first: id, the version it was keyed by, its phase, and
+        the `_N` versions of the titles it expected or took. What a lookup failure lists."""
+        rounds, order = {}, []
+        for event in self.events(kinds=(EV_CAPTURE_ISSUED, EV_CAPTURE_TAKEN)):
+            cid = event.get("capture")
+            if event.get("type") == EV_CAPTURE_ISSUED:
+                rounds[cid] = {"id": cid, "version": str(event.get("version")),
+                               "phase": event.get("phase"), "titles": list(event.get("expected") or [])}
+                order.append(cid)
+            elif cid in rounds and event.get("title"):
+                rounds[cid]["titles"].append(event["title"])
+        out = []
+        for cid in order:
+            r = rounds[cid]
+            seen = []
+            for t in r["titles"]:
+                v = self._title_version(t)
+                if v is not None and v not in seen:
+                    seen.append(v)
+            r["title_versions"] = seen
+            out.append(r)
+        return out
+
     def protective_record_for(self, version):
-        """The protective record of the round captured at ledger `version`, open or closed.
+        """The protective record of the round the solos `<ch>_<version> (sw)` were taken in.
 
         Replayed from the journal rather than read from the state slice, because the slice only
         holds the OPEN round and the solos a joint decision reads (`<ch>_1 (sw)`) are usually from
-        a round closed sessions ago. Two rounds at one version: the LAST one wins, since a retake
-        supersedes what it retook. `None` when no round was ever opened at that version -- which a
-        caller must not read as "nothing was in the chain", only as "nobody recorded a round".
-        """
-        def key(v):
-            # `_01` and `_1` are one DSP config version (`naming.parse_name` says the same): REW
-            # titles are typed by hand and zero-padding is common, and a string compare here would
-            # make a recorded round invisible to the solos it was recorded for.
-            v = str(v).strip()
-            return int(v) if v.isdigit() else v
+        a round closed sessions ago. Two rounds match: the LAST one wins, since a retake supersedes
+        what it retook. `None` when no round matches -- which a caller must not read as "nothing
+        was in the chain", only as "nobody recorded a round" (and, since 2026-08-25, must REFUSE on
+        when it was told a round exists).
 
+        A round matches by EITHER key it carries: the `version` it was opened with, OR the `_N` of
+        any title it expected or took. The two are different numbers in real projects -- the tune
+        session opened `capture-start v_001 "m-L_49 (sw)" ...` (ledger version `v_001`, captures
+        `_49`), and every reader asked for `_49` and got nothing; the exporter then wrote
+        `protectiveHighPass: null` for a fully recorded round, and the junction phase carried a
+        67-degree protective filter nobody could see. The titles were on the round the whole time.
+        """
+        key = self._version_key
         version = key(version)
+        matches = {r["id"] for r in self.capture_rounds()
+                   if key(r["version"]) == version
+                   or any(key(v) == version for v in r["title_versions"])}
         rounds, order = {}, []
         for event in self.events(kinds=(EV_CAPTURE_ISSUED, EV_CAPTURE_PROTECTIVE)):
-            if key(event.get("version")) != version:
-                continue
             cid = event.get("capture")
+            if cid not in matches:
+                continue
             if event.get("type") == EV_CAPTURE_ISSUED:
                 rounds[cid] = {"series": cid, "phase": event.get("phase"),
                                "version": str(event.get("version")), "channels": {}}
@@ -1360,6 +1404,23 @@ def _selftest():
     # It is journalled, because it changes how every phase decision from those sweeps is read.
     kinds = [e.get("type") or e.get("event") or e.get("kind") for e in pr.events()]
     assert EV_CAPTURE_PROTECTIVE in kinds, kinds
+
+    # A round opened under the LEDGER version (`v_001`) whose titles carry the capture number
+    # (`_49`) must be found by that number -- the tune session's real case (2026-08-25), where the
+    # lookup returned None and a fully recorded round was exported as "no filter". Both keys work,
+    # a number nobody captured under still reads as None, and the lookup failure can list rounds.
+    pr.start_capture("v_001", expected=["m-L_49 (sw)", "tw-L_49 (sw)"], phase="0")
+    pr.set_protective("m-L", {"hp": {"f": 100, "type": "LR", "slope": 24}})
+    pr.record_capture("c_49 (sw)")
+    by_title = pr.protective_record_for("49")
+    assert by_title and by_title["version"] == "v_001" and \
+        by_title["channels"]["m-L"]["hp"]["f"] == 100, by_title
+    assert pr.protective_record_for("v_001")["channels"]["m-L"]["hp"]["f"] == 100
+    assert pr.protective_record_for("50") is None, "a capture number nobody recorded under is None"
+    rounds = pr.capture_rounds()
+    assert rounds[-1]["id"] == by_title["series"] and rounds[-1]["title_versions"] == ["49"], rounds[-1]
+    assert Process._title_version("m-L p3_01 (sw)") == "01" and Process._title_version("ALL_final (rta)") == "final"
+    assert Process._title_version("c_49 (sw) x0") is None, "a foreign suffix is not parsed, not guessed"
     # No open round is "no round to ask about", never "there was no protection".
     pr.close_capture(reason="done")
     assert pr.protective_record()["channels"]["m-L"]["hp"]["f"] == 100, "a closed round still says"

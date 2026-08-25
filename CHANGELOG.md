@@ -40,6 +40,39 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [v3.0.28] — 2026-08-25 · a capture round is found by the captures it holds, and a missing one is refused, not written as null
+
+> A 3.0.x patch for the author's own test rigs (the `v3.*` installer audience), not the 3.1.0 gate.
+
+- **`process.py protective_record_for(N)` now matches a round by EITHER key it carries** — the
+  version `capture-start` was opened with, or the `_N` of any title the round expected or took.
+  The tune session (2026-08-25) opened `capture-start v_001 "m-L_49 (sw)" …` — ledger version
+  `v_001`, captures `_49` — and every reader asked for `_49` and got `None`: a fully recorded
+  round (`cap_004`, mids and centre LR24 @100, tweeters LR24 @1000) was invisible to the solos it
+  was recorded for. `capture_rounds()` lists every round with the capture numbers of its titles.
+- **A round that cannot be found under an explicit `--process` is REFUSED, not read around.**
+  `resonalyze_ir.py --process` used to write `protectiveHighPass: null` for it — which two tools
+  downstream read as "no filter", so the whole set was exported as unprotected and the m/tw
+  junction carried a 67-degree protective filter that looked like a filter-model error. Now
+  `resonalyze_ir --process`, `predict --rew --process` and `analyze-joints --process` stop with the
+  rounds on record listed (`cap_004 version 'v_001' titles _49`) and say what to do: open the round
+  for these titles, pass `--hpf`, or drop `--process` to read the solos as configured on purpose.
+  A channel the round records nothing for (neither a filter nor OFF) is refused the same way.
+- **v7 files say what a `null` high-pass MEANS.** `rewSource.protectiveState` = `raw` / `bare` /
+  `unknown` is written next to `protectiveHighPass`; `predict.py` reads it and puts the reading in
+  its notes. A file without the mark (writer ≤ 3.0.27) is read as unfiltered and the note says it
+  predates the mark — the cockpit's point, that `null` had meant a fact where it was a gap.
+- The v3.0.26 Upgrading note gained the paragraph for anyone who compensated a protective filter
+  by hand before 3.0.26 (the tool now does it; a double removal looks like a phase lead growing
+  towards low frequencies) — it was on `main` only; it ships here. `plugin.json` → 3.0.28.
+
+### Upgrading
+
+Three commands that used to proceed on a missing round now refuse under `--process`: that is the
+fix, and the message names the rounds on record. Sets exported with `resonalyze_ir --process` before
+3.0.28 while the round was keyed by a ledger version carry `protectiveHighPass: null` on channels
+that WERE protected — re-export them (the round is found now) or pass `--hpf`. Suite 35/35.
+
 ## [v3.0.27] — 2026-08-25 · an EQ band the predictor cannot model is refused by name, not crashed on
 
 > A 3.0.x patch for the author's own test rigs (the `v3.*` installer audience), not the 3.1.0 gate.

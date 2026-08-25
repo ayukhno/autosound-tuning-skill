@@ -464,15 +464,35 @@ def main(argv=None):
         from process import Process
         import naming
         proc = Process(args.process)
+    prot_state = {}
     for spec in args.title:
         title, _, name = spec.partition("=")
         mid = rew_api.find_measurement_id(title)
         name = name or title
+        if name in hpf:
+            prot_state[name] = "raw"
         if proc is not None:
             parsed = naming.parse_name(title)
             record = proc.protective_record_for(parsed["version"]) if parsed else None
+            if parsed and record is None and name not in hpf:
+                # `--process` was given, so the caller says a round WAS recorded. Not finding it is
+                # a lookup failure, not a fact about the chain -- and writing `null` here turned
+                # into "no filter" two tools downstream (2026-08-25: a full round keyed `v_001`,
+                # titles `_49`, every mid exported as unprotected, a 67-degree junction error).
+                rounds = proc.capture_rounds()
+                ap.error(f"{title!r}: no capture round on record for _{parsed['version']} in "
+                         f"{args.process}, and no --hpf for {name!r}. Rounds on record: "
+                         + ("; ".join(f"{r['id']} version {r['version']!r} titles _"
+                                      + "/_".join(r["title_versions"] or ["?"]) for r in rounds)
+                            or "none") + ". Open the round for these titles, or pass --hpf.")
             state, from_round = (_hpf_from_record(record, parsed["code"]) if parsed and record
                                  else ("unknown", None))
+            if parsed and record is not None and state == "unknown" and name not in hpf:
+                ap.error(f"{title!r}: the round {record.get('series')} records nothing for "
+                         f"{parsed['code']!r} -- neither a filter nor OFF. `null` in the file would "
+                         f"read as unfiltered downstream. Say `capture-protective {parsed['code']} "
+                         f"OFF` or a filter, or pass --hpf.")
+            prot_state[name] = state if name not in hpf else "raw"
             if name in hpf and from_round and hpf[name] != from_round:
                 ap.error(f"{name}: --hpf {hpf[name]} disagrees with the round's record "
                          f"{from_round} for {title!r}; one fact, one source -- fix the round")
@@ -487,10 +507,14 @@ def main(argv=None):
         jobs.append((mid, name or f"rew_{mid}"))
     for mid, name in jobs:
         rec = fetch_rew(mid)
+        # `protectiveState` says what `protectiveHighPass: null` MEANS: "bare" (the round says
+        # nothing was in the chain) or "unknown" (nobody said). Before this the file carried one
+        # null for both, and a reader had to guess.
         doc, info = convert_rew_record(
             rec, bits=args.bits, play_channel=args.play_channel,
             sweep_seconds=args.sweep_seconds, averages=args.averages,
-            protective_hpf=hpf.get(name))
+            protective_hpf=hpf.get(name),
+            extra={"protectiveState": prot_state.get(name, "raw" if name in hpf else "unknown")})
         safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in name)
         path = os.path.join(args.out, safe + ".json")
         write_v7(doc, path)

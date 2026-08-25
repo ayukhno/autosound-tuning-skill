@@ -1065,9 +1065,19 @@ def main():
                 if state_dir not in sys.path:
                     sys.path.insert(0, state_dir)
                 from process import Process
-                record = Process(proc_dir).protective_record_for(args.ver)
+                proc = Process(proc_dir)
+                record = proc.protective_record_for(args.ver)
                 if record is None:
-                    print(f"  У {proc_dir} нема раунду зйому для _{args.ver}.")
+                    # --process was asked for: a round that cannot be found is a lookup failure, and
+                    # reading the joint WITH the protective filter in it is the error the record
+                    # exists to prevent (2026-08-25). Refuse, listing what is on record.
+                    rounds = proc.capture_rounds()
+                    raise ValueError(
+                        f"у {proc_dir} нема раунду зйому для _{args.ver}. Раунди на записі: "
+                        + ("; ".join(f"{r['id']} версія {r['version']!r} назви _"
+                                     + "/_".join(r["title_versions"] or ["?"]) for r in rounds)
+                           or "жодного") + ". Відкрий раунд для цих назв або прибери --process, "
+                        "щоб свідомо читати соло як є.")
             analyze_joints(specs, ver=args.ver, band_oct=args.band_oct,
                            candidates=candidates, protective_record=record,
                            baseline=True if args.baseline else None)

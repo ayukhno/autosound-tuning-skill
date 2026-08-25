@@ -258,14 +258,21 @@ def load_solo_v7(path, freqs, drift_samples=0.0):
     return _spectrum_on_grid(doc["transferRealSamples"], fs, 0.0, freqs, drift_samples), {
         "source": "v7", "path": path, "sample_rate": fs,
         "timing_reference": doc.get("timingReference"),
-        "protective": _legs_from_v7((doc.get("rewSource") or {}).get("protectiveHighPass")),
+        "protective": _legs_from_v7((doc.get("rewSource") or {}).get("protectiveHighPass"),
+                                    (doc.get("rewSource") or {}).get("protectiveState")),
+        "protective_state": (doc.get("rewSource") or {}).get("protectiveState"),
     }
 
 
-def _legs_from_v7(field):
+def _legs_from_v7(field, state=None):
     """`rewSource.protectiveHighPass` ({hz, family, slopeDbPerOct}, written by `resonalyze_ir.py`)
-    -> the `{hp, lp}` legs `protective.legs_of` speaks. `None` in the file means the set's manifest
-    listed no protection for the channel: a measured fact of the writer, so it is "OFF", not "unknown"."""
+    -> the `{hp, lp}` legs `protective.legs_of` speaks.
+
+    `null` in the file is NOT a fact on its own. Writers up to 3.0.27 wrote it both for "the round
+    says nothing was in the chain" and for "nobody said" -- and a whole set exported with a
+    mis-keyed round came out as `null` everywhere (2026-08-25). Since 3.0.28 the file also carries
+    `rewSource.protectiveState` (`raw` / `bare` / `unknown`); with it, `null` is read as it says.
+    Without it, `null` is read as unfiltered and the caller SAYS the file predates the mark."""
     if not field:
         return {"hp": "OFF", "lp": "OFF"}
     if not isinstance(field, dict) or field.get("hz") in (None, 0):
@@ -294,8 +301,15 @@ def de_embed_solos(loaded, freqs, record=None, baseline=None):
             verdict, detail = prot.should_de_embed(record, code, baseline=baseline)
         elif any(prot._live(legs.get(k)) for k in ("hp", "lp")):
             verdict, detail = "yes", legs
+        elif info.get("protective_state") == "bare":
+            verdict, detail = "no", "the round recorded nothing in the chain -- used as recorded"
+        elif info.get("protective_state") == "unknown":
+            verdict, detail = "no", ("the file says nobody recorded what was in the chain -- used "
+                                     "as recorded; if a protective filter WAS in force, the phase "
+                                     "near it is not the driver's")
         else:
-            verdict, detail = "no", "the file records no protective filter -- taken as unfiltered"
+            verdict, detail = "no", ("protectiveHighPass is null and the file predates the "
+                                     "protectiveState mark (writer <= 3.0.27) -- read as unfiltered")
         if verdict == "yes":
             corrected, dinfo = prot.de_embed(f, H, detail)
             solos[code] = corrected
@@ -697,10 +711,19 @@ def main(argv=None):
                 if state_dir not in sys.path:
                     sys.path.insert(0, state_dir)
                 from process import Process
-                record = Process(proc_dir).protective_record_for(args.ver)
+                proc = Process(proc_dir)
+                record = proc.protective_record_for(args.ver)
                 if record is None:
-                    print(f"  {proc_dir}: no capture round for _{args.ver} -- solos read as configured",
-                          file=sys.stderr)
+                    # The caller said a round exists; not finding it is a lookup failure, and reading
+                    # the solos "as configured" on top of it is how a protective filter stays in a
+                    # junction decision unseen (2026-08-25). Refuse, and list what IS on record.
+                    rounds = proc.capture_rounds()
+                    raise PredictError(
+                        f"{proc_dir}: no capture round on record for _{args.ver}. Rounds on record: "
+                        + ("; ".join(f"{r['id']} version {r['version']!r} titles _"
+                                     + "/_".join(r["title_versions"] or ["?"]) for r in rounds)
+                           or "none") + ". Open the round for these titles, or drop --process to "
+                        "read the solos as configured on purpose.")
         solos, prot_notes, refused = de_embed_solos(loaded, f, record=record,
                                                     baseline=True if args.baseline else None)
         for code in refused:
@@ -856,6 +879,12 @@ def _selftest():
         "left in, the protective is still -6.02 dB at its corner"
     assert _legs_from_v7({"hz": 100.0, "family": "LR", "slopeDbPerOct": 24}) == \
         {"hp": {"f": 100.0, "type": "LR", "slope": 24}, "lp": "OFF"}
+    # `null` in a file is read by its state mark, and a file without the mark is SAID to predate it.
+    for state, word in (("bare", "recorded nothing"), ("unknown", "nobody recorded"), (None, "predates")):
+        ld = {"w-L": (np.ones_like(f, dtype=complex),
+                      {"source": "v7", "protective": _legs_from_v7(None, state), "protective_state": state})}
+        _, n_s, _ = de_embed_solos(ld, f)
+        assert any(word in n for n in n_s), (state, n_s)
     # A REW solo with no round record is read as configured (working-by-default); at baseline it is
     # refused, because the missing mark is the one thing the data cannot reveal.
     rew_loaded = {"m-L": (swept, {"source": "rew", "protective": None})}
