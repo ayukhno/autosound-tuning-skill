@@ -2643,7 +2643,7 @@
 
         function add(text, fallback, sharedOff) {
             const r = parse(text);
-            if (!r.pts.length) { alert(t().noPairsAlert); return; }
+            if (!r.pts.length) { alert(t().noPairsAlert); return false; }
             const suggested = (sharedOff === undefined) ? refMean(r.pts) : sharedOff;
             let off = suggested;
             if (sharedOff === undefined) {
@@ -2658,6 +2658,7 @@
             plot(label, r.pts, color, rawName);
             curveChart.update();
             persist();
+            return true;
         }
 
         function readText(f) { return new Promise(res => { const rd = new FileReader(); rd.onload = e => res({ text: e.target.result, name: f.name.replace(/\.txt$/i, '') }); rd.readAsText(f); }); }
@@ -2696,8 +2697,15 @@
             let params;
             try { params = new URLSearchParams(hash.slice(1)); } catch (e) { return; }
             const name = params.get('curve');
-            const data = params.get('data');
+            let data = params.get('data');
             if (!name || !data) return;
+            // A double-encoded payload survives one URLSearchParams decode still carrying %0A / %20 /
+            // %23, so `parse` sees one glued line and finds no pairs. Decode once more when that
+            // signature is present — harmless on a correctly single-encoded payload, whose REW text
+            // has real newlines and no percent-escapes left (autosound-tcc, 2026-08-25).
+            if (/%(0A|20|23|2C)/i.test(data)) {
+                try { data = decodeURIComponent(data); } catch (e) { /* leave as-is; add() will alert */ }
+            }
             // The page remembers curves in localStorage, so a reopen with the same #curve must NOT
             // stack a second copy: if one with this name is already plotted (from restore or a prior
             // load), leave it. `_rawName` is what `plot` stored; a restored curve keeps its own.
@@ -2706,10 +2714,13 @@
             });
             if (already) return;
             // A malformed or empty payload must NOT silently show nothing — say so, like a bad drop.
-            add(data, name, 0);
-            // Clear the fragment so a refresh does not re-add the curve and the URL bar stays short;
-            // the curve now lives in the chart (and in localStorage via persist()).
-            try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+            const ok = add(data, name, 0);
+            // Clear the fragment ONLY on success, so a refresh does not re-add the curve and the URL
+            // stays short. On FAILURE keep it: the fragment is the only evidence of what arrived, and
+            // clearing it on a bad load ate exactly the diagnostic we needed (2026-08-25).
+            if (ok) {
+                try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+            }
         }
 
         function wireToggle(card, ds) {
