@@ -263,7 +263,7 @@ def _load_sibling(name):
 # property of the method and identical on every car, while a step's name is written per project.
 # Group-scoped paths (`groups.N.x`) are matched by their last segment.
 _PHASE_FACTS = {
-    "1": ("sample_rate_hz", "delay", "crossover_filters"),
+    "1": ("dsp_processing_rate_hz", "delay", "crossover_filters"),
     "2": ("parametric_eq", "eq"),
 }
 
@@ -317,7 +317,8 @@ def _require_profile_facts(phase, previous, project_dir):
     raise ProcessError(
         f"phase {phase} needs facts the DSP profile has never recorded: "
         + ", ".join(blocking)
-        + ". These are not paperwork: phase 1 turns delays into samples with `sample_rate_hz`, and "
+        + ". These are not paperwork: phase 1 turns delays into samples with the DSP's processing "
+        "rate (`dsp_processing_rate_hz`; the old name `sample_rate_hz` is still read), and "
         "phase 2 sizes its filters against what the EQ can actually do. A number nobody wrote down "
         "is a number the next session assumes. "
         "Ask the Arbiter and record each one: "
@@ -1106,6 +1107,29 @@ class Process:
                 "at": _now(),
                 "issues": list(verdict.get("issues") or []),
             }
+        # The capture rate vs the DSP's PROCESSING rate -- said ONCE per check, never a failure
+        # (the user's ruling, 2026-08-25): a UMIK-1 captures at 48k under a 96k Helix, and if
+        # capturing at the processing rate is impossible, we work with what there is. What must
+        # never happen silently is the two being confused -- delays in samples derive from the
+        # PROCESSING rate regardless of what the microphone recorded at.
+        rate_note = None
+        capture_rates = sorted({v["stats"]["capture_rate_hz"] for v in verdicts
+                                if v.get("stats", {}).get("capture_rate_hz")})
+        if capture_rates:
+            module = _load_dsp_profile_module()
+            proc_rate = None
+            if module is not None:
+                try:
+                    with open(os.path.join(self.project_dir, "dsp_profile.json")) as f:
+                        proc_rate = module.processing_rate_hz(json.load(f))
+                except (OSError, ValueError, AttributeError):
+                    proc_rate = None
+            if proc_rate and any(r != proc_rate for r in capture_rates):
+                rate_note = (f"captured at {'/'.join(str(r) for r in capture_rates)} Hz; the DSP "
+                             f"processes at {proc_rate:g} Hz -- fine, working with it. Delays in "
+                             f"samples derive from the PROCESSING rate; the capture rate stays with "
+                             f"the measurement")
+                print(f"  ⚠ {rate_note}")
         self._write(state)
         self._append(
             EV_CAPTURE_VERIFIED,
@@ -1113,6 +1137,7 @@ class Process:
             step=round_.get("step"),
             ok=sorted(v["name"] for v in verdicts if v.get("valid")),
             bad=sorted(v["name"] for v in verdicts if not v.get("valid")),
+            rate_note=rate_note,
         )
         return round_
 
@@ -1354,7 +1379,7 @@ def _seed_intake(root):
         "glossary": {"schema_version": 1, "channels": [{"code": "w-L", "active": True}]},
     })
     profile_mod.save_profile(os.path.join(root, "dsp_profile.json"), {"dsp_profile": {
-        "name": "Fixture", "vendor": "Fixture", "sample_rate_hz": 96000,
+        "name": "Fixture", "vendor": "Fixture", "dsp_processing_rate_hz": 96000,
         "delay": {"step_ms": 0.01}, "polarity": {"scope": []},
         "groups": [{"id": "physical_outputs", "label": "Outputs", "max_count": 2,
                     "fields": ["hp", "lp", "gain_db", "ta_ms", "polarity"],
@@ -1444,6 +1469,8 @@ def _selftest():
     with open(os.path.join(root, "dsp_profile.json"), "w") as f:
         json.dump(profile, f)
     refuses("entering phase 1 with no sample rate on record", lambda: proc.enter_phase("1"))
+    # Deliberately the LEGACY key: the phase-1 gate must accept a profile written before the
+    # rename (normalize_rate reads it), or every old project would refuse phase 1 for a fact it has.
     profile["dsp_profile"]["sample_rate_hz"] = 48000
     with open(os.path.join(root, "dsp_profile.json"), "w") as f:
         json.dump(profile, f)

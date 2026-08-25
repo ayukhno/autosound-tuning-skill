@@ -148,6 +148,12 @@ def rename_profile_fields(profile):
     # reading only the top level found no groups and silently renamed nothing.
     body = profile.get("dsp_profile") if isinstance(profile.get("dsp_profile"), dict) else profile
     renames = []
+    # Top-level: `sample_rate_hz` -> `dsp_processing_rate_hz` (2026-08-25). The old name never said
+    # WHICH rate it is and got confused with the capture rate; readers accept both, and migration is
+    # where the file itself moves to the canonical name.
+    if "sample_rate_hz" in body and _dsp_profile.PROCESSING_RATE_KEY not in body:
+        body[_dsp_profile.PROCESSING_RATE_KEY] = body.pop("sample_rate_hz")
+        renames.append(f"sample_rate_hz -> {_dsp_profile.PROCESSING_RATE_KEY}")
     for index, group in enumerate(body.get("groups") or []):
         fields = group.get("fields")
         if not isinstance(fields, list):
@@ -445,7 +451,7 @@ def _selftest():
     # not warn about it and move on.
     _write_json(os.path.join(root, "dsp_profile.json"), {
         "dsp_profile": {
-            "name": "M6V4", "vendor": "Musway", "sample_rate_hz": 96000,
+            "name": "M6V4", "vendor": "Musway", "sample_rate_hz": 96000,  # legacy on purpose: rename_profile_fields must move it
             "groups": [
                 {"id": "physical_outputs", "label": "Output channels",
                  "fields": ["hp", "lp", "gain_db", "delay_ms", "polarity"]},

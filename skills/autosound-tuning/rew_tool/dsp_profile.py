@@ -64,6 +64,42 @@ def _unwrap(data):
     return data.get("dsp_profile", data) if isinstance(data, dict) else data
 
 
+#: The DSP's PROCESSING rate — the rate the processor runs at; every delay expressed in samples
+#: derives from it. Renamed from `sample_rate_hz` (the user's ruling, 2026-08-25) because the old
+#: name never said WHICH rate it is, and two sessions independently confused it with the CAPTURE
+#: rate — the rate a measurement was recorded at (a UMIK-1 captures at 48k while a Helix runs
+#: 96k; that is legitimate and lives with the measurement, not here). The old key is still READ
+#: everywhere (normalize_rate), so nothing written before the rename breaks — including AutoSci's
+#: historical experiment scripts and the released 2.x line, which are deliberately untouched.
+PROCESSING_RATE_KEY = "dsp_processing_rate_hz"
+LEGACY_RATE_KEY = "sample_rate_hz"
+
+
+def normalize_rate(profile):
+    """Make the canonical key present when only the legacy one is (in place, idempotent).
+
+    Both present with DIFFERENT values is refused: that is two answers to one fact, and picking
+    either silently is how a wrong rate gets every sample count wrong.
+    """
+    if LEGACY_RATE_KEY in profile:
+        if PROCESSING_RATE_KEY not in profile:
+            profile[PROCESSING_RATE_KEY] = profile[LEGACY_RATE_KEY]
+        elif profile[PROCESSING_RATE_KEY] != profile[LEGACY_RATE_KEY] and \
+                profile[LEGACY_RATE_KEY] is not None and profile[PROCESSING_RATE_KEY] is not None:
+            raise ValueError(
+                f"profile carries both {PROCESSING_RATE_KEY}={profile[PROCESSING_RATE_KEY]!r} and "
+                f"{LEGACY_RATE_KEY}={profile[LEGACY_RATE_KEY]!r} with different values -- two answers "
+                f"to one fact. Keep {PROCESSING_RATE_KEY} and delete the legacy key")
+    return profile
+
+
+def processing_rate_hz(data):
+    """The DSP's processing rate from either key (canonical first), or None."""
+    profile = _unwrap(data)
+    v = profile.get(PROCESSING_RATE_KEY)
+    return v if v is not None else profile.get(LEGACY_RATE_KEY)
+
+
 def ledger_tier(group_id):
     """The ledger's (and `project.json`'s `tier`) top-level key for a profile group id.
 
@@ -149,7 +185,7 @@ def _validate_groups_enumerated(profile):
 
 
 def _validate_rate(profile):
-    """`sample_rate_hz` must be a rate, not a sentence.
+    """`dsp_processing_rate_hz` (or the legacy `sample_rate_hz`) must be a rate, not a sentence.
 
     SCR-045 made a MISSING rate an open question and a phase-1 refusal, because a delay in samples
     is computed from it. The audit found the obvious hole the same night: it checked presence, not
@@ -157,20 +193,21 @@ def _validate_rate(profile):
     is not a rate; 96 is not a rate in Hz; and a rate no DSP runs at is a number somebody typed
     from memory.
     """
-    if "sample_rate_hz" not in profile:
+    normalize_rate(profile)
+    if PROCESSING_RATE_KEY not in profile and LEGACY_RATE_KEY not in profile:
         return
-    rate = profile["sample_rate_hz"]
+    rate = processing_rate_hz(profile)
     if rate is None:
         return  # null is "not confirmed yet", which `open_questions` already reports
     if isinstance(rate, bool) or not isinstance(rate, (int, float)):
         raise ValueError(
-            f"profile.sample_rate_hz must be a number in HERTZ, got {rate!r}. Every delay in "
+            f"profile.{PROCESSING_RATE_KEY} must be a number in HERTZ, got {rate!r}. Every delay in "
             "samples is computed from it — a value that is not a number makes every alignment "
             f"number wrong. Common rates: {', '.join(str(r) for r in _PLAUSIBLE_RATES_HZ)}."
         )
     if rate not in _PLAUSIBLE_RATES_HZ:
         raise ValueError(
-            f"profile.sample_rate_hz = {rate!r} is not a rate any DSP runs at. In HERTZ, not kHz "
+            f"profile.{PROCESSING_RATE_KEY} = {rate!r} is not a rate any DSP runs at. In HERTZ, not kHz "
             f"(96000, not 96). Known: {', '.join(str(r) for r in _PLAUSIBLE_RATES_HZ)}. If this "
             "processor genuinely runs at something else, add it to `_PLAUSIBLE_RATES_HZ` in the "
             "same commit as the profile — a rate nobody has seen deserves a second reader."
@@ -505,7 +542,10 @@ def _strip_stray_prefix(path):
     nesting — path made dsp_profile.dsp_profile"). Correcting it here is more robust than hoping
     the instructions prevent every case.
     """
-    return path[len("dsp_profile."):] if path.startswith("dsp_profile.") else path
+    path = path[len("dsp_profile."):] if path.startswith("dsp_profile.") else path
+    # The old field name is still typed from habit and from older prose; it means the same fact,
+    # so it lands on the canonical key rather than resurrecting the legacy one.
+    return PROCESSING_RATE_KEY if path == LEGACY_RATE_KEY else path
 
 
 def set_field(project_dir, path, value):
@@ -595,8 +635,10 @@ def finalize(project_dir):
 # of those has a block that explains how it behaves. No new vocabulary — `FIELD_VOCABULARY` is the
 # vocabulary, and SCR-043 made it trustworthy.
 _FACTS_ALWAYS = {
-    "sample_rate_hz": "the DSP's native rate — every delay in samples is computed from it, so a "
-                      "wrong or missing rate makes every alignment number wrong",
+    PROCESSING_RATE_KEY: "the DSP's PROCESSING rate — every delay in samples is computed from it, so "
+                         "a wrong or missing rate makes every alignment number wrong. NOT the capture "
+                         "rate: what a measurement was recorded at is a separate fact that lives with "
+                         "the measurement (a UMIK-1 capturing at 48k under a 96k DSP is legitimate)",
 }
 # field token in ANY group -> the top-level block that has to describe it
 _FACTS_BY_FIELD = {
@@ -620,7 +662,7 @@ def missing_facts(data):
     they are: `null` means "asked, not answered yet", and a key that was never created means the
     question was never asked. Both are open questions; only one of them was being reported.
     """
-    profile = _unwrap(data)
+    profile = normalize_rate(_unwrap(data))
     groups = [g for g in profile.get("groups", []) if isinstance(g, dict)]
     declared = {f for g in groups for f in (g.get("fields") or []) if isinstance(f, str)}
     out = [key for key in _FACTS_ALWAYS if key not in profile]
@@ -652,8 +694,8 @@ def missing_facts(data):
 #: see `gaps()`. Keyed by the dotted path's leaf, since the same fact means the same thing whatever
 #: group it hangs under.
 _GOVERNS = {
-    "sample_rate_hz": "every delay expressed in samples — a wrong or missing rate makes each one "
-                      "wrong, and it is the first thing phase 1 needs",
+    PROCESSING_RATE_KEY: "every delay expressed in samples — a wrong or missing rate makes each one "
+                         "wrong, and it is the first thing phase 1 needs",
     "max_count": "how many slots the tier physically has, so spare capacity is visible at all",
     "fields": "which controls this tier has — and it gates what else gets ASKED, so leaving it "
               "unanswered hides every question about the controls nobody has named",
@@ -720,7 +762,7 @@ def open_questions(data):
     Drives incremental onboarding: a resumed interview asks only about what this returns, not
     the whole checklist again.
     """
-    profile = _unwrap(data)
+    profile = normalize_rate(_unwrap(data))
     out = list(profile.get("_open_questions") or [])
 
     def walk(prefix, obj):

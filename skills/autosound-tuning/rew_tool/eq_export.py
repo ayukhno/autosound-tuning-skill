@@ -427,7 +427,7 @@ def _profile(vendor="Audiotec-Fischer", size=30, types=None, name="Helix DSP Ult
                     else ["PK", "LSH", "HSH", "APF1", "APF2"]}}
     if no_crossover:
         group["no_crossover"] = True
-    return {"dsp_profile": {"name": name, "vendor": vendor, "sample_rate_hz": 96000,
+    return {"dsp_profile": {"name": name, "vendor": vendor, "dsp_processing_rate_hz": 96000,
                             "groups": [group]}}
 
 

@@ -15,7 +15,7 @@
     ],
     "groups_enumerated": false,
     "name": "M6V4",
-    "sample_rate_hz": null,
+    "dsp_processing_rate_hz": null,
     "sources": [
       "user's memory of past use, 2026-07-10, contributed from AutoSci's dsp_profiles/musway-m6v4.yaml on 2026-08-23 -- NOT verified against a datasheet or the vendor software UI, and not re-confirmed since. Every enterable fact is null for that reason: what was remembered is in _open_questions, where no consumer can execute it."
     ],

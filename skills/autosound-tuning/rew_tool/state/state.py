@@ -273,6 +273,29 @@ def project_channels(project_dir):
     return out
 
 
+def processing_rate(project_dir):
+    """The DSP's PROCESSING rate from the project's `dsp_profile.json` (either key: the canonical
+    `dsp_processing_rate_hz` or the legacy `sample_rate_hz`), or None.
+
+    The settings sheet derives its samples column from THIS, not from the snapshot's own recorded
+    rate (the user's ruling, 2026-08-25): the snapshot's number is what was believed at bank time,
+    and if the profile is later corrected, the sheet must follow the profile -- the sheet is what
+    the Arbiter types into the DSP, and the DSP runs at the profile's rate.
+    """
+    path = os.path.join(project_dir or "", "dsp_profile.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    body = data.get("dsp_profile") if isinstance(data.get("dsp_profile"), dict) else data
+    if not isinstance(body, dict):
+        return None
+    v = body.get("dsp_processing_rate_hz")
+    v = v if v is not None else body.get("sample_rate_hz")
+    return v if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 else None
+
+
 def current_target(project_dir, preset):
     """The CURRENT active target curve for `preset`, from `process/process-state.json`'s `targets`.
 
@@ -517,7 +540,8 @@ class PresetHistory:
         """
         snap = self.load(version)
         return render_state(snap, channels=project_channels(self.project_dir),
-                            current_target=current_target(self.project_dir, snap.get("preset", self.preset)))
+                            current_target=current_target(self.project_dir, snap.get("preset", self.preset)),
+                            processing_rate_hz=processing_rate(self.project_dir))
 
 
 def _diff_scalar(a, b):
@@ -574,7 +598,7 @@ def _fmt_opt(v, spec="g"):
     return "—" if v is None else str(v)
 
 
-def render_state(state, channels=None, current_target=None):
+def render_state(state, channels=None, current_target=None, processing_rate_hz=None):
     """The human-applicable settings sheet, GENERATED from the source of truth.
 
     Never hand-edit this — edit the JSON and re-render. This is also the artifact the future
@@ -585,7 +609,11 @@ def render_state(state, channels=None, current_target=None):
     it is what the header shows, because that is the curve the Arbiter EQs against now. The snapshot's
     own `target` — what this version was designed against — is the fallback and stays in the JSON.
     """
-    rate = state["sample_rate"]
+    # Samples derive from the DSP's PROCESSING rate (the profile) when the caller knows it; the
+    # snapshot's own recorded rate is the fallback and is NAMED when they differ, because a silent
+    # difference here is a wrong number in every row of the samples column.
+    rate = processing_rate_hz if processing_rate_hz else state["sample_rate"]
+    snap_rate = state["sample_rate"]
     roles = state.get("roles") or {}
     channels = channels or {}
 
@@ -606,7 +634,9 @@ def render_state(state, channels=None, current_target=None):
         target_line += f" (this version designed against {designed})"
     meta = [
         target_line,
-        f"sample_rate: {rate:g} Hz (samples derived; ms is canonical)",
+        f"processing rate: {rate:g} Hz (samples derived; ms is canonical)"
+        + (f" — the snapshot recorded {snap_rate:g}; samples follow the PROFILE rate"
+           if processing_rate_hz and snap_rate != processing_rate_hz else ""),
         f"roles: artist={roles.get('artist', '—')} · producer={roles.get('producer', '—')} · critic={roles.get('critic', '—')}",
     ]
     prov = state.get("provenance") or {}

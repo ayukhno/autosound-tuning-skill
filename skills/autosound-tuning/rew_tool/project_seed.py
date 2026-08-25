@@ -372,7 +372,7 @@ def _source_project(root):
         # complete for what it declares would make `profile_open` zero and the assertion below
         # would pass without measuring anything.
         json.dump({"dsp_profile": {
-            "name": "Helix DSP Ultra S", "vendor": "Audiotec-Fischer", "sample_rate_hz": 96000,
+            "name": "Helix DSP Ultra S", "vendor": "Audiotec-Fischer", "dsp_processing_rate_hz": 96000,
             "delay": {"step_ms": 0.01, "max_ms": None},
             "polarity": {"scope": ["per driver output"]},
             "groups": [{"id": "physical_outputs", "label": "Outputs", "max_count": 12,

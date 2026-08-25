@@ -2699,12 +2699,17 @@
             const name = params.get('curve');
             let data = params.get('data');
             if (!name || !data) return;
-            // A double-encoded payload survives one URLSearchParams decode still carrying %0A / %20 /
-            // %23, so `parse` sees one glued line and finds no pairs. Decode once more when that
-            // signature is present — harmless on a correctly single-encoded payload, whose REW text
-            // has real newlines and no percent-escapes left (autosound-tcc, 2026-08-25).
-            if (/%(0A|20|23|2C)/i.test(data)) {
-                try { data = decodeURIComponent(data); } catch (e) { /* leave as-is; add() will alert */ }
+            // A double-encoded payload survives one URLSearchParams decode still carrying %0A / %20,
+            // so `parse` sees one glued line and finds no pairs. Retry ONLY when the first parse
+            // actually fails (zero pairs) AND the escape signature is present, and adopt the
+            // re-decoded text only if IT parses — honest data whose header comment happens to hold
+            // a URL-like path (`# exported from file:///My%20Curves/ref.txt`) parses first time, so
+            // the retry never fires on it (autosound-tcc's edge, 2026-08-25).
+            if (!parse(data).pts.length && /%(0A|20|23|2C)/i.test(data)) {
+                try {
+                    const d2 = decodeURIComponent(data);
+                    if (parse(d2).pts.length) data = d2;
+                } catch (e) { /* leave as-is; add() will alert */ }
             }
             // The page remembers curves in localStorage, so a reopen with the same #curve must NOT
             // stack a second copy: if one with this name is already plotted (from restore or a prior

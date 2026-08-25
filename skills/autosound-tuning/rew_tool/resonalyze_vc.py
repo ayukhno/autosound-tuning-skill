@@ -1121,7 +1121,7 @@ def _session(**over):
 def _profile():
     """A Helix-shaped profile: LR stops at 36, 1 Hz corners, a delay step and NO delay ceiling."""
     return {"dsp_profile": {
-        "name": "Test DSP", "vendor": "Test", "sample_rate_hz": 96000,
+        "name": "Test DSP", "vendor": "Test", "dsp_processing_rate_hz": 96000,
         "delay": {"step_ms": 0.01},
         "polarity": {"scope": ["per driver output"]},
         "parametric_eq": {"freq_range_hz": None, "freq_step_hz": 0.01,

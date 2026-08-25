@@ -113,6 +113,12 @@ def verdict(name, measurements=None, f_low=20, f_high=20000):
         times, ir = None, None
     if times and ir:
         out["stats"].update(_analysis.analyze_impulse(times, ir))
+        # The CAPTURE rate -- what this measurement was recorded at. A separate fact from the DSP's
+        # processing rate (the user's ruling, 2026-08-25): a UMIK-1 captures at 48k under a 96k
+        # Helix and that is legitimate. Reported so the round check can say ONCE when they differ;
+        # never an issue by itself.
+        if len(times) > 1 and times[1] > times[0]:
+            out["stats"]["capture_rate_hz"] = int(round(1.0 / (times[1] - times[0])))
 
     out["valid"] = not out["issues"]
     return out
