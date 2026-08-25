@@ -2,6 +2,9 @@
 
 This is the core technical execution phase. All operations **MUST** be performed in this exact chronological order: Hygiene EQ (2a) → Joint Phase Alignment (2b) → Summed Alignment (2c) → Final Technical EQ (2d).
 
+> 🗺️ **Virtual-first?** If Phase −1 chose the virtual-first path (one capture session → design at the desk), the ORDER of work in Phases 0–3 changes — the phase numbers do not. Read [`virtual-first.md`](references/phases/virtual-first.md) alongside this file; it is the one home of that path. This file stays the authority on the iterative fallback and on every gate.
+
+
 ## 🎯 Goal-node
 
 **Purpose:** linearize + acoustically align the system to the target — hygiene EQ, joint phase, summed alignment, final target EQ.

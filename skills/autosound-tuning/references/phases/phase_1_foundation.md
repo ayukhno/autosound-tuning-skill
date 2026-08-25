@@ -2,6 +2,10 @@
 
 This phase establishes the physical foundation of the tune: crossovers, preliminary level balance, raw driver timing, and band-specific targets.
 
+> 🗺️ **Virtual-first?** If Phase −1 chose the virtual-first path (one capture session → design at the desk), the ORDER of work in Phases 0–3 changes — the phase numbers do not. Read [`virtual-first.md`](references/phases/virtual-first.md) alongside this file; it is the one home of that path. This file stays the authority on the iterative fallback and on every gate.
+
+> On virtual-first, Phases 1–2 are one desk sitting that ends in a **predicted sum** (`predict.py`) before anything is entered into the DSP — see [`virtual-first.md`](references/phases/virtual-first.md) §"Phases 1–2".
+
 ## 🎯 Goal-node
 
 > ⛔ **Entry precondition — confirm BEFORE any Phase-1 measurement/analysis:** the Phase −1 / `project-intake.md §3` install verification is actually done — routing · electrical polarity · protective crossovers · **gain staging (amp gain up to the first THD jump, backed off ~10%)** · noise floor · safe sweep level. **Gain staging is the one most often skipped silently**, and every later level/EQ/target decision inherits a bad gain structure if it was — so name it explicitly and confirm it with the user. If you can't confirm a step was done, **stop and clear it (`§3`) before continuing** — don't tune on an unverified install. (This entry gate exists because a real run walked into Phase 1 with gains never set.)

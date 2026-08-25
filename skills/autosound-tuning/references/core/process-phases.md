@@ -27,6 +27,8 @@ When assisting with a tuning session, the AI **MUST** follow this context-minimi
 | **Phase 4** | [phase_4_listening.md](references/phases/phase_4_listening.md) | Systematic test-track listening pass → **satisfied with the sound** → feedback → **session close** (backup · experience via a GitHub Issue). |
 | **Phase 5** | [phase_5_variations.md](references/phases/phase_5_variations.md) | **Variations (cyclical):** client voicing presets (genre/context) + the optional **center & rear** (envelopment). Return anytime to add/tweak a preset. |
 
+> 🗺️ **The virtual-first happy path** (one capture session → design at the desk → verify → lock) crosses Phases 0–3 without renumbering them: [`virtual-first.md`](references/phases/virtual-first.md), with the [`capture-session-sheet.md`](references/phases/capture-session-sheet.md). Phase −1 picks it (or the iterative fallback) per the gear it has.
+
 ---
 
 ## 🛠️ Combined Method & General Guidelines

@@ -2,6 +2,10 @@
 
 This phase acts as the final technical gate before proceeding to subjective listening or surround integration.
 
+> 🗺️ **Virtual-first?** If Phase −1 chose the virtual-first path (one capture session → design at the desk), the ORDER of work in Phases 0–3 changes — the phase numbers do not. Read [`virtual-first.md`](references/phases/virtual-first.md) alongside this file; it is the one home of that path. This file stays the authority on the iterative fallback and on every gate.
+
+> On virtual-first, Phase 3 is the short car session that VERIFIES the desk: enter the preset → all sums from the tripod → predicted/measured delta (≤ 1 dB trusted, otherwise a warning and on) → MMM fine EQ → lock. Detail in [`virtual-first.md`](references/phases/virtual-first.md) §"Phase 3".
+
 ## 🎯 Goal-node
 
 **Purpose:** the final technical gate — verification scans + independent cross-vendor verdicts + Technical Lock, before subjective/multichannel work.
