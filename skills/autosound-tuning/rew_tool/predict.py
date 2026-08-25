@@ -33,6 +33,16 @@ The state comes from the project's ledger (`--project DIR`, the active slot's HE
 or, for reproducing an experiment, from an anchors-style JSON (`--state-json FILE`, the
 `{hpf, lpf, delay_ms, inverted, gain_db, peq}` shape `sound_AutoSci` used for stage 0).
 
+The protective filter is taken back OUT before the chain goes on (doctrine, 2026-08-24, one home:
+`project-intake.md §3`). A solo swept with a protective high-pass carries that filter in the recording,
+and multiplying the ledger's crossover onto it predicts "driver x protective x crossover" -- the tune
+session found the m/tw junction's dip displaced by ~500 Hz that way (2026-08-25, set-02: tweeters
+swept under LR24 @1000, mids and centre under LR24 @100). v7 files say what was in the chain
+(`rewSource.protectiveHighPass`); live REW solos are answered by the capture round's protective record
+(`--process DIR`, the same record `analyze-joints --process` reads). The same rules as there: marked
+raw -> de-embedded, `protective.de_embed`'s boost cap reported; recorded as unfiltered -> unchanged;
+unmarked at baseline (`--baseline`) -> the channel is refused, not guessed.
+
 Deliberately NOT modelled, and said so in the output rather than silently skipped:
 
   * a vendor phase ANGLE (`phase_deg`) -- one control of one vendor (`helix-phase-allpass.md`);
@@ -221,8 +231,61 @@ def load_solo_v7(path, freqs, drift_samples=0.0):
     return _spectrum_on_grid(doc["transferRealSamples"], fs, 0.0, freqs, drift_samples), {
         "source": "v7", "path": path, "sample_rate": fs,
         "timing_reference": doc.get("timingReference"),
-        "protective": (doc.get("rewSource") or {}).get("protectiveHighPass"),
+        "protective": _legs_from_v7((doc.get("rewSource") or {}).get("protectiveHighPass")),
     }
+
+
+def _legs_from_v7(field):
+    """`rewSource.protectiveHighPass` ({hz, family, slopeDbPerOct}, written by `resonalyze_ir.py`)
+    -> the `{hp, lp}` legs `protective.legs_of` speaks. `None` in the file means the set's manifest
+    listed no protection for the channel: a measured fact of the writer, so it is "OFF", not "unknown"."""
+    if not field:
+        return {"hp": "OFF", "lp": "OFF"}
+    if not isinstance(field, dict) or field.get("hz") in (None, 0):
+        raise PredictError(f"protectiveHighPass: expected {{hz, family, slopeDbPerOct}}, got {field!r}")
+    return {"hp": {"f": float(field["hz"]), "type": field.get("family", "LR"),
+                   "slope": int(field.get("slopeDbPerOct", 24))}, "lp": "OFF"}
+
+
+def de_embed_solos(loaded, freqs, record=None, baseline=None):
+    """Take the protective chain out of every loaded solo that is marked as carrying one.
+
+    `loaded`: {code: (H, info)}. For v7 solos the mark is in `info["protective"]` (the file says);
+    for REW solos it is the capture round's `record` (`protective.legs_of` shape). Returns
+    `(solos, notes, refused)`: the corrected {code: H}, one note per channel saying what was done, and
+    the codes left out because the question "was protection in force?" has no recorded answer at a
+    baseline capture -- the `check` verdict of `protective.should_de_embed`, refused here rather than
+    guessed, since a prediction with ~50 degrees of unrecorded phase at a junction looks exactly like a
+    prediction.
+    """
+    import protective as prot
+    f = np.asarray(freqs, dtype=float)
+    solos, notes, refused = {}, [], []
+    for code, (H, info) in loaded.items():
+        legs = info.get("protective")
+        if legs is None:                    # a REW solo: the round record answers
+            verdict, detail = prot.should_de_embed(record, code, baseline=baseline)
+        elif any(prot._live(legs.get(k)) for k in ("hp", "lp")):
+            verdict, detail = "yes", legs
+        else:
+            verdict, detail = "no", "the file records no protective filter -- taken as unfiltered"
+        if verdict == "yes":
+            corrected, dinfo = prot.de_embed(f, H, detail)
+            solos[code] = corrected
+            legs_s = " ".join(f"{k.upper()} {v['f']:g} {v.get('type', 'LR')}{v.get('slope', 24)}"
+                              for k, v in ((k, prot._live(detail.get(k))) for k in ("hp", "lp")) if v)
+            cap = (f", correction capped below {dinfo['capped_below_hz']:.0f} Hz"
+                   if dinfo.get("capped_below_hz") else "") + \
+                  (f", capped above {dinfo['capped_above_hz']:.0f} Hz"
+                   if dinfo.get("capped_above_hz") else "")
+            notes.append(f"{code}: protective {legs_s} taken out of the solo{cap}")
+        elif verdict == "check":
+            refused.append(code)
+            notes.append(f"{code}: REFUSED -- {detail}")
+        else:
+            solos[code] = H
+            notes.append(f"{code}: solo used as recorded ({detail})")
+    return solos, notes, refused
 
 
 def load_solo_rew(title, freqs, api=None):
@@ -522,6 +585,16 @@ def main(argv=None):
                     help="comma list of channel codes for --rew (default: the ledger's rows)")
     ap.add_argument("--drift", metavar="MANIFEST", default=None,
                     help="set manifest with per-channel driftSamples (v7 sets)")
+    ap.add_argument("--process", metavar="DIR", default=None,
+                    help="the project's process/ dir: the capture round's protective record for --ver "
+                         "(REW solos; default $AUTOSOUND_PROJECT_DIR/process when set). v7 solos carry "
+                         "their own mark in the file")
+    ap.add_argument("--baseline", action="store_true",
+                    help="the solos are a baseline capture: an unmarked REW channel is REFUSED, not "
+                         "read as configured")
+    ap.add_argument("--no-de-embed", action="store_true",
+                    help="leave protective filters IN the solos (to see what the doctrine changes; "
+                         "not for a tune)")
     st = ap.add_mutually_exclusive_group()
     st.add_argument("--project", metavar="DIR", help="project dir: the ledger's active slot HEAD")
     st.add_argument("--state-json", metavar="FILE",
@@ -571,7 +644,29 @@ def main(argv=None):
                 loaded[code] = load_solo_rew(title, f)
             except (PredictError, KeyError) as e:
                 print(f"  {code}: {e}", file=sys.stderr)
-    solos = {c: H for c, (H, _) in loaded.items()}
+    if args.no_de_embed:
+        solos = {c: H for c, (H, _) in loaded.items()}
+        prot_notes = ["protective filters LEFT IN every solo (--no-de-embed) -- junction phase near a "
+                      "protected driver is NOT the driver's"]
+    else:
+        record = None
+        if args.rew:
+            proc_dir = args.process or (
+                os.path.join(os.environ["AUTOSOUND_PROJECT_DIR"], "process")
+                if os.environ.get("AUTOSOUND_PROJECT_DIR") else None)
+            if proc_dir:
+                state_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state")
+                if state_dir not in sys.path:
+                    sys.path.insert(0, state_dir)
+                from process import Process
+                record = Process(proc_dir).protective_record_for(args.ver)
+                if record is None:
+                    print(f"  {proc_dir}: no capture round for _{args.ver} -- solos read as configured",
+                          file=sys.stderr)
+        solos, prot_notes, refused = de_embed_solos(loaded, f, record=record,
+                                                    baseline=True if args.baseline else None)
+        for code in refused:
+            print(f"  {code}: refused -- see notes", file=sys.stderr)
 
     joints = None
     if args.joint:
@@ -583,6 +678,7 @@ def main(argv=None):
     result["notes"].insert(0, f"state: {state_label}")
     result["notes"].insert(1, "solos: " + ", ".join(
         f"{c} ({i['source']})" for c, (_, i) in loaded.items()))
+    result["notes"][2:2] = prot_notes
     if args.json:
         print(json.dumps(to_json(result), indent=1))
     else:
@@ -682,6 +778,40 @@ def _selftest():
     assert r3["sides"]["L"]["members"] == ["sw", "w-L", "m-L"], r3["sides"]["L"]["members"]
     assert "sw" in r3["sides"]["R"]["members"] and "c" not in r3["sides"]["R"]["members"]
     assert any("centre/rear" in n for n in r3["notes"]) and any("no ledger row" in n for n in r3["notes"])
+
+    # 6. A protective filter in the recording comes OUT before the chain goes on (doctrine 24.08).
+    # Anchor to the definition: a flat driver swept under LR24 @1000 is, after de-embed, flat again
+    # where the correction is not capped -- so "driver x chain" equals the chain alone -- and left
+    # in, it is the chain x the protective, which is 6.02 dB down at 1 kHz on top of the chain.
+    import protective as prot
+    legs = {"hp": {"f": 1000.0, "type": "LR", "slope": 24}, "lp": "OFF"}
+    swept = prot.response(f, legs)                     # what REW would hand back for a flat driver
+    loaded = {"tw-L": (swept, {"source": "v7", "protective": legs}),
+              "w-L": (np.ones_like(f, dtype=complex), {"source": "v7",
+                                                         "protective": _legs_from_v7(None)})}
+    solos, notes, refused = de_embed_solos(loaded, f)
+    assert not refused and any("taken out" in n for n in notes) and any("as recorded" in n for n in notes), notes
+    # LR24 @1000 is already -42 dB at 300 Hz -- inside `protective.de_embed`'s 40 dB boost cap, where
+    # the correction is deliberately incomplete; the anchor sits where the cap does not (>= 500 Hz).
+    above = f >= 500.0
+    assert np.allclose(solos["tw-L"][above], 1.0, atol=1e-9), "de-embed must undo the protective exactly"
+    assert any("capped below" in n for n in notes), "the cap region must be SAID, not hidden"
+    # AT 1000 Hz, not at the grid's nearest bin (the same trap check 1 names: 1 % off a 24 dB/oct
+    # corner is already 0.3 dB).
+    assert abs(_db(prot.response(np.array([1000.0]), legs))[0] + 6.02) < 0.01, \
+        "left in, the protective is still -6.02 dB at its corner"
+    assert _legs_from_v7({"hz": 100.0, "family": "LR", "slopeDbPerOct": 24}) == \
+        {"hp": {"f": 100.0, "type": "LR", "slope": 24}, "lp": "OFF"}
+    # A REW solo with no round record is read as configured (working-by-default); at baseline it is
+    # refused, because the missing mark is the one thing the data cannot reveal.
+    rew_loaded = {"m-L": (swept, {"source": "rew", "protective": None})}
+    s_no, n_no, r_no = de_embed_solos(rew_loaded, f, record=None)
+    assert "m-L" in s_no and not r_no
+    s_b, n_b, r_b = de_embed_solos(rew_loaded, f, record=None, baseline=True)
+    assert r_b == ["m-L"] and "m-L" not in s_b and any("REFUSED" in n for n in n_b), n_b
+    rec = {"channels": {"m-L": {"hp": {"f": 1000.0, "type": "LR", "slope": 24}}}}
+    s_r, n_r, _ = de_embed_solos(rew_loaded, f, record=rec, baseline=True)
+    assert np.allclose(s_r["m-L"][above], 1.0, atol=1e-9)
     lr = {tuple(b["band"]): b["delta_db"] for b in r3["lr_delta"]}
     assert 2.0 < lr[(120, 250)] < 3.5, lr        # w-R 3 dB down: the L-R delta shows it where w plays
     assert abs(lr[(20, 60)]) < 0.3, lr            # ...and not where only the shared sub plays

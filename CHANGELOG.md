@@ -40,6 +40,34 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [v3.0.26] — 2026-08-25 · the predictor takes the protective filter out before the chain goes on
+
+> A 3.0.x patch for the author's own test rigs (the `v3.*` installer audience), not the 3.1.0 gate.
+
+- **`predict.py` de-embeds protective filters from the solos** (reported by the tune session on the
+  live set-02 + SQ v_001, 2026-08-25, with a table: junction `m-L↔tw-L`, measured `_48` dip at
+  3999 Hz; predicted with the protective left in — 3487 Hz; taken out — 3999 Hz). `load_solo_v7`
+  had been READING `rewSource.protectiveHighPass` since v3.0.22 and nobody used it: the ledger's
+  `HPF 3625 BW24` went onto a tweeter that still carried `LR24 @1000` from the sweep, so the
+  junction phase was the driver's plus a filter that is not in the tune. Now the same rules as
+  `analyze-joints --process` (v3.0.21): a v7 file's mark is taken out via `protective.de_embed`
+  with the boost cap reported (`tw-*: capped below 315 Hz`, `m-*: below 32 Hz` on set-02); a live
+  REW solo is answered by the capture round's record — `--process DIR`, default
+  `$AUTOSOUND_PROJECT_DIR/process`; recorded as unfiltered → unchanged; unmarked at `--baseline` →
+  the channel is **refused**, not guessed; `--no-de-embed` leaves everything in and says so. On
+  set-02 × SQ the `m-L↔tw-L` dip moves 3462 → 3970 Hz and shallows −8.0 → −5.5 dB inside
+  `fc ± 1 oct`, the same direction and place the tune session measured. Selftest anchors to the
+  definition — a flat driver swept under `LR24 @1000` is flat again above the cap region, and
+  −6.02 dB at 1 kHz if left in, evaluated AT 1 kHz and not at the grid's nearest bin (the trap
+  the file's own check 1 names, and this session walked into it first).
+- Docs: `rew-tool-docs.md` (`predict.py` entry). `plugin.json` → 3.0.26.
+
+### Upgrading
+
+`predict.py` output changes for any set whose solos carry a protective mark — that is the fix. A
+prediction made with v3.0.22–25 on such a set predicted driver × protective × chain; re-run it. Three
+new flags (`--process`, `--baseline`, `--no-de-embed`); no existing flag changes meaning. Suite 35/35.
+
 ## [v3.0.25] — 2026-08-25 · the manifest names its own version
 
 > A 3.0.x patch for the author's own test rigs (the `v3.*` installer audience), not the 3.1.0 gate.
