@@ -40,6 +40,55 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [v3.0.29] — 2026-08-25 · the listening vocabulary has one home, a parser, four languages and a writer for verdicts
+
+> A 3.0.x patch for the author's own test rigs (the `v3.*` installer audience), not the 3.1.0 gate.
+
+The user's decisions of 2026-08-25 (in this window and in TCC's): the words for what one hears live in
+ONE place; TCC reads them through a parser, never a JSON copy; verdicts have one writer; the sheet is
+translated. Phase 4 was walked step by step with the user the same day and is written to match.
+
+- **`references/patterns/listening-cheat-sheet.md`** — the one home of every *sounds right / sounds
+  wrong* phrase: sixteen characteristics `c01`…`c16` (label · name · sounds right · sounds wrong ·
+  where a ✗ goes) and the routes `first` (five minutes: a favourite track, a real mono track from
+  streaming — *where is the image?* — CarMus #01) · `short` (ten minutes between drives) · `full`
+  (split over sittings, the long listen as its own drive) · `league` (stage height, width, depth —
+  a second visit). Before any track: which library the user has, what "was" means (only with an
+  existing tune or on a second pass), and what one compares against — for competition a reference,
+  and **the emotion it gave, not the sound**. Translations **`.uk.md`, `.pl.md`, `.de.md`** carry the
+  same ids.
+- **`test-tracks.md` restructured**: a TRACKS table (id, library, number, artist, title, version —
+  the "number is not the track" rule made data) and a LINKS table (track × characteristic, with only
+  a `mm:ss` timecode and a cue specific to that track). The cockpit counted the old file against the
+  new sheet: nine of thirteen characteristics repeated there, two word for word, and the same fact
+  stood in three places inside the old file (`:26`, `:62`, `:98`) already worded three ways. Those
+  copies are gone; the doctrine sections (which library, gate selection, disc identity) are verbatim.
+  `test-tracks.uk.md` carries the Ukrainian cues.
+- **`rew_tool/listening.py`** — the only reader: `characteristics(lang)`, `tracks()`, `links(lang)`,
+  `routes()`, `check(lang)`. Ids are the seam and an unknown id is an exception; a missing translation
+  falls back to English marked `translated: False` so a panel never shows an empty entry. Its selftest
+  runs on the real files, in every language on disk, and fails the suite on an orphan in either
+  direction (the morning's lesson: a round keyed one way and looked up another produced a `null` that
+  read as a fact). 36 checks in the suite now.
+- **`state/process.py listening-verdict`** — one writer for what the Arbiter heard: several
+  `--pair track:characteristic:ok|bad` and their own `--text` in ONE journal entry (they may disagree
+  after editing and the record does not pretend otherwise), stamped `--ledger-version` with the HEAD
+  the caller read; ids validated against the vocabulary. `listening-verdicts [--track] [--characteristic]
+  [--ledger-version]` is the look-back — a filter, not a structure: ❌ at v_003 → 🟢 at v_005. `--bank`
+  prints the lines a snapshot ADDS to `banked_ear_verdicts` at the lock; hand-written lines in older
+  projects are never overwritten.
+- **`phase_4_listening.md`** points at the sheet and the routes instead of restating seven checks;
+  the verdict rule (*a verdict message = one command call, before any reply*); and the sharing rule
+  made explicit — **only a description and the car/equipment parameters ever leave a project: no
+  measurements, ledger, `.mdat` or DSP setup.**
+- Docs: `rew-tool-docs.md` (`listening.py` entry), `process.py --help`. `plugin.json` → 3.0.29.
+
+### Upgrading
+
+`test-tracks.md`'s index and standard-pass tables are gone; their content is the LINKS table and the
+routes of the cheat sheet, read by id. Anything that quoted a track by bare number should quote the
+`id` column (`CarMus#24`). New journal event `listening_verdict`; no existing event changes. Suite 36/36.
+
 ## [v3.0.28] — 2026-08-25 · a capture round is found by the captures it holds, and a missing one is refused, not written as null
 
 > A 3.0.x patch for the author's own test rigs (the `v3.*` installer audience), not the 3.1.0 gate.

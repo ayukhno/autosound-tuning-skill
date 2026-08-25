@@ -92,6 +92,12 @@ EV_CAPTURE_CLOSED = "capture_round_closed"
 # What the arithmetic said about the curves themselves (SCR-040). A separate event from
 # `capture_taken`: one says a measurement came back, the other says it is usable.
 EV_CAPTURE_VERIFIED = "capture_verified"
+#: A listening verdict (Phase 4, 2026-08-25): the Arbiter's own words plus the pairs they ticked
+#: (track x characteristic x ok/bad), stamped with the ledger version they were listening to.
+#: One writer -- this journal; `banked_ear_verdicts` in a ledger snapshot is derived from it at the
+#: lock and only ever ADDS. The journal is the protocol one looks back into: a filter by track or
+#: characteristic across versions IS the A/B history, no other structure.
+EV_LISTENING_VERDICT = "listening_verdict"
 # Who sat down to work, on what model, and when. Written by the front-end when it attaches a
 # session -- the journal otherwise starts at whatever the model happened to record first, so
 # "when did this session begin, and did it record anything at all" had no answer.
@@ -327,6 +333,21 @@ _LEDGER_RE = re.compile(r"\bv_?(\d{1,4})\b", re.IGNORECASE)
 # Loose on purpose: a path only counts once it is found on disk, so over-matching costs nothing
 # and under-matching would reject a real file over its spelling.
 _PATH_RE = re.compile(r"[\w./\\-]+\.(?:json|jsonl|md|mdat|txt|csv|yml|yaml|req|png|pdf)\b")
+
+
+def _load_rew_tool_module(name):
+    """A `rew_tool/<name>.py` module from the same checkout, by path (see `_load_naming`)."""
+    import importlib.util
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), name + ".py")
+    try:
+        spec = importlib.util.spec_from_file_location("_process_" + name, path)
+        if spec is None or spec.loader is None:
+            return None
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    except Exception:  # noqa: BLE001 -- the caller decides whether "cannot load" is fatal
+        return None
 
 
 def _load_naming():
@@ -936,6 +957,89 @@ class Process:
             return live if live and key(live.get("version")) == version else None
         return rounds[order[-1]]
 
+    # -- listening verdicts (Phase 4) --
+    def record_listening_verdict(self, pairs, text=None, route=None, ledger_version=None, note=None):
+        """Bank what the Arbiter heard: `pairs` = [(track_id, characteristic_id, "ok"|"bad"), ...]
+        as ticked, `text` = their own words after editing (the two are kept apart on purpose -- the
+        text may drift from the ticks, and the record must not pretend they are one).
+
+        `ledger_version` is what they were listening to; the caller (a front-end, the session) passes
+        the ledger HEAD it has -- a version typed by hand is the number people get wrong, so a
+        front-end should pass what it read, never what it remembers. Ids are validated against the
+        vocabulary (`listening.py`), so a typo is refused now, not found in a filter a month later.
+        """
+        listening = _load_rew_tool_module("listening")
+        if listening is None:
+            raise ProcessError("cannot load rew_tool/listening.py from this checkout -- the ids of a "
+                               "verdict are validated against it, and an unvalidated id is a typo "
+                               "found a month later in a filter")
+        pairs = [tuple(p) for p in (pairs or [])]
+        if not pairs and not (text or "").strip():
+            raise ProcessError("a listening verdict needs at least one pair (track:characteristic:ok|bad) "
+                               "or some text -- an empty verdict records nothing")
+        ch = listening.characteristics()
+        tr = listening.tracks()
+        clean = []
+        for item in pairs:
+            if len(item) != 3:
+                raise ProcessError(f"a pair is track:characteristic:ok|bad, got {item!r}")
+            track, cid, verdict = item
+            verdict = str(verdict).lower()
+            if verdict in ("🟢", "✓", "pass", "good", "yes"):
+                verdict = "ok"
+            if verdict in ("❌", "✗", "fail", "no"):
+                verdict = "bad"
+            if verdict not in ("ok", "bad"):
+                raise ProcessError(f"verdict must be ok or bad, got {item[2]!r}")
+            if track not in tr:
+                raise ProcessError(f"unknown track id {track!r} -- the ids are in test-tracks.md")
+            if cid not in ch:
+                raise ProcessError(f"unknown characteristic id {cid!r} -- the ids are in "
+                                   f"listening-cheat-sheet.md")
+            clean.append({"track": track, "characteristic": cid, "verdict": verdict})
+        state = self.load()
+        entry = {
+            "at": _now(),
+            "phase": state.get("active_phase"),
+            "route": route,
+            "ledger_version": str(ledger_version) if ledger_version is not None else None,
+            "pairs": clean,
+            "text": (text or "").strip() or None,
+            "note": note,
+        }
+        self._append(EV_LISTENING_VERDICT, **entry)
+        return entry
+
+    def listening_verdicts(self, track=None, characteristic=None, ledger_version=None):
+        """The protocol, filtered: every verdict entry oldest-first, optionally only those that
+        mention `track` / `characteristic` / were heard at `ledger_version`. This is how one looks
+        back -- `bad` at v_003, `ok` at v_005, and the ledger diff between them says what changed."""
+        out = []
+        for e in self.events(kinds=(EV_LISTENING_VERDICT,)):
+            pairs = e.get("pairs") or []
+            if track and not any(p.get("track") == track for p in pairs):
+                continue
+            if characteristic and not any(p.get("characteristic") == characteristic for p in pairs):
+                continue
+            if ledger_version is not None and str(e.get("ledger_version")) != str(ledger_version):
+                continue
+            out.append(e)
+        return out
+
+    def banked_ear_lines(self, ledger_version=None):
+        """The lines a ledger snapshot banks at the technical lock, derived from the journal: one
+        per pair, `[v_004] CarMus#07 c09 ok -- <text>`. A snapshot copies these in ADDITION to what it
+        already holds; hand-written lines in older projects are never overwritten."""
+        lines = []
+        for e in self.listening_verdicts(ledger_version=ledger_version):
+            stamp = e.get("ledger_version") or "?"
+            for p in e.get("pairs") or []:
+                line = f"[{stamp}] {p['track']} {p['characteristic']} {p['verdict']}"
+                if e.get("text"):
+                    line += f" -- {e['text']}"
+                lines.append(line)
+        return lines
+
     def skip_capture(self, title, reason):
         """A capture deliberately NOT taken, and why.
 
@@ -1216,6 +1320,13 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
       [--lp 4000 BW 36]                 back out before a phase decision. OFF = swept with nothing,
                                         which is an ANSWER; not running this at all means the
                                         round measured the system as configured
+  listening-verdict --pair <track>:<char>:ok|bad [--pair ...] [--text "..."] [--ledger-version vN]
+      [--route full] [--note ...]        what the Arbiter heard (Phase 4): the ticked pairs AND their
+                                        own words, stamped with the ledger version listened to; ids
+                                        are validated against listening-cheat-sheet / test-tracks
+  listening-verdicts [--track ID] [--characteristic cNN] [--ledger-version vN] [--bank]
+                                        look back: the verdicts, filtered; --bank prints the lines a
+                                        snapshot banks at the lock (derived, additive)
   capture-skip <title> <reason>         deliberately NOT taken, and why
   capture-close [reason]                close the round; what is outstanding is named
   check                                 done steps with no evidence, and done steps whose
@@ -1405,6 +1516,37 @@ def _selftest():
     kinds = [e.get("type") or e.get("event") or e.get("kind") for e in pr.events()]
     assert EV_CAPTURE_PROTECTIVE in kinds, kinds
 
+    # -- listening verdicts (Phase 4, 2026-08-25): one writer, ids validated, look-back by filter --
+    e1 = pr.record_listening_verdict([("CarMus#07", "c09", "bad"), ("CarMus#07", "c03", "ok")],
+                                     text="stage flat, vocal holds", ledger_version="v_003", route="full")
+    assert e1["pairs"][0]["verdict"] == "bad" and e1["ledger_version"] == "v_003"
+    e2 = pr.record_listening_verdict([("CarMus#07", "c09", "🟢")], ledger_version="v_005")
+    assert e2["pairs"][0]["verdict"] == "ok", "an emoji tick is normalised, not stored as-is"
+    hist = pr.listening_verdicts(track="CarMus#07", characteristic="c09")
+    assert [h["pairs"][0]["verdict"] for h in hist] == ["bad", "ok"], hist
+    assert [h["ledger_version"] for h in hist] == ["v_003", "v_005"]
+    assert pr.listening_verdicts(track="CarMus#24") == []
+    for bad in ([("nope", "c09", "ok")], [("CarMus#07", "c99", "ok")], [("CarMus#07", "c09", "meh")]):
+        try:
+            pr.record_listening_verdict(bad)
+            raise AssertionError(f"{bad} was accepted")
+        except ProcessError:
+            pass
+    try:
+        pr.record_listening_verdict([])
+        raise AssertionError("an empty verdict was accepted")
+    except ProcessError:
+        pass
+    lines = pr.banked_ear_lines()
+    assert lines[0].startswith("[v_003] CarMus#07 c09 bad -- stage flat") and lines[-1] == "[v_005] CarMus#07 c09 ok", lines
+    out = _cli("listening-verdict", "--pair", "mono/merrill:c01:ok", "--text", "tight point", "--ledger-version", "v_005")
+    assert out.returncode == 0 and "mono/merrill c01 ok" in out.stdout, out.stderr + out.stdout
+    out = _cli("listening-verdicts", "--track", "mono/merrill")
+    assert out.returncode == 0 and "tight point" in out.stdout, out.stdout
+    out = _cli("listening-verdict", "--pair", "mono/merrill:c01")
+    assert out.returncode != 0 and "track:characteristic:ok|bad" in (out.stderr + out.stdout), out
+    assert EV_LISTENING_VERDICT in [e.get("type") for e in pr.events()]
+
     # A round opened under the LEDGER version (`v_001`) whose titles carry the capture number
     # (`_49`) must be found by that number -- the tune session's real case (2026-08-25), where the
     # lookup returned None and a fully recorded round was exported as "no filter". Both keys work,
@@ -1577,6 +1719,53 @@ def _main(argv):
                 f"{k.upper()} {v['f']:g} {v['type']}{v['slope']}" for k, v in sorted(legs.items()))
             print(f"{round_['id']} {channel}: protective {shown} — this round is RAW for that "
                   f"channel, so its sweeps are de-embedded before any phase decision")
+        elif cmd == "listening-verdict":
+            pairs, text, route, lv, note = [], None, None, None, None
+            i = 0
+            while i < len(args):
+                a = args[i]
+                if a == "--pair" and i + 1 < len(args):
+                    parts = args[i + 1].split(":")
+                    if len(parts) != 3:
+                        raise ProcessError(f"--pair is track:characteristic:ok|bad, got {args[i + 1]!r}")
+                    pairs.append(tuple(parts)); i += 2
+                elif a == "--text" and i + 1 < len(args):
+                    text = args[i + 1]; i += 2
+                elif a == "--route" and i + 1 < len(args):
+                    route = args[i + 1]; i += 2
+                elif a == "--ledger-version" and i + 1 < len(args):
+                    lv = args[i + 1]; i += 2
+                elif a == "--note" and i + 1 < len(args):
+                    note = args[i + 1]; i += 2
+                else:
+                    raise ProcessError(f"listening-verdict: unexpected {a!r}")
+            e = p.record_listening_verdict(pairs, text=text, route=route, ledger_version=lv, note=note)
+            shown = ", ".join(f"{x['track']} {x['characteristic']} {x['verdict']}" for x in e["pairs"])
+            print(f"listening verdict banked at {e['ledger_version'] or '?'}: {shown or '(text only)'}")
+        elif cmd == "listening-verdicts":
+            track = characteristic = lv = None
+            bank = False
+            i = 0
+            while i < len(args):
+                a = args[i]
+                if a == "--track" and i + 1 < len(args):
+                    track = args[i + 1]; i += 2
+                elif a == "--characteristic" and i + 1 < len(args):
+                    characteristic = args[i + 1]; i += 2
+                elif a == "--ledger-version" and i + 1 < len(args):
+                    lv = args[i + 1]; i += 2
+                elif a == "--bank":
+                    bank = True; i += 1
+                else:
+                    raise ProcessError(f"listening-verdicts: unexpected {a!r}")
+            if bank:
+                for line in p.banked_ear_lines(ledger_version=lv):
+                    print(line)
+            else:
+                for e in p.listening_verdicts(track=track, characteristic=characteristic, ledger_version=lv):
+                    pairs = ", ".join(f"{x['track']} {x['characteristic']} {x['verdict']}" for x in e.get("pairs") or [])
+                    print(f"{e.get('at')} [{e.get('ledger_version') or '?'}] {pairs or '(text only)'}"
+                          + (f" -- {e['text']}" if e.get("text") else ""))
         elif cmd == "capture-skip":
             p.skip_capture(args[0], " ".join(args[1:]))
             print(f"{args[0]} skipped: {' '.join(args[1:])}")

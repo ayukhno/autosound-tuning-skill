@@ -4,122 +4,177 @@
 
 A curated library with **diagnostic markers** — to verify hypotheses BY EAR where measurement is unreliable (cabin phase/GD = junk, diagnostic §10; depth/punch/integration/sibilants — ear-driven, staging-depth §7).
 
+**Where the words live.** This file holds the **tracks** (library, number, artist, title, version) and, per
+track × characteristic, only what is specific to that track — a timecode, a cue. The phrases that say how
+a characteristic *sounds right* / *sounds wrong*, and the ordered routes (`first` · `short` · `full` ·
+`league`), live in ONE place: [`listening-cheat-sheet.md`](listening-cheat-sheet.md) (ids `c01`…`c16`).
+Tools read both files through `rew_tool/listening.py` by id; its selftest fails the suite on an id that
+exists in one file and not the other. Do not repeat a *sounds right / wrong* phrase here.
+
 ## How to use this (workflow)
 When you (Claude) have a **hypothesis to check by ear**:
-1. Identify the **measure** (what you're testing): sub<40, the sub↔midbass joint, midbass punch, depth, sibilants, separation under load…
-2. Look at the **index below** → pick a track that **exposes exactly this measure**.
-3. Tell the Arbiter **specifically:** "play **[track # and name — Library]**, listen at **[timecode if any]** — **[what exactly to listen for: the marker]**. The question: **[good sign] vs [bad sign]**?" (Streaming → give artist — title — the exact version, e.g. the MONO mix.)
-4. The Arbiter listens → states the result → that's your **reliable ear-metric** (instead of single-position phase). Log it in the changelog/audit as a Trace (track+marker instead of a REW number, if it's a listening step).
+1. Identify the **characteristic** (what you're testing): `c06` sub <40, `c05` the sub↔midbass seam, `c09` depth, `c07` sibilants, `c10` separation under load…
+2. Look at the **links below** → pick a track that **exposes exactly this characteristic**.
+3. Tell the Arbiter **specifically:** "play **[library + number + artist — title]**, listen at **[timecode if any]** — **[the cue]**. The question: **[sounds right] vs [sounds wrong]**?" (the two phrases from the cheat sheet). Streaming → give artist — title — the exact version, e.g. the MONO mix.
+4. The Arbiter listens → states the result → that's your **reliable ear-metric** (instead of single-position phase). Record it the moment it is said: `process.py listening-verdict` (several pairs and the Arbiter's own words in one entry).
 
-> Don't dump the whole list. Pick 1 (max 2) track targeted at the hypothesis and give a clear "what to listen for". One marker at a time.
+> Don't dump the whole list. Pick 1 (max 2) track targeted at the hypothesis and give a clear "what to listen for". One cue at a time.
 
 ## Which library does the user have? — establish FIRST (project data)
 
 **Propose ONLY tracks the user can actually play.** Ask at intake which they have; store it in the project profile; **every track you name states its Library.**
-- **A loaded compilation** — CarMus Test&Demo 2026 (`#NN`) · Chesky Ultimate Demo Disc (`Ch.NN`) · an EMMA / AYA competition disc (`competition.md`) · the mono set — cite the track by number **and** library.
+- **A loaded compilation** — CarMus Test&Demo 2026 (`CarMus#NN`) · Chesky Ultimate Demo Disc (`Ch.NN`) · an EMMA / AYA competition disc (`competition.md`) · the mono set — cite the track by number **and** library.
 - **Streaming** (Tidal / Spotify / Apple Music) — you can't cite a disc `#` blindly: give **Artist — Title — the exact version** you need (the **MONO** mix · a specific album / year / remaster), because masters differ and a **stereo copy silently breaks a mono-center test**. Confirm the user opened the right version before trusting the result.
+- **None of the above** — the `own/*` rows: the user's own favourite tracks and a description of the material (deep bass · female vocal · acoustic guitar · dense rock · orchestra). The cheat sheet's words still apply; the cue is whatever the user knows in that track.
 
-## Index: measure → track
-> **Library tags:** `#NN` = CarMus Test&Demo 2026 · `Ch.NN` = Chesky (streaming) · `T#`/`tr.#` = EMMA · AYA → `competition.md` · **mono** = the mono set. **Always name the library when you propose a track**, and check it's one the user has.
-| What you're checking | Track(s) | The key marker |
-|---|---|---|
-| **Sub <40 Hz** (extension, control) | **#24** Olgoi Khorkhoi | holds <40 vs dries up / bloats into droning |
-| **Sub↔midbass joint** (integration, detachment) | **#25** Sundust · **#16** Dock Funk | hits in the joint region — does the sub "fall away"? does the lower bass detach? |
-| **Midbass punch** (chest, density) | **#26** Devil Inside · **#20** Godsmack | a push in the chest vs limp/smeared/over-dried |
-| **Kick vs bass guitar** (LF articulation) | **#20** Godsmack · **#21** Sons of Texas · **#16** | the kick reads SEPARATELY from the bass guitar vs mush |
-| **LF texture/density** (bloat vs thinness) | **#07** · **#09** · **#11** (double bass) · **#10** | the double bass springy vs boomy/bloated/"dried out" |
-| **Stage depth + space** | **#07** Melody Gardot · **#14** Hanne Boel · **#12** Bradley Cooper | a big deep stage vs a flat picture |
-| **Vocal stability on the stage** | **#07** · **#08** | the vocal holds in place vs drifts/changes size/notes fly off |
-| **Instrument separation** (acoustic vs electric) | **#12** Bradley Cooper | an acoustic guitar alive vs electric through an amp — heard separately? |
-| **Sibilants + treble separation/decay** | **#06** Jennifer Warnes · **#05** | sibilants natural (not detaching/not vanishing); decays linger |
-| **Voice: cutters in the mids** (harshness/pressure) | **#08** Hayley Westenra · **#06** · **#10** · **#05** | the high vocal natural vs drilling the ears / dying out |
-| **Cymbals/brass** (foil effect) | **#20** · **#22** · **#05** | a sustained "shimmer" vs chewed foil / a dull "pssh" |
-| **Separation UNDER LOAD** (micro-events) | **#15** Drum Ecstasy · **#23** Hi-Finesse · **#21** | doesn't blend into mush when the system is loaded |
-| **Macrodynamics / attack** | **#10** · **#15** · **#18** | the attack not smeared, the start of the hit crisp |
-| **Layering/multi-layering** | **#13** Vahtang | overlaid effects as layers vs flat/monotonous |
-| **Overall balance / first impression** | **#01** · **#02** · **#11** | scale/space/resolution/balance right away |
-| **Universality** (recording contrast) | transitions **#17→#18**, **#19** | different recording styles sound DIFFERENT, not "the next one on the radio" |
-| **Center / phantom center** | **MONO tracks** (below) | mono should gather into a TIGHT point at center; smeared/wandering/wide = L/R not aligned (level+time+phase) |
-| **3D imaging / stage HEIGHT** | **Ch.23** Britten/Westminster | 3D on 2 speakers; a sense of height; the scale of a cathedral |
-| **Transients / speaker+amp control** | **Ch.25** Stravinsky | drums tight/taut; sharp clear brass |
-| **LF-driver accuracy (artifacts at the limit)** | **Ch.27** double-bass solo · **#24** | pluck→body resonance; non-musical sounds at the limit |
-| **Dynamic headroom / compression at volume** | **Ch.29** · **Ch.23** peaks | quiet→loud stress test; peaks not squashed/not distorting |
+## Tracks
 
-> **The EMMA 2024 tracks (descriptions + markers → `competition.md`)** are also usable for listening verification, with EXACT timecodes: **depth/body** → T8 (the piano far behind+below the singer); **imaging/instrument separation** → T9 (jaw harp 3–4 s on the right, voices by position); **stage levels height/depth** → T11 @2:52 (snare vs tambourine at different levels); **backing-vocal separation across the stage** → T11 @0:46/1:25/2:00; **vocal-wander as the recording's NORM** (don't confuse with a defect) → T8.
+`version` matters for streaming (`the MONO mix`, a remaster); for a disc it is the disc. Library tags:
+`CarMus` = CarMus Test&Demo 2026 (order easy → hard/heavy, "listen to music, not to sounds") · `Chesky` =
+Ultimate Demo Disc, streaming (in each pair the even track is a narrator, the odd one the music) ·
+`EMMA` = the competition discs (`competition.md`; the year matters, formats change between seasons) ·
+`mono` = true MONO recordings (L = R) · `own` = the user's own material.
 
-## The standard PASS — a full listening check at milestones (Phase 4)
+| id | library | number | artist | title | version |
+|---|---|---|---|---|---|
+| CarMus#01 | CarMus | 01 | Eternal Eclipse | Fate Of The Clockmaker | Test&Demo 2026 |
+| CarMus#02 | CarMus | 02 | Preservation Hall Jazz Band | La Malanga | Test&Demo 2026 |
+| CarMus#03 | CarMus | 03 | Felix Irwan | I Don't Want to Miss a Thing | Test&Demo 2026 |
+| CarMus#04 | CarMus | 04 | Elvis Presley | Fever | Test&Demo 2026 |
+| CarMus#05 | CarMus | 05 | Hank Shizzoe | Your Luck Will Find You | Test&Demo 2026 |
+| CarMus#06 | CarMus | 06 | Jennifer Warnes | Invitation To the Blues | Test&Demo 2026 |
+| CarMus#07 | CarMus | 07 | Melody Gardot | Over The Rainbow (Live) | Test&Demo 2026 |
+| CarMus#08 | CarMus | 08 | Hayley Westenra | River Of Dreams | Test&Demo 2026 |
+| CarMus#09 | CarMus | 09 | Alla Turovskaya | Sunny Bunny | Test&Demo 2026 |
+| CarMus#10 | CarMus | 10 | Alexander Jean | Another One Bites The Dust | Test&Demo 2026 |
+| CarMus#11 | CarMus | 11 | Quadro Nuevo | Nature Boy | Test&Demo 2026 |
+| CarMus#12 | CarMus | 12 | Bradley Cooper | Out Of Time | Test&Demo 2026 |
+| CarMus#13 | CarMus | 13 | Vahtang | Black Betty | Test&Demo 2026 |
+| CarMus#14 | CarMus | 14 | Hanne Boel | House of the Rising Sun | Test&Demo 2026 |
+| CarMus#15 | CarMus | 15 | Drum Ecstasy | Oh! Empie! | Test&Demo 2026 |
+| CarMus#16 | CarMus | 16 | Domenico Loparco | Dock Funk | Test&Demo 2026 |
+| CarMus#17 | CarMus | 17 | AC/DC | Back In Black | Test&Demo 2026 |
+| CarMus#18 | CarMus | 18 | Greta Van Fleet | Highway Tune | Test&Demo 2026 |
+| CarMus#19 | CarMus | 19 | San Di EGO | Stayin' Alive | Test&Demo 2026 |
+| CarMus#20 | CarMus | 20 | Godsmack | Cryin' Like A Bitch! | Test&Demo 2026 |
+| CarMus#21 | CarMus | 21 | Sons Of Texas | Feed The Need | Test&Demo 2026 |
+| CarMus#22 | CarMus | 22 | Gus G | Enigma of Life | Test&Demo 2026 |
+| CarMus#23 | CarMus | 23 | Hi-Finesse | Andromeda | Test&Demo 2026 |
+| CarMus#24 | CarMus | 24 | Loud373 & VAGAN | Olgoi Khorkhoi | Test&Demo 2026 |
+| CarMus#25 | CarMus | 25 | Rodg & Veljko Jovic | Sundust | Test&Demo 2026 |
+| CarMus#26 | CarMus | 26 | Vadim Shantor | Devil Inside | Test&Demo 2026 |
+| Ch.03 | Chesky | 03 | Rebecca Pidgeon | Spanish Harlem | Ultimate Demo Disc — High Resolution |
+| Ch.05 | Chesky | 05 | Sara K. | If I Could Sing Your Blues | Ultimate Demo Disc — Depth |
+| Ch.07 | Chesky | 07 | Leny Andrade | Maiden Voyage | Ultimate Demo Disc — Atmosphere |
+| Ch.09 | Chesky | 09 | Livingston Taylor | Grandma's Hands | Ultimate Demo Disc — Midrange Purity |
+| Ch.11 | Chesky | 11 | Ana Caram | Correnteza | Ultimate Demo Disc — Naturalness |
+| Ch.13 | Chesky | 13 | Fred Hersch Trio | Played Twice | Ultimate Demo Disc — Transparency |
+| Ch.15 | Chesky | 15 | McCoy Tyner / Joe Henderson | Ask Me Now | Ultimate Demo Disc — Presence |
+| Ch.17 | Chesky | 17 | Monty Alexander | Sweet Georgia Brown | Ultimate Demo Disc — Visceral Impact |
+| Ch.19 | Chesky | 19 | Johnny Frigo | I Love Paris | Ultimate Demo Disc — Rhythm & Pace |
+| Ch.21 | Chesky | 21 | Connecticut Early Music Festival | Vivaldi — Flute Concerto in D | Ultimate Demo Disc — Focus |
+| Ch.23 | Chesky | 23 | Westminster Choir | Britten — Festival Te Deum | Ultimate Demo Disc — Holographic Imaging |
+| Ch.25 | Chesky | 25 | Solisti New York | Stravinsky — Royal March (L'Histoire du Soldat) | Ultimate Demo Disc — Transients |
+| Ch.27 | Chesky | 27 | Chesky Sampler v2 | Double-bass solo | Ultimate Demo Disc — Bass Resonance |
+| Ch.29 | Chesky | 29 | Chesky Sampler v2 | Drum solo | Ultimate Demo Disc — Dynamics |
+| mono/merrill | mono | — | Helen Merrill | You'd Be So Nice to Come Home To | the MONO recording (Cole Porter; mono vocal jazz) |
+| mono/byrds | mono | — | The Byrds | So You Want To Be A Rock 'N' Roll Star | the MONO mix (Younger Than Yesterday, 1967) |
+| EMMA/positions | EMMA | 2026 tr.2–6 | — | Positions L / LC / C / RC / R — 5 instruments per position | EMMA 2026 disc |
+| EMMA/focus | EMMA | 2026 tr.7–11 | — | Focus — image size hierarchy | EMMA 2026 disc |
+| EMMA/moving | EMMA | 2026 tr.12 | — | Moving track — width / height / depth / room | EMMA 2026 disc |
+| EMMA/T8 | EMMA | 2024 T8 | — | see `competition.md` | EMMA 2024 disc |
+| EMMA/T9 | EMMA | 2024 T9 | — | Hungry Bird | EMMA 2024 disc |
+| EMMA/T11 | EMMA | 2024 T11 | — | see `competition.md` | EMMA 2024 disc |
+| own/favourite | own | — | — | a favourite, well-known track of the user's | whatever they play it from |
+| own/album | own | — | — | a familiar album for the long listen (acoustic + vocal material) | whatever they play it from |
 
-A fixed route (~20–30 min), when the tune is "ready" (after the Phase 3 lock) or before a competition. Each step: play the track → one marker → a **binary verdict ✓/✗** into a checklist. Everything ✗ = the next iteration's backlog (mapped to the band/instrument from its index row).
+## Links — what each track exposes, and where in it
 
-| # | What we check | Track | **Library** | The ✓-criterion |
-|---|---|---|---|---|
-| 1 | First impression / balance | **#01** (backup: #02, #11) | CarMus | scale/space/resolution right away |
-| 2 | Mono center (the L/R foundation) | Helen Merrill or the Byrds (below) | mono | a tight point at center, doesn't drift |
-| 3 | Positions L/LC/C/RC/R | the position track (5 instr × 5 positions) | EMMA (`competition.md`) | each instrument = one point in its place |
-| 4 | Focus / image sizes | EMMA 2026 tr.7-11, or vocal #07 | EMMA / CarMus | a size hierarchy (bass biggest → triangle smallest) |
-| 5 | Depth + space | **#07** / #14 (+ RAUM if available) | CarMus (+ AYA) | the stage behind the hood, layers read |
-| 6 | Punch + sub↔midbass joint | **#26**/#20 + **#25**/#16 | CarMus | a hit in the chest; the sub doesn't "fall away" |
-| 7 | Sub <40 Hz | **#24** | CarMus | holds, doesn't drone or dry up |
-| 8 | Sibilants / top | **#06** (+#05 decays) | CarMus | natural, not detaching/not vanishing |
-| 9 | Separation under load | **#15** / #23 | CarMus | micro-events don't blend into mush |
-| 10 | Universality | transitions **#17→#18→#19** | CarMus | recordings sound DIFFERENT, not "radio" |
+One row per track × characteristic. `timecode` is mm:ss when the cue sits at a moment; `cue` is what to
+listen for in THIS track — never the generic "sounds right / wrong" phrase, that is the cheat sheet's.
 
-## Mono tracks for the CENTER (phantom center / L-R matching)
-**The principle:** a true MONO recording (L=R identical) should localize into a **tight point at center** at height. If it smears / wanders L/R / is wide — L/R are **not aligned in level+time+phase** → this is the cleanest test of the center and the L-R foundation (before imaging work). Give the Arbiter a mono track: "does the vocal/mix stand as a tight point at center, or does it drift/spread?".
-- **The Byrds — "So You Want To Be A Rock 'N' Roll Star"** (Younger Than Yesterday, 1967) — a mono rock mix.
-- **Helen Merrill — "You'd Be So Nice to Come Home To"** (Cole Porter) — mono vocal jazz, a tight center vocal.
-> Drifting/smeared → check L/R level + TA + polarity (the foundation), DON'T jump into imaging EQ.
-
-## The CarMus Test&Demo 2026 library (order: easy → hard/heavy)
-Source: CarMus Test&Demo 2026 (the compiler's description). "Listen to music, not to sounds."
-1. **Eternal Eclipse — Fate Of The Clockmaker** — intro: scale, space, resolution, macrodynamics — the system's level right away.
-2. **Preservation Hall Jazz Band — La Malanga** — many instruments: resolution, timbres, balance.
-3. **Felix Irwan — I Don't Want to Miss a Thing** — vocal + acoustic guitars; **hits on the guitar body** (recognizable vs dry knocks/boomy rumble); voice separation.
-4. **Elvis Presley — Fever** — studio space, resolution at low levels; **finger snaps** (do they read?).
-5. **Hank Shizzoe — Your Luck Will Find You** — a calm vocal (not nasal/not pressing/not anorexic); the treble range, "bodiliness"; guitars don't get lost among the cymbals; a "blanket on the speakers"?
-6. **Jennifer Warnes — Invitation To the Blues** — treble resolution + mid evenness; detail/decays; **sibilants** (natural? not detaching/vanishing?).
-7. **Melody Gardot — Over The Rainbow (Live)** — **DEPTH+space**; the vocal holds in place; the double bass (drones/bloats vs thin); snaps/plucks; **the singer's whispering from ~2:00** under the double-bass solo — does it read?
-8. **Hayley Westenra — River Of Dreams** — a high bright vocal → **cutters in the mids** (fundamentals + upper-mid); the vocal doesn't drift/change size on different notes.
-9. **Alla Turovskaya — Sunny Bunny** — a different mixing principle; double-bass texture; a warm vocal; **a flute from 1:20** (cutters?); a warm piano (live, not electric); balance without accents.
-10. **Alexander Jean — Another One Bites The Dust** — drive/dynamics/attack not smeared; **acoustic guitars** (hear the strings vs "strum-strum"); no boomy LF / no lower-mid pressure; LF density; vocal cutters.
-11. **Quadro Nuevo — Nature Boy** — live instruments, naturalness; they play together; LF texture (the double bass bloated/loss of fullness); mid cutters.
-12. **Bradley Cooper — Out Of Time** — a concert stage; **acoustic guitar (live) vs electric (through an amp) — the SEPARATION is heard**; bass+drummer separated from the hall.
-13. **Vahtang — Black Betty** — beatbox + overlaid effects = **multi-layering**; flat/monotonous = bad.
-14. **Hanne Boel — House of the Rising Sun** — a large spacious cohesive stage, a full stereo panorama (not ragged/not collapsed); a strained vocal (it exposes flaws); bass-guitar texture; **the tambourine jingles from 2:20**.
-15. **Drum Ecstasy — Oh! Empie!** — **drums: separation/placement**; macrodynamics/rate of fire; resolution = don't lose micro-events under load.
-16. **Domenico Loparco… — Dock Funk** — **TWO bass guitars** (dense heavy LF); sub control + the **correctness of the midbass↔sub integration**; the lower bass doesn't detach; the two bass guitars SEPARATELY vs mush.
-17. **AC/DC — Back In Black** — after the heavy ones: not thin? balance/readability; cutters/constriction.
-18. **Greta Van Fleet — Highway Tune** — bright/on the edge; guitars "wzh", the snare cracks out, the bass guitar growls springily, the kick with reverb doesn't get lost.
-19. **San Di EGO — Stayin' Alive** — a **contrast in recording style** with the previous one (a different atmosphere, not "the next one on the radio"); readability/balance.
-20. **Godsmack — Cryin' Like A Bitch!** — the **kick drum**: tight, into the chest like a pile; reads SEPARATELY from the bass guitar and the guitar's low notes (LF articulation); cymbals (clamped) not into foil, especially when a hit+cymbal together.
-21. **Sons Of Texas — Feed The Need** — a heavy "compacted" but intelligible sound; the bass guitar doesn't get lost behind the kick.
-22. **Gus G — Enigma of Life** — a light picture; does the electric guitar cut the ears?; the bass guitar springy vs thin; cymbals sustained vs "pssh".
-23. **Hi-Finesse — Andromeda** — epic, building up; weak systems = boring/oppressive; good ones = open up, hold the **abundance of micro-events**.
-24. **Loud373 & VAGAN — Olgoi Khorkhoi** — **sub <40 Hz**: holds vs dries up / bloats into droning.
-25. **Rodg & Veljko Jovic — Sundust** — electro; **hits in the sub↔midbass joint region** (hypertrophied) — subs here often "fall away".
-26. **Vadim Shantor — Devil Inside** — **midbass**: hit energy higher than #25; tight/juicy/in the chest vs limp/smeared/over-dried.
-
-> The library grows: EMMA 2021/2024/2026, AYA — in `competition.md` (imaging maps + TIEFBASS). Add new compilations here with markers + timecodes.
-
-## The Chesky "Ultimate Demo Disc" library (streaming: Tidal / Spotify / Apple Music) — by SQ measure
-"Chesky Guide to Critical Listening": in each pair, the **even track = a narrator** describing the measure's concept, the **odd one = a music example**. **30 tracks** (T1 welcome … T30 finale), **14 measures**. The markers below — from the disc's original texts.
-| # | Measure | Music track | What to listen for (from the original) |
+| track | characteristic | timecode | cue |
 |---|---|---|---|
-| 03 | **High Resolution** | Rebecca Pidgeon "Spanish Harlem" | the voice "breathes" with space around it; **the shaker BEHIND — each shake different** (alike = no resolution); the bass deep BUT detailed |
-| 05 | **Depth** | Sara K. "If I Could Sing Your Blues" | **the trumpet 10 ft from the mic** = the reference for depth; Sara close, the voice fills the studio with reverb; the guitar warm/intimate |
-| 07 | **Atmosphere** | Leny Andrade "Maiden Voyage" | a warm spacious stage, but the voice direct; the bass full/warm; drums+cymbals ethereal |
-| 09 | **Midrange Purity** | Livingston Taylor "Grandma's Hands" | **finger snaps = live/bodily** (snap your own to compare); the voice has CHEST volume, not "detached from the body" |
-| 11 | **Naturalness** | Ana Caram "Correnteza" | a rainforest/birds ENVELOP you; the cello resonates; Ana's breathing palpable; **no electronic glint/harshness** |
-| 13 | **Transparency** | Fred Hersch Trio "Played Twice" | **the piano percussive** — the hammer's attack obvious; the bass warm not boomy, hear the pluck; the drums BEHIND; cymbals airy; "a window into the sound" |
-| 15 | **Presence** | McCoy Tyner / Joe Henderson "Ask Me Now" | the sax **to the right of center between the speakers**; breathing+key mechanics+a warm tone; **the echo from the back wall** (more discrete=higher resolution); do you believe a live sax is between the speakers? |
-| 17 | **Visceral Impact** | Monty Alexander "Sweet Georgia Brown" | 2 drums/2 basses/brass — **the different acoustics of each kit heard**; striking dynamics — **turn it UP, you should FEEL it** |
-| 19 | **Rhythm & Pace (PRaT)** | Johnny Frigo "I Love Paris" | the transfer of ENERGY: the foot taps the beat / pulls you to dance; watch your **own physical reaction** — no reaction = keep looking |
-| 21 | **Focus** | Connecticut Early Music — Vivaldi "Flute Concerto in D" | the **outline/edge** of an instrument on the stage; the flute clear not blurred; a sharper edge = better focus |
-| 23 | **Holographic Imaging** | Westminster Choir — Britten "Festival Te Deum" | 3D even on 2 speakers; the scale of a cathedral 60×225×90 ft; **some systems give HEIGHT**; the organ atmospheric (hiss = the organ's air, not tape); ⚠️ a low level + **powerful peaks** = a **headroom** test |
-| 25 | **Transients** | Solisti NY — Stravinsky "Royal March" (L'Histoire du Soldat) | sharp level changes; **drums tight/taut = an indicator of speaker+amp control**; brass sharp/clear; the amp's grip+speed |
-| 27 | **Bass Resonance** | Chesky Sampler v2 — double-bass solo (3 ft from the mic) | **the pluck (attack) → the body resonance**; a test of LF-driver accuracy; at the limit — **non-musical sounds** = reveals a construction defect |
-| 29 | **Dynamics** | Chesky Sampler v2 — drum solo | quiet → **louder and louder** = a stress test of the speakers+amp (play at realistic levels, carefully) |
-> **Diagnostic links (references):** depth → **05** · attack/punch → **17** · focus/center → **21** · imaging+HEIGHT+headroom → **23** · transients/control → **25** · LF-driver accuracy (artifacts at the limit) → **27** · dynamic headroom → **29**.
+| CarMus#01 | c04 | — | the intro: scale, space, resolution, macrodynamics — the system's level right away |
+| CarMus#01 | c11 | — | the macrodynamics of the intro |
+| CarMus#02 | c04 | — | many instruments: resolution, timbres, balance |
+| CarMus#02 | c10 | — | the instruments stay separate in the tutti |
+| CarMus#03 | c14 | — | hits on the guitar body — recognisable as wood, not dry knocks or boomy rumble |
+| CarMus#03 | c10 | — | the voice separated from the acoustic guitars |
+| CarMus#04 | c10 | — | studio space and resolution at low level; do the finger snaps read? |
+| CarMus#05 | c08 | — | a calm vocal — not nasal, not pressing, not anorexic |
+| CarMus#05 | c07 | — | the treble range with body; guitars not lost among the cymbals; any blanket on the speakers? |
+| CarMus#06 | c07 | — | sibilants; treble resolution and decays |
+| CarMus#06 | c04 | — | evenness of the mids |
+| CarMus#06 | c08 | — | the voice in the mids |
+| CarMus#07 | c09 | — | depth and space — the stage behind the hood |
+| CarMus#07 | c03 | — | the vocal holds its place and size |
+| CarMus#07 | c14 | — | the double bass: droning or bloated vs thin; snaps and plucks |
+| CarMus#07 | c10 | 2:00 | the singer's whispering under the double-bass solo — does it read? |
+| CarMus#08 | c08 | — | a high bright vocal: cutters in the fundamentals and the upper mids |
+| CarMus#08 | c03 | — | the vocal does not drift or change size on different notes |
+| CarMus#09 | c14 | — | double-bass texture; a warm live piano, not an electric one |
+| CarMus#09 | c08 | 1:20 | the flute — cutters? |
+| CarMus#09 | c04 | — | balance without accents; a different mixing principle from #07/#08 |
+| CarMus#10 | c11 | — | drive, dynamics, attack not smeared |
+| CarMus#10 | c10 | — | acoustic guitars — hear the strings, not "strum-strum" |
+| CarMus#10 | c14 | — | no boomy low end, no lower-mid pressure; LF density |
+| CarMus#10 | c08 | — | vocal cutters |
+| CarMus#11 | c14 | — | the double bass — bloated or losing fullness? |
+| CarMus#11 | c04 | — | live instruments, naturalness, they play together |
+| CarMus#11 | c08 | — | cutters in the mids |
+| CarMus#12 | c10 | — | an acoustic guitar (live) vs an electric one through an amp — the separation is heard |
+| CarMus#12 | c09 | — | a concert stage; the bass and the drummer separated from the hall |
+| CarMus#13 | c10 | — | beatbox with overlaid effects — layers, not flat or monotonous |
+| CarMus#14 | c09 | — | a large, spacious, cohesive stage — a full panorama, not ragged, not collapsed |
+| CarMus#14 | c08 | — | a strained vocal exposes flaws |
+| CarMus#14 | c14 | 2:20 | bass-guitar texture; the tambourine jingles from 2:20 |
+| CarMus#15 | c10 | — | drums: separation and placement; micro-events under load |
+| CarMus#15 | c11 | — | macrodynamics, rate of fire |
+| CarMus#16 | c05 | — | two bass guitars — sub control and the midbass↔sub integration; the lower bass does not detach; the two basses separately, not mush |
+| CarMus#17 | c12 | — | after the heavy ones: not thin? balance and readability |
+| CarMus#17 | c08 | — | cutters, constriction |
+| CarMus#18 | c11 | — | bright, on the edge: the snare cracks out, the kick with reverb does not get lost |
+| CarMus#18 | c14 | — | the bass guitar growls springily; the guitars "wzh" |
+| CarMus#19 | c12 | — | a contrast in recording style with #18 — a different atmosphere, not "the next one on the radio" |
+| CarMus#20 | c05 | — | the kick drum: tight, into the chest like a pile; reads separately from the bass guitar and the guitar's low notes |
+| CarMus#20 | c07 | — | clamped cymbals — not into foil, especially when a hit and a cymbal land together |
+| CarMus#21 | c05 | — | the bass guitar does not get lost behind the kick |
+| CarMus#21 | c10 | — | a heavy, compacted, still intelligible sound |
+| CarMus#22 | c08 | — | does the electric guitar cut the ears? |
+| CarMus#22 | c14 | — | the bass guitar springy vs thin |
+| CarMus#22 | c07 | — | cymbals sustained vs "pssh" |
+| CarMus#23 | c10 | — | epic, building up — an abundance of micro-events; a weak system turns boring or oppressive |
+| CarMus#24 | c06 | — | sub below 40 Hz — holds vs dries up or bloats into droning |
+| CarMus#25 | c05 | — | electro: hits in the sub↔midbass joint region, hypertrophied — subs often fall away here |
+| CarMus#26 | c05 | — | the midbass: hit energy higher than #25 — tight and juicy in the chest vs limp, smeared, over-dried |
+| Ch.03 | c10 | — | the voice breathes with space around it; the shaker behind — each shake different (alike = no resolution); the bass deep but detailed |
+| Ch.05 | c09 | — | the trumpet 10 ft from the mic — the reference for depth; Sara close, the voice filling the studio; the guitar warm and intimate |
+| Ch.07 | c09 | — | a warm spacious stage with the voice direct; the bass full; drums and cymbals ethereal |
+| Ch.09 | c08 | — | the finger snaps live and bodily (snap your own to compare); the voice has chest volume, not detached from the body |
+| Ch.11 | c04 | — | a rainforest that envelops you; the cello resonates; her breathing palpable; no electronic glint or harshness |
+| Ch.13 | c11 | — | the piano percussive — the hammer's attack obvious; the pluck of the bass; the drums behind; cymbals airy |
+| Ch.15 | c02 | — | the sax to the right of centre between the speakers; breathing, key mechanics; the echo from the back wall |
+| Ch.17 | c11 | — | two drum kits, two basses, brass — the different acoustics of each kit; turn it up, you should feel it |
+| Ch.19 | c11 | — | the transfer of energy: the foot taps the beat — no reaction means keep looking |
+| Ch.21 | c03 | — | the outline of the flute on the stage — clear, not blurred |
+| Ch.23 | c15 | — | 3D on two speakers; a sense of height; the scale of a cathedral; the organ's air is not tape hiss |
+| Ch.23 | c16 | — | a low level with powerful organ peaks |
+| Ch.25 | c11 | — | sharp level changes; drums tight and taut; brass sharp and clear |
+| Ch.27 | c06 | — | the pluck, then the body resonance; non-musical sounds at the limit reveal a construction defect |
+| Ch.27 | c14 | — | a double-bass solo three feet from the mic |
+| Ch.29 | c16 | — | a drum solo growing louder and louder — a stress test at realistic levels, carefully |
+| mono/merrill | c01 | — | a true mono vocal: one tight point at centre, at height |
+| mono/byrds | c01 | — | a mono rock mix: the whole band in one point at centre |
+| EMMA/positions | c02 | — | five instruments at each of L / LC / C / RC / R — each one small point; audible in several places = 0 points |
+| EMMA/focus | c03 | — | the bass the biggest → guitar → banjo → vibraphone → the triangle the smallest |
+| EMMA/moving | c15 | — | the moving guitar and cowbell: size does not change mid-flight; height at eye level; room via the echo |
+| EMMA/T8 | c09 | — | the piano far behind and below the singer; the vocal wander is the recording's norm, not a defect |
+| EMMA/T9 | c10 | 0:03 | the jaw harp 3–4 s on the right; voices by position |
+| EMMA/T11 | c15 | 2:52 | the snare vs the tambourine at different stage levels |
+| EMMA/T11 | c10 | 0:46 | backing vocals separated across the stage (also 1:25, 2:00) |
+| own/favourite | c04 | — | your own track: the first impression, no verdict |
+| own/album | c13 | — | a familiar album, relaxed, 15–20 minutes — does it stay easy or tire you, and which way |
 
 ## Gate selection — a test that cannot fail is not a gate
 
