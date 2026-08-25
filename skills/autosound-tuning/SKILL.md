@@ -109,6 +109,7 @@ Read the active phase from `process/process-state.json` (`python3 rew_tool/state
 | [core/diagnostic-techniques.md](references/core/diagnostic-techniques.md) | Anomalies, joint-phase summation, peak-vs-null. |
 | [core/filter-types-car-audio.md](references/core/filter-types-car-audio.md) | LR/Bessel/Butterworth, starting crossover points. |
 | [patterns/staging-depth.md](references/patterns/staging-depth.md) | Stage depth/height, driver layering. |
+| [patterns/stage-imaging.md](references/patterns/stage-imaging.md) | Stage width/height/depth/side-evenness — RESEARCH/CRAFT material (measured / literature / craft, labelled), not doctrine; the measured part: single-point gives no basis for narrow L/R correction. |
 | [core/enclosure-install-diagnostics.md](references/core/enclosure-install-diagnostics.md) | Rattles, SBIR vs cabinet resonances, damping. |
 | [core/impedance-ts.md](references/core/impedance-ts.md) | T-S params, box design, DVC wiring. |
 | [patterns/competition.md](references/patterns/competition.md) | EMMA/AYA/CARMusic SQ prep. |
