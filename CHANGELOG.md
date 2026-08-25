@@ -40,6 +40,25 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [v3.0.27] — 2026-08-25 · an EQ band the predictor cannot model is refused by name, not crashed on
+
+> A 3.0.x patch for the author's own test rigs (the `v3.*` installer audience), not the 3.1.0 gate.
+
+- **`predict.py` no longer crashes on an EQ band without `q` / `gain_db`** (the tune session's rear
+  rows, 2026-08-25: `{"type": "PK", "f": 850}` — an honest "gain and Q not written down", which
+  `state.validate` rightly accepts). A missing Q reached `peq_response` as `None` and the whole run
+  died in `alpha = sw/(2*q)`; a missing gain silently became 0 dB, which is worse. Now the band is
+  refused by name (`eq band PK 850 has no q -- not modellable, record it or bypass it`); through a
+  snapshot that becomes a channel **left out of the prediction with the reason in the notes** and
+  `NOT MODELLED -- …` in the chain table, so the run completes and nothing is approximated. `APF1`
+  needs only its frequency; `APF2` needs its Q; a bell needs both. Selftest pins all three refusals,
+  the APF1 exception, and the left-out channel. `plugin.json` → 3.0.27.
+
+### Upgrading
+
+A ledger whose row carries an incomplete band used to crash `predict.py`; it now runs without that
+channel and says so. No flag or contract changes. Suite 35/35.
+
 ## [v3.0.26] — 2026-08-25 · the predictor takes the protective filter out before the chain goes on
 
 > A 3.0.x patch for the author's own test rigs (the `v3.*` installer audience), not the 3.1.0 gate.

@@ -134,8 +134,7 @@ def chain_from_row(row):
     for b in row.get("eq") or []:
         if b.get("bypass"):
             continue
-        eq.append((str(b["type"]).upper(), float(b["f"]), float(b.get("gain_db") or 0.0),
-                   float(b["q"]) if b.get("q") is not None else None))
+        eq.append(_band_from_row(b))
     pol = str(row.get("polarity") or "NORM").upper()
     if pol not in ("NORM", "INV"):
         raise PredictError(f"polarity {pol!r}: expected NORM or INV")
@@ -148,6 +147,32 @@ def chain_from_row(row):
         "lp": _leg(row.get("lp")),
         "eq": eq,
     }
+
+
+def _band_from_row(b):
+    """One ledger EQ band -> `(kind, f, gain_db, q)`, or a refusal naming what is missing.
+
+    `state.validate` accepts a band without `gain_db` / `q` -- an honest record of "PK 850, gain and
+    Q not written down" (the tune session's rear rows, 2026-08-25). Honest in the ledger, but not
+    modellable: a bell needs both, a second-order all-pass needs its Q. Until now a missing gain
+    silently became 0 dB and a missing Q reached `peq_response` as None and crashed the whole run.
+    Refuse the band by name instead; `chains_from_snapshot` turns that into a channel left out of
+    the prediction with the reason in the notes, which is what the doctrine asks of a check whose
+    input is missing (`estimator-scope.md`).
+    """
+    kind = str(b["type"]).upper()
+    f0 = float(b["f"])
+    if kind == "APF1":
+        return (kind, f0, 0.0, None)
+    q = b.get("q")
+    if q is None:
+        raise PredictError(f"eq band {kind} {f0:g} has no q -- not modellable, record it or bypass it")
+    if kind == "APF2":
+        return (kind, f0, 0.0, float(q))
+    g = b.get("gain_db")
+    if g is None:
+        raise PredictError(f"eq band {kind} {f0:g} has no gain_db -- not modellable, record it or bypass it")
+    return (kind, f0, float(g), float(q))
 
 
 def _leg(leg):
@@ -193,6 +218,8 @@ def chain_response(freqs, chain):
 
 
 def chain_label(chain):
+    if chain.get("unmodellable"):
+        return f"NOT MODELLED -- {chain['unmodellable']}"
     if chain.get("muted"):
         return "MUTED"
     parts = [f"{chain['gain_db']:+.1f} dB", chain["polarity"], f"{chain['ta_ms']:.2f} ms"]
@@ -340,8 +367,16 @@ def drift_from_manifest(path, block="blockB_REW"):
 
 # ---------------------------------------------------------------- state
 def chains_from_snapshot(snapshot, tier="channels"):
+    """Every row as a chain. A row this module cannot model does not stop the run and does not get
+    approximated: it becomes `{"unmodellable": reason}` and `predict` leaves the channel out, saying why."""
     rows = snapshot.get(tier) or {}
-    return {canon(code): chain_from_row(row) for code, row in rows.items()}
+    out = {}
+    for code, row in rows.items():
+        try:
+            out[canon(code)] = chain_from_row(row)
+        except PredictError as e:
+            out[canon(code)] = {"muted": False, "unmodellable": str(e)}
+    return out
 
 
 def chains_from_anchors(d):
@@ -408,6 +443,9 @@ def predict(freqs, solos, chains, joints=None, band_oct=1.0):
         chain = chains.get(code)
         if chain is None:
             notes.append(f"{code}: solo present, no ledger row -- left out")
+            continue
+        if chain.get("unmodellable"):
+            notes.append(f"{code}: ledger row cannot be modelled -- {chain['unmodellable']} -- left out")
             continue
         processed[code] = H * chain_response(f, chain)
     for code in chains:
@@ -730,6 +768,22 @@ def _selftest():
     assert np.allclose(chain_response(f, chain_from_row(row)), chain_response(f, chain_from_anchor(anc)))
     # A bypassed band is not in the chain; a vendor phase angle is refused, not ignored.
     assert len(chain_from_row(row)["eq"]) == 2
+    # A band with no q (or no gain) is refused BY NAME, never modelled as 0 dB or crashed on;
+    # through a snapshot that becomes a channel left out with the reason in the notes.
+    for bad in ({"type": "PK", "f": 850}, {"type": "PK", "f": 850, "q": 2},
+                {"type": "APF2", "f": 300}):
+        try:
+            chain_from_row(dict(row, eq=[bad]))
+            raise AssertionError(f"{bad} was modelled")
+        except PredictError as e:
+            assert "850" in str(e) or "300" in str(e), e
+    assert chain_from_row(dict(row, eq=[{"type": "APF1", "f": 300}]))["eq"] == [("APF1", 300.0, 0.0, None)]
+    snap = {"channels": {"w-L": row, "r-L": dict(row, eq=[{"type": "PK", "f": 850}])}}
+    ch = chains_from_snapshot(snap)
+    assert ch["r-L"].get("unmodellable") and "no q" in ch["r-L"]["unmodellable"], ch["r-L"]
+    r_bad = predict(f, {"w-L": np.ones_like(f, dtype=complex), "r-L": np.ones_like(f, dtype=complex)}, ch)
+    assert "r-L" not in r_bad["processed"] and any("cannot be modelled" in n for n in r_bad["notes"]), r_bad["notes"]
+    assert "NOT MODELLED" in chain_label(ch["r-L"])
     try:
         chain_from_row(dict(row, phase_deg=45))
     except PredictError:
