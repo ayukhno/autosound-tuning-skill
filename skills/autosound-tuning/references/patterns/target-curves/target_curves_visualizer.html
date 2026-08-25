@@ -2634,6 +2634,7 @@
         function plot(label, pts, color, rawName, initialOffset) {
             const ds = { label: label, data: pts, borderColor: color, borderWidth: 3, pointRadius: 0, tension: 0.3, borderDash: [6, 3] };
             if (initialOffset) ds._manual = initialOffset;
+            ds._rawName = rawName;
             curveChart.data.datasets.push(ds);
             const idx = curveChart.data.datasets.length - 1;
             buildCard(label, color, pts.length, ds, idx, rawName);
@@ -2697,13 +2698,19 @@
             const name = params.get('curve');
             const data = params.get('data');
             if (!name || !data) return;
+            // The page remembers curves in localStorage, so a reopen with the same #curve must NOT
+            // stack a second copy: if one with this name is already plotted (from restore or a prior
+            // load), leave it. `_rawName` is what `plot` stored; a restored curve keeps its own.
+            const already = curveChart.data.datasets.some(function (d) {
+                return d._rawName === name || (d.label && d.label.indexOf(name + ' (loaded') === 0);
+            });
+            if (already) return;
             // A malformed or empty payload must NOT silently show nothing — say so, like a bad drop.
             add(data, name, 0);
             // Clear the fragment so a refresh does not re-add the curve and the URL bar stays short;
             // the curve now lives in the chart (and in localStorage via persist()).
             try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
         }
-        loadFromHash();
 
         function wireToggle(card, ds) {
             card.style.cursor = 'pointer';
@@ -2793,6 +2800,12 @@
                 if (i < st.length && st[i].hidden) c.style.opacity = '0.4';
             });
         })();
+
+        // A curve passed in the URL fragment loads AFTER restore(), so a copy this browser already
+        // remembered is plotted once (by restore) and the loader dedupes it, not added twice
+        // (autosound-tcc, 2026-08-25: loading before restore let restore re-read the just-persisted
+        // curve and plot a second card).
+        loadFromHash();
 
         // --- Language switching: rewrite every static + dynamic string in place ---
         function applyLanguage(lang) {
