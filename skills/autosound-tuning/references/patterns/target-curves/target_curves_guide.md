@@ -46,3 +46,20 @@ with the per-band/stereo config, generates the per-driver targets — see Phase 
 
 **REW:** *Preferences → House Curve → Browse* your `.txt`; in the EQ window enable
 *Add room curve to target* so REW designs filters to your curve.
+
+
+## Loading a curve the page does not bundle (URL fragment)
+
+The visualizer carries only the curves in `curves/`. To show one it does not bundle — a project's
+target that lives elsewhere — open it with the curve in the URL **fragment** (a front-end like TCC
+does this so a clicked target opens as itself, not silently as a bundled curve):
+
+```
+target_curves_visualizer.html#curve=<encodeURIComponent(name)>&data=<encodeURIComponent(REW text)>
+```
+
+The fragment never leaves the browser (it is not sent to any server), so the page stays static and
+nothing is published. The curve loads at its own level (offset 0) — exactly the values in the text —
+and the per-curve level buttons adjust it after. A `SQ-Comp-Ref`-sized curve is ~3 KB; comment lines
+may be dropped and dB rounded to one decimal if a payload ever approaches the browser URL limit
+(tens of KB). Added 2026-08-25 at autosound-tcc's request.
