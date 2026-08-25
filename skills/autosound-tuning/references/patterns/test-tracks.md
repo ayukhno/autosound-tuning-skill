@@ -82,9 +82,9 @@ Ultimate Demo Disc, streaming (in each pair the even track is a narrator, the od
 | EMMA/positions | EMMA | 2026 tr.2–6 | — | Positions L / LC / C / RC / R — 5 instruments per position | EMMA 2026 disc |
 | EMMA/focus | EMMA | 2026 tr.7–11 | — | Focus — image size hierarchy | EMMA 2026 disc |
 | EMMA/moving | EMMA | 2026 tr.12 | — | Moving track — width / height / depth / room | EMMA 2026 disc |
-| EMMA/T8 | EMMA | 2024 T8 | — | see `competition.md` | EMMA 2024 disc |
+| EMMA/T8 | EMMA | 2024 T8 | — | depth and body — the piano behind and below the singer (`competition.md`) | EMMA 2024 disc |
 | EMMA/T9 | EMMA | 2024 T9 | — | Hungry Bird | EMMA 2024 disc |
-| EMMA/T11 | EMMA | 2024 T11 | — | see `competition.md` | EMMA 2024 disc |
+| EMMA/T11 | EMMA | 2024 T11 | — | stage levels — snare vs tambourine, backing-vocal separation (`competition.md`) | EMMA 2024 disc |
 | own/favourite | own | — | — | a favourite, well-known track of the user's | whatever they play it from |
 | own/album | own | — | — | a familiar album for the long listen (acoustic + vocal material) | whatever they play it from |
 

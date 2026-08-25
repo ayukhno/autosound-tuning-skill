@@ -41,6 +41,8 @@ Give the user copy-paste-ready specifics containing the exact save PATH, short c
 Load the chosen house curve into REW, **then write down which one it is**:
 
 ```
+
+> **Two facts wear the name "target", and this command feeds the one the readers use for CURRENT.** `process target` writes the active pointer to `process/process-state.json` (`targets[preset]`) — what the enter-phase-1 gate, the plan audit, the settings-sheet header and the TCC header all now read as the current curve. A ledger snapshot ALSO carries a `target`, but that is historical — *what that version was designed against* — and is the fallback, not the current pointer. Set the curve with this command and every reader is current; a snapshot is not rewritten for it (2026-08-25).
 python3 rew_tool/state/process.py <project>/process target <preset> <curve>
 # e.g. …/process target FULL EPY
 ```

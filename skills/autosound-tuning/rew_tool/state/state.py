@@ -273,6 +273,27 @@ def project_channels(project_dir):
     return out
 
 
+def current_target(project_dir, preset):
+    """The CURRENT active target curve for `preset`, from `process/process-state.json`'s `targets`.
+
+    Two different facts wear the name "target" and this untangles them (2026-08-25, a live project's
+    header rendered `—` after the tuner had set the curve): a **snapshot's** `target` is what that
+    version was DESIGNED AGAINST — historical, per-version, immutable with the snapshot; the process
+    journal's `targets[preset]` is the CURRENT pointer, which `process.py target` moves. The gate and
+    the plan audit read the pointer; the settings sheet must show the pointer too, or the documented
+    `process target` updates a home the sheet never reads. Returns None when there is no process dir
+    or no pointer yet — the caller falls back to the snapshot's own `target`.
+    """
+    path = os.path.join(project_dir or "", "process", "process-state.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            targets = (json.load(fh) or {}).get("targets") or {}
+    except (OSError, ValueError):
+        return None
+    v = targets.get(preset)
+    return v if isinstance(v, str) and v.strip() else None
+
+
 def _project_rev(project_dir):
     """`project.json`'s current `project_rev`, or 0 if this project has no facts file yet.
 
@@ -494,7 +515,9 @@ class PresetHistory:
         types into their DSP software — so moving identity out of the ledger (v3) must not cost the
         sheet that column. Read at render time, by `code`, exactly like any other consumer.
         """
-        return render_state(self.load(version), channels=project_channels(self.project_dir))
+        snap = self.load(version)
+        return render_state(snap, channels=project_channels(self.project_dir),
+                            current_target=current_target(self.project_dir, snap.get("preset", self.preset)))
 
 
 def _diff_scalar(a, b):
@@ -551,12 +574,16 @@ def _fmt_opt(v, spec="g"):
     return "—" if v is None else str(v)
 
 
-def render_state(state, channels=None):
+def render_state(state, channels=None, current_target=None):
     """The human-applicable settings sheet, GENERATED from the source of truth.
 
     Never hand-edit this — edit the JSON and re-render. This is also the artifact the future
     `apply-change` gate hands the Arbiter to read at the PC-Tool screen (channel/param/old→new),
     which is what makes the compliant path the easiest path.
+
+    `current_target` is the active target pointer (`current_target(project_dir, preset)`); when given
+    it is what the header shows, because that is the curve the Arbiter EQs against now. The snapshot's
+    own `target` — what this version was designed against — is the fallback and stays in the JSON.
     """
     rate = state["sample_rate"]
     roles = state.get("roles") or {}
@@ -572,8 +599,13 @@ def render_state(state, channels=None):
     lines = []
     lines.append(f"# DSP settings sheet — {state.get('preset', '?')} · {state.get('version', '(unsaved)')}")
     lines.append("")
+    target_now = current_target if current_target is not None else state.get("target", "—")
+    designed = state.get("target")
+    target_line = f"target: {target_now}"
+    if designed and current_target is not None and designed != current_target:
+        target_line += f" (this version designed against {designed})"
     meta = [
-        f"target: {state.get('target', '—')}",
+        target_line,
         f"sample_rate: {rate:g} Hz (samples derived; ms is canonical)",
         f"roles: artist={roles.get('artist', '—')} · producer={roles.get('producer', '—')} · critic={roles.get('critic', '—')}",
     ]
@@ -779,7 +811,8 @@ def render_registry(root, reg, presets):
         lbl = (slots.get(preset) or {}).get("label")
         name = preset + (f" — {lbl}" if lbl else "")
         mark = "✅" if preset == active else ""
-        lines.append(f"| {name} | {mark} | {head or '—'} | {s.get('target', '—')} | {gains} |")
+        tgt = current_target(h.project_dir, preset) or s.get("target") or "—"
+        lines.append(f"| {name} | {mark} | {head or '—'} | {tgt} | {gains} |")
     lines.append("")
     return "\n".join(lines)
 
@@ -918,6 +951,26 @@ def _selftest():
     assert "516" in r and "5.38" in r, r          # derived samples present
     assert "🟢 applied" in r, r
     assert "samples derived; ms is canonical" in r
+    # The header shows the CURRENT target pointer (process/process-state.json targets), not the
+    # snapshot's own historical `target` -- a live project rendered `—` after `process target` set
+    # the curve, because the sheet read the snapshot and the pointer lived elsewhere (2026-08-25).
+    # h.project_dir is the parent of `root`; put a process dir there with a moved pointer.
+    _proc = os.path.join(h.project_dir, "process")
+    os.makedirs(_proc, exist_ok=True)
+    with open(os.path.join(_proc, "process-state.json"), "w", encoding="utf-8") as _fh:
+        json.dump({"targets": {"SQ_Jazzi": "Resonalyze"}}, _fh)
+    assert current_target(h.project_dir, "SQ_Jazzi") == "Resonalyze"
+    assert current_target(h.project_dir, "Nope") is None and current_target("/no/such", "SQ_Jazzi") is None
+    r_now = h.render("v_001")
+    assert "target: Resonalyze" in r_now, r_now
+    # the snapshot's own target (Jazzi) is not lost -- it is named as what this version was designed against
+    assert "designed against Jazzi" in r_now, r_now
+    # registry render shows the pointer too
+    reg_txt = Registry(root).render()
+    assert "Resonalyze" in reg_txt, reg_txt
+    os.remove(os.path.join(_proc, "process-state.json"))
+    # with no pointer, the header falls back to the snapshot's own target
+    assert "target: Jazzi" in h.render("v_001")
     # An `off: true` row with null ta_ms/gain_db passes validate, so render must take it too --
     # it used to raise TypeError on `{None:g}` (FSATO, 2026-08-25). And the EQ column must show the
     # ledger's own `eq` bands, not only an `eq_ptr` pointer.

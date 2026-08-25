@@ -2681,6 +2681,30 @@
         ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.style.borderColor = cssVar('--btn-border'); dz.style.color = cssVar('--text-muted'); }));
         dz.addEventListener('drop', e => handle(e.dataTransfer.files));
 
+        // Load a curve the page does not bundle, from the URL FRAGMENT (autosound-tcc, 2026-08-25):
+        //   #curve=<encodeURIComponent(name)>&data=<encodeURIComponent(REW text)>
+        // The fragment never leaves the browser (it is not sent to the server), so GitHub Pages
+        // stays static and nothing is published. Same code path as a dropped file (`add`), loaded
+        // at its own level (offset 0) so what shows is exactly the curve named — the header that
+        // opened this page and the curve drawn are then the same thing, which was the whole bug:
+        // before this, a target the page did not carry drew a bundled curve silently.
+        function loadFromHash() {
+            let hash = '';
+            try { hash = location.hash || ''; } catch (e) { return; }
+            if (hash.length < 2) return;
+            let params;
+            try { params = new URLSearchParams(hash.slice(1)); } catch (e) { return; }
+            const name = params.get('curve');
+            const data = params.get('data');
+            if (!name || !data) return;
+            // A malformed or empty payload must NOT silently show nothing — say so, like a bad drop.
+            add(data, name, 0);
+            // Clear the fragment so a refresh does not re-add the curve and the URL bar stays short;
+            // the curve now lives in the chart (and in localStorage via persist()).
+            try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+        }
+        loadFromHash();
+
         function wireToggle(card, ds) {
             card.style.cursor = 'pointer';
             card.title = t().clickToggleTitle;

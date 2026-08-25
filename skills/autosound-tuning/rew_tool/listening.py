@@ -22,7 +22,7 @@ where the file has it and the English one, marked `translated: False`, where it 
 must never show an empty line because a translation arrived one commit later than an id.
 
     characteristics(lang=None) -> {id: {id, label, name, good, bad, route, translated}}
-    tracks()                   -> {id: {id, library, number, artist, title, version}}
+    tracks(lang=None)          -> {id: {id, library, number, artist, title, version, translated}}
     links(lang=None)           -> [{track, characteristic, timecode, cue, translated}]
     routes()                   -> {route: [{n, track, characteristic}]}
     check(lang=None)           -> [problems]   (empty = consistent, on the REAL files)
@@ -154,7 +154,16 @@ def characteristics(lang=None, root=None):
     return out
 
 
-def tracks(root=None):
+TITLE_COLUMNS = ("id", "title")
+
+
+def tracks(lang=None, root=None):
+    """{id: {...}}. A track's `title` is normally a proper NAME and is NOT translated (Melody Gardot
+    stays Melody Gardot). But a row with no artist (`own/*`, the EMMA position/focus/moving rows) has
+    a DESCRIPTION in the title slot, and a description must translate or a `uk` panel shows one English
+    line among Ukrainian ones (autosound-tcc, 2026-08-25). With `lang`, the descriptive titles listed
+    in `test-tracks.<lang>.md`'s "Descriptive titles" table override the English by id; a proper name,
+    which the translator leaves out of that table, stays English and is marked `translated: False`."""
     rows = _table(_read(_file(TEST_TRACKS, None, root)), TRACK_COLUMNS, "tracks")
     out = {}
     for r in rows:
@@ -162,7 +171,31 @@ def tracks(root=None):
         if tid in out:
             raise ListeningError(f"tracks: id {tid!r} appears twice")
         out[tid] = {"id": tid, "library": r["library"], "number": _dash(r["number"]),
-                    "artist": _dash(r["artist"]), "title": r["title"], "version": r["version"]}
+                    "artist": _dash(r["artist"]), "title": r["title"], "version": r["version"],
+                    "translated": True}
+    if lang and lang != "en":
+        path = _file(TEST_TRACKS, lang, root)
+        have = {}
+        if os.path.exists(path):
+            text = _read(path)
+            # the descriptive-titles table is optional in a translation
+            for header, trows in parse_tables(text):
+                if tuple(header) == TITLE_COLUMNS:
+                    for tr in trows:
+                        if len(tr) != 2:
+                            raise ListeningError(f"tracks[{lang}] title row: {tr!r}")
+                        have[tr[0]] = tr[1]
+                    break
+        for tid, entry in out.items():
+            t = have.get(tid)
+            if t is not None:
+                entry["title"] = t
+            elif entry["artist"] is None:
+                # a description with no translation falls back to English and SAYS so
+                entry["translated"] = False
+        for tid in have:
+            if tid not in out:
+                raise ListeningError(f"tracks[{lang}]: descriptive title for {tid!r} which is not a track")
     return out
 
 
@@ -225,7 +258,7 @@ def check(lang=None, root=None):
     problems = []
     try:
         ch = characteristics(lang, root)
-        tr = tracks(root)
+        tr = tracks(lang, root)
         ln = links(lang, root)
         rt = routes(root)
     except (ListeningError, OSError) as e:
@@ -279,6 +312,12 @@ def _selftest():
     assert len(ch) >= 13 and "c01" in ch and ch["c01"]["good"] and ch["c01"]["bad"], ch.get("c01")
     assert ch["c01"]["good"] != ch["c01"]["bad"]
     assert "mono/merrill" in tr and tr["mono/merrill"]["artist"] == "Helen Merrill"
+    # a descriptive (artist-less) title translates; a proper name does not (autosound-tcc, 2026-08-25)
+    assert tr["own/favourite"]["artist"] is None, tr["own/favourite"]
+    tr_uk = tracks("uk")
+    if "own/favourite" in tr_uk and tr_uk["own/favourite"]["translated"]:
+        assert tr_uk["own/favourite"]["title"] != tr["own/favourite"]["title"], "own title must translate in uk"
+    assert tracks("uk")["mono/merrill"]["title"] == "You\u0027d Be So Nice to Come Home To", "a proper name is not translated"
     assert tr["CarMus#01"]["library"] == "CarMus" and tr["CarMus#01"]["number"] == "01"
     assert any(l["track"] == "CarMus#07" and l["timecode"] == "2:00" for l in ln), \
         "the whisper at 2:00 must be a timecode on the link, not prose on the track"
@@ -320,6 +359,27 @@ def _selftest():
         uk = characteristics("uk", root=d)
         assert uk["c01"]["good"] == "точка" and uk["c01"]["translated"] is True
         assert uk["c02"]["good"] == "deep" and uk["c02"]["translated"] is False
+        # descriptive titles: own-style rows translate by id; a proper name and an untranslated
+        # description stay English, the latter flagged; an id not a track is refused.
+        # T1 artist-less WITH a translation; T2 artist-less WITHOUT one; a named row is untouched.
+        tt2 = (tt.replace("| T1 | mono | — | A | B | v |", "| T1 | mono | — | — | play your own favourite | v |")
+                 .replace("| T2 | mono | — | A | C | v |", "| T2 | mono | — | — | a familiar album | v |"))
+        write("test-tracks.md", tt2)
+        write("test-tracks.uk.md",
+              "| track | characteristic | timecode | cue |\n|---|---|---|---|\n| T1 | c01 | — | твоя точка |\n\n"
+              "| id | title |\n|---|---|\n| T1 | грай свій улюблений |\n")
+        t_uk = tracks("uk", root=d)
+        assert t_uk["T1"]["title"] == "грай свій улюблений" and t_uk["T1"]["translated"] is True
+        assert t_uk["T2"]["title"] == "a familiar album" and t_uk["T2"]["translated"] is False
+        write("test-tracks.uk.md",
+              "| id | title |\n|---|---|\n| T9 | привид |\n")
+        try:
+            tracks("uk", root=d)
+            raise AssertionError("a descriptive title for a non-track was accepted")
+        except ListeningError:
+            pass
+        os.remove(os.path.join(d, "test-tracks.uk.md"))
+        write("test-tracks.md", tt)
         assert check("uk", root=d) == []
         # an id only in the translation is refused, not merged
         write("listening-cheat-sheet.uk.md",
@@ -380,7 +440,7 @@ def main(argv=None):
             print("  " + p)
         print("consistent" if not problems else f"{len(problems)} problem(s)")
         return 1 if problems else 0
-    data = {"characteristics": lambda: characteristics(args.lang), "tracks": tracks,
+    data = {"characteristics": lambda: characteristics(args.lang), "tracks": lambda: tracks(args.lang),
             "links": lambda: links(args.lang), "routes": routes}[args.what]()
     if args.json:
         print(json.dumps(data, ensure_ascii=False, indent=1))
