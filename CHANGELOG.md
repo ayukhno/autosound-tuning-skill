@@ -87,6 +87,14 @@ channel and says so. No flag or contract changes. Suite 35/35.
 prediction made with v3.0.22–25 on such a set predicted driver × protective × chain; re-run it. Three
 new flags (`--process`, `--baseline`, `--no-de-embed`); no existing flag changes meaning. Suite 35/35.
 
+**If you compensated the protective filter yourself before 3.0.26** — corrected the solos by hand, or
+fed `predict` files you had already de-embedded — the tool now does that on its own wherever the mark
+says a filter was in the chain, and the result is a filter taken out twice. Either drop your own
+compensation or run with `--no-de-embed`. A double removal looks like a phase lead growing towards
+low frequencies under the protected driver's corner (~50° half an octave below an LR24 @100), which is
+easy to read as a filter-model error; check this first. (Added after the tag, 2026-08-25 — a note
+that ships with the next patch, per this file's own rule.)
+
 ## [v3.0.25] — 2026-08-25 · the manifest names its own version
 
 > A 3.0.x patch for the author's own test rigs (the `v3.*` installer audience), not the 3.1.0 gate.
