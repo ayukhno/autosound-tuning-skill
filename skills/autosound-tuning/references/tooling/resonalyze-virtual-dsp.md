@@ -2,9 +2,10 @@
 
 > 🧩 **TOOL MECHANICS, not method doctrine.** This describes how DIMOSUS's Resonalyze computes a
 > virtual tune, so a session can operate it and read its report. **What of this becomes advice the
-> method GIVES is the user's decision** (`~/dev/autosound_projects/CLAUDE.md §9`); nothing here is a
-> rule of the method until the user rules it in. Resonalyze stays an external Windows/.NET program —
-> the skill never takes a .NET dependency (`autosound_visualizer_overview`). The maths the method has
+> method GIVES is a decision only the user makes — this file records how the tool behaves, not what the
+> method should do; nothing here is a rule of the method until the user rules it in. Resonalyze stays an
+> external Windows/.NET program —
+> the skill never takes a .NET dependency and runs no AI at tune time. The maths the method has
 > already ported lives in `rew_tool/` (`predict.py`, `dsp_math.sum_loss`, `analyze-joints`); this
 > file is the READING of the tool those ports were checked against.
 >
@@ -82,7 +83,7 @@ The L−R delay difference grew by +0.24 / +0.25 / +0.25. So 0.25 ms of tilt rep
 ⚠️ **0.25 is the program's DEFAULT** (`StereoSceneOffsetMs = 0.25`), not a value DIMOSUS tuned to a
 car. **The skill must not present it as justified.** The transferable rule is one lever **in place
 of** the other, never on top: adding tilt and keeping the old cuts is a double dose. (The method's own
-stance on the stereo scene is §23 — a zero of the measured pair-arrival difference, with the tape as
+stance on the stereo scene is `diagnostic-techniques.md §23` — a zero of the measured pair-arrival difference, with the tape as
 arbiter; whether Resonalyze's scene offset enters the method at all is a user decision.)
 
 ## 4. Auto delay: why two stages
