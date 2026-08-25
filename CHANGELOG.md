@@ -40,6 +40,29 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [v3.0.24] — 2026-08-25 · the settings sheet shows the EQ it holds, and survives a switched-off row
+
+> A 3.0.x patch for the author's own test rigs (the `v3.*` installer audience), not the 3.1.0 gate.
+
+- **`state.py render` shows the ledger's own `eq` bands in the physical-channel column** (reported
+  by the tune session on the first 3.x ledger of the Passat, 2026-08-25). The column read
+  `eq_ptr` — a pointer to an export file — and never `eq`, the schema-v2 band objects the Arbiter
+  actually keys in, so a ledger whose eight channels all carried 4–8 bands rendered `— / —`. The
+  virtual tier had it right. Bands first, the pointer as fallback: on that ledger the sheet now
+  lists every bank. This is what the intake's done-criterion, "the Arbiter recognises their car in
+  the sheet", depends on.
+- **`render` no longer crashes on a `channels` row with `off: true` and null `ta_ms` / `gain_db`.**
+  `validate` accepts `None` in every required field (a switched-off output has nothing to say);
+  `render` formatted them with `:g` and raised `TypeError`, taking the whole sheet down. Now `—`
+  for what is absent, `OFF` / `MUTE` next to the status for a row that is switched off, samples
+  derived only when there is a number to derive them from. Selftest pins both: an off row renders,
+  and `PK 160 -4 Q3` appears in the sheet it came from.
+
+### Upgrading
+
+No contract change: `render_state` output gains text where it used to print `— / —` or crash, and
+nothing else moves. Suite 35/35.
+
 ## [v3.0.23] — 2026-08-24 · two subwoofers have names
 
 > A 3.0.x patch for the author's own test rigs (the `v3.*` installer audience), not the 3.1.0 gate.

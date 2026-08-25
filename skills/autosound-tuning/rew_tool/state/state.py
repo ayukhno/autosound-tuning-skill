@@ -594,13 +594,26 @@ def render_state(state, channels=None):
     lines.append("| Channel | Slot | HP | LP | Pol | TA ms | TA smp | Gain dB | Status | EQ (out / virt) |")
     lines.append("|---|---|---|---|---|---|---|---|---|---|")
     for ch_name, ch in state["channels"].items():
-        eq = ch.get("eq_ptr") or {}
-        eq_s = f"{eq.get('output', '—')} / {eq.get('virtual', '—')}"
+        # The sheet shows what is IN the ledger. `eq` (schema v2 band objects) is the bank the
+        # Arbiter keys in; `eq_ptr` only points at an export file. The column read the pointer and
+        # never the bank, so a ledger whose eight channels all carried 4-8 bands rendered `— / —`
+        # (FSATO, 2026-08-25) -- and "the Arbiter recognises their car in the sheet" cannot hold on
+        # a sheet with no OUTPUT-EQ. Bands first; the pointer is the fallback, not the answer.
+        ptr = ch.get("eq_ptr") or {}
+        bands = eq_str(ch.get("eq"))
+        out_s = " · ".join(bands) if bands else ptr.get("output", "—")
+        eq_s = f"{out_s} / {ptr.get('virtual', '—')}"
         st = ch.get("status", "proposed")
+        # `validate` accepts None in every required field (an `off: true` row has nothing to say);
+        # `:g` on None raised TypeError and took the whole sheet down with it (FSATO, 2026-08-25).
+        # Render what is there, `—` for what is not, and say OFF where the row is switched off.
+        ta = ch.get("ta_ms")
+        ta_smp = samples_for(ta, rate) if isinstance(ta, (int, float)) and not isinstance(ta, bool) else "—"
+        flags = "".join(f" {flag.upper()}" for flag in ("off", "mute") if ch.get(flag))
         lines.append(
-            f"| {ch_name} | {slot_of(ch_name)} | {_fmt_filter(ch['hp'])} | {_fmt_filter(ch['lp'])} "
-            f"| {ch['polarity']} | {ch['ta_ms']:g} | {samples_for(ch['ta_ms'], rate)} | {ch['gain_db']:g} "
-            f"| {_STATUS_ICON.get(st, '?')} {st} | {eq_s} |"
+            f"| {ch_name} | {slot_of(ch_name)} | {_fmt_filter(ch.get('hp'))} | {_fmt_filter(ch.get('lp'))} "
+            f"| {ch.get('polarity') or '—'} | {_fmt_opt(ta)} | {ta_smp} | {_fmt_opt(ch.get('gain_db'))} "
+            f"| {_STATUS_ICON.get(st, '?')} {st}{flags} | {eq_s} |"
         )
     for tier in tier_names(state):
         if tier == "channels":
@@ -905,6 +918,19 @@ def _selftest():
     assert "516" in r and "5.38" in r, r          # derived samples present
     assert "🟢 applied" in r, r
     assert "samples derived; ms is canonical" in r
+    # An `off: true` row with null ta_ms/gain_db passes validate, so render must take it too --
+    # it used to raise TypeError on `{None:g}` (FSATO, 2026-08-25). And the EQ column must show the
+    # ledger's own `eq` bands, not only an `eq_ptr` pointer.
+    offrow = _sample_state()
+    offrow["channels"]["r-L"] = {"hp": None, "lp": None, "gain_db": None, "ta_ms": None,
+                                 "polarity": None, "off": True, "status": "applied"}
+    offrow["channels"]["w-L"]["eq"] = [{"type": "PK", "f": 160, "gain_db": -4.0, "q": 3.0}]
+    validate(offrow)
+    r_off = render_state(offrow)
+    off_line = next(l for l in r_off.splitlines() if l.startswith("| r-L "))
+    assert "OFF" in off_line and "| — | — | — |" in off_line, off_line
+    w_line = next(l for l in r_off.splitlines() if l.startswith("| w-L "))
+    assert "PK 160 -4 Q3" in w_line, w_line
 
     # revert is forward-only: v_003 == v_001 content, history intact.
     v3 = h.revert("v_001", note="back to baseline")
