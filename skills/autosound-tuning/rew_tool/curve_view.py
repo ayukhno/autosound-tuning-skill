@@ -28,6 +28,46 @@ import numpy as np
 PPO = 96  # analysis grid density (points per octave)
 
 
+class CurveViewError(ValueError):
+    """The input cannot be read at the FINE scale — chiefly: it is already smoothed.
+
+    REW returns a frequency response with its own smoothing already applied (the payload carries a
+    `smoothing` field), and the skill's own `rew_api.set_smoothing` defaults to `1/6`. Smoothing a
+    second time here adds widths in quadrature: at REW `1/6` the effective fine becomes ~1/5.8, which
+    nearly meets the 1/3 macro, so `residual = fine - macro -> 0` and `find_features` reports a CLEAN
+    system that is not — silently, an empty list, no error. That is the trap this refusal makes loud
+    (fork session, on live data, 2026-08-25). The FINE scale needs an UNSMOOTHED input.
+    """
+
+
+def _smoothing_frac(smoothing):
+    """`"1/24"` -> 24.0; `None`/`"None"`/`"none"`/`""` -> None (unsmoothed, the clean case).
+    A non-fractional REW mode (`Var`/`Psy`/`ERB`) is smoothing of unknown width -> returns `"?"`,
+    which the fine guard treats as present-and-corrupting, since it cannot prove it negligible."""
+    if smoothing is None:
+        return None
+    t = str(smoothing).strip()
+    if t == "" or t.lower() in ("none", "no", "off", "unsmoothed"):
+        return None
+    if t.startswith("1/"):
+        try:
+            return float(t[2:])
+        except ValueError:
+            return "?"
+    return "?"
+
+
+def _effective_fine_frac(fine_frac, input_frac):
+    """FWHMs add ~in quadrature (exact for Gaussians; REW smooths band-wise, so this is an ESTIMATE,
+    right in direction and order, not a measurement). Returns the effective fine denominator."""
+    if input_frac is None:
+        return float(fine_frac)
+    if input_frac == "?":
+        return None
+    fwhm = (1.0 / fine_frac ** 2 + 1.0 / input_frac ** 2) ** 0.5
+    return 1.0 / fwhm
+
+
 def _gauss_smooth(y, sigma_pts):
     n = int(max(3, round(sigma_pts * 8)) | 1)
     k = np.exp(-0.5 * ((np.arange(n) - n // 2) / sigma_pts) ** 2)
@@ -40,20 +80,27 @@ def _smooth_frac(y, frac_oct):
     return _gauss_smooth(y, PPO / frac_oct / 2.355)
 
 
-def multiscale(freqs, mag_db, band, macro_frac=3, fine_frac=24):
+def multiscale(freqs, mag_db, band, macro_frac=3, fine_frac=24, input_smoothing=None):
     """Resample to a log grid inside band and split into scales.
 
-    Returns dict: grid, raw (grid-resampled), macro (1/macro_frac oct trend),
-    fine (1/fine_frac oct), residual (fine - macro).
-    macro_frac=3 ~ critical band (tonal balance); fine_frac=24 or 48 for
-    narrow-defect hunting (per §21 use >= 24 to localize targets)."""
+    Returns dict: grid, raw, macro (1/macro_frac trend), fine (1/fine_frac),
+    residual (fine - macro), and the smoothing the INPUT already carried
+    (`input_smoothing`, `input_frac`, `effective_fine_frac`).
+
+    `input_smoothing` is the FR's own smoothing (`rew_api.fr_smoothing(mid)` / the
+    payload `smoothing`). It barely touches the macro trend (1/24 input vs 1/3 macro
+    = 1/2.99 in quadrature), so `macro_summary` stays valid on smoothed input — but it
+    corrupts the FINE residual, and `find_features` refuses on it. See `CurveViewError`."""
     lo, hi = band
     grid = np.geomspace(lo, hi, max(int(np.log2(hi / lo) * PPO), 16))
     raw = np.interp(grid, freqs, mag_db)
     macro = _smooth_frac(raw, macro_frac)
     fine = _smooth_frac(raw, fine_frac)
+    input_frac = _smoothing_frac(input_smoothing)
     return {"grid": grid, "raw": raw, "macro": macro, "fine": fine,
-            "residual": fine - macro}
+            "residual": fine - macro, "fine_frac": fine_frac, "macro_frac": macro_frac,
+            "input_smoothing": input_smoothing, "input_frac": input_frac,
+            "effective_fine_frac": _effective_fine_frac(fine_frac, input_frac)}
 
 
 def find_features(view, min_prominence_db=2.0, source="sweep"):
@@ -62,6 +109,17 @@ def find_features(view, min_prominence_db=2.0, source="sweep"):
     route}. kind: 'peak'|'dip'. source: 'sweep' (single-point — narrow
     features need MMM/mic-shift arbitration first, §13) or 'mmm' (already
     spatially averaged — narrow features are real in space, route by kind)."""
+    if view.get("input_frac") is not None:
+        eff = view.get("effective_fine_frac")
+        eff_s = f"~1/{eff:.1f}" if eff else "unknown (a non-fractional REW mode)"
+        raise CurveViewError(
+            f"the input is already smoothed at {view.get('input_smoothing')!r}; smoothing it again at "
+            f"1/{view.get('fine_frac')} makes the effective fine {eff_s} oct, so the fine residual "
+            f"(vs the 1/{view.get('macro_frac')} macro) is understated or collapses to zero and this "
+            f"would report a CLEAN system that is not. Pull the FR UNSMOOTHED for fine analysis: "
+            f"`rew_api.set_smoothing(mid, 'None')` before `get_fr`, or read `rew_api.fr_smoothing(mid)` "
+            f"and pass it as `input_smoothing`. MACRO / macro_summary is unaffected and may be used "
+            f"on smoothed input.")
     g, r = view["grid"], view["residual"]
     hot = np.abs(r) >= min_prominence_db
     out, i = [], 0
@@ -125,9 +183,12 @@ def macro_summary(view, seg_frac=3):
 
 
 def report(freqs, mag_db, band, macro_frac=3, fine_frac=24,
-           min_prominence_db=2.0, title="", source="sweep"):
-    """One-call human-readable multi-scale report (the three distances)."""
-    v = multiscale(freqs, mag_db, band, macro_frac, fine_frac)
+           min_prominence_db=2.0, title="", source="sweep", input_smoothing=None):
+    """One-call human-readable multi-scale report (the three distances).
+
+    Pass `input_smoothing` = the FR's own smoothing; `find_features` refuses a smoothed
+    input rather than silently reporting a clean system (`CurveViewError`)."""
+    v = multiscale(freqs, mag_db, band, macro_frac, fine_frac, input_smoothing=input_smoothing)
     lines = [f"=== {title or 'curve'} @ {band[0]:.0f}-{band[1]:.0f} Hz ==="]
     lines.append(f"-- MACRO (1/{macro_frac} oct, band-anchored):")
     for lo, hi, d in macro_summary(v, macro_frac):
@@ -164,6 +225,23 @@ def _selftest():
     mac = macro_summary(v)
     seg400 = [d for lo, hi, d in mac if lo <= 400 <= hi]
     assert seg400 and seg400[0] > 2.0, mac  # the hump lives in the macro view
+
+    # A pre-smoothed input must be REFUSED at the fine scale, not reported as clean (fork, 2026-08-25).
+    # The narrow 2 kHz spike is exactly what double-smoothing would erase.
+    for sm, must in (("1/6", "collapses to zero"), ("1/24", "understated"), ("Psy", "non-fractional")):
+        vi = multiscale(f, curve, (100.0, 10000.0), input_smoothing=sm)
+        try:
+            find_features(vi)
+            raise AssertionError(f"find_features accepted input smoothed at {sm}")
+        except CurveViewError as e:
+            assert str(sm) in str(e) or must in str(e), (sm, str(e))
+    # None / "None" / "" are the clean case and pass; and the effective-fine estimate is right in order.
+    for clean in (None, "None", "none", ""):
+        find_features(multiscale(f, curve, (100.0, 10000.0), input_smoothing=clean))
+    assert abs(_effective_fine_frac(24, 6) - 5.8) < 0.2, _effective_fine_frac(24, 6)
+    assert _effective_fine_frac(24, None) == 24.0 and _effective_fine_frac(24, "?") is None
+    # MACRO is unaffected by input smoothing and stays usable on a smoothed input.
+    assert macro_summary(multiscale(f, curve, (100.0, 10000.0), input_smoothing="1/6"))
     print(f"selftest OK -- {len(feats)} fine features "
           f"(narrow peak -> verify-first; medium dip -> null-suspect); "
           f"broad 400 Hz hump correctly in MACRO (+{seg400[0]:.1f} dB), "

@@ -241,6 +241,21 @@ def get_fr(mid):
     return freqs, mag, phase
 
 
+def fr_smoothing(mid):
+    """The smoothing REW ALREADY applied to this measurement's frequency response, as its own string
+    (`"1/6"`, `"1/24"`, `"None"`, `"Var"`, ...), or `None` when the payload does not say.
+
+    Why this exists (fork session, on live data, 2026-08-25): `get_fr` returns magnitude that is
+    already smoothed — the payload carries a `smoothing` field — and `curve_view`'s fine scale needs
+    an UNSMOOTHED input or it double-smooths and reports a clean system that is not. A caller feeding
+    `get_fr` into `curve_view.report(..., input_smoothing=fr_smoothing(mid))` gets a loud refusal
+    instead of an empty feature list. For fine analysis, `set_smoothing(mid, "None")` first.
+    """
+    data = _get(f"/measurements/{mid}/frequency-response")
+    v = data.get("smoothing")
+    return str(v) if v not in (None, "") else None
+
+
 def get_group_delay(mid):
     data = _get(f"/measurements/{mid}/group-delay")
     # GD values come under key "magnitude" (verified); accept "groupDelay" too.
@@ -422,6 +437,11 @@ def excess_phase_version(mid, append_lf_tail=False, append_hf_tail=False,
 
 def set_smoothing(mid, smoothing="1/6"):
     """Apply REW's own smoothing to a measurement (`Smooth` command) so a later
+
+    ⚠️ The `1/6` default is for a MAGNITUDE/tonal read. For `curve_view`'s FINE scale
+    (`find_features`, width routing) the FR must be UNSMOOTHED — call `set_smoothing(mid, "None")`
+    first, or pass `fr_smoothing(mid)` to `curve_view` so it refuses rather than double-smoothing
+    (fork session, 2026-08-25). Original note:
     `get_fr` returns REW-smoothed data — avoids the home-brew perceptual_smooth
     drift. Values per `/measurements/frequency-response/smoothing-choices`
     (e.g. '1/1'…'1/48', 'Var', 'Psy', 'None')."""
