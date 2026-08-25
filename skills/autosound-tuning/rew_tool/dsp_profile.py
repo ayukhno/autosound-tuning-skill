@@ -1070,7 +1070,9 @@ def _selftest():
     validate_profile(bare)  # still a VALID profile: incomplete is not malformed
     questions = open_questions(bare)
     # Always expected...
-    assert "sample_rate_hz" in questions, questions
+    # The fixture writes the LEGACY key on purpose: normalize reads it, so the question list names
+    # the CANONICAL fact -- an old profile is asked in the new vocabulary, not re-asked in two.
+    assert "dsp_processing_rate_hz" in questions and "sample_rate_hz" not in questions, questions
     assert "groups.0.max_count" in questions, questions
     # ...and these only because the group's own `fields` declare the capability.
     assert "delay" in questions, questions
@@ -1082,11 +1084,12 @@ def _selftest():
     # Answered is answered: a fact that is present stops being asked about.
     answered = copy.deepcopy(bare)
     answered["dsp_profile"]["sample_rate_hz"] = 96000
-    assert "sample_rate_hz" not in open_questions(answered)
+    assert "dsp_processing_rate_hz" not in open_questions(answered), \
+        "a legacy-answered rate must count as ANSWERED for the canonical fact"
     # ...but present-and-null is still open, which is the case that always worked.
     nulled = copy.deepcopy(bare)
     nulled["dsp_profile"]["sample_rate_hz"] = None
-    assert open_questions(nulled).count("sample_rate_hz") == 1, open_questions(nulled)
+    assert open_questions(nulled).count("dsp_processing_rate_hz") == 1, open_questions(nulled)
 
     # ── SCR-042: how many slots the tier physically has, and what the ledger calls that tier ──
     # The real case: a Helix Ultra S with 10 outputs wired reads "10/10" without this, when it is
@@ -1157,9 +1160,9 @@ def _selftest():
     assert "virtual_channels" not in ids, ids
     assert "inputs" in ids, ids
 
-    # open_questions surfaces the null sample_rate_hz plus the freeform note.
+    # open_questions surfaces the null rate (canonical name) plus the freeform note.
     oq = open_questions(musway)
-    assert "sample_rate_hz" in oq, oq
+    assert "dsp_processing_rate_hz" in oq, oq
     assert any("vendor software" in q for q in oq), oq
     # Complete in every capability it declares, and still owing its two slot counts (SCR-042) --
     # the `counted` copy below closes exactly those, and asserts an empty list afterwards.
@@ -1300,11 +1303,12 @@ def _selftest():
         assert _unwrap(load_profile(profile_path(proj)))["name"] == "Some Other DSP", \
             "a no-match must change nothing"
 
-    # diff_profile: filling sample_rate_hz shows up as a top-level change; nothing else moves.
+    # diff_profile: filling the rate (via the LEGACY path -- set_field maps it) shows up as a
+    # top-level change under the CANONICAL name; nothing else moves.
     filled = copy.deepcopy(musway)
-    filled["dsp_profile"]["sample_rate_hz"] = 48000
+    filled["dsp_profile"]["dsp_processing_rate_hz"] = 48000
     d = diff_profile(musway, filled)
-    assert d["top"]["sample_rate_hz"] == [None, 48000], d
+    assert d["top"]["dsp_processing_rate_hz"] == [None, 48000], d
     assert d["groups"] == {}, "unrelated groups must not appear in the diff"
 
     # content_hash ignores _contributed bookkeeping so a post-then-rehash round-trip is stable.
@@ -1319,12 +1323,12 @@ def _selftest():
     assert not os.path.exists(draft_path(proj)), "merely READING a draft must not create one"
 
     start_draft(proj, "Musway", "M6V4")
-    set_field(proj, "sample_rate_hz", "96000")          # a JSON-encoded number arrives as a string
+    set_field(proj, "sample_rate_hz", "96000")          # the LEGACY path: set_field maps it onto the canonical key
     set_field(proj, "groups.0.id", "physical_outputs")  # list indices build the list as needed
     set_field(proj, "groups.0.label", "Output channels")
     set_field(proj, "dsp_profile.groups.0.fields", '["hp", "lp", "gain_db"]')  # stray prefix + JSON
     draft = _unwrap(load_draft(proj))
-    assert draft["sample_rate_hz"] == 96000, draft          # decoded to an int, not left "96000"
+    assert draft["dsp_processing_rate_hz"] == 96000 and "sample_rate_hz" not in draft, draft
     assert draft["groups"][0]["fields"] == ["hp", "lp", "gain_db"], draft  # a list, not a string
     assert draft["name"] == "M6V4" and draft["vendor"] == "Musway", draft
 
@@ -1355,7 +1359,7 @@ def _selftest():
 
     # re-interviewing a FINISHED profile starts from it rather than blank.
     resumed = _unwrap(load_draft(proj, "Musway", "M6V4"))
-    assert resumed["sample_rate_hz"] == 96000, resumed
+    assert resumed["dsp_processing_rate_hz"] == 96000, resumed
 
     print(f"selftest OK — max_count validated as a physical slot count (null = still open, 0/float/"
           f"bool/str refused) and physical_outputs mapped to the ledger's `channels` key (SCR-042); "
