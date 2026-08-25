@@ -40,6 +40,17 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [v3.0.25] — 2026-08-25 · the manifest names its own version
+
+> A 3.0.x patch for the author's own test rigs (the `v3.*` installer audience), not the 3.1.0 gate.
+
+The same tree as `v3.0.24`, plus `.claude-plugin/plugin.json` saying so. **`v3.0.24` is skipped —
+its manifest says `3.0.23`.** The bump used to ride in the separate "note before the tag" commit;
+this time the note went inside the fix commit and the habit silently went with it (the cockpit
+caught it against the tag list within the hour). A published tag is not moved, so the newest tag is
+made truthful instead. Follow-up, not today: a check that `plugin.json` equals the newest `v3.*` tag
+at tag time.
+
 ## [v3.0.24] — 2026-08-25 · the settings sheet shows the EQ it holds, and survives a switched-off row
 
 > A 3.0.x patch for the author's own test rigs (the `v3.*` installer audience), not the 3.1.0 gate.
