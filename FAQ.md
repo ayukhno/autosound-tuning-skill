@@ -266,8 +266,10 @@ warnings:
 - **Write into your DSP.** It never has. Every change is yours to type or to import.
 - **Set a delay from a single reading.** Four independent timing estimates must agree; when they
   don't, the disagreement is the finding.
-- **Boost into a null.** An excess-phase test tells a fillable dip from an interference null; only
-  the fillable one may be boosted, and boosts are off by default anyway.
+- **Boost into a null.** An interference null is made by the room, not by the driver, so boosting
+  cannot fill it at all: nothing changes at the listening seat while the driver and the amplifier
+  work at their limit. An excess-phase test (REW's *Excess phase*) tells a fillable dip from a
+  null; only the fillable one may be boosted, and boosts are off by default anyway.
 - **Design on a capture round it cannot trust.** No protective set on record, drift between the
   first and last sweep, a driver missing — the round is refused and you are told what to remeasure.
 - **A filter narrower than the seat allows.** The spread across the positions around the head sets
@@ -610,7 +612,7 @@ Claude Code has one. But the skill is plain Markdown and Python, nothing Claude-
 can point an agentic Gemini session (Antigravity CLI, or any Gemini setup with file and shell
 access) at the repository and ask it directly:
 
-> Clone https://github.com/ayukhno/autosound-tuning-skill, read `skills/autosound-tuning/SKILL.md`,
+> Clone `https://github.com/ayukhno/autosound-tuning-skill`, read `skills/autosound-tuning/SKILL.md`,
 > and follow that method as your operating instructions for this session.
 
 One real caveat: Claude Code's skill system loads only the active phase on demand (the "phase
@@ -689,6 +691,9 @@ clean — rename or delete a mistyped measurement at once, because a stray title
 or, worse, mistaken for a real one.
 
 ### What is the capture session, and why protective filters only?
+
+**Keep REW open the whole time:** the method reads the measurements from the running window over
+the API, not from exported files.
 
 The capture session is the one visit to the car in which every driver is measured *alone*, sweeps
 and MMM in one pass, with only **protective** filters in the DSP: a high-pass on the midranges and
@@ -830,7 +835,7 @@ the change that removes the limit, and it is a hardware decision, not a tuning o
 ### Where do I find what the method can do?
 
 The board: [`references/core/capabilities.md`](skills/autosound-tuning/references/core/capabilities.md).
-Sixty-seven capabilities in thirteen directions — talking to REW, naming and capture rounds,
+Sixty-eight capabilities in thirteen directions — talking to REW, naming and capture rounds,
 protective filters, time and junctions, crossovers and levels, targets, EQ, prediction and
 verification, listening, the project on disk, the review channel, safety and abstention, the
 health of the install — each with the words you would say, what you get, the command, what it

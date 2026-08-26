@@ -338,7 +338,7 @@ Unter Linux oder bei Erschöpfung des Antigravity-Budgets können Sie einen kost
 
 Ja, aber nur als manueller Durchlauf, nicht als automatisierte Installation. Geben Sie der Gemini-Session (mit Dateizugriff und Systemsteuerung) den direkten Befehl:
 
-> Clone https://github.com/ayukhno/autosound-tuning-skill, read `skills/autosound-tuning/SKILL.md`, and follow that method as your operating instructions for this session.
+> Clone `https://github.com/ayukhno/autosound-tuning-skill`, read `skills/autosound-tuning/SKILL.md`, and follow that method as your operating instructions for this session.
 
 Da dort der Mechanismus des gleitenden Fensters fehlt, neigt Gemini bei längeren Sitzungen zu Präzisionsverlusten. Die stabilste kostenlose Option ist daher **Option 4** (die fertigen Schritt-für-Schritt-Prompts für das [Google AI Studio](https://aistudio.google.com/) im [manual_step-by-step-Zweig](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step)).
 

@@ -338,7 +338,7 @@ Na systemie Linux lub przy wyczerpaniu limitów Antigravity możesz używać dar
 
 Tak, ale jako uruchomienie ręczne, a nie automatyczna instalacja. Daj sesji agencyjnej Gemini (z dostępem do plików i terminala) bezpośrednie polecenie:
 
-> Clone https://github.com/ayukhno/autosound-tuning-skill, read `skills/autosound-tuning/SKILL.md`, and follow that method as your operating instructions for this session.
+> Clone `https://github.com/ayukhno/autosound-tuning-skill`, read `skills/autosound-tuning/SKILL.md`, and follow that method as your operating instructions for this session.
 
 Ponieważ nie ma tam mechanizmu ruchomego okna, przy długich sesjach Gemini może stopniowo tracić dokładność. Najbardziej stabilny darmowy wariant to **Wariant 4** (gotowe prompty dla [Google AI Studio](https://aistudio.google.com/) na gałęzi [manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step)).
 
