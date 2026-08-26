@@ -46,10 +46,9 @@ Two consequences worth stating, because both have already caused a question:
 > progress is unaffected. Two things are worth knowing. **The README is now one short page per
 > language** (EN/UK/DE/PL): the long version's material moved into the FAQ, so a link into a README
 > section will no longer resolve — link to the FAQ instead. **`references/core/capabilities.md` is
-> new**: 67 capabilities in 13 directions, indexed by what you want rather than by path, with a
+> new**: 68 capabilities in 13 directions, indexed by what you want rather than by path, with a
 > checker (`rew_tool/capabilities.py --selftest`, in the suite — now 42 checks) that fails if the
-> board names a module, flag, verb, function or reference that does not exist. It carries 68 rows:
-> `REW_API_URL` — pointing every tool at a REW on another host or port — is one of them, because a
+> board names a module, flag, verb, function or reference that does not exist. `REW_API_URL` — pointing every tool at a REW on another host or port — is one of them, because a
 > supported variable that is documented nowhere is a variable somebody will discover by disagreeing
 > with a UI. A session that comes
 > with its own process should start there.

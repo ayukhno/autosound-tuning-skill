@@ -39,10 +39,9 @@ ours, an unlisted one is a drift** — and a deviation recorded anywhere the che
 one somebody will "fix back". The licence text goes verbatim into `LICENSES/NOTICE.md`.
 
 ## Tests
-## Tests
 
 - **`scripts/run-selftests.sh` is the single entry point** — the installer check plus every
-  `rew_tool` module's own selftest, 26 in all. It needs `numpy` and `scipy`, and CI runs this exact
+  `rew_tool` module's own selftest, 42 in all. It needs `numpy` and `scipy`, and CI runs this exact
   script, so a green run locally is a green run there.
 - **A test that shares the implementation's ruler proves nothing.** `xover_select` reported
   `fit=0.00 dB` for a long time while scoring a realization against a target computed by the same
@@ -55,3 +54,14 @@ one somebody will "fix back". The licence text goes verbatim into `LICENSES/NOTI
 - **A check whose input is missing must FAIL, not report "no objection."** A first draft of the
   installer checker let a hijacked URL through in exactly that way. It is the same rule the tools
   themselves follow — `references/core/estimator-scope.md`.
+- **A check you have not made FAIL is not a check yet — and a zero is not a result until the
+  counter is shown to move.** Write the check, then break something on purpose and watch it name
+  the break. `capabilities.py`'s reverse pass gated on `__main__`, so a module offering a CLI any
+  other way would have walked through in silence; a probe module with a parser inside a plain
+  function, dropped into `rew_tool/` and removed again, is what turned "it should catch that" into
+  "it caught that". The expensive half of this rule is the other one, and it is a real case from
+  the companion app (`ayukhno/autosound-tcc`, F-027 in its `docs/TODO.md`): a crash was chased with
+  a probe that could not fire, ten runs came back 0/10, then ten more, and the zeros were read as
+  "rare, timing-dependent" — with a plausible written explanation on top. The fault was in the
+  code the whole time; the fake it ran against answered instantly, so the event never occurred
+  once. **Nothing measured, twice, looks exactly like nothing wrong.**
