@@ -40,10 +40,12 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
-## [Unreleased] — three steps of the virtual-first path become commands
+## [v3.0.31] — 2026-08-26 · the path as commands, walked end to end, and what the walk fixed
 
-> Not tagged yet. The three tool gaps on the path that had no manual way round are closed; the rest of
-> the gap list in `virtual-first.md` stands.
+> A 3.0.x stabilisation build for the author's test rigs and tag-pinned consumers. The three tool
+> gaps on the path that had no manual way round are closed, the whole path runs end to end in the
+> suite (`path_check`), and a dry run on a live capture set plus that walk fixed what they found.
+> The rest of the gap list in `virtual-first.md` stands. No contract changes beyond those listed.
 
 - **`predict --align`** (Phase 1.3 as a command): delay × polarity per junction by sum loss
   (`dsp_math.align_sum_loss`), **bottom-up** — `sw↔w` first, then `w↔m` read on the woofer **as it
