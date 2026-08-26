@@ -86,16 +86,30 @@ def _on_grid(f_src, y_src, f):
 
 
 # ---------------------------------------------------------------- measured sources
-def measured_from_rew(titles, api=None, allow_rta=False):
-    """{title: (freqs, mag_db, base)} from a live REW. `base` is 'sw' for a sweep on the loopback
-    base with no offset, 'rta' for a moving-mic measurement (refused unless allowed), or says the
-    offset otherwise."""
+def measured_from_rew(titles, api=None, allow_rta=False, freqs=None):
+    """{title: (freqs, mag_db, base[, H])} from a live REW. `base` is 'sw' for a sweep on the
+    loopback base with no offset, 'rta' for a moving-mic measurement (refused unless allowed), or
+    says the offset otherwise.
+
+    With `freqs` (the prediction's grid) a sweep is read through `predict.load_solo_rew` -- the
+    impulse response on the same grid with the same treatment as the predicted solos, and the
+    complex response beside the magnitude so the entry control can read the ARRIVAL too. An RTA
+    has no impulse and stays magnitude-only from REW's frequency response."""
     if api is None:
         import rew_api as api  # noqa: F811
     out = {}
+    fg = np.asarray(freqs, float) if freqs is not None else None
     for title in titles:
         mid = api.find_measurement_id(title)
         timing = api.get_timing(mid)
+        if fg is not None and timing.get("has_ir", True):
+            import predict as P
+            try:
+                H, _ = P.load_solo_rew(title, fg, api=api)
+            except P.PredictError as exc:
+                raise VerifyError(str(exc))
+            out[title] = (fg, _db(H), "sw", H)
+            continue
         f, mag, phase = api.get_fr(mid)
         if not timing.get("has_ir", True) or phase is None:
             if not allow_rta:
@@ -455,7 +469,7 @@ def main(argv=None):
         missing = sorted(wanted - have)
         if missing:
             print("  not in REW: " + ", ".join(missing), file=sys.stderr)
-        measured = measured_from_rew(titles, api=api, allow_rta=args.allow_rta)
+        measured = measured_from_rew(titles, api=api, allow_rta=args.allow_rta, freqs=predicted["freqs_hz"])
     else:
         measured = measured_from_v7_dir(args.measured, freqs=predicted["freqs_hz"])
     report = verify(predicted, measured, pair_names=pairs, solo_names=solos, all_name=all_name,

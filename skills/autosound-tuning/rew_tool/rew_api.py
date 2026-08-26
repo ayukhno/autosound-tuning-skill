@@ -3,9 +3,13 @@ import urllib.error
 import urllib.parse
 import json
 import base64
+import os
 import struct
 
-BASE_URL = "http://localhost:4735"
+# REW's own API port. `REW_API_URL` overrides it -- for a REW on another host, and for
+# `rew_tool/rew_stub.py`, which serves the same four endpoints from files so the commands that talk
+# to REW (`capture-check`, `predict --rew`, `verify_prediction --rew`) can be run with no REW.
+BASE_URL = os.environ.get("REW_API_URL", "http://localhost:4735").rstrip("/")
 # No timeout on urlopen() meant a REW-unreachable call (REW not running, port filtered rather than
 # actively refused, ...) could hang a caller forever -- fatal when that caller is a Qt QThread: the
 # app hangs, gets force-quit, and Qt aborts with "QThread: Destroyed while thread is still running"

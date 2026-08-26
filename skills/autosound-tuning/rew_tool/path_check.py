@@ -90,6 +90,11 @@ def _fail(msg):
     raise AssertionError(msg)
 
 
+def _json_in(out):
+    """The JSON object a command printed, with whatever it said on stderr around it ignored."""
+    return json.JSONDecoder().raw_decode(out[out.index("{"):])[0]
+
+
 def _run(*args, env=None, ok=(0,)):
     """Run a rew_tool command line; return (rc, stdout+stderr). Fails loudly on an unexpected rc."""
     proc = subprocess.run([PY, *args], capture_output=True, text=True, env=env)
@@ -106,12 +111,19 @@ def _ir_from_response(H_linear, n):
     return np.fft.irfft(H_linear, n=n)
 
 
+def driver_shape(fb):
+    """Every synthetic driver's own response: a gentle band (40 Hz LR12 up, 16 kHz LR12 down) --
+    not flat, because the capture gate rightly calls a flat response a loopback or a placeholder."""
+    return (dsp_math.xo_response(fb, 40.0, 12, "hp", "LR") *
+            dsp_math.xo_response(fb, 16000.0, 12, "lp", "LR"))
+
+
 def _driver_response(fb, code, chain=None, protective=None, extra_delay_samples=0.0, polarity=None):
-    """A flat driver at its defined arrival, wired as defined, through `chain` (the DSP as entered)
-    and through `protective` (what was in the recording chain), on the linear grid `fb`."""
+    """A driver (`driver_shape`) at its defined arrival, wired as defined, through `chain` (the DSP
+    as entered) and through `protective` (what was in the recording chain), on the linear grid `fb`."""
     arrival, wired, _ = DRIVERS[code]
     pol = wired if polarity is None else polarity
-    H = pol * np.exp(-2j * np.pi * fb * (arrival + extra_delay_samples) / FS)
+    H = pol * driver_shape(fb) * np.exp(-2j * np.pi * fb * (arrival + extra_delay_samples) / FS)
     if protective:
         H = H * dsp_math.xo_response(fb, protective["hz"], protective["slopeDbPerOct"], "hp",
                                      protective["family"])
@@ -247,15 +259,15 @@ def _selftest():
     pred1 = json.load(open(os.path.join(out1, "predicted.json")))
     f = np.asarray(pred1["freqs_hz"], float)
     for code in ("m-L", "tw-L"):
-        # the protective came OUT: a flat driver x the design chain is the design chain ALONE, so
-        # the predicted magnitude equals the chain's own response to within a hundredth of a dB
+        # the protective came OUT: the driver x the design chain is the driver's own shape x the
+        # chain, to within a hundredth of a dB -- nothing of the protective is left in it
         # (the chain droops a tenth or two inside its passband -- that is the chain, not the
         # protective; a first draft expected a flat 0 dB and was wrong by exactly that droop)
         mag = np.asarray(pred1["channels"][code]["mag_db"], float)
         probe_f = 1000.0 if code == "m-L" else 8000.0
         k = int(np.argmin(np.abs(f - probe_f)))
         chain = P.chain_from_row(dict(DESIGN[code], gain_db=0, ta_ms=0, polarity="NORM"))
-        expect = 20 * np.log10(abs(P.chain_response(np.array([f[k]]), chain)[0]))
+        expect = 20 * np.log10(abs(P.chain_response(np.array([f[k]]), chain)[0] * driver_shape(np.array([f[k]]))[0]))
         assert abs(mag[k] - expect) < 0.02, (code, probe_f, mag[k], expect)
     assert all(j["sum_loss_avg_db"] < -0.3 for j in pred1["junctions"]), \
         "delays 0 with these arrivals must read as mis-aligned junctions"
@@ -315,7 +327,7 @@ def _selftest():
                       errors={"tw-R": {"delay_samples": 960}, "m-L": {"hp_f": 600}})
     rc, out = _run(tool("verify_prediction.py"), "--predicted", os.path.join(out3, "predicted.json"),
                    "--measured", set2_bad, "--entry", "--json", env=env, ok=(1,))
-    rep = json.loads(out[out.index("{"):])
+    rep = _json_in(out)
     ch = {c["channel"]: c for c in rep["channels"]}
     assert ch["tw-R"]["status"] == "CHECK" and abs(ch["tw-R"]["delay_error_ms"] - 10.0) < 0.1, ch["tw-R"]
     assert ch["m-L"]["status"] == "CHECK" and "HP 300" in (ch["m-L"]["hint"] or ""), ch["m-L"]
@@ -331,7 +343,7 @@ def _selftest():
     assert "ENTRY OK" in out, out[-600:]
     rc, out = _run(tool("verify_prediction.py"), "--predicted", os.path.join(out3, "predicted.json"),
                    "--measured", set2, "--json", env=env, ok=(0,))
-    rep_ok = json.loads(out[out.index("{"):])
+    rep_ok = _json_in(out)
     assert rep_ok["verdict"].startswith("TRUSTED"), rep_ok["verdict"]
     assert all(j["status"] == "trusted" for j in rep_ok["junctions"]), rep_ok["junctions"]
     # (c) one pair moved 0.6 ms (the mid arrives late only in the pair): NOT trusted THERE only
@@ -340,9 +352,47 @@ def _selftest():
     _make_capture_set(set2_moved, chains=chains3, protectives=False, pairs=pairs_moved, all_front=True)
     rc, out = _run(tool("verify_prediction.py"), "--predicted", os.path.join(out3, "predicted.json"),
                    "--measured", set2_moved, "--json", env=env, ok=(1,))
-    rep_m = json.loads(out[out.index("{"):])
+    rep_m = _json_in(out)
     bad = [f"{j['lo']}↔{j['hi']}" for j in rep_m["junctions"] if j["status"] == "NOT trusted"]
     assert bad == ["w-L↔m-L"], (bad, rep_m["verdict"])
+
+    # ---- 3r · the same in-car commands THROUGH REW (the stub serving the same impulses) ---------
+    # `capture-check --session`, `predict --rew`, `verify_prediction --rew` read REW's API; the stub
+    # answers the four endpoints they use from the very files above, so the REW branch of each is
+    # walked here and must agree with the file branch.
+    import rew_stub as _stub
+    served = []
+    for directory, ver in ((set1, "1"), (set2, "2"), (set2_bad, "3")):
+        served.extend(_stub.measurements_from_v7_dir(directory, ver))
+    url, server = _stub.serve(served)
+    env_rew = dict(env, REW_API_URL=url)
+    try:
+        rc, out = _run(tool("state", "process.py"), os.path.join(proj, "process"), "capture-check", "--session",
+                       env=env_rew, ok=(0,))
+        assert "HELD" in out and "cross-correlation" in out and "UNUSABLE" not in out, out[-900:]
+        assert f"{len(titles)}/{len(titles)}" in out, out[-300:]
+        out_rew = os.path.join(root, "out_rew")
+        _run(tool("predict.py"), "--rew", "--ver", "1", "--project", proj, "--baseline",
+             "--process", os.path.join(proj, "process"), "--out", out_rew, env=env_rew)
+        pred_rew = json.load(open(os.path.join(out_rew, "predicted.json")))
+        for code in pred3["channels"]:                       # HEAD is v_003 now: compare like with like
+            a = np.asarray(pred3["channels"][code]["mag_db"], float)
+            b = np.asarray(pred_rew["channels"][code]["mag_db"], float)
+            live = a > a.max() - 40.0
+            d = np.where(live, np.abs(a - b), 0.0)
+            k = int(np.argmax(d))
+            assert d[k] < 0.02, (code, "file vs REW branch of predict disagree", round(float(f[k])), a[k], b[k])
+        rc, out = _run(tool("verify_prediction.py"), "--predicted", os.path.join(out3, "predicted.json"),
+                       "--rew", "--ver", "2", "--entry", env=env_rew, ok=(0,))
+        assert "ENTRY OK" in out, out[-600:]
+        rc, out = _run(tool("verify_prediction.py"), "--predicted", os.path.join(out3, "predicted.json"),
+                       "--rew", "--ver", "3", "--entry", "--json", env=env_rew, ok=(1,))
+        rep_r = _json_in(out)
+        chr_ = {c["channel"]: c for c in rep_r["channels"]}
+        assert chr_["tw-R"]["status"] == "CHECK" and abs(chr_["tw-R"]["delay_error_ms"] - 10.0) < 0.1, chr_["tw-R"]
+        assert chr_["m-L"]["status"] == "CHECK" and "HP 300" in (chr_["m-L"]["hint"] or ""), chr_["m-L"]
+    finally:
+        server.shutdown()
 
     # ---- 4 · ears: one verdict written by the one writer, read back ---------------------------
     import listening as _listening
@@ -363,8 +413,9 @@ def _selftest():
           "nothing early, no alias; the proposal banks (v_002, sheet in samples), an EQ "
           "band banks and exports; the aligned prediction sums clean; the entry control names a delay "
           "typed 10 ms off and a corner typed an octave off and passes the clean set; the junction "
-          "verdict is TRUSTED on clean sums and NOT trusted at the one pair moved 0.6 ms; a listening "
-          "verdict writes and reads back.")
+          "verdict is TRUSTED on clean sums and NOT trusted at the one pair moved 0.6 ms; the same "
+          "capture-check / predict --rew / verify_prediction --rew through a REW stub agree with the "
+          "file branch; a listening verdict writes and reads back.")
     return 0
 
 

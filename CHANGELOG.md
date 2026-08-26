@@ -42,6 +42,15 @@ Two consequences worth stating, because both have already caused a question:
 
 ## [Unreleased]
 
+- **`rew_tool/rew_stub.py`** — the four REW API endpoints the method's tools read (`/measurements`,
+  one record, `frequency-response`, `impulse-response`), served from Resonalyze v7 files or from
+  arrays in-process, read-only, 404 by name for anything else. `rew_api.py` now honours
+  **`REW_API_URL`**, so `capture-check --session`, `predict --rew --ver N` and
+  `verify_prediction --rew` run against an archived session with no REW — and `path_check` now
+  walks that REW branch too, through the stub, and requires it to agree with the file branch
+  (it does, to 0.001 dB). `verify_prediction --rew` reads sweeps through `predict.load_solo_rew`,
+  the same reader as the predicted solos, so the entry control has the arrival there as well.
+  `python3 rew_tool/rew_stub.py --from-v7 <dir> --ver 49` serves a set at a desk.
 - `SKILL.md` description: the dual-voice-coil trigger is spelled out in the user's own words
   ("series vs parallel, the load it makes and whether the box volume changes"). The trigger eval
   was run on the LIVE 3.x description for the first time (`evals/README.md`, 2026-08-26): 36/37 and
