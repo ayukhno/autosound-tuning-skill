@@ -189,5 +189,43 @@ def main():
     return 0
 
 
+#: The values a fourth copy may need to agree with, each read from the installer that owns it.
+#: `--print NAME` writes one of them and nothing else, so a consumer parses a value rather than
+#: grepping this script -- TCC keeps a fourth copy of the tag glob and asked for this (F-030); a
+#: test written against our source instead of our output breaks silently when we refactor.
+def values():
+    sh, ps1 = read(SH), read(PS1)
+    out = {}
+    v, _ = one(r'^SKILL_TAG_GLOB="([^"]+)"', sh, "SKILL_TAG_GLOB", "install.sh")
+    if v: out["SKILL_TAG_GLOB"] = v
+    v, _ = one(r'^TCC_TAG_GLOB="([^"]+)"', sh, "TCC_TAG_GLOB", "install.sh")
+    if v: out["TCC_TAG_GLOB"] = v
+    m = re.search(r"--skill-ref\s+(v[0-9.]+)", sh)
+    if m: out["SKILL_REF_EXAMPLE"] = m.group(1)
+    m = re.search(r"--tcc-ref\s+(v[0-9.]+)", sh)
+    if m: out["TCC_REF_EXAMPLE"] = m.group(1)
+    for name, pat in (("SKILL_REPO", r"SKILL_REPO=\"([^\"]+)\""), ("TCC_REPO", r"TCC_REPO=\"([^\"]+)\"")):
+        m = re.search(pat, sh)
+        if m: out[name] = m.group(1)
+    return out
+
+
+def print_value(name):
+    """One value on stdout, or exit 2 naming what exists -- never a guess, never a partial match."""
+    vals = values()
+    if name == "--list" or name is None:
+        for k, v in sorted(vals.items()):
+            print(f"{k}={v}")
+        return 0
+    if name not in vals:
+        print(f"unknown name {name!r}; available: {', '.join(sorted(vals))}", file=sys.stderr)
+        return 2
+    print(vals[name])
+    return 0
+
+
 if __name__ == "__main__":
+    if "--print" in sys.argv:
+        i = sys.argv.index("--print")
+        sys.exit(print_value(sys.argv[i + 1] if len(sys.argv) > i + 1 else "--list"))
     sys.exit(main())

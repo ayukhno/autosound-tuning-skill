@@ -48,6 +48,13 @@ Two consequences worth stating, because both have already caused a question:
 > `installer-consistency.py` fails if the three installers stop agreeing about them. The example is
 > deliberately **not** re-chased on every tag: it demonstrates a pair that shipped, not the newest
 > one, and chasing the newest is how it drifted to a method and an app that never shipped together.
+>
+> **`installer-consistency.py --print NAME`** writes one value and nothing else
+> (`SKILL_TAG_GLOB`, `TCC_TAG_GLOB`, `SKILL_REPO`, `TCC_REPO`, `SKILL_REF_EXAMPLE`,
+> `TCC_REF_EXAMPLE`; bare `--print` lists them all, an unknown name exits 2 naming what exists).
+> It is for a consumer that keeps its own copy of one of these — TCC keeps a fourth copy of the tag
+> glob — so their test can read our OUTPUT instead of grepping our source, which is a test that
+> breaks silently the day we refactor.
 
 - **The version-pin example is a real PAIR, and the checker now looks at it.** `install.sh` said
   `--skill-ref v3.0.3`, `install.ps1` said `-SkillRef v3.0.4`, `install.cmd` said nothing, and all
