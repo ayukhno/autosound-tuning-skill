@@ -1,6 +1,6 @@
 # Asystent AI do strojenia car audio (Autosound Tuning Skill)
 
-🇬🇧 [English](README.md) · 🇩🇪 [Deutsch](README.de.md) · 🇵🇱 **Polski** · 🇺🇦 [Українська](README.uk.md) · ❓ [FAQ](FAQ.md) · <img src="assets/icons/roadmap.svg" width="14" height="14" valign="middle" alt="Roadmap" /> [Roadmap (EN)](ROADMAP.md)
+🇬🇧 [English](README.md) · 🇩🇪 [Deutsch](README.de.md) · 🇵🇱 **Polski** · 🇺🇦 [Українська](README.uk.md) · ❓ [FAQ](FAQ.pl.md) · <img src="assets/icons/roadmap.svg" width="14" height="14" valign="middle" alt="Roadmap" /> [Roadmap (EN)](ROADMAP.md)
 
 **Prostymi słowami:** To twój osobisty mistrz AI do strojenia car audio. Chcesz idealnej sceny i równego balansu tonalnego, ale wykresy, fazy i opóźnienia wydają ci się zbyt skomplikowane? Ten asystent weźmie najtrudniejsze na siebie. Czyta twoje pomiary z mikrofonu i krok po kroku prowadzi cię do idealnego dźwięku.
 
@@ -65,7 +65,7 @@ irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/main/instal
 
 ---
 
-**Sprawdzona na zawodach wersja 2.8.x** — [ścieżka 3 w FAQ](FAQ.md#the-four-paths-and-what-each-costs-you) (po angielsku)
+**Sprawdzona na zawodach wersja 2.8.x** — [ścieżka 3 w FAQ](FAQ.pl.md#cztery-warianty-użycia)
 
 Jeśli chcesz użyć dokładnie tej samej wersji **2.8.x**, którą wygrywano zawody, działa ona wyłącznie przez terminal. Zamiast powyższych skryptów, w terminalu z już zainstalowanym `claude` (Claude Code) wykonaj dwa polecenia:
 ```sh

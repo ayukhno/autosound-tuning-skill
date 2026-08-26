@@ -1,6 +1,6 @@
 # KI-Assistent für Car-HiFi (Autosound Tuning Skill)
 
-🇬🇧 [English](README.md) · 🇩🇪 **Deutsch** · 🇵🇱 [Polski](README.pl.md) · 🇺🇦 [Українська](README.uk.md) · ❓ [FAQ](FAQ.md) · <img src="assets/icons/roadmap.svg" width="14" height="14" valign="middle" alt="Roadmap" /> [Roadmap (EN)](ROADMAP.md)
+🇬🇧 [English](README.md) · 🇩🇪 **Deutsch** · 🇵🇱 [Polski](README.pl.md) · 🇺🇦 [Українська](README.uk.md) · ❓ [FAQ](FAQ.de.md) · <img src="assets/icons/roadmap.svg" width="14" height="14" valign="middle" alt="Roadmap" /> [Roadmap (EN)](ROADMAP.md)
 
 **In einfachen Worten:** Dies ist dein persönlicher KI-Meister für das Einstellen von Car-HiFi. Du willst eine perfekte Bühne und eine saubere tonale Balance, aber Graphen, Phasen und Laufzeiten erscheinen dir zu kompliziert? Dieser Assistent übernimmt den schwierigsten Teil. Er liest deine Mikrofonmessungen und führt dich Schritt für Schritt zum perfekten Sound.
 
@@ -65,7 +65,7 @@ irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/main/instal
 
 ---
 
-**Wettbewerbserprobte Version 2.8.x** — [Weg 3 im FAQ](FAQ.md#the-four-paths-and-what-each-costs-you) (auf Englisch)
+**Wettbewerbserprobte Version 2.8.x** — [Weg 3 im FAQ](FAQ.de.md#vier-optionen-zur-nutzung)
 
 Wenn du genau die **2.8.x** Version nutzen möchtest, mit der die Wettbewerbe gewonnen wurden: Diese funktioniert ausschließlich über das Terminal. Anstelle der obigen Skripte führe in einem Terminal mit bereits installiertem `claude` (Claude Code) zwei Befehle aus:
 ```sh

@@ -73,6 +73,14 @@ Two consequences worth stating, because both have already caused a question:
   the EQ reaches your DSP. Stale material removed: the "5-Step Tuning Journey", the 2.x plugin
   framed as the only way in, `dsp-state-current.md` as the state. English only for now — the other
   README translations still carry the previous text.
+- **The FAQ exists in four languages** (`FAQ.md`, `FAQ.uk.md`, `FAQ.de.md`, `FAQ.pl.md`), each with
+  the same structure and each linked from its own README; every page carries a language switcher
+  with a link back to the README of that language. The translated pages take the terminology the
+  Advisor settled — `Tiefmitteltöner`, `Schutzfilter`, `Wedelmessung`; `filtry zabezpieczające`,
+  `midbas`, `zgranie` — and the corrections that landed in the Ukrainian one: the desk-first path
+  is **two** visits to the car (capture, then a short verification), not one; the awards belong to
+  the author's own car; a null cannot be filled by boosting at all, which is why it is refused; the
+  installer takes the newest `v3.*` tag, which is a pre-release and not the stable line.
 - The README now opens on a **path chooser** — five ways to use the method (web chat with nothing
   installed · the 2.x plugin that won the awards · 3.x in a terminal · 3.x in the TCC window ·
   Gemini as the driver), each with what it needs, what it gives and what it costs — because someone

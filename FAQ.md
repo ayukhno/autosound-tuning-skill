@@ -1,8 +1,10 @@
 # FAQ
 
+🇬🇧 **English** · 🇩🇪 [Deutsch](FAQ.de.md) · 🇵🇱 [Polski](FAQ.pl.md) · 🇺🇦 [Українська](FAQ.uk.md) · 📄 [README](README.md) · <img src="assets/icons/roadmap.svg" width="14" height="14" valign="middle" alt="Roadmap" /> [Roadmap (EN, draft)](ROADMAP.md)
+
 Real questions people asked while setting this up and tuning with it, answered once here instead
 of over and over in comments. The [README](README.md) is the short version; this page holds the
-details. English only for now.
+details. The other languages have their own FAQ — the flags above.
 
 Have a question that isn't here? Open a [discussion or issue](https://github.com/ayukhno/autosound-tuning-skill/issues) and we'll add it.
 

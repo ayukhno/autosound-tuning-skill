@@ -1,5 +1,7 @@
 # FAQ — Часті питання з налаштування автозвуку
 
+🇬🇧 [English](FAQ.md) · 🇩🇪 [Deutsch](FAQ.de.md) · 🇵🇱 [Polski](FAQ.pl.md) · 🇺🇦 **Українська** · 📄 [README](README.uk.md) · <img src="assets/icons/roadmap.svg" width="14" height="14" valign="middle" alt="Roadmap" /> [Roadmap (EN, чернетка)](ROADMAP.md)
+
 Реальні запитання користувачів про встановлення та налаштування системи за допомогою цього інструменту. [README](README.uk.md) — це стисла версія; на цій сторінці зібрано всі деталі.
 
 ---
