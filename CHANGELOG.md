@@ -40,10 +40,11 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
-## [Unreleased] — two rates with one name each, the virtual-first path written down, one current target
+## [v3.0.30] — 2026-08-26 · two rates with one name each, the virtual-first path written down, one current target
 
-> Not tagged. Most of this is 3.1.0 content and reaches a consumer that pins by SHA; the `v3.*`
-> installer audience sees it at the next tag. Two contracts change — read **Upgrading** first.
+> A 3.0.x patch for the author's own test rigs (the `v3.*` installer audience) and for consumers that
+> pin by tag. It carries method CONTENT (the virtual-first path) ahead of the 3.1.0 release — the
+> author's call, 2026-08-26. Two contracts change — read **Upgrading** first.
 
 - **Two rates, one name each** (`d636c56`, with the selftest fix-forward `2901cf9`). `sample_rate_hz`
   never said WHICH rate it was, and two sessions built the same wrong model from it: the DSP's
