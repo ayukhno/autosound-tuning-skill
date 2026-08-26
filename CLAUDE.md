@@ -23,9 +23,11 @@ is noise to anyone reading the code.
 languages. **A claim checked in one file is not checked.** Run
 `python3 scripts/installer-consistency.py`, which compares the constants that must match.
 
-There is no PowerShell on the author's machine, so the Windows half of any installer change ships
-unverified until somebody runs `scripts/windows-install-test.md`. Say so in the release note when it
-applies.
+There is no PowerShell on the author's Mac, so the Windows half of any installer change is verified
+only when it is RUN — the author does that on Windows VMs (Parallels and UTM) with the one-liner
+`irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/main/install.ps1 | iex`
+(last confirmed 2026-08-26; the protocol is `scripts/windows-install-test.md`). Until a change has
+had that run, say so in the release note.
 
 ## Ported maths carries its upstream in the header
 

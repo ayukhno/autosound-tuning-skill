@@ -51,6 +51,12 @@ Reference starting state from a real VM (2026-08-22): method `3.0.11`, TCC `0.1.
 Windows 11, uv 0.12.5, python 3.12.14 — that machine had `agy`/`gemini`/`codex` absent, which is
 fine: the reviewer step is optional and must not stop the run.
 
+### Result, 2026-08-26 — the one-liner on two VMs
+
+The author's report: on both Parallels and UTM, `irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/main/install.ps1 | iex`
+installs and everything works. (What the bootstrap fetched: `install.ps1` from `main`, which
+installs the newest `v3.*` tag at the time of the run.)
+
 ### Result, 2026-08-22 — §1, §1a and §2 pass
 
 Run on a VM older than this plan expected: the method at **3.0.4**, and an app so old it had
