@@ -129,6 +129,13 @@ def fold_identity(data, identity):
     return added
 
 
+def _looks_like_project_json(data):
+    """A `project.json` has `channels`/`car`/`dsp` blocks and no `groups`; a profile is the reverse."""
+    if not isinstance(data, dict) or "dsp_profile" in data or "groups" in data:
+        return False
+    return "channels" in data or ("dsp" in data and "car" in data)
+
+
 def rename_profile_fields(profile):
     """Rewrite field tokens 2.x wrote to the names 3.0's vocabulary knows. Returns what changed.
 
@@ -146,6 +153,15 @@ def rename_profile_fields(profile):
     # The file is `{"dsp_profile": {...}}`; a hand-written one is sometimes the body alone. Both
     # shapes exist in the wild and `validate_profile` accepts either, so this has to as well —
     # reading only the top level found no groups and silently renamed nothing.
+    if _looks_like_project_json(profile):
+        # Handed `project.json` instead of a profile, this used to return [] — a silent no-op that
+        # reads as "nothing to rename" while `dsp.sample_rate_hz` stays on the old name forever
+        # (measured on a live project's copy, 2026-08-26). An empty result must not stand in for
+        # "I did not look here": refuse by name and point at the tool that does look.
+        raise ValueError(
+            "rename_profile_fields was handed a project.json, not a DSP profile: it renames profile "
+            "fields only and would have reported nothing while `dsp.sample_rate_hz` stayed. For the "
+            "project file run `project.py <project-dir> migrate-fields`.")
     body = profile.get("dsp_profile") if isinstance(profile.get("dsp_profile"), dict) else profile
     renames = []
     # Top-level: `sample_rate_hz` -> `dsp_processing_rate_hz` (2026-08-25). The old name never said
@@ -551,6 +567,19 @@ def _selftest():
     # ...and importing into the source itself is refused: the point is that the old one is left
     # alone, and a caller who conflates them has misunderstood the whole shape.
     assert _main([root]) == 2, "in-place must not be silently accepted"
+
+    # Handed a project.json, the renamer must REFUSE, not return [] (a live project's copy showed
+    # the silent no-op, 2026-08-26) -- and must leave the dict exactly as it found it.
+    project_like = {"schema_version": 3, "car": {"make": "X"}, "channels": [],
+                    "dsp": {"vendor": "V", "sample_rate_hz": 96000},
+                    "measurement": {"sample_rate_hz": 48000}}
+    before = copy.deepcopy(project_like)
+    try:
+        rename_profile_fields(project_like)
+        raise AssertionError("rename_profile_fields accepted a project.json and returned")
+    except ValueError as exc:
+        assert "migrate-fields" in str(exc), exc
+    assert project_like == before, project_like
 
     print(f"selftest OK — a 2.x project (string EQ incl. LS shorthand, `helix_ch` as the released "
           f"2.x line wrote it, identity on ledger rows, "

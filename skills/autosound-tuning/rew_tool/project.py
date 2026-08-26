@@ -439,6 +439,14 @@ class Project:
         os.replace(tmp, self.path)
         return data
 
+    def migrate_fields(self, write=True):
+        """Rename legacy field names in `project.json` (`rename_legacy_fields`); a dry run writes nothing."""
+        data = self.load()
+        renames = rename_legacy_fields(data)
+        if renames and write:
+            self.save(data)
+        return renames
+
     def backfill_tiers(self, state_root=None, write=True):
         """Write `tier` onto every channel the LEDGER already places. Reads, never guesses.
 
@@ -708,11 +716,53 @@ class Project:
                              source=source, impact=impact)
 
 
+
+def _rate_keys():
+    """(canonical, legacy) names of the DSP's PROCESSING rate, from the module that owns them.
+
+    Lazy for the same reason as `_process_for`: this file is imported from `state/migrate.py` and
+    by consumers that load it by path, and `dsp_profile.py` lives beside it, not on their path.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import dsp_profile as _dsp_profile  # noqa: E402
+    return _dsp_profile.PROCESSING_RATE_KEY, _dsp_profile.LEGACY_RATE_KEY
+
+
+def rename_legacy_fields(data):
+    """Move `dsp.sample_rate_hz` to `dsp.dsp_processing_rate_hz` in a project dict; return renames.
+
+    ONLY the `dsp` block. `measurement.*` / `mic.*` carry the CAPTURE rate -- a different fact that
+    keeps its name (two rates, one name each, 2026-08-25). Both keys present with different values
+    are two answers to one question: refuse, do not pick. `dsp_profile.json` is renamed by its own
+    reader on save; this is the project file's half, which no tool covered until a live project's
+    copy showed `state/migrate.rename_profile_fields` returning [] on it (2026-08-26).
+    """
+    canonical, legacy = _rate_keys()
+    dsp = data.get("dsp")
+    if not isinstance(dsp, dict) or legacy not in dsp:
+        return []
+    if (dsp.get(canonical) is not None and dsp[legacy] is not None
+            and dsp[canonical] != dsp[legacy]):
+        raise ProjectError(
+            f"project.json dsp carries both {canonical}={dsp[canonical]!r} and "
+            f"{legacy}={dsp[legacy]!r} with different values -- two answers to one question; "
+            f"settle it by hand, nothing was written")
+    if dsp.get(canonical) is None:
+        dsp[canonical] = dsp[legacy]
+    del dsp[legacy]
+    return [f"dsp.{legacy} -> dsp.{canonical}"]
+
 # --------------------------------------------------------------------------- CLI
 _USAGE = """usage: project.py <project-dir> <command> [args]
 
   show                                         print project.json (or an empty skeleton)
   open-questions                               list unresolved facts (dotted paths)
+  migrate-fields [--dry-run]                   rename legacy field names in project.json
+                                               (`dsp.sample_rate_hz` -> `dsp.dsp_processing_rate_hz`;
+                                               `measurement`/`mic` rates are the CAPTURE rate and
+                                               keep their name)
   backfill-tiers [--dry-run]                   write `tier` onto every channel the LEDGER
                                                already places — READ from its row keys,
                                                never inferred. A channel with no row and
@@ -806,6 +856,12 @@ def _main(argv):
         elif cmd == "open-questions":
             for q in open_questions(proj.load()):
                 print(q)
+        elif cmd == "migrate-fields":
+            renames = proj.migrate_fields(write="--dry-run" not in args)
+            if not renames:
+                print("nothing to rename — project.json already uses the canonical names")
+            for line in renames:
+                print(("would rename " if "--dry-run" in args else "renamed ") + line)
         elif cmd == "backfill-tiers":
             filled = proj.backfill_tiers(write="--dry-run" not in args)
             if not filled:
@@ -1238,6 +1294,34 @@ def _selftest():
     # error, both are "a consumer cannot act on this automatically".
     voicing = Project.parse_impact("voicing")
     assert voicing["kind"] == "other" and voicing["raw"] == "voicing", voicing
+
+    # migrate-fields: the DSP block's legacy rate name moves, the CAPTURE rate keeps its name, a
+    # dry run writes nothing, a re-run renames nothing, and two different values are refused.
+    mroot = tempfile.mkdtemp(prefix="autosound_project_mig_")
+    mproj = Project(mroot)
+    mdata = mproj.load()
+    mdata["dsp"] = {"vendor": "V", "model": "M", "sample_rate_hz": 96000}
+    mdata["measurement"] = {"sample_rate_hz": 48000}
+    mproj.save(mdata)
+    rev_before = mproj.load()["project_rev"]
+    assert mproj.migrate_fields(write=False) == ["dsp.sample_rate_hz -> dsp.dsp_processing_rate_hz"]
+    assert mproj.load()["project_rev"] == rev_before, "dry run wrote"
+    assert "sample_rate_hz" in mproj.load()["dsp"], "dry run renamed on disk"
+    assert mproj.migrate_fields() == ["dsp.sample_rate_hz -> dsp.dsp_processing_rate_hz"]
+    after = mproj.load()
+    assert after["dsp"] == {"vendor": "V", "model": "M", "dsp_processing_rate_hz": 96000}, after["dsp"]
+    assert after["measurement"] == {"sample_rate_hz": 48000}, after["measurement"]
+    assert after["project_rev"] == rev_before + 1, after["project_rev"]
+    assert mproj.migrate_fields() == [], "re-run renamed again"
+    conflict = mproj.load()
+    conflict["dsp"]["sample_rate_hz"] = 48000
+    mproj.save(conflict)
+    try:
+        mproj.migrate_fields()
+        raise AssertionError("two different rates were not refused")
+    except ProjectError as exc:
+        assert "two answers" in str(exc), exc
+    assert mproj.load()["dsp"]["sample_rate_hz"] == 48000, "refusal wrote"
 
     # unsupported schema_version is a deterministic refusal.
     bad = proj.load()
