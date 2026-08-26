@@ -40,7 +40,16 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
-## [Unreleased]
+## [v3.0.36] — 2026-08-26 · the agreed list closed: crossover checks and candidates, the flaw map as a command, the setup reader, measured levels
+
+> **Upgrading:** additive — four new modules (`crossover_checks`, `xover_candidates`, `flaw_map`,
+> `setup_import`), one fixed command (`level_offsets --solos`, which v3.0.35 shipped broken), the
+> ellipsoid diagram in the capture sheet. Nothing existing changed shape or behaviour: `naming`,
+> `dsp_profile`, `state/*`, `project.py`, `dsp_math`, `protective`, `listening`, `project_seed`,
+> `eq_export`, `rew_api`, `resonalyze_vc` keep every signature they had. `flaw_map --write` and
+> `setup_import --write` add rows to `project.json` / versions to the ledger — both as
+> `hypothesis` / `transcription` provenance, never as confirmed fact. The open list of
+> `virtual-first.md` ("Tool gaps") is empty for the first time.
 
 - **`crossover_checks.py` — the three questions asked of a corner BEFORE it is entered**, each
   answering OK / CAUTION / REFUSE and each naming where its number comes from, because two of the
@@ -65,6 +74,36 @@ Two consequences worth stating, because both have already caused a question:
   The version carries `provenance: transcription, verified_by_file=false`; the first write seeds
   the ledger, later ones go through `apply.propose`. Walked end to end by `path_check` (1.5),
   including the refusal. Suite 44.
+- **`flaw_map.py` — the acoustic flaw map as a command.** The analysers that read the curves
+  already existed (`curve_view` for the features, `ellipsoid` for what stays as the microphone
+  moves, the excess-phase gate for what is minimum-phase); this turns their findings into rows of
+  `acoustics.flaws` — driver resonance and cabin mode (`notch`), a null below Schroeder and a
+  non-minimum-phase feature (`no_boost`) — every one as a `hypothesis` with the capture named as
+  evidence, through `project.add_flaw`, which replaces rather than twins. **What it does not write
+  it lists, with the reason**: a dip above Schroeder (the position), a feature narrower than 1/6
+  oct, a peak the ellipsoid says moves, and a region where the RAW record has no signal — the first
+  run found a "+3.9 dB resonance at 317 Hz" on a tweeter whose protective high-pass sits at 1 kHz,
+  because de-embedding divides by the filter and the quotient where it had removed the signal is
+  noise wearing the driver's shape. Where no positions were measured the row says staying is
+  ASSUMED. Confirming stays a person's verdict, written with `project.py flaw`.
+- **`xover_candidates.py` — two or three crossover candidates for one driver, described, never
+  chosen** (the dry run's rule of 2026-08-25: the tools put candidates on the table, the tuner
+  picks). For each: the fit, the level and phase at every corner — anchored on the family's
+  DEFINITION (LR −6.02 dB, BW −3.01 dB) rather than presented as a finding — the phase turn across
+  the corner octave that 1.3 will have to absorb, the group delay added against Blauert & Laws,
+  the corner's margin from the driver's OWN −6 dB edge read off its solo (negative = the corner
+  asks for a region the driver does not deliver), the junction cost, and the Fs check with `--fs`.
+  It refuses when no candidate beats having no crossover at all, and — found while testing —
+  when every candidate needs a trim outside the DSP's gain range: `realize_driver` fits with an
+  UNBOUNDED trim, and on nonsense slots (high-pass at 5 kHz, low-pass at 65 Hz) it reported a
+  1.6 dB fit reached with a **+127 dB trim**, the floor lifted rather than the target realised.
+  The CLI passes the profile's own `channel_gain.range_db`; without one a borrowed limit is used
+  and the refusal says so.
+- **The ellipsoid diagram** is in `capture-session-sheet.md`, block B: the nine sweeps of one
+  driver as the source defines them — p1/p5/p9 the tripod point returned to three times (their
+  spread is the set's drift), p2–p4 and p6–p8 the six around it at ±9 cm sideways and ±7 cm up and
+  down. Which of the six is which side is the tuner's to fix in the passport; the method reads
+  them as "the six", and the diagram does not invent an assignment the source never made.
 - **`level_offsets --solos` in v3.0.35 did not run: fixed, and now walked by `path_check`.** The
   command called `state.current_snapshot`, which does not exist, and unpacked `load_solo_v7` as a
   3-tuple where it returns 2 — its own selftest was stdlib-only and never exercised the CLI, so the

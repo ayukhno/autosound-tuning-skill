@@ -192,10 +192,12 @@ verification (3), never the capture.**
 
 ## Tool gaps still open on this path
 
-Noted so a later session does not mistake them for done: the flaw map as a command (the writer exists
-and `eq_propose` now finds and proposes what a row would say — the rows themselves are still written by
-hand); the **candidate description** for crossovers (2–3, magnitude/phase/impulse, per-driver
-strengths); the ellipsoid diagram. Closed later on 2026-08-26: crossover checks (`crossover_checks`:
+None left open from the list of 2026-08-25. Closed last on 2026-08-26: the flaw map as a command
+(`flaw_map` — rows proposed from the solos as hypotheses with evidence, and every finding NOT
+written named with its reason), the candidate description for crossovers (`xover_candidates` — 2–3
+per driver, magnitude/phase/impulse and the corner's margin from the driver's own edge; it describes
+and never picks), the ellipsoid diagram (in `capture-session-sheet.md`, block B). Closed the same
+afternoon: crossover checks (`crossover_checks`:
 Fs margin, group-delay budget, junction cost), levels from the measurement as a second estimate
 (`level_offsets --solos`), the setup reader as a validated transcription with provenance
 (`setup_import`), "effects and dynamic processing" as a profile field (`dsp_profile effects`).

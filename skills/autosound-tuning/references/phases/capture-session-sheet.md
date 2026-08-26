@@ -45,6 +45,22 @@ BLOCK B · HANDHELD (before the tripod)                          [0.3]
               EQ decision in 0.2–2 kHz)
   (near-field optional here or any time later on the v0 slot)
 
+      the nine sweeps of one driver (hand-held, seen from the seat):
+
+                         ▲ +7 cm
+                    ·    ·    ·          ·  = one of p2–p4 / p6–p8, the six
+              ◄ −9 cm   [p1·p5·p9]   +9 cm ►     AROUND the tripod point
+                    ·    ·    ·        [ ]  = the tripod point itself: p1 FIRST,
+                         ▼ −7 cm               p5 in the MIDDLE, p9 LAST — the
+                                               same point three times
+
+      p1/p5/p9 are not three positions: they are ONE position returned to at the
+      start, the middle and the end. Their spread is the drift of the set (over
+      1 dB = not one set). The six around it, ±9 cm sideways and ±7 cm up/down,
+      are what shows which features STAY (the driver, the cabin) and which MOVE
+      (that spot). Which of p2–p8 is which side is yours to fix and write in the
+      passport — the method reads them as "the six", not by side.
+
 BLOCK C · TRIPOD P0                                             [0.4]
   place the tripod; tape (a) return set: capsule → windscreen, door glass,
     roof + seat-rail mark; tape (b) desk set: capsule → each driver centre

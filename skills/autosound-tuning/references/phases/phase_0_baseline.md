@@ -97,7 +97,13 @@ that is your first decision, artifacts 2 and 4 are on its critical path and arti
 them first and let the EQ-ability map follow. Reading the list top-to-bottom cost a session exactly
 that, and the cost is real work: the excess-phase versions are one REW round trip per channel.
 
-**Record the map as DATA, not only as prose** (SCR-015). Each finding gets a row:
+**Record the map as DATA, not only as prose** (SCR-015). The rows can be PROPOSED from the solos
+first — `python3 rew_tool/flaw_map.py --project <project> --solos DIR [--ellipsoid DIR]` reads the
+features, asks the ellipsoid what stays and the excess-phase gate what is minimum-phase, and prints
+the rows it would write (driver resonance / cabin mode → `notch`, a null below Schroeder or a
+non-minimum-phase feature → `no_boost`) **and every finding it will NOT write, with the reason**;
+`--write` records them as `hypothesis`. A person confirms or rejects each after the car has been
+heard — that verdict is written with the manual command, which each finding gets as a row:
 
 ```bash
 python3 rew_tool/project.py <project> flaw <f_hz> <level_db> <kind> <action> \

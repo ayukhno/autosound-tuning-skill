@@ -15,6 +15,8 @@ A map: decision → data → REW API function. The API is in `rew_tool/rew_api.p
 | A channel's current filters / EQ | Filters / EQ | — | `get_filters`, `get_equaliser`, `get_equalisers` |
 | Apply EQ/filters | — | — | `set_filters`, `set_equaliser` |
 | Available crossover types and slopes | — | — | `get_crossover_types`, `get_slopes` |
+| Which of 2–3 crossover candidates, and why — fit, corner level/phase, phase turn, added GD, margin from the driver's own edge | the driver's de-embedded solo, its target, the corner slots | — | `xover_candidates.py --solos --project --house --channel --hp --lp [--fs]` (describes; the tuner picks) |
+| The flaw map, from the measurements: what is a driver resonance, a cabin mode, a null, non-minimum-phase — and what is NOT a flaw | de-embedded solos (+ the ellipsoid positions for stays/moves) | — | `flaw_map.py --project --solos [--ellipsoid] [--write]` (rows as hypotheses with evidence) |
 | Is this corner allowed at all — driver Fs, added group delay, ear sensitivity at the junction | installed Fs (impedance sweep), the filter's own GD | — | `crossover_checks.py --fc --fs --order [--gd]` |
 | Target (house curve) for comparison | Target | — | `get_target_settings`, `get_target_response` |
 | Junction delay / polarity at the DESK (virtual-first 1.3) | solos × ledger chains, sum loss per junction, the arrival difference | Sweep (loopback), one base | `predict.py --align` (alias said by name; `aligned-delta.json` → `apply.propose`) |
