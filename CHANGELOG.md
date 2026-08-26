@@ -51,6 +51,10 @@ Two consequences worth stating, because both have already caused a question:
   (it does, to 0.001 dB). `verify_prediction --rew` reads sweeps through `predict.load_solo_rew`,
   the same reader as the predicted solos, so the entry control has the arrival there as well.
   `python3 rew_tool/rew_stub.py --from-v7 <dir> --ver 49` serves a set at a desk.
+- `path_check` also walks three refusals through the real command lines: solos asked from REW for
+  a round nobody opened (refused, the rounds on record named), a `--route` to a virtual row the
+  ledger lacks (refused by that name), a profile with no processing rate (the alignment says its
+  grid is not the DSP's).
 - `SKILL.md` description: the dual-voice-coil trigger is spelled out in the user's own words
   ("series vs parallel, the load it makes and whether the box volume changes"). The trigger eval
   was run on the LIVE 3.x description for the first time (`evals/README.md`, 2026-08-26): 36/37 and

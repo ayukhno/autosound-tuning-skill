@@ -391,6 +391,28 @@ def _selftest():
         chr_ = {c["channel"]: c for c in rep_r["channels"]}
         assert chr_["tw-R"]["status"] == "CHECK" and abs(chr_["tw-R"]["delay_error_ms"] - 10.0) < 0.1, chr_["tw-R"]
         assert chr_["m-L"]["status"] == "CHECK" and "HP 300" in (chr_["m-L"]["hint"] or ""), chr_["m-L"]
+
+        # ---- refusals: a check whose input is missing FAILS by name, never reads as no objection --
+        # (a) solos asked from REW for a round nobody opened: refused, and the rounds on record named
+        rc, out = _run(tool("predict.py"), "--rew", "--ver", "9", "--project", proj, "--baseline",
+                       "--process", os.path.join(proj, "process"), env=env_rew, ok=None)
+        assert rc != 0 and "no capture round on record for _9" in out and "cap_" in out, (rc, out[-500:])
+        # (b) a route to a virtual row the ledger does not have: refused by that name
+        rc, out = _run(tool("predict.py"), "--solos", set1, "--project", proj, "--baseline",
+                       "--route", "VXX=w-L", env=env, ok=None)
+        assert rc != 0 and "VXX" in out, (rc, out[-400:])
+        # (c) a profile with no processing rate: the alignment SAYS its grid is not the DSP's
+        noproj = os.path.join(root, "project_norate")
+        shutil.copytree(proj, noproj)
+        prof_path = os.path.join(noproj, "dsp_profile.json")
+        prof = json.load(open(prof_path))
+        inner = prof.get("dsp_profile", prof)
+        inner.pop("dsp_processing_rate_hz", None)
+        inner.pop("sample_rate_hz", None)
+        json.dump(prof, open(prof_path, "w"))
+        rc, out = _run(tool("predict.py"), "--solos", set1, "--project", noproj, "--baseline", "--align",
+                       env=dict(env, AUTOSOUND_PROJECT_DIR=noproj), ok=(0,))
+        assert "no processing rate known" in out and "0.0100 ms" in out, out[-600:]
     finally:
         server.shutdown()
 
@@ -415,7 +437,8 @@ def _selftest():
           "typed 10 ms off and a corner typed an octave off and passes the clean set; the junction "
           "verdict is TRUSTED on clean sums and NOT trusted at the one pair moved 0.6 ms; the same "
           "capture-check / predict --rew / verify_prediction --rew through a REW stub agree with the "
-          "file branch; a listening verdict writes and reads back.")
+          "file branch; a round nobody opened, a route to a virtual row the ledger lacks, and a profile "
+          "with no processing rate are refused or said by name; a listening verdict writes and reads back.")
     return 0
 
 
