@@ -40,7 +40,10 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
-## [Unreleased]
+## [v3.0.32] — 2026-08-27 · EQ as packages through the gates, what cuts and what booms, the REW stub
+
+> A 3.0.x build for the author's test rigs and tag-pinned consumers. Method content in it (the EQ
+> doctrine of 2a / 2.1 / 3.3) is written and shipped for the author's review — say so in the sync.
 
 - **`rew_tool/ear_suspects.py`** — what "cuts the ear" and what "booms", found on the curve and
   settled by A/B (E3 of the EQ plan). Peaks above a ±1-octave median trend (≥ 3 dB, ≥ 4 in the bass,
