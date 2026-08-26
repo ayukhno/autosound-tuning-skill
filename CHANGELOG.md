@@ -42,6 +42,22 @@ Two consequences worth stating, because both have already caused a question:
 
 ## [Unreleased]
 
+- **`rew_tool/eq_propose.py`** — EQ as PACKAGES through the gates, never a curve fit (E2 of the
+  EQ plan). Three package kinds, computed in the doctrine's order on the curves the earlier ones
+  leave (2a → 2c → 2d): `res:<group>` — driver resonances per group (sub+midbass / mids /
+  tweeters): a medium-width PEAK (1/6–2/3 oct against a one-octave trend), present across the
+  ellipsoid's positions, passing the excess-phase gate (built from the impulse itself — no REW
+  needed), outside ±1 oct of any junction, above Schroeder a peak only; cut by its prominence,
+  Q no narrower than the measured ceiling; `lr:<pair>` — one shape for left and right, cut on the
+  louder side, shelves / Q ≤ 1, until |L−R| ≤ 1 dB per 1/3 oct in 300–4000 Hz; `tone:<pair>` — the
+  pair toward the target on the 1/3-oct macro scale, identically both sides, tolerance
+  max(1 dB, 2σ(f)). Cuts only unless `--allow-boost` and the gate allow. Every package carries
+  WHY, the listening characteristic to check it by (c01/c02, c14/c05, c08, c07, c04), a score
+  before/after on the scale where the curve is true, and its `apply.propose` delta (appended to
+  the row's bank; broad moves go to the virtual tier when `--route` names it). A tool that
+  proposed a −1 dB "tone" move because one side had a resonance taught the order: resonances
+  first. `eq_gate`'s selftest lesson re-learned on the way: a single reflection weaker than the
+  direct sound is minimum-phase and the gate rightly allows it.
 - **`rew_tool/ellipsoid.py`** — what STAYS and what MOVES across the nine hand-held positions
   around the head (E1 of the EQ plan). Per 1/6-oct band: the mean and **σ(f)**, the spread the
   target-matching tolerance is built from (`max(1 dB, 2σ)`); the three centre returns read as one

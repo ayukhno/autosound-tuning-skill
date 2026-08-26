@@ -48,9 +48,12 @@ POSITIONS = tuple(f"p{i}" for i in range(1, 10))
 CENTRE = ("p1", "p5", "p9")           # the three returns to the tripod point
 MIN_POSITIONS = 2                     # two positions is the old minimum (§13); six is the right number
 SMOOTH_FRAC = 6                       # decisions are read at 1/6 oct (analysis-playbook)
+FEATURE_TREND_FRAC = 1                # features: the 1/24 curve against a ONE-octave trend
 STAY_PRESENT_FRACTION = 0.8           # the feature is there (same sign, >= half its depth) in this share
                                       # of the positions -- 5 of 6, the odd one being the hand
-STAY_SIGMA_DB = 2.0                   # ...and its depth holds to this across them
+STAY_SIGMA_FRACTION = 0.5             # ...and its depth wanders by at most half of itself across them
+                                      # (relative on purpose: an absolute bound called a +2.3 dB spike
+                                      # wandering 1.5 dB "stays" and a +6 dB resonance riding a comb "moves")
 Q_DEFAULT = 6.0                       # the borrowed ceiling where nothing measured sets one (#91)
 Q_BANDS = ((20, 80), (80, 300), (300, 1200), (1200, 5000), (5000, 20000))
 DRIFT_OK_DB = 1.0                     # centre returns further apart than this: the set is not one set
@@ -130,7 +133,6 @@ def analyse(freqs, positions, band=(FMIN, FMAX), smooth_frac=SMOOTH_FRAC, min_pr
     # residual `curve_view` defines them on (a 1/6 residual against 1/3 is nearly flat and hides
     # every mode -- the first draft found nothing on a real set for exactly that reason).
     views = {p: curve_view.multiscale(f, m, band, macro_frac=3, fine_frac=smooth_frac) for p, m in mags.items()}
-    fine_views = {p: curve_view.multiscale(f, m, band, macro_frac=3, fine_frac=24) for p, m in mags.items()}
     g = next(iter(views.values()))["grid"]
     smooth = {p: v["fine"] for p, v in views.items()}
     distinct, centre = _distinct(smooth)
@@ -158,7 +160,10 @@ def analyse(freqs, positions, band=(FMIN, FMAX), smooth_frac=SMOOTH_FRAC, min_pr
     # each tracked through every position: does its centre stay, does its depth hold.
     raw_distinct, _ = _distinct({p: v["raw"] for p, v in views.items()})
     mean_raw = np.array(list(raw_distinct.values())).mean(axis=0)
-    mean_view = curve_view.multiscale(g, mean_raw, band, macro_frac=3, fine_frac=24)
+    # Features against a ONE-octave trend (the same ruler `eq_propose` reads a resonance with): the
+    # 1/3-oct macro absorbs a Q 4 hump, and a Q 4 hump is exactly what an EQ decision is about.
+    fine_views = {p: curve_view.multiscale(f, m, band, macro_frac=FEATURE_TREND_FRAC, fine_frac=24) for p, m in mags.items()}
+    mean_view = curve_view.multiscale(g, mean_raw, band, macro_frac=FEATURE_TREND_FRAC, fine_frac=24)
     feats = curve_view.find_features(mean_view, min_prominence_db=min_prominence_db, source="mmm")
     residuals = {p: v["residual"] for p, v in fine_views.items() if p in distinct or p in centre}
     for ft in feats:
@@ -170,26 +175,33 @@ def analyse(freqs, positions, band=(FMIN, FMAX), smooth_frac=SMOOTH_FRAC, min_pr
         # first draft tracked the extremum inside a window and measured its frequency scatter:
         # too wide a window and a moving comb captures it, too narrow and nothing can scatter, so
         # every narrow spike "stayed". Presence cannot be gamed by the window.)
-        near = (g >= fc / 2 ** (1 / 24)) & (g <= fc * 2 ** (1 / 24))
-        wide = (g >= fc / 2 ** (1 / 6)) & (g <= fc * 2 ** (1 / 6))
+        # Presence = the position's own extremum (same sign) lies within a QUARTER of the feature's
+        # width of f_center AND is at least half as deep. Looked for inside the feature's width
+        # (a twelfth of an octave at least), so a wide feature that moved is caught at the window's
+        # edge instead of counted as present from its skirt (a Q 4 resonance drifting +-12 % still
+        # overlaps f_center; its extremum does not).
+        w_oct = max(float(ft["width_oct"]), 1.0 / 12.0)
+        wide = (g >= fc / 2 ** w_oct) & (g <= fc * 2 ** w_oct)
         depths, fs = [], []
         series = [np.mean([residuals[p] for p in centre], axis=0)] if ("centre" in distinct) else []
         series += [residuals[p] for p in residuals if p not in CENTRE]
         for r in series:
-            seg = r[near]
-            depths.append(float(seg.max() if sign > 0 else seg.min()))
             segw = r[wide]
             k = int(np.argmax(segw)) if sign > 0 else int(np.argmin(segw))
             fs.append(float(g[wide][k]))
+            depths.append(float(segw[k]))
         depths = np.array(depths)
-        present = (sign * depths >= 0.5 * abs(ft["extremum_db"]))
+        fs_arr = np.array(fs)
+        present = (sign * depths >= 0.5 * abs(ft["extremum_db"])) & \
+            (np.abs(np.log2(fs_arr / fc)) <= w_oct / 4.0)
         e_sigma = float(np.std(depths, ddof=1)) if len(depths) > 1 else 0.0
         scatter = float(np.std(fs, ddof=1) / fc * 100.0) if len(fs) > 1 else 0.0
         # The depth must hold RELATIVE to the feature: a +2.3 dB spike whose depth wanders by 1.5 dB
         # across positions is noise wearing a peak's shape (a live set showed a dozen such "stays"
-        # at 6/7 presence before this half-of-depth bound went in).
+        # at 6/7 presence before this half-of-depth bound went in); a +6 dB resonance riding a
+        # moving comb wanders 2.3 dB and is still there in every position.
         stays = (n >= MIN_POSITIONS) and present.mean() >= STAY_PRESENT_FRACTION \
-            and e_sigma <= min(STAY_SIGMA_DB, 0.5 * abs(ft["extremum_db"]))
+            and e_sigma <= STAY_SIGMA_FRACTION * abs(ft["extremum_db"])
         ft.update({"present_in": f"{int(present.sum())}/{len(depths)}", "depth_sigma_db": round(e_sigma, 2),
                    "scatter_pct": round(scatter, 1), "positions": len(depths), "stays": bool(stays),
                    "q_equiv": round(_q_of_width(ft["width_oct"]), 1),
@@ -321,7 +333,7 @@ def _selftest():
              * dsp_math.peq_response(f, "PK", 60.0, 6.0, 8.0) * dsp_math.peq_response(f, "PK", 2000.0, 8.0, 6.0))
         d = 0.50 + offset_cm / 100.0
         tau = d / 343.0
-        H = H * (1.0 + 0.5 * np.exp(-2j * np.pi * f * tau))          # one reflection, 0.5 relative
+        H = H * (1.0 + 0.35 * np.exp(-2j * np.pi * f * tau))         # one reflection, 0.35 relative (a car floor bounce)
         mag = 20 * np.log10(np.abs(H)) + jitter * rng.standard_normal(f.size)
         return mag
 
@@ -342,7 +354,9 @@ def _selftest():
     # positions. On the MEAN it averages into a shallow, broad trough (that is what averaging is
     # for) -- so the claim is not "a dip is found", it is: NOTHING in that band STAYS, and the
     # spread sigma(f) there is several times what it is where the mode sits still.
-    assert not [ft for ft in r["features"] if ft["stays"] and 250 <= ft["f_center"] <= 450], \
+    # (the moving null averages into a BROAD shallow trough that IS in every position -- what survives
+    # averaging is real (Wehmeyer); so the claim is: nothing NARROW stays there)
+    assert not [ft for ft in r["features"] if ft["stays"] and ft["width_oct"] < 1 / 3 and 250 <= ft["f_center"] <= 450], \
         [ft for ft in r["features"] if 250 <= ft["f_center"] <= 450]
     s_mode, s_comb = sigma_at(r, 60.0), sigma_at(r, 343.0)
     assert s_comb > 2 * s_mode, (s_mode, s_comb)
