@@ -62,7 +62,16 @@ def analyze_impulse(times, ir):
     """Find IR peak time and pre-ringing."""
     peak_val = max(ir, key=abs)
     peak_idx = ir.index(peak_val)
-    peak_time_ms = times[peak_idx] * 1000
+    # Sub-sample peak position: a parabola through the peak and its two neighbours. The drift
+    # record of a capture session is read in fractions of a sample (the sheet's rule is "< 0.1
+    # sample"), and an integer index cannot see a 0.3-sample drift at all (path_check, 2026-08-26).
+    delta = 0.0
+    if 0 < peak_idx < len(ir) - 1:
+        a, b, c = abs(ir[peak_idx - 1]), abs(peak_val), abs(ir[peak_idx + 1])
+        denom = a - 2 * b + c
+        delta = 0.0 if denom == 0 else 0.5 * (a - c) / denom
+    dt = (times[1] - times[0]) if len(times) > 1 else 0.0
+    peak_time_ms = (times[peak_idx] + delta * dt) * 1000
     peak_db = 20 * math.log10(abs(peak_val)) if abs(peak_val) > 0 else -120
 
     # pre-ringing: max before peak
@@ -72,7 +81,7 @@ def analyze_impulse(times, ir):
     pre_relative = pre_db - peak_db
 
     return {
-        "peak_time_ms": round(peak_time_ms, 3),
+        "peak_time_ms": round(peak_time_ms, 4),
         "peak_dB": round(peak_db, 1),
         "pre_ringing_dB": round(pre_relative, 1),
     }

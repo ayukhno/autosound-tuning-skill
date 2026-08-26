@@ -193,7 +193,45 @@ def _flag_outlier_sweeps(verdicts):
 DRIFT_HELD_SAMPLES = 0.5     # ctl1->ctl3 within half a CAPTURE sample: the time base held
 
 
-def session_report(verdicts, processing_rate_hz=None):
+def drift_samples_xcorr(ir_first, ir_last, oversample=16):
+    """How many samples later `ir_last` arrives than `ir_first`, to a fraction of a sample.
+
+    Two controls are the same driver swept twice, so their IRs differ by the drift and noise alone,
+    and the cross-correlation peak IS the drift. The correlation is evaluated on a grid
+    `oversample` times finer than a sample (zero-padded spectrum) and its peak refined by a
+    parabola through the three top points -- a sinc is not a parabola at sample spacing (a
+    3-point fit read a 0.3-sample shift as 0.07) but it is one at a sixteenth of a sample. A
+    phase-slope fit was tried in between and fell over on noise at the bins where the driver does
+    not play; the correlation integrates over them instead. The sheet's rule is "< 0.1 sample";
+    this reads to a few hundredths (selftest, with and without noise)."""
+    import numpy as np
+    a = np.asarray(ir_first, dtype=float)
+    b = np.asarray(ir_last, dtype=float)
+    n = 1 << (2 * max(a.size, b.size) - 1).bit_length()
+    cross = np.fft.rfft(b, n) * np.conj(np.fft.rfft(a, n))
+    m = n * oversample
+    r = np.fft.irfft(cross, m) * (m / n)          # r[k] peaks at k = drift * oversample
+    i = int(np.argmax(r))
+    y0, y1, y2 = r[(i - 1) % m], r[i], r[(i + 1) % m]
+    denom = y0 - 2 * y1 + y2
+    delta = 0.0 if denom == 0 else 0.5 * (y0 - y2) / denom
+    lag = i + delta
+    if lag > m / 2:
+        lag -= m
+    return float(lag / oversample)
+
+
+def _rew_ir_of(title):
+    """The impulse response REW holds under `title`, or None (unreachable, missing, no IR)."""
+    try:
+        mid = _api.find_measurement_id(title, exact=True)
+        times, ir = _api.get_impulse_response(mid)
+        return ir if ir else None
+    except Exception:  # noqa: BLE001 -- the caller falls back to the peak times it already has
+        return None
+
+
+def session_report(verdicts, processing_rate_hz=None, ir_of=_rew_ir_of):
     """The whole capture session in one table (Phase 0.6): every sweep's level and impulse side
     by side, the loudest and the quietest channel, and the ctl1->ctl3 drift as the DRIFT RECORD.
 
@@ -206,6 +244,10 @@ def session_report(verdicts, processing_rate_hz=None):
     swept first and last in the tripod block, in CAPTURE samples: within half a sample the base
     held; beyond it the solos taken between them are not on one base -- said, not judged, because
     accepting that delta as the base's uncertainty is the tuner's call.
+
+    `ir_of(title)` fetches an impulse response (REW by default; a file reader offline): with both
+    controls' IRs the drift is their cross-correlation peak to a fraction of a sample; without
+    them it falls back to the peak times in the verdicts and the record says which.
     """
     rows = []
     for v in verdicts:
@@ -246,11 +288,19 @@ def session_report(verdicts, processing_rate_hz=None):
         elif r["peak_time_ms"] is None or p["peak_time_ms"] is None:
             drift = {"ctl1": r["name"], "ctl3": partner, "missing": "an impulse on both"}
         else:
-            delta_ms = float(p["peak_time_ms"]) - float(r["peak_time_ms"])
             rate = p["capture_rate_hz"] or r["capture_rate_hz"]
-            smp = delta_ms / 1000.0 * rate if rate else None
+            ir1 = ir_of(r["name"]) if ir_of else None
+            ir3 = ir_of(partner) if (ir_of and ir1 is not None) else None
+            if ir1 is not None and ir3 is not None and rate:
+                smp = drift_samples_xcorr(ir1, ir3)
+                delta_ms = smp / rate * 1000.0
+                method = "xcorr"
+            else:
+                delta_ms = float(p["peak_time_ms"]) - float(r["peak_time_ms"])
+                smp = delta_ms / 1000.0 * rate if rate else None
+                method = "peak"
             drift = {"ctl1": r["name"], "ctl3": partner, "delta_ms": round(delta_ms, 4),
-                     "capture_rate_hz": rate,
+                     "capture_rate_hz": rate, "method": method,
                      "delta_samples": (round(smp, 2) if smp is not None else None),
                      "held": (abs(smp) <= DRIFT_HELD_SAMPLES) if smp is not None else None}
         break
@@ -297,7 +347,8 @@ def render_session(report):
                 "one base; re-take the block or carry this as the base's uncertainty")
         lines.append(f"  drift {d['ctl1']} -> {d['ctl3']}: {d['delta_ms']:+.4f} ms = "
                      + (f"{smp:+.2f} samples @ {d['capture_rate_hz']} Hz" if smp is not None else "? samples (no rate)")
-                     + f" -- {held} (rule: within {DRIFT_HELD_SAMPLES:g} capture sample)")
+                     + f" -- {held} (rule: within {DRIFT_HELD_SAMPLES:g} capture sample; "
+                     + ("cross-correlation" if d.get("method") == "xcorr" else "peak times") + ")")
     if report["rate_note"]:
         lines.append(f"  ⚠ {report['rate_note']}")
     return "\n".join(lines)
@@ -403,17 +454,36 @@ def _selftest():
     rep = session_report([sw("m-L-ctl1_01 (sw)", 70.0, 5.000), sw("sw_01 (sw)", 84.2, 9.1),
                           sw("tw-R_01 (sw)", 66.9, 4.9), sw("c_01 (rta)", 99.0, 4.9),
                           sw("w-L_01 (sw)", 80.0, 5.2, valid=False),
-                          sw("m-L-ctl3_01 (sw)", 70.1, 5.000 + 0.3 / 48.0)], processing_rate_hz=96000)
+                          sw("m-L-ctl3_01 (sw)", 70.1, 5.000 + 0.3 / 48.0)], processing_rate_hz=96000, ir_of=None)
     assert rep["spread"]["loudest"] == "sw_01 (sw)" and rep["spread"]["quietest"] == "tw-R_01 (sw)", rep["spread"]
     assert abs(rep["spread"]["spread_dB"] - 17.3) < 0.05, rep["spread"]
     d = rep["drift"]
     assert d["ctl3"] == "m-L-ctl3_01 (sw)" and abs(d["delta_samples"] - 0.3) < 0.01 and d["held"] is True, d
     assert rep["rate_note"] and "96000" in rep["rate_note"], rep["rate_note"]
-    moved = session_report([sw("m-L_49ctl (sw) x0", 70.0, 5.0), sw("m-L_49rep (sw) x0", 70.0, 5.0 + 2.0 / 48.0)])
+    moved = session_report([sw("m-L_49ctl (sw) x0", 70.0, 5.0), sw("m-L_49rep (sw) x0", 70.0, 5.0 + 2.0 / 48.0)], ir_of=None)
     assert moved["drift"]["held"] is False and abs(moved["drift"]["delta_samples"] - 2.0) < 0.01, moved["drift"]
     assert moved["spread"] is None and moved["rate_note"] is None
-    lone = session_report([sw("m-L-ctl1_01 (sw)", 70.0, 5.0), sw("sw_01 (sw)", 80.0, 9.0)])
+    lone = session_report([sw("m-L-ctl1_01 (sw)", 70.0, 5.0), sw("sw_01 (sw)", 80.0, 9.0)], ir_of=None)
     assert lone["drift"]["missing"] == "m-L-ctl3_01 (sw)", lone["drift"]
+    # The drift by cross-correlation, to a tenth of a sample: a band-limited impulse and the same
+    # impulse 0.3 and 2.0 samples later (fractional delays by sinc interpolation), and a case with
+    # noise on top; the sign says "later is positive".
+    import numpy as np
+    nn = 4096
+    tt = np.arange(nn)
+    def imp(shift):
+        x = np.sinc((tt - 1000 - shift) / 1.0) * np.hanning(nn)   # band-limited, one main lobe
+        return x
+    assert abs(drift_samples_xcorr(imp(0), imp(0.3)) - 0.3) < 0.02
+    assert abs(drift_samples_xcorr(imp(0), imp(2.0)) - 2.0) < 0.02
+    assert abs(drift_samples_xcorr(imp(0.7), imp(0)) + 0.7) < 0.02, "earlier is negative"
+    rng = np.random.default_rng(1)
+    assert abs(drift_samples_xcorr(imp(0) + 0.01 * rng.standard_normal(nn),
+                                   imp(0.3) + 0.01 * rng.standard_normal(nn)) - 0.3) < 0.05
+    rep_x = session_report([sw("m-L-ctl1_01 (sw)", 70.0, 5.0), sw("m-L-ctl3_01 (sw)", 70.0, 5.0)],
+                           ir_of=lambda t: imp(0.3) if "ctl3" in t else imp(0))
+    assert rep_x["drift"]["method"] == "xcorr" and abs(rep_x["drift"]["delta_samples"] - 0.3) < 0.02, rep_x["drift"]
+    assert "cross-correlation" in render_session(rep_x)
     txt = render_session(rep)
     assert "HELD" in txt and "spread 17.3" in txt and "no drift record" not in txt, txt
     assert "MOVED" in render_session(moved) and "no drift record" in render_session(lone)

@@ -100,6 +100,18 @@ Two consequences worth stating, because both have already caused a question:
     exit 3 when the bank could not carry all of it).
   - Docs: the capture sheet and Phase 0.5 write the controls as `m-L-ctl1_01 (sw)` / `m-L-ctl3_01 (sw)`
     (the form the grammar reads); `naming-and-structure.md §3` carries positions and controls.
+  - **`rew_tool/path_check.py --selftest`** — the whole path END TO END, in the suite: a temporary
+    project, synthetic drivers with defined arrivals / one backwards wire / protectives, walked
+    through the real command lines (−1 contract → 0 round + marks + drift record → 1 de-embed and
+    `--align` → 2 `apply.propose` ×2 and `eq_export` → 3 `--entry` with two planted entry errors,
+    then clean, then one pair moved → 4 a listening verdict). Every module had a selftest; nothing
+    checked the seams, and the first walk found four: a 0.3-sample drift invisible to a peak
+    index (the drift record now reads the controls' **cross-correlation** on a 16× grid, to a few
+    hundredths of a sample; `analyze_impulse` reports a sub-sample peak time), a corner typed an
+    octave off hinted as "no chain feature" (corners are now looked for within an octave, bands
+    within a third), and two anchors of my own that expected raw arrival differences where the
+    neighbouring filters' phase decides (the test now asserts the physics: junctions sum clean,
+    the sides agree to a sample, nothing early, no alias).
   - **`predict --route VIRTUAL=out,out`** — the ledger's virtual tier (a Helix `VFL` with its EQ,
     gain and delay) enters the chain of every output it FEEDS, through a routing fact the user
     reads off the DSP's matrix — never guessed from names. Without it, and with EQ on that tier,

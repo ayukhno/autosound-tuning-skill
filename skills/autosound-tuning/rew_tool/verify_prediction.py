@@ -165,27 +165,33 @@ def _smooth_oct(f, y, octaves):
     return out
 
 
-def _nearest_feature(chain, f_hz):
-    """The chain feature (HPF / LPF corner, EQ band) within NEAR_OCTAVES of `f_hz`, or None.
+NEAR_CORNER_OCTAVES = 1.0     # a crossover typed wrong shows up to an octave away from the corner
 
-    The entry control's one hint: a residual sitting on a crossover corner is most likely that
-    corner typed wrong (family, slope, frequency), one on an EQ band that band; one with nothing
-    of the chain nearby is not an entry error at all -- a driver or a position changed."""
+
+def _nearest_feature(chain, f_hz):
+    """The chain feature nearest to `f_hz`, or None: an HPF/LPF corner within NEAR_CORNER_OCTAVES,
+    an EQ band within NEAR_OCTAVES -- each measured in its own tolerance, the closest wins.
+
+    The entry control's one hint: a residual sitting on an EQ band is most likely that band typed
+    wrong; a residual that grows AWAY from a corner (a high-pass typed an octave up takes the
+    bottom of the band down, and the worst point lands at the band's edge, not on the corner --
+    path_check, 2026-08-26) is that corner; one with nothing of the chain nearby is not an entry
+    error at all -- a driver or a position changed."""
     feats = []
     for kind in ("hp", "lp"):
         leg = (chain or {}).get(kind)
         if isinstance(leg, dict) and leg.get("f"):
-            feats.append((f"{kind.upper()} {float(leg['f']):g} Hz", float(leg["f"])))
+            feats.append((f"{kind.upper()} {float(leg['f']):g} Hz", float(leg["f"]), NEAR_CORNER_OCTAVES))
     for b in (chain or {}).get("eq") or []:
         try:
-            feats.append((f"{b[0]} {float(b[1]):g} Hz", float(b[1])))
+            feats.append((f"{b[0]} {float(b[1]):g} Hz", float(b[1]), NEAR_OCTAVES))
         except (TypeError, ValueError, IndexError):
             continue
-    near = [(abs(math.log2(f_hz / ff)), name) for name, ff in feats if ff > 0 and f_hz > 0]
+    near = [(abs(math.log2(f_hz / ff)) / tol, name) for name, ff, tol in feats if ff > 0 and f_hz > 0]
     if not near:
         return None
     dist, name = min(near)
-    return name if dist <= NEAR_OCTAVES else None
+    return name if dist <= 1.0 else None
 
 
 def verify(predicted, measured, *, pair_names=None, solo_names=None, all_name=None,
