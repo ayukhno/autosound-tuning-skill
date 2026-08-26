@@ -40,7 +40,14 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
-## [Unreleased]
+## [v3.0.34] — 2026-08-26 · the version-pin example is a pair, and the checker looks at it
+
+> **Upgrading:** documentation and one checker; nothing in `rew_tool` changed, so a tune in progress
+> is unaffected. **Pair this with the app release cut against it** — that is the point of the change:
+> the `--skill-ref` / `--tcc-ref` example now names two versions that were released together, and
+> `installer-consistency.py` fails if the three installers stop agreeing about them. The example is
+> deliberately **not** re-chased on every tag: it demonstrates a pair that shipped, not the newest
+> one, and chasing the newest is how it drifted to a method and an app that never shipped together.
 
 - **The version-pin example is a real PAIR, and the checker now looks at it.** `install.sh` said
   `--skill-ref v3.0.3`, `install.ps1` said `-SkillRef v3.0.4`, `install.cmd` said nothing, and all
