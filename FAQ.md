@@ -1,137 +1,351 @@
 # FAQ
 
-Real questions people asked while trying to set this up, answered once here instead of over and over in comments. English only for now — worth translating once there's enough on this page to justify it.
+Real questions people asked while setting this up and tuning with it, answered once here instead
+of over and over in comments. The [README](README.md) is the short version; this page holds the
+details. English only for now.
 
-Have a question that isn't here? Open a [discussion or issue](../../issues) and we'll add it.
+Have a question that isn't here? Open a [discussion or issue](https://github.com/ayukhno/autosound-tuning-skill/issues) and we'll add it.
 
-## Table of Contents
+## Table of contents
 
-- [Philosophy & Structure: Why AI?](#philosophy--structure-why-ai)
-  - [Our Mission & Vision](#our-mission--vision)
-  - [Why We Need Specialized AI & Local State](#why-we-need-specialized-ai--local-state)
-  - [The 5-Step Tuning Journey](#the-5-step-tuning-journey)
-  - [Which models is this actually supported on?](#which-models-is-this-actually-supported-on-as-of-august-2026)
-  - [Subscription Options, Quotas, & Budgets (As of July 2026)](#subscription-options-quotas--budgets-as-of-july-2026)
+- [Which line am I on — 2.x or 3.x?](#which-line-am-i-on--2x-or-3x)
+  - [How to tell](#how-to-tell)
+  - [Staying on 2.x](#staying-on-2x)
+  - [Moving from 2.x to 3.x](#moving-from-2x-to-3x)
+  - [What 3.x changed](#what-3x-changed)
+- [Philosophy & structure: why AI?](#philosophy--structure-why-ai)
+  - [Our mission & vision](#our-mission--vision)
+  - [Why a specialised skill, and why state on disk](#why-a-specialised-skill-and-why-state-on-disk)
+  - [The path: phases −1 to 5, and the desk-first way through them](#the-path-phases-1-to-5-and-the-desk-first-way-through-them)
+  - [What the method refuses to do](#what-the-method-refuses-to-do)
+  - [Which models is this actually supported on? (As of August 2026)](#which-models-is-this-actually-supported-on-as-of-august-2026)
+  - [Subscription options, quotas & budgets (As of July 2026)](#subscription-options-quotas--budgets-as-of-july-2026)
   - [Why a full session uses fewer tokens than you'd expect](#why-a-full-session-uses-fewer-tokens-than-youd-expect)
-- [First-Time Setup (macOS & Windows)](#first-time-setup-macos--windows)
+- [First-time setup (macOS & Windows)](#first-time-setup-macos--windows)
   - [The installer does the setup](#the-installer-does-the-setup)
+  - [What the installer puts where](#what-the-installer-puts-where)
   - [Signing in, and starting](#signing-in-and-starting)
-- [Setting up the Gemini/Antigravity Critic (Standalone)](#setting-up-the-geminiantigravity-critic-standalone-setup)
-  - [macOS & Windows Setup (Antigravity CLI - Recommended)](#macos--windows-setup-using-antigravity-cli---recommended)
-  - [Fallback: Direct API Setup (No CLI/Node.js)](#fallback-direct-api-setup-no-cli-or-nodejs-required)
+  - [Updating, pinning a version, uninstalling](#updating-pinning-a-version-uninstalling)
+- [TCC, the desktop app](#tcc-the-desktop-app)
+  - [What it is, and whether you need it](#what-it-is-and-whether-you-need-it)
+  - [One project, two windows](#one-project-two-windows)
+  - [Which models the app offers](#which-models-the-app-offers)
+  - [App updates, and reporting an app problem](#app-updates-and-reporting-an-app-problem)
+- [Setting up the Gemini/Antigravity Critic (standalone)](#setting-up-the-geminiantigravity-critic-standalone-setup)
+  - [macOS & Windows setup (Antigravity CLI — recommended)](#macos--windows-setup-using-antigravity-cli---recommended)
+  - [Fallback: direct API setup (no CLI/Node.js)](#fallback-direct-api-setup-no-cli-or-nodejs-required)
   - [Do you have a version running on Google AI Studio?](#do-you-have-a-version-running-on-google-ai-studio)
   - [Can I ask Gemini to install and run the skill itself?](#can-i-ask-gemini-to-install-and-run-the-skill-itself-without-claude-code)
-- [Measuring Phase & Time Alignment: UMIK-1 vs. XLR](#measuring-phase--time-alignment-umik-1-vs-xlr-microphones)
+- [Measuring](#measuring)
+  - [Measuring phase & time alignment: UMIK-1 vs. XLR microphones](#measuring-phase--time-alignment-umik-1-vs-xlr-microphones)
   - [Can I measure phase with a UMIK-1?](#can-i-measure-phase-with-a-umik-1)
+  - [How do I name measurements in REW?](#how-do-i-name-measurements-in-rew)
+  - [What is the capture session, and why protective filters only?](#what-is-the-capture-session-and-why-protective-filters-only)
+  - [What are the p1…p9 positions and the ctl measurements for?](#what-are-the-p1p9-positions-and-the-ctl-measurements-for)
 - [Target curves](#target-curves)
   - [Can I build my own target curve?](#can-i-build-my-own-target-curve)
+- [The project on disk](#the-project-on-disk)
+  - [What is in the project folder, and what is worth backing up?](#what-is-in-the-project-folder-and-what-is-worth-backing-up)
+  - [Which DSPs, and how does the EQ get into mine?](#which-dsps-and-how-does-the-eq-get-into-mine)
+  - [Where do I find what the method can do?](#where-do-i-find-what-the-method-can-do)
 
 ---
 
-## Philosophy & Structure: Why AI?
+## Which line am I on — 2.x or 3.x?
 
-You absolutely *can* use a regular web-chat with free versions of Claude or Gemini! The core of this project is a **methodology**, not just software. However, there is a fundamental difference between a general chat and our structured AI-assisted approach. Here is how our philosophy and the entire tuning process are organized into four key aspects:
+Two lines exist side by side. **2.x** is the stable, competition-proven one: the iterative loop,
+the project kept as prose, delivered as a Claude Code plugin, at
+[`v2.8.3`](https://github.com/ayukhno/autosound-tuning-skill/releases/tag/v2.8.3) on branch
+[`2.x`](https://github.com/ayukhno/autosound-tuning-skill/tree/2.x), fixes only. **3.x** is the
+`main` branch: the same method with a machine-readable project, a recorded process, the desk-first
+path and the [TCC](#tcc-the-desktop-app) desktop app, delivered by the one-line installer. 3.x is
+a pre-release, in its final full-tune check; the release will be 3.1.0.
 
-### Our Mission & Vision
+### How to tell
 
-We believe that professional-grade car audio tuning should be accessible to every enthusiast. Our goal is to showcase the power of modern AI not as a replacement for human judgment, but as a powerful **intellectual exoskeleton** for the tuner.
+- **How it arrived.** `/plugin install autosound-tuning` inside Claude Code gave you 2.x. The
+  `curl … | bash` / `irm … | iex` line, or the app, gave you 3.x.
+- **What the project folder holds.** 2.x keeps `dsp-state-current.md` and `tuning-changelog.md`,
+  prose. 3.x keeps `project.json`, a ledger of versions and `process-state.json`.
+- **Ask the app.** In TCC, *Diagnostics → Installation* names the method version it runs with.
 
-The human (the Arbiter) always remains the master who listens, feels the soundstage, and makes final decisions. The AI acts as the exoskeleton—instantly calculating complex cabin physics, analyzing phase alignments, automating tasks via the REW API, and offering bold, non-standard acoustic insights. We bridge the gap between rigorous science and human intuition to reveal the true emotional depth and pure joy of music in your car.
+### Staying on 2.x
 
-### Why We Need Specialized AI & Local State
+**You are already on it, and an update will not move you.** The marketplace entry names an exact
+commit rather than a branch, so `/plugin marketplace update` cannot carry you across a major
+version, and `/plugin update` brings you to the commit that entry names, which is 2.8.3.
 
-To make AI-assisted tuning highly reliable, repeatable, and automated, we solve three major limitations of generic web chats:
+To control it yourself — a local checkout of the `2.x` branch, which also takes 2.x fixes the
+moment they land rather than when a pin moves — clone it once, in your terminal:
 
-* **The "Memory Drift" Problem (Why general chat eventually fails):**
-  Tuning a car is a highly iterative process (measuring, adjusting crossovers, set delays, check phase, EQ). Over a long conversation, **general AI models suffer from "context drift"**—they start to forget or slightly alter the exact numbers decided at the beginning, leading to contradictory or dangerous suggestions.
-  *The Solution:* We keep your active DSP configuration on disk (`dsp-state-current.md` and `tuning-changelog.md`). Every time you invoke the AI, it reads this "single source of truth" from disk, restoring 100% of its memory instantly.
+```bash
+git clone -b 2.x https://github.com/ayukhno/autosound-tuning-skill.git ~/autosound-2x
+```
 
-* **What a Specialized "Skill" Actually Is:**
-  A general AI model knows basic audio theory, but it doesn't know car cabins, specific driver behaviors, or safety boundaries. A **Skill** is like installing a custom "firmware" into the AI. It loads specialized acoustic patterns, safety checklists (to protect your tweeters), target curves (like ResoNix or Audiofrog), and calculation scripts. It turns a generic text generator into a professional car-audio calibration engineer that guides you by the hand.
+Then, inside your Claude Code session, one command at a time:
 
-* **Why We Use Local Scripts & APIs (Optional but Powerful):**
-  Measuring a car generates massive amounts of data (phase curves, impulse responses, RTA sweeps). Copying and pasting thousands of rows of CSV data or taking dozens of screenshots is tedious and error-prone. Our Python scripts connect directly to **REW's local API**. They automatically pull the raw measurements, extract the acoustic essence (phase cancellations, cabin resonances, timing deltas), and feed them to the AI in milliseconds. It turns a 10-minute manual data entry job into a 2-second automated command.
+```bash
+/plugin marketplace add ~/autosound-2x
+```
 
-### The 5-Step Tuning Journey
+```bash
+/plugin install autosound-tuning
+```
 
-Regardless of whether you use our automated scripts (Level 2) or simply follow our guidebook in a free web-chat (Level 1), the process always follows this rigorous 5-step roadmap:
+A local path is **referenced, not copied** — that checkout *is* the plugin source. So
+`git -C ~/autosound-2x pull` is how you take 2.x fixes, and nothing moves you onto a newer line
+until you decide to; `git -C ~/autosound-2x checkout v2.8.3` pins you to that exact state. To
+rejoin the normal channel later, remove the local marketplace and add `ayukhno/autosound-tuning-skill`
+again. The 2.x documentation is [its own README](https://github.com/ayukhno/autosound-tuning-skill/blob/2.x/README.md).
 
-1. **System Audit & Target Selection (Baseline & Target)**
-   We document your physical hardware (speaker placement, amps, DSP native sample rate) and agree on a target acoustic curve (e.g., flat monitor, warm bass, or competition-grade). We also run a flaw-analysis pass on that same baseline — which frequencies are EQ-able versus physically unfixable (phase cancellation, cabin interference), where L/R pairs decorrelate, and each driver's distortion floor — so later steps don't chase a fix that can't work.
-2. **Building the Stage (Crossovers & Delays)**
-   We **select and configure** the exact crossovers for each speaker so they play in alignment and within their optimal performance ranges. Then, we apply precise time-alignment delays so sound from every speaker arrives at your ears at the exact same microsecond, creating a razor-sharp, stable stereo image on your dashboard.
-3. **Tonal Balance & Phase Matching (EQ & Phase Alignment)**
-   We use the parametric EQ to tame major cabin resonances and smooth out vocals. **Our core philosophy here is Phase Alignment over surgical EQ: we focus on matching the acoustic phases of the speakers at their crossover points, consciously minimizing the number of EQ bands used.** This is a deliberate compromise with the "ideal" mathematical curve to preserve a live, dynamic, and natural soundstage rather than forcing a flat but lifeless response.
-4. **Objective & Subjective Verification (Technical Lock & Listening)**
-   We verify our work using specialized acoustic sweeps and then listen to critical test tracks **from specialized music-testing libraries, which you can buy, find on the internet, or stream on popular services**. We check for center focus, stage width/depth, and any harshness or boominess.
-5. **Tailoring to Taste (Voicing & Variations)**
-   We build subtle variations and presets tailored to your preferences (e.g., a high-energy rock preset, a highly detailed jazz preset, or a relaxed daily driving profile).
+### Moving from 2.x to 3.x
+
+One skill per machine: two plugins shipping a skill of the same name both stay active, and which
+one answers is anybody's guess. So remove the plugin first, inside Claude Code:
+
+```
+/plugin uninstall autosound-tuning
+```
+
+```
+/plugin marketplace remove autosound-tuning-skill
+```
+
+Then run the install line from [First-time setup](#first-time-setup-macos--windows). Your 2.x
+projects are not converted: 3.x imports the car's **current** state into a **new** project and
+leaves the old one untouched:
+
+```sh
+python3 ~/.claude/skills/.autosound-tuning-src/skills/autosound-tuning/rew_tool/state/migrate.py <old-project> --into <new-project>
+```
+
+Channels and their output slots, crossovers, delays, gains, polarity, EQ and the DSP profile move
+across. The journal and older snapshots stay behind, deliberately: 2.x never recorded which facts
+were in force when, so carrying its history would mean inventing it.
+
+### What 3.x changed
+
+- **The project is data, not prose.** Facts in `project.json`, every crossover, delay, gain and
+  filter in a ledger with the version it entered in, the process (which phase, which capture
+  round, what was checked) in `process-state.json`. The AI reads the state instead of remembering
+  it; the app reads the same files.
+- **The desk-first path.** One capture session, the tune designed on predicted sums at the desk,
+  one short verification in the car — see [the path](#the-path-phases-1-to-5-and-the-desk-first-way-through-them).
+- **Tools that decide, with gates.** Alignment by the loss at each joint, EQ proposed as packages
+  through gates, an entry control, session drift, the spread across positions, a ranked list of
+  ear suspects. Each with its own selftest.
+- **A method that refuses.** A check whose input is missing fails; it never reports "no
+  objection" — [the list](#what-the-method-refuses-to-do).
+- **An installer and an app.** One line brings everything; TCC runs the method in a window.
+- **Patch tags reach you.** The installer and the app take the newest `v3.*` tag, so a fix is on
+  your machine the next time either updates. The [CHANGELOG](CHANGELOG.md) carries an Upgrading
+  note per tag.
+
+---
+
+## Philosophy & structure: why AI?
+
+You absolutely *can* use a regular web chat with free versions of Claude or Gemini. The core of
+this project is a **methodology**, not just software. But there is a fundamental difference
+between a general chat and this structured, AI-assisted approach.
+
+### Our mission & vision
+
+Professional-grade car audio tuning should be accessible to every enthusiast. The goal is to show
+modern AI not as a replacement for human judgement but as an **intellectual exoskeleton** for the
+tuner.
+
+The human (the Arbiter) remains the master who listens, feels the soundstage and makes the final
+decisions. The AI is the exoskeleton: it computes the cabin's physics, reads phase and timing,
+drives REW through its API, and offers bold, non-standard acoustic insight. Rigorous science and
+human intuition together, to reveal the emotional depth and the pure joy of music in your car.
+
+### Why a specialised skill, and why state on disk
+
+- **The "memory drift" problem — why a general chat eventually fails.** A tune is iterative:
+  measure, set crossovers, set delays, check phase, EQ, measure again. Over a long conversation a
+  general model starts to forget or slightly alter the numbers decided at the beginning, and the
+  suggestions turn contradictory or dangerous. *The solution:* the state lives on disk. In 3.x that
+  is `project.json` (the facts: channels, DSP, microphone, target), the ledger (every crossover,
+  delay, gain and filter, with the version it entered in), `process-state.json` (where the process
+  stands) and `autosound_context.md` (the car's glossary and notes). Every time you invoke the AI it
+  reads this single source of truth, and its memory is complete.
+- **What a "skill" actually is.** A general model knows basic audio theory; it does not know car
+  cabins, driver behaviour or safety boundaries. A skill is firmware for the AI: acoustic patterns,
+  safety checklists (to protect your tweeters), target curves, a step-by-step process and the
+  computing scripts. It turns a generic text generator into a calibration engineer that guides you
+  by the hand.
+- **Why local scripts and the REW API.** Measuring a car produces a lot of data — phase curves,
+  impulse responses, RTA averages. Pasting rows of CSV or taking dozens of screenshots is tedious
+  and error-prone. The Python scripts connect to REW's local API, pull the raw measurements,
+  extract the acoustic essence (cancellations, resonances, timing) and hand the AI a digest in
+  milliseconds. A ten-minute data-entry job becomes a two-second command — and a number the script
+  computed is a number the model did not guess.
+
+### The path: phases −1 to 5, and the desk-first way through them
+
+The phases are the same on both lines; what 3.x adds is the desk in the middle. The car is visited
+twice — once to capture, once to verify — and everything between is designed on the *predicted*
+sum of your own measured drivers.
+
+| Phase | Where | What happens | What comes out |
+| :--- | :--- | :--- | :--- |
+| **−1 Intake** | desk | The car, the drivers, the DSP and what it can do (its filters, its processing rate), the microphone, the target curve | `project.json`, the DSP profile, the checklist — nothing in the car is a surprise |
+| **0 Capture** | car, once | Every driver alone, with *protective* filters only; sweeps and an MMM pass in one go; a few control positions around the head; the round checked before you leave | One usable capture round, drift and protective set on record |
+| **1 Foundation** | desk | Crossovers, levels, delays and polarity chosen on the summed response predicted with the DSP's own filters; each joint scored by how little it loses; an alignment a whole cycle off is named | A ledger version with the foundation, and a predicted sum |
+| **2 EQ** | desk | EQ as packages — a driver's own resonances (only where the peak stays put across positions and is minimum-phase), left/right shape, tone toward the target; cuts only by default; ≤ 6 bands per channel | One ledger version per accepted package; an export file for the DSP |
+| **3 Verdict & lock** | car, short | You enter the sheet. An entry control confirms the car hears what the desk predicted, driver by driver (±1 dB at 1/6 octave, delay to 0.1 ms), or names the one that does not. Then fine EQ on the moving-mic average, and A/B by one band with the ear suspects — three rounds at most | The technical tune, locked |
+| **4 Listening** | car | Test tracks, a cheat-sheet of what to listen for, the verdict written against the version that earned it | Listening verdicts in the journal |
+| **5 Variations** | desk / car | Presets to taste on a virtual layer, the optional center-fill and rear-fill | Presets; the technical tune underneath stays intact |
+
+When the desk and the car disagree — the entry control names a driver, a joint does not sum as
+predicted — the path falls back to the iterative loop of 2.x for that step, and the ledger records
+where. The full text is
+[`references/phases/virtual-first.md`](skills/autosound-tuning/references/phases/virtual-first.md);
+the phase files are listed in [`SKILL.md`](skills/autosound-tuning/SKILL.md).
+
+### What the method refuses to do
+
+A tool that answers "no objection" for want of data is worse than none, so these are refusals, not
+warnings:
+
+- **Write into your DSP.** It never has. Every change is yours to type or to import.
+- **Set a delay from a single reading.** Four independent timing estimates must agree; when they
+  don't, the disagreement is the finding.
+- **Boost into a null.** An excess-phase test tells a fillable dip from an interference null; only
+  the fillable one may be boosted, and boosts are off by default anyway.
+- **Design on a capture round it cannot trust.** No protective set on record, drift between the
+  first and last sweep, a driver missing — the round is refused and you are told what to remeasure.
+- **A filter narrower than the seat allows.** The spread across the positions around the head sets
+  the Q ceiling band by band; where no positions were measured the ceiling is 6, and the report says
+  it is a default.
+- **Chase the ear without end.** Three suspects per round, three rounds; then the answer is "leave
+  it" or a new capture, not a fourth round.
+- **Invent an import format.** A DSP without a writer of its own gets REW's Generic format or a
+  format you supply, never a guessed syntax that fails quietly on import.
+
+The table of what each tool refuses and why is
+[`references/core/estimator-scope.md`](skills/autosound-tuning/references/core/estimator-scope.md).
 
 ### Which models is this actually supported on? (As of August 2026)
 
 **Generator: Claude Opus, at `xhigh` effort. Reviewer: Gemini Pro (High).**
 
-Read the next section — the money one — with that in mind, because the cheaper paths below are real and they are also where this choice gets made.
+Read the next section — the money one — with that in mind, because the cheaper paths below are
+real and they are also where this choice gets made.
 
-**Any model can run the skill; that is the point of it being plain Markdown and Python.** But the method has been driven end to end with exactly one combination, and the others are experiments — a different model, a different vendor, or the same model asked to think less.
+**Any model can run the skill; that is the point of it being plain Markdown and Python.** But the
+method has been driven end to end with exactly one combination, and the others are experiments —
+a different model, a different vendor, or the same model asked to think less.
 
-The thing to understand before you economise is that **a downgrade does not fail loudly. It agrees with you.** One documented run closed phases −1 through 3 in a single sitting and reported crossover points, delays to 0.1 ms, EQ "within ±0.5 dB", and a listening verdict — for a car nobody had sat in. There is no error message for that. It reads like a finished tune, and the only way to catch it is to already know what a real one costs in time and measurements.
+The thing to understand before you economise is that **a downgrade does not fail loudly. It
+agrees with you.** One documented run closed phases −1 through 3 in a single sitting and reported
+crossover points, delays to 0.1 ms, EQ "within ±0.5 dB", and a listening verdict — for a car
+nobody had sat in. There is no error message for that. It reads like a finished tune, and the only
+way to catch it is to already know what a real one costs in time and measurements.
 
 Practical notes:
 
-* **Effort is not a preference, it is half the recommendation.** `xhigh` on the Generator; set it where you set the model (`/model` inside Claude Code, or `claude --effort xhigh` at launch). Nothing raises effort on its own mid-session — a session started cheap stays cheap no matter how hard the work turns out to be.
-* **For Gemini via `agy`, the effort tier *is* the model name.** `gemini-3.1-pro-high`, not `gemini-3.1-pro-low`. `(High)` is the whole instruction, and `(Low)` is a different reviewer rather than a discounted one. The Critic channel defaults to `xhigh` for the same reason — see [setup-critic-channel.md](skills/autosound-tuning/references/tooling/setup-critic-channel.md).
-* **The Critic is the wrong place to save money.** A reviewer that never disagrees is not a cheap reviewer, it is an absent one, and it costs you the single check that catches the failure above.
-* **A free Critic is still worth having.** Clipboard Mode into a free web chat is a genuine reviewer and far better than none — the warning here is about a *quiet, capable-sounding* downgrade, not about being on a budget.
+* **Effort is not a preference, it is half the recommendation.** `xhigh` on the Generator; set it
+  where you set the model (`/model` inside Claude Code, or `claude --effort xhigh` at launch).
+  Nothing raises effort on its own mid-session — a session started cheap stays cheap no matter
+  how hard the work turns out to be.
+* **For Gemini via `agy`, the effort tier *is* the model name.** `gemini-3.1-pro-high`, not
+  `gemini-3.1-pro-low`. `(High)` is the whole instruction, and `(Low)` is a different reviewer
+  rather than a discounted one. The Critic channel defaults to `xhigh` for the same reason — see
+  [setup-critic-channel.md](skills/autosound-tuning/references/tooling/setup-critic-channel.md).
+* **The Critic is the wrong place to save money.** A reviewer that never disagrees is not a cheap
+  reviewer, it is an absent one, and it costs you the single check that catches the failure above.
+* **A free Critic is still worth having.** Clipboard Mode into a free web chat is a genuine
+  reviewer and far better than none — the warning here is about a *quiet, capable-sounding*
+  downgrade, not about being on a budget.
 
-**The date is part of the claim.** Model names move fast, and an undated recommendation goes stale without anyone noticing. If you are reading this well after August 2026, check what the current equivalents are rather than trusting these names.
+**The date is part of the claim.** Model names move fast, and an undated recommendation goes stale
+without anyone noticing. If you are reading this well after August 2026, check what the current
+equivalents are rather than trusting these names.
 
-### Subscription Options, Quotas, & Budgets (As of July 2026)
+### Subscription options, quotas & budgets (As of July 2026)
 
 > [!WARNING]
-> **Prices, quotas, free-credit offers, and model names below are a snapshot (July 2026) and go stale fast.** Treat the dollar figures and limits as illustrative of the *shape* of the choice (cheap-solo vs. reliable-dual), not as current fact — always verify the live pricing on the Anthropic / Google Cloud pages before committing.
+> **Prices, quotas, free-credit offers and model names below are a snapshot (July 2026) and go
+> stale fast.** Treat the dollar figures and limits as illustrative of the *shape* of the choice
+> (cheap-solo vs. reliable-dual), not as current fact — verify the live pricing on the Anthropic
+> and Google Cloud pages before committing.
 
-In car audio, enthusiasts easily spend hundreds or thousands of dollars on physical hardware (where a single premium sound dampening sheet or a high-quality RCA cable costs $20–$50). When it comes to tuning your system with this AI tool, you have three flexible financial paths depending on your budget, tolerance for rate limits, and preference for automation:
+In car audio, enthusiasts easily spend hundreds or thousands on hardware, where a single sheet of
+sound deadening or a good RCA cable costs $20–50. For tuning with this tool there are three paths,
+depending on your budget, your tolerance for rate limits and how much automation you want:
 
-* **Option 1 (Recommended Baseline): Claude ($20/mo) + Free Gemini as Advisor/Critic**
-  You pay $20 for a 1-month Claude Pro subscription (using Claude as the strict, highly structured, and systematic "driver" of the tuning process) and connect Gemini as the Critic/Advisor for free (via Clipboard Mode or standard free API keys from Google AI Studio). This is the shape of the [supported pair](#which-models-is-this-actually-supported-on-as-of-august-2026) — spend the subscription on Opus at `xhigh` rather than on more messages from a cheaper tier. 
-  * **Pros:** Highly precise, 100% protection against mathematical errors, costs just $20. You simply cancel the subscription once your car is tuned.
-  * **Cons:** The free-tier Gemini API can occasionally hit Rate Limits (RPM/TPM quotas) during rapid, back-to-back testing.
+* **Option 1 (recommended baseline): Claude ($20/mo) + free Gemini as Advisor/Critic.**
+  One month of Claude Pro for the strict, structured "driver" of the process, and Gemini as the
+  Critic for free (Clipboard Mode, or a free API key from Google AI Studio). This is the shape of
+  the [supported pair](#which-models-is-this-actually-supported-on-as-of-august-2026) — spend the
+  subscription on Opus at `xhigh` rather than on more messages from a cheaper tier.
+  * *Pros:* precise, the maths checked by the scripts, $20. Cancel the subscription once the car
+    is tuned.
+  * *Cons:* the free Gemini tier can hit rate limits during rapid back-to-back testing.
 
-* **Option 2 (Budget Compromise): Gemini Solo ($10 deposit)**
-  You set up a paid billing account on [Google Cloud Console Billing](https://console.cloud.google.com/billing) and deposit $10 (the minimum required deposit to activate paid API tiers, which unlocks $300 in free credits for new accounts). You then run Gemini "solo" as your main tuner. 
-  * **Pros:** Extremely cost-efficient ($10). **Indeed, having Gemini in the driver's seat yields the most amazing acoustic insights and non-standard tuning solutions.**
-  * **Cons:** Due to the risk of "memory drift" under heavy contexts, you will need to manually double-check any variables or parameters the AI references (for example, when it suggests changing a crossover frequency from 200 Hz to 250 Hz when you actually have 230 Hz set, or no filter at all) and start every new tuning phase with a clean session using the `/clear + resume` command. This is also solo drive: one model proposing and approving its own work, with no second opinion to catch the failure described [just above](#which-models-is-this-actually-supported-on-as-of-august-2026).
+* **Option 2 (budget compromise): Gemini solo ($10 deposit).**
+  A paid billing account on [Google Cloud](https://console.cloud.google.com/billing) with the
+  minimum $10 deposit (which unlocks $300 in free credits for new accounts), and Gemini as the
+  sole tuner.
+  * *Pros:* very cheap; and Gemini in the driver's seat does produce striking acoustic insight and
+    non-standard solutions.
+  * *Cons:* memory drift under heavy context, so you double-check every parameter it quotes (a
+    crossover it believes is at 200 Hz when you have 230, or none) and start every phase from a
+    clean session (`/clear` + resume). And it is solo drive: one model proposing and approving its
+    own work, with no second opinion to catch the failure described
+    [above](#which-models-is-this-actually-supported-on-as-of-august-2026).
 
-* **Option 3 (Professional & Seamless): Both Paid (Claude Pro $20 + Paid Gemini Cloud API)**
-  You keep a paid Claude Pro subscription ($20) for the main structured "driver" agent and use a funded [Google Cloud Console Billing](https://console.cloud.google.com/billing) account for the Gemini API Critic/Advisor.
-  * **Pros:** This is the absolute peak of the dual-AI review loop. It eliminates all rate limits, prevents "API quota exhausted" errors, and allows you to tune continuously without pauses. This is highly recommended for professionals, people tuning multiple cars, or those running deep, back-to-back testing sessions.
-  * **Cons:** Costs $20 plus pay-as-you-go API usage (which typically amounts to just a few cents or dollars per session drawn from your Google Cloud deposit).
+* **Option 3 (professional): both paid (Claude Pro $20 + Gemini Cloud API).**
+  Claude Pro for the driver and a funded Google Cloud account for the Critic.
+  * *Pros:* the full dual-AI review loop with no rate limits and no "quota exhausted" pauses; for
+    professionals, people tuning several cars, or long back-to-back sessions.
+  * *Cons:* $20 plus pay-as-you-go API usage, typically cents to a few dollars per session.
 
 ### Why a full session uses fewer tokens than you'd expect
 
-A real full in-car session (bass shaping, HF imaging, and a first-pass rear-fill — with measured verification of every step, on the most capable Claude model) consumed noticeably less quota than casual chat use would suggest. That's not luck; it's what the skill's "token-smart" design does, and it's worth knowing so you can keep it that way:
+A real full in-car session — bass shaping, HF imaging and a first-pass rear-fill, with measured
+verification of every step, on the most capable Claude model — used noticeably less quota than
+casual chat would suggest. That is by design:
 
-1. **Raw measurement data never enters the chat.** A REW sweep is thousands of data points, but they live inside local Python scripts; only digests come back to the conversation ("zone median +5.3 dB", a five-row joint table). Analysis costs tokens proportional to the *conclusion*, not to the *data*. This is the single biggest factor — and the main economic difference from the copy-paste manual method, where curves have to be described in text both ways.
-2. **State lives on disk, not in the context.** The DSP ledger and changelog are re-read in slices when needed; the AI never re-narrates the project history to itself turn after turn. Session summaries are appended to files, not repeated in chat.
-3. **The phase sliding window.** Only the active phase's reference doc (plus its neighbor) is loaded — never the whole knowledge corpus.
-4. **Round-based review cadence.** One Critic call per round on the whole batch (not per-parameter), escalating to two passes only at phase gates — a handful of compact review packages per session instead of dozens.
-5. **The Arbiter matters too.** Precise listening verdicts, measuring proactively, and a screenshot instead of a description save whole clarification round-trips — the cheapest tokens are the ones never spent.
+1. **Raw measurement data never enters the chat.** A REW sweep is thousands of points; they stay
+   inside the local scripts, and only digests come back ("zone median +5.3 dB", a five-row joint
+   table). Analysis costs tokens in proportion to the *conclusion*, not the *data*. This is the
+   biggest factor, and the main economic difference from the copy-paste manual method.
+2. **State lives on disk, not in the context.** The ledger and the journal are re-read in slices
+   when needed; the AI never re-narrates the project's history to itself turn after turn.
+3. **The phase sliding window.** Only the active phase's reference (plus its neighbour) is loaded,
+   never the whole corpus.
+4. **Round-based review.** One Critic call per round on the whole batch, not per parameter, with a
+   second pass only at phase gates.
+5. **The Arbiter matters too.** Precise listening verdicts, measuring proactively and a screenshot
+   instead of a description save whole round-trips; the cheapest tokens are the ones never spent.
 
-Practical takeaway: a structured tuning session on a strong model is dominated by *decisions*, not *chatter* — so the strong model is affordable exactly where it counts. If your sessions feel token-hungry, check you're running with the local scripts (not the manual copy-paste path) and resuming from disk state (`/clear` + resume) rather than carrying one endless conversation.
+Practical takeaway: a structured session on a strong model is dominated by *decisions*, not
+*chatter*, so the strong model is affordable exactly where it counts. If your sessions feel
+token-hungry, check that you are running with the local scripts, not the manual copy-paste path,
+and resuming from the state on disk (`/clear` + resume) rather than carrying one endless
+conversation.
 
 ---
 
-## First-Time Setup (macOS & Windows)
+## First-time setup (macOS & Windows)
 
-To get started, you will need a laptop, a calibrated microphone setup, and a DSP.
+You will need a laptop, a calibrated microphone and a DSP you can type into.
 
 > [!IMPORTANT]
-> **Subscription:** You will need a paid **Claude Pro or Max** subscription because Claude Code (the CLI agent) requires access that isn't available on the free tier. ChatGPT Plus plans cannot be transferred.
+> **Subscription:** a paid **Claude Pro or Max** subscription, because Claude Code (the terminal
+> agent) needs access that the free tier does not include. ChatGPT Plus plans cannot be
+> transferred.
 
-#### The installer does the setup
+### The installer does the setup
 
-One line installs Claude Code, Python, the tuning method, the desktop app, Google's `agy` for the Gemini reviewer and `omp` (which is what lets the app offer models other than Claude), on a clean machine. It shows what is already there, lists everything it will download, asks once, then runs on its own; the sign-ins come at the end, in your browser (Claude first — required; the reviewer and GitHub if you want them).
+One line installs Claude Code, Python, the tuning method, the desktop app, Google's `agy` for the
+Gemini reviewer and `omp` (which is what lets the app offer models other than Claude), on a clean
+machine. It shows what is already there, lists everything it will download, asks once, then runs
+on its own; the sign-ins come at the end, in your browser (Claude first — required; the reviewer
+and GitHub if you want them).
 
 <details>
 <summary><b>For macOS</b></summary>
@@ -141,8 +355,15 @@ One line installs Claude Code, Python, the tuning method, the desktop app, Googl
    ```bash
    curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/main/install.sh | bash
    ```
-3. On a Mac that has never been used for programming it asks for your **Mac password once**, right after the "Go ahead?" question, for Apple's Command Line Tools (git). Nothing else needs it. Then wait — ten to twenty minutes, nothing to press.
-4. At the end it opens your browser for the Claude sign-in (a Pro or Max account), then offers the Gemini reviewer's sign-in and GitHub's — press **Enter** to do one now, **s** to leave it for later.
+3. On a Mac that has never been used for programming it asks for your **Mac password once**,
+   right after the "Go ahead?" question, for Apple's Command Line Tools (git). Nothing else needs
+   it. Then wait — ten to twenty minutes, nothing to press.
+4. At the end it opens your browser for the Claude sign-in (a Pro or Max account), then offers
+   the Gemini reviewer's sign-in and GitHub's — press **Enter** to do one now, **s** to leave it
+   for later.
+
+To leave something out: `--terminal` (no desktop app), `--no-reviewer`, `--no-github`, `--no-omp`,
+after `bash -s --`.
 
 </details>
 
@@ -154,61 +375,137 @@ One line installs Claude Code, Python, the tuning method, the desktop app, Googl
    ```powershell
    irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/main/install.ps1 | iex
    ```
-3. If Git for Windows is not installed yet, Windows shows **one permission dialog** for it — click **Yes**. Nothing else needs administrator rights; everything else goes into your user profile. Then wait, five to fifteen minutes.
-4. The sign-ins at the end are the same as on macOS. The reviewer's doctor script later runs in **Git Bash** (Start Menu → Git → Git Bash), which the installer brought.
+3. If Git for Windows is not installed yet, Windows shows **one permission dialog** for it —
+   click **Yes**. Nothing else needs administrator rights; everything else goes into your user
+   profile. Then wait, five to fifteen minutes.
+4. The sign-ins at the end are the same as on macOS. The installer also puts a **REW (API on)**
+   shortcut on your Desktop, which starts REW with its API switched on in one click.
 
-To leave something out, run the one-liner in this form with the options you want: `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/main/install.ps1))) -Terminal` (no desktop app), `-NoReviewer`, `-NoGitHub`, `-NoOmp`. Prefer a double-click? [Download the repository ZIP](https://github.com/ayukhno/autosound-tuning-skill/archive/refs/heads/main.zip), *Extract All*, and double-click `install.cmd`.
+To leave something out, run the one-liner in this form with the options you want:
+`& ([scriptblock]::Create((irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/main/install.ps1))) -Terminal`
+(no desktop app), `-NoReviewer`, `-NoGitHub`, `-NoOmp`. Prefer a double-click?
+[Download the repository ZIP](https://github.com/ayukhno/autosound-tuning-skill/archive/refs/heads/main.zip),
+*Extract All*, and double-click `install.cmd`.
 
 </details>
 
-Running the same line again **updates** everything. `--uninstall` (macOS, after `bash -s --`) / `-Uninstall` (Windows) removes what the installer put there and never a project folder.
+### What the installer puts where
+
+Everything goes into your user profile; nothing needs administrator rights except the two
+one-time items named above.
+
+| What | Where | Why |
+| :--- | :--- | :--- |
+| Claude Code | Anthropic's own installer | the AI that runs the method |
+| The method (this repository, at its newest `v3.*` tag) | `~/.claude/skills/.autosound-tuning-src`, with `~/.claude/skills/autosound-tuning` pointing into it | where Claude Code looks for skills |
+| **Autosound TCC** (the app, at its newest tag) with `uv` and a Python 3.12 of its own | `~/Applications/Autosound TCC.app` and a shortcut on your Desktop (macOS); your user profile and a Desktop shortcut (Windows) | the method in a window |
+| `agy`, Google's Antigravity CLI | your user profile | Gemini as the reviewer |
+| `gh`, GitHub's command *(only if you said yes)* | your user profile | the private project backup |
+| `omp` | your user profile | lets the app offer models other than Claude (metered) |
+
+### Signing in, and starting
+
+* **Claude:** the installer runs `claude auth login` for you at the end. If you skipped it, run
+  that command in a terminal: a browser window opens, you sign in with your Claude account (Pro or
+  Max) and click **Authorize**.
+* **The reviewer (Gemini):** run `agy` once — see [the Critic setup](#setting-up-the-geminiantigravity-critic-standalone-setup)
+  — or press Enter when the installer offers it.
+* **Start:** make one folder per car and open it either in the app (double-click **Autosound
+  TCC** on your Desktop, *Browse…* to the folder, pick the models, *Open*) or in a terminal
+  (`cd` into it, run `claude`), then say *"tune a new car from scratch"*. Open a *new* terminal
+  window for that: the one you installed from cannot see what was just installed.
+
+### Updating, pinning a version, uninstalling
+
+* **Update:** run the same install line again. It takes the newest `v3.*` tag of the method and
+  the newest tag of the app, and leaves your projects alone. The app also updates itself. What a
+  tag changed, and anything to do after updating, is in the [CHANGELOG](CHANGELOG.md).
+* **Pin a version:** `--skill-ref v3.0.32` and `--tcc-ref v0.1.12` (macOS, after `bash -s --`),
+  `-SkillRef` and `-TccRef` on Windows.
+* **Uninstall:** `--uninstall` (macOS, after `bash -s --`) / `-Uninstall` (Windows) removes what
+  the installer put there and never a project folder. `--uninstall --all` / `-Uninstall -All` also
+  removes `uv`, Claude Code and `~/.claude`, and `agy`/`gh`/`omp` when this installer brought them.
 
 ---
 
-#### Signing in, and starting
+## TCC, the desktop app
 
-* **Claude:** the installer runs `claude auth login` for you at the end. If you skipped it, run that command in a terminal: a browser window opens, you sign in with your Claude account (Pro or Max) and click **Authorize**.
-* **The reviewer (Gemini):** run `agy` once — see the next section — or press Enter when the installer offers it.
-* **Start:** make one folder per car and open it either in the app (double-click **Autosound TCC** on your Desktop, *Browse…* to the folder, pick the models, *Open*) or in a terminal (`cd` into it, run `claude`), then say *"tune a new car from scratch"*.
+### What it is, and whether you need it
 
-> [!NOTE]
-> **The 2.x plugin route** (`/plugin marketplace add ayukhno/autosound-tuning-skill` → `/plugin install autosound-tuning` → `/reload-plugins` inside Claude Code) still works and still gives you the 2.x line. The installer above gives you 3.x. One skill per machine — see the README's *Other ways in* for switching.
+[TCC](https://github.com/ayukhno/autosound-tcc) runs the 3.x method in a desktop window, on macOS
+and Windows: the DSP tree on the left, the curves REW measured, the plan with its steps, the
+ledger's versions, and the AI in a side panel. You do not need it: the method in a terminal is the
+proven path, and everything the app shows is in the project's files. The app is for people who
+would rather see the tree and the curves than read them, and it is early — say so to yourself when
+it surprises you, and [report it](#app-updates-and-reporting-an-app-problem).
+
+### One project, two windows
+
+The app and the terminal are one project, not two. The method writes the project's files, the app
+reads them, and a change made in either shows up in the other: a version banked in the terminal is
+in the app's list, a step taken in the app is in the process state the terminal reads. Point both
+at the same folder and switch as you like.
+
+### Which models the app offers
+
+The app talks to Claude through Anthropic's SDK, so your Claude subscription covers it — *AI main*
+is Claude Opus (SDK) and *AI critic* is Gemini Pro (High), the [supported pair](#which-models-is-this-actually-supported-on-as-of-august-2026).
+Every non-Claude model in the list comes through `omp`, which meters them separately; leave it out
+with `--no-omp` / `-NoOmp` and the list is Claude and Gemini.
+
+### App updates, and reporting an app problem
+
+The app updates itself and, with it, the method it carries — the same newest `v3.*` tag the
+installer takes. *Diagnostics → Installation* shows which app version and which method version
+you are on, and *Report a problem* there opens [the app's issue form](https://github.com/ayukhno/autosound-tcc/issues/new/choose)
+half filled in. Problems with the *method* — wrong advice, a tool that refused when it should not
+have — go to [this repository's issues](https://github.com/ayukhno/autosound-tuning-skill/issues/new/choose).
+
+---
 
 ## Setting up the Gemini/Antigravity Critic (Standalone Setup)
 
-The dual-agent **Generator ↔ Gemini (Critic)** loop is the strongest setup because it completely eliminates single-model bias. The critic runs in the background via lightweight scripts (`scripts/gemini_critic.sh`), so you don't have to manage a second AI window manually.
+The dual-agent **Generator ↔ Gemini (Critic)** loop is the strongest setup because it removes
+single-model bias. The Critic runs in the background through a lightweight script
+(`scripts/gemini_critic.sh`), so you do not manage a second AI window by hand.
 
-This standalone setup is highly recommended, even if you are not using Claude Code (for example, if you prefer a manual workflow or use other tools like Cursor, ChatGPT, or VS Code).
+This standalone setup is worth doing even if you are not using Claude Code — for a manual workflow,
+or with other tools such as Cursor, ChatGPT or VS Code.
 
 ### macOS & Windows Setup (using Antigravity CLI - Recommended)
 
-Google's official **Antigravity CLI (`agy`)** is the recommended default method because it uses a free, browser-based OAuth login and does not require creating or managing any API keys.
+Google's official **Antigravity CLI (`agy`)** is the recommended default because it uses a free,
+browser-based OAuth login and needs no API keys.
 
-#### 1. Install the CLI:
+#### 1. Install the CLI
 
-**The installer from [First-Time Setup](#first-time-setup-macos--windows) already did this** unless you passed `--no-reviewer` / `-NoReviewer`. By hand, it is Google's own installer — no Homebrew, no package manager, no administrator rights; it puts `agy` in your user profile and clears macOS's quarantine flag itself:
+**The installer from [First-time setup](#first-time-setup-macos--windows) already did this** unless
+you passed `--no-reviewer` / `-NoReviewer`. By hand, it is Google's own installer — no Homebrew, no
+package manager, no administrator rights; it puts `agy` in your user profile and clears macOS's
+quarantine flag itself:
 
-* **For macOS:**
+* **macOS:**
   ```bash
   curl -fsSL https://antigravity.google/cli/install.sh | bash
   ```
-* **For Windows (PowerShell):**
+* **Windows (PowerShell):**
   ```powershell
   irm https://antigravity.google/cli/install.ps1 | iex
   ```
 
 Either way, open a **new** terminal window afterwards so it is on your PATH.
 
-#### 2. Perform a one-time login:
-In your standard terminal (Terminal.app on Mac, or PowerShell on Windows), simply run:
+#### 2. Perform a one-time login
+
+In your standard terminal (Terminal.app on Mac, PowerShell on Windows), run:
 ```bash
 agy
 ```
-* A browser window will open automatically. Sign in with the Google account that has Antigravity access.
-* Once authorized, return to your terminal and type `/quit` to close the interactive session.
+* A browser window opens. Sign in with the Google account that has Antigravity access.
+* Once authorised, return to the terminal and type `/quit`.
 
-#### 3. Verify the installation:
-Run this command to test the background channel:
+#### 3. Verify the installation
+
 ```bash
 agy -p "Hello, world!"
 ```
@@ -217,105 +514,251 @@ agy -p "Hello, world!"
 
 ### Fallback: Direct API Setup (No CLI or Node.js required!)
 
-If you are running **Linux**, if the Antigravity CLI is not available on your system, or if your weekly Antigravity free quota is exhausted, you can call Google's Gemini API directly using a free API key without installing Node.js, npm, or any external command-line utilities:
+On **Linux**, where the Antigravity CLI is not available, or when your weekly Antigravity quota is
+exhausted, the Critic can call Google's Gemini API directly with a free API key, with no Node.js,
+npm or other command-line tools:
 
-1. **Get a free API key** (no credit card required) at **[aistudio.google.com/apikey](https://aistudio.google.com/apikey)**.
-2. **Add it to your config:** Create a file named `.critic-env` inside your project's `rew_analitic/` directory (or in CWD) and add your key:
+1. **Get a free API key** (no credit card) at **[aistudio.google.com/apikey](https://aistudio.google.com/apikey)**.
+2. **Add it to your config:** create a file named `.critic-env` in your project's `rew_analitic/`
+   folder (or in the folder you run from) with:
    ```env
    GEMINI_API_KEY=AIzaSy...your_actual_key...
    ```
-3. That's it! The Python script (`autosound_ai.py`) will automatically detect the key and make direct, lightweight HTTPS API calls to Gemini (using the robust and active `gemini-2.5-flash` model), bypassing any need for local CLI tools or npm shims.
+3. That is it. The channel script (`autosound_ai.py`) detects the key and makes direct HTTPS calls
+   to the Gemini API.
 
 > [!TIP]
 > **Do I have to set this up?**
-> No. If no local Gemini CLI or API key is found, the tuning skill will seamlessly fall back to **Autopilot self-loop** (spawning an isolated subagent inside Claude Code) or **Clipboard Mode** (allowing you to copy-paste proposals into any web-based AI of your choice, like ChatGPT or Gemini web).
+> No. If no local Gemini CLI or API key is found, the skill falls back to an **Autopilot self-loop**
+> (an isolated subagent inside Claude Code) or to **Clipboard Mode** (you paste proposals into any
+> web AI of your choice, such as ChatGPT or Gemini web).
 
 ---
 
+### Do you have a version running on Google AI Studio?
 
-## Do you have a version running on Google AI Studio?
-
-**Yes.** We shipped a beta built specifically for this: a set of stateless prompt templates you run entirely inside **[Google AI Studio](https://aistudio.google.com/)** (or any web chat) with free Gemini, no local install and no API key required.
+**Yes.** A beta built for exactly this: a set of stateless prompt templates you run entirely inside
+**[Google AI Studio](https://aistudio.google.com/)** (or any web chat) with free Gemini, no local
+install and no API key:
 
 **[manual_step-by-step branch](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step)**
 
-Each tuning step runs in a fresh chat with a short copy-paste prompt plus your REW exports. The passport file (your car's settings) gets regenerated in full at each step and saved as a new version, so nothing gets lost between steps the way long chat sessions tend to drift.
+Each tuning step runs in a fresh chat with a short copy-paste prompt plus your REW exports. The
+passport file (your car's settings) is regenerated in full at each step and saved as a new
+version, so nothing is lost between steps the way long chat sessions drift.
 
-Being honest about where it stands: it works, but it's a step below the full local setup described above. There's no REW API pulling numbers automatically, no persistent state between messages, and no real back-and-forth review loop. Treat it as the fastest way to try the method for free, before deciding whether the full local setup is worth the time and the small subscription cost.
-
-Still labeled experimental (it's new), and feedback from real tuning sessions is welcome.
-
----
-
-## Can I ask Gemini to install and run the skill itself, without Claude Code?
-
-**Yes, as a manual bootstrap, not a formal install.** There is no plugin system for Gemini the way Claude Code has one. But since the skill is plain Markdown and Python, nothing Claude-specific, you can point an agentic Gemini session (Antigravity CLI, or any Gemini setup with file and shell access) at the repo and ask it directly:
-
-> Clone https://github.com/ayukhno/autosound-tuning-skill, read `skills/autosound-tuning/SKILL.md`, and follow that method as your operating instructions for this session.
-
-One real caveat: Claude Code's own Skill system loads only the active phase on demand (see `SKILL.md`'s "Phase Sliding Window"), which keeps its context focused over a long session. A Gemini session that reads everything at once, instead of pulling files in on demand, may not hold that same discipline over a long session, on top of Gemini's already-documented tendency to drift on long sessions (see above).
-
-The fully stateless, no-install alternative is the [manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step) pipeline described just above.
+Where it stands: it works, and it is a step below the full local setup. No REW API pulling numbers,
+no persistent state between messages, no real back-and-forth review loop — and none of the 3.x
+tools. Treat it as the fastest way to try the method for free, before deciding whether the full
+setup is worth the time and the subscription.
 
 ---
 
+### Can I ask Gemini to install and run the skill itself, without Claude Code?
 
-## Measuring Phase & Time Alignment: UMIK-1 vs. XLR Microphones
+**Yes, as a manual bootstrap, not a formal install.** There is no plugin system for Gemini the way
+Claude Code has one. But the skill is plain Markdown and Python, nothing Claude-specific, so you
+can point an agentic Gemini session (Antigravity CLI, or any Gemini setup with file and shell
+access) at the repository and ask it directly:
+
+> Clone https://github.com/ayukhno/autosound-tuning-skill, read `skills/autosound-tuning/SKILL.md`,
+> and follow that method as your operating instructions for this session.
+
+One real caveat: Claude Code's skill system loads only the active phase on demand (the "phase
+sliding window" in `SKILL.md`), which keeps the context focused over a long session. A Gemini
+session that reads everything at once may not hold that discipline, on top of Gemini's documented
+tendency to drift on long sessions.
+
+The fully stateless, no-install alternative is the
+[manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step)
+pipeline described just above.
+
+---
+
+## Measuring
+
+### Measuring Phase & Time Alignment: UMIK-1 vs. XLR Microphones
 
 There is a major difference in how USB and XLR microphones handle time-critical phase measurements:
 
-* **XLR Microphones (Behringer ECM8000, Beyerdynamic MM1, etc.):** These plug into an analog audio interface (like the Focusrite Scarlett 2i2). This setup is ideal for phase measurements because it allows a **physical loopback cable** (routing a channel output back into an input) to establish a sample-accurate timing reference.
-* **UMIK-1 / UMIK-2:** These are USB microphones that plug directly into your laptop, bypassing the audio interface. Because there is no physical loopback path, you cannot use a hardware timing reference.
+* **XLR microphones (Behringer ECM8000, Beyerdynamic MM1, …)** plug into an analog audio interface
+  (a Focusrite Scarlett 2i2, say). This is ideal for phase because a **physical loopback cable** —
+  one output routed back into an input — gives a sample-accurate timing reference.
+* **UMIK-1 / UMIK-2** are USB microphones that plug straight into the laptop, bypassing the
+  interface. With no physical loopback path there is no hardware timing reference.
 
-#### Can I measure phase with a UMIK-1?
-**Yes.** You can still get highly accurate phase and time-delay measurements with a USB microphone by using REW's **Acoustic Timing Reference**. Instead of a loopback cable, REW will play a short high-frequency "chirp" from a designated reference speaker (usually a tweeter) before each measurement sweep to calculate the timing offset.
+### Can I measure phase with a UMIK-1?
 
-For a complete step-by-step video guide on how to configure REW for accurate phase measurements with a USB microphone, watch this excellent tutorial by RAW-Cat:
-[RAW-Cat: Measuring Speaker Phase in REW](https://www.youtube.com/watch?v=El-kwZ5_nnU)
+**Yes.** You can still get accurate phase and delay with a USB microphone through REW's **Acoustic
+Timing Reference**: instead of a loopback cable, REW plays a short high-frequency chirp from a
+designated reference speaker (usually a tweeter) before each sweep to establish the timing offset.
+
+For a step-by-step video on configuring REW for phase with a USB microphone, see RAW-Cat's
+tutorial: [Measuring Speaker Phase in REW](https://www.youtube.com/watch?v=El-kwZ5_nnU).
 
 > [!WARNING]
-> **CRITICAL RULE: Take all sweeps consecutively in one run!**
-> Whether you are using a physical loopback (XLR) or an Acoustic Timing Reference (USB), **always measure all speakers consecutively in a single session.** Do not measure one speaker, take a 15-minute break (or turn on the AC/heater), and then measure the next one.
-> * **Temperature Drift:** The speed of sound depends heavily on cabin air temperature. A shift of just 5°C alters the speed of sound enough to shift calculated arrival times by nearly 0.08 ms. While this is negligible for low-frequency bass/subwoofer alignment, it is completely fatal for midranges and tweeters (MF/HF) where wave periods are extremely short, easily destroying your crossover phase alignment and stage focus.
-> * **Clock Drift:** If you are using a USB microphone (like the UMIK), the microphone and your output sound card run on separate hardware clocks. Because they are unsynchronized, their sample rates slowly drift over time. Waiting between measurements introduces artificial time offsets that do not physically exist.
-> * **Rule of thumb:** If you adjust the microphone, change the cabin temperature (e.g., turn on/off AC), or pause the session for more than a few minutes, **re-measure all channels again** to guarantee your timing baseline remains 100% consistent.
+> **Take all sweeps consecutively, in one run.** Loopback or acoustic reference, **measure all
+> speakers in a single session.** Do not measure one, take a fifteen-minute break (or switch the
+> heating on) and measure the next.
+> * **Temperature drift:** the speed of sound follows cabin air temperature. Five degrees shift
+>   arrival times by nearly 0.08 ms — negligible for the subwoofer, fatal for midranges and
+>   tweeters, whose periods are short; it destroys the crossover phase alignment and the focus.
+> * **Clock drift:** a USB microphone and your output sound card run on separate clocks. Their
+>   sample rates drift apart, and waiting between measurements introduces offsets that do not
+>   physically exist.
+> * **Rule of thumb:** if you touch the microphone, change the cabin temperature or pause for more
+>   than a few minutes, **remeasure all channels**. In 3.x the capture check measures this drift for
+>   you — the first and last sweep of the round are compared to a fraction of a sample — and a
+>   round that drifted is refused.
+
+### How do I name measurements in REW?
+
+Names are the identity: the tools find a measurement by its title, so a title outside the grammar
+is invisible to them. The grammar is small:
+
+| Title | Meaning |
+| :--- | :--- |
+| `m-L_01 (sw)` | channel `m-L` (left midrange), capture round `01`, a sweep |
+| `m-L_01 (rta)` | the same channel and round, the moving-mic average |
+| `sw_01 (sw)` · `w-R_01 (sw)` · `tw-L_01 (sw)` | subwoofer, right midbass, left tweeter |
+| `L_01 (rta)` · `ALL_01 (rta)` | the left side summed; everything summed |
+| `m-L p5_01 (sw)` | the same driver measured at position `p5` (also written `m-L_01 (sw) p5`) |
+| `m-L-ctl1_01 (sw)` · `m-L-ctl3_01 (sw)` | the *controls* that open and close a series (`m-L_01ctl` / `m-L_01rep`, as typed in the car, read the same) |
+| `m-L_final (sw)` | the sweep of the locked tune |
+
+Channel codes come from your project's glossary (`sw`, `w-L/R`, `m-L/R`, `tw-L/R` are the common
+ones); the round number goes up every time you go back to the car with a change. The capture sheet
+for one session, in the order to take them, is
+[`references/phases/capture-session-sheet.md`](skills/autosound-tuning/references/phases/capture-session-sheet.md),
+and `naming.py` in `rew_tool/` validates a title before you type it into REW. Keep REW's history
+clean — rename or delete a mistyped measurement at once, because a stray title is either ignored
+or, worse, mistaken for a real one.
+
+### What is the capture session, and why protective filters only?
+
+The capture session is the one visit to the car in which every driver is measured *alone*, sweeps
+and MMM in one pass, with only **protective** filters in the DSP: a high-pass on the midranges and
+tweeters so a full-range sweep cannot hurt them, and nothing else — no crossovers, no delays, no
+EQ. The reason is what the recording is for. A measurement taken through a tune carries the tune,
+and every later design step would be reasoning about the tune instead of the driver. A measurement
+taken with protective filters carries the driver and the cabin; the protective set is recorded in
+the ledger with the round, and the desk removes it from the curves before predicting anything, so
+the design sees the bare driver and enters its own filters on top.
+
+The round is checked before you leave the car: are all the drivers there, do the first and last
+sweep agree in time, is the protective set on record. A round that fails is not designed on — it is
+remeasured while the microphone is still on the stand.
+
+### What are the p1…p9 positions and the ctl measurements for?
+
+A curve is true at a certain width, and which width depends on where the microphone is. A resonance
+of the driver stays put when the microphone moves a few centimetres; a reflection comb or a
+seat-position dip moves with it. So a few extra sweeps of the same driver at positions around the
+listener's head — `p1…p9`, with `p5` the centre and `p1/p5/p9` repeated as the centre's own
+control — tell the desk the *spread* at every frequency, and with it:
+
+- which features **stay** (the driver — EQ may correct them) and which **move** (the seat — EQ at
+  the desk will not fix them, and it is told so);
+- **how narrow a filter may be**, band by band: the Q ceiling. Where no positions were taken the
+  ceiling is the borrowed default of 6, and the proposal says it is a default;
+- whether the centre **drifted** between the first and last repeat — the usability of the set.
+
+The `ctl` measurements are the controls that open and close a series of sweeps of one driver, so
+that the drift within the series is measurable rather than assumed.
 
 ---
 
 ## Target curves
 
-#### Can I build my own target curve?
+### Can I build my own target curve?
 
-**Yes — and you often should.** A target ("house") curve is not a fixed standard; it's a
-*per-project starting hypothesis* that you finalize by ear after the Phase-0 baseline. There is
-no single "correct" curve — each car, install, and taste ends up with its own.
+**Yes — and you often should.** A target ("house") curve is not a fixed standard; it is a
+*per-project starting hypothesis* that you finalise by ear after the baseline. There is no single
+correct curve: each car, install and taste ends up with its own.
 
 Two practical ways to build one:
 
-**1. Ask the skill to design it.** Describe your taste and the skill will propose a shape, run it
-through the Generator ↔ Critic ↔ Arbiter loop, and export it for REW/your DSP. The more concretely
-you describe the *character* you want, the better the result. Useful things to tell it:
-- Your genres and how you listen (low volume vs. loud, long drives).
-- The direction vs. a reference: e.g. *"start from ResoNix Accurate but +2 dB more sub-bass and calmer highs"*, or *"like SQ-Comp-Ref but with a slightly deeper presence dip for more laid-back vocals"*.
-- Any complaints about the current sound in the frequency-character language (*boomy, honky, thin, sibilant, no air*…).
+**1. Ask the skill to design it.** Describe your taste and the skill proposes a shape, runs it
+through the Generator ↔ Critic ↔ Arbiter loop, and exports it for REW and your DSP. The more
+concretely you describe the *character* you want, the better the result. Useful things to tell it:
+- your genres and how you listen (low volume vs. loud, long drives);
+- the direction against a reference: *"start from ResoNix Accurate but +2 dB more sub-bass and
+  calmer highs"*, or *"like SQ-Comp-Ref with a slightly deeper presence dip for laid-back vocals"*;
+- any complaints about the current sound in frequency-character language (*boomy, honky, thin,
+  sibilant, no air*…).
 
 Example prompts:
 > *"Build me a custom target curve: warm, punchy bass for rock, vocals slightly forward, gentle highs — start from Half Whitledge and show me the shape."*
 >
 > *"Blend Audiofrog and Harman into one target with Audiofrog's timbre but a bit more deep bass, then compare it against both."*
 
-The skill writes a 2-column `freq  dB` file (log-spaced, 20 Hz–20 kHz) into the project's
-`rew_analitic/target-curves/<name>/`, and `rew_tool` then uses it as the house curve when it
-designs EQ filters. You still confirm the final shape by ear with the measured baseline in hand.
+The skill writes a two-column `freq dB` file (log-spaced, 20 Hz–20 kHz) into the project's
+target-curve folder, records it as the active curve, and derives from it the per-driver targets
+that the EQ proposals aim at. You still confirm the final shape by ear with the measured baseline
+in hand.
 
-> *Reality check: the AI will draw whatever curve you ask for, but your speakers have to physically support it — make sure your midbass and subwoofer have the power and excursion headroom before committing to an aggressive low-end boost.*
+> *Reality check: the AI will draw whatever curve you ask for, but your speakers have to support it
+> physically — make sure your midbass and subwoofer have the power and excursion headroom before
+> committing to an aggressive low-end boost.*
 
-**2. Draw it yourself in the Nono Tuning Tool** ([nonotuningtool.com](https://nonotuningtool.com) →
-*Custom Target Curve*), then export the `.txt` and drop it into the project's `curves/` folder or
-onto the visualizer.
+**2. Draw it yourself in the Nono Tuning Tool** ([nonotuningtool.com](https://nonotuningtool.com)
+→ *Custom Target Curve*), export the `.txt`, and drop it into the project or onto the visualizer.
 
-**Compare and sanity-check it** against the well-known reference curves — and see what each hump or
-dip means for your instruments — in the interactive comparison tool:
+**Compare and sanity-check it** against the well-known reference curves, and see what each hump or
+dip means for your instruments, in the interactive comparison tool:
 **[open the curve visualizer online](https://ayukhno.github.io/autosound-tuning-skill/_curve-visualizer.html)**
 (works offline too; drag your `.txt` in, compare it side by side against SQ-Comp-Ref / ResoNix /
 Audiofrog / Harman / Jazzi / Whitledge, and right-click any point for a frequency-character guide).
+
+---
+
+## The project on disk
+
+### What is in the project folder, and what is worth backing up?
+
+One folder per car; copying the folder copies the whole tune. In 3.x it holds:
+
+- **`project.json`** — the facts: channels and their output slots, the DSP profile, the
+  microphone, the target;
+- **the ledger** — every crossover, delay, gain, polarity and filter, with the version it entered
+  in, and the snapshots (`registry.json`) you can return to in one step;
+- **`process-state.json`** — where the process stands: the phase, the capture rounds and what was
+  checked on each;
+- **`autosound_context.md`** and the journal — the car's glossary, the notes, the listening
+  verdicts;
+- the target curves, the analysis notes, the DSP configuration backups and the export files.
+
+What is worth backing up is exactly that list: small files, and no amount of re-measuring brings
+them back. The raw sweeps are not on it: they run 16 to 112 MB apiece, they live in REW's own
+`.mdat` files on your disk, and if you ever needed them again you would re-measure. The installer
+offers a **private** GitHub repository for the backup and signs `gh` in; the backup itself happens
+when you tell the AI to back the project up, and it knows what stays out.
+
+### Which DSPs, and how does the EQ get into mine?
+
+Any processor you can type into. The method never writes into a DSP; it writes a file:
+
+- **Helix, MATCH, BRAX** (Audiotec Fischer): the Full EQ file the PC-Tool imports in one go.
+- **Everything else:** REW's Generic format — twenty slots, neutral — or its Extended form when
+  a crossover has to ride along with the EQ. Processors without file import, such as Musway, ESX
+  and Zapco, take it through the
+  [copy-paste helper](https://github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant).
+- **A format of your own:** a vendor format can be supplied during a session. What the method
+  will not do is guess one: a guessed import syntax produces a file that looks right and fails
+  quietly.
+
+Whatever the format, the numbers are checked against what your DSP can do — its filter types, its
+band count, its processing rate — before they are written, and a filter that will not fit is
+reported rather than dropped.
+
+### Where do I find what the method can do?
+
+The board: [`references/core/capabilities.md`](skills/autosound-tuning/references/core/capabilities.md).
+Sixty-seven capabilities in thirteen directions — talking to REW, naming and capture rounds,
+protective filters, time and junctions, crossovers and levels, targets, EQ, prediction and
+verification, listening, the project on disk, the review channel, safety and abstention, the
+health of the install — each with the words you would say, what you get, the command, what it
+needs and refuses without, the phase it belongs to, how mature it is, and where to read the
+reasoning. It is written for a session that comes with its own process ("I have my measurements,
+only align the sub-to-midbass joint") as much as for the AI; a checker in the test suite keeps it
+honest against the code.

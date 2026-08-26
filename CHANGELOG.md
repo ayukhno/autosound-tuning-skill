@@ -42,6 +42,17 @@ Two consequences worth stating, because both have already caused a question:
 
 ## [Unreleased]
 
+- **README and FAQ, rewritten for the release.** The README says what the method is, what the two
+  lines are (2.x — the competition-proven one, `v2.8.3`, and 3.x — this branch, pre-release), how a
+  tune actually goes on the desk-first path, and points at the capabilities board; the four 2026
+  awards and their photos are back, carried over from `2.x`. The FAQ takes the detail: which line
+  you are on and how to move between them, the path phase by phase, what the method REFUSES to do,
+  what the installer puts where, TCC, measurement naming, the capture session and why protective
+  filters only, what `p1…p9` and the controls are for, what lives in the project folder, and how
+  the EQ reaches your DSP. Stale material removed: the "5-Step Tuning Journey", the 2.x plugin
+  framed as the only way in, `dsp-state-current.md` as the state. English only for now — the other
+  README translations still carry the previous text.
+
 - **`references/core/capabilities.md` — the board: find the tool by what you want, not by the
   path.** 67 capabilities in 13 directions (talking to REW · naming and captures · protective
   filters · time and junctions · crossovers and levels · targets · EQ · prediction and verification ·

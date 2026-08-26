@@ -2,47 +2,83 @@
 
 🇬🇧 **English** · 🇩🇪 [Deutsch](README.de.md) · 🇵🇱 [Polski](README.pl.md) · 🇺🇦 [Українська](README.uk.md) · ❓ [FAQ](FAQ.md) · <img src="assets/icons/roadmap.svg" width="14" height="14" valign="middle" alt="Roadmap" /> [Roadmap (EN, draft)](ROADMAP.md)
 
-**In one line:** an AI tuning assistant for your car. It reads your REW measurements and takes you
-through crossovers, time alignment, phase and EQ, one checked change at a time.
+**In one line:** an AI tuning assistant for your car. It reads your REW measurements, designs the
+tune at the desk from one capture session, and walks you through crossovers, time alignment, phase
+and EQ one checked change at a time.
 
-- **Works with REW**: pulls your measurements over its API, and writes computed EQ filters back
-  into REW for you to export
-- **Diagnoses before it fixes**: maps the cabin's reflections, nulls and driver distortion from
-  your baseline sweeps before it proposes a single change
-- **Never touches your processor**: nothing changes in the car unless you put it there. That
-  does not mean retyping everything: REW exports your EQ as a file the Helix PC-Tool imports in
-  one go, and a [copy-paste helper](https://github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant)
-  covers processors without file import, such as Musway, ESX and Zapco
-- **Knows the craft**: target curves, a phase-first EQ order, a step-by-step process, and which
-  test track to listen to for what
-- **Learns your setup**: accumulates knowledge about your car and gear, only with your consent
+- **Works with REW**: pulls your measurements over its API and hands the finished EQ back as a
+  file your DSP imports.
+- **Designs at the desk, verifies in the car** *(3.x)*: one disciplined capture session, then every
+  crossover, delay and filter is chosen on the *predicted* sum of your own measured drivers, and
+  the car gets one short visit to confirm it.
+- **Diagnoses before it fixes**: maps the cabin's reflections, nulls and driver resonances from the
+  baseline before proposing a single change, and tells a dip that EQ can fill from a null that it
+  cannot.
+- **Never touches your processor**: nothing changes in the car unless you put it there. That does
+  not mean retyping: the Helix PC-Tool imports the exported EQ in one go, REW's Generic format
+  covers most other processors, and a
+  [copy-paste helper](https://github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant) covers the ones
+  without file import, such as Musway, ESX and Zapco.
+- **Knows the craft**: target curves, protective filters, a phase-first order, a step-by-step
+  process, and which test track to listen to for what.
+- **Learns your setup**: accumulates knowledge about your car and gear, only with your consent.
 
-Tuned with this method, my own car took **1st in class at two AYA competitions in 2026**:
-Einsteiger 5000 in May, with the graph-analysis-and-Gemini workflow that later became this skill,
-then Amateur 5000 in July with the skill itself and my own ears.
+## Proven in competition
+
+Tuned with the **2.x line** of this method, my own car took four awards in 2026:
+
+- **1st in Einsteiger 5000 — AYA, Lemgo, 30 May 2026.** Graph analysis and Gemini's advice: the
+  workflow that later became this skill.
+- **1st in Amateur 5000 — AYA, Horst, 25 July 2026.** The next class up, with the skill itself
+  and my own ears.
+- **2nd in Amateur 5000 — AYA, Schmallenberg, 15 August 2026.** A different sound judge than in
+  July; his score card is the input for the next round.
+- **3rd in SQ Entry Unlimited — EMMA Sound Off 2026, Schmallenberg, 15 August 2026.** First
+  outing under the EMMA ruleset, same day and same tune as the AYA above.
 
 <p align="left">
-  <img src="assets/awards/aya-may26-einsteiger5000.jpg" width="100" alt="AYA May 2026 Einsteiger 5000">
+  <img src="assets/awards/aya-may26-einsteiger5000.jpg" width="100" alt="AYA May 2026 Einsteiger 5000, 1st place">
   &nbsp;&nbsp;&nbsp;
-  <img src="assets/awards/aya-jul26-amateur5000.jpg" width="100" alt="AYA Jul 2026 Amateur 5000">
+  <img src="assets/awards/aya-jul26-amateur5000.jpg" width="100" alt="AYA July 2026 Amateur 5000, 1st place">
+  &nbsp;&nbsp;&nbsp;
+  <img src="assets/awards/aya-aug26-amateur5000.jpg" width="100" alt="AYA August 2026 Amateur 5000, 2nd place">
+  &nbsp;&nbsp;&nbsp;
+  <img src="assets/awards/emma-aug26-entry-unlimited.jpg" width="60" alt="EMMA Sound Off 2026 SQ Entry Unlimited, 3rd place">
 </p>
+
+*Your award could be here too.*
 
 > [!CAUTION]
 > AI can get numbers wrong. Always double-check crossover frequencies, slopes, and EQ values in
 > your DSP before unmuting, especially on tweeters, and start at a low volume.
 
+## Two lines: the one that won, and the one being finished
+
+| | **2.x — stable** | **3.x — this branch** |
+| :--- | :--- | :--- |
+| What it is | The competition-proven method: the iterative loop, the project kept as prose | The same method, plus a machine-readable project, a recorded process, the desk-first path, and the [TCC](https://github.com/ayukhno/autosound-tcc) desktop app |
+| Version | [`v2.8.3`](https://github.com/ayukhno/autosound-tuning-skill/releases/tag/v2.8.3) on branch [`2.x`](https://github.com/ayukhno/autosound-tuning-skill/tree/2.x); fixes only | Pre-release: in its final full-tune check before **3.1.0** |
+| How you get it | The Claude Code plugin — see [the 2.x README](https://github.com/ayukhno/autosound-tuning-skill/blob/2.x/README.md) | The one-line installer [below](#getting-started), which also brings the app |
+| How it updates | It doesn't move: the plugin entry names the 2.8.3 commit, and `/plugin update` returns to it | Run the same install line again, or let the app update itself; both take the newest 3.x tag, so a fix reaches you the next time you run it |
+
+Want the tune that took the awards? Take 2.x: the plugin route installs exactly 2.8.3, and no
+update moves you off it. Want the desk-first path and the app, and don't mind a pre-release?
+Take 3.x. What differs and how to move from one to the other is in the
+[FAQ](FAQ.md#which-line-am-i-on--2x-or-3x).
+
 > [!NOTE]
 > **Prefer a window to a terminal?** [TCC](https://github.com/ayukhno/autosound-tcc), the companion
-> desktop app, runs this same method in a desktop window: the DSP tree, your REW curves, the plan,
-> and the AI in a side panel. The one line below installs it too, unless you say otherwise. It is
-> early, and the method in a terminal is the proven path.
+> desktop app, runs the 3.x method in a desktop window: the DSP tree, your REW curves, the plan, and
+> the AI in a side panel. The one line below installs it too, unless you say otherwise. It is early,
+> and the method in a terminal is the proven path.
 
 ## Table of contents
 
 - [Who it's for](#who-its-for)
 - [What you need](#what-you-need)
 - [Getting started](#getting-started)
-- [What a session actually sounds like](#what-a-session-actually-sounds-like)
+- [How a tune goes](#how-a-tune-goes)
+- [What a session sounds like](#what-a-session-sounds-like)
 - [Which models to use](#which-models-to-use)
 - [The math under the hood](#the-math-under-the-hood)
 - [What's in here](#whats-in-here)
@@ -108,13 +144,13 @@ account covers it.
 
 One line installs everything: Claude Code, the method, the
 [TCC desktop app](https://github.com/ayukhno/autosound-tcc), Gemini as the reviewer, and `omp`,
-which is what lets the app offer models other than Claude. It shows
-what is already on the machine, lists everything it will download and where from, asks once — and
-then runs on its own for ten to twenty minutes. The one interruption comes right after that
-question: on a Mac that has never been used for programming it asks for your Mac password, once,
-for Apple's Command Line Tools; on Windows it shows one permission dialog, for Git. At the end it
-signs you in, in your browser: Claude first (that one is required), then the reviewer and GitHub
-if you want them — each on Enter, or later.
+which is what lets the app offer models other than Claude. It shows what is already on the
+machine, lists everything it will download and where from, asks once — and then runs on its own
+for ten to twenty minutes. The one interruption comes right after that question: on a Mac that has
+never been used for programming it asks for your Mac password, once, for Apple's Command Line
+Tools; on Windows it shows one permission dialog, for Git. At the end it signs you in, in your
+browser: Claude first (that one is required), then the reviewer and GitHub if you want them — each
+on Enter, or later.
 
 **macOS** — open Terminal (⌘-Space, type "terminal", Enter) and paste:
 
@@ -169,22 +205,15 @@ so you can work in the window one day and the terminal the next.
 > (High)** reviewing. [Why the cheaper combinations fail quietly](#which-models-to-use).
 
 <details>
-<summary>Other ways in: Gemini as the driver, or the 2.x plugin you may already have</summary>
+<summary>Other ways in: the 2.x plugin you may already have, or Gemini as the driver</summary>
 
-**Under Gemini as the driver.** There is no plugin installer, but you can point an agentic Gemini
-session (Antigravity CLI, or any Gemini setup with file and shell access) at the repository:
+**Already installed the 2.x plugin?** Then you are on the stable line, it stays supported, and no
+update will move you off it: the marketplace entry names an exact commit (2.8.3) rather than a
+branch. Your existing projects stay readable there.
 
-> Clone https://github.com/ayukhno/autosound-tuning-skill, read `skills/autosound-tuning/SKILL.md`,
-> and follow that method as your operating instructions for this session.
-
-**Already installed the 2.x plugin?** Then you are on the 2.x line, it stays supported, and no
-update will move you off it: the marketplace entry names an exact commit rather than a branch.
-Your existing projects stay readable there.
-
-The line above installs 3.x, which stores a project as machine-readable files instead of prose,
-records the process, and is what TCC reads. One skill per machine: two plugins shipping a skill of
-the same name both stay active, and which one answers is anybody's guess. So remove the plugin
-first, inside Claude Code:
+The line above installs 3.x. One skill per machine: two plugins shipping a skill of the same name
+both stay active, and which one answers is anybody's guess. So remove the plugin first, inside
+Claude Code:
 
 ```
 /plugin uninstall autosound-tuning
@@ -204,12 +233,61 @@ python3 ~/.claude/skills/.autosound-tuning-src/skills/autosound-tuning/rew_tool/
 Channels and their output slots, crossovers, delays, gains, polarity, EQ and the DSP profile move
 across. The journal and older snapshots stay behind, deliberately: 2.x never recorded which facts
 were in force when, so carrying its history would mean inventing it.
+
+**Under Gemini as the driver.** There is no plugin installer, but you can point an agentic Gemini
+session (Antigravity CLI, or any Gemini setup with file and shell access) at the repository:
+
+> Clone https://github.com/ayukhno/autosound-tuning-skill, read `skills/autosound-tuning/SKILL.md`,
+> and follow that method as your operating instructions for this session.
+
+A stateless web-chat version of the method, with no local install at all, lives on the
+[manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step)
+branch; [the FAQ](FAQ.md#do-you-have-a-version-running-on-google-ai-studio) says what it can and
+cannot do.
 </details>
 
-## What a session actually sounds like
+## How a tune goes
+
+The 3.x path puts the car at the ends and the desk in the middle. Two visits to the car, one
+sitting at the desk between them; the ledger on disk is the one source of truth, and every proposal
+lands there as a version you can revert in one step.
+
+1. **Intake, at the desk.** The car, the drivers, the DSP and what it can do, the microphone, and
+   the target curve — agreed before anyone sits in the car, so that nothing there is a surprise.
+2. **One capture session, in the car.** Every driver alone, with *protective* filters only — a
+   high-pass on the mids and tweeters and nothing else — so the recording carries the driver and
+   the cabin, not a tune. Sweeps and an MMM pass in one go, plus a few control positions around
+   the head. Before you leave the car, the round is checked: drift between the first and last
+   sweep, and whether the set is usable at all.
+3. **Design, at the desk.** Crossovers, levels, delays and polarity are chosen on the summed
+   response *predicted* from your measured drivers with the DSP's own filters — every joint scored
+   by how little it loses, and an alignment that sits a whole cycle off is named as such. EQ comes
+   as packages, in this order: a driver's own resonances (only where the peak stays put across the
+   control positions and is minimum-phase), left/right shape, then tone toward the target. Cuts
+   only, unless you say otherwise. Each package is one decision and one ledger version; the result
+   is an export file for the DSP.
+4. **Verification, in the car — short.** You enter the sheet. An entry control confirms that the
+   car hears what the desk predicted, driver by driver, or names the one that does not and why.
+   Then what the desk cannot do: fine EQ on the moving-mic average, and A/B by one band at a
+   time, with the method turning *"it cuts the ear"* or *"it booms"* into a ranked short list of
+   suspects — three rounds at most.
+5. **Listening.** Test tracks, a cheat-sheet of what to listen for, and the verdict written down
+   against the version that earned it.
+6. **Taste.** Presets on a virtual layer, so the technical tune underneath stays intact.
+
+In the app, the same path is what you see: the DSP tree, the curves REW measured, the plan with
+its steps, the ledger's versions, and the AI in the side panel. The app reads the files the method
+writes, so a step taken in the terminal shows in the window and the other way round.
+
+When the desk and the car disagree, the path falls back to the iterative loop that won the awards,
+and the ledger records where. The whole path, phase by phase, is
+[`references/phases/virtual-first.md`](skills/autosound-tuning/references/phases/virtual-first.md);
+the phase files behind it are listed in [`SKILL.md`](skills/autosound-tuning/SKILL.md).
+
+## What a session sounds like
 
 Three voices: **you** at the listening seat, **Claude** driving the process, **Gemini** challenging
-every move.
+every move. This exchange is from a real 2.x session; the review loop is the same in 3.x.
 
 > **You (Arbiter):** The double bass booms a bit. And when I nudged the delays by ear, the bass got better — let's enter my values?
 >
@@ -269,37 +347,67 @@ reviewer through Google AI Studio, are in the [FAQ](FAQ.md).
 
 ## The math under the hood
 
-A library of local scripts crunches the large data sets, so the models never spend tokens on them:
+A library of local scripts crunches the large data sets, so the models never spend tokens on them
+and never guess a number they could compute:
 
 - **A cabin and install flaw map, built before any tuning.** Door nulls, reflections and left/right
   "pockets" that no stereo EQ can fill are found in the first sweeps, so the EQ plan works *around*
   the cabin instead of fighting it.
-- **Four independent timing reads must agree** before any delay is touched.
+- **The sum is predicted, not hoped for.** Any pair of drivers is summed from their measured
+  responses with the DSP's filters in place; delay and polarity are chosen by how little the joint
+  loses, the candidate a whole cycle off is named, and four independent timing reads must agree
+  before any delay is touched.
 - **No driver is ever asked to fight physics.** A fillable dip and an interference null look alike
-  on a chart; a phase test tells them apart, and only the fillable one gets boosted.
-- **Every proposed filter is simulated on your own measured responses** before you type it in, and
-  scored under small delay and level drift so it survives the real world rather than winning at one
-  razor point.
+  on a chart; an excess-phase test tells them apart, and only the fillable one may be boosted.
+- **The curve is trusted at the width where it is true.** The spread across the positions around
+  the head, measured in *your* car, says which features stay put (the driver) and which move with
+  the microphone (the seat), and sets how narrow a filter may be, band by band.
+- **EQ is proposed as packages through gates**, resonances → left/right shape → tone, cuts only by
+  default; *"it cuts the ear"* becomes a short list of suspects ranked by how loud the ear hears
+  them, each with one A/B.
+- **Every proposed filter is simulated on your own measured responses** before you type it in,
+  scored under small delay and level drift so it survives the real world rather than winning at
+  one razor point, and confirmed by an entry control once entered.
+- **A check whose input is missing fails.** It never reports "no objection" for want of data —
+  no delay from a single estimator, no EQ on a capture round that drifted, no round without its
+  protective filters on record.
+
+Everything the method can do, by what you want rather than by file name, is on one board:
+[`references/core/capabilities.md`](skills/autosound-tuning/references/core/capabilities.md) —
+67 capabilities in 13 directions, each with the command, what it needs and refuses without, and
+where the reasoning lives. A checker in the test suite keeps the board honest against the code.
+Every `rew_tool` module carries its own `--selftest`, anchored to definitions rather than to its
+own output, and [`scripts/run-selftests.sh`](scripts/run-selftests.sh) runs them all.
 
 ## What's in here
 
 ```
-autosound-tuning-skill/        a Claude Code plugin
-└── skills/autosound-tuning/    the skill
-    ├── SKILL.md        entry point — process map, session lifecycle, roles
-    ├── references/     on-demand docs (phases, diagnostics, EQ, filters, staging,
-    │                   test tracks, REW API, Helix, the review method, intake …)
-    ├── knowledge/      accumulated car & DSP profiles (cars/, dsp/)
-    ├── rew_tool/       REW API bridge, analysis, target-curve generation, versioned state
-    ├── scripts/        Critic/Advisor channel wrappers (Gemini, Claude, Codex)
-    └── curves.html     target-curve visualizer
+autosound-tuning-skill/
+├── install.sh · install.ps1 · install.cmd    the installer, for macOS and Windows
+├── skills/autosound-tuning/                  the skill (a Claude Code plugin)
+│   ├── SKILL.md         entry point — process map, session lifecycle, roles
+│   ├── references/      the doctrine: core/ (capabilities board, review loop, what the tools
+│   │                    refuse …), phases/ (−1…5, virtual-first), patterns/, tooling/
+│   ├── knowledge/       accumulated car & DSP profiles (cars/, dsp/)
+│   ├── rew_tool/        REW bridge, analysis, prediction and verification, EQ proposals,
+│   │                    the ledger and the process — each module with a --selftest
+│   ├── scripts/         the Advisor / Critic channel (Gemini, Claude, Codex)
+│   ├── evals/           does the skill wake on the right request
+│   └── curves.html      target-curve visualizer
+├── scripts/             release checks: run-selftests.sh, tag-check.sh, installer-consistency.py
+├── community-inbox/     case studies and contributed experience
+└── CHANGELOG.md         every tag, with an Upgrading note
 ```
 
 ▶ **[Open the target-curve visualizer online](https://ayukhno.github.io/autosound-tuning-skill/_curve-visualizer.html?lang=en)** — drag in your own curve or a standard one from the [Nono Tuning Tool](https://nonotuningtool.com), right-click any point for a frequency-character guide, and compare curves side by side. One self-contained file, so it works offline; use Save As to keep a copy.
 
 The independent-review method (Critic/Advisor/Arbiter, anti-anchoring) is written up in
-`references/core/review-loop.md`. A stateless web-chat version of the method, with no local
-install, lives on the [manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step) branch.
+[`references/core/review-loop.md`](skills/autosound-tuning/references/core/review-loop.md).
+
+The desktop app is its own repository, [autosound-tcc](https://github.com/ayukhno/autosound-tcc);
+the installer brings the newest tag of each — the app's, and the method's `v3.*` — and installs
+the method into `~/.claude/skills/autosound-tuning`, where Claude Code finds it. Which app version
+and which method version you are on is in the app under *Diagnostics → Installation*.
 
 ## Reporting a problem
 
