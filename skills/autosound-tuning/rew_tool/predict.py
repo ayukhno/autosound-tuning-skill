@@ -200,11 +200,18 @@ def chain_from_anchor(d):
 
 
 def chain_response(freqs, chain):
-    """The complex response of one DSP chain on `freqs` (no driver in it)."""
+    """The complex response of one DSP chain on `freqs` (no driver in it).
+
+    `chain["upstream"]`, when present, is the list of chains this output is FED BY -- the virtual
+    tier (a Helix VFL feeds every left-front output): their responses multiply in, in order. A
+    virtual row is a chain like any other; what makes it apply here is the ROUTING fact, which the
+    ledger does not carry (see `--route`)."""
     f = np.asarray(freqs, dtype=float)
     if chain.get("muted"):
         return np.zeros(len(f), dtype=complex)
     h = np.full(len(f), 10.0 ** (chain["gain_db"] / 20.0), dtype=complex)
+    for up in chain.get("upstream") or []:
+        h = h * chain_response(f, up)
     if chain["polarity"] == "INV":
         h = -h
     h = h * np.exp(-2j * np.pi * f * chain["ta_ms"] / 1000.0)
@@ -217,12 +224,46 @@ def chain_response(freqs, chain):
     return h
 
 
+def route_chains(chains, virtual, routes):
+    """Attach virtual-tier chains upstream of the outputs they feed. `routes`: {virtual: [outputs]}.
+
+    Returns a new chains dict and the notes. An output no route names is left as it is and SAID;
+    a virtual code the ledger does not have is refused by name. The routing itself is a fact about
+    the DSP's matrix that this module cannot read off anything -- it comes from the user (`--route`)
+    or from the project once the schema carries it."""
+    out = {c: dict(ch) for c, ch in chains.items()}
+    notes, fed = [], set()
+    for vcode, outputs in routes.items():
+        v = virtual.get(canon(vcode))
+        if v is None:
+            raise PredictError(f"--route {vcode}: no such row in the ledger's virtual tier "
+                               f"(have: {', '.join(sorted(virtual)) or 'none'})")
+        if v.get("unmodellable"):
+            raise PredictError(f"--route {vcode}: {v['unmodellable']}")
+        for o in outputs:
+            oc = canon(o)
+            if oc not in out:
+                raise PredictError(f"--route {vcode}={o}: no output row {o!r}")
+            out[oc].setdefault("upstream", []).append(dict(v, code=canon(vcode)))
+            fed.add(oc)
+    if routes:
+        unfed = [c for c in out if c not in fed and not out[c].get("muted") and not out[c].get("unmodellable")]
+        if unfed:
+            notes.append(f"virtual tier applied through --route; NOT routed (left as the output row alone): "
+                         + ", ".join(sorted(unfed)))
+    return out, notes
+
+
 def chain_label(chain):
     if chain.get("unmodellable"):
         return f"NOT MODELLED -- {chain['unmodellable']}"
     if chain.get("muted"):
         return "MUTED"
     parts = [f"{chain['gain_db']:+.1f} dB", chain["polarity"], f"{chain['ta_ms']:.2f} ms"]
+    for up in chain.get("upstream") or []:
+        parts.append(f"<- {up.get('code', 'virtual')} EQ x{len(up.get('eq') or [])}"
+                     + (f" {up['gain_db']:+.1f} dB" if up.get("gain_db") else "")
+                     + (f" {up['ta_ms']:.2f} ms" if up.get("ta_ms") else ""))
     for kind in ("hp", "lp"):
         leg = chain.get(kind)
         parts.append(f"{kind.upper()} {leg['f']:g} {leg['type']}{leg['slope']}" if leg
@@ -554,6 +595,34 @@ def _profile_limits(project_dir):
     return (float(rate) if rate else None), (float(delay) if delay else None)
 
 
+def arrival_difference_ms(freqs, A, B, band, max_ms=25.0, step_ms=0.02):
+    """How much later B arrives than A over `band`: the peak of their band-limited cross-correlation.
+
+    |Σ w·A·conj(B)·e^{+2πj f τ}| over τ, w = |A||B| where both play -- the matched-filter envelope,
+    polarity-blind, and its main lobe sits at the physical delay while the lobes one cycle off are
+    lower by the bandwidth. This is the ruler that tells an alias from the alignment: at 88 Hz one
+    cycle is 11.4 ms, and a sum-loss search confined to ±3 ms on a sub that arrives 12 ms late finds
+    a beautiful score one cycle off (a live tune, 2026-08-26). A first draft fitted the phase slope
+    instead; on a real mid↔tweeter junction it read 6.4 ms where the impulse peaks were 0.9 apart --
+    filter transitions inside the band are phase, not delay, and a slope cannot tell them apart.
+    """
+    f = np.asarray(freqs, dtype=float)
+    m = (f >= band[0]) & (f <= band[1]) & (np.abs(A) > 0) & (np.abs(B) > 0)
+    if m.sum() < 4:
+        return None
+    fb, x = f[m], A[m] * np.conj(B[m])
+    # On a UNIFORM grid across the band: the log grid this module predicts on is dense at the
+    # bottom of the band and sparse at the top, which both skews the correlation toward the low
+    # end and aliases tau at 1/Δf of the sparse end (a 2 kHz junction on 48 ppo read +30 cycles).
+    fu = np.linspace(fb[0], fb[-1], 2048)
+    xu = np.interp(fu, fb, x.real) + 1j * np.interp(fu, fb, x.imag)
+    xu = xu / np.abs(xu).max()
+    taus = np.arange(-max_ms, max_ms + step_ms / 2, step_ms) / 1000.0
+    env = np.abs(np.exp(2j * np.pi * np.outer(taus, fu)) @ xu)
+    # B later by tau: A·conj(B) = e^{+2πj f tau}, which e^{+2πj f tau'} makes coherent at tau' = -tau.
+    return float(-taus[int(np.argmax(env))] * 1000.0)    # ms; + means B arrives later than A
+
+
 def align_joints(freqs, solos, chains, joints=None, *, step_ms=0.01, max_delay_ms=3.0,
                  band_oct=1.0, tie_db=0.02, apf=False, delay_max_ms=None):
     """Delay x polarity per junction, bottom-up, by sum loss -- the desk half of Phase 1.3.
@@ -574,7 +643,13 @@ def align_joints(freqs, solos, chains, joints=None, *, step_ms=0.01, max_delay_m
     `delay_max_ms` (the profile's `delay.max_ms`) turns a delay the DSP cannot enter into a warning,
     never a silent clip.
 
-    Reports and proposes; banks nothing. `delta` is the shape `state/apply.py propose` takes.
+    The search window follows the PHYSICS: `max_delay_ms` is widened to cover the arrival
+    difference read off the members' phase slope (`arrival_difference_ms`), and every answer is
+    reported with how many cycles at fc it sits from that arrival -- a score can be excellent one
+    cycle off, and nothing in the score says so. A non-zero cycle count is a note by name; the
+    choice stays the tuner's.
+
+    Reports and proposes; banks nothing. `delta` is the shape `apply.propose` takes.
     """
     f = np.asarray(freqs, dtype=float)
     original = {c: dict(ch) for c, ch in chains.items()}
@@ -603,18 +678,76 @@ def align_joints(freqs, solos, chains, joints=None, *, step_ms=0.01, max_delay_m
 
     def _record(kind, lo, hi, fc, band, A, B):
         before = dsp_math.sum_loss(f, A, B, band)
+        # B arrives `arr` ms after A: the physical delay is about -arr on B. Widen the window to
+        # reach it, or the search can only return an alias.
+        arr = arrival_difference_ms(f, A, B, band)
+        window = max_delay_ms
+        if arr is not None and abs(arr) + 1.0 > window:
+            window = float(math.ceil(abs(arr) + 1.0))
         pol, tau, dip, margin, avg, score = dsp_math.align_sum_loss(
-            f, A, B, band, max_delay_ms=max_delay_ms, step_ms=step_ms, tie_db=tie_db)
+            f, A, B, band, max_delay_ms=window, step_ms=step_ms, tie_db=tie_db)
+        # The PHYSICAL candidate: the best point within half a cycle of the arrival alignment,
+        # either polarity -- the search re-run around -arr instead of around 0.
+        physical = None
+        if arr is not None and fc:
+            # Candidates within half a cycle of the arrival alignment IN TOTAL PHASE at fc -- a
+            # flip counts as half a cycle, so an inverted candidate is "physical" only between one
+            # cycle back and the arrival itself. Scored on the same ruler, best wins.
+            centre, cycle = -arr, 1000.0 / fc
+            grid = max(step_ms, cycle / 240.0)
+            best = None
+            for pol_c in (1, -1):
+                lo_t, hi_t = (centre - cycle / 2, centre + cycle / 2) if pol_c > 0 else (centre - cycle, centre)
+                for t in np.arange(lo_t, hi_t + grid / 2, grid):
+                    t = round(t / step_ms) * step_ms
+                    s_ = dsp_math.sum_loss(f, A, pol_c * B * np.exp(-2j * np.pi * f * t / 1000.0), band)
+                    if best is None or s_["score_db"] > best["score_db"] + 1e-12:
+                        best = {"tau_ms": float(t), "polarity": pol_c, "score_db": s_["score_db"],
+                                "avg_db": s_["avg_db"], "dip_db": s_["dip_db"]}
+            physical = best
+        chosen = "score"
+        cyc = None
+        if arr is not None and fc:
+            cyc = (tau + arr) * fc / 1000.0 + (0.5 if pol < 0 else 0.0)
+            if abs(cyc) >= 0.75 and physical is not None:
+                # An alias: the score is good and the impulse is not one. The proposal takes the
+                # physical answer; the alias stays in the record for the tuner to overrule.
+                chosen = "physical"
+        alias = {"tau_ms": tau, "polarity": int(pol), "score_db": score, "avg_db": avg, "dip_db": dip}
+        if chosen == "physical":
+            tau, pol = physical["tau_ms"], physical["polarity"]
         _apply(hi, tau, pol)
         after = dsp_math.sum_loss(f, A, processed[hi], band)
         rec = {"kind": kind, "lo": lo, "hi": hi, "fc": fc, "band": [band[0], band[1]],
                "tau_ms": tau, "steps": int(round(tau / step_ms)), "polarity": int(pol),
-               "polarity_margin_db": margin,
+               "polarity_margin_db": margin, "window_ms": window, "chosen": chosen,
+               "arrival_ms": (round(arr, 3) if arr is not None else None), "cycles_off": None,
+               "physical": physical, "score_best": alias,
                "before": {k: before[k] for k in ("avg_db", "dip_db", "dip_hz", "score_db")},
                "after": {k: after[k] for k in ("avg_db", "dip_db", "dip_hz", "score_db")},
                "apf": None, "notes": []}
-        if abs(abs(tau) - max_delay_ms) < step_ms / 2:
-            rec["notes"].append(f"optimum sits AT the search edge ({max_delay_ms:g} ms) -- widen "
+        if window != max_delay_ms:
+            rec["notes"].append(f"search widened to +/-{window:g} ms to reach the arrival difference "
+                                f"(`{hi}` arrives {abs(arr):.2f} ms {'after' if arr > 0 else 'before'} `{lo}`)")
+        if cyc is not None:
+            # A polarity flip is half a cycle; the cycles between the SCORE's answer and the
+            # physical alignment (-arr) at fc, the flip folded in. Fractional, so a 0.35-cycle
+            # disagreement is not rounded into silence.
+            rec["cycles_off"] = round(float(cyc), 2)
+            if chosen == "physical":
+                a = alias
+                rec["notes"].append(
+                    f"ALIAS: the score's best ({a['tau_ms']:+.3f} ms{' INV' if a['polarity'] < 0 else ''}, "
+                    f"score {a['score_db']:+.2f} dB) sits {cyc:+.2f} cycle(s) at {fc:g} Hz from the "
+                    f"arrival alignment -- a good score, not one impulse. TAKEN: the physical answer "
+                    f"({tau:+.3f} ms{' INV' if pol < 0 else ''}, score {physical['score_db']:+.2f} dB); "
+                    f"overrule only after the junction is verified by ear and measurement")
+            elif abs(cyc) >= 0.25:
+                rec["notes"].append(
+                    f"off the arrival alignment ({-arr:+.2f} ms) by {cyc:+.2f} cycle(s) at {fc:g} Hz "
+                    f"-- the score prefers it; check the impulse before entering")
+        if abs(abs(tau) - window) < step_ms / 2:
+            rec["notes"].append(f"optimum sits AT the search edge ({window:g} ms) -- widen "
                                 f"--max-delay-ms before believing it")
         if abs(tau) < step_ms / 2 and pol > 0:
             rec["notes"].append("already aligned as recorded -- nothing to change")
@@ -691,9 +824,11 @@ def render_alignment(result, original=None, rate_hz=None):
         name = f"{st['lo']}<->{st['hi']}" if st["kind"] == "junction" else f"{st['lo']}+{st['hi']} pair"
         fc = f"{st['fc']:.0f}" if st["fc"] else "--"
         b, a = st["before"], st["after"]
+        arr = f"  arrival {st['arrival_ms']:+.2f} ms" if st.get("arrival_ms") is not None else ""
+        cyc = f" ({st['cycles_off']:+.2f} cyc)" if st.get("cycles_off") else ""
         lines.append(f"  {name:16}{fc:>6}{b['avg_db']:>+8.2f}/{b['dip_db']:>+7.2f}"
                      f"{st['tau_ms']:>+9.3f}{'INV' if st['polarity'] < 0 else 'same':>5}"
-                     f"{a['avg_db']:>+8.2f}/{a['dip_db']:>+7.2f}{st['polarity_margin_db']:>+8.2f}")
+                     f"{a['avg_db']:>+8.2f}/{a['dip_db']:>+7.2f}{st['polarity_margin_db']:>+8.2f}{arr}{cyc}")
         for n in st["notes"]:
             lines.append(f"  {'':16}  ! {n}")
         if st.get("apf"):
@@ -844,6 +979,10 @@ def main(argv=None):
                     help="key inside --state-json holding the state (e.g. current_G1_...)")
     ap.add_argument("--preset", default=None)
     ap.add_argument("--state-ver", default=None)
+    ap.add_argument("--route", action="append", default=[], metavar="VIRTUAL=out1,out2",
+                    help="the DSP's routing matrix, as the user reads it off the screen: the ledger's "
+                         "virtual-tier row VIRTUAL feeds these outputs, so its EQ/gain/delay is in "
+                         "their chain (e.g. --route VFL=w-L,m-L,tw-L). Not guessed from names")
     ap.add_argument("--joint", action="append", default=[], metavar="lo,hi,fc",
                     help="override/add a junction (default: derived from the crossovers)")
     ap.add_argument("--band-oct", type=float, default=1.0)
@@ -877,10 +1016,27 @@ def main(argv=None):
             d = d[args.state_key]
         chains = chains_from_anchors(d)
         state_label = f"{args.state_json}" + (f"[{args.state_key}]" if args.state_key else "")
+        route_notes = []
     else:
         preset, snap = load_project_state(args.project, args.preset, args.state_ver)
         chains = chains_from_snapshot(snap)
         state_label = f"{args.project} slot {preset} {snap.get('version') or 'HEAD'}"
+        if args.route:
+            routes = {}
+            for spec in args.route:
+                v, _, outs = spec.partition("=")
+                routes[v.strip()] = [o.strip() for o in outs.split(",") if o.strip()]
+            chains, route_notes = route_chains(chains, chains_from_snapshot(snap, tier="virtual_channels"), routes)
+            state_label += " + virtual tier via --route"
+        else:
+            route_notes = []
+            v_eq = [c for c, r in (snap.get("virtual_channels") or {}).items()
+                    if isinstance(r, dict) and (r.get("eq") or r.get("ta_ms") or r.get("gain_db"))]
+            if v_eq:
+                route_notes.append("the ledger's VIRTUAL tier carries EQ/gain/delay on "
+                                   + ", ".join(sorted(v_eq)) + " and is NOT in this prediction: "
+                                   "no routing fact. Pass --route VIRTUAL=out,out as the DSP's "
+                                   "matrix reads")
 
     drift = drift_from_manifest(args.drift) if args.drift else None
     if args.solos:
@@ -950,6 +1106,7 @@ def main(argv=None):
         state_label += " + aligned"
     result = predict(f, solos, chains, joints=joints, band_oct=args.band_oct)
     result["notes"].insert(0, f"state: {state_label}")
+    result["notes"][1:1] = route_notes
     result["notes"].insert(1, "solos: " + ", ".join(
         f"{c} ({i['source']})" for c, (_, i) in loaded.items()))
     result["notes"][2:2] = prot_notes
@@ -1169,6 +1326,23 @@ def _selftest():
     js = to_json(r3, decimate=4)
     assert set(js["sides"]) == {"L", "R"} and len(js["junctions"]) == 4 and js["not_modelled"]
     assert "w-L↔m-L" in render(r3)
+    # 6b. The virtual tier applies through a ROUTING fact, never by name: a VFL with a -6 dB PK at
+    #     1 kHz routed to w-L puts -6 dB at 1 kHz on w-L's chain, nothing on w-R, and the label says
+    #     where it came from; a virtual code the ledger lacks is refused.
+    vsnap = {"channels": {"w-L": dict(one, hp="OFF", lp="OFF"), "w-R": dict(one, hp="OFF", lp="OFF")},
+             "virtual_channels": {"VFL": {"eq": [{"type": "PK", "f": 1000, "gain_db": -6, "q": 2}],
+                                          "gain_db": 0, "ta_ms": 0, "polarity": "NORM"}}}
+    routed, rnotes = route_chains(chains_from_snapshot(vsnap), chains_from_snapshot(vsnap, "virtual_channels"),
+                                  {"VFL": ["w-L"]})
+    assert abs(_db(chain_response(at, routed["w-L"]))[2] + 6.0) < 0.01 and \
+        abs(_db(chain_response(at, routed["w-R"]))[2]) < 1e-9, (routed["w-L"], routed["w-R"])
+    assert "VFL" in chain_label(routed["w-L"]) and any("NOT routed" in n and "w-R" in n for n in rnotes), rnotes
+    try:
+        route_chains(chains_from_snapshot(vsnap), chains_from_snapshot(vsnap, "virtual_channels"), {"VXX": ["w-L"]})
+        raise AssertionError("an unknown virtual code was accepted")
+    except PredictError as e:
+        assert "VXX" in str(e)
+
     # 7. Alignment by sum loss, bottom-up, on the DSP's grid (Phase 1.3 as a command). Anchored
     #    to arrivals the fixtures DEFINE, never to a stored answer.
     step = 1000.0 / fs
@@ -1270,6 +1444,33 @@ def _selftest():
     r7f = align_joints(f, solos_d, ch3, step_ms=step, tie_db=0.001, delay_max_ms=w_found / 2)
     assert any("w-L" in w and "ceiling" in w for w in r7f["warnings"]), r7f["warnings"]
     assert abs(r7f["chains"]["w-L"]["ta_ms"] - w_found) < 1e-9, "a warning must not change the answer"
+    # (g) A sub that arrives 12 ms after the woofer, at an 88 Hz junction (one cycle = 11.4 ms).
+    #     The arrival difference is read off the phase slope; the window widens to reach it; the
+    #     answer is the PHYSICAL one (within a step of 12 ms, no flip, 0 cycles off). And a search
+    #     pinned to +/-3 ms by hand can only return an alias -- which must then be SAID by name.
+    late = np.exp(-2j * np.pi * f * 12.0e-3)
+    ch_g = {"sw": chain_from_row({"hp": "OFF", "lp": {"f": 88, "type": "LR", "slope": 24},
+                                  "gain_db": 0, "ta_ms": 0, "polarity": "NORM"}),
+            "w-L": chain_from_row({"hp": {"f": 88, "type": "LR", "slope": 24}, "lp": "OFF",
+                                   "gain_db": 0, "ta_ms": 0, "polarity": "NORM"})}
+    arr = arrival_difference_ms(f, late * chain_response(f, ch_g["sw"]), e0 * chain_response(f, ch_g["w-L"]), (44, 176))
+    assert abs(arr + 12.0) < 0.2, arr                        # w-L arrives 12 ms BEFORE the sub
+    r7g = align_joints(f, {"sw": late, "w-L": e0}, ch_g, step_ms=step, tie_db=0.001)
+    g = r7g["steps"][0]
+    assert g["window_ms"] >= 13 and abs(g["tau_ms"] - 12.0) <= 0.1 and g["polarity"] == 1, g
+    assert abs(g["cycles_off"]) < 0.25 and not any("ALIAS" in n for n in g["notes"]), (g["cycles_off"], g["notes"])
+    assert g["chosen"] == "score" and g["physical"] and abs(g["physical"]["tau_ms"] - g["tau_ms"]) <= 0.1, g
+    # (h) Forced alias: the same pair with the search re-read one cycle off by hand -- a chain that
+    #     already carries a whole cycle of delay on the woofer. The score's best and the physical
+    #     answer now disagree by a cycle; the PHYSICAL one is taken and the alias is said by name.
+    ch_h = {"sw": ch_g["sw"], "w-L": dict(ch_g["w-L"], ta_ms=12.0 + 1000.0 / 88.0)}
+    r7h = align_joints(f, {"sw": late, "w-L": e0}, ch_h, step_ms=step, tie_db=0.001)
+    h = r7h["steps"][0]
+    assert h["physical"] is not None and abs(h["chains"]["w-L"]["ta_ms"] - 12.0) <= 0.1 if "chains" in h else True
+    assert abs(r7h["chains"]["w-L"]["ta_ms"] - 12.0) <= 0.1, (r7h["chains"]["w-L"], h)
+    r7g2 = align_joints(f, {"sw": late, "w-L": e0}, ch_g, step_ms=step, tie_db=0.001, max_delay_ms=3.0)
+    g2 = r7g2["steps"][0]
+    assert g2["window_ms"] >= 13, "the window must follow the arrival, not the hand-set default"
     txt = render_alignment(r7d, original=ch3, rate_hz=fs)
     assert "proposal" in txt and "w-L" in txt and "smp" in txt, txt
 

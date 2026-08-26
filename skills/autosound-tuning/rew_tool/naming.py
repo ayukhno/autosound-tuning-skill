@@ -38,11 +38,28 @@ METHOD_SWEEP = "sw"
 METHOD_RTA = "rta"
 METHODS = (METHOD_SWEEP, METHOD_RTA)
 
-# `<body>_<version>` with an optional ` (method)`. `body` is non-greedy up to the LAST underscore
+# `<body>_<version>[ctl|rep][ (method)][ <position>]`. `body` is greedy up to the LAST underscore
 # so codes that contain one still parse; version is digits or the literal `final`.
+#
+# Two tokens the virtual-first capture session added (the user's ruling, 2026-08-25/26):
+#   * a POSITION -- `p1`…`p9` (the ellipsoid around the head), `x0` (the tripod point) -- sits
+#     between the code and the version (`m-L p1_49 (sw)`) or, as REW titles were typed, after the
+#     method (`w-L_49 (sw) x0`). Both parse; the canonical form is the first. It is NOT part of the
+#     code: nine positions of one driver are one channel, and a checker keyed on the code would
+#     otherwise see nine channels nobody has.
+#   * a CONTROL -- the reference measurement repeated to read drift, for a sweep series and for the
+#     ellipsoid alike: `-ctl1`/`-ctl3` in the code (the capture sheet's first/last of the tripod
+#     block) or `ctl`/`rep` glued to the version as typed in the car (`m-L_49ctl`, `m-L_49rep`).
+#     `ctl1`/`ctl` open a series, `ctl3`/`rep` close it.
 _NAME_RE = re.compile(
-    r"^(?P<body>.+)_(?P<version>\d+|final)(?:\s*\((?P<method>[A-Za-z]+)\))?\s*$"
+    r"^(?P<body>.+)_(?P<version>\d+|final)(?P<control>ctl|rep)?"
+    r"(?:\s*\((?P<method>[A-Za-z]+)\))?(?:\s+(?P<pos2>p[1-9]|x0))?\s*$"
 )
+_POS_RE = re.compile(r"^(?P<code>.+?)\s+(?P<pos>p[1-9]|x0)$")
+_CTL_RE = re.compile(r"^(?P<code>.+?)-(?P<ctl>ctl[0-9])$")
+POSITIONS = tuple(f"p{i}" for i in range(1, 10)) + ("x0",)
+CONTROL_OPEN = ("ctl1", "ctl")
+CONTROL_CLOSE = ("ctl3", "rep")
 
 
 class NamingError(ValueError):
@@ -172,20 +189,37 @@ class Glossary:
         }
 
 
-def generate_name(code, version, method=None, modifier=None):
+def generate_name(code, version, method=None, modifier=None, position=None, control=None):
     """Build a measurement title. `version` is an int or `"final"`.
 
     >>> generate_name("w-L", 2, "sw")
     'w-L_2 (sw)'
     >>> generate_name("ALL+C", "final", "rta")
     'ALL+C_final (rta)'
+    >>> generate_name("m-L", 49, "sw", position="p1")
+    'm-L p1_49 (sw)'
+    >>> generate_name("m-L", 49, "sw", control="ctl1")
+    'm-L-ctl1_49 (sw)'
     """
     if not code:
         raise NamingError("a measurement name needs a channel/pair/combo/joint code")
     if method is not None and method not in METHODS:
         raise NamingError(f"unknown method {method!r}; expected one of {', '.join(METHODS)}")
-    body = f"{code} {modifier}".strip() if modifier else str(code)
+    if position is not None and position not in POSITIONS:
+        raise NamingError(f"unknown position {position!r}; expected one of {', '.join(POSITIONS)}")
+    if control is not None and control not in CONTROL_OPEN + CONTROL_CLOSE:
+        raise NamingError(f"unknown control {control!r}; expected one of "
+                          f"{', '.join(CONTROL_OPEN + CONTROL_CLOSE)}")
+    body = str(code)
+    if control in ("ctl1", "ctl3"):
+        body = f"{body}-{control}"
+    if modifier:
+        body = f"{body} {modifier}"
+    if position:
+        body = f"{body} {position}"
     name = f"{body}_{version}"
+    if control in ("ctl", "rep"):
+        name = f"{name}{control}"
     return f"{name} ({method})" if method else name
 
 
@@ -209,6 +243,18 @@ def parse_name(title, glossary=None):
     if method is not None and method.lower() not in METHODS:
         return None  # `(foo)` is not a method suffix; the title isn't ours
     body = match.group("body").strip()
+    position = match.group("pos2")
+    pm = _POS_RE.match(body)
+    if pm:
+        if position:
+            return None  # a position on both sides of the method is not a title, it is a typo
+        body, position = pm.group("code").strip(), pm.group("pos")
+    control = match.group("control")
+    cm = _CTL_RE.match(body)
+    if cm:
+        if control:
+            return None  # `m-L-ctl1_49ctl` says two things about one measurement
+        body, control = cm.group("code").strip(), cm.group("ctl")
 
     code, modifier = body, None
     if glossary:
@@ -228,6 +274,11 @@ def parse_name(title, glossary=None):
         # looking at the two side by side has to be able to match up.
         "code_current": glossary.resolve_code(code) if glossary else code,
         "modifier": modifier,
+        # Where the microphone was (`p1`…`p9` on the ellipsoid, `x0` the tripod point) and whether
+        # this is a CONTROL of a series (`ctl1`/`ctl` open it, `ctl3`/`rep` close it) -- both part
+        # of the measurement's identity, neither part of the channel's code.
+        "position": position,
+        "control": control,
         "version": version,
         # Numeric form, so `_01` and `_1` are recognised as the same DSP config version. REW
         # titles are typed by hand and zero-padding is common; comparing raw strings makes a
@@ -257,7 +308,8 @@ def name_key(parsed):
     if version is None:
         version = parsed.get("version")
     code = parsed.get("code_current") or parsed.get("code")
-    return (code, parsed.get("modifier"), version, parsed.get("method"))
+    return (code, parsed.get("modifier"), version, parsed.get("method"),
+            parsed.get("position"), parsed.get("control"))
 
 
 # The capture plan of `naming-and-structure.md §3`, as a function rather than a table a human
@@ -452,8 +504,32 @@ def _selftest():
     # and a plan is never generated under a retired name.
     assert "m-L" not in expected_series("0", g, 2)[0], expected_series("0", g, 2)
 
+    # -- Positions and controls (2026-08-26): the ellipsoid's `p1`…`p9`, the tripod's `x0`, and
+    #    the control repeats -- both forms each, none of them part of the code.
+    e1 = parse_name("m-L p1_49 (sw)", plain)
+    assert (e1["code"], e1["position"], e1["version_n"], e1["method"]) == ("m-L", "p1", 49, "sw"), e1
+    x0 = parse_name("w-L_49 (sw) x0")
+    assert (x0["code"], x0["position"], x0["control"]) == ("w-L", "x0", None), x0
+    assert name_key(parse_name("m-L p1_49 (sw)")) != name_key(parse_name("m-L p2_49 (sw)")), \
+        "two positions of one driver are two measurements"
+    assert name_key(parse_name("m-L p1_49 (sw)")) != name_key(parse_name("m-L_49 (sw)"))
+    c1 = parse_name("m-L-ctl1_49 (sw)")
+    assert (c1["code"], c1["control"], c1["position"]) == ("m-L", "ctl1", None), c1
+    c2 = parse_name("m-L_49ctl (sw) x0")
+    assert (c2["code"], c2["control"], c2["position"], c2["version_n"]) == ("m-L", "ctl", "x0", 49), c2
+    c3 = parse_name("m-L_49rep (sw)")
+    assert c3["control"] == "rep" and c3["control"] in CONTROL_CLOSE and c1["control"] in CONTROL_OPEN
+    assert name_key(c1) != name_key(parse_name("m-L_49 (sw)")), "a control is not the solo"
+    assert parse_name("m-L p1_49 (sw) x0") is None and parse_name("m-L-ctl1_49ctl (sw)") is None
+    for title in ("m-L p1_49 (sw)", "m-L-ctl1_49 (sw)", "m-L_49rep (sw)", "w-L x0_49 (sw)"):
+        pp = parse_name(title)
+        assert generate_name(pp["code"], pp["version"], pp["method"], pp["modifier"],
+                             position=pp["position"], control=pp["control"]) == title, (title, pp)
+    assert parse_name("m-L FX p3_49 (sw)", g)["modifier"] == "FX", "a modifier and a position coexist"
+
     print("selftest OK — grammar round-trips, padding-insensitive version match, and a renamed "
-          "channel's old captures resolve to it (SCR-039)")
+          "channel's old captures resolve to it (SCR-039); positions p1..p9/x0 and controls "
+          "ctl1/ctl3/ctl/rep parse in both forms and are identity, not code")
     return 0
 
 

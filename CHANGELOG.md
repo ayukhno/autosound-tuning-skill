@@ -70,6 +70,42 @@ Two consequences worth stating, because both have already caused a question:
   nearby → "a driver or the position changed, not an entry error"). With `--entry` that is the verdict
   and the exit code; without it the junction verdict stays and the entry line rides beside it.
 - `virtual-first.md`: steps 0.6, 1.3 and 3.1 name their commands; the gap list says what closed.
+- **What the dry run of the codified path on a live capture set (2026-08-26) changed, the same day:**
+  - `predict --align` reads the **arrival difference** of each junction's members (band-limited
+    cross-correlation on a uniform grid — a phase-slope fit came first and read filter transitions
+    as delay) and widens the search to reach it; every answer is reported with how many cycles at
+    fc it sits from the arrival alignment, a flip counted as half a cycle. When the score's best is
+    an **alias** (≥ 0.75 cycle off — a sub that arrives 12 ms late at an 88 Hz junction scores
+    beautifully one cycle off), the proposal takes the **physical** candidate (the best within half
+    a cycle of the arrival in total phase) and says so by name; the alias stays in the record.
+  - **`verify_prediction` entry control** compares shapes on **1/6-octave-smoothed** curves (per-bin
+    residuals of two captures minutes apart are ±10 dB of reflection comb at HF, not the car) and
+    adds an **arrival check** from the measured complex response: a channel arriving further than
+    0.1 ms (or an eighth of a cycle at the top of its band, whichever is larger) from its prediction
+    is CHECK with the delay named — the shape control is blind to a delay typed wrong. A v7 measured
+    directory goes through `predict.load_solo_v7`, the same reader as the solos, so both sides share
+    one grid and one treatment of the impulse; solo names default to the file stems.
+  - **Naming grammar (SCR-008 module): positions and controls.** `p1`…`p9` (the ellipsoid) and `x0`
+    (the tripod point) parse as a **position** — between the code and the version (`m-L p1_49 (sw)`,
+    canonical) or after the method as typed in the car (`w-L_49 (sw) x0`) — and are identity, not
+    part of the channel's code (nine positions were nine "channels" before). A **control** — the
+    reference repeated to read drift — parses from `-ctl1`/`-ctl3` in the code (the capture sheet)
+    and from `ctl`/`rep` glued to the version (`m-L_49ctl (sw)`); `ctl1`/`ctl` open a series,
+    `ctl3`/`rep` close it. `name_key` carries both. `capture-check --session` pairs the controls
+    through the grammar, and its level spread is read on each channel's **live-band mean** (a sub
+    read over 20–20000 Hz came out 20 dB "quiet"); the IR-peak column is reported as REW gives it
+    (0.0 on every row: REW scales the impulse per measurement).
+  - **`eq_export.py <project> <channel>`** — the library gained a CLI, so Phase 2.3's "EQ file to
+    import" exists in the terminal path (format name, bank size and everything LEFT OUT on stderr;
+    exit 3 when the bank could not carry all of it).
+  - Docs: the capture sheet and Phase 0.5 write the controls as `m-L-ctl1_01 (sw)` / `m-L-ctl3_01 (sw)`
+    (the form the grammar reads); `naming-and-structure.md §3` carries positions and controls.
+  - **`predict --route VIRTUAL=out,out`** — the ledger's virtual tier (a Helix `VFL` with its EQ,
+    gain and delay) enters the chain of every output it FEEDS, through a routing fact the user
+    reads off the DSP's matrix — never guessed from names. Without it, and with EQ on that tier,
+    the prediction now says so. On the live set the entry residuals of the woofers went from 0.84 /
+    1.37 dB to 0.31 / 0.80 and every channel's offset converged to one number once the virtual
+    shelf was in: the tier is real, and a project needs to carry the routing (see the notes).
 
 ## [v3.0.30] — 2026-08-26 · two rates with one name each, the virtual-first path written down, one current target
 

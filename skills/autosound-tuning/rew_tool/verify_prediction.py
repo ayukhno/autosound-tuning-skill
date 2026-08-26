@@ -46,6 +46,7 @@ import dsp_math  # noqa: E402
 CRITERION_DB = 1.0            # |mean delta| in a junction band, stage 0's pass mark
 JUNCTION_THIRDS = 3           # each junction band is read in this many log-spaced sub-bands
 ENTRY_CRITERION_DB = 1.0      # a channel's shape rms after one offset: the entry control (Phase 3.1)
+ENTRY_DELAY_MS = 0.1          # a measured channel arriving further than this from its prediction
 NEAR_OCTAVES = 1.0 / 3.0      # a residual this close to a chain feature is blamed on that entry
 
 
@@ -111,15 +112,28 @@ def measured_from_rew(titles, api=None, allow_rta=False):
     return out
 
 
-def measured_from_v7_dir(directory):
-    """{name: (freqs, mag_db, 'sw')} from Resonalyze v7 files -- the magnitude of each record."""
+def measured_from_v7_dir(directory, freqs=None):
+    """{name: (freqs, mag_db, 'sw')} from Resonalyze v7 files.
+
+    With `freqs` (the prediction's grid) each record goes through `predict.load_solo_v7` -- the
+    SAME reader the predicted solos went through -- so the two sides of the comparison share one
+    grid and one treatment of the impulse. Without it the raw FFT is returned, which carries every
+    reflection's comb at full resolution: a channel-shape comparison against a gridded prediction
+    then reads −20 dB residuals that are the ruler, not the car (the dry run of 2026-08-26)."""
     out = {}
+    if freqs is not None:
+        import predict as P
+        fg = np.asarray(freqs, float)
     for name in sorted(os.listdir(directory)):
         if not name.endswith(".json") or name == "manifest.json":
             continue
         with open(os.path.join(directory, name), encoding="utf-8") as fh:
             doc = json.load(fh)
         if "transferRealSamples" not in doc:
+            continue
+        if freqs is not None:
+            H, _ = P.load_solo_v7(os.path.join(directory, name), fg)
+            out[name[:-5]] = (fg, _db(H), "sw", H)
             continue
         x = np.asarray(doc["transferRealSamples"], float)
         fs = int(doc["sampleRate"])
@@ -130,6 +144,27 @@ def measured_from_v7_dir(directory):
 
 
 # ---------------------------------------------------------------- the comparison
+ENTRY_SMOOTHING_OCT = 1.0 / 6.0   # both sides of a channel-shape comparison, before rms and worst
+
+
+def _smooth_oct(f, y, octaves):
+    """Moving mean of `y` over ±octaves/2 around each grid point (log-spaced grid; NaN-aware).
+
+    Two captures of one driver at the same tripod, minutes apart, differ per bin by ±10 dB at HF
+    from the cabin's reflections alone; on 1/6 octave they agree to a fraction of a dB. The
+    entry control compares SHAPES a person would compare, not bins (the dry run, 2026-08-26).
+    """
+    f = np.asarray(f, float)
+    y = np.asarray(y, float)
+    out = np.full_like(y, np.nan)
+    half = 2.0 ** (octaves / 2.0)
+    for i, fc in enumerate(f):
+        m = (f >= fc / half) & (f <= fc * half) & ~np.isnan(y)
+        if m.any():
+            out[i] = float(np.mean(y[m]))
+    return out
+
+
 def _nearest_feature(chain, f_hz):
     """The chain feature (HPF / LPF corner, EQ band) within NEAR_OCTAVES of `f_hz`, or None.
 
@@ -154,7 +189,8 @@ def _nearest_feature(chain, f_hz):
 
 
 def verify(predicted, measured, *, pair_names=None, solo_names=None, all_name=None,
-           criterion_db=CRITERION_DB, entry_criterion_db=ENTRY_CRITERION_DB, entry_only=False):
+           criterion_db=CRITERION_DB, entry_criterion_db=ENTRY_CRITERION_DB, entry_only=False,
+           entry_delay_ms=ENTRY_DELAY_MS):
     """`predicted`: the dict `predict.to_json` wrote. `measured`: {name: (freqs, mag_db, base)}.
 
     `pair_names`: {(lo, hi): measured name of the pair}; `solo_names`: {code: measured name of
@@ -173,7 +209,7 @@ def verify(predicted, measured, *, pair_names=None, solo_names=None, all_name=No
     pair_names = pair_names or {}
     solo_names = solo_names or {}
     report = {"criterion_db": criterion_db, "junctions": [], "channels": [], "all": None,
-              "verdict": None, "bases": sorted({b for _, _, b in measured.values()})}
+              "verdict": None, "bases": sorted({rec[2] for rec in measured.values()})}
 
     # 1. Junction interference: predicted vs measured, level-free.
     worst = 0.0
@@ -186,7 +222,7 @@ def verify(predicted, measured, *, pair_names=None, solo_names=None, all_name=No
             report["junctions"].append({"lo": lo, "hi": hi, "fc": j["fc"],
                                         "status": "not measured", "missing": missing})
             continue
-        (fa, ma, ba), (fb, mb, bb), (fp, mp, bp) = (measured[wanted[k]] for k in wanted)
+        (fa, ma, ba), (fb, mb, bb), (fp, mp, bp) = (measured[wanted[k]][:3] for k in wanted)
         A, B = pred_c[lo], pred_c[hi]
         d_pred = _db(A + B) - _psum_db(_db(A), _db(B))
         d_meas = _on_grid(fp, mp, f) - _psum_db(_on_grid(fa, ma, f), _on_grid(fb, mb, f))
@@ -215,12 +251,22 @@ def verify(predicted, measured, *, pair_names=None, solo_names=None, all_name=No
     for code, name in solo_names.items():
         if code not in pred_c or name not in measured:
             continue
-        fm, mm, base = measured[name]
-        meas = _on_grid(fm, mm, f)
-        pred = _db(pred_c[code])
-        live = pred >= pred.max() - 20.0            # where the channel actually plays
-        offset = float(np.median((meas - pred)[live]))
+        rec = measured[name]
+        fm, mm, base = rec[0], rec[1], rec[2]
+        H_meas = rec[3] if len(rec) > 3 else None
+        meas = _smooth_oct(f, _on_grid(fm, mm, f), ENTRY_SMOOTHING_OCT)
+        pred = _smooth_oct(f, _db(pred_c[code]), ENTRY_SMOOTHING_OCT)
+        live = pred >= np.nanmax(pred) - 20.0       # where the channel actually plays
+        offset = float(np.nanmedian((meas - pred)[live]))
         resid = np.where(live, meas - pred - offset, np.nan)
+        # A delay typed wrong -- or a delay the ledger does not know about -- leaves the SHAPE
+        # untouched, so the shape control cannot see it. The complex measured response can: the
+        # arrival of the measured channel against the predicted one, by band-limited correlation.
+        delay_err = None
+        if H_meas is not None:
+            import predict as P
+            lo_f, hi_f = float(f[live].min()), float(f[live].max())
+            delay_err = P.arrival_difference_ms(f, pred_c[code], np.asarray(H_meas), (lo_f, hi_f))
         _, rms = _band_mean(f, resid, f[live].min(), f[live].max())
         k = int(np.nanargmax(np.abs(resid)))
         worst_f, worst_db = float(f[k]), float(resid[k])
@@ -231,17 +277,27 @@ def verify(predicted, measured, *, pair_names=None, solo_names=None, all_name=No
             hint = (f"near {near} -- check that entry in the DSP" if near else
                     "no chain feature within a third of an octave -- a driver or the position "
                     "changed, not an entry error")
+        # The floor is `entry_delay_ms` (ten DSP samples -- a typo, not a rounding); at the low end
+        # the correlation cannot place an arrival finer than a fraction of the band's own cycle,
+        # so a sub read over 20-93 Hz is allowed an eighth of a cycle at 93 Hz before it is CHECK.
+        delay_limit = max(entry_delay_ms, 1000.0 / float(f[live].max()) / 8.0) if live.any() else entry_delay_ms
+        if delay_err is not None and abs(delay_err) > delay_limit:
+            ok = False
+            hint = (f"arrives {delay_err:+.2f} ms against the prediction (limit {delay_limit:.2f}) -- a "
+                    f"delay typed wrong, or one the ledger does not carry (another tier?)"
+                    + (f"; also {hint}" if hint else ""))
         report["channels"].append({"channel": code, "measured": name, "base": base,
                                    "offset_db": round(offset, 2), "shape_rms_db": round(rms, 2),
                                    "band": [round(float(f[live].min()), 1),
                                             round(float(f[live].max()), 1)],
                                    "status": "as designed" if ok else "CHECK",
                                    "worst_db": round(worst_db, 2), "worst_hz": round(worst_f, 1),
+                                   "delay_error_ms": (round(delay_err, 3) if delay_err is not None else None),
                                    "hint": hint})
 
     # 3. The whole front as a shape.
     if all_name and all_name in measured:
-        fm, mm, base = measured[all_name]
+        fm, mm, base = measured[all_name][:3]
         meas = _on_grid(fm, mm, f)
         pred = np.asarray(predicted["all_mag_db"], float)
         live = pred >= pred.max() - 30.0
@@ -314,6 +370,8 @@ def render(report):
             lines.append(f"    {c['channel']:6} {c['base']:<4} offset {c['offset_db']:+6.1f} dB   "
                          f"shape rms {c['shape_rms_db']:.2f} dB over {c['band'][0]:.0f}-{c['band'][1]:.0f}"
                          f"   {c.get('status', '')}")
+            if c.get("delay_error_ms") is not None:
+                lines[-1] += f"   arrival {c['delay_error_ms']:+.2f} ms"
             if c.get("hint"):
                 lines.append(f"    {'':6}      worst {c['worst_db']:+.1f} dB @ {c['worst_hz']:.0f} Hz -- {c['hint']}")
         if report.get("entry"):
@@ -353,6 +411,9 @@ def main(argv=None):
                          "`_<ver>` solos against the predicted solo x chain; the verdict is theirs")
     ap.add_argument("--entry-criterion", type=float, default=ENTRY_CRITERION_DB,
                     help="shape rms per channel after one offset (default %(default)s dB)")
+    ap.add_argument("--entry-delay", type=float, default=ENTRY_DELAY_MS,
+                    help="a measured channel arriving further than this (ms) from its prediction is "
+                         "CHECK (default %(default)s)")
     ap.add_argument("--out", metavar="DIR", default=None, help="write verified.json here")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--selftest", action="store_true")
@@ -364,6 +425,12 @@ def main(argv=None):
     with open(args.predicted, encoding="utf-8") as fh:
         predicted = json.load(fh)
     pairs, solos, all_name = _default_names(predicted, args.ver)
+    if args.measured:
+        # A v7 directory is keyed by file stem (`w_L`, `m_L-ctl1`), not by REW title: default the
+        # solo names to the stems so one or two `--solo` overrides are not needed for every channel.
+        solos = {c: c.replace("-", "_") for c in solos}
+        pairs = {k: f"{k[0]}+{k[1]}".replace("-", "_") for k in pairs}
+        all_name = "ALL"
     for spec in args.pair:
         key, _, title = spec.partition("=")
         lo, hi = [p.strip() for p in key.split(",")]
@@ -384,10 +451,10 @@ def main(argv=None):
             print("  not in REW: " + ", ".join(missing), file=sys.stderr)
         measured = measured_from_rew(titles, api=api, allow_rta=args.allow_rta)
     else:
-        measured = measured_from_v7_dir(args.measured)
+        measured = measured_from_v7_dir(args.measured, freqs=predicted["freqs_hz"])
     report = verify(predicted, measured, pair_names=pairs, solo_names=solos, all_name=all_name,
                     criterion_db=args.criterion, entry_criterion_db=args.entry_criterion,
-                    entry_only=args.entry)
+                    entry_only=args.entry, entry_delay_ms=args.entry_delay)
     if args.json:
         print(json.dumps(report, indent=1))
     else:
@@ -463,6 +530,17 @@ def _selftest():
     c7 = next(c for c in r7["channels"] if c["channel"] == "m-L")
     assert c7["status"] == "CHECK" and "HP 300" in c7["hint"], c7
     assert "junction_verdict" in r7 and r7["junction_verdict"] != r7["verdict"], r7
+    # A channel that arrives 0.4 ms late with the SAME shape: the shape control is blind to it, the
+    # arrival control is not -- CHECK with the delay named, on a measured record that carries phase.
+    B_late = B * np.exp(-2j * np.pi * f * 0.4e-3)
+    meas_c = meas(A, B)
+    meas_c["m-L_2 (sw)"] = (f, _db(B_late), "sw", B_late)
+    meas_c["w-L_2 (sw)"] = (f, _db(A), "sw", A)
+    r9 = verify(pred, meas_c, **names, entry_only=True)
+    c9 = {c["channel"]: c for c in r9["channels"]}
+    assert c9["m-L"]["status"] == "CHECK" and abs(c9["m-L"]["delay_error_ms"] - 0.4) < 0.05, c9["m-L"]
+    assert "arrives +0.4" in c9["m-L"]["hint"] and c9["m-L"]["shape_rms_db"] < 0.05, c9["m-L"]
+    assert c9["w-L"]["status"] == "as designed" and abs(c9["w-L"]["delay_error_ms"]) < 0.05, c9["w-L"]
     # Without --entry the junction verdict stays the verdict and the entry line rides beside it.
     r8 = verify(pred, meas(A, bump(B, 300.0)), **names, entry_criterion_db=0.5)
     assert r8["verdict"].startswith(("TRUSTED", "NOT trusted")) and r8["entry"]["check"] == ["m-L"], r8["verdict"]

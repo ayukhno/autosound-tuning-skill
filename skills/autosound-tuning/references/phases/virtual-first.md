@@ -84,9 +84,9 @@ tripod block; every channel both `(sw)` and `(rta)`.
   fixed body points (windscreen, driver's door glass, roof) + a seat-rail mark; (b) for the desk:
   capsule → each driver's centre (the L/R arbiter, §23). Timing = loopback. Drift pair `m-L (sw)` ×2 →
   < 0.1 sample (not saved).
-- **0.5** **tripod block**: `m-L-ctl1 (sw)` → the solos `<ch>_01 (sw)` of **every** channel (subs, w,
+- **0.5** **tripod block**: `m-L-ctl1_01 (sw)` → the solos `<ch>_01 (sw)` of **every** channel (subs, w,
   m, tw, centre, rear — a couple of minutes while the base is set; two subs → also `SWs_01 (sw)`) →
-  `m-L-ctl3 (sw)`. Doors shut, an even tempo.
+  `m-L-ctl3_01 (sw)`. Doors shut, an even tempo.
 - **0.6** **check on the spot** (`capture-check --session`): each measurement present / usable — the
   IR peak above the pre-ringing ("broken impulse"), not a flat curve (loopback or a dead input), not
   in the noise; the whole session in one table (levels side by side, loudest/quietest); ctl1/ctl3 →

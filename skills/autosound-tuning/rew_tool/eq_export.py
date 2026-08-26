@@ -556,8 +556,69 @@ def _selftest():
           f"not count as saying so; undeclared and overflow bands refused by name")
 
 
+_USAGE = """usage: eq_export.py <project-dir> <channel> [--preset P] [--version v_NNN] [--fmt NAME] [--out FILE]
+
+  One channel's EQ (and crossover legs where the format carries them) from the project's ledger,
+  rendered in the format the project's DSP profile takes -- what Phase 2.3 hands the tuner to
+  import. Prints the text, then the format's name and everything LEFT OUT, on stderr; --out writes
+  the text to a file. Default preset: the registry's active slot; default version: HEAD.
+"""
+
+
+def _main(argv):
+    args = list(argv[1:])
+    if len(args) < 2 or args[0] in ("-h", "--help"):
+        print(_USAGE, file=sys.stderr)
+        return 2
+
+    def _flag(name):
+        if name in args:
+            i = args.index(name)
+            v = args[i + 1]
+            del args[i:i + 2]
+            return v
+        return None
+    preset, version, fmt, out_path = _flag("--preset"), _flag("--version"), _flag("--fmt"), _flag("--out")
+    project_dir, channel = args[0], args[1]
+    state_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state")
+    if state_dir not in sys.path:
+        sys.path.insert(0, state_dir)
+    import dsp_profile as _dp
+    import state as _st
+    profile = _dp.load_profile(os.path.join(project_dir, "dsp_profile.json"))
+    root = os.path.join(project_dir, "state")
+    if preset is None:
+        preset = _st.Registry(root).get_active()
+        if not preset:
+            print(f"no active slot in {root}/registry; pass --preset", file=sys.stderr)
+            return 1
+    snap = _st.PresetHistory(root, preset, project_dir=project_dir).load(version)
+    row = (snap.get("channels") or {}).get(channel)
+    if row is None:
+        print(f"{channel!r} is not a row of {preset} {snap.get('version') or 'HEAD'} -- rows: "
+              + ", ".join(sorted(snap.get("channels") or {})), file=sys.stderr)
+        return 1
+    ex = export_eq(profile, row.get("eq") or [], crossovers={"hp": row.get("hp"), "lp": row.get("lp")},
+                   fmt=fmt, channel=channel)
+    if out_path:
+        with open(out_path, "w", encoding="utf-8") as fh:
+            fh.write(ex.text)
+        print(f"wrote {out_path}", file=sys.stderr)
+    else:
+        print(ex.text)
+    print(f"format: {ex.format_name} -- {ex.written} band(s)"
+          + (f", {ex.crossovers} crossover leg(s)" if ex.crossovers else "")
+          + (f", bank of {ex.bank_size}" if ex.bank_size else "")
+          + f"; {preset} {snap.get('version') or 'HEAD'} {channel}", file=sys.stderr)
+    for item in ex.left_out:
+        print(f"LEFT OUT: {item.get('item')} -- {item.get('why')}", file=sys.stderr)
+    for note in ex.notes:
+        print(f"note: {note}", file=sys.stderr)
+    return 0 if ex.complete else 3
+
+
 if __name__ == "__main__":
     if "--selftest" in sys.argv:
         _selftest()
     else:
-        print(__doc__)
+        sys.exit(_main(sys.argv))

@@ -32,6 +32,7 @@ if _HERE not in sys.path:  # same convention as contract.py: importable by path,
 
 import analysis as _analysis  # noqa: E402
 import joint_analysis as _joint  # noqa: E402
+import naming as _naming  # noqa: E402
 import rew_api as _api  # noqa: E402
 
 # An FR flat to within a fraction of a dB across the whole band is not a loudspeaker in a car; it
@@ -88,6 +89,15 @@ def verdict(name, measurements=None, f_low=20, f_high=20000):
         out["issues"].append(f"nothing in band {f_low}-{f_high} Hz")
         return out
     out["stats"].update(stats)
+    # The channel's level where it PLAYS: the mean over the bins within 20 dB of its own maximum.
+    # `mean_dB` averages the whole asked band, so a sub read over 20-20000 Hz comes out 20 dB
+    # "quieter" than a woofer of the same level -- the session probe compared channels on that
+    # once (2026-08-26) and called the sub the quietest. Live-band mean is what a level compare needs.
+    inband = [(f_, m_) for f_, m_ in zip(freqs, mag) if f_low <= f_ <= f_high]
+    if inband:
+        top = max(m_ for _, m_ in inband)
+        live = [m_ for _, m_ in inband if m_ >= top - 20.0]
+        out["stats"]["live_mean_dB"] = round(sum(live) / len(live), 2)
     if stats["range_dB"] < _FLAT_RANGE_DB:
         out["issues"].append(
             f"flat to {stats['range_dB']} dB across the band — a loopback or a placeholder, "
@@ -188,8 +198,10 @@ def session_report(verdicts, processing_rate_hz=None):
     by side, the loudest and the quietest channel, and the ctl1->ctl3 drift as the DRIFT RECORD.
 
     Per-title verdicts say whether one curve is usable; this says whether the SESSION is -- the
-    things only visible across titles. Level spread is read on the in-band mean (SPL), not the IR
-    peak (REW scales the impulse per measurement, so its peak says nothing between titles). The
+    things only visible across titles. Level spread is read on each channel's LIVE-band mean
+    (`live_mean_dB`: the bins within 20 dB of its own maximum -- a sub read over the whole band
+    would come out 20 dB "quiet"), not the IR peak (REW scales the impulse per measurement, so its
+    peak says nothing between titles and reads 0.0 on every row). The
     drift is the arrival difference between `<x>-ctl1 (sw)` and `<x>-ctl3 (sw)`, the same driver
     swept first and last in the tripod block, in CAPTURE samples: within half a sample the base
     held; beyond it the solos taken between them are not on one base -- said, not judged, because
@@ -199,12 +211,13 @@ def session_report(verdicts, processing_rate_hz=None):
     for v in verdicts:
         st = v.get("stats") or {}
         rows.append({"name": v["name"], "exists": bool(v.get("exists")), "valid": bool(v.get("valid")),
-                     "mean_dB": st.get("mean_dB"), "peak_dB": st.get("peak_dB"),
+                     "mean_dB": st.get("live_mean_dB", st.get("mean_dB")), "peak_dB": st.get("peak_dB"),
                      "peak_time_ms": st.get("peak_time_ms"), "pre_ringing_dB": st.get("pre_ringing_dB"),
                      "capture_rate_hz": st.get("capture_rate_hz"),
                      "issues": list(v.get("issues") or [])})
+    _p = {r["name"]: _naming.parse_name(r["name"]) for r in rows}
     sweeps = [r for r in rows if r["valid"] and r["mean_dB"] is not None
-              and "(sw)" in r["name"] and "-ctl" not in r["name"]]
+              and (_p[r["name"]] or {}).get("method") == "sw" and not (_p[r["name"]] or {}).get("control")]
     spread = None
     if len(sweeps) >= 2:
         loud = max(sweeps, key=lambda r: r["mean_dB"])
@@ -212,12 +225,22 @@ def session_report(verdicts, processing_rate_hz=None):
         spread = {"loudest": loud["name"], "loudest_dB": loud["mean_dB"],
                   "quietest": quiet["name"], "quietest_dB": quiet["mean_dB"],
                   "spread_dB": round(loud["mean_dB"] - quiet["mean_dB"], 1)}
-    drift, by = None, {r["name"]: r for r in rows}
+    # The controls are found through the grammar, not a substring: `m-L-ctl1_49 (sw)` (the sheet)
+    # and `m-L_49ctl (sw) x0` (as typed in the car) are the same kind of thing, and the close of
+    # the series is whichever of `ctl3` / `rep` the same channel+version+method carries.
+    drift, parsed = None, _p
     for r in rows:
-        if "-ctl1" not in r["name"]:
+        pr = parsed.get(r["name"])
+        if not pr or pr.get("control") not in _naming.CONTROL_OPEN:
             continue
-        partner = r["name"].replace("-ctl1", "-ctl3")
-        p = by.get(partner)
+        same = lambda q: (q and q["code"] == pr["code"] and q["version_n"] == pr["version_n"]
+                          and q["method"] == pr["method"] and q["position"] == pr["position"])
+        closers = [x for x in rows if same(parsed.get(x["name"]))
+                   and parsed[x["name"]].get("control") in _naming.CONTROL_CLOSE]
+        p = closers[0] if closers else None
+        partner = p["name"] if p else _naming.generate_name(
+            pr["code"], pr["version"], pr["method"], pr["modifier"], position=pr["position"],
+            control="ctl3" if pr["control"] == "ctl1" else "rep")
         if p is None or not p["exists"]:
             drift = {"ctl1": r["name"], "ctl3": partner, "missing": partner}
         elif r["peak_time_ms"] is None or p["peak_time_ms"] is None:
@@ -244,7 +267,7 @@ def session_report(verdicts, processing_rate_hz=None):
 def render_session(report):
     lines = [f"  session probe -- {report['counts']['total']} titles, {report['counts']['ok']} usable, "
              f"{report['counts']['missing']} missing, {report['counts']['invalid']} unusable", ""]
-    lines.append(f"  {'title':24}{'mean dB':>9}{'IR peak':>9}{'pre-ring':>10}{'arrival ms':>12}{'rate':>7}  ")
+    lines.append(f"  {'title':24}{'live dB':>9}{'IR peak':>9}{'pre-ring':>10}{'arrival ms':>12}{'rate':>7}  ")
     lines.append("  " + "-" * 74)
     for r in report["rows"]:
         if not r["exists"]:
@@ -260,8 +283,8 @@ def render_session(report):
     sp = report["spread"]
     if sp:
         lines.append(f"  loudest {sp['loudest']} {sp['loudest_dB']:.1f} dB / quietest {sp['quietest']} "
-                     f"{sp['quietest_dB']:.1f} dB -> spread {sp['spread_dB']:.1f} dB (in-band mean; the "
-                     f"passport says what the loudest was set to)")
+                     f"{sp['quietest_dB']:.1f} dB -> spread {sp['spread_dB']:.1f} dB (each channel's "
+                     f"live-band mean; the passport says what the loudest was set to)")
     d = report["drift"]
     if d is None:
         lines.append("  drift: no `-ctl1 (sw)` title in this set -- the drift record needs ctl1 and ctl3")
@@ -377,20 +400,20 @@ def _selftest():
         return {"name": name, "exists": True, "valid": valid, "issues": [] if valid else ["x"],
                 "stats": {"mean_dB": mean, "peak_dB": -3.0, "pre_ringing_dB": -30.0,
                           "peak_time_ms": peak_ms, "capture_rate_hz": rate}}
-    rep = session_report([sw("m-L-ctl1 (sw)", 70.0, 5.000), sw("sw_01 (sw)", 84.2, 9.1),
+    rep = session_report([sw("m-L-ctl1_01 (sw)", 70.0, 5.000), sw("sw_01 (sw)", 84.2, 9.1),
                           sw("tw-R_01 (sw)", 66.9, 4.9), sw("c_01 (rta)", 99.0, 4.9),
                           sw("w-L_01 (sw)", 80.0, 5.2, valid=False),
-                          sw("m-L-ctl3 (sw)", 70.1, 5.000 + 0.3 / 48.0)], processing_rate_hz=96000)
+                          sw("m-L-ctl3_01 (sw)", 70.1, 5.000 + 0.3 / 48.0)], processing_rate_hz=96000)
     assert rep["spread"]["loudest"] == "sw_01 (sw)" and rep["spread"]["quietest"] == "tw-R_01 (sw)", rep["spread"]
     assert abs(rep["spread"]["spread_dB"] - 17.3) < 0.05, rep["spread"]
     d = rep["drift"]
-    assert d["ctl3"] == "m-L-ctl3 (sw)" and abs(d["delta_samples"] - 0.3) < 0.01 and d["held"] is True, d
+    assert d["ctl3"] == "m-L-ctl3_01 (sw)" and abs(d["delta_samples"] - 0.3) < 0.01 and d["held"] is True, d
     assert rep["rate_note"] and "96000" in rep["rate_note"], rep["rate_note"]
-    moved = session_report([sw("m-L-ctl1 (sw)", 70.0, 5.0), sw("m-L-ctl3 (sw)", 70.0, 5.0 + 2.0 / 48.0)])
+    moved = session_report([sw("m-L_49ctl (sw) x0", 70.0, 5.0), sw("m-L_49rep (sw) x0", 70.0, 5.0 + 2.0 / 48.0)])
     assert moved["drift"]["held"] is False and abs(moved["drift"]["delta_samples"] - 2.0) < 0.01, moved["drift"]
     assert moved["spread"] is None and moved["rate_note"] is None
-    lone = session_report([sw("m-L-ctl1 (sw)", 70.0, 5.0), sw("sw_01 (sw)", 80.0, 9.0)])
-    assert lone["drift"]["missing"] == "m-L-ctl3 (sw)", lone["drift"]
+    lone = session_report([sw("m-L-ctl1_01 (sw)", 70.0, 5.0), sw("sw_01 (sw)", 80.0, 9.0)])
+    assert lone["drift"]["missing"] == "m-L-ctl3_01 (sw)", lone["drift"]
     txt = render_session(rep)
     assert "HELD" in txt and "spread 17.3" in txt and "no drift record" not in txt, txt
     assert "MOVED" in render_session(moved) and "no drift record" in render_session(lone)

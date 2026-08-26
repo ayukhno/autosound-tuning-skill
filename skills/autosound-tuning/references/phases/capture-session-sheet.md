@@ -50,10 +50,10 @@ BLOCK C · TRIPOD P0                                             [0.4]
   drift pair:  m-L (sw) ×2 in a row → < 0.1 sample   (not saved)
 
 BLOCK D · TRIPOD BLOCK (tripod does NOT move until Phase 3)     [0.5]
-  m-L-ctl1 (sw)
+  m-L-ctl1_01 (sw)          (a CONTROL: opens the series; `m-L_01ctl (sw)` as typed in the car reads the same)
   <ch>_01 (sw)  for sw (or SWs_01 (sw) for two subs) · w-L · w-R · m-L · m-R
                 · tw-L · tw-R · c · r-L · r-R
-  m-L-ctl3 (sw)
+  m-L-ctl3_01 (sw)          (closes it; `m-L_01rep (sw)` reads the same)
   doors shut · an even tempo · do not air the cabin
 
 BLOCK E · CHECK ON THE SPOT (laptop in the car)                [0.6]
