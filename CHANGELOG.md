@@ -40,7 +40,16 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
-## [Unreleased]
+## [v3.0.33] — 2026-08-26 · the capabilities board, and a README that fits on one page
+
+> **Upgrading:** documentation and one new index — nothing in `rew_tool` changed, so a tune in
+> progress is unaffected. Two things are worth knowing. **The README is now one short page per
+> language** (EN/UK/DE/PL): the long version's material moved into the FAQ, so a link into a README
+> section will no longer resolve — link to the FAQ instead. **`references/core/capabilities.md` is
+> new**: 67 capabilities in 13 directions, indexed by what you want rather than by path, with a
+> checker (`rew_tool/capabilities.py --selftest`, in the suite — now 42 checks) that fails if the
+> board names a module, flag, verb, function or reference that does not exist. A session that comes
+> with its own process should start there.
 
 - **README and FAQ, rewritten for the release.** The README says what the method is, what the two
   lines are (2.x — the competition-proven one, `v2.8.3`, and 3.x — this branch, pre-release), how a
