@@ -40,6 +40,19 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [Unreleased]
+
+- **`path_check --selftest` runs in 18 s instead of 31** (the user, via TCC, 2026-08-27: it was an
+  eighth of their whole suite and three times slower than anything else in it). Measured, not
+  guessed: 36 tool invocations and 51 synthetic v7 files at 0.14 s each. Two levers, no coverage
+  cut — the walk still goes through every real command line: (1) tools run in-process via `runpy`
+  with the same `argv`, captured output and `SystemExit` code, EXCEPT the REW-stub stage, which
+  keeps a fresh interpreter because `rew_api.BASE_URL` is read at import and an in-process run would
+  silently talk to `localhost:4735`; (2) the synthetic record is 65536 samples, not 131072 — 0.68 s
+  for drivers that decay in milliseconds. A third lever bit back and is recorded: a filter cache
+  keyed on the grid's LENGTH handed the 1000 Hz value cached for one probe to a one-point probe at
+  8000 Hz — a real assertion caught it, and the key is now the grid's bytes.
+
 ## [v3.0.36] — 2026-08-26 · the agreed list closed: crossover checks and candidates, the flaw map as a command, the setup reader, measured levels
 
 > **Upgrading:** additive — four new modules (`crossover_checks`, `xover_candidates`, `flaw_map`,

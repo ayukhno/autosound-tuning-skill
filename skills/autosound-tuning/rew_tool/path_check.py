@@ -101,13 +101,56 @@ def _json_in(out):
 
 
 def _run(*args, env=None, ok=(0,)):
-    """Run a rew_tool command line; return (rc, stdout+stderr). Fails loudly on an unexpected rc."""
-    proc = subprocess.run([PY, *args], capture_output=True, text=True, env=env)
-    out = proc.stdout + proc.stderr
-    if ok is not None and proc.returncode not in ok:
-        _fail(f"`{' '.join(os.path.basename(a) if i == 0 else a for i, a in enumerate(args))}` "
-              f"returned {proc.returncode}, expected {ok}:\n{out[-2000:]}")
-    return proc.returncode, out
+    """Run a rew_tool command line; return (rc, stdout+stderr). Fails loudly on an unexpected rc.
+
+    The command line is REAL either way -- the script's own `__main__` block, its own argument
+    parsing, its own exit code, its own printed output. What differs is the interpreter:
+
+      * in-process (`runpy`, the default): the script runs under this interpreter with `sys.argv`
+        set and stdout/stderr captured. Every tool here ends in `sys.exit(main())`, so the exit code
+        is the `SystemExit` it raises. This saves the ~0.6 s numpy/scipy start-up per call, which
+        was 22 of this walk's 31 seconds (measured 2026-08-27; 36 calls).
+      * a fresh process, ONLY when `env` carries `REW_API_URL`: `rew_api.BASE_URL` is read at
+        import, so a tool that must see the stub's address needs an interpreter that has not
+        imported `rew_api` yet. Running that stage in-process would silently talk to localhost:4735
+        -- the exact quiet failure this walk exists to catch.
+
+    A tool that raises anything other than `SystemExit` in-process is reported as rc 1 with its
+    traceback in `out`, which is what the subprocess version would have shown.
+    """
+    if env and "REW_API_URL" in env:
+        proc = subprocess.run([PY, *args], capture_output=True, text=True, env=env)
+        rc, out = proc.returncode, proc.stdout + proc.stderr
+    else:
+        import contextlib
+        import io
+        import runpy
+        import traceback
+        script, argv = args[0], [str(a) for a in args[1:]]
+        buf = io.StringIO()
+        saved_argv, saved_env = sys.argv, dict(os.environ)
+        if env:
+            os.environ.update(env)
+        sys.argv = [script, *argv]
+        try:
+            with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+                try:
+                    runpy.run_path(script, run_name="__main__")
+                    rc = 0
+                except SystemExit as e:
+                    rc = 0 if e.code in (None, 0) else (e.code if isinstance(e.code, int) else 1)
+                except Exception:                        # a crash: rc 1, traceback in the output
+                    traceback.print_exc()
+                    rc = 1
+        finally:
+            sys.argv = saved_argv
+            os.environ.clear()
+            os.environ.update(saved_env)
+        out = buf.getvalue()
+    if ok is not None and rc not in ok:
+        _fail(f"`{' '.join(os.path.basename(a) if i == 0 else str(a) for i, a in enumerate(args))}` "
+              f"returned {rc}, expected {ok}:\n{out[-2000:]}")
+    return rc, out
 
 
 # ---------------------------------------------------------------- synthetic measurements
@@ -116,11 +159,31 @@ def _ir_from_response(H_linear, n):
     return np.fft.irfft(H_linear, n=n)
 
 
+_XO_CACHE = {}
+
+
+def _xo(fb, corner, order, kind, family):
+    """`dsp_math.xo_response` memoised on (the GRID's bytes, corner, order, kind, family): the five
+    capture sets of this walk use one grid and two dozen filters, and recomputing them was 2.7 s.
+
+    The key hashes the grid's contents, not its length. The first draft keyed on `len(fb)`, and
+    the walk's own probes call `driver_shape(np.array([f]))` on one-point grids -- so the value at
+    1000 Hz, cached for m-L, came back for the tweeter at 8000 Hz: a true number from the right
+    function for the wrong frequency, and it failed a real assertion, which is the only reason it
+    was found. Hashing 65537 floats costs well under a millisecond."""
+    import hashlib
+    key = (hashlib.blake2b(np.ascontiguousarray(fb).tobytes(), digest_size=16).digest(),
+           float(corner), int(order), kind, family)
+    h = _XO_CACHE.get(key)
+    if h is None:
+        h = _XO_CACHE[key] = dsp_math.xo_response(fb, corner, order, kind, family)
+    return h
+
+
 def driver_shape(fb):
     """Every synthetic driver's own response: a gentle band (40 Hz LR12 up, 16 kHz LR12 down) --
     not flat, because the capture gate rightly calls a flat response a loopback or a placeholder."""
-    return (dsp_math.xo_response(fb, 40.0, 12, "hp", "LR") *
-            dsp_math.xo_response(fb, 16000.0, 12, "lp", "LR"))
+    return _xo(fb, 40.0, 12, "hp", "LR") * _xo(fb, 16000.0, 12, "lp", "LR")
 
 
 def _driver_response(fb, code, chain=None, protective=None, extra_delay_samples=0.0, polarity=None):
@@ -130,7 +193,7 @@ def _driver_response(fb, code, chain=None, protective=None, extra_delay_samples=
     pol = wired if polarity is None else polarity
     H = pol * driver_shape(fb) * np.exp(-2j * np.pi * fb * (arrival + extra_delay_samples) / FS)
     if protective:
-        H = H * dsp_math.xo_response(fb, protective["hz"], protective["slopeDbPerOct"], "hp",
+        H = H * _xo(fb, protective["hz"], protective["slopeDbPerOct"], "hp",
                                      protective["family"])
     if chain is not None:
         H = H * P.chain_response(fb, chain)
@@ -150,7 +213,11 @@ def _make_capture_set(directory, chains=None, protectives=True, errors=None, pai
     """A v7 directory. `chains`: the DSP as entered (None = raw, protectives only).
     `errors`: {code: {"delay_samples": d, "hp_f": f}} deliberately mis-entered in the DSP."""
     os.makedirs(directory, exist_ok=True)
-    n = 1 << 17
+    # 65536 samples = 0.68 s at 96 kHz. A synthetic driver is a handful of filters and decays in
+    # milliseconds, so the record is long by a factor of a hundred either way; halving it from
+    # 1 << 17 took 3.5 s of float formatting out of the walk (51 files, 2026-08-27) and changed
+    # no assertion -- each of which is anchored on a definition, not on the record's length.
+    n = 1 << 16
     fb = np.fft.rfftfreq(n, 1.0 / FS)
     errors = errors or {}
     responses = {}
