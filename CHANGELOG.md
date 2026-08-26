@@ -52,6 +52,21 @@ Two consequences worth stating, because both have already caused a question:
   the EQ reaches your DSP. Stale material removed: the "5-Step Tuning Journey", the 2.x plugin
   framed as the only way in, `dsp-state-current.md` as the state. English only for now — the other
   README translations still carry the previous text.
+- The README now opens on a **path chooser** — five ways to use the method (web chat with nothing
+  installed · the 2.x plugin that won the awards · 3.x in a terminal · 3.x in the TCC window ·
+  Gemini as the driver), each with what it needs, what it gives and what it costs — because someone
+  arriving on the page is choosing a path, not asking which line they are already on. The FAQ
+  carries the long form of the same choice.
+- Both files went through the Advisor channel (Gemini Pro High, two rounds). Accepted: the USB
+  "clock drift while you wait" claim inherited from 2.x is **wrong**, and this repo's own control
+  block is the proof — the drift is per capture, not per minute (six captures over eighteen minutes
+  moved the arrival one sample; seventeen idle minutes moved it 0.5 µs), so the warning now names
+  temperature and the measured floor, and points at the control capture; how a single driver is
+  played alone (mute the rest in the DSP); a passive tweeter-plus-midrange pair is one channel, and
+  what that means; the AI Studio section is a pointer to path 1 rather than a second copy of it;
+  Gemini in TCC comes through `agy`, not `omp`. Declined: the claim that Claude Code needs API
+  credits rather than a Pro/Max plan (it does not), and rewriting the session transcript's midrange
+  lift — it is a quotation of a real session, not advice.
 
 - **`references/core/capabilities.md` — the board: find the tool by what you want, not by the
   path.** 67 capabilities in 13 directions (talking to REW · naming and captures · protective

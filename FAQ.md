@@ -8,8 +8,10 @@ Have a question that isn't here? Open a [discussion or issue](https://github.com
 
 ## Table of contents
 
-- [Which line am I on — 2.x or 3.x?](#which-line-am-i-on--2x-or-3x)
-  - [How to tell](#how-to-tell)
+- [Choosing a path](#choosing-a-path)
+  - [The five paths, and what each costs you](#the-five-paths-and-what-each-costs-you)
+  - [Which one should I take?](#which-one-should-i-take)
+  - [I already installed something — which is it?](#i-already-installed-something--which-is-it)
   - [Staying on 2.x](#staying-on-2x)
   - [Moving from 2.x to 3.x](#moving-from-2x-to-3x)
   - [What 3.x changed](#what-3x-changed)
@@ -47,21 +49,72 @@ Have a question that isn't here? Open a [discussion or issue](https://github.com
 - [The project on disk](#the-project-on-disk)
   - [What is in the project folder, and what is worth backing up?](#what-is-in-the-project-folder-and-what-is-worth-backing-up)
   - [Which DSPs, and how does the EQ get into mine?](#which-dsps-and-how-does-the-eq-get-into-mine)
+  - [My tweeter and midrange share one DSP channel (a passive crossover) — does this work?](#my-tweeter-and-midrange-share-one-dsp-channel-a-passive-crossover--does-this-work)
   - [Where do I find what the method can do?](#where-do-i-find-what-the-method-can-do)
 
 ---
 
-## Which line am I on — 2.x or 3.x?
+## Choosing a path
 
-Two lines exist side by side. **2.x** is the stable, competition-proven one: the iterative loop,
-the project kept as prose, delivered as a Claude Code plugin, at
+The same method reaches you five ways. The [README's table](README.md#choose-how-you-want-to-use-it)
+is the short version; here is what each one actually asks of you and gives back.
+
+### The five paths, and what each costs you
+
+**1 · Web chat, nothing installed.** The
+[manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step)
+branch: each tuning step is a short prompt you paste into
+[Google AI Studio](https://aistudio.google.com/) or any chat, together with your REW exports, and
+the car's passport file comes back rewritten in full so nothing drifts between steps.
+*Costs you:* nothing but your time — and all the work is manual. No REW API, no state on disk, no
+review loop, none of the calculating tools. *Take it to* see whether the method suits you before
+spending anything. Still labelled experimental.
+
+**2 · The 2.x line — the one that won.** A Claude Code plugin at
 [`v2.8.3`](https://github.com/ayukhno/autosound-tuning-skill/releases/tag/v2.8.3) on branch
-[`2.x`](https://github.com/ayukhno/autosound-tuning-skill/tree/2.x), fixes only. **3.x** is the
-`main` branch: the same method with a machine-readable project, a recorded process, the desk-first
-path and the [TCC](#tcc-the-desktop-app) desktop app, delivered by the one-line installer. 3.x is
-a pre-release, in its final full-tune check; the release will be 3.1.0.
+[`2.x`](https://github.com/ayukhno/autosound-tuning-skill/tree/2.x): the full iterative method,
+REW read over its API, the analysis scripts, and the Generator ↔ Critic ↔ Arbiter loop. The four
+2026 awards were tuned with it.
+*Costs you:* a paid Claude plan, a REW beta with the API on, and a terminal — plus the ceiling of
+what prose can hold: the project is written as text, so what is in force is re-read rather than
+machine-checked, and the desk-first path, the ledger and the newer tools are not in it. It takes
+fixes, not features. *Take it if* you want exactly what is proven, on the version that competed.
 
-### How to tell
+**3 · 3.x in a terminal.** The [one-line installer](#first-time-setup-macos--windows) brings
+Claude Code, Python, the method and the reviewer. You get everything 2.x has plus the project as
+data (a ledger you revert in one step), the desk-first path, EQ proposed as gated packages, an
+entry control that confirms the car heard what the desk designed, tools that refuse rather than
+report "no objection", and fixes that arrive as tags.
+*Costs you:* the same subscription and REW, and the honesty of a pre-release — it is in its final
+full-tune check before 3.1.0. *Take it if* you want the current method and can live with that.
+
+**4 · 3.x in a window — [TCC](#tcc-the-desktop-app).** The same installer also puts the desktop app
+on your machine: the DSP tree, your measured curves, the plan and the AI in one window, macOS and
+Windows, over the same project files as the terminal.
+*Costs you:* about 700 MB, and the app is early — younger than the method it runs. Models other
+than Claude come through `omp` and are metered separately. *Take it if* you would rather see the
+tree and the curves than read them.
+
+**5 · Gemini as the driver.** No plugin system, but the skill is plain Markdown and Python, so an
+agentic Gemini session with file and shell access can be pointed at the repository and told to
+follow it — [how, below](#can-i-ask-gemini-to-install-and-run-the-skill-itself-without-claude-code).
+*Costs you:* a bootstrap instead of an install, Gemini's drift over long sessions, and no second
+opinion unless you arrange one.
+
+### Which one should I take?
+
+- **"I want the tune that took the awards."** Path 2. The plugin entry names the 2.8.3 commit, so
+  nothing moves you off it later.
+- **"I want the current method, and a pre-release is fine."** Path 3, or path 4 if you prefer a
+  window. Both update themselves to the newest 3.x tag.
+- **"I don't want to install anything yet."** Path 1, then decide.
+- **"I already use Gemini for everything."** Path 5 for a look, path 3 for the work: the reviewer
+  in paths 2–4 is Gemini anyway.
+
+You are not locked in: a project made on path 3 opens in path 4 and back, and 2.x → 3.x is
+[a documented move](#moving-from-2x-to-3x) that leaves the old project untouched.
+
+### I already installed something — which is it?
 
 - **How it arrived.** `/plugin install autosound-tuning` inside Claude Code gave you 2.x. The
   `curl … | bash` / `irm … | iex` line, or the app, gave you 3.x.
@@ -450,8 +503,9 @@ at the same folder and switch as you like.
 
 The app talks to Claude through Anthropic's SDK, so your Claude subscription covers it — *AI main*
 is Claude Opus (SDK) and *AI critic* is Gemini Pro (High), the [supported pair](#which-models-is-this-actually-supported-on-as-of-august-2026).
-Every non-Claude model in the list comes through `omp`, which meters them separately; leave it out
-with `--no-omp` / `-NoOmp` and the list is Claude and Gemini.
+Gemini reaches it the same way it reaches the terminal: through `agy`, on your own Google sign-in.
+Models beyond those two are what `omp` adds, and they are metered separately; leave `omp` out with
+`--no-omp` / `-NoOmp` and the list is the supported pair.
 
 ### App updates, and reporting an app problem
 
@@ -537,20 +591,14 @@ npm or other command-line tools:
 
 ### Do you have a version running on Google AI Studio?
 
-**Yes.** A beta built for exactly this: a set of stateless prompt templates you run entirely inside
-**[Google AI Studio](https://aistudio.google.com/)** (or any web chat) with free Gemini, no local
-install and no API key:
-
-**[manual_step-by-step branch](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step)**
-
-Each tuning step runs in a fresh chat with a short copy-paste prompt plus your REW exports. The
-passport file (your car's settings) is regenerated in full at each step and saved as a new
-version, so nothing is lost between steps the way long chat sessions drift.
-
-Where it stands: it works, and it is a step below the full local setup. No REW API pulling numbers,
-no persistent state between messages, no real back-and-forth review loop — and none of the 3.x
-tools. Treat it as the fastest way to try the method for free, before deciding whether the full
-setup is worth the time and the subscription.
+**Yes — that is [path 1](#the-five-paths-and-what-each-costs-you).** A set of stateless prompt
+templates you run inside [Google AI Studio](https://aistudio.google.com/) or any web chat with free
+Gemini, no local install and no API key:
+**[manual_step-by-step branch](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step)**.
+Each step is a fresh chat with a short copy-paste prompt plus your REW exports, and the car's
+passport comes back rewritten in full, so nothing drifts between steps. What it does not have is
+everything the local setup automates — the REW API, the state on disk, the review loop, the
+calculating tools. Still labelled experimental; feedback from real sessions is welcome.
 
 ---
 
@@ -597,19 +645,24 @@ For a step-by-step video on configuring REW for phase with a USB microphone, see
 tutorial: [Measuring Speaker Phase in REW](https://www.youtube.com/watch?v=El-kwZ5_nnU).
 
 > [!WARNING]
-> **Take all sweeps consecutively, in one run.** Loopback or acoustic reference, **measure all
-> speakers in a single session.** Do not measure one, take a fifteen-minute break (or switch the
-> heating on) and measure the next.
-> * **Temperature drift:** the speed of sound follows cabin air temperature. Five degrees shift
->   arrival times by nearly 0.08 ms — negligible for the subwoofer, fatal for midranges and
->   tweeters, whose periods are short; it destroys the crossover phase alignment and the focus.
-> * **Clock drift:** a USB microphone and your output sound card run on separate clocks. Their
->   sample rates drift apart, and waiting between measurements introduces offsets that do not
->   physically exist.
-> * **Rule of thumb:** if you touch the microphone, change the cabin temperature or pause for more
->   than a few minutes, **remeasure all channels**. In 3.x the capture check measures this drift for
->   you — the first and last sweep of the round are compared to a fraction of a sample — and a
->   round that drifted is refused.
+> **Take all sweeps in one run, and re-measure the first channel at the end.** Loopback or acoustic
+> reference, **measure all the speakers in a single session** — not one now and the next after a
+> fifteen-minute break with the heating on.
+> * **Temperature is the one that moves things.** The speed of sound follows the cabin's air
+>   temperature, so a few degrees change every arrival time — and with an acoustic timing reference
+>   it moves the reference chirp's own path as well. Fractions of a millisecond: negligible against
+>   a subwoofer's wavelengths, fatal for midranges and tweeters, where the same fraction is tens of
+>   degrees of phase at the crossover and takes the focus with it.
+> * **Sequential measurement has a floor, and it is per capture rather than per minute.** Measured
+>   in this method's own control block: one speaker measured six times over eighteen minutes moved
+>   its arrival by one sample (10 µs, about 3.6 mm of apparent path), and the movement tracked the
+>   *captures*, not the idle time — seventeen idle minutes moved it 0.5 µs, while consecutive
+>   captures moved it about 2.6 µs each. Over eight channels that accumulates to one or two samples:
+>   below what matters for a woofer, not obviously below what matters for a tweeter.
+> * **So measure it instead of assuming it.** Re-measure the first channel at the end of the round —
+>   that control capture turns the floor from an assumption into a number. In 3.x the capture check
+>   does the comparison for you, to a fraction of a sample, and a round that drifted is refused
+>   rather than designed on.
 
 ### How do I name measurements in REW?
 
@@ -644,6 +697,14 @@ and every later design step would be reasoning about the tune instead of the dri
 taken with protective filters carries the driver and the cabin; the protective set is recorded in
 the ledger with the round, and the desk removes it from the curves before predicting anything, so
 the design sees the bare driver and enters its own filters on top.
+
+**Playing one driver at a time** is done in the DSP, not in REW: mute everything but the channel
+being measured (the PC-Tool, Conductor, or whatever your processor's software is), and keep one REW
+output level and one head-unit level for the whole session so the levels of different drivers stay
+comparable. On Windows that usually means REW on the ASIO driver of your interface; on macOS, the
+interface as REW's output device. The sheet you take into the car —
+[`capture-session-sheet.md`](skills/autosound-tuning/references/phases/capture-session-sheet.md) —
+carries the whole order, the REW settings and the levels to write down.
 
 The round is checked before you leave the car: are all the drivers there, do the first and last
 sweep agree in time, is the protective set on record. A round that fails is not designed on — it is
@@ -750,6 +811,20 @@ Any processor you can type into. The method never writes into a DSP; it writes a
 Whatever the format, the numbers are checked against what your DSP can do — its filter types, its
 band count, its processing rate — before they are written, and a filter that will not fit is
 reported rather than dropped.
+
+### My tweeter and midrange share one DSP channel (a passive crossover) — does this work?
+
+**Yes, with one thing it cannot do.** A passive pair on one amplifier channel is *one* channel to
+the method: it is measured as one, it gets one target, one delay and one set of EQ bands, and the
+ledger holds it as a single row. Everything the path does — the prediction, the joint to the
+midbass or the sub, the entry control, the EQ packages — works on it unchanged.
+
+What no software can do from outside is time-align the tweeter to the midrange *inside* that pair,
+or move the passive crossover point: those live in the passive network, and the only inputs are the
+network itself and the physical positions. So the method will say what the pair's summed response
+does, including a suck-out at the passive crossover if there is one, and it will not pretend it can
+correct one half of it. Splitting the pair into two DSP channels — an amplifier channel each — is
+the change that removes the limit, and it is a hardware decision, not a tuning one.
 
 ### Where do I find what the method can do?
 

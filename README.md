@@ -52,28 +52,31 @@ Tuned with the **2.x line** of this method, my own car took four awards in 2026:
 > AI can get numbers wrong. Always double-check crossover frequencies, slopes, and EQ values in
 > your DSP before unmuting, especially on tweeters, and start at a low volume.
 
-## Two lines: the one that won, and the one being finished
+## Choose how you want to use it
 
-| | **2.x — stable** | **3.x — this branch** |
-| :--- | :--- | :--- |
-| What it is | The competition-proven method: the iterative loop, the project kept as prose | The same method, plus a machine-readable project, a recorded process, the desk-first path, and the [TCC](https://github.com/ayukhno/autosound-tcc) desktop app |
-| Version | [`v2.8.3`](https://github.com/ayukhno/autosound-tuning-skill/releases/tag/v2.8.3) on branch [`2.x`](https://github.com/ayukhno/autosound-tuning-skill/tree/2.x); fixes only | Pre-release: in its final full-tune check before **3.1.0** |
-| How you get it | The Claude Code plugin — see [the 2.x README](https://github.com/ayukhno/autosound-tuning-skill/blob/2.x/README.md) | The one-line installer [below](#getting-started), which also brings the app |
-| How it updates | It doesn't move: the plugin entry names the 2.8.3 commit, and `/plugin update` returns to it | Run the same install line again, or let the app update itself; both take the newest 3.x tag, so a fix reaches you the next time you run it |
+Five ways in, from "try it in a browser tonight" to "the whole thing in a desktop window". They
+are the same method; what differs is how much of it is automated, how proven it is, and what it
+costs you in setup. **The awards above were won on path 2.**
 
-Want the tune that took the awards? Take 2.x: the plugin route installs exactly 2.8.3, and no
-update moves you off it. Want the desk-first path and the app, and don't mind a pre-release?
-Take 3.x. What differs and how to move from one to the other is in the
-[FAQ](FAQ.md#which-line-am-i-on--2x-or-3x).
+| # | Path | What you need | What you get | The catch |
+| :-- | :--- | :--- | :--- | :--- |
+| **1** | **Web chat, nothing installed** — the [manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step) branch | A browser, free Gemini or any chat, REW to measure and export | The method's steps as copy-paste prompts; a passport file with your car's settings, rewritten in full at each step | You do all the work by hand: no REW automation, no memory between steps, no second AI reviewing. Free, and the weakest of the five |
+| **2** | **2.x — the proven line** ⭐ [`v2.8.3`](https://github.com/ayukhno/autosound-tuning-skill/releases/tag/v2.8.3), branch [`2.x`](https://github.com/ayukhno/autosound-tuning-skill/tree/2.x) | Claude Code + a paid Claude plan, REW beta with its API on, one `/plugin install` | The full iterative method: REW read over its API, the analysis scripts, the Generator ↔ Critic ↔ Arbiter loop. **The four awards above were tuned with it** | Terminal only, no desktop app. The project is prose, so what is in force is re-read rather than machine-checked, and the desk-first path and the newer tools are not there. Fixes only from here on |
+| **3** | **3.x in a terminal** — the [one-line installer](#getting-started) | The same, plus five minutes for the installer, which brings Claude Code and Python itself | Everything in 2.x, plus: the project as data (a ledger you can revert in one step), the desk-first path, gated EQ, an entry control, tools that refuse when their input is missing, and updates that reach you as tags | A pre-release: in its final full-tune check before 3.1.0. Terminal |
+| **4** | **3.x in a window** — the same installer, which brings [TCC](https://github.com/ayukhno/autosound-tcc) | The same, and ~700 MB of disk | Path 3, plus the DSP tree, your REW curves, the plan and the AI side by side in a desktop window — macOS and Windows | The app is early. Models other than Claude come through `omp` and are metered separately |
+| **5** | **Gemini as the driver** | An agentic Gemini session with file and shell access | Point it at the repository and it follows the method | A bootstrap, not an install; Gemini drifts on long sessions, and there is no second opinion unless you arrange one |
 
-> [!NOTE]
-> **Prefer a window to a terminal?** [TCC](https://github.com/ayukhno/autosound-tcc), the companion
-> desktop app, runs the 3.x method in a desktop window: the DSP tree, your REW curves, the plan, and
-> the AI in a side panel. The one line below installs it too, unless you say otherwise. It is early,
-> and the method in a terminal is the proven path.
+**In short.** Want to try the method for free before anything else — path 1. Want exactly what
+took the awards — **path 2**, and no update will move you off it. Want the desk-first path and
+don't mind a pre-release — path 3, or path 4 if you would rather see it than type it. Paths 2, 3
+and 4 all read your car through REW's API and never write into your DSP.
+
+The details of each — what the installer puts where, what changed in 3.x, and how to move from
+one path to another — are in the [FAQ](FAQ.md#choosing-a-path).
 
 ## Table of contents
 
+- [Choose how you want to use it](#choose-how-you-want-to-use-it)
 - [Who it's for](#who-its-for)
 - [What you need](#what-you-need)
 - [Getting started](#getting-started)
@@ -104,10 +107,11 @@ a **Generator ↔ Critic ↔ Arbiter** review loop: one AI proposes, another cha
 
 ## What you need
 
-**A clean machine is the expected case.** The installer below brings Claude Code, Python, the
-method, the desktop app and the Gemini reviewer with it. Nothing has to be installed first.
+**A clean machine is the expected case.** No programming tools — Python, git, Claude Code — have to
+be there first: the installer below brings them, along with the method, the desktop app and the
+Gemini reviewer.
 
-Three things it cannot get for you, because they are yours:
+What it cannot bring is the tuning half, because that part is yours:
 
 - **[REW](https://www.roomeqwizard.com/) — a beta build**, with its API switched on. Everything the
   skill knows about your car arrives through it, and **the API is in the betas only**: the release
@@ -141,6 +145,9 @@ itself happens when you tell the AI to back the project up — it knows what sta
 account covers it.
 
 ## Getting started
+
+*(This is paths 3 and 4 of [the chooser](#choose-how-you-want-to-use-it). For path 2 — the line
+that won the awards — the two plugin commands are in [the 2.x README](https://github.com/ayukhno/autosound-tuning-skill/blob/2.x/README.md#getting-started).)*
 
 One line installs everything: Claude Code, the method, the
 [TCC desktop app](https://github.com/ayukhno/autosound-tcc), Gemini as the reviewer, and `omp`,
@@ -204,47 +211,9 @@ so you can work in the window one day and the terminal the next.
 > nothing raises them later. As of August 2026: **Claude Opus at `xhigh`**, with **Gemini Pro
 > (High)** reviewing. [Why the cheaper combinations fail quietly](#which-models-to-use).
 
-<details>
-<summary>Other ways in: the 2.x plugin you may already have, or Gemini as the driver</summary>
-
-**Already installed the 2.x plugin?** Then you are on the stable line, it stays supported, and no
-update will move you off it: the marketplace entry names an exact commit (2.8.3) rather than a
-branch. Your existing projects stay readable there.
-
-The line above installs 3.x. One skill per machine: two plugins shipping a skill of the same name
-both stay active, and which one answers is anybody's guess. So remove the plugin first, inside
-Claude Code:
-
-```
-/plugin uninstall autosound-tuning
-```
-
-```
-/plugin marketplace remove autosound-tuning-skill
-```
-
-Your 2.x projects are not converted. 3.x imports the car's **current** state into a **new**
-project and leaves the old one untouched:
-
-```sh
-python3 ~/.claude/skills/.autosound-tuning-src/skills/autosound-tuning/rew_tool/state/migrate.py <old-project> --into <new-project>
-```
-
-Channels and their output slots, crossovers, delays, gains, polarity, EQ and the DSP profile move
-across. The journal and older snapshots stay behind, deliberately: 2.x never recorded which facts
-were in force when, so carrying its history would mean inventing it.
-
-**Under Gemini as the driver.** There is no plugin installer, but you can point an agentic Gemini
-session (Antigravity CLI, or any Gemini setup with file and shell access) at the repository:
-
-> Clone https://github.com/ayukhno/autosound-tuning-skill, read `skills/autosound-tuning/SKILL.md`,
-> and follow that method as your operating instructions for this session.
-
-A stateless web-chat version of the method, with no local install at all, lives on the
-[manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step)
-branch; [the FAQ](FAQ.md#do-you-have-a-version-running-on-google-ai-studio) says what it can and
-cannot do.
-</details>
+Coming from the **2.x plugin**, or want to drive with **Gemini** instead? Both are in the FAQ:
+[moving from 2.x to 3.x](FAQ.md#moving-from-2x-to-3x) (remove the plugin first — two skills of the
+same name both stay active), and [Gemini as the driver](FAQ.md#can-i-ask-gemini-to-install-and-run-the-skill-itself-without-claude-code).
 
 ## How a tune goes
 
@@ -256,9 +225,11 @@ lands there as a version you can revert in one step.
    the target curve — agreed before anyone sits in the car, so that nothing there is a surprise.
 2. **One capture session, in the car.** Every driver alone, with *protective* filters only — a
    high-pass on the mids and tweeters and nothing else — so the recording carries the driver and
-   the cabin, not a tune. Sweeps and an MMM pass in one go, plus a few control positions around
-   the head. Before you leave the car, the round is checked: drift between the first and last
-   sweep, and whether the set is usable at all.
+   the cabin, not a tune. A door woofer swept with no low-pass sounds harsh at the top; that is
+   cone breakup, it is what the sweep is there to measure, and nothing is being damaged. Sweeps
+   and an MMM pass in one go, plus a few control positions around the head. Before you leave the
+   car, the round is checked: are all the drivers there, did the first and last sweep stay put,
+   is the protective set on record.
 3. **Design, at the desk.** Crossovers, levels, delays and polarity are chosen on the summed
    response *predicted* from your measured drivers with the DSP's own filters — every joint scored
    by how little it loses, and an alignment that sits a whole cycle off is named as such. EQ comes
