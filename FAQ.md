@@ -9,7 +9,7 @@ Have a question that isn't here? Open a [discussion or issue](https://github.com
 ## Table of contents
 
 - [Choosing a path](#choosing-a-path)
-  - [The five paths, and what each costs you](#the-five-paths-and-what-each-costs-you)
+  - [The four paths, and what each costs you](#the-four-paths-and-what-each-costs-you)
   - [Which one should I take?](#which-one-should-i-take)
   - [I already installed something — which is it?](#i-already-installed-something--which-is-it)
   - [Staying on 2.x](#staying-on-2x)
@@ -56,21 +56,30 @@ Have a question that isn't here? Open a [discussion or issue](https://github.com
 
 ## Choosing a path
 
-The same method reaches you five ways. The [README's table](README.md#choose-how-you-want-to-use-it)
+The same method reaches you four ways. The [README's table](README.md#choose-how-you-want-to-use-it)
 is the short version; here is what each one actually asks of you and gives back.
 
-### The five paths, and what each costs you
+### The four paths, and what each costs you
 
-**1 · Web chat, nothing installed.** The
-[manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step)
-branch: each tuning step is a short prompt you paste into
-[Google AI Studio](https://aistudio.google.com/) or any chat, together with your REW exports, and
-the car's passport file comes back rewritten in full so nothing drifts between steps.
-*Costs you:* nothing but your time — and all the work is manual. No REW API, no state on disk, no
-review loop, none of the calculating tools. *Take it to* see whether the method suits you before
-spending anything. Still labelled experimental.
+**1 · 3.x in a window — [TCC](#tcc-the-desktop-app).** The
+[one-line installer](#first-time-setup-macos--windows) brings Claude Code, Python, the method, the
+reviewer and the desktop app: the DSP tree, your measured curves, the plan and the AI in one window,
+macOS and Windows, over the same project files the terminal uses. What you get with 3.x itself is
+the project as data (a ledger you revert in one step), the desk-first path, EQ proposed as gated
+packages, an entry control that confirms the car heard what the desk designed, tools that refuse
+rather than report "no objection", and fixes that arrive as tags.
+*Costs you:* a paid Claude plan, a REW beta with the API on, about 700 MB of disk — and the honesty
+of a pre-release, with an app younger than the method it runs. Models other than Claude and Gemini
+come through `omp` and are metered separately. *Take it if* you would rather see the tree and the
+curves than read them.
 
-**2 · The 2.x line — the one that won.** A Claude Code plugin at
+**2 · 3.x in a terminal.** The same installer with `--terminal` / `-Terminal`: everything in path 1
+except the window. The method writes the same files, so you can add the app later without moving
+anything.
+*Costs you:* the same subscription and REW, the same pre-release honesty, and everything happens in
+text. *Take it if* you live in a terminal anyway, or the machine is thin on disk.
+
+**3 · The 2.x line — the one that won.** A Claude Code plugin at
 [`v2.8.3`](https://github.com/ayukhno/autosound-tuning-skill/releases/tag/v2.8.3) on branch
 [`2.x`](https://github.com/ayukhno/autosound-tuning-skill/tree/2.x): the full iterative method,
 REW read over its API, the analysis scripts, and the Generator ↔ Critic ↔ Arbiter loop. The four
@@ -80,39 +89,29 @@ what prose can hold: the project is written as text, so what is in force is re-r
 machine-checked, and the desk-first path, the ledger and the newer tools are not in it. It takes
 fixes, not features. *Take it if* you want exactly what is proven, on the version that competed.
 
-**3 · 3.x in a terminal.** The [one-line installer](#first-time-setup-macos--windows) brings
-Claude Code, Python, the method and the reviewer. You get everything 2.x has plus the project as
-data (a ledger you revert in one step), the desk-first path, EQ proposed as gated packages, an
-entry control that confirms the car heard what the desk designed, tools that refuse rather than
-report "no objection", and fixes that arrive as tags.
-*Costs you:* the same subscription and REW, and the honesty of a pre-release — it is in its final
-full-tune check before 3.1.0. *Take it if* you want the current method and can live with that.
-
-**4 · 3.x in a window — [TCC](#tcc-the-desktop-app).** The same installer also puts the desktop app
-on your machine: the DSP tree, your measured curves, the plan and the AI in one window, macOS and
-Windows, over the same project files as the terminal.
-*Costs you:* about 700 MB, and the app is early — younger than the method it runs. Models other
-than Claude come through `omp` and are metered separately. *Take it if* you would rather see the
-tree and the curves than read them.
-
-**5 · Gemini as the driver.** No plugin system, but the skill is plain Markdown and Python, so an
-agentic Gemini session with file and shell access can be pointed at the repository and told to
-follow it — [how, below](#can-i-ask-gemini-to-install-and-run-the-skill-itself-without-claude-code).
-*Costs you:* a bootstrap instead of an install, Gemini's drift over long sessions, and no second
-opinion unless you arrange one.
+**4 · Web chat, nothing installed.** The
+[manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step)
+branch: each tuning step is a short prompt you paste into
+[Google AI Studio](https://aistudio.google.com/) or any chat, together with your REW exports, and
+the car's passport file comes back rewritten in full so nothing drifts between steps.
+*Costs you:* nothing but your time — and all the work is manual. No REW API, no state on disk, no
+review loop, none of the calculating tools. *Take it to* see whether the method suits you before
+spending anything. Still labelled experimental.
 
 ### Which one should I take?
 
-- **"I want the tune that took the awards."** Path 2. The plugin entry names the 2.8.3 commit, so
+- **"I want the current method."** Path 1 if you would rather look at the tree and the curves,
+  path 2 if you would rather type. Both update themselves to the newest 3.x tag.
+- **"I want the tune that took the awards."** Path 3. The plugin entry names the 2.8.3 commit, so
   nothing moves you off it later.
-- **"I want the current method, and a pre-release is fine."** Path 3, or path 4 if you prefer a
-  window. Both update themselves to the newest 3.x tag.
-- **"I don't want to install anything yet."** Path 1, then decide.
-- **"I already use Gemini for everything."** Path 5 for a look, path 3 for the work: the reviewer
-  in paths 2–4 is Gemini anyway.
+- **"I don't want to install anything yet."** Path 4, then decide.
+- **"I would rather drive with Gemini than with Claude."** That is a bootstrap rather than a path —
+  [how, below](#can-i-ask-gemini-to-install-and-run-the-skill-itself-without-claude-code). On paths
+  1–3 Gemini is the reviewer anyway, which is where it is strongest here.
 
-You are not locked in: a project made on path 3 opens in path 4 and back, and 2.x → 3.x is
-[a documented move](#moving-from-2x-to-3x) that leaves the old project untouched.
+You are not locked in: paths 1 and 2 are the same installation seen two ways, a project made in one
+opens in the other, and 2.x → 3.x is [a documented move](#moving-from-2x-to-3x) that leaves the old
+project untouched.
 
 ### I already installed something — which is it?
 
@@ -591,7 +590,7 @@ npm or other command-line tools:
 
 ### Do you have a version running on Google AI Studio?
 
-**Yes — that is [path 1](#the-five-paths-and-what-each-costs-you).** A set of stateless prompt
+**Yes — that is [path 4](#the-four-paths-and-what-each-costs-you).** A set of stateless prompt
 templates you run inside [Google AI Studio](https://aistudio.google.com/) or any web chat with free
 Gemini, no local install and no API key:
 **[manual_step-by-step branch](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step)**.

@@ -54,22 +54,21 @@ Tuned with the **2.x line** of this method, my own car took four awards in 2026:
 
 ## Choose how you want to use it
 
-Five ways in, from "try it in a browser tonight" to "the whole thing in a desktop window". They
-are the same method; what differs is how much of it is automated, how proven it is, and what it
-costs you in setup. **The awards above were won on path 2.**
+Four ways in, from "the whole thing in a desktop window" to "try it in a browser tonight". They are
+the same method; what differs is how much of it is automated, how proven it is, and what it costs
+you in setup. **The awards above were won on path 3.**
 
 | # | Path | What you need | What you get | The catch |
 | :-- | :--- | :--- | :--- | :--- |
-| **1** | **Web chat, nothing installed** — the [manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step) branch | A browser, free Gemini or any chat, REW to measure and export | The method's steps as copy-paste prompts; a passport file with your car's settings, rewritten in full at each step | You do all the work by hand: no REW automation, no memory between steps, no second AI reviewing. Free, and the weakest of the five |
-| **2** | **2.x — the proven line** ⭐ [`v2.8.3`](https://github.com/ayukhno/autosound-tuning-skill/releases/tag/v2.8.3), branch [`2.x`](https://github.com/ayukhno/autosound-tuning-skill/tree/2.x) | Claude Code + a paid Claude plan, REW beta with its API on, one `/plugin install` | The full iterative method: REW read over its API, the analysis scripts, the Generator ↔ Critic ↔ Arbiter loop. **The four awards above were tuned with it** | Terminal only, no desktop app. The project is prose, so what is in force is re-read rather than machine-checked, and the desk-first path and the newer tools are not there. Fixes only from here on |
-| **3** | **3.x in a terminal** — the [one-line installer](#getting-started) | The same, plus five minutes for the installer, which brings Claude Code and Python itself | Everything in 2.x, plus: the project as data (a ledger you can revert in one step), the desk-first path, gated EQ, an entry control, tools that refuse when their input is missing, and updates that reach you as tags | A pre-release: in its final full-tune check before 3.1.0. Terminal |
-| **4** | **3.x in a window** — the same installer, which brings [TCC](https://github.com/ayukhno/autosound-tcc) | The same, and ~700 MB of disk | Path 3, plus the DSP tree, your REW curves, the plan and the AI side by side in a desktop window — macOS and Windows | The app is early. Models other than Claude come through `omp` and are metered separately |
-| **5** | **Gemini as the driver** | An agentic Gemini session with file and shell access | Point it at the repository and it follows the method | A bootstrap, not an install; Gemini drifts on long sessions, and there is no second opinion unless you arrange one |
+| **1** | **3.x in a window** — the [one-line installer](#getting-started), which brings [TCC](https://github.com/ayukhno/autosound-tcc) with it | A paid Claude plan, a REW beta with its API on, and ~700 MB of disk; the installer brings Claude Code and Python itself | The whole method with the DSP tree, your REW curves, the plan and the AI side by side in one window — macOS and Windows — over the same project files the terminal uses | A pre-release, and the app is younger than the method it runs. Models other than Claude and Gemini come through `omp` and are metered separately |
+| **2** | **3.x in a terminal** — the same installer with `--terminal` | The same, minus the app | The project as data (a ledger you revert in one step), the desk-first path, EQ proposed as gated packages, an entry control, tools that refuse rather than report "no objection", and fixes that reach you as tags | A pre-release: in its final full-tune check before 3.1.0. Everything happens in text |
+| **3** | **2.x — the proven line** ⭐ [`v2.8.3`](https://github.com/ayukhno/autosound-tuning-skill/releases/tag/v2.8.3), branch [`2.x`](https://github.com/ayukhno/autosound-tuning-skill/tree/2.x) | Claude Code + a paid Claude plan, a REW beta with its API on, one `/plugin install` | The full iterative method: REW read over its API, the analysis scripts, the Generator ↔ Critic ↔ Arbiter loop. **The four awards above were tuned with it** | Terminal only, no app. The project is prose, so what is in force is re-read rather than machine-checked, and the desk-first path and the newer tools are not there. Fixes only from here on |
+| **4** | **Web chat, nothing installed** — the [manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step) branch | A browser, free Gemini or any chat, REW to measure and export | The method's steps as copy-paste prompts; a passport file with your car's settings, rewritten in full at each step | You do all the work by hand: no REW automation, no memory between steps, no second AI reviewing. Free, and the weakest of the four |
 
-**In short.** Want to try the method for free before anything else — path 1. Want exactly what
-took the awards — **path 2**, and no update will move you off it. Want the desk-first path and
-don't mind a pre-release — path 3, or path 4 if you would rather see it than type it. Paths 2, 3
-and 4 all read your car through REW's API and never write into your DSP.
+**In short.** Want the current method and would rather see it than type it — path 1. Prefer the
+terminal — path 2. Want exactly what took the awards — **path 3**, and no update will move you off
+it. Want to try the method before installing anything — path 4, then decide. Paths 1, 2 and 3 all
+read your car through REW's API and never write into your DSP.
 
 The details of each — what the installer puts where, what changed in 3.x, and how to move from
 one path to another — are in the [FAQ](FAQ.md#choosing-a-path).
@@ -150,7 +149,7 @@ account covers it.
 
 ## Getting started
 
-*(This is paths 3 and 4 of [the chooser](#choose-how-you-want-to-use-it). For path 2 — the line
+*(This is paths 1 and 2 of [the chooser](#choose-how-you-want-to-use-it). For path 3 — the line
 that won the awards — the two plugin commands are in [the 2.x README](https://github.com/ayukhno/autosound-tuning-skill/blob/2.x/README.md#getting-started).)*
 
 One line installs everything: Claude Code, the method, the

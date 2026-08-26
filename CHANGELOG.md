@@ -78,6 +78,19 @@ Two consequences worth stating, because both have already caused a question:
   Two facts the round surfaced are added to BOTH languages, because leaving them apart would be the
   worse divergence: the conversation needs connectivity where the car is parked, and REW has to stay
   open, since the method reads the running window over the API rather than exported files.
+- **The chooser is four paths, not five, and the order starts with the richest**: 1 = 3.x in the TCC
+  window, 2 = 3.x in a terminal, 3 = the proven 2.x line that took the awards, 4 = web chat with
+  nothing installed. "Gemini as the driver" left the table and stays a FAQ answer, because it is a
+  bootstrap rather than a way to run the method.
+- **`README.de.md` and `README.pl.md` rewritten from the new English text**, each through its own
+  Advisor round. German: „Tiefmitteltöner (TMT)" for the midbass, **„Wedelmessung"** for the
+  moving-mic pass, „Membranaufbruch", „Eingabekontrolle", „kostenpflichtiges Claude-Abo", and the
+  calques rewritten — a car does not „hört", it is „am Hörplatz kommt an". Polish: **„złącze" was a
+  real trap** — in Polish it is a physical connector, so the acoustic junction is „zgranie" /
+  „połączenie pasm"; „mod kabiny", not „moda"; „break-up membrany"; „filtry zabezpieczające";
+  „struktura kanałów" for the DSP tree; „weryfikacja po wprowadzeniu". Both keep the ledger/journal
+  distinction (Register/Journal, rejestr/dziennik). Declined: adding Audison to the copy-paste
+  helper's list of processors — a claim about a third party's tool, unverified here.
 
 - **`references/core/capabilities.md` — the board: find the tool by what you want, not by the
   path.** 67 capabilities in 13 directions (talking to REW · naming and captures · protective
