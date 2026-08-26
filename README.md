@@ -258,31 +258,28 @@ the phase files behind it are listed in [`SKILL.md`](skills/autosound-tuning/SKI
 ## What a session sounds like
 
 Three voices: **you** at the listening seat, **Claude** driving the process, **Gemini** challenging
-every move. This exchange is from a real 2.x session; the review loop is the same in 3.x.
+every move. A short illustration of the loop on the desk-first path — the shape of the exchange,
+not a transcript:
 
-> **You (Arbiter):** The double bass booms a bit. And when I nudged the delays by ear, the bass got better — let's enter my values?
+> **You (Arbiter):** The bass is thin, and it pulls to the passenger side.
 >
-> **Claude (Generator):** Checked against fresh measurements first: your delays are already optimal — your ear liked something else. The real culprits are two narrow door resonances and a hot left side. I propose three surgical cuts.
+> **Claude (Generator):** Before any EQ: in the predicted sum, the sub-to-midbass joint at 80 Hz sits 4 dB below either driver on its own. That is a timing question, not a tone one. Two delays fit the magnitude equally well — 3.4 ms, and 3.4 minus one whole cycle.
 >
-> **Gemini (Critic):** Objection: one of those cuts sits inside a crossover joint — it can break the summation there.
+> **Gemini (Critic):** Then say which one the arrival supports. A candidate a full cycle off looks identical at the joint and falls apart an octave above it.
 >
-> **Claude:** Verified on the measurements — that joint actually gets *better*. But your doubt made me look deeper, and you're onto something: it's not just the woofer, the midrange is hot there too. Revised plan: each driver gets its own cut.
+> **Claude:** The arrival read from the measured impulse says 3.4 ms; its twin loses 2 dB at 300 Hz. Taking 3.4 — banked as a version you can revert in one step.
 >
-> **Gemini:** Now agreed.
+> **You:** Entered. Centred now — but one note booms.
 >
-> **You:** Entered. The boom is gone… but the subwoofer now localizes behind me!
+> **Claude:** The entry control says the car agrees with the desk to 0.6 dB, so it is not the alignment. 63 Hz stands still across all nine positions around your head, which makes it the cabin, and a cabin mode is EQ's to cut: one band, −4 dB, Q 3, on the midbass pair.
 >
-> **Claude:** My miss — two of my filters overlap and cut deeper than intended. Softening one.
+> **Gemini:** Agreed, and check the sub is not being asked for the same cut twice — the two overlap below 80.
 >
-> **You:** Bass is back up front — but it sits low. I want it up on the windshield, where it used to be.
->
-> **Claude:** The old defect was what propped the image up. We won't bring the defect back — a gentle symmetric EQ lift on both midranges instead, so the height returns without the skew.
->
-> **You:** …The sub is on the hood! Leaving it.
+> **You:** Better. Leaving it.
 
-About forty minutes from "it booms" to "the sub is on the hood", on a problem that usually eats
-weeks of forum-guided trial and error. Every participant caught something the others missed. The
-full technical version, with every number, is in
+Each step there is a number the tools computed rather than a rule of thumb, and each is a version
+in the ledger, revertable in one step. A real session written up with every number — a hard call on
+a cabin mode, resolved through this loop — is in
 [the case study](community-inbox/case-studies/case-study-mode-a-bass-2026-07-15.md).
 
 ## Which models to use
