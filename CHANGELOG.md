@@ -42,6 +42,21 @@ Two consequences worth stating, because both have already caused a question:
 
 ## [Unreleased]
 
+- **`rew_tool/ellipsoid.py`** — what STAYS and what MOVES across the nine hand-held positions
+  around the head (E1 of the EQ plan). Per 1/6-oct band: the mean and **σ(f)**, the spread the
+  target-matching tolerance is built from (`max(1 dB, 2σ)`); the three centre returns read as one
+  position and give the drift floor. Features on the mean curve (`curve_view`'s 1/24-vs-1/3
+  residual) are tracked position by position for PRESENCE at their own frequency — same sign, at
+  least half the depth, in ≥ 80 % of positions, depth σ within half the feature's own depth — and
+  labelled *STAYS* (a property of the system; EQ may address it) or *MOVES* (a property of the
+  position; not for a filter). The **Q ceiling per octave band** is measured from the narrowest
+  feature that stays, and *borrowed* (Q ≤ 6, said so) where none does. Two rulers that could not
+  fail were tried and discarded on the way: tracking the extremum's frequency inside a window
+  (too wide → a moving comb captures it; too narrow → nothing can move), and an absolute depth
+  bound (a +2.3 dB spike wandering by 1.5 dB read as "stays"). On a live set the woofer's modes
+  at 33 / 127 / 179 Hz stay with σ < 1 dB and the mids' HF spikes move — the doctrine's
+  stay-vs-move made a number.
+
 - **`rew_tool/rew_stub.py`** — the four REW API endpoints the method's tools read (`/measurements`,
   one record, `frequency-response`, `impulse-response`), served from Resonalyze v7 files or from
   arrays in-process, read-only, 404 by name for anything else. `rew_api.py` now honours
