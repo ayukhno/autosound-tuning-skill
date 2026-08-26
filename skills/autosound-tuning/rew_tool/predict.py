@@ -533,6 +533,194 @@ def predict(freqs, solos, chains, joints=None, band_oct=1.0):
             "lr_delta": lr, "notes": notes}
 
 
+# ---------------------------------------------------------------- alignment (Phase 1.3)
+APF_HINT_DIP_DB = -3.0     # a junction dip worse than this after delay/polarity earns an APF hint
+
+
+def _profile_limits(project_dir):
+    """(processing rate, delay ceiling ms) from the project's `dsp_profile.json`, each None if unknown."""
+    if not project_dir:
+        return None, None
+    path = os.path.join(project_dir, "dsp_profile.json")
+    if not os.path.isfile(path):
+        return None, None
+    import dsp_profile as _dp
+    try:
+        data = _dp._unwrap(_dp.load_profile(path))
+    except Exception:  # noqa: BLE001 -- a broken profile is the profile's problem, said elsewhere
+        return None, None
+    rate = _dp.processing_rate_hz(data)
+    delay = (data.get("delay") or {}).get("max_ms") if isinstance(data.get("delay"), dict) else None
+    return (float(rate) if rate else None), (float(delay) if delay else None)
+
+
+def align_joints(freqs, solos, chains, joints=None, *, step_ms=0.01, max_delay_ms=3.0,
+                 band_oct=1.0, tie_db=0.02, apf=False, delay_max_ms=None):
+    """Delay x polarity per junction, bottom-up, by sum loss -- the desk half of Phase 1.3.
+
+    Each junction is read on the SOLOS x the ledger chains (crossovers, gains and EQ the tune
+    already has are in), and the correction found for the UPPER member is written into its chain
+    before the next junction up is read: `sw<->w` first, then `w<->m` on the woofer as it will now
+    play, then `m<->tw`. The search is `dsp_math.align_sum_loss` -- the sum-loss score, the near-tie
+    rule across BOTH polarities (a difference the score cannot resolve is not bought with delay),
+    delays on the DSP's own grid (`step_ms` = 1000 / processing rate).
+
+    Two subs are aligned to each other first (a pair, not a junction) and then enter the `SWs<->w`
+    junction as their sum; the sub group is always the LOWER member, so no delay is ever asked of it.
+
+    The delays that come out are RELATIVE. A negative delay on an upper member means everything
+    below it must wait instead, so at the end the whole system is shifted together so that its
+    smallest delay is 0 -- every relation kept, nothing asked to arrive early; the shift is reported.
+    `delay_max_ms` (the profile's `delay.max_ms`) turns a delay the DSP cannot enter into a warning,
+    never a silent clip.
+
+    Reports and proposes; banks nothing. `delta` is the shape `state/apply.py propose` takes.
+    """
+    f = np.asarray(freqs, dtype=float)
+    original = {c: dict(ch) for c, ch in chains.items()}
+    chains = {c: dict(ch) for c, ch in chains.items()}
+    notes, steps = [], []
+    processed = {}
+    for code, H in solos.items():
+        ch = chains.get(code)
+        if ch is None or ch.get("unmodellable") or ch.get("muted"):
+            continue
+        processed[code] = H * chain_response(f, ch)
+    system = sorted(processed)                      # every channel that plays: shifted together
+    if joints is None:
+        joints = joints_from_chains({c: chains[c] for c in processed})
+    joints = sorted(joints, key=lambda j: j[2])     # bottom-up: the sub junction first
+
+    def _refresh(code):
+        processed[code] = solos[code] * chain_response(f, chains[code])
+
+    def _apply(code, tau_ms, pol):
+        ch = chains[code]
+        ch["ta_ms"] = float(ch["ta_ms"]) + tau_ms
+        if pol < 0:
+            ch["polarity"] = "INV" if ch["polarity"] == "NORM" else "NORM"
+        _refresh(code)
+
+    def _record(kind, lo, hi, fc, band, A, B):
+        before = dsp_math.sum_loss(f, A, B, band)
+        pol, tau, dip, margin, avg, score = dsp_math.align_sum_loss(
+            f, A, B, band, max_delay_ms=max_delay_ms, step_ms=step_ms, tie_db=tie_db)
+        _apply(hi, tau, pol)
+        after = dsp_math.sum_loss(f, A, processed[hi], band)
+        rec = {"kind": kind, "lo": lo, "hi": hi, "fc": fc, "band": [band[0], band[1]],
+               "tau_ms": tau, "steps": int(round(tau / step_ms)), "polarity": int(pol),
+               "polarity_margin_db": margin,
+               "before": {k: before[k] for k in ("avg_db", "dip_db", "dip_hz", "score_db")},
+               "after": {k: after[k] for k in ("avg_db", "dip_db", "dip_hz", "score_db")},
+               "apf": None, "notes": []}
+        if abs(abs(tau) - max_delay_ms) < step_ms / 2:
+            rec["notes"].append(f"optimum sits AT the search edge ({max_delay_ms:g} ms) -- widen "
+                                f"--max-delay-ms before believing it")
+        if abs(tau) < step_ms / 2 and pol > 0:
+            rec["notes"].append("already aligned as recorded -- nothing to change")
+        if apf and after["dip_db"] < APF_HINT_DIP_DB:
+            import xover_select as _xs
+            hint = _xs.repair_joint_apf(f, A, processed[hi], band)
+            if hint:
+                hint["note"] = ("an APF2 hint, not applied: on `lo` it rotates that member's OTHER "
+                                "junction too -- re-read it after entering")
+                rec["apf"] = hint
+        steps.append(rec)
+        return rec
+
+    subs = [c for c in processed if _is_sub(c)]
+    if len(subs) > 1:
+        a, b = subs[0], subs[1]
+        top = max(((chains[c].get("lp") or {}).get("f") or 0.0) for c in subs) or float(f[-1])
+        _record("pair", a, b, None, (float(f[0]), float(top)), processed[a], processed[b])
+        processed[SUB_GROUP] = processed[a] + processed[b]
+        if len(subs) > 2:
+            notes.append(f"{len(subs)} subs: the pair read is the first two; {SUB_GROUP} sums all")
+
+    for lo, hi, fc in joints:
+        if lo not in processed or hi not in processed:
+            notes.append(f"{lo}<->{hi}: a member has no solo or no modellable row -- skipped")
+            continue
+        if hi == SUB_GROUP:
+            notes.append(f"{lo}<->{hi}: the sub group is never the upper member -- skipped")
+            continue
+        band = (fc / 2 ** band_oct, fc * 2 ** band_oct)
+        _record("junction", lo, hi, float(fc), band, processed[lo], processed[hi])
+        if lo == SUB_GROUP:
+            pass                                     # nothing moved on the lower member
+        # a junction ABOVE this one reads `hi` as its `lo`, already refreshed by _apply
+
+    # Nothing arrives early: shift the whole system so its smallest delay is 0.
+    floor = min(float(chains[c]["ta_ms"]) for c in system) if system else 0.0
+    shift = -floor if floor < 0 else 0.0
+    if shift:
+        for c in system:
+            chains[c]["ta_ms"] = float(chains[c]["ta_ms"]) + shift
+        notes.append(f"every channel shifted by +{shift:.3f} ms so that no delay is negative -- "
+                     f"relations unchanged")
+    warnings = []
+    if delay_max_ms:
+        for c in system:
+            if chains[c]["ta_ms"] > delay_max_ms + 1e-9:
+                warnings.append(f"{c}: {chains[c]['ta_ms']:.3f} ms exceeds the DSP's delay "
+                                f"ceiling {delay_max_ms:g} ms -- not enterable as is")
+    delta = {"channels": {}}
+    for c in system:
+        o, n = original[c], chains[c]
+        change = {}
+        if abs(float(n["ta_ms"]) - float(o["ta_ms"])) > 1e-9:
+            change["ta_ms"] = round(float(n["ta_ms"]), 4)
+        if n["polarity"] != o["polarity"]:
+            change["polarity"] = n["polarity"]
+        if change:
+            delta["channels"][c] = change
+    out = {c: chains[c] for c in chains if c != SUB_GROUP}
+    return {"steps": steps, "chains": out, "delta": delta, "shift_ms": shift,
+            "step_ms": step_ms, "max_delay_ms": max_delay_ms, "warnings": warnings,
+            "notes": notes}
+
+
+def render_alignment(result, original=None, rate_hz=None):
+    lines = [f"  Align by sum loss, bottom-up  (grid {result['step_ms']:.4f} ms"
+             + (f" = 1 sample @ {rate_hz:g} Hz" if rate_hz else "")
+             + f"; search +/-{result['max_delay_ms']:g} ms; delay on the UPPER member)", ""]
+    lines.append(f"  {'step':16}{'fc':>6}{'before avg/dip':>17}{'delay':>9}{'pol':>5}"
+                 f"{'after avg/dip':>17}{'margin':>8}")
+    lines.append("  " + "-" * 78)
+    for st in result["steps"]:
+        name = f"{st['lo']}<->{st['hi']}" if st["kind"] == "junction" else f"{st['lo']}+{st['hi']} pair"
+        fc = f"{st['fc']:.0f}" if st["fc"] else "--"
+        b, a = st["before"], st["after"]
+        lines.append(f"  {name:16}{fc:>6}{b['avg_db']:>+8.2f}/{b['dip_db']:>+7.2f}"
+                     f"{st['tau_ms']:>+9.3f}{'INV' if st['polarity'] < 0 else 'same':>5}"
+                     f"{a['avg_db']:>+8.2f}/{a['dip_db']:>+7.2f}{st['polarity_margin_db']:>+8.2f}")
+        for n in st["notes"]:
+            lines.append(f"  {'':16}  ! {n}")
+        if st.get("apf"):
+            h = st["apf"]
+            lines.append(f"  {'':16}  APF2 hint: f0 {h['f0_hz']:g} Hz q {h['q']:g} on `{h['apply_to']}` "
+                         f"(+{h['null_gain_db']:.1f} dB at the dip) -- {h['note']}")
+    lines.append("")
+    if result["delta"]["channels"]:
+        lines.append("  proposal (bank with `state/apply.py propose`; enter by hand from the sheet):")
+        for c, ch in sorted(result["delta"]["channels"].items()):
+            o = (original or {}).get(c) or {}
+            parts = []
+            if "ta_ms" in ch:
+                smp = f" = {ch['ta_ms'] * rate_hz / 1000.0:.0f} smp" if rate_hz else ""
+                parts.append(f"delay {float(o.get('ta_ms') or 0.0):.3f} -> {ch['ta_ms']:.4f} ms{smp}")
+            if "polarity" in ch:
+                parts.append(f"polarity {o.get('polarity', '?')} -> {ch['polarity']}")
+            lines.append(f"    {c:8} " + "; ".join(parts))
+    else:
+        lines.append("  proposal: nothing to change")
+    for w in result["warnings"]:
+        lines.append(f"  WARNING {w}")
+    for n in result["notes"]:
+        lines.append(f"  note: {n}")
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------- output
 def to_json(result, decimate=1):
     f = result["freqs_hz"][::decimate]
@@ -664,6 +852,15 @@ def main(argv=None):
     ap.add_argument("--out", metavar="DIR", default=None, help="write predicted.json here")
     ap.add_argument("--plot", action="store_true", help="also write predicted.png (matplotlib)")
     ap.add_argument("--json", action="store_true", help="print the JSON instead of the table")
+    al = ap.add_argument_group("alignment (Phase 1.3)")
+    al.add_argument("--align", action="store_true",
+                    help="find delay x polarity per junction by sum loss, bottom-up, and print the "
+                         "proposal; the prediction that follows is of the ALIGNED state")
+    al.add_argument("--max-delay-ms", type=float, default=3.0, help="search +/- this (default 3)")
+    al.add_argument("--step-ms", type=float, default=None,
+                    help="delay grid (default: 1000 / the project profile's processing rate, else 0.01)")
+    al.add_argument("--tie-db", type=float, default=0.02)
+    al.add_argument("--apf", action="store_true", help="add an APF2 hint where a dip remains")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args(argv)
     if args.selftest:
@@ -735,19 +932,43 @@ def main(argv=None):
         for spec in args.joint:
             lo, hi, fc = [p.strip() for p in spec.split(",")]
             joints.append((canon(lo), canon(hi), float(fc)))
+    alignment = None
+    if args.align:
+        rate, delay_max = _profile_limits(args.project)
+        step = args.step_ms or (1000.0 / rate if rate else 0.01)
+        alignment = align_joints(f, solos, chains, joints=joints, step_ms=step,
+                                 max_delay_ms=args.max_delay_ms, band_oct=args.band_oct,
+                                 tie_db=args.tie_db, apf=args.apf, delay_max_ms=delay_max)
+        if not rate and not args.step_ms:
+            alignment["notes"].insert(0, "no processing rate known (no --project profile): delays "
+                                         "on a 0.01 ms grid, not the DSP's -- pass --step-ms")
+        if not args.json:
+            print(render_alignment(alignment, original=chains, rate_hz=rate))
+            print()
+        chains = dict(chains, **alignment["chains"])
+        state_label += " + aligned"
     result = predict(f, solos, chains, joints=joints, band_oct=args.band_oct)
     result["notes"].insert(0, f"state: {state_label}")
     result["notes"].insert(1, "solos: " + ", ".join(
         f"{c} ({i['source']})" for c, (_, i) in loaded.items()))
     result["notes"][2:2] = prot_notes
     if args.json:
-        print(json.dumps(to_json(result), indent=1))
+        js = to_json(result)
+        if alignment is not None:
+            js["alignment"] = alignment
+        print(json.dumps(js, indent=1))
     else:
         print(render(result))
     if args.out:
         os.makedirs(args.out, exist_ok=True)
         with open(os.path.join(args.out, "predicted.json"), "w", encoding="utf-8") as fh:
             json.dump(to_json(result), fh, indent=1)
+        if alignment is not None:
+            with open(os.path.join(args.out, "aligned.json"), "w", encoding="utf-8") as fh:
+                json.dump(alignment, fh, indent=1)
+            with open(os.path.join(args.out, "aligned-delta.json"), "w", encoding="utf-8") as fh:
+                json.dump(alignment["delta"], fh, indent=1)
+            print(f"  wrote {args.out}/aligned.json + aligned-delta.json (the proposal)", file=sys.stderr)
         if args.plot:
             plot(result, os.path.join(args.out, "predicted.png"))
         print(f"  wrote {args.out}/predicted.json" + (" + predicted.png" if args.plot else ""),
@@ -947,10 +1168,116 @@ def _selftest():
     js = to_json(r3, decimate=4)
     assert set(js["sides"]) == {"L", "R"} and len(js["junctions"]) == 4 and js["not_modelled"]
     assert "w-L↔m-L" in render(r3)
+    # 7. Alignment by sum loss, bottom-up, on the DSP's grid (Phase 1.3 as a command). Anchored
+    #    to arrivals the fixtures DEFINE, never to a stored answer.
+    step = 1000.0 / fs
+    # (a) check 3's pair with the ledger's delay removed: m-L arrives 0.5 ms after w-L. The upper
+    #     member cannot be asked to arrive early, so the answer must land as +0.5 ms on w-L after
+    #     the shift, on the grid, buying no polarity, and sum to within the tie of perfect.
+    r7 = align_joints(f, {"w-L": sw, "m-L": sm}, chains_off, step_ms=step)
+    st = r7["steps"][0]
+    assert (st["lo"], st["hi"], st["polarity"]) == ("w-L", "m-L", 1), st
+    assert abs(st["tau_ms"] + 0.5) < 0.1 and st["after"]["avg_db"] > -0.02, st
+    assert abs(st["tau_ms"] / step - round(st["tau_ms"] / step)) < 1e-6, "delay off the DSP grid"
+    assert abs(r7["chains"]["w-L"]["ta_ms"] - 0.5) < 0.1 and abs(r7["chains"]["m-L"]["ta_ms"]) < 1e-9
+    assert r7["shift_ms"] > 0 and set(r7["delta"]["channels"]) == {"w-L"}, r7["delta"]
+    assert st["after"]["avg_db"] > st["before"]["avg_db"] + 0.3, "alignment must improve the sum"
+    # (b) the same pair with m-L wired backwards: the flip is found and the delay is the same.
+    r7b = align_joints(f, {"w-L": sw, "m-L": -sm}, chains_off, step_ms=step)
+    assert r7b["steps"][0]["polarity"] == -1 and r7b["chains"]["m-L"]["polarity"] == "INV"
+    assert abs(r7b["steps"][0]["tau_ms"] - st["tau_ms"]) < 0.05, r7b["steps"][0]
+    # (c) already aligned: the tie rule buys nothing -- zero steps, same polarity, empty proposal.
+    r7c = align_joints(f, {"w-L": sw, "m-L": sw}, chains_off, step_ms=step)
+    assert r7c["steps"][0]["steps"] == 0 and r7c["steps"][0]["polarity"] == 1 and not r7c["delta"]["channels"]
+    # (d) three-way, bottom-up. A first draft expected the naive arrival differences (2.0 and 1.5
+    #     ms) and was wrong: the woofer's 80 Hz HPF bends phase at the 300 Hz junction and its 300
+    #     Hz LPF bends phase at the 80 Hz one, so the right delay is NOT the arrival difference --
+    #     which is the whole reason the junction is read on the processed members. The anchor is
+    #     the definition instead: after alignment the two members are in phase AT the corner
+    #     (|phase difference| at fc within 15 deg), each read bottom-up on the member below AS IT
+    #     NOW PLAYS, and no delay is negative. `tie_db` is narrowed so the near-tie rule (checked
+    #     in (c)) does not blur the answer.
+    s_sw = np.exp(-2j * np.pi * f * 3.0e-3)
+    ch3 = {"sw": chain_from_row({"hp": "OFF", "lp": {"f": 80, "type": "LR", "slope": 24},
+                                 "gain_db": 0, "ta_ms": 0, "polarity": "NORM"}),
+           "w-L": chain_from_row({"hp": {"f": 80, "type": "LR", "slope": 24},
+                                  "lp": {"f": 300, "type": "LR", "slope": 24},
+                                  "gain_db": 0, "ta_ms": 0, "polarity": "NORM"}),
+           "m-L": chains_off["m-L"]}
+    solos_d = {"sw": s_sw, "w-L": sw, "m-L": sm}
+    r7d = align_joints(f, solos_d, ch3, step_ms=step, tie_db=0.001)
+    assert [(x["lo"], x["hi"]) for x in r7d["steps"]] == [("sw", "w-L"), ("w-L", "m-L")], r7d["steps"]
+    assert min(c["ta_ms"] for c in r7d["chains"].values()) >= 0, r7d["chains"]
+
+    def _phase_at(fc, lo, hi, chains_, solos_):
+        at = np.array([fc])
+        k = int(np.argmin(abs(f - fc)))
+        A = solos_[lo][k] * chain_response(at, chains_[lo])[0]
+        B = solos_[hi][k] * chain_response(at, chains_[hi])[0]
+        return abs(math.degrees(np.angle(A * np.conj(B))))
+
+    def _score_with(lo, hi, band, chains_, solos_, extra_ms=0.0, flip=False):
+        hi_ch = dict(chains_[hi], ta_ms=chains_[hi]["ta_ms"] + extra_ms)
+        if flip:
+            hi_ch["polarity"] = "INV" if hi_ch["polarity"] == "NORM" else "NORM"
+        A = solos_[lo] * chain_response(f, chains_[lo])
+        B = solos_[hi] * chain_response(f, hi_ch)
+        return dsp_math.sum_loss(f, A, B, band)["score_db"]
+    for x in r7d["steps"]:
+        assert x["after"]["score_db"] >= x["before"]["score_db"] - 1e-9, x
+        band = tuple(x["band"])
+        # The recorded `after` is what an INDEPENDENT read of the returned chains gives -- and for
+        # w<->m that read uses the woofer WITH its sw<->w delay, which is the sequential claim.
+        here = _score_with(x["lo"], x["hi"], band, r7d["chains"], solos_d)
+        assert abs(here - x["after"]["score_db"]) < 1e-9, (x["lo"], x["hi"], here, x["after"])
+        # ...and it is the best point on its grid: no neighbour within three steps, in either
+        # polarity, scores higher. That is what "found" means, with no number guessed.
+        for n in (-3, -2, -1, 1, 2, 3):
+            for flip in (False, True):
+                other = _score_with(x["lo"], x["hi"], band, r7d["chains"], solos_d, n * step, flip)
+                # ...beats it by more than the tie: inside the tie the most compact delay wins
+                # on purpose (the doctrine (c) pins), so a neighbour may score a hair higher.
+                assert other <= here + 0.001 + 1e-9, (x["lo"], x["hi"], n, flip, other, here)
+    # The sub junction's mismatch is delay-like, so there the members end up in phase AT the corner.
+    assert _phase_at(80.0, "sw", "w-L", r7d["chains"], solos_d) < 15.0, \
+        _phase_at(80.0, "sw", "w-L", r7d["chains"], solos_d)
+    # The 80 Hz HPF's phase at 300 Hz is not a delay, so w<->m keeps a residual no delay removes:
+    # said as a number in the report (a dip), and that residual is the APF's job, not this step's.
+    wm = r7d["steps"][1]
+    assert wm["after"]["dip_db"] < 0 and wm["after"]["score_db"] < 0, wm["after"]
+    # (e) two subs: the pair first (identical chains, so its ideal IS the arrival difference of
+    #     0.3 ms, found to a grid step), then their SUM against the woofer -- in phase at 80 Hz.
+    e0 = np.ones_like(f, dtype=complex)
+    solos_e = {"sw-f": e0, "sw-r": np.exp(-2j * np.pi * f * 0.3e-3), "w-L": sw}
+    ch_e = {"sw-f": ch3["sw"], "sw-r": ch3["sw"], "w-L": ch3["w-L"]}
+    # tie_db=0: below 80 Hz a grid step is a fraction of a millidegree of loss, so ANY tie lets the
+    # compact-delay rule pull the answer toward 0; the pair check is of the search, not the rule.
+    r7e = align_joints(f, solos_e, ch_e, step_ms=step, tie_db=0.0)
+    kinds = [(x["kind"], x["lo"], x["hi"]) for x in r7e["steps"]]
+    assert kinds == [("pair", "sw-f", "sw-r"), ("junction", SUB_GROUP, "w-L")], kinds
+    te = {c: r7e["chains"][c]["ta_ms"] for c in ("sw-f", "sw-r", "w-L")}
+    assert abs((te["sw-f"] - te["sw-r"]) - 0.3) <= step, te
+    assert min(te.values()) >= 0 and r7e["steps"][0]["after"]["avg_db"] > -0.01, (te, r7e["steps"][0])
+    sub_sum = solos_e["sw-f"] * chain_response(f, r7e["chains"]["sw-f"]) + \
+        solos_e["sw-r"] * chain_response(f, r7e["chains"]["sw-r"])
+    ph = abs(math.degrees(np.angle((sub_sum * np.conj(solos_e["w-L"] * chain_response(f, r7e["chains"]["w-L"])))[np.argmin(abs(f - 80))])))
+    assert ph < 15.0, ph
+    # (f) the delay ceiling is a warning by name, never a clip: with a ceiling BELOW what (d) found
+    #     for the woofer, the warning names it and the answer is the same as without a ceiling.
+    w_found = r7d["chains"]["w-L"]["ta_ms"]
+    assert w_found > 0, w_found
+    r7f = align_joints(f, solos_d, ch3, step_ms=step, tie_db=0.001, delay_max_ms=w_found / 2)
+    assert any("w-L" in w and "ceiling" in w for w in r7f["warnings"]), r7f["warnings"]
+    assert abs(r7f["chains"]["w-L"]["ta_ms"] - w_found) < 1e-9, "a warning must not change the answer"
+    txt = render_alignment(r7d, original=ch3, rate_hz=fs)
+    assert "proposal" in txt and "w-L" in txt and "smp" in txt, txt
+
     print("selftest[predict] OK -- chain arithmetic (gain/pol/delay/LR corner/PK), ledger row == anchors "
           "entry, an aligned LR24 pair sums to 0 dB on both rulers and the un-aligned one goes negative "
           "inside its band, mono sub on both sides / centre left out / missing rows named, v7 round trip "
-          "reads a pure delay, JSON complete.")
+          "reads a pure delay, JSON complete; align: a 0.5 ms pair lands on the grid as +0.5 on the "
+          "lower member, a backwards wire is found, an aligned pair buys nothing, three-way bottom-up "
+          "and a sub pair keep every relation with no negative delay, the ceiling warns by name.")
     return 0
 
 

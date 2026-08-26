@@ -1295,13 +1295,15 @@ def _selftest():
     voicing = Project.parse_impact("voicing")
     assert voicing["kind"] == "other" and voicing["raw"] == "voicing", voicing
 
-    # migrate-fields: the DSP block's legacy rate name moves, the CAPTURE rate keeps its name, a
-    # dry run writes nothing, a re-run renames nothing, and two different values are refused.
+    # migrate-fields: the DSP block's legacy rate name moves, the CAPTURE rate (`mic`, the key the
+    # schema at `_empty_project` actually has -- a first draft guarded a key that exists nowhere,
+    # which is a test nothing could fail) keeps its name, a dry run writes nothing, a re-run
+    # renames nothing, and two different values are refused.
     mroot = tempfile.mkdtemp(prefix="autosound_project_mig_")
     mproj = Project(mroot)
     mdata = mproj.load()
     mdata["dsp"] = {"vendor": "V", "model": "M", "sample_rate_hz": 96000}
-    mdata["measurement"] = {"sample_rate_hz": 48000}
+    mdata["mic"] = {"model": "UMIK-1", "sample_rate_hz": 48000}   # the CAPTURE rate, where the schema keeps it
     mproj.save(mdata)
     rev_before = mproj.load()["project_rev"]
     assert mproj.migrate_fields(write=False) == ["dsp.sample_rate_hz -> dsp.dsp_processing_rate_hz"]
@@ -1310,7 +1312,7 @@ def _selftest():
     assert mproj.migrate_fields() == ["dsp.sample_rate_hz -> dsp.dsp_processing_rate_hz"]
     after = mproj.load()
     assert after["dsp"] == {"vendor": "V", "model": "M", "dsp_processing_rate_hz": 96000}, after["dsp"]
-    assert after["measurement"] == {"sample_rate_hz": 48000}, after["measurement"]
+    assert after["mic"] == {"model": "UMIK-1", "sample_rate_hz": 48000}, after["mic"]
     assert after["project_rev"] == rev_before + 1, after["project_rev"]
     assert mproj.migrate_fields() == [], "re-run renamed again"
     conflict = mproj.load()
