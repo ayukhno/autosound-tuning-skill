@@ -91,6 +91,18 @@ Two consequences worth stating, because both have already caused a question:
   „struktura kanałów" for the DSP tree; „weryfikacja po wprowadzeniu". Both keep the ledger/journal
   distinction (Register/Journal, rejestr/dziennik). Declined: adding Audison to the copy-paste
   helper's list of processors — a claim about a third party's tool, unverified here.
+- **The README is now the short one, in all four languages** (the author's rewrite, one page per
+  language, same structure): what it is in plain words, the awards with the 2.x/3.x split stated
+  outright, what you need, the installer, the four process steps, and the 2.8.x route for anyone who
+  wants exactly the version that competed. The FAQ carries everything else. Fixed while swapping
+  them in: the capture session has **protective FILTERS, not crossovers** (three languages said
+  crossovers — the one thing the capture must not have); the visualizer link opens in the page's own
+  language (`?lang=de`, `?lang=pl` — the tool has en/uk/de/pl); the "(Path 3)" marker now links to
+  the FAQ's path list instead of naming a number that no longer appears in the README; Polish takes
+  the terms the Advisor settled (`midbas`, `break-up membrany`, `zgrywa`); and the FAQ no longer
+  links to a README section that ceased to exist.
+- **No processor is named anywhere except the author's own** (Audiotec Fischer — Helix / MATCH /
+  BRAX), and only where the text is about the author's setup.
 
 - **`references/core/capabilities.md` — the board: find the tool by what you want, not by the
   path.** 67 capabilities in 13 directions (talking to REW · naming and captures · protective

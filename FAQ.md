@@ -56,8 +56,8 @@ Have a question that isn't here? Open a [discussion or issue](https://github.com
 
 ## Choosing a path
 
-The same method reaches you four ways. The [README's table](README.md#choose-how-you-want-to-use-it)
-is the short version; here is what each one actually asks of you and gives back.
+The same method reaches you four ways. The [README](README.md) gives you the short version —
+install it and start; here is what each path actually asks of you and gives back.
 
 ### The four paths, and what each costs you
 
@@ -798,10 +798,10 @@ when you tell the AI to back the project up, and it knows what stays out.
 
 Any processor you can type into. The method never writes into a DSP; it writes a file:
 
-- **Helix, MATCH, BRAX** (Audiotec Fischer): the Full EQ file the PC-Tool imports in one go.
-- **Everything else:** REW's Generic format — twenty slots, neutral — or its Extended form when
-  a crossover has to ride along with the EQ. Processors without file import, such as Musway, ESX
-  and Zapco, take it through the
+- **The family this method was developed on** — Audiotec Fischer (Helix / MATCH / BRAX): the Full
+  EQ file their PC-Tool imports in one go.
+- **Everything else:** REW's Generic format — twenty slots, neutral — or its Extended form when a
+  crossover has to ride along with the EQ. A processor without file import takes it through the
   [copy-paste helper](https://github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant).
 - **A format of your own:** a vendor format can be supplied during a session. What the method
   will not do is guess one: a guessed import syntax produces a file that looks right and fails
