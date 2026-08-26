@@ -40,6 +40,21 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [Unreleased]
+
+- **`crossover_checks.py` — the three questions asked of a corner BEFORE it is entered**, each
+  answering OK / CAUTION / REFUSE and each naming where its number comes from, because two of the
+  three rest on outside sources rather than on this method's measurements. (1) **Fs margin** against
+  the driver's INSTALLED Fs: below 1.1× the answer is REFUSE, not advice — that is the protective
+  floor the doctrine already had; up to a working margin (2× at second order, less at steeper
+  slopes) it is CAUTION, and the margin is labelled as craft convention. (2) **Group-delay budget**
+  against Blauert & Laws (1978), quoted and interpolated in log frequency, and fed with the delay a
+  filter ADDS — never a measured absolute GD, which carries the flight time (the playbook's 18.4 ms
+  trap). (3) **Junction cost** derived from ISO 226 through `equal_loudness`, so the familiar
+  "avoid 2–4 kHz" falls out of the curve (3.5 kHz costs +2.7 dB against 1 kHz at 70 phon) instead
+  of being asserted. Without `--fs` the tool says the one check that can refuse was skipped. Woven
+  into Phase 1 §3, the playbook and the board (71 rows); suite 43.
+
 ## [v3.0.35] — 2026-08-26 · one phase map, effects named by the profile, levels read off the measurement
 
 > **Upgrading:** additive — one new module function, one new command, two documentation
