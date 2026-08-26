@@ -65,7 +65,7 @@ irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/main/instal
 
 ---
 
-**Competition-Proven Version 2.8.x** — [path 3 in the FAQ](FAQ.md#the-four-paths-and-what-each-costs-you)
+**Competition-Proven Version 2.8.x** — [path 3 in the FAQ](FAQ.md#four-paths-of-usage)
 
 If you want to use the exact **2.8.x** version that won the competitions, it works exclusively through the terminal. Instead of the scripts above, run these two commands in a terminal with `claude` (Claude Code) already installed:
 ```sh
