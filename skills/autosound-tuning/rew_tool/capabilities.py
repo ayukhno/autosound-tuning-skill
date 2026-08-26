@@ -13,7 +13,15 @@ same shape). So this module is the seam check between the board and the tree:
   * every `module.function` names a `def` (or a class) in that module;
   * every `read` pointer resolves to a file;
   * and the reverse: every module WITH a command line is on the board, except the ones listed
-    here as deliberately not (a legacy one-off, a plotting helper, a research harness).
+    here as deliberately not (a legacy one-off, a plotting helper, a research harness). "With a
+    command line" is read WIDELY -- `__main__`, a `.sh`, an argument parser, a `main()`, a read of
+    `sys.argv` -- because the narrow reading (`__main__` only) would let a tool that offers its CLI
+    another way pass in silence.
+
+What this does NOT prove, and a consumer of the board should say so rather than imply otherwise:
+every tool with a command line is represented, but the DEPTH of each tool's coverage is not
+machine-checked -- a module on the board with a seventh useful mode nobody wrote a row for looks
+exactly like one with none.
 
     python3 rew_tool/capabilities.py --selftest     (in the suite)
     python3 rew_tool/capabilities.py                 (print the board's row count per section)
@@ -159,7 +167,18 @@ def check(board_path=BOARD):
             if name in mentioned or name in NOT_ON_BOARD:
                 continue
             src = open(path, encoding="utf-8", errors="replace").read()
-            if "__main__" in src or name.endswith(".sh"):
+            # What counts as "has a command line". `__main__` catches the usual shape, but a tool
+            # can offer one another way -- an entry point, an `argparse` parser in a function that
+            # something else calls -- and that one would walk through this gate in silence (named
+            # by the TCC session, 2026-08-26: the same family as the `name_key` shape change, where
+            # the check that exists passes and the one that matters was never written). So the gate
+            # is the WIDER claim: anything that builds an argument parser, or prints its own usage,
+            # is a tool as far as the board is concerned.
+            cli = ("__main__" in src or name.endswith(".sh")
+                   or "ArgumentParser" in src or "add_argument" in src
+                   or "sys.argv" in src
+                   or re.search(r"^\s*def _?main\(", src, re.M))
+            if cli:
                 problems.append(f"{name} has a command line and is neither on the board nor in NOT_ON_BOARD")
     for name in NOT_ON_BOARD:
         if name in mentioned and name not in ("state.py", "process.py", "equal_loudness.py", "side_effect.py",
