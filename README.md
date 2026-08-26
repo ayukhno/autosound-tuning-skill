@@ -122,12 +122,16 @@ What it cannot bring is the tuning half, because that part is yours:
   starts** and press **Start server**; the panel then reads *"API server is running on port 4735"*,
   and from then on it comes up with REW. That panel is the same on macOS and Windows; on Windows the
   installer also puts a **REW (API on)** shortcut on your Desktop, which starts REW with the API on
-  in one click.
+  in one click. **Keep REW open** while you tune: the method reads the measurements from the running
+  window over that API, not from exported files.
 - **A calibrated measurement microphone, and a DSP you can type into.** Any processor works. For
   phase and timing, XLR with a physical loopback beats USB:
   [why, in the FAQ](FAQ.md#measuring-phase--time-alignment-umik-1-vs-xlr-microphones).
 - **A paid Claude subscription (Pro or Max).** See
   [the plans and what a session costs](FAQ.md#subscription-options-quotas--budgets-as-of-july-2026).
+- **Connectivity where the car is parked.** The AI runs in the cloud, so an underground car park
+  with no signal stops the conversation — arrange mobile data or Wi-Fi before the session. The
+  scripts and the measurements themselves do not need the network; the conversation does.
 
 A second AI as reviewer is optional and is where most of the value comes from. The installer
 brings Google's `agy` for it and offers the sign-in at the end; without one the skill runs solo and

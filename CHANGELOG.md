@@ -66,7 +66,18 @@ Two consequences worth stating, because both have already caused a question:
   what that means; the AI Studio section is a pointer to path 1 rather than a second copy of it;
   Gemini in TCC comes through `agy`, not `omp`. Declined: the claim that Claude Code needs API
   credits rather than a Pro/Max plan (it does not), and rewriting the session transcript's midrange
-  lift — it is a quotation of a real session, not advice.
+  lift — it is a quotation of a real session, not advice. The README's session dialogue is now an
+  illustration of the current path, marked as one, rather than a transcript quoted for its advice.
+- **`README.uk.md` rewritten from the new English text** (Ukrainian is the author's own language;
+  the FAQ stays English-only, so the Ukrainian README links into it on purpose). It went through the
+  Advisor as its own round, and the terminology it returned is applied: «брейкап дифузора», не
+  «конуса»; «на цілий період (360°)», не «цикл убік»; «підготовка» замість «інтейку»; «сесія
+  вимірювань» замість «сесії захвату»; «контроль введеного» замість «вхідного контролю»; «реєстр»
+  замість «леджера» — і не «журнал», бо журнал у цьому методі окрема річ; «авто» не відмінюється;
+  перевірка «ВІДМОВЛЯЄ», а не «падає»; `Excess phase` дано в дужках, бо в REW інтерфейс англійський.
+  Two facts the round surfaced are added to BOTH languages, because leaving them apart would be the
+  worse divergence: the conversation needs connectivity where the car is parked, and REW has to stay
+  open, since the method reads the running window over the API rather than exported files.
 
 - **`references/core/capabilities.md` — the board: find the tool by what you want, not by the
   path.** 67 capabilities in 13 directions (talking to REW · naming and captures · protective
