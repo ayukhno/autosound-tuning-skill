@@ -4,7 +4,7 @@ This phase establishes the physical foundation of the tune: crossovers, prelimin
 
 > 🗺️ **Virtual-first?** If Phase −1 chose the virtual-first path (one capture session → design at the desk), the ORDER of work in Phases 0–3 changes — the phase numbers do not. Read [`virtual-first.md`](references/phases/virtual-first.md) alongside this file; it is the one home of that path. This file stays the authority on the iterative fallback and on every gate.
 
-> On virtual-first, Phases 1–2 are one desk sitting that ends in a **predicted sum** (`predict.py`) before anything is entered into the DSP — see [`virtual-first.md`](references/phases/virtual-first.md) §"Phases 1–2".
+> On virtual-first, Phases 1–2 are one desk sitting that ends in a **predicted sum** (`predict.py`; the junctions by `predict --align`, the virtual tier through `--route`, the EQ as packages by `eq_propose` with `ellipsoid` for what stays) before anything is entered into the DSP — see [`virtual-first.md`](references/phases/virtual-first.md) §"Phases 1–2".
 
 ## 🎯 Goal-node
 

@@ -59,7 +59,7 @@ Flaws need `status`: a measured anomaly is `confirmed`, one the prose reasons ab
 
 **3. `dsp_profile.json` — what the processor can do.** `python3 rew_tool/dsp_profile.py <new> …`
 Not what it is currently set to — that is step 4. If the prose does not state a capability, leave
-it null and let it become an open question. `dsp_processing_rate_hz` (the DSP's PROCESSING rate; the old name `sample_rate_hz` is still read) is required before phase 1, so if the
+it null and let it become an open question. `dsp_processing_rate_hz` (the DSP's PROCESSING rate; the old name `sample_rate_hz` is still read; a `project.json` written under the old name moves to the new one with `project.py <dir> migrate-fields` — the `mic` / `measurement` rate is the CAPTURE rate and keeps its name) is required before phase 1, so if the
 prose never says it, that is the first thing to ask the Arbiter.
 
 **4. The first ledger snapshot — what it is set to now.** The STEP 1/2/3 sections: crossovers,

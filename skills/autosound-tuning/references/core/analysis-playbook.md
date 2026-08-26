@@ -16,6 +16,12 @@ A map: decision → data → REW API function. The API is in `rew_tool/rew_api.p
 | Apply EQ/filters | — | — | `set_filters`, `set_equaliser` |
 | Available crossover types and slopes | — | — | `get_crossover_types`, `get_slopes` |
 | Target (house curve) for comparison | Target | — | `get_target_settings`, `get_target_response` |
+| Junction delay / polarity at the DESK (virtual-first 1.3) | solos × ledger chains, sum loss per junction, the arrival difference | Sweep (loopback), one base | `predict.py --align` (alias said by name; `aligned-delta.json` → `apply.propose`) |
+| Which features stay and which move; how narrow a filter may be; the tolerance to the target | nine positions around the head, σ(f), presence per feature, the Q ceiling | Sweep, hand-held ellipsoid `p1…p9` | `ellipsoid.py --solos DIR \| --rew --ver N --channel m-L` |
+| Coarse EQ at the desk / fine EQ in the car as packages | resonances per driver group, L/R shape per pair, tone per pair | Sweep (desk) or MMM (car) + the ellipsoid + the impulse for the phase gate | `eq_propose.py` (each package: why, listening id, score, delta) |
+| What cuts the ear / what booms | peaks above a ±1-oct trend, classed and ear-weighted | MMM `ALL_N (rta)` (a sweep adds ring-down) | `ear_suspects.py` → A/B one band at a time, `listening-verdict` |
+| Was the preset ENTERED as designed | `_2` solo vs predicted solo × chain: shape (1/6 oct) + arrival | Sweep from the tripod | `verify_prediction.py --entry` |
+| Did the time base hold through the capture session | ctl1 → ctl3 drift by cross-correlation; levels side by side | Sweep, the round's control titles | `capture-check --session` / `verify.py --session` |
 
 ---
 

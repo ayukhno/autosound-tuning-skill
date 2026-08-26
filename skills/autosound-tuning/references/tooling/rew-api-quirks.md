@@ -3,6 +3,7 @@
 Gotchas when driving the REW API over Python/urllib (REW 5.40 Beta 126, API 0.9.4). `rew_tool/` already encodes these correctly — this file exists so a fresh session doesn't re-derive them or re-introduce a bug after a refactor.
 
 ## Encoding & endpoints
+- **The address is `REW_API_URL`** (default `http://localhost:4735`): a REW on another host, or `rew_tool/rew_stub.py` serving an archived v7 session — the same four endpoints from files, read-only — so the in-car commands run with no REW (`path_check` does exactly that).
 - **Data is BIG-ENDIAN float32** (`struct.unpack('>'+n+'f', ...)`). Little-endian (`<f`) returns garbage that grows ~×4 per step. Applies to magnitude / phase / IR / GD. `rew_tool/rew_api.py` decodes correctly.
 - **FR endpoint:** `/measurements/{id}/frequency-response` → keys `magnitude`, `phase` (RTA measurements have **no** phase; sweeps do). Not `/spl`.
 - **Two frequency spacings — handle both or RTA crashes.** Log-sweeps return `ppo` (points-per-octave) + `startFreq` → `freq[i] = startFreq·2^(i/ppo)`. RTA / linear measurements return **`freqStep`** + `startFreq` → `freq[i] = startFreq + i·freqStep` (no `ppo`). Assuming `ppo` only → `KeyError` on every RTA pull. `rew_tool/rew_api.py:freq_axis()` picks the right one.
