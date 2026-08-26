@@ -24,7 +24,12 @@ needed once more, briefly, to verify the prediction and do the fine EQ the desk 
 - **Improve an existing tune**: −1 → 3 → 4, with no new solos — Phase 3 already holds a sum
   measurement, MMM, fine EQ and a verdict. Both modes **read the current DSP settings into the
   ledger** first. ⚠️ On a Helix there is no reader for PC-Tool 6 — the current setup is transcribed
-  from its screens (EQ is the slowest); say this cost in the intake, it is one-time.
+  from its screens (EQ is the slowest); say this cost in the intake, it is one-time. The
+  transcription goes through `setup_import.py <project> transcription.json [--atf code=file.atf]
+  --write`: every value is checked against the DSP profile (a delay off the 0.01 ms grid, a gain
+  outside the range, an EQ type the DSP does not have — each refused by name, nothing rounded), the
+  EQ is taken from the ATF bank where one exists, and the version carries
+  `provenance: transcription, verified_by_file=false` so nobody later mistakes it for a read-back.
 
 There is no separate "iterative path" to choose. The path is one; the intake states what the available
 gear **costs** you:
@@ -189,10 +194,12 @@ verification (3), never the capture.**
 
 Noted so a later session does not mistake them for done: the flaw map as a command (the writer exists
 and `eq_propose` now finds and proposes what a row would say — the rows themselves are still written by
-hand); crossover checks (group-delay budget, the 2–4 kHz junction penalty, tweeter fc from Fs); the
-**candidate description** for crossovers (2–3, magnitude/phase/impulse, per-driver strengths); levels
-from the measurement as a second estimate; the Helix setup reader (screens only; EQ = ATF); a general
-term "effects and dynamic processing" in DSP profiles; the ellipsoid diagram. Closed 2026-08-26: joint
+hand); the **candidate description** for crossovers (2–3, magnitude/phase/impulse, per-driver
+strengths); the ellipsoid diagram. Closed later on 2026-08-26: crossover checks (`crossover_checks`:
+Fs margin, group-delay budget, junction cost), levels from the measurement as a second estimate
+(`level_offsets --solos`), the setup reader as a validated transcription with provenance
+(`setup_import`), "effects and dynamic processing" as a profile field (`dsp_profile effects`).
+Closed earlier the same day: joint
 alignment by sum loss (`predict --align`), the whole-session probe (`capture-check --session`), the entry
 control (`verify_prediction --entry`), the ellipsoid's σ(f) / stays-moves / Q ceiling (`ellipsoid`),
 coarse EQ as packages (`eq_propose`), what cuts and what booms with the A/B loop (`ear_suspects`).

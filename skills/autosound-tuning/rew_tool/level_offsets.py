@@ -194,6 +194,7 @@ def _main(argv=None):
     ap.add_argument("--solos", required=True, help="directory of Resonalyze v7 solo files")
     ap.add_argument("--ver", type=int, required=True, help="capture round number")
     ap.add_argument("--project", help="project dir — bands from its ledger, and the current gains")
+    ap.add_argument("--preset", help="ledger preset (default: the registry's active slot)")
     ap.add_argument("--levels-fixed", action="store_true",
                     help="assert what no file records: one REW output level and one head-unit "
                          "level for the whole round, knobs untouched (capture sheet 0.2)")
@@ -204,36 +205,65 @@ def _main(argv=None):
               file=sys.stderr)
         return 3
 
-    import glob as _glob
     import os as _os
-    from . import predict as _predict  # numpy lives there, not here
-    from .state import state as _state
+    _here = _os.path.dirname(_os.path.abspath(__file__))
+    if _here not in sys.path:
+        sys.path.insert(0, _here)
+    import naming as _naming                         # the title grammar, for stem -> channel code
+    import predict as _predict                       # numpy lives there, not here
+    import verify_prediction as _vp                  # the SAME v7 reader the predictions use
 
     freqs = [20.0 * (2 ** (i / 48.0)) for i in range(int(48 * math.log2(20000 / 20)) + 1)]
     bands, gains = {}, {}
     if args.project:
-        snap = _state.current_snapshot(args.project)
+        _preset, snap = _predict.load_project_state(args.project, args.preset)
         for code, ch in (snap.get("channels") or {}).items():
-            hp = (ch.get("hp") or {}).get("f") or 20.0
-            lp = (ch.get("lp") or {}).get("f") or 20000.0
-            bands[code] = (float(hp), float(lp))
-            if ch.get("gain") is not None:
-                gains[code] = float(ch["gain"])
+            hp = ch.get("hp") if isinstance(ch.get("hp"), dict) else None
+            lp = ch.get("lp") if isinstance(ch.get("lp"), dict) else None
+            bands[code] = (float((hp or {}).get("f") or 20.0), float((lp or {}).get("f") or 20000.0))
+            if ch.get("gain_db") is not None:
+                gains[code] = float(ch["gain_db"])
+
+    def _code_of(stem):
+        """The channel code of a SOLO stem, or None for anything that is not one.
+
+        A level is read from the driver's baseline solo. A control (`ctl`), a position around the
+        head (`p1`…`p9`, `x0`), a pair sum (`a+b`) or `ALL` is a measurement of something else, and
+        counting it here would give one channel several levels -- the first walk of this command
+        did exactly that (9 rows for 7 drivers) until this filter existed.
+        """
+        if "+" in stem or stem == "ALL":
+            return None
+        try:
+            parsed = _naming.parse_name(stem)
+        except Exception:
+            parsed = None
+        if parsed and parsed.get("code"):
+            if parsed.get("control") or parsed.get("position"):
+                return None
+            return parsed["code"]
+        if "-" in stem:                                # path_check's `m_L-ctl1` / `m_L-p5`: a tag
+            return None
+        return stem.replace("_", "-")
 
     rows = []
-    for path in sorted(_glob.glob(_os.path.join(args.solos, "*.json"))):
-        code = _os.path.basename(path).split("-" + str(args.ver))[0].split("_")[0]
-        try:
-            (_f, H, _meta) = _predict.load_solo_v7(path, freqs)[0:3]
-        except Exception as exc:                      # a file that cannot be read is named, not skipped
-            rows.append((code, None, None, f"unreadable: {exc}"))
+    try:
+        measured = _vp.measured_from_v7_dir(args.solos, freqs)
+    except FileNotFoundError as exc:
+        print(f"refusing: {exc}", file=sys.stderr)
+        return 3
+    for stem, (_f, mag, _method, _H) in sorted(measured.items()):
+        code = _code_of(stem)
+        if code is None:
             continue
-        mag = [20.0 * math.log10(abs(v) + 1e-30) for v in H]
         lo, hi = bands.get(code, (20.0, 20000.0))
         try:
-            rows.append((code, band_level_db(freqs, mag, lo, hi), (lo, hi), None))
+            rows.append((code, band_level_db(list(_f), list(mag), lo, hi), (lo, hi), None))
         except ValueError as exc:
             rows.append((code, None, (lo, hi), str(exc)))
+    if not rows:
+        print(f"refusing: no solo v7 files in {args.solos}", file=sys.stderr)
+        return 3
 
     good = {c: lvl for c, lvl, _b, err in rows if err is None and lvl is not None}
     off = measured_offsets(good) if good else {}

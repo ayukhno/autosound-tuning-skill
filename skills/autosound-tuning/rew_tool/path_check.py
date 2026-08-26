@@ -320,6 +320,33 @@ def _selftest():
     atf = os.path.join(root, "tw-L.atf")
     rc, out = _run(tool("eq_export.py"), proj, "tw-L", "--out", atf, env=env, ok=(0, 3))
     assert "5000" in open(atf).read() and "format:" in out, out[-400:]
+    # ---- 1.4 · levels read off the measurement: refuses without the knob assertion, then gives
+    #      cut-only offsets with the quietest driver at 0 -- every driver here was "swept" at the
+    #      same level, so the offsets are the drivers' own sensitivities, not a knob ------------
+    rc, out = _run(tool("level_offsets.py"), "--solos", set1, "--ver", "1", "--project", proj, env=env, ok=(3,))
+    assert "refusing" in out and "knob" in out, out[-300:]
+    rc, out = _run(tool("level_offsets.py"), "--solos", set1, "--ver", "1", "--project", proj,
+                   "--levels-fixed", env=env)
+    offs = [float(line.split()[3]) for line in out.splitlines()
+            if line.split() and line.split()[0] in DRIVERS and len(line.split()) > 3]
+    assert len(offs) == len(DRIVERS), (offs, out[-600:])
+    assert max(offs) == 0.0 and all(o <= 0.0 for o in offs), ("cut-only, quietest = 0", offs)
+
+    # ---- 1.5 · a setup transcribed from the DSP's screens: validated against the profile, refused
+    #      by name when a value is one the DSP cannot hold, and carried with provenance ---------
+    transcription = {"preset": "SQ", "source": "path_check screens", "read_on": "2026-08-26",
+                     "channels": {c: {"hp": DESIGN[c]["hp"], "lp": DESIGN[c]["lp"], "gain_db": 0.0,
+                                      "ta_ms": 0.0, "polarity": "NORM", "eq": []} for c in DRIVERS}}
+    tpath = os.path.join(root, "transcription.json")
+    json.dump(transcription, open(tpath, "w"))
+    rc, out = _run(tool("setup_import.py"), proj, tpath, env=env)
+    assert "would bank" in out and "verified_by_file=False" in out, out[-400:]
+    transcription["channels"]["m-L"]["ta_ms"] = 2.355                    # off the 0.01 ms grid
+    json.dump(transcription, open(tpath, "w"))
+    rc, out = _run(tool("setup_import.py"), proj, tpath, "--write", env=env, ok=(3,))
+    assert "2.355" in out and "grid" in out, out[-400:]
+    assert hist.head() == "v_003", ("a refused import must not bank", hist.head())
+
     out3 = os.path.join(root, "out3")
     _run(tool("predict.py"), "--solos", set1, "--project", proj, "--baseline", "--out", out3, env=env)
     pred3 = json.load(open(os.path.join(out3, "predicted.json")))

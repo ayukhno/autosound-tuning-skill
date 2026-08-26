@@ -53,7 +53,27 @@ Two consequences worth stating, because both have already caused a question:
   trap). (3) **Junction cost** derived from ISO 226 through `equal_loudness`, so the familiar
   "avoid 2–4 kHz" falls out of the curve (3.5 kHz costs +2.7 dB against 1 kHz at 70 phon) instead
   of being asserted. Without `--fs` the tool says the one check that can refuse was skipped. Woven
-  into Phase 1 §3, the playbook and the board (71 rows); suite 43.
+  into Phase 1 §3, the playbook and the board; suite 43.
+- **`setup_import.py` — the DSP's current setup into the ledger, as honestly as a Helix allows.**
+  PC-Tool 6 has no text export, so a setup is typed from its screens; this makes that a checked
+  step instead of a trusted one. The transcription is validated against the DSP profile — a delay
+  off the 0.01 ms grid or above the ceiling, a gain outside the range or off its 1 dB step, a
+  polarity that is not NORM/INV, an EQ type the DSP does not offer, a band count or range it cannot
+  hold — and **every violation is refused by name; nothing is rounded**, because the transcription
+  is wrong or the profile is, and rounding would hide which. EQ comes from the ATF bank
+  (`--atf code=file.atf`) where one exists — typing thirty bands is where transcription fails first.
+  The version carries `provenance: transcription, verified_by_file=false`; the first write seeds
+  the ledger, later ones go through `apply.propose`. Walked end to end by `path_check` (1.5),
+  including the refusal. Suite 44.
+- **`level_offsets --solos` in v3.0.35 did not run: fixed, and now walked by `path_check`.** The
+  command called `state.current_snapshot`, which does not exist, and unpacked `load_solo_v7` as a
+  3-tuple where it returns 2 — its own selftest was stdlib-only and never exercised the CLI, so the
+  tag shipped a command that failed on first use. It now goes through the same v7 reader the
+  predictions use (`verify_prediction.measured_from_v7_dir`) and `predict.load_project_state`, and
+  `path_check` 1.4 runs it against the synthetic capture set: refuses without `--levels-fixed`,
+  then cut-only offsets with the quietest driver at 0. The lesson is the one `CLAUDE.md` already
+  carries — a check nobody made fail is not a check — applied to a CLI whose selftest did not
+  reach it.
 
 ## [v3.0.35] — 2026-08-26 · one phase map, effects named by the profile, levels read off the measurement
 
