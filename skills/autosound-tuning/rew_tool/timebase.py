@@ -287,8 +287,9 @@ def _ms(seconds):
 def read_batch(ids=None, title_contains=None):
     """Pull the capture terms of a set of measurements from a running REW. Read-only.
 
-    REW may be mid-session (`CLAUDE.md`'s rule 6), so this only ever GETs: no smoothing changes, no
-    filters, nothing put back afterwards because nothing was moved.
+    REW may be mid-session, and the rule there is read, never change its state without putting it
+    back -- so this only ever GETs: no smoothing changes, no filters, nothing put back afterwards
+    because nothing was moved.
     """
     import rew_api
 

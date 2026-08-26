@@ -68,19 +68,15 @@ edited in the UI as a non-negative "near-side cut".
   localise there, but the delay split between identical drivers is still physical
 - `MaximumSceneOffsetMs = 5`: beyond this it is not an image shift but an audible echo
 
-**The time↔level trade, measured on real files.** DIMOSUS sent two sessions of one tune that differ
-in exactly 10 numbers (crossovers, PEQ, polarity byte-identical):
+**The time↔level trade, measured on real files.** Compare two Virtual DSP sessions of one tune that
+differ in exactly 10 numbers (crossovers, PEQ and polarity byte-identical) — one balanced by level
+alone, the other with the stereo scene offset switched on. Switching the offset on grew the L−R
+delay difference by that same 0.25 ms on every pair and took ~3 dB of near-side cut back out, so
+0.25 ms of tilt replaced ~3 dB of cut → **≈ 12 dB per millisecond**. Textbook for a ±30° pair is
+~15 dB/ms (a full image shift at ~1 ms or ~15–18 dB); the order of magnitude agrees, the exact
+number does not transfer to a cabin.
 
-| session | offset | left B/C/D cut |
-|---|---|---|
-| levels-only | 0 | −2 / −4 / −4 dB |
-| levels-and-delay | 0.25 | 0 / −1 / −1 dB |
-
-The L−R delay difference grew by +0.24 / +0.25 / +0.25. So 0.25 ms of tilt replaced ~3 dB of cut →
-**≈ 12 dB per millisecond**. Textbook for a ±30° pair is ~15 dB/ms (a full image shift at ~1 ms or
-~15–18 dB); the order of magnitude agrees, the exact number does not transfer to a cabin.
-
-⚠️ **0.25 is the program's DEFAULT** (`StereoSceneOffsetMs = 0.25`), not a value DIMOSUS tuned to a
+⚠️ **0.25 is the program's DEFAULT** (`StereoSceneOffsetMs = 0.25`), not a value anybody tuned to a
 car. **The skill must not present it as justified.** The transferable rule is one lever **in place
 of** the other, never on top: adding tilt and keeping the old cuts is a double dose. (The method's own
 stance on the stereo scene is `diagnostic-techniques.md §23` — a zero of the measured pair-arrival difference, with the tape as
@@ -207,8 +203,8 @@ constraint, not by acoustics; `LOW` is raised as its own warning.
   way to learn a dialog.
 - Auto delay writes delays and polarity but not levels, until `Balance channel gains (cut-only)` is
   set. Cut-only never raises — headroom cannot be lost.
-- The session format is now **VERSION 8**; DIMOSUS's files from 2026-08-23 are version 7 and migrate
-  on load. **Saving over the original destroys the v7** — keep the original if it is a shared record.
+- The session format is now **VERSION 8**; a version 7 session migrates on load. **Saving over the
+  original destroys the v7** — keep the original if it is a shared record.
 - The mic calibration travels **inside the session** as the curve itself, not a reference to a list:
   it describes the microphone the measurement was made with, so it belongs to the measurements and
   moves with them.

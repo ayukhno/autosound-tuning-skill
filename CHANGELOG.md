@@ -11,7 +11,7 @@ Two consequences worth stating, because both have already caused a question:
 
 - Every `3.0.x` tag is **work, not a release — but say for whom.** There are two audiences and the
   tags reach them differently. The plugin catalogue (`.claude-plugin/marketplace.json`) is pinned by
-  SHA to the last released line, **2.8.1**; it does not move when a tag is cut, and that pin is
+  SHA to the last released line, **2.8.3**; it does not move when a tag is cut, and that pin is
   deliberate, not forgotten. The **installers and TCC's updater track tags**: both take the newest
   tag matching `SKILL_TAG_GLOB` (`install.sh`, `install.ps1`) or the same glob in TCC's updater, so
   a `3.0.x` tag is on somebody's machine as soon as it is pushed, with no intervening step. To a
@@ -39,6 +39,99 @@ Two consequences worth stating, because both have already caused a question:
   emptying fields — the warning belongs in this file's **Upgrading** note and in the release body,
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
+
+## [Unreleased] — two rates with one name each, the virtual-first path written down, one current target
+
+> Not tagged. Most of this is 3.1.0 content and reaches a consumer that pins by SHA; the `v3.*`
+> installer audience sees it at the next tag. Two contracts change — read **Upgrading** first.
+
+- **Two rates, one name each** (`d636c56`, with the selftest fix-forward `2901cf9`). `sample_rate_hz`
+  never said WHICH rate it was, and two sessions built the same wrong model from it: the DSP's
+  **processing** rate — every delay in samples derives from it — and a measurement's **capture** rate
+  are two facts, not one. The profile key is now `dsp_processing_rate_hz` (`rew_tool/dsp_profile.py`:
+  `PROCESSING_RATE_KEY`, `processing_rate_hz()`); the capture rate stays with the measurement, where
+  `verify.py` now reports it as `capture_rate_hz` off the IR time base. The legacy key is still READ
+  everywhere (`normalize_rate`), so nothing written before the rename breaks — but a profile carrying
+  BOTH keys with different values raises `ValueError` rather than silently picking one, and
+  `rew_tool/state/migrate.py` renames the top-level key in `dsp_profile.json` when it imports.
+  The settings sheet derives its samples column from the PROFILE's processing rate and names the
+  snapshot's recorded rate when the two differ; no snapshot is rewritten. `capture-check` says ONCE
+  per round when the capture rate differs from the processing rate (*"captured at 48000; the DSP
+  processes at 96000 — fine, working with it"*) and never fails on it. The released 2.x line and the
+  historical experiment scripts are deliberately untouched: the legacy reader is what keeps them working.
+- **The virtual-first path is codified across Phases −1…3** (`01e0157`) — method CONTENT, not
+  mechanics, and no phase is renumbered. New `references/phases/virtual-first.md` is its one home:
+  the idea (the cabin is already in the measurement, so sums are exact), two modes — **full** and
+  **improve-existing** — the loss table by gear, the ledger-as-truth rule, the input→action→output
+  per phase, and the degradation rule (Phase 0 is run the same way regardless; only the desk and the
+  verification degrade). New `references/phases/capture-session-sheet.md` carries the capture blocks
+  A–F, the REW settings and the session passport. Pointer blocks added to the phase files; the
+  path/mode question and the degradation pointer to `project-intake.md` §4; registered in
+  `process-phases.md` and `SKILL.md`. The iterative path stays the fallback.
+- **A target curve has ONE current pointer** (`68eddf9`, doc `17bf546`). `process target` writes the
+  current pointer while the ledger snapshot holds a historical one, and nothing connected them — so
+  a header rendered `—` right after the tuner set the curve. New `state.current_target(project_dir,
+  preset)` reads the pointer; the settings-sheet and registry renders show it and name the snapshot's
+  own target as *designed against* when they differ. The curve visualizer loads a curve it does not
+  bundle from the URL fragment (`#curve=<name>&data=<REW text>`, documented in
+  `target_curves_guide.md`); `listening.tracks(lang)` translates `own/*` and the other descriptive
+  titles by id, while a proper name with an artist stays English.
+- **`curve_view` refuses a pre-smoothed input at the FINE scale** (`168acc3`) instead of reporting a
+  clean system silently. REW returns the FR already smoothed and `rew_api.set_smoothing` defaults to
+  1/6; smoothing it again added widths in quadrature until the fine scale was nearly the macro,
+  residual went to zero and `find_features` returned an EMPTY list — no error. `multiscale` now takes
+  `input_smoothing` and records the effective fine; `find_features` raises `CurveViewError` naming
+  the remedy. New `rew_api.fr_smoothing(mid)` reads the smoothing off the payload so a caller can
+  pass it. MACRO is unaffected, so `macro_summary` stays usable on smoothed input.
+- **Visualizer** (`1ed2aad`, `7597b05`): a fragment curve is plotted once, not twice — the loader runs
+  after `restore()` and dedupes by name, so a reopen recognises the remembered copy instead of
+  stacking a second card. A failed load now KEEPS the fragment instead of clearing it, so the only
+  evidence of what arrived survives; and a double-encoded payload is decoded a second time only when
+  the first parse yields zero pairs, so honest data carrying a `%20` cannot trigger the retry.
+- **References**: `references/tooling/resonalyze-virtual-dsp.md` records Resonalyze's Virtual DSP
+  mechanics as a TOOL reference and not doctrine — the two windows, the stereo scene, the two-stage
+  Auto delay and its locks, every number a named constant with its source (`e39eec9`; `8aa5df0` made
+  it self-contained and took a private path out of a public file).
+  `references/patterns/stage-imaging.md` adds research/craft material with an explicit per-section
+  trust register — measured / literature-from-memory / craft, never levelled into one confidence
+  (`968252a`); `b2626d3` removed a public characterization of a third party's private file, keeping
+  the generalised method point and the public sources. `references/tooling/installation.md` no longer
+  hard-codes one machine's repo path — it names the method (`readlink -f
+  ~/.claude/skills/autosound-tuning`), which is both private and correct anywhere (`fa292f8`).
+
+### Upgrading
+
+**The DSP profile's rate key is renamed.** A consumer reading `profile.get("sample_rate_hz")`
+directly should switch to `dsp_profile.processing_rate_hz(profile)`, which accepts either key: a
+project seeded from the bundled Helix profile carries only `dsp_processing_rate_hz`, so the bare
+legacy read returns `None` there. Everything the skill writes accepts both names and a profile
+written before the rename still clears the phase-1 gate; what is refused is a file carrying both keys
+with different values — keep the canonical one and delete the legacy one. A measurement captured at a
+rate other than the processing rate is a note once per round, never a failure.
+
+**`curve_view.find_features` now RAISES** on an FR already smoothed at the fine scale, where it used
+to return an empty feature list. A puller keeping REW's 1/6 default must call
+`set_smoothing(mid, "None")` before `get_fr`, or pass `rew_api.fr_smoothing(mid)` as `input_smoothing`.
+
+- **`project.json` gets its half of the rename, and the profile renamer refuses the wrong file.**
+  `state/migrate.rename_profile_fields` handed a `project.json` used to return `[]` — a silent no-op
+  that read as "nothing to rename" while `dsp.sample_rate_hz` stayed on the old name forever (found
+  on a live project's copy, 2026-08-26). It now raises by name and points at the tool that does the
+  job: **`project.py <dir> migrate-fields [--dry-run]`** moves `dsp.sample_rate_hz` to
+  `dsp.dsp_processing_rate_hz`, refuses two different values as two answers to one question, and
+  never touches `measurement.*` / `mic.*` — those carry the CAPTURE rate, a different fact that
+  keeps its name. Its selftest pins all four behaviours.
+- **`scripts/tag-check.sh vX.Y.Z`** — everything that must be true BEFORE `git tag`, as one command
+  that fails loudly: `plugin.json` version equals the tag (the v3.0.24 mistake, where the manifest
+  bump rode in a forgotten commit), the CHANGELOG carries a `## [vX.Y.Z]` note and no `[Unreleased]`,
+  the tag exists neither locally nor on origin (a published tag is never moved), the tree is clean
+  and HEAD is on origin (CI must be green on the sha the tag names), the number is newer than the
+  newest `v3.*`, and the installer triplet agrees. A missing argument or an unreachable origin is a
+  failure, not a pass.
+- **Public-surface sweep**: internal project markers and a rule cited by a file only the author has
+  are named as the rule instead; three references to another tuner's PRIVATE Virtual DSP sessions
+  are generalised (the same class as `b2626d3` — the technical lesson stays, the provenance goes);
+  internal ticket ids dropped from `SKILL.md`.
 
 ## [v3.0.29] — 2026-08-25 · the listening vocabulary has one home, a parser, four languages and a writer for verdicts
 

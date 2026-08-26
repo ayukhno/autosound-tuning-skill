@@ -1,10 +1,9 @@
 """Resonalyze Virtual DSP session (`resonalyze-virtual-crossover` v7)  →  ledger rows.
 
 The mirror of `resonalyze_ir.py`: that one writes REW measurements INTO Resonalyze, this one
-reads a tune BACK OUT of it. The occasion was DIMOSUS sending his own tune of the Passat as two
-Virtual DSP sessions over our block-A IRs (2026-08-23); the point is that anybody's Virtual DSP
-session can be read as a proposal against our own ledger, in one place both the terminal and a
-GUI call.
+reads a tune BACK OUT of it. The occasion was a Resonalyze Virtual DSP session another tuner
+shares, computed over our own IRs; the point is that anybody's Virtual DSP session can be read as
+a proposal against our own ledger, in one place both the terminal and a GUI call.
 
 What comes out is `state/state.py` schema-v3 channel rows -- `{hp, lp, gain_db, ta_ms, polarity,
 eq, status}` -- one per sourced leg, each with a machine-readable per-field verdict from the
@@ -51,7 +50,7 @@ does not exist. Whoever adds that rescaling must skip SHELVES: a shelf's Q sets 
 bandwidth, so the conventions do not apply to it and Resonalyze's own `ToConvention` passes
 shelves through untouched. Rescaling one silently widens it.
 
-Format skew, seen in the wild and handled: in the v7 files DIMOSUS writes, `enabled`/`bypass` sit
+Format skew, seen in the wild and handled: in the v7 files the app writes, `enabled`/`bypass` sit
 on the PAIR, while the fork checkout's `VirtualCrossoverChannelSettings` carries them on the SIDE.
 Both are read, side first.
 

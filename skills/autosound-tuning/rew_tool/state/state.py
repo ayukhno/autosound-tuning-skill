@@ -659,7 +659,7 @@ def render_state(state, channels=None, current_target=None, processing_rate_hz=N
         # The sheet shows what is IN the ledger. `eq` (schema v2 band objects) is the bank the
         # Arbiter keys in; `eq_ptr` only points at an export file. The column read the pointer and
         # never the bank, so a ledger whose eight channels all carried 4-8 bands rendered `— / —`
-        # (FSATO, 2026-08-25) -- and "the Arbiter recognises their car in the sheet" cannot hold on
+        # (a live project, 2026-08-25) -- and "the Arbiter recognises their car in the sheet" cannot hold on
         # a sheet with no OUTPUT-EQ. Bands first; the pointer is the fallback, not the answer.
         ptr = ch.get("eq_ptr") or {}
         bands = eq_str(ch.get("eq"))
@@ -667,7 +667,7 @@ def render_state(state, channels=None, current_target=None, processing_rate_hz=N
         eq_s = f"{out_s} / {ptr.get('virtual', '—')}"
         st = ch.get("status", "proposed")
         # `validate` accepts None in every required field (an `off: true` row has nothing to say);
-        # `:g` on None raised TypeError and took the whole sheet down with it (FSATO, 2026-08-25).
+        # `:g` on None raised TypeError and took the whole sheet down with it (a live project, 2026-08-25).
         # Render what is there, `—` for what is not, and say OFF where the row is switched off.
         ta = ch.get("ta_ms")
         ta_smp = samples_for(ta, rate) if isinstance(ta, (int, float)) and not isinstance(ta, bool) else "—"
@@ -1002,7 +1002,7 @@ def _selftest():
     # with no pointer, the header falls back to the snapshot's own target
     assert "target: Jazzi" in h.render("v_001")
     # An `off: true` row with null ta_ms/gain_db passes validate, so render must take it too --
-    # it used to raise TypeError on `{None:g}` (FSATO, 2026-08-25). And the EQ column must show the
+    # it used to raise TypeError on `{None:g}` (a live project, 2026-08-25). And the EQ column must show the
     # ledger's own `eq` bands, not only an `eq_ptr` pointer.
     offrow = _sample_state()
     offrow["channels"]["r-L"] = {"hp": None, "lp": None, "gain_db": None, "ta_ms": None,
