@@ -20,7 +20,9 @@ What is walked, and what would fail if the seam broke:
       `predict --align`: the defined arrivals come back as delays on the DSP's grid, the one
       driver wired backwards comes back INV, nothing arrives early
   2   the proposal banks through `apply.propose` (v_002, sheet in samples), an EQ band through a
-      second proposal (v_003), `eq_export` renders it; the prediction of v_003 sums clean
+      second proposal (v_003), `eq_export` renders it; the prediction of v_003 sums clean;
+      2.1: a resonance planted on one driver comes back as ONE cut in its group's package
+      (`eq_propose`), banks as one version, and the prediction shows it gone
   3   `verify_prediction --entry` on `_2` solos taken WITH the tune: an entry error (a delay typed
       10 ms off, a corner typed an octave off) is CHECK by name; the clean set is ENTRY OK; the
       junction verdict is TRUSTED on clean pair sums and NOT trusted at the one pair moved 0.6 ms
@@ -29,6 +31,7 @@ What is walked, and what would fail if the seam broke:
 from __future__ import annotations
 
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -141,7 +144,7 @@ def _write_v7(path, H_linear, n, *, protective, state):
 
 
 def _make_capture_set(directory, chains=None, protectives=True, errors=None, pairs=(),
-                      all_front=False, control=None):
+                      all_front=False, control=None, resonance=None):
     """A v7 directory. `chains`: the DSP as entered (None = raw, protectives only).
     `errors`: {code: {"delay_samples": d, "hp_f": f}} deliberately mis-entered in the DSP."""
     os.makedirs(directory, exist_ok=True)
@@ -158,6 +161,9 @@ def _make_capture_set(directory, chains=None, protectives=True, errors=None, pai
         extra = errors.get(code, {}).get("delay_samples", 0.0)
         H = _driver_response(fb, code, chain=chain, protective=prot if protectives else None,
                              extra_delay_samples=extra)
+        if resonance and resonance[0] == code:                 # a driver's own resonance (min-phase)
+            _, f0, g, q = resonance
+            H = H * dsp_math.peq_response(fb, "PK", f0, g, q)
         responses[code] = H
         _write_v7(os.path.join(directory, code.replace("-", "_") + ".json"), H, n,
                   protective=(prot if protectives else None),
@@ -320,6 +326,34 @@ def _selftest():
         assert j["sum_loss_avg_db"] > -0.3 and j["worst_null_db"] > -2.0, j
     chains3 = P.chains_from_snapshot(hist.load())
 
+    # ---- 2.1 · EQ as packages: a driver resonance planted on m-L is proposed as ONE cut in the
+    #      mids' resonance package, banked as one version, and the prediction shows it gone ------
+    set1r = os.path.join(root, "set_1r")
+    _make_capture_set(set1r, chains=None, protectives=True, resonance=("m-L", 1000.0, 5.0, 4.0))
+    house = os.path.join(_HERE, "..", "references", "patterns", "target-curves", "curves", "SQ-Comp-Ref_0db_REW.txt")
+    out_eq = os.path.join(root, "out_eq")
+    rc, out = _run(tool("eq_propose.py"), "--project", proj, "--solos", set1r, "--house", house,
+                   "--out", out_eq, "--json", env=env)
+    pkgs = {p["id"]: p for p in json.loads(out[out.index("["):out.rindex("]") + 1])}
+    assert len([p for p in pkgs.values() if p.get("needed")]) <= 5, [p["id"] for p in pkgs.values() if p.get("needed")]
+    rm = pkgs["res:mid"]
+    assert len(rm["bands"]["m-L"]) == 1 and not rm["bands"]["m-R"], rm["bands"]
+    b = rm["bands"]["m-L"][0]
+    assert abs(math.log2(b["f"] / 1000.0)) < 1 / 6 and -5.5 <= b["gain_db"] <= -2.0, b
+    assert os.path.isfile(os.path.join(out_eq, "eq-res-mid.json"))
+    res4 = _apply.propose(hist, json.load(open(os.path.join(out_eq, "eq-res-mid.json"))),
+                          note="resonance package", registry=_state.Registry(state_root))
+    assert res4["version"] == "v_004", res4["version"]
+    out4 = os.path.join(root, "out4")
+    _run(tool("predict.py"), "--solos", set1r, "--project", proj, "--baseline", "--out", out4, env=env)
+    pred4 = json.load(open(os.path.join(out4, "predicted.json")))
+    mag4 = np.asarray(pred4["channels"]["m-L"]["mag_db"], float)
+    k1k = int(np.argmin(np.abs(f - 1000.0)))
+    chain_m = P.chain_from_row(dict(DESIGN["m-L"], gain_db=0, ta_ms=0, polarity="NORM"))
+    expect = 20 * np.log10(abs(P.chain_response(np.array([f[k1k]]), chain_m)[0] * driver_shape(np.array([f[k1k]]))[0]))
+    assert abs(mag4[k1k] - expect) < 1.0, ("the resonance should be cut to within 1 dB", mag4[k1k], expect)
+    hist.revert("v_003", note="path_check: back to the state the `_2` sets were made under")
+
     # ---- 3 · in the car: entry control on `_2` solos taken WITH the tune, then the sums ---------
     # (a) two entry errors: tw-R's delay typed 10 ms off, m-L's HPF typed an octave up
     set2_bad = os.path.join(root, "set_2_bad")
@@ -433,7 +467,8 @@ def _selftest():
           "record pairs the controls to a tenth of a sample; --align sums every junction clean on the DSP's "
           "grid with the two sides agreeing to a sample once the backwards driver is accounted for, "
           "nothing early, no alias; the proposal banks (v_002, sheet in samples), an EQ "
-          "band banks and exports; the aligned prediction sums clean; the entry control names a delay "
+          "band banks and exports; the aligned prediction sums clean; a planted resonance is proposed as one "
+          "package cut and predicted gone; the entry control names a delay "
           "typed 10 ms off and a corner typed an octave off and passes the clean set; the junction "
           "verdict is TRUSTED on clean sums and NOT trusted at the one pair moved 0.6 ms; the same "
           "capture-check / predict --rew / verify_prediction --rew through a REW stub agree with the "

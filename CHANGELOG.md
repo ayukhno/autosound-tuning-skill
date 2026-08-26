@@ -57,7 +57,12 @@ Two consequences worth stating, because both have already caused a question:
   the row's bank; broad moves go to the virtual tier when `--route` names it). A tool that
   proposed a −1 dB "tone" move because one side had a resonance taught the order: resonances
   first. `eq_gate`'s selftest lesson re-learned on the way: a single reflection weaker than the
-  direct sound is minimum-phase and the gate rightly allows it.
+  direct sound is minimum-phase and the gate rightly allows it. On a live set: the woofers' L/R
+  level offsets came out as gain matters (+1.7 / −1.1 dB), one staying mode was proposed for a cut,
+  the mids' 174 Hz resonance was left alone by name (within an octave of the 215 Hz junction).
+  `path_check` walks 2.1: a resonance planted on one driver comes back as ONE cut in its group's
+  package, banks as one version, and the prediction shows it gone — which is how the cut's size
+  learned to put back the share the trend smoothing had absorbed.
 - **`rew_tool/ellipsoid.py`** — what STAYS and what MOVES across the nine hand-held positions
   around the head (E1 of the EQ plan). Per 1/6-oct band: the mean and **σ(f)**, the spread the
   target-matching tolerance is built from (`max(1 dB, 2σ)`); the three centre returns read as one

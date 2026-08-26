@@ -158,6 +158,19 @@ def channel_targets(f, house, chains, roles, pairs_of):
     return out
 
 
+def _absorbed_fraction(f, f0, q, trend_frac):
+    """How much of a PEQ (f0, q) the trend smoothing absorbs at f0: smooth(PEQ)[f0] / PEQ[f0].
+
+    The residual a feature leaves against a smoothed trend is the feature MINUS the part the
+    smoothing kept, so a cut sized from the residual alone falls short by exactly that part (a
+    Q 4 peak against a one-octave trend: a third of it; a +5 dB peak cut by 3.3 left 1.7 dB --
+    path_check). Divide the residual by (1 - fraction) and the cut is the peak."""
+    shape = _db(dsp_math.peq_response(f, "PK", f0, 6.0, q))
+    sm = _smooth(f, shape, trend_frac)
+    k = int(np.argmin(np.abs(f - f0)))
+    return float(np.clip(sm[k] / max(shape[k], 1e-6), 0.0, 0.9))
+
+
 def _live(target_db, margin_db=20.0):
     return target_db >= np.nanmax(target_db) - margin_db
 
@@ -195,30 +208,36 @@ def package_lr(f, pair, members, meas, targets, tol_db=LR_TOL_DB):
     if not live.any():
         return None
     d = _smooth(f, meas[L], 3) - _smooth(f, meas[R], 3)
+    # A level difference is not a shape difference (analysis-playbook): the pair's overall offset
+    # is the GAIN's business (1.4) and is reported, not equalised; what is left is shape.
+    level_diff = float(np.median(d[live]))
+    d = d - level_diff
     before = [(lo, hi, float(np.mean(d[(f >= lo) & (f < hi) & live])))
               for lo, hi in _third_bands(*LR_BAND) if ((f >= lo) & (f < hi) & live).any()]
     worst = max(abs(b[2]) for b in before) if before else 0.0
     bands = {L: [], R: []}
-    why = [f"|L-R| read on 1/3-oct macro curves in {LR_BAND[0]:g}-{LR_BAND[1]:g} Hz; worst band {worst:+.2f} dB"]
+    why = [f"|L-R| read on 1/3-oct macro curves in {LR_BAND[0]:g}-{LR_BAND[1]:g} Hz after the pair's level "
+           f"offset ({level_diff:+.1f} dB, {L} vs {R} -- a GAIN matter, not EQ) is taken out; worst band {worst:+.2f} dB"]
     if worst > tol_db:
         w = live.astype(float)
         for code, sign in ((L, 1.0), (R, -1.0)):
             resid = np.where(live, np.maximum(sign * d, 0.0), 0.0)   # what this side is LOUDER by
             fit, _ = dsp_math.greedy_eq_fit(f, resid, w, n_bands=2, gain_lo=-MAX_CUT_DB, gain_hi=0.0,
                                             q_set=(0.5, 0.7, 1.0), n_f0=16, band=LR_BAND, allow_shelf=True)
-            bands[code] = [band_dict(*b) for b in fit if b[2] < 0]
+            bands[code] = _merge_same_f([band_dict(*b) for b in fit if b[2] < 0])
         why.append("cuts only, on the louder side, no narrower than Q 1 (the widest that works -- "
                    "narrow L/R matching injects a group-delay asymmetry the ear reads as a drifting image)")
     after_L = _apply_bands(f, meas[L], bands[L])
     after_R = _apply_bands(f, meas[R], bands[R])
     d2 = _smooth(f, after_L, 3) - _smooth(f, after_R, 3)
+    d2 = d2 - float(np.median(d2[live]))
     after = [(lo, hi, float(np.mean(d2[(f >= lo) & (f < hi) & live])))
              for lo, hi in _third_bands(*LR_BAND) if ((f >= lo) & (f < hi) & live).any()]
     worst_after = max(abs(b[2]) for b in after) if after else 0.0
     return {"id": f"lr:{pair}", "kind": "lr", "pair": pair, "channels": [L, R], "bands": bands,
             "why": why, "listen": LISTEN["lr"],
             "score": {"worst_lr_db_before": round(worst, 2), "worst_lr_db_after": round(worst_after, 2),
-                      "tolerance_db": tol_db},
+                      "tolerance_db": tol_db, "level_diff_db": round(level_diff, 2)},
             "needed": worst > tol_db, "lr_bands_before": [(round(a), round(b), round(v, 2)) for a, b, v in before],
             "lr_bands_after": [(round(a), round(b), round(v, 2)) for a, b, v in after]}
 
@@ -266,7 +285,8 @@ def package_res(f, group, codes, meas, targets, joints, ellipsoids, gates, allow
             if ell is not None:
                 import ellipsoid as E
                 q_ceiling, _measured = E.q_ceiling_at(ell, fc)
-            q_feature = 1.0 / (2.0 ** (w / 2.0) - 2.0 ** (-w / 2.0))
+            w_q = max(w, 1.0 / 48.0)                   # a one-point feature has no width to speak of
+            q_feature = 1.0 / (2.0 ** (w_q / 2.0) - 2.0 ** (-w_q / 2.0))
             q = min(q_feature, q_ceiling)
             if reason is None and gate is not None:
                 verdict, metric, _ = gate.check(fc, q)
@@ -277,9 +297,12 @@ def package_res(f, group, codes, meas, targets, joints, ellipsoids, gates, allow
             if reason is not None:
                 left_out.append({"channel": code, "f": fc, "db": e, "width_oct": w, "reason": reason})
                 continue
-            gain = -min(abs(e), MAX_CUT_DB)
+            absorbed = _absorbed_fraction(f, fc, q, RES_TREND_FRAC)
+            height = abs(e) / (1.0 - absorbed)
+            gain = -min(height, MAX_CUT_DB)
             chosen.append(band_dict("PK", fc, gain, q))
-            why.append(f"{code} PK {fc:g} Hz {gain:+.1f} dB Q {q:g}: peak {e:+.1f} dB, {w:.2f} oct"
+            why.append(f"{code} PK {fc:g} Hz {gain:+.1f} dB Q {q:g}: peak {e:+.1f} dB above a 1-oct trend "
+                       f"(~{height:.1f} dB tall once the trend's share is put back), {w:.2f} oct"
                        + (", stays in the ellipsoid" if ell is not None else
                           ", no ellipsoid: unverified in space (a single point; capture the ellipsoid to confirm)")
                        + (", phase gate ALLOW" if gate is not None else ", no phase gate")
@@ -310,7 +333,10 @@ def package_tone(f, pair, members, meas, targets, ellipsoids):
     live = np.logical_and.reduce([_live(targets[c]) for c in present])
     if not live.any():
         return None
-    resid = np.mean([meas[c] - targets[c] for c in present], axis=0)
+    def _shape(c, m):
+        r = m - targets[c]
+        return r - float(np.median(r[live]))         # one offset per channel: level is the master's / gain's job
+    resid = np.mean([_shape(c, meas[c]) for c in present], axis=0)
     macro = _smooth(f, np.where(live, resid, 0.0), 3)
     tol = np.full(f.size, TONE_TOL_DB)
     for c in present:
@@ -326,7 +352,7 @@ def package_tone(f, pair, members, meas, targets, ellipsoids):
         w = live.astype(float)
         fit, _ = dsp_math.greedy_eq_fit(f, np.where(over, macro, 0.0), w, n_bands=3, gain_lo=-MAX_CUT_DB, gain_hi=0.0,
                                         q_set=(0.5, 0.7, 1.0, 1.4), n_f0=24, allow_shelf=True)
-        bands = [band_dict(*b) for b in fit if b[2] < 0]
+        bands = _merge_same_f([band_dict(*b) for b in fit if b[2] < 0])
         why.append("cuts only, identically on both sides (a level offset is the master's job); "
                    "nothing narrower than Q 1.4 -- the target lives at the macro scale")
     if under.any():
@@ -334,7 +360,7 @@ def package_tone(f, pair, members, meas, targets, ellipsoids):
         why.append(f"below the target beyond tolerance in {lo_u:.0f}-{hi_u:.0f} Hz: NOT boosted -- raise the "
                    f"pair's level or accept; a boost into a null burns headroom")
     before = _score(f, resid, live)
-    after = _score(f, np.mean([_apply_bands(f, meas[c], bands) - targets[c] for c in present], axis=0), live)
+    after = _score(f, np.mean([_shape(c, _apply_bands(f, meas[c], bands)) for c in present], axis=0), live)
     return {"id": f"tone:{pair}", "kind": "tone", "pair": pair, "channels": present,
             "bands": {c: list(bands) for c in present}, "why": why, "listen": LISTEN["tone"],
             "score": {"macro_rms_before": round(before, 2), "macro_rms_after": round(after, 2)},
@@ -403,6 +429,19 @@ def to_delta(pk, chains, routes=None):
         prev = delta[tier][row].get("eq")
         delta[tier][row]["eq"] = (prev or []) + bands if prev else merged
     return delta
+
+
+def _merge_same_f(bands):
+    """Two bands the greedy fit put on one frequency and Q become one (gains add)."""
+    out = []
+    for b in bands:
+        for o in out:
+            if o["type"] == b["type"] and abs(o["f"] - b["f"]) < 1e-6 and abs(o["q"] - b["q"]) < 1e-6:
+                o["gain_db"] = round(o["gain_db"] + b["gain_db"], 1)
+                break
+        else:
+            out.append(dict(b))
+    return out
 
 
 def merge_deltas(packages):
@@ -633,9 +672,11 @@ def _selftest():
     meas4 = meas_of(driver(), HR4)
     pk4 = {p["id"]: p for p in propose(f, meas4, targets, chains, roles, pairs, joints)}
     lr = pk4["lr:Ms"]
-    assert lr["needed"] and lr["bands"]["m-R"] and not lr["bands"]["m-L"], lr
+    # the level half of the shelf is reported as a GAIN matter, the shape half is equalised --
+    # on whichever side is louder in each region, cuts only, no narrower than Q 1
+    assert lr["needed"] and abs(lr["score"]["level_diff_db"]) > 0.5, lr["score"]
     assert lr["score"]["worst_lr_db_after"] <= LR_TOL_DB + 0.3 < lr["score"]["worst_lr_db_before"], lr["score"]
-    assert all(b["q"] <= 1.0 and b["gain_db"] < 0 for b in lr["bands"]["m-R"]), lr["bands"]
+    assert all(b["q"] <= 1.0 and b["gain_db"] < 0 for bs in lr["bands"].values() for b in bs), lr["bands"]
     # 5. Tone: both mids 2 dB above target over the top of their band (a broad hump): the tone
     #    package proposes an identical broad cut on both, the macro rms falls, and it is cuts only.
     HT = driver([("HS", 1500.0, 2.0, 0.71)])
