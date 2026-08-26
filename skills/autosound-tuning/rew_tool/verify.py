@@ -180,6 +180,106 @@ def _flag_outlier_sweeps(verdicts):
     return verdicts
 
 
+DRIFT_HELD_SAMPLES = 0.5     # ctl1->ctl3 within half a CAPTURE sample: the time base held
+
+
+def session_report(verdicts, processing_rate_hz=None):
+    """The whole capture session in one table (Phase 0.6): every sweep's level and impulse side
+    by side, the loudest and the quietest channel, and the ctl1->ctl3 drift as the DRIFT RECORD.
+
+    Per-title verdicts say whether one curve is usable; this says whether the SESSION is -- the
+    things only visible across titles. Level spread is read on the in-band mean (SPL), not the IR
+    peak (REW scales the impulse per measurement, so its peak says nothing between titles). The
+    drift is the arrival difference between `<x>-ctl1 (sw)` and `<x>-ctl3 (sw)`, the same driver
+    swept first and last in the tripod block, in CAPTURE samples: within half a sample the base
+    held; beyond it the solos taken between them are not on one base -- said, not judged, because
+    accepting that delta as the base's uncertainty is the tuner's call.
+    """
+    rows = []
+    for v in verdicts:
+        st = v.get("stats") or {}
+        rows.append({"name": v["name"], "exists": bool(v.get("exists")), "valid": bool(v.get("valid")),
+                     "mean_dB": st.get("mean_dB"), "peak_dB": st.get("peak_dB"),
+                     "peak_time_ms": st.get("peak_time_ms"), "pre_ringing_dB": st.get("pre_ringing_dB"),
+                     "capture_rate_hz": st.get("capture_rate_hz"),
+                     "issues": list(v.get("issues") or [])})
+    sweeps = [r for r in rows if r["valid"] and r["mean_dB"] is not None
+              and "(sw)" in r["name"] and "-ctl" not in r["name"]]
+    spread = None
+    if len(sweeps) >= 2:
+        loud = max(sweeps, key=lambda r: r["mean_dB"])
+        quiet = min(sweeps, key=lambda r: r["mean_dB"])
+        spread = {"loudest": loud["name"], "loudest_dB": loud["mean_dB"],
+                  "quietest": quiet["name"], "quietest_dB": quiet["mean_dB"],
+                  "spread_dB": round(loud["mean_dB"] - quiet["mean_dB"], 1)}
+    drift, by = None, {r["name"]: r for r in rows}
+    for r in rows:
+        if "-ctl1" not in r["name"]:
+            continue
+        partner = r["name"].replace("-ctl1", "-ctl3")
+        p = by.get(partner)
+        if p is None or not p["exists"]:
+            drift = {"ctl1": r["name"], "ctl3": partner, "missing": partner}
+        elif r["peak_time_ms"] is None or p["peak_time_ms"] is None:
+            drift = {"ctl1": r["name"], "ctl3": partner, "missing": "an impulse on both"}
+        else:
+            delta_ms = float(p["peak_time_ms"]) - float(r["peak_time_ms"])
+            rate = p["capture_rate_hz"] or r["capture_rate_hz"]
+            smp = delta_ms / 1000.0 * rate if rate else None
+            drift = {"ctl1": r["name"], "ctl3": partner, "delta_ms": round(delta_ms, 4),
+                     "capture_rate_hz": rate,
+                     "delta_samples": (round(smp, 2) if smp is not None else None),
+                     "held": (abs(smp) <= DRIFT_HELD_SAMPLES) if smp is not None else None}
+        break
+    rates = sorted({r["capture_rate_hz"] for r in rows if r["capture_rate_hz"]})
+    rate_note = None
+    if processing_rate_hz and rates and any(rt != processing_rate_hz for rt in rates):
+        rate_note = (f"captured at {'/'.join(str(r) for r in rates)} Hz; the DSP processes at "
+                     f"{processing_rate_hz:g} Hz -- fine, working with it")
+    return {"rows": rows, "spread": spread, "drift": drift, "capture_rates_hz": rates,
+            "processing_rate_hz": processing_rate_hz, "rate_note": rate_note,
+            "counts": summary(verdicts)}
+
+
+def render_session(report):
+    lines = [f"  session probe -- {report['counts']['total']} titles, {report['counts']['ok']} usable, "
+             f"{report['counts']['missing']} missing, {report['counts']['invalid']} unusable", ""]
+    lines.append(f"  {'title':24}{'mean dB':>9}{'IR peak':>9}{'pre-ring':>10}{'arrival ms':>12}{'rate':>7}  ")
+    lines.append("  " + "-" * 74)
+    for r in report["rows"]:
+        if not r["exists"]:
+            lines.append(f"  {r['name']:24}  -- missing")
+            continue
+        def _f(v, fmt):
+            return (fmt % v) if isinstance(v, (int, float)) else "--"
+        mark = "" if r["valid"] else "  ✗ " + "; ".join(r["issues"])
+        lines.append(f"  {r['name']:24}{_f(r['mean_dB'], '%9.1f')}{_f(r['peak_dB'], '%9.1f')}"
+                     f"{_f(r['pre_ringing_dB'], '%10.1f')}{_f(r['peak_time_ms'], '%12.3f')}"
+                     f"{_f(r['capture_rate_hz'], '%7d')}{mark}")
+    lines.append("")
+    sp = report["spread"]
+    if sp:
+        lines.append(f"  loudest {sp['loudest']} {sp['loudest_dB']:.1f} dB / quietest {sp['quietest']} "
+                     f"{sp['quietest_dB']:.1f} dB -> spread {sp['spread_dB']:.1f} dB (in-band mean; the "
+                     f"passport says what the loudest was set to)")
+    d = report["drift"]
+    if d is None:
+        lines.append("  drift: no `-ctl1 (sw)` title in this set -- the drift record needs ctl1 and ctl3")
+    elif d.get("missing"):
+        lines.append(f"  drift: {d['ctl1']} present, {d['missing']} missing -- no drift record")
+    else:
+        smp = d["delta_samples"]
+        held = ("the time base HELD" if d["held"] else
+                "the base MOVED between the first and last sweep -- the solos between them are not on "
+                "one base; re-take the block or carry this as the base's uncertainty")
+        lines.append(f"  drift {d['ctl1']} -> {d['ctl3']}: {d['delta_ms']:+.4f} ms = "
+                     + (f"{smp:+.2f} samples @ {d['capture_rate_hz']} Hz" if smp is not None else "? samples (no rate)")
+                     + f" -- {held} (rule: within {DRIFT_HELD_SAMPLES:g} capture sample)")
+    if report["rate_note"]:
+        lines.append(f"  ⚠ {report['rate_note']}")
+    return "\n".join(lines)
+
+
 def summary(verdicts):
     """Counts a caller can act on without walking the list."""
     return {
@@ -190,10 +290,12 @@ def summary(verdicts):
     }
 
 
-_USAGE = """usage: verify.py <title> [title ...] [--json] [--band LOW HIGH]
+_USAGE = """usage: verify.py <title> [title ...] [--json] [--band LOW HIGH] [--session]
 
   Verdict per REW measurement title: does it exist, is what REW holds usable.
   Exit code 0 when every title is valid, 1 otherwise — so a shell gate can branch on it.
+  --session adds the whole-session table (Phase 0.6): level and impulse of every title side by
+  side, loudest/quietest, and the ctl1->ctl3 drift record.
 """
 
 
@@ -203,7 +305,8 @@ def _main(argv):
         print(_USAGE, file=sys.stderr)
         return 2
     as_json = "--json" in args
-    args = [a for a in args if a != "--json"]
+    session = "--session" in args
+    args = [a for a in args if a not in ("--json", "--session")]
     f_low, f_high = 20, 20000
     if "--band" in args:
         i = args.index("--band")
@@ -219,9 +322,14 @@ def _main(argv):
 
     verdicts = verify(args, f_low=f_low, f_high=f_high)
     if as_json:
-        print(json.dumps({"summary": summary(verdicts), "measurements": verdicts},
-                         ensure_ascii=False, indent=2))
+        out = {"summary": summary(verdicts), "measurements": verdicts}
+        if session:
+            out["session"] = session_report(verdicts)
+        print(json.dumps(out, ensure_ascii=False, indent=2))
     else:
+        if session:
+            print(render_session(session_report(verdicts)))
+            print()
         for v in verdicts:
             mark = "OK  " if v["valid"] else ("MISSING" if not v["exists"] else "INVALID")
             print(f"{mark} {v['name']}")
@@ -262,9 +370,35 @@ def _selftest():
     assert not any(v.get("remeasure") for v in
                    _flag_outlier_sweeps([cap("c_01 (rta)", None), cap("c_01 (sw)", -12.0)]))
 
+    # The session table, offline: spread on the in-band MEAN of the solos only (ctl titles and
+    # RTA rows excluded), the drift from ctl1 to ctl3 in CAPTURE samples at the capture rate, held
+    # within half a sample and said to have moved beyond it; a missing ctl3 is said, not guessed.
+    def sw(name, mean, peak_ms, rate=48000, valid=True):
+        return {"name": name, "exists": True, "valid": valid, "issues": [] if valid else ["x"],
+                "stats": {"mean_dB": mean, "peak_dB": -3.0, "pre_ringing_dB": -30.0,
+                          "peak_time_ms": peak_ms, "capture_rate_hz": rate}}
+    rep = session_report([sw("m-L-ctl1 (sw)", 70.0, 5.000), sw("sw_01 (sw)", 84.2, 9.1),
+                          sw("tw-R_01 (sw)", 66.9, 4.9), sw("c_01 (rta)", 99.0, 4.9),
+                          sw("w-L_01 (sw)", 80.0, 5.2, valid=False),
+                          sw("m-L-ctl3 (sw)", 70.1, 5.000 + 0.3 / 48.0)], processing_rate_hz=96000)
+    assert rep["spread"]["loudest"] == "sw_01 (sw)" and rep["spread"]["quietest"] == "tw-R_01 (sw)", rep["spread"]
+    assert abs(rep["spread"]["spread_dB"] - 17.3) < 0.05, rep["spread"]
+    d = rep["drift"]
+    assert d["ctl3"] == "m-L-ctl3 (sw)" and abs(d["delta_samples"] - 0.3) < 0.01 and d["held"] is True, d
+    assert rep["rate_note"] and "96000" in rep["rate_note"], rep["rate_note"]
+    moved = session_report([sw("m-L-ctl1 (sw)", 70.0, 5.0), sw("m-L-ctl3 (sw)", 70.0, 5.0 + 2.0 / 48.0)])
+    assert moved["drift"]["held"] is False and abs(moved["drift"]["delta_samples"] - 2.0) < 0.01, moved["drift"]
+    assert moved["spread"] is None and moved["rate_note"] is None
+    lone = session_report([sw("m-L-ctl1 (sw)", 70.0, 5.0), sw("sw_01 (sw)", 80.0, 9.0)])
+    assert lone["drift"]["missing"] == "m-L-ctl3 (sw)", lone["drift"]
+    txt = render_session(rep)
+    assert "HELD" in txt and "spread 17.3" in txt and "no drift record" not in txt, txt
+    assert "MOVED" in render_session(moved) and "no drift record" in render_session(lone)
+
     print("selftest OK — the post-sweep gate compares a driver against ITSELF: a 24 dB outlier "
           "flagged and still readable, a close pair left alone, a lone capture and an RTA (no "
-          "impulse) judged not at all.")
+          "impulse) judged not at all; the session table: spread on the solos' in-band mean, the "
+          "ctl1->ctl3 drift in capture samples held/moved/missing, the capture-vs-processing rate said.")
     return 0
 
 

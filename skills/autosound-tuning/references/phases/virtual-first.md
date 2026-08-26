@@ -87,9 +87,11 @@ tripod block; every channel both `(sw)` and `(rta)`.
 - **0.5** **tripod block**: `m-L-ctl1 (sw)` → the solos `<ch>_01 (sw)` of **every** channel (subs, w,
   m, tw, centre, rear — a couple of minutes while the base is set; two subs → also `SWs_01 (sw)`) →
   `m-L-ctl3 (sw)`. Doors shut, an even tempo.
-- **0.6** **check on the spot**: each measurement present / usable — the IR peak above the pre-ringing
-  ("broken impulse"), not a flat curve (loopback or a dead input), not in the noise; ctl1/ctl3 → a
-  drift record. Re-take whatever failed now, while the tripod stands.
+- **0.6** **check on the spot** (`capture-check --session`): each measurement present / usable — the
+  IR peak above the pre-ringing ("broken impulse"), not a flat curve (loopback or a dead input), not
+  in the noise; the whole session in one table (levels side by side, loudest/quietest); ctl1/ctl3 →
+  the drift record, in capture samples, written on the round. Re-take whatever failed now, while the
+  tripod stands.
 - **0.7** mark the protectives on the round (`capture-protective`); the `.mdat` into the project;
   finish the passport (temperature by eye, optional). **Tripod untouched** → the desk.
 
@@ -104,8 +106,10 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
 - **1.2** **crossovers**: 2–3 candidates, scored automatically on magnitude, phase and impulse, each
   with its drivers' strengths and weaknesses and a plain description → **the user chooses**.
 - **1.3** **joints bottom-up** (sub↔sub → subs↔midbass → midbass↔mid → mid↔tweeter): delay × polarity
-  by how much the pair loses when summed vs the ideal; near-tie through both polarities; an all-pass if
-  a null remains. L/R: the pair-arrival difference against tape set (b) — the tape is the arbiter.
+  by how much the pair loses when summed vs the ideal (`predict --align`: each joint read on the member
+  below AS IT WILL NOW PLAY, delays on the DSP's grid, the proposal as `aligned-delta.json` for
+  `apply.propose`); near-tie through both polarities; an all-pass if a null remains (`--apf` hints
+  one). L/R: the pair-arrival difference against tape set (b) — the tape is the arbiter.
 - **1.4** **levels**: from geometry (distances and angles from the tape), cut-only — a first estimate;
   a second from the measurement; a divergence is a finding, not an error.
 - **1.5** **predict the sums** (`predict`): L, R, ALL; the sum loss per joint; L−R per band; a graph. A
@@ -122,8 +126,9 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
 - **3.1** **enter and check entry**: the preset into the DSP per the sheet (EQ by file import); "entered"
   in the ledger. Levels from the passport. Two controls, from the tripod: *base* — `m-L (sw)` vs
   `m-L-ctl3` from Phase 0 → the drift between capture and today, recorded; *entry* — 1–2 solos `_02 (sw)`
-  (e.g. tw-L, w-L) vs the predicted processed channel — catches a PC-Tool entry error before it becomes
-  a "bad joint".
+  (e.g. tw-L, w-L) vs the predicted processed channel (`verify_prediction --entry`: shape after one
+  offset, the worst point and the chain feature nearest to it) — catches a PC-Tool entry error before it
+  becomes a "bad joint".
 - **3.2** **all sums from the tripod** `_02 (sw)`, at the same levels: the joints (sub+midbass L/R,
   midbass+mid L/R, mid+tweeter L/R), L, R, ALL. Predicted/measured delta per joint band: ≤ 1 dB
   trusted; more → a **warning** (joint, band) + a "not trusted" mark, and we go on. For a warned joint,
@@ -166,10 +171,10 @@ verification (3), never the capture.**
 
 ## Tool gaps still open on this path
 
-Noted so a later session does not mistake them for done: the flaw map as a command; joint alignment by
-sum-loss as a command (the function exists); crossover checks (group-delay budget, the 2–4 kHz junction
-penalty, tweeter fc from Fs); the **candidate description** for crossovers (2–3, magnitude/phase/impulse,
-per-driver strengths); levels from the measurement as a second estimate; a whole-session probe (max
-peak / min SNR of every channel in one go); the entry control (`_02` solo vs prediction); the Helix
-setup reader (screens only; EQ = ATF); a general term "effects and dynamic processing" in DSP profiles;
-the ellipsoid diagram.
+Noted so a later session does not mistake them for done: the flaw map as a command (the writer and
+`curve_view.find_features` exist; nothing joins them); crossover checks (group-delay budget, the 2–4 kHz
+junction penalty, tweeter fc from Fs); the **candidate description** for crossovers (2–3,
+magnitude/phase/impulse, per-driver strengths); levels from the measurement as a second estimate; the
+Helix setup reader (screens only; EQ = ATF); a general term "effects and dynamic processing" in DSP
+profiles; the ellipsoid diagram. Closed 2026-08-26: joint alignment by sum loss (`predict --align`),
+the whole-session probe (`capture-check --session`), the entry control (`verify_prediction --entry`).

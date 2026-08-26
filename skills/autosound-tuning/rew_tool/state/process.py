@@ -1073,7 +1073,7 @@ class Process:
         except Exception:  # noqa: BLE001 -- unavailable arithmetic is "cannot tell", never "bad"
             return None
 
-    def check_captures(self, titles=None, verifier=None):
+    def check_captures(self, titles=None, verifier=None, session=False):
         """Run the skill's own verdict over the open round and record it (SCR-040).
 
         The arithmetic lives in `verify.py` and is called here rather than reimplemented by a
@@ -1083,6 +1083,10 @@ class Process:
         Each verdict pins REW's `uuid`. The title is not identity -- re-take `sw_1 (sw)` and the
         name is unchanged while the data is not, so a verdict keyed by title would outlive the
         graph it judged. A measurement REW no longer holds records no uuid and reads as not ok.
+
+        `session=True` adds the whole-session probe (Phase 0.6, `verify.session_report`) and
+        records it on the round as `session` -- the ctl1->ctl3 drift is the DRIFT RECORD the
+        capture sheet asks for, and it lives with the round it measured.
         """
         state, round_ = self._require_capture()
         verifier = self._load_verifier() if verifier is None else verifier
@@ -1130,6 +1134,10 @@ class Process:
                              f"samples derive from the PROCESSING rate; the capture rate stays with "
                              f"the measurement")
                 print(f"  ⚠ {rate_note}")
+        if session and hasattr(verifier, "session_report"):
+            probe = verifier.session_report(verdicts, processing_rate_hz=proc_rate if capture_rates else None)
+            round_["session"] = {"at": _now(), "spread": probe["spread"], "drift": probe["drift"],
+                                 "capture_rates_hz": probe["capture_rates_hz"], "rows": probe["rows"]}
         self._write(state)
         self._append(
             EV_CAPTURE_VERIFIED,
@@ -1338,7 +1346,9 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
   decision <question> <answer> [step] [--invalidates X]   what the Arbiter ruled, as itself
   capture-start <version> [title ...] [--step ID]   open a capture round; titles = what was
                                          asked for, --step binds it to the plan step it satisfies
-  capture-check [title ...]             run the verdict over the round and record it (SCR-040)
+  capture-check [title ...] [--session]  run the verdict over the round and record it (SCR-040);
+                                         --session adds the whole-session probe (levels side by
+                                         side, loudest/quietest, ctl1->ctl3 drift) and records it
   capture-taken <title>                 a measurement came back (unplanned ones are flagged)
   capture-protective <ch> OFF           this round was RAW for that channel: what was in the
   capture-protective <ch> --hp 100 LR 24    chain and is NOT part of the tune, so it can be taken
@@ -1692,7 +1702,16 @@ def _main(argv):
                 f"{len(round_['expected'])} capture(s) expected"
             )
         elif cmd == "capture-check":
-            round_ = p.check_captures(args or None)
+            session = "--session" in args
+            args = [a for a in args if a != "--session"]
+            round_ = p.check_captures(args or None, session=session)
+            if session and round_.get("session"):
+                verifier = p._load_verifier()
+                probe = dict(round_["session"], counts=verifier.summary(
+                    [{"exists": r["exists"], "valid": r["valid"]} for r in round_["session"]["rows"]]),
+                    processing_rate_hz=None, rate_note=None)
+                print(verifier.render_session(probe))
+                print()
             for title in round_.get("expected", []):
                 verdict = ((round_.get("taken") or {}).get(title) or {}).get("verified") or {}
                 if verdict.get("ok"):

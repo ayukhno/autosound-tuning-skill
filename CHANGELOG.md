@@ -40,6 +40,37 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [Unreleased] — three steps of the virtual-first path become commands
+
+> Not tagged yet. The three tool gaps on the path that had no manual way round are closed; the rest of
+> the gap list in `virtual-first.md` stands.
+
+- **`predict --align`** (Phase 1.3 as a command): delay × polarity per junction by sum loss
+  (`dsp_math.align_sum_loss`), **bottom-up** — `sw↔w` first, then `w↔m` read on the woofer **as it
+  will now play**, then `m↔tw`; two subs are a pair first and enter the `SWs↔w` junction as their sum.
+  Delays land on the DSP's own grid (1000 / the project profile's processing rate; `--step-ms`
+  otherwise), the near-tie rule spans both polarities, a negative delay becomes a shift of the whole
+  system (relations kept, nothing arrives early — said in the notes), the profile's `delay.max_ms`
+  warns by name, `--apf` offers an APF2 hint where a dip remains. Proposes, banks nothing: `--out`
+  writes `aligned.json` and `aligned-delta.json` — the shape `apply.propose` takes — and the
+  prediction printed after `--align` is of the aligned state. The selftest's anchors are independent
+  re-reads of the returned chains, not stored numbers: a first draft expected the naive arrival
+  differences, and the 80 Hz HPF's phase at the 300 Hz junction proved that wrong — which is the whole
+  reason the junction is read on the processed members.
+- **`capture-check --session`** / `verify.py --session` (Phase 0.6): the whole capture session in one
+  table — every title's in-band mean, IR peak, pre-ringing, arrival and capture rate side by side; the
+  loudest and quietest solo (on the in-band mean, not the IR peak — REW scales the impulse per
+  measurement); and the **drift record**: `<x>-ctl1 (sw)` → `<x>-ctl3 (sw)` in CAPTURE samples, "held"
+  within half a sample, "moved" beyond it, "missing" when ctl3 is not there. `capture-check --session`
+  writes it onto the round as `session` (additive key).
+- **`verify_prediction --entry`** (Phase 3.1, the entry control): each measured `_2` solo against the
+  predicted solo × chain after one offset now carries a status — *as designed* within
+  `--entry-criterion` (1 dB shape rms) or **CHECK** with the worst point and the chain feature nearest
+  to it (an HPF/LPF corner or an EQ band within a third of an octave → "check that entry"; nothing
+  nearby → "a driver or the position changed, not an entry error"). With `--entry` that is the verdict
+  and the exit code; without it the junction verdict stays and the entry line rides beside it.
+- `virtual-first.md`: steps 0.6, 1.3 and 3.1 name their commands; the gap list says what closed.
+
 ## [v3.0.30] — 2026-08-26 · two rates with one name each, the virtual-first path written down, one current target
 
 > A 3.0.x patch for the author's own test rigs (the `v3.*` installer audience) and for consumers that

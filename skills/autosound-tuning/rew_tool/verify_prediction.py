@@ -45,6 +45,8 @@ import dsp_math  # noqa: E402
 
 CRITERION_DB = 1.0            # |mean delta| in a junction band, stage 0's pass mark
 JUNCTION_THIRDS = 3           # each junction band is read in this many log-spaced sub-bands
+ENTRY_CRITERION_DB = 1.0      # a channel's shape rms after one offset: the entry control (Phase 3.1)
+NEAR_OCTAVES = 1.0 / 3.0      # a residual this close to a chain feature is blamed on that entry
 
 
 class VerifyError(ValueError):
@@ -128,12 +130,42 @@ def measured_from_v7_dir(directory):
 
 
 # ---------------------------------------------------------------- the comparison
+def _nearest_feature(chain, f_hz):
+    """The chain feature (HPF / LPF corner, EQ band) within NEAR_OCTAVES of `f_hz`, or None.
+
+    The entry control's one hint: a residual sitting on a crossover corner is most likely that
+    corner typed wrong (family, slope, frequency), one on an EQ band that band; one with nothing
+    of the chain nearby is not an entry error at all -- a driver or a position changed."""
+    feats = []
+    for kind in ("hp", "lp"):
+        leg = (chain or {}).get(kind)
+        if isinstance(leg, dict) and leg.get("f"):
+            feats.append((f"{kind.upper()} {float(leg['f']):g} Hz", float(leg["f"])))
+    for b in (chain or {}).get("eq") or []:
+        try:
+            feats.append((f"{b[0]} {float(b[1]):g} Hz", float(b[1])))
+        except (TypeError, ValueError, IndexError):
+            continue
+    near = [(abs(math.log2(f_hz / ff)), name) for name, ff in feats if ff > 0 and f_hz > 0]
+    if not near:
+        return None
+    dist, name = min(near)
+    return name if dist <= NEAR_OCTAVES else None
+
+
 def verify(predicted, measured, *, pair_names=None, solo_names=None, all_name=None,
-           criterion_db=CRITERION_DB):
+           criterion_db=CRITERION_DB, entry_criterion_db=ENTRY_CRITERION_DB, entry_only=False):
     """`predicted`: the dict `predict.to_json` wrote. `measured`: {name: (freqs, mag_db, base)}.
 
     `pair_names`: {(lo, hi): measured name of the pair}; `solo_names`: {code: measured name of
     the channel's solo WITH the tune loaded}; `all_name`: the measured whole-front name.
+
+    The channel comparison doubles as the ENTRY CONTROL of Phase 3.1: one or two `_2` solos read
+    against the predicted solo x chain, on the same base, before any sum is measured. A shape
+    rms above `entry_criterion_db` marks the channel CHECK and names the worst point and the chain
+    feature nearest to it, so a corner or a band typed wrong in the DSP is caught as an entry
+    error and not later as a "bad junction". `entry_only` makes that the verdict (junctions may
+    be 'not measured' on purpose then).
     """
     f = np.asarray(predicted["freqs_hz"], float)
     chans = predicted["channels"]
@@ -190,10 +222,22 @@ def verify(predicted, measured, *, pair_names=None, solo_names=None, all_name=No
         offset = float(np.median((meas - pred)[live]))
         resid = np.where(live, meas - pred - offset, np.nan)
         _, rms = _band_mean(f, resid, f[live].min(), f[live].max())
+        k = int(np.nanargmax(np.abs(resid)))
+        worst_f, worst_db = float(f[k]), float(resid[k])
+        ok = rms <= entry_criterion_db
+        near = _nearest_feature((chans[code] or {}).get("chain"), worst_f)
+        hint = None
+        if not ok:
+            hint = (f"near {near} -- check that entry in the DSP" if near else
+                    "no chain feature within a third of an octave -- a driver or the position "
+                    "changed, not an entry error")
         report["channels"].append({"channel": code, "measured": name, "base": base,
                                    "offset_db": round(offset, 2), "shape_rms_db": round(rms, 2),
                                    "band": [round(float(f[live].min()), 1),
-                                            round(float(f[live].max()), 1)]})
+                                            round(float(f[live].max()), 1)],
+                                   "status": "as designed" if ok else "CHECK",
+                                   "worst_db": round(worst_db, 2), "worst_hz": round(worst_f, 1),
+                                   "hint": hint})
 
     # 3. The whole front as a shape.
     if all_name and all_name in measured:
@@ -218,6 +262,26 @@ def verify(predicted, measured, *, pair_names=None, solo_names=None, all_name=No
         report["verdict"] = (f"NOT trusted at {', '.join(bad)} -- the model disagrees with the car "
                              f"there; a chain fact, a moved driver or an unrecorded protective "
                              f"filter, and which one is the tuner's to find")
+    # The entry control's own verdict, and the verdict of the run when that is all that was asked.
+    checked = report["channels"]
+    if checked:
+        bad = [c for c in checked if c["status"] == "CHECK"]
+        worst_rms = max(c["shape_rms_db"] for c in checked)
+        if bad:
+            entry = "ENTRY CHECK: " + "; ".join(
+                f"{c['channel']} (rms {c['shape_rms_db']:.2f} dB, worst {c['worst_db']:+.1f} dB @ "
+                f"{c['worst_hz']:.0f} Hz, {c['hint']})" for c in bad)
+        else:
+            entry = (f"ENTRY OK -- {len(checked)} channel(s) play as designed (shape rms within "
+                     f"{entry_criterion_db:g} dB after one offset; worst {worst_rms:.2f})")
+        report["entry"] = {"criterion_db": entry_criterion_db, "channels": len(checked),
+                           "check": [c["channel"] for c in bad], "verdict": entry}
+    else:
+        report["entry"] = None
+    if entry_only:
+        report["junction_verdict"] = report["verdict"]
+        report["verdict"] = (report["entry"] or {}).get("verdict") or \
+            "ENTRY UNVERIFIED -- no channel solo was measured"
     if any(b != "sw" for b in report["bases"]):
         report["verdict"] += "  ⚠️ some rows are not on the point-sweep base (see `base`)"
     return report
@@ -248,7 +312,12 @@ def render(report):
         lines.append("  channel shapes (one offset each; the offset is a calibration fact):")
         for c in report["channels"]:
             lines.append(f"    {c['channel']:6} {c['base']:<4} offset {c['offset_db']:+6.1f} dB   "
-                         f"shape rms {c['shape_rms_db']:.2f} dB over {c['band'][0]:.0f}-{c['band'][1]:.0f}")
+                         f"shape rms {c['shape_rms_db']:.2f} dB over {c['band'][0]:.0f}-{c['band'][1]:.0f}"
+                         f"   {c.get('status', '')}")
+            if c.get("hint"):
+                lines.append(f"    {'':6}      worst {c['worst_db']:+.1f} dB @ {c['worst_hz']:.0f} Hz -- {c['hint']}")
+        if report.get("entry"):
+            lines.append("  " + report["entry"]["verdict"])
     if report["all"]:
         a = report["all"]
         lines.append(f"  ALL {a['base']:<4} offset {a['offset_db']:+.1f} dB  shape rms {a['shape_rms_db']:.2f} dB")
@@ -279,6 +348,11 @@ def main(argv=None):
     ap.add_argument("--allow-rta", action="store_true",
                     help="compare against RTA/MMM rows too -- said in the table; not a verification")
     ap.add_argument("--criterion", type=float, default=CRITERION_DB)
+    ap.add_argument("--entry", action="store_true",
+                    help="the ENTRY CONTROL (Phase 3.1): judge the channel solos only -- one or two "
+                         "`_<ver>` solos against the predicted solo x chain; the verdict is theirs")
+    ap.add_argument("--entry-criterion", type=float, default=ENTRY_CRITERION_DB,
+                    help="shape rms per channel after one offset (default %(default)s dB)")
     ap.add_argument("--out", metavar="DIR", default=None, help="write verified.json here")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--selftest", action="store_true")
@@ -312,7 +386,8 @@ def main(argv=None):
     else:
         measured = measured_from_v7_dir(args.measured)
     report = verify(predicted, measured, pair_names=pairs, solo_names=solos, all_name=all_name,
-                    criterion_db=args.criterion)
+                    criterion_db=args.criterion, entry_criterion_db=args.entry_criterion,
+                    entry_only=args.entry)
     if args.json:
         print(json.dumps(report, indent=1))
     else:
@@ -321,7 +396,7 @@ def main(argv=None):
         os.makedirs(args.out, exist_ok=True)
         with open(os.path.join(args.out, "verified.json"), "w", encoding="utf-8") as fh:
             json.dump(report, fh, indent=1)
-    return 0 if report["verdict"].startswith("TRUSTED") else 1
+    return 0 if report["verdict"].startswith(("TRUSTED", "ENTRY OK")) else 1
 
 
 # ---------------------------------------------------------------- selftest
@@ -371,9 +446,32 @@ def _selftest():
     r5 = verify(pred, meas(A, B, base="rta"), **names)
     assert "not on the point-sweep base" in r5["verdict"] and r5["bases"] == ["rta"], r5["verdict"]
     assert "w-L↔m-L" in render(r3) and "✗" in render(r3)
+    # 6. The entry control. The exact car: every channel 'as designed', ENTRY OK. A +8 dB bump the
+    #    DSP was not asked for: CHECK on that channel, the worst point at the bump, and the hint is
+    #    the chain feature nearest to it -- the HPF when the bump sits on the corner, and "no chain
+    #    feature" when it sits two octaves away (a driver or position change, not an entry error).
+    assert all(c["status"] == "as designed" for c in r["channels"]) and r["entry"]["verdict"].startswith("ENTRY OK"), r["entry"]
+
+    def bump(H, f0, db=8.0, width_oct=0.5):
+        return H * 10 ** ((db * np.exp(-0.5 * (np.log2(f / f0) / width_oct) ** 2)) / 20)
+    r6 = verify(pred, meas(A, bump(B, 1200.0)), **names, entry_criterion_db=0.5, entry_only=True)
+    c6 = next(c for c in r6["channels"] if c["channel"] == "m-L")
+    assert c6["status"] == "CHECK" and 1000 < c6["worst_hz"] < 1400 and c6["worst_db"] > 4, c6
+    assert "no chain feature" in c6["hint"] and r6["verdict"].startswith("ENTRY CHECK: m-L"), (c6, r6["verdict"])
+    assert next(c for c in r6["channels"] if c["channel"] == "w-L")["status"] == "as designed"
+    r7 = verify(pred, meas(A, bump(B, 300.0)), **names, entry_criterion_db=0.5, entry_only=True)
+    c7 = next(c for c in r7["channels"] if c["channel"] == "m-L")
+    assert c7["status"] == "CHECK" and "HP 300" in c7["hint"], c7
+    assert "junction_verdict" in r7 and r7["junction_verdict"] != r7["verdict"], r7
+    # Without --entry the junction verdict stays the verdict and the entry line rides beside it.
+    r8 = verify(pred, meas(A, bump(B, 300.0)), **names, entry_criterion_db=0.5)
+    assert r8["verdict"].startswith(("TRUSTED", "NOT trusted")) and r8["entry"]["check"] == ["m-L"], r8["verdict"]
+    assert "ENTRY CHECK" in render(r8) and "HP 300" in render(r8)
     print("selftest[verify_prediction] OK -- exact car → TRUSTED with zero deltas; +7.3 dB → still "
           "TRUSTED and the offsets say 7.3; an extra 0.6 ms → NOT trusted at the named junction; "
-          "missing pair → UNVERIFIED; an RTA base is said in the verdict.")
+          "missing pair → UNVERIFIED; an RTA base is said in the verdict; entry control: the exact "
+          "car is ENTRY OK, a bump on the HPF corner is CHECK naming the HPF, one two octaves away "
+          "names no chain feature.")
     return 0
 
 

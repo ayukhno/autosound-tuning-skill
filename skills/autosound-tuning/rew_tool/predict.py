@@ -702,7 +702,8 @@ def render_alignment(result, original=None, rate_hz=None):
                          f"(+{h['null_gain_db']:.1f} dB at the dip) -- {h['note']}")
     lines.append("")
     if result["delta"]["channels"]:
-        lines.append("  proposal (bank with `state/apply.py propose`; enter by hand from the sheet):")
+        lines.append("  proposal (aligned-delta.json; bank it with `apply.propose(history, delta)` and "
+                     "enter by hand from the sheet it emits):")
         for c, ch in sorted(result["delta"]["channels"].items()):
             o = (original or {}).get(c) or {}
             parts = []
