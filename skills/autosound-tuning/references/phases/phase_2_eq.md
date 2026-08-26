@@ -32,6 +32,21 @@ Linearize each individual channel to its own **per-band target** (from Phase 1 �
 
 > **⚙️ Score the package's SUMMED curve per channel, not each filter alone.** Overlapping PK skirts stack: on a live build, PK 188 Q5 −3.5 + PK 300 Q2 −2.5 on one channel delivered **−5.1 dB at 175–210** instead of the intended −3.5 — an over-cut that audibly unmasked the trunk sub (it localized rearward) until the first filter was softened (−2.5, Q7). Before issuing any settings sheet with ≥2 new filters on a channel, compute the product of their responses (`dsp_math.peq_response`) and check the combined dB in every affected zone against the intended correction.
 
+> **⚙️ 2a as PACKAGES, decided by width (2026-08-26).** A single-point curve is true at a certain
+> width, and the width says what a deviation is: **broad** (> 2/3 oct) is tone — the pair moves toward
+> the target, together, gently; **medium** (1/6–2/3 oct), a **peak**, present in every position of the
+> ellipsoid, minimum-phase, away from a junction (±1 oct is the delay's business) — a driver resonance,
+> cut it, Q no narrower than the ceiling the ellipsoid measured (borrowed Q ≤ 6 without one); **narrow**,
+> a dip, or moving — the position, not the car: listed, not filtered. And what skews the stage is the
+> **L/R difference**, not the distance from the target: left and right become one shape (broadly, on the
+> louder side, Q ≤ 1) before the pair goes to the target; a level offset between them is the gain's
+> business and is reported, not equalised. The decision unit is a **package** — resonances per driver
+> group (sub+midbass / mids / tweeters), L/R shape per pair, tone per pair — accepted or refused whole and
+> banked as one ledger version. Tolerance to the target is not a constant: **max(1 dB, 2σ(f))**, σ from the
+> ellipsoid's own spread. Commands: `rew_tool/ellipsoid.py` (σ(f), stays/moves, the Q ceiling) and
+> `rew_tool/eq_propose.py` (the packages, each with why, a listening id, a score before/after and its
+> `apply.propose` delta). Cuts only; a boost needs `--allow-boost` **and** the excess-phase gate.
+
 ### Rules of Action
 1. **Min-Phase Peaks Only:** Cut narrow and wide minimum-phase peaks.
 2. **Never Fill Nulls — enforced by the Phase-0 gate, not by memory:** pass the flaw map's `eq_gate.ExcessPhaseGate` into every fit (`greedy_eq_fit(boost_gate=…)` / `realize_driver(boost_gate=…)`); WARN verdicts get the mic-shift cross-check (§13). The prose rule stays for manual EQ work: do **NOT** EQ-boost acoustic nulls/dips. If a dip is deep and narrow, it is a phase cancellation or diffraction effect (non-minimum-phase). Equalizer boosting into nulls wastes amplifier headroom and introduces physical distortion.

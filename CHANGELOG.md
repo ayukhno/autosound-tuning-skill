@@ -42,6 +42,24 @@ Two consequences worth stating, because both have already caused a question:
 
 ## [Unreleased]
 
+- **`rew_tool/ear_suspects.py`** — what "cuts the ear" and what "booms", found on the curve and
+  settled by A/B (E3 of the EQ plan). Peaks above a ±1-octave median trend (≥ 3 dB, ≥ 4 in the bass,
+  1/12–1 oct wide — narrower is the position, broader is tone), classed by where they sit (booms
+  40–120, boxy 150–300, nasal 0.8–2k, cuts 2–5k, sibilant 5–9k), ranked with the ear's sensitivity
+  from ISO 226 at the listening level; the top THREE, each with one conservative correction (half
+  the prominence, the widest Q that covers it, ≤ the ceiling), the cheat-sheet characteristic and
+  its *sounds right / sounds wrong* phrases, and the exact `listening-verdict` line that records
+  the A/B answer (`suspect:<id>=better|same|worse`). `--round K` reads those answers back from the
+  journal and drops the bands heard as *same* or *worse*; a fourth round is refused by name. A
+  sweep adds how long a bass suspect RINGS (band-limited envelope). For the listener who cannot say
+  how it should sound but can say which sounds better; taste lives in its own preset.
+- `path_check` walks 3.3 through the REW stub: an MMM with a 63 Hz mode and a 3.2 kHz peak names
+  both, the ear's region first; a *same* verdict recorded through the one writer drops that band in
+  round 2; round 4 is refused.
+- Doctrine (the author's to read): `phase_2_eq.md` 2a — packages decided by width, L/R before the
+  target, tolerance max(1 dB, 2σ); `virtual-first.md` 2.1 and 3.3 name the commands and the A/B
+  loop (three suspects, three rounds); `listening-cheat-sheet.md` — which correction points at
+  which characteristic (a section below the table; the table `listening.py` parses is unchanged).
 - **`rew_tool/eq_propose.py`** — EQ as PACKAGES through the gates, never a curve fit (E2 of the
   EQ plan). Three package kinds, computed in the doctrine's order on the curves the earlier ones
   leave (2a → 2c → 2d): `res:<group>` — driver resonances per group (sub+midbass / mids /

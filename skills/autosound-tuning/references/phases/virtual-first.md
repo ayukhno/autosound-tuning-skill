@@ -114,8 +114,12 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
   a second from the measurement; a divergence is a finding, not an error.
 - **1.5** **predict the sums** (`predict`): L, R, ALL; the sum loss per joint; L−R per band; a graph. A
   bad joint → back to 1.2/1.3 — iterations exist, but at the desk.
-- **2.1** **coarse EQ** (`target_bands`): only cuts of minimum-phase peaks from bands that have a flaw-map
-  row; below ~150–200 Hz free, above only what survives the ellipsoid; zero boosts.
+- **2.1** **coarse EQ as packages** (`eq_propose`, with `ellipsoid` for σ(f), stays/moves and the Q
+  ceiling): resonances per driver group → L/R shape per pair → tone per pair, each package accepted or
+  refused whole and banked as one version (`apply.propose`); only cuts of minimum-phase peaks that
+  stay across the positions, away from the junctions; below ~150–200 Hz a point is trusted, above only
+  what survives the ellipsoid; tolerance to the target max(1 dB, 2σ); zero boosts. Every package names
+  the listening characteristic that checks it.
 - **2.2** **check after EQ**: predict again — joints and L/R on the same rulers (EQ inside a joint band
   rotates phase).
 - **2.3** **preset to disk**: the settings sheet — what is entered in PC-Tool per channel (HPF/LPF,
@@ -137,7 +141,16 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
   *Improve mode:* the same without a prediction — joints read straight from the measured sums.
 - **3.3** **tripod down.** MMM `_02 (rta)` handheld: L, R, ALL, groups. Fine EQ over MMM as today
   (2c/2d): group targets, the residual to target, only what stands in the MMM → enter → `_final (rta)`:
-  every channel, groups, L, R, ALL.
+  every channel, groups, L, R, ALL. **What cuts and what booms** (`ear_suspects`): the top three peaks
+  above the local trend on the MMM, classed (cuts 2–5 kHz, sibilant 5–9 kHz, nasal 0.8–2 kHz, boxy
+  150–300 Hz, booms 40–120 Hz), ear-weighted, one conservative correction each (half the prominence,
+  the widest Q that covers it) into the B slot — the technical tune stays in A. **A/B one band at a
+  time** with the cheat-sheet phrase for that suspect; the answer is *better / same / worse*, recorded
+  through `listening-verdict` (`--text "suspect:<id>=better"`); *same* → the band is not needed, *worse*
+  → dropped and remembered. **Three suspects, three rounds at most** — the loop for a listener who
+  cannot say how it should sound but can say which sounds better ("how I like it", not competition;
+  for a judged tune the same loop runs against the target and the judges' characteristics). Taste
+  corrections live in their own preset or on the virtual layer, never in the per-driver EQ (Phase 5).
 - **3.4** two independent verdicts + the minimum ear pass (as today) → the technical lock → backup: the
   ledger snapshot, the PC-Tool setup file, the `.mdat` into the project (+git).
 
@@ -171,10 +184,12 @@ verification (3), never the capture.**
 
 ## Tool gaps still open on this path
 
-Noted so a later session does not mistake them for done: the flaw map as a command (the writer and
-`curve_view.find_features` exist; nothing joins them); crossover checks (group-delay budget, the 2–4 kHz
-junction penalty, tweeter fc from Fs); the **candidate description** for crossovers (2–3,
-magnitude/phase/impulse, per-driver strengths); levels from the measurement as a second estimate; the
-Helix setup reader (screens only; EQ = ATF); a general term "effects and dynamic processing" in DSP
-profiles; the ellipsoid diagram. Closed 2026-08-26: joint alignment by sum loss (`predict --align`),
-the whole-session probe (`capture-check --session`), the entry control (`verify_prediction --entry`).
+Noted so a later session does not mistake them for done: the flaw map as a command (the writer exists
+and `eq_propose` now finds and proposes what a row would say — the rows themselves are still written by
+hand); crossover checks (group-delay budget, the 2–4 kHz junction penalty, tweeter fc from Fs); the
+**candidate description** for crossovers (2–3, magnitude/phase/impulse, per-driver strengths); levels
+from the measurement as a second estimate; the Helix setup reader (screens only; EQ = ATF); a general
+term "effects and dynamic processing" in DSP profiles; the ellipsoid diagram. Closed 2026-08-26: joint
+alignment by sum loss (`predict --align`), the whole-session probe (`capture-check --session`), the entry
+control (`verify_prediction --entry`), the ellipsoid's σ(f) / stays-moves / Q ceiling (`ellipsoid`),
+coarse EQ as packages (`eq_propose`), what cuts and what booms with the A/B loop (`ear_suspects`).

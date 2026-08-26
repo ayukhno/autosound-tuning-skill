@@ -69,6 +69,21 @@ characteristic marked `next league` is not for the first pass.
 Order matters: **c01 – c03 first.** If the centre or the positions fail, the rest is too early to
 judge.
 
+## Which correction points at which characteristic
+
+The EQ tools name a characteristic beside every proposal, so the ear checks the same thing the
+measurement moved (`eq_propose`, `ear_suspects`):
+
+| correction | characteristic |
+|---|---|
+| L/R shape of a pair (`lr:*`) | c01 mono centre, c02 positions |
+| a sub / midbass resonance, or what *booms* (`res:low`, `boom`, `boxy`) | c14 LF texture, c05 punch / seam, c06 sub < 40 |
+| a mid resonance, what is *nasal* or *cuts* in the mids (`res:mid`, `nasal`, `harsh`) | c08 voice cutters |
+| a tweeter resonance, what *cuts* or is *sibilant* (`res:high`, `harsh`, `sibilant`) | c07 top / sibilants |
+| the pair's tone toward the target (`tone:*`) | c04 tonal balance |
+
+One rule for all of them: a band the A/B cannot hear is a band the tune does not need.
+
 ## Routes — ordered pairs of track and characteristic
 
 A route is just an order. The words come from the table above; where to listen in the track comes

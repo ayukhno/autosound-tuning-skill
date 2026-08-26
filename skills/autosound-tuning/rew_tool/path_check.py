@@ -26,6 +26,8 @@ What is walked, and what would fail if the seam broke:
   3   `verify_prediction --entry` on `_2` solos taken WITH the tune: an entry error (a delay typed
       10 ms off, a corner typed an octave off) is CHECK by name; the clean set is ENTRY OK; the
       junction verdict is TRUSTED on clean pair sums and NOT trusted at the one pair moved 0.6 ms
+  3.3 `ear_suspects` names what cuts and what booms on an MMM served by the stub; a verdict of
+      "same" recorded through the one writer drops that band in the next round; round 4 is refused
   4   `listening-verdict` writes, `listening-verdicts` reads it back
 """
 from __future__ import annotations
@@ -390,6 +392,10 @@ def _selftest():
     bad = [f"{j['lo']}↔{j['hi']}" for j in rep_m["junctions"] if j["status"] == "NOT trusted"]
     assert bad == ["w-L↔m-L"], (bad, rep_m["verdict"])
 
+    import listening as _listening
+    tid = sorted(_listening.tracks())[0]
+    cid = sorted(_listening.characteristics("en"))[0]
+
     # ---- 3r · the same in-car commands THROUGH REW (the stub serving the same impulses) ---------
     # `capture-check --session`, `predict --rew`, `verify_prediction --rew` read REW's API; the stub
     # answers the four endpoints they use from the very files above, so the REW branch of each is
@@ -398,6 +404,12 @@ def _selftest():
     served = []
     for directory, ver in ((set1, "1"), (set2, "2"), (set2_bad, "3")):
         served.extend(_stub.measurements_from_v7_dir(directory, ver))
+    # ...and an MMM of the whole front with a cabin mode that booms and a peak that cuts (3.3)
+    f_rta = np.arange(20.0, 20000.0, 5.0)
+    mmm = (75.0 - 1.0 * np.log2(f_rta / 1000.0)
+           + 20 * np.log10(np.abs(dsp_math.peq_response(f_rta, "PK", 63.0, 6.0, 5.0)
+                                  * dsp_math.peq_response(f_rta, "PK", 3200.0, 4.5, 3.0))))
+    served.append(_stub.Measurement("ALL_2 (rta)", rta=(f_rta, mmm)))
     url, server = _stub.serve(served)
     env_rew = dict(env, REW_API_URL=url)
     try:
@@ -426,6 +438,26 @@ def _selftest():
         assert chr_["tw-R"]["status"] == "CHECK" and abs(chr_["tw-R"]["delay_error_ms"] - 10.0) < 0.1, chr_["tw-R"]
         assert chr_["m-L"]["status"] == "CHECK" and "HP 300" in (chr_["m-L"]["hint"] or ""), chr_["m-L"]
 
+        # ---- 3.3 · what cuts and what booms, from the MMM, settled by A/B -------------------------
+        rc, out = _run(tool("ear_suspects.py"), "--rew", "--title", "ALL_2 (rta)", "--json", env=env_rew)
+        sus = _json_in(out)["suspects"]
+        classes = {s["class"]: s for s in sus}
+        assert "harsh" in classes and "boom" in classes, [s["id"] for s in sus]
+        assert sus[0]["class"] == "harsh", "the ear's region ranks first"
+        assert abs(classes["boom"]["f_hz"] - 63) < 6 and abs(classes["harsh"]["f_hz"] - 3200) < 200, classes
+        assert classes["harsh"]["correction"]["gain_db"] < 0 and classes["harsh"]["listen"][0] == "c08"
+        # the tuner A/B'd the harsh band and heard no difference: recorded through the one writer,
+        # the next round leaves it out and the boom leads
+        _run(tool("state", "process.py"), os.path.join(proj, "process"), "listening-verdict",
+             "--pair", f"{tid}:c08:ok", "--text", f"suspect:{classes['harsh']['id']}=same",
+             "--ledger-version", "v_003", env=env)
+        rc, out = _run(tool("ear_suspects.py"), "--rew", "--title", "ALL_2 (rta)", "--json",
+                       "--process", os.path.join(proj, "process"), "--round", "2", env=env_rew)
+        r2 = _json_in(out)
+        assert classes["harsh"]["id"] not in [s["id"] for s in r2["suspects"]] and r2["suspects"][0]["class"] == "boom", r2["suspects"]
+        rc, out = _run(tool("ear_suspects.py"), "--rew", "--title", "ALL_2 (rta)", "--round", "4", env=env_rew, ok=(3,))
+        assert "three rounds is the limit" in out, out[-300:]
+
         # ---- refusals: a check whose input is missing FAILS by name, never reads as no objection --
         # (a) solos asked from REW for a round nobody opened: refused, and the rounds on record named
         rc, out = _run(tool("predict.py"), "--rew", "--ver", "9", "--project", proj, "--baseline",
@@ -451,11 +483,6 @@ def _selftest():
         server.shutdown()
 
     # ---- 4 · ears: one verdict written by the one writer, read back ---------------------------
-    import listening as _listening
-    tracks = _listening.tracks()
-    chars = _listening.characteristics("en")
-    tid = sorted(tracks)[0]
-    cid = sorted(chars)[0]
     _run(tool("state", "process.py"), os.path.join(proj, "process"), "listening-verdict",
          "--pair", f"{tid}:{cid}:ok", "--text", "path check", "--ledger-version", "v_003", env=env)
     rc, out = _run(tool("state", "process.py"), os.path.join(proj, "process"), "listening-verdicts", env=env)
@@ -473,7 +500,9 @@ def _selftest():
           "verdict is TRUSTED on clean sums and NOT trusted at the one pair moved 0.6 ms; the same "
           "capture-check / predict --rew / verify_prediction --rew through a REW stub agree with the "
           "file branch; a round nobody opened, a route to a virtual row the ledger lacks, and a profile "
-          "with no processing rate are refused or said by name; a listening verdict writes and reads back.")
+          "with no processing rate are refused or said by name; the ear suspects on an MMM are named and "
+          "classed, a 'same' verdict drops one for the next round, a fourth round is refused; a listening "
+          "verdict writes and reads back.")
     return 0
 
 
