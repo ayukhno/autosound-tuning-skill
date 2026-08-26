@@ -31,8 +31,9 @@
 #   ./install.sh --no-omp            without omp, which offers TCC every non-Claude model
 #   ./install.sh --dry-run           say what it would do, change nothing
 #   ./install.sh --yes               yes to every question; sign-ins are printed, not run
-#   ./install.sh --skill-ref v3.0.3  a specific skill version (default: the newest 3.x tag)
-#   ./install.sh --tcc-ref v0.1.12   a specific app version (default: the newest app tag)
+#   ./install.sh --skill-ref v3.0.33 a specific skill version (default: the newest 3.x tag)
+#   ./install.sh --tcc-ref v0.1.22   the app version released WITH that one — quote the two
+#                                    together or not at all; a mixed pair is untested
 #   ./install.sh --uninstall         remove what this script installed — NEVER your projects
 #   ./install.sh --uninstall --all   also uv, Claude Code and ~/.claude, agy/gh/omp when this
 #                                    script installed them, and every --user pip package. For
@@ -107,8 +108,9 @@ Autosound tuning — installer for macOS (and Linux)
   install.sh --no-omp            without omp, which offers TCC every non-Claude model (metered)
   install.sh --dry-run           say what it would do, change nothing
   install.sh --yes               yes to every question; sign-ins are printed, not run
-  install.sh --skill-ref v3.0.3  a specific skill version (default: the newest 3.x tag)
-  install.sh --tcc-ref v0.1.12   a specific app version (default: the newest app tag)
+  install.sh --skill-ref v3.0.33 a specific skill version (default: the newest 3.x tag)
+  install.sh --tcc-ref v0.1.22   the app version released WITH that one — quote the two
+                                 together or not at all; a mixed pair is untested
   install.sh --uninstall         remove what this script installed — NEVER your projects
   install.sh --uninstall --all   also uv, Claude Code and ~/.claude, agy/gh/omp when this script
                                  installed them, and every --user pip package. Asks first.

@@ -275,7 +275,7 @@ All files are stored strictly within your user profile:
 ### Updating, Locking Version, and Uninstallation
 
 * **Updating:** Simply run the installation command again. The script will automatically download the latest tag `v3.*` (this is a pre-release, not a stable line — stable is 2.8.x) and won't affect your project files.
-* **Locking Version:** Use the `--skill-ref v3.0.32` and `--tcc-ref v0.1.12` flags on macOS, or `-SkillRef` and `-TccRef` on Windows during installation.
+* **Locking Version:** Use the `--skill-ref v3.0.33` and `--tcc-ref v0.1.22` flags — quote them as a **pair**, since those two were released and tested together; a mixed pair is untested on macOS, or `-SkillRef` and `-TccRef` on Windows during installation.
 * **Uninstallation:** Run the installer with the `--uninstall` flag (or add `--all` for a complete cleanup of development environments). Your project folders will never be deleted.
 
 ---

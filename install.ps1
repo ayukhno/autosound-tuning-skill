@@ -40,8 +40,9 @@
 #   .\install.ps1 -NoOmp              without omp, which offers TCC every non-Claude model
 #   .\install.ps1 -DryRun             say what it would do, change nothing
 #   .\install.ps1 -Yes                yes to every question; sign-ins are printed, not run
-#   .\install.ps1 -SkillRef v3.0.4    a specific skill version (default: the newest 3.x tag)
-#   .\install.ps1 -TccRef v0.1.12     a specific app version (default: the newest app tag)
+#   .\install.ps1 -SkillRef v3.0.33   a specific skill version (default: the newest 3.x tag)
+#   .\install.ps1 -TccRef v0.1.22     the app version released WITH that one -- quote the two
+#                                     together or not at all; a mixed pair is untested
 #   .\install.ps1 -Uninstall          remove what this script installed -- NEVER your projects
 #   .\install.ps1 -Uninstall -All     also uv, Claude Code and ~\.claude, agy/gh/omp when this
 #                                     script installed them, and every --user pip package. Asks first.
@@ -121,8 +122,9 @@ Autosound tuning -- installer for Windows
   install.ps1 -NoOmp              without omp, which offers TCC every non-Claude model (metered)
   install.ps1 -DryRun             say what it would do, change nothing
   install.ps1 -Yes                yes to every question; sign-ins are printed, not run
-  install.ps1 -SkillRef v3.0.4    a specific skill version (default: the newest 3.x tag)
-  install.ps1 -TccRef v0.1.12     a specific app version (default: the newest app tag)
+  install.ps1 -SkillRef v3.0.33   a specific skill version (default: the newest 3.x tag)
+  install.ps1 -TccRef v0.1.22     the app version released WITH that one -- quote the two
+                                  together or not at all; a mixed pair is untested
   install.ps1 -Uninstall          remove what this script installed -- NEVER your projects
   install.ps1 -Uninstall -All     also uv, Claude Code and ~\.claude, agy/gh/omp when this
                                   script installed them, and every --user pip package. Asks first.

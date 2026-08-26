@@ -277,7 +277,7 @@ Wszystkie pliki są zapisywane wyłącznie w obrębie Twojego profilu użytkowni
 ### Aktualizacja, blokowanie wersji i usuwanie
 
 * **Aktualizacja:** Uruchom tę samą linię instalacyjną ponownie. Skrypt automatycznie pobierze najnowszy tag `v3.*` (jest to wersja przedpremierowa, a nie stabilna gałąź — stabilna to linia 2.8.x) i nie naruszy Twoich projektów.
-* **Blokowanie wersji:** Użyj flag `--skill-ref v3.0.32` oraz `--tcc-ref v0.1.12` na macOS lub `-SkillRef` oraz `-TccRef` na Windows podczas instalacji.
+* **Blokowanie wersji:** Użyj flag `--skill-ref v3.0.33` oraz `--tcc-ref v0.1.22` — podawaj je jako **parę**: te dwie wersje zostały wydane i przetestowane razem, a mieszana para jest nieprzetestowana na macOS lub `-SkillRef` oraz `-TccRef` na Windows podczas instalacji.
 * **Usuwanie:** Uruchom instalator z flagą `--uninstall` (lub dodatkowo `--all` dla pełnego oczyszczenia środowisk). Foldery Twoich projektów nigdy nie zostaną usunięte.
 
 ---

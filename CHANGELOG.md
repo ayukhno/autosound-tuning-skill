@@ -40,6 +40,20 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [Unreleased]
+
+- **The version-pin example is a real PAIR, and the checker now looks at it.** `install.sh` said
+  `--skill-ref v3.0.3`, `install.ps1` said `-SkillRef v3.0.4`, `install.cmd` said nothing, and all
+  four FAQ pages had copied `--skill-ref v3.0.32 --tcc-ref v0.1.12` out of that help text — a
+  method and an app that were never released together, in the one paragraph whose whole job is to
+  teach which two versions belong together. `installer-consistency.py` had been green through all
+  of it, because the example was not in its comparison set: a check that is green for want of
+  looking. It now compares the skill and app examples across all three installers, and it was made
+  to FAIL on the old text before the text was fixed (and again on a planted mismatch in
+  `install.cmd`) — 8 shared decisions now, up from 6. The example everywhere is `v3.0.33` +
+  `v0.1.22`, the pair that shipped together, with one clause saying that is why they are quoted
+  together.
+
 ## [v3.0.33] — 2026-08-26 · the capabilities board, and a README that fits on one page
 
 > **Upgrading:** documentation and one new index — nothing in `rew_tool` changed, so a tune in

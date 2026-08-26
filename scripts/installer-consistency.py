@@ -134,7 +134,41 @@ def main():
         else:
             checked.append(f"install.cmd fetches install.ps1 from {want} on main")
 
-    # 4. the default mode. `--terminal` is the opt-out in both, so both must default to tcc.
+    # 4. the version-pin EXAMPLE. It is documentation, not a constant -- and that is exactly why it
+    # drifted unseen: `install.sh` said `v3.0.3`, `install.ps1` said `v3.0.4`, `install.cmd` said
+    # nothing, and every FAQ page copied the pair out of that help text (found 2026-08-26). The
+    # example teaches the reader which two versions belong together, so a mismatched pair here
+    # teaches the opposite of the thing the pairing exists for. Same versions in every file that
+    # shows the example, and the skill/app versions quoted as ONE pair.
+    ex_sh = set(re.findall(r"--skill-ref\s+(v[0-9.]+)", sh)) , set(re.findall(r"--tcc-ref\s+(v[0-9.]+)", sh))
+    ex_ps = set(re.findall(r"-SkillRef\s+(v[0-9.]+)", ps1)), set(re.findall(r"-TccRef\s+(v[0-9.]+)", ps1))
+    ex_cmd = set(re.findall(r"-SkillRef\s+(v[0-9.]+)", cmd)), set(re.findall(r"-TccRef\s+(v[0-9.]+)", cmd))
+    for what, a, b in (("skill", ex_sh[0], ex_ps[0]), ("app", ex_sh[1], ex_ps[1])):
+        if not a or not b:
+            problems.append(f"the {what} version example is missing from "
+                            f"{'install.sh' if not a else 'install.ps1'} — the pin example is part "
+                            f"of what the triplet must agree on")
+        elif len(a) > 1 or len(b) > 1:
+            problems.append(f"the {what} version example is not one value — install.sh {sorted(a)}, "
+                            f"install.ps1 {sorted(b)}")
+        elif a != b:
+            problems.append(f"the {what} version example differs — install.sh {a.pop()} vs "
+                            f"install.ps1 {b.pop()}")
+        else:
+            v = a.pop()
+            # install.cmd passes every option through to install.ps1 and lists them, so its own
+            # example must name the same pair -- it is the file a Windows user double-clicks.
+            c = ex_cmd[0] if what == "skill" else ex_cmd[1]
+            if c and c != {v}:
+                problems.append(f"the {what} version example in install.cmd is {sorted(c)}, "
+                                f"not {v} like the other two")
+            elif not c:
+                problems.append(f"install.cmd shows no {what} version example — it lists the "
+                                f"options it forwards, so it must show the same pair")
+            else:
+                checked.append(f"{what} version example agrees in all three ({v})")
+
+    # 5. the default mode. `--terminal` is the opt-out in both, so both must default to tcc.
     if not re.search(r'^MODE="tcc"', sh, re.M):
         problems.append('install.sh: default MODE is no longer "tcc"')
     elif not re.search(r'\{\s*"terminal"\s*\}\s*else\s*\{\s*"tcc"\s*\}', ps1):

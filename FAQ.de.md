@@ -277,7 +277,7 @@ Alle Dateien werden ausschließlich innerhalb Ihres Benutzerprofils gespeichert:
 ### Aktualisierung, Version fixieren und Deinstallation
 
 * **Aktualisierung:** Führen Sie dieselbe Installationszeile einfach erneut aus. Das Skript lädt automatisch das neueste Tag `v3.*` herunter (dies ist ein Vorab-Release, kein stabiler Zweig — stabil ist die 2.8.x-Linie) und lässt Ihre Projekte unberührt.
-* **Version fixieren:** Nutzen Sie die Parameter `--skill-ref v3.0.32` und `--tcc-ref v0.1.12` unter macOS oder `-SkillRef` und `-TccRef` unter Windows während der Installation.
+* **Version fixieren:** Nutzen Sie die Parameter `--skill-ref v3.0.33` und `--tcc-ref v0.1.22` — und zwar als **Paar**: diese beiden wurden zusammen veröffentlicht und getestet, eine gemischte Kombination ist ungetestet unter macOS oder `-SkillRef` und `-TccRef` unter Windows während der Installation.
 * **Deinstallation:** Führen Sie den Installer mit dem Parameter `--uninstall` aus (oder zusätzlich `--all` für eine vollständige Bereinigung der Entwicklungsumgebungen). Ihre Projektordner werden niemals gelöscht.
 
 ---

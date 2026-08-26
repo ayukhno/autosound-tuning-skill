@@ -21,6 +21,10 @@ REM  Everything real happens in install.ps1. This file finds it and hands over,
 REM  options included:  install.cmd -Terminal   install.cmd -NoReviewer
 REM                     install.cmd -DryRun     install.cmd -Uninstall
 REM
+REM  To pin versions, pass BOTH as one pair -- they are released and tested
+REM  together, and a mixed pair is untested:
+REM    install.cmd -SkillRef v3.0.33 -TccRef v0.1.22
+REM
 REM  Plain ASCII on purpose: cmd reads this file in the console code page, and
 REM  a stray non-ASCII byte in an echo line prints as junk.
 REM ===========================================================================
