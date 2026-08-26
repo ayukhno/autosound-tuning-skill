@@ -40,6 +40,35 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [v3.0.35] — 2026-08-26 · one phase map, effects named by the profile, levels read off the measurement
+
+> **Upgrading:** additive — one new module function, one new command, two documentation
+> corrections; nothing existing changed shape or behaviour, and `naming`, `dsp_profile`,
+> `state/*`, `project.py`, `dsp_math`, `protective`, `listening`, `eq_export`, `rew_api` keep every
+> signature they had. **`installer-consistency.py --print` is now a consumer contract**: TCC's suite
+> parses its `NAME=value` output, so the six names and that shape may gain members but must not be
+> renamed without telling them.
+
+- **One phase map.** `naming-and-structure.md` still described the process as «PHASE −1–7» with the
+  old nine stages, and `SKILL.md` called `process-phases.md` "the 9-stage overview", while the
+  method itself is seven phases (−1…5). The phase number is written into the changelog and read back
+  at the start of a session, so "phase 5" meant different things depending on which file you had
+  read. Both now say −1…5.
+- **"Effects and dynamic processing" is a term the profile carries.** The capture instruction has
+  always been "everything that is not gain, delay, polarity, crossover or EQ must be off" — but each
+  vendor names those differently, so the instruction was uncheckable. A DSP profile now records the
+  vendor's own names (`effects_and_dynamics`), `dsp_profile.py effects <profile.json>` prints them,
+  and it **exits 3 when a DSP has none recorded** — "nobody wrote it down" and "there are none" are
+  different answers, and the second is an empty list. The bundled Helix profile carries its seven.
+- **Levels read off the measurement, as a SECOND estimate.** `level_offsets` had the geometry
+  (distance + directivity); it now also reads each channel's energy-averaged level inside its own
+  band and proposes the cut-only offsets that balance them —
+  `level_offsets.py --solos DIR --ver N --levels-fixed [--project DIR]`, bands taken from the
+  ledger's crossovers, the ledger's current gains shown beside them. It **refuses without
+  `--levels-fixed`**: no file records the volume knob, so without that assertion the numbers compare
+  the knob rather than the car. Where the two estimates disagree by more than a couple of dB, the
+  disagreement is the finding — usually an install problem, not a number to type in.
+
 ## [v3.0.34] — 2026-08-26 · the version-pin example is a pair, and the checker looks at it
 
 > **Upgrading:** documentation and one checker; nothing in `rew_tool` changed, so a tune in progress

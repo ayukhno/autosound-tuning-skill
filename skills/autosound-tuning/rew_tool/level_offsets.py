@@ -91,6 +91,46 @@ def compute_offsets(drivers: list[Driver], n: float = 2.0, c: float = C_AIR) -> 
     return {name: round(floor - lvl, 1) for name, lvl in delivered.items()}
 
 
+# ── the SECOND estimate: levels read off the measurement ──────────────────────
+# The geometry above is a hypothesis from distances and angles. The measurement knows what the
+# cabin actually did to them -- boundary gain, a door that loads a woofer, an off-axis tweeter
+# firing into glass -- and none of that is in d and theta. Two independent estimates that agree
+# are worth far more than either alone; when they DISAGREE, that disagreement is the finding, and
+# it usually names an install problem rather than a level to type in.
+#
+# One precondition, and it is the reason this is not automatic: every channel must have been swept
+# at the SAME REW output level and the same head-unit level, knobs untouched (the capture sheet's
+# 0.2, `phases/capture-session-sheet.md`). If the levels moved between sweeps, these numbers
+# compare the knob, not the car. Nothing in a v7 file records the knob, so the caller asserts it.
+
+def band_level_db(freqs, mag_db, f_min, f_max):
+    """Energy-average level (dB) of one channel inside its own band.
+
+    Energy average, not an average of decibels: doubling the power in half the band must show as
+    +3 dB, which an arithmetic mean of dB values does not give. Raises when the band holds no
+    points -- a level from an empty band is the "no objection" answer this method refuses.
+    """
+    if not (f_max > f_min):
+        raise ValueError(f"band ({f_min}, {f_max}) is empty or inverted")
+    pwr = [10.0 ** (float(m) / 10.0) for f, m in zip(freqs, mag_db) if f_min <= float(f) <= f_max]
+    if not pwr:
+        raise ValueError(f"no measured points inside ({f_min}, {f_max}) Hz — wrong band or wrong grid")
+    return 10.0 * math.log10(sum(pwr) / len(pwr))
+
+
+def measured_offsets(levels: dict) -> dict:
+    """Cut-only offsets from measured band levels, same convention as `compute_offsets`.
+
+    The quietest channel is the reference and gets 0; everything louder is cut to meet it, because
+    a boost spends headroom that a car does not have and the quietest driver is the one that sets
+    what the system can do.
+    """
+    if not levels:
+        raise ValueError("no channels to balance")
+    floor = min(levels.values())
+    return {name: round(floor - lvl, 1) for name, lvl in levels.items()}
+
+
 def _selftest() -> None:
     assert abs(bessj1(0.0)) < 1e-9, "J1(0)=0"
     assert abs(bessj1(1.0) - 0.4400505857) < 1e-6, f"J1(1)={bessj1(1.0)}"
@@ -104,13 +144,120 @@ def _selftest() -> None:
     off = compute_offsets(drv)
     assert off["near_onaxis"] <= off["far_offaxis"], off
     assert max(off.values()) == 0.0 and min(off.values()) <= 0.0, "cut-only, floor=0"
+    # the measured estimate, anchored on definitions rather than on its own output
+    f = [20.0 * (2 ** (i / 24.0)) for i in range(int(24 * math.log2(20000 / 20)) + 1)]
+    flat = [80.0] * len(f)
+    assert abs(band_level_db(f, flat, 300, 3000) - 80.0) < 1e-9, "a constant band averages to itself"
+    louder = [83.0] * len(f)
+    assert abs(band_level_db(f, louder, 300, 3000) - 83.0) < 1e-9
+    # energy average, not a mean of decibels: half the band at +10 dB is +7.4 dB, not +5
+    half = [90.0 if v < 300 else 80.0 for v in f]
+    _lo, _hi = 20.0, 20000.0
+    _n = len([v for v in f if _lo <= v <= _hi])
+    _split = len([v for v in f if v < 300 and v >= _lo]) / _n
+    _expect = 10 * math.log10(_split * 10 ** 9.0 + (1 - _split) * 10 ** 8.0)
+    assert abs(band_level_db(f, half, _lo, _hi) - _expect) < 1e-9, "must average POWER, not dB"
+    # what lies outside the band cannot move the answer
+    spiky = [120.0 if v < 200 else 80.0 for v in f]
+    assert abs(band_level_db(f, spiky, 300, 3000) - 80.0) < 1e-9, "out-of-band energy leaked in"
+    # offsets: cut-only, quietest is the reference, and 3 dB louder is exactly −3
+    mo = measured_offsets({"m-L": 80.0, "m-R": 83.0})
+    assert mo == {"m-L": 0.0, "m-R": -3.0}, mo
+    for bad in ((3000, 300), (1000, 1000)):
+        try:
+            band_level_db(f, flat, *bad)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"band {bad} must be refused")
+    try:
+        band_level_db([100.0, 200.0], [80.0, 80.0], 300, 3000)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("a band with no points in the grid must be refused")
+
     print("selftest OK —",
-          f"J1(1)={bessj1(1.0):.6f}; D(10k,45°,5cm)={directivity(10000,45,0.05):.3f}; offsets={off}")
+          f"J1(1)={bessj1(1.0):.6f}; D(10k,45°,5cm)={directivity(10000,45,0.05):.3f}; offsets={off}; "
+          f"measured: energy-averaged, out-of-band ignored, cut-only ({mo})")
+
+
+def _main(argv=None):
+    """`--solos DIR --ver N`: the measured second estimate for a whole capture round.
+
+    Bands come from the ledger's own crossovers, so the level is read where the driver actually
+    works. The output is a PROPOSAL to compare with the geometry estimate and with the gains
+    already in the ledger — it is not applied by anything here.
+    """
+    import argparse
+    ap = argparse.ArgumentParser(description="levels read off the measurement (second estimate)")
+    ap.add_argument("--solos", required=True, help="directory of Resonalyze v7 solo files")
+    ap.add_argument("--ver", type=int, required=True, help="capture round number")
+    ap.add_argument("--project", help="project dir — bands from its ledger, and the current gains")
+    ap.add_argument("--levels-fixed", action="store_true",
+                    help="assert what no file records: one REW output level and one head-unit "
+                         "level for the whole round, knobs untouched (capture sheet 0.2)")
+    args = ap.parse_args(argv)
+    if not args.levels_fixed:
+        print("refusing: without --levels-fixed these numbers compare the volume knob, not the car."
+              "\nNothing in a v7 file records the output level, so the assertion is yours to make.",
+              file=sys.stderr)
+        return 3
+
+    import glob as _glob
+    import os as _os
+    from . import predict as _predict  # numpy lives there, not here
+    from .state import state as _state
+
+    freqs = [20.0 * (2 ** (i / 48.0)) for i in range(int(48 * math.log2(20000 / 20)) + 1)]
+    bands, gains = {}, {}
+    if args.project:
+        snap = _state.current_snapshot(args.project)
+        for code, ch in (snap.get("channels") or {}).items():
+            hp = (ch.get("hp") or {}).get("f") or 20.0
+            lp = (ch.get("lp") or {}).get("f") or 20000.0
+            bands[code] = (float(hp), float(lp))
+            if ch.get("gain") is not None:
+                gains[code] = float(ch["gain"])
+
+    rows = []
+    for path in sorted(_glob.glob(_os.path.join(args.solos, "*.json"))):
+        code = _os.path.basename(path).split("-" + str(args.ver))[0].split("_")[0]
+        try:
+            (_f, H, _meta) = _predict.load_solo_v7(path, freqs)[0:3]
+        except Exception as exc:                      # a file that cannot be read is named, not skipped
+            rows.append((code, None, None, f"unreadable: {exc}"))
+            continue
+        mag = [20.0 * math.log10(abs(v) + 1e-30) for v in H]
+        lo, hi = bands.get(code, (20.0, 20000.0))
+        try:
+            rows.append((code, band_level_db(freqs, mag, lo, hi), (lo, hi), None))
+        except ValueError as exc:
+            rows.append((code, None, (lo, hi), str(exc)))
+
+    good = {c: lvl for c, lvl, _b, err in rows if err is None and lvl is not None}
+    off = measured_offsets(good) if good else {}
+    print(f"{'channel':10} {'band Hz':>16} {'measured dB':>12} {'offset dB':>10} {'ledger gain':>12} {'delta':>7}")
+    for code, lvl, band, err in rows:
+        if err:
+            print(f"{code:10} {'—':>16} {'—':>12} {'—':>10}   {err}")
+            continue
+        g = gains.get(code)
+        d = "" if g is None else f"{off[code] - g:+.1f}"
+        print(f"{code:10} {band[0]:7.0f}–{band[1]:<8.0f} {lvl:12.1f} {off[code]:10.1f} "
+              f"{'—' if g is None else f'{g:12.1f}'} {d:>7}")
+    print("\nSecond estimate only. Where it disagrees with the geometry estimate by more than a "
+          "couple of dB, the disagreement is the finding — read the install, do not just type the "
+          "number in.")
+    return 0
 
 
 if __name__ == "__main__":
     if "--selftest" in sys.argv:
         _selftest()
+    elif "--solos" in sys.argv:
+        raise SystemExit(_main())
     else:
         print(__doc__)
-        print("Run with --selftest, or import compute_offsets(drivers, n).")
+        print("Run with --selftest, or --solos DIR --ver N --levels-fixed, "
+              "or import compute_offsets(drivers, n).")

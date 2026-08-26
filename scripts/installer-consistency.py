@@ -189,6 +189,18 @@ def main():
     return 0
 
 
+#: ── A CONSUMER CONTRACT, not just a convenience ──────────────────────────────────────────────
+#: TCC's test suite reads `--print`, parses `NAME=value` and compares four of its own constants
+#: against ours (their F-030, closed 2026-08-26). So the SIX NAMES and the `NAME=value` shape are
+#: an interface: renaming a value or changing the output format breaks their suite, and it breaks
+#: it the way `name_key`'s tuple did — quietly, in a consumer we do not build. Add names freely;
+#: change or remove one only after telling them. Values themselves are expected to change: that is
+#: what the flag is for.
+#:
+#: One asymmetry they handle on their side, recorded so nobody "fixes" it here: our `SKILL_REPO`
+#: ends in `.git` and theirs does not. Same remote, different punctuation; they strip the suffix on
+#: both sides before comparing.
+#:
 #: The values a fourth copy may need to agree with, each read from the installer that owns it.
 #: `--print NAME` writes one of them and nothing else, so a consumer parses a value rather than
 #: grepping this script -- TCC keeps a fourth copy of the tag glob and asked for this (F-030); a
