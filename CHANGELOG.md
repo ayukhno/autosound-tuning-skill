@@ -48,8 +48,21 @@ Two consequences worth stating, because both have already caused a question:
 > section will no longer resolve — link to the FAQ instead. **`references/core/capabilities.md` is
 > new**: 67 capabilities in 13 directions, indexed by what you want rather than by path, with a
 > checker (`rew_tool/capabilities.py --selftest`, in the suite — now 42 checks) that fails if the
-> board names a module, flag, verb, function or reference that does not exist. A session that comes
+> board names a module, flag, verb, function or reference that does not exist. It carries 68 rows:
+> `REW_API_URL` — pointing every tool at a REW on another host or port — is one of them, because a
+> supported variable that is documented nowhere is a variable somebody will discover by disagreeing
+> with a UI. A session that comes
 > with its own process should start there.
+>
+> **One older change is repeated here, because it broke a downstream consumer QUIETLY.**
+> `naming.name_key()` has returned a **6-tuple** since v3.0.31 — `position` and `control` joined
+> `code, modifier, version, method` when the grammar learned `p1…p9`/`x0` and `ctl`/`rep`. Nothing
+> was removed, so a compatibility check that reads "no API removed" passes; but a caller that BUILDS
+> a key by hand and looks it up in a map filled by `name_key` now misses on every lookup, raises
+> nothing, and reports the measurements as absent. **Build both sides of any comparison through
+> `name_key`.** Found by the TCC session on 2026-08-26 in its `curve_groups.resolve`: every group
+> came back empty and every member read as "REW does not have this" — in a window opened to sum
+> that very car.
 
 - **README and FAQ, rewritten for the release.** The README says what the method is, what the two
   lines are (2.x — the competition-proven one, `v2.8.3`, and 3.x — this branch, pre-release), how a

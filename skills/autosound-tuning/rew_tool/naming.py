@@ -290,7 +290,15 @@ def parse_name(title, glossary=None):
 
 
 def name_key(parsed):
-    """Identity of a measurement for comparison: code, modifier, version, method.
+    """Identity of a measurement for comparison: code, modifier, version, method, position, control.
+
+    **The tuple's SHAPE is part of the contract, and it has changed once.** It was 4 fields
+    (code, modifier, version, method) until v3.0.31, and is 6 since — `position` (`p1`…`p9`, `x0`)
+    and `control` (`ctl`/`rep`) joined it when the grammar learned them. A caller that BUILDS a key
+    by hand and looks it up in a map filled by this function will simply never match: no exception,
+    every lookup a miss, and the caller reports "REW does not have this" for measurements that are
+    right there. That is exactly what happened downstream in TCC (2026-08-26). Build both sides of
+    any comparison through this function.
 
     Matching on this rather than on the raw title is what makes `c_01 (rta)` and `c_1 (rta)` the
     same measurement, and what lets a checker survive the padding a human happens to type.
