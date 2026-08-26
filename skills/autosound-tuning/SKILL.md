@@ -105,6 +105,7 @@ Read the active phase from `process/process-state.json` (`python3 rew_tool/state
 | [patterns/target-curves/target_curves_guide.md](references/patterns/target-curves/target_curves_guide.md) | Target curves + offsets. |
 | [patterns/target-curves/target_curves_visualizer.html](references/patterns/target-curves/target_curves_visualizer.html) | Interactive curve comparison. |
 | [core/naming-and-structure.md](references/core/naming-and-structure.md) | Measurement names, .mdat storage, preset structure. |
+| [core/capabilities.md](references/core/capabilities.md) | **Find the tool by what you want, not by the path** — every capability by intent (EN/UK words), its command, what it needs, its maturity. For a session that comes with its own process. |
 | [core/analysis-playbook.md](references/core/analysis-playbook.md) | Which REW graph for which decision. |
 | [core/estimator-scope.md](references/core/estimator-scope.md) | When a number is NOT an answer: where each tool abstains, why a measurement is not a setting, what survives a "from scratch". |
 | [core/diagnostic-techniques.md](references/core/diagnostic-techniques.md) | Anomalies, joint-phase summation, peak-vs-null. |

@@ -40,6 +40,23 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [Unreleased]
+
+- **`references/core/capabilities.md` — the board: find the tool by what you want, not by the
+  path.** 67 capabilities in 13 directions (talking to REW · naming and captures · protective
+  filters · time and junctions · crossovers and levels · targets · EQ · prediction and verification ·
+  listening · the project on disk · the review channel · safety and abstention · health of the
+  install), each with the words a user says (EN/UK), what you get, the command or call, what it needs
+  and refuses without, the phase, its maturity (field / desk / selftest) and where to read. For a
+  session that comes with its own process. `rew_tool/capabilities.py --selftest` keeps it honest:
+  every module, flag, verb, function and read pointer named on the board must exist, and every module
+  with a command line must be on the board or listed as deliberately not. A row in `SKILL.md`'s
+  reference map points at it.
+- The new tools are woven into the skill's prose where a session looks for them: the module docs,
+  the question → tool table (`analysis-playbook.md`), the abstention table (`estimator-scope.md`),
+  phases 0/1/3, `REW_API_URL` in the REW quirks, `migrate-fields` in the intake, the path's command
+  list in `SKILL.md`.
+
 ## [v3.0.32] — 2026-08-27 · EQ as packages through the gates, what cuts and what booms, the REW stub
 
 > A 3.0.x build for the author's test rigs and tag-pinned consumers. Method content in it (the EQ
