@@ -1,6 +1,6 @@
 # ШІ-помічник з налаштування автозвуку (Autosound Tuning Skill)
 
-🇬🇧 [English](README.md) · 🇩🇪 [Deutsch](README.de.md) · 🇵🇱 [Polski](README.pl.md) · 🇺🇦 **Українська** · ❓ [FAQ](FAQ.md) · <img src="assets/icons/roadmap.svg" width="14" height="14" valign="middle" alt="Roadmap" /> [Roadmap (EN)](ROADMAP.md)
+🇬🇧 [English](README.md) · 🇩🇪 [Deutsch](README.de.md) · 🇵🇱 [Polski](README.pl.md) · 🇺🇦 **Українська** · ❓ [FAQ](FAQ.uk.md) · <img src="assets/icons/roadmap.svg" width="14" height="14" valign="middle" alt="Roadmap" /> [Roadmap (EN)](ROADMAP.md)
 
 **Простою мовою:** Це твій персональний ШІ-майстер з налаштування автозвуку. Ти хочеш ідеальну сцену і рівний тональний баланс, але графіки, фази та затримки здаються занадто складними? Цей помічник візьме найскладніше на себе. Він читає твої заміри з мікрофона і крок за кроком веде тебе до ідеального звуку.
 
@@ -65,7 +65,7 @@ irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/main/instal
 
 ---
 
-**Перевірена на змаганнях версія 2.8.x** — [шлях 3 у FAQ](FAQ.md#the-four-paths-and-what-each-costs-you) (англійською)
+**Перевірена на змаганнях версія 2.8.x** — [шлях 3 у FAQ](FAQ.uk.md#чотири-способи-використання-інструменту)
 
 Якщо ти хочеш використати ту саму версію **2.8.x**, якою були виграні змагання, вона працює суто через термінал. Замість скриптів вище, у терміналі з уже встановленим `claude` (Claude Code) виконай дві команди:
 ```sh
