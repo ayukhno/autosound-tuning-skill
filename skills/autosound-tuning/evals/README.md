@@ -57,3 +57,27 @@ routes "what is X?" as a lookup, not a skill-load. Low impact: the anti-drift dr
 a question still **self-answers correctly from disk** (reads dsp-state/changelog/audit-trail), and
 forcing a lookup to load a full tuning skill isn't clearly desirable. Imperative resume is the
 common case and it works.
+
+## Run on the 3.x description — 2026-08-26 (v3.0.31 + the DVC wording)
+
+`python3 evals/run_trigger_eval.py --eval-set evals/trigger-eval-set.json --skill-name autosound-tuning --model sonnet --workers 4`
+against the LIVE skill (a `~/.claude/skills/autosound-tuning` symlink to the working checkout — the
+same shape `install.sh --terminal` makes).
+
+**36 / 37 — no false positives.** Everything the set says should fire, fires: the from-scratch and
+casual-EN asks, imaging/staging, an EMMA round, an MMM sweep reading, house-curve creation, the
+impedance / T-S / sealed-box family, the UK/DE/PL native-language asks, and all three resume
+phrasings. Every near-miss stays silent: home theatre, bookshelf-speaker impedance, PC speakers,
+a 3D-printer enclosure, a Fusion 360 box, a code project's "where did we leave off", and a bare
+"what's my current state?".
+
+**The one miss is marginal, not a hole:** *"how should i wire my dual 4-ohm voice coil subwoofer,
+and does series-vs-parallel change what box volume i should build?"* — 0/4 on the v3.0.31 wording
+("DVC coil wiring"), then, with the description sharpened to the user's own words ("dual-voice-coil
+(DVC) wiring — series vs parallel, the load it makes and whether the box volume changes"), 0/3 on
+single re-runs and 1/1 inside the second full run (**37/37**). So it sits on the model's routing
+edge — a question that reads as one electrical fact is sometimes answered as a lookup rather than
+by loading a tuning method (the same shape as the documented status-question limit). Low impact:
+the sibling queries of the same family (a DVC sub in Ukrainian, T-S from a datasheet, box
+verification by impedance sweep, L/R matching) fire every time. The sharpened wording is kept —
+accurate, additive, and recall elsewhere did not move.

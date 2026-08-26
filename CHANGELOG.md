@@ -40,6 +40,13 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [Unreleased]
+
+- `SKILL.md` description: the dual-voice-coil trigger is spelled out in the user's own words
+  ("series vs parallel, the load it makes and whether the box volume changes"). The trigger eval
+  was run on the LIVE 3.x description for the first time (`evals/README.md`, 2026-08-26): 36/37 and
+  then 37/37 on the full set, no false positives; the one marginal query is documented there.
+
 ## [v3.0.31] — 2026-08-26 · the path as commands, walked end to end, and what the walk fixed
 
 > A 3.0.x stabilisation build for the author's test rigs and tag-pinned consumers. The three tool
