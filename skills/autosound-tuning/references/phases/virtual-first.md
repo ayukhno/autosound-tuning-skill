@@ -68,8 +68,11 @@ Step names describe the action, not a command. The joint and L/R **phase** is th
 Order of channels is the user's in TCC; the path only constrains: handheld before the tripod; the whole
 tripod block in one go, **tripod untouched until Phase 3**; `m-L-ctl1` first and `m-L-ctl3` last in the
 tripod block; every channel both `(sw)` and `(rta)`.
-- **0.1** `v0` into the DSP (a permanent slot — near-field any time later), effects/dynamics off per
-  the profile list, seat, log Phase 0.
+- **0.1** `v0` into the DSP (a permanent slot — near-field any time later), **effects and dynamic
+  processing off** — everything that is not gain, delay, polarity, crossover or EQ. The vendor's own
+  names for them are in the profile: `python3 rew_tool/dsp_profile.py effects <profile.json>` prints
+  the list, and **exits 3 saying so when the DSP has none recorded** — that is a thing to go and read
+  off the DSP's screens, not a reason to guess which switches counted. Then the seat, then log Phase 0.
 - **0.2** **session levels, handheld**: one REW output level for all sweeps, one head-unit/Conductor
   level for all RTA; then the knobs are not touched. Set by the **loudest-driver test** (usually the
   sub): peak −5…−10 dBFS in; the quietest driver above the cabin noise (example: sub −5, centre −15…−20,

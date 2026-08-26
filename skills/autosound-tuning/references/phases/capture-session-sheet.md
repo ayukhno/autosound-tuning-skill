@@ -10,7 +10,9 @@
 1. **Back up the current tune** to a file (the DSP slot is left alone — the car stays drivable, and it
    is the "before" for A/B in Phase 4).
 2. **The `v0` preset**: every channel with the protective filters from −1.3 only, gains level, delays 0,
-   polarity normal, EQ empty, effects and dynamic processing **off** → into the ledger as version 0
+   polarity normal, EQ empty, effects and dynamic processing **off** (the vendor's names for those:
+   `dsp_profile.py effects <profile.json>`; it exits 3 if this DSP has none recorded) → into the
+   ledger as version 0
    (at the desk if PC-Tool allows it without the DSP, otherwise the first thing in 0.1). `v0` stays in
    its own permanent slot — near-field can be captured on it any time later.
 3. **REW** — Measure → Sweep: Length **512k**, **Repetitions 4** (not "Sequential measurements"),

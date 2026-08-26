@@ -7,7 +7,8 @@ A tune outlives any single session: months later you may chase a different targe
 ```
 PROJECT  = one car + one install (drivers, DSP, amps, wiring). Lives for years.
   └ SESSION = tuning toward ONE target curve. May span days (a Mac restart wipes the chat).
-      └ PHASE −1–7 (process-phases.md): intake (new project) → baseline → crossovers/level/delay+nono-targets → hygiene-EQ/joint-phase/voicing → verdict → center/rear → listening → client voicing → wrap-up/feedback
+      └ PHASE −1…5 (process-phases.md): intake (new project) → baseline/capture → crossovers/levels/delays
+        → EQ + joint phase → technical verdict & lock → listening → variations (voicing, centre/rear)
           └ STEP (the user's path) → GENERATOR↔CRITIC cycle (≤3 rounds) → Arbiter
 ```
 

@@ -98,7 +98,7 @@ Read the active phase from `process/process-state.json` (`python3 rew_tool/state
 | [core/knowledge-architecture.md](references/core/knowledge-architecture.md) | Where a piece of knowledge belongs (5-layer model). |
 | [core/preference-profile.md](references/core/preference-profile.md) | Subjective voicing vs objective engineering goals. |
 | [tooling/installation.md](references/tooling/installation.md) | Install, update, troubleshoot the skill/plugin. |
-| [core/process-phases.md](references/core/process-phases.md) | Phase transitions, the 9-stage overview. |
+| [core/process-phases.md](references/core/process-phases.md) | Phase transitions, the seven phases (−1…5). |
 | [core/happy-paths.md](references/core/happy-paths.md) | Short end-to-end session walkthroughs. |
 | [core/project-intake.md](references/core/project-intake.md) | New car profile, equipment interview, target choice. |
 | [core/intake-from-prose.md](references/core/intake-from-prose.md) | A project whose state is in prose and has no ledger — READ it across, never re-interview. `contract.py check` says when this is the case. |

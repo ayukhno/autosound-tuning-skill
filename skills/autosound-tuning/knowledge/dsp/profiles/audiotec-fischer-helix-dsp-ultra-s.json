@@ -220,6 +220,15 @@
       "user, PC-Tool on his own unit, 2026-08-23: the 'Parametric EQ' panel photographed in one state — Freq 26.01 Hz, Gain 0.1 dB, Q 50 together — which observes the freq_step_hz / q_range pair that had been recorded as derived from the full-range ruling.",
       "user, 2026-08-23: the input stage is high-level capture from a factory head unit only, bypassed on optical/BT/USB, and un-processing a head unit's output is a separate problem the method does not address — so the tier list is complete at three, of which two are tuned."
     ],
-    "vendor": "Audiotec-Fischer"
+    "vendor": "Audiotec-Fischer",
+    "effects_and_dynamics": [
+      "RealCenter",
+      "DynamicBass",
+      "SubXpander",
+      "ActiveToneControl",
+      "RemoteToneControl",
+      "SubRC",
+      "RearRC"
+    ]
   }
 }

@@ -100,6 +100,30 @@ def processing_rate_hz(data):
     return v if v is not None else profile.get(LEGACY_RATE_KEY)
 
 
+#: The general term for everything a capture session must have OFF: anything that is not gain,
+#: delay, polarity, crossover or EQ. Every vendor names these differently -- Helix calls them
+#: RealCenter / DynamicBass / SubXpander / ActiveToneControl, another DSP calls them "loudness",
+#: "auto EQ", "bass restoration", "limiter" -- so the METHOD needs one word and the PROFILE needs
+#: the vendor's own names. Without that list, "effects and dynamic processing off" is an
+#: instruction nobody can check: the tuner reads it, looks at a screen full of vendor words, and
+#: decides for themselves which of them counted.
+EFFECTS_KEY = "effects_and_dynamics"
+
+
+def effects_and_dynamics(data):
+    """The vendor's own names for what must be OFF during a capture, or None if unrecorded.
+
+    None is not "this DSP has none" -- it is "nobody wrote it down for this DSP", and the two must
+    not look alike to a caller. A profile that genuinely has nothing of the sort records an empty
+    list, which says a person checked.
+    """
+    profile = _unwrap(data)
+    v = profile.get(EFFECTS_KEY)
+    if v is None:
+        return None
+    return [str(x) for x in v]
+
+
 def ledger_tier(group_id):
     """The ledger's (and `project.json`'s `tier`) top-level key for a profile group id.
 
@@ -253,6 +277,11 @@ def validate_profile(data):
         raise ValueError("profile.vendor must be a non-empty string")
     _validate_rate(profile)
     _validate_groups_enumerated(profile)
+    fx = profile.get(EFFECTS_KEY)
+    if fx is not None and (not isinstance(fx, list) or any(not isinstance(x, str) or not x.strip()
+                                                           for x in fx)):
+        raise ValueError(f"profile.{EFFECTS_KEY} must be a list of non-empty vendor names "
+                         f"(an empty list means someone checked and there are none)")
     groups = profile["groups"]
     if not isinstance(groups, list) or not groups:
         raise ValueError("profile.groups must be a non-empty list")
@@ -849,6 +878,9 @@ def _main(argv=None):
     fb.add_argument("bundled_dir", nargs="?",
                     help="where to look (default: the method's own library)")
 
+    fx = sub.add_parser("effects", help="the vendor names a capture must have OFF (exit 3 if unrecorded)")
+    fx.add_argument("path")
+
     ls = sub.add_parser("list-bundled", help="every reference profile the method ships")
     ls.add_argument("bundled_dir", nargs="?")
 
@@ -889,6 +921,20 @@ def _main(argv=None):
     sub.add_parser("selftest")
     args = p.parse_args(argv)
 
+    if args.cmd == "effects":
+        prof = load_profile(args.path)
+        names = effects_and_dynamics(prof)
+        if names is None:
+            print(f"{_unwrap(prof).get('name', args.path)}: {EFFECTS_KEY} is NOT RECORDED — "
+                  f"read the DSP's own screens and write the list into the profile; "
+                  f"'none that I saw' is an empty list, not a missing key", file=sys.stderr)
+            return 3
+        if not names:
+            print("(none — recorded as checked)")
+            return 0
+        for n in names:
+            print(n)
+        return 0
     if args.cmd == "selftest" or args.cmd is None:
         return _selftest()
     if args.cmd == "validate":
@@ -1360,6 +1406,26 @@ def _selftest():
     # re-interviewing a FINISHED profile starts from it rather than blank.
     resumed = _unwrap(load_draft(proj, "Musway", "M6V4"))
     assert resumed["dsp_processing_rate_hz"] == 96000, resumed
+
+    # effects_and_dynamics: unrecorded / recorded-empty / recorded-with-names are THREE different
+    # answers, and the middle one is the point -- "I checked and there are none" must not look like
+    # "nobody looked". Guarded here because the capture step reads it before any sweep is taken.
+    _base = {"name": "X", "vendor": "V", "groups": [{"id": "physical_outputs", "max_count": 8}],
+             "groups_enumerated": True, PROCESSING_RATE_KEY: 96000}
+    assert effects_and_dynamics(dict(_base)) is None, "a missing key must read as unrecorded"
+    assert effects_and_dynamics(dict(_base, **{EFFECTS_KEY: []})) == [], "empty list = checked, none"
+    assert effects_and_dynamics(dict(_base, **{EFFECTS_KEY: ["DynamicBass"]})) == ["DynamicBass"]
+    for _bad in ("DynamicBass", [""], [None], [3]):
+        try:
+            validate_profile(dict(_base, **{EFFECTS_KEY: _bad}))
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"{EFFECTS_KEY}={_bad!r} must be refused")
+    _hx = os.path.join(bundled_dir(), "audiotec-fischer-helix-dsp-ultra-s.json")
+    if os.path.exists(_hx):
+        _names = effects_and_dynamics(load_profile(_hx))
+        assert _names and "DynamicBass" in _names, "the bundled Helix profile lost its effects list"
 
     print(f"selftest OK — max_count validated as a physical slot count (null = still open, 0/float/"
           f"bool/str refused) and physical_outputs mapped to the ledger's `channels` key (SCR-042); "
