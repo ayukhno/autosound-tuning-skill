@@ -43,6 +43,8 @@ MODULE_DIRS = [_HERE, os.path.join(_HERE, "state"), os.path.join(_HERE, "gates")
 NOT_ON_BOARD = {
     "verify_measurements.py": "a one-off session script kept as it was (rew-tool-docs says so)",
     "make_plot.py": "a plotting helper, not a decision",
+    "provenance.py": "which checkout wrote a file; the writers' stamp and a way to print it, "
+                     "not something a tuner runs (autosound-hub HUB-002)",
     "excess_gate.py": "the research / validation harness behind eq_gate",
     "capabilities.py": "this checker",
     "__init__.py": "not a tool",

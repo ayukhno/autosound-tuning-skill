@@ -300,17 +300,44 @@ def load_profile(path):
         return json.load(f)
 
 
+def _provenance():
+    """`provenance.py` from the same checkout, by path — same reason as every other sibling load
+    here: `rew_tool/` is not on the consumer's import path, it is loaded from one."""
+    import importlib.util
+
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "provenance.py")
+    try:
+        spec = importlib.util.spec_from_file_location("_dsp_profile_provenance", path)
+        if spec is None or spec.loader is None:
+            return None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    except Exception:  # noqa: BLE001 — an unloadable stamp must not cost the profile
+        return None
+
+
 def save_profile(path, data):
-    """Stamp the schema version, validate, then write. Refuses to write a malformed profile (same
-    discipline as state.py's snapshot() — a garbage profile can't be silently banked).
+    """Stamp the schema version and the writer, validate, then write. Refuses to write a malformed
+    profile (same discipline as state.py's snapshot() — a garbage profile can't be silently banked).
 
     Stamped at the wrapper level (beside `dsp_profile`, not inside it) so a bundled reference
-    profile keeps the same inner shape it has always had — the version describes the FILE.
+    profile keeps the same inner shape it has always had — both stamps describe the FILE, not the
+    DSP. `content_hash` and `diff_profile` work on the inner profile, so neither of them notices
+    them, which is the point: re-saving the same profile from a newer method is not a content
+    change.
+
+    `skill_sha` is which checkout of the method wrote this file, whole (autosound-hub HUB-002) —
+    the identifier that lets an artifact brought back from a weekend be compared with another
+    instead of trusted. `""` means the question was asked and had no answer; the key MISSING means
+    the file predates anyone asking. See `provenance.py` for why it is not the version string.
     """
     validate_profile(data)
     if isinstance(data, dict):
         data = dict(data)
         data["schema_version"] = SCHEMA_VERSION
+        prov = _provenance()
+        data["skill_sha"] = prov.skill_sha() if prov is not None else ""
     parent = os.path.dirname(path)
     if parent:
         os.makedirs(parent, exist_ok=True)
@@ -1392,6 +1419,21 @@ def _selftest():
     written = finalize(proj)
     assert os.path.isfile(written) and not os.path.exists(draft_path(proj)), written
     assert load_profile(written)["schema_version"] == SCHEMA_VERSION, load_profile(written)
+
+    # ...and with the checkout that wrote it (autosound-hub HUB-002): a profile carried off a
+    # weekend has to say which method produced it. The whole sha or "" — never half of one, and
+    # never the version string, which is kept by hand and already disagrees with itself.
+    on_disk = load_profile(written)
+    stamp = on_disk["skill_sha"]
+    prov = _provenance()
+    assert prov is not None, "provenance.py must load from its own checkout"
+    assert stamp == prov.skill_sha(), (stamp, prov.skill_sha())
+    assert stamp == "" or (len(stamp) == 40 and stamp == stamp.lower().strip()), stamp
+    # It describes the FILE, so it sits BESIDE the profile and not inside it, exactly where
+    # `schema_version` sits. A stamp inside the profile is content: `diff_profile` and everything
+    # built on it would then read every project as drifted from the library the moment the method
+    # moved -- which is what `refresh must be idempotent` above catches when this is got wrong.
+    assert "skill_sha" not in _unwrap(on_disk), "the stamp landed inside the profile"
 
     # an invalid draft is REFUSED, and the draft survives the refusal so it can be fixed.
     broken = tempfile.mkdtemp(prefix="dsp_profile_broken_")

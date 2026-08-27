@@ -42,6 +42,26 @@ Two consequences worth stating, because both have already caused a question:
 
 ## [Unreleased]
 
+- **The artifacts say which checkout of the method wrote them** (autosound-hub HUB-002). The
+  journal and `dsp_profile.json` are the two files that leave the machine that made them — read
+  days later, on another laptop, beside another project's pair — and neither said what produced it.
+  Two runs from two versions of the method looked alike, so comparing them was trust, not a check.
+  Now `rew_tool/provenance.py` reads `git rev-parse HEAD` in this checkout, in one place, and the
+  writers stamp themselves: `journal.jsonl` gets a `written_by` header, `dsp_profile.json` a
+  wrapper-level `skill_sha` beside `schema_version`. **The sha, not the version string** — `main`
+  carries 3.0.36 while `marketplace.json` says 2.8.3 (measured 2026-08-27), and a number kept by
+  hand drifts where a sha cannot; the version is what a person quotes on screen, the sha is what
+  things are compared by. One spelling only, all forty characters, the same number
+  `autosound-tcc` shows for the same checkout (verified both ways against its
+  `core/install_report.skill_sha`, on this clone and on its vendored one). The header is **not**
+  written once at creation — the journal grows across runs, so it is written before the first event
+  of a run and only when the sha differs from the last one recorded: a car tuned over a weekend on
+  one version carries one header, not one per event. `""` means the writer was asked and could not
+  be told (no repository, no git); the key absent means the file predates anyone asking.
+  **For a consumer:** both files gain a key, nothing changes shape — the stamp sits beside the
+  profile, not inside it, so `content_hash`, `diff_profile` and `refresh` do not see it, and
+  `written_by` is one more journal type to ignore or read.
+
 - **`path_check --selftest` runs in 18 s instead of 31** (the user, via TCC, 2026-08-27: it was an
   eighth of their whole suite and three times slower than anything else in it). Measured, not
   guessed: 36 tool invocations and 51 synthetic v7 files at 0.14 s each. Two levers, no coverage

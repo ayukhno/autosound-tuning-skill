@@ -106,6 +106,9 @@ EV_SESSION_STARTED = "session_started"
 # the only surviving trace of an answer was a hand-typed evidence string, and a constraint the user
 # set was invisible to the next session unless it happened to be re-read out of prose (SCR-030).
 EV_USER_DECISION = "user_decision"
+# Which checkout of the method wrote what follows (autosound-hub HUB-002). The header of the
+# journal, and of every later run that came from a different commit -- see `Process._stamp`.
+EV_WRITTEN_BY = "written_by"
 
 
 class ProcessError(ValueError):
@@ -441,6 +444,18 @@ def _now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def _writer_sha():
+    """Which checkout of the method is doing the writing — the one call site (`Process._stamp`).
+
+    A function rather than an inline load so the header logic can be exercised against sha values
+    a test chooses. `provenance` proves it can read a real checkout on real repositories; what has
+    to be proved HERE is when a header is written and when it is not, and that is a different
+    question from what git says.
+    """
+    prov = _load_rew_tool_module("provenance")
+    return prov.skill_sha() if prov is not None else ""
+
+
 def _empty_state():
     return {
         "schema_version": SCHEMA_VERSION,
@@ -526,6 +541,10 @@ class Process:
         # whatever folder the user happened to open would be the audit inventing the thing it is
         # auditing. The write paths (`_write`, `_append`) create the directory instead.
         self.dir = root
+        # Whether this run has already decided about its header event (`_stamp`). One decision per
+        # instance: the sha is a property of the code that is running, and that does not change
+        # under it.
+        self._stamped = False
 
     # -- paths --
     @property
@@ -1314,7 +1333,41 @@ class Process:
         # JSON, and the next session would read an empty process and think nothing had happened.
         os.replace(tmp, self.state_path)
 
+    def _last_written_by(self):
+        """The sha in the last header event, or None when the journal carries no header at all.
+
+        None is not `""`: a journal that has never recorded a writer must get a header even when
+        the writer cannot be told, otherwise "asked, could not be told" and "never asked" are the
+        same silence.
+        """
+        seen = self.events(kinds=(EV_WRITTEN_BY,))
+        return seen[-1].get("skill_sha", "") if seen else None
+
+    def _stamp(self):
+        """Write the header event when this run's writer is not the one the journal last recorded.
+
+        Not once, at creation. The journal grows across runs, and a header written when the file
+        was born says only which method STARTED it — while the thing that has to be answerable is
+        "were these two runs made by the same method?" (autosound-hub HUB-002). So the header sits
+        at the top of each run's slice, and only where the sha actually CHANGES: a car tuned over a
+        weekend on one version carries one header, not one line per event.
+
+        The sha is read from this checkout, never accepted from a caller — `provenance` says why.
+        A `provenance` that will not load stamps `""`, the same as a machine with no git: the
+        journal records that the question was asked and had no answer, rather than losing the
+        event it was riding on.
+        """
+        if self._stamped:
+            return
+        self._stamped = True  # decided first: one attempt per run, whatever it finds
+        sha = _writer_sha()
+        if sha == self._last_written_by():
+            return
+        self._append(EV_WRITTEN_BY, skill_sha=sha)
+
     def _append(self, event_type, **payload):
+        if event_type != EV_WRITTEN_BY:
+            self._stamp()
         event = {"at": _now(), "type": event_type}
         event.update({k: v for k, v in payload.items() if v is not None})
         os.makedirs(self.dir, exist_ok=True)
@@ -1604,13 +1657,56 @@ def _selftest():
     pr.close_capture(reason="done")
     assert pr.protective_record()["channels"]["m-L"]["hp"]["f"] == 100, "a closed round still says"
 
+    # -- the journal says which method wrote it (autosound-hub HUB-002) -------------------------
+    # The stamp is the journal's own, so what has to hold HERE is when it is written: at the top of
+    # a fresh journal, once per run, and again only when the writing checkout changed. What git
+    # actually says is `provenance`'s business and is proved there, on real repositories — a header
+    # test that also asked git would be one ruler measuring itself.
+    real_sha = _writer_sha
+    try:
+        globals()["_writer_sha"] = lambda: "a" * 40
+        stamped = os.path.join(tempfile.mkdtemp(prefix="autosound_stamp_"), "process")
+        run = Process(stamped)
+        run.record_session("selftest", "-")
+        run.record_session("selftest", "-")
+        head = run.events()[0]
+        assert head["type"] == EV_WRITTEN_BY and head["skill_sha"] == "a" * 40, head
+        assert [e["type"] for e in run.events()].count(EV_WRITTEN_BY) == 1, "one header per run"
+
+        # A new run from the SAME checkout adds nothing: the header marks a change, not a start-up.
+        Process(stamped).record_session("selftest", "-")
+        assert [e["type"] for e in Process(stamped).events()].count(EV_WRITTEN_BY) == 1, \
+            "a second run from the same checkout re-headed the journal"
+
+        # The method moved under the project — which is the whole case the header exists for.
+        globals()["_writer_sha"] = lambda: "b" * 40
+        Process(stamped).record_session("selftest", "-")
+        kinds = [e["type"] for e in Process(stamped).events()]
+        heads = [e["skill_sha"] for e in Process(stamped).events() if e["type"] == EV_WRITTEN_BY]
+        assert heads == ["a" * 40, "b" * 40], heads
+        # ...and it stands IN FRONT of the run it describes, not at the tail of the one before.
+        assert kinds.index(EV_WRITTEN_BY, 1) == len(kinds) - 2, kinds
+
+        # "Asked and could not be told" is recorded, not skipped: a journal with no header at all
+        # means nobody ever asked, and the two must not look the same.
+        globals()["_writer_sha"] = lambda: ""
+        blind = os.path.join(tempfile.mkdtemp(prefix="autosound_blind_"), "process")
+        Process(blind).record_session("selftest", "-")
+        first = Process(blind).events()[0]
+        assert first["type"] == EV_WRITTEN_BY and first["skill_sha"] == "", first
+        Process(blind).record_session("selftest", "-")
+        assert [e["type"] for e in Process(blind).events()].count(EV_WRITTEN_BY) == 1, "'' repeated"
+    finally:
+        globals()["_writer_sha"] = real_sha
+
     print(
         "selftest OK — evidence refused when empty and when it resolves to nothing (SCR-035), "
         "phase -1 refused to end on a folder intake never touched, "
         "phase 0 refused to exit without a target (SCR-036) and without a flaw map (SCR-044) "
         "and opened once the map was recorded; "
         "phase 1 refused a profile with no `sample_rate_hz` (SCR-045) and phase 2 asked only for "
-        "what a profile declaring no EQ actually owes. "
+        "what a profile declaring no EQ actually owes; "
+        "the journal headed itself with the writing checkout and re-headed only when it changed. "
         f"root={root}"
     )
     return 0

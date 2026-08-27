@@ -64,7 +64,7 @@ One JSON object per line, oldest first: `{"at": …, "type": …, …}`. Types:
 `phase_entered` · `step_added` · `attempt_started` · `step_skipped` · `step_done` ·
 `step_blocked` · `critic_called` · `config_change` · `capture_task_issued` · `capture_taken` ·
 `capture_skipped` · `capture_round_closed` · `capture_verified` · `session_started` ·
-`user_decision`.
+`user_decision` · `written_by`.
 
 `user_decision` is the Arbiter's half of the conversation, recorded as the answer rather than as
 prose about it. `invalidates` carries the same shape as `config_change.impact`, so a ruling that
@@ -74,6 +74,17 @@ forcing it into that event would lie about where the fact came from.
 `session_started` is the one event a front-end writes rather than the model: only it knows a
 session was attached at all. Without it a journal whose first entry is a `step_done` cannot tell
 a session that recorded nothing from a session that never happened.
+
+`written_by` is the header: `{"at": …, "type": "written_by", "skill_sha": "<40 hex>"}` — which
+checkout of the method wrote what follows (autosound-hub HUB-002). Written by the journal itself,
+not by a caller, and **not once at creation**: the file grows across runs, so a header stamped when
+it was born would only say which method STARTED it, while the question that has to be answerable is
+whether two runs came from the same method. It is written before the first event of a run *and only
+when the sha differs from the last one recorded* — a car tuned over a weekend on one version carries
+one header, not one line per event. `""` means the writer was asked and could not be told (no
+repository, no git); a journal with no header at all predates anyone asking. The whole forty
+characters, the same spelling `dsp_profile.json` carries and the same number the companion app shows
+for that checkout — see `rew_tool/provenance.py` for why it is the sha and not the version string.
 
 ## Invariants (enforced in code, not by discipline)
 
