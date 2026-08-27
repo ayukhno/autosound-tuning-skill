@@ -40,7 +40,17 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
-## [Unreleased]
+## [v3.0.37] — 2026-08-27 · the artifacts say which checkout wrote them; path_check walks in 18 s
+
+> **Upgrading:** additive. One new module (`rew_tool/provenance.py`) and **two files gain a key**:
+> `process/journal.jsonl` gets a `written_by` header event, `dsp_profile.json` a wrapper-level
+> `skill_sha` beside `schema_version`. Nothing existing changed shape or signature — `process`,
+> `dsp_profile`, `project`, `state/*`, `naming`, `contract` keep every call they had, and a reader
+> that ignores both keys behaves exactly as before. **For a consumer:** `written_by` is one more
+> journal type to skip or read, and the profile's stamp sits BESIDE the profile rather than inside
+> it, so `content_hash`, `diff_profile` and `refresh` do not see it — re-saving an unchanged profile
+> from a newer method is still not a change. `path_check --selftest` got faster with no coverage
+> cut; the walk still goes through every real command line.
 
 - **The artifacts say which checkout of the method wrote them** (autosound-hub HUB-002). The
   journal and `dsp_profile.json` are the two files that leave the machine that made them — read
