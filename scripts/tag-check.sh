@@ -7,12 +7,26 @@
 # tag matching v3.*, so a tag is on somebody's machine the moment it is pushed. Every check below
 # is something that has already shipped wrong once, or that cannot be undone once it has.
 #
+# THE GIT HALF IS NOT HERE. Everything about the release channel -- clean tree, HEAD published,
+# push.followTags, the newest tag on the remote, the tag being free, the tag rule and the hook's
+# reading of the exact command lines that will run -- lives in ONE carrier owned by the hub,
+# `hub/scripts/release-preflight.py`, and is CALLED from here (hub governance/RELEASE-CHANNEL.md §9,
+# ticket HUB-004). Two of those checks never existed in this file: push.followTags was compared by
+# hand, and nothing ever asked the hook. What stays here is this repo's inventory -- the manifest,
+# the note, the installer triplet, this repo's CI -- because no second copy of it exists anywhere
+# to drift against. The carrier only reports; the tag is still cut by a human afterwards.
+#
 # No `set -e`: every check runs, so one invocation names everything that is not ready and the
-# summary is honest instead of stopping at the first complaint.
+# summary is honest instead of stopping at the first complaint. The carrier was built to the same
+# rule, so the two halves read as one list.
 set -uo pipefail
 
 cd "$(dirname "$0")/.."
 PY="${PYTHON:-python3}"
+
+# The hub is checked out beside this repo. PREFLIGHT overrides that for a hub living elsewhere;
+# it is a path to the carrier, not a switch that can turn the channel checks off.
+PREFLIGHT="${PREFLIGHT:-$(cd .. && pwd)/hub/scripts/release-preflight.py}"
 
 # 1. The intended tag is REQUIRED -- a check whose input is missing must FAIL, not report
 #    "no objection" about a version it was never told (references/core/estimator-scope.md).
@@ -27,7 +41,7 @@ if ! printf '%s' "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
   echo "usage: scripts/tag-check.sh vX.Y.Z (got '$TAG')" >&2
   exit 2
 fi
-VER="${TAG#v}"; MAJOR="${VER%%.*}"
+VER="${TAG#v}"
 
 pass=0 fail=0 failed=()
 ok()  { pass=$((pass + 1)); printf '  ok   %-16s %s\n' "$1" "${2-}"; }
@@ -60,50 +74,7 @@ else
   fi
 fi
 
-# 4. A published tag is NEVER moved: one version number would then name two builds, and a plain
-#    `git fetch` does not move a tag, so every existing clone keeps showing the old commit.
-if git tag -l | grep -qxF "$TAG"; then
-  bad tag-free-local "$TAG already exists locally -- a published tag is never moved"
-else
-  ok tag-free-local "no local $TAG"
-fi
-if remote_tag="$(git ls-remote --tags origin "refs/tags/$TAG" 2>&1)"; then
-  if [ -n "$remote_tag" ]; then bad tag-free-origin "$TAG already exists on origin -- never moved, cut the next number"
-  else ok tag-free-origin "origin has no $TAG"; fi
-else
-  # Offline is not a pass: without origin we cannot know whether this tag is already published.
-  bad tag-free-origin "cannot reach origin: ${remote_tag//$'\n'/ }"
-fi
-
-# 5. CI must be green on the tagged sha, and that requires the sha to EXIST on origin; a dirty tree
-#    means the tag would name a commit that is not what you just tested.
-if [ -z "$(git status --porcelain)" ]; then ok worktree-clean "nothing uncommitted"
-else bad worktree-clean "$(git status --porcelain | wc -l | tr -d ' ') uncommitted path(s) -- commit or clean first"; fi
-if git fetch --quiet origin main 2>/dev/null; then     # fetch is read-only, it moves no local ref
-  head_sha="$(git rev-parse HEAD 2>/dev/null || true)"
-  up_sha="$(git rev-parse origin/main 2>/dev/null || true)"
-  if [ -z "$up_sha" ]; then bad head-pushed "cannot resolve origin/main"
-  elif [ "$head_sha" = "$up_sha" ]; then ok head-pushed "HEAD = origin/main ${head_sha:0:12}"
-  else bad head-pushed "HEAD ${head_sha:0:12} != origin/main ${up_sha:0:12} -- push first, CI runs there"; fi
-else
-  bad head-pushed "git fetch origin main failed -- cannot confirm HEAD is published"
-fi
-
-# 6. The installers take the NEWEST v$MAJOR.* tag, so a lower number publishes nothing and a
-#    reused-looking number confuses every machine that already updated.
-if origin_tags="$(git ls-remote --tags origin "refs/tags/v${MAJOR}.*" 2>&1)"; then
-  newest="$(printf '%s\n' "$origin_tags" | sed 's#.*refs/tags/##' | grep -vF '^{}' \
-            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)"
-  if [ -z "$newest" ]; then ok version-newer "no existing v${MAJOR}.* tag on origin"
-  elif [ "$TAG" = "$newest" ]; then bad version-newer "$TAG is the newest tag already"
-  elif [ "$(printf '%s\n%s\n' "$newest" "$TAG" | sort -V | tail -n1)" = "$TAG" ]; then
-    ok version-newer "$newest -> $TAG"
-  else bad version-newer "$TAG is not newer than $newest -- installers would ignore it"; fi
-else
-  bad version-newer "cannot list origin tags: ${origin_tags//$'\n'/ }"
-fi
-
-# 7. The installer triplet carries the same decisions three times; a claim checked in one file is
+# 4. The installer triplet carries the same decisions three times; a claim checked in one file is
 #    not checked. Reuse the existing checker rather than restating any part of it here.
 if inst_out="$("$PY" scripts/installer-consistency.py 2>&1)"; then
   ok installers "$(printf '%s' "$inst_out" | tail -n1 | cut -c1-60)"
@@ -112,12 +83,64 @@ else
   printf '%s\n' "$inst_out" | tail -n 12 | sed 's/^/         /'
 fi
 
-# 8. The selftests are NOT rerun here: CI runs scripts/run-selftests.sh on every push, and the
-#    thing that matters is that it was green ON THE SHA THE TAG WILL NAME, not on this checkout.
+# 5. The channel half, asked of the carrier with the tag named explicitly. Its lines are printed
+#    verbatim underneath, in the hub's language: a verdict restated in other words is a second
+#    copy of it, and this whole ticket exists because two copies drifted. A missing carrier is a
+#    FAILURE, not a skip -- without it the git side is unchecked, and unchecked is not "fine".
 echo
-sha="$(git rev-parse --short HEAD 2>/dev/null || echo HEAD)"
-echo "  note: selftests are not rerun here -- CI runs scripts/run-selftests.sh on every push."
-echo "        CI must be green on THIS sha before you tag:  gh run list --commit $sha"
+if [ ! -f "$PREFLIGHT" ]; then
+  bad channel "no carrier at $PREFLIGHT -- the channel checks are the hub's; set PREFLIGHT=<path to hub/scripts/release-preflight.py>"
+elif chan_out="$("$PY" "$PREFLIGHT" --root . --role skill --tag "$TAG" 2>&1)"; then
+  ok channel "hub preflight passed -- its own lines below"
+  printf '%s\n' "$chan_out" | sed 's/^/         /'
+else
+  bad channel "hub preflight says NOT READY -- its own lines below"
+  printf '%s\n' "$chan_out" | sed 's/^/         /'
+fi
+echo
+
+# 6. CI green ON THE SHA THE TAG WILL NAME. Until HUB-004 this was a printed reminder and the one
+#    thing in the list held by attention instead of by a gate -- the same shape as the
+#    push.followTags gap that ticket closed. It is a gate now: the selftests are still not rerun
+#    here (CI runs scripts/run-selftests.sh on every push, and what matters is that it was green on
+#    the sha, not on this checkout), but whether it WAS green is now asked rather than assumed.
+#    Not knowing is not a pass: no gh, no answer from it, no run on this sha, or a run still going
+#    are each "not ready", and each says which.
+sha="$(git rev-parse HEAD 2>/dev/null || true)"
+if [ -z "$sha" ]; then
+  bad ci-green "cannot resolve HEAD -- there is no sha to ask about"
+elif ! command -v gh >/dev/null 2>&1; then
+  bad ci-green "gh is not on PATH: CI on ${sha:0:12} is unverified, and unverified is not green"
+elif ! runs="$(gh run list --commit "$sha" --limit 50 --json status,conclusion,workflowName 2>&1)"; then
+  bad ci-green "gh run list failed: $(printf '%s' "$runs" | tr '\n' ' ' | cut -c1-140)"
+elif ! ci_msg="$("$PY" -c '
+import json, sys
+runs = json.loads(sys.argv[1])
+if not runs:
+    print("FAIL no run on this sha -- CI has not seen the commit the tag would name")
+    raise SystemExit
+pending = sorted({r["workflowName"] for r in runs if r["status"] != "completed"})
+broken = sorted({r["workflowName"] + ":" + str(r["conclusion"]) for r in runs
+                 if r["status"] == "completed"
+                 and r["conclusion"] not in ("success", "skipped", "neutral")})
+green = sorted({r["workflowName"] for r in runs if r["conclusion"] == "success"})
+if pending:
+    print("FAIL still running: " + ", ".join(pending) + " -- a run in flight is not a green run")
+elif broken:
+    print("FAIL " + ", ".join(broken) + " -- red on the sha the tag would name")
+elif not green:
+    print("FAIL nothing succeeded on this sha: "
+          + ", ".join(sorted({str(r["conclusion"]) for r in runs})))
+else:
+    print("OK " + ", ".join(green) + " green on " + sys.argv[2][:12])
+' "$runs" "$sha" 2>&1)"; then
+  bad ci-green "cannot read gh output: $(printf '%s' "$ci_msg" | tr '\n' ' ' | cut -c1-140)"
+else
+  case "$ci_msg" in
+    OK*) ok ci-green "${ci_msg#OK }" ;;
+    *)   bad ci-green "${ci_msg#FAIL }" ;;
+  esac
+fi
 
 echo
 if [ "$fail" -ne 0 ]; then

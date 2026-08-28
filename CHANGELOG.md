@@ -40,6 +40,32 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [Unreleased]
+
+- **`scripts/tag-check.sh` gives the git half away and gates on CI.** Everything about the release
+  channel -- clean tree, HEAD published, `push.followTags`, the newest tag on the remote, the tag
+  being free, the tag rule, and the hook's reading of the exact lines that will be run -- now comes
+  from one carrier owned by the hub, `hub/scripts/release-preflight.py`, called with the tag named
+  explicitly. It is not a copy: the rule is imported from the hook and invoked, so the two cannot
+  drift. Two of those checks never existed here -- `push.followTags` (the config that pushes a tag
+  *with* the branch, without naming it on the command line) was compared by hand, and nothing ever
+  asked the hook whether it would pass the commands we were about to run. What stays here is this
+  repo's inventory, which has no second copy anywhere to drift against: the `plugin.json` version,
+  the `## [vX.Y.Z]` note, the installer triplet. The carrier still only reports; the tag is cut by a
+  human afterwards, and the output form is unchanged -- no `set -e`, every check runs, one
+  invocation names everything. Its lines are printed verbatim, in the hub's language: restating
+  another checker's verdict in your own words is how you get a second copy of it.
+- **CI on the tagged sha is a gate, not a printed reminder.** It was the last item held by attention
+  rather than by a check -- the same shape as the `followTags` gap above, which was also "compared
+  by hand" until it was not. `tag-check.sh` now asks `gh` for the runs on the sha the tag would name
+  and refuses on any answer that is not green: no run, a run still in flight, a red or cancelled
+  one, or no answer at all. Not knowing is not a pass. The selftests are still not rerun locally --
+  CI runs `scripts/run-selftests.sh` on every push, and what matters is that it was green *there*.
+- **Two things `tag-check.sh` now needs**: the hub checked out beside this repo (`../hub`, or
+  `PREFLIGHT=` pointing at the carrier), and `gh` on PATH. A missing carrier is a failure, not a
+  skip: without it the channel side is unchecked, and unchecked is not "fine". Both are maintainer
+  machinery -- nothing in the installed skill depends on either.
+
 ## [v3.0.37] — 2026-08-27 · the artifacts say which checkout wrote them; path_check walks in 18 s
 
 > **Upgrading:** additive. One new module (`rew_tool/provenance.py`) and **two files gain a key**:

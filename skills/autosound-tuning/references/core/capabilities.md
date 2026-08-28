@@ -154,4 +154,4 @@ named here must exist, and every module with a command line must be on the board
 |---|---|---|---|---|---|---|
 | does the tooling work here / чи працює інсталяція | the deterministic core, offline | `scripts/smoke_test.py` | python3, numpy, scipy | — | field | `tooling/installation.md` |
 | every module's own checks / усі селфтести | one entry point, what CI runs | `scripts/run-selftests.sh` | — | — | field | `CLAUDE.md` of the repo |
-| the installers agree; a tag is safe to cut / інсталятори, тег | the shared constants compared; the eight pre-tag checks | `scripts/installer-consistency.py`, `scripts/tag-check.sh vX.Y.Z` | — | — | field | `CHANGELOG.md` (doctrine section) |
+| the installers agree; a tag is safe to cut / інсталятори, тег | the shared constants compared; this repo's inventory (manifest, note, triplet, CI on the sha) plus the hub's channel preflight, called not copied | `scripts/installer-consistency.py`, `scripts/tag-check.sh vX.Y.Z` | the hub checked out beside this repo (or `PREFLIGHT=`); `gh` for the CI gate | — | field | `CHANGELOG.md` (doctrine section) |
