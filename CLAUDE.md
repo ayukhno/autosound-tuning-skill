@@ -54,7 +54,9 @@ the only path any consumer is ever handed. So the identity has to be *asked for*
 the same shape as the two partial selftest sets below — each half believing it was the whole.
 
 `rew_tool/deployment.py` is the check, and `SKILL.md`'s Pre-Session step 0 is what makes a session
-run it. It refuses on disagreement (exit 3) and refuses separately on a copy with no identity
+run it. Its one known blind spot — a deliberate pin is indistinguishable from a split — is
+`docs/TODO.md` S-001, and the refusal says so itself when a held checkout is among the candidates,
+so the item arrives with the case rather than waiting to be remembered. It refuses on disagreement (exit 3) and refuses separately on a copy with no identity
 (exit 4), because those are different repairs. It does NOT rank the candidates: which one a loader
 prefers is decided outside this repo, so the fact worth reporting is the one that stays true
 whichever wins. **A rule about which copy to use, written anywhere but in a check, is the rule that

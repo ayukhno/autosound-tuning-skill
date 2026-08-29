@@ -64,6 +64,15 @@ Two consequences worth stating, because both have already caused a question:
   version it loaded before it proposes anything, so the method's version and the maths' version
   appear side by side in the transcript rather than being assumed equal. Costs one command per
   session; the divergence it names cost a silent three-way split for three days.
+- **The one thing `deployment.py` cannot judge, it says out loud.** A checkout held `DETACHED` is
+  what a deliberate pin looks like, and today it is refused exactly like a split nobody chose —
+  which is how a check earns the right to be skipped. Telling the two apart needs the consumer to
+  declare the version it expects (the shape `autosound-tcc`'s submodule already has, and the only
+  arrangement on the author's machine that never drifted); that is `docs/TODO.md` S-001, due when
+  the first pinned project is still being worked on. Until then the refusal names the blind spot
+  and points at the item, so it turns up with the case instead of waiting to be remembered.
+  `docs/TODO.md` is new: the maintainer's backlog, kept apart from `ROADMAP.md`, which is product
+  direction for people who use the method.
 - **Board row in `capabilities.md` §M**, and the reasoning in `CLAUDE.md` — including why the
   previous form of this rule failed: "the personal symlink is gone and is not to be restored" was
   decided 2026-08-13, lived only in a memory file, and was contradicted by `install.sh:774`, which

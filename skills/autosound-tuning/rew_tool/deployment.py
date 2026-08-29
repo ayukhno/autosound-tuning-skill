@@ -164,7 +164,16 @@ def verdict(cands):
     shas = sorted({c["sha"] for c in live})
     if len(shas) > 1:
         names = " vs ".join(sorted({f"{c['ref'] or c['sha'][:12]}" for c in live}))
-        return 3, f"{len(shas)} different checkouts of the method are reachable here: {names}"
+        line = f"{len(shas)} different checkouts of the method are reachable here: {names}"
+        # A HELD checkout among them is the one case this refusal reads wrongly: a pin looks
+        # exactly like a split and is its opposite -- somebody chose it, for reproducibility. The
+        # fix is for the project to declare the pin so a match can read as agreement, and it is not
+        # built (docs/TODO.md S-001). Until it is, say which of the two this is where it happens:
+        # a refusal that cannot admit its own blind spot is how a check teaches people to skip it.
+        if any(not c["branch"] for c in live):
+            line += (" — one of them is HELD (DETACHED), which is what a deliberate pin looks like;"
+                     " telling a declared pin from a split is not built yet (docs/TODO.md S-001)")
+        return 3, line
     return 0, f"one method: {live[0]['version'] or '?'} ({live[0]['ref'] or live[0]['sha'][:12]})"
 
 
@@ -246,6 +255,22 @@ def _selftest():
                               dict(describe(os.path.join(clone, "skills", SKILL_DIRNAME)),
                                    origin="personal", link=clone)])
         assert code == 0, f"same commit twice read as a disagreement: {line}"
+
+        # -- a HELD checkout among the disagreeing ones is named as the blind spot it is, and
+        #    a disagreement between two MOVING branches is not (S-001 is about pins, not splits) --
+        held = os.path.join(tmp, "held")
+        subprocess.run(["git", "clone", "--quiet", os.path.join(tmp, "b"), held],
+                       capture_output=True, text=True, check=True)
+        subprocess.run(["git", "-C", held, "checkout", "--quiet", "--detach", "HEAD"],
+                       capture_output=True, text=True, check=True)
+        held_skill = os.path.join(held, "skills", SKILL_DIRNAME)
+        assert describe(held_skill)["branch"] == "", "a detached checkout claimed a branch"
+        _, line = verdict([dict(describe(a), origin="here", link=a),
+                           dict(describe(held_skill), origin="project", link=held_skill)])
+        assert "S-001" in line, f"a held checkout was not named as the blind spot: {line}"
+        _, line = verdict([dict(describe(a), origin="here", link=a),
+                           dict(describe(b), origin="personal", link=b)])
+        assert "S-001" not in line, f"two moving branches were called a pin: {line}"
 
         # -- a copy in NO repository is refused, and refused differently from a disagreement --
         loose = os.path.join(tmp, "loose", "skills", SKILL_DIRNAME)
