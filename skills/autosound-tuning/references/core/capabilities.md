@@ -152,6 +152,7 @@ named here must exist, and every module with a command line must be on the board
 
 | what you want | what you get | command / call | needs · refuses without | phase | maturity | read |
 |---|---|---|---|---|---|---|
+| which version of the method is actually running / яку версію методу справді запущено | every deployment this machine can reach, with its version, its checkout and whether it is held still or moving; a refusal when two of them are different commits | `rew_tool/deployment.py` | git; refuses when a copy cannot say which checkout it is — unknown is not agreement | any | field | `tooling/installation.md` |
 | does the tooling work here / чи працює інсталяція | the deterministic core, offline | `scripts/smoke_test.py` | python3, numpy, scipy | — | field | `tooling/installation.md` |
 | every module's own checks / усі селфтести | one entry point, what CI runs | `scripts/run-selftests.sh` | — | — | field | `CLAUDE.md` of the repo |
 | the installers agree; a tag is safe to cut / інсталятори, тег | the shared constants compared; this repo's inventory (manifest, note, triplet, CI on the sha) plus the hub's channel preflight, called not copied | `scripts/installer-consistency.py`, `scripts/tag-check.sh vX.Y.Z` | the hub checked out beside this repo (or `PREFLIGHT=`); `gh` for the CI gate | — | field | `CHANGELOG.md` (doctrine section) |

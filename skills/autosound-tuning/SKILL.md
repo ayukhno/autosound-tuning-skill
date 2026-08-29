@@ -39,6 +39,16 @@ or `~/.claude/skills/autosound-tuning`.
 **Do not search the disk for it.** The skill is normally installed as a symlink, and `find` does
 not descend into one — a real session lost minutes to `find . -name rew_tool` returning nothing.
 
+**More than one of those candidates can exist, at different versions — and that is not rare.** A
+plugin install, a developer symlink on a moving branch, and a per-project pin a run holds still are
+all legitimate, all present at once, and none of them announces itself. The failure mode is silent
+by construction: the project's scripts put the pin's `rew_tool` on `sys.path` while you advise out
+of a different checkout, both run, neither is wrong out loud. **Say which one you loaded, and check
+it against the project's, before proposing anything** — `python3 rew_tool/deployment.py <project>`
+(exit 0 one method, 3 they disagree, 4 one cannot say which it is). A disagreement is a finding for
+the user, not something to resolve by picking: the maths behind their numbers and the method behind
+your advice are different versions, and which one is right is their call.
+
 ---
 
 ## 🏛️ Three Roles
@@ -53,6 +63,7 @@ Tone: equal colleagues. Accept a correct critique fully; argue disagreements in 
 
 ## 🔄 Pre-Session & Resume (every start)
 
+0. **Which method is this:** `python3 rew_tool/deployment.py <project>` — state the version you are running. A refusal (exit 3/4) is named to the user before step 1, not worked around; see `📍 Resolving paths` above.
 1. **Hardware:** mic connected, REW API on :4735, cabin closed, active DSP input matches the task.
 2. **Reconcile state from disk — MACHINE FILES FIRST, prose second.** One call for the whole picture: `python3 rew_tool/contract.py check <project>`. Concretely: `process/process-state.json` for the active phase + plan (`python3 rew_tool/state/process.py <project>/process show`) is where the phase/plan actually live now — **not** `tuning-changelog`'s ▶️ CONTINUE block, which is a human-readable cross-check, not the source. Then the ledger HEAD (multi-slot DSP → the active-slot banner first, `python3 rew_tool/state/state.py registry render`) and `project.json` (car/equipment/glossary/hardware facts, `python3 rew_tool/project.py <project> show`). Read `audit-trail.md`/`tuning-changelog` alongside for the human narrative, but if prose and the machine files disagree, **the machine files win** — that divergence is itself worth flagging to the user. Ask what the user changed manually.
 3. **Banked decisions:** 🟡 items agreed earlier but not yet applied → prompt to apply before proposing anything new.

@@ -45,6 +45,30 @@ an INFO line on the reviewer channel (local CLI / API key) without failing on it
 python3 skills/autosound-tuning/scripts/smoke_test.py     # exit 0 = healthy · SMOKE_VERBOSE=1 for tracebacks
 ```
 
+## Which method is actually running here (one command)
+
+The three shapes above can all be present **at the same time**, and that is normal: a plugin
+install pinned by sha, a developer symlink into a clone that moves with `main`, a per-project
+`.claude/skills/autosound-tuning` a run keeps detached at a tag so its numbers stay reproducible.
+Nothing is wrong with having several. What goes wrong is that none of them says which it is — so a
+project's scripts can compute on one version while the session advises from another, both working,
+neither complaining. (Measured on the author's machine 2026-08-29: scripts on `v3.0.33`, session on
+`3.0.36`, working tree on `3.0.37`.)
+
+```
+python3 rew_tool/deployment.py                 # this copy and the personal ~/.claude one
+python3 rew_tool/deployment.py <project-dir>   # ... plus that project's own pin
+```
+
+It prints every deployment it can reach with its version, its checkout and whether that checkout is
+held still (`DETACHED`) or moving (a branch name), and it **refuses** — exit 3 — when two of them
+are different commits. A copy that cannot say which checkout it is exits 4 instead: unknown is not
+agreement.
+
+It does not tell you which one to prefer, on purpose. Which candidate wins is decided by the loader
+doing the asking — Claude Code's skill loader and a script's `sys.path` are two mechanisms with two
+rules — so the fact worth reporting is the disagreement, which is true whichever one wins.
+
 ## Troubleshooting
 
 - **Antigravity / agy sandbox — state snapshots vanish.** Some agent environments restrict certain file writes to the session's own directory (observed on Antigravity: an artifact-write outside `…/brain/<session>/` was refused). If versioned snapshots don't land where you expect, point `AUTOSOUND_STATE_ROOT` inside the project and verify it's writable **from within the session**: `python3 rew_tool/state/state.py selftest` (must print `selftest OK`); confirm the root actually fills after the first `apply.py propose`.

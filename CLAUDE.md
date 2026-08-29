@@ -38,6 +38,30 @@ lists the upstream commits that touched the file since the sha; **a difference l
 ours, an unlisted one is a drift** — and a deviation recorded anywhere the checker does not look is the
 one somebody will "fix back". The licence text goes verbatim into `LICENSES/NOTICE.md`.
 
+## The method is deployed more than once, and only one copy is edited
+
+`~/dev/autosound/skill` is where the method is edited and versioned. Every other copy on a machine
+is a **deployment**: the installer's clone at a tag (`install.sh` puts it in
+`~/.claude/skills/.autosound-tuning-src` and symlinks `~/.claude/skills/autosound-tuning` at it),
+a per-project pin a run holds detached so its numbers stay reproducible, the submodule
+`autosound-tcc` records by sha. Several at once is normal and none of them is wrong.
+
+**What is wrong is a deployment that cannot say which it is.** The version lives in
+`.claude-plugin/plugin.json` at the repo root — one level ABOVE `skills/autosound-tuning`, which is
+the only path any consumer is ever handed. So the identity has to be *asked for*, and until
+2026-08-29 nothing asked: a tuning run computed on `v3.0.33` while the session advising it read
+`3.0.36` and the working tree sat on `3.0.37`. Three versions, all working, no complaint. That is
+the same shape as the two partial selftest sets below — each half believing it was the whole.
+
+`rew_tool/deployment.py` is the check, and `SKILL.md`'s Pre-Session step 0 is what makes a session
+run it. It refuses on disagreement (exit 3) and refuses separately on a copy with no identity
+(exit 4), because those are different repairs. It does NOT rank the candidates: which one a loader
+prefers is decided outside this repo, so the fact worth reporting is the one that stays true
+whichever wins. **A rule about which copy to use, written anywhere but in a check, is the rule that
+already failed** — "the personal symlink is gone and is not to be restored" was decided 2026-08-13,
+lived only in a memory file, and was contradicted by `install.sh:774`, which creates that very
+symlink on every user machine. It came back on 2026-08-26 and nothing noticed.
+
 ## Tests
 
 - **`scripts/run-selftests.sh` is the single entry point** — the installer check plus every

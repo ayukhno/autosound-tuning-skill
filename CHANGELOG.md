@@ -42,6 +42,34 @@ Two consequences worth stating, because both have already caused a question:
 
 ## [Unreleased]
 
+- **The method now says WHICH copy of itself is running — `rew_tool/deployment.py`.** `provenance.py`
+  (v3.0.37) put the sha into the artifacts, where a reader finds it days later. This is the other
+  half of the same identifier: the one that has to reach a screen while the run is happening. The
+  method is deployed several times on the same machine on purpose — the installer's clone at a tag,
+  a developer symlink on a moving branch (`references/tooling/installation.md` §2 blesses it), a
+  per-project pin a run holds detached for reproducibility, TCC's submodule — and none of them
+  announced itself, because the version lives in `.claude-plugin/plugin.json` one level ABOVE
+  `skills/autosound-tuning`, which is the only path a consumer is ever handed. Measured on the
+  author's machine 2026-08-29: a tuning project's scripts on `v3.0.33`, the session advising it on
+  `3.0.36`, the working tree on `3.0.37`. All three worked. None complained. `deployment.py` lists
+  every deployment it can reach with its version, its checkout and whether that checkout is held
+  still or moving, and refuses on disagreement (exit 3); a copy that cannot say which checkout it is
+  refuses separately (exit 4), because unknown is not agreement and the two need different repairs.
+- **It does not rank the candidates, on purpose.** Which copy a loader prefers is decided outside
+  this repo — Claude Code's skill loader and a script's `sys.path` are two mechanisms with two rules
+  — so a module guessing at the ranking would be asserting the one thing it cannot see from inside
+  one of the candidates. What it reports is the disagreement, which is true whichever one wins, and
+  it hands the choice to the person whose numbers are at stake.
+- **`SKILL.md` Pre-Session step 0 runs it.** A check nothing calls is a file. The session states the
+  version it loaded before it proposes anything, so the method's version and the maths' version
+  appear side by side in the transcript rather than being assumed equal. Costs one command per
+  session; the divergence it names cost a silent three-way split for three days.
+- **Board row in `capabilities.md` §M**, and the reasoning in `CLAUDE.md` — including why the
+  previous form of this rule failed: "the personal symlink is gone and is not to be restored" was
+  decided 2026-08-13, lived only in a memory file, and was contradicted by `install.sh:774`, which
+  creates that symlink on every user machine. It came back on 2026-08-26 and nothing noticed. A rule
+  about which copy to use, written anywhere but in a check, is a rule that has already failed.
+
 - **`scripts/tag-check.sh` gives the git half away and gates on CI.** Everything about the release
   channel -- clean tree, HEAD published, `push.followTags`, the newest tag on the remote, the tag
   being free, the tag rule, and the hook's reading of the exact lines that will be run -- now comes
