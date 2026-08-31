@@ -295,6 +295,44 @@ def validate_profile(data):
 
 
 # ── read/write ────────────────────────────────────────────────────────────────
+def bind_model_rate(project_dir_or_profile):
+    """Bind the response model to THIS device's processing rate, and say what happened.
+
+    Returns `(rate_hz_or_None, note_or_None)`. The note is `None` only when the profile states a
+    rate and the model is on it — every other case has something a session must be told, and the
+    caller prints it. The rate is bound in `dsp_math`, so `xo_response` / `peq_response` model at
+    the device's rate instead of a module constant.
+
+    Call this ONCE, early, before anything is modelled — not inside the `--align` branch, which is
+    where the delay grid reads the rate today. The crossover model runs whether or not alignment
+    is asked for, so a binding that happens only on that path leaves the common case unbound.
+
+    Why this lives here and not in `load_profile`: loading a profile is also what VALIDATORS do,
+    to a profile that may describe some other device entirely, and a load that silently rebinds
+    the model would make validation change the session's arithmetic. Binding is a decision, so it
+    is a call.
+
+    `dsp_math` is imported lazily: this module is pure stdlib on purpose and is read by tools that
+    have no numpy.
+    """
+    import dsp_math
+    profile = project_dir_or_profile
+    if isinstance(profile, str):
+        path = os.path.join(profile, "dsp_profile.json") if os.path.isdir(profile) else profile
+        try:
+            with open(path) as fh:
+                profile = json.load(fh)
+        except (OSError, ValueError):
+            return None, dsp_math.rate_note(None)
+    rate = processing_rate_hz(profile)
+    if rate:
+        try:
+            dsp_math.bind_processing_rate(float(rate), source="profile")
+        except dsp_math.RateConflict as exc:
+            return float(rate), str(exc)
+    return (float(rate) if rate else None), dsp_math.rate_note(float(rate) if rate else None)
+
+
 def load_profile(path):
     with open(path) as f:
         return json.load(f)

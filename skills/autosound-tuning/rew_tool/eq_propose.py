@@ -505,6 +505,14 @@ def main(argv=None):
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args(argv)
+    # The response model is bound to THIS device's processing rate before anything is modelled.
+    # Not inside a branch: the crossover model runs on every path, and a binding that happens only
+    # where the delay grid is computed leaves the common case on a module constant (hub #28).
+    if getattr(args, "project", None):
+        import dsp_profile as _dp_bind
+        _rate_hz, _rate_note = _dp_bind.bind_model_rate(args.project)
+        if _rate_note:
+            print(f"  \u26a0 {_rate_note}", file=sys.stderr)
     if args.selftest:
         return _selftest()
     if not args.project or not args.house or not (args.solos or args.rew):

@@ -59,7 +59,21 @@ import verify as _verify  # noqa: E402
 import apply as _apply  # noqa: E402
 import state as _state  # noqa: E402
 
+#: The CAPTURE rate — REW's, the rate the synthetic impulse responses are sampled at. This is
+#: NOT the DSP's processing rate; the two are different facts about different boxes and this
+#: file used one name for both until 2026-08-31 (see DSP_RATE below).
 FS = 96000
+CAPTURE_FS = FS
+
+#: The synthetic car's DSP PROCESSING rate, written as a literal ON PURPOSE.
+#:
+#: It used to be `FS`, and that one line blinded the whole walk: the profile handed to the tools
+#: took its rate FROM the constant the crossover model computed at, so the two could never
+#: disagree and this end-to-end check could not have caught a model that ignored the profile.
+#: A fixture that supplies the answer it is meant to test is not a test. The literal is the
+#: same number (this synthetic car is a Helix DSP Ultra S) but it is now an INDEPENDENT fact,
+#: and `_selftest` exercises a profile that disagrees with the model on purpose.
+DSP_RATE = 96000
 PY = sys.executable
 
 # ---------------------------------------------------------------- the definitions
@@ -170,10 +184,15 @@ def _xo(fb, corner, order, kind, family):
     the walk's own probes call `driver_shape(np.array([f]))` on one-point grids -- so the value at
     1000 Hz, cached for m-L, came back for the tweeter at 8000 Hz: a true number from the right
     function for the wrong frequency, and it failed a real assertion, which is the only reason it
-    was found. Hashing 65537 floats costs well under a millisecond."""
+    was found. Hashing 65537 floats costs well under a millisecond.
+
+    The RATE is in the key for the same reason, added 2026-08-31 when `xo_response` stopped
+    taking it from a module constant: without it, a response computed before a profile was bound
+    would be handed back after -- once again a true number from the right function, at the wrong
+    rate, and this time nothing would fail."""
     import hashlib
     key = (hashlib.blake2b(np.ascontiguousarray(fb).tobytes(), digest_size=16).digest(),
-           float(corner), int(order), kind, family)
+           float(corner), int(order), kind, family, dsp_math.processing_rate())
     h = _XO_CACHE.get(key)
     if h is None:
         h = _XO_CACHE[key] = dsp_math.xo_response(fb, corner, order, kind, family)
@@ -267,7 +286,7 @@ def _selftest():
     data = pj.load()
     data["car"] = {"make": "Synthetic", "model": "Path", "year": 2026}
     data["dsp"] = {"vendor": "Audiotec-Fischer", "model": "Helix DSP Ultra S",
-                   "dsp_processing_rate_hz": FS}
+                   "dsp_processing_rate_hz": DSP_RATE}
     data["mic"] = {"model": "synthetic", "sample_rate_hz": FS}
     data["channels"] = [{"code": c, "role": ROLES[c], "tier": "channels"} for c in DRIVERS]
     data["glossary"] = {"channels": [{"code": c, "active": True} for c in DRIVERS],
@@ -350,7 +369,7 @@ def _selftest():
     _run(tool("predict.py"), "--solos", set1, "--project", proj, "--baseline", "--align", "--out", out2, env=env)
     delta = json.load(open(os.path.join(out2, "aligned-delta.json")))
     aligned = json.load(open(os.path.join(out2, "aligned.json")))
-    step = 1000.0 / FS
+    step = 1000.0 / DSP_RATE
     assert abs(aligned["step_ms"] - step) < 1e-9, "delays must land on the DSP's grid, from the profile's rate"
     # What the definitions imply -- and what they do NOT. A first draft expected every delay to be
     # the raw arrival difference (the sub arrives last, at 768); the tool answered 5.19 ms for w-L

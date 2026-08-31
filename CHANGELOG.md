@@ -42,6 +42,37 @@ Two consequences worth stating, because both have already caused a question:
 
 ## [Unreleased]
 
+- **The response model now runs at the DSP's OWN processing rate, and a session is told when it
+  cannot — `rew_tool/dsp_math.py`, `dsp_profile.py`, `path_check.py`.** `xo_response` had no rate
+  argument at all: every crossover this method proposed, predicted or checked was computed at the
+  `FS = 96000` written into the module, whatever the processor in the car actually ran at. The
+  profile knew better — `dsp_processing_rate_hz` has been there, with its own migration and
+  validation — but that number reached the DELAY grid and stopped. Nothing compared the two, and
+  the one place they met made them equal: `path_check`'s synthetic profile took its rate FROM `FS`,
+  so the end-to-end walk could not have caught a model that ignores the profile. A fixture that
+  supplies the answer it is meant to test is not a test. Found while checking the premise of a
+  research RFC (hub `#25`) that proposed switching the crossover model from an analog prototype to a
+  digital biquad: measurement said the model was ALREADY digital — `scipy` designs with the bilinear
+  transform, prewarped at the corner, matching a closed-form digital biquad to 0.000 dB in six of
+  six cases against 2.070–5.523 dB for the analog form — so the proposal was empty and the real hole
+  was one level down, in which rate that digital form is taken at. What it would have cost on a
+  48 kHz processor, had one ever been tuned with this: 0.149 dB out at 2 kHz, 0.960 at 5 kHz, 4.253
+  at 10 kHz (BW24, fc 80 Hz), tens of dB approaching that device's Nyquist — and silently, because
+  `verify_prediction` reads JUNCTION bands, which is exactly where the error vanishes and from which
+  it grows upward. Now: the rate is bound from the project profile (`dsp_profile.bind_model_rate`,
+  called by `predict`, `eq_propose` and `xover_candidates` before anything is modelled, not inside
+  the `--align` branch where the delay grid reads it); it carries its SOURCE — `profile`, `explicit`
+  or `assumed` — the way `protectiveState` and `sessionState` do, because a default that cannot be
+  told from a stated fact is read as one; a profile that states no rate produces a warning rather
+  than a shrug; and two different rates inside one session raise instead of last-writer-wins. PEQ
+  and shelves follow the same bound rate — leaving them on a constant while crossovers followed the
+  device would have replaced one divergence with another. `path_check`'s profile rate is now an
+  independent literal, and `_XO_CACHE` keys on the rate: without that, a response computed before a
+  profile was bound would come back after it — the same "true number from the right function at the
+  wrong parameter" that the cache's own comment records from its first draft. The all-pass
+  (`apf1_response`/`apf2_response`) is deliberately untouched: it is computed in the analog form on
+  purpose, and changing that is a change to what the method recommends, not to its machinery.
+
 - **A converted set now names the REW session it came out of, and the name is CHECKED —
   `rew_tool/resonalyze_ir.py`.** Until now the `.mdat` a measurement came from was written down by
   the operator, or not written down at all: REW's API is measurement-scoped, no endpoint these tools

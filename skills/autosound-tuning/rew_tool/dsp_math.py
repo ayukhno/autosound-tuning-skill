@@ -1,10 +1,103 @@
 """Vectorized DSP building blocks for the v3 acoustic-target pipeline.
 All responses are complex numpy arrays over an arbitrary frequency vector,
-digital-domain at FS=96000 (matches Helix DSP Ultra S).
+digital-domain at the DSP's PROCESSING rate — `processing_rate()`, which a session binds
+from the project's `dsp_profile.dsp_processing_rate_hz` and which falls back to `FS` only
+when nobody has stated one, and says so when it does.
 """
 import numpy as np
 
+#: The processing rate ASSUMED when no profile has stated one. It is the reference car's
+#: (Helix DSP Ultra S), not a property of anything — which is exactly why it must never be
+#: used silently. Read `processing_rate()`, do not read this.
 FS = 96000.0
+
+# ── the rate is STATE, not a constant, and it always says where it came from ───────────────
+#
+# Until 2026-08-31 the crossover model took `FS` directly and `xo_response` had no rate
+# argument at all, so every predicted and proposed crossover was computed at 96 kHz whatever
+# the device ran at. The project profile knew better (`dsp_profile.dsp_processing_rate_hz`)
+# and that number reached the DELAY grid and stopped there. Nothing compared the two, and the
+# one place they met — `path_check`'s synthetic profile — ASSIGNED `FS` to the profile, so the
+# end-to-end walk made them equal by construction and could not have caught it.
+#
+# The bill, had a 48 kHz processor ever been tuned with this: 0.149 dB out at 2 kHz, 0.960 at
+# 5 kHz, 4.253 at 10 kHz (BW24, fc 80 Hz), and tens of dB approaching that device's Nyquist —
+# silently, because `verify_prediction` reads JUNCTION bands, which is where the error is
+# smallest and from which it grows upward.
+#
+# So the rate carries its SOURCE, the way `protectiveState` and `sessionState` do elsewhere in
+# this tree, and for the same reason: a default that cannot be told apart from a stated fact
+# is read as a stated fact.
+#
+#: `profile` — bound from a device profile. `explicit` — bound by a caller or a test.
+#: `assumed` — nobody stated one; `FS` is standing in, and every report must say so.
+RATE_SOURCES = ("profile", "explicit", "assumed")
+
+_RATE = {"hz": FS, "source": "assumed"}
+
+
+class RateConflict(ValueError):
+    """Two different processing rates inside one session."""
+
+
+def processing_rate():
+    """`(hz, source)` — what the model is ACTUALLY computing at, and where that came from."""
+    return _RATE["hz"], _RATE["source"]
+
+
+def bind_processing_rate(hz, source="explicit"):
+    """Bind the rate every response is modelled at. Idempotent; conflicting re-binds RAISE.
+
+    A conflict is not a rare accident — it is one session modelling two devices, or a profile
+    loaded after work has already been done at the assumed rate. Either way the responses
+    already computed are at the other rate, so continuing quietly would mix them. Callers that
+    genuinely want to change rate call `reset_processing_rate()` first and say why.
+    """
+    if source not in RATE_SOURCES:
+        raise ValueError(f"rate source must be one of {RATE_SOURCES}, not {source!r}")
+    hz = float(hz)
+    if not np.isfinite(hz) or hz <= 0:
+        raise ValueError(f"processing rate must be a positive rate, got {hz!r}")
+    cur, cur_src = _RATE["hz"], _RATE["source"]
+    if cur_src != "assumed" and cur != hz:
+        raise RateConflict(
+            f"this session already models at {cur:g} Hz (from: {cur_src}) and is now asked for "
+            f"{hz:g} Hz (from: {source}). Responses already computed are at {cur:g} Hz, so the "
+            f"two cannot be mixed. Call reset_processing_rate() first if the change is meant.")
+    _RATE.update(hz=hz, source=source)
+    return hz
+
+
+def reset_processing_rate():
+    """Back to the assumed rate. For tests, and for a caller deliberately switching device."""
+    _RATE.update(hz=FS, source="assumed")
+
+
+def rate_note(profile_rate_hz):
+    """What a session must SAY about its modelling rate. `None` only when there is nothing to say.
+
+    Three answers, and none of them is silence — this is the whole point of the function:
+
+      * the profile states a rate and the model is on it        -> None
+      * the profile states a rate and the model is NOT on it    -> the divergence, both numbers
+      * the profile states nothing                              -> named as assumed, not as fine
+
+    Deliberately shaped like `state/process.py`'s existing capture-vs-processing note ("captured
+    at X; the DSP processes at Y -- fine, working with it"): that one already tells a session its
+    two rates differ. The crossover model was the one place that never got the message.
+    """
+    hz, source = processing_rate()
+    if profile_rate_hz is None:
+        return (f"no processing rate in the profile: crossovers are modelled at {hz:g} Hz "
+                f"(source: {source}) -- assumed, not stated. A device that processes at another "
+                f"rate is being modelled with the wrong prewarping, and nothing downstream can "
+                f"tell. State dsp_processing_rate_hz in the profile.")
+    if float(profile_rate_hz) != hz:
+        return (f"the profile says the DSP processes at {float(profile_rate_hz):g} Hz, but "
+                f"crossovers are modelled at {hz:g} Hz (source: {source}). The modelled shape is "
+                f"not the shape this device makes -- the error grows with frequency and is "
+                f"SMALLEST at the junction, which is where verify_prediction reads.")
+    return None
 
 
 # ---------- crossover filters (same conventions as v2, minus Chebyshev) ----------
@@ -13,6 +106,14 @@ FS = 96000.0
 # metrics, greedy EQ fit — is pure numpy and must keep working without scipy
 # (soft degradation: an install without scipy can still run eq_gate and all
 # joint-phase analysis; only crossover REALIZATION needs the extra dep).
+
+def _fs(fs):
+    """The rate a response is computed at: the caller's if given, else the session's bound one.
+
+    Never `FS` directly — that constant is the fallback INSIDE `_RATE`, and reading it here is
+    how the model came loose from the device in the first place."""
+    return float(fs) if fs is not None else _RATE["hz"]
+
 
 def _scipy_signal():
     try:
@@ -46,12 +147,18 @@ def _design(order_db_per_oct, wn, btype, ftype):
     return sig.butter(n, wn, btype=btype, output="sos")
 
 
-def xo_response(freqs_hz, corner_hz, order_db_per_oct, kind, ftype):
-    """Complex response of one HPF/LPF slot. kind: 'hp'|'lp'. ftype: 'BW'|'BE'|'LR'."""
+def xo_response(freqs_hz, corner_hz, order_db_per_oct, kind, ftype, fs=None):
+    """Complex response of one HPF/LPF slot. kind: 'hp'|'lp'. ftype: 'BW'|'BE'|'LR'.
+
+    `fs` is the DSP's PROCESSING rate; omitted, the session's bound rate is used
+    (`processing_rate()`). scipy designs digitally — `warped = 2*fs*tan(pi*Wn/fs)` then the
+    bilinear transform — so this rate is not a formality: it sets the prewarping, and getting it
+    wrong bends the shape upward from the corner."""
     sosfreqz = _scipy_signal().sosfreqz
-    wn = min(max(corner_hz / (FS / 2.0), 1e-4), 0.999)
+    fs = _fs(fs)
+    wn = min(max(corner_hz / (fs / 2.0), 1e-4), 0.999)
     btype = "highpass" if kind == "hp" else "lowpass"
-    w = 2 * np.pi * freqs_hz / FS
+    w = 2 * np.pi * freqs_hz / fs
     if ftype == "LR":
         sos = _design(max(6, order_db_per_oct // 2), wn, btype, "BW")
         _, h = sosfreqz(sos, worN=w)
@@ -125,8 +232,8 @@ def options_for(profile_types, families=MODELLABLE_FAMILIES):
 
 # ---------- biquad EQ (RBJ cookbook, digital, matches Helix PEQ bank) ----------
 
-def _biquad_h(freqs_hz, b0, b1, b2, a0, a1, a2):
-    z1 = np.exp(-1j * 2 * np.pi * freqs_hz / FS)
+def _biquad_h(freqs_hz, b0, b1, b2, a0, a1, a2, fs=None):
+    z1 = np.exp(-1j * 2 * np.pi * freqs_hz / _fs(fs))
     z2 = z1 * z1
     return (b0 + b1 * z1 + b2 * z2) / (a0 + a1 * z1 + a2 * z2)
 
@@ -137,7 +244,7 @@ def _biquad_h(freqs_hz, b0, b1, b2, a0, a1, a2):
 _SHELF_KINDS = {"LS": "LS", "LSH": "LS", "HS": "HS", "HSH": "HS"}
 
 
-def peq_response(freqs_hz, kind, f0, gain_db, q):
+def peq_response(freqs_hz, kind, f0, gain_db, q, fs=None):
     """kind: 'PK' | 'LS'/'LSH' | 'HS'/'HSH'. Complex response.
 
     Anything else is refused. It used to fall through to the high shelf — `PK` was one branch,
@@ -149,7 +256,7 @@ def peq_response(freqs_hz, kind, f0, gain_db, q):
         raise ValueError(f"peq_response: unknown EQ kind {kind!r} (PK, LS/LSH, HS/HSH; "
                          f"an all-pass goes through apf1_response/apf2_response)")
     A = 10.0 ** (gain_db / 40.0)
-    w0 = 2 * np.pi * f0 / FS
+    w0 = 2 * np.pi * f0 / _fs(fs)
     cw, sw = np.cos(w0), np.sin(w0)
     if kind == "PK":
         alpha = sw / (2 * q)
@@ -173,7 +280,7 @@ def peq_response(freqs_hz, kind, f0, gain_db, q):
                  (A + 1) - (A - 1) * cw + tsa,
                  2 * ((A - 1) - (A + 1) * cw),
                  (A + 1) - (A - 1) * cw - tsa)
-    return _biquad_h(freqs_hz, *c)
+    return _biquad_h(freqs_hz, *c, fs=fs)
 
 
 def apf1_response(freqs_hz, f0):
@@ -1007,6 +1114,54 @@ def _selftest():
     # The default constant stays the reference car's grid and must not silently widen.
     assert ("CHEBYSHEV", 12) not in XO_OPTIONS and ("LR", 48) not in XO_OPTIONS
 
+    # ---- the processing rate is bound, and a session KNOWS when it diverges from the profile ----
+    #
+    # The point of these cases is NOT "the model runs at another rate" -- it is that a profile and
+    # a model on different rates cannot pass QUIETLY. Checked across the rates a car processor
+    # actually ships with, not just the 48 kHz that prompted this, because a check written against
+    # one number proves that number and nothing else.
+    reset_processing_rate()
+    assert processing_rate() == (FS, "assumed"), processing_rate()
+    # (a) nobody stated a rate: named as assumed, never as fine
+    n = rate_note(None)
+    assert n and "assumed, not stated" in n, n
+    # (b) profile agrees with the model -> the ONLY case that says nothing
+    assert rate_note(FS) is None
+    # (c) profile disagrees -> caught, at every rate, with BOTH numbers in the text
+    for other in (32000.0, 44100.0, 48000.0, 88200.0, 192000.0):
+        note = rate_note(other)
+        assert note and f"{other:g}" in note and f"{FS:g}" in note, (other, note)
+    # (d) once bound from a profile, the model IS on that rate and the note falls silent there
+    for r in (44100.0, 48000.0, 96000.0, 192000.0):
+        reset_processing_rate()
+        bind_processing_rate(r, source="profile")
+        assert processing_rate() == (r, "profile")
+        assert rate_note(r) is None, r
+        assert rate_note(FS if r != FS else 48000.0) is not None, r
+    # (e) two different rates in one session is a conflict, not a last-writer-wins
+    reset_processing_rate()
+    bind_processing_rate(48000.0, source="profile")
+    bind_processing_rate(48000.0, source="profile")          # idempotent
+    try:
+        bind_processing_rate(96000.0, source="profile")
+    except RateConflict as e:
+        assert "48000" in str(e) and "96000" in str(e), str(e)
+    else:
+        raise AssertionError("a second, different rate was accepted inside one session")
+    # (f) the rate is LOAD-BEARING, not decorative: the same filter differs by rate away from
+    #     its corner, and agrees AT the corner -- which is why a junction-band check cannot see it
+    reset_processing_rate()
+    fprobe = np.array([2000.0, 5000.0, 10000.0])
+    at96 = 20 * np.log10(np.abs(xo_response(fprobe, 80.0, 24, "lp", "BW", fs=96000.0)))
+    at48 = 20 * np.log10(np.abs(xo_response(fprobe, 80.0, 24, "lp", "BW", fs=48000.0)))
+    assert abs(abs(at96[2] - at48[2]) - 4.253) < 0.01, (at96, at48)
+    corner96 = 20 * np.log10(abs(xo_response(np.array([80.0]), 80.0, 24, "lp", "BW", fs=96000.0)[0]))
+    corner48 = 20 * np.log10(abs(xo_response(np.array([80.0]), 80.0, 24, "lp", "BW", fs=48000.0)[0]))
+    assert abs(corner96 - corner48) < 0.02, (corner96, corner48)
+    # (g) an unbound session still computes -- but says "assumed", so nothing reads it as stated
+    reset_processing_rate()
+    assert processing_rate()[1] == "assumed" and rate_note(None) is not None
+
     print("selftest[dsp_math] OK -- APF1 (-90 deg at f0, 0..-180, 1/(pi f0) delay far below f0), "
           "APF2 (-180 deg at f0, 0..-360, Q steepens), APF1^2 == APF2(Q=0.5), "
           "eq_complex renders APF/LSH/HSH as themselves and refuses an unknown kind, "
@@ -1015,7 +1170,9 @@ def _selftest():
           "was asked for (LR -6.02 dB, BW/BE -3.01 dB, 54 combinations) and falls at the "
           "order it was asked for (+-1.2 dB/oct over an octave of stopband), and its phase at its own "
           "corner does not depend on where that corner is; and the whole grid matches an "
-          "independent zpk reference to 0.000 dB / 0.00 deg.")
+          "independent zpk reference to 0.000 dB / 0.00 deg; and the processing rate is bound "
+          "with its source, diverges loudly from a profile at 32/44.1/48/88.2/192 kHz, refuses a "
+          "second rate in one session, and is load-bearing away from the corner while silent at it.")
 
 
 if __name__ == "__main__":
