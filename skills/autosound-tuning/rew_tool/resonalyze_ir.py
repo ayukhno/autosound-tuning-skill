@@ -47,6 +47,13 @@ commit d11186e, 2026-08-19):
     Resonalyze's deserializer ignores unknown members, so it travels harmlessly and a
     reader can audit every number without the manifest.
 
+  * the SESSION the measurements came out of — `rewSource.session`, `sessionState` and
+    (when it was checked) `sessionSha256`, in every file and in the manifest. REW's API is
+    measurement-scoped: nothing in it reports which `.mdat` is open, so the session is named
+    on the command line. `--session PATH` does not merely record that name — it is CHECKED:
+    every measurement's uuid must be found inside the file, or nothing is written. See
+    `scan_session`.
+
 NOT carried (REW has none of it): transfer coherence, mic/loopback level meters, the
 SPL calibration, the audio-session record. All are optional in the format; Resonalyze's
 consumers fall back without them (checked in `dsp/*.cs`).
@@ -64,6 +71,7 @@ document is checked here against the same rules that would reject it there.
 Deps: numpy (FFT). Live use needs REW with its API on; `--selftest` is offline.
 CLI:
   python3 resonalyze_ir.py --title "w-L_01 (sw)=w_L" --title "sw_01 (sw)=sw" --out DIR
+        (--session "REW-2026-07-12 v10.mdat" | --session-name NAME | --session-unknown)
         [--bits 24] [--play-channel Left] [--sweep-seconds S] [--averages 1]
         [--hpf m_L=100:LR:24 ...] [--note "..."]
   python3 resonalyze_ir.py --selftest
@@ -72,16 +80,18 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import json
 import math
 import os
 import sys
+import uuid as uuidlib
 from datetime import datetime, timezone
 
 import numpy as np
 
 CONVERTER = "autosound-tuning-skill rew_tool/resonalyze_ir.py"
-CONVERTER_VERSION = "1.0 (2026-08-19, format v7 as of Resonalyze d11186e)"
+CONVERTER_VERSION = "1.1 (2026-08-31, format v7 as of Resonalyze d11186e; session provenance)"
 FORMAT = "resonalyze-impulse-response"
 VERSION = 7
 PLAY_CHANNELS = ("Mono", "Left", "Right", "Stereo")
@@ -412,6 +422,106 @@ def _hpf_from_record(record, channel):
                    "slopeDbPerOct": int(hp["slope"])}
 
 
+# ------------------------------------------------------- session identity (provenance)
+
+def scan_session(path, uuids, chunk=8 << 20):
+    """One pass over a REW `.mdat`: its sha256, and which of `uuids` are inside it.
+
+    An `.mdat` is `Java serialization data, version 5` — REW's own classes, undocumented and
+    coupled to the beta that wrote them. We deliberately do NOT parse it. A measurement's uuid
+    is serialised as two `long`s, i.e. exactly the sixteen raw bytes `UUID(...).bytes` gives,
+    and a byte search finds it while knowing nothing about the format.
+
+    That is the whole trick, and it is why this module reads the session file at all: it buys
+    the IDENTITY half of "read the .mdat" at a cost that rounds to nothing, and leaves the DATA
+    half — which nobody has priced, and which would mean re-deriving REW's timing semantics out
+    of a Java blob — to the API, where those semantics are served as documented fields.
+
+    Read once, feed both the hasher and the search: 373 MB against 115 needles took ~9 s
+    (2026-08-31), versus 115 HTTP pulls of a 256k-sample IR for the same set.
+
+    What it proves is "this measurement IS IN this file", not "was taken from it" — a later
+    save of the same session contains everything an earlier one did. That is the weaker claim
+    on purpose, and it is the one the question is actually asked in: which file must be kept.
+    The error it does catch — a name that does not contain the measurement at all (stale, wrong
+    series, typo) — is the one that silently loses data.
+
+    Returns `(sha256_hex, found)`; `found` is the subset of `uuids` present in the file.
+    """
+    needles = {}
+    for u in uuids:
+        try:
+            needles[uuidlib.UUID(str(u)).bytes] = u
+        except (ValueError, AttributeError, TypeError):
+            raise ConversionError(
+                f"REW gave {u!r} as a measurement uuid and it is not one, so it cannot be "
+                f"looked for in the session file")
+    h = hashlib.sha256()
+    found, tail = set(), b""
+    overlap = 15                      # a 16-byte needle may straddle a chunk boundary
+    with open(path, "rb") as fh:
+        while True:
+            buf = fh.read(chunk)
+            if not buf:
+                break
+            h.update(buf)             # the hash sees the file exactly once -- never `hay`
+            hay = tail + buf
+            for needle, u in needles.items():
+                if u not in found and needle in hay:
+                    found.add(u)
+            tail = hay[-overlap:]
+    return h.hexdigest(), found
+
+
+def session_block(*, path=None, name=None, unknown=False, uuids_by_name=None):
+    """The provenance every written file carries — or the refusal, before anything is written.
+
+    Three states, and the shape deliberately mirrors `protectiveState` above, for the same
+    bought reason: one `null` that means two different things gets read downstream as the
+    harmless one. `protectiveHighPass: null` meaning "nobody said" was read as "no filter" two
+    tools away and cost 67 degrees at a junction (2026-08-25). So the state is always named:
+
+      `verified` — a path was given, the file was read, every uuid is in it; carries `sessionSha256`
+      `stated`   — a name was given, the file is not reachable here (archive, another disk)
+      `unknown`  — said out loud that nobody knows
+
+    There is no fourth, empty state. An empty session field reads as recorded while saying
+    nothing, which is worse than "unknown" — the reason `research`'s `pull_irs.py` makes its
+    own `--session` a hard requirement rather than a default.
+
+    Why a PATH and not just a name (this is where we diverge from `pull_irs.py`, knowingly —
+    hub `#20`): a name can only be recorded, a path can be CHECKED. With the path, the
+    operator's claim stops being a claim.
+    """
+    if unknown:
+        return {"session": None, "sessionState": "unknown",
+                "sessionNote": "nobody stated which .mdat these came from"}
+    if name:
+        return {"session": name, "sessionState": "stated",
+                "sessionNote": "named by the caller; the file was not reachable here, so the "
+                               "name is recorded but not checked against its contents"}
+    sha, found = scan_session(path, list(uuids_by_name.values()))
+    missing = {n: u for n, u in uuids_by_name.items() if u not in found}
+    if missing:
+        # Refuse, and write NOTHING. A set whose provenance does not hold up is exactly the
+        # set that must not end up on disk looking like every other set: internally consistent
+        # data under the wrong label reads as a real measurement (the m-L/m-R swap in
+        # `references/tooling/rew-api-quirks.md` happened that way).
+        raise ConversionError(
+            f"{len(missing)} of {len(uuids_by_name)} measurements are not in "
+            f"{os.path.basename(path)!r}:\n"
+            + "\n".join(f"  {n:8} uuid {u}" for n, u in sorted(missing.items()))
+            + "\n\nNothing was written. REW is serving measurements that this session file does "
+              "not contain, which means the .mdat named here is not the one REW has open — "
+              "check the title bar. Pass --session-name to record a name without checking it, "
+              "or --session-unknown to say so outright.")
+    return {"session": os.path.basename(path), "sessionState": "verified",
+            "sessionSha256": sha,
+            "sessionNote": "every measurement's uuid was found in this file at extraction time; "
+                           "that says the measurement IS IN this file, not that it was taken "
+                           "from it -- a later save of the same session contains the earlier one"}
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--title", action="append", default=[],
@@ -430,6 +540,20 @@ def main(argv=None):
                          "from the capture round recorded for its _N version (capture-protective), "
                          "so the manifest and the round never disagree; --hpf still overrides")
     ap.add_argument("--note", default=None, help="free-text provenance note for the manifest")
+    ses = ap.add_argument_group(
+        "session provenance (exactly one is required)",
+        "REW's API is measurement-scoped: no endpoint reports which .mdat is open, so the "
+        "session has to be named here. See `session_block`.")
+    ses.add_argument("--session", default=None, metavar="PATH",
+                     help="path to the REW .mdat these measurements come from. Every "
+                          "measurement's uuid is looked for inside it; a miss refuses the run "
+                          "before anything is written")
+    ses.add_argument("--session-name", default=None, metavar="NAME",
+                     help="record the session by name WITHOUT checking it -- for when the file "
+                          "is not reachable here (archive, another disk)")
+    ses.add_argument("--session-unknown", action="store_true",
+                     help="state outright that the session is unknown. Not the same as leaving "
+                          "it blank: a blank field reads as recorded while saying nothing")
     ap.add_argument("--rew", default=None, help="REW API base URL (default http://localhost:4735)")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args(argv)
@@ -437,11 +561,19 @@ def main(argv=None):
         return _selftest()
     if not args.out or not (args.title or args.id):
         ap.error("--out and at least one --title/--id are required (or --selftest)")
+    given = [bool(args.session), bool(args.session_name), bool(args.session_unknown)]
+    if sum(given) != 1:
+        ap.error("exactly one of --session PATH / --session-name NAME / --session-unknown is "
+                 "required. The session cannot be left to the operator's memory: a set with no "
+                 "session on it looks exactly like a set with one, right up to the moment "
+                 "something has to be deleted (hub CAR-001).")
+    if args.session and not os.path.isfile(args.session):
+        ap.error(f"--session {args.session!r}: no such file. Give the path to the .mdat REW has "
+                 f"open, or --session-name to record the name unchecked.")
     import rew_api
     if args.rew:
         rew_api.BASE_URL = args.rew
     hpf = {k: _parse_hpf(v) for k, v in (s.split("=", 1) for s in args.hpf)}
-    os.makedirs(args.out, exist_ok=True)
     manifest = {
         "converter": CONVERTER, "converterVersion": CONVERTER_VERSION,
         "createdAtUtc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -505,6 +637,33 @@ def main(argv=None):
     for spec in args.id:
         mid, _, name = spec.partition("=")
         jobs.append((mid, name or f"rew_{mid}"))
+    # Provenance is settled BEFORE the first write. Metadata only here (one cheap GET per
+    # measurement); the IR pulls come after. So a set that fails the session check costs no
+    # bandwidth and, more to the point, leaves no half-written directory behind.
+    if args.session:
+        uuids_by_name = {}
+        for mid, name in jobs:
+            meta = rew_api.get_measurement(mid) or {}
+            u = meta.get("uuid")
+            if not u:
+                ap.error(f"REW reports no uuid for {name!r} (#{mid}); it cannot be checked "
+                         f"against the session file. Use --session-name or --session-unknown.")
+            uuids_by_name[name] = u
+        try:
+            sess = session_block(path=args.session, uuids_by_name=uuids_by_name)
+        except ConversionError as exc:
+            raise SystemExit(str(exc))
+        print(f"session: {sess['session']!r} verified — {len(uuids_by_name)}/{len(uuids_by_name)} "
+              f"uuid found, sha256 {sess['sessionSha256'][:16]}…", file=sys.stderr)
+    else:
+        sess = session_block(name=args.session_name, unknown=args.session_unknown)
+        print(f"session: {sess['session']!r} ({sess['sessionState']}; REW's API does not report "
+              f"which .mdat is open)", file=sys.stderr)
+    manifest["session"] = sess
+
+    # Only now does the output directory come into existence: "nothing was written" above has
+    # to be literally true, and a directory that appears is already something written.
+    os.makedirs(args.out, exist_ok=True)
     for mid, name in jobs:
         rec = fetch_rew(mid)
         # `protectiveState` says what `protectiveHighPass: null` MEANS: "bare" (the round says
@@ -514,7 +673,7 @@ def main(argv=None):
             rec, bits=args.bits, play_channel=args.play_channel,
             sweep_seconds=args.sweep_seconds, averages=args.averages,
             protective_hpf=hpf.get(name),
-            extra={"protectiveState": prot_state.get(name, "raw" if name in hpf else "unknown")})
+            extra=dict(sess, **{"protectiveState": prot_state.get(name, "raw" if name in hpf else "unknown")}))
         safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in name)
         path = os.path.join(args.out, safe + ".json")
         write_v7(doc, path)
@@ -607,8 +766,38 @@ def _selftest():
         assert "transfer peak index" in str(e)
     else:
         raise AssertionError("out-of-range transfer peak index passed validation")
+    # 7. session provenance: the byte search finds a uuid the way REW serialises it, the three
+    #    states stay distinct, and a measurement that is NOT in the file refuses the whole run.
+    import tempfile
+    here = uuidlib.uuid4()
+    absent = uuidlib.uuid4()
+    with tempfile.NamedTemporaryFile(suffix=".mdat", delete=False) as fh:
+        # `here` is planted so it STRADDLES a chunk boundary -- the overlap is the one part of
+        # the scan that a single-chunk test would never exercise.
+        fh.write(b"\xac\xed\x00\x05" + b"j" * (64 - 4 - 8) + here.bytes + b"k" * 64)
+        fake = fh.name
+    try:
+        sha, found = scan_session(fake, [str(here), str(absent)], chunk=64)
+        assert found == {str(here)}, f"byte search across a chunk boundary: {found}"
+        assert sha == hashlib.sha256(open(fake, "rb").read()).hexdigest(), "hash saw the file twice"
+        ok = session_block(path=fake, uuids_by_name={"m_L": str(here)})
+        assert ok["sessionState"] == "verified" and ok["sessionSha256"] == sha
+        assert ok["session"] == os.path.basename(fake)
+        try:
+            session_block(path=fake, uuids_by_name={"m_L": str(here), "m_R": str(absent)})
+        except ConversionError as e:
+            assert "m_R" in str(e) and "Nothing was written" in str(e)
+        else:
+            raise AssertionError("a measurement absent from the session file was accepted")
+    finally:
+        os.unlink(fake)
+    named = session_block(name="REW-2026-07-12 v10.mdat")
+    unk = session_block(unknown=True)
+    assert named["sessionState"] == "stated" and named["session"] == "REW-2026-07-12 v10.mdat"
+    assert unk["sessionState"] == "unknown" and unk["session"] is None
+    assert named["sessionState"] != unk["sessionState"], "stated and unknown must not collapse"
     print(f"selftest OK — fractional t0 kept to {abs(err_samples):.4f} samples, integer t0 bit-exact, "
-          f"round trip + Validate() port + refusals")
+          f"round trip + Validate() port + refusals, session states verified/stated/unknown distinct")
     return 0
 
 

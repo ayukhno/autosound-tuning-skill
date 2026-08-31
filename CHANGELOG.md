@@ -42,6 +42,28 @@ Two consequences worth stating, because both have already caused a question:
 
 ## [Unreleased]
 
+- **A converted set now names the REW session it came out of, and the name is CHECKED —
+  `rew_tool/resonalyze_ir.py`.** Until now the `.mdat` a measurement came from was written down by
+  the operator, or not written down at all: REW's API is measurement-scoped, no endpoint these tools
+  speak reports which session file is open, and a set with no session on it looks exactly like a set
+  with one — right up to the moment something has to be deleted, which is when the bill arrives
+  (hub `CAR-001`). One of `--session PATH` / `--session-name NAME` / `--session-unknown` is now
+  required; there is deliberately no blank state, because an empty field reads as recorded while
+  saying nothing. `--session PATH` does not merely record the name: an `.mdat` is `Java
+  serialization data, version 5`, so a measurement's uuid sits in it as the same sixteen raw bytes
+  `UUID(...).bytes` gives, and a byte search finds it **without parsing the format**. Every
+  measurement's uuid must be in the named file or the run refuses before anything is written —
+  including the output directory, so "nothing was written" is literally true. Measured 2026-08-31:
+  115 real measurements across five exported sets, all 115 found in a 373 MB session in ~9 s, one
+  pass feeding both the hash and the search; the sha256 matched the record `car` keeps beside the
+  data. What the check proves is "this measurement **is in** this file", not "was taken from it" —
+  a later save of the same session contains the earlier one. That weaker claim is on purpose: it is
+  the one the question is actually asked in. Reading the measurement DATA out of an `.mdat` was
+  considered and rejected — the identity half is a byte search, the data half would mean re-deriving
+  REW's timing semantics out of a Java blob coupled to a beta, and it buys nothing the check does
+  not already buy. `rewSource.session` / `sessionState` / `sessionSha256` go into every file **and**
+  the manifest, so a file carried out of its directory still answers for itself.
+
 - **The method now says WHICH copy of itself is running — `rew_tool/deployment.py`.** `provenance.py`
   (v3.0.37) put the sha into the artifacts, where a reader finds it days later. This is the other
   half of the same identifier: the one that has to reach a screen while the run is happening. The
