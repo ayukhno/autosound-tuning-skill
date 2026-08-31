@@ -110,6 +110,11 @@ def _rew_tool_selftest():
     # REW IR → Resonalyze v7: fractional t = 0 kept to <0.02 sample, integer case
     # bit-exact, the Validate() port, the refusals (offline, synthetic IR)
     assert _quiet(resonalyze_ir._selftest) == 0, "resonalyze_ir.py selftest returned non-zero"
+    # bind.py: a missing pin refuses instead of falling through to another copy, and a module
+    # name present in both the caller's dir and the method refuses instead of letting sys.path
+    # decide. Both failures were found in the field before this existed (2026-08-22, 2026-08-31).
+    import bind
+    assert _quiet(bind._selftest) == 0, "bind.py selftest returned non-zero"
 
 
 def main():

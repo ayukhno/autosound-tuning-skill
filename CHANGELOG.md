@@ -42,6 +42,28 @@ Two consequences worth stating, because both have already caused a question:
 
 ## [Unreleased]
 
+- **The method hands out its own loader — `rew_tool/bind.py`.** A script outside this repo must
+  put `rew_tool` on `sys.path` before it can import anything, and every copy of those three lines
+  decides two things without saying either: which COPY of the method answers the import, and the
+  method versus the caller's OWN modules. Both have already cost real work, nine days apart, found
+  by two sessions neither of which knew about the other — a solver computing with corrected maths
+  while its verifiers ran the broken copy, purely from `sys.path.insert(0, …)` putting the method
+  ahead of the caller's directory (2026-08-22); and eighteen run scripts whose fallback takes the
+  next candidate when the pinned one is gone, so a pinned run continues at another version with
+  nothing printed (autosound-hub `CAR-002`). The second was measured in the same tree on
+  2026-08-31 and the first turned out to be live there too: `dsp_math.py`, `curve_view.py`,
+  `eq_gate.py` and `xover_select.py` exist in both the project and the method, all four differ,
+  and the method's copies were winning. One defect under two faces — **the loader was copied
+  instead of called**, which is the shape this codebase already has a rule for (`SKL-001`: the
+  shared carrier is called, not duplicated). So: a missing pin now REFUSES instead of falling
+  through, naming the pin and the copy that would have stood in for it; a module name present in
+  both places REFUSES instead of letting path order decide, naming both files; `expect=` refuses a
+  copy that is not the one the run means. Every refusal names the ways out, and both the
+  substitution and the override remain possible — only out loud. What `bind()` returns is a record
+  (`path`, `realpath`, `version`, `ref`, `sha`) a run writes beside its numbers, where `ref`
+  separates held-still (`v3.0.33`) from drifting (`v3.0.37-6-gc7bf84c`). Order itself is never
+  re-judged in silence — that is `deployment.py`'s rule and this obeys it.
+
 - **The response model now runs at the DSP's OWN processing rate, and a session is told when it
   cannot — `rew_tool/dsp_math.py`, `dsp_profile.py`, `path_check.py`.** `xo_response` had no rate
   argument at all: every crossover this method proposed, predicted or checked was computed at the
