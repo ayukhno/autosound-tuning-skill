@@ -385,6 +385,23 @@ def save_profile(path, data):
 
 
 # ── bundled-library lookup ─────────────────────────────────────────────────────
+#
+# ⚖ RULING, 2026-08-31: the bundled library is NOT a public surface of this method, and the
+# silence about it in `README.md` / `SKILL.md` / `FAQ.md` is now the ANSWER, not an omission.
+#
+# Asked 2026-08-23, answered by the owner today, in his words: two profiles are not a library,
+# and he is not prepared to promise one. Announcing it would be promising two things nobody has
+# undertaken — that the collection grows, and that we stand behind profiles of hardware we have
+# not touched.
+#
+# What this does NOT change: the path, the entry point and `find_bundled` are final and are used
+# by sessions that already know about them. Nothing here is deprecated. What is settled is only
+# whether the method ADVERTISES it, and the answer is no.
+#
+# Recorded here rather than left as silence because silence and a decision read identically from
+# the outside, and this one was already re-asked once after the fact that produced it (a cockpit
+# board line, hub `#22`). A decision with no carrier gets asked again.
+
 #: The method's own reference profiles — the machine-readable half of `knowledge/dsp/`'s prose,
 #: paired with it by basename. NOT `community-inbox/dsp-profiles/`, which is a landing zone for
 #: other people's contributions and a different job entirely.

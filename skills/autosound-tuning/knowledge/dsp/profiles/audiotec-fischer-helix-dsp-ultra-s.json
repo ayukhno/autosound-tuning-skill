@@ -1,7 +1,8 @@
 {
   "dsp_profile": {
     "_open_questions": [
-      "DSP compute budget: with up to 60 bands stacked (30 virtual-channel + 30 output) plus crossover + phase + delay, is there a practical ceiling before the 2x295MHz DSP saturates?"
+      "DSP compute budget: with up to 60 bands stacked (30 virtual-channel + 30 output) plus crossover + phase + delay, is there a practical ceiling before the 2x295MHz DSP saturates?",
+      "Whether the three tiers listed here (virtual channels, physical outputs, inputs) are ALL the tiers this DSP exposes is UNKNOWN. `groups_enumerated: false` is what says so to a machine; this line says why. It stood at `true` from 2026-08-23 until 2026-08-31, and that was an error of the same kind this file elsewhere warns about: the owner named the input tier when asked, and STOPPED LISTING -- which is not the same statement as `that is all of them`. `true` makes the absence of a group a POSITIVE CLAIM that the DSP lacks that tier (see `rew_tool/dsp_profile.py`), so the profile was asserting on his behalf something he had not said. Corrected on his ruling, 2026-08-31: `I did not say that`, and not knowing is itself an answer -- it means false."
     ],
     "channel_gain": {
       "note": "the same range on both tiers (user, PC-Tool, 2026-08-23). Deliberately NOT the EQ band's -30..+12: they are different controls and the asymmetry is the proof. Step 1.0 dB (user, PC-Tool on his own unit, 2026-08-23) — note it is COARSER than the EQ band's 0.1 dB, another reason the two must not stand in for each other.",
@@ -168,7 +169,7 @@
         "note": "The stage EXISTS on this processor, and it is NOT a tuning tier like the other two. Its job is forming the INPUT signal when the source is a factory head unit's speaker-level outputs. On optical, Bluetooth or USB it is not in the path at all (user, 2026-08-23). OUT OF SCOPE for this method, deliberately and not for now: undoing what a factory head unit already did — its EQ, its delays, its all-passes — to recover a flat input is a different problem from tuning a system, and this method does not solve it. So expect NO ledger rows for this tier, and do not read its absence from a ledger as an incomplete project. Recorded rather than deleted because the hardware fact is true and belongs in a MODEL profile; what is scoped out is our work on it, not its existence."
       }
     ],
-    "groups_enumerated": true,
+    "groups_enumerated": false,
     "name": "Helix DSP Ultra S",
     "parametric_eq": {
       "freq_range_hz": [
