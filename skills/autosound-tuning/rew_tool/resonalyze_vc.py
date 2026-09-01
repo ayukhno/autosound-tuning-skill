@@ -593,11 +593,22 @@ def _check_eq(leg, channel, group, inner):
 
 
 def _check_band_numbers(channel, field, wanted, band, peq):
-    """Frequency / gain / Q of one band against `parametric_eq`'s ranges and steps."""
+    """Frequency / gain / Q of one band against `parametric_eq`'s ranges and steps.
+
+    Q can be bounded PER BAND TYPE. One range for every type is wrong on real hardware, and the
+    bench of 2026-09-01 measured it: a Helix PC-Tool takes a bell's Q up to 50 and a SHELF's Q only
+    within 0.3 .. 2 (hub #36 / RES-002). Checked against the single `q_range`, a legitimate shelf
+    at Q 0.3 reads as out of range while a shelf at Q 30 -- which the processor will not accept --
+    passes. So `parametric_eq.q_range_by_type` (keyed by the ledger's own type names, `PK` / `LSH` /
+    `HSH` / `APF2`) overrides `q_range` for the types it names, and nothing changes for a profile
+    that does not declare one.
+    """
     if not isinstance(peq, dict):
         return [_verdict(channel, field, wanted, UNKNOWN,
                          "profile has no 'parametric_eq' block, so the band's numbers "
                          "cannot be checked", unverified=["parametric_eq"])]
+    by_type = peq.get("q_range_by_type")
+    q_override = by_type.get(band.get("type")) if isinstance(by_type, dict) else None
     problems, verified, unverified = [], [], []
     for key, value, rng_key, step_key, unit in (
         ("frequency", band.get("f"), "freq_range_hz", "freq_step_hz", "Hz"),
@@ -607,6 +618,8 @@ def _check_band_numbers(channel, field, wanted, band, peq):
         if value is None:                     # an APF1 has no Q and no gain -- not a gap
             continue
         rng, step = peq.get(rng_key), peq.get(step_key)
+        if key == "Q" and isinstance(q_override, list) and len(q_override) == 2:
+            rng = q_override
         if isinstance(rng, list) and len(rng) == 2:
             if not (rng[0] <= value <= rng[1]):
                 problems.append(f"{key} {_g(value)}{unit} outside {_g(rng[0])}..{_g(rng[1])}")
@@ -1471,8 +1484,29 @@ def _selftest():
     else:
         raise AssertionError(f"missing fixture {FIXTURE} -- write it with --write-fixture")
 
+    # Q bounded per band type (hub #36 / RES-002): a Helix takes a bell to Q 50 and a SHELF only
+    # to 2, so one range for every type both refuses legitimate shelves and passes impossible ones.
+    peq_by_type = {"gain_range_db": [-30.0, 12.0], "gain_step_db": 0.1,
+                   "freq_range_hz": [10.0, 40000.0], "freq_step_hz": 0.01,
+                   "q_range": [0.5, 50.0], "q_step": 0.1,
+                   "q_range_by_type": {"LSH": [0.3, 2.0], "HSH": [0.3, 2.0]}}
+    shelf_low = {"i": 1, "type": "LSH", "f": 100.0, "gain_db": 3.0, "q": 0.3}
+    shelf_high = {"i": 2, "type": "LSH", "f": 100.0, "gain_db": 3.0, "q": 30.0}
+    bell_high = {"i": 3, "type": "PK", "f": 100.0, "gain_db": 3.0, "q": 30.0}
+    ok_shelf = _check_band_numbers("A", "eq[1]", "LSH", shelf_low, peq_by_type)[0]
+    bad_shelf = _check_band_numbers("A", "eq[2]", "LSH", shelf_high, peq_by_type)[0]
+    ok_bell = _check_band_numbers("A", "eq[3]", "PK", bell_high, peq_by_type)[0]
+    assert ok_shelf["verdict"] == OK, ok_shelf          # 0.3 is legal for a shelf, below q_range
+    assert bad_shelf["verdict"] == UNSUPPORTED, bad_shelf   # 30 is legal for a bell, not a shelf
+    assert ok_bell["verdict"] == OK, ok_bell
+    # ...and a profile that declares no override behaves exactly as before.
+    plain = dict(peq_by_type)
+    plain.pop("q_range_by_type")
+    assert _check_band_numbers("A", "eq[1]", "LSH", shelf_low, plain)[0]["verdict"] == UNSUPPORTED
+
     print(f"selftest OK -- {len(legs)} legs from {len(doc['pairs'])} pairs; LR48 refused (not rounded to LR36); "
           f"dormant HP 10 Hz withheld; delay unverifiable without max_ms; "
+          f"Q bounded per band type (shelf 0.3 ok, shelf 30 refused, bell 30 ok); "
           f"no profile => {blind['summary'][UNKNOWN]} unknown, 0 ok")
 
 

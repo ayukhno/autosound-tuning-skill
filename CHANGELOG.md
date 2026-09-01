@@ -42,6 +42,40 @@ Two consequences worth stating, because both have already caused a question:
 
 ## [Unreleased]
 
+- **A shelf takes the Q it is given, and an all-pass is the filter the processor actually runs —
+  `rew_tool/dsp_math.py`, `resonalyze_vc.py`, the Helix profile** (autosound-hub `#36` / `RES-002`).
+  A bench of twenty electrical sweeps on a Helix DSP Ultra S (2026-09-01, no microphone: each number
+  a complex ratio to a bypass capture of the same set) put three of this module's assumptions to the
+  hardware and two failed.
+  **(1) The shelf ignored its Q.** `peq_response` built every LS/HS at RBJ `S=1` and threw the `q`
+  argument away — the comment said so and nobody priced it. The bench fitted the measurement with
+  frequency, gain and Q all free and got back what was typed: **Q 0.300 / 0.707 / 1.998** for
+  entered 0.3 / 0.7 / 2.0, residual 0.005 dB. So the Q entered into a Helix shelf **is** the RBJ Q,
+  and `S=1` was not an approximation but a different filter everywhere except one point: against the
+  measurement it was **1.17 dB rms / 1.78 max at Q 0.3 and 1.86 / 4.33 at Q 2**, on a bench whose own
+  threshold is 0.15 dB. The curve looked plausible while being the wrong filter — the error does not
+  shout. Now the argument is used; `SHELF_Q_S1` names the old value for anyone who genuinely means
+  the textbook S=1 shelf, and the selftest asserts that shelf is bit-identical to what it was. A
+  shelf with **no** Q is now refused rather than modelled at S=1, because a silent default is the
+  defect being fixed.
+  **(2) The all-passes were analog formulas in a digital module.** `apf1_response` and
+  `apf2_response` returned `-2·arctan(x)` and `-2·arctan2(x/q, 1-x²)` while the crossovers beside
+  them had already moved to the bilinear form. Measured against the hardware at 8 kHz Q 0.7: the
+  analog form was **9.5° out at worst (3.6° rms)** where the digital biquad was **0.5° (0.3°)**, and
+  the error GROWS with frequency — so it was largest exactly at the tweeter joint, which is where an
+  all-pass is used. Both are now RBJ biquads at the session's processing rate; `APF1² ≡ APF2(Q=0.5)`
+  still holds to 1e-12, and the digital form reaches exactly −360° at Nyquist, which the analog one
+  never does.
+  **(3) `FS = 96000` is a named gap, not a defect** — the bench cannot close it (an Ultra S runs at
+  96 kHz natively and there was no second processor), and the rate has been profile-bound with its
+  source since `SKL-004`; the all-passes now honour it too, having had no rate at all before.
+  **Confirmed and left alone:** the Bessel magnitude normalisation (`norm="mag"`) — BE36 measures
+  −3.04 dB at its own corner, 0.034 dB rms against the prototype.
+  **And one hardware limit that had nowhere to live:** PC-Tool takes a shelf's Q only within
+  **0.3 … 2** while the bell reaches 50, so a single `q_range` refused legitimate shelves and passed
+  impossible ones. Profiles may now declare `parametric_eq.q_range_by_type`, `resonalyze_vc` reads
+  it per band type, and the Helix profile carries the measured pair.
+
 - **The method hands out its own loader — `rew_tool/bind.py`.** A script outside this repo must
   put `rew_tool` on `sys.path` before it can import anything, and every copy of those three lines
   decides two things without saying either: which COPY of the method answers the import, and the

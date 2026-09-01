@@ -817,6 +817,9 @@ _GOVERNS = {
     "freq_range_hz": "the bounds an EQ band's centre frequency is checked against",
     "freq_step_hz": "the grid an EQ band's centre frequency must land on",
     "q_range": "the bounds an EQ band's Q is checked against",
+    "q_range_by_type": "the bounds an EQ band's Q is checked against FOR ONE band type, where the "
+                       "hardware bounds them differently (a Helix takes a bell to Q 50 and a shelf "
+                       "only to 2); optional, and it overrides `q_range` for the types it names",
     "q_step": "the grid an EQ band's Q must land on",
     "gain_range_db": "the bounds an EQ band's gain is checked against",
     "gain_step_db": "the grid a gain must land on",

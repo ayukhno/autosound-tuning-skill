@@ -25,6 +25,17 @@
       ],
       "step_ms": 0.01
     },
+    "dsp_processing_rate_hz": 96000,
+    "dsp_processing_rate_note": "the PROCESSING rate the DSP runs at -- delays in samples derive from it. NOT the capture rate: what a measurement was recorded at is a separate fact that lives with the measurement (a UMIK-1 capturing at 48k under this 96k DSP is legitimate; warn once, work with it). Renamed from sample_rate_hz 2026-08-25; the old name is still read",
+    "effects_and_dynamics": [
+      "RealCenter",
+      "DynamicBass",
+      "SubXpander",
+      "ActiveToneControl",
+      "RemoteToneControl",
+      "SubRC",
+      "RearRC"
+    ],
     "features": [
       {
         "key": "RealCenter"
@@ -190,6 +201,17 @@
         0.5,
         50.0
       ],
+      "q_range_by_type": {
+        "HSH": [
+          0.3,
+          2.0
+        ],
+        "LSH": [
+          0.3,
+          2.0
+        ]
+      },
+      "q_range_by_type_note": "MEASURED on the bench of 2026-09-01 (20 electrical sweeps, hub #36 / RES-002): PC-Tool accepts a SHELF's Q only within 0.3 .. 2, while the bell reaches the 50 recorded in `q_range`. One range for every type was wrong in both directions -- it called a legitimate shelf at Q 0.3 out of range, and passed a shelf at Q 30 that the processor will not take. `resonalyze_vc` reads this override for the types named here and falls back to `q_range` for the rest. The same bench also settled that the Q typed into a Helix shelf IS the RBJ Q: a free fit of the measurement returned 0.300 / 0.707 / 1.998 for the three entered values, residual 0.005 dB.",
       "q_step": 0.1,
       "shelf_note": "PC-Tool's LS_Q/HS_Q at Q=0.7071 is identical to an RBJ shelf at S=1 (0.000 dB), so model them in REW with its 'LS Q'/'HS Q' types -- REW's plain 'Low shelf'/'High shelf' is a different definition and will not match. Note also that shelf Q is NEVER rescaled between PEQ Q conventions (a shelf Q sets a knee, not a bandwidth): anything converting Q for a non-RBJ target must skip shelves or it silently widens every one of them."
     },
@@ -205,8 +227,6 @@
         "per virtual channel"
       ]
     },
-    "dsp_processing_rate_hz": 96000,
-    "dsp_processing_rate_note": "the PROCESSING rate the DSP runs at -- delays in samples derive from it. NOT the capture rate: what a measurement was recorded at is a separate fact that lives with the measurement (a UMIK-1 capturing at 48k under this 96k DSP is legitimate; warn once, work with it). Renamed from sample_rate_hz 2026-08-25; the old name is still read",
     "sources": [
       "raw/papers/HELIX_DSP-ULTRA-S_11-04-2024.pdf (hardware I/O + electrical specs, page 16 'Technische Daten')",
       "user, confirmed directly from the PC-Tool software UI, 2026-07-10 (filter grid, gain/freq/Q resolution)",
@@ -219,17 +239,9 @@
       "bundled into the method's profile library 2026-08-23 from autosound-tcc's src/autosound_tcc/dsp_profiles/helix-dsp-ultra-s.json, which is where these facts were first assembled -- authorship theirs, diffed field by field before landing",
       "user, PC-Tool on his own unit, 2026-08-23: channel gain step 1.0 dB; an INPUT tier exists (unused on his car); Chebyshev slope ladder 6-42 dB/oct corroborated. Chebyshev ripple asked and declined as unknown and unneeded.",
       "user, PC-Tool on his own unit, 2026-08-23: the 'Parametric EQ' panel photographed in one state — Freq 26.01 Hz, Gain 0.1 dB, Q 50 together — which observes the freq_step_hz / q_range pair that had been recorded as derived from the full-range ruling.",
-      "user, 2026-08-23: the input stage is high-level capture from a factory head unit only, bypassed on optical/BT/USB, and un-processing a head unit's output is a separate problem the method does not address — so the tier list is complete at three, of which two are tuned."
+      "user, 2026-08-23: the input stage is high-level capture from a factory head unit only, bypassed on optical/BT/USB, and un-processing a head unit's output is a separate problem the method does not address — so the tier list is complete at three, of which two are tuned.",
+      "bench series 2026-09-01 (20 electrical sweeps, no microphone, complex ratio to a bypass capture; research/results/helix-bench-second-series/) -- the source for the shelf Q range 0.3..2, for the shelf's Q being the RBJ Q, for the all-pass being a digital biquad rather than the analog prototype, and for the Bessel magnitude normalisation being right as it was"
     ],
-    "vendor": "Audiotec-Fischer",
-    "effects_and_dynamics": [
-      "RealCenter",
-      "DynamicBass",
-      "SubXpander",
-      "ActiveToneControl",
-      "RemoteToneControl",
-      "SubRC",
-      "RearRC"
-    ]
+    "vendor": "Audiotec-Fischer"
   }
 }

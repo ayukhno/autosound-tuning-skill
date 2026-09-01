@@ -243,6 +243,12 @@ def _biquad_h(freqs_hz, b0, b1, b2, a0, a1, a2, fs=None):
 #: names instead of falling through to the wrong branch.
 _SHELF_KINDS = {"LS": "LS", "LSH": "LS", "HS": "HS", "HSH": "HS"}
 
+#: The Q of a shelf whose RBJ `S` is 1 — the value this module FORCED on every shelf until
+#: 2026-09-01. Named rather than left as a literal, because it is now the one value at which the
+#: old model and the hardware agree, and a caller who genuinely means "the textbook S=1 shelf"
+#: should be able to say so in those words.
+SHELF_Q_S1 = 1.0 / np.sqrt(2.0)
+
 
 def peq_response(freqs_hz, kind, f0, gain_db, q, fs=None):
     """kind: 'PK' | 'LS'/'LSH' | 'HS'/'HSH'. Complex response.
@@ -263,8 +269,13 @@ def peq_response(freqs_hz, kind, f0, gain_db, q, fs=None):
         c = (1 + alpha * A, -2 * cw, 1 - alpha * A,
              1 + alpha / A, -2 * cw, 1 - alpha / A)
     else:
-        # shelves with S=1 (RBJ), q arg ignored
-        alpha = sw / 2.0 * np.sqrt(max((A + 1 / A) * (1 / 1.0 - 1) + 2, 0.0))
+        if q is None:
+            raise ValueError(
+                f"peq_response: shelf {kind} at {f0:g} Hz has no q. Until 2026-09-01 this module "
+                f"ignored the argument and modelled EVERY shelf at S=1; the bench showed that is a "
+                f"different filter (RES-002). If S=1 is what you mean, say it: "
+                f"q=SHELF_Q_S1 ({SHELF_Q_S1:.6f})")
+        alpha = sw / (2.0 * q)
         tsa = 2 * np.sqrt(A) * alpha
         if _SHELF_KINDS[kind] == "LS":
             c = (A * ((A + 1) - (A - 1) * cw + tsa),
@@ -283,26 +294,80 @@ def peq_response(freqs_hz, kind, f0, gain_db, q, fs=None):
     return _biquad_h(freqs_hz, *c, fs=fs)
 
 
-def apf1_response(freqs_hz, f0):
+
+def _shelf_s1_reference(freqs_hz, kind, f0, gain_db, fs=None):
+    """The S=1 shelf EXACTLY as this module computed every shelf until 2026-09-01.
+
+    Kept for one purpose: the selftest asserts that `peq_response(..., q=SHELF_Q_S1)` still equals
+    it to the bit, so the change of 2026-09-01 can be read as "the argument is now used" and not
+    as "the shelf was reshaped". Not for callers -- model a shelf by naming its Q.
+    """
+    A = 10.0 ** (gain_db / 40.0)
+    w0 = 2 * np.pi * f0 / _fs(fs)
+    cw, sw = np.cos(w0), np.sin(w0)
+    alpha = sw / 2.0 * np.sqrt(max((A + 1 / A) * (1 / 1.0 - 1) + 2, 0.0))
+    tsa = 2 * np.sqrt(A) * alpha
+    if _SHELF_KINDS[kind] == "LS":
+        c = (A * ((A + 1) - (A - 1) * cw + tsa),
+             2 * A * ((A - 1) - (A + 1) * cw),
+             A * ((A + 1) - (A - 1) * cw - tsa),
+             (A + 1) + (A - 1) * cw + tsa,
+             -2 * ((A - 1) + (A + 1) * cw),
+             (A + 1) + (A - 1) * cw - tsa)
+    else:
+        c = (A * ((A + 1) + (A - 1) * cw + tsa),
+             -2 * A * ((A - 1) + (A + 1) * cw),
+             A * ((A + 1) + (A - 1) * cw - tsa),
+             (A + 1) - (A - 1) * cw + tsa,
+             2 * ((A - 1) - (A + 1) * cw),
+             (A + 1) - (A - 1) * cw - tsa)
+    return _biquad_h(freqs_hz, *c, fs=fs)
+
+
+def apf1_response(freqs_hz, f0, fs=None):
     """1st-order allpass (APF1 in an EQ slot): unit magnitude, phase 0 → −180° through `f0`.
 
-    −90° at `f0`, and that is the whole filter — one number to type. The same analog convention
-    as `apf2_response` (phase lag, negative going), so the two stack and compare directly; where
-    the second order turns a full 360°, this turns half of it, which is what makes it the right
-    tool for a joint that needs a quarter turn and not a half (SCR-050 item 4, 2026-08-18).
+    −90° at `f0`, and that is the whole filter — one number to type. Same sign convention as
+    `apf2_response` (phase lag, negative going), so the two stack and compare directly; where the
+    second order turns a full 360°, this turns half of it, which is what makes it the right tool
+    for a joint that needs a quarter turn and not a half (SCR-050 item 4, 2026-08-18).
+
+    DIGITAL, at the session's processing rate — the bilinear image of the analog prototype,
+    prewarped so `f0` lands exactly where it is typed. Until 2026-09-01 this returned the ANALOG
+    phase −2·arctan(f/f0) while the crossovers next door had already moved to the bilinear form;
+    the bench measured the price on the second order (below), and it is the same class of error
+    here.
     """
-    x = np.asarray(freqs_hz, dtype=float) / f0
-    phase = -2.0 * np.arctan(x)
-    return np.exp(1j * phase)
+    fs_ = _fs(fs)
+    t0 = np.tan(np.pi * float(f0) / fs_)
+    c = (t0 - 1.0) / (t0 + 1.0)
+    return _biquad_h(freqs_hz, c, 1.0, 0.0, 1.0, c, 0.0, fs=fs_)
 
 
-def apf2_response(freqs_hz, f0, q):
+def apf2_response(freqs_hz, f0, q, fs=None):
     """2nd-order allpass (APF2 in the Helix PEQ bank): unit magnitude, phase only.
 
-    0 → −360° through `f0`, −180° AT `f0`, and `q` sets how much of the turn happens near it."""
-    x = np.asarray(freqs_hz, dtype=float) / f0
-    phase = -2.0 * np.arctan2(x / q, 1.0 - x * x)
-    return np.exp(1j * phase)
+    0 → −360° through `f0`, −180° AT `f0`, and `q` sets how much of the turn happens near it.
+
+    DIGITAL (RBJ all-pass biquad) at the session's processing rate. It used to be the analog
+    −2·arctan2(x/q, 1−x²), and the bench of 2026-09-01 priced that (20 electrical sweeps on a
+    Helix DSP Ultra S, complex ratio to a bypass capture, RES-002 / hub #36):
+
+        capture                analog form            digital form
+        AP2 4 kHz  Q 0.7       rms 1.5°, max 3.6°     rms 0.2°, max 0.4°
+        AP2 8 kHz  Q 0.7       rms 3.6°, max 9.5°     rms 0.3°, max 0.5°
+        AP2 8 kHz  Q 4         rms 1.7°, max 3.2°     rms 0.1°, max 0.2°
+
+    The error GROWS with frequency, so it was largest exactly where an all-pass is used — at the
+    tweeter joint. A free fit of the digital form recovers what was typed to 0.05 % in frequency
+    and 0.3 % in Q.
+    """
+    fs_ = _fs(fs)
+    w0 = 2 * np.pi * float(f0) / fs_
+    cw, sw = np.cos(w0), np.sin(w0)
+    alpha = sw / (2.0 * q)
+    return _biquad_h(freqs_hz, 1 - alpha, -2 * cw, 1 + alpha,
+                     1 + alpha, -2 * cw, 1 - alpha, fs=fs_)
 
 
 # ---------- deterministic inner solvers ----------
@@ -858,26 +923,82 @@ def _selftest():
     for q in (0.5, 0.7, 1.0, 2.0, 4.0):
         h2 = apf2_response(f, f0, q)
         assert np.allclose(np.abs(h2), 1.0, atol=1e-12), f"APF2 q={q} is not unit magnitude"
-        at2 = np.degrees(np.angle(apf2_response(np.array([f0]), f0, q)))[0]
-        assert abs(abs(at2) - 180.0) < 1e-9, f"APF2 phase at f0 = {at2:.4f}, expected -180"
+        # At f0 the filter IS -1, so compare the complex value rather than its angle: the angle
+        # sits exactly on the +-180 wrap, where the last digits go to cancellation and say nothing
+        # about the model (the digital form lands within 1e-11 of -1; its ANGLE reads 180.0 minus
+        # a nanodegree, which a tight angle tolerance would call a failure).
+        at2 = apf2_response(np.array([f0]), f0, q)[0]
+        assert abs(at2 + 1.0) < 1e-9, f"APF2 at f0 = {at2!r}, expected -1 (i.e. -180 deg)"
         p2 = deg(h2)
         # The two ends against the filter's own asymptotes: far below f0 the lag is 2x/q radians
         # (x = f/f0), far above it is a full turn short of 2/(xq). Low Q starts turning earlier --
         # at 2 Hz an APF2(100 Hz, Q 0.5) already lags 4.6 deg -- so a fixed "near zero" would be
         # wrong about the physics, not about the code.
         lo_asym = -np.degrees(2.0 * (f[0] / f0) / q)
-        hi_asym = -360.0 + np.degrees(2.0 * (f0 / f[-1]) / q)
         assert abs(p2[0] - lo_asym) < 0.05, (q, p2[0], lo_asym)
-        assert abs(p2[-1] - hi_asym) < 0.05, (q, p2[-1], hi_asym)
+        # The TOP end is where the digital form stops agreeing with the analog prototype, and
+        # that disagreement is the whole point of the 2026-09-01 change (RES-002): the bilinear
+        # image turns slightly FASTER as it approaches Nyquist, where it reaches exactly -360 --
+        # a value the analog form only approaches at infinity. So the grid's last point must sit
+        # between the analog asymptote and -360, and the gap must stay small at 40 kHz on a
+        # 96 kHz rate (measured: under a fifth of a degree).
+        hi_asym = -360.0 + np.degrees(2.0 * (f0 / f[-1]) / q)
+        assert -360.0 < p2[-1] < hi_asym, (q, p2[-1], hi_asym)
+        assert hi_asym - p2[-1] < 0.5, (q, p2[-1], hi_asym)
+        at_nyq = deg(apf2_response(np.append(f, _fs(None) / 2.0), f0, q))[-1]
+        assert abs(at_nyq + 360.0) < 1e-9, (q, at_nyq)
         assert np.all(np.diff(p2) < 0), f"APF2 q={q} phase must fall monotonically"
-    just_above = np.array([f0 * 2 ** (1 / 6)])
-    steep = np.degrees(np.unwrap(np.angle(apf2_response(np.array([f0, just_above[0]]), f0, 4.0))))
-    gentle = np.degrees(np.unwrap(np.angle(apf2_response(np.array([f0, just_above[0]]), f0, 0.7))))
-    assert steep[1] < gentle[1] < -180.0, ("higher Q turns faster near f0", steep, gentle)
+    # How much MORE lag a third of an octave above f0 -- measured as the ratio to the value at f0,
+    # because f0 itself sits on the +-180 wrap and unwrapping from there starts on the wrong side.
+    just_above = f0 * 2 ** (1 / 6)
+    def _past_f0(q_):
+        pair = apf2_response(np.array([f0, just_above]), f0, q_)
+        return float(np.degrees(np.angle(pair[1] / pair[0])))
+    steep, gentle = _past_f0(4.0), _past_f0(0.7)
+    assert steep < gentle < 0.0, ("higher Q turns faster near f0", steep, gentle)
     # Two first-order sections at one f0 ARE a second-order all-pass with Q = 0.5. If the two
     # functions did not share a convention this identity would break first.
     assert np.allclose(apf1_response(f, f0) ** 2, apf2_response(f, f0, 0.5), atol=1e-12), \
         "APF1^2 != APF2(Q=0.5): the two all-pass functions disagree about their convention"
+
+    # ---- what the bench of 2026-09-01 closed (RES-002 / hub #36) -------------------------------
+    # 1. A shelf takes the Q it is given. Until that day this module forced S=1 on every shelf and
+    #    ignored the argument; the bench fitted the hardware with all three parameters free and got
+    #    back what was typed (Q 0.300 / 0.707 / 1.998 for 0.3 / 0.7 / 2.0, residual 0.005 dB). The
+    #    numbers below are the price of the old model, reproduced here from the formulas alone --
+    #    they match the bench's measured 1.17 / 1.78 and 1.86 / 4.33 dB.
+    fsh = np.geomspace(100.0, 10000.0, 300)
+    s1 = 20 * np.log10(np.abs(peq_response(fsh, "LS", 1000.0, 6.0, SHELF_Q_S1)))
+    for q_shelf, want_rms, want_max in ((0.3, 1.17, 1.78), (2.0, 1.86, 4.33)):
+        got = 20 * np.log10(np.abs(peq_response(fsh, "LS", 1000.0, 6.0, q_shelf)))
+        rms = float(np.sqrt(np.mean((got - s1) ** 2)))
+        assert abs(rms - want_rms) < 0.01, (q_shelf, rms, want_rms)
+        assert abs(float(np.max(np.abs(got - s1))) - want_max) < 0.01, (q_shelf, want_max)
+    # ...and the one Q at which the old model was right is right still, to the bit: nothing that
+    # meant "the textbook S=1 shelf" moved on 2026-09-01.
+    assert np.allclose(20 * np.log10(np.abs(peq_response(fsh, "HS", 1000.0, 6.0, SHELF_Q_S1))),
+                       20 * np.log10(np.abs(_shelf_s1_reference(fsh, "HS", 1000.0, 6.0))),
+                       atol=1e-12), "the S=1 shelf changed shape"
+    # A shelf with no Q is refused rather than modelled as S=1 -- the silent default is the defect.
+    try:
+        peq_response(fsh, "LS", 1000.0, 6.0, None)
+    except ValueError as exc:
+        assert "SHELF_Q_S1" in str(exc), str(exc)
+    else:
+        raise AssertionError("a shelf with q=None must be refused, not modelled at S=1")
+
+    # 2. The all-pass is the bilinear image, not the analog formula. The bench measured the gap on
+    #    a Helix at 8 kHz Q 0.7: the analog form was 9.5 deg out at worst where the digital one was
+    #    0.5. Here the same gap is computed between the two FORMS, over the audible band -- and it
+    #    lands on the same figure, which is the point: the discrepancy was the FORM, not the rig.
+    #    Above 20 kHz it keeps growing toward Nyquist, so the band is named rather than assumed.
+    fap = np.geomspace(2000.0, 20000.0, 2000)   # the audible band the bench's 9.5 deg lives in
+    analog = -2.0 * np.arctan2((fap / 8000.0) / 0.7, 1.0 - (fap / 8000.0) ** 2)
+    gap = np.degrees(np.unwrap(analog) - deg(apf2_response(fap, 8000.0, 0.7)) * np.pi / 180.0)
+    assert 8.0 < float(np.max(np.abs(gap))) < 11.0, float(np.max(np.abs(gap)))
+    # ...and it GROWS with frequency, which is why it bit at the tweeter joint and nowhere else.
+    lowband, highband = fap < 5000.0, fap > 15000.0
+    assert float(np.max(np.abs(gap[lowband]))) < float(np.max(np.abs(gap[highband]))), "gap must grow"
 
     # eq_complex: an all-pass band renders as the all-pass, the ledger's shelf spellings render as
     # the shelves they name, and a kind nobody knows is refused rather than drawn as a shelf.
@@ -1163,7 +1284,11 @@ def _selftest():
     assert processing_rate()[1] == "assumed" and rate_note(None) is not None
 
     print("selftest[dsp_math] OK -- APF1 (-90 deg at f0, 0..-180, 1/(pi f0) delay far below f0), "
-          "APF2 (-180 deg at f0, 0..-360, Q steepens), APF1^2 == APF2(Q=0.5), "
+          "APF2 (-180 deg at f0, 0..-360 with -360 EXACTLY at Nyquist, Q steepens), "
+          "APF1^2 == APF2(Q=0.5), the all-pass is the bilinear image and the retired analog form "
+          "is 9 deg out at 8 kHz Q 0.7 (growing with frequency), a shelf USES its Q (1.17/1.78 dB "
+          "at Q 0.3 and 1.86/4.33 at Q 2.0 against the old forced S=1, which is still exact at "
+          "SHELF_Q_S1) and refuses q=None, "
           "eq_complex renders APF/LSH/HSH as themselves and refuses an unknown kind, "
           "align_delay_polarity inverts at odd-order LR joints and breaks near-ties "
           "across both polarities by smallest |tau|, and every crossover sits at the corner it "
