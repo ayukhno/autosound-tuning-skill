@@ -583,6 +583,16 @@ def main(argv=None):
                 continue
     packages = propose(f, meas, targets, chains, roles, pairs, joints, ellipsoids, gates,
                        allow_boost=args.allow_boost, routes=routes)
+    # A channel refused at de-embed gets no EQ package, and until 2026-09-01 that was ALL that
+    # happened: `refused` was bound and never read, and the note explaining it rode in `notes`,
+    # which is truncated to eight lines and printed only in the human mode. So under `--json` a
+    # channel could vanish from the proposal in silence -- the same shape of silence the refusal
+    # exists to prevent (autosound-hub #31). It goes to stderr in BOTH modes; stdout is untouched,
+    # so the JSON contract is exactly what it was.
+    for code in refused:
+        print(f"  {code}: refused at de-embed -- no EQ proposed for it. "
+              f"Record the capture round's protective state (or say there was none) and re-run.",
+              file=sys.stderr)
     if args.json:
         print(json.dumps(packages, indent=1, default=float))
     else:

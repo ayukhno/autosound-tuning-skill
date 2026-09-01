@@ -42,6 +42,38 @@ Two consequences worth stating, because both have already caused a question:
 
 ## [Unreleased]
 
+- **The refusal that withholds a number now has an author — `references/core/estimator-scope.md` §2a,
+  `rew_tool/eq_propose.py`** (autosound-hub `#31`). Three commands lean on one refusal: a solo taken
+  at **baseline** with no protective declaration gets no number, because at baseline no crossover
+  existed yet, so a filter in the path is protection almost by definition and a forgotten mark costs
+  ~50° of somebody else's phase at the nearest junction (measured: the same junction reads −49° with
+  the protective filter left in and +3° with it removed). The mechanism was right and **nobody had
+  decided it** — it appeared as code and the doctrine described it as though it had been ratified,
+  which is a mechanism with authority and no author. §2a now states what it forbids (one verdict,
+  one condition, three commands, and what the caller gets instead of a number), what it never
+  refuses (four cases — a working capture, a marked-raw capture, a baseline capture with a record,
+  and a file older than the mark), and what cancelling would cost. **Signed by the user on
+  2026-09-01**, together with their statement of the design it is an exception to: a protective
+  filter is declared with its parameters at capture time and that declaration is what makes the
+  analysis remove it; no declaration means a working capture — the same rule for TCC's interface and
+  for this method's logic, maths and terminal mode. **One defect found while taking the inventory:**
+  `eq_propose` bound the refused list and never read it, and the explaining note rode in a list
+  truncated to eight lines and printed only in human mode — so under `--json` a channel could
+  disappear from the proposal in silence, which is the very shape the refusal exists to prevent. It
+  now goes to stderr in both modes; stdout is untouched.
+
+- **A deferred debt got a carrier where the work would actually happen —
+  `references/core/filter-types-car-audio.md`, the Helix profile** (autosound-hub `#32`). Whether
+  the Helix's own "Butterworth −24" behaves as the method models it is an open question from
+  2026-08-25, and the number that raised it — a residual mid-channel phase sitting on the upper edge
+  of a threshold named in advance — is **lost**: not in the tree, not in git history. The owner's
+  decision (2026-08-31) is that it is not worth digging for, so the debt carries an **arrival
+  condition** instead of a queue position: measure it against hardware when the method walks into the
+  same wall again — protectives de-embedded, joint aligned, residual mid phase back at the top of the
+  threshold, and the joint decision depending on it. Not earlier, not while passing. Until then it is
+  written where a session doing mid-joint work will meet it, and `autosound-hub#32` stays open on
+  purpose: it waits for an event, not for a person.
+
 - **A shelf takes the Q it is given, and an all-pass is the filter the processor actually runs —
   `rew_tool/dsp_math.py`, `resonalyze_vc.py`, the Helix profile** (autosound-hub `#36` / `RES-002`).
   A bench of twenty electrical sweeps on a Helix DSP Ultra S (2026-09-01, no microphone: each number

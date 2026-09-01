@@ -61,6 +61,26 @@
 - Sub LP (a slightly harder cut than LR)
 - Subsonic to protect the sub (BW 12 dB/oct — a gentle protective roll-off)
 
+### ⏸ A deferred question about the Helix's own "Butterworth −24" — and why nobody is chasing it
+
+**The question:** does the Helix's `BW −24` behave as this method models it? It was raised on
+2026-08-25 by a residual phase on the mid channel that, once the real cause of the disagreement was
+found (the protective filter was not being de-embedded at all), sat **right on the upper edge of a
+threshold a session had named in advance** — the "if this much is left, it is data for the model
+rather than noise" line.
+
+**The number is gone, and it is deliberately not being looked for.** It is in neither the method
+tree nor git history (a search of the same shape finds neighbouring topics at once, so the absence
+is real and not a bad query); the cockpit inventory kept only the question. Digging through session
+transcripts would cost more than the answer is worth — the owner's decision, 2026-08-31.
+
+**So the debt carries an arrival condition instead of a queue position.** Measure the Helix's
+`BW −24` against hardware when — and only when — **the method walks into the same wall again**:
+protectives correctly taken out, the joint aligned, and the residual phase on the mid channel again
+sitting at the top of the threshold **with the joint decision depending on it**. Not earlier, and
+not "while we are in there anyway". The debt lives as `autosound-hub#32`, open on purpose: it waits
+for an event, not for a person.
+
 ---
 
 ## Hybrid strategy (a candidate for 3-way + sub)

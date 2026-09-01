@@ -131,6 +131,59 @@ answerable from the table below and should not cost a round trip.
 | `verify_prediction --entry` | point sweeps from the tripod, the complex response (v7 or REW impulse) | an RTA (no impulse: the arrival check has nothing to read; the pair check is refused without `--allow-rta`) | the entry control needs the same base as the prediction |
 | `ear_suspects` | an MMM or a sweep with peaks that clear the local trend | a fourth round (refused); a shelf (that is tone, not a suspect); a one-bin spike (the position) | three suspects × three rounds, then stop — more is over-fitting one afternoon |
 
+## 2a. The one refusal that withholds a NUMBER — what it forbids, what cancelling costs, who signed it
+
+Written 2026-09-01 (`autosound-hub#31`). Everything in §2 says where a tool is **silent**. This says
+where the method **refuses**, and it exists because that row was the *behaviour* and not the
+*decision*: three commands leaned on a refusal nobody had signed, which is a mechanism that looks
+ratified because it acts ratified.
+
+**One verdict, one condition.** `protective.should_de_embed(record, channel, baseline=True)` returns
+`("check", …)` for a channel that is **not marked raw, has no round record, and was captured at
+baseline** — before any crossover existed. Nothing else in the method refuses on this ground.
+`predict.de_embed_solos` is what enforces it: the channel is left out of `solos` and a note
+`"<code>: REFUSED — …"` is added.
+
+| command | when it can fire | what the caller gets instead of a number |
+|---|---|---|
+| `predict …` | only with `--baseline` | the channel is out of the prediction and out of any joint that uses it; `<code>: refused -- see notes` on stderr |
+| `eq_propose --solos …` | always — baseline is passed unconditionally | no EQ package for that channel; `<code>: refused at de-embed …` on stderr in **both** modes (since 2026-09-01; before that it was invisible under `--json`, and the channel simply vanished from the proposal) |
+| `flaw_map --solos …` | always | no flaw rows for it; `refused at de-embed (no recorded protective state): <codes>` in the report |
+
+Every other channel proceeds, no exit code changes, and nothing is guessed on the refused one.
+
+**What it never refuses** — worth listing together, because "it refuses on principle" is the fear:
+
+- a **working** capture — the default is `no`, and that is an answer rather than a shrug;
+- a capture **marked raw** — that one gets de-embedded, which is the whole point;
+- a baseline capture **with a round record** — the record answers the question;
+- a file older than the `protectiveState` mark (writer ≤ 3.0.27) — read as unfiltered, said out loud.
+
+**The price of cancelling it.** Exactly one class of error comes back: rotation belonging to the
+measuring rig, read as the car's phase. On the reference car's own protective set, with this
+module's maths — HPF `LR4 @100` still owes ~52° at 320 Hz; LPF `LR4 @500` ~53.5° at 160 Hz. So a
+junction three-ish times away from a protective corner carries about fifty degrees that is not the
+car's. Live, on the same data through the same engine: the `w/m` left junction read **−49°** with
+the protective filter left in and **+3°** with it removed (cross-check runs 3/4, 2026-08-18) — the
+distance between "badly out of phase, fix it" and "leave it alone".
+
+**Why a refusal and not a warning.** The omission cannot be detected in the data: a protective
+`LR4 @100` and a designed `LR4 @100` are the same filter. The only thing that betrays it is *when*
+the sweep was taken, and only a person knows whether the button was missed. A number produced
+anyway looks exactly like a good one — which is why the answer is withheld rather than flagged.
+
+**Signed off: the user, 2026-09-01 — the refusal stands.** In their own words, the design is this:
+when curves are captured there is a place to declare a protective filter on a driver **with its
+parameters**, and that declaration is exactly what tells the analysis to take it out; **no
+declaration means a working capture**. It was specified that way for both consumers at once — TCC's
+interface, and this method's logic, maths and terminal mode.
+
+The baseline case above is the **one named exception** to that rule, and it was put to the author as
+an exception and kept: at baseline an unmarked capture is *not* read as working — the method
+withholds the number for that channel and asks a person. Cancelling it now takes a decision of the
+same weight, not an edit. Recorded here because until this line existed the mechanism had authority
+with no author (`autosound-hub#31`, split out of `#22`).
+
 ## 3. A measurement is not a setting
 
 Two different quantities wear the same units, and the session that confuses them sets a knob
