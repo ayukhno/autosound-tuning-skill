@@ -1,24 +1,212 @@
 {
   "dsp_profile": {
     "_open_questions": [
-      "Crossover slope ladder: the user RECALLS a plain 6 dB/oct ladder up to 48 dB/oct with no named-type (LR/BW/BE) restriction, unlike the Helix's LR-only-at-12/24/36. Unverified -- a hypothesis to check in the vendor app, NEVER a grid to search. It is the claim this profile exists to make checkable, and it is the one claim here that has already been quoted as evidence when it was not.",
-      "Whether this DSP exposes tiers beyond the output channels -- a virtual-channel tier, per-input (Optic/USB/BT) gain and EQ -- is UNKNOWN. `groups_enumerated: false` is what says so to a machine; this line says why.",
-      "How many output channels the hardware physically has. The model name suggests six; a model name is not a measurement, so max_count stays null."
+      "Maximum time-alignment delay: datasheet 0-17 ms vs 0-692 cm (mutually inconsistent), vs the demo software's 425 cm = 12.50 ms at 340 m/s. `delay.max_ms` stays null until a connected unit says. Nothing is blocked by this -- in-car TA rarely exceeds ~8 ms.",
+      "The odd-order 'Linkwitz' menu entries (6/18/30/42 dB/oct) are recorded in prose but NOT in `crossover_filters.types.LR`: a true LR alignment exists only at even orders, and their real phase behaviour is unmeasured. Measure before adding them to a search space.",
+      "The optical input accepts PCM up to 96 kHz / 24 bit per the datasheet; sample-rate conversion to the 48 kHz core rate is INFERRED, not vendor-confirmed.",
+      "STRUCTURAL, not a question: the matrix per-cell level has no field token in the ledger vocabulary, so it is stored as a descriptive key only and cannot be proposed as a normal field edit."
     ],
+    "channel_gain": {
+      "master_range_db": [
+        -59,
+        0
+      ],
+      "note": "Attenuation only -- no positive gain, so all headroom management is downward and a quiet channel cannot be trimmed up. Separate master level 0...-59 dB.",
+      "range_db": [
+        -59.9,
+        0
+      ],
+      "scope": [
+        "per output channel"
+      ]
+    },
+    "crossover_filters": {
+      "corner_freq_range_hz": [
+        20,
+        20000
+      ],
+      "corner_freq_step_hz": 1,
+      "independent_hp_lp": true,
+      "scope": "per output channel",
+      "slope_range_note": "The MENU offers Bessel, Butterworth and Linkwitz each at 6/12/18/24/30/36/42/48 dB/oct (vendor datasheet, 'TECHNICAL SPECIFICATIONS'). LR is recorded here at EVEN orders only, and that is a deliberate narrowing, not a transcription error: a true Linkwitz-Riley alignment exists only at even orders, so the odd-order LR entries are vendor menu labelling whose actual phase behaviour nobody has measured. Feeding them to a search would put filters we cannot model into the space the search picks a winner from -- the same shape as the Helix CHEBYSHEV family, which is excluded for the same reason. If the odd-order LR entries are ever measured on hardware, add them back with the measurement beside them.",
+      "types": {
+        "BE": {
+          "orders_db_per_oct": [
+            6,
+            12,
+            18,
+            24,
+            30,
+            36,
+            42,
+            48
+          ]
+        },
+        "BW": {
+          "orders_db_per_oct": [
+            6,
+            12,
+            18,
+            24,
+            30,
+            36,
+            42,
+            48
+          ]
+        },
+        "LR": {
+          "orders_db_per_oct": [
+            12,
+            24,
+            36,
+            48
+          ]
+        }
+      }
+    },
+    "delay": {
+      "max_ms": null,
+      "max_ms_note": "UNRESOLVED, and null rather than a guess. The datasheet states 0-17 ms AND 0-692 cm, which contradict each other (692 cm at the datasheet's own implied 350 m/s is 19.8 ms). The PC software (DEMO build, no unit connected) showed a 425 cm maximum = exactly 12.50 ms at 340 m/s, and a demo build may not expose a connected unit's real limits. Practical impact is near zero -- in-car time alignment rarely exceeds ~8 ms -- so nothing is blocked by leaving it open, while a plausible bound written here becomes a limit code enforces and nobody re-questions.",
+      "min_ms": 0,
+      "scope": "per output channel",
+      "speed_of_sound_note": "The UI converts ms <-> cm internally and TWO constants are implied by different vendor sources: the datasheet step pairs (0.08 ms = 2.8 cm, 0.02 ms = 0.7 cm) imply 350 m/s, while the software's 425 cm / 12.5 ms limit implies 340 m/s. Never hand-convert: propose delay in ms and let the app derive centimetres.",
+      "step_ms": 0.021,
+      "step_ms_note": "0.021 ms is one sample at 48 kHz; the datasheet's own 'Time Alignment Fine Set: 0.02 ms' is the same figure rounded. This is the second, independent witness for the 48 kHz processing rate."
+    },
+    "dsp_processing_rate_hz": 48000,
+    "dsp_processing_rate_note": "Derived, not vendor-stated. The datasheet gives only 'DIGITAL SIGNAL PROCESSOR (64 bit Clock speed: 295 MHz)'; that is the Analog Devices SigmaDSP ADAU145x core clock 294.912 MHz = 6144 x 48 kHz. Corroborated independently by the delay fine step being exactly 1/48000 s. Generalizable: any DSP quoting a ~295 MHz clock is an ADAU145x at 48 kHz.",
+    "eq_bypass_available": false,
     "groups": [
       {
-        "fields": null,
+        "crossover_filters": {
+          "types": {
+            "BE": {
+              "orders_db_per_oct": [
+                6,
+                12,
+                18,
+                24,
+                30,
+                36,
+                42,
+                48
+              ]
+            },
+            "BW": {
+              "orders_db_per_oct": [
+                6,
+                12,
+                18,
+                24,
+                30,
+                36,
+                42,
+                48
+              ]
+            },
+            "LR": {
+              "orders_db_per_oct": [
+                12,
+                24,
+                36,
+                48
+              ]
+            }
+          }
+        },
+        "eq": {
+          "band_types": [
+            "PK"
+          ],
+          "bands_per_channel": 31
+        },
+        "fields": [
+          "hp",
+          "lp",
+          "gain_db",
+          "ta_ms",
+          "polarity",
+          "mute",
+          "eq"
+        ],
         "id": "physical_outputs",
         "label": "Output channels",
-        "max_count": null
+        "max_count": 8,
+        "note": "6 amplified channels + 2 RCA pre-outs. There is no virtual/group tier on this model."
       }
     ],
-    "groups_enumerated": false,
+    "groups_enumerated": true,
+    "input_routing": {
+      "aux_rca": 2,
+      "bluetooth": {
+        "channels": 2,
+        "optional": true
+      },
+      "hi_level": 6,
+      "input_processing": "level (gain) only -- no per-input EQ or delay",
+      "matrix": {
+        "cell_level_range_db": [
+          -60,
+          0
+        ],
+        "cell_level_step_db": 1,
+        "per_cell_level": true,
+        "per_cell_level_note": "The mix level is set in EVERY matrix cell (input -> output), not once per input source, so there is no per-input processing row at all.",
+        "shape": "all inputs x all outputs"
+      },
+      "measurement_input": {
+        "operational_note": "Input selection follows the preset on this unit, so every preset used during measurement must have the same input selected. And because per-input level lives in the matrix cells, the measurement input's row must carry identical cell levels across the channels being compared -- an unequal cell level presents as a level error that looks acoustic.",
+        "rationale": "Aux RCA works as a dedicated measurement input: the sweep bypasses the head unit, so measurements carry no OEM EQ, loudness or level-dependent processing.",
+        "source": "aux_rca"
+      },
+      "optical": 2,
+      "usb_audio": false
+    },
     "name": "M6V4",
-    "dsp_processing_rate_hz": null,
+    "parametric_eq": {
+      "band_types": [
+        "PK"
+      ],
+      "bands_per_channel": 31,
+      "eq_transfer_note": "No EQ file import. Filters move from REW with REW-EQ-CopyPaste-Assistant (github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant), which types them into the MUSWAY window. A proposal must therefore be expressible as REW PK filters on the grid F=1 Hz / Q=0.01 / G=0.1 dB, within 31 bands per channel, and PK only -- this processor has no shelf and no all-pass band.",
+      "file_import": false,
+      "freq_range_hz": [
+        20,
+        20000
+      ],
+      "freq_step_hz": 1,
+      "gain_range_db": [
+        -15,
+        15
+      ],
+      "gain_step_db": 0.1,
+      "q_range": [
+        0.1,
+        10
+      ],
+      "q_step": 0.01,
+      "scope": "per output channel"
+    },
+    "polarity": {
+      "implementation": "0/180 degree switch only -- no continuous all-pass phase control",
+      "scope": "per output channel",
+      "values": [
+        "NORM",
+        "INV"
+      ]
+    },
+    "presets": {
+      "count": 6,
+      "input_selection_switches_with_preset": true,
+      "note": "The silent input reset trap (competition.md Pre-session #4): give every preset used during a session the same input, and check the input after every switch."
+    },
     "sources": [
-      "user's memory of past use, 2026-07-10, contributed from AutoSci's dsp_profiles/musway-m6v4.yaml on 2026-08-23 -- NOT verified against a datasheet or the vendor software UI, and not re-confirmed since. Every enterable fact is null for that reason: what was remembered is in _open_questions, where no consumer can execute it."
+      "vendor datasheet musway.de/assets/m6v4.pdf, 40 pp., section 'TECHNICAL SPECIFICATIONS' -- the source for the filter menu, ranges, steps, preset count and input complement",
+      "a tuner's reading of the MUSWAY PC software, DEMO build with no unit connected, 2026-09-01 -- the source for the 425 cm delay limit and the matrix per-cell level; a demo build may not expose a connected unit's real limits",
+      "contributed through an onboarding interview as autosound-tuning-skill#14 and folded into the library on 2026-09-01, replacing an all-null entry that carried the user's 2026-07-10 recollection in _open_questions",
+      "NOT measured on hardware: this processor is in no run of ours (autosound-hub #26). Every value here is READ from the vendor's own documents or UI, never verified acoustically."
     ],
+    "variant_note": "This entry describes the NON-512K unit (ADAU1452). The 512K variant is different silicon (ADAU1466) whose published DSP specification block is byte-identical, so the sheet cannot be used to infer one from the other. A tuner who names the variant when starting a project ('M6V4 (no 512K)') will not match this entry by name -- `find_bundled` is exact by design.",
     "vendor": "Musway"
   }
 }
