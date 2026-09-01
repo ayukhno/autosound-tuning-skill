@@ -1,8 +1,8 @@
 {
   "dsp_profile": {
     "_open_questions": [
-      "Maximum time-alignment delay: datasheet 0-17 ms vs 0-692 cm (mutually inconsistent), vs the demo software's 425 cm = 12.50 ms at 340 m/s. `delay.max_ms` stays null until a connected unit says. Nothing is blocked by this -- in-car TA rarely exceeds ~8 ms.",
-      "The odd-order 'Linkwitz' menu entries (6/18/30/42 dB/oct) are recorded in prose but NOT in `crossover_filters.types.LR`: a true LR alignment exists only at even orders, and their real phase behaviour is unmeasured. Measure before adding them to a search space.",
+      "How far the 512K variant differs. The user says it has different EQ filters and a different input stage but not how far that goes; the published DSP spec blocks are byte-identical, so the datasheet cannot answer it. Until somebody reads the 512K's own software, this profile covers the non-512K only -- which is why the variant is part of `name`.",
+      "The odd-order 'Linkwitz' entries (6/18/30/42 dB/oct) are in the menu and are recorded, but their phase behaviour is UNMEASURED: a true LR alignment exists only at even orders. Measure them when a unit is available, and note it here.",
       "The optical input accepts PCM up to 96 kHz / 24 bit per the datasheet; sample-rate conversion to the 48 kHz core rate is INFERRED, not vendor-confirmed.",
       "STRUCTURAL, not a question: the matrix per-cell level has no field token in the ledger vocabulary, so it is stored as a descriptive key only and cannot be proposed as a normal field edit."
     ],
@@ -28,7 +28,7 @@
       "corner_freq_step_hz": 1,
       "independent_hp_lp": true,
       "scope": "per output channel",
-      "slope_range_note": "The MENU offers Bessel, Butterworth and Linkwitz each at 6/12/18/24/30/36/42/48 dB/oct (vendor datasheet, 'TECHNICAL SPECIFICATIONS'). LR is recorded here at EVEN orders only, and that is a deliberate narrowing, not a transcription error: a true Linkwitz-Riley alignment exists only at even orders, so the odd-order LR entries are vendor menu labelling whose actual phase behaviour nobody has measured. Feeding them to a search would put filters we cannot model into the space the search picks a winner from -- the same shape as the Helix CHEBYSHEV family, which is excluded for the same reason. If the odd-order LR entries are ever measured on hardware, add them back with the measurement beside them.",
+      "slope_range_note": "The menu offers Bessel, Butterworth and Linkwitz each at 6/12/18/24/30/36/42/48 dB/oct (vendor datasheet, 'TECHNICAL SPECIFICATIONS'), and all eight are recorded for all three families, including the ODD-order Linkwitz entries -- the user's ruling, 2026-09-01: they are definitely in the menu, so record them and measure when somebody gets the chance. Read them for what they are: a true Linkwitz-Riley alignment exists only at even orders, so an odd-order 'LR' here is a vendor menu label whose actual phase behaviour nobody has measured yet. A search may therefore return one, and its phase prediction is unverified until it is measured on hardware.",
       "types": {
         "BE": {
           "orders_db_per_oct": [
@@ -56,17 +56,21 @@
         },
         "LR": {
           "orders_db_per_oct": [
+            6,
             12,
+            18,
             24,
+            30,
             36,
+            42,
             48
           ]
         }
       }
     },
     "delay": {
-      "max_ms": null,
-      "max_ms_note": "UNRESOLVED, and null rather than a guess. The datasheet states 0-17 ms AND 0-692 cm, which contradict each other (692 cm at the datasheet's own implied 350 m/s is 19.8 ms). The PC software (DEMO build, no unit connected) showed a 425 cm maximum = exactly 12.50 ms at 340 m/s, and a demo build may not expose a connected unit's real limits. Practical impact is near zero -- in-car time alignment rarely exceeds ~8 ms -- so nothing is blocked by leaving it open, while a plausible bound written here becomes a limit code enforces and nobody re-questions.",
+      "max_ms": 17,
+      "max_ms_note": "17 ms, confirmed by the user against their own old setups on a WORKING unit (2026-09-01). That settles a source conflict rather than joining it: the demo build showed 425 cm (= 12.50 ms at 340 m/s) because a demo build does not expose a connected unit's limits, and the datasheet's own '0-692 cm' remains inconsistent with its '0-17 ms' (692 cm at its implied 350 m/s is 19.8 ms). The ms figure is the one with a unit behind it, so it is the one recorded.",
       "min_ms": 0,
       "scope": "per output channel",
       "speed_of_sound_note": "The UI converts ms <-> cm internally and TWO constants are implied by different vendor sources: the datasheet step pairs (0.08 ms = 2.8 cm, 0.02 ms = 0.7 cm) imply 350 m/s, while the software's 425 cm / 12.5 ms limit implies 340 m/s. Never hand-convert: propose delay in ms and let the app derive centimetres.",
@@ -106,9 +110,13 @@
             },
             "LR": {
               "orders_db_per_oct": [
+                6,
                 12,
+                18,
                 24,
+                30,
                 36,
+                42,
                 48
               ]
             }
@@ -162,7 +170,7 @@
       "optical": 2,
       "usb_audio": false
     },
-    "name": "M6V4",
+    "name": "M6V4 (no 512K)",
     "parametric_eq": {
       "band_types": [
         "PK"
@@ -201,12 +209,13 @@
       "note": "The silent input reset trap (competition.md Pre-session #4): give every preset used during a session the same input, and check the input after every switch."
     },
     "sources": [
+      "the user's own unit and old setups, 2026-09-01 -- the source for the 17 ms delay maximum, for the odd-order Linkwitz entries being real menu items, and for the 512K being a materially different processor (different EQ filters and input stage)",
       "vendor datasheet musway.de/assets/m6v4.pdf, 40 pp., section 'TECHNICAL SPECIFICATIONS' -- the source for the filter menu, ranges, steps, preset count and input complement",
       "a tuner's reading of the MUSWAY PC software, DEMO build with no unit connected, 2026-09-01 -- the source for the 425 cm delay limit and the matrix per-cell level; a demo build may not expose a connected unit's real limits",
       "contributed through an onboarding interview as autosound-tuning-skill#14 and folded into the library on 2026-09-01, replacing an all-null entry that carried the user's 2026-07-10 recollection in _open_questions",
       "NOT measured on hardware: this processor is in no run of ours (autosound-hub #26). Every value here is READ from the vendor's own documents or UI, never verified acoustically."
     ],
-    "variant_note": "This entry describes the NON-512K unit (ADAU1452). The 512K variant is different silicon (ADAU1466) whose published DSP specification block is byte-identical, so the sheet cannot be used to infer one from the other. A tuner who names the variant when starting a project ('M6V4 (no 512K)') will not match this entry by name -- `find_bundled` is exact by design.",
+    "variant_note": "This entry describes the NON-512K unit and MUST NOT be read as covering the 512K. The user (2026-09-01): the 512K has different EQ filters and a different input stage -- 'не знаю точно' how far the difference goes, so the extent is open, but the fact of it is not. The silicon differs too (ADAU1452 vs ADAU1466) while the two published DSP specification blocks are byte-identical, which is exactly why the datasheet cannot be used to infer one from the other. The variant is in `name` on purpose: `find_bundled` is exact, so a bare 'M6V4' finds nothing and triggers an interview. That is the safe direction -- a missed match costs questions, a false match applies another unit's facts.",
     "vendor": "Musway"
   }
 }
