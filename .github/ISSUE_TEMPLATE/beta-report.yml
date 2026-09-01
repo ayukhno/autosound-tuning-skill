@@ -10,9 +10,15 @@ body:
         → **Installation** → **Report a problem**. From a terminal session, paste what the
         installer printed, or the output of `claude --version` and `python3 --version`.
 
+        **A screenshot is welcome and is usually the fastest half of the report** — drag the image
+        straight into the "Screenshot" box below and GitHub uploads it. The app cannot attach it for
+        you, so this is the moment to add it.
+
         Nothing here should carry personal data: no names, plates, addresses, or photos. Versions,
         paths and log lines are what this is for — and note that a path contains your computer's
-        user name (`/Users/<you>/…`). This is a public repository; edit those out if you mind.
+        user name (`/Users/<you>/…`). This is a public repository; edit those out if you mind. The
+        same goes for a screenshot: crop out a title bar or a path that names you, and no photos of
+        the car or of people.
   - type: textarea
     id: what
     attributes:
@@ -23,6 +29,16 @@ body:
         carried on without a review.
     validations:
       required: true
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot (drag the image into this box)
+      description: >
+        For anything you can see — a window, a wrong number on screen, a menu that offers the wrong
+        thing — the picture IS the report. Described in prose the same thing is vague. Optional, and
+        only if it carries no personal data.
+    validations:
+      required: false
   - type: textarea
     id: install
     attributes:
