@@ -40,7 +40,26 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
-## [Unreleased]
+## [v3.0.38] — 2026-09-01 · the shelf takes its Q, the all-pass is the filter the hardware runs, and the refusal that withholds a number has an author
+
+> **Upgrading:** mostly additive, with **three things a consumer must know before installing.**
+> **(1) A shelf with no Q is now REFUSED** (`dsp_math.peq_response` raises `ValueError`) where it
+> used to be modelled silently at `S=1`. Anything that hands a shelf band without a `q` now gets an
+> error naming `SHELF_Q_S1` instead of a plausible wrong curve; in-tree callers already refuse a
+> band with no Q upstream (`predict._band_from_row`), so this bites only a caller that built bands
+> by hand. **(2) The numbers move.** A shelf at any Q other than ≈0.707 and every all-pass phase are
+> computed differently now, because both were measured against hardware and both were wrong
+> (up to 4.33 dB on a shelf at Q 2; up to ~9° of all-pass phase at 8 kHz) — so an EQ or phase
+> proposal produced before this tag does not reproduce after it. That is a correction toward the
+> processor, not a change of policy, but a re-run will not match an old artifact. **(3) The MUSWAY
+> profile is renamed** to `M6V4 (no 512K)`: `find_bundled("Musway", "M6V4")` no longer matches, a
+> project whose `dsp_profile.json` names `M6V4` will not `refresh` against the library until its
+> name is updated, and TCC's New Project list shows the new name. Deliberate — the 512K is different
+> silicon with different EQ filters and a different input stage, and a bare "M6V4" must not silently
+> pick up the other unit's facts. Everything else is additive: `parametric_eq.q_range_by_type` is
+> optional (a profile without it behaves exactly as before), `eq_propose` now writes de-embed
+> refusals to **stderr** in both modes with stdout untouched, and `estimator-scope.md` §2a plus the
+> Butterworth note in `filter-types-car-audio.md` are documentation.
 
 - **The refusal that withholds a number now has an author — `references/core/estimator-scope.md` §2a,
   `rew_tool/eq_propose.py`** (autosound-hub `#31`). Three commands lean on one refusal: a solo taken
