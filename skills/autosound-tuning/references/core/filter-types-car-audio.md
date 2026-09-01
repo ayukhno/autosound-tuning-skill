@@ -74,12 +74,18 @@ tree nor git history (a search of the same shape finds neighbouring topics at on
 is real and not a bad query); the cockpit inventory kept only the question. Digging through session
 transcripts would cost more than the answer is worth — the owner's decision, 2026-08-31.
 
-**So the debt carries an arrival condition instead of a queue position.** Measure the Helix's
-`BW −24` against hardware when — and only when — **the method walks into the same wall again**:
-protectives correctly taken out, the joint aligned, and the residual phase on the mid channel again
-sitting at the top of the threshold **with the joint decision depending on it**. Not earlier, and
-not "while we are in there anyway". The debt lives as `autosound-hub#32`, open on purpose: it waits
-for an event, not for a person.
+**So the debt carried an arrival condition instead of a queue position:** measure the Helix's
+`BW −24` against hardware when **the method walks into the same wall again** — protectives correctly
+taken out, the joint aligned, and the residual phase on the mid channel again sitting at the top of
+the threshold **with the joint decision depending on it**. Not earlier, and not "while we are in
+there anyway".
+
+**Since 2026-09-01 it is with the `research` role** (`autosound-hub#32`), because the reason for
+waiting has gone: that condition was written when there was nothing to measure with, and there is
+now a bench — twenty electrical sweeps, no microphone, each number a complex ratio to a bypass
+capture, the method that settled the shelf Q and the all-pass form in `#36`. So the answer may
+arrive before the wall does. Nothing here waits on it: this is an unverified assumption, not a
+blocker, and the ticket stays open until somebody measures.
 
 ---
 
