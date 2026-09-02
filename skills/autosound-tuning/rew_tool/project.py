@@ -249,6 +249,33 @@ FLAW_KINDS = (
 # whole point of writing the map down is that "don't EQ-boost this null" survives the session that
 # discovered it.
 FLAW_ACTIONS = ("notch", "leave", "no_boost", "geometry", "delay", "crossover")
+
+#: Which rows a front-end shows the CAR'S OWNER, as opposed to the ones it keeps for the tune
+#: (user, 2026-09-02). The line is not "important vs unimportant" -- it is **what stays in the car
+#: after the tune is finished**. Geometry and an install shelf are properties of the vehicle; a
+#: null you must not boost is the cabin's physics and will be there next year. A notch and a
+#: crossover corner are the tuner's working plan: once the tune is done they are not features of
+#: the car any more, they are what was done about it.
+#:
+#: This is here, and not in a window, because both sides have to mean the same thing by it and one
+#: of them vendors this file (`autosound-tcc: core/vendor_loader.py`). A rule about what to show,
+#: written in the thing that shows it, is a rule the next front-end will not know about.
+#:
+#: Bought on the live Passat map: 18 rows shown at one weight, of which two asked the owner for
+#: real money (a tweeter pod, re-doing the far door) and sixteen did not -- and the two looked
+#: exactly like the rest.
+OWNER_FACING_ACTIONS = ("geometry", "leave", "no_boost")
+
+#: What the person HEARS, in their words -- the one thing no row on the live map said. `why` is the
+#: audit trail and is good at that: the measurement, the cross-check, the doubt, the section it
+#: argues with. On the Passat map its median was 131 characters and its longest 763, and it was
+#: also the only prose a panel had, so an owner was handed an audit trail to read.
+#:
+#: Capped rather than trusted, because the field that has no limit is the field that becomes a
+#: second `why`. One sentence: "the bass comes from both sides", "a piano left of centre wanders
+#: with pitch". The vocabulary already exists -- `knowledge/cars/<body>.md` writes in exactly this
+#: voice -- so this is borrowing a register, not inventing one.
+SYMPTOM_MAX = 200
 #: How sure we are. A tune generates suspicions constantly and they had nowhere to go: the
 #: PART B pair-coherence findings on the live project sat in prose for a week, explicitly marked
 #: "measured before TA, re-check afterwards", because recording them as facts would have been a
@@ -328,6 +355,19 @@ def validate_flaw(entry):
             f"status must be one of {', '.join(FLAW_STATUSES)} or absent (got "
             f"{entry.get('status')!r}). Absent means {DEFAULT_FLAW_STATUS}."
         )
+    if entry.get("symptom") is not None:
+        symptom = entry["symptom"]
+        if not isinstance(symptom, str) or not symptom.strip():
+            raise ProjectError(
+                f"symptom, when given, is one sentence in the OWNER's words — what they hear, not "
+                f"what was measured (got {symptom!r})"
+            )
+        if len(symptom) > SYMPTOM_MAX:
+            raise ProjectError(
+                f"symptom is {len(symptom)} characters and the limit is {SYMPTOM_MAX}: it is the "
+                f"line a person reads on a panel, not a second `why`. The measurement, the "
+                f"cross-check and the doubt belong in `why`, which has no limit."
+            )
     if not str(entry.get("why") or "").strip():
         raise ProjectError("a flaw needs `why` — the next session reads the reason, not the number")
     if not [e for e in (entry.get("evidence") or []) if str(e).strip()]:
@@ -777,7 +817,7 @@ _USAGE = """usage: project.py <project-dir> <command> [args]
   set-hardware <name> <value> [--source S]     set a DSP-hardware control (RearRC/SubRC/...)
   record-change <process-dir> <file> <what>    log a config_change journal event
       [--why W] [--source S] [--impact I]
-  flaw <f_hz> <level_db> <kind> <action> [--status hypothesis]
+  flaw <f_hz> <level_db> <kind> <action> [--status hypothesis] [--symptom "..."]
   flaw --t-ms <ms> <kind> <action>       a TIME-domain install property (energy_lag,
                                          ringing, decay_asymmetry): no frequency, no dB
                                                add/replace an acoustic-flaw entry (SCR-015).
@@ -790,7 +830,12 @@ _USAGE = """usage: project.py <project-dir> <command> [args]
                                                  thd_spike|pair_suckout
                                                action: notch|leave|no_boost|geometry|delay|
                                                  crossover  (a dip can never be `notch`)
-  flaws                                        print the map, lowest frequency first
+                                               --symptom: what the OWNER hears, one sentence in
+                                                 their words. `why` is the audit trail; this is
+                                                 the line a person reads. Owed on the rows an
+                                                 owner is shown: geometry|leave|no_boost
+  flaws [--owner]                              print the map, lowest frequency first; --owner
+                                               shows only what stays in the car after the tune
 """
 
 
@@ -823,6 +868,19 @@ def _parse_kv(pairs, source=None):
             v = fact(v, source=source)
         out[k] = v
     return out
+
+
+def _flaw_prose(entry, owner_only):
+    """The one line this reader came for: the symptom for an owner, the audit trail for a session.
+
+    A row an owner is shown that has no `symptom` says so out loud rather than silently falling
+    back to `why` -- a fallback would hand a person the audit trail again, which is the whole thing
+    being fixed, and it would hide the gap from the only reader who can close it.
+    """
+    if owner_only:
+        return entry.get("symptom") or "(symptom not written yet)"
+    said = entry.get("why", "")
+    return f"{said}  ⟵ {entry['symptom']}" if entry.get("symptom") else said
 
 
 def _flag(args, name, default=None):
@@ -923,7 +981,8 @@ def _main(argv):
             # typo here stops the write instead of banking a hypothesis as fact -- which is what
             # this flag not being read at all used to do, silently and with exit 0.
             status = _flag(args, "--status")
-            said = {"status": status} if status else {}
+            symptom = _flag(args, "--symptom")
+            said = {k: v for k, v in (("status", status), ("symptom", symptom)) if v}
             # A time-domain row has no frequency and no dB, so it cannot use the positional form:
             #   flaw --t-ms 1.1 energy_lag geometry --channels m-L --why … --evidence …
             if t_ms is not None:
@@ -956,7 +1015,12 @@ def _main(argv):
             print(f"{entry['f_hz']:g} Hz{width} {entry['level_db']:+g} dB "
                   f"[{entry['kind']}]{mark} -> {entry['action']}")
         elif cmd == "flaws":
+            # The same split the panel makes, available to anyone with a terminal: a front-end is
+            # not the only reader, and a rule only one consumer can apply is a rule that drifts.
+            owner_only = "--owner" in args
             for entry in proj.flaws():
+                if owner_only and entry.get("action") not in OWNER_FACING_ACTIONS:
+                    continue
                 width = f" Q{entry['q']:g}" if entry.get("q") else (
                     f" {entry['bw_oct']:g}oct" if entry.get("bw_oct") else "")
                 who = ", ".join(entry.get("channels") or []) or "—"
@@ -964,10 +1028,11 @@ def _main(argv):
                     where = "broadband" if entry.get("f_hz") is None else f"{entry['f_hz']:.6g} Hz"
                     print(f"{where:>10}{'':>8} {entry['t_ms']:+6g} ms  "
                           f"{entry['kind']:<16} {entry['action']:<10} {who:<12} "
-                          f"{entry.get('why','')}")
+                          f"{_flaw_prose(entry, owner_only)}")
                     continue
                 print(f"{entry['f_hz']:>7.6g} Hz{width:>8} {entry['level_db']:+6g} dB  "
-                      f"{entry['kind']:<16} {entry['action']:<10} {who:<12} {entry.get('why','')}")
+                      f"{entry['kind']:<16} {entry['action']:<10} {who:<12} "
+                      f"{_flaw_prose(entry, owner_only)}")
         else:
             print(_USAGE, file=sys.stderr)
             return 2
@@ -1064,6 +1129,40 @@ def _selftest():
     assert _main(["p", cli_root, "flaw", "40", "+3", "modal_peak", "notch",
                   "--status", "probably", *said]) == 1
     assert len(Project(cli_root).flaws()) == 3, "a refused status must not have written a row"
+
+    # -- the row says what the OWNER hears, and the map splits by who is reading (2026-09-02) ----
+    # The live Passat map had 18 rows and not one said what a person hears: `why` carried the
+    # measurement, the cross-check, the doubt and the section it argued with -- median 131
+    # characters, longest 763 -- and it was also the only prose a panel had. So an owner was shown
+    # an audit trail. `symptom` is the other job, capped so it cannot quietly become a second
+    # `why`, and `OWNER_FACING_ACTIONS` is the line between what stays in the car and what the
+    # tune does about it.
+    assert "notch" not in OWNER_FACING_ACTIONS and "crossover" not in OWNER_FACING_ACTIONS
+    assert "delay" not in OWNER_FACING_ACTIONS, "a delay fix is the tuner's work, not the car"
+    assert set(OWNER_FACING_ACTIONS) <= set(FLAW_ACTIONS), OWNER_FACING_ACTIONS
+    heard = "бас іде з обох боків, а не з-під ніг"
+    assert _main(["p", cli_root, "flaw", "145", "-10.4", "cabin_null", "leave",
+                  "--symptom", heard, *said]) == 0
+    assert [f.get("symptom") for f in Project(cli_root).flaws() if f.get("f_hz") == 145.0] \
+        == [heard]
+    # Capped, and blank refused: both would end as "a person reads whatever fit".
+    assert _main(["p", cli_root, "flaw", "150", "-9", "cabin_null", "leave",
+                  "--symptom", "x" * (SYMPTOM_MAX + 1), *said]) == 1
+    assert _main(["p", cli_root, "flaw", "150", "-9", "cabin_null", "leave",
+                  "--symptom", "   ", *said]) == 1
+    assert not [f for f in Project(cli_root).flaws() if f.get("f_hz") == 150.0], \
+        "a refused symptom must not have written a row"
+    # `flaws --owner` keeps what stays in the car and NAMES the rows still missing their line --
+    # falling back to `why` would hand the person the audit trail again, quietly.
+    import contextlib
+    import io as _io
+    with contextlib.redirect_stdout(_io.StringIO()) as shown:
+        _main(["p", cli_root, "flaws", "--owner"])
+    lines = [ln for ln in shown.getvalue().splitlines() if ln.strip()]
+    assert len(lines) == 2, lines                      # 145 leave + 0.3 ms energy_lag geometry
+    assert heard in shown.getvalue(), shown.getvalue()
+    assert "(symptom not written yet)" in shown.getvalue(), shown.getvalue()
+    assert "127.4" not in shown.getvalue() and "39" not in shown.getvalue(), "plan rows leaked"
 
     # -- time-domain install properties (inbox 3.12) -------------------------------------------
     # The row shape that did not exist: one door's energy lagging the other's is a real install

@@ -113,11 +113,29 @@ front-end can render it and a later phase can consult it without re-reading a ca
 | `kind` | `room_gain` · `modal_peak` · `cabin_null` · `sbir` · `floor_bounce` · `driver_resonance` · `non_min_phase` · `thd_spike` · `pair_suckout` |
 | `action` | `notch` · `leave` · `no_boost` · `geometry` · `delay` · `crossover` |
 | `channels` | the codes it was measured on |
-| `why` | one line — the next session reads the reason, not the number |
+| `why` | the audit trail: the measurement, the cross-check, the doubt, the section it argues with. No limit, and it is read by the next SESSION |
+| `symptom` | optional, ≤200 chars — one sentence in the OWNER's words, what they *hear*. `why` is not this and cannot stand in for it |
 | `evidence` | the captures it was read off; a flaw with no measurement behind it is a rumour |
 
 Both lists are closed: a consumer colours by `action`, and "what may NOT be done here" is the half
 that has to survive the session that found it. `status` is `hypothesis` or `confirmed`, and **absent means confirmed** — every map written before the field existed was written as fact. A hypothesis is a finding the session raised and has not settled: the pair-coherence dips measured before time alignment are the worked example, since they are expected to move once TA lands. It still needs `why` and `evidence` — a hypothesis is a question with a measurement behind it, not a guess.
+
+**Two readers, and the row must serve both** (user, 2026-09-02). `why` is written for the next
+session and is good at it; on a live 18-row map its median was 131 characters and its longest 763,
+carrying an arbitration about an unfixed τ. It was also the only prose a front-end had — so the
+car's owner was handed an audit trail to read. `symptom` is the other job and is capped, because
+the field with no limit becomes a second `why`: *"the bass comes from both sides"*, *"a piano left
+of centre wanders with pitch"*. The register already exists in `knowledge/cars/<body>.md`; borrow
+it rather than inventing one.
+
+**Which rows an owner is shown: `project.OWNER_FACING_ACTIONS`** = `geometry` · `leave` ·
+`no_boost`. The line is **what stays in the car after the tune**, not what matters most. Geometry
+and an install shelf are properties of the vehicle; a null you must not boost is the cabin's
+physics and will be there next year. A `notch`, a `crossover` corner and a `delay` are the tuner's
+working plan — once the tune is done they are not features of the car, they are what was done
+about it. The constant lives in `project.py` so a front-end can import it (`autosound-tcc` vendors
+that file); `project.py flaws --owner` applies it from a terminal. A row an owner is shown with no
+`symptom` is reported as missing one, never quietly backfilled from `why`.
 
 **`level_db < 0` with `action: "notch"` is refused**
 — a null is interference, not minimum-phase; cutting it changes nothing and boosting it burns

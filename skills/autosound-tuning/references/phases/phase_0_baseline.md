@@ -107,8 +107,20 @@ heard — that verdict is written with the manual command, which each finding ge
 
 ```bash
 python3 rew_tool/project.py <project> flaw <f_hz> <level_db> <kind> <action> \
-  [--q Q | --bw-oct B] [--channels w-R,w-L] --why "..." --evidence "w-R_1 (sw)"
+  [--q Q | --bw-oct B] [--channels w-R,w-L] --why "..." --evidence "w-R_1 (sw)" \
+  [--status hypothesis] [--symptom "what the owner hears"]
 ```
+
+**A row has two readers, and `--why` only serves one.** `why` is the audit trail — the measurement,
+the cross-check, the doubt, the section it argues with — and the next session reads it. `--symptom`
+is one sentence in the **owner's** words: *"the bass comes from both sides"*, *"a piano left of
+centre wanders with pitch"*. Write it on every row an owner will be shown (`geometry`, `leave`,
+`no_boost` — `project.OWNER_FACING_ACTIONS`, the rows that stay in the car after the tune is
+finished); `project.py flaws --owner` prints exactly those and names the ones still missing it. The
+register to write in already exists in `knowledge/cars/<body>.md`, which describes the same cabins
+in the same voice — borrow it rather than inventing one. Bought on a live 18-row map where not one
+row said what a person hears, so a panel showed the owner an audit trail whose longest entry ran
+763 characters.
 
 `level_db` is the **feature** — `+` a hump, `−` a dip — not the correction you would apply to it.
 `kind` and `action` come from closed lists (`project.py flaws` prints the map; the usage text lists
