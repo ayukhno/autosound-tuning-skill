@@ -865,14 +865,29 @@ def _main(argv=None):
     rp = sub.add_parser("registry", help="multi-slot active-slot pointer (issue #5)")
     rp.add_argument("action", choices=["show", "set-active", "render", "describe"])
     rp.add_argument("preset", nargs="?", default=None)
-    rp.add_argument("--label", default=None)
-    rp.add_argument("--note", default=None)
+    # Declared for the verb, usable only by `describe` -- `action` is a positional choice, not
+    # four subparsers, so argparse cannot scope them. The handler refuses them elsewhere.
+    rp.add_argument("--label", default=None, help="`registry describe` only: the slot's label")
+    rp.add_argument("--note", default=None, help="`registry describe` only: the slot's note")
     sub.add_parser("selftest")
     args = p.parse_args(argv)
 
     if args.cmd == "selftest" or args.cmd is None:
         return _selftest()
     if args.cmd == "registry":
+        # `--label`/`--note` are declared once for the whole `registry` verb, because `action` is a
+        # positional choice rather than four subparsers -- so argparse accepts them on all four and
+        # only `describe` can act on them. `set-active FULL --label "Slot 1"` used to exit 0, print
+        # `active → FULL`, and drop both: the reader then concluded the registry could not hold a
+        # label at all and wrote that down as a tooling limit, which was wrong and sat on disk for
+        # a day. A flag that cannot take effect refuses; silence plus exit 0 is indistinguishable
+        # from having worked.
+        if args.action != "describe" and (args.label is not None or args.note is not None):
+            named = " and ".join(f"--{n}" for n in ("label", "note")
+                                 if getattr(args, n) is not None)
+            p.error(f"{named} {'is' if ' and ' not in named else 'are'} only used by "
+                    f"`registry describe`; `registry {args.action}` cannot act on "
+                    f"{'it' if ' and ' not in named else 'them'}")
         reg = Registry(args.root)
         if args.action == "set-active":
             print("active →", reg.set_active(args.preset))
@@ -1180,6 +1195,32 @@ def _selftest():
     assert "ResoNix" in banner, "every slot must still be listed (isolated rows)"
     active_row = [ln for ln in banner.splitlines() if ln.startswith("| SQ_Jazzi")][0]
     assert "✅" in active_row, active_row
+
+    # -- a flag the subcommand cannot act on REFUSES (2026-09-02) -------------------------------
+    # `--label`/`--note` are declared once for the whole verb, so argparse took them on all four
+    # actions while only `describe` used them. `set-active … --label "Slot 1"` exited 0, printed
+    # `active → …` and wrote nothing into `slots`; the reader concluded the registry could not
+    # persist a label at all, recorded that as a tooling limit, and it sat on disk for a day.
+    # Read the FILE, not the exit code -- the exit code was the part that looked fine.
+    import contextlib
+    import io
+    for action in ("set-active", "show", "render"):
+        for flag in ("--label", "--note"):
+            with contextlib.redirect_stderr(io.StringIO()) as said:
+                try:
+                    _main(["--root", root, "registry", action, "SQ_Jazzi", flag, "Slot 1"])
+                    raise AssertionError(f"registry {action} accepted {flag}")
+                except SystemExit as exc:
+                    assert exc.code == 2, exc.code
+            assert "registry describe" in said.getvalue(), said.getvalue()
+    assert reg.load().get("slots", {}) == {}, "a refused flag must not have written a slot"
+    # ...and the one that CAN act on them still does, which is what makes the refusal a signpost
+    # rather than a wall: the flags work, they were simply typed on the wrong action.
+    with contextlib.redirect_stdout(io.StringIO()):
+        _main(["--root", root, "registry", "describe", "SQ_Jazzi", "--label", "Slot 1",
+               "--note", "competition set"])
+    assert reg.load()["slots"]["SQ_Jazzi"] == {"label": "Slot 1", "note": "competition set"}, \
+        reg.load()["slots"]
 
     # -- one stray value must not hide a whole tier (2026-08-12) --------------------------------
     # `tier_names` required a dict OF DICTS, so a single non-dict value demoted the key to unknown

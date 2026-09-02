@@ -917,6 +917,13 @@ def _main(argv):
             why = _flag(args, "--why")
             evidence = _flag(args, "--evidence") or ""
             t_ms = _flag(args, "--t-ms")
+            # Passed on only when given, never as `status=None`: absent is the file's own way of
+            # saying `confirmed`, and writing the key as null would say the same thing louder in a
+            # shape no reader expects. `validate_flaw` refuses a value outside FLAW_STATUSES, so a
+            # typo here stops the write instead of banking a hypothesis as fact -- which is what
+            # this flag not being read at all used to do, silently and with exit 0.
+            status = _flag(args, "--status")
+            said = {"status": status} if status else {}
             # A time-domain row has no frequency and no dB, so it cannot use the positional form:
             #   flaw --t-ms 1.1 energy_lag geometry --channels m-L --why … --evidence …
             if t_ms is not None:
@@ -925,6 +932,7 @@ def _main(argv):
                     channels=[c.strip() for c in channels.split(",") if c.strip()],
                     why=why,
                     evidence=[e.strip() for e in evidence.split(",") if e.strip()],
+                    **said,
                 )
                 mark = ("" if flaw_status(entry) == DEFAULT_FLAW_STATUS
                         else f" ({flaw_status(entry)})")
@@ -940,6 +948,7 @@ def _main(argv):
                 channels=[c.strip() for c in channels.split(",") if c.strip()],
                 why=why,
                 evidence=[e.strip() for e in evidence.split(",") if e.strip()],
+                **said,
             )
             width = f" Q{entry['q']:g}" if entry.get("q") else (
                 f" {entry['bw_oct']:g}oct" if entry.get("bw_oct") else "")
@@ -1029,6 +1038,32 @@ def _selftest():
         raise AssertionError("add_flaw accepted a status outside the list")
     except ProjectError as exc:
         assert "hypothesis" in str(exc), exc
+
+    # ...and the same round trip through the DOCUMENTED CLI, read back OFF DISK (2026-09-02).
+    # Everything above tests the model layer, and every one of those assertions passed while
+    # `--status` was accepted on the command line and dropped: the handler read six flags and
+    # never asked for this one. The command printed the row, exited 0, and wrote an entry with no
+    # `status` key -- which `flaw_status` then reads as `confirmed`, so a hypothesis was banked as
+    # fact by a command that said it had worked. Only reading the file back catches that; the
+    # return value cannot, because there was nothing wrong with it.
+    cli_root = tempfile.mkdtemp(prefix="autosound_project_cliflaw_")
+    said = ["--why", "pair coherence before TA", "--evidence", "Ws_01 (sw)"]
+    assert _main(["p", cli_root, "flaw", "127.4", "-4.86", "pair_suckout", "crossover",
+                  "--status", "hypothesis", *said]) == 0
+    assert _main(["p", cli_root, "flaw", "39", "+5.9", "modal_peak", "notch", *said]) == 0
+    assert _main(["p", cli_root, "flaw", "--t-ms", "0.3", "energy_lag", "geometry",
+                  "--status", "hypothesis", *said]) == 0
+    on_disk = Project(cli_root).flaws()
+    asked = {(f.get("f_hz") or f["kind"]): f.get("status", "(absent)") for f in on_disk}
+    assert asked == {127.4: "hypothesis", 39.0: "(absent)", "energy_lag": "hypothesis"}, asked
+    # Absent stays ABSENT, not a written-out `null`: the file's own way of saying `confirmed` is
+    # the missing key, and a null would be a third spelling of it that no reader expects.
+    assert all("status" in f or flaw_status(f) == DEFAULT_FLAW_STATUS for f in on_disk)
+    # A flag that cannot take effect refuses rather than succeeding -- the lesson this bug and the
+    # `registry set-active --label` one taught together.
+    assert _main(["p", cli_root, "flaw", "40", "+3", "modal_peak", "notch",
+                  "--status", "probably", *said]) == 1
+    assert len(Project(cli_root).flaws()) == 3, "a refused status must not have written a row"
 
     # -- time-domain install properties (inbox 3.12) -------------------------------------------
     # The row shape that did not exist: one door's energy lagging the other's is a real install

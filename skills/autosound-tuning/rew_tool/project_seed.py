@@ -23,7 +23,8 @@ three different kinds of thing (`project-schema.md`), and only one of them descr
 * **the findings** — `acoustics.flaws` and `_open_questions`. Measured or decided IN a project.
   The cabin's 32 Hz null is a fact about the car and will very likely reappear; the entry that
   records it also carries `evidence` naming measurements that exist only in the project it came
-  from. So: offered, off by default, never silent.
+  from. So: offered, off by default, never silent -- and every carried row lands as a
+  `hypothesis`, because in the new project nobody has measured it yet.
 * **this project's own** — `project_rev` (its own write counter), and most of `paths`, which
   points at a REW file, a baseline set and a ledger version belonging to that project. Only
   `measurements_repo` travels, because it points at the car, not at the tune.
@@ -179,6 +180,28 @@ def dsp_of(source):
     return (vendor, model) if vendor and model else None
 
 
+def _carried_as_hypotheses(acoustics):
+    """Every carried flaw lands as `hypothesis`, whatever it was in the source project.
+
+    Not a judgement about the source's rigour -- a judgement about WHERE the row now sits. Its
+    `evidence` names captures that exist only in the project it came from, so in the target it is
+    by construction unverified: nobody has measured this cabin through this build yet. Carrying a
+    status of `confirmed` across that boundary would let one processor's findings arrive in a
+    brand-new project as fact, pointing at measurements the project has never taken.
+
+    The asymmetry is deliberate. A row can only be weakened here, never strengthened: `hypothesis`
+    is the safe direction, and settling it again is a measurement, which is exactly the work the
+    new project exists to do.
+    """
+    carried = dict(acoustics or {})
+    flaws = carried.get("flaws")
+    if isinstance(flaws, list):
+        carried["flaws"] = [
+            {**f, "status": "hypothesis"} if isinstance(f, dict) else f for f in flaws
+        ]
+    return carried
+
+
 def _mark(text, note):
     """Put the note where a reader meets it first, without displacing the document's title."""
     lines = text.split("\n")
@@ -234,6 +257,8 @@ def seed(source, target, *, include_findings=False, copy_profile=True, note=DEFA
         for key in FINDING_KEYS:
             if key in data:
                 seeded[key] = data[key]
+        if "acoustics" in seeded:
+            seeded["acoustics"] = _carried_as_hypotheses(seeded["acoustics"])
     paths = data.get("paths")
     if isinstance(paths, dict):
         travelling = {k: paths[k] for k in PATHS_THAT_TRAVEL if k in paths}
@@ -295,8 +320,9 @@ def main(argv=None):
     parser.add_argument("--describe", action="store_true",
                         help="just say what SOURCE is, and copy nothing")
     parser.add_argument("--findings", action="store_true",
-                        help="also carry acoustics.flaws and _open_questions (their evidence "
-                             "points at the source project's measurements)")
+                        help="also carry acoustics.flaws and _open_questions; every carried flaw "
+                             "lands as a hypothesis, because its evidence points at the source "
+                             "project's measurements, not at this one's")
     parser.add_argument("--no-profile", action="store_true",
                         help="do not inherit dsp_profile.json (the new build has a DIFFERENT DSP)")
     parser.add_argument("--note", default=DEFAULT_NOTE,
@@ -328,7 +354,7 @@ def main(argv=None):
         print(f"seeded {args.target} from {args.source}")
         print(f"  wrote     {', '.join(result.written)}")
         print(f"  carried   {result.channels} channels · {result.amps} amps"
-              + (f" · {result.flaws} flaws · {result.questions} open questions"
+              + (f" · {result.flaws} flaws (as hypotheses) · {result.questions} open questions"
                  if args.findings else ""))
         if PROFILE_FILE in result.written:
             print(f"  profile   inherited"
@@ -442,6 +468,16 @@ def _selftest():
         # --findings carries them, and counts them, so the choice is visible either way.
         with_f = seed(src, os.path.join(tmp, "third"), include_findings=True)
         assert with_f.flaws == 1 and with_f.questions == 1, with_f
+        # ...and they arrive as HYPOTHESES, whatever they were at home (2026-09-02). The source
+        # row here is a plain confirmed one -- no `status` key at all, which is how every map
+        # written before the field existed reads. Carried verbatim it would have banked another
+        # build's finding in a brand-new project as fact, its evidence naming captures this
+        # project has never taken. Read off DISK, because that is where the next session reads it.
+        with open(os.path.join(tmp, "third", "project.json"), encoding="utf-8") as fh:
+            carried = json.load(fh)["acoustics"]["flaws"]
+        assert [f["status"] for f in carried] == ["hypothesis"], carried
+        with open(os.path.join(src, "project.json"), encoding="utf-8") as fh:
+            assert "status" not in json.load(fh)["acoustics"]["flaws"][0], "source was mutated"
         # A different DSP: everything about the car still travels, its capabilities do not.
         no_p = seed(src, os.path.join(tmp, "fourth"), copy_profile=False)
         assert PROFILE_FILE not in no_p.written and no_p.profile_open == 0, no_p
