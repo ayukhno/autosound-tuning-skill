@@ -102,6 +102,12 @@ class Summary:
     car: str
     dsp: str
     channels: int
+    #: How many measured flaw rows `--findings` would carry from here (2026-09-02). The checkbox
+    #: existed before the number did, so the choice was offered blind: a window could say "carry
+    #: the findings?" and neither it nor the person could see whether that meant three rows or
+    #: eighteen. `Seeded.flaws` answers the same question AFTER the copy, which is the wrong side
+    #: of the decision. Zero is a real answer and reads as one -- the source has none to give.
+    flaws: int = 0
 
 
 @dataclass
@@ -141,7 +147,8 @@ def _read_project(source):
 def describe(source):
     """The one-line identity of a project worth seeding from, or None if it is not one.
 
-    Used by a picker to answer "is this a project, and which car is it" before anything is copied.
+    Used by a picker to answer "is this a project, which car is it, and how much is on offer"
+    before anything is copied.
     Reads the file directly rather than through `Project`: an unreadable or 2.x `project.json` is
     a "no" here, not an exception in a dialog.
     """
@@ -157,10 +164,12 @@ def describe(source):
         str(dsp[key]) for key in ("vendor", "model") if dsp.get(key) not in (None, "")
     )
     channels = data.get("channels")
+    flaws = ((data.get("acoustics") or {}).get("flaws")) or []
     return Summary(
         car=car_line or os.path.basename(os.path.normpath(source)),
         dsp=dsp_line,
         channels=len(channels) if isinstance(channels, list) else 0,
+        flaws=len(flaws) if isinstance(flaws, list) else 0,
     )
 
 
@@ -338,7 +347,9 @@ def main(argv=None):
             return 1
         print(json.dumps(vars(summary), indent=2, ensure_ascii=False) if args.json else
               f"{summary.car} · {summary.dsp or 'DSP not stated'} · "
-              f"{summary.channels} channels")
+              f"{summary.channels} channels · "
+              + (f"{summary.flaws} flaws on offer (--findings, as hypotheses)"
+                 if summary.flaws else "no flaw map to carry"))
         return 0
 
     if not args.target:
@@ -485,6 +496,13 @@ def _selftest():
 
         summary = describe(src)
         assert (summary.car, summary.channels) == ("VW Passat B8 2017", 2), summary
+        # ...and it says how much `--findings` is offering, BEFORE the choice (2026-09-02). The
+        # checkbox shipped before this number did, so a window could ask "carry the findings?"
+        # while neither it nor the person could see whether that meant three rows or eighteen.
+        # `Seeded.flaws` answers afterwards, which is the wrong side of the decision.
+        assert summary.flaws == 1, summary
+        assert describe(dst).flaws == 0, "a copy seeded without --findings offers none"
+        assert describe(os.path.join(tmp, "third")).flaws == 1, "a copy WITH them offers them on"
         assert dsp_of(src) == ("Audiotec-Fischer", "Helix DSP Ultra S"), dsp_of(src)
         assert describe(os.path.join(tmp, "nowhere")) is None
 
