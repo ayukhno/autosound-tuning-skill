@@ -40,6 +40,97 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [v3.0.39] — 2026-09-02 · a flag that cannot take effect refuses, a flaw row says what a person hears, and the cabin gets the lookup the processor already had
+
+> **Upgrading:** additive except for **three refusals where there used to be silence**, and one of
+> them can break a script. **(1) `state.py registry set-active|show|render --label|--note` now
+> EXITS 2** where it used to exit 0 and quietly discard the flag; only `registry describe` was ever
+> able to act on them. Anything piping those flags at the wrong action was already achieving
+> nothing, but it was achieving nothing *successfully*, and now it stops. **(2) `project.py flaw
+> --status <bad value>` now exits 1** instead of being ignored. **(3) `--symptom`, when given, is
+> refused if blank or over 200 characters.** Then the one that changes **data rather than exit
+> codes: `project.py flaw --status` is now actually read.** It was documented, validated, printed
+> and never parsed, so every row written through the CLI landed with no `status` key — and absent
+> means `confirmed`. **Rows already on disk are unchanged and still read as confirmed**; if a map
+> was written expecting `--status hypothesis` to stick, it did not, and that is worth re-reading
+> before the map is trusted. Also: `project_seed.py --findings` now stamps every carried row
+> `hypothesis` regardless of its status at home, so a consumer rendering a seeded map will see
+> hypotheses where it saw facts — that is the fix, not a regression. Everything else is additive:
+> the new `symptom` field is optional and a row without one behaves exactly as before, `car_profile.py`
+> is a new module, `Summary` gained a field, and `flaws --owner` is a new argument to an existing
+> command.
+
+- **A flag that cannot take effect refuses, rather than reporting success — `rew_tool/project.py`,
+  `rew_tool/project_seed.py`, `rew_tool/state/state.py`** (issues `#18`, `#20`). Three bugs of one
+  class, found while seeding a MUSWAY M6V4 project from an existing Passat B8 one. What made them
+  expensive is not what each did but what all three did the same way: **the command printed its
+  row, exited 0, and dropped what it was handed.**
+  **(1) `flaw --status` was never parsed.** The flag is in the usage text, validated by
+  `validate_flaw`, read back by `flaw_status` and printed in the row's own marker — and the handler
+  read six flags without asking for this one. `_flag` pops what it matches, so `--status hypothesis`
+  simply sat in `argv` past the four positionals and disturbed nobody. The consequence is worse
+  than a missing feature: the row landed with **no `status` key**, and `DEFAULT_FLAW_STATUS` is
+  `confirmed`, so a hypothesis was banked as fact by a command that said it had worked. Sixteen
+  imported rows went that way. It surfaced only because the rendered panel was compared against the
+  raw JSON on disk.
+  **(2) `--findings` carried other people's findings at their own status.** In the target project
+  those rows are unverified by construction — their `evidence` names captures that exist only where
+  they came from — so every carried row now lands as `hypothesis`. The asymmetry is deliberate: a
+  row can be weakened across that boundary, never strengthened.
+  **(3) `registry set-active FULL --label "Slot 1"` exited 0 and wrote nothing.** `--label`/`--note`
+  are declared once for the whole verb because `action` is a positional choice rather than four
+  subparsers, so argparse accepted them on all four and only `describe` could use them. The reader
+  concluded the registry could not persist a slot label at all, recorded that as a tooling limit,
+  and it sat on disk for a day being wrong. The refusal now names the subcommand that can.
+  **`DEFAULT_FLAW_STATUS` stays `confirmed`** — every map written before the field existed was
+  written as fact, and re-labelling history would be its own lie. Fail-safe belongs at the writer,
+  which is what (1) and (2) now are. **The tests read the file, not the exit code**: the exit code
+  was the part that looked fine, which is why the model-layer assertions all passed while the flag
+  was being dropped.
+
+- **A flaw row has two readers, and `why` was only serving one — `rew_tool/project.py`,
+  `rew_tool/project-schema.md`, `references/phases/phase_0_baseline.md`** (user, 2026-09-02).
+  Reviewing a live 18-row map: not one row said what a person **hears**. `why` carried the
+  measurement, the cross-check, the doubt and the section it argued with — median 131 characters,
+  longest **763**, an arbitration about an unfixed τ — and it was also the only prose a front-end
+  had, so the car's owner was being handed an audit trail. **`symptom`** is the other job: one
+  sentence in the owner's words, capped at 200 characters because the field with no limit becomes a
+  second `why`. The register already exists in `knowledge/cars/<body>.md`, which describes the same
+  cabins in the same voice — *"the bass comes from both sides"* — so this borrows one rather than
+  inventing it. **`project.OWNER_FACING_ACTIONS`** (`geometry` · `leave` · `no_boost`) draws the
+  line, and the line is **what stays in the car after the tune**, not what matters most: geometry
+  and an install shelf are properties of the vehicle, a null you must not boost is the cabin's
+  physics and will be there next year, while a `notch`, a `crossover` corner and a `delay` are the
+  tuner's working plan. It lives in `project.py` rather than in a window because a consumer vendors
+  that file and both sides must mean the same thing by it — a rule about what to show, written
+  inside the thing that shows it, is a rule the next front-end will not know about. `flaws --owner`
+  applies it from a terminal. A shown row with no `symptom` is **named** as missing one and never
+  backfilled from `why`: the fallback would hand the person the audit trail a second time and hide
+  the gap from the only reader who can close it. Bought on a map where two of eighteen rows asked
+  the owner for real money and looked exactly like the other sixteen.
+
+- **"Has this cabin been described before?" is a command now, not a session's memory —
+  `rew_tool/car_profile.py` (new), `rew_tool/project_seed.py`, `references/core/project-intake.md`**
+  (issue `#19`). `project-intake.md:172` asks one question about two libraries — `knowledge/dsp/`
+  for the processor and `knowledge/cars/` for the body — and only half of it was backed by code. So
+  the processor's answer arrived on its own (`None` meaning "interview from scratch"), while the
+  cabin was checked whenever a session remembered to go looking. On a real intake it did remember,
+  then decided silently what to do with what it found, and the material went unused for two days
+  until the person asked directly. **`car_profile.find_bundled_car(make, model, body)`** returns an
+  exact body or `None`, building the path from the slug rather than searching for it — which is the
+  naming rule's purpose and also makes the refusals fall out of the arithmetic: a wagon slugs
+  differently from a sedan, and a body nobody named slugs short and matches nothing. **A near miss
+  is never named.** No fuzzy match, no "did you mean", and `list_bundled` is for a person browsing,
+  because the damage is not the wrong file being read but the wrong file being *mentioned* — the
+  answer to "we have something for the Passat B7, want it?" is going to be yes. Six near misses in
+  the selftest, every one silent. **The second place to look is a previous project on the same
+  body**, which the prose never mentioned: `Summary.flaws` now carries how many measured rows the
+  seeder would hand over, so `--describe` says *"18 flaws on offer (--findings, as hypotheses)"*
+  **before** the choice — the `--findings` checkbox shipped before that number existed, so the
+  choice was being offered blind, and `Seeded.flaws` answers on the wrong side of the decision. The
+  point is not automation: it is that *"there is prior material for this cabin, here is how much,
+  carry it as hypotheses?"* becomes a question the person is asked.
+
 ## [v3.0.38] — 2026-09-01 · the shelf takes its Q, the all-pass is the filter the hardware runs, and the refusal that withholds a number has an author
 
 > **Upgrading:** mostly additive, with **three things a consumer must know before installing.**
