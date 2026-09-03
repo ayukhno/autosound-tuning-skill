@@ -242,7 +242,14 @@ def verify_asset_url(rc, out, err):
 
 def upload_issue_asset(image_path, dest_name, *, consented=False, message=None,
                        runner=_subprocess_runner, dry_run=False):
-    """Publish ONE image to the hardcoded repo's asset branch and return its verified raw URL.
+    """Publish ONE image to the hardcoded repo's asset branch; the verified raw URL is `["url"]`.
+
+    Returns `guarded_run`'s dict — the same shape `post_feedback` returns — with one key added:
+    **`url`**, the raw URL after `verify_asset_url` accepted it. The docstring used to say it
+    returned the URL itself while it returned the dict, and a caller who believed it and parsed a
+    string would have got `None` and shipped an issue body with no picture in it. Caught by `tcc`
+    on the first real wiring (hub `SKL-019`, 2026-09-03), who read both forms defensively rather
+    than trusting either — the key exists so nobody has to.
 
     For a bug report whose evidence is a picture: a UI bug arrives without its screenshot today,
     and `gh issue create` has no attach flag (public `skill#17`).
@@ -292,7 +299,12 @@ def upload_issue_asset(image_path, dest_name, *, consented=False, message=None,
                 "-f", f"message={message or 'issue asset: ' + name}",
                 "-F", f"content=@{tmp.name}",
                 "--jq", ".content.download_url"]
-        return guarded_run(argv, verify_asset_url, runner=runner, dry_run=dry_run)
+        done = guarded_run(argv, verify_asset_url, runner=runner, dry_run=dry_run)
+        # `verify_asset_url` already resolved and checked it; re-deriving it from `detail` would
+        # make every caller parse a sentence written for a human.
+        if not done.get("dry_run"):
+            done["url"] = _extract_url(done.get("stdout", "")) or _extract_url(done.get("stderr", ""))
+        return done
     finally:
         os.unlink(tmp.name)
 
@@ -382,6 +394,10 @@ def _selftest():
     up = upload_issue_asset(shot, "shot.png", consented=True,
                             runner=lambda argv: (0, raw + "\n", ""))
     assert up["detail"].startswith("verified on"), up
+    # The URL is a KEY, not a sentence to parse. The docstring once promised the URL and returned
+    # the dict; a caller who believed it got None and posted an issue with no picture in it.
+    assert up["url"] == raw, up
+    assert upload_issue_asset(shot, "shot.png", consented=True, dry_run=True).get("url") is None
     # The repo AND the branch are in the command as constants, not as anything a caller passed.
     assert up["argv"][:4] == ["gh", "api", "-X", "PUT"], up["argv"]
     assert up["argv"][4] == f"repos/{FEEDBACK_REPO}/contents/issues/shot.png", up["argv"]
@@ -425,7 +441,8 @@ def _selftest():
           "list still post); FAIL LOUD on wrong-repo / confabulated-success / gh-failure / "
           "look-alike host; refused missing body-file + shell-string argv; dry-run safe. "
           "Upload: refused without consent, repo+branch hardcoded, name reduced to a basename, "
-          "loud on wrong repo / look-alike host / non-raw host / gh failure.")
+          "loud on wrong repo / look-alike host / non-raw host / gh failure, verified URL "
+          "returned under ['url'].")
     return 0
 
 
