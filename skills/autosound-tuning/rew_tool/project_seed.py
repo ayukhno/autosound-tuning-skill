@@ -18,8 +18,11 @@ to be done"). That import is `resonalyze_vc.py`; this is the other half of the s
 **What "system parameters" means here, and what it deliberately does not.** `project.json` holds
 three different kinds of thing (`project-schema.md`), and only one of them describes the car:
 
-* **the system** — `car`, `source`, `dsp`, `amps`, `mic`, `hardware`, `channels`, `glossary`,
-  `channel_summary`, `presets`. True of the installation, not of any one tune. This travels.
+* **the system**, and it splits in two. `car`, `source`, `amps`, `mic` are true of the
+  installation whatever drives it, and always travel. `dsp`, `hardware`, `channels`, `glossary`,
+  `channel_summary`, `presets` are bound to the PROCESSOR and travel only while it is the same
+  one; on a new processor its output list is not inheritance but a wrong answer, and nothing
+  undoes it (there is no `remove-channel`). Which half you get is `copy_profile` — see `seed`.
 * **the findings** — `acoustics.flaws` and `_open_questions`. Measured or decided IN a project.
   The cabin's 32 Hz null is a fact about the car and will very likely reappear; the entry that
   records it also carries `evidence` naming measurements that exist only in the project it came
@@ -67,11 +70,21 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
-#: Facts about the installation. True whichever tune is running, so they travel whole.
-SYSTEM_KEYS = (
-    "car", "source", "dsp", "amps", "mic", "hardware",
-    "channels", "glossary", "channel_summary", "presets",
-)
+#: Facts about the CAR and its installation: true whichever processor drives them. These travel
+#: always -- the drivers are in the same doors whatever is upstream of them.
+CAR_KEYS = ("car", "source", "amps", "mic")
+
+#: Facts bound to the PROCESSOR, and the reason `copy_profile=False` had to grow teeth (2026-09-02).
+#: `channels` is its output list, `channel_summary` is derived from that list, `glossary.channels`
+#: names those same codes, `presets` are its preset slots, and `hardware.controls` is DSP-level by
+#: the schema's own words (`project-schema.md`, SCR-017: a vendor with no such remote simply has no
+#: entries). Carrying them into a build with a different processor is not inheritance but a wrong
+#: answer: 20 Helix channels, a centre, two rears and two virtual tiers arrived in an 8-output DSP
+#: with no virtual layer, and nothing undoes it -- there is no `remove-channel`.
+DSP_KEYS = ("dsp", "hardware", "channels", "glossary", "channel_summary", "presets")
+
+#: Both halves, for the ordinary case where the processor did not change.
+SYSTEM_KEYS = CAR_KEYS + DSP_KEYS
 
 #: Measured or decided inside a project. Offered separately because the entries reference their
 #: own project's evidence -- see the module docstring.
@@ -241,10 +254,17 @@ def seed(source, target, *, include_findings=False, copy_profile=True, note=DEFA
     The file is written through `Project.save()` -- so it is validated, written atomically, and
     gets `project_rev` 1 rather than inheriting the source's count of writes it was not part of.
 
-    `copy_profile=False` is for the one case where the source is the wrong authority on it: the
-    person picked a DIFFERENT DSP for the new build. Everything else about the car still travels
-    -- the same drivers in the same doors, on a new processor -- but its capabilities are then a
-    question for the onboarding interview, not a file to inherit.
+    `copy_profile=False` says **the new build has a different processor**, and that is the whole
+    of its meaning: the car still travels -- the same drivers in the same doors -- while `DSP_KEYS`
+    stay behind with the profile file, because the source is the wrong authority on all of them.
+    Capabilities, outputs and preset slots are then a question for the onboarding interview.
+
+    The flag is named after the file it started with, and until 2026-09-02 that is all it skipped:
+    the topology came across anyway, so the one documented path for "same car, new processor" was
+    the one path that could not be used (public `skill#18`). Every caller already meant the wider
+    thing -- `autosound-tcc`'s window computes it as `dsp_of(source) == (vendor, model)` -- so the
+    behaviour was widened to the meaning rather than the name to the behaviour, which would have
+    broken that caller for nothing.
     """
     source = os.path.abspath(os.path.expanduser(str(source)))
     target = os.path.abspath(os.path.expanduser(str(target)))
@@ -259,7 +279,7 @@ def seed(source, target, *, include_findings=False, copy_profile=True, note=DEFA
     when = (today or date.today()).isoformat()
     name = os.path.basename(os.path.normpath(source))
     seeded = {"project_rev": 0}
-    for key in SYSTEM_KEYS:
+    for key in (SYSTEM_KEYS if copy_profile else CAR_KEYS):
         if key in data:
             seeded[key] = data[key]
     if include_findings:
@@ -333,7 +353,9 @@ def main(argv=None):
                              "lands as a hypothesis, because its evidence points at the source "
                              "project's measurements, not at this one's")
     parser.add_argument("--no-profile", action="store_true",
-                        help="do not inherit dsp_profile.json (the new build has a DIFFERENT DSP)")
+                        help="the new build has a DIFFERENT processor: neither dsp_profile.json "
+                             "nor anything bound to the old one (channels, glossary, "
+                             "channel_summary, presets, hardware controls) is inherited")
     parser.add_argument("--note", default=DEFAULT_NOTE,
                         help="marker put at the top of each inherited prose file; "
                              "{source} and {when} are substituted")
@@ -371,6 +393,9 @@ def main(argv=None):
             print(f"  profile   inherited"
                   + (f", {result.profile_open} facts still open" if result.profile_open
                      else ", complete"))
+        if args.no_profile:
+            print("  processor left behind: no profile, no channels, no glossary, no presets, "
+                  "no hardware controls — they belong to the DSP that changed")
         if not args.findings:
             print("  findings  left behind (--findings to carry them; their evidence names "
                   "measurements that live in the source project)")
@@ -489,10 +514,23 @@ def _selftest():
         assert [f["status"] for f in carried] == ["hypothesis"], carried
         with open(os.path.join(src, "project.json"), encoding="utf-8") as fh:
             assert "status" not in json.load(fh)["acoustics"]["flaws"][0], "source was mutated"
-        # A different DSP: everything about the car still travels, its capabilities do not.
-        no_p = seed(src, os.path.join(tmp, "fourth"), copy_profile=False)
+        # A different processor: the CAR still travels, everything bound to the old DSP does not
+        # (2026-09-02, public `skill#18`). Until then this flag skipped the profile FILE only, so
+        # the old output list arrived anyway and "same car, new processor" -- the normal shape of
+        # a rebuild -- was the one documented path that could not be used.
+        fourth = os.path.join(tmp, "fourth")
+        no_p = seed(src, fourth, copy_profile=False, include_findings=True)
         assert PROFILE_FILE not in no_p.written and no_p.profile_open == 0, no_p
-        assert no_p.channels == 2, "the car still travels when the processor changes"
+        with open(os.path.join(fourth, "project.json"), encoding="utf-8") as fh:
+            newdsp = json.load(fh)
+        assert newdsp["car"]["model"] == "Passat B8" and len(newdsp["amps"]) == 2, newdsp
+        assert not any(k in newdsp for k in DSP_KEYS), \
+            [k for k in DSP_KEYS if k in newdsp]
+        assert no_p.channels == 0 and no_p.amps == 2, no_p
+        # ...and the findings are still reachable on that path. Wanting them WITHOUT the old
+        # topology used to mean getting neither: findings travel only with the seeder, and the
+        # seeder brought the channels along, so the correct move was to bypass it by hand.
+        assert no_p.flaws == 1 and newdsp["acoustics"]["flaws"][0]["status"] == "hypothesis", no_p
 
         summary = describe(src)
         assert (summary.car, summary.channels) == ("VW Passat B8 2017", 2), summary
@@ -508,7 +546,9 @@ def _selftest():
 
     print(f"selftest OK -- system travels (2 channels, 2 amps), findings and ledger stay behind, "
           f"only measurements_repo of 4 paths, project_rev 1 not inherited, "
-          f"profile carried with {out.profile_open} facts still open, re-seed refused")
+          f"profile carried with {out.profile_open} facts still open, re-seed refused; "
+          f"a new processor keeps the car and drops all {len(DSP_KEYS)} DSP-bound keys, "
+          f"findings still on offer there")
 
 
 if __name__ == "__main__":
