@@ -40,6 +40,76 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [v3.0.40] — 2026-09-03 · the processor's topology stops travelling to a new processor, the cabin gets its second lookup, and a screenshot gets a rail to travel on
+
+> **Upgrading:** additive except for **one behaviour change, and it is the one this patch was for.**
+> **`project_seed.py --no-profile` (`copy_profile=False`) now leaves the whole processor behind**,
+> not just `dsp_profile.json`: `dsp`, `hardware`, `channels`, `glossary`, `channel_summary` and
+> `presets` no longer travel. That flag has always MEANT "the new build has a different processor"
+> — every caller computes it that way, `autosound-tcc`'s window as `dsp_of(source) == (vendor,
+> model)` — but it skipped only the file, so the old output list arrived anyway and "same car, new
+> processor" was the one documented path that could not be used (20 Helix channels, a centre, two
+> rears and two virtual tiers into an 8-output DSP, with no `remove-channel` to undo it). **What to
+> check:** anything asserting that `channels` survives `--no-profile` now sees them absent — that is
+> the fix, not a regression, and `autosound-tcc`'s `tests/test_project_seed.py:128` is one such line
+> (tracked as hub `SKL-018`). Projects already on disk are untouched; this is about what a NEW
+> project inherits. Everything else is additive: `car_profile.py --prior` is a new mode,
+> `upload_issue_asset` is a new function, `car.generation` / `car.body` are new optional fields that
+> older projects simply do not have, and the older three-part `car_profile.py --find "<make>"
+> "<model>" "<generation+body>"` form still works and slugs identically.
+
+- **The topology belongs to the processor, so it stops at a new one — `rew_tool/project_seed.py`**
+  (issue `#18`, part 3). `SYSTEM_KEYS` is split into `CAR_KEYS` (`car`, `source`, `amps`, `mic`)
+  and `DSP_KEYS` (`dsp`, `hardware`, `channels`, `glossary`, `channel_summary`, `presets`), and
+  `--no-profile` carries only the first. Six keys, not the four the report listed: `presets` are the
+  processor's own slots and `hardware.controls` is DSP-level by the schema's own words (SCR-017 — a
+  vendor with no such remote simply has no entries). The flag keeps its name deliberately: every
+  caller already meant the wider thing, so the behaviour was widened to the meaning rather than the
+  name to the behaviour, which would have broken that caller for nothing. Wanting the findings but
+  not the old channels used to mean getting neither, because findings travel only with the seeder
+  and the seeder brought the channels along.
+
+- **The car is four parts, and the year is not one of them — `rew_tool/car_profile.py`,
+  `project-schema.md` SCR-043** (issue `#19`). `car` now records `make` · `model` (the nameplate) ·
+  `generation` (the model range) · `body`, with `year` kept as a description of that one car.
+  **The generation IS the span of years over which the acoustics count as the same**, which is why
+  it, and not the year, is what classifies: two builds of one generation and body are one cabin
+  whether 2017 or 2018, while the same year in another shell is another cabin. The body was being
+  ASKED for at intake and thrown away, so a later session could only compare make+model — which
+  merges a sedan with a wagon, the exact error the exact-match rule exists to prevent.
+
+- **The second place the doctrine names is a command now — `car_profile.py --prior`.** Cabin memory
+  lives in two places: the library, and a previous PROJECT on the same body. The first had a lookup;
+  the second had prose. `find_prior_projects` returns previous builds on exactly this cabin, how
+  many measured flaw rows each offers, and which captures its `evidence` names — so the question put
+  to the person is "there are N rows from a previous build of this cabin, carry them as
+  hypotheses?", not a judgement made quietly. **It answers three ways, not two:** a project that
+  never recorded its body comes back as `unknown`, never as "no" — collapsing those two is the same
+  failure one layer down, where material exists, nothing says so, and silence reads as an answer.
+
+- **A screenshot gets a rail to travel on — `rew_tool/gates/side_effect.py`** (issue `#17`, the
+  method's half). `upload_issue_asset` publishes one image and returns a verified raw URL: the repo
+  and the `issue-assets` branch are hardcoded exactly as `FEEDBACK_REPO` is, `verify_asset_url` is
+  its own verifier because raw content is served from a different host than issues are, the
+  destination name is reduced to a basename, and **`consented=True` is required** — the default is
+  refusal, naming where the file would have gone. A public upload cannot be meaningfully
+  un-published and a DSP window shows a file path with a person's name, a vehicle, an installer's
+  branding; asking a caller in prose to be careful is not a rail. `feedback-loop.md` now separates a
+  screenshot of our OWN window from a photo: the line runs through what is in frame, not the file
+  format.
+
+- **REW's UI filter reaches the API, and the ordinal is an index of the VIEW —
+  `references/tooling/rew-api-quirks.md`** (hub `TCC-003`, measured on a live REW over four passes
+  of one 102-measurement session). `GET /measurements` returns what REW *shows*, not what it holds:
+  17 records under "impedance + RTA only", 85 under "sweeps only", 102 with the filter off — the two
+  filtered sets do not overlap and add up to the whole. A hidden measurement is invisible from the
+  response, because under a filter the ordinals run `1..N` with **no gaps**, so "look for holes in
+  the numbering" as an integrity check is empty. The existing "never cache an index" rule now says
+  WHY the index moves — filter, sorting, a plain drag — with `sw_01 (sw)` sitting at №1 under a
+  filter and №18 without it, one measurement, one uuid, two positions. Also: the list order is not
+  the capture order (rows captured at 13:25 sat after rows captured at 20:11), and `date` is a
+  display string in REW's Java locale, not ISO.
+
 ## [v3.0.39] — 2026-09-02 · a flag that cannot take effect refuses, a flaw row says what a person hears, and the cabin gets the lookup the processor already had
 
 > **Upgrading:** additive except for **three refusals where there used to be silence**, and one of
