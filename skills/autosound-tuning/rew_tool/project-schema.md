@@ -32,7 +32,8 @@ machine-readable to render for its Project/System/Car-audio-analysis panels eith
                                                              //   it was taken, so a consumer can tell
                                                              //   whose facts it is joining against
   "sources": ["user, confirmed at intake 2026-07-20", "datasheet: Audiofrog GB25 spec sheet"],
-  "car": {"make": "VW", "model": "Passat B8", "year": 2019},
+  "car": {"make": "VW", "model": "Passat", "generation": "B8",     // SCR-043 -- see below
+          "body": "sedan", "year": 2018},
   "source": {"head_unit": "OEM"},
   "dsp": {"vendor": "Audiotec-Fischer", "model": "Helix DSP Ultra S"},   // links dsp_profile.json
   "amps": [{"role": "front", "make": "Helix", "model": "P Six DSP",
@@ -144,6 +145,35 @@ in a paragraph somebody may or may not re-read.
 
 Re-measuring the same frequency on the same channels **replaces** its row. An install changes and
 the map is redone; two contradictory rows for one peak would leave a reader picking between them.
+
+### The car is four parts, and the year is not one of them (SCR-043)
+
+`car` records `make` · `model` · `generation` · `body` — and `year` separately, as a detail of this
+one car rather than a part of its identity:
+
+| part | Passat example | what it is |
+|---|---|---|
+| `make` | `VW` | the marque |
+| `model` | `Passat` | the nameplate — the type |
+| `generation` | `B8` | the model range: **the span of years over which the acoustics count as the same** |
+| `body` | `sedan` | sedan · wagon · hatch — a different shell is a different cabin |
+| `year` | `2018` | ⛔ **takes no part in classification** |
+
+Stated by the owner, 2026-09-03. The generation already *is* the year band, so asking the year on
+top of it classifies nothing: two builds of the same generation and body are one cabin whether they
+left the line in 2017 or 2018, while the same year in another shell is another cabin. The year is
+kept because it describes the car in front of you; it is never consulted to decide whether two
+cabins match.
+
+`car_profile.body_slug(make, model, generation, body)` builds the identity — `vw-passat-b8-sedan` —
+and it is the same string the cabin library is keyed by (`knowledge/cars/<body-slug>.md`), so a
+project and the library answer to one name.
+
+**A body that was never recorded is not a body.** `car_profile.find_prior_projects` returns such a
+project as **unknown**, never as "no match": a sedan and a wagon cannot be told apart without it,
+and reporting silence as an answer is exactly the failure `ayukhno/autosound-tuning-skill#19` is
+about. Projects written before this split kept `model: "Passat B8"` with no `generation`; the parts
+are joined to build the slug, so those still match — but with no `body` they answer *unknown*.
 
 ### A channel's id is not its name (SCR-039)
 
