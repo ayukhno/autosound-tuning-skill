@@ -21,9 +21,20 @@ import urllib.parse
 FEEDBACK_REPO = "ayukhno/autosound-tuning-skill"
 _EXPECTED_PREFIX = f"https://github.com/{FEEDBACK_REPO}/"
 
+#: Images ride on an ORPHAN branch of that same hardcoded repo, never on `main`: an issue body
+#: needs a URL that resolves, and a screenshot is not source. The branch is part of the rail,
+#: not an argument -- a caller that could choose the branch could choose a repo (`skill#17`).
+ASSET_BRANCH = "issue-assets"
+
+#: Raw content comes back from a DIFFERENT host than the issue does, so `verify_feedback_url`
+#: cannot be reused here: it rejects everything that is not `github.com`, and that is correct
+#: for what it guards. Two hosts, two verifiers, one hardcoded repo.
+_ASSET_PREFIX = f"https://raw.githubusercontent.com/{FEEDBACK_REPO}/{ASSET_BRANCH}/"
+
 
 class SideEffectRefused(RuntimeError):
-    """Raised (FAIL LOUD) when an outbound command's output fails post-verification."""
+    """Raised (FAIL LOUD) when an outbound command's output fails post-verification -- or when the
+    action was never allowed to run at all (an upload nobody consented to)."""
 
 
 def _subprocess_runner(argv):
@@ -213,6 +224,79 @@ def post_feedback(body_file, car, dsp, runner=_subprocess_runner, dry_run=False)
     return guarded_run(argv, verify_feedback_url, runner=runner, dry_run=dry_run)
 
 
+def verify_asset_url(rc, out, err):
+    """Post-verify an upload: gh succeeded AND the raw URL is on the hardcoded repo AND branch."""
+    if rc != 0:
+        return False, f"gh exited {rc}"
+    url = _extract_url(out) or _extract_url(err)
+    if not url:
+        return False, "no raw URL in gh output (did the upload actually happen?)"
+    p = urllib.parse.urlparse(url)
+    if p.scheme != "https" or p.netloc != "raw.githubusercontent.com":
+        return False, f"URL host is {p.netloc!r}, expected raw.githubusercontent.com — refusing ({url})"
+    if not url.startswith(_ASSET_PREFIX):
+        return False, (f"URL {url} is NOT on {FEEDBACK_REPO}@{ASSET_BRANCH} — refusing "
+                       "(wrong-repo/branch guard)")
+    return True, f"verified on {FEEDBACK_REPO}@{ASSET_BRANCH}: {url}"
+
+
+def upload_issue_asset(image_path, dest_name, *, consented=False, message=None,
+                       runner=_subprocess_runner, dry_run=False):
+    """Publish ONE image to the hardcoded repo's asset branch and return its verified raw URL.
+
+    For a bug report whose evidence is a picture: a UI bug arrives without its screenshot today,
+    and `gh issue create` has no attach flag (public `skill#17`).
+
+    `consented` is not a courtesy argument. **A public upload cannot be meaningfully un-published**,
+    and a screenshot carries more than the bug — a DSP window shows file paths with a person's name,
+    a vehicle, an installer's branding (`feedback-loop.md`, package safety). So the default is to
+    refuse, and the caller has to have ASKED and been told yes; a window that shows the person each
+    image and lets them drop any of them is the shape that answer comes from. Prose asking a caller
+    to be careful is not a rail — the same lesson as the hardcoded repo two functions up.
+
+    The repo and the branch are hardcoded for the same reason the feedback repo is: a caller that
+    could name them could be talked into naming others. Only the file and its destination NAME are
+    the caller's, and the name is placed under a fixed prefix rather than used as a path.
+    """
+    import base64
+    import os
+    import posixpath
+    import tempfile
+
+    if not consented:
+        raise SideEffectRefused(
+            "⛔ SIDE-EFFECT REFUSED — no consent recorded for a PUBLIC upload.\n"
+            f"  file             : {image_path}\n"
+            f"  would publish to : {_ASSET_PREFIX}\n"
+            "  reason           : an image on a public repository cannot be meaningfully "
+            "un-published, and a screenshot can carry a name, a vehicle or an installer's "
+            "branding. Show the person what is about to be published, let them drop any of it, "
+            "and pass consented=True.")
+    if not os.path.isfile(image_path):
+        raise ValueError(f"image not found: {image_path!r}")
+    name = posixpath.basename(str(dest_name))
+    if not name or name.startswith("."):
+        raise ValueError(f"destination name is not usable: {dest_name!r}")
+
+    with open(image_path, "rb") as fh:
+        encoded = base64.b64encode(fh.read()).decode("ascii")
+    # `gh api` reads a field's value from a file with `@path`. The base64 of a screenshot is far
+    # past any comfortable argv length, so it travels in a file rather than on the command line.
+    tmp = tempfile.NamedTemporaryFile("w", suffix=".b64", delete=False)
+    try:
+        tmp.write(encoded)
+        tmp.close()
+        argv = ["gh", "api", "-X", "PUT",
+                f"repos/{FEEDBACK_REPO}/contents/issues/{name}",
+                "-f", f"branch={ASSET_BRANCH}",
+                "-f", f"message={message or 'issue asset: ' + name}",
+                "-F", f"content=@{tmp.name}",
+                "--jq", ".content.download_url"]
+        return guarded_run(argv, verify_asset_url, runner=runner, dry_run=dry_run)
+    finally:
+        os.unlink(tmp.name)
+
+
 # ── self-test (no network — the runner is faked) ──────────────────────────────
 def _selftest():
     import os, tempfile
@@ -281,9 +365,67 @@ def _selftest():
     except ValueError:
         pass
 
+    # ── uploading a screenshot (skill#17): consent is a rail, not a courtesy ──────────────
+    import os as _os, tempfile as _tf
+    shot = _os.path.join(_tf.mkdtemp(), "shot.png")
+    with open(shot, "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\n" + b"x" * 64)
+
+    # Default is REFUSAL: a public upload cannot be un-published, and nobody was asked.
+    try:
+        upload_issue_asset(shot, "shot.png", runner=lambda argv: (0, "", ""))
+        raise AssertionError("an upload nobody consented to must be refused")
+    except SideEffectRefused as exc:
+        assert "no consent recorded" in str(exc) and _ASSET_PREFIX in str(exc), exc
+
+    raw = _ASSET_PREFIX + "shot.png"
+    up = upload_issue_asset(shot, "shot.png", consented=True,
+                            runner=lambda argv: (0, raw + "\n", ""))
+    assert up["detail"].startswith("verified on"), up
+    # The repo AND the branch are in the command as constants, not as anything a caller passed.
+    assert up["argv"][:4] == ["gh", "api", "-X", "PUT"], up["argv"]
+    assert up["argv"][4] == f"repos/{FEEDBACK_REPO}/contents/issues/shot.png", up["argv"]
+    assert f"branch={ASSET_BRANCH}" in up["argv"], up["argv"]
+    # A destination "name" that tries to be a path is reduced to its basename, so neither a
+    # traversal nor a second directory can be smuggled in through it.
+    esc = upload_issue_asset(shot, "../../evil.png", consented=True,
+                             runner=lambda argv: (0, _ASSET_PREFIX + "evil.png\n", ""))
+    assert esc["argv"][4].endswith("/contents/issues/evil.png"), esc["argv"]
+
+    # FAIL LOUD on the ways an upload can look successful and not be: the right host but the
+    # wrong repo, a look-alike host, and gh exiting non-zero with a URL still on stdout.
+    for bad, why in (
+        ("https://raw.githubusercontent.com/someone/else/issue-assets/shot.png", "wrong repo"),
+        (f"https://raw.githubusercontent.com.evil.test/{FEEDBACK_REPO}/{ASSET_BRANCH}/s.png",
+         "look-alike host"),
+        (f"https://github.com/{FEEDBACK_REPO}/blob/{ASSET_BRANCH}/shot.png", "not the raw host"),
+    ):
+        try:
+            upload_issue_asset(shot, "shot.png", consented=True,
+                               runner=lambda argv, u=bad: (0, u + "\n", ""))
+            raise AssertionError(f"must refuse: {why}")
+        except SideEffectRefused:
+            pass
+    try:
+        upload_issue_asset(shot, "shot.png", consented=True,
+                           runner=lambda argv: (1, raw + "\n", "boom"))
+        raise AssertionError("must refuse: gh exited non-zero")
+    except SideEffectRefused:
+        pass
+    # An upload of a file that is not there is a caller error, not a refusal to publish.
+    try:
+        upload_issue_asset(shot + ".missing", "shot.png", consented=True)
+        raise AssertionError("must refuse a missing file")
+    except ValueError:
+        pass
+    # Dry-run prints the exact command and publishes nothing.
+    assert upload_issue_asset(shot, "shot.png", consented=True, dry_run=True)["dry_run"]
+
     print("selftest OK — verified good post; dedup guard skips a <24h duplicate (stale + broken "
           "list still post); FAIL LOUD on wrong-repo / confabulated-success / gh-failure / "
-          "look-alike host; refused missing body-file + shell-string argv; dry-run safe.")
+          "look-alike host; refused missing body-file + shell-string argv; dry-run safe. "
+          "Upload: refused without consent, repo+branch hardcoded, name reduced to a basename, "
+          "loud on wrong repo / look-alike host / non-raw host / gh failure.")
     return 0
 
 

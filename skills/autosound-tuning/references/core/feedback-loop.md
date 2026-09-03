@@ -85,6 +85,8 @@ crossover sets · techniques · successful symptom→fix · track markers
 
 - **Only the method + equipment classes.** WITHOUT: names, locations, plate/VIN numbers, photos, full measurements (`.mdat` are large and identify the system) — numbers only decimated, as for the critic (`analysis-playbook.md`).
 - The package — plain markdown, read by the user BEFORE sending. A doubtful line → drop it.
+- **A screenshot of our OWN window is not a photo, and it is the one picture that may travel.** The "no photos" line above is about the car, the install and the people around it; a UI bug reported without a picture of the UI arrives without its evidence, which is why bug reports carry one at all. The two are separated by what is in frame, not by the file format — a photo of the dashboard stays out however it was captured.
+- **An image is published through `rew_tool/gates/side_effect.py:upload_issue_asset`, never by hand.** The repo and the `issue-assets` branch are hardcoded there, the returned raw URL is verified before it is used, and `consented=True` is required — it refuses by default. Reason: a public upload **cannot be meaningfully un-published**, and a window shows more than the bug — a file path with a person's name, a vehicle, an installer's branding. So the person is shown each image and may drop any of them BEFORE it goes; the same "the user sees everything they send" rule as the package, made mechanical instead of remembered.
 
 ## The maintenance loop (harvest → fold)
 
