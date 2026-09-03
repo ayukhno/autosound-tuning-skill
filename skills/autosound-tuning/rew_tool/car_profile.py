@@ -214,11 +214,18 @@ def _main(argv):
         return 0
     if len(argv) > 1 and argv[1] == "--find":
         parts = argv[2:6]
+        # Three arguments are the FORM THAT SHIPPED — `make model body`, where the body field
+        # carried the generation inside it ("B8 sedan"). It still slugs correctly, so it keeps
+        # working: a caller who wrote it before today did nothing wrong, and breaking it would
+        # cost a version digit to buy nothing (`RELEASE-CHANNEL.md` §10).
+        if len(parts) == 3:
+            parts = [parts[0], parts[1], "", parts[2]]
         if len(parts) != 4:
             print('usage: --find "<make>" "<model>" "<generation>" "<body>"\n'
                   '  four parts, because the car has four: Passat is the MODEL, B8 the GENERATION\n'
-                  '  (it carries the years), sedan the BODY. Three arguments would slug short and\n'
-                  '  answer "not in the library" about a car that is in it.', file=sys.stderr)
+                  '  (it carries the years), sedan the BODY. The older three-part form\n'
+                  '  "<make>" "<model>" "<generation+body>" still works and slugs the same.',
+                  file=sys.stderr)
             return 2
         found = find_bundled_car(*parts)
         if found is None:
@@ -228,6 +235,8 @@ def _main(argv):
         return 0
     if len(argv) > 1 and argv[1] == "--prior":
         parts, dirs = argv[2:6], argv[6:]
+        if len(parts) == 3 and dirs:
+            parts, dirs = [parts[0], parts[1], "", parts[2]], dirs
         if len(parts) != 4 or not dirs:
             print('usage: --prior "<make>" "<model>" "<generation>" "<body>" <dir> [<dir>...]',
                   file=sys.stderr)
@@ -353,12 +362,18 @@ def _selftest():
     # Asking about nothing matches nothing, rather than matching everything.
     assert find_prior_projects([same], "", "", "", "")[0] == []
 
+    # The three-argument CLI form that shipped keeps working: it slugs the same, so a caller who
+    # wrote it before the split did nothing wrong. Breaking it would cost a digit to buy nothing.
+    assert _main(["car_profile.py", "--find", "VW", "Passat", "B8 sedan"]) == 0
+    assert _main(["car_profile.py", "--find", "VW", "Passat", "B8", "sedan"]) == 0
+
     print(f"selftest OK -- exact body matched off the shipped library and off a fixture; six near "
           f"misses (wagon, B7, unnamed body, generation-only, empty, platform sibling) all None "
           f"and unsuggested; the template is not a car. Four-part slug (model/generation/body) "
           f"agrees with the old combined form; prior projects: 1 match with 2 rows and its "
           f"evidence, a wagon skipped, a body-less project reported as UNKNOWN not as no, "
-          f"two years of one generation matched as one cabin. "
+          f"two years of one generation matched as one cabin; the older three-part CLI form "
+          f"still answers. "
           f"library={bundled_dir()}")
     return 0
 
