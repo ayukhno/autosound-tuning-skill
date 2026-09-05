@@ -355,6 +355,42 @@ def cross_check_rew(process_state, glossary, snapshots):
 
 
 # ── the whole report ────────────────────────────────────────────────────────────
+#: Fields the schema expects on rows a project already has, checked per row rather than per file.
+#: A schema change reaches the model instantly and reaches the CARS never: `symptom` landed on
+#: 2026-09-02 and two days later was filled on one map out of four, all four being the same car,
+#: and nothing anywhere said so (autosound-hub CAR-007). `gaps` below is the command that says so.
+#:
+#: Each entry: (what it is called, which rows owe it, how to tell whether a row has it).
+_ROW_FIELDS = (
+    ("acoustics.flaws[].symptom",
+     lambda e: e.get("action") in project.OWNER_FACING_ACTIONS,
+     lambda e: project.symptom_said(e) is not None),
+)
+
+
+def flaw_field_gaps(project_data):
+    """Rows that owe a field the current schema expects, per field. Never raises: a project whose
+    `project.json` could not be read has no rows to judge, which is a different report."""
+    flaws = ((project_data or {}).get("acoustics") or {}).get("flaws") or []
+    out = []
+    for name, owes, has in _ROW_FIELDS:
+        owing = [e for e in flaws if owes(e)]
+        missing = [e for e in owing if not has(e)]
+        drafts = [e for e in missing if project.symptom_is_draft(e)]
+        out.append({"field": name, "rows": len(flaws), "owing": len(owing),
+                    "missing": len(missing), "drafts": len(drafts),
+                    "rows_missing": [_row_label(e) for e in missing]})
+    return out
+
+
+def _row_label(entry):
+    what = f"{entry.get('f_hz'):g} Hz" if entry.get("f_hz") is not None else \
+        (f"{entry.get('t_ms'):g} ms" if entry.get("t_ms") is not None else "?")
+    chans = ",".join(entry.get("channels") or []) or "-"
+    state = " (draft)" if project.symptom_is_draft(entry) else ""
+    return f"{chans} {what} {entry.get('kind', '?')}/{entry.get('action', '?')}{state}"
+
+
 def check_project(project_dir, skip_rew=False):
     files = []
     project_entry, project_data = check_project_json(project_dir)
@@ -401,9 +437,82 @@ def check_project(project_dir, skip_rew=False):
                 "not written yet — it is in the prose above" if "run intake" in issue else issue
                 for issue in (entry.get("issues") or [])
             ]
+    # The phase-0 question, and a THIRD one: `ok` says nothing is broken, `complete` says intake
+    # left everything phase 0 needs. Neither asks whether the map a person will be shown can be
+    # read by that person. A row an owner sees with no `symptom` is not a broken file and not a
+    # missing one -- it is a finished-looking map that hands them the audit trail (CAR-007).
+    row_gaps = flaw_field_gaps(project_data)
+    map_ready = all(g["missing"] == 0 for g in row_gaps)
     return {"project_dir": project_dir, "ok": ok, "complete": complete, "missing": missing,
+            "map_ready": map_ready, "row_gaps": row_gaps,
             "legacy": looks_like_2x(project_dir, files), "prose": prose,
             "files": files, "cross_checks": cross}
+
+
+def find_projects(roots, max_depth=4):
+    """Every directory under `roots` that holds a `project.json`. A root that IS one counts."""
+    found = []
+    for root in roots:
+        root = os.path.abspath(root)
+        if os.path.isfile(os.path.join(root, "project.json")):
+            found.append(root)
+            continue
+        base_depth = root.rstrip(os.sep).count(os.sep)
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames[:] = [d for d in dirnames
+                           if not d.startswith(".") and d not in ("node_modules", "__pycache__")]
+            if dirpath.count(os.sep) - base_depth >= max_depth:
+                dirnames[:] = []
+            if "project.json" in filenames:
+                found.append(dirpath)
+    return sorted(set(found))
+
+
+def gaps_report(roots, max_depth=4):
+    """Which projects on disk are incomplete against the CURRENT schema, and in which rows."""
+    out = []
+    for project_dir in find_projects(roots, max_depth):
+        try:
+            data = project.Project(project_dir).load()
+            entry = {"project_dir": project_dir, "readable": True,
+                     "row_gaps": flaw_field_gaps(data)}
+        except (project.ProjectError, OSError) as exc:
+            entry = {"project_dir": project_dir, "readable": False, "error": str(exc),
+                     "row_gaps": []}
+        entry["ready"] = entry["readable"] and all(g["missing"] == 0 for g in entry["row_gaps"])
+        out.append(entry)
+    return out
+
+
+def render_gaps(report):
+    lines = [f"# Rows owing a field the current schema expects — {len(report)} project(s)", ""]
+    if not report:
+        lines.append("no `project.json` found under the given path(s).")
+        return "\n".join(lines)
+    for entry in report:
+        head = entry["project_dir"]
+        if not entry["readable"]:
+            lines.append(f"?  {head}\n     unreadable: {entry['error']}")
+            continue
+        bad = [g for g in entry["row_gaps"] if g["missing"]]
+        if not bad:
+            rows = sum(g["rows"] for g in entry["row_gaps"][:1])
+            lines.append(f"ok {head}  ({rows} flaw row(s), nothing owing)")
+            continue
+        lines.append(f"!! {head}")
+        for g in bad:
+            drafts = f", {g['drafts']} of them a machine DRAFT" if g["drafts"] else ""
+            lines.append(f"     {g['field']}: {g['missing']} of {g['owing']} owing row(s){drafts}")
+            for label in g["rows_missing"]:
+                lines.append(f"       - {label}")
+    lines.append("")
+    lines.append("A row an owner is shown owes ONE sentence in their words — what they hear, not "
+                 "what was measured. Write it with:")
+    lines.append('    python3 rew_tool/project.py <project-dir> flaw <f_hz> <level_db> <kind> '
+                 '<action> --symptom "…"')
+    lines.append("A DRAFT is what the kind sounds like, not what this car sounds like; it is a "
+                 "placeholder so the row is not born empty, and it still owes the person's line.")
+    return "\n".join(lines)
 
 
 #: The files a pre-ledger project keeps its state in. Before `state/state.py` existed (v2.1.0) —
@@ -564,15 +673,33 @@ def render_report(report):
                          + ("" if rew["complete"] else f" — MISSING {rew['missing']}"))
     else:
         lines.append(f"- REW: {rew.get('note', 'not reachable')}")
+    for gap in report.get("row_gaps") or []:
+        if gap["missing"]:
+            drafts = f" ({gap['drafts']} still a machine DRAFT)" if gap["drafts"] else ""
+            lines.append(f"- **{gap['field']}: {gap['missing']} of {gap['owing']} owing row(s) "
+                         f"have none{drafts}** — a row an owner is shown owes ONE sentence in "
+                         f"their words. Phase 0 is not finished until it does "
+                         f"(`--phase0-gate`); the rows: " + "; ".join(gap["rows_missing"]))
+    if report.get("row_gaps") and report.get("map_ready"):
+        lines.append("- flaw map: every owner-facing row carries the owner's own sentence.")
     lines.append("")
     lines.append("**OK — nothing to fix.**" if report["ok"] else "**Issues found — see above.**")
     return "\n".join(lines)
 
 
 # --------------------------------------------------------------------------- CLI
-_USAGE = """usage: contract.py check <project-dir> [--json] [--no-rew]
+_USAGE = """usage: contract.py check <project-dir> [--json] [--no-rew] [--gate] [--phase0-gate]
+       contract.py gaps <dir> [<dir> ...] [--json] [--depth N]
+                                               which projects on disk are INCOMPLETE against the
+                                               current schema, and in which rows -- a schema change
+                                               reaches the model at once and the cars never, unless
+                                               something asks (autosound-hub CAR-007)
        contract.py table                       print the CONTRACT (file -> owner -> schema version)
        contract.py selftest
+
+  --gate         phase -1: does everything the method needs before phase 0 EXIST and validate
+  --phase0-gate  phase 0: can the map be READ by the person it is shown to -- every owner-facing
+                 row carries the owner's own sentence (a machine DRAFT does not count)
 """
 
 
@@ -586,6 +713,20 @@ def _main(argv):
         for path, label, owner, sv in CONTRACT:
             print(f"{path:35s} {label:32s} owner={owner:6s} schema_version={sv}")
         return 0
+    if argv[1] == "gaps":
+        roots = [a for a in argv[2:] if not a.startswith("--")]
+        if not roots:
+            print(_USAGE, file=sys.stderr)
+            return 2
+        depth = 4
+        if "--depth" in argv:
+            depth = int(argv[argv.index("--depth") + 1])
+        report = gaps_report(roots, max_depth=depth)
+        if "--json" in argv:
+            print(json.dumps(report, indent=2, ensure_ascii=False))
+        else:
+            print(render_gaps(report))
+        return 0 if all(e["ready"] for e in report) else 1
     if argv[1] != "check" or len(argv) < 3:
         print(_USAGE, file=sys.stderr)
         return 2
@@ -600,6 +741,8 @@ def _main(argv):
         print(json.dumps(report, indent=2, ensure_ascii=False))
     else:
         print(render_report(report))
+    if "--phase0-gate" in argv:
+        return 0 if report["map_ready"] else 1
     if gate:
         return 0 if report["complete"] else 1
     return 0 if report["ok"] else 1
@@ -757,12 +900,52 @@ def _selftest():
     assert agree["valid"] is True and agree["issues"] == [], agree
     os.remove(gl_path)
 
+    # ── the map an owner is shown, and the schema change that never reached the cars ──────────
+    # Anchored to the ROLE of a row, never to a stored count: what owes a symptom is what an owner
+    # is shown (`OWNER_FACING_ACTIONS`), and a `notch` is the tuner's working plan and owes nothing.
+    pj = project.Project(root)
+    pj.add_flaw(f_hz=150.0, level_db=-9.0, kind="cabin_null", action="no_boost",
+                why="a null: interference", evidence=["w-L_01 (sw)"], channels=["w-L"])
+    pj.add_flaw(f_hz=1000.0, level_db=5.0, kind="driver_resonance", action="notch",
+                why="a peak", evidence=["m-L_01 (sw)"], channels=["m-L"])
+    gaps = flaw_field_gaps(pj.load())[0]
+    assert gaps["rows"] == 2 and gaps["owing"] == 1 and gaps["missing"] == 1, gaps
+    assert "w-L 150 Hz cabin_null/no_boost" in gaps["rows_missing"], gaps
+    assert check_project(root, skip_rew=True)["map_ready"] is False
+    # A DRAFT fills the empty space and does NOT satisfy the gate -- the whole point of marking it.
+    draft = project.symptom_draft("cabin_null", 150.0, ["w-L"])
+    assert draft and project.symptom_is_draft({"symptom": draft}) and project.symptom_said({"symptom": draft}) is None
+    pj.add_flaw(f_hz=150.0, level_db=-9.0, kind="cabin_null", action="no_boost",
+                why="a null: interference", evidence=["w-L_01 (sw)"], channels=["w-L"], symptom=draft)
+    drafted = flaw_field_gaps(pj.load())[0]
+    assert drafted["missing"] == 1 and drafted["drafts"] == 1, drafted
+    assert "(draft)" in drafted["rows_missing"][0], drafted
+    assert check_project(root, skip_rew=True)["map_ready"] is False, "a draft must not pass the gate"
+    # ...and a person's sentence does.
+    pj.add_flaw(f_hz=150.0, level_db=-9.0, kind="cabin_null", action="no_boost",
+                why="a null: interference", evidence=["w-L_01 (sw)"], channels=["w-L"],
+                symptom="the bass goes thin and spreads out")
+    said = flaw_field_gaps(pj.load())[0]
+    assert said["missing"] == 0 and said["owing"] == 1, said
+    assert check_project(root, skip_rew=True)["map_ready"] is True
+    # `gaps` finds a project by its project.json and reports the same thing across several roots.
+    scan = gaps_report([os.path.dirname(root)], max_depth=3)
+    mine = [e for e in scan if e["project_dir"] == root]
+    assert len(mine) == 1 and mine[0]["ready"] is True, (root, [e["project_dir"] for e in scan])
+    assert "nothing owing" in render_gaps(mine)
+    empty_dir = os.path.join(root, "no-project-here")
+    os.makedirs(empty_dir, exist_ok=True)
+    assert gaps_report([empty_dir]) == [] and "no `project.json` found" in render_gaps([])
+
     print(f"selftest OK — empty project reports missing files without crashing; a seeded project "
           f"(project.json+glossary, dsp_profile.json, ledger, process) validates at the right "
           f"schema versions; cross-checks caught a glossary/ledger mismatch, a profile missing "
           f"the virtual_channels tier, and a spare slot naming an undeclared tier (SCR-042); "
           f"REW check reported as skipped, not attempted; a 2.x project is recognised as one and "
-          f"told to migrate rather than to re-run intake. root={root}")
+          f"told to migrate rather than to re-run intake; and an owner-facing flaw row owes a "
+          f"symptom while a `notch` does not, a machine DRAFT does NOT satisfy the phase-0 gate "
+          f"and a person's sentence does, and `gaps` finds a project by its project.json and "
+          f"reports an empty path as empty. root={root}")
     return 0
 
 

@@ -276,6 +276,91 @@ OWNER_FACING_ACTIONS = ("geometry", "leave", "no_boost")
 #: with pitch". The vocabulary already exists -- `knowledge/cars/<body>.md` writes in exactly this
 #: voice -- so this is borrowing a register, not inventing one.
 SYMPTOM_MAX = 200
+
+#: **Mechanism → what a person HEARS.** The register `symptom` is written in, kept HERE, beside
+#: `FLAW_KINDS`, because that is what it is a property of.
+#:
+#: It used to live only in `knowledge/cars/<body>.md`, and `phase_0_baseline.md` told a session to
+#: borrow the register from there — advice that works for exactly the one body in that folder
+#: (autosound-hub CAR-007). What a mechanism sounds like does not depend on the cabin: a one-sided
+#: null in the midbass smears the bass wherever it happens. The cabin file keeps what THAT car
+#: does; the vocabulary belongs to the kind.
+#:
+#: Deliberately plain and short. These are not descriptions of the physics — the physics is `why`.
+#: They are how the fault arrives at the ear of somebody who does not tune.
+KIND_HEARD = {
+    "room_gain": "the bass swells and thickens everything under the voices",
+    "modal_peak": "one bass note booms much louder than the ones around it",
+    "cabin_null": "the bass thins out and loses its body",
+    "sbir": "the tone goes hollow and the sound is harder to place",
+    "floor_bounce": "the low end sounds hollow, as if one note went missing",
+    "driver_resonance": "a narrow band honks or rings",
+    "non_min_phase": "the sound smears and gets harsher, and EQ does not clean it",
+    "thd_spike": "it buzzes or breaks up when pushed",
+    "pair_suckout": "it comes from both sides at once instead of from the centre",
+    "energy_lag": "the bass arrives late, behind the beat",
+    "ringing": "notes hang on after they should have stopped",
+    "decay_asymmetry": "one side sounds drier than the other",
+}
+
+#: A `symptom` a machine wrote, not a person. `flaw_map` fills one from the kind and the band so a
+#: row never arrives with an empty space where the owner's line goes — but a draft is NOT the
+#: owner's words, and the phase-0 gate (`contract.py check --phase0-gate`) counts it as unwritten.
+#: The tuner replaces it after the car has been listened to; the marker is what makes the two
+#: distinguishable, and without it the draft would quietly satisfy the check meant to demand a
+#: person.
+SYMPTOM_DRAFT_PREFIX = "DRAFT: "
+
+#: Where a frequency sits, in the words the symptom is written in. Rough on purpose: the exact Hz
+#: is already in the row, and the sentence is for somebody who does not read Hz.
+_HEARD_BANDS = ((60.0, "in the deep bass"), (120.0, "in the bass"), (300.0, "in the midbass"),
+                (800.0, "in the lower mids"), (2500.0, "in the mids"),
+                (6000.0, "in the presence range"), (float("inf"), "at the top"))
+
+
+def symptom_is_draft(entry):
+    """True when this row's `symptom` is machine-written and still owes the owner's words."""
+    symptom = (entry or {}).get("symptom")
+    return isinstance(symptom, str) and symptom.startswith(SYMPTOM_DRAFT_PREFIX)
+
+
+def symptom_said(entry):
+    """The symptom as a person wrote it, or None when there is none yet (a draft is not one)."""
+    entry = entry or {}
+    if not entry.get("symptom") or symptom_is_draft(entry):
+        return None
+    return entry["symptom"]
+
+
+def heard_band(f_hz):
+    for edge, words in _HEARD_BANDS:
+        if f_hz is None or float(f_hz) < edge:
+            return words
+    return _HEARD_BANDS[-1][1]
+
+
+def symptom_draft(kind, f_hz=None, channels=None):
+    """A first line for a row nobody has listened to yet — `SYMPTOM_DRAFT_PREFIX` + what this kind
+    sounds like, where it sits, and which side it is on when the row names one.
+
+    Built only from what the writer actually knows (`flaw_map` has the kind, the band and the
+    channel). It does NOT claim a pair comparison it never made: the side comes from the channel's
+    own code, so a row on `w-L` says "on the left", and a row that names no side says nothing
+    about sides.
+    """
+    heard = KIND_HEARD.get(kind)
+    if not heard:
+        return None
+    parts = [heard]
+    if kind not in TIME_DOMAIN_KINDS or f_hz is not None:
+        parts.append(heard_band(f_hz))
+    sides = {c[-1].upper() for c in (channels or []) if isinstance(c, str) and c[-2:-1] in "-_"}
+    if sides == {"L"}:
+        parts.append("on the left")
+    elif sides == {"R"}:
+        parts.append("on the right")
+    draft = SYMPTOM_DRAFT_PREFIX + " ".join(parts)
+    return draft[:SYMPTOM_MAX]
 #: How sure we are. A tune generates suspicions constantly and they had nowhere to go: the
 #: PART B pair-coherence findings on the live project sat in prose for a week, explicitly marked
 #: "measured before TA, re-check afterwards", because recording them as facts would have been a

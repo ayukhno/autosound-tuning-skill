@@ -116,9 +116,15 @@ the cross-check, the doubt, the section it argues with — and the next session 
 is one sentence in the **owner's** words: *"the bass comes from both sides"*, *"a piano left of
 centre wanders with pitch"*. Write it on every row an owner will be shown (`geometry`, `leave`,
 `no_boost` — `project.OWNER_FACING_ACTIONS`, the rows that stay in the car after the tune is
-finished); `project.py flaws --owner` prints exactly those and names the ones still missing it. The
-register to write in already exists in `knowledge/cars/<body>.md`, which describes the same cabins
-in the same voice — borrow it rather than inventing one. Bought on a live 18-row map where not one
+finished); `project.py flaws --owner` prints exactly those and names the ones still missing it.
+
+**The register to write in is `project.KIND_HEARD`** — one line per mechanism saying what it sounds
+like, beside the `FLAW_KINDS` it belongs to. It used to say "borrow it from `knowledge/cars/<body>.md`",
+which works for exactly the one body that folder holds; what a mechanism sounds like does not depend
+on the cabin (autosound-hub `CAR-007`). **You do not start from nothing either:** `flaw_map.py`
+writes a `DRAFT:` symptom on every owner-facing row it proposes, built from the kind, the band and
+the channel. A draft is a placeholder so the row is not born empty — it is not the owner's words,
+it does not close the row, and the gate below counts it as unwritten. Bought on a live 18-row map where not one
 row said what a person hears, so a panel showed the owner an audit trail whose longest entry ran
 763 characters.
 
@@ -137,4 +143,27 @@ Then also record it in the car record (PART-B style: each item phrased as a chec
 * Check for clipping (DSP outputs vs. amplifier inputs). Measurements must remain clean and undistorted.
 * Lock down a repeatable **MMM measurement pattern** (spatial boundaries, speed, volume coverage). Successive RTA tests must use this identical pattern to be comparable.
 
-Once the baseline is saved, analyzed, and logged in the `tuning-changelog`, proceed to **Phase 1**.
+### The boundary out of phase 0 — one command, not a memory
+
+```bash
+python3 rew_tool/contract.py check <project> --phase0-gate     # exits non-zero while a row owes its sentence
+```
+
+Once the baseline is saved, analyzed, and logged in the `tuning-changelog` — **and the map can be
+read by the person it is shown to** — proceed to **Phase 1**. The gate asks one thing: every
+owner-facing row carries the owner's own sentence, a machine `DRAFT:` not counting. It exists
+because the requirement stood here in prose for two days and was met on one map out of four
+(`CAR-007`), and because the map has exactly one other rule with teeth (a `dip` can never be
+`notch`) — prose held neither.
+
+The order stays what it was: the row is written when the measurement is made, **before** anyone has
+listened; the sentence is added by the end of the phase, after they have. What the gate forbids is
+leaving phase 0 with the sentence still owed.
+
+**A schema change does not reach the cars on its own.** When a new field lands, the projects already
+on disk become incomplete and nothing says so — `symptom` was filled on one of four copies of the
+same car's map two days after it existed. Ask, across everything on disk:
+
+```bash
+python3 rew_tool/contract.py gaps ~/dev/autosound ~/dev/autosound_projects
+```

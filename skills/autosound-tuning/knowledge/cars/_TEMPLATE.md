@@ -25,6 +25,11 @@ delays, EQ and phase angles are the tune's state and live in the project, never 
 - □ *(driver positions / aim angles / coplanarity)* → these depend on YOUR install — **never assert coplanarity as fact** (the recurring leak); ask or measure.
 - □ *(passive filters in the path — present, and where?)* → ask; a passive between amp and driver changes what every electrical setting downstream means. Enclosure is its own block below.
 
+> **The voice these lines are written in is not defined here.** What a mechanism SOUNDS like
+> lives with the mechanism — `project.KIND_HEARD`, beside `FLAW_KINDS` — so a flaw row's
+> `symptom` has a register on every car, not only on the one body that happens to have a file
+> in this folder (autosound-hub `CAR-007`). What belongs HERE is what THIS cabin does.
+
 **Cabin response anomalies — the PHYSICS half: if present, LEAVE them (interference / non-min-phase), don't fill:**
 - □ *(anomaly the author's build showed, e.g. a left-door dip ~X Hz)* → measure your own; don't assume the Hz or the side.
 - □ *(SBIR notches)* → **never assert a notch frequency as fact**; it follows this build's geometry.

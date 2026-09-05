@@ -152,6 +152,15 @@ def rows_for(freqs, mag_db, code, evidence, gate=None, ell=None, raw_db=None):
                          "reason": why_not})
             continue
         row.update({"channels": [code], "status": "hypothesis", "evidence": list(evidence)})
+        # The owner's line, as a DRAFT. Until 2026-09-05 this module never wrote `symptom` at all
+        # -- the word did not appear in the file -- so every map made the standard way was born
+        # without the one line a car's owner reads, and the requirement lived in prose elsewhere
+        # (autosound-hub CAR-007). We know the kind, the band and the channel, which is what the
+        # sentence is made of; we do NOT know what the car sounds like, so the draft is marked as
+        # one and `contract.py check --phase0-gate` still counts the row as owing a person's words.
+        draft = _project.symptom_draft(row["kind"], row.get("f_hz"), row["channels"])
+        if draft and row["action"] in _project.OWNER_FACING_ACTIONS:
+            row["symptom"] = draft
         rows.append(row)
     return rows, left
 
@@ -206,6 +215,14 @@ def render(result):
         for r in result["rows"]:
             out.append(f"{r['channels'][0]:8} {r['f_hz']:7.0f} {r['level_db']:+6.1f} {r['kind']:17} "
                        f"{r['action']:9} {r['why']}")
+            if r.get("symptom"):
+                out.append(f"{'':8} {'':>7} {'':>6} {'':17} {'':9} ⟵ {r['symptom']}")
+        drafts = sum(1 for r in result["rows"] if _project.symptom_is_draft(r))
+        if drafts:
+            out.append(f"\n{drafts} owner-facing row(s) carry a DRAFT symptom: it is what the kind "
+                       f"sounds like, not what THIS car sounds like. Replace each after listening "
+                       f"(`project.py <dir> flaw … --symptom \"…\"`); `contract.py check <dir> "
+                       f"--phase0-gate` counts a draft as unwritten.")
     if result["left_out"]:
         out.append("\nfound but NOT written (and why):")
         for l in result["left_out"]:

@@ -42,6 +42,27 @@ Two consequences worth stating, because both have already caused a question:
 
 ## [Unreleased]
 
+- **A schema change now reaches the cars, and the owner's line is no longer optional prose —
+  `rew_tool/project.py`, `rew_tool/flaw_map.py`, `rew_tool/contract.py`,
+  `references/phases/phase_0_baseline.md`** (autosound-hub `#63` / CAR-007, from `car`). `symptom`
+  — the one sentence in the owner's words on a row an owner is shown — landed in the model on
+  2026-09-02. Two days later it was filled on **one map out of four**, and all four were the same
+  car; the one that had it was filled by hand under a separate ticket. Four causes, four fixes.
+  **(1) Nothing told the cars.** `contract.py gaps <dir> [<dir> …]` walks the disk, finds every
+  project by its `project.json` and names, row by row, which field each owes — run on this machine
+  it reproduces the report exactly. **(2) The standard path did not know the field:** the word
+  `symptom` appeared in `flaw_map.py` zero times, so every automatically written map was born
+  without it. It now writes a `DRAFT:` sentence on each owner-facing row from the kind, the band
+  and the channel — and the draft is **marked**, because an unmarked one would satisfy the check
+  below and make it worthless. **(3) The register lived in one car's file.** `phase_0_baseline.md`
+  said to borrow the voice from `knowledge/cars/<body>.md`, which works for the single body that
+  folder holds; what a mechanism sounds like does not depend on the cabin, so it is now
+  `project.KIND_HEARD`, one line per kind, beside `FLAW_KINDS`. **(4) The requirement was prose.**
+  `contract.py check <dir> --phase0-gate` exits non-zero while any owner-facing row still owes a
+  person's sentence (a draft counts as owing), and phase 0 now ends on that command instead of on
+  remembering. The order is unchanged: the row is written when it is measured, the sentence is
+  added by the end of the phase — what the gate forbids is leaving with it still owed.
+
 - **Three texts stopped claiming other people's curves — `target_curves_visualizer.html`,
   `SKILL.md`, `curves/SQ-Comp-Ref_0db_REW.txt`** (autosound-hub `#67` / RES-004, found by `research`
   while reading another site where every curve carries its origin). The curves themselves were
