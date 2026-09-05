@@ -680,6 +680,12 @@ def render_report(report):
                          f"have none{drafts}** — a row an owner is shown owes ONE sentence in "
                          f"their words. Phase 0 is not finished until it does "
                          f"(`--phase0-gate`); the rows: " + "; ".join(gap["rows_missing"]))
+            if gap["missing"] > gap["drafts"]:
+                # The case arrives with its command, the way `deployment.py`'s refusal does. A
+                # project written before the field is not the user's mistake to look up.
+                lines.append(f"  This project predates the field. Bring it current — additive, "
+                             f"idempotent, and it still will not close the gate:\n"
+                             f"      python3 rew_tool/project.py {report['project_dir']} catch-up")
     if report.get("row_gaps") and report.get("map_ready"):
         lines.append("- flaw map: every owner-facing row carries the owner's own sentence.")
     lines.append("")
@@ -937,10 +943,51 @@ def _selftest():
     assert said["missing"] == 0 and said["owing"] == 1, said
     assert check_project(root, skip_rew=True)["map_ready"] is True
     # `gaps` finds a project by its project.json and reports the same thing across several roots.
-    scan = gaps_report([os.path.dirname(root)], max_depth=3)
-    mine = [e for e in scan if e["project_dir"] == root]
-    assert len(mine) == 1 and mine[0]["ready"] is True, (root, [e["project_dir"] for e in scan])
-    assert "nothing owing" in render_gaps(mine)
+    # `catch-up` is what a session runs on a project written before the field existed. It fills the
+    # marked draft and NOTHING else about the sentence -- the gate must still refuse afterwards, or
+    # the machine would be closing a question only a person can answer.
+    stale = project.Project(root)
+    stale.add_flaw(f_hz=645.0, level_db=-7.0, kind="sbir", action="geometry",
+                   why="pillar", evidence=["m-R_01 (sw)"], channels=["m-R"])
+    assert check_project(root, skip_rew=True)["map_ready"] is False
+    dry = stale.catch_up(write=False)
+    assert len(dry["symptom_drafts"]) == 1 and dry["symptom_drafts"][0]["f_hz"] == 645.0, dry
+    assert project.symptom_said(stale.load()["acoustics"]["flaws"][-1]) is None, "--dry-run wrote"
+    assert not stale.catch_up(write=True)["symptom_drafts"] == [], "catch-up filled nothing"
+    filled = [e for e in stale.load()["acoustics"]["flaws"] if e.get("f_hz") == 645.0][0]
+    assert project.symptom_is_draft(filled), filled
+    assert check_project(root, skip_rew=True)["map_ready"] is False, \
+        "catch-up must NOT close the phase-0 gate -- a draft is not the owner's words"
+    assert stale.catch_up(write=True)["symptom_drafts"] == [], "catch-up is not idempotent"
+    # ...and a `notch` row is the tuner's plan, not something an owner is shown: it is left alone.
+    stale.add_flaw(f_hz=2000.0, level_db=6.0, kind="driver_resonance", action="notch",
+                   why="peak", evidence=["tw-L_01 (sw)"], channels=["tw-L"])
+    assert stale.catch_up(write=True)["symptom_drafts"] == [], "a notch row owes no symptom"
+    # The report hands over the command rather than leaving the reader to look it up.
+    stale.add_flaw(f_hz=90.0, level_db=-8.0, kind="cabin_null", action="leave",
+                   why="null", evidence=["sw_01 (sw)"], channels=["sw"])
+    assert "catch-up" in render_report(check_project(root, skip_rew=True))
+
+    # `gaps` finds a project by its `project.json` -- the root itself, and one nested below it.
+    # Scanned from `root` rather than from its parent: the parent is the shared temp directory, and
+    # every other selftest's leftover project lives there too (the first draft of this line swept
+    # them all up and asserted about somebody else's fixture).
+    nested = os.path.join(root, "sub", "another-car")
+    os.makedirs(nested, exist_ok=True)
+    with open(os.path.join(nested, "project.json"), "w", encoding="utf-8") as fh:
+        json.dump({"schema_version": project.SCHEMA_VERSION, "car": {"make": "vw", "model": "up"}}, fh)
+    # A root that IS a project means that project -- `find_projects` does not descend into one, so
+    # a nested project is reached by naming the directory ABOVE it. Both forms in one call.
+    assert gaps_report([root], max_depth=3) and \
+        [e["project_dir"] for e in gaps_report([root], max_depth=3)] == [root], "a project root is itself"
+    scan = gaps_report([root, os.path.join(root, "sub")], max_depth=3)
+    found = {e["project_dir"]: e for e in scan}
+    assert root in found and nested in found, sorted(found)
+    # readiness is READ, never assumed: the fixture owes sentences by now, the empty one owes none
+    assert found[root]["ready"] is check_project(root, skip_rew=True)["map_ready"], found[root]
+    assert found[root]["ready"] is False and found[nested]["ready"] is True, sorted(found)
+    rendered = render_gaps(scan)
+    assert "nothing owing" in rendered and "acoustics.flaws[].symptom" in rendered, rendered
     empty_dir = os.path.join(root, "no-project-here")
     os.makedirs(empty_dir, exist_ok=True)
     assert gaps_report([empty_dir]) == [] and "no `project.json` found" in render_gaps([])
@@ -953,7 +1000,9 @@ def _selftest():
           f"told to migrate rather than to re-run intake; and an owner-facing flaw row owes a "
           f"symptom while a `notch` does not, a machine DRAFT does NOT satisfy the phase-0 gate "
           f"and a person's sentence does, and `gaps` finds a project by its project.json and "
-          f"reports an empty path as empty. root={root}")
+          f"reports an empty path as empty; `catch-up` fills the marked draft on a "
+          f"project written before the field, is idempotent, leaves a `notch` row alone and "
+          f"still does NOT close the phase-0 gate. root={root}")
     return 0
 
 

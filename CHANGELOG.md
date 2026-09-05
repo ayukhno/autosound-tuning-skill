@@ -69,6 +69,16 @@ Two consequences worth stating, because both have already caused a question:
   `$AUTOSOUND_PROJECT_DIR`'s parent or the working directory, so it runs on a disk laid out
   differently from the author's — the first draft of this documented it with the author's own
   absolute paths, which is the same defect one layer up.
+  **And the project a session opens now catches itself up, without being asked** —
+  `project.py <project> catch-up` (owner's ruling: the current project with a new skill is
+  what matters, and the skill should notice and do it, not report it). One idempotent,
+  additive verb beside the migrations that already existed: legacy names, `tier` read off the
+  ledger, and a marked `DRAFT:` symptom on owner-facing flaw rows that have none, so a map
+  written before the field has the same shape as one written after it. `contract.py check`
+  prints the exact command when it is owed, and Pre-Session step 2 says to run it there and
+  then rather than carry it as a to-do. **It still does not close the phase-0 gate** — filling
+  the space is a machine's job, saying what the car sounds like is not, and the selftest
+  asserts the gate keeps refusing after a catch-up.
 
 - **Three texts stopped claiming other people's curves — `target_curves_visualizer.html`,
   `SKILL.md`, `curves/SQ-Comp-Ref_0db_REW.txt`** (autosound-hub `#67` / RES-004, found by `research`

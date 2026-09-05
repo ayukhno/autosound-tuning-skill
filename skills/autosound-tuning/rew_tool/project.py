@@ -634,6 +634,50 @@ class Project:
             self.save(data)
         return filled
 
+    def catch_up(self, write=True):
+        """Bring THIS project up to the current schema — every fill a machine may honestly make.
+
+        A field lands in the model in one commit and in the projects already on disk never: on
+        2026-09-04 `symptom` was two days old and filled on one map out of four, all four the same
+        car (autosound-hub `CAR-007`). The answer is not a habit but a verb, run when a project is
+        opened: **idempotent, additive, and it never invents a fact.**
+
+        What it does today:
+
+          * `migrate_fields` — legacy field names;
+          * `backfill_tiers` — `tier`, READ off the ledger, never inferred;
+          * a `DRAFT:` symptom on every owner-facing flaw row that has none, from the row's own
+            kind, band and channels.
+
+        The draft is the interesting one, and the line it walks is the point. A `symptom` is what
+        the OWNER hears, and no machine knows that — so this does not write one. It writes the
+        marked placeholder that `flaw_map` now writes on new rows, so an old project's map has the
+        same shape as a new one's, and `contract.py check --phase0-gate` still refuses until a
+        person replaces it. Filling the space is a machine's job; saying what the car sounds like
+        is not, and a fill that pretended otherwise would close the gate on nobody's words.
+
+        Returns what changed (or would, when `write` is false).
+        """
+        done = {"renamed": self.migrate_fields(write=write),
+                "tiers": self.backfill_tiers(write=write)}
+        data = self.load()
+        flaws = (data.get("acoustics") or {}).get("flaws") or []
+        drafted = []
+        for entry in flaws:
+            if entry.get("action") not in OWNER_FACING_ACTIONS or entry.get("symptom"):
+                continue
+            draft = symptom_draft(entry.get("kind"), entry.get("f_hz"), entry.get("channels"))
+            if not draft:
+                continue
+            drafted.append({"f_hz": entry.get("f_hz"), "kind": entry.get("kind"),
+                            "channels": list(entry.get("channels") or []), "symptom": draft})
+            if write:
+                entry["symptom"] = draft
+        if write and drafted:
+            self.save(data)
+        done["symptom_drafts"] = drafted
+        return done
+
 
     def set_channel(self, code, **fields):
         """Add or update one `channels[]` row by `code` (SCR-001) — `slot`/`descr`/`role`/`order`/
@@ -884,6 +928,14 @@ _USAGE = """usage: project.py <project-dir> <command> [args]
 
   show                                         print project.json (or an empty skeleton)
   open-questions                               list unresolved facts (dotted paths)
+  catch-up [--dry-run]                         bring THIS project up to the current schema —
+                                               legacy names, `tier` off the ledger, and a DRAFT
+                                               symptom on every owner-facing flaw row that has
+                                               none. Idempotent, additive, invents no fact: the
+                                               draft is a marked placeholder and the phase-0 gate
+                                               still wants the owner's own sentence. Run it when a
+                                               project is opened — a field lands in the model at
+                                               once and in the cars on disk never (CAR-007)
   migrate-fields [--dry-run]                   rename legacy field names in project.json
                                                (`dsp.sample_rate_hz` -> `dsp.dsp_processing_rate_hz`;
                                                `measurement`/`mic` rates are the CAPTURE rate and
@@ -999,6 +1051,25 @@ def _main(argv):
         elif cmd == "open-questions":
             for q in open_questions(proj.load()):
                 print(q)
+        elif cmd == "catch-up":
+            dry = "--dry-run" in args
+            done = proj.catch_up(write=not dry)
+            verb = "would " if dry else ""
+            for line in done["renamed"]:
+                print(f"  {verb}rename {line}")
+            for code, tier in sorted(done["tiers"].items()):
+                print(f"  {verb}fill tier {code} -> {tier}")
+            for row in done["symptom_drafts"]:
+                where = ",".join(row["channels"]) or "-"
+                at = f"{row['f_hz']:g} Hz" if row["f_hz"] is not None else "-"
+                print(f"  {verb}draft {where} {at} {row['kind']}: {row['symptom']}")
+            n = len(done["renamed"]) + len(done["tiers"]) + len(done["symptom_drafts"])
+            if not n:
+                print("already current — nothing this schema gained is missing here")
+            elif done["symptom_drafts"]:
+                print(f"\n{len(done['symptom_drafts'])} row(s) got a DRAFT symptom: what the KIND "
+                      f"sounds like, not what THIS car sounds like. Replace each after listening — "
+                      f"`contract.py check <dir> --phase0-gate` counts a draft as unwritten.")
         elif cmd == "migrate-fields":
             renames = proj.migrate_fields(write="--dry-run" not in args)
             if not renames:
