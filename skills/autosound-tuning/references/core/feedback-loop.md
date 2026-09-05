@@ -63,6 +63,13 @@ Presents it as **a list where EACH item is already PRE-SELECTED (☑)**. The use
 car/body · DSP · amps · drivers + positions · sub/enclosure · mic rig
 ## What worked
 crossover sets · techniques · successful symptom→fix · track markers
+<!-- The package MAY carry the settings — it is the case, sent from a project, and the maintainer
+     needs them to judge it. Where they land is the part that is fixed: the SCHEME (family, slopes,
+     the setup it ran on, the outcome) goes to `knowledge/approaches.md`; the dialled corners are
+     project state and are NOT copied into `knowledge/cars/<body>.md`, which takes the physics and
+     the install (`knowledge-architecture.md`). -->
+
+
 ## What did NOT work / where the skill erred or was silent
 ## New techniques / know-how (skill-inbox format: 📚 one line + why/evidence)
 ## DSP/hardware quirks (→ knowledge/dsp/)
