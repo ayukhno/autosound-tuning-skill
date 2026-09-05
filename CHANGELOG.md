@@ -40,6 +40,20 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [Unreleased]
+
+- **One car's dialled phase angles are out of the method — `references/tooling/helix-phase-allpass.md`.**
+  The file carried "Practice for our system (Passat B8): sub 174.375°, left mid 33°" as though it
+  were method knowledge. It is **layer 5, Project State**, by this method's own architecture
+  (`knowledge-architecture.md`: *Skill = layers 1–2, shared and model-agnostic; Project = layers 3–5,
+  per-car and dynamic*) — a live DSP state has no home in a shared reference, and the owner said so
+  plainly. Both costs were real by the time it was removed: a screen read of that processor on
+  2026-09-05 shows **Phase = 0° on all twelve outputs** (its ledger and its own `autosound_context.md`
+  §4A agree), and the two angles existed **nowhere but this file**, so nothing could have caught the
+  drift; and `33°` is not on the control's measured 5.625° grid at all, which is the tell that it was
+  never read off a screen. What generalises — the midbass anchor, the order, the angle being stated
+  at the configured crossover — stays in §2. Nothing in code changed.
+
 ## [v3.0.41] — 2026-09-05 · the phase control becomes a filter, the crossover model gets the hardware behind it, and a residual carries its grid
 
 > **Upgrading:** additive except for **one behaviour change, and it is the one this patch was

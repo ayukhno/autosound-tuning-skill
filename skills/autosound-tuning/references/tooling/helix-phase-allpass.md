@@ -154,12 +154,28 @@ high channels by 11.25°. So the step is measured for one channel type and assum
 * **Mind the ceiling:** on a channel crossed above ~1 kHz, the first few positions do nothing the
   UI claims (§1.3). Read the delivered angle from `phase_rotation`, not from the screen.
 
-### Practice for our system (Passat B8)
+### One car's phase settings do not live here
 
-In the first successful configuration (AYA) the phase control is set: sub `174.375°`, left mid
-`33°`, the rest `0°`; the midbasses — no rotation (the anchor). See `autosound_context.md` §4A.
-Note that `33°` is not on the 5.625° grid (the nearest positions are 28.125° and 33.75°) — a
-transcription to check against the PC-Tool screen (`screen-read-dsp.md`).
+**Removed 2026-09-05.** This section used to carry one car's dialled angles ("sub 174.375°, left
+mid 33°") as "our practice". That is **layer 5 — Project State** by this method's own architecture
+(`knowledge-architecture.md`: *Skill = layers 1–2, shared and model-agnostic; Project = layers 3–5,
+per-car and dynamic*), and it does not belong in a method reference. Where to read a car's actual
+angles: the project's ledger (`state/`, `phase_deg` per row) and its `autosound_context.md` §4A —
+never here.
+
+Two things it cost, and they are the general argument, not this one file's accident:
+
+* **It went stale invisibly.** A screen read of that processor on 2026-09-05 shows **Phase = 0° on
+  every one of the twelve outputs**; the project's ledger and its own context file said the same.
+  The two angles existed **nowhere but this file** — not in the car's tree, not in any project —
+  so their provenance cannot be established, and a reader would have taken them for the current
+  state of a working tune.
+* **One of them could not exist.** `33°` is not on the control's 5.625° grid (§1.5) — the nearest
+  positions are 28.125° and 33.75°. A number that the hardware cannot hold is the tell that it was
+  never read off a screen; it survived because nothing in a method file is ever re-measured.
+
+What generalises from that tune stays, and it is above in §2: the midbass is the anchor, the order
+is midbass → sub → mid → tweeter, and the angle is stated at the channel's configured crossover.
 
 ## 3. Explicit AP1/AP2 bands in the EQ bank — hardware-verified
 
