@@ -40,7 +40,25 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
-## [Unreleased]
+## [v3.0.43] — 2026-09-05 · stopping is an event, and a family the method cannot predict says so in the data
+
+> **Upgrading:** additive, with **one thing a consumer must know: a profile's `content_hash`
+> moves.** Each crossover family now carries `modellable` + `modellable_note`, and those live
+> INSIDE the profile — unlike `schema_version` and `skill_sha`, which sit at the wrapper level and
+> are deliberately invisible to `content_hash` / `diff_profile`. So a bundled profile re-read after
+> this patch hashes differently (verified: the MUSWAY profile moves from `e3c8da81…` to
+> `c3792203…`), and anything pinning or comparing that hash sees one change, once. `diff_profile`
+> will likewise show the new keys the first time. Both bundled profiles are re-stamped in this
+> patch, so the shift happens here rather than silently on somebody's next save. **Everything else
+> is additive:** `dsp_profile.annotate_modellable` / `modellable_families` are new (and
+> `save_profile` now stamps on every write — it stays silent when numpy is absent rather than
+> guessing a marker); `process.py <proj>/process session-close` and `Process.open_work` are new and
+> read-only; no signature changed, no file moved, and a profile written before this patch carries
+> no marker at all — which reads as "ask `options_for`", exactly as before. **One behaviour change
+> that is not code:** stopping a session now has a written closing order (SKILL.md item 4), so a
+> session that stops with an open capture round or a step left in progress is doing it wrong where
+> previously nothing said so.
+
 
 - **Stopping is an event now, with a closing order and one command that names what is still open —
   `rew_tool/state/process.py`, `SKILL.md`, `references/core/process-control.md`,
