@@ -42,6 +42,27 @@ Two consequences worth stating, because both have already caused a question:
 
 ## [Unreleased]
 
+- **Stopping is an event now, with a closing order and one command that names what is still open —
+  `rew_tool/state/process.py`, `SKILL.md`, `references/core/process-control.md`,
+  `references/core/project-intake.md`** (autosound-hub `#68` / HUB-023, from the hub, on the
+  owner's ask that the skill understand "добраніч" the way the hub does). `session-start` had no
+  pair: the method wrote every phase, step, decision and capture round as it happened, and said
+  nothing about the moment work ends — so stopping read as a pause in a conversation and four
+  things stayed open. The cost lands on the NEXT session, which resumes and reconciles against
+  what is not there. **`process.py <proj>/process session-close`** names the open capture round
+  and every step left in progress, gives the command that closes each, and exits non-zero while
+  either stands. **It reports and never closes** — which evidence ends a step, and whether a
+  capture was skipped or is still owed, are judgements, and a tool that guessed would write a
+  plausible wrong record; it also names the four things it does NOT check (a ruling made out loud,
+  an unbanked 🟡, the session log, the in-car checklist) rather than implying it did. **No new
+  carrier**, as the ticket asked: the round, the steps and the session anchor already existed —
+  what was missing was an order. SKILL.md item 4 now carries both halves, the record before the
+  car, the trigger phrases in all four session languages (the skill is used in UK/DE/PL, and a rule
+  that fires on one English phrase would not fire at all), and the rule that **nothing new starts
+  after** — if something genuinely cannot wait, say so rather than quietly doing it. One bug of my
+  own was caught by probing rather than by reading: a CLOSED round stays in the state slice
+  carrying `closed`, and the first draft reported every finished round as open forever.
+
 - **A family the method cannot predict now says so IN THE PROFILE DATA — `rew_tool/dsp_profile.py`,
   `rew_tool/dsp_math.py`, both bundled profiles, `references/core/estimator-scope.md` §1b**
   (autosound-hub `#65` / RES-003, from `research`, integrated on the owner's word). `options_for`

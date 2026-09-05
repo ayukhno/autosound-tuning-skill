@@ -50,7 +50,7 @@
   - **(3) Human Reviewer.**
   - **(4) Autopilot self-loop — FALLBACK (only when no second AI is available).** The Generator spawns an isolated subagent `critic_advisor` in the same terminal — zero-config, no second-model setup. ⚠️ Same-model review shares the model's blind spots (not true cross-vendor anti-anchoring) and is where long autonomous sessions drifted (lost DSP state/phase). Use only if options 1–3 aren't available.
   ⚠️ **Don't skip this step.** (The CLI CHANNEL is optional; the reviewer ROLE is not.)
-- **What a working session looks like:** Pre-session checklist (hardware) → Resume (state) → work by phases (`process-phases.md`) → Session log (handoff to the next session). A new project's first session = this whole file + Phase 0.
+- **What a working session looks like:** Pre-session checklist (hardware) → Resume (state) → work by phases (`process-phases.md`) → **Session close** (stopping is an event with a fixed order — `process.py … session-close` names what is still open; `SKILL.md` Pre-Session & Resume item 4, `process-control.md`) → Session log (handoff to the next session). A new project's first session = this whole file + Phase 0.
 
 ---
 

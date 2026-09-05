@@ -1272,6 +1272,44 @@ class Process:
         )
         return {"harness": harness, "model": model, "resumed": bool(resumed)}
 
+    def open_work(self, state=None):
+        """What this project still has OPEN — the list a session owes before it stops.
+
+        `session_start` had no pair. Stopping was a pause in a conversation rather than an event
+        with a closing order, and the cost lands on the NEXT session, which resumes and reconciles
+        against things that were never written (autosound-hub HUB-023, from the hub, on the owner's
+        ask that the skill understand "добраніч" the way the hub does).
+
+        Reports, never closes. Each of these is a decision with an argument the machine does not
+        have — which evidence closes a step, whether a capture was skipped or is still owed, what
+        the Arbiter actually ruled — so naming them is this function's whole job. It adds no
+        carrier: the round, the steps and the session anchor are already here, and the fifth item
+        below deliberately lives elsewhere and is only pointed at.
+        """
+        state = state or self.load()
+        round_ = state.get("capture")
+        # A CLOSED round stays in `state["capture"]` carrying `closed` -- the slice holds the last
+        # round, not only a live one, the same way it holds the active phase. `capture_outstanding`
+        # and `_require_capture` both test that flag; testing only for presence (the first draft of
+        # this) reports every finished round as open forever, which would train a reader to ignore
+        # the line. Caught by the probe, not by reading.
+        if round_ and round_.get("closed"):
+            round_ = None
+        steps = [s for s in state.get("plan", []) if s.get("status") == STEP_IN_PROGRESS]
+        out = {"capture_round": None, "steps_in_progress": [], "phase": state.get("active_phase")}
+        if round_:
+            out["capture_round"] = {
+                "id": round_.get("id"), "version": round_.get("version"),
+                "outstanding": _outstanding(round_),
+                "taken": len(round_.get("taken", {})), "skipped": len(round_.get("skipped", {})),
+            }
+        for entry in steps:
+            out["steps_in_progress"].append({
+                "id": entry.get("id"), "name": entry.get("name"),
+                "attempt": entry.get("attempt", 1),
+            })
+        return out
+
     def set_target(self, preset, curve):
         """The active target curve for a preset — a pointer, the curve itself lives elsewhere."""
         state = self.load()
@@ -1396,6 +1434,12 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
                                         record a reviewer call and WHERE its text is
   target <preset> <curve>               set a preset's active target curve
   session-start <harness> <model> [resumed]   a working session began (written by the front-end)
+  session-close                               STOPPING: what is still open — the capture round,
+                                              any step left in progress — and what else stopping
+                                              owes that this file does not hold. Reports, never
+                                              closes: which evidence ends a step is a decision.
+                                              Exits non-zero while anything is open, so "we
+                                              stopped" cannot be said over an open round
   decision <question> <answer> [step] [--invalidates X]   what the Arbiter ruled, as itself
   capture-start <version> [title ...] [--step ID]   open a capture round; titles = what was
                                          asked for, --step binds it to the plan step it satisfies
@@ -1699,6 +1743,40 @@ def _selftest():
     finally:
         globals()["_writer_sha"] = real_sha
 
+    # ── stopping is an event: what is still open when a session ends (HUB-023) ────────────────
+    # `session_start` had no pair, so "we stopped" could be said over an open round whose status
+    # lives only in REW's measurement list. `open_work` REPORTS; closing each thing stays a
+    # decision (which evidence, which reason), which is why nothing here writes.
+    stop_root = os.path.join(tempfile.mkdtemp(prefix="autosound_stop_"), "process")
+    sp = Process(stop_root)
+    assert sp.open_work() == {"capture_round": None, "steps_in_progress": [], "phase": None}, \
+        "a project that has done nothing owes nothing"
+    sp.add_step("0.1", "baseline sweeps", phase="0")
+    sp.start_attempt("0.1")
+    sp.start_capture("1", ["w-L_1 (sw)", "w-R_1 (sw)"])
+    sp.record_capture("w-L_1 (sw)")
+    open_ = sp.open_work()
+    assert open_["capture_round"]["outstanding"] == ["w-R_1 (sw)"], open_
+    assert [s["id"] for s in open_["steps_in_progress"]] == ["0.1"], open_
+    sp.skip_capture("w-R_1 (sw)", "not taken today")
+    sp.close_capture()
+    # A CLOSED round stays in the slice carrying `closed` -- reporting it as open forever is the
+    # bug this line exists for, and the probe found it before this assertion did.
+    assert sp.open_work()["capture_round"] is None, sp.open_work()
+    assert sp.open_work()["steps_in_progress"], "the step is still in progress"
+    sp.block_step("0.1", "the mic moved")
+    assert sp.open_work()["steps_in_progress"] == [], sp.open_work()
+    # ...and a step picked up again is owed again: stopping is not a one-way latch. The attempt
+    # number does NOT move here, and that is this module's existing rule rather than an oversight
+    # -- `start_attempt` counts a redo only after `done` or `skipped`; resuming a BLOCKED step is
+    # the same attempt continuing. Asserted as it is, not as first assumed.
+    sp.start_attempt("0.1")
+    assert [(s["id"], s["attempt"]) for s in sp.open_work()["steps_in_progress"]] == [("0.1", 1)], \
+        sp.open_work()
+    sp.finish_step("0.1", ["w-L_1 (sw)"])
+    sp.start_attempt("0.1")
+    assert [s["attempt"] for s in sp.open_work()["steps_in_progress"]] == [2], sp.open_work()
+
     print(
         "selftest OK — evidence refused when empty and when it resolves to nothing (SCR-035), "
         "phase -1 refused to end on a folder intake never touched, "
@@ -1706,7 +1784,10 @@ def _selftest():
         "and opened once the map was recorded; "
         "phase 1 refused a profile with no `sample_rate_hz` (SCR-045) and phase 2 asked only for "
         "what a profile declaring no EQ actually owes; "
-        "the journal headed itself with the writing checkout and re-headed only when it changed. "
+        "the journal headed itself with the writing checkout and re-headed only when it changed; "
+        "and STOPPING is an event: `open_work` names the open round and every step left in "
+        "progress, drops a round once it is closed, and owes a step again when it is picked "
+        "back up. "
         f"root={root}"
     )
     return 0
@@ -1785,6 +1866,39 @@ def _main(argv):
         elif cmd == "session-start":
             p.record_session(args[0], args[1], resumed=(len(args) > 2 and args[2] == "resumed"))
             print(f"session recorded: {args[0]} / {args[1]}")
+        elif cmd == "session-close":
+            open_ = p.open_work()
+            lines, owed = [], 0
+            round_ = open_["capture_round"]
+            if round_:
+                owed += 1
+                miss = round_["outstanding"]
+                lines.append(
+                    f"OPEN ROUND {round_['id']} at {round_['version']}: "
+                    f"{round_['taken']} taken, {round_['skipped']} skipped"
+                    + (f", {len(miss)} still expected ({', '.join(miss)})" if miss else "")
+                    + "\n    close it: capture-skip <title> <reason> for each one not coming, "
+                      "then capture-close"
+                    + "\n    why now: an open round's status lives in REW's measurement list and "
+                      "goes when REW does")
+            for entry in open_["steps_in_progress"]:
+                owed += 1
+                lines.append(
+                    f"STEP IN PROGRESS {entry['id']} {entry.get('name') or ''} "
+                    f"(attempt {entry['attempt']})"
+                    "\n    close it: done <id> <evidence that RESOLVES>, or block <id> <reason>, "
+                    "or skip <id>")
+            print("\n".join(lines) if lines else
+                  "nothing open in the process record — round closed, no step left in progress")
+            # Two carriers this module does not own, named rather than checked: saying "also do X"
+            # is honest, pretending to have verified it would not be.
+            print("\nNot checked here, and still part of stopping:"
+                  "\n  - a ruling the Arbiter made out loud -> `decision <question> <answer>`"
+                  "\n  - an agreed change not yet banked (🟡) -> `apply.propose` (the ledger, not this file)"
+                  "\n  - the session log / handoff line for the next session"
+                  "\n  - the car itself: the in-car EXIT CHECKLIST (SKILL.md) — test values reverted, "
+                  "knobs back, config backed up")
+            return 1 if owed else 0
         elif cmd == "capture-start":
             step = None
             rest = list(args)

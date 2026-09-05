@@ -51,6 +51,35 @@ project, collect `state/` + the session transcripts + `dsp-config/` + the `.mdat
 with invocation-greps (**count real `python3 …py` executions, not token mentions** — mentions
 include the skill's own text and the model's narration; only invocations are ground truth).
 
+## Stopping is an event, and it has a closing order
+
+The discipline of this method is strong while work is happening — every agreed change is banked,
+every phase, step, decision and capture round is written as it occurs. It had one hole, and it was
+at the end: **nothing said what happens when work stops.** So stopping read as a pause in a
+conversation, and the four things that were open stayed open.
+
+The cost never lands on the session that stopped. It lands on the next one, which resumes and
+reconciles against what is not there:
+
+* **an open capture round** — this method's own warning says its status lives in REW's measurement
+  list and disappears when REW is closed. Stopping without `capture-close` is how a round becomes
+  unreconstructable;
+* **a step left in `start`** — neither done, nor blocked, nor skipped, so the plan claims work is
+  underway that nobody is doing;
+* **a ruling the Arbiter made out loud** — a constraint on later phases that exists only in a
+  transcript, which is exactly what `decision` was built to stop;
+* **a change agreed and not banked**, and **a session with no handoff line.**
+
+`process.py <project>/process session-close` is the one question — what is still open — and it
+answers with the commands that close each thing. It deliberately **reports and does not close**:
+which evidence ends a step, and whether a capture is skipped or still owed, are judgements with an
+argument behind them, and a tool that guessed would write a plausible wrong record. The trigger
+words, the full order and the in-car half live in `SKILL.md`'s Pre-Session & Resume block, beside
+the checklist that already existed for the hardware.
+
+**No new carrier was added for this**, deliberately (autosound-hub `HUB-023`, the ask from the hub):
+a second record of the same thing drifts from the first. What was missing was an order, not a store.
+
 ## The record and the hardware drift apart — verify, don't compute from memory
 
 Three independent occurrences on one build, each caught only by someone reading a screen:
