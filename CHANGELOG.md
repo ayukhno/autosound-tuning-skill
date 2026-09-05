@@ -40,6 +40,127 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [v3.0.41] — 2026-09-05 · the phase control becomes a filter, the crossover model gets the hardware behind it, and a residual carries its grid
+
+> **Upgrading:** additive except for **one behaviour change, and it is the one this patch was
+> for.** **(1) `predict.py` now MODELS `phase_deg`** where it used to refuse every row carrying one.
+> A ledger row with a phase angle **and** a configured reference crossover (the LPF on a sub, the
+> HPF otherwise) now changes that channel's predicted phase and group delay — a channel that was
+> "NOT MODELLED — a vendor phase angle" in 3.0.40 has a curve in 3.0.41, and every sum and junction
+> it is a member of moves with it. A row with an angle and no configured reference is still
+> refused, with a new message that says what is missing. `chain_from_row` gained a `code=` argument
+> (needed to tell a sub from the rest; `chains_from_snapshot` passes it), the chain dict gained a
+> `phase` key (`None` when the row has none — it is in `predicted.json` under `chain`), and the
+> `not_modelled` list in that JSON changed its first entry. **(2) A crossover leg written with
+> `slope: "OFF"` (or 0) is now read as configured-but-not-active** — out of the chain, still the
+> phase reference — where `_leg` used to crash on `int("OFF")`. Only a caller that wrote such a leg
+> sees a difference, and the difference is a prediction instead of a traceback. **(3) `dsp_math`'s
+> selftest reads fixtures from `rew_tool/testdata/helix-bench/`** (300 KB of published curves,
+> CC BY 4.0, `LICENSES/NOTICE.md`); a deployment that strips `testdata/` fails that selftest by name
+> rather than passing quietly. **(4) The Helix profile gained fields** (`phase_control.*`,
+> `delay.sample_quantised*`, `crossover_filters.verification_note`), lost the Butterworth entry of
+> `_open_questions` (answered) and gained two open questions (delay rounding vs truncation, the
+> phase step on mid/high channels) — additive for every reader; `open-questions` prints two new
+> lines. Everything else is documentation, and one statement in `helix-phase-allpass.md` is
+> **reversed**: the phase control's delay cost lands BELOW its corner, not above it.
+
+- **The channel Phase control is a filter now — `rew_tool/phase_rotation.py`, `predict.py`,
+  `references/tooling/helix-phase-allpass.md`, the Helix profile** (handoff from the Resonalyze-fork
+  bench session, 2026-09-05; the measurements are `ayukhno/autosound-measurements` fact 6, the
+  upstream implementation `DIMOSUS/Resonalyze` `dsp/PhaseRotationControl.cs @ bc957c8`,
+  DIMOSUS/Resonalyze#88). `predict` refused every `phase_deg` outright, and that refusal was right
+  while nobody knew the law: the angle alone is not a filter. The law is measured — ~60 electrical
+  sweeps on a Helix DSP Ultra S at 96 kHz: **one RBJ second-order all-pass with Q = 1.0000, whose
+  corner the processor places so the phase equals the setting AT the channel's reference
+  crossover** — the configured LPF on a sub, the configured HPF otherwise, and *configured* is the
+  word: bypass and `slope = OFF` leave the reference in place (three states 0.018 dB / 0.12° apart),
+  so reading the live crossover is the trap. **The corner is capped at 3/16 of the rate — 18 kHz —
+  which the manufacturer documents nowhere**, and above it settings collapse onto one filter: at a
+  5 kHz reference 5.625°, 11.25° and 28.125° are literally the same measurement and all deliver
+  29.5°, a value not on the control's own grid; nothing is lost below a 1001 Hz reference, 2 / 3 /
+  5 / 9 positions at 2 / 3 / 5 / 8 kHz. So `realize()` returns the **delivered** angle beside the
+  setting and `predict` puts a note on a capped channel, because a report that echoes the setting
+  lies exactly where the control stops behaving. It is not a polarity flip (180° at 5 kHz is −23°
+  at 1 kHz) and not free: the group delay is a plateau **below** the corner — 180° at a 500 Hz
+  reference costs 640–690 µs over 20–100 Hz, about 22 cm of path, in the sub/midbass joint the
+  control is usually used to fix. The port carries its upstream header and three declared
+  deviations (`scripts/upstream-drift.py` reads it clean); its selftest runs 15 vectors from the
+  upstream's compiled library and all **32 published bench cases** (`testdata/helix-bench/phase-
+  control-vectors.json`; median corner agreement 0.09 %, worst 3.7 %), and proves the flag on the
+  four cases whose free fit is unidentifiable is load-bearing — each would fail the line if it were
+  used. The workaround the old refusal recommended — hand-entering an APF2 band — could never
+  reproduce the control, because the corner depends on the channel's crossover and the user never
+  sees it. Two things are named as NOT established rather than assumed: the ceiling at any rate but
+  96 kHz (3/16 of the rate and an absolute 18 kHz fit the data equally; the rate-relative reading
+  is taken, `MAX_CORNER_FRACTION` is the one line to correct, `docs/TODO.md` S-004), and the 5.625°
+  step on mid/high channels (measured on a sub channel only).
+
+- **The crossover model has the hardware behind it, and the selftest runs on the published
+  curves — `rew_tool/dsp_math.py`, `rew_tool/testdata/helix-bench/`,
+  `references/core/filter-types-car-audio.md`** (autosound-hub `#32` / `#64`). Every anchor in
+  `dsp_math`'s selftest was a definition or an independent evaluation path; none could say the
+  *processor* builds these filters. Ten measured curves now can: `xo_response` at 96 kHz against
+  the published BW24 and LR24 at 460 Hz, BE36 at 1 kHz and LR36 at 8 kHz, each a complex ratio to
+  its set's bypass capture, over a stated band, above a stated mask, on the files' own 1/96-octave
+  grid, with delay and offset removed. **BW24 at 460 Hz** — the corner the working preset runs on
+  the mids, and the question `#32` carried since 2026-08-25 as an arrival condition — sits
+  **−0.0024 dB / +0.034° from the LR24 control captured in the same 54-second pass** (0.0598 dB /
+  0.443° absolute, −2.985 dB at the corner); the difference holds to 0.11° at every mask from −40 to
+  −10 dB while the absolute number moves twenty-fold. **BE36** is the −3 dB-normalised prototype
+  (0.042 / 0.029 dB rms; the delay-normalised one is >5 dB off and −10 dB at the corner) — so
+  `norm="mag"`, chosen in 2026-07 against REW's curves, now fails against the hardware if reverted,
+  not only against another model. **LR36 at 8 kHz** fits the bilinear form at 96 kHz (0.064 / 0.085
+  dB) and refuses both the analogue prototype (max 0.9–1.9 dB) and the same digital model at
+  48 kHz — the measurement behind binding the model to the profile's rate (3.0.35). Each anchor was
+  broken on purpose before it was trusted: a 3 % corner shift reads 0.52 dB, a wrong order 1.7 dB.
+  The Butterworth section of `filter-types-car-audio.md` now carries the answer beside the
+  question, and the profile's `_open_questions` no longer lists it (`#64`'s two asks; the third —
+  verify it yourself — is the selftest). The verified family is **LR12 · LR24 · LR36 · BW24 · BW42 ·
+  BE36**, and polarity follows the alignment: LR12 and LR36 need one leg inverted, LR24 and BW42 do
+  not.
+
+- **Six more bench facts folded into the knowledge, marked against what was already there —
+  `knowledge/dsp/helix-dsp-ultra-s.md`, the Helix profile, `dsp_math.apf1_response`.** A typed
+  delay is **quantised to a whole sample** (10.4167 µs at 96 kHz: 0.05 ms = 4.800 samples lands on
+  5.0003; the published "0.01 ms" step is that figure rounded and a model built on it drifts 4 %) —
+  the sheet's samples column is what the device holds, and snapping proposals to that grid is
+  `docs/TODO.md` S-002, held until the quantiser's direction is measured. **AP1's placed corner
+  sits low and the error grows with frequency** (−0.5 % at 250 Hz … **−4.9 % at 8 kHz**, while every
+  AP2 lands within 0.05 %; no simple law fits) — `apf1_response` models the typed corner and its
+  docstring now prices that (3.0° at 8 kHz), S-003 carries the correction if an AP1 is ever
+  prescribed up there. The **PK bell is constant-Q** and the typed Q is the half-gain Q (edges at
+  619.5 / 1610.6 Hz for Q 1 against 618.0 / 1618.0 RBJ). A typed **channel gain is exact** (−6.0 →
+  −5.9998 dB) and **re-uploading the configuration changes nothing** (+0.0001 dB) — a level shift
+  between two captures is never the upload. And **the chain simply multiplies** (HP 500 × LP 5000
+  separately vs together: 0.015 dB / 0.11°). Every ✅ names its fact number; the section at the
+  end of the knowledge file says where the 109 curves live and the one rule for using them.
+
+- **A residual carries its band, mask and grid — `references/core/diagnostic-techniques.md` §35,
+  `verify_prediction.py`, `testdata/helix-bench/README.md`.** Four measurement lessons, each bought
+  with a retraction on the bench. The one that touches every tolerance this method states: **an rms
+  is a weighted number and the frequency grid is the weight** — the same measurement reads 0.224°
+  on REW's raw linear bins and 0.443° on a 1/96-octave grid, and the residual was not at the knee
+  but in the deep stopband at the mask edge, which a log grid samples 96 times per octave. So where
+  a control exists, quote the difference against it; where none does, the band, mask and grid are
+  part of the number, and a tolerance written in advance for another representation is a miss of
+  the criterion, not of the hardware. The other three: a free fit whose parameter lands outside the
+  fitted band is an extrapolation wearing decimals (report the residual, not the parameter); a null
+  result needs a variable that actually moved; a caveat about published data decays like any other
+  claim and is re-derived from the files in the representation they are in.
+
+- **`helix-phase-allpass.md` is rewritten from measurement, and one of its statements was
+  backwards.** The file said it was compiled from forums, and it was. Three of its claims are now
+  measurable: "Helix computes the coefficients from the crossover value" is right, and here is the
+  formula, the Q and the ceiling; "the APF adds delay to everything ABOVE the turn frequency" is
+  **the other way round** — the cost is a plateau below the corner and it scales with how low the
+  reference sits; and there was nothing about a ceiling. The AP1/AP2-band half stays, with the
+  electrical numbers (AP2 to 0.05 % in f0; identifiability set by the band together with the Q,
+  not by Q alone: an 8 kHz Q 0.7 section fitted over 2–8 kHz is degenerate with delay + offset).
+  The method rule "the midbass is the anchor you do not rotate" and the hardware fact "a `low`
+  channel has no Phase control" are now both stated, as the different kinds of statement they are.
+  Also: the Passat's recorded left-mid setting of `33°` is not on the 5.625° grid (28.125 / 33.75
+  are) — flagged as a transcription to check, not corrected.
+
 ## [v3.0.40] — 2026-09-03 · the processor's topology stops travelling to a new processor, the cabin gets its second lookup, and a screenshot gets a rail to travel on
 
 > **Upgrading:** additive except for **one behaviour change, and it is the one this patch was for.**
