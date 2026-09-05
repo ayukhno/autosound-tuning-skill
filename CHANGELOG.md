@@ -40,7 +40,17 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
-## [Unreleased]
+## [v3.0.44] — 2026-09-05 · the sum-loss port catches up with its upstream: a NaN channel adds nothing, and the junction ripple is read
+
+> **Upgrading:** additive. `dsp_math.sum_loss` returns one more key, `ripple_db`; `predict`'s
+> junction and pair records carry `sum_ripple_db`, and the junction table has a `ripple` column
+> beside score. No signature changed, no file moved. **One behaviour change, and only for a caller
+> that passes NaN:** a non-finite bin of either response now counts as a channel that measured
+> nothing there and ADDS NOTHING, where before it gated the bin — so a pair with NaN in one
+> channel reads MORE bins than it did, in `sum_loss` and `align_sum_loss` alike. Nothing in this
+> tree produces such an input today, and every finite pair reads the same numbers to the last
+> digit. The upstream pin is `56b07c8`, so `scripts/upstream-drift.py --fork <clone>` reports the
+> port current until Resonalyze touches the file again.
 
 - **The sum-loss port caught up with its upstream — `rew_tool/dsp_math.py`, `rew_tool/predict.py`,
   `LICENSES/NOTICE.md`, `docs/TODO.md` S-005 / S-006.** `scripts/upstream-drift.py` had been
