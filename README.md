@@ -91,6 +91,8 @@ claude plugin install autosound-tuning
 
 This tool is **completely free**. The code and scripts are licensed under **MIT**, and the documentation and method itself under **CC BY-SA 4.0**. 
 
+**Credits:** part of the DSP maths follows the logic of [Resonalyze](https://github.com/DIMOSUS/Resonalyze) by DIMOSUS (MIT) — the junction sum-loss metric and the HELIX channel phase control are ports of it, so that a tuner moving between the two tools gets one answer per filter, not two. Details in [`LICENSES/NOTICE.md`](LICENSES/NOTICE.md).
+
 If it saved you weeks of tuning time and you want to thank the author, you can do it here:
 💜 **[GitHub Sponsors](https://github.com/sponsors/ayukhno)** · ☕ **[Monobank Jar (UA)](https://send.monobank.ua/jar/8wThVcodjm)**
 

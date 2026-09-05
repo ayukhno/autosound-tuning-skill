@@ -89,7 +89,9 @@ claude plugin install autosound-tuning
 - Wenn mit der Tuning-Logik selbst etwas nicht stimmt: [Öffne ein Issue auf GitHub (autosound-tuning-skill)](https://github.com/ayukhno/autosound-tuning-skill/issues/new/choose).
 - Wenn das Problem die grafische Oberfläche (Autosound TCC) betrifft — schreibe ins [Repository der TCC-App](https://github.com/ayukhno/autosound-tcc/issues/new/choose).
 
-Dieses Tool ist **komplett kostenlos**. Der Code und die Skripte stehen unter der **MIT**-Lizenz, die Dokumentation und die Methode selbst unter **CC BY-SA 4.0**. 
+Dieses Tool ist **komplett kostenlos**. Der Code und die Skripte stehen unter der **MIT**-Lizenz, die Dokumentation und die Methode selbst unter **CC BY-SA 4.0**.
+
+**Danksagung:** Ein Teil der DSP-Mathematik folgt der Logik des Projekts [Resonalyze](https://github.com/DIMOSUS/Resonalyze) von DIMOSUS (MIT) — die Summenverlust-Metrik an der Trennstelle und die HELIX-Kanal-Phasensteuerung sind Portierungen daraus, damit ein Tuner, der zwischen beiden Werkzeugen wechselt, pro Filter eine Antwort erhält und nicht zwei. Details in [`LICENSES/NOTICE.md`](LICENSES/NOTICE.md). 
 
 Wenn es dir Wochen an Tuning-Zeit gespart hat und du dem Autor danken möchtest, kannst du das hier tun:
 💜 **[GitHub Sponsors](https://github.com/sponsors/ayukhno)** · ☕ **[Monobank Jar (UA)](https://send.monobank.ua/jar/8wThVcodjm)**

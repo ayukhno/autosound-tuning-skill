@@ -148,6 +148,17 @@ Two consequences worth stating, because both have already caused a question:
   result needs a variable that actually moved; a caveat about published data decays like any other
   claim and is re-derived from the files in the representation they are in.
 
+- **Resonalyze is credited on the front page, not only in the licence file — `README.md` and its
+  three translations, `LICENSES/NOTICE.md`.** Two of this method's DSP modules are ports of
+  [Resonalyze](https://github.com/DIMOSUS/Resonalyze) (MIT) and the debt is wider than the two
+  files: the junction vocabulary and the reading of a virtual crossover start there too, and the
+  exchange runs both ways — the phase-control law was measured on our bench, implemented by that
+  project's author from the data, and ported back here. Where both tools answer the same question
+  the answer is deliberately **theirs**, so a tuner moving between the two gets one number per
+  filter rather than two. `NOTICE.md`'s entry was one dense bullet with two ports jammed into it
+  and is now a section that says all of this; each README carries a one-line credit beside the
+  licence sentence.
+
 - **`helix-phase-allpass.md` is rewritten from measurement, and one of its statements was
   backwards.** The file said it was compiled from forums, and it was. Three of its claims are now
   measurable: "Helix computes the coefficients from the crossover value" is right, and here is the

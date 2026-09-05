@@ -91,6 +91,8 @@ claude plugin install autosound-tuning
 
 Цей інструмент **повністю безкоштовний**. Ліцензія на код і скрипти — **MIT**, на документацію та сам метод — **CC BY-SA 4.0**. 
 
+**Подяка:** частина DSP-математики зроблена за логікою проєкту [Resonalyze](https://github.com/DIMOSUS/Resonalyze) від DIMOSUS (MIT) — метрика втрат на стику й фазовий регулятор HELIX є портами звідти, щоб тюнер, який ходить між двома інструментами, отримував на один фільтр одну відповідь, а не дві. Деталі — у [`LICENSES/NOTICE.md`](LICENSES/NOTICE.md).
+
 Якщо він зекономив тобі тижні часу на налаштування і ти хочеш подякувати автору, це можна зробити тут:
 💜 **[GitHub Sponsors](https://github.com/sponsors/ayukhno)** · ☕ **[Банка в Monobank](https://send.monobank.ua/jar/8wThVcodjm)**
 

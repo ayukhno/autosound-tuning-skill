@@ -28,17 +28,29 @@ Third-party resources (icons, external target curves, data) with their own licen
   > TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
   > THIS SOFTWARE.
 
-- `skills/autosound-tuning/rew_tool/dsp_math.py` — the junction **sum-loss metric** (`sum_loss`,
-  `sum_loss_score`, `align_sum_loss`) is a Python port of the *definition* in
-  [Resonalyze](https://github.com/DIMOSUS/Resonalyze) by DIMOSUS, `dsp/VirtualCrossoverAnalysis.cs`
-  at commit `1da56dd` (`DetailedLoss`, `SumLossCurve`, `DipExcessPenaltyWeight`,
-  `MinBinAmplitudeRatio`, `SumLossLevelGateDb`): the formula and its constants, written fresh in
-  numpy with one grid-independence change noted in the source.
-  `skills/autosound-tuning/rew_tool/phase_rotation.py` — the HELIX channel **phase control**
-  (`realize`, `rotation_at`, `solve_corner`, `snap_to_grid`, the step / range / Q / ceiling
-  constants) is a port of `dsp/PhaseRotationControl.cs` at commit `bc957c8`, written by the same
-  author from the bench data below; the biquad it evaluates is this repo's own `apf2_response`,
-  and the deviations are declared in the file's header. Resonalyze is used under the MIT License:
+- **[Resonalyze](https://github.com/DIMOSUS/Resonalyze) by DIMOSUS — parts of this method's DSP
+  maths follow that project's logic**, and two modules are direct ports of it. Resonalyze is a
+  Virtual DSP for car audio; where it and this method answer the same question, the answer here is
+  **its** answer, written fresh in numpy rather than re-derived — deliberately, so that a tuner who
+  moves between the two tools does not get two different numbers for one filter. The debt is
+  larger than the two files below: this method's junction vocabulary and its reading of a virtual
+  crossover both start there (`references/tooling/resonalyze-virtual-dsp.md`), and the exchange has
+  run both ways — the Helix phase-control law was measured on our bench and implemented by
+  Resonalyze's author from that data (DIMOSUS/Resonalyze#88), and we then ported his
+  implementation back.
+
+  - `skills/autosound-tuning/rew_tool/dsp_math.py` — the junction **sum-loss metric** (`sum_loss`,
+    `sum_loss_score`, `align_sum_loss`) is a Python port of the *definition* in
+    `dsp/VirtualCrossoverAnalysis.cs` at commit `1da56dd` (`DetailedLoss`, `SumLossCurve`,
+    `DipExcessPenaltyWeight`, `MinBinAmplitudeRatio`, `SumLossLevelGateDb`): the formula and its
+    constants, with one grid-independence change noted in the source.
+  - `skills/autosound-tuning/rew_tool/phase_rotation.py` — the HELIX channel **phase control**
+    (`realize`, `rotation_at`, `solve_corner`, `snap_to_grid`, the step / range / Q / ceiling
+    constants) is a port of `dsp/PhaseRotationControl.cs` at commit `bc957c8`; the biquad it
+    evaluates is this repo's own `apf2_response`, and the deviations are declared in the file's
+    header.
+
+  Resonalyze is used under the MIT License:
 
   > Copyright (c) 2023 dimosus
   >
