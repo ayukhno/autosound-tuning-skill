@@ -223,6 +223,13 @@ def options_for(profile_types, families=MODELLABLE_FAMILIES):
     A family whose own parameters are unstated (`ripple_db: null`) is NOT modellable regardless of
     the list -- the filter is not determined by family and order alone, so there is nothing to
     realise. That check is here rather than at the call site because forgetting it is silent.
+
+    THIS FUNCTION IS THE DECIDER, and since 2026-09-05 its verdict is also cached in the profile
+    as `modellable` per family (`dsp_profile.annotate_modellable`, stamped by `save_profile`), so a
+    consumer that reads the JSON without importing this module can see it. The cache is generated,
+    never hand-written, and `dsp_profile`'s selftest re-derives it for every bundled profile and
+    fails on any disagreement -- so changing what is realisable here is safe, and forgetting to
+    re-stamp is loud (autosound-hub RES-003; the argument in `estimator-scope.md` §1b).
     """
     out = []
     for family in families:

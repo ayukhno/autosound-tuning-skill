@@ -355,6 +355,82 @@ def _provenance():
         return None
 
 
+#: Stamped onto every crossover family in a profile: can the METHOD predict this filter?
+#:
+#: `dsp_math.options_for` decides, here and nowhere else — this pair is its verdict written into
+#: the data, not a second opinion. Why it needs writing down at all: the rule lived only inside
+#: that function, so a consumer reading `crossover_filters.types` straight off the JSON saw
+#: CHEBYSHEV with a full order ladder and nothing saying the method cannot model it. That is not a
+#: hypothesis — `research` was that consumer, walked `types` itself, and its pilot recorded
+#: `CHEBYSHEV12` as a winner after modelling it with an invented ripple (autosound-hub RES-003).
+#:
+#: The failure mode of writing a decision twice is that the copies drift, and the RFC named it.
+#: Two things stop it: the fields are GENERATED (`annotate_modellable`, called by `save_profile`),
+#: never typed by hand; and `_selftest` re-derives them for every bundled profile and fails on any
+#: disagreement. A profile that predates the stamp simply has no marker, which reads as "nobody
+#: has said" — the same tri-state this module uses everywhere else, and it is the safe direction:
+#: a consumer that finds no marker must ask `options_for`, exactly as today.
+MODELLABLE_KEY = "modellable"
+MODELLABLE_WHY_KEY = "modellable_note"
+
+
+def annotate_modellable(data):
+    """Stamp `modellable` on every declared crossover family, from `dsp_math.options_for`.
+
+    Returns `data`, modified in place. Raises when `dsp_math` cannot be imported: a marker guessed
+    without the decider is worse than none, because absent means "ask" and a wrong `true` means
+    "go ahead" (`estimator-scope.md` — a check whose input is missing must fail, not wave through).
+    """
+    import dsp_math                                   # lazy: this module is stdlib for readers with no numpy
+
+    profile = _unwrap(data)
+    for group in profile.get("groups") or []:
+        types = ((group or {}).get("crossover_filters") or {}).get("types")
+        if not isinstance(types, dict):
+            continue
+        modellable = {family for family, _order in dsp_math.options_for(types, families=tuple(types))}
+        for family, spec in types.items():
+            if not isinstance(spec, dict):
+                continue
+            ok = family in modellable and family in dsp_math.MODELLABLE_FAMILIES
+            spec[MODELLABLE_KEY] = ok
+            if ok:
+                spec.pop(MODELLABLE_WHY_KEY, None)
+                continue
+            unstated = sorted(k for k, v in spec.items()
+                              if v is None and k not in (MODELLABLE_KEY, MODELLABLE_WHY_KEY))
+            reasons = []
+            if family not in dsp_math.MODELLABLE_FAMILIES:
+                reasons.append(f"{family} is not in the method's default realisable set "
+                               f"(dsp_math.MODELLABLE_FAMILIES) — ENTERABLE on this device, not "
+                               f"predictable by us")
+            if unstated:
+                reasons.append(f"{', '.join(unstated)} unstated, so family and order alone do not "
+                               f"determine the filter — there is nothing to realise")
+            # Both can be true at once, and on the live Helix's CHEBYSHEV both ARE: naming one
+            # would let a reader think stating the missing parameter is enough, or that adding a
+            # realisation is. The note carries every reason it has.
+            spec[MODELLABLE_WHY_KEY] = "; ".join(reasons) or "dsp_math.options_for excludes it"
+    return data
+
+
+def modellable_families(data):
+    """`{family: bool}` as the DATA declares it — for a consumer that will not import `dsp_math`.
+
+    `None` for a family carrying no marker: a profile written before the stamp says nothing, and
+    nothing is not `false`. Ask `dsp_math.options_for` in that case, as every consumer does today.
+    """
+    out = {}
+    for group in _unwrap(data).get("groups") or []:
+        types = ((group or {}).get("crossover_filters") or {}).get("types")
+        if not isinstance(types, dict):
+            continue
+        for family, spec in types.items():
+            if isinstance(spec, dict):
+                out[family] = spec.get(MODELLABLE_KEY)
+    return out
+
+
 def save_profile(path, data):
     """Stamp the schema version and the writer, validate, then write. Refuses to write a malformed
     profile (same discipline as state.py's snapshot() — a garbage profile can't be silently banked).
@@ -371,6 +447,13 @@ def save_profile(path, data):
     the file predates anyone asking. See `provenance.py` for why it is not the version string.
     """
     validate_profile(data)
+    try:
+        annotate_modellable(data)
+    except ImportError:
+        # No numpy here (a stdlib-only consumer writing a profile back). Stamping nothing is the
+        # honest outcome: absent means "ask the decider", which is what a reader did before this
+        # field existed. A guessed marker would be read as an answer.
+        pass
     if isinstance(data, dict):
         data = dict(data)
         data["schema_version"] = SCHEMA_VERSION
@@ -1527,6 +1610,58 @@ def _selftest():
         _names = effects_and_dynamics(load_profile(_hx))
         assert _names and "DynamicBass" in _names, "the bundled Helix profile lost its effects list"
 
+    # ── the modellable marker: the data's copy of `options_for`'s verdict (RES-003) ────────────
+    # The whole risk the RFC named is that two places drift. This is what makes that a FAILURE
+    # rather than a discovery: every bundled profile is re-derived and compared, so a family whose
+    # marker no longer matches the decider stops the suite instead of misleading a consumer.
+    def _drift(data):
+        """What the file SAYS vs what the decider says right now, re-derived rather than re-coded.
+        Comparing against a fresh `annotate_modellable` is the whole check: no second copy of the
+        rule lives in this test, so the test cannot agree with a bug by sharing it."""
+        return {f: (said, want) for (f, said), (_, want)
+                in zip(sorted(modellable_families(data).items()),
+                       sorted(modellable_families(annotate_modellable(copy.deepcopy(data))).items()))
+                if said is not want}
+
+    for _path in sorted(glob.glob(os.path.join(bundled_dir(), "*.json"))):
+        _data = load_profile(_path)
+        assert modellable_families(_data), f"{os.path.basename(_path)} declares no family marker"
+        assert not _drift(_data), (
+            f"{os.path.basename(_path)}: the marker has drifted from the decider "
+            f"{_drift(_data)} — re-run annotate_modellable and commit the profile")
+        for _group in _unwrap(_data).get("groups") or []:
+            _types = ((_group or {}).get("crossover_filters") or {}).get("types")
+            for _family, _spec in (_types or {}).items():
+                assert bool(_spec.get(MODELLABLE_WHY_KEY)) is not _spec.get(MODELLABLE_KEY), \
+                    f"{_family}: a refusal owes a reason and a pass owes none"
+    # ...and the drift check FIRES. A marker flipped by hand is the realistic way the two copies
+    # part company, and a guard nobody has watched fail is not a guard (this repo's own rule).
+    _tampered = load_profile(os.path.join(bundled_dir(), "audiotec-fischer-helix-dsp-ultra-s.json"))
+    for _group in _unwrap(_tampered).get("groups") or []:
+        _t = ((_group or {}).get("crossover_filters") or {}).get("types") or {}
+        if "CHEBYSHEV" in _t:
+            _t["CHEBYSHEV"][MODELLABLE_KEY] = True
+    assert _drift(_tampered) == {"CHEBYSHEV": (True, False)}, _drift(_tampered)
+    # ...and the marker is the DEFAULT search space, so the Helix's Chebyshev is false with BOTH
+    # of its reasons named — stating the ripple alone would not make the method able to build it.
+    _hx_types = [g for g in _unwrap(load_profile(_hx)).get("groups") or []
+                 if g.get("id") == "physical_outputs"][0]["crossover_filters"]["types"]
+    _cheb = _hx_types["CHEBYSHEV"]
+    assert _cheb[MODELLABLE_KEY] is False and "ripple_db unstated" in _cheb[MODELLABLE_WHY_KEY] \
+        and "default realisable set" in _cheb[MODELLABLE_WHY_KEY], _cheb[MODELLABLE_WHY_KEY]
+    # A profile written before the stamp says NOTHING, which is not `false`: absent means ask.
+    _old = {"dsp_profile": {"name": "X", "vendor": "Y", "groups": [
+        {"id": "physical_outputs", "label": "Out", "fields": ["hp", "lp"],
+         "crossover_filters": {"types": {"LR": {"orders_db_per_oct": [24]}}}}]}}
+    assert modellable_families(_old) == {"LR": None}, modellable_families(_old)
+    assert annotate_modellable(copy.deepcopy(_old)) and \
+        modellable_families(annotate_modellable(copy.deepcopy(_old))) == {"LR": True}
+    # An unstated parameter flips it, and the marker follows the decider rather than the name.
+    _un = copy.deepcopy(_old)
+    _un["dsp_profile"]["groups"][0]["crossover_filters"]["types"]["LR"]["orders_db_per_oct"] = [24]
+    _un["dsp_profile"]["groups"][0]["crossover_filters"]["types"]["LR"]["ripple_db"] = None
+    assert modellable_families(annotate_modellable(_un)) == {"LR": False}, _un
+
     print(f"selftest OK — max_count validated as a physical slot count (null = still open, 0/float/"
           f"bool/str refused) and physical_outputs mapped to the ledger's `channels` key (SCR-042); "
           f"validate rejects malformed groups, MUSWAY's missing virtual_channels "
@@ -1535,7 +1670,10 @@ def _selftest():
           f"isolated the one changed field, content_hash is stable across _contributed stamping; "
           f"writer: every set-field hit the disk (a lost session keeps its answers), JSON-encoded "
           f"values and a stray `dsp_profile.` prefix were decoded, a wrong shape was recoverable, "
-          f"finalize promoted the draft and refused a half-answered one without destroying it. "
+          f"finalize promoted the draft and refused a half-answered one without destroying it; "
+          f"and every bundled profile's `modellable` marker re-derives to the same verdict "
+          f"`dsp_math.options_for` gives (a hand-flipped one is caught, absent stays None, "
+          f"a refusal owes a reason and the Helix's Chebyshev names both of its own). "
           f"tmp={tmp}")
     return 0
 

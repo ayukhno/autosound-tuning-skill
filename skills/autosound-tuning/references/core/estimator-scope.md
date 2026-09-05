@@ -112,6 +112,37 @@ would have made a tool REFUSE something possible; here it makes a tool PROPOSE s
 unpredictable. Same defect, opposite damage — so when a list is about to be consulted, ask which
 of the two questions is being put to it.
 
+### The intersection is now CACHED in the profile — and why that is not the thing forbidden above
+
+Everything above holds, with one narrowing bought on 2026-09-05 (autosound-hub `RES-003`, from
+`research`). The paragraph before this one forbids writing "we cannot model this" into a device
+profile, for two good reasons: it records our limitation in a file describing somebody's hardware,
+and it goes stale the day our maths improves. Both are objections to a **hand-written** marker, and
+both were right about one.
+
+What they did not cover is the reader who never runs our code. `options_for` is the intersection —
+but a consumer reading `crossover_filters.types` straight off the JSON sees the family, its full
+order ladder, and nothing at all. That is not hypothetical: `research` was that consumer, walked
+`types` with its own loop, and its pilot recorded **`CHEBYSHEV12` as a winning crossover** after
+modelling it with an invented ripple. The rule existed and could not be seen.
+
+So each family now carries `modellable` + `modellable_note`, and the two objections are answered by
+**how** it gets there rather than by argument:
+
+* **it is generated, never typed** — `dsp_profile.annotate_modellable` derives it from
+  `dsp_math.options_for`, and `save_profile` stamps it on every write. There is no second opinion
+  to maintain, only a cached one;
+* **stale fails the build** — `dsp_profile`'s selftest re-derives the marker for every bundled
+  profile and compares. The day our maths improves, a profile still saying `false` stops CI with
+  the family named, which is the opposite of quietly going stale;
+* **absent still means ASK** — a profile written before the stamp carries no marker, and `None` is
+  not `false`. A consumer that finds nothing does what every consumer did before: calls
+  `options_for`. `dsp_profile.modellable_families(profile)` returns exactly that tri-state.
+
+The decision stays in one place. What is in the data is its shadow, and a shadow that cannot drift
+without stopping the build is not a second source of truth — it is the first one, made visible to
+somebody standing outside the code.
+
 ## 2. Where each tool is SILENT — so step order can be derived, not asked
 
 Sequencing questions ("do I need the excess-phase gate before the sub↔midbass joint?") are

@@ -85,6 +85,7 @@
         "crossover_filters": {
           "types": {
             "BE": {
+              "modellable": true,
               "orders_db_per_oct": [
                 6,
                 12,
@@ -97,6 +98,7 @@
               ]
             },
             "BW": {
+              "modellable": true,
               "orders_db_per_oct": [
                 6,
                 12,
@@ -109,6 +111,7 @@
               ]
             },
             "LR": {
+              "modellable": true,
               "orders_db_per_oct": [
                 6,
                 12,
@@ -217,5 +220,7 @@
     ],
     "variant_note": "This entry describes the NON-512K unit and MUST NOT be read as covering the 512K. The user (2026-09-01): the 512K has different EQ filters and a different input stage -- 'не знаю точно' how far the difference goes, so the extent is open, but the fact of it is not. The silicon differs too (ADAU1452 vs ADAU1466) while the two published DSP specification blocks are byte-identical, which is exactly why the datasheet cannot be used to infer one from the other. The variant is in `name` on purpose: `find_bundled` is exact, so a bare 'M6V4' finds nothing and triggers an interview. That is the safe direction -- a missed match costs questions, a false match applies another unit's facts.",
     "vendor": "Musway"
-  }
+  },
+  "schema_version": 3,
+  "skill_sha": "58b18a1077cc431489717a4890bb8fb1fd832af2"
 }

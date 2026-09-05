@@ -100,6 +100,7 @@
           "corner_freq_step_hz": 1.0,
           "types": {
             "BE": {
+              "modellable": true,
               "orders_db_per_oct": [
                 6,
                 12,
@@ -111,6 +112,7 @@
               ]
             },
             "BW": {
+              "modellable": true,
               "orders_db_per_oct": [
                 6,
                 12,
@@ -122,6 +124,8 @@
               ]
             },
             "CHEBYSHEV": {
+              "modellable": false,
+              "modellable_note": "CHEBYSHEV is not in the method's default realisable set (dsp_math.MODELLABLE_FAMILIES) — ENTERABLE on this device, not predictable by us; ripple_db unstated, so family and order alone do not determine the filter — there is nothing to realise",
               "orders_db_per_oct": [
                 6,
                 12,
@@ -135,6 +139,7 @@
               "ripple_db_note": "MEASURED AND NOT IDENTIFIED — deferred permanently, not merely unasked. An experiment was run and could not identify the mathematics (user, 2026-08-23), so this is a closed line of enquiry rather than a lookup nobody has done: do not re-ask, and do not expect a cheap retry. The consequence is bigger than one null: with the ripple unidentified the filter is not DETERMINED, so a Chebyshev crossover on this processor can be entered and cannot be modelled, predicted or checked against a target. `dsp_math.XO_OPTIONS` already excludes the family from any search for that reason; `resonalyze_vc` reports such an edge as unverifiable rather than passing it. Also do not read the 6-42 dB/oct beside it into this field — that answer was about the SLOPE ladder and shares only a conversation with this question."
             },
             "LR": {
+              "modellable": true,
               "orders_db_per_oct": [
                 12,
                 24,
@@ -142,6 +147,8 @@
               ]
             },
             "SELF_DEFINED": {
+              "modellable": false,
+              "modellable_note": "SELF_DEFINED is not in the method's default realisable set (dsp_math.MODELLABLE_FAMILIES) — ENTERABLE on this device, not predictable by us",
               "q_range": [
                 0.5,
                 2.0
@@ -268,5 +275,7 @@
       "DIMOSUS/Resonalyze dsp/PhaseRotationControl.cs @ bc957c8 (MIT), written by the upstream author from the same bench data (DIMOSUS/Resonalyze#88) and verified on all 32 published phase cases on 2026-09-05; ported as rew_tool/phase_rotation.py and checked against the same 32 cases in its selftest (2026-09-05 handoff from the Resonalyze-fork bench session)"
     ],
     "vendor": "Audiotec-Fischer"
-  }
+  },
+  "schema_version": 3,
+  "skill_sha": "58b18a1077cc431489717a4890bb8fb1fd832af2"
 }
