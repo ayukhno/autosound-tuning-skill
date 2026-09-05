@@ -42,6 +42,21 @@ Two consequences worth stating, because both have already caused a question:
 
 ## [Unreleased]
 
+- **The knowledge base stops collecting solutions — `knowledge/cars/vw-passat-b8-sedan.md`,
+  `knowledge/cars/_TEMPLATE.md`, `references/core/feedback-loop.md`, `knowledge/approaches.md`**
+  (the owner's ruling, 2026-09-05: *we do not collect "successful solutions" into the base*). The
+  worked car file carried a tune's settings behind a "⛔ verify only, never copy" label — the
+  crossovers that won an AYA round, per-driver polarities, a centre-fill config (corners, PK bands,
+  polarity, delay), a rear-fill config, notch Hz/dB/Q. The label does not save them: a setting is
+  **project state**, and a base that stores winning numbers is a recipe book whoever reads it will
+  eventually cook from. Removed, with a line saying what was removed and why so it cannot quietly
+  come back. **What stayed is everything the cabin and the drivers DO** — nulls, SBIR notches, room
+  modes, the anti-correlated midbass pair, the intrinsic L/R arrival asymmetry, non-minimum-phase
+  zones, the THD floors a corner has to clear — plus **the standing install** (placement, aim,
+  coplanarity, passives, enclosure, the amp→channel map). Two instructions that told future sessions
+  to store "winning crossover sets" there are corrected at the same time, because the template and
+  the doctrine were the thing producing the leak.
+
 - **Where a per-car fact may sit in the skill, stated once — `references/core/knowledge-architecture.md`,
   `knowledge/cars/_TEMPLATE.md`** (the owner's ruling, 2026-09-05). The five-layer table said
   "Skill = layers 1–2, shared and model-agnostic" and then said nothing about `knowledge/cars/` and

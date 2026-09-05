@@ -29,7 +29,7 @@
 ## How to use this file
 
 - **Choosing a start:** name the goal, read the four setup factors for THIS car, then pick a scheme whose **setup context resembles** it — as a **starting hypothesis**, not a fact. ⚠️ Transplanting a scheme to a different setup = a hypothesis to verify by measurement + summation (the same discipline as `knowledge/cars` PART B), never "this won AYA so it's right for you".
-- **After a tune:** add/append the scheme actually used + its setup + the outcome (and the competition result, if any) — that's how the catalog earns its ratings. Collected via the closing ritual (`feedback-loop.md`, stream C); winning crossover sets also land in `knowledge/cars/<body>.md`.
+- **After a tune:** add/append the scheme actually used + its setup + the outcome (and the competition result, if any) — that's how the catalog earns its ratings. Collected via the closing ritual (`feedback-loop.md`, stream C). ⛔ The *scheme* lands here, tagged with its setup — the dialled corners do NOT go into `knowledge/cars/<body>.md`, which holds physics and the install, never a tune's settings (`knowledge-architecture.md`).
 
 ## Vision — a public, community-rated classifier (roadmap)
 

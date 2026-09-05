@@ -33,11 +33,14 @@ delays, EQ and phase angles are the tune's state and live in the project, never 
 **Drivers / enclosure — from the user's intake or the datasheet, NOT from here:**
 - □ *(enclosure type/volume in the author's build)* → yours is whatever the user actually has; don't assume.
 
-**Crossovers that won in the author's build — DATA, not your starting table:**
-- *(values)* → ⚠️ derive a specific car's crossovers from baseline + summation (`process-phases` Phase 1); do **NOT** present these before measuring.
+**Timing and phase behaviour of this install — measured properties, NOT settings:**
+- □ *(intrinsic L/R arrival asymmetry from door path/mounting; pair phase divergence; non-minimum-phase zones)* → these are things the install DOES; derive your own TA from the measured latest arriver (`process-phases` Phase 1) and your polarity by summation (`diagnostic §9`).
 
-**Install polarity & TA — a SUMMATION result of THIS build, NOT a rule:**
-- □ *(per-driver polarity / inter-channel timing)* → derive yours by summation (`diagnostic §9`) and the measured latest-arriver (`process-phases` Phase 1); never copy the pattern.
+> ⛔ **No settings block here, and that is deliberate.** Do not add "the crossovers that won", the
+> per-driver polarities, the delays, the EQ or the levels — not even labelled "data, not a starting
+> table", and not even if that tune won something. **This base does not collect solutions.** They
+> are project state and live in the project (`references/core/knowledge-architecture.md`). What a
+> win proves about a *scheme* goes to `knowledge/approaches.md`, tagged with its setup.
 
 **Techniques (more transferable, still verify by ear/measurement):**
 - *(e.g. heavy midbasses → align to the IR peak; LHD/RHD → which side is quieter/delayed for centering.)*
