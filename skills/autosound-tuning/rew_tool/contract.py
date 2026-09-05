@@ -716,8 +716,16 @@ def _main(argv):
     if argv[1] == "gaps":
         roots = [a for a in argv[2:] if not a.startswith("--")]
         if not roots:
-            print(_USAGE, file=sys.stderr)
-            return 2
+            # No path given: the projects around HERE. A command that only works when the caller
+            # already knows where every project on their disk lives is a command for the person who
+            # wrote it -- and the paths in this repo's own examples are that person's. `$AUTOSOUND_
+            # PROJECT_DIR` is the convention the other tools use; its PARENT is where its siblings
+            # sit, which is the question this command is for.
+            env = os.environ.get("AUTOSOUND_PROJECT_DIR")
+            roots = [os.path.dirname(os.path.abspath(env)) if env else os.getcwd()]
+            print(f"# no path given -- scanning {roots[0]}"
+                  + ("  ($AUTOSOUND_PROJECT_DIR's parent)" if env else "  (the working directory)"),
+                  file=sys.stderr)
         depth = 4
         if "--depth" in argv:
             depth = int(argv[argv.index("--depth") + 1])

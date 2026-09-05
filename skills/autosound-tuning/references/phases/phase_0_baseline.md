@@ -165,5 +165,12 @@ on disk become incomplete and nothing says so — `symptom` was filled on one of
 same car's map two days after it existed. Ask, across everything on disk:
 
 ```bash
-python3 rew_tool/contract.py gaps ~/dev/autosound ~/dev/autosound_projects
+python3 rew_tool/contract.py gaps                  # the projects around this one
+python3 rew_tool/contract.py gaps <dir> [<dir> ...]  # or say where they live
 ```
+
+With no path it scans `$AUTOSOUND_PROJECT_DIR`'s parent, or the working directory — so it runs on
+somebody else's disk without knowing the author's folder layout. **The project you are IN needs no
+separate run:** Pre-Session step 2 already calls `contract.py check <project>` every start, and that
+report now names the owing rows. `gaps` is for the copies you are NOT in — which is where the four
+maps of one car sat.

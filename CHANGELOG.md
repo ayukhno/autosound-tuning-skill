@@ -62,6 +62,13 @@ Two consequences worth stating, because both have already caused a question:
   person's sentence (a draft counts as owing), and phase 0 now ends on that command instead of on
   remembering. The order is unchanged: the row is written when it is measured, the sentence is
   added by the end of the phase — what the gate forbids is leaving with it still owed.
+  **Two of these run themselves and one does not, which is worth saying plainly:** the project a
+  session opens is covered with no new habit — Pre-Session step 2 already calls `contract.py
+  check <project>` every start, and that report now names the owing rows. `gaps` is the sweep
+  across the copies a session is NOT in, and nothing fires it; with no path it scans
+  `$AUTOSOUND_PROJECT_DIR`'s parent or the working directory, so it runs on a disk laid out
+  differently from the author's — the first draft of this documented it with the author's own
+  absolute paths, which is the same defect one layer up.
 
 - **Three texts stopped claiming other people's curves — `target_curves_visualizer.html`,
   `SKILL.md`, `curves/SQ-Comp-Ref_0db_REW.txt`** (autosound-hub `#67` / RES-004, found by `research`
