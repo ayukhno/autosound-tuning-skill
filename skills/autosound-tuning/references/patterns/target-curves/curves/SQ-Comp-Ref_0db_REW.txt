@@ -2,6 +2,14 @@
 # Developed within the autosound-tuning project
 # https://github.com/ayukhno/autosound-tuning-skill
 # Reference target curve, magnitude only (dB), 0 dB anchored
+#
+# What the shape is built on (it travels with the file, not only in the visualizer):
+#   deep sub-bass floor +9.0 dB, similar to Audiofrog's low end
+#   a soft, ultra-smooth roll-off to 200 Hz -- removes boominess rather than trading it for thinness
+#   a presence dip -2 dB at 2.5 kHz
+#   a natural HF roll-off, about -0.5 dB/oct
+# Nothing here is another author's curve: the reference points name what the shape was aimed at,
+# and the numbers below are this project's own (autosound-hub RES-004).
 20.000 9.000
 20.706 9.000
 21.438 9.000

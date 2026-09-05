@@ -7,8 +7,9 @@ description: >
   loop. Use whenever the user wants to (e.g. "help me set up my car audio", "tune my speakers/system"):
   set up or tune a car-audio system FROM SCRATCH, tune speakers,
   pick crossover points, set time delays, phase, or polarity, build per-channel EQ, fix imaging/staging,
-  match OR create/build a target/house curve (ResoNix, Jazzi, Harman, Audiofrog, or a custom one via the
-  Nono Tuning Tool), pull REW measurements, or run a tuning session. Also fires for driver
+  match OR create/build a target/house curve (bring your own, or get ResoNix / Jazzi / Harman /
+  Audiofrog from the Nono Tuning Tool — those are their authors' and are not bundled here),
+  pull REW measurements, or run a tuning session. Also fires for driver
   impedance / Thiele-Small (T-S) measurement and subwoofer-enclosure work: Fs/Qts/Vas, the
   added-mass method (impedance jig), sealed-box volume & Qtc, box design/leak verification via
   an impedance sweep, dual-voice-coil (DVC) wiring — series vs parallel, the load it makes and

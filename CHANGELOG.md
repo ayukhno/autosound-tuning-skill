@@ -42,6 +42,23 @@ Two consequences worth stating, because both have already caused a question:
 
 ## [Unreleased]
 
+- **Three texts stopped claiming other people's curves — `target_curves_visualizer.html`,
+  `SKILL.md`, `curves/SQ-Comp-Ref_0db_REW.txt`** (autosound-hub `#67` / RES-004, found by `research`
+  while reading another site where every curve carries its origin). The curves themselves were
+  already right — exactly one ships, ours, and the visualizer's copy matches it point for point
+  (re-checked: 200 points, 0 differences). The texts beside them did not. **(1)** Our curve's data
+  sat in `const emmaRefData`, with `emmaCardDesc` over its description — a foreign curve's name
+  above our numbers reads as an attribution, and anyone tracing "where did an EMMA curve in the
+  skill come from" would have found it. Renamed to `sqCompRef*`, with a comment saying what they
+  were and why they changed; `emma2024` / `emma2026` further down are the EMMA judging bands and
+  correctly keep the name. **(2)** The skill's own description read "(ResoNix, Jazzi, Harman,
+  Audiofrog, or a custom one via the Nono Tuning Tool)", where "via the Nono Tuning Tool" attaches
+  grammatically to "a custom one" alone — so the four named curves read as ours, the opposite of
+  what the README in that same folder says. Now the tool covers all four and the line says they are
+  their authors' and are not bundled. **(3)** The curve file's header named its origin but not what
+  the shape is built on — that lived only in the visualizer, while the `.txt` is the thing that
+  travels. The four reference points moved into the header, beside the rest of the provenance.
+
 - **The knowledge base stops collecting solutions — `knowledge/cars/vw-passat-b8-sedan.md`,
   `knowledge/cars/_TEMPLATE.md`, `references/core/feedback-loop.md`, `knowledge/approaches.md`**
   (the owner's ruling, 2026-09-05: *we do not collect "successful solutions" into the base*). The
