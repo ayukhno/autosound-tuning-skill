@@ -4,6 +4,8 @@ digital-domain at the DSP's PROCESSING rate — `processing_rate()`, which a ses
 from the project's `dsp_profile.dsp_processing_rate_hz` and which falls back to `FS` only
 when nobody has stated one, and says so when it does.
 """
+import os
+
 import numpy as np
 
 #: The processing rate ASSUMED when no profile has stated one. It is the reference car's
@@ -142,7 +144,12 @@ def _design(order_db_per_oct, wn, btype, ftype):
     if ftype == "BE":
         # norm="mag" (-3 dB at the corner) matches REW's BE shapes, verified
         # against REW predicted responses 2026-07-12 (norm="phase" gave up to
-        # 27 dB transfer-function error on BE12/BE18 channels)
+        # 27 dB transfer-function error on BE12/BE18 channels) -- and the HARDWARE says the same
+        # independently (bench 2026-09-01, fact 9): BE36 at 1 kHz measures -3.04 / -3.06 dB at
+        # its corner and sits 0.034 / 0.036 dB rms from this prototype, while the delay-normalised
+        # one is -0.40 dB at its own w=1 and 2.6 dB off at the corner. A choice justified only by
+        # agreement with another model is one somebody eventually re-opens; the selftest pins this
+        # one to the published curves (`testdata/helix-bench/`).
         return sig.bessel(n, wn, btype=btype, norm="mag", output="sos")
     return sig.butter(n, wn, btype=btype, output="sos")
 
@@ -337,6 +344,17 @@ def apf1_response(freqs_hz, f0, fs=None):
     phase −2·arctan(f/f0) while the crossovers next door had already moved to the bilinear form;
     the bench measured the price on the second order (below), and it is the same class of error
     here.
+
+    ⚠️ On the Helix the corner the DEVICE places is not the corner that was typed, and the
+    deviation grows with frequency (bench 2026-09-01/02, fact 1): 250 Hz → 248.8 (−0.5 %),
+    1000 → 993.2 (−0.7 %), 4000 → 3936 (−1.6 %), 8000 → **7611.6 (−4.9 %)** — while every AP2
+    corner in the same session landed within 0.05 %. The shape stays a clean first-order all-pass
+    (band-stable to ±0.3 % under four fitting windows, magnitude flat to 0.02 dB), so it is the
+    frequency that is wrong, not the form, and no simple law fits it (not a constant percentage,
+    not a constant offset, not the un-prewarped substitution, which would put 8 kHz at 7824). This
+    function models the TYPED corner; the cost of that is 0.4° at 1 kHz, 0.9° at 4 kHz and 3.0° at
+    8 kHz — where a tweeter all-pass lives. Prefer AP2 in prescriptions (`helix-phase-allpass.md`),
+    and where AP1 is used carry that deviation as a known unmodelled error.
     """
     fs_ = _fs(fs)
     t0 = np.tan(np.pi * float(f0) / fs_)
@@ -826,6 +844,51 @@ def load_ntt_txt(path):
     return np.array(fr), np.array(mg)
 
 
+# ---------- the bench: published Helix curves the selftest runs against ----------
+BENCH_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "testdata", "helix-bench")
+
+
+def load_bench_curve(stem):
+    """`(freqs_hz, mag_db, phase_deg)` of one published curve (`testdata/helix-bench/README.md`)."""
+    f, m, p = [], [], []
+    with open(os.path.join(BENCH_DIR, stem + ".txt"), encoding="utf-8") as fh:
+        for line in fh:
+            if line.startswith("*") or not line.strip():
+                continue
+            a, b, c = line.split("\t")
+            f.append(float(a))
+            m.append(float(b))
+            p.append(float(c))
+    return np.array(f), np.array(m), np.array(p)
+
+
+def bench_ratio(stem, reference_stem):
+    """The complex ratio of a capture to its set's reference: the filter alone, on the file's grid.
+    Only ratios WITHIN a set mean anything -- the levels are REW's electrical dB of one session."""
+    f, m, p = load_bench_curve(stem)
+    f0, m0, p0 = load_bench_curve(reference_stem)
+    assert np.allclose(f, f0), "two files of one set share one grid"
+    return f, 10 ** ((m - m0) / 20.0) * np.exp(1j * np.radians(p - p0))
+
+
+def bench_residual(f, measured, model, band, mask_db):
+    """`(mag_rms_db, phase_rms_deg, mag_max_db, bins)` of a measured ratio against a model over
+    `band`, on the bins where the measured leg clears `mask_db` (deeper is stopband noise, not
+    evidence), with the median removed from the magnitude and the best-fit delay + offset removed
+    from the phase. On the file's own grid -- so these are 1/96-octave-weighted numbers, and a
+    residual read on another grid, band or mask is a different number, not a comparable one."""
+    b = (f >= band[0]) & (f <= band[1])
+    meas_db = 20 * np.log10(np.abs(measured))
+    m = b & (meas_db > mask_db)
+    e = meas_db[m] - 20 * np.log10(np.abs(model[m]))
+    e = e - np.median(e)
+    q = np.degrees(np.unwrap(np.angle(measured[m]))) - np.degrees(np.unwrap(np.angle(model[m])))
+    A = np.vstack([f[m], np.ones(int(m.sum()))]).T
+    q = q - A @ np.linalg.lstsq(A, q, rcond=None)[0]
+    rms = lambda v: float(np.sqrt(np.mean(v ** 2)))  # noqa: E731
+    return rms(e), rms(q), float(np.max(np.abs(e))), int(m.sum())
+
+
 # ---------- selftest ----------
 
 def _selftest():
@@ -1215,6 +1278,73 @@ def _selftest():
                         f"{dmag:.3f} dB / {dphase:.2f} deg -- the evaluation path is losing the "
                         f"answer, as the transfer-function form did before v3.0.14")
 
+    # ---- against the HARDWARE: the published Helix curves, through this very function ----------
+    # Everything above is a definition or an independent evaluation path; none of it can say the
+    # PROCESSOR builds these filters. The bench can (Helix DSP Ultra S, 96 kHz, electrical loop --
+    # `testdata/helix-bench/README.md`, CC BY 4.0). Each number is a capture over its own set's
+    # bypass capture, against `xo_response` at the processor's rate, over a stated band, above a
+    # stated mask, on the files' 1/96-octave grid, with delay and offset removed -- because an rms
+    # is a weighted number and the grid is the weight: the same BW24 residual reads 0.44 deg here
+    # and 0.22 on REW's raw linear bins (diagnostic-techniques.md §35). Where a control was taken
+    # in the same pass the assertion is on the DIFFERENCE to it, which is what survives the grid.
+    reset_processing_rate()
+    hw = 96000.0
+    # (a) BW24 at 460 Hz -- the even-order Butterworth, the question of hub #32 -- read against an
+    #     LR24 control captured 19 s later in the same pass (LR24 is verified separately at 1 kHz),
+    #     with the set's reference captured again at the end to show the rig held still.
+    fb, bw24 = bench_ratio("bw24-460-hp", "bw24-460-bypass")
+    _, lr24 = bench_ratio("lr24-460-hp", "bw24-460-bypass")
+    _, again = bench_ratio("bw24-460-bypass-ctl", "bw24-460-bypass")
+    band, mask = (100.0, 4000.0), -25.0
+    r_bw = bench_residual(fb, bw24, xo_response(fb, 460.0, 24, "hp", "BW", fs=hw), band, mask)
+    r_lr = bench_residual(fb, lr24, xo_response(fb, 460.0, 24, "hp", "LR", fs=hw), band, mask)
+    r_rep = bench_residual(fb, again, np.ones(len(fb), dtype=complex), band, -1e9)
+    assert r_rep[0] < 0.03 and r_rep[1] < 0.2, ("the reference moved during the pass", r_rep)
+    assert r_lr[0] < 0.10 and r_lr[1] < 0.6, ("the control does not fit its own model", r_lr)
+    assert r_bw[0] < 0.10 and r_bw[1] < 0.6, r_bw
+    assert abs(r_bw[0] - r_lr[0]) < 0.02 and abs(r_bw[1] - r_lr[1]) < 0.10, (
+        "BW24 must fit no worse than the LR24 control taken in the same pass", r_bw, r_lr)
+    at_fc_bw = float(np.interp(460.0, fb, 20 * np.log10(np.abs(bw24))))
+    at_fc_lr = float(np.interp(460.0, fb, 20 * np.log10(np.abs(lr24))))
+    assert abs(at_fc_bw + 3.0103) < 0.15, ("BW24 at its own corner", at_fc_bw)
+    assert abs(at_fc_lr + 6.0206) < 0.15, ("LR24 at its own corner", at_fc_lr)
+    # (b) BE36 at 1 kHz: the -3 dB-normalised prototype IS the hardware's. The delay-normalised
+    #     one (`norm="phase"`) is a different filter -- 2.6 dB off at the corner alone and about
+    #     10 dB rms over the band -- so flipping `_design`'s norm= fails here, not only against REW.
+    band, mask = (100.0, 15000.0), -25.0
+    be = {}
+    for kind in ("lp", "hp"):
+        fb, meas = bench_ratio(f"fact9-be36-1k-{kind}", "fact9-be36-1k-bypass")
+        be[kind] = bench_residual(fb, meas, xo_response(fb, 1000.0, 36, kind, "BE", fs=hw), band, mask)
+        assert be[kind][0] < 0.08 and be[kind][1] < 0.5, (kind, be[kind])
+        at_fc = float(np.interp(1000.0, fb, 20 * np.log10(np.abs(meas))))
+        assert abs(at_fc + 3.0103) < 0.15, ("BE36 at its own corner", kind, at_fc)
+        sos = sig.bessel(6, 1000.0 / (hw / 2.0), btype="lowpass" if kind == "lp" else "highpass",
+                         norm="phase", output="sos")
+        _, h_delay = sig.sosfreqz(sos, worN=2 * np.pi * fb / hw)
+        r_delay = bench_residual(fb, meas, h_delay, band, mask)
+        assert r_delay[0] > 5.0, ("a delay-normalised Bessel fits the hardware", kind, r_delay)
+    # (c) LR36 at 8 kHz: the rate is load-bearing against the HARDWARE, not only against a zpk
+    #     twin. The bilinear model at 96 kHz fits; the analogue prototype does not (its max error
+    #     is 0.9-1.9 dB where the digital one's is 0.3); the same digital model at 48 kHz does not
+    #     either. At 1 kHz none of this separates -- which is why the 8 kHz set decides the form.
+    lr36 = {}
+    for kind in ("lp", "hp"):
+        fb, meas = bench_ratio(f"fact8-xover-lr36-8k-{kind}", "fact8-xover-lr36-8k-bypass")
+        lr36[kind] = bench_residual(fb, meas, xo_response(fb, 8000.0, 36, kind, "LR", fs=hw), band, mask)
+        assert lr36[kind][0] < 0.12 and lr36[kind][1] < 0.6, (kind, lr36[kind])
+        b_a, a_a = sig.butter(3, 2 * np.pi * 8000.0, btype="lowpass" if kind == "lp" else "highpass",
+                              analog=True)
+        _, h_a = sig.freqs(b_a, a_a, worN=2 * np.pi * fb)
+        r_ana = bench_residual(fb, meas, h_a * h_a, band, mask)
+        assert r_ana[0] > 2.0 * lr36[kind][0] and r_ana[2] > 0.8, (
+            "the analogue prototype fits the hardware at 8 kHz", kind, r_ana, lr36[kind])
+        r_48 = bench_residual(fb, meas, xo_response(fb, 8000.0, 36, kind, "LR", fs=48000.0), band, mask)
+        assert r_48[0] > 0.3, ("the model at the wrong rate fits the hardware", kind, r_48)
+    bench_line = (f"BW24@460 {r_bw[0]:.4f} dB/{r_bw[1]:.3f} deg vs LR24 control {r_lr[0]:.4f}/{r_lr[1]:.3f} "
+                  f"(100-4000 Hz, mask -25 dB, 1/96 oct), BE36@1k {be['lp'][0]:.3f}/{be['hp'][0]:.3f} dB, "
+                  f"LR36@8k {lr36['lp'][0]:.3f}/{lr36['hp'][0]:.3f} dB")
+
     # -- enterable vs modellable (2026-08-23) ---------------------------------
     # A search must offer only what the device accepts AND we can predict. Chebyshev is the live
     # case: the Helix offers it, an experiment could not identify its maths, so proposing one would
@@ -1297,7 +1427,9 @@ def _selftest():
           "corner does not depend on where that corner is; and the whole grid matches an "
           "independent zpk reference to 0.000 dB / 0.00 deg; and the processing rate is bound "
           "with its source, diverges loudly from a profile at 32/44.1/48/88.2/192 kHz, refuses a "
-          "second rate in one session, and is load-bearing away from the corner while silent at it.")
+          "second rate in one session, and is load-bearing away from the corner while silent at it; "
+          "and against the published Helix curves -- " + bench_line + " -- with the delay-normalised "
+          "Bessel, the analogue LR36 prototype and the 48 kHz model each refused by the hardware.")
 
 
 if __name__ == "__main__":

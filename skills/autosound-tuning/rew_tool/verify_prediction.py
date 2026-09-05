@@ -43,6 +43,11 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import dsp_math  # noqa: E402
 
+# Every tolerance here is a LOG-WEIGHTED number on the predictor's grid (`dsp_math._log_weights`
+# in `_band_mean`), over the band it names, after 1/6-octave smoothing where `ENTRY_SMOOTHING_OCT`
+# says so. That is part of the number: an rms is a weighted quantity and the grid is the weight --
+# the same residual reads 0.22 deg on REW's raw linear bins and 0.44 on a 1/96-octave grid
+# (`diagnostic-techniques.md` §35). A criterion quoted without its band and grid is not this one.
 CRITERION_DB = 1.0            # |mean delta| in a junction band, stage 0's pass mark
 JUNCTION_THIRDS = 3           # each junction band is read in this many log-spaced sub-bands
 ENTRY_CRITERION_DB = 1.0      # a channel's shape rms after one offset: the entry control (Phase 3.1)

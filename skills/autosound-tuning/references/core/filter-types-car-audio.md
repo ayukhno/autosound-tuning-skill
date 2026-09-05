@@ -61,31 +61,39 @@
 - Sub LP (a slightly harder cut than LR)
 - Subsonic to protect the sub (BW 12 dB/oct — a gentle protective roll-off)
 
-### ⏸ A deferred question about the Helix's own "Butterworth −24" — and why nobody is chasing it
+### ✅ The Helix's own "Butterworth −24" is the filter this method models — measured 2026-09-04
 
-**The question:** does the Helix's `BW −24` behave as this method models it? It was raised on
-2026-08-25 by a residual phase on the mid channel that, once the real cause of the disagreement was
-found (the protective filter was not being de-embedded at all), sat **right on the upper edge of a
-threshold a session had named in advance** — the "if this much is left, it is data for the model
-rather than noise" line.
+**The question** was raised on 2026-08-25 by a residual phase on the mid channel that, once the
+real cause of the disagreement was found (the protective filter was not being de-embedded at all),
+sat right on the upper edge of a threshold a session had named in advance. The number itself was
+lost and deliberately not searched for (the owner's decision, 2026-08-31); the debt carried an
+arrival condition and then went to the `research` role once a bench existed (`autosound-hub#32`).
 
-**The number is gone, and it is deliberately not being looked for.** It is in neither the method
-tree nor git history (a search of the same shape finds neighbouring topics at once, so the absence
-is real and not a bad query); the cockpit inventory kept only the question. Digging through session
-transcripts would cost more than the answer is worth — the owner's decision, 2026-08-31.
+**The answer**, measured electrically by `research` on 2026-09-04 (REW #99–102, `BW24` at
+**460 Hz — the corner the working preset runs on the mids**, not a round number) and re-derived by
+this tree from the published copy of the same four sweeps (`rew_tool/testdata/helix-bench/`,
+`ayukhno/autosound-measurements` fact 8):
 
-**So the debt carried an arrival condition instead of a queue position:** measure the Helix's
-`BW −24` against hardware when **the method walks into the same wall again** — protectives correctly
-taken out, the joint aligned, and the residual phase on the mid channel again sitting at the top of
-the threshold **with the joint decision depending on it**. Not earlier, and not "while we are in
-there anyway".
+* `dsp_math.xo_response(…, 24, "hp", "BW")` sits **0.0598 dB / 0.443° rms** from the measured
+  ratio over 100–4000 Hz, above a −25 dB mask, on the files' 1/96-octave grid, with delay and
+  offset removed; **−2.985 dB** at the corner against −3.010 predicted.
+* The number that carries the claim is not that one but the **distance to a control taken in the
+  same 54-second pass**: an `LR24` at the same corner — the alignment already verified at 1 kHz —
+  sits 0.0622 dB / 0.409° from *its* model, so **BW24 is −0.0024 dB and +0.034° from the
+  control**, and the two track each other to 0.11° at every mask from −40 to −10 dB while the
+  absolute residual moves twenty-fold with the mask. The reference captured first and last in the
+  pass agrees with itself to 0.004 dB / 0.035°.
+* The absolute residual is a **weighted** number: the same per-bin difference reads 0.443° on the
+  1/96-octave grid and 0.220° on REW's raw linear bins, and it lives in the deep stopband at the
+  mask edge (1.7° over 100–230 Hz, 0.06° above 920 Hz), not at the knee. A tolerance written in
+  advance for this check (0.35°) was calibrated on 1 kHz bench numbers and is too tight in this
+  representation — a miss of the *criterion*, not of the hardware, and it was not moved after the
+  fact. The rule that came out of it is `diagnostic-techniques.md` §35.
 
-**Since 2026-09-01 it is with the `research` role** (`autosound-hub#32`), because the reason for
-waiting has gone: that condition was written when there was nothing to measure with, and there is
-now a bench — twenty electrical sweeps, no microphone, each number a complex ratio to a bypass
-capture, the method that settled the shelf Q and the all-pass form in `#36`. So the answer may
-arrive before the wall does. Nothing here waits on it: this is an unverified assumption, not a
-blocker, and the ticket stays open until somebody measures.
+So the even-order Butterworth closes with the rest of the family — LR12 · LR24 · LR36 · BW24 ·
+BW42 · BE36 are all the bilinear digital biquad chain `dsp_math` builds at the processor's rate
+(`knowledge/dsp/helix-dsp-ultra-s.md`, Crossovers). `dsp_math`'s selftest now pins this to the
+published curves, so the verification runs on every push rather than living on a closed ticket.
 
 ---
 

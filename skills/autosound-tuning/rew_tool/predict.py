@@ -45,8 +45,11 @@ unmarked at baseline (`--baseline`) -> the channel is refused, not guessed.
 
 Deliberately NOT modelled, and said so in the output rather than silently skipped:
 
-  * a vendor phase ANGLE (`phase_deg`) -- one control of one vendor (`helix-phase-allpass.md`);
-    an all-pass belongs in `eq` as `APF1`/`APF2`, which IS modelled;
+  * a vendor phase ANGLE (`phase_deg`) on a channel whose reference crossover the ledger does not
+    carry. The angle itself IS modelled since 2026-09-05 (`phase_rotation.py` -- the law measured on
+    the Helix: one Q=1 second-order all-pass whose corner puts the angle AT the channel's configured
+    crossover, the LPF on a sub and the HPF otherwise), so what is refused is only a row that states
+    an angle at a crossover it does not have (`helix-phase-allpass.md`);
   * the virtual tier -- its routing onto outputs is a project fact this module does not hold;
     the output tier is what stage 0 validated and what this predicts;
   * centre and rear (`c`, `r-*`) -- Phase 5 work; they are loaded if present and left out of the
@@ -69,6 +72,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import dsp_math  # noqa: E402
+import phase_rotation  # noqa: E402
 
 PPO_DEFAULT = 96
 FMIN_DEFAULT, FMAX_DEFAULT = 20.0, 20000.0
@@ -121,15 +125,15 @@ def canon(code):
 
 
 # ---------------------------------------------------------------- chains
-def chain_from_row(row):
-    """A schema-v3 ledger row -> the chain this module applies. Refuses what it cannot model."""
+def chain_from_row(row, code=None):
+    """A schema-v3 ledger row -> the chain this module applies. Refuses what it cannot model.
+
+    `code` is the channel's name. A row with a `phase_deg` needs it: the control's reference is the
+    LPF on a subwoofer channel and the HPF on every other one (`_is_sub`), and nothing else on the
+    row says which the channel is."""
     row = row or {}
     if row.get("mute") or row.get("off"):
         return {"muted": True}
-    if row.get("phase_deg") not in (None, 0, 0.0):
-        raise PredictError(
-            f"phase_deg={row['phase_deg']!r}: a vendor phase angle is not modelled "
-            f"(helix-phase-allpass.md); express the all-pass as an APF1/APF2 band in `eq`")
     eq = []
     for b in row.get("eq") or []:
         if b.get("bypass"):
@@ -146,7 +150,63 @@ def chain_from_row(row):
         "hp": _leg(row.get("hp")),
         "lp": _leg(row.get("lp")),
         "eq": eq,
+        "phase": _phase_from_row(row, code),
     }
+
+
+def _phase_reference(row, code):
+    """`(kind, hz)` of the crossover a phase angle is stated AT: the CONFIGURED LPF on a subwoofer
+    channel, the configured HPF otherwise -- fact 6 of the Helix bench (`helix-phase-allpass.md`).
+
+    Configured, not active: on the hardware a bypassed or `slope = OFF` crossover keeps its
+    frequency and keeps being the reference, and reading the LIVE crossover gives the wrong corner
+    on every channel whose filter is switched off. The ledger writes a disabled leg as null /
+    "OFF" and loses the frequency with it, so the only way to carry that state is a leg whose `f`
+    is still written with its slope OFF -- `_leg` keeps such a leg OUT of the chain, and this reads
+    its frequency. `hz` is None when the row has no configured corner of that kind."""
+    kind = "lp" if _is_sub(code) else "hp"
+    leg = row.get(kind)
+    f = leg.get("f") if isinstance(leg, dict) else None
+    if f in (None, "OFF", "off", 0):
+        return kind, None
+    return kind, float(f)
+
+
+def _phase_from_row(row, code):
+    """The channel's phase control as the chain applies it, or None when the row has none.
+
+    Until 2026-09-05 this module refused every `phase_deg` outright, and the refusal was right
+    while nobody knew the law: the angle alone is not a filter. The law is measured now
+    (`phase_rotation`): one Q=1 second-order all-pass whose corner the processor places so that
+    the phase equals the angle AT the reference crossover, capped at 3/16 of the rate. So the
+    angle plus the row's own crossover IS a filter, and the only genuinely unanswerable row is one
+    that states an angle at a crossover it does not have -- that one is still refused by name.
+    The chain carries the DELIVERED angle beside the setting: above the cap the setting lies."""
+    deg = row.get("phase_deg")
+    if deg in (None, 0, 0.0):
+        return None
+    deg = float(deg)
+    if code is None:
+        raise PredictError(
+            f"phase_deg={deg:g}: the channel's code is needed to pick the reference crossover "
+            f"(the LPF on a sub, the HPF otherwise) -- pass code=")
+    kind, ref = _phase_reference(row, code)
+    if ref is None:
+        raise PredictError(
+            f"phase_deg={deg:g} on a channel with no configured {kind.upper()}: the angle is stated "
+            f"AT the channel's reference crossover (the LPF on a sub, the HPF otherwise -- "
+            f"helix-phase-allpass.md), so without one it is not a filter. A crossover that is "
+            f"switched off but still configured is written with its f and slope OFF")
+    corner, delivered = phase_rotation.realize(deg, ref)       # at the session's bound rate
+    if corner is None:
+        return None
+    out = {"deg": deg, "reference": {"kind": kind, "hz": ref}, "corner_hz": corner,
+           "q": phase_rotation.SECTION_Q, "delivered_deg": delivered,
+           "capped": phase_rotation.is_capped(deg, ref)}
+    note = phase_rotation.capped_note(deg, ref)
+    if note:
+        out["note"] = note
+    return out
 
 
 def _band_from_row(b):
@@ -176,7 +236,12 @@ def _band_from_row(b):
 
 
 def _leg(leg):
+    """A crossover leg as the chain applies it; None when there is nothing to apply. A leg whose
+    slope is OFF/0 is CONFIGURED and not active (the Helix keeps the frequency): out of the chain
+    here, still the phase control's reference in `_phase_reference`."""
     if not isinstance(leg, dict) or leg.get("f") in (None, "OFF", "off", 0):
+        return None
+    if leg.get("slope") in (None, "OFF", "off", 0):
         return None
     return {"f": float(leg["f"]), "type": str(leg.get("type", "LR")).upper(),
             "slope": int(leg["slope"])}
@@ -196,7 +261,7 @@ def chain_from_anchor(d):
     return {"muted": False, "gain_db": float(d.get("gain_db") or 0.0),
             "polarity": "INV" if d.get("inverted") else "NORM",
             "ta_ms": float(d.get("delay_ms") or 0.0),
-            "hp": leg(d.get("hpf")), "lp": leg(d.get("lpf")), "eq": eq}
+            "hp": leg(d.get("hpf")), "lp": leg(d.get("lpf")), "eq": eq, "phase": None}
 
 
 def chain_response(freqs, chain):
@@ -221,6 +286,10 @@ def chain_response(freqs, chain):
             h = h * dsp_math.xo_response(f, leg["f"], leg["slope"], kind, leg["type"])
     if chain.get("eq"):
         h = h * dsp_math.eq_complex(f, chain["eq"])
+    ph = chain.get("phase")
+    if ph:
+        # the vendor's phase control, realized: one APF2 at the corner the device places
+        h = h * dsp_math.apf2_response(f, ph["corner_hz"], ph["q"])
     return h
 
 
@@ -269,6 +338,11 @@ def chain_label(chain):
         parts.append(f"{kind.upper()} {leg['f']:g} {leg['type']}{leg['slope']}" if leg
                      else f"{kind.upper()} off")
     parts.append(f"EQ x{len(chain.get('eq') or [])}")
+    ph = chain.get("phase")
+    if ph:
+        parts.append(f"phase {ph['deg']:g}° @{ph['reference']['kind'].upper()} {ph['reference']['hz']:g} "
+                     f"-> APF2 {ph['corner_hz']:.0f} Hz"
+                     + (f" CAPPED, delivers {ph['delivered_deg']:.1f}°" if ph.get("capped") else ""))
     return " · ".join(parts)
 
 
@@ -428,7 +502,7 @@ def chains_from_snapshot(snapshot, tier="channels"):
     out = {}
     for code, row in rows.items():
         try:
-            out[canon(code)] = chain_from_row(row)
+            out[canon(code)] = chain_from_row(row, code=canon(code))
         except PredictError as e:
             out[canon(code)] = {"muted": False, "unmodellable": str(e)}
     return out
@@ -503,6 +577,8 @@ def predict(freqs, solos, chains, joints=None, band_oct=1.0):
             notes.append(f"{code}: ledger row cannot be modelled -- {chain['unmodellable']} -- left out")
             continue
         processed[code] = H * chain_response(f, chain)
+        if (chain.get("phase") or {}).get("note"):
+            notes.append(f"{code}: {chain['phase']['note']}")
     for code in chains:
         if code not in solos:
             notes.append(f"{code}: ledger row present, no solo -- left out")
@@ -875,8 +951,8 @@ def to_json(result, decimate=1):
         "pairs": result.get("pairs", []),
         "lr_delta": result["lr_delta"],
         "notes": result["notes"],
-        "not_modelled": ["phase_deg (vendor phase angle)", "virtual tier routing",
-                         "centre / rear in the sums"],
+        "not_modelled": ["phase_deg on a channel with no configured reference crossover",
+                         "virtual tier routing", "centre / rear in the sums"],
     }
     return out
 
@@ -1194,12 +1270,46 @@ def _selftest():
     r_bad = predict(f, {"w-L": np.ones_like(f, dtype=complex), "r-L": np.ones_like(f, dtype=complex)}, ch)
     assert "r-L" not in r_bad["processed"] and any("cannot be modelled" in n for n in r_bad["notes"]), r_bad["notes"]
     assert "NOT MODELLED" in chain_label(ch["r-L"])
-    try:
-        chain_from_row(dict(row, phase_deg=45))
-    except PredictError:
-        pass
-    else:
-        raise AssertionError("phase_deg must be refused, not silently dropped")
+    # A vendor phase ANGLE is a filter once the row carries the crossover it is stated at
+    # (`phase_rotation`: one Q=1 APF2 whose corner puts the angle AT the configured reference --
+    # the LPF on a sub, the HPF otherwise). Without that crossover, or without the channel's name
+    # to pick it, it is refused by name -- never dropped, never guessed.
+    m_row = dict(row, phase_deg=90)                          # hp 80 BW24: the HPF is the reference
+    ch_m = chain_from_row(m_row, code="m-L")
+    assert ch_m["phase"]["reference"] == {"kind": "hp", "hz": 80.0} and not ch_m["phase"]["capped"], ch_m["phase"]
+    assert abs(ch_m["phase"]["corner_hz"] - phase_rotation.realize(90.0, 80.0, fs)[0]) < 1e-9
+    at_ref = chain_response(np.array([80.0]), dict(one, phase=ch_m["phase"]))[0]
+    assert abs(np.degrees(np.angle(at_ref)) + 90.0) < 1e-6, "the angle is delivered AT the reference"
+    assert np.allclose(np.abs(chain_response(f, dict(one, phase=ch_m["phase"]))), 1.0, atol=1e-12)
+    ch_s = chain_from_row(m_row, code="sw")                  # the same row on a sub: the LPF (300)
+    assert ch_s["phase"]["reference"] == {"kind": "lp", "hz": 300.0}, ch_s["phase"]
+    assert ch_s["phase"]["corner_hz"] != ch_m["phase"]["corner_hz"], "sub and mid read different references"
+    assert chain_from_row(dict(row, phase_deg=0), code="m-L")["phase"] is None
+    assert chain_from_row(row, code="m-L")["phase"] is None
+    for bad, code, needle in ((dict(row, phase_deg=90, hp="OFF"), "m-L", "no configured HP"),
+                              (dict(row, phase_deg=90, lp=None), "sw", "no configured LP"),
+                              (dict(row, phase_deg=90), None, "code")):
+        try:
+            chain_from_row(bad, code=code)
+            raise AssertionError(f"{bad} was modelled")
+        except PredictError as e:
+            assert needle in str(e), (needle, str(e))
+    # CONFIGURED, not active: a leg written with slope OFF is out of the chain and still the reference.
+    off_leg = chain_from_row(dict(row, phase_deg=180, hp={"f": 80, "type": "BW", "slope": "OFF"}), code="m-L")
+    assert off_leg["hp"] is None and off_leg["phase"]["reference"]["hz"] == 80.0, off_leg
+    # Capped: one small step at a high reference collapses onto the ceiling, and the chain SAYS so
+    # with the angle the channel actually gets -- the measured 29.5 deg, not the 5.625 asked for.
+    cap = chain_from_row(dict(row, phase_deg=5.625, hp={"f": 5000, "type": "LR", "slope": 24}), code="tw-L")
+    assert cap["phase"]["capped"] and abs(cap["phase"]["delivered_deg"] - 29.487) < 0.01, cap["phase"]
+    assert "capped" in cap["phase"]["note"] and "CAPPED" in chain_label(cap), chain_label(cap)
+    r_cap = predict(f, {"tw-L": np.ones_like(f, dtype=complex)}, {"tw-L": cap})
+    assert any("capped" in n for n in r_cap["notes"]), r_cap["notes"]
+    # ...and through a snapshot the code travels with the row, so a sub reads its LPF and a channel
+    # with no configured reference is left out with the reason in the notes, not modelled blind.
+    snap_p = {"channels": {"sw": dict(row, phase_deg=180), "m-L": dict(row, phase_deg=180, hp="OFF")}}
+    ch_p = chains_from_snapshot(snap_p)
+    assert ch_p["sw"]["phase"]["reference"]["kind"] == "lp", ch_p["sw"]
+    assert "no configured HP" in ch_p["m-L"]["unmodellable"], ch_p["m-L"]
 
     # 3. Two solos on one time base, aligned by the ledger: perfect summation, both rulers agree.
     #    w-L arrives at 1.0 ms, m-L at 1.5 ms; the ledger delays w-L by 0.5 -> in phase everywhere.
@@ -1483,7 +1593,10 @@ def _selftest():
     assert "proposal" in txt and "w-L" in txt and "smp" in txt, txt
 
     print("selftest[predict] OK -- chain arithmetic (gain/pol/delay/LR corner/PK), ledger row == anchors "
-          "entry, an aligned LR24 pair sums to 0 dB on both rulers and the un-aligned one goes negative "
+          "entry, a phase angle is realized at the row's configured reference (LPF on a sub, HPF "
+          "otherwise; slope OFF keeps it), delivered AT the reference, capped by name, refused without "
+          "a reference or a code, "
+          "an aligned LR24 pair sums to 0 dB on both rulers and the un-aligned one goes negative "
           "inside its band, mono sub on both sides / centre left out / missing rows named, v7 round trip "
           "reads a pure delay, JSON complete; align: a 0.5 ms pair lands on the grid as +0.5 on the "
           "lower member, a backwards wire is found, an aligned pair buys nothing, three-way bottom-up "

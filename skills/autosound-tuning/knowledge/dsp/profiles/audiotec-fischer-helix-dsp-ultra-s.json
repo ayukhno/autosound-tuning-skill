@@ -3,7 +3,8 @@
     "_open_questions": [
       "DSP compute budget: with up to 60 bands stacked (30 virtual-channel + 30 output) plus crossover + phase + delay, is there a practical ceiling before the 2x295MHz DSP saturates?",
       "Whether the three tiers listed here (virtual channels, physical outputs, inputs) are ALL the tiers this DSP exposes is UNKNOWN. `groups_enumerated: false` is what says so to a machine; this line says why. It stood at `true` from 2026-08-23 until 2026-08-31, and that was an error of the same kind this file elsewhere warns about: the owner named the input tier when asked, and STOPPED LISTING -- which is not the same statement as `that is all of them`. `true` makes the absence of a group a POSITIVE CLAIM that the DSP lacks that tier (see `rew_tool/dsp_profile.py`), so the profile was asserting on his behalf something he had not said. Corrected on his ruling, 2026-08-31: `I did not say that`, and not knowing is itself an answer -- it means false.",
-      "DEFERRED WITH AN ARRIVAL CONDITION, not merely unanswered (autosound-hub #32): whether this processor's own 'Butterworth -24' behaves as the method models it. Raised 2026-08-25 by a residual mid-channel phase sitting on the upper edge of a threshold named in advance; the number itself is LOST and is deliberately not being searched for (owner, 2026-08-31 -- the dig would cost more than the answer). The arrival condition was: measure it against hardware only when the method walks into the same wall again -- protectives de-embedded, joint aligned, residual mid phase back at the top of the threshold, and the joint decision depending on it. Since 2026-09-01 the ticket is with the `research` role, which now has a bench, so the answer may come before the wall does. Full statement: references/core/filter-types-car-audio.md, the Butterworth section."
+      "Delay quantiser: rounding or truncation upward? Both fractional values measured on 2026-09-02 (4.800 and 30.720 samples) sat ABOVE the half-sample, so the data cannot tell. One electrical capture at a delay whose fraction sits below the half-sample (e.g. 0.03 ms = 2.880 samples at 96 kHz) decides it. Costs at most half a sample (5.2 us) either way; worth knowing before any sheet snaps to the grid (docs/TODO.md S-002)",
+      "Phase control step on mid/high channels: 5.625 deg is measured on a SUBWOOFER channel; the mid/high block captured only 180 deg, which sits on a 5.625 grid and an 11.25 one alike, and older PC-Tool generations are reported to step mid/high by 11.25. One capture of one step on a mid/high channel at a reference below 1 kHz decides it (bench series 3, 2026-09-02)"
     ],
     "channel_gain": {
       "note": "the same range on both tiers (user, PC-Tool, 2026-08-23). Deliberately NOT the EQ band's -30..+12: they are different controls and the asymmetry is the proof. Step 1.0 dB (user, PC-Tool on his own unit, 2026-08-23) — note it is COARSER than the EQ band's 0.1 dB, another reason the two must not stand in for each other.",
@@ -20,6 +21,8 @@
     "delay": {
       "max_ms": 20.82,
       "note": "the ceiling is per tier AND the two tiers SUM -- enter a delay in one layer only, keep the other at 0 (user, PC-Tool, 2026-07-15).",
+      "sample_quantised": true,
+      "sample_quantised_note": "a typed delay is quantised to a WHOLE SAMPLE at the processing rate -- 10.4167 us at 96 kHz (bench 2026-09-02, fact 3, read off the phase slope of each ratio with 0.13 deg residual): 0.05 ms = 4.800 samples lands on 5.0003, 0.32 ms = 30.720 on 30.9996, 1.00 ms = 96.000 on 95.9981. The published step '3.5 mm or 0.01 ms' is that figure rounded, and a model built on 0.01 ms drifts 4 % -- about 0.4 mm per 10 mm of claimed alignment. `step_ms` stays the UI's ENTRY step; what the device HOLDS is the whole-sample count, which is the samples column of the settings sheet (state/apply.py). Both fractional values measured sat above the half-sample, so rounding and truncation upward are not separated by this data (see _open_questions)",
       "scope": [
         "per driver output",
         "per virtual channel"
@@ -144,7 +147,8 @@
                 2.0
               ]
             }
-          }
+          },
+          "verification_note": "VERIFIED AGAINST THE HARDWARE (electrical bench 2026-08-31 .. 2026-09-04; ayukhno/autosound-measurements, hardware/helix/dsp-ultra-s, fact 8 and 9): LR12, LR24, LR36, BW24, BW42 and BE36 are bilinear-transformed DIGITAL biquad chains at the processing rate, LR(n) = BW(n/2) squared, Bessel normalised at -3 dB (dsp_math's norm='mag'), and the chain is a plain product of sections (HP 500 x LP 5000 measured separately and multiplied match both engaged to 0.015 dB / 0.11 deg). dsp_math.xo_response against eight published curves: 0.04-0.09 dB and 0.19-0.48 deg rms on the files' own 1/96-octave grid, band and mask stated per case. BW24 at 460 Hz -- the question of hub #32 -- sits -0.0024 dB / +0.034 deg from the LR24 control captured in the same 54-second pass and reads -2.985 dB at its corner; at 8 kHz the analogue prototype is refused by the hardware where the digital form fits, which is the measurement behind binding the model to dsp_processing_rate_hz. Polarity follows the alignment: LR12 and LR36 need one leg inverted, LR24 and BW42 do not. Fixtures and the exact windows: rew_tool/testdata/helix-bench/ (dsp_math selftest). CHEBYSHEV stays as below: enterable, not modellable"
         },
         "eq": {
           "band_types": [
@@ -217,9 +221,26 @@
       "shelf_note": "PC-Tool's LS_Q/HS_Q at Q=0.7071 is identical to an RBJ shelf at S=1 (0.000 dB), so model them in REW with its 'LS Q'/'HS Q' types -- REW's plain 'Low shelf'/'High shelf' is a different definition and will not match. Note also that shelf Q is NEVER rescaled between PEQ Q conventions (a shelf Q sets a knee, not a bandwidth): anything converting Q for a non-RBJ target must skip shelves or it silently widens every one of them."
     },
     "phase_control": {
-      "cross_reference": "autosound-tuning skill's GEMINI.md independently documents this as APF2 (2nd-order all-pass) at the channel's own crossover frequency -- likely-correct, not independently re-confirmed here",
-      "implementation": "all-pass filter; exact order/frequency mapping not confirmed from the PC-Tool UI itself",
-      "scope": "per driver output, all drivers except midbass (midbass is the fixed alignment reference)"
+      "corner_ceiling_fraction_of_rate": 0.1875,
+      "corner_ceiling_note": "3/16 of the rate. Measured ONLY at 96 kHz: three recoveries at two references gave 18007-18010 Hz, which is 3/16 of the rate AND an absolute 18 kHz to within the spread -- one rate cannot separate them. The rate-relative reading is the one taken (Resonalyze's too: the corner is placed in the digital domain); on a 48 kHz unit the two differ, and this is the field to correct if one is ever measured. Whether the ceiling is deliberate or a firmware defect is not established; the manufacturer documents neither it nor its consequences. Positions lost to it: 0 below a 1001 Hz reference (the documented grid works exactly), 2 at 2000, 3 at 3000, 5 at 5000, 9 at 8000 -- arithmetic from the ceiling and the step (phase_rotation.lost_settings)",
+      "cost_note": "not a polarity flip: 180 deg at a 5 kHz reference is -23 deg at 1 kHz. Not free: the group delay of the realized section is a plateau BELOW the corner, a peak at it and a fall away above -- 270 deg at a 5 kHz reference costs 102 us over 20-500 Hz; 180 deg at a 500 Hz reference costs 640-690 us over 20-100 Hz (about 22 cm of path) and 1.27 ms at the corner. The cost lands in the sub/midbass joint the control is usually used to fix (phase_rotation.group_delay_us)",
+      "implementation": "one RBJ second-order all-pass with Q = 1.0000, whose corner the processor places so that the filter's phase equals the setting AT the channel's reference crossover -- capped at corner_ceiling_fraction_of_rate x the processing rate (18 kHz at 96 kHz); above that, settings collapse onto one filter and deliver an angle that is not on the grid. MEASURED on the bench of 2026-09-01/02 (~60 electrical sweeps; ayukhno/autosound-measurements, hardware/helix/dsp-ultra-s, fact 6, CC BY 4.0), implemented upstream in DIMOSUS/Resonalyze dsp/PhaseRotationControl.cs @ bc957c8 and verified there on all 32 published cases (median phase residual 0.19 deg rms, median corner agreement 0.10 %); ported as rew_tool/phase_rotation.py and applied by predict.py to any ledger row carrying phase_deg beside its crossover. The method's reading: references/tooling/helix-phase-allpass.md",
+      "present_on_roles": [
+        "sub",
+        "mid",
+        "high"
+      ],
+      "present_on_roles_note": "per Audiotec-Fischer: subwoofer channels and the mid/high channels of a fully active system; `fullrange` and `low` channels get plain 0/180 polarity instead. A hardware statement about channel TYPE -- distinct from the method's rule that the midbass is the anchor one does not rotate; both stand",
+      "range_deg": [
+        0.0,
+        354.375
+      ],
+      "reference": "configured LPF on a sub channel, configured HPF otherwise",
+      "reference_note": "AS CONFIGURED, not as active: Bypass and slope = OFF leave the reference in place (three states measured, 0.018 dB and 0.12 deg apart). Reading the LIVE crossover gives the wrong corner on every channel whose filter is switched off. In the ledger a switched-off but configured crossover is written with its f and slope OFF, which predict keeps out of the chain and still reads as the reference (predict._phase_reference). A row with an angle and no configured reference is refused by name: the angle is stated AT a crossover, so without one it is not a filter",
+      "scope": "per driver output. The virtual tier declares the field too (groups[].fields) and was not measured there",
+      "section_q": 1.0,
+      "step_deg": 5.625,
+      "step_note": "360/64; a full 360 is not offered. MEASURED on a subwoofer channel (one step -5.54 deg against a nominal 5.625, two steps -11.29 against 11.25, at a 500 Hz reference). The mid/high block only captured 180 deg, which sits on a 5.625 grid and an 11.25 one alike, and older PC-Tool generations are reported to step mid/high by 11.25 -- so the step is measured for one channel type and ASSUMED for the others (see _open_questions)"
     },
     "polarity": {
       "note": "double-inversion possible (driver stage + virtual channel stage); net effect cancels if both are inverted",
@@ -241,7 +262,10 @@
       "user, PC-Tool on his own unit, 2026-08-23: channel gain step 1.0 dB; an INPUT tier exists (unused on his car); Chebyshev slope ladder 6-42 dB/oct corroborated. Chebyshev ripple asked and declined as unknown and unneeded.",
       "user, PC-Tool on his own unit, 2026-08-23: the 'Parametric EQ' panel photographed in one state — Freq 26.01 Hz, Gain 0.1 dB, Q 50 together — which observes the freq_step_hz / q_range pair that had been recorded as derived from the full-range ruling.",
       "user, 2026-08-23: the input stage is high-level capture from a factory head unit only, bypassed on optical/BT/USB, and un-processing a head unit's output is a separate problem the method does not address — so the tier list is complete at three, of which two are tuned.",
-      "bench series 2026-09-01 (20 electrical sweeps, no microphone, complex ratio to a bypass capture; research/results/helix-bench-second-series/) -- the source for the shelf Q range 0.3..2, for the shelf's Q being the RBJ Q, for the all-pass being a digital biquad rather than the analog prototype, and for the Bessel magnitude normalisation being right as it was"
+      "bench series 2026-09-01 (20 electrical sweeps, no microphone, complex ratio to a bypass capture; research/results/helix-bench-second-series/) -- the source for the shelf Q range 0.3..2, for the shelf's Q being the RBJ Q, for the all-pass being a digital biquad rather than the analog prototype, and for the Bessel magnitude normalisation being right as it was",
+      "bench series 2026-08-31 (fact 8: LR36/BW42 at 1 kHz, LR36 at 8 kHz) and 2026-09-02 (57 sweeps: the phase control -- fact 6; delay quantisation -- fact 3; exact channel gain and no-op re-upload -- fact 4; constant-Q RBJ bell with half-gain edges where RBJ puts them -- fact 5; AP1 corner deviation growing with frequency -- fact 1; the cascade multiplies -- fact 8), ELECTRICAL, published under CC BY 4.0 in ayukhno/autosound-measurements hardware/helix/dsp-ultra-s (FACTS.md, bench3-manifest.json, measurements/README.md with every defect in the data documented in place)",
+      "research session 2026-09-04 (ayukhno/autosound-research 92e83ab, datasets/rew/bw24-460-2026-09-04; REW #99-102, electrical, fc 460 Hz, LR24 control captured in the same pass) -- BW24 verified against the model, hub #32 closed; re-derived by the skill from the published copy in rew_tool/testdata/helix-bench/ on 2026-09-05 and pinned in dsp_math's selftest",
+      "DIMOSUS/Resonalyze dsp/PhaseRotationControl.cs @ bc957c8 (MIT), written by the upstream author from the same bench data (DIMOSUS/Resonalyze#88) and verified on all 32 published phase cases on 2026-09-05; ported as rew_tool/phase_rotation.py and checked against the same 32 cases in its selftest (2026-09-05 handoff from the Resonalyze-fork bench session)"
     ],
     "vendor": "Audiotec-Fischer"
   }

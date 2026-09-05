@@ -33,8 +33,12 @@ Third-party resources (icons, external target curves, data) with their own licen
   [Resonalyze](https://github.com/DIMOSUS/Resonalyze) by DIMOSUS, `dsp/VirtualCrossoverAnalysis.cs`
   at commit `1da56dd` (`DetailedLoss`, `SumLossCurve`, `DipExcessPenaltyWeight`,
   `MinBinAmplitudeRatio`, `SumLossLevelGateDb`): the formula and its constants, written fresh in
-  numpy with one grid-independence change noted in the source. Resonalyze is used under the MIT
-  License:
+  numpy with one grid-independence change noted in the source.
+  `skills/autosound-tuning/rew_tool/phase_rotation.py` — the HELIX channel **phase control**
+  (`realize`, `rotation_at`, `solve_corner`, `snap_to_grid`, the step / range / Q / ceiling
+  constants) is a port of `dsp/PhaseRotationControl.cs` at commit `bc957c8`, written by the same
+  author from the bench data below; the biquad it evaluates is this repo's own `apf2_response`,
+  and the deviations are declared in the file's header. Resonalyze is used under the MIT License:
 
   > Copyright (c) 2023 dimosus
   >
@@ -58,6 +62,16 @@ Third-party resources (icons, external target curves, data) with their own licen
 
   Each such port names its upstream file and commit in a header line (`upstream: dsp/X.cs @ sha`)
   so drift against the upstream can be checked.
+
+- `skills/autosound-tuning/rew_tool/testdata/helix-bench/` — ten measured curves of a Helix DSP
+  Ultra S (crossovers BW24 / LR24 at 460 Hz, BE36 at 1 kHz, LR36 at 8 kHz, each with its set's
+  bypass reference) and the 32 fitted cases of its phase control, copied verbatim from
+  [ayukhno/autosound-measurements](https://github.com/ayukhno/autosound-measurements),
+  `hardware/helix/dsp-ultra-s/`, at commit `5254c16`. That repository publishes its data under the
+  **Creative Commons Attribution 4.0 International** licence (CC BY 4.0,
+  <https://creativecommons.org/licenses/by/4.0/>); the files are the fixtures behind the hardware
+  half of `dsp_math` and `phase_rotation`'s selftests (`testdata/helix-bench/README.md` says what
+  each decides and how it is read).
 
 Notes:
 - If you include third-party content in a contribution, state its source and license in the PR description.

@@ -1,0 +1,968 @@
+{
+ "source": "Helix DSP Ultra S, 96 kHz, electrical loop; curves published under CC BY 4.0 in ayukhno/autosound-measurements, hardware/helix/dsp-ultra-s/measurements/",
+ "reference_implementation": "DIMOSUS/Resonalyze dsp/PhaseRotationControl.cs @ bc957c8 (MIT)",
+ "verified": "2026-09-05: his compiled library run against all 32 published cases; median phase residual 0.19 deg rms, median corner agreement 0.10 %, worst delivered-angle error 0.75 deg",
+ "how_to_read": "`solved_corner_hz` and `delivered_deg` come from the model; everything under `bench` comes from the measurement. Each case is the ratio of its own file to its group's ph0 capture - never compare across groups.",
+ "cases": [
+  {
+   "case": "phase-cap-midhigh-hp500-step1",
+   "published_files": {
+    "setting": "phase-cap-midhigh-hp500-step1.txt",
+    "group_reference": "phase-cap-midhigh-hp500-ph0.txt"
+   },
+   "setting_deg": 5.625,
+   "reference": {
+    "kind": "HP",
+    "hz": 500
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 9847.5,
+   "delivered_deg": 5.625,
+   "capped": false,
+   "bench": {
+    "free_fit_corner_hz": 10001.3,
+    "corner_diff_pct": 1.562,
+    "bins": 694,
+    "band_hz": [
+     100,
+     14906
+    ],
+    "mag_rms_db": 0.0147,
+    "phase_rms_deg": 0.408,
+    "phase_max_deg": 2.085
+   },
+   "free_fit_trustworthy": true,
+   "note": null
+  },
+  {
+   "case": "phase-cap-midhigh-hp500-step2",
+   "published_files": {
+    "setting": "phase-cap-midhigh-hp500-step2.txt",
+    "group_reference": "phase-cap-midhigh-hp500-ph0.txt"
+   },
+   "setting_deg": 11.25,
+   "reference": {
+    "kind": "HP",
+    "hz": 500
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 5078.5,
+   "delivered_deg": 11.25,
+   "capped": false,
+   "bench": {
+    "free_fit_corner_hz": 5078.3,
+    "corner_diff_pct": -0.004,
+    "bins": 694,
+    "band_hz": [
+     100,
+     14906
+    ],
+    "mag_rms_db": 0.0175,
+    "phase_rms_deg": 0.119,
+    "phase_max_deg": 0.673
+   },
+   "free_fit_trustworthy": true,
+   "note": null
+  },
+  {
+   "case": "phase-midhigh-hp500-ph180",
+   "published_files": {
+    "setting": "phase-midhigh-hp500-ph180.txt",
+    "group_reference": "phase-midhigh-hp500-ph0.txt"
+   },
+   "setting_deg": 180.0,
+   "reference": {
+    "kind": "HP",
+    "hz": 500
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 500.0,
+   "delivered_deg": 180.0,
+   "capped": false,
+   "bench": {
+    "free_fit_corner_hz": 498.6,
+    "corner_diff_pct": -0.28,
+    "bins": 569,
+    "band_hz": [
+     247,
+     14906
+    ],
+    "mag_rms_db": 0.0727,
+    "phase_rms_deg": 0.498,
+    "phase_max_deg": 3.293
+   },
+   "free_fit_trustworthy": true,
+   "note": null
+  },
+  {
+   "case": "phase-ref-lp2000-byp-ph90",
+   "published_files": {
+    "setting": "phase-ref-lp2000-byp-ph90.txt",
+    "group_reference": "phase-ref-lp2000-byp-ph0.txt"
+   },
+   "setting_deg": 90.0,
+   "reference": {
+    "kind": "LP",
+    "hz": 2000
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 3228.6,
+   "delivered_deg": 90.0,
+   "capped": false,
+   "bench": {
+    "free_fit_corner_hz": 3227.0,
+    "corner_diff_pct": -0.05,
+    "bins": 694,
+    "band_hz": [
+     100,
+     14906
+    ],
+    "mag_rms_db": 0.0125,
+    "phase_rms_deg": 0.089,
+    "phase_max_deg": 0.296
+   },
+   "free_fit_trustworthy": true,
+   "note": null
+  },
+  {
+   "case": "phase-ref-lp2000-byp-ph180",
+   "published_files": {
+    "setting": "phase-ref-lp2000-byp-ph180.txt",
+    "group_reference": "phase-ref-lp2000-byp-ph0.txt"
+   },
+   "setting_deg": 180.0,
+   "reference": {
+    "kind": "LP",
+    "hz": 2000
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 2000.0,
+   "delivered_deg": 180.0,
+   "capped": false,
+   "bench": {
+    "free_fit_corner_hz": 2000.6,
+    "corner_diff_pct": 0.03,
+    "bins": 694,
+    "band_hz": [
+     100,
+     14906
+    ],
+    "mag_rms_db": 0.0124,
+    "phase_rms_deg": 0.083,
+    "phase_max_deg": 0.236
+   },
+   "free_fit_trustworthy": true,
+   "note": null
+  },
+  {
+   "case": "phase-ref-lp2000-on-ph180",
+   "published_files": {
+    "setting": "phase-ref-lp2000-on-ph180.txt",
+    "group_reference": "phase-ref-lp2000-on-ph0.txt"
+   },
+   "setting_deg": 180.0,
+   "reference": {
+    "kind": "LP",
+    "hz": 2000
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 2000.0,
+   "delivered_deg": 180.0,
+   "capped": false,
+   "bench": {
+    "free_fit_corner_hz": 1993.5,
+    "corner_diff_pct": -0.325,
+    "bins": 511,
+    "band_hz": [
+     100,
+     3977
+    ],
+    "mag_rms_db": 0.0602,
+    "phase_rms_deg": 0.332,
+    "phase_max_deg": 1.46
+   },
+   "free_fit_trustworthy": true,
+   "note": null
+  },
+  {
+   "case": "phase-slopeoff-lp2000-ph180",
+   "published_files": {
+    "setting": "phase-slopeoff-lp2000-ph180.txt",
+    "group_reference": "phase-slopeoff-lp2000-ph0.txt"
+   },
+   "setting_deg": 180.0,
+   "reference": {
+    "kind": "LP",
+    "hz": 2000
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 2000.0,
+   "delivered_deg": 180.0,
+   "capped": false,
+   "bench": {
+    "free_fit_corner_hz": 2000.6,
+    "corner_diff_pct": 0.03,
+    "bins": 694,
+    "band_hz": [
+     100,
+     14906
+    ],
+    "mag_rms_db": 0.0128,
+    "phase_rms_deg": 0.084,
+    "phase_max_deg": 0.244
+   },
+   "free_fit_trustworthy": true,
+   "note": null
+  },
+  {
+   "case": "phase-cap-midhigh-hp3000-step1",
+   "published_files": {
+    "setting": "phase-cap-midhigh-hp3000-step1.txt",
+    "group_reference": "phase-cap-midhigh-hp3000-ph0.txt"
+   },
+   "setting_deg": 5.625,
+   "reference": {
+    "kind": "HP",
+    "hz": 3000
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 18000.0,
+   "delivered_deg": 17.1374,
+   "capped": true,
+   "bench": {
+    "free_fit_corner_hz": 18019.1,
+    "corner_diff_pct": 0.106,
+    "bins": 694,
+    "band_hz": [
+     100,
+     14906
+    ],
+    "mag_rms_db": 0.0094,
+    "phase_rms_deg": 0.063,
+    "phase_max_deg": 0.451
+   },
+   "free_fit_trustworthy": true,
+   "note": null
+  },
+  {
+   "case": "phase-cap-midhigh-hp3000-step2",
+   "published_files": {
+    "setting": "phase-cap-midhigh-hp3000-step2.txt",
+    "group_reference": "phase-cap-midhigh-hp3000-ph0.txt"
+   },
+   "setting_deg": 11.25,
+   "reference": {
+    "kind": "HP",
+    "hz": 3000
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 18000.0,
+   "delivered_deg": 17.1374,
+   "capped": true,
+   "bench": {
+    "free_fit_corner_hz": 18017.7,
+    "corner_diff_pct": 0.098,
+    "bins": 694,
+    "band_hz": [
+     100,
+     14906
+    ],
+    "mag_rms_db": 0.0099,
+    "phase_rms_deg": 0.067,
+    "phase_max_deg": 0.756
+   },
+   "free_fit_trustworthy": true,
+   "note": null
+  },
+  {
+   "case": "phase-cap-midhigh-hp3000-ph180",
+   "published_files": {
+    "setting": "phase-cap-midhigh-hp3000-ph180.txt",
+    "group_reference": "phase-cap-midhigh-hp3000-ph0.txt"
+   },
+   "setting_deg": 180.0,
+   "reference": {
+    "kind": "HP",
+    "hz": 3000
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 3000.0,
+   "delivered_deg": 180.0,
+   "capped": false,
+   "bench": {
+    "free_fit_corner_hz": 2998.4,
+    "corner_diff_pct": -0.053,
+    "bins": 694,
+    "band_hz": [
+     100,
+     14906
+    ],
+    "mag_rms_db": 0.0175,
+    "phase_rms_deg": 0.123,
+    "phase_max_deg": 0.641
+   },
+   "free_fit_trustworthy": true,
+   "note": null
+  },
+  {
+   "case": "phase-steps-lp5000-byp-clamped",
+   "published_files": {
+    "setting": "phase-steps-lp5000-byp-clamped.txt",
+    "group_reference": "phase-steps-lp5000-byp-ph0.txt"
+   },
+   "setting_deg": 5.625,
+   "reference": {
+    "kind": "LP",
+    "hz": 5000
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 18000.0,
+   "delivered_deg": 29.4871,
+   "capped": true,
+   "bench": {
+    "free_fit_corner_hz": 17986.7,
+    "corner_diff_pct": -0.074,
+    "bins": 694,
+    "band_hz": [
+     100,
+     14906
+    ],
+    "mag_rms_db": 0.0067,
+    "phase_rms_deg": 0.048,
+    "phase_max_deg": 0.391
+   },
+   "free_fit_trustworthy": true,
+   "note": null
+  },
+  {
+   "case": "phase-steps-lp5000-on-clamped",
+   "published_files": {
+    "setting": "phase-steps-lp5000-on-clamped.txt",
+    "group_reference": "phase-steps-lp5000-on-ph0.txt"
+   },
+   "setting_deg": 5.625,
+   "reference": {
+    "kind": "LP",
+    "hz": 5000
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 18000.0,
+   "delivered_deg": 29.4871,
+   "capped": true,
+   "bench": {
+    "free_fit_corner_hz": 16506.6,
+    "corner_diff_pct": -8.297,
+    "bins": 635,
+    "band_hz": [
+     100,
+     9735
+    ],
+    "mag_rms_db": 0.0307,
+    "phase_rms_deg": 0.193,
+    "phase_max_deg": 1.611
+   },
+   "free_fit_trustworthy": false,
+   "note": "the capped corner sits ABOVE this case's usable band (the channel's crossover is active), so the free fit is unidentifiable here - use the residual, not the fitted corner"
+  },
+  {
+   "case": "phase-cap-lp5000-byp-step1",
+   "published_files": {
+    "setting": "phase-cap-lp5000-byp-step1.txt",
+    "group_reference": "phase-cap-lp5000-byp-ph0.txt"
+   },
+   "setting_deg": 5.625,
+   "reference": {
+    "kind": "LP",
+    "hz": 5000
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 18000.0,
+   "delivered_deg": 29.4871,
+   "capped": true,
+   "bench": {
+    "free_fit_corner_hz": 18018.9,
+    "corner_diff_pct": 0.105,
+    "bins": 694,
+    "band_hz": [
+     100,
+     14906
+    ],
+    "mag_rms_db": 0.0086,
+    "phase_rms_deg": 0.055,
+    "phase_max_deg": 0.421
+   },
+   "free_fit_trustworthy": true,
+   "note": null
+  },
+  {
+   "case": "phase-cap-lp5000-on-step1",
+   "published_files": {
+    "setting": "phase-cap-lp5000-on-step1.txt",
+    "group_reference": "phase-cap-lp5000-on-ph0.txt"
+   },
+   "setting_deg": 5.625,
+   "reference": {
+    "kind": "LP",
+    "hz": 5000
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 18000.0,
+   "delivered_deg": 29.4871,
+   "capped": true,
+   "bench": {
+    "free_fit_corner_hz": 14929.8,
+    "corner_diff_pct": -17.057,
+    "bins": 636,
+    "band_hz": [
+     100,
+     9806
+    ],
+    "mag_rms_db": 0.0391,
+    "phase_rms_deg": 0.255,
+    "phase_max_deg": 1.716
+   },
+   "free_fit_trustworthy": false,
+   "note": "the capped corner sits ABOVE this case's usable band (the channel's crossover is active), so the free fit is unidentifiable here - use the residual, not the fitted corner"
+  },
+  {
+   "case": "phase-cap-lp5000-byp-step2",
+   "published_files": {
+    "setting": "phase-cap-lp5000-byp-step2.txt",
+    "group_reference": "phase-cap-lp5000-byp-ph0.txt"
+   },
+   "setting_deg": 11.25,
+   "reference": {
+    "kind": "LP",
+    "hz": 5000
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 18000.0,
+   "delivered_deg": 29.4871,
+   "capped": true,
+   "bench": {
+    "free_fit_corner_hz": 18020.3,
+    "corner_diff_pct": 0.113,
+    "bins": 694,
+    "band_hz": [
+     100,
+     14906
+    ],
+    "mag_rms_db": 0.0086,
+    "phase_rms_deg": 0.057,
+    "phase_max_deg": 0.644
+   },
+   "free_fit_trustworthy": true,
+   "note": null
+  },
+  {
+   "case": "phase-cap-lp5000-on-step2",
+   "published_files": {
+    "setting": "phase-cap-lp5000-on-step2.txt",
+    "group_reference": "phase-cap-lp5000-on-ph0.txt"
+   },
+   "setting_deg": 11.25,
+   "reference": {
+    "kind": "LP",
+    "hz": 5000
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 18000.0,
+   "delivered_deg": 29.4871,
+   "capped": true,
+   "bench": {
+    "free_fit_corner_hz": 14719.6,
+    "corner_diff_pct": -18.224,
+    "bins": 636,
+    "band_hz": [
+     100,
+     9806
+    ],
+    "mag_rms_db": 0.0371,
+    "phase_rms_deg": 0.268,
+    "phase_max_deg": 1.934
+   },
+   "free_fit_trustworthy": false,
+   "note": "the capped corner sits ABOVE this case's usable band (the channel's crossover is active), so the free fit is unidentifiable here - use the residual, not the fitted corner"
+  },
+  {
+   "case": "phase-cap-lp5000-byp-step5",
+   "published_files": {
+    "setting": "phase-cap-lp5000-byp-step5.txt",
+    "group_reference": "phase-cap-lp5000-byp-ph0.txt"
+   },
+   "setting_deg": 28.125,
+   "reference": {
+    "kind": "LP",
+    "hz": 5000
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 18000.0,
+   "delivered_deg": 29.4871,
+   "capped": true,
+   "bench": {
+    "free_fit_corner_hz": 18013.9,
+    "corner_diff_pct": 0.077,
+    "bins": 694,
+    "band_hz": [
+     100,
+     14906
+    ],
+    "mag_rms_db": 0.0084,
+    "phase_rms_deg": 0.064,
+    "phase_max_deg": 0.928
+   },
+   "free_fit_trustworthy": true,
+   "note": null
+  },
+  {
+   "case": "phase-cap-lp5000-on-step5",
+   "published_files": {
+    "setting": "phase-cap-lp5000-on-step5.txt",
+    "group_reference": "phase-cap-lp5000-on-ph0.txt"
+   },
+   "setting_deg": 28.125,
+   "reference": {
+    "kind": "LP",
+    "hz": 5000
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 18000.0,
+   "delivered_deg": 29.4871,
+   "capped": true,
+   "bench": {
+    "free_fit_corner_hz": 15164.2,
+    "corner_diff_pct": -15.754,
+    "bins": 636,
+    "band_hz": [
+     100,
+     9806
+    ],
+    "mag_rms_db": 0.0379,
+    "phase_rms_deg": 0.25,
+    "phase_max_deg": 1.683
+   },
+   "free_fit_trustworthy": false,
+   "note": "the capped corner sits ABOVE this case's usable band (the channel's crossover is active), so the free fit is unidentifiable here - use the residual, not the fitted corner"
+  },
+  {
+   "case": "phase-steps-lp5000-byp-ph45",
+   "published_files": {
+    "setting": "phase-steps-lp5000-byp-ph45.txt",
+    "group_reference": "phase-steps-lp5000-byp-ph0.txt"
+   },
+   "setting_deg": 45.0,
+   "reference": {
+    "kind": "LP",
+    "hz": 5000
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 13126.5,
+   "delivered_deg": 45.0,
+   "capped": false,
+   "bench": {
+    "free_fit_corner_hz": 13071.8,
+    "corner_diff_pct": -0.417,
+    "bins": 694,
+    "band_hz": [
+     100,
+     14906
+    ],
+    "mag_rms_db": 0.0088,
+    "phase_rms_deg": 0.083,
+    "phase_max_deg": 0.58
+   },
+   "free_fit_trustworthy": true,
+   "note": null
+  },
+  {
+   "case": "phase-turns-bypassed-ph90",
+   "published_files": {
+    "setting": "phase-turns-bypassed-ph90.txt",
+    "group_reference": "phase-turns-bypassed-ph0.txt"
+   },
+   "setting_deg": 90.0,
+   "reference": {
+    "kind": "LP",
+    "hz": 5000
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 7976.9,
+   "delivered_deg": 90.0,
+   "capped": false,
+   "bench": {
+    "free_fit_corner_hz": 7961.5,
+    "corner_diff_pct": -0.193,
+    "bins": 694,
+    "band_hz": [
+     100,
+     14906
+    ],
+    "mag_rms_db": 0.0112,
+    "phase_rms_deg": 0.109,
+    "phase_max_deg": 0.537
+   },
+   "free_fit_trustworthy": true,
+   "note": null
+  },
+  {
+   "case": "phase-turns-hp500-ph90",
+   "published_files": {
+    "setting": "phase-turns-hp500-ph90.txt",
+    "group_reference": "phase-turns-hp500-ph0.txt"
+   },
+   "setting_deg": 90.0,
+   "reference": {
+    "kind": "LP",
+    "hz": 5000
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 7976.9,
+   "delivered_deg": 90.0,
+   "capped": false,
+   "bench": {
+    "free_fit_corner_hz": 7962.1,
+    "corner_diff_pct": -0.186,
+    "bins": 569,
+    "band_hz": [
+     247,
+     14906
+    ],
+    "mag_rms_db": 0.0668,
+    "phase_rms_deg": 0.304,
+    "phase_max_deg": 5.209
+   },
+   "free_fit_trustworthy": true,
+   "note": null
+  },
+  {
+   "case": "phase-turns-lp5000-ph90",
+   "published_files": {
+    "setting": "phase-turns-lp5000-ph90.txt",
+    "group_reference": "phase-turns-lp5000-ph0.txt"
+   },
+   "setting_deg": 90.0,
+   "reference": {
+    "kind": "LP",
+    "hz": 5000
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 7976.9,
+   "delivered_deg": 90.0,
+   "capped": false,
+   "bench": {
+    "free_fit_corner_hz": 7954.7,
+    "corner_diff_pct": -0.278,
+    "bins": 636,
+    "band_hz": [
+     100,
+     9806
+    ],
+    "mag_rms_db": 0.0665,
+    "phase_rms_deg": 0.411,
+    "phase_max_deg": 2.692
+   },
+   "free_fit_trustworthy": true,
+   "note": null
+  },
+  {
+   "case": "phase-slopeoff-lp5000-ph180",
+   "published_files": {
+    "setting": "phase-slopeoff-lp5000-ph180.txt",
+    "group_reference": "phase-slopeoff-lp5000-ph0.txt"
+   },
+   "setting_deg": 180.0,
+   "reference": {
+    "kind": "LP",
+    "hz": 5000
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 5000.0,
+   "delivered_deg": 180.0,
+   "capped": false,
+   "bench": {
+    "free_fit_corner_hz": 4999.1,
+    "corner_diff_pct": -0.018,
+    "bins": 694,
+    "band_hz": [
+     100,
+     14906
+    ],
+    "mag_rms_db": 0.648,
+    "phase_rms_deg": 0.188,
+    "phase_max_deg": 1.642
+   },
+   "free_fit_trustworthy": true,
+   "note": null
+  },
+  {
+   "case": "phase-steps-lp5000-on-ph180",
+   "published_files": {
+    "setting": "phase-steps-lp5000-on-ph180.txt",
+    "group_reference": "phase-steps-lp5000-on-ph0.txt"
+   },
+   "setting_deg": 180.0,
+   "reference": {
+    "kind": "LP",
+    "hz": 5000
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 5000.0,
+   "delivered_deg": 180.0,
+   "capped": false,
+   "bench": {
+    "free_fit_corner_hz": 5003.8,
+    "corner_diff_pct": 0.076,
+    "bins": 635,
+    "band_hz": [
+     100,
+     9735
+    ],
+    "mag_rms_db": 0.0482,
+    "phase_rms_deg": 0.297,
+    "phase_max_deg": 1.455
+   },
+   "free_fit_trustworthy": true,
+   "note": null
+  },
+  {
+   "case": "phase-turns-bypassed-ph180",
+   "published_files": {
+    "setting": "phase-turns-bypassed-ph180.txt",
+    "group_reference": "phase-turns-bypassed-ph0.txt"
+   },
+   "setting_deg": 180.0,
+   "reference": {
+    "kind": "LP",
+    "hz": 5000
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 5000.0,
+   "delivered_deg": 180.0,
+   "capped": false,
+   "bench": {
+    "free_fit_corner_hz": 4999.0,
+    "corner_diff_pct": -0.02,
+    "bins": 694,
+    "band_hz": [
+     100,
+     14906
+    ],
+    "mag_rms_db": 0.0124,
+    "phase_rms_deg": 0.086,
+    "phase_max_deg": 0.612
+   },
+   "free_fit_trustworthy": true,
+   "note": null
+  },
+  {
+   "case": "phase-turns-hp500-ph180",
+   "published_files": {
+    "setting": "phase-turns-hp500-ph180.txt",
+    "group_reference": "phase-turns-hp500-ph0.txt"
+   },
+   "setting_deg": 180.0,
+   "reference": {
+    "kind": "LP",
+    "hz": 5000
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 5000.0,
+   "delivered_deg": 180.0,
+   "capped": false,
+   "bench": {
+    "free_fit_corner_hz": 4999.1,
+    "corner_diff_pct": -0.018,
+    "bins": 569,
+    "band_hz": [
+     247,
+     14906
+    ],
+    "mag_rms_db": 0.0501,
+    "phase_rms_deg": 0.348,
+    "phase_max_deg": 6.318
+   },
+   "free_fit_trustworthy": true,
+   "note": null
+  },
+  {
+   "case": "phase-turns-lp5000-ph180",
+   "published_files": {
+    "setting": "phase-turns-lp5000-ph180.txt",
+    "group_reference": "phase-turns-lp5000-ph0.txt"
+   },
+   "setting_deg": 180.0,
+   "reference": {
+    "kind": "LP",
+    "hz": 5000
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 5000.0,
+   "delivered_deg": 180.0,
+   "capped": false,
+   "bench": {
+    "free_fit_corner_hz": 5003.9,
+    "corner_diff_pct": 0.078,
+    "bins": 637,
+    "band_hz": [
+     100,
+     9877
+    ],
+    "mag_rms_db": 0.0484,
+    "phase_rms_deg": 0.323,
+    "phase_max_deg": 1.82
+   },
+   "free_fit_trustworthy": true,
+   "note": null
+  },
+  {
+   "case": "phase-turns-bypassed-ph270",
+   "published_files": {
+    "setting": "phase-turns-bypassed-ph270.txt",
+    "group_reference": "phase-turns-bypassed-ph0.txt"
+   },
+   "setting_deg": 270.0,
+   "reference": {
+    "kind": "LP",
+    "hz": 5000
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 3107.3,
+   "delivered_deg": 270.0,
+   "capped": false,
+   "bench": {
+    "free_fit_corner_hz": 3109.4,
+    "corner_diff_pct": 0.068,
+    "bins": 694,
+    "band_hz": [
+     100,
+     14906
+    ],
+    "mag_rms_db": 0.0127,
+    "phase_rms_deg": 0.095,
+    "phase_max_deg": 0.514
+   },
+   "free_fit_trustworthy": true,
+   "note": null
+  },
+  {
+   "case": "phase-turns-hp500-ph270",
+   "published_files": {
+    "setting": "phase-turns-hp500-ph270.txt",
+    "group_reference": "phase-turns-hp500-ph0.txt"
+   },
+   "setting_deg": 270.0,
+   "reference": {
+    "kind": "LP",
+    "hz": 5000
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 3107.3,
+   "delivered_deg": 270.0,
+   "capped": false,
+   "bench": {
+    "free_fit_corner_hz": 3109.7,
+    "corner_diff_pct": 0.077,
+    "bins": 569,
+    "band_hz": [
+     247,
+     14906
+    ],
+    "mag_rms_db": 0.0523,
+    "phase_rms_deg": 0.314,
+    "phase_max_deg": 5.645
+   },
+   "free_fit_trustworthy": true,
+   "note": null
+  },
+  {
+   "case": "phase-turns-lp5000-ph270",
+   "published_files": {
+    "setting": "phase-turns-lp5000-ph270.txt",
+    "group_reference": "phase-turns-lp5000-ph0.txt"
+   },
+   "setting_deg": 270.0,
+   "reference": {
+    "kind": "LP",
+    "hz": 5000
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 3107.3,
+   "delivered_deg": 270.0,
+   "capped": false,
+   "bench": {
+    "free_fit_corner_hz": 3110.2,
+    "corner_diff_pct": 0.093,
+    "bins": 637,
+    "band_hz": [
+     100,
+     9877
+    ],
+    "mag_rms_db": 0.0314,
+    "phase_rms_deg": 0.223,
+    "phase_max_deg": 1.432
+   },
+   "free_fit_trustworthy": true,
+   "note": null
+  },
+  {
+   "case": "phase-steps-lp5000-byp-ph354.375",
+   "published_files": {
+    "setting": "phase-steps-lp5000-byp-ph354.375.txt",
+    "group_reference": "phase-steps-lp5000-byp-ph0.txt"
+   },
+   "setting_deg": 354.375,
+   "reference": {
+    "kind": "LP",
+    "hz": 5000
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 247.2,
+   "delivered_deg": 354.375,
+   "capped": false,
+   "bench": {
+    "free_fit_corner_hz": 256.4,
+    "corner_diff_pct": 3.722,
+    "bins": 694,
+    "band_hz": [
+     100,
+     14906
+    ],
+    "mag_rms_db": 0.0145,
+    "phase_rms_deg": 2.061,
+    "phase_max_deg": 5.102
+   },
+   "free_fit_trustworthy": true,
+   "note": null
+  },
+  {
+   "case": "phase-steps-lp5000-on-ph354.375",
+   "published_files": {
+    "setting": "phase-steps-lp5000-on-ph354.375.txt",
+    "group_reference": "phase-steps-lp5000-on-ph0.txt"
+   },
+   "setting_deg": 354.375,
+   "reference": {
+    "kind": "LP",
+    "hz": 5000
+   },
+   "sample_rate_hz": 96000,
+   "solved_corner_hz": 247.2,
+   "delivered_deg": 354.375,
+   "capped": false,
+   "bench": {
+    "free_fit_corner_hz": 256.4,
+    "corner_diff_pct": 3.722,
+    "bins": 635,
+    "band_hz": [
+     100,
+     9735
+    ],
+    "mag_rms_db": 0.0159,
+    "phase_rms_deg": 2.011,
+    "phase_max_deg": 4.74
+   },
+   "free_fit_trustworthy": true,
+   "note": null
+  }
+ ]
+}

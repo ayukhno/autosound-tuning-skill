@@ -130,7 +130,7 @@ Read the active phase from `process/process-state.json` (`python3 rew_tool/state
 | [patterns/test-tracks.md](references/patterns/test-tracks.md) | Diagnostic tracks with timestamps. |
 | [patterns/voicing-by-ear.md](references/patterns/voicing-by-ear.md) | Symptom-to-fix ear EQ, client taste tuning. |
 | [patterns/method-hashimoto.md](references/patterns/method-hashimoto.md) | Slope-first matching, polarity-by-ear, mono-center. |
-| [tooling/helix-phase-allpass.md](references/tooling/helix-phase-allpass.md) | Helix phase controls, 2nd-order all-pass. |
+| [tooling/helix-phase-allpass.md](references/tooling/helix-phase-allpass.md) | Helix channel Phase control — the measured law (Q=1 APF2 at the configured crossover, 18 kHz ceiling, cost in the bass) — and the AP1/AP2 bands. |
 | [tooling/helix-eq-export.md](references/tooling/helix-eq-export.md) | PEQ banks in Audiotec-Fischer format. |
 | [tooling/rew-tool-docs.md](references/tooling/rew-tool-docs.md) | REW API client scripts, module layout. |
 | [tooling/rew-api-quirks.md](references/tooling/rew-api-quirks.md) | float32 encoding, gaindB, loopback offsets. |
