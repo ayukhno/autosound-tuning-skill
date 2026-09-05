@@ -15,6 +15,34 @@ normative method separate from per-project data, and starting hypotheses separat
 
 **Skill = layers 1–2 (shared, model-agnostic). Project = layers 3–5 (per-car, dynamic.)**
 
+## The knowledge base — the one place a per-car fact may sit in the skill
+
+`knowledge/cars/<body>.md` and `knowledge/dsp/<model>.md` are in the skill and yet describe one
+cabin and one processor, which reads like a contradiction of the line above. It is not, and the
+boundary is narrow enough to state exactly (the owner's ruling, 2026-09-05):
+
+**A project detail may live here only as supplementary reference about a CAR or a piece of
+EQUIPMENT** — the standing, physical way the system is built. The mounting angle of a driver.
+Whether passive filters sit in the path. Enclosure, placement, what is bolted where. These describe
+**what the sound meets** before anyone tunes anything; they survive every session, and the next
+build on the same body genuinely wants them.
+
+**What may never sit here is anything DIALLED** — crossover corners, delays, EQ, the phase
+control's angles. That is the tune's state, layer 5, and it lives in the project. The tell is
+simple: if changing it is a tuning decision, it is not knowledge, it is state.
+
+**And inside a car's file the two halves do not mix.** A flaw description is **physics** — what the
+cabin or the driver does, measured, with its evidence (`flaw_map.py`, `acoustics.flaws`, PART B of
+`knowledge/cars/_TEMPLATE.md`). Install facts are **logic** — how the build is put together. An
+angle or a passive filter is not a flaw and does not belong in a flaw row, even when it explains
+one; put it in the install description and let the flaw row point at it. Mixing them makes a
+measured physical finding read as a configuration choice, and neither can then be trusted on its own.
+
+Bought 2026-09-05: `references/tooling/helix-phase-allpass.md` carried one car's dialled phase
+angles as "our practice" for months. A screen read showed the processor at 0° on all twelve
+outputs, the project's own ledger agreed, and one of the two angles was not even on the control's
+hardware grid — a number nothing could have re-measured, because a method file is never re-measured.
+
 ## The two governing rules
 
 1. **Patterns are hypotheses, never rules.** A pattern proposes a *starting point*; measurement

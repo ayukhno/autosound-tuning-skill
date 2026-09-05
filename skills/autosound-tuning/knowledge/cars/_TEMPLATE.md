@@ -14,11 +14,20 @@
 
 ## PART B — the record of THIS build — ⛔ VERIFY ONLY (each line = a CHECK, not a fact)
 
-**Mounting geometry — check by measurement/question, don't assert:**
-- □ *(anomaly the author's build showed, e.g. a left-door dip ~X Hz)* → measure your own; don't assume the Hz or the side.
-- □ *(driver positions / coplanarity / SBIR notches)* → these depend on YOUR install — **never assert coplanarity or a notch frequency as fact** (the recurring leak).
+**How the build is PUT TOGETHER — the install, and it is logic, not physics:**
+The standing, physical arrangement the sound meets before anyone tunes: driver mounting angle and
+aim, on/off axis, whether **passive filters** sit in the path, enclosure and placement. It changes
+only when somebody rebuilds the car, so it is the one kind of per-build detail the knowledge base
+is *for* (`references/core/knowledge-architecture.md`). Keep it here and **out of the anomaly
+lines below**: an angle explains a dip, it is not the dip, and a row that carries both makes a
+measured finding read as a configuration choice. Nothing DIALLED goes here either — crossovers,
+delays, EQ and phase angles are the tune's state and live in the project, never in this file.
+- □ *(driver positions / aim angles / coplanarity)* → these depend on YOUR install — **never assert coplanarity as fact** (the recurring leak); ask or measure.
+- □ *(passive filters in the path — present, and where?)* → ask; a passive between amp and driver changes what every electrical setting downstream means. Enclosure is its own block below.
 
-**Cabin response anomalies — if present, LEAVE them (interference / non-min-phase), don't fill:**
+**Cabin response anomalies — the PHYSICS half: if present, LEAVE them (interference / non-min-phase), don't fill:**
+- □ *(anomaly the author's build showed, e.g. a left-door dip ~X Hz)* → measure your own; don't assume the Hz or the side.
+- □ *(SBIR notches)* → **never assert a notch frequency as fact**; it follows this build's geometry.
 - □ *(cabin nulls / deep dips / room modes the author saw)* → check your own; don't EQ-boost a positional null.
 
 **Drivers / enclosure — from the user's intake or the datasheet, NOT from here:**

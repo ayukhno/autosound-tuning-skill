@@ -42,6 +42,23 @@ Two consequences worth stating, because both have already caused a question:
 
 ## [Unreleased]
 
+- **Where a per-car fact may sit in the skill, stated once — `references/core/knowledge-architecture.md`,
+  `knowledge/cars/_TEMPLATE.md`** (the owner's ruling, 2026-09-05). The five-layer table said
+  "Skill = layers 1–2, shared and model-agnostic" and then said nothing about `knowledge/cars/` and
+  `knowledge/dsp/`, which are in the skill and describe one cabin and one processor. The boundary is
+  narrow and now written: a project detail may live there **only as supplementary reference about a
+  car or a piece of equipment** — the standing, physical way the build is put together (a driver's
+  mounting angle and aim, whether **passive filters** sit in the path, enclosure, placement). Those
+  describe what the sound meets, they survive every session, and the next build on the same body
+  wants them. **Anything DIALLED never goes there** — crossovers, delays, EQ, phase angles are the
+  tune's state; the tell is that if changing it is a tuning decision, it is state and not knowledge.
+  **And the two halves do not mix inside a car's file:** a flaw description is **physics** (what the
+  cabin or the driver does, measured, with evidence), install facts are **logic** (how it is built) —
+  an angle explains a dip, it is not the dip, and a row carrying both makes a measured finding read
+  as a configuration choice. `_TEMPLATE.md`'s PART B was itself mixing them: a cabin anomaly sat under
+  a "Mounting geometry" heading. It is now an install block and an anomalies block, and the anomaly
+  moved to the second.
+
 - **One car's dialled phase angles are out of the method — `references/tooling/helix-phase-allpass.md`.**
   The file carried "Practice for our system (Passat B8): sub 174.375°, left mid 33°" as though it
   were method knowledge. It is **layer 5, Project State**, by this method's own architecture
