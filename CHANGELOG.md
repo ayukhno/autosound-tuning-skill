@@ -40,7 +40,30 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
-## [Unreleased]
+## [v3.0.42] — 2026-09-05 · the base keeps physics and the install, never a tune's settings — and a schema change reaches the cars
+
+> **Upgrading:** additive in code, **subtractive in the knowledge base**, and one new habit.
+> **(1) `knowledge/cars/vw-passat-b8-sedan.md` lost its settings.** The crossovers that won, the
+> per-driver polarities, the centre-fill and rear-fill configs and the notch Hz/dB/Q are gone —
+> deliberately, on the owner's ruling that this base does not collect solutions. Anything quoting
+> those numbers from the car library must stop; they were labelled "⛔ verify only, never copy"
+> the whole time. What stays is what the cabin and the drivers DO, plus the standing install.
+> `knowledge/cars/_TEMPLATE.md` no longer has a settings block and says why. **(2) New machine
+> keys and verbs, all additive:** `contract.py check` reports gain `row_gaps` and `map_ready`
+> (a JSON consumer sees two new keys); `contract.py gaps`, `contract.py check --phase0-gate` and
+> `project.py <dir> catch-up` are new commands; `project.py` gains `KIND_HEARD`,
+> `SYMPTOM_DRAFT_PREFIX`, `symptom_draft`, `symptom_is_draft`, `symptom_said`. **(3) `flaw_map.py`
+> now writes a `symptom`** on every owner-facing row it proposes — a marked `DRAFT:` string, so a
+> consumer that assumed the field was empty on fresh rows now sees one, and one that treats any
+> non-empty `symptom` as a person's words must check `project.symptom_is_draft` instead.
+> **(4) The new habit:** Pre-Session step 2 now says to run `catch-up` when `check` reports the
+> project predates a field — it is idempotent and additive, and it does NOT close the phase-0
+> gate. **(5) The skill's own `description` changed** (the target-curve list now says the four
+> community curves are their authors' and come from the Nono Tuning Tool) — trigger behaviour is
+> unaffected, but a consumer that pinned the description string will see a diff. Everything in
+> `rew_tool` keeps its existing signatures; `predict`, `dsp_math` and `phase_rotation` are
+> untouched since v3.0.41.
+
 
 - **A schema change now reaches the cars, and the owner's line is no longer optional prose —
   `rew_tool/project.py`, `rew_tool/flaw_map.py`, `rew_tool/contract.py`,
