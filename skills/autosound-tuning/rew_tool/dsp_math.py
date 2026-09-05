@@ -482,15 +482,31 @@ def robust_worst_null(freqs_hz, A, B, band, perturbations=ROBUST_PERT):
 
 
 # ---------- sum loss: the junction metric ported from Resonalyze ----------
-# upstream: DIMOSUS/Resonalyze dsp/VirtualCrossoverAnalysis.cs @ 5d24924 (MIT) --
+# upstream: DIMOSUS/Resonalyze dsp/VirtualCrossoverAnalysis.cs @ 56b07c8 (MIT) --
+# `DetailedLoss`, `SumLossCurve`, `MeasureJunctionSpectrum` (the ripple), `DipExcessPenaltyWeight`,
+# `MinBinAmplitudeRatio`, `SumLossLevelGateDb`. A port of the DEFINITION (formula and
+# constants), written fresh in numpy; see LICENSES/NOTICE.md. Checked against our own earlier
+# Python reading of the same metric (sound_AutoSci resonalyze-cross-check), which agreed
+# with the C# to tenths of a dB on six real junctions.
 # reviewed: 5d24924 (#117, 2026-08-24) adds per-frequency arrival coherence and only CALLS
 #           DetailedLoss; the definition, the constants and SumLossCurve are untouched. The
 #           port was made at 1da56dd and re-pinned after reading that diff.
-# `DetailedLoss`, `SumLossCurve`, `DipExcessPenaltyWeight`, `MinBinAmplitudeRatio`,
-# `SumLossLevelGateDb`. A port of the DEFINITION (formula and constants), written
-# fresh in numpy; see LICENSES/NOTICE.md. Checked against our own earlier Python
-# reading of the same metric (sound_AutoSci resonalyze-cross-check), which agreed
-# with the C# to tenths of a dB on six real junctions.
+# reviewed: 56b07c8 (2026-09-05) -- four commits touched the file since 5d24924, each read:
+#           dc7edb6 (#126) builds the chain at the PROCESSOR's rate, not the record's. The
+#             metric's INPUT, not the metric; this module did the same on 2026-08-31
+#             (`processing_rate`), and the two bills agree (theirs 4.1 dB at 12 kHz, ours 4.25
+#             at 10 kHz, both LR/BW24 at 48 vs 96 kHz).
+#           bd51791 (#128) their alignment SEARCH: above 1 kHz the seed comes off the direct
+#             sound and a near-tie between a lobe and its half-period alias goes to a
+#             coherence-band vote, because the sum cannot separate them (their v6 L: the alias
+#             SCORES HIGHER on this very formula). Not in the metric. Our guard against the
+#             alias is `predict.arrival_difference_ms`; what #128 says about it: TODO S-005.
+#           b9374e4 (#130) SumLossCurve: a channel whose curve is NaN at a bin (it measured
+#             nothing there) ADDS NOTHING, instead of poisoning the bin. Ported -- the
+#             `isfinite` lines in `sum_loss` and `align_sum_loss`.
+#           56b07c8 (#172) MeasureJunctionSpectrum: the RIPPLE of the summed magnitude next to
+#             loss and dip, calling DetailedLoss unchanged. Ported as `ripple_db`, READ and
+#             not scored -- whether it enters `score_db` is TODO S-006.
 # deviation: d(ln f) per bin instead of their bare 1/f weight -- see `_log_weights`
 #            (their 1/f is a log-frequency average only on a uniform-Hz FFT grid).
 # deviation: candidates tie-break by our own near-tie rule (smallest |tau| within
@@ -538,8 +554,12 @@ def sum_loss(freqs_hz, A, B, band, *, level_gate_db=None,
     weight on a linear FFT grid, made grid-independent here, see `_log_weights`), `dip_db` (minimum of the `dip_octaves` moving mean of the per-bin loss) and
     `dip_hz` (where it sits), `score_db` (`avg + 0.5 * (dip - avg)` -- the ranking figure
     Resonalyze's search uses, penalising the notch's EXCESS over the average so a uniformly
-    lossy junction is not punished twice), `curve_db` per in-band bin (NaN where gated),
-    `freqs_hz` of those bins, and `gated_bins`.
+    lossy junction is not punished twice), `ripple_db` (the log-weighted RMS of 20*log10|A+B|
+    about its own mean over the same bins, >= 0 -- their `MeasureJunctionSpectrum`: the loss
+    says how much the pair cancels, the ripple whether what is left is FLAT, which the loss
+    cannot -- two drivers both wide open at the corner sum coherently into a 6 dB hump and
+    lose nothing. Read, not scored: `score_db` does not see it), `curve_db` per in-band bin
+    (NaN where gated), `freqs_hz` of those bins, and `gated_bins`.
 
     `level_gate_db=None` is the SEARCH definition (every in-band bin counts, as in their
     `DetailedLoss`). `level_gate_db=25` is the READ-OUT definition (their `SumLossCurve`):
@@ -550,11 +570,17 @@ def sum_loss(freqs_hz, A, B, band, *, level_gate_db=None,
 
     `A` and `B` are complex responses on `freqs_hz`, already carrying whatever delay,
     polarity and chain the caller wants judged. Level does not matter (a ratio); shape does
-    not matter (a ratio per bin). Both responses zero at a bin -> that bin is skipped.
+    not matter (a ratio per bin). Both responses zero at a bin -> that bin is skipped. A
+    NON-FINITE bin of either is a channel that measured nothing there (a protective high-pass
+    took its signal past recovering, say) and it ADDS NOTHING -- upstream #130: where the
+    other channel plays alone the loss is honestly 0 and the bin counts; only where neither
+    measured anything is the bin skipped, exactly like both zero.
     """
     f = np.asarray(freqs_hz, dtype=float)
     A = np.asarray(A, dtype=complex)
     B = np.asarray(B, dtype=complex)
+    A = np.where(np.isfinite(A), A, 0.0)      # measured nothing there -> contributes nothing
+    B = np.where(np.isfinite(B), B, 0.0)
     m = (f >= band[0]) & (f <= band[1])
     f, a, b = f[m], A[m], B[m]
     mag_sum = np.abs(a) + np.abs(b)
@@ -565,8 +591,8 @@ def sum_loss(freqs_hz, A, B, band, *, level_gate_db=None,
         local_peak = np.array([mag_sum[(f >= fc / ratio) & (f <= fc * ratio)].max() for fc in f])
         usable &= mag_sum >= local_peak * 10.0 ** (-level_gate_db / 20.0)
     empty = {"avg_db": None, "dip_db": None, "dip_hz": None, "score_db": None,
-             "curve_db": np.full(len(f), np.nan), "freqs_hz": f, "n_bins": 0,
-             "gated_bins": int((~usable).sum())}
+             "ripple_db": None, "curve_db": np.full(len(f), np.nan), "freqs_hz": f,
+             "n_bins": 0, "gated_bins": int((~usable).sum())}
     if not usable.any():
         return empty
     fu, au, bu, su = f[usable], a[usable], b[usable], mag_sum[usable]
@@ -581,10 +607,16 @@ def sum_loss(freqs_hz, A, B, band, *, level_gate_db=None,
         v = float(loss[win].mean())
         if v < dip:
             dip, dip_hz = v, float(fc)
+    # The ripple of the SUM itself over the same bins: log-weighted RMS of its level about its
+    # log-weighted mean (their MeasureJunctionSpectrum, verbatim). A property of what is left
+    # after the pair adds, not of how it added -- room and overlap both show here.
+    level = 20.0 * np.log10(np.maximum(np.abs(au + bu), 1e-12))
+    mean = float(np.sum(w * level) / np.sum(w))
+    ripple = float(np.sqrt(np.sum(w * (level - mean) ** 2) / np.sum(w)))
     curve = np.full(len(f), np.nan)
     curve[usable] = loss
     return {"avg_db": avg, "dip_db": float(dip), "dip_hz": dip_hz,
-            "score_db": sum_loss_score(avg, dip),
+            "score_db": sum_loss_score(avg, dip), "ripple_db": ripple,
             "curve_db": curve, "freqs_hz": f, "n_bins": int(usable.sum()),
             "gated_bins": int((~usable).sum())}
 
@@ -617,6 +649,8 @@ def align_sum_loss(freqs_hz, A, B, band, max_delay_ms=3.0, step_ms=0.01,
     f = np.asarray(freqs_hz, dtype=float)
     A = np.asarray(A, dtype=complex)
     B = np.asarray(B, dtype=complex)
+    A = np.where(np.isfinite(A), A, 0.0)      # the same rule as `sum_loss`: NaN adds nothing
+    B = np.where(np.isfinite(B), B, 0.0)
     m = (f >= band[0]) & (f <= band[1])
     fb, ab, bb = f[m], A[m], B[m]
     taus = np.arange(-max_delay_ms, max_delay_ms + step_ms / 2, step_ms) / 1000.0
@@ -968,6 +1002,38 @@ def _selftest():
     # ...and agrees with the energy-max twin on a clean case, so the two rulers can be read together.
     pol_e, tau_e, _, _ = align_delay_polarity(fs_, flat, B_, band)
     assert pol_e == pol and abs(tau_e - tau_hat) < 0.06, (pol_e, tau_e, tau_hat)
+    # A channel that measured nothing at a bin (NaN) adds nothing there -- upstream #130. One
+    # channel gone above 500 Hz: the pair reads as the other channel alone there (loss 0, and
+    # the bin COUNTS); both gone: the bin is skipped, exactly like both zero. Before this a
+    # single NaN gated the bin as if neither had played -- 301 bins of 1000 on this grid --
+    # and the search read the same pair through two different sets of bins.
+    gone = flat.copy()
+    gone[fs_ > 500.0] = np.nan
+    r8 = sum_loss(fs_, flat, gone, band)
+    r8z = sum_loss(fs_, flat, np.where(np.isnan(gone), 0.0, gone), band)
+    assert r8["gated_bins"] == 0 and r8["n_bins"] == r8z["n_bins"], (r8["gated_bins"], r8["n_bins"])
+    assert abs(r8["avg_db"]) < 1e-9 and r8["dip_db"] == 0.0, (r8["avg_db"], r8["dip_db"])
+    r9 = sum_loss(fs_, gone, gone, band)
+    in_band = (fs_ >= band[0]) & (fs_ <= band[1])
+    assert r9["gated_bins"] == int((in_band & (fs_ > 500.0)).sum()) > 0, r9["gated_bins"]
+    assert r9["n_bins"] + r9["gated_bins"] == int(in_band.sum()), (r9["n_bins"], r9["gated_bins"])
+    B_gone = B_.copy()
+    B_gone[fs_ > 500.0] = np.nan
+    got = align_sum_loss(fs_, flat, B_gone, band)
+    want = align_sum_loss(fs_, flat, np.where(np.isnan(B_gone), 0.0, B_gone), band)
+    assert np.allclose(got, want, atol=1e-9), (got, want)
+    # The ripple: what the loss cannot see. A flat pair in phase sums flat -> ripple 0. B in
+    # the bottom half (log) of the band only, absent above: nothing cancels anywhere, so the
+    # loss is 0 -- and the sum steps 6.02 dB at the middle of the band, so its log-weighted
+    # RMS about the mean is 3.01 dB by construction (two equal halves, +-3.01 about +3.01).
+    # Upstream #172's own case: drivers wide open at the corner make a hump and lose nothing.
+    assert r["ripple_db"] < 1e-9, r["ripple_db"]
+    half_b = flat.copy()
+    half_b[fs_ > np.sqrt(band[0] * band[1])] = 0.0
+    r10 = sum_loss(fs_, flat, half_b, band)
+    assert abs(r10["avg_db"]) < 1e-9 and r10["dip_db"] == 0.0, (r10["avg_db"], r10["dip_db"])
+    assert abs(r10["ripple_db"] - 20.0 * np.log10(2.0) / 2.0) < 0.02, r10["ripple_db"]
+    assert r10["score_db"] == 0.0, r10["score_db"]        # read, not scored
 
     f = np.geomspace(2.0, 40000.0, 4000)
     deg = lambda h: np.degrees(np.unwrap(np.angle(h)))  # noqa: E731

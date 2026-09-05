@@ -41,9 +41,10 @@ Third-party resources (icons, external target curves, data) with their own licen
 
   - `skills/autosound-tuning/rew_tool/dsp_math.py` — the junction **sum-loss metric** (`sum_loss`,
     `sum_loss_score`, `align_sum_loss`) is a Python port of the *definition* in
-    `dsp/VirtualCrossoverAnalysis.cs` at commit `1da56dd` (`DetailedLoss`, `SumLossCurve`,
-    `DipExcessPenaltyWeight`, `MinBinAmplitudeRatio`, `SumLossLevelGateDb`): the formula and its
-    constants, with one grid-independence change noted in the source.
+    `dsp/VirtualCrossoverAnalysis.cs` at commit `56b07c8` (`DetailedLoss`, `SumLossCurve`,
+    `MeasureJunctionSpectrum`, `DipExcessPenaltyWeight`, `MinBinAmplitudeRatio`,
+    `SumLossLevelGateDb`): the formula and its constants, with the deviations declared in the
+    file's header.
   - `skills/autosound-tuning/rew_tool/phase_rotation.py` — the HELIX channel **phase control**
     (`realize`, `rotation_at`, `solve_corner`, `snap_to_grid`, the step / range / Q / ceiling
     constants) is a port of `dsp/PhaseRotationControl.cs` at commit `bc957c8`; the biquad it

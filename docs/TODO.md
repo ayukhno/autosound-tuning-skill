@@ -99,3 +99,50 @@ or 18 kHz. The constant is the one line to correct; the selftest's 48 kHz case (
 90° at 5 kHz) is the assertion that would flip with it.
 
 **Raised** 2026-09-05 from the same handoff (§1).
+
+## S-005 · The alias guard reads the whole record; above 1 kHz the record is the cabin
+
+**Due when:** a mid↔tweeter junction proposed by `predict.py align` lands 0.75 cycles or more from
+a tune verified by ear and measurement. The record already carries `chosen`, `arrival_ms` and
+`cycles_off`, so the case arrives with its own evidence.
+
+**State today.** `align_joints` does not trust the sum-loss score alone: `arrival_difference_ms`
+(the band-limited matched-filter envelope of A·conj(B)) says where the physical delay is, and a
+score optimum 0.75 cycles or more away from it is recorded as an alias while the physical candidate
+is proposed. That is the right shape — Resonalyze's #128 (`bd51791`) arrived at the same one — and
+#128 measured its limit: at junctions above ~1 kHz a correlation over the FULL record is dominated
+by the cabin, and in half of seven archived cabins' 1.3–2.9 kHz cells its extremum sat 3.4–4.7
+periods from the owner's tune while passing every trust gate. Their fix reads the seed off
+direct-sound cuts (one to two periods behind each wavefront) and, where two witnesses disagree by
+a hair, lets the coherence bands vote. Our witness is validated at the bottom (an 88 Hz sub 12 ms
+late, where one cycle is 11.4 ms) and on one mid↔tweeter junction (0.9 ms read where the impulse
+peaks were 0.9 apart); nothing here has measured it across cabins at 2 kHz. **The score cannot be
+the tiebreaker:** on #128's own numbers the alias scores HIGHER than the hand tune on `score_db`
+(v6 L: −2.24 against −2.33), so a wrong witness is not caught by the ranking.
+
+**What it is not:** a reason to port their search. The direct-sound cut is a property of the
+MEASUREMENT — a gate on the solos before they reach `predict` — and the cheapest first move is to
+read the arrival on gated solos and compare: one junction, one cabin, before any code.
+
+**Raised** 2026-09-05 while reading the four upstream commits behind the re-pin of `sum_loss`
+(CHANGELOG, Unreleased).
+
+## S-006 · The junction ripple is read, not scored
+
+**Due when:** a real junction reads `sum_loss_avg_db` better than −0.5 dB with `sum_ripple_db`
+above 3 dB — a pair that adds coherently into a hump. Until one does, the number has not earned a
+place in the ranking.
+
+**State today.** `dsp_math.sum_loss` returns `ripple_db` (upstream `MeasureJunctionSpectrum`,
+`56b07c8` / #172): the log-weighted RMS of the summed level about its mean over the junction band.
+`predict` prints it in the junction table beside score and worst null. `score_db` does not see it
+and `align_sum_loss` does not search on it. Upstream's own reason for the number — "two drivers
+both wide open at the corner sum coherently into a 6 dB hump and lose nothing" — is a CROSSOVER
+question, not a delay one: at fixed crossovers the phase-blind sum |A|+|B| does not move with
+delay, so the only part of the ripple a delay search could change is the loss, which the score
+already reads. Where it would matter here is `xover_select`, which ranks realizations against a
+target and not by junction reading. On measured solos the ripple also carries the room, so a
+threshold set on a synthetic pair would be wrong in a car; the trigger above is a real case, not a
+number.
+
+**Raised** 2026-09-05, same reading as S-005.

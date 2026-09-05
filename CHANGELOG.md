@@ -40,6 +40,29 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [Unreleased]
+
+- **The sum-loss port caught up with its upstream — `rew_tool/dsp_math.py`, `rew_tool/predict.py`,
+  `LICENSES/NOTICE.md`, `docs/TODO.md` S-005 / S-006.** `scripts/upstream-drift.py` had been
+  reporting four Resonalyze commits on `dsp/VirtualCrossoverAnalysis.cs` since the pin at
+  `5d24924`; each was read, and the header now says what each did (`# reviewed:`), pinned at
+  `56b07c8`. **Two are ported.** `#130`: a channel whose response is NaN at a bin — it measured
+  nothing there — now ADDS NOTHING, where before one NaN gated the bin as if neither channel had
+  played (301 bins of 1000 on the selftest grid — and `align_sum_loss` read the same pair through
+  a different set of bins than `sum_loss` did); both functions carry the rule, and the selftest
+  fails without it. `#172`: `sum_loss` returns **`ripple_db`** — the log-weighted RMS of the summed
+  level about its mean over the same bins, upstream's `MeasureJunctionSpectrum` — because the loss
+  says how much a pair cancels and not whether what is left is flat: two drivers wide open at the
+  corner sum into a 6 dB hump and lose nothing, and the selftest pins exactly that pair (loss 0,
+  ripple 3.01 dB). **Read, not scored:** `score_db` does not see it, no search uses it, and
+  `predict`'s junction table gains a `ripple` column beside score and worst null; S-006 says what
+  would make it more than a number. **Two are not ported, and the header says why:** `#126`
+  designs the chain at the processor's rate — the metric's INPUT, which this tree fixed its own way
+  on 2026-08-31 with the same bill; `#128` is their alignment search, and what it measured about
+  arrival witnesses above 1 kHz is S-005, because our alias guard (`predict.arrival_difference_ms`)
+  has the same shape and has not been measured there. Nothing else moved: no signature changed, and
+  a caller that never passes NaN sees the same numbers to the last digit, plus one key.
+
 ## [v3.0.43] — 2026-09-05 · stopping is an event, and a family the method cannot predict says so in the data
 
 > **Upgrading:** additive, with **one thing a consumer must know: a profile's `content_hash`

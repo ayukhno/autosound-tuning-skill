@@ -599,6 +599,7 @@ def predict(freqs, solos, chains, joints=None, band_oct=1.0):
         pairs.append({"pair": SUB_GROUP, "members": subs, "band": [band[0], band[1]],
                       "sum_loss_avg_db": sl["avg_db"], "sum_loss_dip_db": sl["dip_db"],
                       "sum_loss_dip_hz": sl["dip_hz"], "sum_loss_score_db": sl["score_db"],
+                      "sum_ripple_db": sl["ripple_db"],
                       "note": ("the subs' mutual alignment over their shared band -- a pair, "
                                "not a junction; more than two are read as the first two")})
 
@@ -632,6 +633,7 @@ def predict(freqs, solos, chains, joints=None, band_oct=1.0):
             "lo": lo, "hi": hi, "fc": fc, "band": [band[0], band[1]],
             "sum_loss_avg_db": sl["avg_db"], "sum_loss_dip_db": sl["dip_db"],
             "sum_loss_dip_hz": sl["dip_hz"], "sum_loss_score_db": sl["score_db"],
+                      "sum_ripple_db": sl["ripple_db"],
             "worst_null_db": (float(null[k]) if k is not None else None),
             "worst_null_hz": (float(f[m][ok][k]) if k is not None else None),
         })
@@ -963,20 +965,22 @@ def render(result):
         lines.append(f"  {c:6} {chain_label(chain)}")
     lines.append("")
     lines.append(f"  {'junction/pair':14}{'fc':>6}{'band':>12}{'sum-loss avg':>13}{'dip':>8}"
-                 f"{'@Hz':>7}{'score':>7} | {'worst null':>10}{'@Hz':>7}")
-    lines.append("  " + "-" * 88)
+                 f"{'@Hz':>7}{'score':>7}{'ripple':>8} | {'worst null':>10}{'@Hz':>7}")
+    lines.append("  " + "-" * 96)
     for j in result["junctions"]:
         name = j["lo"] + "↔" + j["hi"]
         band_s = "%.0f-%.0f" % (j["band"][0], j["band"][1])
         lines.append(
             f"  {name:14}{j['fc']:>6.0f}{band_s:>12}"
             f"{j['sum_loss_avg_db']:>+13.2f}{j['sum_loss_dip_db']:>+8.1f}"
-            f"{(j['sum_loss_dip_hz'] or 0):>7.0f}{j['sum_loss_score_db']:>+7.2f} | "
+            f"{(j['sum_loss_dip_hz'] or 0):>7.0f}{j['sum_loss_score_db']:>+7.2f}"
+            f"{j['sum_ripple_db']:>8.2f} | "
             f"{j['worst_null_db']:>+10.1f}{(j['worst_null_hz'] or 0):>7.0f}")
     for pr in result.get("pairs", []):
         lines.append(f"  {pr['pair']:14}{'pair':>6}{'%.0f-%.0f' % (pr['band'][0], pr['band'][1]):>12}"
                      f"{pr['sum_loss_avg_db']:>+13.2f}{pr['sum_loss_dip_db']:>+8.1f}"
-                     f"{(pr['sum_loss_dip_hz'] or 0):>7.0f}{pr['sum_loss_score_db']:>+7.2f} | "
+                     f"{(pr['sum_loss_dip_hz'] or 0):>7.0f}{pr['sum_loss_score_db']:>+7.2f}"
+                     f"{pr['sum_ripple_db']:>8.2f} | "
                      f"{'(' + '+'.join(pr['members']) + ')':>18}")
     lines.append("")
     lines.append("  L-R level difference (dB, + = left louder): " + "  ".join(
