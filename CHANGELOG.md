@@ -50,7 +50,9 @@ Two consequences worth stating, because both have already caused a question:
 > unaffected and stay UTF-8**; the fold is for terminals only. One new module,
 > `rew_tool/console.py`, and one new checker, `scripts/encoding-check.py`, both in the selftest
 > run. If a report suddenly reads `->` where it used to read `→`, that is this change telling you
-> the terminal never could draw it.
+> the terminal never could draw it. The tag carries two text-only changes besides: the protective
+> record's two answers (`OFF` is the default, `"check"` kept for records the front-end did not
+> write) and a closing form for `docs/TODO.md`. Neither changes behaviour.
 
 - **A cosmetic glyph could take a finished verdict with it — `rew_tool/console.py` (new),
   `rew_tool/state/process.py`, `scripts/encoding-check.py` (new), and 51 modules' entry points
@@ -102,6 +104,32 @@ Two consequences worth stating, because both have already caused a question:
   to 53 of 53 passing, which is the measure of how much of this was never about the glyph at all.
   **This has not yet been run on a real Windows console** — the code pages were simulated on macOS via
   `PYTHONIOENCODING`, which exercises the same codecs but not the terminal itself.
+
+- **Two answers about protection, and `OFF` is the default — `rew_tool/protective.py`,
+  `rew_tool/state/process.py`, `references/core/project-intake.md` §3,
+  `references/phases/phase_0_baseline.md`, `phase_1_foundation.md` (hub TCC-005).** The user's
+  ruling of 2026-09-06: there is no third answer. `OFF` means *leave this capture alone* — the
+  chain was bare, or it carried a working crossover that is part of the tune and is read as it
+  is — and a recorded filter is the one case the maths removes before analysis. **Both states were
+  already in the code** (`should_de_embed` answers `no` by default and `yes` on live legs); what
+  changed is that the front-end now writes one of the two for every channel it captures
+  (autosound-tcc `4da5454`), so "nobody said" is no longer a state of the interface. `"check"`
+  stays — the user's call — but its population is different and the texts now say so: an unmarked
+  baseline channel means the record came from MCP, a hand-typed call, a round older than that
+  ruling, or a front-end that failed to write what it thought it wrote. It is a question about the
+  record's PROVENANCE, not a state anyone can click into. No behaviour changed: no new branch, no
+  new field, and every existing record reads as it did.
+
+- **`docs/TODO.md` can now close an item — `docs/TODO.md` (hub HUB-024).** The file said how an
+  item is filed and nothing about what happens when one is done: no status field, and in its whole
+  git history no item had ever been closed, because the form had never been needed. The cost would
+  have landed on the first closed item — closing it would mean deleting it, and a deleted item is
+  indistinguishable from one that never existed: the counter moves, nobody sees a "done", and the
+  history stays in git, which the board reading this file does not read. So: an item dies with a
+  **`**Status**:`** line under its heading (`open` · `doing` · `done` · `dropped`), its text stays
+  where it stands, and a `done` line carries a COMMAND another person re-runs rather than a
+  description of the result — the same rule the bus closes tickets by. S-001…S-006 are marked
+  `open`; none of them became due.
 
 ## [v3.0.44] — 2026-09-05 · the sum-loss port catches up with its upstream: a NaN channel adds nothing, and the junction ripple is read
 
