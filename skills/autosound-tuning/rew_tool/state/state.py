@@ -55,6 +55,7 @@ import datetime
 import json
 import os
 import re
+import sys
 
 # ── schema ──────────────────────────────────────────────────────────────────
 # One number across every machine file (see `project.py`'s own note). 3 is the format break.
@@ -422,6 +423,50 @@ def samples_for(ms, sample_rate):
 
 
 # ── store ─────────────────────────────────────────────────────────────────────
+class SnapshotError(ValueError):
+    """A snapshot file that exists and cannot be trusted -- named, so every reader sees the same
+    thing (TCC-007).
+
+    The bug that bought this: `snapshot()` wrote with `ensure_ascii=False` and no `encoding=`, so
+    on a Windows machine `§` went to disk as one cp1251 byte. The write side is fixed (issue #21,
+    every `open()` in `rew_tool` names UTF-8, and `scripts/encoding-check.py` keeps it that way) --
+    but the fix does nothing for the files ALREADY on a user's disk, and one of them is in a live
+    project. Reading one raised a bare `UnicodeDecodeError` from three frames down, and
+    `contract.py check` handed the user a traceback where a verdict belongs.
+
+    A `ValueError` subclass on purpose: `json.JSONDecodeError` and `UnicodeDecodeError` are both
+    `ValueError`s already, so callers that were written to catch a broken file keep working -- but
+    a caller that wants to tell "cannot read this file" apart from "this number is wrong" now can,
+    and the message carries the repair command instead of a stack.
+    """
+
+
+def _read_snapshot_json(path):
+    """The ONE door to a snapshot's bytes. Every failure comes back as `SnapshotError`.
+
+    Not `errors="replace"`, not a fallback code page, not a guess: `console.py` §3 already paid for
+    that rule on the output side, and the input side is worse. A UTF-8 file read as cp1251 does not
+    fail -- it succeeds with mangled text -- so a reader that guesses cannot report the mirror case
+    at all. What the guess would buy is a note that reads `Phase 0 В§2.5`; what it costs is not
+    knowing it happened. So: name it, and hand over the repair.
+    """
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except UnicodeDecodeError as exc:
+        raise SnapshotError(
+            f"{path}: not UTF-8 -- byte {exc.object[exc.start]:#04x} at position {exc.start} "
+            f"({exc.reason}). Written by a machine whose default code page was not UTF-8 -- a "
+            f"Windows session before v3.0.45. The numbers are intact and the text is recoverable: "
+            f"`python3 {os.path.abspath(__file__)} --root <project>/state repair-encoding` shows "
+            f"what it says and rewrites it as UTF-8."
+        ) from exc
+    except json.JSONDecodeError as exc:
+        raise SnapshotError(f"{path}: not readable JSON -- {exc}") from exc
+    except OSError as exc:
+        raise SnapshotError(f"{path}: cannot be read -- {exc}") from exc
+
+
 class PresetHistory:
     """Versioned snapshot history for one preset under a project-local root.
 
@@ -470,8 +515,14 @@ class PresetHistory:
     def head(self):
         hp = self._head_path()
         if os.path.exists(hp):
-            with open(hp, encoding="utf-8") as f:
-                v = f.read().strip()
+            try:
+                with open(hp, encoding="utf-8") as f:
+                    v = f.read().strip()
+            except (UnicodeDecodeError, OSError) as exc:
+                # HEAD holds one ASCII version name, so this is nearly always a damaged file rather
+                # than a code page -- but it is read on every single ledger operation, so it fails
+                # like the snapshots do (TCC-007) instead of aborting a tuning run from here.
+                raise SnapshotError(f"{hp}: cannot be read -- {exc}") from exc
             if v in self.versions():
                 return v
         vs = self.versions()
@@ -486,8 +537,7 @@ class PresetHistory:
         version = version or self.head()
         if version is None:
             raise FileNotFoundError(f"no snapshots yet for preset {self.preset!r}")
-        with open(self._path(version), encoding="utf-8") as f:
-            return json.load(f)
+        return _read_snapshot_json(self._path(version))
 
     def snapshot(self, state, note=None, project_rev=None, project_dir=None):
         """Validate, assign the next version, write it, advance HEAD. Returns the version name.
@@ -847,6 +897,133 @@ def render_registry(root, reg, presets):
     return "\n".join(lines)
 
 
+# ── repair: snapshots written before the encoding was named (TCC-007) ─────────
+# The code pages a Windows machine actually runs in the places this method is used. Ordered by how
+# likely they are to be the one, and every one of them is only ever a CANDIDATE: this list decides
+# what to OFFER, never what to write.
+LEGACY_PAGES = ("cp1251", "cp1252", "cp1250")
+
+
+def ledger_files(root):
+    """Every file the ledger writes, oldest preset first: snapshots and their HEAD."""
+    out = []
+    if not os.path.isdir(root):
+        return out
+    for preset in sorted(n for n in os.listdir(root)
+                         if not n.startswith(".") and os.path.isdir(os.path.join(root, n))):
+        d = os.path.join(root, preset)
+        for fn in sorted(os.listdir(d)):
+            if fn == "HEAD" or (fn.endswith(".json") and _VER_RE.match(fn[:-5])):
+                out.append(os.path.join(d, fn))
+    return out
+
+
+def encoding_survey(paths):
+    """Which of `paths` are not UTF-8, and what each one could say instead.
+
+    Returns one dict per DAMAGED file -- a clean set surveys to `[]`. `candidates` holds only the
+    code pages that both decode the bytes AND leave a file that still parses as JSON, so a page
+    that merely happens not to raise is not offered as an answer. Takes paths rather than a project
+    or a root: the damage is a property of BYTES, and the same repair serves `project.json` and a
+    snapshot equally -- who knows which files a project has is the caller (`contract.py` for a
+    whole project, `ledger_files` for this module's own CLI).
+    """
+    found = []
+    for path in paths:
+        raw = open(path, "rb").read()
+        try:
+            raw.decode("utf-8")
+            continue                            # already UTF-8: nothing to repair
+        except UnicodeDecodeError as exc:
+            entry = {"path": path, "byte": raw[exc.start], "position": exc.start,
+                     "reason": exc.reason, "candidates": []}
+        for page in LEGACY_PAGES:
+            try:
+                text = raw.decode(page)
+            except UnicodeDecodeError:
+                continue
+            if path.endswith(".json"):
+                try:
+                    json.loads(text)
+                except ValueError:
+                    continue                    # decodes, but not into our file: not an answer
+            entry["candidates"].append({"codec": page, "text": text})
+        found.append(entry)
+    return found
+
+
+def _non_ascii_lines(text, limit=6):
+    """The lines a human has to look at -- the ASCII ones are identical under every candidate."""
+    out = [ln.strip() for ln in text.splitlines() if any(ord(c) > 127 for c in ln)]
+    return out[:limit]
+
+
+def render_survey(found, where, repair_command):
+    if not found:
+        return f"every file under {where} is UTF-8 — nothing to repair"
+    lines = [f"{len(found)} file(s) under {where} are NOT UTF-8.", ""]
+    for e in found:
+        lines.append(f"{e['path']}")
+        lines.append(f"    byte {e['byte']:#04x} at position {e['position']} — {e['reason']}")
+        if not e["candidates"]:
+            lines.append("    no code page decodes this into readable JSON — it is damaged, not "
+                         "merely mis-encoded; the file's own history (`git`, a backup) is the way "
+                         "back, and the numbers can be re-banked with a fresh snapshot.")
+            continue
+        for c in e["candidates"]:
+            shown = _non_ascii_lines(c["text"])
+            lines.append(f"    as {c['codec']}:")
+            for s in shown:
+                lines.append(f"        {s}")
+        lines.append("")
+    codec = found[0]["candidates"][0]["codec"] if found[0]["candidates"] else "cp1251"
+    lines.append("Read the text above and pick the page whose words are the ones that were "
+                 "written. Nothing is guessed for you: a UTF-8 file read as cp1251 does not fail, "
+                 "it just says something else, so the only reader who can tell is the one who "
+                 "knows what it should say.")
+    lines.append("")
+    lines.append("    " + repair_command(codec))
+    lines.append("")
+    lines.append("That rewrites each file as UTF-8 and keeps the original bytes beside it as "
+                 "`<file>.<codec>.orig` — a snapshot is immutable, so the bytes that were there "
+                 "stay on disk.")
+    return "\n".join(lines)
+
+
+def repair_encoding(paths, codec):
+    """Rewrite every non-UTF-8 file among `paths` as UTF-8, decoding it as `codec`.
+
+    The characters are unchanged; only the bytes that carry them are. The original file is kept as
+    `<file>.<codec>.orig` rather than replaced — this history's own invariant is that a snapshot is
+    immutable and nothing here destroys what was written, and a repair that cannot be checked
+    afterwards is one the user has to take on faith.
+    """
+    done = []
+    for e in encoding_survey(paths):
+        match = [c for c in e["candidates"] if c["codec"] == codec]
+        if not match:
+            raise SnapshotError(
+                f"{e['path']}: {codec} does not decode this file into readable JSON. "
+                f"Offered: {', '.join(c['codec'] for c in e['candidates']) or 'none'}"
+            )
+        backup = e["path"] + f".{codec}.orig"
+        if not os.path.exists(backup):
+            os.replace(e["path"], backup)
+        else:
+            os.remove(e["path"])                # a second run: the first backup is the original
+        tmp = e["path"] + ".tmp"
+        # `newline=""` because the repair changes the ENCODING and nothing else. The text came from
+        # `bytes.decode`, so its line endings are the ones the file already had; writing it back in
+        # the default text mode would translate every `\n` to `\r\n` on the very platform this
+        # repair is for, and a repair that silently rewrites bytes it was not asked about is one
+        # nobody can check afterwards.
+        with open(tmp, "w", encoding="utf-8", newline="") as f:
+            f.write(match[0]["text"])
+        os.replace(tmp, e["path"])
+        done.append({"path": e["path"], "backup": backup, "codec": codec})
+    return done
+
+
 # ── CLI ───────────────────────────────────────────────────────────────────────
 def _main(argv=None):
     p = argparse.ArgumentParser(description="Versioned hard-params DSP state")
@@ -869,11 +1046,44 @@ def _main(argv=None):
     # four subparsers, so argparse cannot scope them. The handler refuses them elsewhere.
     rp.add_argument("--label", default=None, help="`registry describe` only: the slot's label")
     rp.add_argument("--note", default=None, help="`registry describe` only: the slot's note")
+    ep = sub.add_parser("repair-encoding",
+                        help="ledger files written by a machine whose default was not UTF-8 "
+                             "(TCC-007): survey by default, rewrite only when told which page")
+    ep.add_argument("preset", nargs="*", default=None,
+                    help="limit to these presets (default: every preset under --root)")
+    ep.add_argument("--from", dest="codec", default=None,
+                    help="decode as this code page and rewrite as UTF-8. Without it nothing is "
+                         "written: the survey shows what each candidate page makes the text say, "
+                         "and choosing is the reader's, because a wrong page does not fail")
     sub.add_parser("selftest")
     args = p.parse_args(argv)
 
     if args.cmd == "selftest" or args.cmd is None:
         return _selftest()
+    if args.cmd == "repair-encoding":
+        presets = set(args.preset or [])
+        paths = [p_ for p_ in ledger_files(args.root)
+                 if not presets or os.path.basename(os.path.dirname(p_)) in presets]
+        me = os.path.abspath(__file__)
+        if args.codec is None:
+            print(render_survey(
+                encoding_survey(paths), args.root,
+                lambda c: f"python3 {me} --root {args.root} repair-encoding "
+                          + (" ".join(sorted(presets)) + " " if presets else "")
+                          + f"--from {c}"))
+            return 0
+        try:
+            done = repair_encoding(paths, args.codec)
+        except SnapshotError as exc:
+            print(str(exc), file=sys.stderr)
+            return 3
+        if not done:
+            print(f"every ledger file under {args.root} is UTF-8 — nothing was rewritten")
+            return 0
+        for d in done:
+            print(f"{d['path']} — rewritten as UTF-8 (was {d['codec']}); "
+                  f"original bytes kept at {os.path.basename(d['backup'])}")
+        return 0
     if args.cmd == "registry":
         # `--label`/`--note` are declared once for the whole `registry` verb, because `action` is a
         # positional choice rather than four subparsers -- so argparse accepts them on all four and
@@ -1239,11 +1449,70 @@ def _selftest():
     except ValueError as exc:
         assert "comment" in str(exc), exc
 
+    # ── TCC-007: a snapshot from a machine whose default was not UTF-8 ────────────────────────
+    # The writers are fixed (issue #21) and `scripts/encoding-check.py` keeps them fixed. What is
+    # tested here is the OTHER half: the files that were already written, one of which is in a
+    # user's live project. It is built by writing a real snapshot and re-encoding its bytes --
+    # not by pasting a broken literal -- so the fixture is what the tool actually produced.
+    enc_root = tempfile.mkdtemp(prefix="autosound_encoding_")
+    eh = PresetHistory(enc_root, "FULL")
+    note_ru = "нуль — Phase 0 §2.5"
+    eh.snapshot(_sample_state(), note=note_ru)
+    snap_path = eh._path("v_001")
+    assert encoding_survey(ledger_files(enc_root)) == [], "a UTF-8 ledger has nothing to repair"
+    text_before = open(snap_path, encoding="utf-8").read()
+    with open(snap_path, "wb") as f:                     # what a pre-v3.0.45 Windows session wrote
+        f.write(text_before.encode("cp1251"))
+
+    try:
+        eh.load("v_001")
+        raise AssertionError("load() read a cp1251 snapshot as if it were UTF-8")
+    except SnapshotError as exc:
+        # NAMED, and carrying the way out. A bare UnicodeDecodeError from inside `json` is what
+        # `contract.py check` used to hand the user instead of a verdict.
+        assert "not UTF-8" in str(exc) and "repair-encoding" in str(exc), exc
+    except UnicodeDecodeError:                           # pragma: no cover - the bug itself
+        raise AssertionError("load() still raises the raw decode error -- see TCC-007")
+
+    survey = encoding_survey(ledger_files(enc_root))
+    assert [e["path"] for e in survey] == [snap_path], survey
+    assert survey[0]["byte"] == 0xed, hex(survey[0]["byte"])
+    pages = {c["codec"]: c["text"] for c in survey[0]["candidates"]}
+    # Every one of the three DECODES. That is the whole reason nothing may be guessed: only one of
+    # them says what was written, and the other two fail by being readable.
+    assert set(pages) == set(LEGACY_PAGES), sorted(pages)
+    assert json.loads(pages["cp1251"])["note"] == note_ru, pages["cp1251"]
+    assert json.loads(pages["cp1252"])["note"] != note_ru, "cp1252 must not agree with cp1251 here"
+
+    done = repair_encoding(ledger_files(enc_root), "cp1251")
+    assert [d["path"] for d in done] == [snap_path], done
+    assert open(snap_path, encoding="utf-8").read() == text_before, \
+        "repair must restore the bytes the writer would produce today, character for character"
+    assert eh.load("v_001")["note"] == note_ru
+    assert open(done[0]["backup"], "rb").read() == text_before.encode("cp1251"), \
+        "the original bytes stay on disk -- a snapshot is immutable and a repair is checkable"
+    assert encoding_survey(ledger_files(enc_root)) == [], "repaired ledger still surveys as damaged"
+
+    # A page that decodes into something that is not our file is not an answer, and saying so is
+    # the difference between a repair and a shredder.
+    with open(snap_path, "wb") as f:
+        f.write(text_before.encode("cp1251"))
+    try:
+        repair_encoding(ledger_files(enc_root), "utf-16")
+        raise AssertionError("repair accepted a code page that does not decode the file")
+    except SnapshotError as exc:
+        assert "does not decode" in str(exc), exc
+    assert open(snap_path, "rb").read() == text_before.encode("cp1251"), \
+        "a refused repair must leave the file exactly as it found it"
+
     print(f"selftest OK — 3 snapshots, diff caught the channels+virtual_channels changes (schema "
           f"v2 tier-aware), 5.38 ms → 516 smp @96k (258 @48k), revert forward-only (v_001→v_003), "
           f"validation rejected bad polarity + an unknown EQ type, structured EQ round-tripped "
           f"(incl. LS→LSH alias), render emitted a virtual_channels section; registry: 2 slots "
           f"isolated, active=SQ_Jazzi loud-bannered, set-active refused a history-less slot; v3: identity refused on every tier, project_rev stamped from project.json (0 without one), settings sheet joined its Slot column back in. "
+          f"encoding (TCC-007): a cp1251 snapshot raised SnapshotError with its repair, "
+          f"all 3 code pages decoded it and only cp1251 said the right words, repair round-tripped "
+          f"byte-for-byte and kept the original, a page that does not decode was refused. "
           f"root={root}")
     return 0
 

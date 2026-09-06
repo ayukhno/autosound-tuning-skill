@@ -227,8 +227,11 @@ def snapshot_paths(project_dir):
 
 
 def _read_json(path):
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
+    # Through the ledger's own door, so a 2.x project whose snapshots were written on a machine
+    # with a non-UTF-8 default says which file and what to run (TCC-007) instead of ending the
+    # migration with a `UnicodeDecodeError` from inside `json`. This is the likeliest place to meet
+    # one: an old project is by definition one written before the encoding was named.
+    return _state._read_snapshot_json(path)
 
 
 def _write_json(path, data):

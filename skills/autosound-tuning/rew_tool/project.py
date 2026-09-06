@@ -507,6 +507,7 @@ class Project:
         # No `makedirs`: reading a project must not create one (same rule as `Process` and
         # `PresetHistory`). `save()` creates the folder when there is finally something to put in it.
         self.dir = root
+        self.unreadable_snapshots = []       # filled by `backfill_tiers` (TCC-007)
 
     @property
     def path(self):
@@ -529,6 +530,18 @@ class Project:
         try:
             with open(self.path, encoding="utf-8") as f:
                 data = json.load(f)
+        except UnicodeDecodeError as exc:
+            # Told apart from the rest because the repair is a DIFFERENT one and it exists
+            # (TCC-007): the file is whole, its numbers are untouched, and only the bytes carrying
+            # the words are from another code page. Sending the owner to their editor's backups for
+            # this one would be sending them past a file that is fine.
+            raise ProjectError(
+                f"{self.path} is not UTF-8: {exc}. Written by a machine whose default code page "
+                f"was not UTF-8 — a session before v3.0.45. Refusing to treat it as an empty "
+                f"project. Nothing in it is lost: `python3 "
+                f"{os.path.join(os.path.dirname(os.path.abspath(__file__)), 'contract.py')} "
+                f"repair-encoding {self.dir}` shows what it says and rewrites it as UTF-8."
+            ) from exc
         except (OSError, ValueError) as exc:
             raise ProjectError(
                 f"{self.path} exists and cannot be read: {exc}. Refusing to treat it as an empty "
@@ -594,7 +607,9 @@ class Project:
         the presence of a driver) and that is precisely the inference this schema refuses, because
         slot letters repeat across tiers and a wrong placement is invisible once written.
 
-        Returns `{code: tier}` for what was filled (or would be, when `write` is false).
+        Returns `{code: tier}` for what was filled (or would be, when `write` is false). Snapshots
+        that could not be read are left in `self.unreadable_snapshots` as `(path, reason)` -- the
+        fill is then knowingly partial, and the caller can say so rather than reporting a clean run.
         """
         import glob as _glob
 
@@ -602,11 +617,18 @@ class Project:
         rows = [r for r in (data.get("channels") or []) if isinstance(r, dict)]
         by_key = {}
         root = state_root or os.path.join(self.dir, "state")
+        # A snapshot this cannot read is RECORDED, not merely skipped (TCC-007). Skipping is still
+        # the right move -- one damaged file must not stop the other twenty channels from being
+        # placed -- but the silent version was indistinguishable from "that channel has no ledger
+        # row", and the two want opposite repairs: one is honest emptiness, the other is a file
+        # that needs its encoding fixed before the tier can be read off it at all.
+        self.unreadable_snapshots = []
         for path in sorted(_glob.glob(os.path.join(root, "*", "v_*.json"))):
             try:
                 with open(path, encoding="utf-8") as f:
                     snap = json.load(f)
-            except (OSError, ValueError):
+            except (OSError, ValueError) as exc:
+                self.unreadable_snapshots.append((path, str(exc)))
                 continue
             for tier, tier_rows in snap.items():
                 if tier in _LEDGER_NON_TIERS or not isinstance(tier_rows, dict):
@@ -1078,6 +1100,9 @@ def _main(argv):
                 print(("would rename " if "--dry-run" in args else "renamed ") + line)
         elif cmd == "backfill-tiers":
             filled = proj.backfill_tiers(write="--dry-run" not in args)
+            for path, why in proj.unreadable_snapshots:
+                print(f"  ! {path}: unreadable, its rows were not consulted — {why}",
+                      file=sys.stderr)
             if not filled:
                 print("nothing to fill — every channel with a ledger row already names its tier")
             else:
@@ -1430,6 +1455,27 @@ def _selftest():
     # An already-stated tier is never overwritten from the ledger: project.json is identity's home.
     tproj.set_channel("c", tier="virtual_channels")
     assert tproj.backfill_tiers() == {}, "a stated tier wins over anything the ledger implies"
+
+    # TCC-007: a snapshot this cannot read is RECORDED, not merely skipped. Skipping stays right --
+    # one damaged file must not leave the other channels unplaced -- but the silent version was
+    # indistinguishable from "that channel has no ledger row", and those two want opposite repairs.
+    unread_root = tempfile.mkdtemp(prefix="autosound_project_unreadable_")
+    uproj = Project(unread_root)
+    uproj.save({"channels": [{"code": "w-L"}, {"code": "VFL"}]})
+    uledger = os.path.join(unread_root, "state", "SQ")
+    os.makedirs(uledger, exist_ok=True)
+    with open(os.path.join(uledger, "v_001.json"), "wb") as f:      # a pre-v3.0.45 Windows write
+        f.write(json.dumps({"schema_version": 3, "preset": "SQ", "note": "нуль",
+                            "channels": {"w-L": {"gain_db": 0}}},
+                           ensure_ascii=False).encode("cp1251"))
+    with open(os.path.join(uledger, "v_002.json"), "w", encoding="utf-8") as f:
+        json.dump({"schema_version": 3, "preset": "SQ",
+                   "virtual_channels": {"VFL": {"gain_db": 0}}}, f)
+    filled_partial = uproj.backfill_tiers(write=False)
+    assert filled_partial == {"VFL": "virtual_channels"}, filled_partial
+    assert [os.path.basename(p_) for p_, _ in uproj.unreadable_snapshots] == ["v_001.json"], \
+        uproj.unreadable_snapshots
+    assert "w-L" not in filled_partial, "a row inside an unreadable file must not be invented"
 
     # -- SCR-042: a spare slot says which tier it is spare OF. The case that motivated it: slot
     # letters repeat across tiers, so these two are both legal "F" and only `tier` tells them apart.

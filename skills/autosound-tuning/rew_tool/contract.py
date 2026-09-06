@@ -234,7 +234,17 @@ def check_ledgers(project_dir):
                                    issues=["no snapshot history yet"]))
             snapshots[preset] = None
             continue
-        snap = h.load(head)
+        try:
+            snap = h.load(head)
+        except state_mod.SnapshotError as exc:
+            # Unreadable is a REPORT here, exactly as it already is for `project.json` above
+            # (TCC-007). This line used to be a bare `h.load(head)`, and a snapshot written on a
+            # Windows machine before v3.0.45 -- one `§` as a single cp1251 byte -- handed the user
+            # a `UnicodeDecodeError` traceback from three frames down instead of a verdict. A
+            # checker that dies on the worst project is the checker that is absent for it.
+            entries.append(_entry(f"state/{preset}/{head}.json", True, None, False, [str(exc)]))
+            snapshots[preset] = None
+            continue
         try:
             state_mod.validate(snap)
             entry = _entry(f"state/{preset}/{head}.json", True, snap.get("schema_version"), True)
@@ -443,8 +453,16 @@ def check_project(project_dir, skip_rew=False):
     # missing one -- it is a finished-looking map that hands them the audit trail (CAR-007).
     row_gaps = flaw_field_gaps(project_data)
     map_ready = all(g["missing"] == 0 for g in row_gaps)
+    # Which files are not UTF-8, as a FIELD rather than as sentences inside `issues` (TCC-007).
+    # A consumer app reading this JSON gets one repair to offer for the whole project, and it gets
+    # it whether the damage landed on `project.json`, on a snapshot, or on both -- reading it back
+    # out of prose would mean parsing our error messages, which is the kind of coupling that breaks
+    # on the next wording change.
+    damaged = [os.path.relpath(e["path"], project_dir)
+               for e in _load_vendored("state").encoding_survey(project_text_files(project_dir))]
     return {"project_dir": project_dir, "ok": ok, "complete": complete, "missing": missing,
             "map_ready": map_ready, "row_gaps": row_gaps,
+            "encoding_damaged": damaged,
             "legacy": looks_like_2x(project_dir, files), "prose": prose,
             "files": files, "cross_checks": cross}
 
@@ -571,6 +589,11 @@ def looks_like_2x(project_dir, files):
             with open(path, encoding="utf-8") as handle:
                 snap = json.load(handle)
         except (OSError, ValueError):
+            # Skipping here is deliberate and is NOT the silent skip TCC-007 was about. This is a
+            # sniff -- "does this project predate 3.0?" -- and a file it cannot decode answers
+            # neither yes nor no. The readability of that same file is reported, by name and with
+            # its repair, by `check_ledgers` above; two readers of one file may behave differently
+            # as long as exactly one of them is the one that reports.
             continue
         for key, rows in snap.items():
             if not isinstance(rows, dict):
@@ -595,6 +618,37 @@ def _ledger_snapshots(project_dir):
             continue
         out.extend(os.path.join(directory, fn) for fn in sorted(os.listdir(directory))
                    if fn.endswith(".json") and fn.startswith("v_"))
+    return out
+
+
+def project_text_files(project_dir):
+    """Every file the METHOD writes into a project as text -- the set a code page can spoil.
+
+    The ledger is the one that crashed a check (TCC-007), but it is not the one most likely to
+    carry non-ASCII: `project.json` holds the car, the channel names and the owner's own sentences
+    about what is wrong with the sound, and on a Ukrainian install every one of those is Cyrillic.
+    A repair offered for snapshots alone would leave the file with the most words in it unrepaired,
+    which is half a path, and half a path is a dead end.
+
+    Not a `walk` of everything: a project directory also holds measurements, exports and whatever
+    the owner put there, and this must never offer to rewrite bytes it does not own.
+    """
+    out = []
+    for rel in ("project.json", "dsp_profile.json", "glossary.json"):
+        path = os.path.join(project_dir, rel)
+        if os.path.isfile(path):
+            out.append(path)
+    proc = os.path.join(project_dir, "process")
+    if os.path.isdir(proc):
+        out.extend(os.path.join(proc, fn) for fn in sorted(os.listdir(proc))
+                   if fn.endswith((".json", ".jsonl")))
+    out.extend(_ledger_snapshots(project_dir))
+    root = os.path.join(project_dir, "state")
+    if os.path.isdir(root):
+        for preset in sorted(n for n in os.listdir(root) if not n.startswith(".")):
+            head = os.path.join(root, preset, "HEAD")
+            if os.path.isfile(head):
+                out.append(head)
     return out
 
 
@@ -651,11 +705,25 @@ def render_report(report):
         exists = "✅" if f["exists"] else "—"
         valid = {"True": "✅", "False": "❌", "None": "—"}[str(f["valid"])]
         sv = f["schema_version"] if f["schema_version"] is not None else "—"
-        issues = "; ".join(f["issues"]) or "—"
+        # A newline inside a cell ends the row and the rest of the table reads as prose -- so an
+        # issue is folded to one line HERE rather than every raiser being trusted to remember that
+        # its text lands in a table. `|` would split the row into columns for the same reason.
+        issues = "; ".join(" ".join(str(i).split()).replace("|", "/") for i in f["issues"]) or "—"
         lines.append(f"| {f['file']} | {exists} | {sv} | {valid} | {issues} |")
         if f.get("open_questions"):
             lines.append(f"|  |  |  |  | 🟡 open: {', '.join(f['open_questions'])} |")
     lines.append("")
+    if report.get("encoding_damaged"):
+        lines.append(f"**Not UTF-8 — {len(report['encoding_damaged'])} file(s):** "
+                     + ", ".join(report["encoding_damaged"]) + ". Written by a machine whose "
+                     "default code page was not UTF-8 (a session before v3.0.45; the writers are "
+                     "fixed, these files are not). The text is recoverable and no number in them "
+                     "changed — this shows what each candidate page makes them say, and rewrites "
+                     "them only once you name one:")
+        lines.append("")
+        lines.append(f"    python3 {os.path.abspath(__file__)} repair-encoding "
+                     f"{report['project_dir']}")
+        lines.append("")
     cross = report["cross_checks"]
     lines.append("**Cross-file checks:**")
     for note in cross["glossary_vs_ledgers"] + cross["tiers_vs_profile"]:
@@ -700,6 +768,10 @@ _USAGE = """usage: contract.py check <project-dir> [--json] [--no-rew] [--gate] 
                                                current schema, and in which rows -- a schema change
                                                reaches the model at once and the cars never, unless
                                                something asks (autosound-hub CAR-007)
+       contract.py repair-encoding <project-dir> [--from <code-page>]
+                                               files this method wrote on a machine whose default
+                                               was not UTF-8 (TCC-007). Without --from it only
+                                               SHOWS what each candidate page makes the text say
        contract.py table                       print the CONTRACT (file -> owner -> schema version)
        contract.py selftest
 
@@ -741,6 +813,32 @@ def _main(argv):
         else:
             print(render_gaps(report))
         return 0 if all(e["ready"] for e in report) else 1
+    if argv[1] == "repair-encoding":
+        if len(argv) < 3:
+            print(_USAGE, file=sys.stderr)
+            return 2
+        project_dir = argv[2]
+        state_mod = _load_vendored("state")
+        paths = project_text_files(project_dir)
+        codec = argv[argv.index("--from") + 1] if "--from" in argv else None
+        if codec is None:
+            here = os.path.abspath(__file__)
+            print(state_mod.render_survey(
+                state_mod.encoding_survey(paths), project_dir,
+                lambda c: f"python3 {here} repair-encoding {project_dir} --from {c}"))
+            return 0
+        try:
+            done = state_mod.repair_encoding(paths, codec)
+        except state_mod.SnapshotError as exc:
+            print(str(exc), file=sys.stderr)
+            return 3
+        if not done:
+            print(f"every file the method owns under {project_dir} is UTF-8 — nothing was written")
+            return 0
+        for d in done:
+            print(f"{d['path']} — rewritten as UTF-8 (was {d['codec']}); original bytes kept at "
+                  f"{os.path.basename(d['backup'])}")
+        return 0
     if argv[1] != "check" or len(argv) < 3:
         print(_USAGE, file=sys.stderr)
         return 2
@@ -988,6 +1086,41 @@ def _selftest():
     assert found[root]["ready"] is False and found[nested]["ready"] is True, sorted(found)
     rendered = render_gaps(scan)
     assert "nothing owing" in rendered and "acoustics.flaws[].symptom" in rendered, rendered
+    # ── TCC-007: a snapshot from a machine whose default was not UTF-8 ────────────────────────
+    # This is the exact shape that reached a user: `check` exited with a `UnicodeDecodeError`
+    # traceback from three frames down, on a real project, on Windows. A checker that dies on the
+    # worst project is the checker that is absent for it -- so what is asserted here is that a
+    # verdict comes back at all, and that it names both the file and the way out.
+    enc_root = os.path.join(root, "windows-written")
+    os.makedirs(os.path.join(enc_root, "state", "FULL"), exist_ok=True)
+    with open(os.path.join(enc_root, "project.json"), "w", encoding="utf-8") as fh:
+        json.dump({"schema_version": project.SCHEMA_VERSION}, fh)
+    enc_hist = state_mod.PresetHistory(os.path.join(enc_root, "state"), "FULL")
+    enc_hist.snapshot(state_mod._sample_state(), note="нуль — Phase 0 §2.5")
+    snap_path = enc_hist._path("v_001")
+    utf8_text = open(snap_path, encoding="utf-8").read()
+    with open(snap_path, "wb") as fh:
+        fh.write(utf8_text.encode("cp1251"))
+
+    enc_report = check_project(enc_root, skip_rew=True)     # must RETURN, not raise
+    enc_entry = [f for f in enc_report["files"] if f["file"] == "state/FULL/v_001.json"]
+    assert enc_entry and enc_entry[0]["valid"] is False, enc_report["files"]
+    assert "not UTF-8" in enc_entry[0]["issues"][0], enc_entry
+    assert enc_report["encoding_damaged"] == ["state/FULL/v_001.json"], enc_report["encoding_damaged"]
+    assert enc_report["ok"] is False, "a file that cannot be read is not an OK project"
+    rendered_enc = render_report(enc_report)
+    # One line per file: an issue carrying a newline would end the row and the rest of the table
+    # would read as prose.
+    assert sum(1 for ln in rendered_enc.splitlines()
+               if ln.startswith("| state/FULL/v_001.json |")) == 1, rendered_enc
+    assert "repair-encoding" in rendered_enc, rendered_enc
+
+    # And the repair the report names actually runs, from here, on this project.
+    fixed = state_mod.repair_encoding(project_text_files(enc_root), "cp1251")
+    assert [os.path.relpath(f["path"], enc_root) for f in fixed] == \
+        [os.path.join("state", "FULL", "v_001.json")], fixed
+    assert check_project(enc_root, skip_rew=True)["encoding_damaged"] == [], "repair did not take"
+
     empty_dir = os.path.join(root, "no-project-here")
     os.makedirs(empty_dir, exist_ok=True)
     assert gaps_report([empty_dir]) == [] and "no `project.json` found" in render_gaps([])
@@ -1000,7 +1133,9 @@ def _selftest():
           f"told to migrate rather than to re-run intake; and an owner-facing flaw row owes a "
           f"symptom while a `notch` does not, a machine DRAFT does NOT satisfy the phase-0 gate "
           f"and a person's sentence does, and `gaps` finds a project by its project.json and "
-          f"reports an empty path as empty; `catch-up` fills the marked draft on a "
+          f"reports an empty path as empty; a cp1251 snapshot comes back as a VERDICT naming the "
+          f"file and its repair rather than as a traceback, on one table line, and the repair it "
+          f"names runs and clears it (TCC-007); `catch-up` fills the marked draft on a "
           f"project written before the field, is idempotent, leaves a `notch` row alone and "
           f"still does NOT close the phase-0 gate. root={root}")
     return 0
