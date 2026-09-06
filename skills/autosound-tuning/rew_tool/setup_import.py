@@ -271,7 +271,7 @@ def _selftest():
         bundled = dsp_profile.find_bundled("Audiotec-Fischer", "Helix DSP Ultra S")
         assert bundled, "the bundled Helix profile must exist -- the selftest validates against it"
         dsp_profile.save_profile(os.path.join(proj, "dsp_profile.json"), bundled)
-        with open(os.path.join(proj, "project.json"), "w") as fh:
+        with open(os.path.join(proj, "project.json"), "w", encoding="utf-8") as fh:
             json.dump({"schema_version": 3, "channels": [{"code": c, "role": r, "tier": "channels"}
                                                         for c, r in (("m-L", "mid"), ("m-R", "mid"))]}, fh)
 
@@ -282,7 +282,7 @@ def _selftest():
             atf_eq.Band(3, "PK", False, "Manual", 3000.0, -6.0, 4.0),
         ])
         atf_path = os.path.join(tmp, "m-L.atf")
-        with open(atf_path, "w") as fh:
+        with open(atf_path, "w", encoding="utf-8") as fh:
             fh.write(atf)
         got = eq_from_atf(atf_path)
         assert [b["type"] for b in got] == ["PK", "LSH"], got
@@ -296,7 +296,7 @@ def _selftest():
                                      "lp": {"f": 3000, "type": "LR", "slope": 24},
                                      "gain_db": -2.0, "ta_ms": 2.11, "polarity": "NORM", "eq": []}}}
         gpath = os.path.join(tmp, "good.json")
-        with open(gpath, "w") as fh:
+        with open(gpath, "w", encoding="utf-8") as fh:
             json.dump(good, fh)
 
         # every kind of disagreement is REFUSED BY NAME, and nothing is written
@@ -307,7 +307,7 @@ def _selftest():
         bad["channels"]["m-R"]["eq"] = [{"type": "NOTCH", "f": 1000, "gain_db": -3, "q": 2},
                                         {"type": "PK", "f": 1000, "gain_db": -40, "q": 2}]
         bpath = os.path.join(tmp, "bad.json")
-        with open(bpath, "w") as fh:
+        with open(bpath, "w", encoding="utf-8") as fh:
             json.dump(bad, fh)
         r = run(proj, bpath, write=True)
         text = "\n".join(r["refusals"])
@@ -335,7 +335,7 @@ def _selftest():
 
         # second write goes through apply.propose -- a proposal, not a rewrite of history
         good["channels"]["m-R"]["gain_db"] = -4.0
-        with open(gpath, "w") as fh:
+        with open(gpath, "w", encoding="utf-8") as fh:
             json.dump(good, fh)
         r2 = run(proj, gpath, write=True)
         assert r2["mode"] == "proposed" and r2["version"] != r["version"], r2
@@ -387,6 +387,8 @@ def _main(argv=None):
 
 
 if __name__ == "__main__":
+    import console                       # issue #21: a code page must not destroy a result
+    console.install()
     if "--selftest" in sys.argv:
         sys.exit(_selftest())
     sys.exit(_main())

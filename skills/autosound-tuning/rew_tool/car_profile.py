@@ -331,7 +331,7 @@ def _selftest():
                                       "body": "wagon"})
     old = _project("passat-old", {"make": "VW", "model": "Passat B8", "year": 2019})
     _project("not-a-project", {})
-    with open(os.path.join(projects, "not-a-project", "project.json"), "w") as fh:
+    with open(os.path.join(projects, "not-a-project", "project.json"), "w", encoding="utf-8") as fh:
         fh.write("{ broken")
 
     matches, unknown = find_prior_projects(
@@ -379,6 +379,8 @@ def _selftest():
 
 
 if __name__ == "__main__":
+    import console                       # issue #21: a code page must not destroy a result
+    console.install()
     if len(sys.argv) > 1 and sys.argv[1] == "selftest":
         raise SystemExit(_selftest())
     raise SystemExit(_main(sys.argv))

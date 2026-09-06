@@ -729,7 +729,7 @@ def _selftest():
     txt = render(list(pk.values()))
     assert "res:mid" in txt and "listen: c08" in txt and "why:" in txt
     tmp = tempfile.mkdtemp(prefix="autosound_eqp_")
-    json.dump(list(pk.values()), open(os.path.join(tmp, "p.json"), "w"), default=float)
+    json.dump(list(pk.values()), open(os.path.join(tmp, "p.json"), "w", encoding="utf-8"), default=float)
     print("selftest[eq_propose] OK -- a +5 dB Q4 resonance is cut where it is and only on its channel; a "
           "comb is not boosted and its dips are listed with the reason; a peak that MOVES in the "
           "ellipsoid is not proposed and one that STAYS is; a 2.5 dB shelf difference is cut on the louder "
@@ -740,4 +740,6 @@ def _selftest():
 
 
 if __name__ == "__main__":
+    import console                       # issue #21: a code page must not destroy a result
+    console.install()
     sys.exit(main())

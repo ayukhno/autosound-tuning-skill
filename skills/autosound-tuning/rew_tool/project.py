@@ -1371,9 +1371,9 @@ def _selftest():
     # `project_rev` back to 1. Reproduced before fixing (2026-08-12).
     broken_root = tempfile.mkdtemp(prefix="autosound_project_broken_")
     broken_path = os.path.join(broken_root, "project.json")
-    with open(broken_path, "w") as f:
+    with open(broken_path, "w", encoding="utf-8") as f:
         f.write('{"schema_version": 3, "channels": [ {"code": "w-L"} ,,, ]}')
-    before = open(broken_path).read()
+    before = open(broken_path, encoding="utf-8").read()
     broken = Project(broken_root)
     for what, call in (("load", broken.load),
                        ("set_channel", lambda: broken.set_channel("w-R", tier="channels"))):
@@ -1382,9 +1382,9 @@ def _selftest():
             raise AssertionError(f"{what} accepted an unreadable project.json")
         except ProjectError:
             pass
-    assert open(broken_path).read() == before, "the write must not have touched the file"
+    assert open(broken_path, encoding="utf-8").read() == before, "the write must not have touched the file"
     # Valid JSON that is not an object is the same danger by another route.
-    with open(broken_path, "w") as f:
+    with open(broken_path, "w", encoding="utf-8") as f:
         f.write('["not", "an", "object"]')
     try:
         broken.load()
@@ -1635,6 +1635,8 @@ def _selftest():
 
 
 if __name__ == "__main__":
+    import console                       # issue #21: a code page must not destroy a result
+    console.install()
     if len(sys.argv) > 1 and sys.argv[1] == "selftest":
         raise SystemExit(_selftest())
     raise SystemExit(_main(sys.argv))

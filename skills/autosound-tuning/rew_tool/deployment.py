@@ -67,7 +67,7 @@ def _git(root, *args):
     """git in `root`, first line, or "" -- never an exception, never git's complaint as data."""
     try:
         done = subprocess.run(["git", "-C", root, *args], capture_output=True, text=True,
-                              timeout=_TIMEOUT, check=False)
+                              timeout=_TIMEOUT, check=False, encoding="utf-8", errors="replace")
     except Exception:  # noqa: BLE001 -- no git on the machine is a finding, not a crash
         return ""
     if done.returncode != 0:
@@ -214,7 +214,7 @@ def _selftest():
     def git(cwd, *args):
         subprocess.run(["git", "-C", cwd, *args], capture_output=True, text=True, check=True,
                        env={**os.environ, "GIT_CONFIG_GLOBAL": os.devnull,
-                            "GIT_CONFIG_SYSTEM": os.devnull})
+                            "GIT_CONFIG_SYSTEM": os.devnull}, encoding="utf-8", errors="replace")
 
     def make_repo(root, version, body):
         skills = os.path.join(root, "skills", SKILL_DIRNAME)
@@ -250,7 +250,7 @@ def _selftest():
         # -- two PATHS at the same commit is not a fault; a clone beside a worktree is normal --
         clone = os.path.join(tmp, "clone")
         subprocess.run(["git", "clone", "--quiet", os.path.join(tmp, "a"), clone],
-                       capture_output=True, text=True, check=True)
+                       capture_output=True, text=True, check=True, encoding="utf-8", errors="replace")
         code, line = verdict([dict(describe(a), origin="here", link=a),
                               dict(describe(os.path.join(clone, "skills", SKILL_DIRNAME)),
                                    origin="personal", link=clone)])
@@ -260,9 +260,9 @@ def _selftest():
         #    a disagreement between two MOVING branches is not (S-001 is about pins, not splits) --
         held = os.path.join(tmp, "held")
         subprocess.run(["git", "clone", "--quiet", os.path.join(tmp, "b"), held],
-                       capture_output=True, text=True, check=True)
+                       capture_output=True, text=True, check=True, encoding="utf-8", errors="replace")
         subprocess.run(["git", "-C", held, "checkout", "--quiet", "--detach", "HEAD"],
-                       capture_output=True, text=True, check=True)
+                       capture_output=True, text=True, check=True, encoding="utf-8", errors="replace")
         held_skill = os.path.join(held, "skills", SKILL_DIRNAME)
         assert describe(held_skill)["branch"] == "", "a detached checkout claimed a branch"
         _, line = verdict([dict(describe(a), origin="here", link=a),
@@ -325,4 +325,6 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    import console                       # issue #21: a code page must not destroy a result
+    console.install()
     sys.exit(main())

@@ -109,7 +109,7 @@ class SessionError(ValueError):
 def load_session(path):
     """Read and validate a session file. `SessionError` on anything unreadable."""
     try:
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             doc = json.load(f)
     except OSError as exc:
         raise SessionError(f"cannot read {path}: {exc}") from exc
@@ -1474,7 +1474,7 @@ def _selftest():
     # either one alone, this fails and names the command that reconciles them -- which is the only
     # reason a second copy of a format description is safe to keep at all.
     if os.path.exists(FIXTURE):
-        with open(FIXTURE) as f:
+        with open(FIXTURE, encoding="utf-8") as f:
             on_disk = f.read()
         assert on_disk == _fixture_text(), (
             f"{FIXTURE} has drifted from _session(); regenerate:\n"
@@ -1511,11 +1511,13 @@ def _selftest():
 
 
 if __name__ == "__main__":
+    import console                       # issue #21: a code page must not destroy a result
+    console.install()
     if "--selftest" in sys.argv:
         _selftest()
     elif "--write-fixture" in sys.argv:
         os.makedirs(os.path.dirname(FIXTURE), exist_ok=True)
-        with open(FIXTURE, "w") as _f:
+        with open(FIXTURE, "w", encoding="utf-8") as _f:
             _f.write(_fixture_text())
         print(f"wrote {FIXTURE}")
     else:

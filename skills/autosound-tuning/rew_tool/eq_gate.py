@@ -268,5 +268,7 @@ def _selftest():
 
 
 if __name__ == "__main__":
+    import console                       # issue #21: a code page must not destroy a result
+    console.install()
     if "--selftest" in sys.argv:
         _selftest()

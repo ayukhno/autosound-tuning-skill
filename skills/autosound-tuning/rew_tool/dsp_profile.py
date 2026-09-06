@@ -320,7 +320,7 @@ def bind_model_rate(project_dir_or_profile):
     if isinstance(profile, str):
         path = os.path.join(profile, "dsp_profile.json") if os.path.isdir(profile) else profile
         try:
-            with open(path) as fh:
+            with open(path, encoding="utf-8") as fh:
                 profile = json.load(fh)
         except (OSError, ValueError):
             return None, dsp_math.rate_note(None)
@@ -334,7 +334,7 @@ def bind_model_rate(project_dir_or_profile):
 
 
 def load_profile(path):
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -462,7 +462,7 @@ def save_profile(path, data):
     parent = os.path.dirname(path)
     if parent:
         os.makedirs(parent, exist_ok=True)
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, sort_keys=True, ensure_ascii=False)
     return path
 
@@ -1679,4 +1679,6 @@ def _selftest():
 
 
 if __name__ == "__main__":
+    import console                       # issue #21: a code page must not destroy a result
+    console.install()
     raise SystemExit(_main())

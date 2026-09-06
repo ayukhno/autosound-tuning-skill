@@ -470,7 +470,7 @@ class PresetHistory:
     def head(self):
         hp = self._head_path()
         if os.path.exists(hp):
-            with open(hp) as f:
+            with open(hp, encoding="utf-8") as f:
                 v = f.read().strip()
             if v in self.versions():
                 return v
@@ -478,7 +478,7 @@ class PresetHistory:
         return vs[-1] if vs else None
 
     def _set_head(self, version):
-        with open(self._head_path(), "w") as f:
+        with open(self._head_path(), "w", encoding="utf-8") as f:
             f.write(version + "\n")
 
     # -- read/write --
@@ -486,7 +486,7 @@ class PresetHistory:
         version = version or self.head()
         if version is None:
             raise FileNotFoundError(f"no snapshots yet for preset {self.preset!r}")
-        with open(self._path(version)) as f:
+        with open(self._path(version), encoding="utf-8") as f:
             return json.load(f)
 
     def snapshot(self, state, note=None, project_rev=None, project_dir=None):
@@ -512,7 +512,7 @@ class PresetHistory:
         state["version"] = version
         state["created"] = datetime.datetime.now().isoformat(timespec="seconds")
         os.makedirs(self.dir, exist_ok=True)  # first snapshot is what creates the preset dir
-        with open(self._path(version), "w") as f:
+        with open(self._path(version), "w", encoding="utf-8") as f:
             json.dump(state, f, indent=2, sort_keys=True, ensure_ascii=False)
         self._set_head(version)
         return version
@@ -771,14 +771,14 @@ class Registry:
     def load(self):
         p = self._path()
         if os.path.exists(p):
-            with open(p) as f:
+            with open(p, encoding="utf-8") as f:
                 return json.load(f)
         return {"active": None, "slots": {}}
 
     def _write(self, reg):
         reg["updated"] = datetime.datetime.now().isoformat(timespec="seconds")
         os.makedirs(self.root, exist_ok=True)
-        with open(self._path(), "w") as f:
+        with open(self._path(), "w", encoding="utf-8") as f:
             json.dump(reg, f, indent=2, sort_keys=True, ensure_ascii=False)
 
     def get_active(self):
@@ -1249,4 +1249,10 @@ def _selftest():
 
 
 if __name__ == "__main__":
+    # issue #21: a code page must not destroy a result. Run from a subdirectory, so the sibling
+    # modules' own directory has to go on the path before `console` can be found at all.
+    import os as _os, sys as _sys
+    _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+    import console
+    console.install()
     raise SystemExit(_main())

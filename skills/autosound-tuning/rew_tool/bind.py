@@ -188,10 +188,10 @@ def _selftest():
         caller = os.path.join(root, "proj")
         for d in (pin, alt, caller):
             os.makedirs(d)
-        open(os.path.join(pin, "rew_api.py"), "w").close()
-        open(os.path.join(alt, "rew_api.py"), "w").close()
+        open(os.path.join(pin, "rew_api.py"), "w", encoding="utf-8").close()
+        open(os.path.join(alt, "rew_api.py"), "w", encoding="utf-8").close()
         me = os.path.join(caller, "run.py")
-        open(me, "w").close()
+        open(me, "w", encoding="utf-8").close()
         gone = os.path.join(root, "not-here")
 
         # 1. the declared copy exists -> bound, quietly, and sys.path leads with it
@@ -209,8 +209,8 @@ def _selftest():
         rec = bind(me, (gone, alt), fallback=True)
         assert rec["path"] == alt and rec["substituted"] is True
         # 4. a name in both places -> REFUSED, both paths named
-        open(os.path.join(caller, "dsp_math.py"), "w").close()
-        open(os.path.join(pin, "dsp_math.py"), "w").close()
+        open(os.path.join(caller, "dsp_math.py"), "w", encoding="utf-8").close()
+        open(os.path.join(pin, "dsp_math.py"), "w", encoding="utf-8").close()
         try:
             bind(me, (pin, alt))
         except BindError as e:
@@ -246,5 +246,7 @@ def _selftest():
 
 
 if __name__ == "__main__":
+    import console                       # issue #21: a code page must not destroy a result
+    console.install()
     sys.exit(_selftest() if "--selftest" in sys.argv or "selftest" in sys.argv[1:2] else
              (print(__doc__.split("\n\n")[0]) or 0))

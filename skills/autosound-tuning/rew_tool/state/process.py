@@ -165,7 +165,7 @@ def _flaw_map_entries(project_dir):
     a gate that silently stops gating. None means "no opinion" for the same reason.
     """
     try:
-        with open(os.path.join(project_dir, "project.json")) as f:
+        with open(os.path.join(project_dir, "project.json"), encoding="utf-8") as f:
             data = json.load(f)
     except (OSError, ValueError):
         return None
@@ -310,7 +310,7 @@ def _require_profile_facts(phase, previous, project_dir):
     if module is None:
         return
     try:
-        with open(os.path.join(project_dir, "dsp_profile.json")) as f:
+        with open(os.path.join(project_dir, "dsp_profile.json"), encoding="utf-8") as f:
             data = json.load(f)
     except (OSError, ValueError):
         return  # no readable profile at all is contract.py's complaint, not this gate's
@@ -1143,7 +1143,7 @@ class Process:
             proc_rate = None
             if module is not None:
                 try:
-                    with open(os.path.join(self.project_dir, "dsp_profile.json")) as f:
+                    with open(os.path.join(self.project_dir, "dsp_profile.json"), encoding="utf-8") as f:
                         proc_rate = module.processing_rate_hz(json.load(f))
                 except (OSError, ValueError, AttributeError):
                     proc_rate = None
@@ -1152,7 +1152,6 @@ class Process:
                              f"processes at {proc_rate:g} Hz -- fine, working with it. Delays in "
                              f"samples derive from the PROCESSING rate; the capture rate stays with "
                              f"the measurement")
-                print(f"  ⚠ {rate_note}")
         if session and hasattr(verifier, "session_report"):
             probe = verifier.session_report(verdicts, processing_rate_hz=proc_rate if capture_rates else None)
             round_["session"] = {"at": _now(), "spread": probe["spread"], "drift": probe["drift"],
@@ -1166,6 +1165,15 @@ class Process:
             bad=sorted(v["name"] for v in verdicts if not v.get("valid")),
             rate_note=rate_note,
         )
+        # Told AFTER the record is on disk, never before -- issue #21. This print used to sit
+        # where `rate_note` is computed, and on a cp1252 console the warning glyph raised
+        # `UnicodeEncodeError` between the verdicts and `_write`: the gate ran, the result was
+        # thrown away, and TCC reported `recorded: false`. `console.install()` keeps that from
+        # raising at all now; the ORDER is what makes it not matter if something else ever does.
+        # And the note only fires when the rates differ -- so the gate was reliable right up to
+        # the moment it had something to say.
+        if rate_note:
+            print(f"  ⚠ {rate_note}")
         return round_
 
     def unusable_captures(self, state=None):
@@ -1525,7 +1533,7 @@ def _selftest():
     refuses("a done step with no evidence", lambda: proc.finish_step("s1", []))
     refuses("evidence that resolves to nothing",
             lambda: proc.finish_step("s1", ["I looked at the graphs and they seemed fine"]))
-    with open(os.path.join(root, "autosound_context.md"), "w") as f:
+    with open(os.path.join(root, "autosound_context.md"), "w", encoding="utf-8") as f:
         f.write("# context\n")
     proc.finish_step("s1", ["autosound_context.md"])  # a file that exists resolves
 
@@ -1573,13 +1581,13 @@ def _selftest():
          "fields": ["hp", "lp", "gain_db", "ta_ms"], "max_count": 6,
          "crossover_filters": {"types": {"LR": {"orders_db_per_oct": [24]}}}},
     ], "delay": {"step_ms": 0.02}}}
-    with open(os.path.join(root, "dsp_profile.json"), "w") as f:
+    with open(os.path.join(root, "dsp_profile.json"), "w", encoding="utf-8") as f:
         json.dump(profile, f)
     refuses("entering phase 1 with no sample rate on record", lambda: proc.enter_phase("1"))
     # Deliberately the LEGACY key: the phase-1 gate must accept a profile written before the
     # rename (normalize_rate reads it), or every old project would refuse phase 1 for a fact it has.
     profile["dsp_profile"]["sample_rate_hz"] = 48000
-    with open(os.path.join(root, "dsp_profile.json"), "w") as f:
+    with open(os.path.join(root, "dsp_profile.json"), "w", encoding="utf-8") as f:
         json.dump(profile, f)
     proc.enter_phase("1")
     # ...and phase 2 asks for what phase 2 needs, not for everything at once: this profile
@@ -1630,7 +1638,8 @@ def _selftest():
     _mod = os.path.abspath(__file__)
     def _cli(*argv):
         return subprocess.run([sys.executable, _mod, pr.dir, *argv],
-                              capture_output=True, text=True)
+                              capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              env={**os.environ, "PYTHONIOENCODING": "utf-8"})
     out = _cli("capture-protective", "tw-L", "--hp", "1000", "LR", "24")
     assert out.returncode == 0, out.stderr
     assert pr.protective_record()["channels"]["tw-L"]["hp"]["f"] == 1000.0, out.stdout
@@ -2059,4 +2068,10 @@ def _main(argv):
 
 
 if __name__ == "__main__":
+    # issue #21: a code page must not destroy a result. Run from a subdirectory, so the sibling
+    # modules' own directory has to go on the path before `console` can be found at all.
+    import os as _os, sys as _sys
+    _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+    import console
+    console.install()
     sys.exit(_main(sys.argv))

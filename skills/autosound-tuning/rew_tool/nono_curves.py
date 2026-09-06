@@ -114,6 +114,8 @@ def _fmt(curve: NonoCurve) -> str:
 
 
 if __name__ == "__main__":
+    import console                       # issue #21: a code page must not destroy a result
+    console.install()
     target = sys.argv[1] if len(sys.argv) > 1 else "."
     if os.path.isdir(target):
         for band, curve in parse_nono_band_set(target).items():

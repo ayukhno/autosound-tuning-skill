@@ -337,6 +337,8 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    import console                       # issue #21: a code page must not destroy a result
+    console.install()
     if len(sys.argv) > 1 and sys.argv[1] == "selftest":
         sys.argv[1] = "--selftest"
     sys.exit(main())

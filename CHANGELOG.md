@@ -40,6 +40,69 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [v3.0.45] — 2026-09-06 · the console's code page can no longer destroy a computed result
+
+> **Upgrading:** no signature changed, no file moved, and on a UTF-8 terminal nothing looks
+> different. On a terminal that is NOT UTF-8 — an English, German or Polish Windows console runs
+> cp1252/cp850/cp852/cp437/cp1250 — output that used to raise `UnicodeEncodeError` now prints,
+> with the characters that page cannot draw folded to their ASCII sense: `→` reads `->`, `⚠`
+> reads `!`, a box rule reads `-`, and Cyrillic transliterates (`гудить` → `hudyt`). **Files are
+> unaffected and stay UTF-8**; the fold is for terminals only. One new module,
+> `rew_tool/console.py`, and one new checker, `scripts/encoding-check.py`, both in the selftest
+> run. If a report suddenly reads `->` where it used to read `→`, that is this change telling you
+> the terminal never could draw it.
+
+- **A cosmetic glyph could take a finished verdict with it — `rew_tool/console.py` (new),
+  `rew_tool/state/process.py`, `scripts/encoding-check.py` (new), and 51 modules' entry points
+  (issue #21).** `capture-check` ran the whole mandatory post-sweep gate, computed every verdict,
+  and then died printing `  ⚠ captured at 96000 Hz; the DSP processes at 48000 Hz` — one line
+  BEFORE `self._write(state)`. On a cp1252 console that print raises; nothing was persisted, no
+  `capture_verified` event was journalled, and through TCC the call came back `recorded: false`
+  with a traceback. The note only fires when the capture rate differs from the processing rate,
+  **so the gate was reliable right up to the moment it had something to say.**
+
+  The narrow repair is to drop the glyph. The one made here is wider, because the machine that
+  reported it has no Cyrillic code page at all and this tree prints `─` 2932 times, `→` 131
+  times, band names like `Суббас` and symptom words like `гудить`:
+
+  * **The transport cannot raise.** `console.install()`, called from every `__main__` block in
+    `rew_tool` (51 of them), puts a codec error handler on stdout and stderr — stderr included,
+    because a traceback carrying an em dash cannot be printed either, and the crash then arrives
+    as a `UnicodeEncodeError` with the original error nowhere in it.
+  * **The approximation stays readable.** `?` (`replace`) turns a table into noise, so glyphs
+    fold to their meaning and Cyrillic transliterates: a German console gets a legible sentence,
+    not thirty question marks. `console.GLYPHS` holds every non-ASCII character this tree prints.
+  * **The encoding is never guessed.** `install()` sets `errors=`, never `encoding=`.
+    Reconfiguring a cp850 console to UTF-8 does not let it draw `─`; it makes it draw `Ã¢ÂÂ`,
+    and TCC reading stdout as a pipe would have its bytes reinterpreted underneath it. What a
+    page CAN hold it keeps — `fold("Höhe § 4 — ok", "cp1252")` is unchanged.
+  * **The order is the actual bug fix.** `verify_captures` now writes the state and appends the
+    journal event FIRST and prints the note last, so a print that somehow still fails costs a
+    line of text and not a round of measurements.
+
+  **Two failures of the same family came out with it.** Every text `open()` in `rew_tool` now
+  names `encoding="utf-8"` (52 calls, 13 files): Windows' default is the machine's ANSI page, and
+  `process.py` read `dsp_profile.json` with no encoding inside `except (OSError, ValueError)` —
+  `UnicodeDecodeError` IS a `ValueError`, so a perfectly readable profile became "no profile"
+  silently, and the delay-vs-rate note that started all this would never have fired. And every
+  `subprocess` reading text now names UTF-8 too (12 calls), with our own child processes pinned
+  to `PYTHONIOENCODING=utf-8`, so two of our processes cannot talk different pages to each other.
+
+  **`scripts/encoding-check.py` keeps it from coming back** and is in `run-selftests.sh`: an entry
+  point with no `install()`, a text `open()` or `subprocess` with no encoding, or a printed
+  character with no ASCII sense each fail the build — and its `--selftest` breaks all four on
+  purpose first, because a check nobody has made fail is not a check yet.
+
+  **Measured, not asserted.** The full selftest set run with the console forced to a code page:
+  before this change **9 of 51 modules failed under cp1252** (`analysis`, `equal_loudness`,
+  `path_check`, `rew_tool`, `state/apply`, `state/process`, `state/state`, `target_bands`,
+  `verify_prediction`); after it, **53 of 53 pass** under cp1252, cp850, cp852, cp437 and cp1250.
+  Under a full `LC_ALL=C` locale, where the FILES are ASCII as well as the console — the closest
+  thing to the `open()` half of this on a Unix box — the same set went from **25 of 51 failing**
+  to 53 of 53 passing, which is the measure of how much of this was never about the glyph at all.
+  **This has not yet been run on a real Windows console** — the code pages were simulated on macOS via
+  `PYTHONIOENCODING`, which exercises the same codecs but not the terminal itself.
+
 ## [v3.0.44] — 2026-09-05 · the sum-loss port catches up with its upstream: a NaN channel adds nothing, and the junction ripple is read
 
 > **Upgrading:** additive. `dsp_math.sum_loss` returns one more key, `ripple_db`; `predict`'s

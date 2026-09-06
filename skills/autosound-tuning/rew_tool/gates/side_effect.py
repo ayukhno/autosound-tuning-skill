@@ -38,7 +38,7 @@ class SideEffectRefused(RuntimeError):
 
 
 def _subprocess_runner(argv):
-    proc = subprocess.run(argv, capture_output=True, text=True)
+    proc = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace")
     return proc.returncode, proc.stdout, proc.stderr
 
 
@@ -313,7 +313,7 @@ def upload_issue_asset(image_path, dest_name, *, consented=False, message=None,
 def _selftest():
     import os, tempfile
     body = os.path.join(tempfile.mkdtemp(), "feedback.md")
-    with open(body, "w") as f:
+    with open(body, "w", encoding="utf-8") as f:
         f.write("# Feedback\nbody\n")
 
     good = lambda argv: (0, f"https://github.com/{FEEDBACK_REPO}/issues/2\n", "")
@@ -449,7 +449,7 @@ def _selftest():
 def _selftest_dsp_profile():
     import os, tempfile
     profile = os.path.join(tempfile.mkdtemp(), "profile.json")
-    with open(profile, "w") as f:
+    with open(profile, "w", encoding="utf-8") as f:
         f.write('{"dsp_profile": {"name": "M6V4", "vendor": "Musway"}}\n')
 
     good_new = lambda argv: (0, f"https://github.com/{FEEDBACK_REPO}/issues/9\n", "")
@@ -497,4 +497,10 @@ def _selftest_dsp_profile():
 
 
 if __name__ == "__main__":
+    # issue #21: a code page must not destroy a result. Run from a subdirectory, so the sibling
+    # modules' own directory has to go on the path before `console` can be found at all.
+    import os as _os, sys as _sys
+    _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+    import console
+    console.install()
     raise SystemExit(_selftest() or _selftest_dsp_profile())

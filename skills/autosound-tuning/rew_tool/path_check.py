@@ -133,7 +133,13 @@ def _run(*args, env=None, ok=(0,)):
     traceback in `out`, which is what the subprocess version would have shown.
     """
     if env and "REW_API_URL" in env:
-        proc = subprocess.run([PY, *args], capture_output=True, text=True, env=env)
+        # The child is one of ours, and the pipe between two of our own processes has no console
+        # to respect: pin it to UTF-8 at both ends rather than inherit whatever page the machine
+        # runs (issue #21). Without this the parent decodes UTF-8 while a Windows child writes
+        # cp1252, and the difference shows up as mangled evidence, not as an error.
+        env = {**env, "PYTHONIOENCODING": "utf-8"}
+        proc = subprocess.run([PY, *args], capture_output=True, text=True, env=env,
+                              encoding="utf-8", errors="replace")
         rc, out = proc.returncode, proc.stdout + proc.stderr
     else:
         import contextlib
@@ -326,7 +332,7 @@ def _selftest():
     # the session probe, on the verdicts a REW-less check can build from the files' own peaks
     verdicts = []
     for name in sorted(os.listdir(set1)):
-        doc = json.load(open(os.path.join(set1, name)))
+        doc = json.load(open(os.path.join(set1, name), encoding="utf-8"))
         x = list(doc["transferRealSamples"])
         imp = _analysis.analyze_impulse([i / FS for i in range(len(x))], x)   # the tool's own reader
         title = name[:-5].replace("_", "-") + "_1 (sw)"
@@ -340,7 +346,7 @@ def _selftest():
         stem = title.split("_1 (sw)")[0]
         stem = stem.replace("-ctl", "|ctl").replace("-", "_").replace("|ctl", "-ctl")
         path = os.path.join(set1, stem + ".json")
-        return json.load(open(path))["transferRealSamples"] if os.path.isfile(path) else None
+        return json.load(open(path, encoding="utf-8"))["transferRealSamples"] if os.path.isfile(path) else None
     probe = _verify.session_report(verdicts, processing_rate_hz=FS, ir_of=ir_of)
     d = probe["drift"]
     assert d and d.get("ctl3") == "m-L-ctl3_1 (sw)" and d["held"] is True and d["method"] == "xcorr" \
@@ -350,7 +356,7 @@ def _selftest():
     # ---- 1 · the desk: de-embed, then align ---------------------------------------------------
     out1 = os.path.join(root, "out1")
     _run(tool("predict.py"), "--solos", set1, "--project", proj, "--baseline", "--out", out1, env=env)
-    pred1 = json.load(open(os.path.join(out1, "predicted.json")))
+    pred1 = json.load(open(os.path.join(out1, "predicted.json"), encoding="utf-8"))
     f = np.asarray(pred1["freqs_hz"], float)
     for code in ("m-L", "tw-L"):
         # the protective came OUT: the driver x the design chain is the driver's own shape x the
@@ -367,8 +373,8 @@ def _selftest():
         "delays 0 with these arrivals must read as mis-aligned junctions"
     out2 = os.path.join(root, "out2")
     _run(tool("predict.py"), "--solos", set1, "--project", proj, "--baseline", "--align", "--out", out2, env=env)
-    delta = json.load(open(os.path.join(out2, "aligned-delta.json")))
-    aligned = json.load(open(os.path.join(out2, "aligned.json")))
+    delta = json.load(open(os.path.join(out2, "aligned-delta.json"), encoding="utf-8"))
+    aligned = json.load(open(os.path.join(out2, "aligned.json"), encoding="utf-8"))
     step = 1000.0 / DSP_RATE
     assert abs(aligned["step_ms"] - step) < 1e-9, "delays must land on the DSP's grid, from the profile's rate"
     # What the definitions imply -- and what they do NOT. A first draft expected every delay to be
@@ -405,7 +411,7 @@ def _selftest():
     assert res3["version"] == "v_003"
     atf = os.path.join(root, "tw-L.atf")
     rc, out = _run(tool("eq_export.py"), proj, "tw-L", "--out", atf, env=env, ok=(0, 3))
-    assert "5000" in open(atf).read() and "format:" in out, out[-400:]
+    assert "5000" in open(atf, encoding="utf-8").read() and "format:" in out, out[-400:]
     # ---- 1.4 · levels read off the measurement: refuses without the knob assertion, then gives
     #      cut-only offsets with the quietest driver at 0 -- every driver here was "swept" at the
     #      same level, so the offsets are the drivers' own sensitivities, not a knob ------------
@@ -424,18 +430,18 @@ def _selftest():
                      "channels": {c: {"hp": DESIGN[c]["hp"], "lp": DESIGN[c]["lp"], "gain_db": 0.0,
                                       "ta_ms": 0.0, "polarity": "NORM", "eq": []} for c in DRIVERS}}
     tpath = os.path.join(root, "transcription.json")
-    json.dump(transcription, open(tpath, "w"))
+    json.dump(transcription, open(tpath, "w", encoding="utf-8"))
     rc, out = _run(tool("setup_import.py"), proj, tpath, env=env)
     assert "would bank" in out and "verified_by_file=False" in out, out[-400:]
     transcription["channels"]["m-L"]["ta_ms"] = 2.355                    # off the 0.01 ms grid
-    json.dump(transcription, open(tpath, "w"))
+    json.dump(transcription, open(tpath, "w", encoding="utf-8"))
     rc, out = _run(tool("setup_import.py"), proj, tpath, "--write", env=env, ok=(3,))
     assert "2.355" in out and "grid" in out, out[-400:]
     assert hist.head() == "v_003", ("a refused import must not bank", hist.head())
 
     out3 = os.path.join(root, "out3")
     _run(tool("predict.py"), "--solos", set1, "--project", proj, "--baseline", "--out", out3, env=env)
-    pred3 = json.load(open(os.path.join(out3, "predicted.json")))
+    pred3 = json.load(open(os.path.join(out3, "predicted.json"), encoding="utf-8"))
     for j in pred3["junctions"]:
         # the same physics tolerance as the align step: non-adjacent filters leave a tenth or two
         assert j["sum_loss_avg_db"] > -0.3 and j["worst_null_db"] > -2.0, j
@@ -456,12 +462,12 @@ def _selftest():
     b = rm["bands"]["m-L"][0]
     assert abs(math.log2(b["f"] / 1000.0)) < 1 / 6 and -5.5 <= b["gain_db"] <= -2.0, b
     assert os.path.isfile(os.path.join(out_eq, "eq-res-mid.json"))
-    res4 = _apply.propose(hist, json.load(open(os.path.join(out_eq, "eq-res-mid.json"))),
+    res4 = _apply.propose(hist, json.load(open(os.path.join(out_eq, "eq-res-mid.json"), encoding="utf-8")),
                           note="resonance package", registry=_state.Registry(state_root))
     assert res4["version"] == "v_004", res4["version"]
     out4 = os.path.join(root, "out4")
     _run(tool("predict.py"), "--solos", set1r, "--project", proj, "--baseline", "--out", out4, env=env)
-    pred4 = json.load(open(os.path.join(out4, "predicted.json")))
+    pred4 = json.load(open(os.path.join(out4, "predicted.json"), encoding="utf-8"))
     mag4 = np.asarray(pred4["channels"]["m-L"]["mag_db"], float)
     k1k = int(np.argmin(np.abs(f - 1000.0)))
     chain_m = P.chain_from_row(dict(DESIGN["m-L"], gain_db=0, ta_ms=0, polarity="NORM"))
@@ -533,7 +539,7 @@ def _selftest():
         out_rew = os.path.join(root, "out_rew")
         _run(tool("predict.py"), "--rew", "--ver", "1", "--project", proj, "--baseline",
              "--process", os.path.join(proj, "process"), "--out", out_rew, env=env_rew)
-        pred_rew = json.load(open(os.path.join(out_rew, "predicted.json")))
+        pred_rew = json.load(open(os.path.join(out_rew, "predicted.json"), encoding="utf-8"))
         for code in pred3["channels"]:                       # HEAD is v_003 now: compare like with like
             a = np.asarray(pred3["channels"][code]["mag_db"], float)
             b = np.asarray(pred_rew["channels"][code]["mag_db"], float)
@@ -584,11 +590,11 @@ def _selftest():
         noproj = os.path.join(root, "project_norate")
         shutil.copytree(proj, noproj)
         prof_path = os.path.join(noproj, "dsp_profile.json")
-        prof = json.load(open(prof_path))
+        prof = json.load(open(prof_path, encoding="utf-8"))
         inner = prof.get("dsp_profile", prof)
         inner.pop("dsp_processing_rate_hz", None)
         inner.pop("sample_rate_hz", None)
-        json.dump(prof, open(prof_path, "w"))
+        json.dump(prof, open(prof_path, "w", encoding="utf-8"))
         rc, out = _run(tool("predict.py"), "--solos", set1, "--project", noproj, "--baseline", "--align",
                        env=dict(env, AUTOSOUND_PROJECT_DIR=noproj), ok=(0,))
         assert "no processing rate known" in out and "0.0100 ms" in out, out[-600:]
@@ -620,6 +626,8 @@ def _selftest():
 
 
 if __name__ == "__main__":
+    import console                       # issue #21: a code page must not destroy a result
+    console.install()
     if "--selftest" in sys.argv:
         sys.exit(_selftest())
     print(__doc__)

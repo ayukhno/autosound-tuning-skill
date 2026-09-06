@@ -37,6 +37,9 @@ run_one "installers" scripts/installer-consistency.py
 # The upstream-drift checker's own mechanics (a throwaway git repo, no network). The real check
 # against the upstream is `scripts/upstream-drift.py --fork <clone> --fetch`, run by a person.
 run_one "upstream-drift" scripts/upstream-drift.py --selftest
+# Issue #21: the console's code page must not be able to destroy a computed result. The checker
+# scans the tree; its own --selftest breaks each rule on purpose first.
+run_one "encoding" scripts/encoding-check.py --selftest
 
 echo
 echo "rew_tool selftests ($PY)"

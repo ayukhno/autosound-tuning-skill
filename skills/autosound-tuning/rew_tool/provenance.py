@@ -89,7 +89,7 @@ def _sha_at(root):
     """
     try:
         done = subprocess.run(["git", "-C", root, "rev-parse", "HEAD"],
-                              capture_output=True, text=True, timeout=_TIMEOUT, check=False)
+                              capture_output=True, text=True, timeout=_TIMEOUT, check=False, encoding="utf-8", errors="replace")
     except Exception:  # noqa: BLE001 — no git on the machine is a finding, not a crash
         return ""
     lines = (done.stdout or "").strip().splitlines()
@@ -135,7 +135,7 @@ def _selftest():
     def git(cwd, *args):
         subprocess.run(["git", "-C", cwd, *args], capture_output=True, text=True, check=True,
                        env={**os.environ, "GIT_CONFIG_GLOBAL": os.devnull,
-                            "GIT_CONFIG_SYSTEM": os.devnull})
+                            "GIT_CONFIG_SYSTEM": os.devnull}, encoding="utf-8", errors="replace")
 
     with tempfile.TemporaryDirectory() as tmp:
         # -- a real checkout answers with its own HEAD --
@@ -144,11 +144,11 @@ def _selftest():
         git(repo, "init", "--quiet")
         git(repo, "config", "user.email", "selftest@example.invalid")
         git(repo, "config", "user.name", "selftest")
-        open(os.path.join(repo, "f"), "w").close()
+        open(os.path.join(repo, "f"), "w", encoding="utf-8").close()
         git(repo, "add", "f")
         git(repo, "commit", "--quiet", "-m", "one")
         head = subprocess.run(["git", "-C", repo, "rev-parse", "HEAD"],
-                              capture_output=True, text=True, check=True).stdout.strip()
+                              capture_output=True, text=True, check=True, encoding="utf-8", errors="replace").stdout.strip()
         got = _sha_at(repo)
         assert got == head, f"checkout: {got!r} != {head!r}"
         assert _SHA.match(got), f"not a sha: {got!r}"
@@ -162,7 +162,7 @@ def _selftest():
         # The check the check needs: git DID speak there, and what it said was rejected rather
         # than absent. Without this the line above passes just as well on a git that never ran.
         spoke = subprocess.run(["git", "-C", bare, "rev-parse", "HEAD"],
-                               capture_output=True, text=True, check=False)
+                               capture_output=True, text=True, check=False, encoding="utf-8", errors="replace")
         assert spoke.returncode != 0 and spoke.stderr.strip(), "git said nothing — case is hollow"
 
         # -- the marker walk stops at a marker, and does not climb past one --
@@ -196,4 +196,6 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    import console                       # issue #21: a code page must not destroy a result
+    console.install()
     sys.exit(main())

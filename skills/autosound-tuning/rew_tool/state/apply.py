@@ -481,4 +481,10 @@ def _selftest():
 
 
 if __name__ == "__main__":
+    # issue #21: a code page must not destroy a result. Run from a subdirectory, so the sibling
+    # modules' own directory has to go on the path before `console` can be found at all.
+    import os as _os, sys as _sys
+    _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+    import console
+    console.install()
     raise SystemExit(_selftest())

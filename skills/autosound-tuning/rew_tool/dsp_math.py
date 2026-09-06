@@ -871,7 +871,7 @@ def mag_db(h):
 def load_ntt_txt(path):
     """NTT/REW txt: comment lines start with #/;/*, then 'freq mag' columns."""
     fr, mg = [], []
-    with open(path) as fh:
+    with open(path, encoding="utf-8") as fh:
         for line in fh:
             line = line.strip()
             if not line or line[0] in "#;*":
@@ -1506,6 +1506,8 @@ def _selftest():
 
 
 if __name__ == "__main__":
+    import console                       # issue #21: a code page must not destroy a result
+    console.install()
     import sys
     if len(sys.argv) > 1 and sys.argv[1] in ("selftest", "--selftest"):
         _selftest()

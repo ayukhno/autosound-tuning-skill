@@ -47,6 +47,10 @@ NOT_ON_BOARD = {
                      "not something a tuner runs (autosound-hub HUB-002)",
     "excess_gate.py": "the research / validation harness behind eq_gate",
     "capabilities.py": "this checker",
+    "console.py": "output plumbing: the console code-page fold every entry point installs "
+                  "(issue #21). Not a decision a tuner makes -- `console.py report` exists to "
+                  "answer 'what is this terminal?' when a Windows machine reports a crash",
+    "encoding-check.py": "the checker that keeps issue #21 from coming back",
     "__init__.py": "not a tool",
     "analysis.py": "library; its functions are on the board by name",
     "dsp_math.py": "library; its functions are on the board by name",
@@ -203,6 +207,8 @@ def _selftest():
 
 
 if __name__ == "__main__":
+    import console                       # issue #21: a code page must not destroy a result
+    console.install()
     if "--selftest" in sys.argv:
         sys.exit(_selftest())
     problems, n = check()
