@@ -40,6 +40,52 @@ Two consequences worth stating, because both have already caused a question:
   where a consumer will actually read it. Do not reach for a bigger number to signal danger; say the
   danger in words.
 
+## [v3.0.46] — 2026-09-06 · a file that is valid only on the machine that wrote it no longer kills the check
+
+> **Upgrading:** no signature changed and no file moved, but **two things a consumer reads did
+> change, and both are in `contract.py check`.** (1) A snapshot or a `project.json` that cannot be
+> decoded is now REPORTED — a table row with `valid: false` carrying the reason and the repair —
+> where it used to come out of `check_project()` as a raised `UnicodeDecodeError`. Code that read
+> "an exception means this project is broken" now gets a verdict instead, and `ok` is `false` on
+> it. (2) The report gains one field, `encoding_damaged`: the project-relative paths of files that
+> are not UTF-8, `[]` on a healthy project — a field rather than prose, so a front-end never has
+> to parse our error text. One new verb, `contract.py repair-encoding <project> [--from <page>]`,
+> and its ledger-only twin `state.py --root <project>/state repair-encoding`. **Nothing on disk is
+> touched unless you name a code page**, and when you do, the original bytes stay beside the file
+> as `<file>.<codec>.orig`. `state.SnapshotError` is new and is a `ValueError` subclass, so an
+> existing `except ValueError` around a snapshot read keeps working.
+
+- **The writer was fixed a tag ago; the files it had already written were not — `rew_tool/state/state.py`,
+  `rew_tool/contract.py`, `rew_tool/project.py`, `rew_tool/state/migrate.py` (autosound-hub `TCC-007`).**
+  `v3.0.45` made every `open()` in `rew_tool` name UTF-8. It could do nothing for the snapshot
+  already sitting in a user's live project, written by a Windows session where `§` went to disk as
+  a single cp1251 byte `0xa7`. Running the contract check on that project handed its owner a
+  `UnicodeDecodeError` traceback from three frames down instead of a verdict — reported from the
+  field, then reproduced here on a copy: same byte, same chain `contract.py:237 → state.py:490`.
+
+  * **One door to a snapshot's bytes.** `state._read_snapshot_json` is the only reader, and every
+    failure leaves it as a named `SnapshotError` carrying the repair command. `load()`, `head()`
+    and `migrate._read_json` all go through it, so the four readers of one file stopped having four
+    opinions about what an unreadable one means.
+  * **A verdict, not a stack.** `check_ledgers` reports the file exactly as `check_project_json`
+    already reported an unreadable `project.json`. A checker that dies on the worst project is the
+    checker that is absent for it. The rest of the readers were audited with it: `backfill_tiers`
+    no longer skips a damaged snapshot in silence (it lands in `unreadable_snapshots`, because "no
+    ledger row" and "the row could not be read" want opposite repairs), while `looks_like_2x` still
+    skips — deliberately, and now says so: it is a sniff, and the same file's readability is
+    reported by name one function above.
+  * **A path, not a dead end — and no guessing in it.** `repair-encoding` shows what each candidate
+    code page makes the text say and rewrites only once one is named. This is not caution for its
+    own sake: a UTF-8 file read as cp1251 does not fail, it just says something else, so a fallback
+    decode would fix the loud half of this bug and make the quiet half invisible. On a real project
+    the three candidates differ visibly — `передні двері` against `ïåðåäí³ äâåð³` — and the only
+    reader who can choose is the one who knows what it should say. The sweep covers the whole
+    project, not just the ledger: `project.json` is where a car's words actually live.
+
+  Each new check was broken on purpose and named its break: a bare `load()` → "still raises the raw
+  decode error", a repair without a backup → the missing `.orig`, the silent skip → an empty
+  `unreadable_snapshots`.
+
 ## [v3.0.45] — 2026-09-06 · the console's code page can no longer destroy a computed result
 
 > **Upgrading:** no signature changed, no file moved, and on a UTF-8 terminal nothing looks
