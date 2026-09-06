@@ -850,6 +850,14 @@ class Process:
         Working-by-default is the rule (`protective.py`): a round nobody marks measured the system
         as configured, and nothing is de-embedded. This is how a round says otherwise.
 
+        **Two answers, not three** (user's ruling 2026-09-06, hub TCC-005). `"OFF"` is the default
+        and it means leave the capture alone — whether the chain was bare or carried a working
+        crossover, which is part of the tune and read as it is; a recorded filter is the one case
+        the maths removes before analysis. The front-end writes one of those two for every channel
+        it captures, so a channel with NO record here did not come from the front-end: it came
+        through MCP or a typed CLI call, or the front-end failed to write what it thought it did.
+        That is what `protective.should_de_embed(..., baseline=True)` still answers `"check"` for.
+
         It lives on the ROUND rather than on a measurement because that is the granularity it
         actually has -- one protective set covers the sweeps of one pass, and it differs by channel
         within that pass (100 Hz on a mid, 1 kHz on a tweeter, nothing on a woofer). And it lives
@@ -1457,9 +1465,11 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
   capture-taken <title>                 a measurement came back (unplanned ones are flagged)
   capture-protective <ch> OFF           this round was RAW for that channel: what was in the
   capture-protective <ch> --hp 100 LR 24    chain and is NOT part of the tune, so it can be taken
-      [--lp 4000 BW 36]                 back out before a phase decision. OFF = swept with nothing,
-                                        which is an ANSWER; not running this at all means the
-                                        round measured the system as configured
+      [--lp 4000 BW 36]                 back out before a phase decision. OFF = leave it alone,
+                                        which is an ANSWER and the default; not running this at
+                                        all means the round measured the system as configured --
+                                        and since 2026-09-06 the front-end always writes one of
+                                        the two, so an absent record means this was not it
   listening-verdict --pair <track>:<char>:ok|bad [--pair ...] [--text "..."] [--ledger-version vN]
       [--route full] [--note ...]        what the Arbiter heard (Phase 4): the ticked pairs AND their
                                         own words, stamped with the ledger version listened to; ids

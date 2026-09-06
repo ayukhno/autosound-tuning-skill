@@ -44,6 +44,17 @@ any crossover has been designed, so a baseline capture with crossovers in force 
 almost by definition. `should_de_embed(..., baseline=True)` returns `"check"` for exactly that
 case — the one place a forgotten button is recoverable.
 
+**Since 2026-09-06 an absent record means something narrower, and `"check"` is kept for it.** The
+user's ruling that day: there is no third answer — `OFF` is the DEFAULT and it means *leave this
+capture alone*, whether nothing was in the chain or a working crossover was, and a recorded filter
+is the one case the maths removes before analysis. The front-end was brought to those two states
+(autosound-tcc `4da5454`, hub TCC-005): its protective window and its "take measurements" table
+now write `"OFF"` for every channel that entered the pass, so a channel with NO record is no
+longer something a person can produce by clicking through. What is left produces it — a session
+writing through MCP, a hand-typed CLI call, a round older than that day, or the front-end failing
+to write what it thinks it wrote — and those are exactly the cases worth a question. The verdict
+did not change; the population it fires on did.
+
 The flag belongs to the CAPTURE, not to the filter. The same 1 kHz high-pass can be protection
 today and part of the finished crossover next week; what makes it protective is that it was not
 part of the design when this sweep was taken.
@@ -131,6 +142,12 @@ def should_de_embed(record, channel, *, baseline=None):
     crossover exists, so filters in force during one are protection almost by definition. That is
     the single place the omission is recoverable, and it is worth a question rather than a guess:
     the answer is a person's, since only they know whether the button was missed.
+
+    **And what it now means when it fires** (2026-09-06, module header): the front-end writes
+    `"OFF"` for every channel it captures, so an unmarked baseline channel says the record came
+    from somewhere else — MCP, a typed CLI call, a round older than that day — or that the
+    front-end did not write what it believed it wrote. `"check"` is a question about the RECORD's
+    provenance now, not a state of the interface.
     """
     legs = legs_of(record, channel)
     if legs is not None and any(_live(legs.get(k)) for k in ("hp", "lp")):
