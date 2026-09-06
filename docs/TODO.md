@@ -5,9 +5,38 @@ people who use the method, this is engineering debt for whoever maintains it. An
 **what would make it due**, because an item whose trigger is "when someone remembers" is the kind
 that gets found again three months later as a surprise.
 
+## How an item is closed
+
+**An item dies with a status line, never by being deleted.** Every item carries `**Status**:` on
+the line under its heading — `open` · `doing` · `done` · `dropped` — and a closed one keeps its
+text where it stands, with what closed it written into that line.
+
+Deleting is what this file did until 2026-09-06, because no item had yet been closed and the form
+had never been needed. It loses the one thing worth keeping: a deleted item is indistinguishable
+from an item that never existed. The counter changes and nobody sees a "done" — the history stays
+in git, and the board that reads this file (autosound-hub, `scripts/board-collect.py`) does not
+read git. The form comes from hub HUB-024; the shape of the status line is the board's, so that
+this file is read rather than guessed at.
+
+**A `done` line carries a COMMAND, not a description** — the same rule as closing a ticket on the
+bus (`hub:governance/PROTOCOL.md` §4.3): something another person re-runs to see the claim for
+themselves. "Snapped the proposal to the sample grid" is a description and is worth nothing;
+`python3 rew_tool/state/apply.py … --sheet` is the claim. `dropped` carries the reason it will not
+be done — and specifically why it cannot be fixed by doing the work, since anything else is just
+`open` with a tired author.
+
+    ## S-007 · Something that was due and is now finished
+    **Status**: done 2026-09-06 · `scripts/run-selftests.sh` (53/53) · commit `abc1234`
+
+The `**Due when:**` line stays as it was written. An item that turned out to be due for a reason
+nobody predicted keeps its original trigger and says so in the status line: what actually brought
+it in is worth more than a tidy record.
+
 ---
 
 ## S-001 · `deployment.py` cannot tell a DECLARED pin from a split
+
+**Status**: open
 
 **Due when:** the first tuning project is pinned to a version and still being worked on. Not before.
 
@@ -45,6 +74,8 @@ one of the disagreeing checkouts is held (`DETACHED`), and points here. It arriv
 
 ## S-002 · A proposed delay is printed in ms the device cannot hold
 
+**Status**: open
+
 **Due when:** the first alignment sheet is entered by hand and the verdict is read at a tweeter
 joint — or when the delay quantiser's direction (below) is measured, whichever comes first.
 
@@ -67,6 +98,8 @@ profile) — a snap in the wrong direction is a whole sample off, worse than no 
 
 ## S-003 · `apf1_response` models the typed corner; the Helix places a lower one
 
+**Status**: open
+
 **Due when:** an AP1 band is prescribed on this hardware above ~2 kHz, or a second processor is
 measured and the deviation turns out to be Helix-specific.
 
@@ -87,6 +120,8 @@ bench would need the octaves in between first.
 
 ## S-004 · The phase control's ceiling is known at one rate
 
+**Status**: open
+
 **Due when:** a 48 kHz Audiotec-Fischer unit (a MATCH, or an older HELIX) is on a bench.
 
 **State today.** `phase_rotation.MAX_CORNER_FRACTION = 3/16` — 18 kHz at 96 kHz. Three
@@ -101,6 +136,8 @@ or 18 kHz. The constant is the one line to correct; the selftest's 48 kHz case (
 **Raised** 2026-09-05 from the same handoff (§1).
 
 ## S-005 · The alias guard reads the whole record; above 1 kHz the record is the cabin
+
+**Status**: open
 
 **Due when:** a mid↔tweeter junction proposed by `predict.py align` lands 0.75 cycles or more from
 a tune verified by ear and measurement. The record already carries `chosen`, `arrival_ms` and
@@ -128,6 +165,8 @@ read the arrival on gated solos and compare: one junction, one cabin, before any
 (CHANGELOG, Unreleased).
 
 ## S-006 · The junction ripple is read, not scored
+
+**Status**: open
 
 **Due when:** a real junction reads `sum_loss_avg_db` better than −0.5 dB with `sum_ripple_db`
 above 3 dB — a pair that adds coherently into a hump. Until one does, the number has not earned a
