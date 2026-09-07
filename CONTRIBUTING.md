@@ -34,7 +34,7 @@ Before opening a PR, make sure you have:
   when they drift. It checks values, not logic: a pass does not mean the three files still *do* the
   same thing, so read all three anyway.
 - **Run `scripts/run-selftests.sh`** — the installer check plus every `rew_tool` module's own
-  selftest, 56 in all (2026-09-07; the runner prints the current count itself —
+  selftest, 55 in all (2026-09-07; the runner prints the current count itself —
   `scripts/run-selftests.sh | tail -1`, and that command is the answer, not this number). It needs
   `numpy` and `scipy` (`dsp_math` and `eq_gate` import scipy by name, and the `dsp_math` selftest
   designs crossovers). CI runs this exact script on push and PR, so a green run here is a green run

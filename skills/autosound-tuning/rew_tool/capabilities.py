@@ -41,7 +41,6 @@ MODULE_DIRS = [_HERE, os.path.join(_HERE, "state"), os.path.join(_HERE, "gates")
                os.path.join(SKILL, "scripts"), os.path.join(REPO, "scripts")]
 #: modules with a command line that the board deliberately does not carry, and why
 NOT_ON_BOARD = {
-    "verify_measurements.py": "a one-off session script kept as it was (rew-tool-docs says so)",
     "make_plot.py": "a plotting helper, not a decision",
     "provenance.py": "which checkout wrote a file; the writers' stamp and a way to print it, "
                      "not something a tuner runs (autosound-hub HUB-002)",

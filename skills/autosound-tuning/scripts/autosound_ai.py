@@ -37,32 +37,76 @@ CWD = os.getcwd()
 PROJECT_MIRROR = os.environ.get("PROJECT_MIRROR", os.path.join(CWD, "rew_analitic"))
 # AUTOSOUND_DIR (optional cross-project canon) is resolved from env below, after .critic-env loads.
 
+def machine_config_path():
+    """The per-machine critic config — the place a SECRET belongs, outside any project.
+
+    The project folder is the one the README tells you to back up to a private GitHub, so a key
+    kept there is one `git push` from leaving; and `.gitignore` stops none of `git add -f`, a
+    folder copy, or a backup that is not git (HUB-025). Mirrors `_gemini_common.sh`, which must
+    resolve the same file -- the shell wrappers and this script are two doors into one channel.
+    """
+    if os.name == "nt" or os.environ.get("APPDATA"):
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            return os.path.join(appdata, "autosound", "critic-env")
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    base = xdg if xdg else os.path.join(os.path.expanduser("~"), ".config")
+    return os.path.join(base, "autosound", "critic-env")
+
+
 # Спроба зчитати конфігурацію з .critic-env
 def load_env_file():
+    """Read every config that exists, machine file FIRST, project files after it.
+
+    Both are read rather than the first one winning: the machine file carries the key, and a
+    project may still pin non-secret things (models, GEMINI_BIN, PROJECT_MIRROR) -- and an
+    existing project-local file keeps working exactly as before.
+
+    Returns the list of files actually used, so the caller can say which one it read instead of
+    leaving the user to guess which of four it was."""
     env_paths = [
+        machine_config_path(),
         os.path.join(PROJECT_MIRROR, ".critic-env"),
         os.path.join(CWD, ".critic-env"),
         os.path.join(CWD, "scripts", ".critic-env"),
     ]
+    used = []
     for path in env_paths:
-        if os.path.isfile(path):
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    for line in f:
-                        line = line.strip()
-                        if not line or line.startswith("#"):
-                            continue
-                        if "=" in line:
-                            k, v = line.split("=", 1)
-                            # Прибираємо лапки
-                            v = v.strip().strip("'\"")
-                            os.environ[k.strip()] = v
-                return path
-            except Exception as e:
-                print(f"Помилка зчитування .critic-env {path}: {e}", file=sys.stderr)
-    return None
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    if line.startswith("export "):
+                        line = line[len("export "):].strip()
+                    if "=" not in line:
+                        continue
+                    # A value that can RUN something is not a value. This file is not sourced
+                    # here -- but `_gemini_common.sh` reads the SAME file, so a line dropped
+                    # there must be dropped here too, or the two doors disagree about what the
+                    # config says.
+                    if "$(" in line or "`" in line or ";" in line:
+                        print(f"critic-env: рядок відкинуто (виконуваний вміст): "
+                              f"{line.split('=', 1)[0]}", file=sys.stderr)
+                        continue
+                    k, v = line.split("=", 1)
+                    k = k.strip()
+                    if not k.replace("_", "").isalnum() or k[:1].isdigit():
+                        continue
+                    # Прибираємо лапки
+                    v = v.strip().strip("'\"")
+                    os.environ[k] = v
+            used.append(path)
+        except Exception as e:
+            print(f"Помилка зчитування .critic-env {path}: {e}", file=sys.stderr)
+    return used
 
-ENV_FILE_USED = load_env_file()
+
+ENV_FILES_USED = load_env_file()
+ENV_FILE_USED = ENV_FILES_USED[-1] if ENV_FILES_USED else None
 
 # Optional cross-project canon dir (UNSET by default; set AUTOSOUND_DIR in env/.critic-env).
 AUTOSOUND_DIR = os.environ.get("AUTOSOUND_DIR", "")
@@ -367,8 +411,11 @@ def run_doctor():
     ok = True
     
     # 1. Перевірка .critic-env
-    if ENV_FILE_USED:
-        print(f"✓ Знайдено файл конфігурації: {ENV_FILE_USED}")
+    if ENV_FILES_USED:
+        # All of them, in the order they were applied -- with four candidate locations, "found a
+        # config" without saying WHICH is a fact the user cannot act on.
+        for _p in ENV_FILES_USED:
+            print(f"✓ Знайдено файл конфігурації: {_p}")
     else:
         print("· Файл .critic-env не знайдено (використовуються змінні оточення або дефолтні значення)")
         

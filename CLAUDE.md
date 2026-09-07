@@ -67,7 +67,7 @@ symlink on every user machine. It came back on 2026-08-26 and nothing noticed.
 ## Tests
 
 - **`scripts/run-selftests.sh` is the single entry point** — the installer check plus every
-  `rew_tool` module's own selftest, 56 in all (2026-09-07 — but read the count off
+  `rew_tool` module's own selftest, 55 in all (2026-09-07 — but read the count off
   `scripts/run-selftests.sh | tail -1` rather than off this line; a number with no command beside
   it ages in silence, which is how this one said 42 and CONTRIBUTING said 20 on the same day).
   It needs `numpy` and `scipy`, and CI runs this exact script, so a green run locally is a green

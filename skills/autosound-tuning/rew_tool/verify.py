@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Is this measurement there, and is it usable? — a machine verdict per title (SCR-013).
 
-`verify_measurements.py` next door is what this replaces for anything but its own Passat session:
-a one-off script with hardcoded measurement ids, `print`-driven output and no way to be called.
-A front-end asking "can I light this row green?" needs an answer, not a report.
+This replaced `verify_measurements.py`, a one-off script with hardcoded measurement ids (9-15),
+`print`-driven output and no way to be called; that file was deleted on 2026-09-07 once it was
+established that everything it did lives elsewhere -- arrivals in `timebase.py` + `analyze_impulse`,
+corner candidates in `xover_candidates.py`, the usability verdict here. A front-end asking "can I
+light this row green?" needs an answer, not a report.
 
 The verdict is deliberately shallow. It says whether REW holds the measurement and whether what it
 holds looks like a real capture — not whether the tune is good. Judging the sound is the method's

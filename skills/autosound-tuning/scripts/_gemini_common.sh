@@ -15,9 +15,50 @@
 # env or a .critic-env file — see references/tooling/setup-critic-channel.md.
 
 # --- optional per-machine / per-project config -----------------------------
-# Sourced if present so a user pins CLI/model/paths ONCE, not on every call.
-for _env in "$PWD/rew_analitic/.critic-env" "$PWD/.critic-env"; do
-  if [[ -f "$_env" ]]; then set -a; . "$_env"; set +a; break; fi
+# READ as KEY=VALUE. Never sourced.
+#
+# This file used to be run through `.` with `set -a`. That meant a project someone else wrote --
+# a clone, a copy off a stick, a folder a customer sent -- executed arbitrary shell the moment you
+# started the reviewer. Nothing in here needs a shell: it is a list of names and values, and that
+# is now all it can be (HUB-025).
+_critic_load() {                                   # $1 = file
+  local line key val
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line#"${line%%[![:space:]]*}"}"        # ltrim
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    [[ "$line" == export\ * ]] && line="${line#export }"
+    [[ "$line" != *=* ]] && continue
+    # A value that can RUN something is not a value. These three are how a config file turns
+    # into a shell script; a line carrying one is dropped, and said out loud rather than ignored.
+    if [[ "$line" == *'$('* || "$line" == *'`'* || "$line" == *';'* ]]; then
+      printf 'critic-env: рядок відкинуто (виконуваний вміст): %s\n' "${line%%=*}" >&2
+      continue
+    fi
+    key="${line%%=*}"; val="${line#*=}"
+    key="${key//[[:space:]]/}"
+    [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+    val="${val#"${val%%[![:space:]]*}"}"           # ltrim
+    val="${val%"${val##*[![:space:]]}"}"           # rtrim
+    if [[ ${#val} -ge 2 && ( "$val" == \"*\" || "$val" == \'*\' ) ]]; then
+      val="${val:1:${#val}-2}"                     # one layer of matching quotes
+    fi
+    export "$key=$val"
+  done < "$1"
+}
+
+# WHERE the key lives, and why it is not in the project. The project folder is the one the README
+# tells you to back up to a private GitHub -- so a secret kept there is a secret one `git push`
+# away from leaving, and `.gitignore` does not stop `git add -f`, a folder copy, or a backup that
+# is not git at all. The per-machine file is the first line; `.gitignore` (seeded by
+# project_seed.py) is the second.
+#
+# Both are read, machine first, so a project can still pin non-secret things -- models,
+# GEMINI_BIN, PROJECT_MIRROR -- and an existing project-local file keeps working unchanged.
+if [[ -n "${XDG_CONFIG_HOME:-}" ]]; then _critic_machine="$XDG_CONFIG_HOME/autosound/critic-env"
+else                                     _critic_machine="$HOME/.config/autosound/critic-env"; fi
+for _env in "$_critic_machine" "${APPDATA:+$APPDATA/autosound/critic-env}" \
+            "$PWD/rew_analitic/.critic-env" "$PWD/.critic-env"; do
+  [[ -n "$_env" && -f "$_env" ]] && _critic_load "$_env"
 done
 
 # --- where the docs live ----------------------------------------------------
