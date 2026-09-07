@@ -243,6 +243,42 @@ def _profile_open_count(path):
         return 0
 
 
+#: What a fresh project must never push, seeded as a real file rather than promised in prose.
+#: `setup-critic-channel.md` said "it's gitignored" for months with nothing behind it: no
+#: `.gitignore` was written by anything, and `project-intake.md` asked the AGENT to make one --
+#: an instruction with no carrier, obeyed or not depending on the session. Meanwhile README
+#: recommends backing this very folder up to a private GitHub (HUB-025).
+#:
+#: This is the SECOND line of defence and it is worth saying which: a key belongs outside the
+#: project entirely (`~/.config/autosound/critic-env`), because `.gitignore` stops none of
+#: `git add -f`, a copied folder, or a backup that is not git at all.
+GITIGNORE_LINES = [
+    "# Written by project_seed.py. Secrets and machine-local state do not leave this folder.",
+    "# The key itself belongs OUTSIDE the project: ~/.config/autosound/critic-env",
+    "# (Windows: %APPDATA%\\autosound\\critic-env). See setup-critic-channel.md.",
+    ".critic-env",
+    "rew_analitic/.critic-env",
+    ".mcp.json",
+    ".tcc/",
+    "*.mdat",
+]
+
+
+def write_gitignore(target):
+    """Write `.gitignore` into a fresh project. Returns True if it wrote one.
+
+    An existing file is left ALONE and reported as untouched -- a project may already carry
+    rules somebody meant, and silently rewriting them would be a worse failure than the one
+    this closes."""
+    path = os.path.join(target, ".gitignore")
+    if os.path.exists(path):
+        return False
+    os.makedirs(target, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(GITIGNORE_LINES) + "\n")
+    return True
+
+
 def seed(source, target, *, include_findings=False, copy_profile=True, note=DEFAULT_NOTE,
          today=None):
     """Copy `source`'s system parameters into `target`. Never writes into `source`.
@@ -308,6 +344,8 @@ def seed(source, target, *, include_findings=False, copy_profile=True, note=DEFA
     result.written.append("project.json")
 
     os.makedirs(target, exist_ok=True)
+    if write_gitignore(target):
+        result.written.append(".gitignore")
     profile = os.path.join(source, PROFILE_FILE)
     if copy_profile and os.path.isfile(profile):
         shutil.copy2(profile, os.path.join(target, PROFILE_FILE))
@@ -476,6 +514,30 @@ def _selftest():
 
         # An allowlist, not a blocklist: the ledger is not excluded by a rule, it is never reached.
         assert not os.path.exists(os.path.join(dst, "state")), "the ledger must not travel"
+
+        # ── the .gitignore is WRITTEN, not promised (HUB-025) ────────────────────────────────
+        # `setup-critic-channel.md` claimed "it's gitignored" while nothing wrote one, and README
+        # recommends backing this folder up to a private GitHub. This is the carrier that claim
+        # never had; the key living outside the project is the first line, this is the second.
+        gi_path = os.path.join(dst, ".gitignore")
+        assert os.path.isfile(gi_path), "a fresh project must carry a .gitignore"
+        assert ".gitignore" in out.written, out.written
+        with open(gi_path, encoding="utf-8") as f:
+            gi = f.read()
+        for rule in (".critic-env", "rew_analitic/.critic-env", ".mcp.json", ".tcc/", "*.mdat"):
+            assert any(ln.strip() == rule for ln in gi.splitlines()), (rule, gi)
+        # And it says where the key SHOULD live, because a rule with no alternative just moves
+        # the problem to wherever the user puts the file next.
+        assert "critic-env" in gi and ".config/autosound" in gi, gi
+
+        # An existing .gitignore is left alone: a project may already carry rules somebody meant.
+        keep = os.path.join(tmp, "has-own")
+        os.makedirs(keep, exist_ok=True)
+        with open(os.path.join(keep, ".gitignore"), "w", encoding="utf-8") as f:
+            f.write("mine\n")
+        assert write_gitignore(keep) is False, "an existing .gitignore must not be rewritten"
+        with open(os.path.join(keep, ".gitignore"), encoding="utf-8") as f:
+            assert f.read() == "mine\n", "the user's rules survived"
 
         # Prose is marked, and the mark goes UNDER the title rather than displacing it.
         with open(os.path.join(dst, "autosound_context.md"), encoding="utf-8") as f:

@@ -1,6 +1,16 @@
-# Copy to your project:  cp scripts/.critic-env.example rew_analitic/.critic-env
-# Then edit + uncomment what you need. Sourced automatically by both wrappers.
-# ⚠️ Model names with SPACES/PARENS MUST be quoted, or the file won't parse.
+# WHERE THIS GOES depends on what you put in it.
+#
+#   the API KEY  ->  ~/.config/autosound/critic-env     (Windows: %APPDATA%\autosound\critic-env)
+#   everything else -> rew_analitic/.critic-env in the project, if you want it per-car
+#
+#   mkdir -p ~/.config/autosound && cp scripts/.critic-env.example ~/.config/autosound/critic-env
+#
+# The key stays out of the project because the project folder is the one the README suggests
+# backing up to a private GitHub. Both files are read, the machine one first, so an existing
+# project-local file keeps working exactly as before.
+#
+# READ as KEY=VALUE, never executed: a line containing $( , a backtick or ; is dropped with a
+# message. Quotes around a value are optional and stripped; they cost nothing and read clearer.
 
 # ---- Default: real Antigravity (agy) ----
 GEMINI_BIN=agy

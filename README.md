@@ -39,7 +39,7 @@ You don't need to be a programmer — the app installs with a single command. Bu
 3. **REW (Room EQ Wizard) software** — **beta version** is required (the regular release version has no API tab at all). Get the beta build from [roomeqwizard.com/beta.html](https://www.roomeqwizard.com/beta.html). After launching REW, go to *Preferences → API*, check **Start the API when REW starts**, and click **Start server**.
 4. **Paid Claude subscription (Pro or Max)** — this AI does the heavy lifting and solves complex math problems. Without internet near the car, the session won't work.
 
-*(We also recommend having a free GitHub account to automatically back up your tuning history in a private repository).*
+*(We also recommend having a free GitHub account to automatically back up your tuning history in a private repository. Your Gemini API key does **not** travel with that backup: it lives outside the project, in `~/.config/autosound/critic-env` — `%APPDATA%\autosound\critic-env` on Windows — and a new project is created with a `.gitignore` that keeps the project-local config out of git as well.)*
 
 ## How to Install and Start (Version 3.x — Beta)
 

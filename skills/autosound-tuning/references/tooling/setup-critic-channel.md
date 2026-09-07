@@ -53,13 +53,36 @@ brew install --cask antigravity-cli      # the REAL agy — NOT a symlink to gem
 GEMINI_CRITIC_MODEL="Gemini 3.5 Flash (Medium)" scripts/gemini_critic.sh pkg.md  # force Flash
 ```
 
-## 3. Pin config once with `.critic-env`
+## 3. Pin config once — the KEY outside the project, the rest in it
 
-Copy the shipped template (it's gitignored) and edit:
+**The API key does not go in the project folder.** That folder is the one the README suggests
+backing up to a private GitHub, so a key kept there is one `git push` from leaving. It lives
+per-machine instead, and both the shell wrappers and `autosound_ai.py` read it from there first:
+
 ```bash
-cp scripts/.critic-env.example rew_analitic/.critic-env
+mkdir -p ~/.config/autosound                       # Windows: %APPDATA%\autosound\
+cp scripts/.critic-env.example ~/.config/autosound/critic-env
 ```
-⚠️ **Quote any model name with spaces/parens**, or the file won't parse (`--doctor` catches this):
+
+Everything non-secret — models, `GEMINI_BIN`, `PROJECT_MIRROR` — can still sit in the project,
+where it belongs with the car it describes:
+
+```bash
+cp scripts/.critic-env.example rew_analitic/.critic-env   # then delete the key line from it
+```
+
+Both files are read, the machine one first, so an existing project-local setup keeps working.
+A project's `.gitignore` now really does cover `.critic-env` — `project_seed.py` writes it when
+the project is created (before, this page said "it's gitignored" and nothing wrote one). That is
+the second line, not the first: `.gitignore` stops none of `git add -f`, a copied folder, or a
+backup that is not git.
+
+**The file is read as `KEY=VALUE`, never executed.** A line containing `$(`, a backtick or `;` is
+dropped with a message — before, this file was `source`d, so a project someone else wrote ran
+arbitrary shell the moment you started the reviewer.
+
+⚠️ **Quote any model name with spaces/parens** — no longer required by the parser, but harmless
+and clearer (`--doctor` catches a malformed line):
 ```bash
 GEMINI_BIN=agy
 GEMINI_CRITIC_MODEL="Gemini 3.5 Flash (Medium)"     # quotes REQUIRED
