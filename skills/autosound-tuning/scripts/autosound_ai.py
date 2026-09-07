@@ -22,6 +22,7 @@ import subprocess
 import json
 import urllib.request
 import shutil
+import tempfile
 from datetime import datetime
 
 # Примусово налаштовуємо UTF-8 для виводу на Windows, щоб уникнути збоїв кодування (UnicodeEncodeError) на українських символах
@@ -692,10 +693,19 @@ def main():
     cli_bin = detect_cli(provider)
     if cli_bin:
         print(f">> Виклик локального CLI '{cli_bin}' ({provider})...", file=sys.stderr)
-        # Збережемо тимчасовий файл промпту
-        temp_prompt_path = os.path.join(os.environ.get("TEMP", os.environ.get("TMPDIR", "/tmp")), f"autosound_{role}.txt")
+        # Тимчасовий файл промпту — з унікальним іменем і правами 0600, які дає сама бібліотека.
+        #
+        # Було: `$TEMP|$TMPDIR|/tmp` + `autosound_<role>.txt` — передбачуване ім'я з правами за
+        # umask. У файл лягає скомпільований промпт: контекст проєкту, вміст контракту, дані
+        # тюнінгу. На macOS і Windows тека вже приватна на користувача, тож ризик там малий; на
+        # СПІЛЬНОМУ Linux `/tmp` світ-записуваний, і передбачуване ім'я — це і TOCTOU через
+        # символьне посилання на чужий файл, і видимість вмісту сусідові. `tempfile` знімає обидва
+        # без окремої гілки на кожну ОС і коштує рівно нічого (HUB-041).
+        temp_prompt_path = None
         try:
-            with open(temp_prompt_path, "w", encoding="utf-8") as tf:
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", prefix=f"autosound_{role}_",
+                                             suffix=".txt", delete=False) as tf:
+                temp_prompt_path = tf.name
                 tf.write(compiled_prompt)
 
             # Agent-inside-agent = chronic deadlock (observed ~15/20 field sessions).
@@ -731,15 +741,21 @@ def main():
                         f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M')} | {role}={model} | package={os.path.basename(pkg_file)}\n")
                 except Exception:
                     pass
-                try:
-                    os.remove(temp_prompt_path)
-                except Exception:
-                    pass
                 return
             else:
                 print(f">> Помилка виконання CLI. Спроба буфера обміну. Деталі: {proc.stderr}", file=sys.stderr)
         except Exception as e:
             print(f">> Не вдалося виконати CLI ({e}). Перехід у ручний режим...", file=sys.stderr)
+        finally:
+            # У `finally`, а не в гілці успіху: раніше файл прибирався ТІЛЬКИ коли CLI відпрацював
+            # чисто, тож після таймауту, помилки чи будь-якого винятку промпт із контекстом
+            # проєкту лишався в спільній теці назавжди — і саме падіння було тим випадком, коли
+            # він там залишався.
+            if temp_prompt_path:
+                try:
+                    os.remove(temp_prompt_path)
+                except OSError:
+                    pass
 
     # 3. Ручний режим — Clipboard Mode (Кросплатформний порятунок)
     print("\n" + "="*50, file=sys.stderr)
