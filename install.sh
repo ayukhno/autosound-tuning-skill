@@ -748,8 +748,23 @@ elif [ -d "$SKILL_SRC/.git" ]; then
   # Fetch the ref BY NAME. The checkout was made with `--depth 1 --branch <tag>`, so it contains
   # that tag and nothing else; FETCH_HEAD is whatever was just fetched, so this handles a tag, a
   # branch or a sha the same way (2026-08-13).
-  run git -C "$SKILL_SRC" fetch --quiet --depth 1 origin "$SKILL_REF"
-  run git -c advice.detachedHead=false -C "$SKILL_SRC" checkout --quiet FETCH_HEAD
+  # CHECKED, both of them. Unchecked, a network blip or a moved ref left the method sitting on
+  # the previous version while this script printed "updating to <ref>" and carried on -- the one
+  # failure mode where the user is told the opposite of what happened (HUB-042).
+  if run git -C "$SKILL_SRC" fetch --quiet --depth 1 origin "$SKILL_REF" &&
+     run git -c advice.detachedHead=false -C "$SKILL_SRC" checkout --quiet FETCH_HEAD; then
+    # And verify what it was supposed to produce, not just that the command exited 0.
+    if [ "$DRY_RUN" = 0 ] &&
+       [ "$(git -C "$SKILL_SRC" rev-parse HEAD 2>/dev/null)" != \
+         "$(git -C "$SKILL_SRC" rev-parse FETCH_HEAD 2>/dev/null)" ]; then
+      warn "the update did not take: HEAD is not what was just fetched."
+      warn "the method is still at $(git -C "$SKILL_SRC" describe --tags --always 2>/dev/null || echo unknown)"
+    fi
+  else
+    warn "could not update the method to $SKILL_REF -- it is STILL at" \
+         "$(git -C "$SKILL_SRC" describe --tags --always 2>/dev/null || echo unknown)."
+    warn "check the network, then re-run this script; nothing was changed."
+  fi
 else
   say "  into ~/.claude/skills/autosound-tuning"
   if [ "$DRY_RUN" = 0 ]; then mkdir -p "$(dirname "$SKILL_HOME")"; fi

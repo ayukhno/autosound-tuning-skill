@@ -73,6 +73,26 @@ if ($Log) { try { Start-Transcript -Path $Log -Force | Out-Null } catch { Write-
 # Native commands (git, winget, uv, claude...) write ordinary progress to stderr, and under
 # `$ErrorActionPreference = "Stop"` Windows PowerShell 5.1 turns that into a terminating error the
 # moment it is redirected. So: Continue, and every step checks its own result instead.
+#
+# "Every step checks its own result" was a PROMISE until 2026-09-07; this is the audit that made
+# it a statement (HUB-042). Every external call in this file, and what checks it:
+#
+#   winget install Git.Git        `Have git` right after, then `exit 1` -- the strongest of the lot
+#   Invoke-WebRequest (Git .exe)  try/catch -> Warn, then the same `Have git` gate
+#   uv installer (irm | iex)      Invoke-Upstream returns the CHILD's exit code; `Have uv` after
+#   uv python install 3.12        `Test-Path $Py3` after; Warn naming what will not run
+#   uv tool install autosound-tcc return value read into `if` -- the one that always was
+#   git fetch / git checkout      both return values read, then HEAD vs FETCH_HEAD compared
+#   git clone                     `Test-Path <clone>\skills\autosound-tuning` after
+#   pip install -r requirements   `python3 -c "import numpy, scipy"` after -- the produce, not the code
+#   claude / agy / gh installers  `Have <tool>` after each; absence is a Warn, not a stop
+#   Remove-Item (the --uninstall  DELIBERATELY unchecked. The goal is "gone"; a file that was not
+#   branch, 12 of the 19 `Run`     there is the goal already, and every one carries
+#   calls in this file)           -ErrorAction SilentlyContinue for exactly that reason.
+#
+# The rule this leaves behind: a new external call either reads its result, or carries a line
+# saying why its failure is safe. `Run` returns a boolean -- piping it to Out-Null is the way to
+# say "I do not care", and it should be visible when that is what you mean.
 $ErrorActionPreference = "Continue"
 $ProgressPreference = "SilentlyContinue"
 # Windows PowerShell 5.1 still defaults to TLS 1.0/1.1 for web requests, which GitHub and most of
@@ -681,8 +701,22 @@ if ((-not $linkExists) -or $isOurs) {
         Say "already installed -- updating to $SkillRef"
         # Fetch the ref BY NAME: the clone was made with --depth 1 --branch <tag>, so it holds
         # that tag and nothing else; FETCH_HEAD is whatever was just fetched.
-        Run { & git -C $SkillSrc fetch --quiet --depth 1 origin $SkillRef } "git fetch $SkillRef" | Out-Null
-        Run { & git -c advice.detachedHead=false -C $SkillSrc checkout --quiet FETCH_HEAD } "git checkout FETCH_HEAD" | Out-Null
+        # CHECKED, both of them, and the mirror of install.sh. Unchecked, a network blip or a
+        # moved ref left the method on the previous version while this script printed
+        # "updating to <ref>" and carried on -- the one failure mode where the user is told the
+        # opposite of what happened (HUB-042).
+        $fetched  = Run { & git -C $SkillSrc fetch --quiet --depth 1 origin $SkillRef } "git fetch $SkillRef"
+        $checked  = $fetched -and (Run { & git -c advice.detachedHead=false -C $SkillSrc checkout --quiet FETCH_HEAD } "git checkout FETCH_HEAD")
+        if (-not $DryRun) {
+            $at = (& git -C $SkillSrc describe --tags --always 2>$null)
+            if (-not $checked) {
+                Warn "could not update the method to $SkillRef -- it is STILL at $at."
+                Warn "check the network, then run this script again; nothing was changed."
+            } elseif ((& git -C $SkillSrc rev-parse HEAD 2>$null) -ne (& git -C $SkillSrc rev-parse FETCH_HEAD 2>$null)) {
+                # What it was supposed to PRODUCE, not just that it exited 0.
+                Warn "the update did not take: HEAD is not what was just fetched; still at $at"
+            }
+        }
     } else {
         Say "into ~\.claude\skills\autosound-tuning"
         if (-not $DryRun) {
@@ -727,7 +761,22 @@ if ($DryRun -and -not (Test-Path $reqs)) {
     # (PEP 668) and pip refuses even --user without it (first Windows run, 2026-08-17). With the
     # flag and --user nothing under uv's tree is touched.
     Say "into $(Pretty $Py3)"
-    Run { & $Py3 -m pip install --quiet --user --break-system-packages --no-warn-script-location --disable-pip-version-check -r $reqs } "python3 -m pip install --user -r requirements.txt" | Out-Null
+    # CHECKED by what it was supposed to produce. install.sh has warned on a failed pip since it
+    # was written; this side did not, so a machine that could not reach PyPI finished the install
+    # looking successful and only said so much later, as a selftest failing on `import numpy`
+    # with nothing pointing back here (HUB-042).
+    $pipOk = Run { & $Py3 -m pip install --quiet --user --break-system-packages --no-warn-script-location --disable-pip-version-check -r $reqs } "python3 -m pip install --user -r requirements.txt"
+    if (-not $DryRun) {
+        $haveDeps = Test-Quiet { & $Py3 -c "import numpy, scipy" }
+        if (-not $haveDeps) {
+            Warn "numpy/scipy did not install -- the method's tools will fail on import."
+            Warn "retry by hand:  `"$Py3`" -m pip install --user --break-system-packages -r `"$reqs`""
+        } elseif (-not $pipOk) {
+            # pip said no, the imports say yes: they were already there. Worth one line, because
+            # "pip failed" with everything working is the kind of thing people re-run for hours.
+            Say "  (pip reported an error, but numpy and scipy import fine -- already installed)"
+        }
+    }
 }
 
 # -- the desktop app ---------------------------------------------------------------------------
