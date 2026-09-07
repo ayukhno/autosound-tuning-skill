@@ -54,7 +54,14 @@ def verdict(name, measurements=None, f_low=20, f_high=20000):
     `measurements` is REW's own `get_measurements()` map, passed in when checking a list so the
     whole check costs one round trip plus one pull per title rather than two per title.
     """
-    out = {"name": name, "exists": False, "valid": False, "issues": [], "stats": {}}
+    # THREE states, not two. `exists` and `valid` were split because "nobody measured it" and "it
+    # was measured and cannot be used" are different conversations; `applicable` is the same split
+    # one step earlier -- this check asks swept-capture questions (is the impulse there, does the
+    # span cover the band), and an RTA answers none of them by its nature. Judging it against them
+    # paints a row red where nothing is wrong (TCC-008). Defaults to True so a caller that never
+    # looks at the field keeps the behaviour it had.
+    out = {"name": name, "exists": False, "applicable": True, "kind": _api.UNKNOWN,
+           "valid": False, "issues": [], "stats": {}}
     try:
         ms = _api.get_measurements() if measurements is None else measurements
     except Exception as exc:  # noqa: BLE001 — REW not running is a verdict, not a traceback
@@ -76,6 +83,17 @@ def verdict(name, measurements=None, f_low=20, f_high=20000):
     entry = (ms.get(mid) or {})
     out["stats"]["uuid"] = entry.get("uuid")
     out["stats"]["date"] = entry.get("date")
+    # The kind comes off the LISTING record, which is all a caller has before pulling anything --
+    # the same place a front-end reads it when the tuner is still choosing rows at the car.
+    out["kind"] = _api.measurement_kind(entry)
+    if not _api.is_swept(entry):
+        # Not a failure and not a pass: a row to grey out, not to colour. `valid` stays False
+        # because nothing here was validated -- reading it as "bad" is what `applicable` exists
+        # to prevent, and a caller that ignores the field sees exactly what it saw before.
+        out["applicable"] = False
+        out["issues"].append(f"this check is for swept captures; REW says this one is "
+                             f"{out['kind']} — nothing here was checked")
+        return out
 
     try:
         freqs, mag, phase = _api.get_fr(mid)
@@ -425,6 +443,35 @@ def _selftest():
 
     assert _driver_of("w-L_02 (sw)") == "w-L", _driver_of("w-L_02 (sw)")
     assert _driver_of("tw-R_01") == "tw-R"
+
+    # ── an RTA is not a failed sweep (TCC-008) ──────────────────────────────────────────────
+    # The three states this verdict keeps apart, exercised without REW by stubbing the one call
+    # that needs it. `applicable: False` must NOT read as `valid: False` to anyone downstream:
+    # a front-end colouring rows sees "grey", not "red", and the reason says which.
+    _orig_gm, _orig_fr = _api.get_measurements, _api.get_fr
+    rta   = {"title": "ALL_60 (rta)", "uuid": "u1",
+             "notes": "65536-point 1/48 octave RTA using Hann window, no smoothing and 150 averages"}
+    swept = {"title": "sw_60 (sw)", "uuid": "u2",
+             "notes": "DELAY 22.6504 ms (7.769 m, 25 ft 5.9 in)"}
+    listing = {"1": rta, "2": swept}
+    try:
+        _api.get_measurements = lambda: listing
+        # A real-looking sweep: rising then falling, nothing flat, nothing silent.
+        _api.get_fr = lambda mid: ([20 * (10 ** (k / 100.0)) for k in range(301)],
+                                   [70 + 10 * (k % 7) for k in range(301)], None)
+        v_rta = verdict("ALL_60 (rta)", measurements=listing)
+        assert v_rta["exists"] is True, v_rta
+        assert v_rta["applicable"] is False and v_rta["kind"] == _api.RTA, v_rta
+        assert "swept captures" in v_rta["issues"][0], v_rta
+        # Nothing was measured against sweep rules, so no sweep-shaped complaint appears.
+        assert not any("truncated" in i or "flat to" in i for i in v_rta["issues"]), v_rta
+
+        v_sw = verdict("sw_60 (sw)", measurements=listing)
+        assert v_sw["applicable"] is True and v_sw["kind"] == _api.SWEEP, v_sw
+        # And the swept one really did get checked -- otherwise the assert above proves nothing.
+        assert v_sw["stats"].get("range_dB") is not None, v_sw
+    finally:
+        _api.get_measurements, _api.get_fr = _orig_gm, _orig_fr
 
     # Two captures of one driver, 24 dB apart: the worse one is flagged, the cleaner is not, and
     # a different driver's capture is judged only against its own.

@@ -2,6 +2,7 @@ import urllib.request
 import urllib.error
 import urllib.parse
 import json
+import re
 import base64
 import os
 import struct
@@ -168,6 +169,64 @@ def duplicate_titles(measurements=None):
             continue
         seen.setdefault(title, []).append(mid)
     return {t: ids for t, ids in seen.items() if len(ids) > 1}
+
+
+#: What kind of capture a record is. `unknown` is a real answer and not a failure -- see
+#: `measurement_kind` for why it is treated as swept downstream.
+SWEEP, RTA, IMPEDANCE, UNKNOWN = "sweep", "rta", "impedance", "unknown"
+
+#: REW writes the capture's own description into `notes`, and that is the ONLY thing in a
+#: `/measurements` listing that separates the kinds -- measured on a live REW V5.40 beta 132 over
+#: 90 captures, 72 RTA and 18 swept, 2026-09-07 (autosound-tcc, TCC-008). The listing's fields are
+#: alignSPLOffsetdB · date · endFreq · groupID · groupName · groupNotes · inverted · notes ·
+#: rewVersion · sampleRate · splOffsetdB · startFreq · title · uuid. No type among them.
+_RTA_NOTE = re.compile(r"\bRTA\b", re.IGNORECASE)
+_IMPEDANCE_NOTE = re.compile(r"\bimpedance\b", re.IGNORECASE)
+_SWEPT_NOTE = re.compile(r"^\s*DELAY\b|\bno timing offset\b", re.IGNORECASE | re.MULTILINE)
+
+
+def measurement_kind(record):
+    """`sweep` · `rta` · `impedance` · `unknown`, from one measurement record.
+
+    Where the knowledge belongs: REW does not report a type, so every front-end that needs one
+    would otherwise guess separately and differently (TCC-008).
+
+    Two sources, strongest first:
+
+      * **`timeOfIRStartSeconds`** -- present only on a capture that HAS an impulse, which is
+        exactly what "swept" means. It is in a single-measurement record and NOT in the listing,
+        so it settles the question when you have pulled the measurement and not otherwise.
+      * **`notes`** -- REW's own description. An RTA says so (`… 1/48 octave RTA using Hann
+        window …`); a sweep carries the delay REW computed FROM its impulse (`DELAY 22.6504 ms
+        (7.769 m …)`), so the delay line is itself evidence of an impulse.
+
+    Returns `unknown` when neither settles it. That is deliberate and it matters downstream: see
+    `is_swept`, which treats unknown as swept.
+    """
+    if not isinstance(record, dict):
+        return UNKNOWN
+    if record.get("timeOfIRStartSeconds") is not None:
+        return SWEEP
+    notes = record.get("notes") or ""
+    if _IMPEDANCE_NOTE.search(notes):
+        return IMPEDANCE
+    if _RTA_NOTE.search(notes):
+        return RTA
+    if _SWEPT_NOTE.search(notes):
+        return SWEEP
+    return UNKNOWN
+
+
+def is_swept(record):
+    """Should a swept-capture check RUN on this? Excludes what is definitely not swept.
+
+    Note the direction: it does not ask "is this a sweep", it asks "is there a reason to skip
+    this". A sweep whose notes REW writes in a shape we have not seen must NOT drop out of the
+    check -- a missed verdict is the tuner discovering at home that a capture was unusable, which
+    is the entire cost this exists to avoid. A wrongly-included RTA costs one confusing row.
+    Same direction as `capture_import.is_swept` in autosound-tcc, which this replaces.
+    """
+    return measurement_kind(record) not in (RTA, IMPEDANCE)
 
 
 def find_measurement_id(name, measurements=None, exact=True):
