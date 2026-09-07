@@ -8,9 +8,17 @@ import os
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 for _cand in (
+    # This file LIVES in rew_tool. The search below was written when it sat in a project folder
+    # and looked outward for the skill; it moved and the search did not, so on a machine with no
+    # global install the module exited on import while `rew_api.py` lay in the same directory.
+    # Invisible until CI ran it (2026-09-07) -- a developer machine has the skill installed, which
+    # is exactly the condition that hides this.
+    _HERE if os.path.isfile(os.path.join(_HERE, "rew_api.py")) else "",
     os.path.join(_HERE, "..", ".claude", "skills", "autosound-tuning", "rew_tool"),
     os.path.expanduser("~/.claude/skills/autosound-tuning/rew_tool"),
 ):
+    if not _cand:
+        continue
     if os.path.isdir(_cand):
         sys.path.insert(0, os.path.abspath(_cand))
         break
