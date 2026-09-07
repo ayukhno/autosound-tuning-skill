@@ -129,10 +129,14 @@ def main():
                             "established from install.sh/install.ps1")
         elif not ps1url.endswith("/install.ps1"):
             problems.append(f"install.cmd PS1URL does not end in /install.ps1 — {ps1url}")
-        elif f"/{want}/main/" not in ps1url:
-            problems.append(f"install.cmd PS1URL is not {want} on main — {ps1url}")
+        elif f"/{want}/" not in ps1url:
+            problems.append(f"install.cmd PS1URL is not {want} — {ps1url}")
+        elif "/main/" in ps1url:
+            # A moving branch is the thing HUB-030 removed: a broken `main` reaches every new
+            # user instantly, a broken tag reaches nobody until the next one is cut.
+            problems.append(f"install.cmd PS1URL still points at main — {ps1url}")
         else:
-            checked.append(f"install.cmd fetches install.ps1 from {want} on main")
+            checked.append(f"install.cmd fetches install.ps1 from {want}, by tag")
 
     # 4. the version-pin EXAMPLE. It is documentation, not a constant -- and that is exactly why it
     # drifted unseen: `install.sh` said `v3.0.3`, `install.ps1` said `v3.0.4`, `install.cmd` said
@@ -175,6 +179,56 @@ def main():
         problems.append('install.ps1: $Mode no longer defaults to "tcc" the way install.sh does')
     else:
         checked.append("both default to mode tcc (--terminal / -Terminal is the opt-out)")
+
+    # 6. the TAG the world is told to paste. HUB-030 moved the one-liners off `main`, and a pinned
+    # URL is only worth pinning while it is current: a stale one keeps handing new users a build
+    # that is not the newest. Compared against the CHANGELOG's own top entry, which is what this
+    # repo already treats as the released version -- and offline, because CI has no network.
+    changelog = read(ROOT / "CHANGELOG.md")
+    released = None
+    m = re.search(r"^## \[(v3\.[0-9.]+)\]", changelog, re.M)
+    if m:
+        released = m.group(1)
+    else:
+        problems.append("CHANGELOG.md: no `## [v3.x.y]` heading — the released version cannot be "
+                        "established, so the install lines cannot be checked against it")
+
+    readmes = {n: read(ROOT / n) for n in
+               ("README.md", "README.uk.md", "README.de.md", "README.pl.md")}
+    pasted = {}
+    for name, text in readmes.items():
+        tags = set(re.findall(r"autosound-tuning-skill/(v3\.[0-9.]+|main)/install\.", text))
+        if not tags:
+            problems.append(f"{name}: no install one-liner found — it is the line people paste")
+        elif len(tags) > 1:
+            problems.append(f"{name}: the two install lines disagree — {sorted(tags)}")
+        else:
+            pasted[name] = tags.pop()
+    if pasted and "main" in pasted.values():
+        problems.append("an install one-liner still points at main: "
+                        + ", ".join(n for n, t in pasted.items() if t == "main"))
+    elif pasted and len(set(pasted.values())) > 1:
+        problems.append("the four READMEs paste different versions — "
+                        + ", ".join(f"{n} {t}" for n, t in sorted(pasted.items())))
+    elif pasted and released and set(pasted.values()) != {released}:
+        problems.append(f"the READMEs paste {pasted['README.md']} but CHANGELOG's newest is "
+                        f"{released} — the pinned line is behind the release")
+    elif pasted and released:
+        checked.append(f"all four READMEs paste the same install line, at {released}")
+
+    # And the app: `install-tcc.md` is the OTHER way into TCC, so it must pin too (SCR-054).
+    tcc_doc = read(ROOT / "commands" / "install-tcc.md")
+    tcc_refs = set(re.findall(r"autosound-tcc(@v[0-9.]+)?'", tcc_doc))
+    if not tcc_refs:
+        problems.append("commands/install-tcc.md: no `uv tool install … autosound-tcc` line found")
+    elif "" in tcc_refs:
+        problems.append("commands/install-tcc.md: an install line has no @tag, so uv takes the "
+                        "default branch — the two ways into TCC stop giving the same app")
+    elif len(tcc_refs) > 1:
+        problems.append(f"commands/install-tcc.md: the lines pin different app versions — "
+                        f"{sorted(tcc_refs)}")
+    else:
+        checked.append(f"commands/install-tcc.md pins the app at {tcc_refs.pop().lstrip('@')}")
 
     for line in checked:
         print(f"  ok   {line}")

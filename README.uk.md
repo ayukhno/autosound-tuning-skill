@@ -43,16 +43,16 @@
 
 ## Як встановити та почати (Версія 3.x — Бета)
 
-Ми зробили інсталятор, який сам завантажить усе необхідне і підготує зручний **графічний застосунок (Autosound TCC)**. Процес займає 10–20 хвилин (на macOS система один раз попросить твій пароль, на Windows — покаже діалог дозволу для Git).
+Ми зробили інсталятор, який сам завантажить усе необхідне і підготує зручний **графічний застосунок (Autosound TCC)**. Процес займає 10–20 хвилин (на macOS один раз відкриється власне вікно Apple для інструментів розробника — один клік, і жодного пароля в сам скрипт; на Windows — покаже діалог дозволу для Git).
 
 **macOS** — відкрий Terminal (натисни ⌘-Space, набери «terminal», Enter) і встав:
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.46/install.sh | bash
 ```
 
 **Windows** — відкрий PowerShell (натисни Пуск, набери «powershell», Enter) і встав:
 ```powershell
-irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.46/install.ps1 | iex
 ```
 
 **Після встановлення:**

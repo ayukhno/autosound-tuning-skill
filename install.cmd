@@ -30,7 +30,7 @@ REM  a stray non-ASCII byte in an echo line prints as junk.
 REM ===========================================================================
 
 set "PS1=%~dp0install.ps1"
-set "PS1URL=https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/main/install.ps1"
+set "PS1URL=https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.46/install.ps1"
 
 REM PowerShell 7 if it is here, Windows PowerShell 5.1 otherwise. 5.1 ships with
 REM every supported Windows, so one of these always exists.

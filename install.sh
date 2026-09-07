@@ -116,7 +116,7 @@ Autosound tuning — installer for macOS (and Linux)
                                  installed them, and every --user pip package. Asks first.
 
 Through the one-liner, options go after `bash -s --`:
-  curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/main/install.sh | bash -s -- --terminal
+  curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.46/install.sh | bash -s -- --terminal
 USAGE
 }
 
@@ -240,31 +240,17 @@ usable() {
   fi
 }
 clt_present() { if on_mac; then xcode-select -p >/dev/null 2>&1; else return 0; fi; }
-is_admin()    { id -Gn 2>/dev/null | tr ' ' '\n' | grep -qx admin; }
 
-# The one password. Apple's Command Line Tools install through `softwareupdate`, which needs root;
-# it is asked for here, once, at the start, and a background ticket keeps it valid for the length
-# of the download — so nothing later in the run stops to ask for anything. Dropped again at exit.
-SUDO_OK=0
-SUDO_KEEPALIVE=""
-get_sudo() {
-  tty_ok || return 1
-  say "  Your Mac password now — Apple's Command Line Tools (git) need it. Nothing else here does."
-  if sudo -v -p '  Password: '; then
-    SUDO_OK=1
-    ( while kill -0 "$$" 2>/dev/null; do sudo -n true 2>/dev/null || exit 0; sleep 50; done ) &
-    SUDO_KEEPALIVE=$!
-    return 0
-  fi
-  warn "could not confirm the password — Apple's own installer window will be used instead."
-  return 1
-}
-cleanup() {
-  [ -n "$SUDO_KEEPALIVE" ] && kill "$SUDO_KEEPALIVE" 2>/dev/null
-  [ "$SUDO_OK" = 1 ] && sudo -k 2>/dev/null
-  return 0
-}
-trap cleanup EXIT
+# THIS SCRIPT NEVER ASKS FOR YOUR PASSWORD. It used to: `sudo -v` read the password straight out
+# of a `curl … | bash` pipe, and a background loop re-stamped the ticket every 50 seconds to keep
+# it alive for the download. It worked, and that is the problem — typing a root password into a
+# script you have not read is a habit an installer should not be teaching, and a pipe is the worst
+# place to learn it (HUB-030).
+#
+# Apple's Command Line Tools still need root. They are installed through Apple's OWN window
+# instead, which was already here as the fallback: `xcode-select --install` opens it, macOS asks
+# for whatever it needs in its own dialog, and this script waits. One extra click, no password
+# passing through anything we wrote.
 
 # Telling somebody to paste a line into a file they have never opened is not help, it is a
 # handoff. The line is written here instead. What CANNOT be done from a child process is change
@@ -645,12 +631,10 @@ export PATH="$LOCAL_BIN:$PATH"
 # comes while the person is still at the keyboard, not twelve minutes in.
 if on_mac && [ "$HAVE_CLT" = 0 ]; then
   if [ "$DRY_RUN" = 1 ]; then
-    say "  would ask for your Mac password (for the Command Line Tools)"
-  elif is_admin; then
-    get_sudo || true
+    say "  would open Apple's own installer window for the Command Line Tools (one click)"
   else
-    say "  This account is not an administrator, so Apple's own installer window will be used"
-    say "  for the Command Line Tools — it may ask for an administrator's name and password."
+    say "  Apple's Command Line Tools are missing. Its own installer window opens in a moment —"
+    say "  one click there, and this script waits for it. No password is typed into this script."
   fi
 fi
 
@@ -662,29 +646,10 @@ fi
 if on_mac && [ "$HAVE_CLT" = 0 ]; then
   step "Apple's Command Line Tools (git)"
   if [ "$DRY_RUN" = 1 ]; then
-    say "  would run: softwareupdate -l, then softwareupdate -i \"Command Line Tools for Xcode-…\" (as administrator)"
-    say "  and if that finds nothing: xcode-select --install, waiting for the window to finish"
+    say "  would run: xcode-select --install, then wait for Apple's window to finish"
   else
-    if [ "$SUDO_OK" = 1 ]; then
-      # The same route Homebrew's installer takes: a placeholder file makes `softwareupdate` list
-      # the Command Line Tools, and `-i` installs them with no window and no click.
-      say "  Asking Apple's servers which version to install — this can take a minute…"
-      _ph="/tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress"
-      sudo touch "$_ph" 2>/dev/null || true
-      _label="$(softwareupdate -l 2>/dev/null \
-                 | grep -B 1 -E 'Command Line Tools' \
-                 | awk -F'*' '/^ *\*/ {print $2}' \
-                 | sed -e 's/^ *Label: //' -e 's/^ *//' \
-                 | sort -V | tail -n1)" || _label=""
-      if [ -n "$_label" ]; then
-        say "  Installing \"$_label\" — 5 to 15 minutes, nothing to do meanwhile."
-        sudo softwareupdate -i "$_label" || true
-        sudo xcode-select --switch /Library/Developer/CommandLineTools 2>/dev/null || true
-      else
-        warn "Apple's servers did not list the Command Line Tools — using the installer window instead."
-      fi
-      sudo rm -f "$_ph" 2>/dev/null || true
-    fi
+    # The `softwareupdate -i` route that used to live here needed the root ticket this script no
+    # longer takes. It bought a windowless install; it cost a password typed into a pipe.
     if ! clt_present; then
       say "  Apple's own installer window opens now. Click Install, then Agree, and let it finish —"
       say "  this waits for it. (Do not pick \"Get Xcode\": that is 12 GB and not needed.)"
