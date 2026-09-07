@@ -1,0 +1,33 @@
+# Ruff's configuration, and nothing else. This repo is not a Python package -- there is no
+# `[project]` table on purpose: the method ships as a skill folder, not as a wheel, and adding a
+# package declaration would invite tooling to build and install something nobody asked for.
+
+[tool.ruff]
+# The tree the linter owns. `references/` and the docs are prose; `.venv` is not ours.
+include = ["skills/**/*.py", "scripts/**/*.py"]
+line-length = 100
+
+[tool.ruff.lint]
+# WHAT IS ON, and why it is only this.
+#
+#   F   -- pyflakes: dead code, unused imports and variables, a name defined twice. Every one of
+#          these is a statement about the program rather than about its looks, and the class earned
+#          its place here on the first run: `F811` found `def get_distortion` declared twice in
+#          rew_api.py, where the dead first version swallowed the exception and returned None. A
+#          test could not have caught it -- tests drive behaviour, and Python silently takes the
+#          second def. `F841` then pointed at the caller written against the dead signature.
+#   E9  -- syntax and IO errors ruff cannot even parse past. A file in this state is broken, full
+#          stop.
+#
+# WHAT IS OFF, and why that is a decision rather than an omission (HUB-036 asked for the choice to
+# be written down, so that the next person does not make it again by accident):
+#
+#   E4  -- import placement. `E402` is load-bearing here: several modules extend `sys.path` before
+#          importing their siblings, because the method runs from a skill folder and not from an
+#          installed package. Those lines already carry `# noqa: E402` where it matters.
+#   E7  -- statement style: `x = lambda ...`, two statements on one line, `l` as a name. 81 of the
+#          109 findings on 2026-09-06 were this class. Real, and none of them is a bug; turning
+#          them on would mean a churn commit across the whole tree in exchange for taste.
+#   W, I, UP, B and the rest -- not evaluated yet. Adding a class is a deliberate act with a diff
+#          attached, not a default we inherit.
+select = ["F", "E9"]

@@ -45,7 +45,6 @@ _PARENT = os.path.dirname(_HERE)
 if _PARENT not in sys.path:
     sys.path.insert(0, _PARENT)
 
-import process as _process  # noqa: E402
 import state as _state  # noqa: E402
 
 import dsp_profile as _dsp_profile  # noqa: E402

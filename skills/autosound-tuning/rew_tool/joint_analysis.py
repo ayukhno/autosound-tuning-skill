@@ -177,7 +177,6 @@ def flag_remeasure_candidates(captures, margin_db=REMEASURE_MARGIN_DB):
 
 
 def _best_lag(a, b, fs, max_lag_ms=8.0):
-    n = min(len(a), len(b))
     la = _leading_edge(a) or 0
     lb = _leading_edge(b) or 0
     guard = int(0.001 * fs)
@@ -412,7 +411,6 @@ def _selftest():
     flags = {c["name"]: c["remeasure"] for c in flag_remeasure_candidates(caps)}
     assert flags["wL_b"] and not flags["wL_a"] and not flags["wR_a"]
 
-    dt = 1.0 / fs
     drift = timing_drift_audit(clean, -1.0, clean, -1.0 + 0.00013, fs)
     assert not drift["real_change"] and "drift" in drift["verdict"]
     shifted = [0.0] * n

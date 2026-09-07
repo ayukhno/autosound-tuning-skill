@@ -318,13 +318,6 @@ def get_impulse_response(mid):
     return times, ir
 
 
-def get_distortion(mid):
-    try:
-        return _get(f"/measurements/{mid}/distortion")
-    except Exception:
-        return None
-
-
 def get_filters(mid):
     return _get(f"/measurements/{mid}/filters")
 

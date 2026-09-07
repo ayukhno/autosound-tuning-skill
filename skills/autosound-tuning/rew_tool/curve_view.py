@@ -212,7 +212,6 @@ def _selftest():
     curve -= 7.0 * np.exp(-0.5 * (np.log2(f / 5000.0) / 0.12) ** 2)   # medium dip
 
     _, feats = report(f, curve, (100.0, 10000.0), title="selftest")
-    kinds = {(x["kind"], x["route"].split(":")[0]) for x in feats}
     spikes = [x for x in feats if abs(np.log2(x["f_center"] / 2000)) < 0.15]
     dips = [x for x in feats if abs(np.log2(x["f_center"] / 5000)) < 0.2]
     assert spikes and spikes[0]["kind"] == "peak", feats

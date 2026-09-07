@@ -46,8 +46,6 @@ import os
 import subprocess
 import sys
 
-import provenance
-
 #: Where a consumer points: the skill FOLDER, not the repository around it. Every deployment shape
 #: above hands out this path and only this path, which is why the version has to be answerable
 #: from inside it rather than from a root the consumer never sees.

@@ -31,7 +31,6 @@ import argparse
 import base64
 import json
 import os
-import struct
 import sys
 import threading
 import uuid as _uuid

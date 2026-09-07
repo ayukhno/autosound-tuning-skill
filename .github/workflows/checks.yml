@@ -13,6 +13,13 @@ on:
   push:
   pull_request:
 
+# Nothing here writes anything: the job reads the tree, runs selftests and a linter, and reports.
+# Without this block GITHUB_TOKEN gets whatever the ACCOUNT defaults to, which can be write -- a
+# permission nobody declared and nothing uses. Declaring the floor is cheaper than auditing the
+# default later (HUB-038).
+permissions:
+  contents: read
+
 # A newer push supersedes an in-flight run on the same ref; stale runs are noise, not signal.
 concurrency:
   group: checks-${{ github.ref }}
@@ -22,9 +29,14 @@ jobs:
   selftests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-python@v7
+      # Pinned to a COMMIT, not to `@v7`. A major tag moves onto new commits without our
+      # involvement -- same name, different contents -- which is the shape the hub guards against
+      # in its own tag ledger. Note the difference from numpy/scipy above: those stay unpinned
+      # deliberately, because they are the SUBJECT of the check; these are the machinery that runs
+      # it. To raise either, resolve the tag and commit the new SHA with the version beside it:
+      #   gh api repos/actions/checkout/git/ref/tags/v7 --jq .object.sha
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1     # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.12"
 
@@ -36,3 +48,18 @@ jobs:
 
       - name: selftests and installer consistency
         run: scripts/run-selftests.sh
+
+      # The linter is PINNED while numpy and scipy above are not, and the difference is deliberate.
+      # A new numpy breaking us is information about the code. A new ruff going red is information
+      # about ruff -- it ships new rules, and a check that turns red without anybody touching the
+      # tree is exactly the blinking check this file opens by refusing to have. Raising the pin is
+      # a commit with a diff attached.
+      #
+      # Which classes run, and why only those, is in pyproject.toml next to the choice itself.
+      # Installed explicitly rather than through `uvx`: `uv` is not guaranteed on the runner
+      # image, and a check that depends on a tool nobody promised is a check that goes red for a
+      # reason unrelated to this repo. Same command locally: `uvx ruff@0.12.0 check`.
+      - name: ruff
+        run: |
+          python -m pip install ruff==0.12.0
+          ruff check

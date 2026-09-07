@@ -21,7 +21,6 @@ import os
 import subprocess
 import json
 import urllib.request
-import time
 import shutil
 from datetime import datetime
 

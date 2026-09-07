@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 import rew_api as api
 import analysis as an
 import joint_analysis as ja
-from target_curves import find_target_curve, load_target_curve, interpolate_target
+from target_curves import find_target_curve, interpolate_target
 
 DEFAULT_CURVES_DIR = os.path.expanduser(
     "~/Documents/home/EMMA_2026-05/7. HelixDSP v4 ResoNix_ACС/ResoNix_Accurate_50db_REW 2"
@@ -74,11 +74,11 @@ def print_fr_analysis(freqs, mag, phase, title="АЧХ / Фаза"):
                   f"Δ={stats['range_dB']:.1f} dB")
 
     if phase is None:
-        print(f"\n  Фаза: недоступна (RTA-вимір — лише магнітуда)")
+        print("\n  Фаза: недоступна (RTA-вимір — лише магнітуда)")
     else:
         anomalies = an.find_phase_anomalies(freqs, phase)
         if anomalies:
-            print(f"\n  Фазові аномалії (>30°/окт):")
+            print("\n  Фазові аномалії (>30°/окт):")
             for f, rate in anomalies[:10]:
                 print(f"    {f:>8.1f} Hz  {rate:.0f}°/окт")
 
@@ -103,18 +103,36 @@ def print_gd_analysis(freqs, gd):
 
 
 def print_distortion(dist_data):
-    if not dist_data:
-        print_header("Спотворення")
+    """Top THD peaks from `rew_api.get_distortion`, which returns a TUPLE
+    (freqs, fundamental_db, thd_pct, rows) -- not the raw JSON dict.
+
+    It read that dict for as long as `rew_api` carried TWO `def get_distortion`.
+    The dead first one returned the payload as-is; the live second one returns the
+    tuple, and Python takes the second. So this function reached `k.lower()` on a
+    list and raised AttributeError on every real run -- one `def` too many kept a
+    caller alive that had been written against a signature gone since 2026-07-14.
+    Found by `ruff --select F811,F841` (HUB-036), not by a test: a test drives
+    behaviour, and nothing here drives a live REW."""
+    print_header("Спотворення")
+    if not dist_data or not dist_data[0]:
         print("  Дані недоступні для цього виміру.")
         return
-    print_header("Спотворення")
-    # Show top THD peaks
-    freqs_key = None
-    for k in dist_data:
-        if "freq" in k.lower():
-            freqs_key = k
-            break
-    print(f"  Дані отримано: {list(dist_data.keys())[:5]}")
+    freqs, fund_db, thd_pct, _rows = dist_data
+    # get_distortion pads unparsable cells with NaN, and NaN != NaN is how you spot them.
+    rows = [(f, d, t) for f, d, t in zip(freqs, fund_db, thd_pct) if t == t and d == d]
+    if not rows:
+        print("  Таблиця є, але жодного числового рядка.")
+        return
+    print(f"  {'Freq (Hz)':>10}  {'Fund (dB)':>10}  {'THD %':>8}")
+    print(f"  {'-' * 10}  {'-' * 10}  {'-' * 8}")
+    for f, d, t in sorted(sorted(rows, key=lambda r: r[2], reverse=True)[:8]):
+        print(f"  {f:>10.1f}  {d:>10.1f}  {t:>8.2f}")
+    # phase_0_baseline.md §3.5: a spike counts as a driver/install fault only if the
+    # fundamental there is within ~10 dB of its neighbours. In a deep null the fundamental
+    # collapses while harmonics (at 2f/3f, outside the null) do not -- THD % explodes on a
+    # QUIET fundamental, and that is the room, not the driver.
+    print("  ⚠️ рядки нижче HPF каналу — шум; у глибокому нулі THD % злітає "
+          "при тихому фундаменталі (артефакт, не драйвер).")
 
 
 def print_deviation(meas_freqs, meas_mag, target_freqs, target_mag, target_file):
@@ -144,7 +162,7 @@ def print_deviation(meas_freqs, meas_mag, target_freqs, target_mag, target_file)
                 if 20 <= f <= 20000]
     cuts = sorted([(f, d) for f, d in all_devs if d > 1.5], key=lambda x: -x[1])
     if cuts:
-        print(f"\n  Ділянки що перевищують ціль (>+1.5 dB) → кандидати на зрізання:")
+        print("\n  Ділянки що перевищують ціль (>+1.5 dB) → кандидати на зрізання:")
         for f, d in cuts[:8]:
             print(f"    {f:>8.1f} Hz  {d:+.1f} dB")
 
@@ -219,13 +237,13 @@ def analyze_batch(pattern, curves_dir, vs_targets=True):
     band_names = [b[0] for b in BANDS]
     if vs_targets:
         print(f"  Цілі з: {curves_dir}")
-        print(f"  Клітинка = середнє відхилення (замір − ціль) у смузі, dB.")
-        print(f"  anchor = офсет 300–3000 Гц (відніми від смуг → чиста форма); "
-              f"ripple = розкид смуг після anchor (нерівність форми).\n")
+        print("  Клітинка = середнє відхилення (замір − ціль) у смузі, dB.")
+        print("  anchor = офсет 300–3000 Гц (відніми від смуг → чиста форма); "
+              "ripple = розкид смуг після anchor (нерівність форми).\n")
         hdr = f"  {'Driver':<20}" + "".join(f"{bn:>8}" for bn in band_names)
         hdr += f"{'anchor':>8}{'ripple':>8}"
     else:
-        print(f"  Середній рівень у смузі, dB (без цілі).\n")
+        print("  Середній рівень у смузі, dB (без цілі).\n")
         hdr = f"  {'Driver':<20}" + "".join(f"{bn:>8}" for bn in band_names)
     print(hdr)
     print("  " + "-" * (len(hdr) - 2))
@@ -262,7 +280,7 @@ def analyze_batch(pattern, curves_dir, vs_targets=True):
     if no_target:
         print(f"\n  ⚠️ Без відповідної per-band цілі: {', '.join(no_target)} "
               f"(перевір --curves-dir / іменування).")
-    print(f"\n  Деталі по одному драйверу → інтерактивний режим (без аргументів).")
+    print("\n  Деталі по одному драйверу → інтерактивний режим (без аргументів).")
     print(f"{SEP}\n")
     return matches
 
@@ -711,8 +729,8 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
             print(f"  ↳ кандидат на {ch} ({_apf_label(*candidates[ch])}): жоден стик у списку "
                   f"не торкається {ch} — нема з чим перевірити.")
 
-    print(f"\n  Порядок вирівнювання (метод §2b): midbass(ref) → sub → mid → tweeter, "
-          f"тоді L↔R. Вводь через APF/Helix-phase, не raw-delay.")
+    print("\n  Порядок вирівнювання (метод §2b): midbass(ref) → sub → mid → tweeter, "
+          "тоді L↔R. Вводь через APF/Helix-phase, не raw-delay.")
     print(f"{SEP}\n")
     return rows
 
@@ -807,6 +825,26 @@ def _selftest():
         api.get_measurements, api.get_fr = orig_gm, orig_fr
         globals()["find_target_curve"] = orig_find
 
+    # ── the distortion table: the shape `get_distortion` ACTUALLY returns ───────────────
+    #    Written after HUB-036. `print_distortion` was reading the raw JSON dict, which no
+    #    version of `get_distortion` had returned since 2026-07-14 -- a dead second `def`
+    #    kept the mismatch invisible, and no test drove the path because it needs a live REW.
+    #    Now it does not need one. Confirmed RED before the fix: the dict-reading version
+    #    raised `AttributeError: 'list' object has no attribute 'lower'` on this same input.
+    import io, contextlib                       # selftest-only: not worth a module import
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        print_distortion(([100.0, 160.0, 1000.0], [81.0, 53.0, 80.0],
+                          [0.4, 4.4, 0.2], [[], [], []]))
+    shown = buf.getvalue()
+    assert "160.0" in shown and "4.40" in shown, shown          # the peak is in the table
+    assert "нижче HPF" in shown, shown                          # and so is the null caveat
+    for empty in (None, ((), (), (), ())):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            print_distortion(empty)
+        assert "недоступн" in buf.getvalue().lower(), (empty, buf.getvalue())
+
     # ── joints path: two solo sweeps where hi = lo inverted + delayed by tau.
     #    analyze_joints must recover polarity=-1 (INV) and delay≈-tau. ──────────
     hz = [20.0 * (10 ** (k * 3.0 / 511)) for k in range(512)]
@@ -844,7 +882,6 @@ def _selftest():
         #    an APF2 at 400 Hz: the joint nulls at 400 in phase. The candidate is the SAME APF2
         #    on lo — it un-rotates the pair, so the null closes with no delay change at all;
         #    the same candidate on hi doubles the rotation and does not help. ─────────────
-        import cmath as _cm
         def _ap2_deg(f, f0, q):
             x = f / f0
             return math.degrees(-2.0 * math.atan2(x / q, 1.0 - x * x))
@@ -1100,7 +1137,7 @@ def main():
     while True:
         print()
         list_measurements(measurements)
-        print(f"\n  Введи номер виміру (або 'q' для виходу): ", end="")
+        print("\n  Введи номер виміру (або 'q' для виходу): ", end="")
         choice = input().strip()
         if choice.lower() == "q":
             break

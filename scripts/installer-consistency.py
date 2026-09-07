@@ -206,7 +206,7 @@ def main():
 #: grepping this script -- TCC keeps a fourth copy of the tag glob and asked for this (F-030); a
 #: test written against our source instead of our output breaks silently when we refactor.
 def values():
-    sh, ps1 = read(SH), read(PS1)
+    sh = read(SH)
     out = {}
     v, _ = one(r'^SKILL_TAG_GLOB="([^"]+)"', sh, "SKILL_TAG_GLOB", "install.sh")
     if v: out["SKILL_TAG_GLOB"] = v

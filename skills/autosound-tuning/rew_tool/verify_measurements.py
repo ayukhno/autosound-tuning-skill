@@ -5,7 +5,6 @@
 # carry its own copy of rew_api/analysis — that's the duplication we removed.
 import sys
 import os
-import math
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 for _cand in (
@@ -141,9 +140,9 @@ def main():
                 elif name == max_driver:
                     desc = "Найвіддаленіший фронтальний драйвер (якір)"
                 elif "L" in name:
-                    desc = f"Лівий бік (ближчий, менший час)"
+                    desc = "Лівий бік (ближчий, менший час)"
                 else:
-                    desc = f"Правий бік (середній час)"
+                    desc = "Правий бік (середній час)"
                 f.write(f"| **{name}** | {sweep_mids[name]} | {peaks[name]:.4f} ms | {desc} |\n")
         f.write("\n")
         

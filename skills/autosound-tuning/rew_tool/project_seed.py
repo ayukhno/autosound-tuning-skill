@@ -390,7 +390,7 @@ def main(argv=None):
               + (f" · {result.flaws} flaws (as hypotheses) · {result.questions} open questions"
                  if args.findings else ""))
         if PROFILE_FILE in result.written:
-            print(f"  profile   inherited"
+            print("  profile   inherited"
                   + (f", {result.profile_open} facts still open" if result.profile_open
                      else ", complete"))
         if args.no_profile:

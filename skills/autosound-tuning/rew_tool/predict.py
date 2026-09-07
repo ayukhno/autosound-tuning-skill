@@ -318,7 +318,7 @@ def route_chains(chains, virtual, routes):
     if routes:
         unfed = [c for c in out if c not in fed and not out[c].get("muted") and not out[c].get("unmodellable")]
         if unfed:
-            notes.append(f"virtual tier applied through --route; NOT routed (left as the output row alone): "
+            notes.append("virtual tier applied through --route; NOT routed (left as the output row alone): "
                          + ", ".join(sorted(unfed)))
     return out, notes
 

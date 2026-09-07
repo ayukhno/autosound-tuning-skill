@@ -151,7 +151,6 @@ def compare(timings):
     # itself SLOW on the grounds that the batch "already" mismatched, which was circular. Unknown
     # and different are the two things this whole module exists to keep apart.
     stated = [t for t in timed if t["offset_s"] is not None and t["reference"] is not None]
-    silent = [t for t in timed if t not in stated]
     groups = {}
     for t in stated:
         groups.setdefault(_group_key(t), []).append(t)
