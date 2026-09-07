@@ -458,7 +458,12 @@ def check_project(project_dir, skip_rew=False):
     # it whether the damage landed on `project.json`, on a snapshot, or on both -- reading it back
     # out of prose would mean parsing our error messages, which is the kind of coupling that breaks
     # on the next wording change.
-    damaged = [os.path.relpath(e["path"], project_dir)
+    # Spelled with `/`, not with the platform separator: every other name in this report is
+    # written that way (`files[].file` is built as `state/{preset}/{head}.json`), and `relpath`
+    # on Windows returns `state\FULL\v_001.json`. One report naming one file two ways is a
+    # consumer that joins this field to the table by name and matches nothing -- and the field
+    # exists precisely so a consumer would not have to parse our prose (TCC-007, 2026-09-07).
+    damaged = [os.path.relpath(e["path"], project_dir).replace(os.sep, "/")
                for e in _load_vendored("state").encoding_survey(project_text_files(project_dir))]
     return {"project_dir": project_dir, "ok": ok, "complete": complete, "missing": missing,
             "map_ready": map_ready, "row_gaps": row_gaps,
@@ -1107,6 +1112,13 @@ def _selftest():
     assert enc_entry and enc_entry[0]["valid"] is False, enc_report["files"]
     assert "not UTF-8" in enc_entry[0]["issues"][0], enc_entry
     assert enc_report["encoding_damaged"] == ["state/FULL/v_001.json"], enc_report["encoding_damaged"]
+    # The literal above is a `/` string, which on Windows is a claim about the SEPARATOR and not
+    # only about the file. So say the thing that actually matters, in a form no platform can make
+    # accidentally true: the field and the table spell the same file the same way. Before the fix
+    # this failed on windows-latest and passed everywhere else -- `relpath` gave `state\FULL\...`
+    # while `files[].file` gave `state/FULL/...`, so a name-join between them matched nothing.
+    assert set(enc_report["encoding_damaged"]) <= {f["file"] for f in enc_report["files"]}, \
+        (enc_report["encoding_damaged"], [f["file"] for f in enc_report["files"]])
     assert enc_report["ok"] is False, "a file that cannot be read is not an OK project"
     rendered_enc = render_report(enc_report)
     # One line per file: an issue carrying a newline would end the row and the rest of the table
