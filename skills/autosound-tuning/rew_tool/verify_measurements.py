@@ -21,23 +21,24 @@ import rew_api as api
 import analysis as an
 
 def calculate_ta_delays(peaks):
-    # Find the maximum arrival time (furthest driver)
-    # Exclude subwoofer for the main time alignment reference because its distance is large
-    # and it is usually aligned separately. Let's use the furthest front driver as reference.
+    """Per-driver delay to the furthest FRONT driver, in whatever unit `peaks` carries.
+
+    The subwoofer is excluded from the choice of reference -- its distance is large and it is
+    normally aligned by phase, separately -- but it is still measured against that reference,
+    like everything else. It used to have its own `if` branch here, whose body was character for
+    character the same as the other one, next to a comment promising it was treated differently.
+    Nothing downstream ever saw a difference, because there was none (found 2026-09-07 while
+    writing this module's first selftest, HUB-037). If the sub ever does need its own rule, it
+    needs a rule -- not a branch that pretends.
+    """
     front_peaks = {k: v for k, v in peaks.items() if k != "sw"}
+    if not front_peaks:
+        # A batch of nothing but a subwoofer has no front reference to align to. Saying so beats
+        # `max()` raising "arg is an empty sequence" three frames down.
+        raise ValueError("no front driver in peaks -- nothing to reference the alignment to")
     max_driver = max(front_peaks, key=front_peaks.get)
     max_val = front_peaks[max_driver]
-    
-    delays = {}
-    for name, peak in peaks.items():
-        if name == "sw":
-            # For subwoofer, we show relative to the furthest front driver
-            # but usually it needs to be aligned based on phase, so we'll note this.
-            delays[name] = max_val - peak
-        else:
-            delays[name] = max_val - peak
-            
-    return delays, max_driver
+    return {name: max_val - peak for name, peak in peaks.items()}, max_driver
 
 def find_crossover_intersection(freqs, mag_a, mag_b, f_low, f_high):
     # Find where the magnitude curves intersect
@@ -223,7 +224,44 @@ def main():
         
     print(f"Report written successfully to {report_path}")
 
+def _selftest():
+    """The two pure functions here. `main()` is not covered and cannot be: it talks to a live REW
+    and writes a report for one specific car (HUB-037 -- the arithmetic is the reusable part)."""
+    peaks = {"tw-L": 3.0, "m-L": 4.5, "w-L": 5.0, "sw": 12.0}
+    delays, ref = calculate_ta_delays(peaks)
+    assert ref == "w-L", ref                       # furthest FRONT driver, not the sub
+    assert delays["w-L"] == 0.0, delays            # the reference gets no delay
+    assert delays["tw-L"] == 2.0 and delays["m-L"] == 0.5, delays
+    # The sub is measured against that same reference -- negative, because it arrives later.
+    assert delays["sw"] == -7.0, delays
+    try:
+        calculate_ta_delays({"sw": 1.0})
+    except ValueError as exc:
+        assert "no front driver" in str(exc), exc
+    else:
+        raise AssertionError("a sub-only batch must not silently pick a reference")
+
+    # Crossover intersection: the curves cross at 250 Hz, and only inside the window asked for.
+    freqs = [100.0, 250.0, 500.0, 1000.0]
+    mag_a = [0.0, -6.0, -12.0, -18.0]              # falling
+    mag_b = [-12.0, -6.0, 0.0, 3.0]                # rising
+    f, val = find_crossover_intersection(freqs, mag_a, mag_b, 100.0, 1000.0)
+    assert f == 250.0 and val == -6.0, (f, val)
+    # A window that excludes the real crossing returns the closest point IN it, not None --
+    # the caller picks the window, so the answer is scoped to it.
+    f2, _ = find_crossover_intersection(freqs, mag_a, mag_b, 500.0, 1000.0)
+    assert f2 == 500.0, f2
+    assert find_crossover_intersection(freqs, mag_a, mag_b, 2000.0, 4000.0) == (None, None)
+
+    print("selftest OK — TA delays reference the furthest FRONT driver (sub measured against it, "
+          "not excluded from the answer), a sub-only batch refuses instead of crashing, and the "
+          "crossover search stays inside the window it was given.")
+
+
 if __name__ == "__main__":
     import console                       # issue #21: a code page must not destroy a result
     console.install()
+    if len(sys.argv) > 1 and sys.argv[1] in ("selftest", "--selftest"):
+        _selftest()
+        sys.exit(0)
     main()

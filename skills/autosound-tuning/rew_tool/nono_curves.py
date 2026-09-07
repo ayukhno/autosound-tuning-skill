@@ -113,9 +113,50 @@ def _fmt(curve: NonoCurve) -> str:
             f"{lo:.0f}-{hi:.0f}Hz  v{curve.version or '?'}")
 
 
+def _selftest():
+    """Parse both export shapes from files this test writes. First selftest here (HUB-037).
+
+    The shapes are the whole contract with the Nono tool: a full target is 2 columns and carries
+    no phase, a per-band export is 3 and does. Reading a per-band file as magnitude-only silently
+    drops the crossover phase -- the one thing those files exist to carry."""
+    import tempfile
+
+    full = "# Generated from Nono Tuning Tool\n# Version 3.1.1\n\n20 6.0\n1000 0.0\n20000 -3.0\n"
+    band = "# Generated from Nono Tuning Tool\n60 0.0 -12.5\n120 -3.0 -45.0\njunk row\n240 -12.0 -90.0\n"
+
+    with tempfile.TemporaryDirectory() as d:
+        f_full = os.path.join(d, "house_0db_REW.txt")
+        f_band = os.path.join(d, "house_mid_250_SUM.txt")
+        open(f_full, "w", encoding="utf-8").write(full)
+        open(f_band, "w", encoding="utf-8").write(band)
+
+        c = parse_nono_curve(f_full)
+        assert not c.has_phase and c.phase is None, c.kind
+        assert c.freqs == [20.0, 1000.0, 20000.0] and c.mag == [6.0, 0.0, -3.0], (c.freqs, c.mag)
+        assert c.version == "3.1.1", c.version
+        assert c.source == "Generated from Nono Tuning Tool", c.source
+        assert len(c) == 3, len(c)
+
+        b = parse_nono_curve(f_band)
+        assert b.has_phase and b.phase == [-12.5, -45.0, -90.0], b.phase   # junk row skipped
+        assert b.freqs == [60.0, 120.0, 240.0], b.freqs
+        assert "per-band" in b.kind, b.kind
+
+        bands = parse_nono_band_set(d)
+        assert set(bands) == {"full", "mid"}, sorted(bands)
+        assert bands["mid"].has_phase and not bands["full"].has_phase, bands
+
+    print("selftest OK — 2-col export parses as a full target with no phase (v3.1.1 read from "
+          "the header), 3-col as per-band WITH phase and a junk row skipped, and a directory "
+          "keys them by band.")
+
+
 if __name__ == "__main__":
     import console                       # issue #21: a code page must not destroy a result
     console.install()
+    if len(sys.argv) > 1 and sys.argv[1] in ("selftest", "--selftest"):
+        _selftest()
+        sys.exit(0)
     target = sys.argv[1] if len(sys.argv) > 1 else "."
     if os.path.isdir(target):
         for band, curve in parse_nono_band_set(target).items():

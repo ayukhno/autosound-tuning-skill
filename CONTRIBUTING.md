@@ -34,9 +34,18 @@ Before opening a PR, make sure you have:
   when they drift. It checks values, not logic: a pass does not mean the three files still *do* the
   same thing, so read all three anyway.
 - **Run `scripts/run-selftests.sh`** — the installer check plus every `rew_tool` module's own
-  selftest, 20 in all. It needs `numpy` and `scipy` (`dsp_math` and `eq_gate` import scipy by name,
-  and the `dsp_math` selftest designs crossovers). CI runs this exact script on push and PR, so a
-  green run here is a green run there.
+  selftest, 56 in all (2026-09-07; the runner prints the current count itself —
+  `scripts/run-selftests.sh | tail -1`, and that command is the answer, not this number). It needs
+  `numpy` and `scipy` (`dsp_math` and `eq_gate` import scipy by name, and the `dsp_math` selftest
+  designs crossovers). CI runs this exact script on push and PR, so a green run here is a green run
+  there.
+- **Deliberately without a selftest:** `make_plot.py`. It renders one synthetic PNG for a
+  one-off experiment (does a model read a picture of a curve better than the numbers?), and
+  covering it would mean adding `matplotlib` to CI for a module no part of the method calls. A
+  new module without a selftest needs a line here saying why — an empty one is worse than the
+  honest exception.
+- **Run `uvx ruff@0.12.0 check`.** CI runs it too, and it fails the build. Which rule classes are
+  on and why the rest are off is written in `pyproject.toml`, next to the choice.
 
 PR checklist:
 - [ ] Tests / smoke test pass locally (if applicable)

@@ -67,8 +67,15 @@ symlink on every user machine. It came back on 2026-08-26 and nothing noticed.
 ## Tests
 
 - **`scripts/run-selftests.sh` is the single entry point** — the installer check plus every
-  `rew_tool` module's own selftest, 42 in all. It needs `numpy` and `scipy`, and CI runs this exact
-  script, so a green run locally is a green run there.
+  `rew_tool` module's own selftest, 56 in all (2026-09-07 — but read the count off
+  `scripts/run-selftests.sh | tail -1` rather than off this line; a number with no command beside
+  it ages in silence, which is how this one said 42 and CONTRIBUTING said 20 on the same day).
+  It needs `numpy` and `scipy`, and CI runs this exact script, so a green run locally is a green
+  run there.
+- **`uvx ruff@0.12.0 check` runs in CI and fails the build.** `F` and `E9` are on; `E4`/`E7` are
+  off on purpose, and `pyproject.toml` says why. It earned the slot on its first run: `F811`
+  found `get_distortion` defined twice in `rew_api.py`, and the caller was written against the
+  dead one.
 - **A test that shares the implementation's ruler proves nothing.** `xover_select` reported
   `fit=0.00 dB` for a long time while scoring a realization against a target computed by the same
   broken function — the ruler and the part were one object, and a 30 dB error at 80 Hz survived.
