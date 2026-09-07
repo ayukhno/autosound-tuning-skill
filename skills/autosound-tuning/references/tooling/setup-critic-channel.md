@@ -62,7 +62,14 @@ per-machine instead, and both the shell wrappers and `autosound_ai.py` read it f
 ```bash
 mkdir -p ~/.config/autosound                       # Windows: %APPDATA%\autosound\
 cp scripts/.critic-env.example ~/.config/autosound/critic-env
+chmod 600 ~/.config/autosound/critic-env
 ```
+
+**And do not `export GEMINI_API_KEY` from your shell profile.** A file is read by whoever knows
+its path; an exported variable is handed to **every** process you start — every npm package, every
+agent, every `env` and `ps e`. The wrappers export it themselves for the length of their own run,
+which is as long as it needs to exist. If you call `gemini`/`agy` by hand, export it in that one
+shell rather than in `~/.zshrc`.
 
 Everything non-secret — models, `GEMINI_BIN`, `PROJECT_MIRROR` — can still sit in the project,
 where it belongs with the car it describes:

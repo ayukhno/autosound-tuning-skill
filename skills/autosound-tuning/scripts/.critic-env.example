@@ -4,6 +4,12 @@
 #   everything else -> rew_analitic/.critic-env in the project, if you want it per-car
 #
 #   mkdir -p ~/.config/autosound && cp scripts/.critic-env.example ~/.config/autosound/critic-env
+#   chmod 600 ~/.config/autosound/critic-env
+#
+# And do NOT `export GEMINI_API_KEY` from ~/.zshrc or ~/.bashrc. A file is read by whoever knows
+# its path; an exported variable is handed to EVERY process you start -- every npm package, every
+# agent, every `env`. The wrappers export it themselves for the length of their own run, which is
+# as long as it needs to exist.
 #
 # The key stays out of the project because the project folder is the one the README suggests
 # backing up to a private GitHub. Both files are read, the machine one first, so an existing
