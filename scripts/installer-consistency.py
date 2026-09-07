@@ -180,6 +180,18 @@ def main():
     else:
         checked.append("both default to mode tcc (--terminal / -Terminal is the opt-out)")
 
+    # 5b. the PINNED uv version. Pinning is only worth anything while both sides pin the SAME
+    # thing: two installers on two versions of a third-party bootstrap is the drift this file
+    # exists to catch, and it would show up as "works on my machine" (HUB-031).
+    uv_sh, err_a = one(r'^UV_VERSION="([0-9][0-9.]*)"', sh, "UV_VERSION", "install.sh")
+    uv_ps, err_b = one(r'^\$UvVersion\s*=\s*"([0-9][0-9.]*)"', ps1, "$UvVersion", "install.ps1")
+    if err_a or err_b:
+        problems.append(err_a or err_b)
+    elif uv_sh and uv_ps and uv_sh != uv_ps:
+        problems.append(f"the pinned uv version differs — install.sh {uv_sh} vs install.ps1 {uv_ps}")
+    elif uv_sh:
+        checked.append(f"both pin uv at {uv_sh}")
+
     # 6. the TAG the world is told to paste. HUB-030 moved the one-liners off `main`, and a pinned
     # URL is only worth pinning while it is current: a stale one keeps handing new users a build
     # that is not the newest. Compared against the CHANGELOG's own top entry, which is what this

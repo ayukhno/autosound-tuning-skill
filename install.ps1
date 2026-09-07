@@ -107,6 +107,8 @@ $SkillRepoUrl = $SkillRepo -replace '\.git$', ''
 $SkillTagGlob = "v3.*"
 # The app's supported line -- `v*`, not `v3.*`: the app versions independently of the method.
 $TccTagGlob   = "v*"
+#: The uv release this installer pins. Must equal UV_VERSION in install.sh.
+$UvVersion    = "0.12.10"
 $TccRepo      = "https://github.com/ayukhno/autosound-tcc"
 $SkillHome    = Join-Path $HOME ".claude\skills\autosound-tuning"
 # The checkout lives beside the skill and the skill points at it (a junction) -- see install.sh
@@ -157,9 +159,11 @@ Through the one-liner, options go on the scriptblock:
 
 $Mode         = if ($Terminal -and -not $Tcc) { "terminal" } else { "tcc" }   # -Tcc is the default, kept for old command lines
 $WantReviewer = -not $NoReviewer
-# omp comes WITH the app now (2026-08-19, same change as install.sh): it is what fills TCC's
-# model picker with everything that is not Claude, so it belongs with the app and means
-# nothing without it. -NoOmp leaves it out; -Terminal never brings it.
+# omp comes WITH the app (2026-08-19, same change as install.sh): it is what fills TCC's model
+# picker with everything that is not Claude, so it belongs with the app and means nothing
+# without it. -NoOmp leaves it out; -Terminal never brings it.
+# HUB-031 asks for this to become opt-in. NOT DONE -- see the note in install.sh: the user
+# decided the opposite on 2026-08-19, and the ticket does not answer that reason.
 $WantOmp      = if ($NoOmp) { $false } elseif ($WithOmp) { $true } else { $Mode -eq "tcc" }
 $WantGitHub   = if ($GitHub) { "1" } elseif ($NoGitHub) { "0" } else { "ask" }
 
@@ -199,6 +203,10 @@ function Test-Quiet {
 function Invoke-Upstream {
     param([string]$Url, [string]$Label, [switch]$Capture)
     if ($DryRun) { Say "would run: irm $Url | iex   ($Label)"; return $true }
+    # Say whose script this is and what is about to run, every time and in one place -- these are
+    # the four calls in the whole installer that execute code we did not write, and a person
+    # watching the screen should be able to see that happen (HUB-031).
+    Say "  the official installer, $($Url -replace '^https://','')"
     $cmd = "[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12; irm '$Url' -UseBasicParsing | iex"
     $global:LASTEXITCODE = 0
     if ($Capture) {
@@ -598,7 +606,24 @@ if (-not $HaveGit) {
                 try {
                     Invoke-WebRequest -Uri $g.Url -OutFile $tmp -UseBasicParsing
                     Unblock-File $tmp -ErrorAction SilentlyContinue
-                    Start-Process -FilePath $tmp -ArgumentList "/VERYSILENT", "/NORESTART" -Wait
+                    # CHECK WHO SIGNED IT before running it as an installer. git-for-windows
+                    # publishes no checksums file, but every .exe in the release is Authenticode
+                    # signed -- and this is a download we hand straight to Start-Process, which is
+                    # the strongest thing this script does with a file off the internet (HUB-031).
+                    $sig = Get-AuthenticodeSignature -FilePath $tmp
+                    $who = "$($sig.SignerCertificate.Subject)"
+                    if ($sig.Status -ne "Valid") {
+                        Warn "the Git installer is NOT validly signed (status: $($sig.Status)) -- not running it."
+                        Warn "install Git for Windows yourself from git-scm.com/download/win"
+                    } elseif ($who -notmatch "Johannes Schindelin|Git for Windows") {
+                        # Valid but somebody else's: a signature proves a signer, and this is not
+                        # the signer we came for.
+                        Warn "the Git installer is signed by someone unexpected -- not running it."
+                        Warn "signer: $who"
+                    } else {
+                        Say "  signature OK ($(($who -split ',')[0]))"
+                        Start-Process -FilePath $tmp -ArgumentList "/VERYSILENT", "/NORESTART" -Wait
+                    }
                 } catch { Warn "the Git installer did not run: $($_.Exception.Message)" }
                 Remove-Item $tmp -Force -ErrorAction SilentlyContinue
             } else { Say "would run: $($g.Name) /VERYSILENT /NORESTART" }
@@ -645,7 +670,10 @@ if ($Uv) {
     Say "OK   $(& $Uv --version 2>$null)"
 } else {
     Say "the official installer, astral.sh/uv/install.ps1:"
-    if (Invoke-Upstream "https://astral.sh/uv/install.ps1" "uv") {
+    # PINNED -- see the same note in install.sh; the two versions must match, and
+    # installer-consistency.py fails when they drift.
+    Say "  from astral.sh, uv's own installer, pinned at $UvVersion"
+    if (Invoke-Upstream "https://astral.sh/uv/$UvVersion/install.ps1" "uv") {
         Sync-ProcessPath
         if (Test-Path (Join-Path $LocalBin "uv.exe")) { Add-ManifestEntry "uv" }
     }

@@ -51,6 +51,8 @@ SKILL_TAG_GLOB="v3.*"
 # method -- they are different products that ship together, and pinning them to one number is the
 # coupling SCR-055 is arguing about, not a thing to bake in here.
 TCC_TAG_GLOB="v*"
+#: The uv release this installer pins. See the note beside the download for how to raise it.
+UV_VERSION="0.12.10"
 TCC_REPO="https://github.com/ayukhno/autosound-tcc"
 SKILL_HOME="${HOME}/.claude/skills/autosound-tuning"
 # The repo lives beside the skill and the skill POINTS at it. Cloning and then moving the
@@ -147,6 +149,10 @@ done
 # An `if`, not `[ … ] && …`: this script runs under `set -e`, where a top-level test that comes out
 # false is an exit status and ends the install.
 if [ "$WANT_OMP" = "auto" ]; then
+  # HUB-031 asks for omp to be opt-in. NOT DONE, and deliberately: the note above records the
+  # user deciding the opposite on 2026-08-19, for a reason the ticket does not answer -- the
+  # person who wants omp is the person who does not know the flag exists. Two decisions, one
+  # newer and one better-informed, and picking between them is not this session's call.
   if [ "$MODE" = "tcc" ]; then WANT_OMP=1; else WANT_OMP=0; fi
 fi
 
@@ -805,7 +811,13 @@ if [ "$MODE" = "tcc" ]; then
   else
     say "  uv first (astral.sh/uv/install.sh) — it brings a Python 3.12 of its own, so nothing on"
     say "  this machine has to be the right version:"
-    if run sh -c 'curl -LsSf https://astral.sh/uv/install.sh | sh -s -- --quiet'; then
+    # PINNED. `astral.sh/uv/install.sh` is whatever uv released this morning; the versioned URL
+    # is the same file at a fixed point, and it is the vendor's own (HUB-031). We cannot sign
+    # somebody else's script -- we can stop it from changing under us between two runs of the
+    # same installer. To raise it: check github.com/astral-sh/uv/releases and commit the new
+    # number here AND in install.ps1; installer-consistency.py fails if the two drift apart.
+    say "  from astral.sh, uv's own installer, pinned at $UV_VERSION"
+    if run sh -c "curl -LsSf https://astral.sh/uv/$UV_VERSION/install.sh | sh -s -- --quiet"; then
       export PATH="$LOCAL_BIN:$PATH"
       in_local_bin uv && manifest_add uv
       UV="$(find_bin uv || true)"
@@ -929,7 +941,10 @@ if [ "$WANT_OMP" = 1 ]; then
   step "omp — every non-Claude model for TCC's picker (metered)"
   if find_bin omp >/dev/null; then
     say "  ✓ already here"
-  elif run sh -c 'curl -fsSL https://omp.sh/install.sh | sh'; then
+  # Every third-party script here says whose it is and what is about to run, before it runs --
+  # the other three already did; this was the one that just went (HUB-031).
+  elif say "  the official installer, omp.sh/install.sh:" && \
+       run sh -c 'curl -fsSL https://omp.sh/install.sh | sh'; then
     in_local_bin omp && manifest_add omp
   else
     warn "omp did not install; TCC's picker offers Claude, and Gemini through agy, without it."
@@ -946,22 +961,44 @@ if [ "$WANT_GITHUB" = 1 ]; then
   elif [ "$DRY_RUN" = 1 ]; then
     say "  would download the newest gh release from github.com/cli/cli into $(pretty "$LOCAL_BIN")/gh"
   else
-    # Straight from GitHub's releases: a signed binary, no package manager. The `latest` page
-    # redirects to the current tag, which names the file.
+    # Straight from GitHub's releases, and CHECKED against the checksums the same release
+    # publishes. Before this, whatever the download produced was made executable and put on PATH
+    # unexamined -- a truncated transfer or a proxy handing back something else would have been
+    # installed with the same confidence as the real thing (HUB-031). The checksum does not prove
+    # who built it; it proves we got what that release says it has, which is the part we can
+    # check without a signature.
     _ver="$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/cli/cli/releases/latest 2>/dev/null \
               | sed 's#.*/tag/v##')" || _ver=""
     case "$(uname -m)" in arm64|aarch64) _arch=arm64 ;; *) _arch=amd64 ;; esac
     _tmp="$(mktemp -d)"
     _got=0
     if [ -n "$_ver" ]; then
-      if on_mac; then
-        _asset="gh_${_ver}_macOS_${_arch}.zip"
-        curl -fsSL -o "$_tmp/$_asset" "https://github.com/cli/cli/releases/download/v${_ver}/${_asset}" \
-          && unzip -q "$_tmp/$_asset" -d "$_tmp" && _got=1
-      else
-        _asset="gh_${_ver}_linux_${_arch}.tar.gz"
-        curl -fsSL -o "$_tmp/$_asset" "https://github.com/cli/cli/releases/download/v${_ver}/${_asset}" \
-          && tar -xzf "$_tmp/$_asset" -C "$_tmp" && _got=1
+      if on_mac; then _asset="gh_${_ver}_macOS_${_arch}.zip"
+      else            _asset="gh_${_ver}_linux_${_arch}.tar.gz"
+      fi
+      _base="https://github.com/cli/cli/releases/download/v${_ver}"
+      if curl -fsSL -o "$_tmp/$_asset" "$_base/${_asset}" &&
+         curl -fsSL -o "$_tmp/checksums.txt" "$_base/gh_${_ver}_checksums.txt"; then
+        # sha256sum on Linux, shasum -a 256 on a Mac. If NEITHER is there we do not install:
+        # "could not check" is not "checked", and this is the one place where saying so costs a
+        # backup feature nobody has set up yet.
+        _want="$(awk -v a="$_asset" '$2 == a {print $1}' "$_tmp/checksums.txt")"
+        _have=""
+        if command -v sha256sum >/dev/null 2>&1; then _have="$(sha256sum "$_tmp/$_asset" | awk '{print $1}')"
+        elif command -v shasum   >/dev/null 2>&1; then _have="$(shasum -a 256 "$_tmp/$_asset" | awk '{print $1}')"
+        fi
+        if [ -z "$_want" ] || [ -z "$_have" ]; then
+          warn "gh: could not check the download (no checksum line, or no sha256 tool) — not installing it."
+        elif [ "$_want" != "$_have" ]; then
+          warn "gh: the download does NOT match the checksum GitHub publishes for it — not installing."
+          warn "expected $_want"
+          warn "got      $_have"
+        else
+          say "  checksum OK ($(printf '%.12s' "$_have")…)"
+          if on_mac; then unzip -q "$_tmp/$_asset" -d "$_tmp" && _got=1
+          else            tar -xzf "$_tmp/$_asset" -C "$_tmp" && _got=1
+          fi
+        fi
       fi
     fi
     if [ "$_got" = 1 ] && mkdir -p "$LOCAL_BIN" && cp "$_tmp"/gh_*/bin/gh "$LOCAL_BIN/gh" 2>/dev/null; then
