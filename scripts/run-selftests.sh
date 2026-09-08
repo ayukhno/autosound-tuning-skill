@@ -50,6 +50,14 @@ run_one "secrets-in-tree" scripts/secret-scan.py
 # markup. The checker's own mechanics, then every .html in the tree.
 run_one "html-data" scripts/html-data-check.py --selftest
 run_one "html-in-tree" scripts/html-data-check.py
+# HUB-029: a rule that lives only in prose can be deleted by a tidy-up. The checker's own
+# mechanics, then the documents: SKILL.md's always-on guardrails must still say that everything
+# the session READS is data, not instructions, and the inbox page must say it too.
+run_one "docs-check" scripts/docs-check.py --selftest
+run_one "docs-in-tree" scripts/docs-check.py
+# The same rule where a stranger's text meets a model: the issue body travels inside a fence with
+# a random marker, and the warning stands before it. Offline -- the prompt is built, not sent.
+run_one "issue-triage" skills/autosound-tuning/scripts/issue_triage.py --selftest
 # The reviewer channel's shell plumbing: the closed gemini-CLI path is recognised and named, not
 # retried on a fallback model (hub PAS-004). Offline -- the CLI call is stubbed.
 run_one "gemini-channel" skills/autosound-tuning/scripts/gemini_critic.sh --selftest
