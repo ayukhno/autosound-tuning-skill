@@ -1,5 +1,10 @@
 # Deviation-analysis audit — how much can the reported numbers be trusted?
 
+> 🗺️ **Not on SKILL.md's Reference Map — by design:** a dated audit of the Analyze panel's own arithmetic, i.e. development material
+> — a tuning session never needs it, and what it concluded is already carried by the panel (every
+> figure prints its ± spread). Its door is this folder's [`README.md`](./README.md); read it when
+> changing that math, not while tuning (autosound-hub `HUB-039`).
+
 Audit of the Analyze panel's comparison math, run against a real measurement.
 Date: 2026-07-22.
 

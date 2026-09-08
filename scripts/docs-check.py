@@ -26,6 +26,16 @@ Rules:
    tells the reader to *read the file*, because an agent handed a tool it does not have either
    ignores the line, imitates it, or tells the user it cannot comply.
 
+3. **`references-orphans`** (autosound-hub `HUB-039`). A reference file nobody links from
+   `SKILL.md` is not cheap-but-harmless: it costs a session nothing (nothing loads it) and it
+   costs the READER everything — 116 KB of it, including a listening cheat-sheet in four
+   languages, was written and then lost, because an agent cannot point at a file it does not know
+   exists. So every `references/**/*.md` must be either **named in `SKILL.md`** (path or
+   filename), or a **translation of a file that is** (`<base>.<lang>.md` — one map row covers all
+   its languages, which is the point: four rows for one document is the same document four
+   times), or it must **say in its own first lines that it is off the map on purpose** and where
+   its door is. A silent orphan reads exactly like a forgotten one.
+
 Run: `scripts/docs-check.py` (from anywhere), `--selftest` for the checker's own mechanics.
 stdlib only.
 """
@@ -53,12 +63,22 @@ PHASE_WINS = "where they disagree the machine file wins"
 # one in `process-phases.md`; the others are the same class of mistake waiting to happen.
 HARNESS_TOOLS = ("view_file", "read_file tool", "str_replace_editor")
 
+# The line a deliberately unmapped reference carries, in its own first lines. Wording, not a
+# machine tag, because a person opening the file has to read WHY and where the door is.
+ORPHAN_MARK = "Not on SKILL.md's Reference Map — by design:"
+ORPHAN_HEAD_LINES = 12          # it has to be near the top, where a reader starts
+
 
 def _read(root: str, rel: str) -> str | None:
     path = os.path.join(root, rel)
     if not os.path.isfile(path):
         return None
     return open(path, encoding="utf-8").read()
+
+
+def _head(path: str) -> str:
+    """The first lines of a file — where a reader starts, so where a declaration has to be."""
+    return "\n".join(open(path, encoding="utf-8").read().splitlines()[:ORPHAN_HEAD_LINES])
 
 
 def _section(text: str, heading: str) -> str:
@@ -146,8 +166,54 @@ def rule_phase_source(root: str) -> list[str]:
     return bad
 
 
+def rule_references_orphans(root: str) -> list[str]:
+    bad = []
+    skill_md = _read(root, os.path.join(SKILL, "SKILL.md"))
+    if skill_md is None:
+        return [f"{os.path.join(SKILL, 'SKILL.md')}: missing — nothing to check the map against"]
+    refs = os.path.join(root, SKILL, "references")
+    if not os.path.isdir(refs):
+        return [f"{os.path.join(SKILL, 'references')}: missing"]
+
+    def mapped(path: str) -> bool:
+        rel = os.path.relpath(path, refs).replace(os.sep, "/")
+        return rel in skill_md or os.path.basename(path) in skill_md \
+            or os.path.splitext(os.path.basename(path))[0] in skill_md
+
+    for cur, dirs, files in os.walk(refs):
+        dirs[:] = [d for d in dirs if d not in {".git", "__pycache__"}]
+        for name in sorted(files):
+            if not name.endswith(".md"):
+                continue
+            path = os.path.join(cur, name)
+            rel = os.path.relpath(path, root)
+            declared = ORPHAN_MARK in _head(path)
+            if mapped(path):
+                if declared:
+                    bad.append(f"{rel}: says it is off the map on purpose, but SKILL.md names it "
+                               f"— one of the two statements is stale")
+                continue
+            if declared:
+                continue
+            # A translation rides on its base file's single map row: `<base>.<lang>.md` is covered
+            # when `<base>.md` is covered. Four rows for one document is that document four times.
+            m = re.match(r"^(?P<base>.+)\.(?P<lang>[a-z]{2})$", os.path.splitext(name)[0])
+            if m:
+                base = m.group("base")
+                base_path = os.path.join(cur, base + ".md")
+                if base in skill_md or (os.path.isfile(base_path)
+                                        and ORPHAN_MARK in _head(base_path)):
+                    continue
+            bad.append(f"{rel}: no road from SKILL.md — add a Reference Map row, merge it into "
+                       f"the file next to it, or write '{ORPHAN_MARK}' in its first "
+                       f"{ORPHAN_HEAD_LINES} lines with the door it IS reached by "
+                       f"(autosound-hub HUB-039)")
+    return bad
+
+
 RULES = [("data-not-instructions", rule_data_not_instructions),
-         ("phase-source", rule_phase_source)]
+         ("phase-source", rule_phase_source),
+         ("references-orphans", rule_references_orphans)]
 
 
 def run(root: str) -> int:
@@ -220,13 +286,50 @@ def _selftest() -> int:
                              "# P\n\n" + quoted + "\n2. Use the `view" + "_file` tool.\n")
         assert any("names the harness tool" in c for c in rule_phase_source(harness))
 
+        # -- rule 3: no reference without a road
+        def ref_tree(skill_md: str, files: dict):
+            root = tempfile.mkdtemp(dir=tmp)
+            refs = os.path.join(root, SKILL, "references", "patterns")
+            os.makedirs(refs)
+            open(os.path.join(root, SKILL, "SKILL.md"), "w", encoding="utf-8").write(skill_md)
+            for name, body in files.items():
+                open(os.path.join(refs, name), "w", encoding="utf-8").write(body)
+            return root
+
+        mapped = ref_tree("| [patterns/tracks.md](references/patterns/tracks.md) | tracks |\n",
+                          {"tracks.md": "# Tracks\n", "tracks.uk.md": "# Треки\n"})
+        assert rule_references_orphans(mapped) == [], rule_references_orphans(mapped)
+
+        lost = ref_tree("# S\n", {"tracks.md": "# Tracks\n"})
+        assert any("no road from SKILL.md" in c for c in rule_references_orphans(lost))
+
+        # a translation whose BASE is off the map is lost with it, not covered by it
+        lost_pair = ref_tree("# S\n", {"tracks.md": "# Tracks\n", "tracks.uk.md": "# Треки\n"})
+        assert len(rule_references_orphans(lost_pair)) == 2, rule_references_orphans(lost_pair)
+
+        onpurpose = ref_tree("# S\n", {"tracks.md": f"# Tracks\n\n> {ORPHAN_MARK} reached from "
+                                                    f"the folder index.\n"})
+        assert rule_references_orphans(onpurpose) == [], rule_references_orphans(onpurpose)
+
+        # a declaration BURIED below the head is not a declaration a reader meets
+        buried = ref_tree("# S\n", {"tracks.md": "# Tracks\n" + "\nfiller\n" * 20
+                                                  + f"> {ORPHAN_MARK} late.\n"})
+        assert any("no road from SKILL.md" in c for c in rule_references_orphans(buried))
+
+        both = ref_tree("| [patterns/tracks.md](references/patterns/tracks.md) | tracks |\n",
+                        {"tracks.md": f"# Tracks\n\n> {ORPHAN_MARK} nowhere.\n"})
+        assert any("one of the two statements is stale" in c
+                   for c in rule_references_orphans(both))
+
         # and the tree itself, which is the point of the whole file
         assert run(ROOT) == 0, "the tree must be clean, or the selftest measures a fake"
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("selftest OK — a deleted rule, a rule moved out of the always-on section, an inbox page "
-          "without it, a phase source that drifted back to the changelog, a missing tie-break and "
-          "a harness tool named as an instruction are each named")
+          "without it, a phase source that drifted back to the changelog, a missing tie-break, a "
+          "harness tool named as an instruction, a reference with no road, a translation whose base "
+          "is lost too, a declaration buried below the head and a file that claims both are each "
+          "named; a mapped file, its translation and an honest off-map declaration are not")
     return 0
 
 

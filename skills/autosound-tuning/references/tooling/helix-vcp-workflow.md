@@ -1,5 +1,11 @@
 # Helix DSP Ultra S — full workflow (VCP)
 
+> 🗺️ **Not on SKILL.md's Reference Map — by design:** the Reference Map carries no per-DSP rows — `knowledge/dsp/<vendor>-<model>.md`
+> is the door for a processor, and this file is where
+> [`knowledge/dsp/helix-dsp-ultra-s.md`](../../knowledge/dsp/helix-dsp-ultra-s.md) and
+> [`core/project-intake.md`](../core/project-intake.md) send a Helix project. A project on another
+> processor never needs it (autosound-hub `HUB-039`).
+
 ## Signal-processing architecture
 
 ### Two processing layers (Output Layer + Virtual Layer)

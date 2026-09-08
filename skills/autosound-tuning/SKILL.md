@@ -144,12 +144,15 @@ Read the active phase from `process/process-state.json` (`python3 rew_tool/state
 | [patterns/competition.md](references/patterns/competition.md) | EMMA/AYA/CARMusic SQ prep. |
 | [core/preset-strategy.md](references/core/preset-strategy.md) | Multiple DSP slots: base vs voicing presets. |
 | [patterns/test-tracks.md](references/patterns/test-tracks.md) | Diagnostic tracks with timestamps. |
+| [patterns/listening-cheat-sheet.md](references/patterns/listening-cheat-sheet.md) | The words for what you hear (characteristics, routes) — the one home of the listening vocabulary, and what a person keeps open while a track plays. **English is the source; `.uk` / `.de` / `.pl` next to it (and `test-tracks.uk.md`) are translations that may lag** — `rew_tool/listening.py` picks the language by id and falls back to English. |
+| [patterns/car-eq-patterns.md](references/patterns/car-eq-patterns.md) | Recurring cabin problems band by band and the EQ that usually helps — starting hypotheses, validated by measurement, never a mandate. |
 | [patterns/voicing-by-ear.md](references/patterns/voicing-by-ear.md) | Symptom-to-fix ear EQ, client taste tuning. |
 | [patterns/method-hashimoto.md](references/patterns/method-hashimoto.md) | Slope-first matching, polarity-by-ear, mono-center. |
 | [tooling/helix-phase-allpass.md](references/tooling/helix-phase-allpass.md) | Helix channel Phase control — the measured law (Q=1 APF2 at the configured crossover, 18 kHz ceiling, cost in the bass) — and the AP1/AP2 bands. |
 | [tooling/helix-eq-export.md](references/tooling/helix-eq-export.md) | PEQ banks in Audiotec-Fischer format. |
 | [tooling/rew-tool-docs.md](references/tooling/rew-tool-docs.md) | REW API client scripts, module layout. |
 | [tooling/rew-api-quirks.md](references/tooling/rew-api-quirks.md) | float32 encoding, gaindB, loopback offsets. |
+| [tooling/resonalyze-virtual-dsp.md](references/tooling/resonalyze-virtual-dsp.md) | Resonalyze's IR and Virtual-DSP session files: what we read, which versions, and the drift check on the ported readers. |
 | [tooling/screen-read-dsp.md](references/tooling/screen-read-dsp.md) | Reading DSP params off screenshots. |
 | [core/review-loop.md](references/core/review-loop.md) | Review cadence, TWO-PASS, deadlocks, audits. |
 | [core/process-control.md](references/core/process-control.md) | Operating modes A/B/C, model classes, pull-based control. |
