@@ -149,10 +149,11 @@ done
 # An `if`, not `[ … ] && …`: this script runs under `set -e`, where a top-level test that comes out
 # false is an exit status and ends the install.
 if [ "$WANT_OMP" = "auto" ]; then
-  # HUB-031 asks for omp to be opt-in. NOT DONE, and deliberately: the note above records the
-  # user deciding the opposite on 2026-08-19, for a reason the ticket does not answer -- the
-  # person who wants omp is the person who does not know the flag exists. Two decisions, one
-  # newer and one better-informed, and picking between them is not this session's call.
+  # HUB-031 asks for omp to be opt-in. DECIDED THE OTHER WAY, twice: 2026-08-19 and again
+  # 2026-09-09, for the reason the ticket does not answer -- the person who wants omp is the
+  # person who does not know the flag exists. It is the one foreign script left that we can
+  # neither sign nor checksum, so the question is not closed, it is PARKED: issue #25 holds it
+  # with both reasons and what would change the answer. Do not flip this without that issue.
   if [ "$MODE" = "tcc" ]; then WANT_OMP=1; else WANT_OMP=0; fi
 fi
 

@@ -162,8 +162,9 @@ $WantReviewer = -not $NoReviewer
 # omp comes WITH the app (2026-08-19, same change as install.sh): it is what fills TCC's model
 # picker with everything that is not Claude, so it belongs with the app and means nothing
 # without it. -NoOmp leaves it out; -Terminal never brings it.
-# HUB-031 asks for this to become opt-in. NOT DONE -- see the note in install.sh: the user
-# decided the opposite on 2026-08-19, and the ticket does not answer that reason.
+# HUB-031 asks for this to become opt-in. Decided the other way twice (2026-08-19, 2026-09-09)
+# -- see the note in install.sh. Parked, not closed: issue #25 holds the question, both reasons,
+# and what would change the answer.
 $WantOmp      = if ($NoOmp) { $false } elseif ($WithOmp) { $true } else { $Mode -eq "tcc" }
 $WantGitHub   = if ($GitHub) { "1" } elseif ($NoGitHub) { "0" } else { "ask" }
 
