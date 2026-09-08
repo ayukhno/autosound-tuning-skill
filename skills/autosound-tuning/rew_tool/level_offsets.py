@@ -252,7 +252,10 @@ def _main(argv=None):
     except FileNotFoundError as exc:
         print(f"refusing: {exc}", file=sys.stderr)
         return 3
-    for stem, (_f, mag, _method, _H) in sorted(measured.items()):
+    # Indexed, not unpacked: the record grew a fifth slot (the gated reading, `verify_prediction`)
+    # and a positional unpack of a shared shape breaks in the file that does not care about it.
+    for stem, rec in sorted(measured.items()):
+        _f, mag = rec[0], rec[1]
         code = _code_of(stem)
         if code is None:
             continue

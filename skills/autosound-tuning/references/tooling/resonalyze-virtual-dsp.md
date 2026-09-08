@@ -217,6 +217,24 @@ constraint, not by acoustics; `LOW` is raised as its own warning.
   it describes the microphone the measurement was made with, so it belongs to the measurements and
   moves with them.
 
+## Two windows — the definition we took, and what we checked it against
+
+Their Virtual DSP reads a junction through **two** windows and says so: the gate's durations shape the
+phase and impulse views (the direct sound), while the magnitude is read over a long window (~680 ms
+from the detected START of the response, not from the peak). Their own numbers for it: below 500 Hz a
+gated and a steady junction read agree (median 5° and 0.05 ms over twenty junctions in eight cars),
+while above 1 kHz the steady window's coherence ceiling is 0.69 against 0.93 through the gate
+(`REFERENCE.md` @ `8514e7b`, §Virtual DSP → "The panel: gates, plots and read-outs").
+
+We took the **definition** and checked it on our own data rather than on their word
+(`rew_tool/windows.py`, hub `RES-006`): the anchor is the detected arrival, the gate decays from it,
+and the FDW is N cycles at each frequency. What our `_60` set adds, and what no reference stated: a
+gated junction needs at least **five cycles of the junction frequency** in the window, and a window
+shorter than the two members' arrivals are apart is not a reading at all — at 2 kHz a 3 ms gate
+(6 cycles) reproduces the measured pair to 0.03 dB, while the same gate at 215 Hz reads 5 dB of
+"cancellation" that is the window. Our magnitude window stays the whole record (2.73 s) rather than
+their ~680 ms; the difference is the very late tail, and it is named rather than adopted silently.
+
 ## Where this meets the skill's own tools
 
 `rew_tool/resonalyze_ir.py` writes v7 impulse-response files REW → Resonalyze and READS v4..v8 (v8,

@@ -73,6 +73,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import dsp_math  # noqa: E402
 import phase_rotation  # noqa: E402
+import windows as _windows  # noqa: E402
 
 PPO_DEFAULT = 96
 FMIN_DEFAULT, FMAX_DEFAULT = 20.0, 20000.0
@@ -82,6 +83,25 @@ LR_BANDS = ((20, 60), (60, 120), (120, 250), (250, 500), (500, 1000),
 
 class PredictError(ValueError):
     pass
+
+
+#: How many cycles OF THE JUNCTION FREQUENCY the window must hold for a gated junction to mean
+#: anything. Measured on the `_60` set, predicted interference against the measured pair, worst
+#: |Δ| over the junction's 1/3-octave bands (`scripts` of the RES-006 run, 2026-09-08):
+#:
+#:     cycles at fc   0.2   0.4   0.9   1.3   2.6   4.2   5.0   6.0   10.0   steady
+#:     worst |Δ| dB   1.3   5.3   3.9   9.0   3.9   0.26  0.26  0.36   0.28   0.43
+#:
+#: Under a cycle the window holds no wave and the number is arbitrary -- and it does not improve
+#: monotonically on the way up, which is what makes it dangerous: a 6 ms gate at 215 Hz reads
+#: 9 dB of "cancellation" that is the window. Five is above every measured failure and under the
+#: six an FDW gives everywhere; a fixed gate that cannot reach it is refused for that junction.
+GATE_MIN_CYCLES = 5.0
+
+#: How far under its own passband peak the OLD chain may be before its solo stops being data.
+#: 30 dB down is 3% of amplitude: what a channel contributes there cannot move a junction, while
+#: what dividing by it would amplify is the noise floor (hub RES-006's own risk line).
+STATE_FLOOR_DB = -30.0
 
 
 # ---------------------------------------------------------------- grid & helpers
@@ -381,7 +401,7 @@ def _spectrum_on_grid(ir, fs, t0_s, freqs, drift_samples=0.0):
     return H * np.exp(-2j * np.pi * f * t0)
 
 
-def load_solo_v7(path, freqs, drift_samples=0.0):
+def load_solo_v7(path, freqs, drift_samples=0.0, keep_ir=False):
     """A Resonalyze impulse-response file (v4..v8): sample 0 of `transferRealSamples` is t = 0.
 
     Read through `resonalyze_ir.load_file`, the one reader of the format in this tree: v7 carries
@@ -397,13 +417,21 @@ def load_solo_v7(path, freqs, drift_samples=0.0):
     if doc.get("transferRealSamples") is None:
         raise PredictError(f"{path}: no transferRealSamples -- not a loopback-transfer file")
     fs = int(doc["sampleRate"])
-    return _spectrum_on_grid(doc["transferRealSamples"], fs, 0.0, freqs, drift_samples), {
+    info = {
         "source": f"v{doc.get('version')}", "path": path, "sample_rate": fs,
         "timing_reference": doc.get("timingReference"),
         "protective": _legs_from_v7((doc.get("rewSource") or {}).get("protectiveHighPass"),
                                     (doc.get("rewSource") or {}).get("protectiveState")),
         "protective_state": (doc.get("rewSource") or {}).get("protectiveState"),
+        "window": _windows.STEADY,
     }
+    if keep_ir:
+        # The impulse itself, so the SECOND window (the gate) is a second reading of one file
+        # rather than a second file read. `t0_s` is 0 by construction here: a v7 file carries the
+        # IR already rotated so sample 0 IS the loopback reference (`resonalyze_ir`).
+        info["ir"] = {"ir": np.asarray(doc["transferRealSamples"], float), "sample_rate": fs,
+                      "t0_s": 0.0, "drift_samples": float(drift_samples)}
+    return _spectrum_on_grid(doc["transferRealSamples"], fs, 0.0, freqs, drift_samples), info
 
 
 def _legs_from_v7(field, state=None):
@@ -471,7 +499,7 @@ def de_embed_solos(loaded, freqs, record=None, baseline=None):
     return solos, notes, refused
 
 
-def load_solo_rew(title, freqs, api=None):
+def load_solo_rew(title, freqs, api=None, keep_ir=False):
     """`<ch>_N (sw)` from a live REW, refused unless on the loopback base with no offset."""
     if api is None:
         import rew_api as api  # noqa: F811
@@ -491,13 +519,21 @@ def load_solo_rew(title, freqs, api=None):
     # every junction's depth and sign into a guess (hub RES-005, the desk of 2026-09-07).
     times, ir = api.get_impulse_response(mid, normalised=False)
     fs = round(1.0 / (times[1] - times[0]))   # 1/dt of two accumulated floats is 95999.9999999
-    return _spectrum_on_grid(ir, fs, times[0], freqs), {
+    info = {
         "source": "rew", "title": title, "id": str(mid), "sample_rate": fs,
         "timing_reference": timing.get("reference"), "ir_start_s": times[0],
+        "window": _windows.STEADY,
     }
+    if keep_ir:
+        # `t0_s` is REW's own `startTime` -- the time of sample 0, and every reading that compares
+        # two measurements needs it (two `_60` mid buffers begin 0.535 ms apart; a read that
+        # assumes one origin got the L-R arrival's SIGN wrong, hub RES-006).
+        info["ir"] = {"ir": np.asarray(ir, float), "sample_rate": fs, "t0_s": float(times[0]),
+                      "drift_samples": 0.0}
+    return _spectrum_on_grid(ir, fs, times[0], freqs), info
 
 
-def load_solos_dir(directory, freqs, drift=None):
+def load_solos_dir(directory, freqs, drift=None, keep_ir=False):
     """Every `<name>.json` in DIR that is a v7 file -> {canonical code: (H, info)}."""
     out = {}
     for name in sorted(os.listdir(directory)):
@@ -508,7 +544,7 @@ def load_solos_dir(directory, freqs, drift=None):
             continue                       # controls, near-field, RTA twins: not solos
         try:
             H, info = load_solo_v7(os.path.join(directory, name), freqs,
-                                   drift_samples=(drift or {}).get(code, 0.0))
+                                   drift_samples=(drift or {}).get(code, 0.0), keep_ir=keep_ir)
         except (PredictError, KeyError, ValueError) as exc:
             # A file this reader cannot open is skipped as before -- a manifest, a control, an
             # RTA twin -- but one that is refused BY VERSION is named: a directory of v9 files
@@ -520,6 +556,120 @@ def load_solos_dir(directory, freqs, drift=None):
     if not out:
         raise PredictError(f"{directory}: no Resonalyze impulse-response files (v4..v8) found")
     return out
+
+
+def gated_solos(loaded, freqs, *, gate_ms=None, cycles=None):
+    """`({code: H}, notes, anchors)` -- the same solos read through the GATE, from the kept IRs.
+
+    The second of the two windows (`windows.py`): phase, arrival and the junctions are read here,
+    magnitude against a target stays on the steady reading. A channel whose start cannot be located
+    gets no gated reading and is named -- it is then absent from the gated junctions rather than
+    present with a number nobody can stand behind.
+    """
+    f = np.asarray(freqs, dtype=float)
+    out, notes, anchors = {}, [], {}
+    for code, (_H, info) in loaded.items():
+        raw = info.get("ir")
+        if not raw:
+            notes.append(f"{code}: no impulse kept -- no gated reading (loaded without keep_ir)")
+            continue
+        H, winfo = _windows.windowed_spectrum(raw["ir"], raw["sample_rate"], raw["t0_s"], f,
+                                             gate_ms=gate_ms, cycles=cycles,
+                                             drift_samples=raw.get("drift_samples") or 0.0)
+        if H is None:
+            notes.append(f"{code}: no gated reading -- {winfo.get('refused')}")
+            continue
+        out[code] = H
+        info["window_gate"] = winfo
+        anchors[code] = {"arrival_ms": winfo["arrival_ms"], "gate_ms": gate_ms, "cycles": cycles}
+        verdict = (winfo.get("anchor") or {}).get("verdict")
+        spread = (winfo.get("anchor") or {}).get("spread_ms")
+        notes.append(f"{code}: gated at {winfo['arrival_ms']:.3f} ms"
+                     + (f", {gate_ms:g} ms" if gate_ms is not None else f", {cycles:g} cycles")
+                     + (f" (start {verdict}"
+                        + (f", four estimators {spread:g} ms apart -- the arrival in this band is "
+                           f"not one number" if verdict == "ILL-POSED" and spread else "") + ")"
+                        if verdict else ""))
+    return out, notes, anchors
+
+
+def de_embed_state(solos, freqs, chains_a, chains_b=None, floor_db=STATE_FLOOR_DB):
+    """Solos measured UNDER a state -> the drivers behind them: `H / C_a`, gated where `C_a` is small.
+
+    The desk works from the series it has -- `<ch>_N (sw)` taken under ledger version `v_a`, with
+    that version's crossovers, gains, delays and EQ already in the sound -- not from a set of bare
+    baseline solos nobody captured. Predicting version `v_b` from those is one division and one
+    multiplication: `H_b = H_meas x C_b / C_a`, which is this function (the division) followed by
+    `predict` (the multiplication by `C_b`).
+
+    Where `C_a` is more than `floor_db` under its own passband peak, the old chain was letting
+    nothing through, `H_meas` there is the noise floor, and dividing amplifies exactly that. The
+    channel is therefore ABSENT from the sum in that band and the band is named -- 30 dB down is
+    3% of amplitude, so what is dropped cannot move a junction (measured on the `_60` set: the
+    identity case, `C_b = C_a`, still reproduces the measured pairs to hundredths of a dB).
+
+    A channel the ledger version does not carry is left as measured and said: a solo with no row
+    under `v_a` was captured with nothing in its chain, which is the baseline case.
+
+    `chains_b` (the state being predicted) makes the unchanged channels EXACT: where the row did
+    not move, `C_b / C_a` is 1, so the division here and the multiplication `predict` does next
+    cancel to float rounding -- and the FLOOR is not applied, because there is nothing to protect
+    against. (Divided with the floor and multiplied back, an unchanged channel would silently lose
+    the band where its own chain is 30 dB down. It cannot move a junction, but "exact where nothing
+    changed" is worth having for free.) That is most channels of most changes.
+    """
+    f = np.asarray(freqs, dtype=float)
+    out, notes = {}, []
+    for code, H in solos.items():
+        chain = (chains_a or {}).get(code)
+        if chain is None:
+            out[code] = H
+            notes.append(f"{code}: no row under the source state -- solo used as measured")
+            continue
+        unchanged = chains_b is not None and (chains_b.get(code) == chain)
+        if chain.get("muted") or chain.get("unmodellable"):
+            notes.append(f"{code}: the source state cannot be modelled "
+                         f"({chain.get('unmodellable') or 'muted'}) -- left out")
+            continue
+        C = chain_response(f, chain)
+        mag = np.abs(C)
+        peak = float(mag.max()) if mag.size else 0.0
+        if peak <= 0:
+            notes.append(f"{code}: the source state passes nothing at all -- left out")
+            continue
+        live = (mag > 0.0) if unchanged else (mag >= peak * 10.0 ** (floor_db / 20.0))
+        H_drv = np.zeros_like(H)
+        H_drv[live] = np.asarray(H)[live] / C[live]
+        out[code] = H_drv
+        if unchanged:
+            notes.append(f"{code}: the row is the same in both states -- divided out and multiplied "
+                         f"back, which cancels exactly (no floor applied)")
+        elif live.all():
+            notes.append(f"{code}: source state {chain_label(chain)} divided out")
+        else:
+            edges = _band_edges(f, ~live)
+            notes.append(f"{code}: source state {chain_label(chain)} divided out; ABSENT from the "
+                         f"sum where it was more than {abs(floor_db):g} dB down ({edges})")
+    return out, notes
+
+
+def _band_edges(freqs, mask, limit=3):
+    """`20-58 Hz, 4.1k-20k` -- the contiguous runs of `mask`, for a note a person reads."""
+    f = np.asarray(freqs, float)
+    idx = np.nonzero(mask)[0]
+    if idx.size == 0:
+        return "nowhere"
+    runs, start = [], idx[0]
+    for a, b in zip(idx, idx[1:]):
+        if b != a + 1:
+            runs.append((start, a))
+            start = b
+    runs.append((start, idx[-1]))
+
+    def hz(v):
+        return f"{v / 1000:.1f}k" if v >= 1000 else f"{v:.0f}"
+    shown = ", ".join(f"{hz(f[a])}-{hz(f[b])} Hz" for a, b in runs[:limit])
+    return shown + (f" and {len(runs) - limit} more" if len(runs) > limit else "")
 
 
 def drift_from_manifest(path, block="blockB_REW"):
@@ -600,8 +750,27 @@ def joints_from_chains(chains):
 
 
 # ---------------------------------------------------------------- the prediction
-def predict(freqs, solos, chains, joints=None, band_oct=1.0):
-    """`solos`: {code: complex response on freqs}; `chains`: {code: chain}. Returns a dict."""
+def predict(freqs, solos, chains, joints=None, band_oct=1.0, solos_gate=None, gate_spec=None,
+            gate_anchors=None):
+    """`solos`: {code: complex response on freqs}; `chains`: {code: chain}. Returns a dict.
+
+    `solos_gate`, when given, is the SAME solos read through the direct-sound gate
+    (`windows.py`): the junctions and the sub pair are then read from those, because a
+    cancellation between two drivers is a property of what leaves them and a reflection 3 ms later
+    is a comb laid over the answer. Magnitudes, the side sums, ALL and the L-R levels stay on the
+    steady reading -- that is what a target curve is judged against. Every junction row says which
+    window it was read through, so two numbers from two days cannot be compared by accident
+    (hub RES-006, the user's ruling 2026-09-08).
+
+    **A gate that cannot hold BOTH members of a junction is not used for it.** Each channel's gate
+    opens at its own arrival, so when the two arrive further apart than the window is long, the
+    lower one is cut out of the pair while its own solo keeps it -- and the gated junction then
+    disagrees with the measured pair by whole dB while looking like a reading. Measured on the `_60`
+    set with a 2 ms gate: the mid and the tweeter arrive 0.02 ms apart and the gated junction
+    verified to 0.27 dB; the woofer and the mid are 2.40 ms apart and it came out 5.21 dB off; the
+    sub and the woofer, 1.54 ms apart, 1.71 dB off. Such a junction falls back to the steady reading
+    and SAYS so, per junction, with both numbers in the note.
+    """
     f = np.asarray(freqs, dtype=float)
     processed, notes = {}, []
     for code, H in solos.items():
@@ -615,6 +784,15 @@ def predict(freqs, solos, chains, joints=None, band_oct=1.0):
         processed[code] = H * chain_response(f, chain)
         if (chain.get("phase") or {}).get("note"):
             notes.append(f"{code}: {chain['phase']['note']}")
+    # The junctions' own reading: the gated solos through the same chains. A channel with no gated
+    # reading (no locatable start -- a sub) is absent from it, and `_junction_rows` says so.
+    gated = {}
+    for code, H in (solos_gate or {}).items():
+        chain = chains.get(code)
+        if chain is not None and not chain.get("unmodellable"):
+            gated[code] = H * chain_response(f, chain)
+    window = _windows.GATE if gated else _windows.STEADY
+    window_note = _gate_label(gate_spec)
     for code in chains:
         if code not in solos:
             notes.append(f"{code}: ledger row present, no solo -- left out")
@@ -631,11 +809,14 @@ def predict(freqs, solos, chains, joints=None, band_oct=1.0):
         top = max(((chains[c].get("lp") or {}).get("f") or 0.0) for c in subs) or f[-1]
         band = (float(f[0]), float(top))
         a, b = subs[0], subs[1]
-        sl = dsp_math.sum_loss(f, processed[a], processed[b], band)
+        read, used, why = _read_pair(processed, gated, a, b, top, gate_spec, gate_anchors)
+        if why:
+            notes.append(f"{SUB_GROUP}: {why}")
+        sl = dsp_math.sum_loss(f, read[a], read[b], band)
         pairs.append({"pair": SUB_GROUP, "members": subs, "band": [band[0], band[1]],
                       "sum_loss_avg_db": sl["avg_db"], "sum_loss_dip_db": sl["dip_db"],
                       "sum_loss_dip_hz": sl["dip_hz"], "sum_loss_score_db": sl["score_db"],
-                      "sum_ripple_db": sl["ripple_db"],
+                      "sum_ripple_db": sl["ripple_db"], "window": used,
                       "note": ("the subs' mutual alignment over their shared band -- a pair, "
                                "not a junction; more than two are read as the first two")})
 
@@ -658,7 +839,10 @@ def predict(freqs, solos, chains, joints=None, band_oct=1.0):
         if lo not in processed or hi not in processed:
             continue
         band = (fc / 2 ** band_oct, fc * 2 ** band_oct)
-        A, B = processed[lo], processed[hi]
+        read, used, why = _read_pair(processed, gated, lo, hi, fc, gate_spec, gate_anchors)
+        if why:
+            notes.append(f"{lo}↔{hi}: {why}")
+        A, B = read[lo], read[hi]
         sl = dsp_math.sum_loss(f, A, B, band)                       # search definition
         m = (f >= band[0]) & (f <= band[1])
         ceil = np.abs(A[m]) + np.abs(B[m])
@@ -666,7 +850,7 @@ def predict(freqs, solos, chains, joints=None, band_oct=1.0):
         null = 20.0 * np.log10(np.abs(A[m] + B[m])[ok] / ceil[ok] + 1e-12)
         k = int(np.argmin(null)) if ok.any() else None
         junctions.append({
-            "lo": lo, "hi": hi, "fc": fc, "band": [band[0], band[1]],
+            "lo": lo, "hi": hi, "fc": fc, "band": [band[0], band[1]], "window": used,
             "sum_loss_avg_db": sl["avg_db"], "sum_loss_dip_db": sl["dip_db"],
             "sum_loss_dip_hz": sl["dip_hz"], "sum_loss_score_db": sl["score_db"],
                       "sum_ripple_db": sl["ripple_db"],
@@ -683,9 +867,68 @@ def predict(freqs, solos, chains, joints=None, band_oct=1.0):
         d = _db(sides["L"]["sum"][m]) - _db(sides["R"]["sum"][m])
         lr.append({"band": [lo_f, hi_f], "delta_db": float(np.sum(w * d) / np.sum(w))})
 
-    return {"freqs_hz": f, "processed": processed, "chains": {c: chains[c] for c in processed},
+    if window == _windows.GATE:
+        notes.append(f"junctions read through the GATE ({window_note or 'the direct sound'}); "
+                     f"magnitudes, the side sums and ALL through the steady window -- "
+                     + _windows.steady_note())
+    missing_gate = [c for c in processed if gated and c not in gated]
+    if missing_gate:
+        notes.append(f"{', '.join(sorted(missing_gate))}: no gated reading, so any junction they "
+                     f"are in is read STEADY and says so")
+    return {"freqs_hz": f, "processed": processed, "gated": gated,
+            "chains": {c: chains[c] for c in processed}, "window": window,
             "sides": sides, "all": all_sum, "junctions": junctions, "pairs": pairs,
             "lr_delta": lr, "notes": notes}
+
+
+def _read_pair(processed, gated, a, b, fc, spec=None, anchors=None):
+    """`(reading, window, why_not)` -- the GATE when BOTH members have one AND it can hold them.
+
+    Never one of each: a sum of one gated response and one steady is not a measurement of anything,
+    and it is the shape a per-channel fallback would silently produce. And never a gate shorter than
+    the two arrivals are apart -- `predict`'s own note carries what that costs (5.2 dB on the `_60`
+    woofer↔mid at a 2 ms gate).
+    """
+    if not (a in gated and b in gated):
+        return processed, _windows.STEADY, None
+    anchors = anchors or {}
+    length = _gate_length_ms(spec, fc)
+    if length is not None and fc:
+        need = GATE_MIN_CYCLES * 1000.0 / float(fc)
+        if length < need:
+            return processed, _windows.STEADY, (
+                f"read STEADY: {length:.2f} ms holds {length * float(fc) / 1000.0:.2f} cycles at "
+                f"{fc:.0f} Hz and a gated junction needs {GATE_MIN_CYCLES:g} "
+                f"({need:.1f} ms here) -- under that the window answers, not the car")
+    if a in anchors and b in anchors and length is not None:
+        apart = abs(anchors[a]["arrival_ms"] - anchors[b]["arrival_ms"])
+        if apart >= length:
+            return processed, _windows.STEADY, (
+                f"read STEADY: they arrive {apart:.2f} ms apart and the window is {length:.2f} ms at "
+                f"{fc:.0f} Hz, so it cannot hold both -- the later one is cut out of the pair while "
+                f"its own solo keeps it, which cost 5.2 dB on this very set")
+    return gated, _windows.GATE, None
+
+
+def _gate_length_ms(spec, fc):
+    """The window length that matters AT a junction: the fixed gate, or `cycles`/fc for an FDW."""
+    if not spec:
+        return None
+    if spec.get("gate_ms"):
+        return float(spec["gate_ms"])
+    if spec.get("cycles") and fc:
+        return float(spec["cycles"]) * 1000.0 / float(fc)
+    return None
+
+
+def _gate_label(spec):
+    if not spec:
+        return None
+    if spec.get("gate_ms"):
+        return f"{float(spec['gate_ms']):g} ms after the arrival"
+    if spec.get("cycles"):
+        return f"{float(spec['cycles']):g} cycles at each frequency"
+    return None
 
 
 # ---------------------------------------------------------------- alignment (Phase 1.3)
@@ -971,20 +1214,250 @@ def render_alignment(result, original=None, rate_hz=None):
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------- delta and ladder
+def delta_report(freqs, solos, chains_a, chains_b, *, joints=None, band_oct=1.0, solos_gate=None,
+                 gate_spec=None, gate_anchors=None, labels=("from", "to")):
+    """What one ledger change does, ONLY where the two versions differ: `{rows, junctions, sides}`.
+
+    Two predictions from the same solos and the difference between them -- and the difference is
+    reported per changed row, per junction those rows are in, and per side band, because that is
+    the shape of the question a desk asks before it types anything into the processor ("what does
+    moving this corner do, and to what"). A channel whose row did not move is not in the report at
+    all: a table that lists thirty unchanged channels beside the two that changed is a table
+    nobody reads twice.
+    """
+    f = np.asarray(freqs, dtype=float)
+    a = predict(f, solos, chains_a, joints=joints, band_oct=band_oct, solos_gate=solos_gate,
+                gate_spec=gate_spec, gate_anchors=gate_anchors)
+    b = predict(f, solos, chains_b, joints=joints, band_oct=band_oct, solos_gate=solos_gate,
+                gate_spec=gate_spec, gate_anchors=gate_anchors)
+    changed = sorted(c for c in set(chains_a) | set(chains_b)
+                     if chains_a.get(c) != chains_b.get(c))
+    rows = []
+    for code in changed:
+        entry = {"channel": code, "from": chain_label(chains_a[code]) if code in chains_a else "—",
+                 "to": chain_label(chains_b[code]) if code in chains_b else "—"}
+        if code in a["processed"] and code in b["processed"]:
+            d = _db(b["processed"][code]) - _db(a["processed"][code])
+            live = _db(a["processed"][code]) > np.nanmax(_db(a["processed"][code])) - 40.0
+            k = int(np.nanargmax(np.abs(np.where(live, d, 0.0))))
+            entry.update({"worst_db": round(float(d[k]), 2), "worst_hz": round(float(f[k]), 1)})
+        rows.append(entry)
+    junctions = []
+    ja = {(j["lo"], j["hi"]): j for j in a["junctions"]}
+    jb = {(j["lo"], j["hi"]): j for j in b["junctions"]}
+    for key in sorted(set(ja) | set(jb), key=lambda kv: (ja.get(kv) or jb[kv])["fc"]):
+        if not (set(key) & set(changed)):
+            continue
+        one, two = ja.get(key), jb.get(key)
+        junctions.append({
+            "lo": key[0], "hi": key[1], "fc": (one or two)["fc"],
+            "window": (two or one).get("window"),
+            "from": {k: one[k] for k in ("sum_loss_avg_db", "sum_loss_dip_db", "sum_loss_dip_hz",
+                                         "sum_loss_score_db", "sum_ripple_db", "worst_null_db",
+                                         "worst_null_hz")} if one else None,
+            "to": {k: two[k] for k in ("sum_loss_avg_db", "sum_loss_dip_db", "sum_loss_dip_hz",
+                                        "sum_loss_score_db", "sum_ripple_db", "worst_null_db",
+                                        "worst_null_hz")} if two else None,
+        })
+    sides = []
+    for side in ("L", "R"):
+        for lo_f, hi_f in LR_BANDS:
+            m = (f >= lo_f) & (f <= hi_f)
+            if not m.any():
+                continue
+            d = _db(b["sides"][side]["sum"][m]) - _db(a["sides"][side]["sum"][m])
+            k = int(np.nanargmax(np.abs(d)))
+            sides.append({"side": side, "band": [lo_f, hi_f], "worst_db": round(float(d[k]), 2),
+                          "worst_hz": round(float(f[m][k]), 1)})
+    return {"labels": list(labels), "changed": changed, "rows": rows, "junctions": junctions,
+            "sides": sides, "window": b.get("window"),
+            "notes": [n for n in b["notes"] if n not in a["notes"]] or []}
+
+
+def render_delta(rep):
+    lab_a, lab_b = rep["labels"]
+    lines = [f"  Delta {lab_a} → {lab_b}: only what differs "
+             f"(junctions read {rep.get('window') or 'steady'})", ""]
+    if not rep["changed"]:
+        lines.append("  the two versions carry the same rows -- nothing to report")
+        return "\n".join(lines)
+    for r in rep["rows"]:
+        lines.append(f"  {r['channel']:6} {r['from']}")
+        lines.append(f"  {'':6} → {r['to']}")
+        if "worst_db" in r:
+            lines.append(f"  {'':6}   biggest change {r['worst_db']:+.2f} dB at {r['worst_hz']:.0f} Hz")
+    if rep["junctions"]:
+        lines.append("")
+        lines.append(f"  {'junction':14}{'fc':>6}  {'avg':>14}{'dip':>14}{'score':>14}{'worst null':>16}")
+        for j in rep["junctions"]:
+            def two(key, fmt="%+.2f"):
+                x = (j["from"] or {}).get(key)
+                y = (j["to"] or {}).get(key)
+                return f"{(fmt % x) if x is not None else '—':>6}→{(fmt % y) if y is not None else '—':>7}"
+            lines.append(f"  {j['lo'] + '↔' + j['hi']:14}{j['fc']:>6.0f}  {two('sum_loss_avg_db')}"
+                         f"{two('sum_loss_dip_db')}{two('sum_loss_score_db')}"
+                         f"{two('worst_null_db', '%+.1f')}")
+    worst = max(rep["sides"], key=lambda s: abs(s["worst_db"]), default=None)
+    if worst:
+        lines.append("")
+        lines.append(f"  the side sums move most on {worst['side']} at {worst['worst_hz']:.0f} Hz: "
+                     f"{worst['worst_db']:+.2f} dB")
+    for n in rep["notes"]:
+        lines.append(f"  note: {n}")
+    return "\n".join(lines)
+
+
+def ladder_report(freqs, solos, chains, lo, hi, *, delays_ms, polarities=("NORM", "INV"),
+                  edges=(), band_oct=1.0, solos_gate=None, gate_spec=None, gate_anchors=None):
+    """One junction, every named variant, read the same way: delay x polarity x crossover edge.
+
+    A LADDER, not a search: the rungs come from the caller and the table is printed in the order
+    they were asked for. It is deliberately not sorted by score -- the desk reads and the Arbiter
+    decides, and a table ordered by the metric is a proposal wearing a table's clothes (the desk's
+    own doctrine B8; `align_joints` is the search, and it exists separately and says what it did).
+    """
+    f = np.asarray(freqs, dtype=float)
+    base = chains[hi]
+    fc = (chains[lo].get("lp") or {}).get("f")
+    rungs = []
+    for edge in (edges or (None,)):
+        for pol in polarities:
+            for d in delays_ms:
+                ch = dict(base, ta_ms=float(base.get("ta_ms") or 0.0) + float(d), polarity=pol)
+                label = f"{d:+.2f} ms · {pol}"
+                if edge:
+                    kind, leg = edge
+                    ch = dict(ch, **{kind: leg})
+                    label += f" · {kind.upper()} {leg['f']:g} {leg['type']}{leg['slope']}"
+                trial = dict(chains, **{hi: ch})
+                r = predict(f, solos, trial, joints=[(lo, hi, fc)] if fc else None,
+                            band_oct=band_oct, solos_gate=solos_gate, gate_spec=gate_spec,
+                            gate_anchors=gate_anchors)
+                row = next((j for j in r["junctions"] if j["lo"] == lo and j["hi"] == hi), None)
+                if row is None:
+                    continue
+                rungs.append({"label": label, "delay_ms": float(d), "polarity": pol,
+                              "edge": (f"{edge[0]}={edge[1]['f']:g}:{edge[1]['type']}{edge[1]['slope']}"
+                                       if edge else None),
+                              **{k: row[k] for k in ("sum_loss_avg_db", "sum_loss_dip_db",
+                                                      "sum_loss_dip_hz", "sum_loss_score_db",
+                                                      "sum_ripple_db", "worst_null_db",
+                                                      "worst_null_hz", "window")}})
+    return {"junction": [lo, hi], "fc": fc, "applied_to": hi, "rungs": rungs,
+            "note": ("the rungs are in the order they were asked for; sorting them by score would "
+                     "be a proposal, and the desk does not propose (doctrine B8) -- read them and "
+                     "decide, or run --align, which searches and says so")}
+
+
+def render_ladder(rep):
+    lines = [f"  Ladder on {rep['junction'][0]}↔{rep['junction'][1]}"
+             + (f" (fc {rep['fc']:.0f} Hz)" if rep.get("fc") else "")
+             + f", applied to {rep['applied_to']}",
+             "  delays are ± around that row's current value; polarity and an edge are absolute", ""]
+    lines.append(f"  {'rung':44}{'avg':>8}{'dip':>8}{'@Hz':>7}{'score':>8}{'ripple':>8}"
+                 f"{'worst null':>12}{'@Hz':>7}{'window':>8}")
+    lines.append("  " + "-" * 110)
+    for r in rep["rungs"]:
+        lines.append(f"  {r['label']:44}{r['sum_loss_avg_db']:>+8.2f}{r['sum_loss_dip_db']:>+8.1f}"
+                     f"{(r['sum_loss_dip_hz'] or 0):>7.0f}{r['sum_loss_score_db']:>+8.2f}"
+                     f"{r['sum_ripple_db']:>8.2f}{(r['worst_null_db'] or 0):>+12.1f}"
+                     f"{(r['worst_null_hz'] or 0):>7.0f}{r['window']:>8}")
+    lines.append("")
+    lines.append(f"  {rep['note']}")
+    return "\n".join(lines)
+
+
+#: The gates the desk sweeps. Not one gate: a number that holds across the sweep is a measurement,
+#: one that moves with the window is the window (`car/…/scripts-2026-09-05/gate_sweep.py`).
+GATE_SWEEP_MS = (0.7, 1.0, 1.5, 2.0, 3.0, 5.0)
+
+
+def shared_band(chains, a, b, fmin=FMIN_DEFAULT, fmax=FMAX_DEFAULT):
+    """Where both channels play, from their own rows: the higher high-pass to the lower low-pass.
+
+    The band is read off the ledger rather than typed: two mids compared L against R are compared
+    over the band the tune gives them, and a band typed by hand is one more number to get wrong.
+    """
+    his = [(chains.get(c) or {}).get("hp") for c in (a, b)]
+    los = [(chains.get(c) or {}).get("lp") for c in (a, b)]
+    lo = max([float(x["f"]) for x in his if x] or [fmin])
+    hi = min([float(x["f"]) for x in los if x] or [fmax])
+    return (lo, hi) if hi > lo else (fmin, fmax)
+
+
+def arrival_sweep(loaded, a, b, band, gates=GATE_SWEEP_MS):
+    """`{band, rows, edge_difference_ms, verdicts}` -- how much later A arrives than B, gate by gate.
+
+    The desk's question of 05.09, with the two things that reading needs and its own script did not
+    have: each record's own time base (`t0`), and one window over BOTH channels rather than one per
+    channel. Without the first the answer comes out on the wrong side of zero; without the second
+    the window absorbs the very delay being measured (`windows.arrival_between`).
+    """
+    ra, rb = loaded[a][1].get("ir"), loaded[b][1].get("ir")
+    if not ra or not rb:
+        raise PredictError(f"--arrival {a},{b} needs the impulses: load with a gate (--gate/--fdw)")
+    rows = []
+    info = {}
+    for g in gates:
+        ms, i = _windows.arrival_between(ra["ir"], rb["ir"], ra["sample_rate"], band=band,
+                                        gate_ms=g, t0_a=ra["t0_s"], t0_b=rb["t0_s"])
+        rows.append({"gate_ms": g, "ms": (round(ms, 4) if ms is not None else None),
+                     "refused": i.get("refused")})
+        info = i if ms is not None else info
+    return {"a": a, "b": b, "band": [float(band[0]), float(band[1])], "rows": rows,
+            "edge_difference_ms": round(info.get("edge_difference_ms", float("nan")), 4)
+            if info else None,
+            "arrival_a_ms": info.get("arrival_a_ms"), "arrival_b_ms": info.get("arrival_b_ms"),
+            "verdict_a": info.get("verdict_a"), "verdict_b": info.get("verdict_b")}
+
+
+def render_arrival(rep):
+    lines = [f"  Arrival {rep['a']} vs {rep['b']} over {rep['band'][0]:.0f}-{rep['band'][1]:.0f} Hz "
+             f"(+ = {rep['a']} arrives LATER), through the gate:", ""]
+    lines.append("  " + "".join(f"{r['gate_ms']:>10.1f} ms" for r in rep["rows"]))
+    lines.append("  " + "".join(f"{(('%+.3f' % r['ms']) if r['ms'] is not None else '—'):>13}"
+                                for r in rep["rows"]))
+    for r in rep["rows"]:
+        if r["refused"]:
+            lines.append(f"    {r['gate_ms']:g} ms: {r['refused']}")
+    if rep.get("edge_difference_ms") is not None:
+        lines.append("")
+        lines.append(f"  the leading edges are {rep['edge_difference_ms']:+.3f} ms apart "
+                     f"({rep['arrival_a_ms']:.3f} vs {rep['arrival_b_ms']:.3f} ms), "
+                     f"start {rep['verdict_a']}/{rep['verdict_b']}")
+        if "ILL-POSED" in (rep.get("verdict_a"), rep.get("verdict_b")):
+            lines.append("  ⚠ ILL-POSED: the four onset estimators disagree by more than this "
+                         "question can bear in this band, so the arrival here is not ONE number -- "
+                         "read the sweep's trend and the edges together, and align by SUMMATION "
+                         "(`--align`), not by pinning a delay off this")
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------- output
-def to_json(result, decimate=1):
+def to_json(result, decimate=1, window_spec=None):
     f = result["freqs_hz"][::decimate]
+    gated = result.get("gated") or {}
     out = {
         "freqs_hz": [round(float(v), 3) for v in f],
         "channels": {c: {"chain": result["chains"][c],
                          "mag_db": [round(float(v), 3) for v in _db(h)[::decimate]],
                          "phase_deg": [round(float(v), 2)
-                                       for v in np.degrees(np.angle(h))[::decimate]]}
+                                       for v in np.degrees(np.angle(h))[::decimate]],
+                         # The gated reading travels WITH the steady one, so a verification can
+                         # compare through the same window instead of being told which to use --
+                         # a window named in one place and applied in another is two definitions.
+                         **({"gate_mag_db": [round(float(v), 3) for v in _db(gated[c])[::decimate]],
+                             "gate_phase_deg": [round(float(v), 2) for v in
+                                                np.degrees(np.angle(gated[c]))[::decimate]]}
+                            if c in gated else {})}
                      for c, h in result["processed"].items()},
+        "window_spec": window_spec,
         "sides": {s: {"members": v["members"],
                       "sum_mag_db": [round(float(x), 3) for x in _db(v["sum"])[::decimate]]}
                   for s, v in result["sides"].items()},
         "all_mag_db": [round(float(x), 3) for x in _db(result["all"])[::decimate]],
+        "window": result.get("window", _windows.STEADY),
         "junctions": result["junctions"],
         "pairs": result.get("pairs", []),
         "lr_delta": result["lr_delta"],
@@ -996,7 +1469,8 @@ def to_json(result, decimate=1):
 
 
 def render(result):
-    lines = ["  Prediction: solos x ledger chains -> what the mic would hear", ""]
+    lines = ["  Prediction: solos x ledger chains -> what the mic would hear"
+             + (f"   (junctions read {result['window']})" if result.get("window") else ""), ""]
     for c, chain in result["chains"].items():
         lines.append(f"  {c:6} {chain_label(chain)}")
     lines.append("")
@@ -1084,6 +1558,10 @@ def main(argv=None):
     ap.add_argument("--baseline", action="store_true",
                     help="the solos are a baseline capture: an unmarked REW channel is REFUSED, not "
                          "read as configured")
+    ap.add_argument("--from-state", metavar="VER",
+                    help="the solos were measured UNDER this ledger version: divide that state out "
+                         "first, so the prediction is H_meas x C_new/C_old (hub RES-006). Needs "
+                         "--project; the desk's own series is exactly this case")
     ap.add_argument("--no-de-embed", action="store_true",
                     help="leave protective filters IN the solos (to see what the doctrine changes; "
                          "not for a tune)")
@@ -1117,6 +1595,26 @@ def main(argv=None):
                     help="delay grid (default: 1000 / the project profile's processing rate, else 0.01)")
     al.add_argument("--tie-db", type=float, default=0.02)
     al.add_argument("--apf", action="store_true", help="add an APF2 hint where a dip remains")
+    win = ap.add_argument_group("windows (RES-006): the junctions read through the direct sound")
+    win.add_argument("--gate", type=float, metavar="MS",
+                     help="read phase, arrival and the junctions through a MS gate on the direct "
+                          "sound; magnitude stays on the whole record. Every number says which")
+    win.add_argument("--fdw", type=float, metavar="CYCLES",
+                     help="...through a frequency-dependent window of CYCLES cycles instead")
+    win.add_argument("--arrival", metavar="A,B[,lo,hi]",
+                     help="how much later A arrives than B, swept over the desk's gates; the band "
+                          "comes from the two rows unless given")
+    what = ap.add_argument_group("what changed / what the rungs give (RES-006)")
+    what.add_argument("--delta-vs", metavar="VER",
+                      help="also predict ledger version VER and report the difference ONLY where "
+                           "the two versions differ; --out writes delta.json")
+    what.add_argument("--ladder", metavar="lo,hi",
+                      help="a table of variants on ONE junction: delay x polarity x crossover edge, "
+                           "read the same way and NOT sorted by score; --out writes ladder.json")
+    what.add_argument("--ladder-delay-ms", default=None, metavar="LIST",
+                      help="the delay rungs (default: 0 and +/-1 and 2 steps of the DSP grid)")
+    what.add_argument("--ladder-edge", action="append", default=[], metavar="KIND=F:TYPESLOPE",
+                      help="an edge rung, e.g. lp=2500:LR24 (repeatable; applied to the upper member)")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args(argv)
     # The response model is bound to THIS device's processing rate before anything is modelled.
@@ -1163,21 +1661,29 @@ def main(argv=None):
                                    "matrix reads")
 
     drift = drift_from_manifest(args.drift) if args.drift else None
+    if args.gate and args.fdw:
+        ap.error("--gate and --fdw are two window definitions: name one")
+    gate_kw = ({"gate_ms": args.gate} if args.gate else
+               ({"cycles": args.fdw} if args.fdw else None))
+    # The impulses are kept only when a second reading needs them -- a gated spectrum or an
+    # arrival -- so the ordinary run allocates nothing it will not read.
+    keep_ir = bool(gate_kw or args.arrival)
     if args.solos:
-        loaded = load_solos_dir(args.solos, f, drift)
+        loaded = load_solos_dir(args.solos, f, drift, keep_ir=keep_ir)
     else:
         codes = [c.strip() for c in args.channels.split(",")] if args.channels else list(chains)
         loaded = {}
         for code in codes:
             title = f"{code}_{args.ver} (sw)"
             try:
-                loaded[code] = load_solo_rew(title, f)
+                loaded[code] = load_solo_rew(title, f, keep_ir=keep_ir)
             except (PredictError, KeyError) as e:
                 print(f"  {code}: {e}", file=sys.stderr)
     if args.no_de_embed:
         solos = {c: H for c, (H, _) in loaded.items()}
         prot_notes = ["protective filters LEFT IN every solo (--no-de-embed) -- junction phase near a "
                       "protected driver is NOT the driver's"]
+        record = None
     else:
         record = None
         if args.rew:
@@ -1207,6 +1713,37 @@ def main(argv=None):
         for code in refused:
             print(f"  {code}: refused -- see notes", file=sys.stderr)
 
+    # The SECOND window, when asked for: the same impulses through the gate, and then through the
+    # same corrections -- one function decides what comes out of a solo, whichever window read it.
+    solos_gate = None
+    gate_anchors = None
+    if gate_kw:
+        graw, gate_notes, gate_anchors = gated_solos(loaded, f, **gate_kw)
+        packed = {c: (H, loaded[c][1]) for c, H in graw.items()}
+        if args.no_de_embed:
+            solos_gate = graw
+        else:
+            solos_gate, _, _ = de_embed_solos(packed, f, record=record,
+                                              baseline=True if args.baseline else None)
+        prot_notes = list(prot_notes) + gate_notes
+
+    if args.from_state:
+        if not args.project:
+            ap.error("--from-state names a LEDGER version, so it needs --project")
+        _, snap_a = load_project_state(args.project, args.preset, args.from_state)
+        chains_a = chains_from_snapshot(snap_a)
+        # The identity shortcut needs ONE target state to compare against. With --align the rows
+        # are about to move, and with --delta-vs there are two targets, so it is switched off and
+        # every channel is divided out (which is correct either way, just not exact in the band
+        # where the old chain was 30 dB down).
+        target = None if (args.align or args.delta_vs) else chains
+        solos, state_notes = de_embed_state(solos, f, chains_a, chains_b=target)
+        if solos_gate is not None:
+            solos_gate, _ = de_embed_state(solos_gate, f, chains_a, chains_b=target)
+        prot_notes = list(prot_notes) + [f"measured under {args.from_state}: " + n
+                                         for n in state_notes]
+        state_label += f" (solos measured under {args.from_state})"
+
     joints = None
     if args.joint:
         joints = []
@@ -1228,29 +1765,89 @@ def main(argv=None):
             print()
         chains = dict(chains, **alignment["chains"])
         state_label += " + aligned"
-    result = predict(f, solos, chains, joints=joints, band_oct=args.band_oct)
+    if args.arrival:
+        parts = [p.strip() for p in args.arrival.split(",")]
+        a, b = canon(parts[0]), canon(parts[1])
+        for code in (a, b):
+            if code not in loaded:
+                ap.error(f"--arrival: no solo loaded for {code}")
+        band = ((float(parts[2]), float(parts[3])) if len(parts) >= 4
+                else shared_band(chains, a, b, args.fmin, args.fmax))
+        arr = arrival_sweep(loaded, a, b, band)
+        if not args.json:
+            print(render_arrival(arr))
+            print()
+    else:
+        arr = None
+
+    result = predict(f, solos, chains, joints=joints, band_oct=args.band_oct,
+                     solos_gate=solos_gate, gate_spec=gate_kw, gate_anchors=gate_anchors)
     result["notes"].insert(0, f"state: {state_label}")
     result["notes"][1:1] = route_notes
     result["notes"].insert(1, "solos: " + ", ".join(
         f"{c} ({i['source']})" for c, (_, i) in loaded.items()))
     result["notes"][2:2] = prot_notes
+    delta = ladder = None
+    if args.delta_vs:
+        if not args.project:
+            ap.error("--delta-vs names a LEDGER version, so it needs --project")
+        preset_b, snap_b = load_project_state(args.project, args.preset, args.delta_vs)
+        chains_b = chains_from_snapshot(snap_b)
+        delta = delta_report(f, solos, chains, chains_b, joints=joints, band_oct=args.band_oct,
+                             solos_gate=solos_gate, gate_spec=gate_kw, gate_anchors=gate_anchors,
+                             labels=(args.state_ver or "HEAD", args.delta_vs))
+        if not args.json:
+            print(render_delta(delta))
+            print()
+    if args.ladder:
+        lo, _, hi = args.ladder.partition(",")
+        lo, hi = canon(lo.strip()), canon(hi.strip())
+        if lo not in chains or hi not in chains:
+            ap.error(f"--ladder {lo},{hi}: both channels must have a ledger row")
+        rate, _dmax = _profile_limits(args.project)
+        step = 1000.0 / rate if rate else 0.02
+        rungs = ([float(v) for v in args.ladder_delay_ms.split(",")] if args.ladder_delay_ms
+                 else [-2 * step, -step, 0.0, step, 2 * step])
+        edges = []
+        for spec in args.ladder_edge:
+            kind, _, rest = spec.partition("=")
+            hz, _, shape = rest.partition(":")
+            fam = "".join(ch for ch in shape if ch.isalpha()) or "LR"
+            slope = "".join(ch for ch in shape if ch.isdigit()) or "24"
+            edges.append((kind.strip().lower(), {"f": float(hz), "type": fam.upper(),
+                                                 "slope": int(slope)}))
+        ladder = ladder_report(f, solos, chains, lo, hi, delays_ms=rungs, edges=tuple(edges),
+                               band_oct=args.band_oct, solos_gate=solos_gate, gate_spec=gate_kw,
+                               gate_anchors=gate_anchors)
+        if not args.json:
+            print(render_ladder(ladder))
+            print()
     if args.json:
-        js = to_json(result)
+        js = to_json(result, window_spec=gate_kw)
         if alignment is not None:
             js["alignment"] = alignment
+        for key, val in (("arrival", arr), ("delta", delta), ("ladder", ladder)):
+            if val is not None:
+                js[key] = val
         print(json.dumps(js, indent=1))
     else:
         print(render(result))
     if args.out:
         os.makedirs(args.out, exist_ok=True)
         with open(os.path.join(args.out, "predicted.json"), "w", encoding="utf-8") as fh:
-            json.dump(to_json(result), fh, indent=1)
+            json.dump(to_json(result, window_spec=gate_kw), fh, indent=1)
         if alignment is not None:
             with open(os.path.join(args.out, "aligned.json"), "w", encoding="utf-8") as fh:
                 json.dump(alignment, fh, indent=1)
             with open(os.path.join(args.out, "aligned-delta.json"), "w", encoding="utf-8") as fh:
                 json.dump(alignment["delta"], fh, indent=1)
             print(f"  wrote {args.out}/aligned.json + aligned-delta.json (the proposal)", file=sys.stderr)
+        for name, val in (("delta.json", delta), ("ladder.json", ladder),
+                          ("arrival.json", arr)):
+            if val is not None:
+                with open(os.path.join(args.out, name), "w", encoding="utf-8") as fh:
+                    json.dump(val, fh, indent=1)
+                print(f"  wrote {args.out}/{name}", file=sys.stderr)
         if args.plot:
             plot(result, os.path.join(args.out, "predicted.png"))
         print(f"  wrote {args.out}/predicted.json" + (" + predicted.png" if args.plot else ""),
@@ -1632,6 +2229,152 @@ def _selftest():
     txt = render_alignment(r7d, original=ch3, rate_hz=fs)
     assert "proposal" in txt and "w-L" in txt and "smp" in txt, txt
 
+    # ── RES-006: the two windows, the state de-embed, delta and ladder ────────────────────────
+    # A synthetic capture with a REFLECTION: one driver, its own arrival, and a boundary 3 ms
+    # later. The steady read carries the comb, the gated read does not -- and that difference is
+    # the whole reason there are two windows.
+    fs6 = 96000
+    n6 = 1 << 15
+    t06 = -0.001
+
+    def cap(arrival_ms, hp=None, lp=None, refl=0.5, refl_ms=3.0, gain=1.0):
+        """An IR: a band-limited burst at `arrival_ms`, plus one reflection, filtered like a driver."""
+        x = np.zeros(n6)
+        i = int(round((arrival_ms / 1000.0 - t06) * fs6))
+        x[i] = gain
+        x[i + int(round(refl_ms / 1000.0 * fs6))] = gain * refl
+        X = np.fft.rfft(x)
+        fb = np.fft.rfftfreq(n6, 1.0 / fs6)
+        for kind, leg in (("hp", hp), ("lp", lp)):
+            if leg:
+                X = X * dsp_math.xo_response(fb, leg["f"], leg["slope"], kind, leg["type"])
+        return np.fft.irfft(X, n6)
+
+    lp2k = {"f": 2000.0, "type": "LR", "slope": 24}
+    hp2k = {"f": 2000.0, "type": "LR", "slope": 24}
+    ir_m = cap(2.0, lp=lp2k)
+    ir_t = cap(2.0, hp=hp2k)
+    loaded6 = {
+        "m-L": (_spectrum_on_grid(ir_m, fs6, t06, f), {"source": "test", "protective": None,
+                "ir": {"ir": ir_m, "sample_rate": fs6, "t0_s": t06, "drift_samples": 0.0}}),
+        "tw-L": (_spectrum_on_grid(ir_t, fs6, t06, f), {"source": "test", "protective": None,
+                 "ir": {"ir": ir_t, "sample_rate": fs6, "t0_s": t06, "drift_samples": 0.0}}),
+    }
+    ch6 = {"m-L": dict(one, lp=lp2k), "tw-L": dict(one, hp=hp2k)}
+    solos6 = {c: H for c, (H, _) in loaded6.items()}
+    g6, gnotes6, ganch6 = gated_solos(loaded6, f, gate_ms=3.0)
+    assert set(g6) == {"m-L", "tw-L"} and all("gated at" in n for n in gnotes6), gnotes6
+    # 2.0 ms plus the crossover's own group delay (an LR24 at 2 kHz costs ~0.06 ms in band) --
+    # which is exactly the sort of thing the arrival must carry rather than round away.
+    assert 2.0 <= ganch6["m-L"]["arrival_ms"] < 2.1, ganch6
+    # 3 ms at 2 kHz is 6 cycles, and the two arrive together, so the junction reads GATED -- and
+    # the comb the reflection puts on the steady reading is gone, which shows as a different
+    # ripple. Both numbers exist, each says its window, and neither is quietly substituted.
+    r_steady = predict(f, solos6, ch6)
+    r_gated = predict(f, solos6, ch6, solos_gate=g6, gate_spec={"gate_ms": 3.0},
+                      gate_anchors=ganch6)
+    js, jg = r_steady["junctions"][0], r_gated["junctions"][0]
+    assert js["window"] == "steady" and jg["window"] == "gate", (js["window"], jg["window"])
+    assert jg["sum_ripple_db"] < js["sum_ripple_db"] - 0.5, (jg["sum_ripple_db"], js["sum_ripple_db"])
+    assert to_json(r_gated, window_spec={"gate_ms": 3.0})["window_spec"] == {"gate_ms": 3.0}
+    assert "gate_mag_db" in to_json(r_gated)["channels"]["m-L"], "the gated reading must travel"
+    assert "gate_mag_db" not in to_json(r_steady)["channels"]["m-L"]
+    # A gate too short for the junction FREQUENCY is refused for it and says the arithmetic:
+    # 1 ms at 2 kHz is 2 cycles, and five is the floor measured on the `_60` set.
+    short = predict(f, solos6, ch6, solos_gate=g6, gate_spec={"gate_ms": 1.0},
+                    gate_anchors=ganch6)
+    assert short["junctions"][0]["window"] == "steady"
+    assert any("2.00 cycles at 2000 Hz" in n and "needs 5" in n for n in short["notes"]), short["notes"]
+    # ...and a gate the two ARRIVALS do not fit into is refused too, whatever the frequency: the
+    # later member is cut out of the pair while its own solo keeps it (5.2 dB on the real set).
+    ir_late = cap(6.0, lp=lp2k)
+    loaded_late = dict(loaded6, **{"m-L": (_spectrum_on_grid(ir_late, fs6, t06, f),
+                                           {"source": "test", "protective": None,
+                                            "ir": {"ir": ir_late, "sample_rate": fs6, "t0_s": t06,
+                                                   "drift_samples": 0.0}})})
+    g_late, _, anch_late = gated_solos(loaded_late, f, gate_ms=3.0)
+    apart = predict(f, {c: H for c, (H, _) in loaded_late.items()}, ch6, solos_gate=g_late,
+                    gate_spec={"gate_ms": 3.0}, gate_anchors=anch_late)
+    assert apart["junctions"][0]["window"] == "steady"
+    assert any("apart" in n and "cannot hold both" in n for n in apart["notes"]), apart["notes"]
+    # An FDW holds the low junctions where a fixed gate cannot: 6 cycles is 6 cycles everywhere.
+    gf, _, anchf = gated_solos(loaded6, f, cycles=6.0)
+    rf = predict(f, solos6, ch6, solos_gate=gf, gate_spec={"cycles": 6.0}, gate_anchors=anchf)
+    assert rf["junctions"][0]["window"] == "gate" and rf["window"] == "gate"
+
+    # `de_embed_state`: the solos were measured UNDER a state. Divide it out, multiply the target
+    # back -- and where the row did not change, the two cancel EXACTLY (no floor, no mask).
+    same, notes_same = de_embed_state(solos6, f, ch6, chains_b=ch6)
+    r_same = predict(f, same, ch6)
+    for c in ch6:
+        assert np.allclose(r_same["processed"][c], solos6[c], rtol=1e-9, atol=1e-12), c
+    assert all("the same in both states" in n for n in notes_same), notes_same
+    # A row that DID change: H_b = H_meas x C_b / C_a, to the arithmetic's own precision.
+    ch6b = {"m-L": dict(one, lp={"f": 2500.0, "type": "LR", "slope": 24}), "tw-L": ch6["tw-L"]}
+    drv, notes_ch = de_embed_state(solos6, f, ch6, chains_b=ch6b)
+    r_b = predict(f, drv, ch6b)
+    want = solos6["m-L"] * chain_response(f, ch6b["m-L"]) / chain_response(f, ch6["m-L"])
+    live = np.abs(chain_response(f, ch6["m-L"])) >= np.abs(chain_response(f, ch6["m-L"])).max() * 10 ** (STATE_FLOOR_DB / 20)
+    assert np.allclose(r_b["processed"]["m-L"][live], want[live], rtol=1e-9)
+    # Below the floor the channel is ABSENT from the sum, and the band is named rather than left
+    # to be discovered as a hole in a curve.
+    assert not live.all() and np.all(r_b["processed"]["m-L"][~live] == 0)
+    assert any("ABSENT from the sum" in n and "Hz" in n for n in notes_ch), notes_ch
+    assert _band_edges(f, ~live).count("-") >= 1, _band_edges(f, ~live)
+    # A channel with no row under the source state is used as measured and said (the baseline case).
+    orphan, notes_orphan = de_embed_state(solos6, f, {"tw-L": ch6["tw-L"]})
+    assert np.allclose(orphan["m-L"], solos6["m-L"]) and any("no row under" in n for n in notes_orphan)
+
+    # `delta_report`: only what differs, and the junction it is in.
+    rep = delta_report(f, same, ch6, ch6b, labels=("v_a", "v_b"))
+    assert rep["changed"] == ["m-L"] and [r["channel"] for r in rep["rows"]] == ["m-L"]
+    assert "2000" in rep["rows"][0]["from"] and "2500" in rep["rows"][0]["to"]
+    assert rep["junctions"] and rep["junctions"][0]["from"]["sum_loss_avg_db"] != \
+        rep["junctions"][0]["to"]["sum_loss_avg_db"]
+    assert "v_a → v_b" in render_delta(rep)
+    # Nothing changed -> nothing reported, rather than a table of thirty identical rows.
+    assert delta_report(f, same, ch6, dict(ch6))["changed"] == []
+    assert "nothing to report" in render_delta(delta_report(f, same, ch6, dict(ch6)))
+
+    # `ladder_report`: the rungs in the order asked, NOT sorted, and the 0/NORM rung is the
+    # prediction itself. A ladder that sorts is a proposal, and the desk does not propose.
+    lad = ladder_report(f, same, ch6, "m-L", "tw-L", delays_ms=[-0.02, 0.0, 0.02],
+                        polarities=("NORM", "INV"))
+    assert [r["label"].split(" · ")[1] for r in lad["rungs"]] == ["NORM"] * 3 + ["INV"] * 3
+    assert [r["delay_ms"] for r in lad["rungs"][:3]] == [-0.02, 0.0, 0.02]
+    zero = next(r for r in lad["rungs"] if r["delay_ms"] == 0.0 and r["polarity"] == "NORM")
+    base_j = predict(f, same, ch6)["junctions"][0]
+    assert abs(zero["sum_loss_avg_db"] - base_j["sum_loss_avg_db"]) < 1e-9
+    assert lad["rungs"] != sorted(lad["rungs"], key=lambda r: -r["sum_loss_score_db"]), \
+        "the rungs must not come out sorted by score"
+    assert "does not propose" in render_ladder(lad)
+    # An edge rung reaches the upper member's crossover, and the label says which.
+    lad_e = ladder_report(f, same, ch6, "m-L", "tw-L", delays_ms=[0.0], polarities=("NORM",),
+                          edges=(("hp", {"f": 2500.0, "type": "LR", "slope": 24}),))
+    assert "HP 2500 LR24" in lad_e["rungs"][0]["label"], lad_e["rungs"][0]["label"]
+
+    # `shared_band` comes off the rows, and the gated arrival between two channels recovers a pure
+    # delay through it -- the desk's 05.09 question, with each record's own time base folded in.
+    band6 = shared_band(ch6, "m-L", "m-L")
+    assert band6 == (20.0, 2000.0), band6
+    pair_ch = {"m-L": dict(one, hp={"f": 300.0, "type": "LR", "slope": 24}, lp=lp2k),
+               "m-R": dict(one, hp={"f": 350.0, "type": "LR", "slope": 24}, lp=lp2k)}
+    assert shared_band(pair_ch, "m-L", "m-R") == (350.0, 2000.0)
+    ir_r = cap(2.0, hp={"f": 300.0, "type": "LR", "slope": 24}, lp=lp2k)
+    ir_l = cap(2.26, hp={"f": 300.0, "type": "LR", "slope": 24}, lp=lp2k)
+    loaded_pair = {c: (_spectrum_on_grid(x, fs6, t06, f),
+                       {"source": "test", "protective": None,
+                        "ir": {"ir": x, "sample_rate": fs6, "t0_s": t06, "drift_samples": 0.0}})
+                   for c, x in (("m-L", ir_l), ("m-R", ir_r))}
+    sweep = arrival_sweep(loaded_pair, "m-L", "m-R", (350.0, 2000.0), gates=(1.5, 3.0, 5.0))
+    for r in sweep["rows"]:
+        assert r["ms"] is not None and abs(r["ms"] - 0.26) < 0.03, r
+    assert abs(sweep["edge_difference_ms"] - 0.26) < 0.02, sweep["edge_difference_ms"]
+    assert "+ = m-L arrives LATER" in render_arrival(sweep)
+    # A gate that cannot hold both arrivals refuses, in the row, with the fix named.
+    tight = arrival_sweep(loaded_pair, "m-L", "m-R", (350.0, 2000.0), gates=(0.2,))
+    assert tight["rows"][0]["ms"] is None and "gate longer than" in tight["rows"][0]["refused"]
+
     print("selftest[predict] OK -- chain arithmetic (gain/pol/delay/LR corner/PK), ledger row == anchors "
           "entry, a phase angle is realized at the row's configured reference (LPF on a sub, HPF "
           "otherwise; slope OFF keeps it), delivered AT the reference, capped by name, refused without "
@@ -1640,7 +2383,13 @@ def _selftest():
           "inside its band, mono sub on both sides / centre left out / missing rows named, v7 round trip "
           "reads a pure delay, JSON complete; align: a 0.5 ms pair lands on the grid as +0.5 on the "
           "lower member, a backwards wire is found, an aligned pair buys nothing, three-way bottom-up "
-          "and a sub pair keep every relation with no negative delay, the ceiling warns by name.")
+          "and a sub pair keep every relation with no negative delay, the ceiling warns by name; "
+          "RES-006: a gated junction loses the reflection's comb and says `gate`, a window under 5 "
+          "cycles of fc or shorter than the two arrivals are apart falls back to steady and says the "
+          "number, FDW holds where a fixed gate cannot, a state divided out and multiplied back "
+          "cancels exactly on an unchanged row and is H x C_b/C_a on a changed one (absent below the "
+          "floor, band named), delta reports only what differs, the ladder keeps the order it was "
+          "asked in, and a gated arrival recovers a pure 0.26 ms delay through the rows' own band.")
     return 0
 
 

@@ -122,14 +122,38 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
   a second from the measurement; a divergence is a finding, not an error.
 - **1.5** **predict the sums** (`predict`): L, R, ALL; the sum loss per joint; L−R per band; a graph. A
   bad joint → back to 1.2/1.3 — iterations exist, but at the desk.
+  - **A junction at the desk is computed by `predict`, or it is not computed.** A script written for
+    one evening is not evidence: the desk's own three misses of 02–07.09.2026 were all outside the
+    tool — a summation done in magnitudes only (which cannot see a sign, and predicted −1.2 dB where
+    the car gave −3.8), a centre added by hand, and a level bug in the IR pull. The arithmetic in
+    `predict` reproduces the measured pairs of a real series to **0.36 dB** with no free parameter
+    (hub `RES-006`, the `_60` set); what is missing when a desk misses is the call, not the model.
+  - **The solos you have are the solos measured under the state you are in** — `--from-state v_031`
+    divides that state out and applies the new one (`H × C_new/C_old`). A row that did not change
+    cancels exactly; a band where the old chain was more than 30 dB down is ABSENT from the sum and
+    named, because dividing by nothing amplifies the noise floor. No separate session of bare solos.
+  - **Two windows, and every number says which.** Junctions, phase and arrival read through the
+    **gate** — the direct sound (`--gate 2` for one band, `--fdw 6` across the spectrum); magnitude
+    against a target reads the **whole record**, because that is what the seat hears. A window that
+    holds under **5 cycles of the junction frequency**, or that is shorter than the two members'
+    arrivals are apart, is refused for that junction and it falls back to steady with the arithmetic
+    printed — measured: at 2 kHz a 3 ms gate (6 cycles) verifies to 0.03 dB, while at 215 Hz the same
+    gate reads 5 dB of "cancellation" that is the window (hub `RES-006`).
+  - **`--delta-vs` for what a change does, `--ladder` for what the rungs give.** The delta reports only
+    the rows that differ and the junctions they are in; the ladder prints one junction's variants in
+    the order asked and **does not sort them** — ordering by score is a proposal, and the desk does not
+    propose (`--align` is the search, and it says that it searched).
 - **2.1** **coarse EQ as packages** (`eq_propose`, with `ellipsoid` for σ(f), stays/moves and the Q
   ceiling): resonances per driver group → L/R shape per pair → tone per pair, each package accepted or
   refused whole and banked as one version (`apply.propose`); only cuts of minimum-phase peaks that
   stay across the positions, away from the junctions; below ~150–200 Hz a point is trusted, above only
   what survives the ellipsoid; tolerance to the target max(1 dB, 2σ); zero boosts. Every package names
   the listening characteristic that checks it.
-- **2.2** **check after EQ**: predict again — joints and L/R on the same rulers (EQ inside a joint band
-  rotates phase).
+- **2.2** **check after EQ**: predict again — joints and L/R on the same rulers **and through the same
+  windows** (EQ inside a joint band rotates phase). `verify_prediction` reads the measured set through
+  the window the prediction carries (`predicted.json`'s `window_spec`), per junction, so a gated
+  prediction is never compared against a steady measurement: those are two questions subtracted from
+  each other, and on the `_60` woofer↔mid that looked like 5.2 dB of model error (hub `RES-006`).
 - **2.3** **preset to disk**: the settings sheet — what is entered in PC-Tool per channel (HPF/LPF,
   gain, delay, polarity, APF, EQ), old → new, samples for the DSP rate, a "why" per row; the EQ file in
   the DSP format to import; the predicted graph. Into the project (+git if configured).

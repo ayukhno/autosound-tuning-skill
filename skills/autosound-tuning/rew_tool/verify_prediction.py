@@ -91,7 +91,7 @@ def _on_grid(f_src, y_src, f):
 
 
 # ---------------------------------------------------------------- measured sources
-def measured_from_rew(titles, api=None, allow_rta=False, freqs=None):
+def measured_from_rew(titles, api=None, allow_rta=False, freqs=None, window=None):
     """{title: (freqs, mag_db, base[, H])} from a live REW. `base` is 'sw' for a sweep on the
     loopback base with no offset, 'rta' for a moving-mic measurement (refused unless allowed), or
     says the offset otherwise.
@@ -110,10 +110,17 @@ def measured_from_rew(titles, api=None, allow_rta=False, freqs=None):
         if fg is not None and timing.get("has_ir", True):
             import predict as P
             try:
-                H, _ = P.load_solo_rew(title, fg, api=api)
+                H, info = P.load_solo_rew(title, fg, api=api, keep_ir=bool(window))
             except P.PredictError as exc:
                 raise VerifyError(str(exc))
-            out[title] = (fg, _db(H), "sw", H)
+            gated = None
+            if window:
+                # BOTH readings travel: the prediction decides PER JUNCTION which window it could
+                # use (a gate that cannot hold two arrivals falls back to steady), so the measured
+                # side has to be able to follow it junction by junction rather than in one lump.
+                Hg = _through_window(H, info, fg, window, title)
+                gated = (_db(Hg), Hg)
+            out[title] = (fg, _db(H), "sw", H, gated)
             continue
         f, mag, phase = api.get_fr(mid)
         if not timing.get("has_ir", True) or phase is None:
@@ -131,7 +138,22 @@ def measured_from_rew(titles, api=None, allow_rta=False, freqs=None):
     return out
 
 
-def measured_from_v7_dir(directory, freqs=None):
+def _through_window(H, info, freqs, window, what):
+    """One measured response, re-read through the prediction's own window. Refuses rather than
+    falling back to the steady reading: a table with one gated row and one steady row compares
+    nothing, and nothing in the numbers would say so."""
+    import windows as W
+    raw = (info or {}).get("ir")
+    if not raw:
+        raise VerifyError(f"{what!r}: the impulse was not kept, so it cannot be re-read through "
+                          f"the prediction's window")
+    Hg, winfo = W.windowed_spectrum(raw["ir"], raw["sample_rate"], raw["t0_s"], freqs, **window)
+    if Hg is None:
+        raise VerifyError(f"{what!r}: no gated reading -- {winfo.get('refused')}")
+    return Hg
+
+
+def measured_from_v7_dir(directory, freqs=None, window=None):
     """{name: (freqs, mag_db, 'sw')} from Resonalyze v7 files.
 
     With `freqs` (the prediction's grid) each record goes through `predict.load_solo_v7` -- the
@@ -156,8 +178,12 @@ def measured_from_v7_dir(directory, freqs=None):
         if doc.get("transferRealSamples") is None:
             continue
         if freqs is not None:
-            H, _ = P.load_solo_v7(os.path.join(directory, name), fg)
-            out[name[:-5]] = (fg, _db(H), "sw", H)
+            H, info = P.load_solo_v7(os.path.join(directory, name), fg, keep_ir=bool(window))
+            gated = None
+            if window:
+                Hg = _through_window(H, info, fg, window, name)
+                gated = (_db(Hg), Hg)
+            out[name[:-5]] = (fg, _db(H), "sw", H, gated)
             continue
         x = np.asarray(doc["transferRealSamples"], float)
         fs = int(doc["sampleRate"])
@@ -236,10 +262,17 @@ def verify(predicted, measured, *, pair_names=None, solo_names=None, all_name=No
     f = np.asarray(predicted["freqs_hz"], float)
     chans = predicted["channels"]
     pred_c = {c: _complex(v["mag_db"], v["phase_deg"]) for c, v in chans.items()}
+    # The junctions are judged through the window the PREDICTION read them through, and the measured
+    # side arrives read the same way (`measured_from_*(window=…)`, from `predicted["window_spec"]`).
+    # Channel shapes stay on the steady reading either way: a shape is judged against a target
+    # curve, and that is a steady-window question (hub RES-006).
+    pred_g = {c: _complex(v["gate_mag_db"], v["gate_phase_deg"]) for c, v in chans.items()
+              if "gate_mag_db" in v}
     pair_names = pair_names or {}
     solo_names = solo_names or {}
     report = {"criterion_db": criterion_db, "junctions": [], "channels": [], "all": None,
-              "verdict": None, "bases": sorted({rec[2] for rec in measured.values()})}
+              "verdict": None, "bases": sorted({rec[2] for rec in measured.values()}),
+              "window_spec": predicted.get("window_spec")}
 
     # 1. Junction interference: predicted vs measured, level-free.
     worst = 0.0
@@ -253,7 +286,20 @@ def verify(predicted, measured, *, pair_names=None, solo_names=None, all_name=No
                                         "status": "not measured", "missing": missing})
             continue
         (fa, ma, ba), (fb, mb, bb), (fp, mp, bp) = (measured[wanted[k]][:3] for k in wanted)
-        A, B = pred_c[lo], pred_c[hi]
+        # Which window THIS junction was predicted through, and whether the measured set can be
+        # read the same way. Never one side gated and the other not: that subtracts two different
+        # questions, and it is what the 5.2 dB on the `_60` woofer↔mid looked like.
+        want_gate = j.get("window") == "gate"
+        have_gate = (all(len(measured[wanted[k]]) > 4 and measured[wanted[k]][4] for k in wanted)
+                     and lo in pred_g and hi in pred_g)
+        used = "gate" if (want_gate and have_gate) else "steady"
+        if want_gate and not have_gate:
+            report.setdefault("window_notes", []).append(
+                f"{lo}↔{hi}: predicted through the gate, but the measured set has no gated reading "
+                f"here -- compared steady on both sides instead")
+        if used == "gate":
+            ma, mb, mp = (measured[wanted[k]][4][0] for k in wanted)
+        A, B = (pred_g[lo], pred_g[hi]) if used == "gate" else (pred_c[lo], pred_c[hi])
         d_pred = _db(A + B) - _psum_db(_db(A), _db(B))
         d_meas = _on_grid(fp, mp, f) - _psum_db(_on_grid(fa, ma, f), _on_grid(fb, mb, f))
         delta = d_pred - d_meas
@@ -273,6 +319,7 @@ def verify(predicted, measured, *, pair_names=None, solo_names=None, all_name=No
         base = "sw" if all(b == "sw" for b in (ba, bb, bp)) else "/".join(sorted({ba, bb, bp}))
         report["junctions"].append({
             "lo": lo, "hi": hi, "fc": j["fc"], "base": base, "bands": bands,
+            "window": used,
             "worst_abs_delta_db": round(j_worst, 2),
             "status": "trusted" if j_worst <= criterion_db else "NOT trusted",
         })
@@ -374,11 +421,21 @@ def verify(predicted, measured, *, pair_names=None, solo_names=None, all_name=No
 
 
 def render(report):
+    spec = report.get("window_spec") or {}
+    wins = sorted({j.get("window", "steady") for j in report["junctions"]
+                   if j.get("status") != "not measured"}) or ["steady"]
+    win = " + ".join(wins)
     lines = [f"  Verify: predicted vs measured  (criterion |mean Δ| ≤ {report['criterion_db']:g} dB "
-             f"per junction band; Δ = predicted − measured interference)", ""]
+             f"per junction band; Δ = predicted − measured interference)",
+             f"  junctions read {win} (each row says which)"
+             + (f" ({spec.get('gate_ms'):g} ms after the arrival)" if spec.get("gate_ms")
+                else (f" ({spec.get('cycles'):g} cycles)" if spec.get("cycles") else ""))
+             + " on BOTH sides; channel shapes steady", ""]
     lines.append(f"  {'junction':14}{'fc':>6} {'base':<6}{'band':>12}{'pred':>7}{'meas':>7}"
                  f"{'Δ':>7}{'rms':>6}  ")
     lines.append("  " + "-" * 70)
+    for note in report.get("window_notes") or []:
+        lines.append(f"  ⚠ {note}")
     for j in report["junctions"]:
         name = f"{j['lo']}↔{j['hi']}"
         if j.get("status") == "not measured":
@@ -444,6 +501,9 @@ def main(argv=None):
     ap.add_argument("--entry-delay", type=float, default=ENTRY_DELAY_MS,
                     help="a measured channel arriving further than this (ms) from its prediction is "
                          "CHECK (default %(default)s)")
+    ap.add_argument("--steady", action="store_true",
+                    help="read the measured set through the WHOLE record even if the prediction "
+                         "was gated -- the report says which window it used either way")
     ap.add_argument("--out", metavar="DIR", default=None, help="write verified.json here")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--selftest", action="store_true")
@@ -455,6 +515,13 @@ def main(argv=None):
     with open(args.predicted, encoding="utf-8") as fh:
         predicted = json.load(fh)
     pairs, solos, all_name = _default_names(predicted, args.ver)
+    # The window comes from the PREDICTION, never from a second flag: one definition, applied on
+    # both sides. `--steady` is the deliberate way out, for reading an older gated prediction the
+    # long way (and the report says which it used).
+    window = None if args.steady else (predicted.get("window_spec") or None)
+    if window:
+        print(f"  reading the measured set through the prediction's own window: {window}",
+              file=sys.stderr)
     if args.measured:
         # A v7 directory is keyed by file stem (`w_L`, `m_L-ctl1`), not by REW title: default the
         # solo names to the stems so one or two `--solo` overrides are not needed for every channel.
@@ -479,9 +546,10 @@ def main(argv=None):
         missing = sorted(wanted - have)
         if missing:
             print("  not in REW: " + ", ".join(missing), file=sys.stderr)
-        measured = measured_from_rew(titles, api=api, allow_rta=args.allow_rta, freqs=predicted["freqs_hz"])
+        measured = measured_from_rew(titles, api=api, allow_rta=args.allow_rta,
+                                     freqs=predicted["freqs_hz"], window=window)
     else:
-        measured = measured_from_v7_dir(args.measured, freqs=predicted["freqs_hz"])
+        measured = measured_from_v7_dir(args.measured, freqs=predicted["freqs_hz"], window=window)
     report = verify(predicted, measured, pair_names=pairs, solo_names=solos, all_name=all_name,
                     criterion_db=args.criterion, entry_criterion_db=args.entry_criterion,
                     entry_only=args.entry, entry_delay_ms=args.entry_delay)
