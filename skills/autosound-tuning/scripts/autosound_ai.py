@@ -56,6 +56,35 @@ def machine_config_path():
     return os.path.join(base, "autosound", "critic-env")
 
 
+def _refuse_if_git_would_take(path):
+    """A project-local config that carries a KEY and that git would take -- tracked, or not
+    ignored -- stops the run. The user's rule (2026-09-08): a file that can carry a key MUST be
+    ignored so it never reaches GitHub. Mirrors `_critic_guard` in `_gemini_common.sh`: two doors,
+    one rule. A file with no key line, or outside any repository, is read as before."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            if not any(line.strip().lstrip("export ").split("=", 1)[0].strip().endswith("API_KEY")
+                       and "=" in line for line in fh if line.strip() and not line.lstrip().startswith("#")):
+                return
+    except OSError:
+        return
+    if not shutil.which("git"):
+        return
+    d, name = os.path.dirname(os.path.abspath(path)), os.path.basename(path)
+    if subprocess.run(["git", "-C", d, "rev-parse", "--is-inside-work-tree"], capture_output=True).returncode != 0:
+        return
+    if subprocess.run(["git", "-C", d, "ls-files", "--error-unmatch", "--", name], capture_output=True).returncode == 0:
+        print(f"critic-env: {path} carries a key AND is TRACKED by git — відмова.\n"
+              f"  fix: git rm --cached '{path}'; '{name}' у .gitignore; ключ — у ~/.config/autosound/critic-env; "
+              f"ключ ЗМІНИТИ (він уже в історії).", file=sys.stderr)
+        sys.exit(2)
+    if subprocess.run(["git", "-C", d, "check-ignore", "-q", "--", name], capture_output=True).returncode != 0:
+        print(f"critic-env: {path} carries a key and git would ADD it (нема в .gitignore) — відмова.\n"
+              f"  fix: додай '{name}' у .gitignore репозиторію — або перенеси ключ у ~/.config/autosound/critic-env "
+              f"(setup-critic-channel.md §3).", file=sys.stderr)
+        sys.exit(2)
+
+
 # Спроба зчитати конфігурацію з .critic-env
 def load_env_file():
     """Read every config that exists, machine file FIRST, project files after it.
@@ -76,6 +105,8 @@ def load_env_file():
     for path in env_paths:
         if not os.path.isfile(path):
             continue
+        if path != env_paths[0]:
+            _refuse_if_git_would_take(path)
         try:
             with open(path, "r", encoding="utf-8") as f:
                 for line in f:

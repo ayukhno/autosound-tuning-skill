@@ -50,6 +50,9 @@ NOT_ON_BOARD = {
                   "(issue #21). Not a decision a tuner makes -- `console.py report` exists to "
                   "answer 'what is this terminal?' when a Windows machine reports a crash",
     "encoding-check.py": "the checker that keeps issue #21 from coming back",
+    "secret-scan.py": "the checker that keeps a key out of every repository (the user's rule, "
+                      "2026-09-08): the tree, the staged change, the pre-commit hook. Repo hygiene, "
+                      "not a decision a tuner makes",
     "__init__.py": "not a tool",
     "analysis.py": "library; its functions are on the board by name",
     "dsp_math.py": "library; its functions are on the board by name",

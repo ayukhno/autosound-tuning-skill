@@ -18,6 +18,10 @@
 # READ as KEY=VALUE, never executed: a line containing $( , a backtick or ; is dropped with a
 # message. Quotes around a value are optional and stripped; they cost nothing and read clearer.
 
+# A copy of this file WITH a key in it must be ignored by git wherever it lands (.critic-env is
+# in the skill's and every seeded project's .gitignore) -- the wrappers refuse to read one that
+# git would take, and scripts/secret-scan.py checks the tree. Best: keep the key in the machine
+# file (~/.config/autosound/critic-env) and only models/paths in a project copy.
 # ---- Default: real Antigravity (agy) ----
 GEMINI_BIN=agy
 # Critic = Pro, Advisor = Flash. These were the other way round in this file until 2026-08-12,

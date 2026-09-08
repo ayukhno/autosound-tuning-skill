@@ -42,6 +42,10 @@ run_one "upstream-drift" scripts/upstream-drift.py --selftest
 # Issue #21: the console's code page must not be able to destroy a computed result. The checker
 # scans the tree; its own --selftest breaks each rule on purpose first.
 run_one "encoding" scripts/encoding-check.py --selftest
+# No key leaves this repository: the scanner's own mechanics, then the tree as committed (a key
+# in a tracked file or a tracked/unignored key file fails the suite, and CI, before a tag).
+run_one "secret-scan" scripts/secret-scan.py --selftest
+run_one "secrets-in-tree" scripts/secret-scan.py
 # The reviewer channel's shell plumbing: the closed gemini-CLI path is recognised and named, not
 # retried on a fallback model (hub PAS-004). Offline -- the CLI call is stubbed.
 run_one "gemini-channel" skills/autosound-tuning/scripts/gemini_critic.sh --selftest

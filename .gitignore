@@ -28,3 +28,10 @@ __pycache__/
 
 # Working arrangements of the author's own sessions — internal process, not part of the method.
 CLAUDE.local.md
+
+# A file that can carry a key is ignored wherever it lands (the user's rule, 2026-09-08: if such
+# a file can exist it MUST be ignored, so it never reaches GitHub). `.critic-env.example` is a
+# template with placeholders and stays tracked -- these are exact basenames. The check behind the
+# rule is scripts/secret-scan.py (run by scripts/run-selftests.sh and by the pre-commit hook).
+.critic-env
+critic-env

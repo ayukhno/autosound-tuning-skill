@@ -56,9 +56,36 @@ _critic_load() {                                   # $1 = file
 # GEMINI_BIN, PROJECT_MIRROR -- and an existing project-local file keeps working unchanged.
 if [[ -n "${XDG_CONFIG_HOME:-}" ]]; then _critic_machine="$XDG_CONFIG_HOME/autosound/critic-env"
 else                                     _critic_machine="$HOME/.config/autosound/critic-env"; fi
+# A project-local file that carries a KEY and that git would take -- tracked, or not ignored --
+# is refused, not read. The user's rule (2026-09-08): a file that can carry a key MUST be ignored
+# so it never reaches GitHub; a wrapper that reads it anyway is the wrapper that lets it ride.
+# Only the project-local files: the machine file is outside every repository by construction.
+_critic_guard() {                                  # $1 = file inside the project
+  local dir rel
+  grep -qE '^\s*(export\s+)?[A-Z_]*API_KEY\s*=' "$1" || return 0        # no key in it: fine
+  command -v git >/dev/null 2>&1 || return 0
+  dir="$(cd "$(dirname "$1")" && pwd)"
+  git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0   # not a repository
+  rel="$(basename "$1")"
+  if git -C "$dir" ls-files --error-unmatch -- "$rel" >/dev/null 2>&1; then
+    echo "critic-env: $1 carries a key AND is TRACKED by git -- refusing to run." >&2
+    echo "  fix: git rm --cached '$1'; add '$(basename "$1")' to .gitignore; move the key to ~/.config/autosound/critic-env; ROTATE the key (it is in the history)." >&2
+    return 1
+  fi
+  if ! git -C "$dir" check-ignore -q -- "$rel"; then
+    echo "critic-env: $1 carries a key and git would ADD it (not in .gitignore) -- refusing to run." >&2
+    echo "  fix: add '$(basename "$1")' to the repository's .gitignore -- or move the key to ~/.config/autosound/critic-env (setup-critic-channel.md §3)." >&2
+    return 1
+  fi
+  return 0
+}
 for _env in "$_critic_machine" "${APPDATA:+$APPDATA/autosound/critic-env}" \
             "$PWD/rew_analitic/.critic-env" "$PWD/.critic-env"; do
-  [[ -n "$_env" && -f "$_env" ]] && _critic_load "$_env"
+  [[ -n "$_env" && -f "$_env" ]] || continue
+  case "$_env" in
+    "$PWD"/*) _critic_guard "$_env" || { [[ "${BASH_SOURCE[0]}" != "$0" ]] && return 1 2>/dev/null || exit 1; } ;;
+  esac
+  _critic_load "$_env"
 done
 
 # --- where the docs live ----------------------------------------------------
@@ -296,7 +323,22 @@ gemini_selfcheck() {
   [[ $rc -eq 2 ]] || { echo "selfcheck: gemini_run returned $rc on the closed path, expected 2"; return 1; }
   grep -q 'закрито Google' <<<"$report" || { echo "selfcheck: gemini_run did not name the closed path"; return 1; }
   grep -q 'FALLING BACK' <<<"$report" && { echo "selfcheck: gemini_run fell back on the closed path"; return 1; }
-  echo "selftest[gemini-channel] OK -- IneligibleTierError recognised (and not as a quota), key shapes AQ./AIza/odd told apart, the doctor names a key-less gemini CLI and the closed path in its smoke, gemini_run stops at the closed door without a fallback (rc 2)"
+  # The guard: a key file git would take is refused; ignored, it is read; tracked, refused with
+  # the rotate line. A throwaway repository, and no real key anywhere near it.
+  local tmp; tmp="$(mktemp -d)"
+  ( cd "$tmp" && git init -q -b main . && printf 'GEMINI_API_KEY=AQ.%s\n' "$(printf 'x%.0s' $(seq 1 50))" > .critic-env
+    _critic_guard "$tmp/.critic-env" 2>/dev/null && { echo "selfcheck: an unignored key file was accepted"; exit 1; }
+    printf '.critic-env\n' > .gitignore
+    _critic_guard "$tmp/.critic-env" 2>/dev/null || { echo "selfcheck: an ignored key file was refused"; exit 1; }
+    git add -f .critic-env && GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t git commit -q -m x
+    msg="$(_critic_guard "$tmp/.critic-env" 2>&1)" && { echo "selfcheck: a TRACKED key file was accepted"; exit 1; }
+    grep -q 'ROTATE' <<<"$msg" || { echo "selfcheck: a tracked key file did not say to rotate"; exit 1; }
+    grep -q 'AQ\.xxxx' <<<"$msg" && { echo "selfcheck: the guard printed the key"; exit 1; }
+    printf 'GEMINI_CRITIC_MODEL=gemini-pro-latest\n' > .critic-env
+    _critic_guard "$tmp/.critic-env" 2>/dev/null || { echo "selfcheck: a file with no key was refused"; exit 1; }
+  ) || { rm -rf "$tmp"; return 1; }
+  rm -rf "$tmp"
+  echo "selftest[gemini-channel] OK -- IneligibleTierError recognised (and not as a quota), key shapes AQ./AIza/odd told apart, the doctor names a key-less gemini CLI and the closed path in its smoke, gemini_run stops at the closed door without a fallback (rc 2); a project key file git would take is refused (unignored, tracked -> rotate), ignored or keyless it is read"
 }
 
 # gemini_doctor — one-shot preflight: diagnose the WHOLE channel + run a live smoke,
@@ -354,6 +396,16 @@ PY
   fi
   envf=""; for e in "$PWD/rew_analitic/.critic-env" "$PWD/.critic-env"; do [[ -f "$e" ]] && { envf="$e"; break; }; done
   if [[ -n "$envf" ]]; then
+    # A project file may carry the key only if git cannot take it: not tracked, and ignored.
+    if command -v git >/dev/null 2>&1 && git -C "$(dirname "$envf")" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      if git -C "$(dirname "$envf")" ls-files --error-unmatch -- "$(basename "$envf")" >/dev/null 2>&1; then
+        echo "✗ .critic-env: $envf is TRACKED by git -- a key in it is one push from GitHub. Fix: git rm --cached, add '.critic-env' to .gitignore, rotate the key"; ok=0
+      elif git -C "$(dirname "$envf")" check-ignore -q -- "$(basename "$envf")"; then
+        echo "✓ .critic-env: $envf is ignored by git"
+      else
+        echo "✗ .critic-env: $envf is NOT in .gitignore -- git would add it. Fix: add '.critic-env' to the repository's .gitignore (project_seed.py writes it for new projects)"; ok=0
+      fi
+    fi
     if ( set -a; . "$envf" ) 2>/tmp/_ce_err; then echo "✓ .critic-env: $envf parses"
     else echo "✗ .critic-env: $envf SYNTAX error — quote model names with spaces/parens, e.g. GEMINI_CRITIC_MODEL=\"Gemini 3.5 Flash (Medium)\":"; sed 's/^/    /' /tmp/_ce_err; ok=0; fi
     rm -f /tmp/_ce_err

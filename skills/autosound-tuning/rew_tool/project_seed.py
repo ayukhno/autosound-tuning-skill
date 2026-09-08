@@ -258,6 +258,7 @@ GITIGNORE_LINES = [
     "# (Windows: %APPDATA%\\autosound\\critic-env). See setup-critic-channel.md.",
     ".critic-env",
     "rew_analitic/.critic-env",
+    "critic-env",
     ".mcp.json",
     ".tcc/",
     "*.mdat",

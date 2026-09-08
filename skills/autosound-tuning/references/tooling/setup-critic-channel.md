@@ -106,6 +106,22 @@ the project is created (before, this page said "it's gitignored" and nothing wro
 the second line, not the first: `.gitignore` stops none of `git add -f`, a copied folder, or a
 backup that is not git.
 
+**A file that can carry a key MUST be ignored — and that is checked, not promised** (the user's
+rule, 2026-09-08, after the "it's gitignored" months). Three carriers:
+- **Both doors refuse the dangerous case.** A project-local `.critic-env` that carries an
+  `*_API_KEY` line inside a git repository and that git would take — tracked, or not in
+  `.gitignore` — stops `gemini_critic.sh` / `gemini_advisor.sh` and `autosound_ai.py` with the fix
+  printed (add the line, or move the key to the machine file; a TRACKED one also says *rotate*,
+  because the history already has it). A file with no key line, or outside any repository, is
+  read as before. `--doctor` reports which side of the rule a project file is on.
+- **`scripts/secret-scan.py`** scans a repository for a tracked/unignored key file and for
+  key-shaped strings in tracked text (Google `AIza…`/`AQ.…`, Anthropic, OpenAI, or a real value
+  under a `*_API_KEY=` name) — naming the file and line, never the value. `scripts/run-selftests.sh`
+  runs it on this tree, so CI fails before a tag can carry a key.
+- **`scripts/secret-scan.py --install-hook <repo>`** writes a pre-commit hook that runs the same
+  scan on the staged change; a foreign hook is never overwritten. Install it in every repository a
+  project lives in — the skill's own and the car's.
+
 **The file is read as `KEY=VALUE`, never executed.** A line containing `$(`, a backtick or `;` is
 dropped with a message — before, this file was `source`d, so a project someone else wrote ran
 arbitrary shell the moment you started the reviewer.
