@@ -1369,7 +1369,7 @@ def render_ladder(rep):
 
 
 #: The gates the desk sweeps. Not one gate: a number that holds across the sweep is a measurement,
-#: one that moves with the window is the window (`car/…/scripts-2026-09-05/gate_sweep.py`).
+#: one that moves with the window is the window.
 GATE_SWEEP_MS = (0.7, 1.0, 1.5, 2.0, 3.0, 5.0)
 
 
@@ -1389,10 +1389,11 @@ def shared_band(chains, a, b, fmin=FMIN_DEFAULT, fmax=FMAX_DEFAULT):
 def arrival_sweep(loaded, a, b, band, gates=GATE_SWEEP_MS):
     """`{band, rows, edge_difference_ms, verdicts}` -- how much later A arrives than B, gate by gate.
 
-    The desk's question of 05.09, with the two things that reading needs and its own script did not
-    have: each record's own time base (`t0`), and one window over BOTH channels rather than one per
-    channel. Without the first the answer comes out on the wrong side of zero; without the second
-    the window absorbs the very delay being measured (`windows.arrival_between`).
+    Two things this reading needs, and both are easy to leave out: each record's own time base
+    (`t0` -- two measurements never share an origin, `rew-api-quirks.md`), and ONE window over both
+    channels rather than one per channel. Without the first the answer is off by the origins'
+    difference, which is enough to flip a small one's sign; without the second the window absorbs
+    the very delay being measured (`windows.arrival_between` carries both prices).
     """
     ra, rb = loaded[a][1].get("ir"), loaded[b][1].get("ir")
     if not ra or not rb:
@@ -2354,7 +2355,8 @@ def _selftest():
     assert "HP 2500 LR24" in lad_e["rungs"][0]["label"], lad_e["rungs"][0]["label"]
 
     # `shared_band` comes off the rows, and the gated arrival between two channels recovers a pure
-    # delay through it -- the desk's 05.09 question, with each record's own time base folded in.
+    # delay through it, with each record's own time base folded in (`rew-api-quirks.md`: two
+    # measurements never share an origin).
     band6 = shared_band(ch6, "m-L", "m-L")
     assert band6 == (20.0, 2000.0), band6
     pair_ch = {"m-L": dict(one, hp={"f": 300.0, "type": "LR", "slope": 24}, lp=lp2k),

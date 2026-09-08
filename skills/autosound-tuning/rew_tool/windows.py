@@ -13,11 +13,13 @@ how a junction number stops being comparable between days:
     a cancellation between two drivers is a property of what leaves them, and a reflection 3 ms
     later is not part of that question -- it is a comb laid over the answer.
 
-Bought on the desk of the Passat, 02-07.09.2026 (autosound-hub `RES-006`, the user's ruling
-2026-09-08): a junction read across the whole record predicted −1.2 dB at 3775 Hz for a mid↔tweeter
-change that measured −3.8, and the L−R arrival of the mids was stable at −0.24…−0.31 ms through
-gates of 0.7…5 ms while an ungated read of 400-1000 Hz jumped by whole periods. Two windows are not
-an refinement of one; they answer two questions, and the answer has to say which it answered.
+Two windows are not a refinement of one: they answer two questions, and an answer has to say which
+question it answered. What each is worth was measured on one real series (hub `RES-006`, the user's
+ruling 2026-09-08): a junction read across the whole record predicted −1.2 dB for a mid↔tweeter
+change the car gave as −3.8, while the same junctions read through a window of six cycles reproduce
+the measured pairs to 0.03-0.36 dB. The other direction has a price too, and it is the one nobody
+expects: a window too short for the junction's frequency reads 5-9 dB of "cancellation" that is the
+window and not the car, so the reading is refused there rather than returned (`predict._read_pair`).
 
 WHAT ANCHORS THE GATE, and why not the peak. The window opens at the **detected start** of the
 response (`analysis.first_arrival`, the leading edge at −20 dB of the peak, minus a margin), never
@@ -33,10 +35,10 @@ not do -- and a gate length is therefore "how long AFTER the arrival we listen",
 arrival has to fit inside. (Measured from the window's own start instead, the direct sound lands at
 a different point of the taper at every frequency, and an FDW read comes out with several dB of
 frequency-dependent scale that is the margin, not the car. Found in this module's own selftest.)
-Beyond the shape, the independent path this is checked against
-(`car/…/scripts-2026-09-05/gate_sweep.py`) anchors on the band's envelope PEAK -- two anchors and
-two rulers agreeing on the mids' arrival to a hundredth of a millisecond is the evidence that
-neither is an artefact.
+Beyond the shape, the independent path this was checked against -- a script written in the project
+that measured it, and kept there -- anchors on the band's envelope PEAK instead. Two anchors and two
+rulers agreeing to a hundredth of a millisecond on a driver pair whose arrival is well posed is the
+evidence that neither is an artefact (hub `RES-006`).
 
 FDW (`cycles=N`) is the same read with a window that is N cycles long AT EACH FREQUENCY: 6 cycles
 is 300 ms at 20 Hz and 0.6 ms at 10 kHz, which is what makes one curve show the bass with its room
@@ -192,8 +194,8 @@ def gate_ir(ir, fs, *, t0_s=0.0, band=None, gate_ms=1.0, i_edge=None):
     positions kept, everything outside the window zero), for a reading that lives in time.
 
     Kept in place rather than cut out because the thing being read is a TIME: a cross-correlation
-    of two cut-out segments answers a question about the cuts (`gate_sweep.py` corrects for its own
-    two offsets, and that correction is where a time base goes missing).
+    of two cut-out segments answers a question about the cuts -- and a correction for one's own two
+    cuts is exactly where a per-measurement time base goes missing (`rew-api-quirks.md`).
     """
     x = np.asarray(ir, dtype=float)
     fs = float(fs)
@@ -219,22 +221,24 @@ def gate_ir(ir, fs, *, t0_s=0.0, band=None, gate_ms=1.0, i_edge=None):
     return out, int(i_edge), info
 
 
-def arrival_between(ir_a, ir_b, fs, *, band, gate_ms, t0_a=0.0, t0_b=0.0, max_lag_ms=5.0):
+def arrival_between(ir_a, ir_b, fs, *, band, gate_ms, t0_a, t0_b, max_lag_ms=5.0):
     """How much later A arrives than B over `band`, read through the gate: `(ms, info)`.
 
     The cross-correlation of the two gated, band-limited responses, refined to a fraction of a
-    sample by a parabola through the peak -- the ruler the desk used (`gate_sweep.py`) and the one
-    that answers on a 0.7 ms gate, where a SPECTRUM over the same band has barely one resolution
+    sample by a parabola through the peak -- a band cross-correlation, the ruler that answers on a
+    0.7 ms gate, where a SPECTRUM over the same band has barely one resolution
     cell and its matched filter locks a whole cycle away (measured on the `_60` mids: +0.57 ms
     against +0.26, one cycle at 2.2 kHz -- so `predict.arrival_difference_ms` stays what it is,
     the alias guard on FULL-band solos over a junction band, and this is the gated read).
 
     **`t0_a` / `t0_b` are each measurement's own time base** (REW's `startTime`, the time of its
-    sample 0) and they are not optional decoration: on the `_60` mids the two buffers begin
-    0.535 ms apart, and a reading that assumes one shared origin comes out with the WRONG SIGN --
-    L 0.27 ms early instead of 0.26 late (the desk's 05.09 sweep; REW's own `delay` field settles
-    it, +0.535 ms peak to peak). A v7 file has this folded in already (sample 0 IS t = 0), so its
-    `t0` is zero; a live REW pull carries it per measurement.
+    sample 0) and they have NO DEFAULT on purpose: zero is right for a v7 file, where sample 0 is
+    the loopback reference, and wrong for a live REW pull, where every measurement begins its buffer
+    somewhere else -- and a default cannot know which. A value whose safe default does not exist is
+    asked for (`rew-api-quirks.md`, "every measurement has its OWN `startTime`"). What omitting it
+    costs is the difference itself, which is enough to flip the sign of a small answer: measured
+    0.535 ms between two midrange captures of one series, turning 0.26 ms late into 0.27 early
+    (hub `RES-006`).
 
     `info` carries the edge difference and both triangulation verdicts beside the number: when the
     two disagree the question is ill-posed in that band, and the number is not to be pinned. On the
@@ -403,16 +407,17 @@ def _selftest():
                     np.concatenate([np.zeros(int(0.002 * fs)), [1.0], np.zeros(n - int(0.002 * fs) - 1)]))
     late = np.roll(burst, int(round(0.00026 * fs)))
     for g, tol in ((0.7, 0.03), (1.0, 0.02), (1.5, 0.006), (2.0, 0.005), (5.0, 0.002)):
-        got, info = arrival_between(late, burst, fs, band=(300.0, 2500.0), gate_ms=g)
+        got, info = arrival_between(late, burst, fs, band=(300.0, 2500.0), gate_ms=g,
+                                    t0_a=0.0, t0_b=0.0)
         assert abs(got - 0.26) < tol, f"gate {g} ms: pure delay read {got:+.4f} ms, expected +0.260"
         assert info["window"] == GATE and info["gate_ms"] == g
     # A gate that cannot hold both arrivals is REFUSED, not answered: 1 ms of delay read through a
     # 1 ms gate comes out 0.50 -- half the truth, and shaped exactly like a measurement.
     far = np.roll(burst, int(round(0.001 * fs)))
     for g in (0.7, 1.0):
-        got, info = arrival_between(far, burst, fs, band=(300.0, 2500.0), gate_ms=g)
+        got, info = arrival_between(far, burst, fs, band=(300.0, 2500.0), gate_ms=g, t0_a=0.0, t0_b=0.0)
         assert got is None and "outside the window" in info["refused"], (g, got, info)
-    got, _ = arrival_between(far, burst, fs, band=(300.0, 2500.0), gate_ms=1.5)
+    got, _ = arrival_between(far, burst, fs, band=(300.0, 2500.0), gate_ms=1.5, t0_a=0.0, t0_b=0.0)
     assert abs(got - 1.0) < 0.04, got
     # ...and the same pair with 0.535 ms of time-base difference between the two records: the
     # answer must not move, because `t0` says where each buffer begins.
@@ -420,8 +425,11 @@ def _selftest():
     got, info = arrival_between(np.roll(late, shift), burst, fs, band=(300.0, 2500.0), gate_ms=2.0,
                                 t0_a=-shift / fs, t0_b=0.0)
     assert abs(got - 0.26) < 0.02, f"with two time bases the read moved to {got:+.4f} ms"
-    blind, _ = arrival_between(np.roll(late, shift), burst, fs, band=(300.0, 2500.0), gate_ms=2.0)
-    assert abs(blind - (0.26 + 0.535)) < 0.03, f"ignoring t0 must cost exactly the offset: {blind:+.4f}"
+    # ...and getting it wrong costs exactly the offset -- which is why there is no default to get
+    # wrong by accident: this call has to SAY t0_a=0 to be wrong.
+    blind, _ = arrival_between(np.roll(late, shift), burst, fs, band=(300.0, 2500.0), gate_ms=2.0,
+                               t0_a=0.0, t0_b=0.0)
+    assert abs(blind - (0.26 + 0.535)) < 0.03, f"a wrong t0 must cost exactly the offset: {blind:+.4f}"
 
     # A sub-shaped response: the same arrival through a causal 60 Hz low-pass, so the envelope
     # peaks many milliseconds after the edge. The four estimators then disagree by more than the
