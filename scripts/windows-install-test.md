@@ -113,6 +113,23 @@ This is the SCR-056 test:
 5. Shortcut → Properties → Target points at `autosound-tcc-gui.exe` under the installed bin
    directory, **not** at a temp path. This is what makes `uv tool upgrade` move the shortcut too.
 
+### 2a. `gh`'s download is checked before it is unpacked (HUB-031)
+
+Only on a run that installs `gh` (`-GitHub`, or answer yes when asked). The Unix installer has
+verified gh's SHA256 against the checksums file of the same release since 2026-09-07;
+`install.ps1` got the same step on 2026-09-09 and **it has never run on Windows** — this is the
+line that tests it.
+
+| look for | pass | fail means |
+| :--- | :--- | :--- |
+| `checksum OK (<12 hex chars>…)` right before gh appears | the checksums file was found, parsed, and matched | see the two rows below |
+| `gh: the release publishes no checksum line for gh_<ver>_windows_<arch>.zip` | — | the asset name and the name in `gh_<ver>_checksums.txt` disagree (a release layout change), or the checksums URL 404'd |
+| `gh: the download does NOT match the checksum…` | — | either a genuinely bad download, or the case comparison broke (`Get-FileHash` is UPPERCASE, the file is lowercase; `-ne` is case-insensitive on purpose) |
+| `gh --version` works afterwards | the zip was unpacked and copied | — |
+
+A deliberate failure is worth one run: point `$sumUrl` at a wrong file name, and the install must
+**not** put `gh` on PATH and must say why.
+
 ## 3. An older app ref — the deliberate gap
 
 ```powershell

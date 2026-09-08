@@ -962,14 +962,46 @@ if ($WantGitHub -eq "1") {
             $tmpd = Join-Path $Scratch "gh-extract"
             try {
                 Invoke-WebRequest -Uri $g.Url -OutFile $tmpz -UseBasicParsing
-                if (Test-Path $tmpd) { Remove-Item $tmpd -Recurse -Force }
-                Expand-Archive -Path $tmpz -DestinationPath $tmpd -Force
-                $exe = Get-ChildItem -Path $tmpd -Filter "gh.exe" -Recurse | Select-Object -First 1
-                if ($exe) {
-                    Copy-Item $exe.FullName (Join-Path $LocalBin "gh.exe") -Force
-                    Unblock-File (Join-Path $LocalBin "gh.exe") -ErrorAction SilentlyContinue
-                    $got = $true
+                # CHECKED against the checksums the same release publishes -- the Unix half of this
+                # installer has done that since HUB-031, and this half was still unpacking whatever
+                # came back: a truncated transfer or a proxy answering with something else would be
+                # copied onto PATH with the same confidence as the real thing. The checksum does not
+                # prove who built it; it proves we got what that release says it has.
+                # "Could not check" is NOT "checked": with no checksum line we do not install, and
+                # the only cost is a backup feature nobody has set up yet.
+                $ver = $g.Version -replace "^v", ""
+                # The asset URL ends with the asset's own name, so the checksums file sits beside it.
+                # Built by cutting that name off rather than by a regex: one less thing to escape.
+                $sumUrl = $g.Url.Substring(0, $g.Url.Length - $g.Name.Length) + "gh_${ver}_checksums.txt"
+                $tmps = Join-Path $Scratch "gh_checksums.txt"
+                Invoke-WebRequest -Uri $sumUrl -OutFile $tmps -UseBasicParsing
+                # `<sha256>  gh_<ver>_windows_<arch>.zip` -- take the line naming OUR asset, then its
+                # first field. No line for it means we cannot check, which is not the same as checked.
+                $sumPattern = "\s" + [regex]::Escape($g.Name) + "\s*$"
+                $sumLine = Get-Content $tmps | Where-Object { $_ -match $sumPattern } | Select-Object -First 1
+                $want = if ($sumLine) { ($sumLine -split "\s+" | Select-Object -First 1) } else { "" }
+                # Get-FileHash returns UPPERCASE hex, the file lists lowercase -- and PowerShell's
+                # -ne on strings is case-INSENSITIVE, which is why this compares correctly. Do not
+                # "fix" it into -cne without lowering both sides first.
+                $have = (Get-FileHash -Path $tmpz -Algorithm SHA256).Hash
+                if (-not $want) {
+                    Warn "gh: the release publishes no checksum line for $($g.Name) -- not installing it."
+                } elseif ($want -ne $have) {
+                    Warn "gh: the download does NOT match the checksum GitHub publishes for it -- not installing."
+                    Warn "expected $want"
+                    Warn "got      $have"
+                } else {
+                    Say "  checksum OK ($($have.Substring(0,12))...)"
+                    if (Test-Path $tmpd) { Remove-Item $tmpd -Recurse -Force }
+                    Expand-Archive -Path $tmpz -DestinationPath $tmpd -Force
+                    $exe = Get-ChildItem -Path $tmpd -Filter "gh.exe" -Recurse | Select-Object -First 1
+                    if ($exe) {
+                        Copy-Item $exe.FullName (Join-Path $LocalBin "gh.exe") -Force
+                        Unblock-File (Join-Path $LocalBin "gh.exe") -ErrorAction SilentlyContinue
+                        $got = $true
+                    }
                 }
+                if (Test-Path $tmps) { Remove-Item $tmps -Force -ErrorAction SilentlyContinue }
             } catch { Warn "$($_.Exception.Message)" }
             foreach ($t in @($tmpz, $tmpd)) { if (Test-Path $t) { Remove-Item $t -Recurse -Force -ErrorAction SilentlyContinue } }
         }
