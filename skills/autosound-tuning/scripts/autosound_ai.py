@@ -288,8 +288,11 @@ def call_gemini_api(api_key, model, prompt):
     # within a year, because the labels moved on and the table did not. A table of model names is
     # a promise to keep updating it, and nobody was.
     api_model = model
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{api_model}:generateContent?key={api_key}"
-    headers = {"Content-Type": "application/json"}
+    # The key goes in a header, not in the URL: a URL is what proxies log, what an exception may
+    # carry in its text, and what a traceback prints -- a header is none of those (hub PAS-004,
+    # the user's rule: a key must not reach anywhere public, and a URL is halfway there).
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{api_model}:generateContent"
+    headers = {"Content-Type": "application/json", "x-goog-api-key": api_key}
     body = {
         "contents": [{
             "parts": [{"text": prompt}]

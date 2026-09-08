@@ -29,16 +29,16 @@ GEMINI_BIN=agy
 GEMINI_CRITIC_MODEL=gemini-3.1-pro-high
 GEMINI_ADVISOR_MODEL=gemini-3.5-flash-medium
 
-# ---- Fallback: @google/gemini-cli via an API KEY (cross-platform) ----
-# gemini-cli's OWN sign-in is CLOSED (2026-09-08, IneligibleTierError: "This client is no longer
-# supported for Gemini Code Assist for individuals … migrate to the Antigravity suite") — the
-# binary works with a key ONLY. Get one at https://aistudio.google.com/apikey — the current
+# ---- The direct API with a KEY (autosound_ai.py; cross-platform, no CLI) ----
+# @google/gemini-cli is CLOSED (2026-09-08, IneligibleTierError: "This client is no longer
+# supported for Gemini Code Assist for individuals … migrate to the Antigravity suite") and a key
+# in the environment did NOT reopen it (probed the same day) — do not pin GEMINI_BIN=gemini.
+# A key still drives the direct API. Get one at https://aistudio.google.com/apikey — the current
 # shape is AQ.… (53 chars); an AIza… (39) key is the old shape and answers API_KEY_INVALID once a
 # new one exists. Keep the key in THIS file (per machine), not in a shell export: a session's
-# environment does not follow ~/.zshrc after it started.
-# GEMINI_BIN=gemini
-# GEMINI_API_KEY=AQ....                       # exported to gemini-cli automatically
-# GEMINI_CRITIC_MODEL=gemini-2.5-pro           # API ids for this CLI; Critic = Pro
-# GEMINI_ADVISOR_MODEL=gemini-2.5-flash
+# environment does not follow ~/.zshrc after it started, and an export reaches every process.
+# GEMINI_API_KEY=AQ....
+# AUTOSOUND_CRITIC_MODEL=gemini-2.5-pro        # API ids for a raw key call; Critic = Pro
+# AUTOSOUND_ADVISOR_MODEL=gemini-2.5-flash
 
 # PROJECT_MIRROR=/abs/path/to/project/rew_analitic   # only if CWD differs from the project

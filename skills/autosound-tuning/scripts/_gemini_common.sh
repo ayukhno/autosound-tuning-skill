@@ -88,11 +88,15 @@ else AUDIT="$PROJECT_MIRROR/audit-trail.md"; fi
 #   Code Assist for individuals. To continue using Gemini, please migrate to the Antigravity
 #   suite of products: https://antigravity.google
 #
-# Google shut the free OAuth tier the CLI signed in with; `agy` is what replaced it. `gemini`
-# stays detectable for one reason only: with a GEMINI_API_KEY it still calls the API. Without a
-# key it fails on every model with the text above, which `_is_dead_cli_error` recognises so the
+# Google shut the free OAuth tier the CLI signed in with; `agy` is what replaced it. A key does
+# NOT reopen it as installed: with a fresh AQ.-shaped GEMINI_API_KEY in the environment the same
+# 0.50.0 still went to its sign-in (`_doSetupUser`) and printed the text above (probed
+# 2026-09-08) -- the CLI's stored auth mode decides, not the variable. So `gemini` is detected
+# only so that the closed path is NAMED: `_is_dead_cli_error` recognises the words and the
 # wrapper says "the path is closed, use agy" instead of falling back to a second model on the
 # same closed door (hub PAS-004: ~10 minutes of diagnosis in a car, on a fact one line can carry).
+# A GEMINI_API_KEY still has a use -- the direct API in `autosound_ai.py` -- which is why the
+# doctor checks the key at all.
 # What the key was before any config file was read -- the doctor tells a stale shell export
 # from a file value with it.
 _GEMINI_KEY_FROM_SHELL="${GEMINI_API_KEY:-}"
@@ -169,7 +173,7 @@ gemini_preflight() {
   → copy your project's autosound_context.md into rew_analitic/, or set PROJECT_MIRROR"
   [[ -n "$GEMINI_BIN" ]] || die "no Gemini CLI on PATH — install Antigravity:
   brew install --cask antigravity-cli   (then 'agy' once to log in; references/tooling/setup-critic-channel.md §1)
-  (the old @google/gemini-cli sign-in is closed since 2026-09-08 — it only works with a GEMINI_API_KEY now)"
+  (the old @google/gemini-cli sign-in is closed since 2026-09-08, a key in the environment did not reopen it)"
   if [[ "$GEMINI_FLAVOR" == gemini && -z "${GEMINI_API_KEY:-}" ]]; then
     echo ">> WARNING: $(_dead_cli_message)" >&2
   fi
@@ -182,7 +186,7 @@ _is_dead_cli_error() {
   grep -qiE 'IneligibleTierError|no longer supported for Gemini Code Assist|migrate to the Antigravity' <<<"$1"
 }
 _dead_cli_message() {
-  printf '%s' "шлях gemini CLI закрито Google (IneligibleTierError, 2026-09-08: «This client is no longer supported for Gemini Code Assist for individuals … migrate to the Antigravity suite») — використовуй agy: brew install --cask antigravity-cli, потім 'agy' для входу; або дай gemini CLI ключ GEMINI_API_KEY у ~/.config/autosound/critic-env (setup-critic-channel.md §1, §3)"
+  printf '%s' "шлях gemini CLI закрито Google (IneligibleTierError, 2026-09-08: «This client is no longer supported for Gemini Code Assist for individuals … migrate to the Antigravity suite»; ключ в оточенні його не відкриває — перевірено) — використовуй agy: brew install --cask antigravity-cli, потім 'agy' для входу; ключ GEMINI_API_KEY у ~/.config/autosound/critic-env живить прямий API (autosound_ai.py), не цей CLI (setup-critic-channel.md §1–§3)"
 }
 
 # What shape a GEMINI_API_KEY has: `AQ.` + 53 chars is the format AI Studio issues now (seen
@@ -193,7 +197,7 @@ _key_format() {
   local k="$1"
   if [[ "$k" == AQ.* && ${#k} -eq 53 ]]; then echo "current (AQ.…, 53 chars)"
   elif [[ "$k" == AIza* && ${#k} -eq 39 ]]; then echo "OLD format (AIza…, 39 chars) — AI Studio issues AQ.… keys now; if the profile holds a new one, this shell has not seen it"
-  else echo "unrecognised shape (${#k} chars, starts ${k:0:3}…)"; fi
+  else echo "unrecognised shape (${#k} chars)"; fi
 }
 
 # _run_model <model> <prompt_file> — prints raw Gemini output, strips CLI noise.
@@ -296,7 +300,7 @@ gemini_selfcheck() {
 # so setup traps surface in ONE command instead of serially (a real cold-start hit
 # ~6 papercuts here). Invoked via the wrappers' `--doctor` flag.
 gemini_doctor() {
-  local ok=1 chan_ok=0 envf bin
+  local ok=1 chan_ok=0 key_ok=1 proj_ok=1 envf bin
   echo "== Gemini reviewer channel — doctor =="
   if [[ -z "${GEMINI_BIN:-}" ]]; then
     echo "✗ CLI: none on PATH. Fix: brew install --cask antigravity-cli (agy; the old @google/gemini-cli sign-in is closed — it needs a GEMINI_API_KEY now)"; ok=0
@@ -318,12 +322,16 @@ gemini_doctor() {
     if command -v curl >/dev/null 2>&1; then
       # One GET that costs nothing (a model listing), the key never printed: the code says live
       # or not, and API_KEY_INVALID in the body is the old-key-in-a-new-world case by name.
-      local kc kb; kb="$(mktemp)"
-      kc="$(curl -s -m 10 -o "$kb" -w '%{http_code}' "https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}" 2>/dev/null || echo 000)"
+      # The key travels as a header read from a 0600 file -- not in the URL and not in argv,
+      # where `ps`, a shell trace or a proxy log would have it (the same rule as HUB-025).
+      local kc kb kh; kb="$(mktemp)"; kh="$(mktemp)"; chmod 600 "$kh"
+      printf 'x-goog-api-key: %s\n' "$GEMINI_API_KEY" > "$kh"
+      kc="$(curl -s -m 10 -o "$kb" -w '%{http_code}' -H @"$kh" "https://generativelanguage.googleapis.com/v1beta/models" 2>/dev/null || echo 000)"
+      rm -f "$kh"
       case "$kc" in
         200) echo "✓ key: GET /v1beta/models → 200 (the key is live)";;
         000) echo "· key: GET /v1beta/models → no answer (offline?) — not checked";;
-        *)   echo "✗ key: GET /v1beta/models → HTTP $kc$(grep -o 'API_KEY_INVALID' "$kb" | head -1 | sed 's/^/ /') — a new key from https://aistudio.google.com/apikey into ~/.config/autosound/critic-env, then re-run; if the file already holds a new one, unset the shell's export"; ok=0;;
+        *)   echo "✗ key: GET /v1beta/models → HTTP $kc$(grep -o 'API_KEY_INVALID' "$kb" | head -1 | sed 's/^/ /') — a new key from https://aistudio.google.com/apikey into ~/.config/autosound/critic-env, then re-run; if the file already holds a new one, unset the shell's export"; ok=0; key_ok=0;;
       esac
       rm -f "$kb"
     fi
@@ -334,8 +342,8 @@ gemini_doctor() {
     else echo "✗ .critic-env: $envf SYNTAX error — quote model names with spaces/parens, e.g. GEMINI_CRITIC_MODEL=\"Gemini 3.5 Flash (Medium)\":"; sed 's/^/    /' /tmp/_ce_err; ok=0; fi
     rm -f /tmp/_ce_err
   else echo "· .critic-env: none (defaults; optional — cp scripts/.critic-env.example rew_analitic/.critic-env)"; fi
-  [[ -f "$CONTRACT" ]] && echo "✓ contract: $CONTRACT" || { echo "✗ contract: $CONTRACT not found — run intake or set PROJECT_MIRROR"; ok=0; }
-  [[ -f "$CONTEXT"  ]] && echo "✓ context:  $CONTEXT"  || { echo "✗ context:  $CONTEXT not found — copy autosound_context.md into rew_analitic/ or set PROJECT_MIRROR"; ok=0; }
+  [[ -f "$CONTRACT" ]] && echo "✓ contract: $CONTRACT" || { echo "✗ contract: $CONTRACT not found — run intake or set PROJECT_MIRROR"; ok=0; proj_ok=0; }
+  [[ -f "$CONTEXT"  ]] && echo "✓ context:  $CONTEXT"  || { echo "✗ context:  $CONTEXT not found — copy autosound_context.md into rew_analitic/ or set PROJECT_MIRROR"; ok=0; proj_ok=0; }
   if [[ -n "${GEMINI_BIN:-}" ]]; then
     echo "— live smoke (1 line) —"
     local sf out; sf="$(mktemp)"; printf 'reply with exactly: channel works' > "$sf"
@@ -356,10 +364,16 @@ gemini_doctor() {
   # the hard part started working: "✓ smoke: channel works" followed by "ISSUES ABOVE ✗", where
   # the issues were two project files missing because the doctor was run from a home directory
   # rather than from a car (2026-08-13).
+  # ...and it read badly a second time when the key was the ✗ and the folder was a car: the
+  # footer blamed "project files" for a key that had answered API_KEY_INVALID (2026-09-08). So
+  # the footer names what failed, and only what failed.
   if [[ $ok = 1 ]]; then echo "== ALL GOOD ✓ =="
   elif [[ ${chan_ok:-1} = 1 ]]; then
-    echo "== The reviewer channel works ✓ — the ✗ above are project files, and this is not a"
-    echo "   project folder. Run this again from inside a car's folder to check those too. =="
+    echo "== The reviewer channel works ✓ — what failed above:"
+    [[ $proj_ok = 1 ]] || echo "   · project files: this is not a car's folder — run this again from inside one to check those too"
+    [[ $key_ok = 1 ]]  || echo "   · the API key: the agy channel does not need it, the direct-API path (autosound_ai.py) does — fix it or drop the stale export"
+    [[ $proj_ok = 1 && $key_ok = 1 ]] && echo "   · see the ✗ lines"
+    echo "=="
   else
     echo "== ISSUES ABOVE ✗ — fix and re-run --doctor =="
   fi

@@ -50,7 +50,7 @@ brew install --cask antigravity-cli      # the REAL agy — NOT a symlink to gem
 >
 > `Error authenticating: IneligibleTierError: This client is no longer supported for Gemini Code Assist for individuals. To continue using Gemini, please migrate to the Antigravity suite of products: https://antigravity.google`
 >
-> Google shut the free OAuth tier the CLI signed in with; `agy` (§1) is what replaced it. The `gemini` binary still works **only with a `GEMINI_API_KEY`** (§3), which is the one reason it stays detectable. If you see the text above, do not try the other model — it fails at the same sign-in; the wrapper now says "шлях gemini CLI закрито Google, використовуй agy" and stops rather than falling back. The models this page used to list for that CLI (`gemini-2.5-pro` / `gemini-2.5-flash`) are still the API ids a raw key call takes.
+> Google shut the free OAuth tier the CLI signed in with; `agy` (§1) is what replaced it. **A key does not reopen it as installed:** with a fresh `AQ.`-shaped `GEMINI_API_KEY` in the environment the same CLI still went to its sign-in and printed the text above (probed 2026-09-08 — its stored auth mode decides, not the variable). Treat the `gemini` CLI as closed; the wrappers keep detecting it only to NAME the closed path: "шлях gemini CLI закрито Google, використовуй agy", and they stop rather than fall back to the other model, which fails at the same sign-in. A `GEMINI_API_KEY` still matters for the **direct API** (`autosound_ai.py`, §3), where the models this page used to list for that CLI (`gemini-2.5-pro` / `gemini-2.5-flash`) are the ids a raw key call takes.
 
 > ℹ️ **`Gemini 3.5/3.1` are Antigravity's own display labels** (what `agy models` shows beside the slug ids), NOT real Gemini versions. Use the name your channel expects: the `agy` CLI wants its slug id (`gemini-3.1-pro-high`; the display label is rejected since agy 1.1.12); a raw `GEMINI_API_KEY` call wants the `gemini-2.5-*` id.
 
@@ -188,11 +188,11 @@ So **launch Claude from the project directory** (CWD = the car you're tuning). `
 printf '## Test\nChannel check: reply with one line "channel works".\n' > /tmp/smoke.md
 scripts/gemini_critic.sh /tmp/smoke.md
 ```
-Expect a one-line reply + a `— [critic: <model>]` tag (or `[advisor: …]`). An **empty reply** (just the tag) ≠ a crash — it's almost always **quota exhausted** (agy's weekly tier) or lost auth; the wrapper prints a loud WARNING. Recover by switching the model group, re-logging-in `agy`, or pinning the gemini API-key path (§3 — the `gemini` CLI works with a key only, §2).
+Expect a one-line reply + a `— [critic: <model>]` tag (or `[advisor: …]`). An **empty reply** (just the tag) ≠ a crash — it's almost always **quota exhausted** (agy's weekly tier) or lost auth; the wrapper prints a loud WARNING. Recover by switching the model group, re-logging-in `agy`, or going to the direct API with a key through `autosound_ai.py` (§3; the `gemini` CLI is closed, §2).
 
 ## 7. No CLI — or the CLI is slow/dry? Use a manual channel (the ROLE still happens)
 
-The reviewer role is vendor-agnostic (`review-loop.md`). When there's no CLI — **or `agy` is quota-dry / hanging on a big package, or the only CLI on the machine is `gemini` with no key (§2)** — go manual:
+The reviewer role is vendor-agnostic (`review-loop.md`). When there's no CLI — **or `agy` is quota-dry / hanging on a big package, or the only CLI on the machine is `gemini` (closed, §2)** — go manual:
 1. **Copy-paste into a desktop chat** *(field-proven; the go-to when the CLI chokes)* — `cat package.md | pbcopy`, paste into a **Gemini / Claude / ChatGPT desktop chat** where you have a subscription / tokens, then paste the reply back. No CLI, no quota juggling, no agentic stalls — ideal for a **bulk one-off** review (e.g. several long docs at once). Real use: a 4-language README review the agentic CLI couldn't finish.
 2. **Any other AI** in a second window — same idea, ask it to play the Critic.
 3. **Claude in a SEPARATE session** (cross-session self-review; TWO-PASS anti-anchoring — see `review-loop.md`).
