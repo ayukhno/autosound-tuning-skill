@@ -304,11 +304,13 @@ KIND_HEARD = {
 }
 
 #: A `symptom` a machine wrote, not a person. `flaw_map` fills one from the kind and the band so a
-#: row never arrives with an empty space where the owner's line goes — but a draft is NOT the
-#: owner's words, and the phase-0 gate (`contract.py check --phase0-gate`) counts it as unwritten.
-#: The tuner replaces it after the car has been listened to; the marker is what makes the two
-#: distinguishable, and without it the draft would quietly satisfy the check meant to demand a
-#: person.
+#: row never arrives with an empty space where the owner's line goes — the marker is what tells
+#: machine words from a person's. The line is a COMMUNICATION field: what the owner will notice
+#: in the finished tune, written when they have heard it, if they ever give one. It verifies
+#: nothing and gates nothing — a flaw is computed from a measurement, and the ear cannot check a
+#: row (the user's ruling, 2026-09-08, skill #22; until then `contract.py check --phase0-gate`
+#: demanded a person's sentence on every owner-facing row before phase 0 could close, asking for
+#: eight sentences about things nobody could yet hear).
 SYMPTOM_DRAFT_PREFIX = "DRAFT: "
 
 #: Where a frequency sits, in the words the symptom is written in. Rough on purpose: the exact Hz
@@ -989,10 +991,12 @@ _USAGE = """usage: project.py <project-dir> <command> [args]
                                                  thd_spike|pair_suckout
                                                action: notch|leave|no_boost|geometry|delay|
                                                  crossover  (a dip can never be `notch`)
-                                               --symptom: what the OWNER hears, one sentence in
-                                                 their words. `why` is the audit trail; this is
-                                                 the line a person reads. Owed on the rows an
-                                                 owner is shown: geometry|leave|no_boost
+                                               --symptom: OPTIONAL. What the OWNER hears, one
+                                                 sentence in their words, for the rows they are
+                                                 shown (geometry|leave|no_boost) -- a communication
+                                                 line for the finished tune, never a gate: the
+                                                 row stands on --evidence, and the ear cannot
+                                                 verify a flaw (#22). `why` is the audit trail
   flaws [--owner]                              print the map, lowest frequency first; --owner
                                                shows only what stays in the car after the tune
 """
@@ -1034,10 +1038,10 @@ def _flaw_prose(entry, owner_only):
 
     A row an owner is shown that has no `symptom` says so out loud rather than silently falling
     back to `why` -- a fallback would hand a person the audit trail again, which is the whole thing
-    being fixed, and it would hide the gap from the only reader who can close it.
+    being fixed. It says so as information: the row stands on its measurement either way (#22).
     """
     if owner_only:
-        return entry.get("symptom") or "(symptom not written yet)"
+        return entry.get("symptom") or "(no owner's line yet -- the row stands on its measurement)"
     said = entry.get("why", "")
     return f"{said}  ⟵ {entry['symptom']}" if entry.get("symptom") else said
 
@@ -1090,8 +1094,9 @@ def _main(argv):
                 print("already current — nothing this schema gained is missing here")
             elif done["symptom_drafts"]:
                 print(f"\n{len(done['symptom_drafts'])} row(s) got a DRAFT symptom: what the KIND "
-                      f"sounds like, not what THIS car sounds like. Replace each after listening — "
-                      f"`contract.py check <dir> --phase0-gate` counts a draft as unwritten.")
+                      f"sounds like, not what THIS car sounds like. A person's line, if the owner "
+                      f"ever gives one after hearing the finished tune, replaces it; the phase-0 "
+                      f"gate stands on evidence and asks for neither (#22).")
         elif cmd == "migrate-fields":
             renames = proj.migrate_fields(write="--dry-run" not in args)
             if not renames:
@@ -1342,7 +1347,7 @@ def _selftest():
     lines = [ln for ln in shown.getvalue().splitlines() if ln.strip()]
     assert len(lines) == 2, lines                      # 145 leave + 0.3 ms energy_lag geometry
     assert heard in shown.getvalue(), shown.getvalue()
-    assert "(symptom not written yet)" in shown.getvalue(), shown.getvalue()
+    assert "(no owner's line yet" in shown.getvalue(), shown.getvalue()
     assert "127.4" not in shown.getvalue() and "39" not in shown.getvalue(), "plan rows leaked"
 
     # -- time-domain install properties (inbox 3.12) -------------------------------------------

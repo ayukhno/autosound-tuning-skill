@@ -102,8 +102,10 @@ first — `python3 rew_tool/flaw_map.py --project <project> --solos DIR [--ellip
 features, asks the ellipsoid what stays and the excess-phase gate what is minimum-phase, and prints
 the rows it would write (driver resonance / cabin mode → `notch`, a null below Schroeder or a
 non-minimum-phase feature → `no_boost`) **and every finding it will NOT write, with the reason**;
-`--write` records them as `hypothesis`. A person confirms or rejects each after the car has been
-heard — that verdict is written with the manual command, which each finding gets as a row:
+`--write` records them as `hypothesis`. A hypothesis is settled by a **measurement on this build**
+— when in doubt, ask the owner for the capture that would settle it (a position set, a near-field,
+a repeat sweep) and say which in `--why` — and it is watched through the tune, not judged by ear.
+The verdict is written with the manual command, which each finding gets as a row:
 
 ```bash
 python3 rew_tool/project.py <project> flaw <f_hz> <level_db> <kind> <action> \
@@ -114,19 +116,28 @@ python3 rew_tool/project.py <project> flaw <f_hz> <level_db> <kind> <action> \
 **A row has two readers, and `--why` only serves one.** `why` is the audit trail — the measurement,
 the cross-check, the doubt, the section it argues with — and the next session reads it. `--symptom`
 is one sentence in the **owner's** words: *"the bass comes from both sides"*, *"a piano left of
-centre wanders with pitch"*. Write it on every row an owner will be shown (`geometry`, `leave`,
+centre wanders with pitch"*. It belongs to the rows an owner will be shown (`geometry`, `leave`,
 `no_boost` — `project.OWNER_FACING_ACTIONS`, the rows that stay in the car after the tune is
-finished); `project.py flaws --owner` prints exactly those and names the ones still missing it.
+finished); `project.py flaws --owner` prints exactly those and names the ones still bare.
+
+**The symptom is a communication line, not evidence, and it is optional** (the Arbiter's ruling,
+2026-09-08, skill #22). The map exists precisely because nobody can tell by ear which flaw can be
+corrected and which cannot: a flaw is *computed* from the measurement and entered in the project,
+and the ear cannot verify a row — by ear you get "something is wrong in the midbass", never
+`w-L, 145 Hz, −10.4 dB, cabin_null, non-minimum-phase, never boost`. The ear is asked at the very
+end, when there is a finished tune to hear, and then to choose among variants the owner likes and
+accepts — not to control a measurement; not every owner hears well, and some have hearing that
+gets in the way. So the owner's sentence is written **if and when** the owner gives one after
+hearing the finished tune (Phase 4/5), and it changes nothing about whether the row stands.
 
 **The register to write in is `project.KIND_HEARD`** — one line per mechanism saying what it sounds
 like, beside the `FLAW_KINDS` it belongs to. It used to say "borrow it from `knowledge/cars/<body>.md`",
 which works for exactly the one body that folder holds; what a mechanism sounds like does not depend
 on the cabin (autosound-hub `CAR-007`). **You do not start from nothing either:** `flaw_map.py`
 writes a `DRAFT:` symptom on every owner-facing row it proposes, built from the kind, the band and
-the channel. A draft is a placeholder so the row is not born empty — it is not the owner's words,
-it does not close the row, and the gate below counts it as unwritten. Bought on a live 18-row map where not one
-row said what a person hears, so a panel showed the owner an audit trail whose longest entry ran
-763 characters.
+the channel. A draft is a placeholder so the row is not shown bare — machine words, marked as such
+so they are never mistaken for the owner's. Bought on a live 18-row map where not one row said what
+a person hears, so a panel showed the owner an audit trail whose longest entry ran 763 characters.
 
 `level_db` is the **feature** — `+` a hump, `−` a dip — not the correction you would apply to it.
 `kind` and `action` come from closed lists (`project.py flaws` prints the map; the usage text lists
@@ -146,19 +157,22 @@ Then also record it in the car record (PART-B style: each item phrased as a chec
 ### The boundary out of phase 0 — one command, not a memory
 
 ```bash
-python3 rew_tool/contract.py check <project> --phase0-gate     # exits non-zero while a row owes its sentence
+python3 rew_tool/contract.py check <project> --phase0-gate     # exits non-zero while a row names no measurement
 ```
 
-Once the baseline is saved, analyzed, and logged in the `tuning-changelog` — **and the map can be
-read by the person it is shown to** — proceed to **Phase 1**. The gate asks one thing: every
-owner-facing row carries the owner's own sentence, a machine `DRAFT:` not counting. It exists
-because the requirement stood here in prose for two days and was met on one map out of four
-(`CAR-007`), and because the map has exactly one other rule with teeth (a `dip` can never be
-`notch`) — prose held neither.
+Once the baseline is saved, analyzed, and logged in the `tuning-changelog` — **and every row of
+the map stands on a measurement** — proceed to **Phase 1**. The gate asks one thing: every flaw
+row names its evidence (a capture on this build). A row with none is a guess wearing the map's
+authority, and nothing downstream can tell the difference — the map *binds* Phase 1 and 2. The
+gate also **lists** what it does not block: the `hypothesis` rows, to be settled by a capture the
+owner is asked for; and the owner-facing rows with no owner's line yet, which is information for
+the front-end that shows the map, not a debt.
 
-The order stays what it was: the row is written when the measurement is made, **before** anyone has
-listened; the sentence is added by the end of the phase, after they have. What the gate forbids is
-leaving phase 0 with the sentence still owed.
+Until 2026-09-08 this gate demanded the owner's *sentence* on every owner-facing row — eight
+sentences about things nobody could yet hear, on a Phase 0 that is observational by definition.
+A gate that cannot be met honestly gets met with invented sentences, and the map would then carry
+invented perception as fact (skill #22). The Arbiter's ruling moved it to where the method already
+stood: flaws are computed; doubts become measurements; the ear comes last, and chooses.
 
 **A schema change does not reach the cars on its own.** When a new field lands, the projects already
 on disk become incomplete and nothing says so — `symptom` was filled on one of four copies of the
@@ -172,5 +186,6 @@ python3 rew_tool/contract.py gaps <dir> [<dir> ...]  # or say where they live
 With no path it scans `$AUTOSOUND_PROJECT_DIR`'s parent, or the working directory — so it runs on
 somebody else's disk without knowing the author's folder layout. **The project you are IN needs no
 separate run:** Pre-Session step 2 already calls `contract.py check <project>` every start, and that
-report now names the owing rows. `gaps` is for the copies you are NOT in — which is where the four
-maps of one car sat.
+report now names the rows that lack a field of the current schema (evidence — the gate; the owner's
+line — information). `gaps` is for the copies you are NOT in — which is where the four maps of one
+car sat.

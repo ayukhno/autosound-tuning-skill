@@ -370,27 +370,54 @@ def cross_check_rew(process_state, glossary, snapshots):
 #: 2026-09-02 and two days later was filled on one map out of four, all four being the same car,
 #: and nothing anywhere said so (autosound-hub CAR-007). `gaps` below is the command that says so.
 #:
-#: Each entry: (what it is called, which rows owe it, how to tell whether a row has it).
+#: Each entry: (what it is called, which rows owe it, how to tell whether a row has it, whether
+#: the phase-0 gate STANDS on it).
+#:
+#: What the gate stands on, and what it does not -- the user's ruling, 2026-09-08 (skill #22):
+#: the map exists because nobody can tell by ear which flaw can be corrected and which cannot;
+#: the flaws are COMPUTED from measurements and entered in the project, a doubt is settled by
+#: asking the owner for another capture, and how they behave is watched through the tune. The ear
+#: cannot verify a row -- and it is only asked at the very end, choosing among variants the owner
+#: likes, never as a control on a measurement (not every owner hears well, and some cannot hear
+#: this at all). So the gate stands on EVIDENCE: a row that names no measurement is a guess. The
+#: owner's `symptom` stays as what it always was underneath -- a communication line for the
+#: finished tune -- reported here so a front-end can show what is still bare, and gating nothing.
+#: Until 2026-09-08 it gated phase 0, which asked eight sentences about things nobody could hear
+#: yet and would have been met with invented ones (#22).
 _ROW_FIELDS = (
+    ("acoustics.flaws[].evidence",
+     lambda e: True,
+     lambda e: bool([x for x in (e.get("evidence") or []) if str(x).strip()]),
+     True),
     ("acoustics.flaws[].symptom",
      lambda e: e.get("action") in project.OWNER_FACING_ACTIONS,
-     lambda e: project.symptom_said(e) is not None),
+     lambda e: project.symptom_said(e) is not None,
+     False),
 )
 
 
 def flaw_field_gaps(project_data):
     """Rows that owe a field the current schema expects, per field. Never raises: a project whose
-    `project.json` could not be read has no rows to judge, which is a different report."""
+    `project.json` could not be read has no rows to judge, which is a different report. `gates`
+    says whether the phase-0 gate stands on the field (evidence) or only reports it (symptom)."""
     flaws = ((project_data or {}).get("acoustics") or {}).get("flaws") or []
     out = []
-    for name, owes, has in _ROW_FIELDS:
+    for name, owes, has, gates in _ROW_FIELDS:
         owing = [e for e in flaws if owes(e)]
         missing = [e for e in owing if not has(e)]
         drafts = [e for e in missing if project.symptom_is_draft(e)]
         out.append({"field": name, "rows": len(flaws), "owing": len(owing),
-                    "missing": len(missing), "drafts": len(drafts),
+                    "missing": len(missing), "drafts": len(drafts), "gates": gates,
                     "rows_missing": [_row_label(e) for e in missing]})
     return out
+
+
+def flaw_hypotheses(project_data):
+    """Rows still `status: hypothesis` -- findings not yet settled. Settled by a MEASUREMENT on
+    this build (a capture the owner is asked for), never by ear; reported, not gated: a doubt
+    that is written down and watched through the tune is the method working, not a hole in it."""
+    flaws = ((project_data or {}).get("acoustics") or {}).get("flaws") or []
+    return [_row_label(e) for e in flaws if e.get("status") == "hypothesis"]
 
 
 def _row_label(entry):
@@ -448,11 +475,13 @@ def check_project(project_dir, skip_rew=False):
                 for issue in (entry.get("issues") or [])
             ]
     # The phase-0 question, and a THIRD one: `ok` says nothing is broken, `complete` says intake
-    # left everything phase 0 needs. Neither asks whether the map a person will be shown can be
-    # read by that person. A row an owner sees with no `symptom` is not a broken file and not a
-    # missing one -- it is a finished-looking map that hands them the audit trail (CAR-007).
+    # left everything phase 0 needs. Neither asks whether every row of the map STANDS on a
+    # measurement -- a row with no evidence is a guess wearing the map's authority, and the ear
+    # cannot check it (the user's ruling, 2026-09-08, #22). `symptom` is reported alongside for
+    # the front-end that shows the map to an owner, and gates nothing.
     row_gaps = flaw_field_gaps(project_data)
-    map_ready = all(g["missing"] == 0 for g in row_gaps)
+    map_ready = all(g["missing"] == 0 for g in row_gaps if g["gates"])
+    to_confirm = flaw_hypotheses(project_data)
     # Which files are not UTF-8, as a FIELD rather than as sentences inside `issues` (TCC-007).
     # A consumer app reading this JSON gets one repair to offer for the whole project, and it gets
     # it whether the damage landed on `project.json`, on a snapshot, or on both -- reading it back
@@ -466,7 +495,7 @@ def check_project(project_dir, skip_rew=False):
     damaged = [os.path.relpath(e["path"], project_dir).replace(os.sep, "/")
                for e in _load_vendored("state").encoding_survey(project_text_files(project_dir))]
     return {"project_dir": project_dir, "ok": ok, "complete": complete, "missing": missing,
-            "map_ready": map_ready, "row_gaps": row_gaps,
+            "map_ready": map_ready, "row_gaps": row_gaps, "to_confirm": to_confirm,
             "encoding_damaged": damaged,
             "legacy": looks_like_2x(project_dir, files), "prose": prose,
             "files": files, "cross_checks": cross}
@@ -502,7 +531,7 @@ def gaps_report(roots, max_depth=4):
         except (project.ProjectError, OSError) as exc:
             entry = {"project_dir": project_dir, "readable": False, "error": str(exc),
                      "row_gaps": []}
-        entry["ready"] = entry["readable"] and all(g["missing"] == 0 for g in entry["row_gaps"])
+        entry["ready"] = entry["readable"] and all(g["missing"] == 0 for g in entry["row_gaps"] if g["gates"])
         out.append(entry)
     return out
 
@@ -517,24 +546,28 @@ def render_gaps(report):
         if not entry["readable"]:
             lines.append(f"?  {head}\n     unreadable: {entry['error']}")
             continue
-        bad = [g for g in entry["row_gaps"] if g["missing"]]
+        bad = [g for g in entry["row_gaps"] if g["missing"] and g["gates"]]
+        info = [g for g in entry["row_gaps"] if g["missing"] and not g["gates"]]
+        rows = sum(g["rows"] for g in entry["row_gaps"][:1])
         if not bad:
-            rows = sum(g["rows"] for g in entry["row_gaps"][:1])
-            lines.append(f"ok {head}  ({rows} flaw row(s), nothing owing)")
-            continue
-        lines.append(f"!! {head}")
-        for g in bad:
+            lines.append(f"ok {head}  ({rows} flaw row(s), every one on a measurement)")
+        else:
+            lines.append(f"!! {head}")
+            for g in bad:
+                lines.append(f"     {g['field']}: {g['missing']} of {g['owing']} row(s) name none")
+                for label in g["rows_missing"]:
+                    lines.append(f"       - {label}")
+        for g in info:
             drafts = f", {g['drafts']} of them a machine DRAFT" if g["drafts"] else ""
-            lines.append(f"     {g['field']}: {g['missing']} of {g['owing']} owing row(s){drafts}")
-            for label in g["rows_missing"]:
-                lines.append(f"       - {label}")
+            lines.append(f"     · {g['field']}: {g['missing']} of {g['owing']} owner-facing row(s) "
+                         f"have no owner's line yet{drafts} (optional -- the row stands on its measurement)")
     lines.append("")
-    lines.append("A row an owner is shown owes ONE sentence in their words — what they hear, not "
-                 "what was measured. Write it with:")
+    lines.append("A row stands on its MEASUREMENT (`--evidence`): a flaw is computed, not heard, and "
+                 "the ear cannot verify one. A doubt is `--status hypothesis` and is settled by a "
+                 "capture on this build. The owner's `symptom` is a communication line for the "
+                 "finished tune -- optional, written if the owner ever gives one:")
     lines.append('    python3 rew_tool/project.py <project-dir> flaw <f_hz> <level_db> <kind> '
                  '<action> --symptom "…"')
-    lines.append("A DRAFT is what the kind sounds like, not what this car sounds like; it is a "
-                 "placeholder so the row is not born empty, and it still owes the person's line.")
     return "\n".join(lines)
 
 
@@ -747,20 +780,29 @@ def render_report(report):
     else:
         lines.append(f"- REW: {rew.get('note', 'not reachable')}")
     for gap in report.get("row_gaps") or []:
-        if gap["missing"]:
-            drafts = f" ({gap['drafts']} still a machine DRAFT)" if gap["drafts"] else ""
-            lines.append(f"- **{gap['field']}: {gap['missing']} of {gap['owing']} owing row(s) "
-                         f"have none{drafts}** — a row an owner is shown owes ONE sentence in "
-                         f"their words. Phase 0 is not finished until it does "
+        if not gap["missing"]:
+            continue
+        if gap["gates"]:
+            lines.append(f"- **{gap['field']}: {gap['missing']} of {gap['owing']} row(s) name no "
+                         f"measurement** — a flaw is computed, not heard, and a row with no evidence "
+                         f"is a guess. Phase 0 is not finished until every row stands on a capture "
                          f"(`--phase0-gate`); the rows: " + "; ".join(gap["rows_missing"]))
+        else:
+            drafts = f" ({gap['drafts']} a machine DRAFT)" if gap["drafts"] else ""
+            lines.append(f"- {gap['field']}: {gap['missing']} of {gap['owing']} owner-facing row(s) "
+                         f"have no owner's line yet{drafts} — optional; a communication line for the "
+                         f"finished tune, not a gate (the ear cannot verify a row, #22)")
             if gap["missing"] > gap["drafts"]:
                 # The case arrives with its command, the way `deployment.py`'s refusal does. A
                 # project written before the field is not the user's mistake to look up.
-                lines.append(f"  This project predates the field. Bring it current — additive, "
-                             f"idempotent, and it still will not close the gate:\n"
+                lines.append(f"  A DRAFT line per row, so no row is shown bare — additive, idempotent:\n"
                              f"      python3 rew_tool/project.py {report['project_dir']} catch-up")
+    if report.get("to_confirm"):
+        lines.append(f"- {len(report['to_confirm'])} hypothesis row(s) — settled by a MEASUREMENT on "
+                     f"this build (ask the owner for the capture when in doubt), never by ear; "
+                     f"watched through the tune, not a gate: " + "; ".join(report["to_confirm"]))
     if report.get("row_gaps") and report.get("map_ready"):
-        lines.append("- flaw map: every owner-facing row carries the owner's own sentence.")
+        lines.append("- flaw map: every row stands on a measurement.")
     lines.append("")
     lines.append("**OK — nothing to fix.**" if report["ok"] else "**Issues found — see above.**")
     return "\n".join(lines)
@@ -781,8 +823,9 @@ _USAGE = """usage: contract.py check <project-dir> [--json] [--no-rew] [--gate] 
        contract.py selftest
 
   --gate         phase -1: does everything the method needs before phase 0 EXIST and validate
-  --phase0-gate  phase 0: can the map be READ by the person it is shown to -- every owner-facing
-                 row carries the owner's own sentence (a machine DRAFT does not count)
+  --phase0-gate  phase 0: does every flaw row STAND on a measurement (evidence). A flaw is
+                 computed, not heard -- the ear cannot verify one, so the owner's `symptom` is
+                 reported and gates nothing; hypotheses are listed to be settled by a capture
 """
 
 
@@ -1017,50 +1060,73 @@ def _selftest():
     assert agree["valid"] is True and agree["issues"] == [], agree
     os.remove(gl_path)
 
-    # ── the map an owner is shown, and the schema change that never reached the cars ──────────
-    # Anchored to the ROLE of a row, never to a stored count: what owes a symptom is what an owner
-    # is shown (`OWNER_FACING_ACTIONS`), and a `notch` is the tuner's working plan and owes nothing.
+    # ── the map stands on measurements; the owner's line is reported, never gated (#22) ───────
+    # Anchored to the ROLE of a row, never to a stored count: what CAN carry a symptom is what an
+    # owner is shown (`OWNER_FACING_ACTIONS`); a `notch` is the tuner's working plan. The gate
+    # stands on EVIDENCE: a flaw is computed, not heard (the user's ruling, 2026-09-08).
     pj = project.Project(root)
     pj.add_flaw(f_hz=150.0, level_db=-9.0, kind="cabin_null", action="no_boost",
                 why="a null: interference", evidence=["w-L_01 (sw)"], channels=["w-L"])
     pj.add_flaw(f_hz=1000.0, level_db=5.0, kind="driver_resonance", action="notch",
                 why="a peak", evidence=["m-L_01 (sw)"], channels=["m-L"])
-    gaps = flaw_field_gaps(pj.load())[0]
-    assert gaps["rows"] == 2 and gaps["owing"] == 1 and gaps["missing"] == 1, gaps
-    assert "w-L 150 Hz cabin_null/no_boost" in gaps["rows_missing"], gaps
-    assert check_project(root, skip_rew=True)["map_ready"] is False
-    # A DRAFT fills the empty space and does NOT satisfy the gate -- the whole point of marking it.
+    by_field = {g["field"]: g for g in flaw_field_gaps(pj.load())}
+    ev, sym = by_field["acoustics.flaws[].evidence"], by_field["acoustics.flaws[].symptom"]
+    assert ev["gates"] is True and ev["rows"] == 2 and ev["owing"] == 2 and ev["missing"] == 0, ev
+    assert sym["gates"] is False and sym["owing"] == 1 and sym["missing"] == 1, sym
+    assert "w-L 150 Hz cabin_null/no_boost" in sym["rows_missing"], sym
+    # No owner's line on the row -- and the gate is OPEN: the row stands on `w-L_01 (sw)`.
+    assert check_project(root, skip_rew=True)["map_ready"] is True, "a symptom must not gate phase 0"
+    # A DRAFT is machine words, told apart from a person's -- and still gates nothing either way.
     draft = project.symptom_draft("cabin_null", 150.0, ["w-L"])
     assert draft and project.symptom_is_draft({"symptom": draft}) and project.symptom_said({"symptom": draft}) is None
     pj.add_flaw(f_hz=150.0, level_db=-9.0, kind="cabin_null", action="no_boost",
                 why="a null: interference", evidence=["w-L_01 (sw)"], channels=["w-L"], symptom=draft)
-    drafted = flaw_field_gaps(pj.load())[0]
-    assert drafted["missing"] == 1 and drafted["drafts"] == 1, drafted
-    assert "(draft)" in drafted["rows_missing"][0], drafted
-    assert check_project(root, skip_rew=True)["map_ready"] is False, "a draft must not pass the gate"
-    # ...and a person's sentence does.
+    drafted = {g["field"]: g for g in flaw_field_gaps(pj.load())}["acoustics.flaws[].symptom"]
+    assert drafted["missing"] == 1 and drafted["drafts"] == 1 and "(draft)" in drafted["rows_missing"][0], drafted
+    assert check_project(root, skip_rew=True)["map_ready"] is True
     pj.add_flaw(f_hz=150.0, level_db=-9.0, kind="cabin_null", action="no_boost",
                 why="a null: interference", evidence=["w-L_01 (sw)"], channels=["w-L"],
                 symptom="the bass goes thin and spreads out")
-    said = flaw_field_gaps(pj.load())[0]
+    said = {g["field"]: g for g in flaw_field_gaps(pj.load())}["acoustics.flaws[].symptom"]
     assert said["missing"] == 0 and said["owing"] == 1, said
+    # What DOES shut the gate: a row that names no measurement. The writer refuses one at the
+    # door (`validate_flaw`), so it is planted the way an older project carries it -- on disk.
+    data = pj.load()
+    data["acoustics"]["flaws"].append({"f_hz": 300.0, "level_db": -6.0, "kind": "cabin_null",
+                                       "action": "leave", "why": "guessed", "evidence": [],
+                                       "channels": ["m-L"], "at": "2026-01-01T00:00:00Z"})
+    with open(os.path.join(root, "project.json"), "w", encoding="utf-8") as fh:
+        json.dump(data, fh)
+    guessed = check_project(root, skip_rew=True)
+    assert guessed["map_ready"] is False, "a row with no evidence must shut the gate"
+    ev_gap = {g["field"]: g for g in guessed["row_gaps"]}["acoustics.flaws[].evidence"]
+    assert ev_gap["missing"] == 1 and "m-L 300 Hz cabin_null/leave" in ev_gap["rows_missing"], ev_gap
+    assert "name no measurement" in render_report(guessed), render_report(guessed)
+    data["acoustics"]["flaws"] = [e for e in data["acoustics"]["flaws"] if e.get("f_hz") != 300.0]
+    with open(os.path.join(root, "project.json"), "w", encoding="utf-8") as fh:
+        json.dump(data, fh)
     assert check_project(root, skip_rew=True)["map_ready"] is True
-    # `gaps` finds a project by its project.json and reports the same thing across several roots.
-    # `catch-up` is what a session runs on a project written before the field existed. It fills the
-    # marked draft and NOTHING else about the sentence -- the gate must still refuse afterwards, or
-    # the machine would be closing a question only a person can answer.
+    # A hypothesis is a doubt written down: reported with the rows to settle by a CAPTURE on this
+    # build, and it does not shut the gate -- a doubt watched through the tune is the method.
+    pj.add_flaw(f_hz=175.0, level_db=-8.0, kind="cabin_null", action="leave", status="hypothesis",
+                why="moves with head position; confirm with a p1..p9 set", evidence=["w-R_01 (sw)"],
+                channels=["w-R"])
+    hyp = check_project(root, skip_rew=True)
+    assert hyp["map_ready"] is True and hyp["to_confirm"] == ["w-R 175 Hz cabin_null/leave"], hyp["to_confirm"]
+    assert "settled by a MEASUREMENT" in render_report(hyp) and "never by ear" in render_report(hyp)
+    # `catch-up` still writes a DRAFT line so no owner-facing row is shown bare -- and it changes
+    # nothing about the gate in either direction.
     stale = project.Project(root)
     stale.add_flaw(f_hz=645.0, level_db=-7.0, kind="sbir", action="geometry",
                    why="pillar", evidence=["m-R_01 (sw)"], channels=["m-R"])
-    assert check_project(root, skip_rew=True)["map_ready"] is False
     dry = stale.catch_up(write=False)
-    assert len(dry["symptom_drafts"]) == 1 and dry["symptom_drafts"][0]["f_hz"] == 645.0, dry
+    # Two rows are shown bare by now -- the 175 Hz hypothesis and this one -- and both get a line.
+    assert {d["f_hz"] for d in dry["symptom_drafts"]} == {175.0, 645.0}, dry
     assert project.symptom_said(stale.load()["acoustics"]["flaws"][-1]) is None, "--dry-run wrote"
     assert not stale.catch_up(write=True)["symptom_drafts"] == [], "catch-up filled nothing"
     filled = [e for e in stale.load()["acoustics"]["flaws"] if e.get("f_hz") == 645.0][0]
     assert project.symptom_is_draft(filled), filled
-    assert check_project(root, skip_rew=True)["map_ready"] is False, \
-        "catch-up must NOT close the phase-0 gate -- a draft is not the owner's words"
+    assert check_project(root, skip_rew=True)["map_ready"] is True
     assert stale.catch_up(write=True)["symptom_drafts"] == [], "catch-up is not idempotent"
     # ...and a `notch` row is the tuner's plan, not something an owner is shown: it is left alone.
     stale.add_flaw(f_hz=2000.0, level_db=6.0, kind="driver_resonance", action="notch",
@@ -1086,11 +1152,13 @@ def _selftest():
     scan = gaps_report([root, os.path.join(root, "sub")], max_depth=3)
     found = {e["project_dir"]: e for e in scan}
     assert root in found and nested in found, sorted(found)
-    # readiness is READ, never assumed: the fixture owes sentences by now, the empty one owes none
+    # readiness is READ, never assumed: every row here stands on a measurement, so both are ready;
+    # the owner's lines still owed are INFORMATION in the listing, not a `!!`.
     assert found[root]["ready"] is check_project(root, skip_rew=True)["map_ready"], found[root]
-    assert found[root]["ready"] is False and found[nested]["ready"] is True, sorted(found)
+    assert found[root]["ready"] is True and found[nested]["ready"] is True, sorted(found)
     rendered = render_gaps(scan)
-    assert "nothing owing" in rendered and "acoustics.flaws[].symptom" in rendered, rendered
+    assert "every one on a measurement" in rendered and "acoustics.flaws[].symptom" in rendered, rendered
+    assert "!!" not in rendered and "optional" in rendered, rendered
     # ── TCC-007: a snapshot from a machine whose default was not UTF-8 ────────────────────────
     # This is the exact shape that reached a user: `check` exited with a `UnicodeDecodeError`
     # traceback from three frames down, on a real project, on Windows. A checker that dies on the

@@ -1,10 +1,10 @@
-# Phase 4 — Targeted Listening (Ear Verification)
+# Phase 4 — Targeted Listening (Preference and Acceptance)
 
-This is the penultimate phase. While physical measurements verify technical correctness, the human ear is the ultimate judge of acoustic reproduction, soundstage depth, and natural voicing.
+This is the penultimate phase. Measurements verify technical correctness — a flaw is computed, not heard, and the ear cannot check a row of the map (Phase 0, skill #22). What the ear does is different and comes now, when there is a finished tune to hear: it chooses among variants the owner likes, and it accepts. Not every owner hears well, and some have hearing that gets in the way — so a listening verdict is what the owner *prefers*, banked as such (`process.py listening-verdict`), never a control on a measurement.
 
 ## 🎯 Goal-node
 
-**Purpose:** ear-verify the technically-correct tune across the standard listening pass — the ear is the final judge of tone, imaging, depth, voicing.
+**Purpose:** hear the technically-correct tune across the standard listening pass and let the owner choose and accept — tone, imaging, depth, voicing as *they* want them.
 
 **Questions this phase answers:** pass or fail on each — tonal balance · mono-center focus · lateral localization · depth/layering · midbass punch · HF sibilance?
 
@@ -19,7 +19,7 @@ This is the penultimate phase. While physical measurements verify technical corr
 ---
 
 ## Core Guidelines
-* **On-Demand Ear Checks:** Listening checks are not just restricted to this phase — they are a cross-cutting diagnostic tool. Use them during crossover selection, time-alignment, and joint phasing to cross-check measurement anomalies.
+* **On-Demand Ear Checks:** Listening checks are not restricted to this phase — during crossover selection, time-alignment and joint phasing they can *raise* a question. They do not *settle* one: a thing heard is answered by a measurement (a capture, a prediction, a verify), never the other way round (skill #22).
 * **Curated Diagnostic Tracks:** Always refer to the index in [test-tracks.md](references/patterns/test-tracks.md) to pick the exact track tailored to expose specific acoustic traits (e.g., soundstage depth, lateral focus, midbass punch, or vocal sibilance).
 * **Hypothesis-Driven Instruction:** Do **not** dump a long, overwhelming list of songs on the user. Propose **one track at a time**, instructing the user exactly:
   1. **What song** to play.

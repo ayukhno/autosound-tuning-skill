@@ -157,7 +157,8 @@ def rows_for(freqs, mag_db, code, evidence, gate=None, ell=None, raw_db=None):
         # without the one line a car's owner reads, and the requirement lived in prose elsewhere
         # (autosound-hub CAR-007). We know the kind, the band and the channel, which is what the
         # sentence is made of; we do NOT know what the car sounds like, so the draft is marked as
-        # one and `contract.py check --phase0-gate` still counts the row as owing a person's words.
+        # one. It is a communication line and nothing more: the row stands on `evidence`, and the
+        # phase-0 gate asks for that, not for a person's words (the user's ruling, #22).
         draft = _project.symptom_draft(row["kind"], row.get("f_hz"), row["channels"])
         if draft and row["action"] in _project.OWNER_FACING_ACTIONS:
             row["symptom"] = draft
@@ -221,9 +222,10 @@ def render(result):
         drafts = sum(1 for r in result["rows"] if _project.symptom_is_draft(r))
         if drafts:
             out.append(f"\n{drafts} owner-facing row(s) carry a DRAFT symptom: it is what the kind "
-                       f"sounds like, not what THIS car sounds like. Replace each after listening "
-                       f"(`project.py <dir> flaw … --symptom \"…\"`); `contract.py check <dir> "
-                       f"--phase0-gate` counts a draft as unwritten.")
+                       f"sounds like, not what THIS car sounds like. A person's line, if the owner "
+                       f"gives one after hearing the finished tune, replaces it (`project.py <dir> "
+                       f"flaw … --symptom \"…\"`); the rows stand on their measurements either way, "
+                       f"and the phase-0 gate asks for those, not for words (#22).")
     if result["left_out"]:
         out.append("\nfound but NOT written (and why):")
         for l in result["left_out"]:
