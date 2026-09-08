@@ -1419,8 +1419,8 @@
                     if (!curveChart.isDatasetVisible(i)) return;
                     const y = interpY(analyzeDisplayData(i, ds), freq); if (y === null) return;
                     html += '<span style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;">' +
-                        '<span style="width:10px;height:10px;border-radius:50%;background:' + ds.borderColor + ';"></span>' +
-                        cleanLabel(ds.label) + ': <b>' + (y >= 0 ? '+' : '') + y.toFixed(2) + ' dB</b></span>';
+                        '<span style="width:10px;height:10px;border-radius:50%;background:' + esc(ds.borderColor) + ';"></span>' +
+                        labelHtml(ds.label) + ': <b>' + (y >= 0 ? '+' : '') + y.toFixed(2) + ' dB</b></span>';
                 });
                 cursorInfo.innerHTML = html;
             }
@@ -1448,11 +1448,25 @@
     // baseline curve (radio row at the top — picking the baseline matters, so
     // it's never implicit). Cell text reuses the same phrase vocabulary as the
     // right-click frequency guide, so both features read consistently. ---
+    // Foreign data never becomes markup. A curve's name comes from the FILE the user
+    // dropped — its file name, or a `# NTT: Name` line inside it — so it is data, and it
+    // reaches the DOM only as textContent or through esc(). Our own markup is the string
+    // that data is pasted into, and the two are never mixed by hand.
+    // cleanLabel() is NOT a sanitiser: it strips the trailing "(loaded)" / "(+1.0 dB)"
+    // bookkeeping and nothing else — a name that looks like a tag survives it whole.
+    // Whatever goes into an HTML string uses labelHtml(); scripts/html-data-check.py fails
+    // the selftest suite if a file-derived value is concatenated raw again.
+    function esc(v) {
+        return String(v === null || v === undefined ? '' : v).replace(/[&<>"']/g, function (ch) {
+            return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
+        });
+    }
     function cleanLabel(label) {
         let s = (label || '').trim(), prev;
         do { prev = s; s = s.replace(/\s*\([^()]*\)\s*$/, '').trim(); } while (s !== prev);
         return s || label;
     }
+    function labelHtml(label) { return esc(cleanLabel(label)); }
     function bandAvg(data, lo, hi) {
         const pts = data.filter(p => p.x >= lo && p.x < hi);
         if (pts.length) return pts.reduce((s, p) => s + p.y, 0) / pts.length;
@@ -1498,7 +1512,7 @@
         html += '<div style="margin-bottom:12px;font-size:13px;color:var(--text-muted);">' + s.chooseBaseline + '</div>' +
             '<div id="cmpBaseRadios" style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px;">';
         idxs.forEach(function (i) {
-            const lbl = cleanLabel(curveChart.data.datasets[i].label);
+            const lbl = labelHtml(curveChart.data.datasets[i].label);
             html += '<label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;">' +
                 '<input type="radio" name="cmpBase" value="' + i + '"' + (i === baseIdx ? ' checked' : '') + '> ' + lbl + '</label>';
         });
@@ -1506,9 +1520,9 @@
 
         html += '<div style="overflow-x:auto;"><table style="border-collapse:collapse;width:100%;font-size:12.5px;">' +
             '<thead><tr><th style="text-align:left;padding:6px 10px;border-bottom:2px solid var(--border-color);color:var(--text-muted);">' + s.bandCol + '</th>' +
-            '<th style="text-align:left;padding:6px 10px;border-bottom:2px solid var(--border-color);">' + s.compareBaseline + ' <b>' + cleanLabel(curveChart.data.datasets[baseIdx].label) + '</b></th>';
+            '<th style="text-align:left;padding:6px 10px;border-bottom:2px solid var(--border-color);">' + s.compareBaseline + ' <b>' + labelHtml(curveChart.data.datasets[baseIdx].label) + '</b></th>';
         others.forEach(function (i) {
-            html += '<th style="text-align:left;padding:6px 10px;border-bottom:2px solid var(--border-color);"><b>' + cleanLabel(curveChart.data.datasets[i].label) + '</b></th>';
+            html += '<th style="text-align:left;padding:6px 10px;border-bottom:2px solid var(--border-color);"><b>' + labelHtml(curveChart.data.datasets[i].label) + '</b></th>';
         });
         html += '</tr></thead><tbody>';
 
@@ -1993,10 +2007,12 @@
         const rows = info.tracks.map(function (z) {
             return '<div style="margin-top:3px;"><b>' + z.ref + '</b> — ' + (z.n[lang] || z.n.en) + '</div>';
         }).join('');
-        const label = (INSTR_STR.ui.tracksHeader && (INSTR_STR.ui.tracksHeader[lang] || INSTR_STR.ui.tracksHeader.en)) || 'Test tracks';
+        // `trkTip` and not `label`: in this page a bare `label` is a CURVE label, i.e. a name
+        // that came from a file. This one is our own i18n heading for the ? button's tooltip.
+        const trkTip = (INSTR_STR.ui.tracksHeader && (INSTR_STR.ui.tracksHeader[lang] || INSTR_STR.ui.tracksHeader.en)) || 'Test tracks';
         boxes.push('<div class="anz-trk-box" id="' + id + '" style="display:none;margin-top:6px;padding:6px 8px;background:var(--panel-bg);border:1px solid var(--border-color);border-radius:6px;font-size:11px;color:var(--text-muted);"><b style="color:var(--text-color);">' + x.nm + '</b>' + rows + '</div>');
         return x.nm +
-            '<button class="anz-trk-q" data-target="' + id + '" title="' + label + '" style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;margin-left:3px;border-radius:50%;background:var(--btn-bg);border:1px solid var(--btn-border);color:var(--text-muted);font-size:9px;line-height:1;cursor:pointer;vertical-align:2px;">?</button>';
+            '<button class="anz-trk-q" data-target="' + id + '" title="' + trkTip + '" style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;margin-left:3px;border-radius:50%;background:var(--btn-bg);border:1px solid var(--btn-border);color:var(--text-muted);font-size:9px;line-height:1;cursor:pointer;vertical-align:2px;">?</button>';
     }
     function analyzeInstrumentsInBand(lo, hi) {
         const span = Math.log2(hi / lo);
@@ -2041,7 +2057,7 @@
     function analyzeCurveOptions(idxs, selectedIdx) {
         return idxs.map(function (i) {
             const ds = curveChart.data.datasets[i];
-            return '<option value="' + i + '"' + (i === selectedIdx ? ' selected' : '') + '>' + cleanLabel(ds.label) + '</option>';
+            return '<option value="' + i + '"' + (i === selectedIdx ? ' selected' : '') + '>' + labelHtml(ds.label) + '</option>';
         }).join('');
     }
     let analyzeSetupOpen = true;
@@ -2179,7 +2195,7 @@
         const lvl = document.getElementById('anzLevelBox');
         if (lvl) lvl.innerHTML = renderAnalyzeLevelControl(-autoAnchor, applied);
         const body = document.getElementById('anzReportBody');
-        if (body) body.innerHTML = renderAnalyzeReport(cleanLabel(cmpDs.label), cleanLabel(baseDs.label), delta) +
+        if (body) body.innerHTML = renderAnalyzeReport(labelHtml(cmpDs.label), labelHtml(baseDs.label), delta) +
             renderAnalyzeDisclaimers();
         wireAnalyzeLevelControl();
         wireAnalyzeHover();
@@ -2239,7 +2255,9 @@
         const wire = function (id, d) { const el = document.getElementById(id); if (el) el.onclick = function () { step(d); }; };
         wire('anzMDown1', -1); wire('anzMDown05', -0.5); wire('anzMUp05', 0.5); wire('anzMUp1', 1);
     }
-    function renderAnalyzeReport(cmpName, baseName, delta) {
+    // cmpNameHtml/baseNameHtml arrive ALREADY escaped (labelHtml) — the names in them come
+    // from the dropped files. The suffix Html says so at the point of use.
+    function renderAnalyzeReport(cmpNameHtml, baseNameHtml, delta) {
         const s = t();
         const tl = analyzeTiltCalc(delta);
         const cov = analyzeCoverageCalc(delta);
@@ -2255,8 +2273,8 @@
         const resScore = feats.filter(function (f) { return f.narrow; }).reduce(function (sm, f) { return sm + f.sev; }, 0);
         const resGrade = analyzeGrade(resScore, [2, 5, 9]);
 
-        let h = '<h3 style="margin:0 0 10px;font-size:15px;">' + cmpName +
-            ' <span style="color:var(--text-muted);font-weight:400;">' + s.analyzeVs + ' (' + baseName + ')</span></h3>';
+        let h = '<h3 style="margin:0 0 10px;font-size:15px;">' + cmpNameHtml +
+            ' <span style="color:var(--text-muted);font-weight:400;">' + s.analyzeVs + ' (' + baseNameHtml + ')</span></h3>';
 
         // Rows are grouped by band, which ascends in frequency; WITHIN a band they now
         // ascend in frequency too, so the whole table reads monotonically left to right on
@@ -2270,8 +2288,9 @@
         function featBadge(f) {
             const color = f.kind === 'null' ? '#f87171' : (f.dip ? '#38bdf8' : '#fb923c');
             const bg = f.kind === 'null' ? 'rgba(248,113,113,.15)' : (f.dip ? 'rgba(56,189,248,.15)' : 'rgba(251,146,60,.15)');
-            const label = f.kind === 'null' ? s.analyzeLabelNull : (f.dip ? s.analyzeLabelDip : s.analyzeLabelPeak);
-            return '<span style="display:inline-block;font-size:11px;font-weight:700;border-radius:6px;padding:2px 7px;white-space:nowrap;color:' + color + ';background:' + bg + ';">' + label + ' ' + fmtHz(Math.round(f.f)) + 'Hz</span>';
+            // `badgeWord`, not `label`: our own PEAK / DIP / NULL word, not a curve's name.
+            const badgeWord = f.kind === 'null' ? s.analyzeLabelNull : (f.dip ? s.analyzeLabelDip : s.analyzeLabelPeak);
+            return '<span style="display:inline-block;font-size:11px;font-weight:700;border-radius:6px;padding:2px 7px;white-space:nowrap;color:' + color + ';background:' + bg + ';">' + badgeWord + ' ' + fmtHz(Math.round(f.f)) + 'Hz</span>';
         }
         function bandRow(bandLabel, d, badgeHtml, shiftHtml, instrList, rLo, rHi, hoverF, spread) {
             // The +- is not measurement noise, it is how much this number moves when the
@@ -2585,8 +2604,8 @@
             card.dataset.rawName = rawName || '';
             card.dataset.ptsLen = ptsLen;
             card.innerHTML = '<div class="card-title" style="flex-wrap:wrap;">' +
-                '<input type="color" class="dot-color" value="' + color + '" title="' + t().colorTitle + '" style="flex-shrink:0;">' +
-                '<span style="flex:1;min-width:0;overflow-wrap:anywhere;">' + label + '</span>' +
+                '<input type="color" class="dot-color" value="' + esc(color) + '" title="' + t().colorTitle + '" style="flex-shrink:0;">' +
+                '<span style="flex:1;min-width:0;overflow-wrap:anywhere;">' + esc(label) + '</span>' +
                 '<button class="del-btn" title="' + t().delTitle + '" style="flex-shrink:0;background:none;border:none;color:var(--hint-color);cursor:pointer;font-size:16px;line-height:1;padding:0 2px;">✕</button></div>' +
                 '<div class="card-desc">' + desc + '</div>' +
                 '<div class="offset-ctl" style="margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;"><span class="lvl-label">' + t().level + '</span> ' +

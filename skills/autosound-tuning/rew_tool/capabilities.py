@@ -50,6 +50,9 @@ NOT_ON_BOARD = {
                   "(issue #21). Not a decision a tuner makes -- `console.py report` exists to "
                   "answer 'what is this terminal?' when a Windows machine reports a crash",
     "encoding-check.py": "the checker that keeps issue #21 from coming back",
+    "html-data-check.py": "the checker that keeps a dropped file's name from becoming markup "
+                          "in the curve visualizer (HUB-040). Repo hygiene, not a decision a "
+                          "tuner makes",
     "secret-scan.py": "the checker that keeps a key out of every repository (the user's rule, "
                       "2026-09-08): the tree, the staged change, the pre-commit hook. Repo hygiene, "
                       "not a decision a tuner makes",

@@ -46,6 +46,10 @@ run_one "encoding" scripts/encoding-check.py --selftest
 # in a tracked file or a tracked/unignored key file fails the suite, and CI, before a tag).
 run_one "secret-scan" scripts/secret-scan.py --selftest
 run_one "secrets-in-tree" scripts/secret-scan.py
+# HUB-040: in the curve visualizer a dropped file's name (and the `#curve=` link) is data, never
+# markup. The checker's own mechanics, then every .html in the tree.
+run_one "html-data" scripts/html-data-check.py --selftest
+run_one "html-in-tree" scripts/html-data-check.py
 # The reviewer channel's shell plumbing: the closed gemini-CLI path is recognised and named, not
 # retried on a fallback model (hub PAS-004). Offline -- the CLI call is stubbed.
 run_one "gemini-channel" skills/autosound-tuning/scripts/gemini_critic.sh --selftest

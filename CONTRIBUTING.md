@@ -39,8 +39,22 @@ Before opening a PR, make sure you have:
   `python3 scripts/installer-consistency.py` — it compares the constants that must match and fails
   when they drift. It checks values, not logic: a pass does not mean the three files still *do* the
   same thing, so read all three anyway.
+- **Touched an HTML tool? Text from outside is data, never markup.** In
+  `target_curves_visualizer.html` a curve's name arrives from three places the page does not
+  control — the dropped file's **name**, a `# NTT: Name` line inside its **body**, and the
+  `#curve=` **link fragment** — and every panel prints that name (readout, comparison table,
+  deviation report, card). It reaches the DOM only as `textContent` or through `esc()`; our own
+  markup is the string that value is pasted into. And **a helper whose name does not say
+  "escaped" must not be the last thing a foreign value passes through**: `cleanLabel()` strips
+  the trailing `(loaded)` bookkeeping, looked like a sanitiser, and a curve named
+  `<img src=x onerror=alert(1)>` executed (autosound-hub `HUB-040`). `scripts/html-data-check.py`
+  fails the suite on the direct form and on any call to `cleanLabel()` outside `labelHtml()`; it
+  is a lint, not dataflow, so the end-to-end proof stays a browser. Run by a person, not by CI:
+  `node scripts/xss-proof-visualizer.mjs <the .html>` drops that file name, that name inside a
+  file body and that name in a `#curve=` link into headless Chrome and reports whether the text
+  stayed text — or drop such a file by hand and read the card.
 - **Run `scripts/run-selftests.sh`** — the installer check plus every `rew_tool` module's own
-  selftest, 55 in all (2026-09-07; the runner prints the current count itself —
+  selftest, 62 in all (2026-09-09; the runner prints the current count itself —
   `scripts/run-selftests.sh | tail -1`, and that command is the answer, not this number). It needs
   `numpy` and `scipy` (`dsp_math` and `eq_gate` import scipy by name, and the `dsp_math` selftest
   designs crossovers). CI runs this exact script on push and PR, so a green run here is a green run
