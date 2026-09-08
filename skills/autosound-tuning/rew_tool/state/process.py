@@ -1305,6 +1305,11 @@ class Process:
             # Named rather than left to be worked out: a round that ends with expected captures
             # neither taken nor skipped is the shape план-факт exists to show.
             outstanding=outstanding,
+            # A round with no knob record closes anyway -- refusing would strand a session mid-car
+            # -- but it closes SAYING so, at the one moment the answer is still in the room. The
+            # knobs are the part of the setup that lives outside every file, so a reader months
+            # later has no way to recover them (hub RES-007).
+            knobs=dict(round_.get("knobs") or {}),
             reason=reason,
         )
 
@@ -1724,6 +1729,14 @@ def _selftest():
     assert proc.knobs_for("0")["knobs"]["SubRC"] == "3/4"
     assert proc.knobs_for("999") is None, "a version with no round has no knobs, not empty ones"
     assert _cli("capture-knobs").returncode != 0 and _cli("capture-knobs", "SubRC").returncode != 0
+    # A round that closes with no knobs recorded says so, at the one moment the answer is still in
+    # the room -- and closes anyway, because refusing would strand a session mid-car.
+    bare = Process(os.path.join(root, "process-bare"))
+    bare.enter_phase("0")
+    bare.start_capture("7", expected=["m-L_7 (sw)"], phase="0")
+    bare_out = subprocess.run([sys.executable, _mod, bare.dir, "capture-close"],
+                              capture_output=True, text=True, encoding="utf-8", errors="replace")
+    assert bare_out.returncode == 0 and "NO KNOBS RECORDED" in bare_out.stdout, bare_out
     out = _cli("capture-protective", "tw-L", "--hp", "1000", "LR", "24")
     assert out.returncode == 0, out.stderr
     assert pr.protective_record()["channels"]["tw-L"]["hp"]["f"] == 1000.0, out.stdout
@@ -2138,6 +2151,12 @@ def _main(argv):
             )
             for title in outstanding:
                 print(f"  OUTSTANDING: {title}")
+            if not round_.get("knobs"):
+                print("  NO KNOBS RECORDED for this round. Whatever sits outside the DSP -- a "
+                      "remote knob, a bass control, a fader -- is part of what these sweeps "
+                      "measured, and nothing else on disk carries it. Two series taken at "
+                      "different positions cannot be compared later, and the difference will "
+                      "look like a calibration offset. `capture-knobs SubRC=4/4 …` (RES-007)")
         elif cmd == "check":
             bad = p.unevidenced_done_steps()
             for entry in bad:

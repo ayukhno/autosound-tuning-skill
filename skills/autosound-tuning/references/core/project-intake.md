@@ -194,6 +194,20 @@ In the new project's root (a git repo; layout and the "what's in git, what isn't
 - **The Critic channel's files — in `rew_analitic/` (where the channel reads them, project-local).** Create/place:
   - **`rew_analitic/autosound_context.md`** — this is the profile above (the channel reads `$PWD/rew_analitic/autosound_context.md`; keep it here, not only in the root).
   - **`rew_analitic/data-contract-template.md`** — copy the bundled template from the skill: `cp <skill>/assets/data-contract-template.md rew_analitic/`, then fill in the `<DSP>` placeholders. (Don't copy someone else's contract — its other car/DSP specifics would leak into the Critic.)
+  - **What sits OUTSIDE the DSP is an input, not an assumption.** A remote knob (Helix `SubRC`/`RearRC`,
+    a bass control, a fader), a switch, an amplifier's own gain: nothing in a measurement records them,
+    the ledger is per-preset and cannot, and `project.json.hardware.controls` holds where they stand
+    today — not where they stood for a given capture. So they are recorded **on the capture round**
+    (`process.py <project>/process capture-knobs SubRC=4/4`) and what a step of one is WORTH is a
+    separate fact with its own provenance (`project.py <dir> set-control-mapping SubRC 2 sw --source
+    user`) — the vendor's claim or the tuner's word until somebody measures it. Two facts, because
+    the position is read off the device and the mapping is somebody's opinion, and a report that
+    mixes them cannot be argued with. Without the mapping, a comparison across positions is REFUSED
+    rather than folded into a calibration offset (hub `RES-007`).
+  - **The DSP's routing matrix is a fact of the project, recorded once** (`project.py <dir> set-route
+    VFL w-L,m-L,tw-L`): which physical outputs each virtual channel feeds. A fact that has to be
+    retyped on every run is one session away from being wrong, and it is never inferable from names —
+    `VFL` looking like "virtual front left" is a convention, not a wiring diagram.
   - If the channel = `@google/gemini-cli` (closed since 2026-09-08 — a key did not reopen it, `setup-critic-channel.md` §2; use `agy`) or the CWD ≠ the project root — add **`rew_analitic/.critic-env`** (`GEMINI_BIN=…`, and `PROJECT_MIRROR=…` if needed). Detail → `references/tooling/setup-critic-channel.md`.
 - The first changelog entry: "project created; intake done; candidate target: X; preset targets: …".
 

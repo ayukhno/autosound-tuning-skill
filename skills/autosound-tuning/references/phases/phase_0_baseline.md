@@ -65,8 +65,22 @@ Instruct the user to measure **each driver we'll work with**, solo, on the clean
 
 **Record the protection on the round, in the same breath as the sweep:** `python3 rew_tool/state/process.py <project>/process capture-protective <ch> --hp 1000 LR 24` for every driver swept behind a protective filter, `… capture-protective <ch> OFF` for one swept bare. Doctrine (2026-08-24) → [`project-intake.md §3`](references/core/project-intake.md), the after-the-sweep half: a joint-phase decision read through an unrecorded protective filter is invalid, and Phase 1 answers `check` for an unmarked baseline solo instead of a number. **Two answers, and `OFF` is the default** (user's ruling 2026-09-06): `OFF` means leave the capture alone — bare chain or a working crossover that is part of the tune, read as it is — and a recorded filter is the one the maths removes before analysis. A front-end writes one of the two for every channel it captures, so an unmarked channel means the record came from somewhere else (MCP, a typed call, an older round) or the front-end did not write what it thought it wrote. That is the population `check` now fires on.
 
+**Record what sits OUTSIDE the DSP, in the same breath too** — the remote knobs, a bass control, a
+fader, a switch: `python3 rew_tool/state/process.py <project>/process capture-knobs SubRC=4/4
+RealCenter=ON`. **A setting that lives outside every file will be assumed, and the assumption is
+"zero".** Nothing else on disk carries these: not the ledger (they are not per-preset), not
+`project.json` (that holds where a knob stands TODAY, not where it stood for these sweeps), not the
+measurement (REW records the sound, not the room's controls). So a session months later comparing two
+series has no way to know one of them was taken with 4 dB less on the subwoofer — and the difference
+lands in a calibration offset, where it stops looking like a fault at all. `capture-close` says out
+loud when a round has no knob record, at the one moment the answer is still in the room; and
+`verify_prediction --project` REFUSES to compare two series whose knobs differ (or are unrecorded)
+rather than absorbing it. Bought on a real hour lost to "where did the +4 dB go" — it had not gone
+anywhere (hub `RES-007`).
+
 ⚠️ **After the pass, run the post-sweep quality gate** — `python3 rew_tool/state/process.py <project>/process capture-check --session` (`--session` adds the whole-session table and the ctl1 → ctl3 drift record, written onto the round). It asks two things of every capture in the round: is it there and readable at all, and is its pre-echo far worse than the CLEANEST capture of the same driver (`REMEASURE_MARGIN_DB`, 15 dB). The second is why the comparison is a driver against itself rather than against a number: on a real car sweep the pre-echo includes the loopback reference and earlier arrivals, so an absolute threshold condemns good sweeps. A flagged capture is still readable — re-taking it is the Arbiter's call — but the step cannot close until the round has been checked (SCR-040). The pre-sweep gate protects the hardware; this one protects the conclusions.
-* For every front channel — `sw` (or `sw-f` and `sw-r`), `w-L/R`, `m-L/R`, `tw-L/R` — capture `<ch>_1 (sw)` (loopback sweep → IR/phase/GD) **and** `<ch>_1 (rta)` (MMM). **Two subs: also `SWs_1 (sw)` from the tripod** — their mutual phase decision needs a measured pair like any other. *(Center/rear are integrated later, Phase 5.)*
+* For every front channel — `sw` (or `sw-f` and `sw-r`), `w-L/R`, `m-L/R`, `tw-L/R` — capture `<ch>_1 (sw)` (loopback sweep → IR/phase/GD) **and** `<ch>_1 (rta)` (MMM). **Two subs: also `SWs_1 (sw)` from the tripod** — their mutual phase decision needs a measured pair like any other.
+* **A centre, if the car has one: capture it like any other channel** (`c_1 (sw)` from the tripod, `c_1 (rta)`), and capture the whole system twice — with it and without it (`ALL_1`, `ALL+C_1`). The centre has no side of its own, so nothing about its code places it in a sum; what makes it summable is the MEASUREMENT that exists (`predict` gives `ALL+C` and the `c↔FRONT` pair, and `verify_prediction --all-plus-c` checks what it adds). Take both under one condition — one signal on both inputs — and say so, because a coherent sum is an UPPER BOUND for material whose correlation is unknown: for music the centre carries only the correlated part. *(Its own voicing is still Phase 5; this is only so the desk can predict what the mic hears.)*
 * This per-driver set **is** the raw baseline **and** the input for Phase 1 (TA, crossovers, levels, per-band targets) — **Phase 1 does not re-collect it.**
 * Do **NOT** perform time-alignment, delay, or level-matching yet. This phase is purely observational.
 
