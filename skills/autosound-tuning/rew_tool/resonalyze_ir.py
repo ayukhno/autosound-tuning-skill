@@ -68,6 +68,16 @@ de-embedded by whoever consumes it (their `ProtectiveHighPassCompensation
 `validate_v7()` mirrors `ImpulseResponseFile.Validate()` field for field so a written
 document is checked here against the same rules that would reject it there.
 
+WRITES v7, READS v4..v8. The writer stays on v7 (JSON number arrays) on purpose: their reader
+takes `Version is >= 4 and <= CurrentVersion` and migrates on load, so a v7 file opens in every
+Resonalyze build including the ones before v8 -- and our own consumers (`predict --solos`,
+`rew_stub --from-v7`, `verify_prediction --measured`) read the same file. What we READ has to
+follow their writer: since b8d73c8 (2026-08-31, #153) the five bulk arrays are base64 of
+little-endian float32 (`Float32SampleArrayJsonConverter`), so a file the current app saves is
+v8 and `load_file` decodes both forms; a version above 8 is refused by its number, the way
+their `LoadAsync` refuses ours. The header below pins the upstream and `scripts/upstream-drift.py`
+compares its `CurrentVersion` against `format-version` here on every run (hub RES-008).
+
 Deps: numpy (FFT). Live use needs REW with its API on; `--selftest` is offline.
 CLI:
   python3 resonalyze_ir.py --title "w-L_01 (sw)=w_L" --title "sw_01 (sw)=sw" --out DIR
@@ -90,10 +100,25 @@ from datetime import datetime, timezone
 
 import numpy as np
 
+# upstream: DIMOSUS/Resonalyze source/Measurements/ImpulseResponseFile.cs @ b8d73c8 (MIT) --
+#   `Validate()` (mirrored as `validate_v7` for the members this module writes), the member set
+#   and its camelCase names, `CurrentVersion`; read alongside
+#   source/Measurements/Float32SampleArrayJsonConverter.cs @ b8d73c8 (the v8 base64 float32 LE
+#   form and the pre-v8 number-array form, both read by `load_file`).
+# format-version: 8 -- their `CurrentVersion`; `scripts/upstream-drift.py` reads it out of the
+#   upstream file and names a mismatch as a drift of the FORMAT, not merely of the file.
+# deviation: the writer stays on v7 (number arrays) -- see the module docstring: their reader
+#            takes 4..CurrentVersion and migrates, and a v7 file opens in every build; only what
+#            we READ follows the current writer.
+# deviation: `validate_v7` covers the members this module writes, not the optional entries it
+#            never emits (array microphones, previews, audio session, SPL calibration).
 CONVERTER = "autosound-tuning-skill rew_tool/resonalyze_ir.py"
-CONVERTER_VERSION = "1.1 (2026-08-31, format v7 as of Resonalyze d11186e; session provenance)"
+CONVERTER_VERSION = "1.2 (2026-09-08, writes format v7, reads v4..v8 as of Resonalyze b8d73c8; session provenance)"
 FORMAT = "resonalyze-impulse-response"
-VERSION = 7
+VERSION = 7                 #: what this module WRITES
+READ_VERSIONS = range(4, 9)  #: what `load_file` READS -- their `Validate()` takes 4..CurrentVersion (8)
+_BULK_ARRAYS = ("sweepDeconvolutionRealSamples", "sweepDeconvolutionImaginarySamples",
+                "transferRealSamples", "transferImaginarySamples", "transferCoherence")
 PLAY_CHANNELS = ("Mono", "Left", "Right", "Stereo")
 
 
@@ -324,15 +349,56 @@ def write_v7(doc, path):
     return path
 
 
-def load_v7(path):
-    """Read a file back (ours or Resonalyze's) into the same dict shape, arrays as numpy."""
+def decode_samples(value, key="samples"):
+    """One bulk array as the file carries it -> float64 numpy: a JSON number array (v4..v7, read at
+    full double precision) or the base64 of little-endian float32 (v8, `Float32SampleArrayJsonConverter`).
+    Anything else, and a base64 block that is not a whole number of float32 values, is refused
+    with the upstream's own complaint."""
+    if isinstance(value, str):
+        raw = base64.b64decode(value, validate=True)
+        if len(raw) % 4:
+            raise ConversionError(f"{key}: the base64 sample block is not a whole number of "
+                                  "float32 values.")
+        return np.frombuffer(raw, dtype="<f4").astype(np.float64)
+    if isinstance(value, (list, tuple)):
+        return np.asarray(value, dtype=np.float64)
+    raise ConversionError(f"{key}: expected a number array or a base64 sample string, found "
+                          f"{type(value).__name__}.")
+
+
+def load_file(path):
+    """Read a file back (ours or Resonalyze's) into the same dict shape, arrays as numpy.
+
+    v4..v7 carry the bulk arrays as JSON numbers, v8 as base64 float32 (their #153); both come
+    back as float64 arrays, so nothing downstream knows which it read -- `doc["version"]` still
+    says. A file from a LATER version is refused by its number before anything is decoded,
+    exactly as their `LoadAsync` refuses ours: a later version exists to change how something is
+    represented, and a parse error where the version is the answer is the wrong message."""
     with open(path, encoding="utf-8-sig") as fh:
         doc = json.load(fh)
-    for key in ("sweepDeconvolutionRealSamples", "sweepDeconvolutionImaginarySamples",
-                "transferRealSamples", "transferImaginarySamples", "transferCoherence"):
+    fmt = doc.get("format")
+    if fmt != FORMAT:
+        raise ConversionError(f"{path}: Unsupported file format '{fmt}'.")
+    version = doc.get("version")
+    if not isinstance(version, int) or version not in READ_VERSIONS:
+        raise ConversionError(
+            f"{path}: Unsupported impulse response version {version}. This reader knows "
+            f"{READ_VERSIONS.start}..{READ_VERSIONS.stop - 1} (Resonalyze b8d73c8); a later "
+            "number means the upstream writer moved -- `scripts/upstream-drift.py` names it.")
+    for key in _BULK_ARRAYS:
         if doc.get(key) is not None:
-            doc[key] = np.asarray(doc[key], dtype=np.float64)
+            doc[key] = decode_samples(doc[key], key)
     return doc
+
+
+load_v7 = load_file      # the old name: what it reads is decided by the file, not by the name
+
+
+def encode_samples_v8(values):
+    """The v8 wire form of one bulk array: base64 of little-endian float32. Used by the selftest
+    to build what the current Resonalyze writes; the WRITER of this module stays on v7."""
+    arr = np.asarray(values, dtype="<f4")
+    return base64.b64encode(arr.tobytes()).decode("ascii")
 
 
 # --------------------------------------------------------------- live REW path
@@ -796,8 +862,51 @@ def _selftest():
     assert named["sessionState"] == "stated" and named["session"] == "REW-2026-07-12 v10.mdat"
     assert unk["sessionState"] == "unknown" and unk["session"] is None
     assert named["sessionState"] != unk["sessionState"], "stated and unknown must not collapse"
+    # 8. READING what the current Resonalyze writes (v8, base64 float32 LE -- their #153): the
+    #    same document in the v8 wire form comes back as the same arrays to float32 precision, a
+    #    v7 number array still reads at FULL double precision (their own test pins the same), a
+    #    later version is refused by its number before anything is decoded, and a base64 block
+    #    that is not whole float32s is refused with their words. Synthetic on purpose: no file
+    #    written by a v8 build is on disk today (hub RES-008) -- when one arrives it belongs here.
+    exact = 0.12345678901234567
+    assert float(np.float32(exact)) != exact
+    with tempfile.TemporaryDirectory() as tmp:
+        v8 = json.loads(dumps_v7(doc))
+        v8["version"] = 8
+        for key in _BULK_ARRAYS:
+            if v8.get(key) is not None:
+                v8[key] = encode_samples_v8(v8[key])
+        p8 = os.path.join(tmp, "v8.json")
+        json.dump(v8, open(p8, "w", encoding="utf-8"))
+        back8 = load_file(p8)
+        assert back8["version"] == 8 and isinstance(back8["transferRealSamples"], np.ndarray)
+        scale = np.max(np.abs(y))
+        assert np.max(np.abs(back8["transferRealSamples"] - y)) < 2e-7 * scale, "v8 base64 float32 LE"
+        assert back8["sweepDeconvolutionRealSamples"].size == n
+        v7 = json.loads(dumps_v7(doc))
+        v7["transferRealSamples"] = [exact, 1.0, -0.5, 0.125]
+        p7 = os.path.join(tmp, "v7.json")
+        json.dump(v7, open(p7, "w", encoding="utf-8"))
+        assert load_file(p7)["transferRealSamples"][0] == exact, "a v7 number array keeps its doubles"
+        for mutate, why, words in (
+                (lambda d: d.__setitem__("version", 9), "a later version", "version 9"),
+                (lambda d: d.__setitem__("transferRealSamples", "AAAA"), "three bytes of base64",
+                 "whole number of float32"),
+                (lambda d: d.__setitem__("format", "something-else"), "another format",
+                 "Unsupported file format")):
+            bad8 = dict(v8)
+            mutate(bad8)
+            pb = os.path.join(tmp, "bad.json")
+            json.dump(bad8, open(pb, "w", encoding="utf-8"))
+            try:
+                load_file(pb)
+            except ConversionError as e:
+                assert words in str(e), (why, str(e))
+            else:
+                raise AssertionError(f"read a file it must refuse: {why}")
     print(f"selftest OK — fractional t0 kept to {abs(err_samples):.4f} samples, integer t0 bit-exact, "
-          f"round trip + Validate() port + refusals, session states verified/stated/unknown distinct")
+          f"round trip + Validate() port + refusals, session states verified/stated/unknown distinct, "
+          f"v8 base64 float32 read back to 2e-7, v7 doubles kept, v9 / partial block / other format refused")
     return 0
 
 

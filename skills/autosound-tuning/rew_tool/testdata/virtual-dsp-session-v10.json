@@ -1,0 +1,195 @@
+{
+  "calibrationId": "90deg",
+  "channels": [],
+  "dspProcessorModelId": null,
+  "format": "resonalyze-virtual-crossover",
+  "pairs": [
+    {
+      "bypass": false,
+      "collapsed": false,
+      "enabled": true,
+      "left": {
+        "crossoverKind": "LowPass",
+        "delayMs": 0.0,
+        "displayName": "Resonalyze-IR-2026-08-20_12-40-42_sw.json",
+        "gainDb": 0.0,
+        "hasSource": true,
+        "highPassEdge": {
+          "family": "Butterworth",
+          "frequencyHz": 10,
+          "rippleDb": 0.1,
+          "slopeDbPerOctave": 24
+        },
+        "historyEntryId": null,
+        "invertPolarity": true,
+        "lowPassEdge": {
+          "family": "Butterworth",
+          "frequencyHz": 65,
+          "rippleDb": 1,
+          "slopeDbPerOctave": 36
+        },
+        "peqBands": [
+          {
+            "frequencyHz": 38,
+            "gainDb": -3,
+            "isTransparent": false,
+            "q": 7,
+            "type": "Peaking"
+          },
+          {
+            "frequencyHz": 100,
+            "gainDb": 0,
+            "isTransparent": true,
+            "q": 2,
+            "type": "Peaking"
+          },
+          {
+            "frequencyHz": 120,
+            "gainDb": 0,
+            "isTransparent": false,
+            "q": 2.5,
+            "type": "AllPassSecondOrder"
+          }
+        ],
+        "peqPreampDb": 0.0,
+        "peqSourceName": null,
+        "phaseRotationDegrees": 0.0,
+        "sourceFilePath": "D:\\x\\Resonalyze-IR-2026-08-20_12-40-42_sw.json",
+        "sourceRelativePath": "Resonalyze-IR-2026-08-20_12-40-42_sw.json"
+      },
+      "mono": true,
+      "right": {
+        "crossoverKind": "Off",
+        "displayName": "",
+        "hasSource": false,
+        "historyEntryId": null,
+        "sourceFilePath": null,
+        "sourceRelativePath": null
+      },
+      "zone": "Sub"
+    },
+    {
+      "bypass": false,
+      "collapsed": false,
+      "enabled": true,
+      "left": {
+        "crossoverKind": "BandPass",
+        "delayMs": 4.71,
+        "displayName": "Resonalyze-IR-2026-08-20_12-35-42_w_L.json",
+        "gainDb": 0.0,
+        "hasSource": true,
+        "highPassEdge": {
+          "family": "Butterworth",
+          "frequencyHz": 65,
+          "rippleDb": 1,
+          "slopeDbPerOctave": 36
+        },
+        "historyEntryId": null,
+        "invertPolarity": false,
+        "lowPassEdge": {
+          "family": "LinkwitzRiley",
+          "frequencyHz": 350,
+          "rippleDb": 0.1,
+          "slopeDbPerOctave": 48
+        },
+        "peqBands": [],
+        "peqPreampDb": 0.0,
+        "peqSourceName": null,
+        "phaseRotationDegrees": 90.0,
+        "sourceFilePath": "D:\\x\\Resonalyze-IR-2026-08-20_12-35-42_w_L.json",
+        "sourceRelativePath": "Resonalyze-IR-2026-08-20_12-35-42_w_L.json"
+      },
+      "mono": false,
+      "right": {
+        "crossoverKind": "BandPass",
+        "delayMs": 2.81,
+        "displayName": "Resonalyze-IR-2026-08-20_12-36-32_w_R.json",
+        "gainDb": 0.0,
+        "hasSource": true,
+        "highPassEdge": {
+          "family": "Butterworth",
+          "frequencyHz": 65,
+          "rippleDb": 1,
+          "slopeDbPerOctave": 36
+        },
+        "historyEntryId": null,
+        "invertPolarity": false,
+        "lowPassEdge": {
+          "family": "LinkwitzRiley",
+          "frequencyHz": 350,
+          "rippleDb": 0.1,
+          "slopeDbPerOctave": 24
+        },
+        "peqBands": [],
+        "peqPreampDb": 0.0,
+        "peqSourceName": null,
+        "phaseRotationDegrees": 0.0,
+        "sourceFilePath": "D:\\x\\Resonalyze-IR-2026-08-20_12-36-32_w_R.json",
+        "sourceRelativePath": "Resonalyze-IR-2026-08-20_12-36-32_w_R.json"
+      },
+      "zone": "Front"
+    },
+    {
+      "bypass": false,
+      "collapsed": false,
+      "enabled": true,
+      "left": {
+        "crossoverKind": "LowPass",
+        "delayMs": 0.0,
+        "displayName": "Resonalyze-IR-2026-08-20_12-44-02_nosuch.json",
+        "gainDb": 0.0,
+        "hasSource": true,
+        "highPassEdge": {
+          "family": "LinkwitzRiley",
+          "frequencyHz": 300,
+          "rippleDb": 0.1,
+          "slopeDbPerOctave": 24
+        },
+        "historyEntryId": null,
+        "invertPolarity": false,
+        "lowPassEdge": {
+          "family": "LinkwitzRiley",
+          "frequencyHz": 2000,
+          "rippleDb": 0.1,
+          "slopeDbPerOctave": 24
+        },
+        "peqBands": [],
+        "peqPreampDb": 0.0,
+        "peqSourceName": null,
+        "phaseRotationDegrees": 45.0,
+        "sourceFilePath": "D:\\x\\Resonalyze-IR-2026-08-20_12-44-02_nosuch.json",
+        "sourceRelativePath": "Resonalyze-IR-2026-08-20_12-44-02_nosuch.json"
+      },
+      "mono": true,
+      "right": {
+        "crossoverKind": "Off",
+        "displayName": "",
+        "hasSource": false,
+        "historyEntryId": null,
+        "sourceFilePath": null,
+        "sourceRelativePath": null
+      },
+      "zone": "Center"
+    }
+  ],
+  "savedAtUtc": "2026-08-22T21:20:19Z",
+  "showPhaseView": true,
+  "smoothingInverseOctaves": 6,
+  "stereoLevelDifferenceDb": -1.0,
+  "stereoRightHandDrive": false,
+  "stereoSceneOffsetMs": 0.25,
+  "synthetic": "built by resonalyze_vc._session_v10() from the upstream's tests, not written by Resonalyze -- the shape of a v10 session, not somebody's tune",
+  "target": {
+    "bassShelfFrequencyHz": 100,
+    "bassShelfGainDb": 9,
+    "bassShelfWidthOctaves": 0.8,
+    "preset": "CarBass",
+    "tiltDbPerOctave": 0,
+    "toleranceDb": 3,
+    "trebleShelfFrequencyHz": 12000,
+    "trebleShelfGainDb": -2,
+    "trebleShelfWidthOctaves": 0.7
+  },
+  "targetLevelDb": -4.0,
+  "version": 10
+}

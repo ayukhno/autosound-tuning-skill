@@ -203,16 +203,27 @@ constraint, not by acoustics; `LOW` is raised as its own warning.
   way to learn a dialog.
 - Auto delay writes delays and polarity but not levels, until `Balance channel gains (cut-only)` is
   set. Cut-only never raises — headroom cannot be lost.
-- The session format is now **VERSION 8**; a version 7 session migrates on load. **Saving over the
-  original destroys the v7** — keep the original if it is a shared record.
+- The session format is **VERSION 10** (`VirtualCrossoverProjectFile.CurrentVersion`, 319e873 as of
+  2026-09-08): v8 (24.08, #118) made the per-side all-pass a band of the PEQ bank (`AllPassFirstOrder` /
+  `AllPassSecondOrder`); v9 (30.08, #147) gave every block a `zone` (Front / Rear / Center / Sub —
+  guessed on migration: stereo → Front, mono high-passed → Center, other mono → Sub); v10 (05.09,
+  #177) added the channel phase control (`phaseRotationDegrees` per side, stated at the LP on a Sub
+  block and the HP elsewhere, AS CONFIGURED). An older session migrates on load; **saving over the
+  original destroys the old version** — keep the original if it is a shared record. Four versions in
+  three weeks is the pace: `resonalyze_vc.py` pins the number in its header and
+  `scripts/upstream-drift.py` names a mismatch on every run, so the next bump is a FORMAT line in a
+  check, not a discovery.
 - The mic calibration travels **inside the session** as the curve itself, not a reference to a list:
   it describes the microphone the measurement was made with, so it belongs to the measurements and
   moves with them.
 
 ## Where this meets the skill's own tools
 
-`rew_tool/resonalyze_ir.py` writes v7 files REW → Resonalyze; `resonalyze_vc.py` reads a Virtual DSP
-session back as ledger rows; `predict.py` is the method's own full-state predictor, checked against
+`rew_tool/resonalyze_ir.py` writes v7 impulse-response files REW → Resonalyze and READS v4..v8 (v8,
+their #153 of 31.08, carries the bulk arrays as base64 float32 — the file the current app saves; the
+writer stays on v7 on purpose, because their reader takes 4..CurrentVersion and migrates, so a v7 file
+opens in every build); `resonalyze_vc.py` reads a Virtual DSP session (v7..v10, migrated in memory by
+their own steps) back as ledger rows — zone and `phase_deg` included; `predict.py` is the method's own full-state predictor, checked against
 this engine's arithmetic to 3·10⁻¹⁴ dB on the real set-02. The **sum-loss** metric and the **two-stage
 delay** idea are already ours in `dsp_math`/`analyze-joints`; the **arrival-first, sum-second** split,
 the **long magnitude window vs gated phase**, and the **precedence exception for a shared sub** are the

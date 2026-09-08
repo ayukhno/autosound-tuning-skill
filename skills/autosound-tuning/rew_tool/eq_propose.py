@@ -549,7 +549,8 @@ def main(argv=None):
         solos, notes, refused = P.de_embed_solos(loaded, f, baseline=True)
         for code, (_H, info) in loaded.items():
             try:
-                doc = json.load(open(info["path"], encoding="utf-8"))
+                import resonalyze_ir
+                doc = resonalyze_ir.load_file(info["path"])       # v7 numbers or v8 base64 alike
                 g = gate_from_ir(doc["transferRealSamples"], doc["sampleRate"])
                 if g is not None:
                     gates[code] = g

@@ -1,4 +1,4 @@
-"""Resonalyze Virtual DSP session (`resonalyze-virtual-crossover` v7)  →  ledger rows.
+"""Resonalyze Virtual DSP session (`resonalyze-virtual-crossover` v7..v10)  →  ledger rows.
 
 The mirror of `resonalyze_ir.py`: that one writes REW measurements INTO Resonalyze, this one
 reads a tune BACK OUT of it. The occasion was a Resonalyze Virtual DSP session another tuner
@@ -54,8 +54,28 @@ Format skew, seen in the wild and handled: in the v7 files the app writes, `enab
 on the PAIR, while the fork checkout's `VirtualCrossoverChannelSettings` carries them on the SIDE.
 Both are read, side first.
 
+VERSIONS. The app's writer moved four times in three weeks -- v7 (22.08) → v8 (24.08, the per-side
+all-pass stage became a band of the PEQ bank) → v9 (30.08, every block got a ZONE: front / rear /
+center / sub) → v10 (05.09, the channel phase control, `phaseRotationDegrees`) -- and a reader
+pinned to v7 refused every file the current app saves, correctly and uselessly (hub RES-008).
+`migrate_session` now brings any v7..v10 document to v10 IN MEMORY by the app's own `Migrate`
+steps, ported line for line (the header below pins them and `scripts/upstream-drift.py` compares
+the format version on every run); the file on disk is never touched, and the report says which
+steps ran and what each one guessed or dropped. A version above 10 is refused by its number.
+
+What v9 and v10 add to a row: the block's `zone` travels on the leg (the ledger has no such field,
+but it decides which crossover corner the phase control's angle is stated at), and a non-zero
+`phaseRotationDegrees` becomes the row's `phase_deg`. The angle is stated AT the channel's
+configured crossover -- the LP on a sub block, the HP on every other -- so when that edge is
+dormant in the session (`crossoverKind` does not engage it) the row still carries it, with
+`slope: "OFF"`: the ledger's own form of "configured, not active", which `predict._phase_reference`
+reads and `predict._leg` keeps out of the chain. The check on that field names the one way this
+goes wrong silently: the ledger picks the corner BY CHANNEL CODE (`sw…` reads the LP), the session
+by zone, and a sub-zone leg bound to a code that is not a sub lands its angle on the wrong corner.
+
     resonalyze_vc.py <session.json> --project <dir>          # human report
     resonalyze_vc.py <session.json> --project <dir> --json    # the same as machine JSON
+    resonalyze_vc.py --write-fixture                          # the synthetic v7 and v10 fixtures
 
 Exit codes: 0 every check passed · 1 something the target DSP cannot enter · 2 nothing blocking
 but something unverifiable (no profile, or a limit the profile does not declare).
@@ -66,6 +86,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 
@@ -73,11 +94,33 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
+# upstream: DIMOSUS/Resonalyze source/Tools/VirtualCrossover/VirtualCrossoverProjectFile.cs @ 319e873 (MIT) --
+#   the session schema v7..v10 (`VirtualCrossoverChannelSettings`, `VirtualCrossoverChannelPairSettings`),
+#   `Migrate` steps v7→v8 (the all-pass stage into the PEQ bank, `EqualizationCurve.MaxBandCount`),
+#   v8→v9 (the zone) and v9→v10 (the phase control), `PhaseReferenceHz` (LP on a Sub block, HP
+#   otherwise, AS CONFIGURED), `Validate()`'s ranges.
+# format-version: 10 -- their `CurrentVersion`; `scripts/upstream-drift.py` reads it out of the
+#   upstream file and names a mismatch as a drift of the FORMAT.
+# deviation: reads and never writes -- the migration runs in memory and the file stays as it was;
+#            their `LoadOrDefault` rewrites the project on the next save. See `migrate_session`.
+# deviation: `IsTransparent` is recomputed here and a transparent band is DROPPED and listed,
+#            where their chain carries it as a no-op -- see `_eq_bands`.
+# deviation: a dormant reference edge under a non-zero angle is written into the row with
+#            `slope: "OFF"` -- the ledger's form of "configured, not active"; theirs keeps both
+#            edges on the side always. See `_leg` and `predict._phase_reference`.
+# upstream: DIMOSUS/Resonalyze source/Tools/VirtualCrossover/VirtualCrossoverZone.cs @ f026276 (MIT) --
+#   `VirtualCrossoverZones.GuessForLegacyPair` (the v9 step's zone guess) and the zone names.
 CONVERTER = "autosound-tuning-skill rew_tool/resonalyze_vc.py"
-CONVERTER_VERSION = "1.0 (2026-08-23, format v7 as of Resonalyze VirtualCrossoverProjectFile.cs)"
+CONVERTER_VERSION = "1.1 (2026-09-08, reads format v7..v10 as of Resonalyze 319e873, migrated in memory)"
 
 FORMAT = "resonalyze-virtual-crossover"
-SUPPORTED_VERSIONS = (7,)
+SUPPORTED_VERSIONS = (7, 8, 9, 10)   #: what `validate_session` accepts; `migrate_session` brings all to
+CURRENT_VERSION = 10                 #: ...this, their `CurrentVersion`
+MAX_BAND_COUNT = 32                  #: `EqualizationCurve.MaxBandCount` -- the v7→v8 step's full-bank rule
+ZONES = ("Front", "Rear", "Center", "Sub")   #: `VirtualCrossoverZone`, in their order
+#: `PhaseRotationControl.MaximumDegrees`: 360 − 360/64. Range only, like their `Validate()`; the
+#: 5.625° grid is the profile's business (`phase_control.step_deg`).
+MAX_PHASE_DEG = 360.0 - 360.0 / 64.0
 
 #: Resonalyze crossover family -> the ledger's short type code.
 FAMILY_TO_TYPE = {
@@ -86,10 +129,13 @@ FAMILY_TO_TYPE = {
     "Bessel": "BE",
     "Chebyshev": "CHEBYSHEV",
 }
-#: Resonalyze PEQ band type -> `state.EQ_TYPES`.
-BAND_TO_EQ_TYPE = {"Peaking": "PK", "LowShelf": "LSH", "HighShelf": "HSH"}
-#: Resonalyze all-pass stage -> `state.EQ_TYPES`. A first-order section takes no Q.
-ALLPASS_TO_EQ_TYPE = {"FirstOrder": "APF1", "SecondOrder": "APF2"}
+#: Resonalyze PEQ band type -> `state.EQ_TYPES`. Since v8 the all-pass sections are bands of the
+#: bank (`PeqBandType.AllPassFirstOrder` / `AllPassSecondOrder`); a first-order section takes no Q.
+BAND_TO_EQ_TYPE = {"Peaking": "PK", "LowShelf": "LSH", "HighShelf": "HSH",
+                   "AllPassFirstOrder": "APF1", "AllPassSecondOrder": "APF2"}
+ALLPASS_BAND_TYPES = ("AllPassFirstOrder", "AllPassSecondOrder")
+#: v7's per-side all-pass STAGE (`allPassType`) -> the v8 band type the migration writes.
+ALLPASS_STAGE_TO_BAND = {"FirstOrder": "AllPassFirstOrder", "SecondOrder": "AllPassSecondOrder"}
 
 CROSSOVER_KINDS = ("Off", "LowPass", "HighPass", "BandPass")
 
@@ -119,7 +165,7 @@ def load_session(path):
 
 
 def validate_session(doc, path="<session>"):
-    """Refuse anything that is not a v7 Virtual DSP session, loudly and by name.
+    """Refuse anything that is not a v7..v10 Virtual DSP session, loudly and by name.
 
     A v2-era file carries its channels in the legacy flat `channels` list rather than in `pairs`.
     That is refused rather than read as "a session with no legs": an empty result from a file that
@@ -133,7 +179,9 @@ def validate_session(doc, path="<session>"):
     version = doc.get("version")
     if version not in SUPPORTED_VERSIONS:
         raise SessionError(
-            f"{path}: version {version!r}, this converter reads {list(SUPPORTED_VERSIONS)}")
+            f"{path}: version {version!r}, this converter reads {list(SUPPORTED_VERSIONS)} "
+            f"(Resonalyze 319e873 writes {CURRENT_VERSION}); a later number means the upstream "
+            "writer moved -- `scripts/upstream-drift.py` names it")
     pairs = doc.get("pairs")
     if not isinstance(pairs, list):
         raise SessionError(f"{path}: 'pairs' must be a list, got {type(pairs).__name__}")
@@ -143,6 +191,86 @@ def validate_session(doc, path="<session>"):
             f"{len(doc['channels'])} entr{'y' if len(doc['channels']) == 1 else 'ies'} -- this is "
             "a pre-pairs session and reading it as empty would lose the whole tune")
     return doc
+
+
+def migrate_session(doc):
+    """A validated v7..v10 document -> (a v10 COPY, the notes of what each step did).
+
+    Their `Migrate`, ported step for step; the input is not touched. Every step is additive or a
+    move, so a migrated session describes the same tune -- the two places that is not exactly
+    true are said in the notes rather than left to be found: the v7→v8 step has to DROP a band
+    when a full 32-band bank has no room for the all-pass stage (theirs drops the last
+    gain-bearing band and tells the user; so does this), and the v8→v9 step GUESSES the zone
+    from the mono flag and the filter (a stereo block is Front, a mono high-passed block is
+    Center, any other mono block is Sub -- `VirtualCrossoverZones.GuessForLegacyPair`), which is
+    right for most installs and wrong for a rear pair, and a wrong guess costs one combo box in
+    their UI and one `zone` field here.
+    """
+    doc = json.loads(json.dumps(doc))
+    notes = []
+    version = doc.get("version")
+    if version == 7:
+        dropped = 0
+        for index, pair in enumerate(doc.get("pairs") or []):
+            for side_name in ("left", "right"):
+                side = pair.get(side_name)
+                if not isinstance(side, dict):
+                    continue
+                stage = ALLPASS_STAGE_TO_BAND.get(side.get("allPassType"))
+                first = stage == "AllPassFirstOrder"
+                f = _num(side.get("allPassFrequencyHz"), 0.0)
+                q = 1.0 if first else _num(side.get("allPassQ"), 1.0)
+                if stage and math.isfinite(f) and f > 0 and math.isfinite(q) and q > 0:
+                    bands = side.setdefault("peqBands", [])
+                    if not isinstance(bands, list):
+                        bands = side["peqBands"] = []
+                    if len(bands) >= MAX_BAND_COUNT:
+                        last = max((i for i, b in enumerate(bands)
+                                    if isinstance(b, dict) and b.get("type") not in ALLPASS_BAND_TYPES),
+                                   default=-1)
+                        if last >= 0:
+                            gone = bands.pop(last)
+                            dropped += 1
+                            notes.append(
+                                f"v7→v8 pair {index} {side_name}: the bank was full (32), so its "
+                                f"last gain-bearing band ({_band_label(_band_from_raw(gone))}) was "
+                                "dropped to make room for the all-pass stage -- a bell Auto Tune "
+                                "can propose again, where an all-pass sits on a junction aligned by ear")
+                    if len(bands) < MAX_BAND_COUNT:
+                        bands.append({"frequencyHz": f, "q": q, "gainDb": 0.0, "type": stage,
+                                      "isTransparent": False})
+                elif side.get("allPassType") not in (None, "Off"):
+                    notes.append(f"v7→v8 pair {index} {side_name}: all-pass stage "
+                                 f"{side.get('allPassType')!r} at {f:g} Hz Q {q:g} is not a filter "
+                                 "and was dropped, as their migration drops it")
+                for key in ("allPassType", "allPassFrequencyHz", "allPassQ"):
+                    side.pop(key, None)
+        notes.insert(0, "v7→v8: each side's all-pass stage became a band of its PEQ bank"
+                        + (f" ({dropped} full bank(s) lost a band for it)" if dropped else ""))
+        doc["version"] = version = 8
+    if version == 8:
+        for index, pair in enumerate(doc.get("pairs") or []):
+            if not isinstance(pair, dict):
+                continue
+            left = pair.get("left") if isinstance(pair.get("left"), dict) else {}
+            pair["zone"] = guess_zone(bool(pair.get("mono")), left.get("crossoverKind", "Off"))
+            notes.append(f"v8→v9 pair {index}: zone GUESSED as {pair['zone']} from "
+                         f"mono={bool(pair.get('mono'))} and the left side's crossoverKind "
+                         f"{left.get('crossoverKind', 'Off')!r} -- a rear pair reads as Front here")
+        doc["version"] = version = 9
+    if version == 9:
+        notes.append("v9→v10: the channel phase control is absent, so every side opens with no "
+                     "rotation (phase_deg 0)")
+        doc["version"] = version = 10
+    return doc, notes
+
+
+def guess_zone(mono, mono_side_kind):
+    """`VirtualCrossoverZones.GuessForLegacyPair`: a stereo block is Front; a mono block that
+    plays UP the spectrum (high-passed) is a Center, any other mono block is the Sub."""
+    if not mono:
+        return "Front"
+    return "Center" if mono_side_kind == "HighPass" else "Sub"
 
 
 def scene_of(doc):
@@ -185,6 +313,8 @@ def legs_of(doc):
     A side with `hasSource` false is not a channel at all -- the mono sub pair here has an empty
     right side -- and is skipped rather than emitted as a row of defaults.
     """
+    if doc.get("version") != CURRENT_VERSION:
+        doc, _ = migrate_session(doc)
     out = []
     for index, pair in enumerate(doc.get("pairs") or []):
         if not isinstance(pair, dict):
@@ -218,6 +348,13 @@ def _leg(pair_index, side, mono, pair, raw):
             f"pair {pair_index} {side}: crossoverKind {kind!r} is not one of {CROSSOVER_KINDS}")
     live_lp = kind in ("LowPass", "BandPass")
     live_hp = kind in ("HighPass", "BandPass")
+    zone = pair.get("zone", "Front")
+    if zone not in ZONES:
+        raise SessionError(f"pair {pair_index}: zone {zone!r} is not one of {ZONES}")
+    phase_deg = _num(raw.get("phaseRotationDegrees"), 0.0)
+    if not math.isfinite(phase_deg) or phase_deg < 0 or phase_deg > MAX_PHASE_DEG:
+        raise SessionError(f"pair {pair_index} {side}: phaseRotationDegrees {phase_deg!r} is "
+                           f"outside 0..{MAX_PHASE_DEG:g} (their Validate() refuses it too)")
 
     eq, dropped = _eq_bands(raw)
     row = {
@@ -226,6 +363,7 @@ def _leg(pair_index, side, mono, pair, raw):
         "gain_db": _num(raw.get("gainDb"), 0.0),
         "ta_ms": _num(raw.get("delayMs"), 0.0),
         "polarity": "INV" if raw.get("invertPolarity") else "NORM",
+        "phase_deg": phase_deg,
         "eq": eq,
         "status": "proposed",
     }
@@ -236,6 +374,21 @@ def _leg(pair_index, side, mono, pair, raw):
         dormant["hp"] = _edge(raw["highPassEdge"])
     if not live_lp and raw.get("lowPassEdge"):
         dormant["lp"] = _edge(raw["lowPassEdge"])
+    # The phase control's angle is stated AT a crossover corner: the LP on a Sub block, the HP on
+    # every other, AS CONFIGURED whatever the kind engages (`PhaseReferenceHz`; the Helix bench,
+    # fact 6). A dormant reference is therefore still the reference, and the row has to carry
+    # it or the angle is not a filter -- so it goes into the row with `slope: "OFF"`, the
+    # ledger's form of "configured, not active", which `predict._phase_reference` reads and
+    # `predict._leg` keeps out of the chain. Only under a non-zero angle: a dormant edge with
+    # nothing stated at it stays out, as before.
+    ref_kind = "lp" if zone == "Sub" else "hp"
+    phase_reference = None
+    if phase_deg:
+        edge = _edge(raw.get("lowPassEdge" if ref_kind == "lp" else "highPassEdge"))
+        phase_reference = {"kind": ref_kind, "hz": edge["f"], "dormant": row[ref_kind] is None}
+        if row[ref_kind] is None:
+            row[ref_kind] = dict(edge, slope="OFF")
+            dormant.pop(ref_kind, None)
 
     display = raw.get("displayName") or ""
     return {
@@ -259,6 +412,8 @@ def _leg(pair_index, side, mono, pair, raw):
         "peq_source_name": raw.get("peqSourceName"),
         "peq_preamp_db": _num(raw.get("peqPreampDb"), 0.0),
         "crossover_kind": kind,
+        "zone": zone.lower(),
+        "phase_reference": phase_reference,
         "channel_hint": channel_hint(display or raw.get("sourceRelativePath") or ""),
         "channel": None,
         "row": row,
@@ -300,35 +455,36 @@ def _eq_bands(side):
     for i, raw in enumerate(side.get("peqBands") or []):
         if not isinstance(raw, dict):
             raise SessionError(f"peqBands[{i}] must be an object, got {raw!r}")
-        freq = _num(raw.get("frequencyHz"), 0.0)
-        q = _num(raw.get("q"), 0.0)
-        gain = _num(raw.get("gainDb"), 0.0)
-        kind = raw.get("type", "Peaking")
-        entry = {
-            "type": BAND_TO_EQ_TYPE.get(kind, kind),
-            "f": freq,
-            "gain_db": gain,
-            "q": q,
-            "i": len(bands) + 1,
-        }
-        if gain == 0 or q <= 0 or freq <= 0:
-            dropped.append(dict(entry, reason="transparent: contributes nothing"))
+        entry = _band_from_raw(raw)
+        entry["i"] = len(bands) + 1
+        # Their `IsTransparent`: `Q <= 0 || FrequencyHz <= 0 || (GainDb == 0 && !Type.IsAllPass())`
+        # -- an all-pass has no gain by construction and is anything but transparent.
+        if entry["f"] <= 0 or entry["_q"] <= 0 or (entry["_gain"] == 0 and entry["type"] not in ("APF1", "APF2")):
+            dropped.append(dict(_ledger_band(entry), reason="transparent: contributes nothing"))
             continue
-        bands.append(entry)
-
-    all_pass = side.get("allPassType", "Off")
-    if all_pass and all_pass != "Off":
-        eq_type = ALLPASS_TO_EQ_TYPE.get(all_pass)
-        if eq_type is None:
-            raise SessionError(f"allPassType {all_pass!r} is not one of {list(ALLPASS_TO_EQ_TYPE)}")
-        band = {"type": eq_type, "f": _num(side.get("allPassFrequencyHz"), 0.0),
-                "i": len(bands) + 1}
-        # A first-order section is a single real pole and has no Q at all; the ledger's `q` is
-        # optional for exactly this case.
-        if eq_type == "APF2":
-            band["q"] = _num(side.get("allPassQ"), 0.0)
-        bands.append(band)
+        bands.append(_ledger_band(entry))
     return bands, dropped
+
+
+def _band_from_raw(raw):
+    """One `peqBands[]` entry as read, before the ledger's shape is decided."""
+    kind = raw.get("type", "Peaking")
+    return {"type": BAND_TO_EQ_TYPE.get(kind, kind), "f": _num(raw.get("frequencyHz"), 0.0),
+            "_gain": _num(raw.get("gainDb"), 0.0), "_q": _num(raw.get("q"), 0.0)}
+
+
+def _ledger_band(entry):
+    """The ledger's band: a bell or shelf carries gain and Q; an all-pass carries neither gain
+    nor -- for a first-order section, a single real pole -- a Q (the file stores the 1.0 the
+    section ignores). The ledger's `q` is optional for exactly that case."""
+    band = {"type": entry["type"], "f": entry["f"], "i": entry.get("i")}
+    if entry["type"] == "APF1":
+        return band
+    if entry["type"] == "APF2":
+        band["q"] = entry["_q"]
+        return band
+    band.update({"gain_db": entry["_gain"], "q": entry["_q"]})
+    return band
 
 
 def _num(value, default):
@@ -459,8 +615,83 @@ def check_leg(leg, profile=None, group_id="physical_outputs"):
     out += _check_delay(leg, channel, inner)
     out += _check_gain(leg, channel, inner)
     out += _check_polarity(leg, channel, inner)
+    out += _check_phase(leg, channel, inner)
     out += _check_preamp(leg, channel)
     out += _check_state(leg, channel)
+    return out
+
+
+def _ledger_reads_lp(code):
+    """Which corner the LEDGER states a `phase_deg` at: the LP on a channel whose code says sub,
+    the HP on every other. The same one-line rule as `predict._is_sub` -- kept here rather than
+    imported so this module stays stdlib-only; the selftest binds the two when numpy is about."""
+    return str(code or "").lower().startswith(("sw", "sub"))
+
+
+def _check_phase(leg, channel, inner):
+    """A non-zero angle against `phase_control` -- range and step, like a delay -- and against
+    the one thing a profile cannot know: WHICH corner the ledger will read it at.
+
+    Resonalyze states the angle at the LP of a Sub block and the HP of any other (`zone`); the
+    ledger, having no zone, picks the corner from the channel CODE (`predict._is_sub`). A sub
+    block bound to `m-L`, or a front block bound to `sw`, lands the same number on the other
+    corner -- a different filter, applied silently. Refused by name; an unbound leg cannot be
+    checked and says so.
+    """
+    deg = leg["row"].get("phase_deg") or 0.0
+    if not deg:
+        return []
+    ref = leg.get("phase_reference") or {}
+    wanted = (f"{_g(deg)} deg @ {ref.get('kind', '?').upper()} {_g(ref.get('hz'))} Hz"
+              + (" (that edge is dormant in the session; written with slope OFF)" if ref.get("dormant") else ""))
+    out = []
+    control = inner.get("phase_control") if isinstance(inner, dict) else None
+    if not isinstance(control, dict):
+        out.append(_verdict(channel, "phase_deg", wanted, UNKNOWN,
+                            "profile has no 'phase_control' block", unverified=["phase_control"]))
+    else:
+        rng, step = control.get("range_deg"), control.get("step_deg")
+        verified, unverified = [], []
+        if isinstance(rng, list) and len(rng) == 2:
+            if not (rng[0] <= deg <= rng[1]):
+                return [_verdict(channel, "phase_deg", wanted, UNSUPPORTED,
+                                 f"outside the DSP's {_g(rng[0])}..{_g(rng[1])} deg range")]
+            verified.append(f"within {_g(rng[0])}..{_g(rng[1])} deg")
+        else:
+            unverified.append("phase_control.range_deg")
+        if step is None:
+            unverified.append("phase_control.step_deg")
+        elif not _on_grid(deg, step):
+            return [_verdict(channel, "phase_deg", wanted, UNSUPPORTED,
+                             f"not a multiple of the DSP's {_g(step)} deg step", verified)]
+        else:
+            verified.append(f"on the {_g(step)} deg grid")
+        if unverified:
+            out.append(_verdict(channel, "phase_deg", wanted, UNKNOWN,
+                                (("; ".join(verified) + " -- but ") if verified else "")
+                                + "the profile states no "
+                                + ", ".join(k.split(".")[-1] for k in unverified),
+                                verified, unverified))
+        else:
+            out.append(_verdict(channel, "phase_deg", wanted, OK, "; ".join(verified), verified))
+    # The corner: the session's zone against the ledger's code rule.
+    code = leg.get("channel")
+    session_lp = ref.get("kind") == "lp"
+    if not code:
+        out.append(_verdict(channel, "phase_deg.reference", wanted, UNKNOWN,
+                            "no channel bound, so which corner the ledger reads the angle at "
+                            "(the LP on a `sw…` code, the HP otherwise) is not decided yet",
+                            unverified=["channel binding"]))
+    elif _ledger_reads_lp(code) != session_lp:
+        out.append(_verdict(channel, "phase_deg.reference", wanted, UNSUPPORTED,
+                            f"the session states the angle at the {'LP' if session_lp else 'HP'} "
+                            f"(zone {leg.get('zone')}), but the ledger reads phase_deg on "
+                            f"{code!r} at the {'LP' if _ledger_reads_lp(code) else 'HP'} -- the same "
+                            "number would become a different filter; rebind, or leave the angle out"))
+    else:
+        out.append(_verdict(channel, "phase_deg.reference", wanted, OK,
+                            f"the ledger reads {code!r}'s angle at the same corner the session "
+                            f"states it ({'LP' if session_lp else 'HP'})"))
     return out
 
 
@@ -799,6 +1030,8 @@ def convert(doc, *, profile=None, proj=None, mapping=None, group_id="physical_ou
     The one call a CLI and a GUI both make, so neither can drift into its own reading of a file.
     """
     validate_session(doc, source_path or "<session>")
+    read_version = doc.get("version")
+    doc, migration = migrate_session(doc)
     legs = legs_of(doc)
     bind_channels(legs, proj, mapping)
     for leg in legs:
@@ -814,7 +1047,9 @@ def convert(doc, *, profile=None, proj=None, mapping=None, group_id="physical_ou
         "source": {
             "path": source_path,
             "format": doc.get("format"),
-            "version": doc.get("version"),
+            "version": read_version,
+            "read_as": CURRENT_VERSION,
+            "migration": migration,
         },
         "scene": scene_of(doc),
         "profile": None if not inner else {
@@ -908,8 +1143,12 @@ def report(result):
     scene = result["scene"]
     profile = result["profile"]
     lines.append(f"{result['source']['format']} v{result['source']['version']}"
-                 f"  ->  ledger rows (status: proposed)")
+                 + (f" (read as v{result['source']['read_as']})"
+                    if result["source"].get("read_as") not in (None, result["source"]["version"]) else "")
+                 + "  ->  ledger rows (status: proposed)")
     lines.append(f"  file        {result['source']['path']}")
+    for note in result["source"].get("migration") or []:
+        lines.append(f"  migrated    {note}")
     lines.append(f"  saved       {scene['saved_at_utc']}")
     lines.append(f"  calibration {scene['calibration_id']!r}"
                  + ("" if scene["calibration_id"] else "  (none -- IRs treated as uncalibrated)"))
@@ -931,7 +1170,7 @@ def report(result):
             flags.append("BYPASSED")
         if leg["mono"]:
             flags.append("mono")
-        lines.append(f"{head}   pair {leg['pair']} {leg['side']}"
+        lines.append(f"{head}   pair {leg['pair']} {leg['side']}   zone {leg.get('zone', '?')}"
                      + (f"   [{', '.join(flags)}]" if flags else ""))
         lines.append(f"    source  {leg['source_relative_path'] or leg['display_name']}")
         if not leg["channel"]:
@@ -941,6 +1180,12 @@ def report(result):
         lines.append(f"    HP {_leg_str(row['hp'])}    LP {_leg_str(row['lp'])}"
                      f"    gain {row['gain_db']:+g} dB    delay {_g(row['ta_ms'])} ms"
                      f"    {row['polarity']}")
+        if row.get("phase_deg"):
+            ref = leg.get("phase_reference") or {}
+            lines.append(f"    phase {_g(row['phase_deg'])} deg @ {ref.get('kind', '?').upper()} "
+                         f"{_g(ref.get('hz'))} Hz"
+                         + ("  (that edge is dormant in the session -- carried with slope OFF so "
+                            "the angle keeps its reference)" if ref.get("dormant") else ""))
         if row["eq"]:
             lines.append(f"    EQ  {len(row['eq'])} bands: "
                          + "; ".join(_band_label(b) for b in row["eq"]))
@@ -1153,20 +1398,60 @@ def _profile():
     }}
 
 
+def _session_v10(**over):
+    """The same two-pair session as `_session`, in the form the CURRENT Resonalyze writes (v10,
+    319e873): no per-side all-pass keys (the stage is a band of the bank), a `zone` and a
+    `collapsed` flag on every pair, `phaseRotationDegrees` on every side. The sub carries the
+    v7 fixture's all-pass as an `AllPassSecondOrder` band; the woofer's left side asks for 90°
+    of phase at its live HP; the orphan is a Center block with its HP DORMANT and 45° stated at
+    it. SYNTHETIC, built from the upstream's own tests (VirtualCrossoverProjectFileTests) -- no
+    file written by a v10 build is on disk today (hub RES-008); when one arrives it belongs
+    beside this one, and the reader is checked on both."""
+    doc = _session()
+    doc["version"] = 10
+    doc["synthetic"] = ("built by resonalyze_vc._session_v10() from the upstream's tests, not "
+                        "written by Resonalyze -- the shape of a v10 session, not somebody's tune")
+    doc["dspProcessorModelId"] = None
+    doc["showPhaseView"] = True
+    zones = ("Sub", "Front", "Center")
+    for pair, zone in zip(doc["pairs"], zones):
+        pair["zone"] = zone
+        pair["collapsed"] = False
+        for name in ("left", "right"):
+            side = pair.get(name) or {}
+            if not side.get("hasSource"):
+                continue
+            for key in ("allPassType", "allPassFrequencyHz", "allPassQ"):
+                side.pop(key, None)
+            side["phaseRotationDegrees"] = 0.0
+    sub, woofer, orphan = doc["pairs"]
+    sub["left"]["peqBands"].append({"frequencyHz": 120, "q": 2.5, "gainDb": 0, "type": "AllPassSecondOrder",
+                                    "isTransparent": False})
+    woofer["left"]["phaseRotationDegrees"] = 90.0
+    orphan["left"]["crossoverKind"] = "LowPass"
+    orphan["left"]["highPassEdge"] = {"family": "LinkwitzRiley", "frequencyHz": 300,
+                                      "slopeDbPerOctave": 24, "rippleDb": 0.1}
+    orphan["left"]["phaseRotationDegrees"] = 45.0
+    doc.update(over)
+    return doc
+
+
 #: A synthetic v7 session on disk, for consumers who need a file rather than this module's
 #: builder (autosound-tcc's importer tests). SYNTHETIC on purpose: a real session carries
 #: somebody's tune and the absolute paths of their machine, and this repo is public.
 FIXTURE = os.path.join(_HERE, "testdata", "virtual-dsp-session-v7.json")
+#: ...and its v10 twin, the shape the current app writes (`_session_v10`).
+FIXTURE_V10 = os.path.join(_HERE, "testdata", "virtual-dsp-session-v10.json")
 
 
-def _fixture_text():
+def _fixture_text(builder=None):
     """The fixture's exact bytes, from the same builder the selftest runs on.
 
     One source, two consumers. A fixture hand-maintained beside a builder is two descriptions of
     one format that agree until the day they do not -- and the drift shows up as somebody else's
     test passing against a file this module no longer produces.
     """
-    return json.dumps(_session(), indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    return json.dumps((builder or _session)(), indent=2, sort_keys=True, ensure_ascii=False) + "\n"
 
 
 def _selftest():
@@ -1483,6 +1768,136 @@ def _selftest():
                        proj=_Proj())["summary"]["blocked"], "the fixture must still refuse LR48"
     else:
         raise AssertionError(f"missing fixture {FIXTURE} -- write it with --write-fixture")
+    if os.path.exists(FIXTURE_V10):
+        with open(FIXTURE_V10, encoding="utf-8") as f:
+            assert f.read() == _fixture_text(_session_v10), (
+                f"{FIXTURE_V10} has drifted from _session_v10(); regenerate:\n"
+                f"    python3 {os.path.basename(__file__)} --write-fixture")
+    else:
+        raise AssertionError(f"missing fixture {FIXTURE_V10} -- write it with --write-fixture")
+
+    # ── versions: v7..v10 read, migrated in memory by their own steps; v11 refused by name ──
+    for v in (8, 9, 10):
+        validate_session(_session(version=v))
+    try:
+        validate_session(_session(version=11))
+    except SessionError as exc:
+        assert "11" in str(exc) and "upstream-drift" in str(exc), exc
+    else:
+        raise AssertionError("a v11 session was read")
+    # v7→v8: the all-pass stage becomes a band of the bank, per order (their test, pinned): a
+    # second-order stage keeps its Q, a first-order one has none, a side without a stage gains
+    # nothing, and the v7 document itself is not touched.
+    v7 = _session()
+    v7["pairs"][1]["left"].update(allPassType="SecondOrder", allPassFrequencyHz=120, allPassQ=2.5)
+    v7["pairs"][1]["right"].update(allPassType="FirstOrder", allPassFrequencyHz=300, allPassQ=4.0)
+    v10, notes = migrate_session(v7)
+    assert v7["version"] == 7 and "allPassType" in v7["pairs"][1]["left"], "the input was mutated"
+    assert v10["version"] == 10 and notes and notes[0].startswith("v7→v8"), notes
+    wl, wr = v10["pairs"][1]["left"], v10["pairs"][1]["right"]
+    assert "allPassType" not in wl and wl["peqBands"][-1] == {
+        "frequencyHz": 120.0, "q": 2.5, "gainDb": 0.0, "type": "AllPassSecondOrder", "isTransparent": False}, wl
+    assert wr["peqBands"][-1]["type"] == "AllPassFirstOrder" and wr["peqBands"][-1]["q"] == 1.0, wr
+    assert v10["pairs"][0]["left"]["peqBands"][-1]["type"] == "Peaking", "a side with no stage gained a band"
+    m_legs = legs_of(v10)
+    assert [b["type"] for b in m_legs[1]["row"]["eq"]] == ["APF2"] and m_legs[1]["row"]["eq"][0]["q"] == 2.5
+    assert m_legs[2]["row"]["eq"] == [{"type": "APF1", "f": 300.0, "i": 1}], m_legs[2]["row"]["eq"]
+    # ...an all-pass band is NOT transparent though its gain is 0 (their IsTransparent excludes it),
+    # and a bell at 0 dB still is.
+    assert not m_legs[1]["dropped_eq_bands"] and m_legs[0]["dropped_eq_bands"], "transparency rule"
+    # A full bank: the last gain-bearing band goes, the all-pass lands, and the note says what it cost.
+    full = _session()
+    full["pairs"][1]["left"]["peqBands"] = [{"frequencyHz": 100 + i, "q": 2, "gainDb": -1, "type": "Peaking"}
+                                            for i in range(MAX_BAND_COUNT)]
+    full["pairs"][1]["left"].update(allPassType="SecondOrder", allPassFrequencyHz=120, allPassQ=2.5)
+    fm, fnotes = migrate_session(full)
+    bank = fm["pairs"][1]["left"]["peqBands"]
+    assert len(bank) == MAX_BAND_COUNT and bank[-1]["type"] == "AllPassSecondOrder", len(bank)
+    assert not any(b["frequencyHz"] == 131 for b in bank), "the last bell (131 Hz) should be gone"
+    assert any("bank was full" in n and "131 Hz" in n for n in fnotes), fnotes
+    # Garbage and nonsense stages degrade to "no all-pass", and the rest of the file survives.
+    junk = _session()
+    junk["pairs"][1]["left"].update(allPassType="SomeGarbage", allPassFrequencyHz=120, allPassQ=2.5)
+    junk["pairs"][1]["right"].update(allPassType="SecondOrder", allPassFrequencyHz=300, allPassQ=0)
+    jm, jnotes = migrate_session(junk)
+    assert all(b["type"] != "AllPassSecondOrder" for b in jm["pairs"][1]["left"]["peqBands"] + jm["pairs"][1]["right"]["peqBands"])
+    assert sum("dropped" in n for n in jnotes) == 2, jnotes
+    assert legs_of(jm)[1]["row"]["ta_ms"] == 4.71, "the rest of the side must survive"
+    # v8→v9: the zone is GUESSED their way -- stereo Front, mono high-passed Center, mono else Sub.
+    assert guess_zone(False, "HighPass") == "Front" and guess_zone(True, "HighPass") == "Center"
+    assert guess_zone(True, "LowPass") == "Sub" and guess_zone(True, "Off") == "Sub"
+    assert [leg["zone"] for leg in legs_of(_session())] == ["sub", "front", "front", "sub"]
+    assert any("GUESSED" in n for n in notes), notes
+    # v10 as the app writes it: the zone is READ, not guessed; the angle becomes the row's
+    # phase_deg; the bank's all-pass is an APF2 band; an absent angle is 0.
+    t = _session_v10()
+    t_legs = legs_of(t)
+    assert [leg["zone"] for leg in t_legs] == ["sub", "front", "front", "center"], [leg["zone"] for leg in t_legs]
+    assert t_legs[0]["row"]["eq"][-1] == {"type": "APF2", "f": 120.0, "i": 2, "q": 2.5}, t_legs[0]["row"]["eq"]
+    assert t_legs[1]["row"]["phase_deg"] == 90.0 and t_legs[2]["row"]["phase_deg"] == 0.0
+    assert t_legs[1]["phase_reference"] == {"kind": "hp", "hz": 65.0, "dormant": False}, t_legs[1]["phase_reference"]
+    # The Center block's HP is dormant (kind LowPass) and 45° is stated at it: the row carries
+    # the HP with slope OFF -- configured, not active -- so the angle keeps its reference, and
+    # the edge is no longer listed as merely dormant.
+    orphan = t_legs[3]
+    assert orphan["row"]["hp"] == {"f": 300.0, "type": "LR", "slope": "OFF", "family": "LinkwitzRiley"}, orphan["row"]["hp"]
+    assert orphan["phase_reference"] == {"kind": "hp", "hz": 300.0, "dormant": True} and "hp" not in orphan["dormant"]
+    assert orphan["row"]["lp"]["f"] == 2000.0, "the live LP (the C# default) is untouched"
+    # A Sub block states its angle at the LP: the row's reference is the LP.
+    sub10 = _session_v10()
+    sub10["pairs"][0]["left"]["phaseRotationDegrees"] = 180.0
+    assert legs_of(sub10)[0]["phase_reference"] == {"kind": "lp", "hz": 65.0, "dormant": False}
+    # An angle outside their Validate() range is refused, not clamped.
+    bad = _session_v10()
+    bad["pairs"][1]["left"]["phaseRotationDegrees"] = 360.0
+    try:
+        legs_of(bad)
+    except SessionError as exc:
+        assert "phaseRotationDegrees" in str(exc), exc
+    else:
+        raise AssertionError("an angle of 360 was read")
+    # ── the phase verdicts ─────────────────────────────────────────────────────
+    phased = json.loads(json.dumps(profile))
+    phased["dsp_profile"]["phase_control"] = {"range_deg": [0.0, 354.375], "step_deg": 5.625}
+    pres = convert(t, profile=phased, proj=_Proj(), source_path="<v10>")
+    assert pres["source"]["version"] == 10 and pres["source"]["read_as"] == 10 and pres["source"]["migration"] == []
+
+    def pv(res, channel, field):
+        return [c for leg in res["legs"] for c in leg["checks"] if c["channel"] == channel and c["field"] == field]
+    # w-L, zone front, 90° at its HP: on the grid, in range, and the ledger reads `w-L` at the HP too.
+    assert pv(pres, "w-L", "phase_deg")[0]["verdict"] == OK, pv(pres, "w-L", "phase_deg")
+    assert pv(pres, "w-L", "phase_deg.reference")[0]["verdict"] == OK, pv(pres, "w-L", "phase_deg.reference")
+    assert not pv(pres, "w-R", "phase_deg"), "an angle of 0 is nothing to enter"
+    # The unbound Center block: the number checks, the corner cannot -- said, not guessed.
+    assert pv(pres, "nosuch", "phase_deg.reference")[0]["verdict"] == UNKNOWN
+    # A step the control does not have is refused; a profile without the block is unknown.
+    off_grid = _session_v10()
+    off_grid["pairs"][1]["left"]["phaseRotationDegrees"] = 91.0
+    assert pv(convert(off_grid, profile=phased, proj=_Proj()), "w-L", "phase_deg")[0]["verdict"] == UNSUPPORTED
+    assert pv(convert(t, profile=profile, proj=_Proj()), "w-L", "phase_deg")[0]["verdict"] == UNKNOWN
+    # THE trap: a Sub block (angle at the LP) bound to a code the ledger reads at the HP. Same
+    # number, different filter -- refused by name. Bound to `sw`, the corners agree.
+    trap = _session_v10()
+    trap["pairs"][0]["left"]["phaseRotationDegrees"] = 180.0
+    wrong = convert(trap, profile=phased, proj=_Proj(), mapping={"sw": "m-L"})
+    ref = pv(wrong, "m-L", "phase_deg.reference")[0]
+    assert ref["verdict"] == UNSUPPORTED and "LP" in ref["reason"] and "HP" in ref["reason"], ref
+    right = convert(trap, profile=phased, proj=_Proj())
+    assert pv(right, "sw", "phase_deg.reference")[0]["verdict"] == OK
+    # ...and the local corner rule IS predict's rule, on the codes that matter, when predict can load.
+    try:
+        import predict as _predict
+    except ImportError:                      # stdlib-only environment: the rule is the same text
+        pass
+    else:
+        for code in ("sw", "sw-f", "sub", "SW_R", "w-L", "m-R", "tw-L", "c", "s-L"):
+            assert _ledger_reads_lp(code) == _predict._is_sub(code), code
+    # The report says what was read, what migrated, and which corner an angle sits on.
+    text10 = report(pres)
+    assert "zone front" in text10 and "phase 90 deg @ HP 65 Hz" in text10, text10
+    assert "phase 45 deg @ HP 300 Hz  (that edge is dormant" in text10, text10
+    text7 = report(convert(_session(), profile=phased, proj=_Proj(), source_path="<v7>"))
+    assert "v7 (read as v10)" in text7 and "migrated    v7→v8" in text7 and "GUESSED" in text7, text7
 
     # Q bounded per band type (hub #36 / RES-002): a Helix takes a bell to Q 50 and a SHELF only
     # to 2, so one range for every type both refuses legitimate shelves and passes impossible ones.
@@ -1507,7 +1922,10 @@ def _selftest():
     print(f"selftest OK -- {len(legs)} legs from {len(doc['pairs'])} pairs; LR48 refused (not rounded to LR36); "
           f"dormant HP 10 Hz withheld; delay unverifiable without max_ms; "
           f"Q bounded per band type (shelf 0.3 ok, shelf 30 refused, bell 30 ok); "
-          f"no profile => {blind['summary'][UNKNOWN]} unknown, 0 ok")
+          f"no profile => {blind['summary'][UNKNOWN]} unknown, 0 ok; "
+          f"v7..v10 read and migrated in memory (all-pass into the bank incl. a full one, zone guessed "
+          f"their way, v11 refused); v10 zone read, phase_deg with its reference (a dormant edge kept "
+          f"with slope OFF), a sub angle bound to a non-sub code refused")
 
 
 if __name__ == "__main__":
@@ -1517,8 +1935,9 @@ if __name__ == "__main__":
         _selftest()
     elif "--write-fixture" in sys.argv:
         os.makedirs(os.path.dirname(FIXTURE), exist_ok=True)
-        with open(FIXTURE, "w", encoding="utf-8") as _f:
-            _f.write(_fixture_text())
-        print(f"wrote {FIXTURE}")
+        for _path, _builder in ((FIXTURE, _session), (FIXTURE_V10, _session_v10)):
+            with open(_path, "w", encoding="utf-8") as _f:
+                _f.write(_fixture_text(_builder))
+            print(f"wrote {_path}")
     else:
         sys.exit(main())

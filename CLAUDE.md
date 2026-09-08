@@ -38,6 +38,13 @@ lists the upstream commits that touched the file since the sha; **a difference l
 ours, an unlisted one is a drift** — and a deviation recorded anywhere the checker does not look is the
 one somebody will "fix back". The licence text goes verbatim into `LICENSES/NOTICE.md`.
 
+**A port of a file FORMAT is a port too, and it pins the version as a number:** `# format-version: N`
+in the same block. The checker reads the upstream file's `CurrentVersion` and names `M != N` as a FORMAT
+drift whatever the commit list says. Bought 2026-09-08 (hub RES-008 / TCC-008): the two format readers
+(`resonalyze_ir.py`, `resonalyze_vc.py`) carried their pins in prose the checker could not see, the
+session format moved four times in three weeks, and every file the current app wrote was refused —
+correctly, and with nothing to say why.
+
 ## The method is deployed more than once, and only one copy is edited
 
 `~/dev/autosound/skill` is where the method is edited and versioned. Every other copy on a machine

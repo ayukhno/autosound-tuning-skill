@@ -5,11 +5,21 @@ Every port of somebody else's maths into `rew_tool` carries a header block (the 
 2026-08-24: "портуємо і будемо слідкувати за змінами"):
 
     # upstream: OWNER/REPO path/in/their/tree.cs @ <sha> (MIT) -- <symbols ported>
+    # format-version: <N> -- <why>          (only on a port of a FILE FORMAT; optional)
     # deviation: <what we did differently> -- see <where in our code>
 
 This script reads those headers and answers, per port, whether `path` has changed in the upstream
 since `<sha>`. It says WHICH commits touched the file, so the reader can go and look — it does not
 say whether the change matters, because that needs a person who understands both sides.
+
+**A port of a file format pins the format's version as a number, and that number is checked, not
+the commit list.** `# format-version: N` says which `CurrentVersion` the reader was written for;
+the checker reads `const int CurrentVersion = M` out of the upstream file at `ref` and names
+`M != N` as a drift of the FORMAT — whatever the commit list says, and however many commits
+merely touched the file for other reasons. Four session versions in three weeks (v7 → v10,
+2026-08-22 .. 09-05) is the pace that made this a mechanism rather than a note in a reference
+(hub RES-008): a reader pinned to v7 refused every file the current app wrote, correctly, and
+nothing named the gap until somebody read the upstream by hand.
 
 **A `# deviation:` line is where the checker looks before calling a difference a drift.** An
 unlisted difference between our port and the upstream is a drift (theirs moved, or ours did); a
@@ -44,7 +54,11 @@ PORT_ROOTS = [os.path.join(REPO, "skills", "autosound-tuning", "rew_tool")]
 UPSTREAM_RE = re.compile(
     r"^#\s*upstream:\s*(?P<repo>[\w.-]+/[\w.-]+)\s+(?P<path>\S+)\s+@\s+(?P<sha>[0-9a-fA-F]{7,40})")
 DEVIATION_RE = re.compile(r"^#\s*deviation:\s*(?P<text>.+)$")
+FORMAT_VERSION_RE = re.compile(r"^#\s*format-version:\s*(?P<n>\d+)")
 CONTINUATION_RE = re.compile(r"^#\s{4,}(?P<text>\S.*)$")
+# What the upstream's file says its writer produces. C# today; a second language gets a second
+# pattern here, not a second script.
+CURRENT_VERSION_RE = re.compile(r"\bconst\s+int\s+CurrentVersion\s*=\s*(?P<n>\d+)\s*;")
 
 
 def find_headers(roots):
@@ -66,15 +80,20 @@ def find_headers(roots):
                         continue
                     entry = {"file": os.path.relpath(fp, REPO), "line": i + 1,
                              "repo": m["repo"], "path": m["path"], "sha": m["sha"].lower(),
-                             "deviations": []}
+                             "deviations": [], "format_version": None}
                     # The block runs while the lines are comments; deviations may wrap onto
                     # indented continuation lines.
                     j = i + 1
-                    while j < len(lines) and lines[j].startswith("#"):
+                    # ...and stops at the next `# upstream:` line: two ports declared back to back
+                    # with no code between them are two blocks, not one with a swallowed header.
+                    while j < len(lines) and lines[j].startswith("#") and not UPSTREAM_RE.match(lines[j]):
                         d = DEVIATION_RE.match(lines[j])
+                        v = FORMAT_VERSION_RE.match(lines[j])
                         c = CONTINUATION_RE.match(lines[j])
                         if d:
                             entry["deviations"].append(d["text"].strip())
+                        elif v:
+                            entry["format_version"] = int(v["n"])
                         elif c and entry["deviations"]:
                             entry["deviations"][-1] += " " + c["text"].strip()
                         j += 1
@@ -99,7 +118,27 @@ def drift_via_clone(entry, clone, ref="origin/main"):
     log = _git(clone, "log", "--oneline", f"{entry['sha']}..{ref}", "--", entry["path"]).strip()
     commits = [l for l in log.splitlines() if l.strip()]
     head = _git(clone, "rev-parse", "--short", ref).strip()
-    return {"via": f"clone {clone} @ {ref} ({head})", "commits": commits}
+    out = {"via": f"clone {clone} @ {ref} ({head})", "commits": commits}
+    if entry.get("format_version") is not None:
+        try:
+            text = _git(clone, "show", f"{ref}:{entry['path']}")
+        except RuntimeError as exc:
+            return {"error": f"cannot read {entry['path']} at {ref}: {exc}"}
+        out.update(_format_check(entry, text))
+    return out
+
+
+def _format_check(entry, upstream_text):
+    """The upstream writer's version against the header's pin. A file that carries a pin but
+    whose upstream states no `CurrentVersion` is an error, not a pass: the pin would be checked
+    against nothing, which is the shape of check this whole script exists to refuse."""
+    m = CURRENT_VERSION_RE.search(upstream_text)
+    if not m:
+        return {"error": f"format-version pinned at {entry['format_version']}, but "
+                         f"{entry['path']} states no `const int CurrentVersion`"}
+    theirs = int(m["n"])
+    return {"upstream_format_version": theirs,
+            "format_drift": theirs != entry["format_version"]}
 
 
 def drift_via_api(entry):
@@ -122,8 +161,17 @@ def drift_via_api(entry):
                 cd = json.loads(rr.stdout)
                 if any(f.get("filename") == entry["path"] for f in cd.get("files", [])):
                     commits.append(f"{sha[:7]} {cd['commit']['message'].splitlines()[0][:70]}")
-    return {"via": f"GitHub API, {data.get('ahead_by', '?')} commits ahead of {entry['sha']}",
-            "commits": commits}
+    out = {"via": f"GitHub API, {data.get('ahead_by', '?')} commits ahead of {entry['sha']}",
+           "commits": commits}
+    if entry.get("format_version") is not None:
+        rr = subprocess.run(["gh", "api", f"repos/{entry['repo']}/contents/{entry['path']}"],
+                            capture_output=True, text=True)
+        if rr.returncode != 0:
+            return {"error": f"gh api contents failed: {rr.stderr.strip()[:160]}"}
+        import base64
+        text = base64.b64decode(json.loads(rr.stdout).get("content", "")).decode("utf-8", "replace")
+        out.update(_format_check(entry, text))
+    return out
 
 
 def check(entries, clone=None, ref="origin/main", fetch=False):
@@ -142,6 +190,13 @@ def render(results):
         where = f"{r['file']}:{r['line']}"
         if "error" in r:
             lines.append(f"  ?    {where}  {r['repo']} {r['path']} @ {r['sha']}: {r['error']}")
+        elif r.get("format_drift"):
+            lines.append(f"  FORMAT {where}  {r['repo']} {r['path']}: the upstream writer is at "
+                         f"version {r['upstream_format_version']}, this reader is pinned at "
+                         f"{r['format_version']} ({r['via']}) -- files it writes now will be "
+                         f"refused by their number until the reader is taught")
+            for c in r["commits"]:
+                lines.append(f"           {c}")
         elif r["commits"]:
             lines.append(f"  DRIFT {where}  {r['repo']} {r['path']} has moved since {r['sha']} "
                          f"({len(r['commits'])} commit(s), {r['via']}):")
@@ -149,6 +204,9 @@ def render(results):
                 lines.append(f"           {c}")
         else:
             lines.append(f"  ok   {where}  {r['repo']} {r['path']} unchanged since {r['sha']} ({r['via']})")
+        if r.get("format_version") is not None and not r.get("format_drift") and "error" not in r:
+            lines.append(f"         format-version {r['format_version']} = the upstream writer's "
+                         f"CurrentVersion")
         for d in r["deviations"]:
             lines.append(f"         deviation (ours, declared): {d}")
         if not r["deviations"]:
@@ -180,7 +238,7 @@ def main(argv=None):
         print(render(results))
     if any("error" in r for r in results):
         return 1
-    return 2 if any(r["commits"] for r in results) else 0
+    return 2 if any(r["commits"] or r.get("format_drift") for r in results) else 0
 
 
 def _selftest():
@@ -210,6 +268,9 @@ def _selftest():
         with open(os.path.join(up, "dsp", "Other.cs"), "w") as fh:
             fh.write("o2\n")
         commit("something else moved")
+        with open(os.path.join(up, "dsp", "Fmt.cs"), "w") as fh:
+            fh.write("public const int CurrentVersion = 7;\n")
+        sha_fmt7 = commit("a file format at version 7")
         # A clone with the upstream as origin/main, the way a fork checkout looks.
         clone = os.path.join(tmp, "clone")
         subprocess.run(["git", "clone", "-q", up, clone], check=True, env=env)
@@ -225,19 +286,42 @@ def _selftest():
                      "def f(): pass\n"
                      f"# upstream: who/what dsp/Metric.cs @ {sha2} -- Metric again\n"
                      "y = 2\n"
-                     f"# upstream: who/what dsp/Other.cs @ {sha2}\n")
+                     f"# upstream: who/what dsp/Other.cs @ {sha2}\n"
+                     f"# upstream: who/what dsp/Fmt.cs @ {sha_fmt7} -- a reader of the format\n"
+                     "# format-version: 7 -- their CurrentVersion\n"
+                     f"# upstream: who/what dsp/Other.cs @ {sha_fmt7} -- pinned as if a format\n"
+                     "# format-version: 1\n")
         entries = find_headers([ports])
-        assert [e["sha"] for e in entries] == [sha1, sha2, sha2], entries
+        assert [e["sha"] for e in entries] == [sha1, sha2, sha2, sha_fmt7, sha_fmt7], entries
+        assert [e["format_version"] for e in entries] == [None, None, None, 7, 1], entries
         assert entries[0]["deviations"] == [
             "log weights, not 1/f -- see _w (their 1/f is a log average only on a linear grid).",
             "our tie rule -- see align"], entries[0]["deviations"]
         assert entries[1]["deviations"] == [] and entries[2]["deviations"] == []
-        results = check(entries, clone=clone)
+        results = check(entries[:4], clone=clone)
         assert len(results[0]["commits"]) == 1 and "the metric changed" in results[0]["commits"][0], results[0]
         assert results[1]["commits"] == [], results[1]           # pinned to the change itself: current
         assert len(results[2]["commits"]) == 1 and "something else" in results[2]["commits"][0], results[2]
+        # The format pin: 7 against a writer at 7 is current and SAYS the number was compared.
+        assert results[3]["commits"] == [] and results[3]["format_drift"] is False, results[3]
+        assert results[3]["upstream_format_version"] == 7, results[3]
         text = render(results)
         assert "DRIFT" in text and "ok   " in text and "no deviations declared" in text
+        assert "format-version 7 = the upstream writer's CurrentVersion" in text, text
+        # A pin against a file that states no CurrentVersion is an error, never a pass.
+        fmt_on_other = check([entries[4]], clone=clone)
+        assert "error" in fmt_on_other[0] and "states no" in fmt_on_other[0]["error"], fmt_on_other
+        # The writer moves to 8 and the reader pinned at 7 is named as a FORMAT drift -- even a
+        # reader re-pinned to the very commit of the bump, whose commit list is empty.
+        with open(os.path.join(up, "dsp", "Fmt.cs"), "w") as fh:
+            fh.write("// bumped\npublic const int CurrentVersion = 8;\n")
+        sha_fmt8 = commit("the format moved to 8")
+        subprocess.run(["git", "-C", clone, "fetch", "-q"], check=True, env=env)
+        moved = check([entries[3], dict(entries[3], sha=sha_fmt8)], clone=clone)
+        assert moved[0]["format_drift"] and moved[0]["upstream_format_version"] == 8, moved[0]
+        assert moved[1]["commits"] == [] and moved[1]["format_drift"], moved[1]
+        assert "FORMAT" in render(moved) and "version 8" in render(moved), render(moved)
+        assert (2 if any(r["commits"] or r.get("format_drift") for r in moved) else 0) == 2
         # A sha the clone has never seen is an error, not a clean bill.
         bad = check([dict(entries[0], sha="deadbeef")], clone=clone)
         assert "error" in bad[0], bad[0]
@@ -246,7 +330,9 @@ def _selftest():
         assert rc_drift == 2
     print("selftest[upstream-drift] OK -- headers parsed with wrapped deviations, drift = exactly the "
           "commits that touched the ported file since the pinned sha, a pin at the change reads as "
-          "current, an unknown sha is an error, exit 2 on drift.")
+          "current, an unknown sha is an error, exit 2 on drift; a format-version pin is compared "
+          "with the upstream's CurrentVersion (7 = 7 current and said so; 7 vs 8 is a FORMAT drift "
+          "even with an empty commit list; a pin on a file with no version is an error).")
     return 0
 
 

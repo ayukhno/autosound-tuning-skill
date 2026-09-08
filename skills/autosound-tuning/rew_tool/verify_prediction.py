@@ -146,9 +146,14 @@ def measured_from_v7_dir(directory, freqs=None):
     for name in sorted(os.listdir(directory)):
         if not name.endswith(".json") or name == "manifest.json":
             continue
-        with open(os.path.join(directory, name), encoding="utf-8") as fh:
-            doc = json.load(fh)
-        if "transferRealSamples" not in doc:
+        import resonalyze_ir
+        try:
+            doc = resonalyze_ir.load_file(os.path.join(directory, name))
+        except resonalyze_ir.ConversionError as exc:
+            if "Unsupported impulse response version" in str(exc):
+                raise VerifyError(f"{directory}/{name}: {exc}")
+            continue                                   # a manifest or some other JSON
+        if doc.get("transferRealSamples") is None:
             continue
         if freqs is not None:
             H, _ = P.load_solo_v7(os.path.join(directory, name), fg)

@@ -178,7 +178,8 @@ def run(project_dir, solos_dir, ellipsoid_dir=None, write=False):
         info = loaded[code][1]
         gate = None
         try:
-            doc = json.load(open(info["path"], encoding="utf-8"))
+            import resonalyze_ir
+            doc = resonalyze_ir.load_file(info["path"])           # v7 numbers or v8 base64 alike
             gate = gate_from_ir(doc["transferRealSamples"], doc["sampleRate"])
         except (OSError, KeyError, ValueError):
             pass
