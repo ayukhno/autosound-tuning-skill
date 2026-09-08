@@ -87,6 +87,11 @@ EV_CAPTURE_TAKEN = "capture_taken"
 #: phase decision made from those measurements is read, and a round whose classification changed
 #: silently is a round nobody can re-litigate.
 EV_CAPTURE_PROTECTIVE = "capture_protective"
+#: The HARDWARE CONTROLS as they stood for a capture round -- the remote knobs, the switches: a
+#: fact ABOUT THE SERIES, not about the tune, and one nothing recorded until 2026-09-08. An hour
+#: went on "why is +4 dB on the virtual sub not in the measurement": it was not in the measurement
+#: because the sub's knob stood at −4, and no reader could have known (hub RES-007).
+EV_CAPTURE_KNOBS = "capture_knobs"
 EV_CAPTURE_SKIPPED = "capture_skipped"
 EV_CAPTURE_CLOSED = "capture_round_closed"
 # What the arithmetic said about the curves themselves (SCR-040). A separate event from
@@ -894,6 +899,62 @@ class Process:
                      phase=round_["phase"], version=round_["version"])
         return round_
 
+    def set_knobs(self, controls):
+        """The hardware controls as they stood for THIS round: `{name: position}`.
+
+        On the ROUND, like the protective record and for the same reason: one set of knob positions
+        covers one pass, and the round already carries the phase and the ledger version a reader
+        needs. `project.json.hardware.controls` holds where a knob stands TODAY (SCR-017); this
+        holds where it stood when these sweeps were taken, which is the only thing that makes two
+        series comparable -- or tells a reader they are not (hub RES-007).
+
+        Positions are stored verbatim, as the device shows them ("4/4", "-4", "ON"): what a step
+        is worth in dB is a different fact, with a different provenance, and it lives in
+        `project.json.hardware.control_mapping`.
+        """
+        if not isinstance(controls, dict) or not controls:
+            raise ProcessError("a knob record needs {name: position} -- an empty record says "
+                               "nothing, and nobody having said is what it would look like")
+        state, round_ = self._require_capture()
+        clean = {str(k).strip(): (v if isinstance(v, (int, float)) else str(v).strip())
+                 for k, v in controls.items() if str(k).strip()}
+        round_.setdefault("knobs", {}).update(clean)
+        self._write(state)
+        self._append(EV_CAPTURE_KNOBS, capture=round_["id"], knobs=clean,
+                     phase=round_["phase"], version=round_["version"])
+        return round_
+
+    def knobs_for(self, version):
+        """The knob positions recorded for the round the `_<version>` titles were taken in, or None.
+
+        `None` is "nobody recorded the knobs", never "the knobs were at zero" -- and a reader that
+        compares two series must treat it as the refusal it is (`verify_prediction`).
+        """
+        key = self._version_key
+        version = key(version)
+        matches = {r["id"] for r in self.capture_rounds()
+                   if key(r["version"]) == version
+                   or any(key(v) == version for v in r["title_versions"])}
+        rounds, order = {}, []
+        for event in self.events(kinds=(EV_CAPTURE_ISSUED, EV_CAPTURE_KNOBS)):
+            cid = event.get("capture")
+            if cid not in matches:
+                continue
+            if event.get("type") == EV_CAPTURE_ISSUED:
+                rounds[cid] = {"series": cid, "phase": event.get("phase"),
+                               "version": str(event.get("version")), "knobs": {}}
+                order.append(cid)
+            elif cid in rounds:
+                rounds[cid]["knobs"].update(event.get("knobs") or {})
+        for cid in reversed(order):
+            if rounds[cid]["knobs"]:
+                return rounds[cid]
+        live = (self.load().get("capture") or {})
+        if live.get("knobs") and key(live.get("version")) == version:
+            return {"series": live["id"], "phase": live.get("phase"),
+                    "version": str(live.get("version")), "knobs": dict(live["knobs"])}
+        return None
+
     def protective_record(self, state=None):
         """The open round's protective record, in the shape `protective.legs_of` reads.
 
@@ -1463,6 +1524,10 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
                                          --session adds the whole-session probe (levels side by
                                          side, loudest/quietest, ctl1->ctl3 drift) and records it
   capture-taken <title>                 a measurement came back (unplanned ones are flagged)
+  capture-knobs <NAME>=<POS> [...]      the hardware controls as they stood for THIS round
+                                        (SubRC=4/4 RealCenter=ON): a fact about the SERIES, so two
+                                        series taken at different positions can be told apart
+                                        instead of the difference landing in a calibration offset
   capture-protective <ch> OFF           this round was RAW for that channel: what was in the
   capture-protective <ch> --hp 100 LR 24    chain and is NOT part of the tune, so it can be taken
       [--lp 4000 BW 36]                 back out before a phase decision. OFF = leave it alone,
@@ -1650,6 +1715,15 @@ def _selftest():
         return subprocess.run([sys.executable, _mod, pr.dir, *argv],
                               capture_output=True, text=True, encoding="utf-8", errors="replace",
                               env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+    # The knobs of a round: recorded verbatim, found by the `_N` of the titles the round took, and
+    # `None` when nobody recorded them -- which is not "they were at zero" (hub RES-007).
+    assert _cli("capture-knobs", "SubRC=4/4", "RealCenter=ON").returncode == 0
+    kn = proc.knobs_for("0")                       # this round was opened for version "0"
+    assert kn and kn["knobs"] == {"SubRC": "4/4", "RealCenter": "ON"}, kn
+    assert _cli("capture-knobs", "SubRC=3/4").returncode == 0, "a second write UPDATES the round"
+    assert proc.knobs_for("0")["knobs"]["SubRC"] == "3/4"
+    assert proc.knobs_for("999") is None, "a version with no round has no knobs, not empty ones"
+    assert _cli("capture-knobs").returncode != 0 and _cli("capture-knobs", "SubRC").returncode != 0
     out = _cli("capture-protective", "tw-L", "--hp", "1000", "LR", "24")
     assert out.returncode == 0, out.stderr
     assert pr.protective_record()["channels"]["tw-L"]["hp"]["f"] == 1000.0, out.stdout
@@ -1961,6 +2035,17 @@ def _main(argv):
                 f"{args[0]} recorded"
                 + ("" if entry["planned"] else " (unplanned -- not on this round's list)")
             )
+        elif cmd == "capture-knobs":
+            if not args:
+                raise ProcessError("capture-knobs needs at least one NAME=POSITION")
+            knobs = {}
+            for item in args:
+                if "=" not in item:
+                    raise ProcessError(f"expected NAME=POSITION, got {item!r}")
+                name, _, pos = item.partition("=")
+                knobs[name] = pos
+            p.set_knobs(knobs)
+            print("knobs recorded: " + ", ".join(f"{k}={v}" for k, v in sorted(knobs.items())))
         elif cmd == "capture-protective":
             # Out-of-process on purpose: `autosound-tcc` routes every process WRITE through this
             # CLI under an exclusive lock, because its window and its model's MCP surface can both

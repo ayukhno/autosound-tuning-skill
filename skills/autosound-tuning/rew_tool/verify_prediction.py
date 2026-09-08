@@ -50,6 +50,16 @@ import dsp_math  # noqa: E402
 # (`diagnostic-techniques.md` §35). A criterion quoted without its band and grid is not this one.
 CRITERION_DB = 1.0            # |mean delta| in a junction band, stage 0's pass mark
 JUNCTION_THIRDS = 3           # each junction band is read in this many log-spaced sub-bands
+#: Where "what the centre adds" is read, and in how many bands. The centre's own band, kept low
+#: enough that a tripod prediction and a moving-mic measurement are still the same measurement:
+#: at 2 kHz the two differ in SIGN on real data, and that is the limit of a point prediction
+#: against an MMM, not an error in either (hub RES-007).
+CENTRE_BAND = (400.0, 1250.0)
+CENTRE_THIRDS = 3
+#: Below this, "what the centre adds" is nothing and its SIGN is arbitrary -- comparing the signs
+#: of two numbers that are both a tenth of a dB reports a disagreement where there is no quantity
+#: (seen on the first live run: −0.12 against +0.04 flagged as opposite). Such a band says so.
+CENTRE_MIN_DB = 0.5
 ENTRY_CRITERION_DB = 1.0      # a channel's shape rms after one offset: the entry control (Phase 3.1)
 ENTRY_DELAY_MS = 0.1          # a measured channel arriving further than this from its prediction
 NEAR_OCTAVES = 1.0 / 3.0      # a residual this close to a chain feature is blamed on that entry
@@ -244,13 +254,87 @@ def _nearest_feature(chain, f_hz):
     return name if dist <= 1.0 else None
 
 
+def knob_delta(predicted_knobs, measured_knobs, mapping):
+    """What the hardware controls did BETWEEN the two series: `{state, controls, per_channel, why}`.
+
+    Four states, and the difference between them is the whole point (hub RES-007):
+
+      * `"same"` -- every recorded control stands where it stood; the two series are comparable and
+        an offset between them is calibration, nothing else.
+      * `"unrecorded"` -- one side (or both) never wrote its knobs down. NOT "the knobs were equal":
+        the hour that went on "where did +4 dB go" went there because nobody could tell those two
+        apart. Reported as a refusal to compare, not as a pass.
+      * `"unmapped"` -- they differ and the project does not say what a step is worth. Refused for
+        the same reason: folding an unknown quantity into a calibration offset is how it becomes
+        invisible.
+      * `"mapped"` -- they differ and the project states `step_db` and the channels it moves, so the
+        expected shift is arithmetic: `(position_measured − position_predicted) × step_db`, and the
+        report can put it on its own line beside the calibration.
+    """
+    a = dict((predicted_knobs or {}).get("knobs") or {})
+    b = dict((measured_knobs or {}).get("knobs") or {})
+    if not a or not b:
+        return {"state": "unrecorded", "controls": {}, "per_channel": {},
+                "why": ("the knob positions of "
+                        + " and ".join([s for s, v in (("the prediction's series", a),
+                                                        ("the measured series", b)) if not v])
+                        + " were never recorded -- two series cannot be compared on the assumption "
+                          "that nobody touched anything (`process.py <dir> capture-knobs …`)")}
+    moved = {k: (a.get(k), b.get(k)) for k in sorted(set(a) | set(b)) if a.get(k) != b.get(k)}
+    if not moved:
+        return {"state": "same", "controls": {}, "per_channel": {},
+                "why": "every recorded control stands where it stood"}
+    per_channel, unmapped = {}, []
+    for name, (was, now) in moved.items():
+        spec = (mapping or {}).get(name) or {}
+        steps = _knob_steps(was, now)
+        if not spec.get("step_db") or not spec.get("affects") or steps is None:
+            unmapped.append(name)
+            continue
+        for code in spec["affects"]:
+            per_channel[code] = per_channel.get(code, 0.0) + steps * float(spec["step_db"])
+    if unmapped:
+        return {"state": "unmapped", "controls": moved, "per_channel": per_channel,
+                "why": (", ".join(unmapped) + " moved between the two series and the project does "
+                        "not say what a step is worth (or the positions are not on a scale that "
+                        "subtracts): `project.py <dir> set-control-mapping " + unmapped[0]
+                        + " <dB per step> <ch,ch> --source user`. Until it does, the difference "
+                          "would land in a calibration offset and stop being visible")}
+    return {"state": "mapped", "controls": moved,
+            "per_channel": {k: round(v, 2) for k, v in per_channel.items()},
+            "why": "; ".join(f"{n}: {w} → {v}" for n, (w, v) in moved.items())}
+
+
+def _knob_steps(was, now):
+    """How many STEPS a control moved: `4/4 → 3/4` is −1, `-4 → -2` is +2, `ON → OFF` is not a step.
+
+    A position like `3/4` is read as its numerator -- what the device shows as lamps or clicks --
+    and anything that is not a number on both sides has no step count, which is a refusal (a
+    RealCenter switch does not have a dB per step).
+    """
+    def one(v):
+        if isinstance(v, (int, float)):
+            return float(v)
+        text = str(v).strip()
+        head = text.split("/")[0].strip()
+        try:
+            return float(head)
+        except ValueError:
+            return None
+    x, y = one(was), one(now)
+    return None if x is None or y is None else y - x
+
+
 def verify(predicted, measured, *, pair_names=None, solo_names=None, all_name=None,
-           criterion_db=CRITERION_DB, entry_criterion_db=ENTRY_CRITERION_DB, entry_only=False,
-           entry_delay_ms=ENTRY_DELAY_MS):
+           all_plus_c_name=None, knobs=None, mapping=None, criterion_db=CRITERION_DB,
+           entry_criterion_db=ENTRY_CRITERION_DB, entry_only=False, entry_delay_ms=ENTRY_DELAY_MS):
     """`predicted`: the dict `predict.to_json` wrote. `measured`: {name: (freqs, mag_db, base)}.
 
     `pair_names`: {(lo, hi): measured name of the pair}; `solo_names`: {code: measured name of
-    the channel's solo WITH the tune loaded}; `all_name`: the measured whole-front name.
+    the channel's solo WITH the tune loaded}; `all_name`: the measured whole-front name;
+    `all_plus_c_name`: the measured front WITH the centre (`ALL+C_N`), against the prediction's own
+    `all_plus_c` -- the row that exists so a change on the centre is checked by the same instrument
+    as a change on a junction, instead of by hand in magnitudes (hub RES-007).
 
     The channel comparison doubles as the ENTRY CONTROL of Phase 3.1: one or two `_2` solos read
     against the predicted solo x chain, on the same base, before any sum is measured. A shape
@@ -270,7 +354,9 @@ def verify(predicted, measured, *, pair_names=None, solo_names=None, all_name=No
               if "gate_mag_db" in v}
     pair_names = pair_names or {}
     solo_names = solo_names or {}
+    knob = knob_delta(predicted.get("knobs"), knobs, mapping)
     report = {"criterion_db": criterion_db, "junctions": [], "channels": [], "all": None,
+              "all_plus_c": None, "knobs": knob,
               "verdict": None, "bases": sorted({rec[2] for rec in measured.values()}),
               "window_spec": predicted.get("window_spec")}
 
@@ -335,6 +421,10 @@ def verify(predicted, measured, *, pair_names=None, solo_names=None, all_name=No
         pred = _smooth_oct(f, _db(pred_c[code]), ENTRY_SMOOTHING_OCT)
         live = pred >= np.nanmax(pred) - 20.0       # where the channel actually plays
         offset = float(np.nanmedian((meas - pred)[live]))
+        # A knob that moved between the two series is NOT calibration, and the report says which is
+        # which: the knob's share is arithmetic from the mapping, the rest is the calibration fact
+        # it always was (hub RES-007).
+        knob_db = knob["per_channel"].get(code) if knob["state"] == "mapped" else None
         resid = np.where(live, meas - pred - offset, np.nan)
         # A delay typed wrong -- or a delay the ledger does not know about -- leaves the SHAPE
         # untouched, so the shape control cannot see it. The complex measured response can: the
@@ -364,6 +454,9 @@ def verify(predicted, measured, *, pair_names=None, solo_names=None, all_name=No
                     f"delay typed wrong, or one the ledger does not carry (another tier?)"
                     + (f"; also {hint}" if hint else ""))
         report["channels"].append({"channel": code, "measured": name, "base": base,
+                                   **({"knob_db": round(knob_db, 2),
+                                       "calibration_db": round(offset - knob_db, 2)}
+                                      if knob_db is not None else {}),
                                    "offset_db": round(offset, 2), "shape_rms_db": round(rms, 2),
                                    "band": [round(float(f[live].min()), 1),
                                             round(float(f[live].max()), 1)],
@@ -373,6 +466,42 @@ def verify(predicted, measured, *, pair_names=None, solo_names=None, all_name=No
                                    "hint": hint})
 
     # 3. The whole front as a shape.
+    if all_plus_c_name and all_plus_c_name in measured and "all_plus_c_mag_db" in predicted:
+        fm, mm, base = measured[all_plus_c_name][:3]
+        pred = np.asarray(predicted["all_plus_c_mag_db"], float)
+        meas = _on_grid(fm, mm, f)
+        live = pred > np.nanmax(pred) - 30.0
+        offset = float(np.nanmean((meas - pred)[live]))
+        resid = (meas - pred - offset)[live]
+        report["all_plus_c"] = {
+            "measured": all_plus_c_name, "base": base, "offset_db": round(offset, 2),
+            "rms_db": round(float(np.sqrt(np.nanmean(resid ** 2))), 2),
+            "worst_db": round(float(np.nanmax(np.abs(resid))), 2),
+            "centres": predicted.get("centres") or [],
+            "note": ("the centre summed coherently: valid only against a measurement taken with "
+                     "one signal on both inputs, and an UPPER BOUND for decorrelated music")}
+        # What the centre ADDS, predicted against measured -- the number the desk got the sign of
+        # wrong by summing magnitudes. Read as a DIFFERENCE (neither side's calibration is in it)
+        # and per 1/3 octave inside the centre's band, because above it a point prediction and a
+        # moving-mic measurement are not the same measurement.
+        if "all_mag_db" in predicted and all_name and all_name in measured:
+            d_pred = pred - np.asarray(predicted["all_mag_db"], float)
+            d_meas = meas - _on_grid(measured[all_name][0], measured[all_name][1], f)
+            rows = []
+            for lo_f, hi_f in _sub_bands(CENTRE_BAND[0], CENTRE_BAND[1], CENTRE_THIRDS):
+                m = (f >= lo_f) & (f <= hi_f)
+                if not m.any():
+                    continue
+                p_v, m_v = float(np.nanmean(d_pred[m])), float(np.nanmean(d_meas[m]))
+                small = max(abs(p_v), abs(m_v)) < CENTRE_MIN_DB
+                rows.append({"band": [round(lo_f, 1), round(hi_f, 1)],
+                             "pred_db": round(p_v, 2), "meas_db": round(m_v, 2), "small": small,
+                             "same_sign": (None if small else
+                                           bool(np.sign(round(p_v, 2)) == np.sign(round(m_v, 2))))})
+            report["all_plus_c"]["adds"] = rows
+            judged = [r for r in rows if not r["small"]]
+            report["all_plus_c"]["signs_agree"] = (all(r["same_sign"] for r in judged) if judged
+                                                   else None)
     if all_name and all_name in measured:
         fm, mm, base = measured[all_name][:3]
         meas = _on_grid(fm, mm, f)
@@ -434,6 +563,15 @@ def render(report):
     lines.append(f"  {'junction':14}{'fc':>6} {'base':<6}{'band':>12}{'pred':>7}{'meas':>7}"
                  f"{'Δ':>7}{'rms':>6}  ")
     lines.append("  " + "-" * 70)
+    k = report.get("knobs") or {}
+    if k.get("state") == "same":
+        lines.append(f"  knobs: {k['why']}")
+    elif k.get("state") == "mapped":
+        lines.append(f"  knobs MOVED between the two series -- {k['why']}; expected shift: "
+                     + ", ".join(f"{c} {v:+.2f} dB" for c, v in sorted(k["per_channel"].items())))
+    elif k.get("state"):
+        lines.append(f"  ⚠ knobs: {k['why']}")
+    lines.append("")
     for note in report.get("window_notes") or []:
         lines.append(f"  ⚠ {note}")
     for j in report["junctions"]:
@@ -463,6 +601,23 @@ def render(report):
                 lines.append(f"    {'':6}      worst {c['worst_db']:+.1f} dB @ {c['worst_hz']:.0f} Hz -- {c['hint']}")
         if report.get("entry"):
             lines.append("  " + report["entry"]["verdict"])
+    if report.get("all_plus_c"):
+        c = report["all_plus_c"]
+        lines.append("")
+        lines.append(f"  ALL+C ({', '.join(c['centres']) or 'centre'}) vs {c['measured']}: "
+                     f"offset {c['offset_db']:+.1f} dB, shape rms {c['rms_db']:.2f} dB, "
+                     f"worst {c['worst_db']:.2f}")
+        for r in c.get("adds") or []:
+            lines.append(f"    what the centre adds {r['band'][0]:.0f}-{r['band'][1]:.0f} Hz: "
+                         f"predicted {r['pred_db']:+.2f} dB · measured {r['meas_db']:+.2f} dB"
+                         + ("   (both under %.1f dB -- the centre adds nothing here and the sign is "
+                            "not a quantity)" % CENTRE_MIN_DB if r["small"]
+                            else ("" if r["same_sign"] else "   ← OPPOSITE SIGN")))
+        if c.get("signs_agree") is False:
+            lines.append("    ⚠ the centre's contribution comes out with the opposite sign to the "
+                         "measurement in at least one band -- read the note, then the condition the "
+                         "measurement was taken under")
+        lines.append(f"    {c['note']}")
     if report["all"]:
         a = report["all"]
         lines.append(f"  ALL {a['base']:<4} offset {a['offset_db']:+.1f} dB  shape rms {a['shape_rms_db']:.2f} dB")
@@ -490,6 +645,10 @@ def main(argv=None):
     ap.add_argument("--solo", action="append", default=[], metavar="ch=TITLE",
                     help="measured solo title (default '<ch>_<ver> (sw)')")
     ap.add_argument("--all", default=None, metavar="TITLE", help="whole-front title (default 'ALL_<ver> (sw)')")
+    ap.add_argument("--all-plus-c", default=None, metavar="TITLE",
+                    help="the measured front WITH the centre (`ALL+C_<ver>`), against the "
+                         "prediction's own ALL+C -- the centre checked by the same instrument as a "
+                         "junction (hub RES-007)")
     ap.add_argument("--allow-rta", action="store_true",
                     help="compare against RTA/MMM rows too -- said in the table; not a verification")
     ap.add_argument("--criterion", type=float, default=CRITERION_DB)
@@ -501,6 +660,10 @@ def main(argv=None):
     ap.add_argument("--entry-delay", type=float, default=ENTRY_DELAY_MS,
                     help="a measured channel arriving further than this (ms) from its prediction is "
                          "CHECK (default %(default)s)")
+    ap.add_argument("--project", metavar="DIR", default=None,
+                    help="the project: its `process/` gives the knob positions of THIS series and "
+                         "`project.json` what a knob step is worth, so an offset can be split into "
+                         "knob and calibration instead of being called calibration (hub RES-007)")
     ap.add_argument("--steady", action="store_true",
                     help="read the measured set through the WHOLE record even if the prediction "
                          "was gated -- the report says which window it used either way")
@@ -537,7 +700,10 @@ def main(argv=None):
         solos[code.strip()] = title
     if args.all:
         all_name = args.all
+    all_plus_c_name = args.all_plus_c
     wanted = set(pairs.values()) | set(solos.values()) | {all_name}
+    if all_plus_c_name:
+        wanted.add(all_plus_c_name)
     if args.rew:
         import rew_api as api
         ms = api.get_measurements()
@@ -550,7 +716,21 @@ def main(argv=None):
                                      freqs=predicted["freqs_hz"], window=window)
     else:
         measured = measured_from_v7_dir(args.measured, freqs=predicted["freqs_hz"], window=window)
+    knobs_here, mapping = None, None
+    if args.project:
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "state"))
+        try:
+            from process import Process
+            knobs_here = Process(os.path.join(args.project, "process")).knobs_for(args.ver)
+        except Exception as exc:                        # noqa: BLE001
+            print(f"  knobs not read: {exc}", file=sys.stderr)
+        try:
+            import project as _pj
+            mapping = _pj.Project(args.project).control_mapping()
+        except Exception as exc:                        # noqa: BLE001
+            print(f"  control mapping not read: {exc}", file=sys.stderr)
     report = verify(predicted, measured, pair_names=pairs, solo_names=solos, all_name=all_name,
+                    all_plus_c_name=all_plus_c_name, knobs=knobs_here, mapping=mapping,
                     criterion_db=args.criterion, entry_criterion_db=args.entry_criterion,
                     entry_only=args.entry, entry_delay_ms=args.entry_delay)
     if args.json:
@@ -561,6 +741,11 @@ def main(argv=None):
         os.makedirs(args.out, exist_ok=True)
         with open(os.path.join(args.out, "verified.json"), "w", encoding="utf-8") as fh:
             json.dump(report, fh, indent=1)
+    # A knob difference nobody can convert is a REFUSAL, not a caveat: the run exits 4 so a script
+    # cannot read "trusted" past it, and the reason names the command that fixes it (hub RES-007).
+    if (report.get("knobs") or {}).get("state") in ("unrecorded", "unmapped") and args.project:
+        print(f"  REFUSING to call this a verification: {report['knobs']['why']}", file=sys.stderr)
+        return 4
     return 0 if report["verdict"].startswith(("TRUSTED", "ENTRY OK")) else 1
 
 
@@ -643,11 +828,54 @@ def _selftest():
     r8 = verify(pred, meas(A, bump(B, 300.0)), **names, entry_criterion_db=0.5)
     assert r8["verdict"].startswith(("TRUSTED", "NOT trusted")) and r8["entry"]["check"] == ["m-L"], r8["verdict"]
     assert "ENTRY CHECK" in render(r8) and "HP 300" in render(r8)
+    # ── RES-007: knobs are a fact of the series, and the difference is not calibration ────────
+    # `4/4 → 3/4` on a knob mapped at 2 dB/step is −2 dB on the channels it moves; a switch has no
+    # step; a control nobody recorded is a refusal, not a pass.
+    assert _knob_steps("4/4", "3/4") == -1.0 and _knob_steps("-4", "-2") == 2.0
+    assert _knob_steps(4, 3) == -1.0 and _knob_steps("ON", "OFF") is None
+    mp = {"SubRC": {"step_db": 2.0, "affects": ["sw"], "zero_at": "4/4"}}
+    same = knob_delta({"knobs": {"SubRC": "4/4"}}, {"knobs": {"SubRC": "4/4"}}, mp)
+    assert same["state"] == "same" and same["per_channel"] == {}, same
+    moved = knob_delta({"knobs": {"SubRC": "4/4"}}, {"knobs": {"SubRC": "3/4"}}, mp)
+    assert moved["state"] == "mapped" and moved["per_channel"] == {"sw": -2.0}, moved
+    assert "4/4 → 3/4" in moved["why"]
+    for a, b, mapping, state, says in (
+            ({"knobs": {"SubRC": "4/4"}}, None, mp, "unrecorded", "never recorded"),
+            (None, {"knobs": {"SubRC": "4/4"}}, mp, "unrecorded", "never recorded"),
+            ({"knobs": {"SubRC": "4/4"}}, {"knobs": {"SubRC": "3/4"}}, {}, "unmapped",
+             "set-control-mapping"),
+            ({"knobs": {"RealCenter": "ON"}}, {"knobs": {"RealCenter": "OFF"}}, mp, "unmapped",
+             "not on a scale that subtracts")):
+        got = knob_delta(a, b, mapping)
+        assert got["state"] == state and says in got["why"], (state, got)
+    # In a report: the moved knob's share is on its own line, and what is left is the calibration.
+    # In a report: the moved knob's share is on its own line, and what is left is the calibration.
+    # `w-L` stands in for the knob's channel, since this fixture's map moves whatever is named.
+    pred_k = dict(pred, knobs={"series": "cap_1", "knobs": {"SubRC": "4/4"}})
+    mp_w = {"SubRC": {"step_db": 2.0, "affects": ["w-L"], "zero_at": "4/4"}}
+    rep_k = verify(pred_k, meas(A, B, gain_db=-2.0), **names,
+                   knobs={"knobs": {"SubRC": "3/4"}}, mapping=mp_w)
+    row = next(c for c in rep_k["channels"] if c["channel"] == "w-L")
+    assert row["knob_db"] == -2.0, row
+    assert abs(row["calibration_db"] - (row["offset_db"] + 2.0)) < 0.01, row
+    # The measurement WAS 2 dB quieter and the knob explains exactly that: the calibration line
+    # comes out at zero, which is the whole point of splitting them.
+    assert abs(row["calibration_db"]) < 0.1, row
+    assert rep_k["knobs"]["state"] == "mapped"
+    text_k = render(rep_k)
+    assert "knobs MOVED" in text_k and "w-L -2.00 dB" in text_k, text_k
+    assert "knobs: every recorded control" in render(
+        verify(pred_k, meas(A, B), **names, knobs={"knobs": {"SubRC": "4/4"}}, mapping=mp_w))
+
     print("selftest[verify_prediction] OK -- exact car → TRUSTED with zero deltas; +7.3 dB → still "
           "TRUSTED and the offsets say 7.3; an extra 0.6 ms → NOT trusted at the named junction; "
           "missing pair → UNVERIFIED; an RTA base is said in the verdict; entry control: the exact "
           "car is ENTRY OK, a bump on the HPF corner is CHECK naming the HPF, one two octaves away "
-          "names no chain feature.")
+          "names no chain feature."
+          + " · RES-007: the centre summed as ALL+C with its condition named and what it adds "
+            "compared per third of an octave (a band where it adds nothing says so instead of "
+            "reporting a sign), knobs are a fact of each series -- equal, mapped (the shift on its "
+            "own line and the calibration at zero), or refused as unrecorded/unmapped")
     return 0
 
 

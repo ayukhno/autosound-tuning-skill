@@ -139,6 +139,22 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
     arrivals are apart, is refused for that junction and it falls back to steady with the arithmetic
     printed — measured: at 2 kHz a 3 ms gate (6 cycles) verifies to 0.03 dB, while at 215 Hz the same
     gate reads 5 dB of "cancellation" that is the window (hub `RES-006`).
+  - **The centre is summed, under the condition it was measured in.** `ALL+C` sits beside `ALL`, the
+    `c↔FRONT` pair reads on the same row as a junction, and `verify_prediction --all-plus-c` compares
+    what the centre ADDS per third of an octave against the measurement. The condition travels with
+    the number: one signal on both inputs, the centre playing the whole programme — for music it
+    carries only the correlated part, so the coherent sum is an **upper bound**. (Resonalyze draws a
+    centre and never sums it, for exactly this reason; we sum it because the `ALL+C` measurement
+    exists and is what we check against, and we name the limit instead of skipping the sum.) A rear
+    pair was always in its side's sum, by the side in its own code — that is now said rather than
+    contradicted by a note.
+  - **A knob is not a calibration.** The capture round records the hardware controls
+    (`process.py … capture-knobs SubRC=4/4`), the prediction carries them, and
+    `verify_prediction --project DIR` compares them: equal → the series are comparable; different
+    with a mapping (`set-control-mapping`) → the expected shift on its own line and the calibration
+    as what is left; different with no mapping, or not recorded at all → **a refusal, exit 4**. An
+    hour went on "where did +4 dB on the virtual sub go" because nothing carried the sub knob's
+    −4 (hub `RES-007`).
   - **`--delta-vs` for what a change does, `--ladder` for what the rungs give.** The delta reports only
     the rows that differ and the junctions they are in; the ladder prints one junction's variants in
     the order asked and **does not sort them** — ordering by score is a proposal, and the desk does not

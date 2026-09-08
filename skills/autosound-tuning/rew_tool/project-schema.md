@@ -71,6 +71,13 @@ machine-readable to render for its Project/System/Car-audio-analysis panels eith
     "controls": {
       "RearRC": {"value": "3/4", "source": "user", "at": "…"},
       "RealCenter": {"value": "ON", "source": "user", "at": "…"}
+    },
+    "control_mapping": {                                     // RES-007: what a knob DOES
+      "SubRC": {"step_db": {"value": 2.0, "source": "user", "at": "…"},
+                "affects": ["sw"], "zero_at": "4/4"}
+    },
+    "virtual_routing": {                                     // RES-007: the DSP's matrix, as a fact
+      "VFL": {"value": ["w-L", "m-L", "tw-L"], "source": "user", "at": "…"}
     }
   },
 
@@ -276,6 +283,29 @@ Two granularities, deliberately not one:
 `open_questions(data)` walks the whole structure (mirrors `dsp_profile.py`'s walker exactly): a
 bare `null` OR a `fact()` wrapper whose `value` is `null` is an open question; `_open_questions`
 freeform notes are included as-is. Unknowns are recorded, never guessed.
+
+## What a knob DOES, and where the virtual tier GOES (RES-007)
+
+Two facts that sat outside every file until 2026-09-08, and both cost time:
+
+- **`hardware.control_mapping`** — a knob's POSITION (`controls`) and what a step of it is WORTH are
+  two facts with two provenances: the position is read off the device, the dB per step is usually the
+  vendor's claim or the tuner's word. So the mapping carries its own `source`, and until it exists
+  `verify_prediction` **refuses** to compare two series taken at different positions rather than
+  folding the difference into a calibration offset — which is how an hour went on "where did the
+  +4 dB on the virtual sub go" (it had not gone anywhere: the sub's knob stood at −4).
+  `project.py <dir> set-control-mapping SubRC 2 sw --source user --zero-at 4/4`.
+- **`hardware.virtual_routing`** — which physical outputs each VIRTUAL channel feeds. The ledger
+  carries the virtual ROWS (a Helix VFL's EQ, gain and delay) and nothing about where they go, so
+  `predict` had to be told by hand on every run. Recorded once here, it is read automatically;
+  `--route` stays as a per-run override and the report says which was used. **Never guessed from
+  names**: `VFL` looking like "virtual front left" is a convention, not a wiring diagram.
+  `project.py <dir> set-route VFL w-L,m-L,tw-L --source user`.
+
+Where the knob stood FOR A CAPTURE is a third thing, and it belongs to the round rather than here:
+`process.py <dir> capture-knobs SubRC=4/4 RealCenter=ON` (see `process`'s own doc). This file holds
+where a knob stands today; the round holds where it stood when those sweeps were taken, and that is
+what makes two series comparable — or says they are not.
 
 ## Hardware controls vs. the ledger (SCR-017)
 

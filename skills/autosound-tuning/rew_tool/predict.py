@@ -116,9 +116,21 @@ def _db(h):
 
 SUB_GROUP = "SWs"       # the name of two (or more) subwoofers summed: a PAIR, like Ws, not a junction
 
+#: A CENTRE channel: one driver playing a signal derived from both sides, so it has no side of its
+#: own -- and it is the one "other" channel that belongs in a sum, because a measurement of the
+#: whole system with the centre on (`ALL+C`) is a thing a tuner takes and a thing a desk must be
+#: able to predict (hub RES-007). Rear channels are NOT here: `r-L`/`r-R` carry a side in their
+#: code and have been summed into it all along.
+_CENTRE_CODES = ("c", "centre", "center")
+
 
 def _is_sub(code):
     return code.lower().startswith(("sw", "sub"))
+
+
+def _is_centre(code):
+    c = str(code).lower()
+    return c in _CENTRE_CODES or c.startswith(("c-", "c_"))
 
 
 def _side_of(code):
@@ -827,10 +839,32 @@ def predict(freqs, solos, chains, joints=None, band_oct=1.0, solos_gate=None, ga
                        "sum": (sum(processed[c] for c in members) if members
                                else np.zeros(len(f), dtype=complex))}
     front = [c for c in processed if c != SUB_GROUP and _side_of(c) != "other"]
-    left_out = [c for c in processed if _side_of(c) == "other"]
-    if left_out:
-        notes.append(f"{', '.join(left_out)}: centre/rear -- loaded, not summed (Phase 5)")
+    rear = [c for c in front if str(c).lower().startswith(("r-", "r_"))]
+    if rear:
+        # Said because it was NOT said for a long time: a rear channel carries its side in its own
+        # code, so it has always been summed into that side -- while the note here claimed centre
+        # AND rear were "loaded, not summed" (hub RES-007). One of those two was true.
+        notes.append(f"{', '.join(sorted(rear))}: rear -- IN its side's sum and in ALL, by the side "
+                     f"in its code; a rear pair is part of what the mic hears")
+    centres = [c for c in processed if _is_centre(c)]
+    other = [c for c in processed if _side_of(c) == "other" and c not in centres]
+    if other:
+        notes.append(f"{', '.join(other)}: no side in the code and not a centre -- loaded, not summed")
     all_sum = sum(processed[c] for c in front) if front else np.zeros(len(f), dtype=complex)
+    # ALL+C: the front sum with the centre added as a mono member of both sides -- the thing a
+    # tuner MEASURES as `ALL+C_N`, so the thing a desk has to be able to predict. Kept beside ALL
+    # rather than folded into it: `ALL` is the front, and the two measurements are two rows.
+    all_plus_c = None
+    if centres:
+        all_plus_c = all_sum + sum(processed[c] for c in centres)
+        notes.append(
+            f"ALL+C = ALL + {', '.join(sorted(centres))}, summed COHERENTLY and only valid under "
+            f"the condition it was measured in: one signal on both inputs, the centre playing the "
+            f"whole programme. For music the centre carries the CORRELATED part of the two channels, "
+            f"so this is an UPPER BOUND for decorrelated content -- verify it against an `ALL+C` "
+            f"measurement taken the same way, never against music. (Resonalyze draws a centre and "
+            f"never sums it, for this reason -- `REFERENCE.md` @ 8514e7b; we sum it because the "
+            f"measurement we check against exists, and we name the limit rather than skip the sum.)")
 
     if joints is None:
         joints = joints_from_chains({c: chains[c] for c in processed})
@@ -858,6 +892,29 @@ def predict(freqs, solos, chains, joints=None, band_oct=1.0, solos_gate=None, ga
             "worst_null_hz": (float(f[m][ok][k]) if k is not None else None),
         })
 
+    # The centre against the front it plays into: a PAIR, not a junction -- there is no crossover
+    # between them, and what a tuner needs to know is whether they add or fight where both play.
+    for centre in sorted(centres):
+        ch = chains[centre]
+        band_lo = float((ch.get("hp") or {}).get("f") or f[0])
+        band_hi = float((ch.get("lp") or {}).get("f") or f[-1])
+        if band_hi <= band_lo or not front:
+            continue
+        read, used, why = _read_pair(processed, gated, centre, front[0], band_lo * 2 ** 0.5,
+                                     gate_spec, gate_anchors)
+        front_sum = sum(read[c] for c in front if c in read)
+        sl = dsp_math.sum_loss(f, read[centre], front_sum, (band_lo, band_hi))
+        pairs.append({"pair": f"{centre}+FRONT", "members": [centre] + front,
+                      "band": [band_lo, band_hi],
+                      "sum_loss_avg_db": sl["avg_db"], "sum_loss_dip_db": sl["dip_db"],
+                      "sum_loss_dip_hz": sl["dip_hz"], "sum_loss_score_db": sl["score_db"],
+                      "sum_ripple_db": sl["ripple_db"], "window": used,
+                      "note": ("the centre against the whole front over the band the centre plays: "
+                               "a pair, not a junction -- no crossover joins them, and the reading "
+                               "carries ALL+C's condition (one signal on both inputs)")})
+        if why:
+            notes.append(f"{centre}+FRONT: {why}")
+
     lr = []
     for lo_f, hi_f in LR_BANDS:
         m = (f >= lo_f) & (f <= hi_f)
@@ -877,8 +934,8 @@ def predict(freqs, solos, chains, joints=None, band_oct=1.0, solos_gate=None, ga
                      f"are in is read STEADY and says so")
     return {"freqs_hz": f, "processed": processed, "gated": gated,
             "chains": {c: chains[c] for c in processed}, "window": window,
-            "sides": sides, "all": all_sum, "junctions": junctions, "pairs": pairs,
-            "lr_delta": lr, "notes": notes}
+            "sides": sides, "all": all_sum, "all_plus_c": all_plus_c, "centres": sorted(centres),
+            "junctions": junctions, "pairs": pairs, "lr_delta": lr, "notes": notes}
 
 
 def _read_pair(processed, gated, a, b, fc, spec=None, anchors=None):
@@ -1454,10 +1511,15 @@ def to_json(result, decimate=1, window_spec=None):
                             if c in gated else {})}
                      for c, h in result["processed"].items()},
         "window_spec": window_spec,
+        "knobs": result.get("knobs"),
         "sides": {s: {"members": v["members"],
                       "sum_mag_db": [round(float(x), 3) for x in _db(v["sum"])[::decimate]]}
                   for s, v in result["sides"].items()},
         "all_mag_db": [round(float(x), 3) for x in _db(result["all"])[::decimate]],
+        **({"all_plus_c_mag_db": [round(float(x), 3)
+                                  for x in _db(result["all_plus_c"])[::decimate]],
+            "centres": result.get("centres") or []}
+           if result.get("all_plus_c") is not None else {}),
         "window": result.get("window", _windows.STEADY),
         "junctions": result["junctions"],
         "pairs": result.get("pairs", []),
@@ -1494,6 +1556,14 @@ def render(result):
                      f"{pr['sum_ripple_db']:>8.2f} | "
                      f"{'(' + '+'.join(pr['members']) + ')':>18}")
     lines.append("")
+    if result.get("all_plus_c") is not None:
+        d = _db(result["all_plus_c"]) - _db(result["all"])
+        fq = result["freqs_hz"]
+        lines.append("")
+        lines.append("  ALL+C − ALL (what the centre adds, coherently, under the measurement's "
+                     "condition): " + "  ".join(
+                         f"{v:.0f}:{float(d[int(np.argmin(np.abs(fq - v)))]):+.1f}"
+                         for v in (100, 250, 500, 800, 1250, 2000, 4000) if fq[0] <= v <= fq[-1]))
     lines.append("  L-R level difference (dB, + = left louder): " + "  ".join(
         f"{b['band'][0]:.0f}-{b['band'][1]:.0f}:{b['delta_db']:+.1f}" for b in result["lr_delta"]))
     for n in result["notes"]:
@@ -1644,13 +1714,29 @@ def main(argv=None):
         preset, snap = load_project_state(args.project, args.preset, args.state_ver)
         chains = chains_from_snapshot(snap)
         state_label = f"{args.project} slot {preset} {snap.get('version') or 'HEAD'}"
+        # The routing matrix, in this order: what the run says (`--route`), then what the PROJECT
+        # records (`hardware.virtual_routing`, RES-007), then nothing -- and the third case leaves
+        # the tier out and says so. Never guessed from names.
+        routes, route_from = {}, None
         if args.route:
-            routes = {}
             for spec in args.route:
                 v, _, outs = spec.partition("=")
                 routes[v.strip()] = [o.strip() for o in outs.split(",") if o.strip()]
+            route_from = "--route"
+        else:
+            import project as _project_mod
+            try:
+                recorded = _project_mod.Project(args.project).virtual_routing()
+            except Exception as exc:                       # noqa: BLE001 -- unreadable is not routed
+                recorded, exc_note = {}, str(exc)
+                print(f"  project.json unreadable for routing: {exc_note}", file=sys.stderr)
+            if recorded:
+                routes, route_from = recorded, "project.json hardware.virtual_routing"
+        if routes:
             chains, route_notes = route_chains(chains, chains_from_snapshot(snap, tier="virtual_channels"), routes)
-            state_label += " + virtual tier via --route"
+            route_notes.insert(0, f"virtual tier routed by {route_from}: "
+                                  + "; ".join(f"{k} → {', '.join(v)}" for k, v in sorted(routes.items())))
+            state_label += f" + virtual tier via {route_from}"
         else:
             route_notes = []
             v_eq = [c for c, r in (snap.get("virtual_channels") or {}).items()
@@ -1658,8 +1744,9 @@ def main(argv=None):
             if v_eq:
                 route_notes.append("the ledger's VIRTUAL tier carries EQ/gain/delay on "
                                    + ", ".join(sorted(v_eq)) + " and is NOT in this prediction: "
-                                   "no routing fact. Pass --route VIRTUAL=out,out as the DSP's "
-                                   "matrix reads")
+                                   "no routing fact in the project either "
+                                   "(`project.py <dir> set-route VFL w-L,m-L,tw-L`) -- pass "
+                                   "--route VIRTUAL=out,out for one run, or record it once")
 
     drift = drift_from_manifest(args.drift) if args.drift else None
     if args.gate and args.fdw:
@@ -1680,6 +1767,22 @@ def main(argv=None):
                 loaded[code] = load_solo_rew(title, f, keep_ir=keep_ir)
             except (PredictError, KeyError) as e:
                 print(f"  {code}: {e}", file=sys.stderr)
+    # The KNOBS the series was taken at -- a fact about the capture, not about the tune, and the
+    # one a reader needs to know whether two series are comparable at all (hub RES-007). Looked up
+    # whatever the protective question is: they are different facts.
+    knobs = None
+    knob_dir = args.process or (os.path.join(os.environ["AUTOSOUND_PROJECT_DIR"], "process")
+                               if os.environ.get("AUTOSOUND_PROJECT_DIR")
+                               else (os.path.join(args.project, "process") if args.project else None))
+    if knob_dir and os.path.isdir(knob_dir):
+        state_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state")
+        if state_dir not in sys.path:
+            sys.path.insert(0, state_dir)
+        from process import Process as _Proc
+        try:
+            knobs = _Proc(knob_dir).knobs_for(args.ver)
+        except Exception as exc:                        # noqa: BLE001 -- unreadable is not "none"
+            print(f"  knobs not read from {knob_dir}: {exc}", file=sys.stderr)
     if args.no_de_embed:
         solos = {c: H for c, (H, _) in loaded.items()}
         prot_notes = ["protective filters LEFT IN every solo (--no-de-embed) -- junction phase near a "
@@ -1783,7 +1886,20 @@ def main(argv=None):
 
     result = predict(f, solos, chains, joints=joints, band_oct=args.band_oct,
                      solos_gate=solos_gate, gate_spec=gate_kw, gate_anchors=gate_anchors)
+    result["knobs"] = knobs
     result["notes"].insert(0, f"state: {state_label}")
+    if knobs and knobs.get("knobs"):
+        result["notes"].insert(1, "hardware controls at this series (round "
+                                  f"{knobs.get('series')}): "
+                                  + ", ".join(f"{k}={v}" for k, v in sorted(knobs["knobs"].items()))
+                                  + " -- a verification against a series taken at other positions "
+                                    "is refused unless the project states what a step is worth "
+                                    "(`project.py <dir> set-control-mapping`)")
+    elif knob_dir:
+        result["notes"].insert(1, f"hardware controls for _{args.ver}: NOT recorded. A knob nobody "
+                                  f"wrote down is not a knob at zero -- record it with "
+                                  f"`process.py <dir> capture-knobs SubRC=4/4 …` at capture time, or "
+                                  f"a difference between two series will look like a calibration")
     result["notes"][1:1] = route_notes
     result["notes"].insert(1, "solos: " + ", ".join(
         f"{c} ({i['source']})" for c, (_, i) in loaded.items()))
@@ -1989,7 +2105,23 @@ def _selftest():
     r3 = predict(f, solos3, chains3)
     assert r3["sides"]["L"]["members"] == ["sw", "w-L", "m-L"], r3["sides"]["L"]["members"]
     assert "sw" in r3["sides"]["R"]["members"] and "c" not in r3["sides"]["R"]["members"]
-    assert any("centre/rear" in n for n in r3["notes"]) and any("no ledger row" in n for n in r3["notes"])
+    # The centre is not a SIDE's member -- it has no side -- and it IS in `ALL+C`, which is the
+    # measurement a tuner takes (hub RES-007). The condition it is valid under travels with it.
+    assert r3["centres"] == ["c"] and r3["all_plus_c"] is not None
+    assert np.allclose(r3["all_plus_c"], r3["all"] + r3["processed"]["c"])
+    assert any("ALL+C = ALL + c" in n and "UPPER BOUND" in n and "one signal on both inputs" in n
+               for n in r3["notes"]), r3["notes"]
+    c_pair = next(p for p in r3["pairs"] if p["pair"] == "c+FRONT")
+    assert c_pair["members"][0] == "c" and c_pair["sum_loss_avg_db"] <= 0.0, c_pair
+    assert "no crossover joins them" in c_pair["note"]
+    assert "all_plus_c_mag_db" in to_json(r3) and to_json(r3)["centres"] == ["c"]
+    assert "ALL+C − ALL" in render(r3)
+    # A rear pair is summed into its side by the side in its own code, and that is now SAID.
+    r3r = predict(f, dict(solos3, **{"r-L": sm, "r-R": sm}), dict(chains3, **{"r-L": chains["m-L"],
+                                                                             "r-R": chains["m-L"]}))
+    assert "r-L" in r3r["sides"]["L"]["members"] and "r-R" in r3r["sides"]["R"]["members"]
+    assert any("rear -- IN its side's sum" in n for n in r3r["notes"]), r3r["notes"]
+    assert any("no ledger row" in n for n in r3["notes"])
 
     # 6. A protective filter in the recording comes OUT before the chain goes on (doctrine 24.08).
     # Anchor to the definition: a flat driver swept under LR24 @1000 is, after de-embed, flat again
@@ -2093,6 +2225,23 @@ def _selftest():
     assert abs(_db(chain_response(at, routed["w-L"]))[2] + 6.0) < 0.01 and \
         abs(_db(chain_response(at, routed["w-R"]))[2]) < 1e-9, (routed["w-L"], routed["w-R"])
     assert "VFL" in chain_label(routed["w-L"]) and any("NOT routed" in n and "w-R" in n for n in rnotes), rnotes
+    # ...and the routing fact recorded in the PROJECT gives the same chains as `--route` typed by
+    # hand -- the identity that lets the fact stop being retyped (hub RES-007, criterion (c)).
+    import project as _pj
+    with tempfile.TemporaryDirectory() as ptmp:
+        pj = _pj.Project(ptmp)
+        for code in ("w-L", "w-R"):
+            pj.set_channel(code, tier="channels")
+        pj.set_channel("VFL", tier="virtual_channels")
+        pj.set_virtual_route("VFL", ["w-L"], source="user")
+        assert pj.virtual_routing() == {"VFL": ["w-L"]}
+        from_project, pnotes = route_chains(chains_from_snapshot(vsnap),
+                                            chains_from_snapshot(vsnap, "virtual_channels"),
+                                            pj.virtual_routing())
+        for code in ("w-L", "w-R"):
+            assert np.array_equal(chain_response(f, from_project[code]),
+                                  chain_response(f, routed[code])), code
+        assert pnotes == rnotes
     try:
         route_chains(chains_from_snapshot(vsnap), chains_from_snapshot(vsnap, "virtual_channels"), {"VXX": ["w-L"]})
         raise AssertionError("an unknown virtual code was accepted")

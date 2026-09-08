@@ -862,6 +862,75 @@ class Project:
         controls[name] = fact(value, source=source)
         return self.save(data)
 
+    def set_virtual_route(self, name, outputs, source=None):
+        """Which physical outputs one VIRTUAL channel feeds -- the DSP's routing matrix, as a fact.
+
+        A Helix's VFL feeds every left-front output, so its EQ, gain and delay are in their chains;
+        the ledger carries the virtual ROWS and nothing about where they go, and `predict` therefore
+        had to be told by hand on every run (`--route VFL=w-L,m-L,tw-L`). A fact that has to be
+        retyped is a fact that is one session away from being wrong -- and it is the same shape as
+        `hardware.controls` (SCR-017): a property of the DEVICE, constant across presets, so it
+        lives here once (hub RES-007).
+
+        Never guessed from names: `VFL` looking like "virtual front left" is a convention, not a
+        wiring diagram, and a prediction built on a guessed matrix is wrong in a way nothing in it
+        would show. With no fact recorded, `predict` leaves the tier out and says so.
+        """
+        codes = [str(c).strip() for c in (outputs or []) if str(c).strip()]
+        if not codes:
+            raise ProjectError(f"{name}: a route needs the outputs it feeds -- an empty route is "
+                               f"not 'feeds nothing', it is nobody having said")
+        data = self.load()
+        known = {r.get("code") for r in data.get("channels") or []}
+        unknown = [c for c in codes if known and c not in known]
+        if unknown:
+            raise ProjectError(f"{name}: {', '.join(unknown)} — not a channel of this project "
+                               f"(`channels[].code`); a route into a name nothing answers to would "
+                               f"apply the tier to nothing and look like it worked")
+        data.setdefault("hardware", {}).setdefault("virtual_routing", {})[str(name).strip()] = \
+            fact(codes, source=source)
+        return self.save(data)
+
+    def virtual_routing(self, data=None):
+        """`{virtual code: [outputs]}` as recorded, or `{}`. The provenance stays in the file."""
+        data = data or self.load()
+        raw = ((data.get("hardware") or {}).get("virtual_routing") or {})
+        return {k: list(fact_value(v) or []) for k, v in raw.items()}
+
+    def set_control_mapping(self, name, step_db, affects, source=None, zero_at=None):
+        """What one hardware knob DOES, in dB per step, and to which channels.
+
+        Separate from the knob's POSITION (`hardware.controls`) because they are two different
+        facts with two different provenances: the position is read off the device, the mapping is
+        usually the vendor's claim or the tuner's word -- and until it is measured, saying so is
+        the whole point. Without a mapping a reader must REFUSE to compare two series taken at
+        different positions rather than fold the difference into a calibration offset, which is how
+        an hour went on "where did +4 dB go" (hub RES-007).
+        """
+        codes = [str(c).strip() for c in (affects or []) if str(c).strip()]
+        if not codes:
+            raise ProjectError(f"{name}: a mapping needs the channels it moves")
+        if not isinstance(step_db, (int, float)):
+            raise ProjectError(f"{name}: step_db must be a number of dB per step, got {step_db!r}")
+        data = self.load()
+        data.setdefault("hardware", {}).setdefault("control_mapping", {})[str(name).strip()] = {
+            "step_db": fact(float(step_db), source=source), "affects": codes,
+            **({"zero_at": zero_at} if zero_at is not None else {})}
+        return self.save(data)
+
+    def control_mapping(self, data=None):
+        """`{knob: {step_db, affects, zero_at}}` as recorded, or `{}`."""
+        data = data or self.load()
+        raw = ((data.get("hardware") or {}).get("control_mapping") or {})
+        out = {}
+        for name, entry in raw.items():
+            if not isinstance(entry, dict):
+                continue
+            out[name] = {"step_db": fact_value(entry.get("step_db")),
+                         "affects": list(entry.get("affects") or []),
+                         "zero_at": entry.get("zero_at")}
+        return out
+
     @staticmethod
     def parse_impact(impact):
         """One reading of a `config_change` event's `impact`, for every consumer.
@@ -976,6 +1045,15 @@ _USAGE = """usage: project.py <project-dir> <command> [args]
                                                captures (SCR-039). <old> may be a name it used
                                                to have; snapshots are not rewritten
   set-hardware <name> <value> [--source S]     set a DSP-hardware control (RearRC/SubRC/...)
+  set-route <VIRTUAL> <out,out,...> [--source S]
+                                               which outputs a VIRTUAL channel feeds -- the DSP's
+                                               routing matrix as a fact, so `predict` stops being
+                                               told by hand (RES-007). Refuses a code the project
+                                               does not have
+  set-control-mapping <name> <step_db> <ch,ch> [--source S] [--zero-at POS]
+                                               what a knob DOES (dB per step, on which channels).
+                                               Without it, two series at different positions are
+                                               refused for comparison, not silently offset
   record-change <process-dir> <file> <what>    log a config_change journal event
       [--why W] [--source S] [--impact I]
   flaw <f_hz> <level_db> <kind> <action> [--status hypothesis] [--symptom "..."]
@@ -1144,6 +1222,17 @@ def _main(argv):
             name, value = args[0], args[1]
             proj.set_hardware_control(name, value, source=source)
             print(f"hardware.controls.{name} = {value!r}")
+        elif cmd == "set-route":
+            source = _flag(args, "--source")
+            name, outs = args[0], [c.strip() for c in args[1].split(",") if c.strip()]
+            proj.set_virtual_route(name, outs, source=source)
+            print(f"hardware.virtual_routing.{name} = {outs}")
+        elif cmd == "set-control-mapping":
+            source = _flag(args, "--source")
+            zero_at = _flag(args, "--zero-at")
+            name, step, affects = args[0], float(args[1]), [c.strip() for c in args[2].split(",")]
+            proj.set_control_mapping(name, step, affects, source=source, zero_at=zero_at)
+            print(f"hardware.control_mapping.{name} = {step:+g} dB/step on {affects}")
         elif cmd == "record-change":
             why = _flag(args, "--why")
             source = _flag(args, "--source")
@@ -1600,6 +1689,33 @@ def _selftest():
     # set_hardware_control: SCR-017 -- a DSP-level knob position, recorded ONCE, not per-preset.
     proj.set_hardware_control("RearRC", "3/4", source="user")
     proj.set_hardware_control("RealCenter", "ON", source="user")
+    # The DSP's routing matrix and what a knob does: two facts that used to be retyped or guessed
+    # (hub RES-007). A route into a code the project does not have is refused -- it would apply the
+    # virtual tier to nothing and look like it worked.
+    proj.set_channel("VFL", tier="virtual_channels")
+    proj.set_channel("m-L", slot="C", descr="Front L Mid", role="mid", order=2)
+    proj.set_virtual_route("VFL", ["w-L", "m-L"], source="user")
+    assert proj.virtual_routing() == {"VFL": ["w-L", "m-L"]}, proj.virtual_routing()
+    assert proj.load()["hardware"]["virtual_routing"]["VFL"]["source"] == "user"
+    for bad, why in ((["w-L", "nosuch"], "not a channel"), ([], "an empty route")):
+        try:
+            proj.set_virtual_route("VFL", bad)
+        except ProjectError as exc:
+            assert why.split()[0] in str(exc), (bad, exc)
+        else:
+            raise AssertionError(f"accepted {bad!r}")
+    proj.set_control_mapping("SubRC", 2.0, ["sw"], source="user", zero_at="4/4")
+    m = proj.control_mapping()["SubRC"]
+    assert m == {"step_db": 2.0, "affects": ["sw"], "zero_at": "4/4"}, m
+    assert proj.load()["hardware"]["control_mapping"]["SubRC"]["step_db"]["source"] == "user", \
+        "a mapping that is somebody's WORD must carry whose"
+    try:
+        proj.set_control_mapping("SubRC", "two", ["sw"])
+    except ProjectError as exc:
+        assert "number of dB" in str(exc), exc
+    else:
+        raise AssertionError("accepted a mapping with no number in it")
+
     hw = proj.load()["hardware"]["controls"]
     assert fact_value(hw["RearRC"]) == "3/4" and hw["RearRC"]["source"] == "user", hw
     assert fact_value(hw["RealCenter"]) == "ON", hw
