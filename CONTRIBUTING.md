@@ -11,6 +11,13 @@ Thanks for your interest in the project! Below are the minimal steps and rules t
   `translated: False` so a panel shows a real line rather than an empty one. Filling a language in is
   welcome and is tracked as its own task, never as a blocker.
 - Translations are welcome: add them as README.<lang>.md (for example README.uk.md) or link them from the main README. Localized discussion or case studies may be written in the respective language, but summaries and key actions should be in English.
+- **`README` and `FAQ` are the exception that is kept in step**, because they are the front door:
+  `scripts/i18n-check.py` (in `run-selftests.sh`) compares what can be compared without knowing the
+  languages — the sequence of heading levels, and the commands inside fenced blocks, where only
+  `<placeholders>` may differ. A translation deliberately behind says so in its own first lines with
+  the words `Translation lags the English original:` and its divergences print as notes instead of
+  failing the run; silence is what fails. The guard sees divergence BETWEEN languages only — all
+  four lagging the code together looks perfect to it, and that stays a person's judgement.
 
 ## Quickstart (local development)
 1. Clone the repository and create a branch:
@@ -54,7 +61,7 @@ Before opening a PR, make sure you have:
   file body and that name in a `#curve=` link into headless Chrome and reports whether the text
   stayed text — or drop such a file by hand and read the card.
 - **Run `scripts/run-selftests.sh`** — the installer check plus every `rew_tool` module's own
-  selftest, 65 in all (2026-09-09; the runner prints the current count itself —
+  selftest, 67 in all (2026-09-09; the runner prints the current count itself —
   `scripts/run-selftests.sh | tail -1`, and that command is the answer, not this number). It needs
   `numpy` and `scipy` (`dsp_math` and `eq_gate` import scipy by name, and the `dsp_math` selftest
   designs crossovers). CI runs this exact script on push and PR, so a green run here is a green run
