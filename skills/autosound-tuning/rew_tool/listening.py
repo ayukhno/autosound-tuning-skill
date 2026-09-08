@@ -21,6 +21,12 @@ Translations are sibling files with the SAME ids -- `listening-cheat-sheet.uk.md
 where the file has it and the English one, marked `translated: False`, where it does not: the panel
 must never show an empty line because a translation arrived one commit later than an id.
 
+**ENGLISH IS MANDATORY; A TRANSLATION MAY LAG** (the user's ruling, 2026-09-09). A change lands in the
+English file and is finished there -- nothing waits on a translator, and no row is held back because
+three languages are not ready. That is what the `translated` flag is FOR: it lets a lag be visible
+instead of blocking, and a reader (or a panel) can say "English, untranslated" rather than pretend.
+Which languages are behind, and by how much, is a backlog item and not a gate.
+
     characteristics(lang=None) -> {id: {id, label, name, good, bad, route, translated}}
     tracks(lang=None)          -> {id: {id, library, number, artist, title, version, translated}}
     links(lang=None)           -> [{track, characteristic, timecode, cue, translated}]

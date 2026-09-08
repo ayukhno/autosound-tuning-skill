@@ -4,6 +4,12 @@ Thanks for your interest in the project! Below are the minimal steps and rules t
 
 ## Language / localization policy
 - Primary language: English. Please write issues, PR titles, and descriptions in English where possible to help the widest audience and contributors.
+- **English is the source and it is mandatory; a translation may lag.** A change lands in English and
+  is finished there — nothing is held back waiting for three other languages. The machine-read
+  references (`references/patterns/listening-cheat-sheet*.md`, `test-tracks*.md`) are built for that:
+  ids are shared, only the free text differs, and `rew_tool/listening.py` falls back to English marked
+  `translated: False` so a panel shows a real line rather than an empty one. Filling a language in is
+  welcome and is tracked as its own task, never as a blocker.
 - Translations are welcome: add them as README.<lang>.md (for example README.uk.md) or link them from the main README. Localized discussion or case studies may be written in the respective language, but summaries and key actions should be in English.
 
 ## Quickstart (local development)
