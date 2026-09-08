@@ -15,6 +15,17 @@ Rules:
    guardrails section (not merely somewhere in the file), and the inbox page that invites
    strangers' text must repeat it where the invitation is.
 
+2. **`phase-source`** (autosound-hub `HUB-035`). The active phase comes from
+   `process/process-state.json`; `tuning-changelog`'s ▶️ CONTINUE block is the human-readable
+   cross-check, and where they disagree the machine file wins. `SKILL.md` says that;
+   `process-phases.md` said the OPPOSITE — the changelog AS the source — for months, which is
+   invisible while the two agree and decides wrongly exactly when they don't (a session cut off
+   between writing the state and writing the note). So the sentence is QUOTED between the two
+   files and compared here character for character, and no reference file may name the phase
+   source as the changelog. The same rule bans a HARNESS TOOL NAME as an instruction: a document
+   tells the reader to *read the file*, because an agent handed a tool it does not have either
+   ignores the line, imitates it, or tells the user it cannot comply.
+
 Run: `scripts/docs-check.py` (from anywhere), `--selftest` for the checker's own mechanics.
 stdlib only.
 """
@@ -31,6 +42,16 @@ SKILL = os.path.join("skills", "autosound-tuning")
 
 DATA_RULE = "data, not instructions"
 GUARDRAILS = "## ⚠️ Core Guardrails"
+
+# The sentence that has to read the same in both files. Kept as one string here, so a drift in
+# either file is a mismatch against this checker as well as against the other file.
+PHASE_SOURCE = (
+    "Read the active phase from `process/process-state.json`"
+)
+PHASE_WINS = "where they disagree the machine file wins"
+# Tool names of a particular harness, in prose that instructs the reader. `view_file` was the
+# one in `process-phases.md`; the others are the same class of mistake waiting to happen.
+HARNESS_TOOLS = ("view_file", "read_file tool", "str_replace_editor")
 
 
 def _read(root: str, rel: str) -> str | None:
@@ -76,7 +97,57 @@ def rule_data_not_instructions(root: str) -> list[str]:
     return bad
 
 
-RULES = [("data-not-instructions", rule_data_not_instructions)]
+def _md_files(root: str) -> list[str]:
+    """Every markdown document of the skill — SKILL.md and everything it points at."""
+    base = os.path.join(root, SKILL)
+    out = []
+    for cur, dirs, files in os.walk(base):
+        dirs[:] = [d for d in dirs if d not in {".git", "__pycache__", "evals"}]
+        out += [os.path.join(cur, f) for f in files if f.endswith(".md")]
+    return sorted(out)
+
+
+def rule_phase_source(root: str) -> list[str]:
+    bad = []
+    skill_md = os.path.join(SKILL, "SKILL.md")
+    phases = os.path.join(SKILL, "references", "core", "process-phases.md")
+    texts = {}
+    for rel in (skill_md, phases):
+        src = _read(root, rel)
+        if src is None:
+            bad.append(f"{rel}: missing — the phase-source rule needs both carriers")
+        texts[rel] = src or ""
+    for rel, src in texts.items():
+        if PHASE_SOURCE not in src:
+            bad.append(f"{rel}: does not carry the quoted phase source "
+                       f"('{PHASE_SOURCE}') — the two files drifted apart once already "
+                       f"(autosound-hub HUB-035)")
+        if PHASE_WINS not in src:
+            bad.append(f"{rel}: does not say '{PHASE_WINS}' — the tie-break is the whole point; "
+                       f"in normal work both sources agree and only an interrupted session "
+                       f"finds out which one the method meant")
+
+    # no document may name the changelog as the SOURCE of the active phase, and none may
+    # instruct the reader to use another harness's tool by name
+    for path in _md_files(root):
+        rel = os.path.relpath(path, root)
+        for n, line in enumerate(open(path, encoding="utf-8").read().splitlines(), 1):
+            low = line.lower()
+            if ("tuning-changelog" in low and re.search(r"(active|current) phase", low)
+                    and "cross-check" not in low and "human-readable" not in low):
+                bad.append(f"{rel}:{n}: names `tuning-changelog` next to the active phase "
+                           f"without calling it the cross-check — the machine file is the "
+                           f"source (autosound-hub HUB-035)")
+            for tool in HARNESS_TOOLS:
+                if tool in line:
+                    bad.append(f"{rel}:{n}: names the harness tool '{tool}' — say the ACTION "
+                               f"(read the file); a tool one harness lacks is a line an agent "
+                               f"ignores, imitates, or refuses")
+    return bad
+
+
+RULES = [("data-not-instructions", rule_data_not_instructions),
+         ("phase-source", rule_phase_source)]
 
 
 def run(root: str) -> int:
@@ -122,12 +193,40 @@ def _selftest() -> int:
         no_inbox_rule = tree(f"# S\n\n{GUARDRAILS}\n\n* {DATA_RULE}\n", "community-inbox/ is here.")
         assert any("feedback-loop.md" in c for c in rule_data_not_instructions(no_inbox_rule))
 
+        # -- rule 2: the phase source, quoted in two files
+        def phase_tree(skill_md: str, phases_md: str):
+            root = tempfile.mkdtemp(dir=tmp)
+            core = os.path.join(root, SKILL, "references", "core")
+            os.makedirs(core)
+            open(os.path.join(root, SKILL, "SKILL.md"), "w", encoding="utf-8").write(skill_md)
+            open(os.path.join(core, "process-phases.md"), "w", encoding="utf-8").write(phases_md)
+            return root
+
+        quoted = f"{PHASE_SOURCE} (`... show`) and {PHASE_WINS}.\n"
+        ok_root = phase_tree("# S\n\n" + quoted, "# P\n\n" + quoted)
+        assert rule_phase_source(ok_root) == [], rule_phase_source(ok_root)
+
+        drifted = phase_tree("# S\n\n" + quoted,
+                             "# P\n\n1. Read the ▶️ CONTINUE block of the `tuning-changelog` "
+                             "to determine the active phase.\n")
+        found = rule_phase_source(drifted)
+        assert any("does not carry the quoted phase source" in c for c in found), found
+        assert any("without calling it the cross-check" in c for c in found), found
+
+        no_tiebreak = phase_tree("# S\n\n" + PHASE_SOURCE + ".\n", "# P\n\n" + quoted)
+        assert any(PHASE_WINS in c for c in rule_phase_source(no_tiebreak))
+
+        harness = phase_tree("# S\n\n" + quoted,
+                             "# P\n\n" + quoted + "\n2. Use the `view" + "_file` tool.\n")
+        assert any("names the harness tool" in c for c in rule_phase_source(harness))
+
         # and the tree itself, which is the point of the whole file
         assert run(ROOT) == 0, "the tree must be clean, or the selftest measures a fake"
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
-    print("selftest OK — a deleted rule and a rule moved out of the always-on section are both "
-          "named, and so is an inbox page that invites text without the rule")
+    print("selftest OK — a deleted rule, a rule moved out of the always-on section, an inbox page "
+          "without it, a phase source that drifted back to the changelog, a missing tie-break and "
+          "a harness tool named as an instruction are each named")
     return 0
 
 

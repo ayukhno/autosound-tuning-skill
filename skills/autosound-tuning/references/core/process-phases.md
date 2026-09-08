@@ -7,8 +7,26 @@ The tuning process consists of seven chronological phases. To optimize large lan
 ## 🔄 The "Phase Sliding Window" Protocol
 
 When assisting with a tuning session, the AI **MUST** follow this context-minimizing protocol:
-1. **Identify current phase:** At the start of every session, read the top **▶️ CONTINUE** block of the `tuning-changelog` to determine the user's active phase (e.g., Phase 1).
-2. **Load active & adjacent phases:** Use the `view_file` tool to load **ONLY** the active phase file and the next logical phase file (e.g., `phase_1_foundation.md` and `phase_2_eq.md`).
+1. **Identify current phase.** Quoted from `SKILL.md` § 🧭 Phase Sliding Window rather than
+   restated, because a restatement is what drifted:
+   > Read the active phase from `process/process-state.json`
+   > (`python3 rew_tool/state/process.py <project>/process show`) — the same source step 2 names.
+   > `tuning-changelog`'s ▶️ CONTINUE block is the human-readable cross-check to read alongside
+   > it, and where they disagree the machine file wins.
+
+   Until 2026-09-09 this line said the opposite — the changelog's ▶️ CONTINUE block AS the
+   source. In normal work both agree and the contradiction is invisible; they separate exactly
+   when the rule is needed (a session cut off between writing the state and writing the note, or
+   a changelog nobody updated). `SKILL.md` had already been fixed of that same mistake inside
+   itself, and this file kept the old text — so the words above are now checked by
+   `scripts/docs-check.py`, not left to two texts agreeing (autosound-hub `HUB-035`).
+2. **Load active & adjacent phases:** **read** **ONLY** the active phase file and the next
+   logical phase file (e.g., `phase_1_foundation.md` and `phase_2_eq.md`) — with whatever your
+   harness reads files with. The instruction is the ACTION, never one harness's tool name: this
+   line used to order the reader to use a file-viewing tool that exists in another harness and
+   not in Claude Code, and an agent met with a tool it does not have either ignores the line,
+   imitates it, or tells the user it cannot comply. (Checked: no reference file may name that
+   tool again — `scripts/docs-check.py`.)
 3. **Ignore out-of-scope phases:** Do not load or process instructions for prior or future phases unless explicitly requested by the user or required for global context reconciliation.
 
 > ⚙️ **Quality Gates are re-entrant, not one-way locks.** Tuning is iterative and non-linear: a later change that touches a **crossover joint band** (±~1 octave of a joint, e.g. 230–350 Hz or 3–5 kHz), or a failed Phase-5/6 ear check, **re-opens** the affected earlier gate (typically phase/joint alignment) — re-measure and re-verify the summation; never treat a passed gate as permanent. An EQ move inside a joint band rotates local phase/group-delay and can undo a prior alignment.
