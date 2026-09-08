@@ -63,6 +63,11 @@ run_one "issue-triage" skills/autosound-tuning/scripts/issue_triage.py --selftes
 # four lagging the code together.
 run_one "i18n-check" scripts/i18n-check.py --selftest
 run_one "i18n-in-tree" scripts/i18n-check.py
+# HUB-043: the CHANGELOG's way in. The index is generated from the version headings of the live file
+# and the archive, so a new note without a regenerated table fails here rather than being noticed by
+# a reader who cannot find it.
+run_one "changelog-index" scripts/changelog-index.py --selftest
+run_one "changelog-fresh" scripts/changelog-index.py --check
 # The reviewer channel's shell plumbing: the closed gemini-CLI path is recognised and named, not
 # retried on a fallback model (hub PAS-004). Offline -- the CLI call is stubbed.
 run_one "gemini-channel" skills/autosound-tuning/scripts/gemini_critic.sh --selftest

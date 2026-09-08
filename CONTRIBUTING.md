@@ -40,7 +40,9 @@ Thanks for your interest in the project! Below are the minimal steps and rules t
 Before opening a PR, make sure you have:
 - Updated the documentation if behavior changed.
 - Run the smoke test (and evals, if relevant) and fixed any failures.
-- Added a CHANGELOG entry for user-visible changes.
+- Added a CHANGELOG entry for user-visible changes — and if you added a version section, run
+  `python3 scripts/changelog-index.py` so the index table at the top of the file carries it. The
+  table is generated, never hand-edited: `--check` runs in the suite and fails on a stale one.
 - **Touched an installer? Touch all three.** `install.sh`, `install.ps1` and `install.cmd` carry the
   same decisions in three languages, and a change made in one is a divergence, not a fix. Run
   `python3 scripts/installer-consistency.py` — it compares the constants that must match and fails
@@ -61,7 +63,7 @@ Before opening a PR, make sure you have:
   file body and that name in a `#curve=` link into headless Chrome and reports whether the text
   stayed text — or drop such a file by hand and read the card.
 - **Run `scripts/run-selftests.sh`** — the installer check plus every `rew_tool` module's own
-  selftest, 67 in all (2026-09-09; the runner prints the current count itself —
+  selftest, 69 in all (2026-09-09; the runner prints the current count itself —
   `scripts/run-selftests.sh | tail -1`, and that command is the answer, not this number). It needs
   `numpy` and `scipy` (`dsp_math` and `eq_gate` import scipy by name, and the `dsp_math` selftest
   designs crossovers). CI runs this exact script on push and PR, so a green run here is a green run
