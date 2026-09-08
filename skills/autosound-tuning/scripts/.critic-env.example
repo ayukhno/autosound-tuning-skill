@@ -38,7 +38,9 @@ GEMINI_ADVISOR_MODEL=gemini-3.5-flash-medium
 # new one exists. Keep the key in THIS file (per machine), not in a shell export: a session's
 # environment does not follow ~/.zshrc after it started, and an export reaches every process.
 # GEMINI_API_KEY=AQ....
-# AUTOSOUND_CRITIC_MODEL=gemini-2.5-pro        # API ids for a raw key call; Critic = Pro
-# AUTOSOUND_ADVISOR_MODEL=gemini-2.5-flash
+# AUTOSOUND_CRITIC_MODEL=gemini-pro-latest     # Google's own pointer to the current Pro; Critic = Pro
+# AUTOSOUND_ADVISOR_MODEL=gemini-flash-latest  # ...and to the current Flash. A dated id (gemini-2.5-*)
+#                                              # retires under you: 404 on 2026-09-08. The script
+#                                              # prints the key's list and stops when a pin is gone.
 
 # PROJECT_MIRROR=/abs/path/to/project/rew_analitic   # only if CWD differs from the project

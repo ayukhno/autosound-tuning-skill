@@ -20,6 +20,7 @@ import sys
 import os
 import subprocess
 import json
+import urllib.error
 import urllib.request
 import shutil
 import tempfile
@@ -282,7 +283,59 @@ def _looks_like_a_display_label(model):
     return bool(model) and (" " in str(model) or "(" in str(model))
 
 
-def call_gemini_api(api_key, model, prompt):
+GEMINI_API = "https://generativelanguage.googleapis.com/v1beta"
+
+
+class ModelChoiceNeeded(RuntimeError):
+    """The reviewer's model is not one this key can call -- and which one to use instead is the
+    Arbiter's decision, not this script's (the user's rule, 2026-09-08: "вміти брати нові моделі,
+    а коли не знаєш яку -- дати користувачу список, щоб він вибрав"). Carries the list."""
+
+    def __init__(self, why, models, role_var):
+        self.why, self.models, self.role_var = why, models, role_var
+        super().__init__(why)
+
+    def render(self):
+        lines = [f">> {self.why}",
+                 ">> Моделі, які цей ключ може викликати (generateContent) -- вибери одну і закріпи її:",
+                 f">>   {self.role_var}=<модель>   у ~/.config/autosound/critic-env"]
+        for name in choosable_models(self.models):
+            lines.append(f">>     {name}")
+        lines.append(">> `gemini-pro-latest` / `gemini-flash-latest` -- Google's own pointers to the current "
+                     "Pro / Flash; a dated id stays put until Google retires it -- and the list lags the "
+                     "retirements (2026-09-08 it still named gemini-2.5-* that answered 404). "
+                     "Full list: GET /v1beta/models.")
+        return "\n".join(lines)
+
+
+#: Not a table of names -- a SHAPE rule: a reviewer reads and writes text, so the ids that say
+#: they do something else (speech, images, transcription, robotics, a computer-use agent) are
+#: left out of the choice list. Everything else the key lists is offered as listed.
+_NOT_A_TEXT_REVIEWER = ("tts", "image", "transcribe", "computer-use", "robotics", "omni", "lyria", "nano-banana")
+
+
+def choosable_models(models):
+    """`gemini-*` text models, the `-latest` pointers first, then the rest as the API sorts them."""
+    text = [m for m in models if m.startswith("gemini-") and not any(t in m for t in _NOT_A_TEXT_REVIEWER)]
+    return [m for m in text if "latest" in m] + [m for m in text if "latest" not in m]
+
+
+def list_gemini_models(api_key, timeout=20):
+    """The ids this key can call with generateContent, as the API lists them today.
+
+    Asked, never tabled: the ids move (2026-09-08: `gemini-2.5-flash` and `-pro` answer 404
+    "no longer available to new users" on a key issued that week, while the same key calls
+    `gemini-3.6-flash` and `gemini-pro-latest`). A list kept in this file would be the alias
+    table again, wrong within a season."""
+    req = urllib.request.Request(f"{GEMINI_API}/models?pageSize=100",
+                                 headers={"x-goog-api-key": api_key})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        data = json.loads(r.read().decode("utf-8"))
+    return sorted(m["name"].split("/")[-1] for m in data.get("models", [])
+                  if "generateContent" in (m.get("supportedGenerationMethods") or []))
+
+
+def call_gemini_api(api_key, model, prompt, role_var="AUTOSOUND_CRITIC_MODEL"):
     # The model name is passed through as given. There used to be an alias table here mapping a
     # CLI's display labels onto API ids ("Gemini 3.1 Pro (High)" -> gemini-2.5-pro); it was wrong
     # within a year, because the labels moved on and the table did not. A table of model names is
@@ -291,7 +344,7 @@ def call_gemini_api(api_key, model, prompt):
     # The key goes in a header, not in the URL: a URL is what proxies log, what an exception may
     # carry in its text, and what a traceback prints -- a header is none of those (hub PAS-004,
     # the user's rule: a key must not reach anywhere public, and a URL is halfway there).
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{api_model}:generateContent"
+    url = f"{GEMINI_API}/models/{api_model}:generateContent"
     headers = {"Content-Type": "application/json", "x-goog-api-key": api_key}
     body = {
         "contents": [{
@@ -308,6 +361,26 @@ def call_gemini_api(api_key, model, prompt):
         with urllib.request.urlopen(req, timeout=120) as r:
             res = json.loads(r.read().decode("utf-8"))
             return res["candidates"][0]["content"]["parts"][0]["text"], api_model
+    except urllib.error.HTTPError as e:
+        # A 404 on the model path is Google saying THIS id is gone for this key ("no longer
+        # available to new users", 2026-09-08). That is not a reason to try a CLI or the
+        # clipboard with the same stale name -- it is a choice the Arbiter has to make, so the
+        # list goes up and the run stops.
+        detail = ""
+        try:
+            detail = (json.loads(e.read().decode("utf-8", "replace")).get("error") or {}).get("message", "")
+        except Exception:  # noqa: BLE001 -- the body is a bonus, the code is the fact
+            pass
+        if e.code == 404:
+            try:
+                models = list_gemini_models(api_key)
+            except Exception as le:  # noqa: BLE001
+                raise RuntimeError(f"Помилка запиту до Gemini API: {e} ({detail[:160]}); "
+                                   f"і список моделей не читається: {le}")
+            raise ModelChoiceNeeded(
+                f"Модель `{api_model}` цей ключ викликати не може: HTTP 404 — {detail[:200]}",
+                models, role_var)
+        raise RuntimeError(f"Помилка запиту до Gemini API: {e}{(' — ' + detail[:200]) if detail else ''}")
     except Exception as e:
         raise RuntimeError(f"Помилка запиту до Gemini API: {e}")
 
@@ -410,6 +483,64 @@ def cli_command(provider, binary, model, prompt_path, prompt_text):
     extra = ["--skip-trust"] if binary == "gemini" else []
     return [binary, "--model", model] + extra + ["-p", prompt_path]
 
+def _selftest():
+    """Offline: a retired model becomes a CHOICE carrying the key's list (never a fall-through),
+    the list is parsed from the API's shape, and a run with a key and no model stops on the list."""
+    import io
+    import urllib.error
+    canned = {"models": [
+        {"name": "models/gemini-3.6-flash", "supportedGenerationMethods": ["generateContent"]},
+        {"name": "models/gemini-pro-latest", "supportedGenerationMethods": ["generateContent"]},
+        {"name": "models/gemini-2.5-flash-preview-tts", "supportedGenerationMethods": ["generateContent"]},
+        {"name": "models/embedding-001", "supportedGenerationMethods": ["embedContent"]},
+    ]}
+    gone = {"error": {"code": 404, "message": "This model models/gemini-2.5-flash is no longer "
+                                              "available to new users. Please update your code to use models/gemini-3.6-flash"}}
+    calls = []
+
+    def fake_urlopen(req, timeout=None):
+        url = req.full_url
+        calls.append(url)
+        assert "key=" not in url, "the key must not be in the URL"
+        assert req.get_header("X-goog-api-key") == "K", "the key travels as a header"
+        if url.endswith("/models?pageSize=100"):
+            return io.BytesIO(json.dumps(canned).encode())
+        if ":generateContent" in url and "gemini-2.5-flash" in url:
+            raise urllib.error.HTTPError(url, 404, "Not Found", {}, io.BytesIO(json.dumps(gone).encode()))
+        if ":generateContent" in url:
+            return io.BytesIO(json.dumps({"candidates": [{"content": {"parts": [{"text": "direct API works"}]}}]}).encode())
+        raise AssertionError(url)
+
+    real = urllib.request.urlopen
+    urllib.request.urlopen = fake_urlopen
+    try:
+        assert list_gemini_models("K") == ["gemini-2.5-flash-preview-tts", "gemini-3.6-flash", "gemini-pro-latest"]
+        assert choosable_models(list_gemini_models("K")) == ["gemini-pro-latest", "gemini-3.6-flash"], "pointers first, no tts"
+        text, used = call_gemini_api("K", "gemini-3.6-flash", "hi")
+        assert text == "direct API works" and used == "gemini-3.6-flash"
+        try:
+            call_gemini_api("K", "gemini-2.5-flash", "hi", "AUTOSOUND_ADVISOR_MODEL")
+        except ModelChoiceNeeded as choice:
+            out = choice.render()
+            assert "404" in choice.why and "no longer available" in choice.why, choice.why
+            assert "AUTOSOUND_ADVISOR_MODEL=<модель>" in out and "gemini-3.6-flash" in out, out
+            assert "embedding-001" not in out, "a model without generateContent is not a choice"
+            assert "-tts" not in out, "a speech model is not a reviewer"
+        else:
+            raise AssertionError("a retired model did not become a choice")
+        # ...and it is not a RuntimeError, so main's fall-through branch cannot catch it first.
+        assert not issubclass(ModelChoiceNeeded, KeyError)
+        # The prompt never reached a second endpoint after the 404: two generateContent calls in
+        # all (the good model, the retired one) and the list reads (two above, one for the choice).
+        assert sum(":generateContent" in u for u in calls) == 2 and sum("/models?" in u for u in calls) == 3, calls
+    finally:
+        urllib.request.urlopen = real
+    print("selftest[autosound_ai] OK -- the key travels as a header, never in a URL; a retired model "
+          "(404) becomes a choice carrying the key's generateContent models, not a fall-through; "
+          "the list is parsed from the API's own shape")
+    return 0
+
+
 def run_doctor():
     print("=== ДІАГНОСТИКА СЕРЕДОВИЩА (DOCTOR MODE) ===")
     ok = True
@@ -446,6 +577,24 @@ def run_doctor():
     api_provider = provider if api_key_for(provider) else None
     if not api_provider:
         print(f"· Ключа API для рецензента ({provider}) немає — буде CLI або ручне копіювання")
+    elif provider == "google":
+        # The key's own list, not a table: the one check that catches a retired id BEFORE a
+        # package is sent to it (2026-09-08: gemini-2.5-* went 404 under a working key).
+        try:
+            models = list_gemini_models(api_key_for("google"))
+        except Exception as e:  # noqa: BLE001
+            print(f"✗ Список моделей ключа не читається: {e}")
+            ok = False
+        else:
+            print(f"✓ Ключ живий: {len(models)} моделей для generateContent, серед них "
+                  + ", ".join(m for m in models if m.startswith("gemini-") and "latest" in m))
+            if model and not _looks_like_a_display_label(model):
+                if model in models:
+                    print(f"✓ Модель рецензента `{model}` — у списку ключа")
+                else:
+                    print(f"✗ Модель рецензента `{model}` НЕ в списку ключа — вибери одну з: "
+                          + ", ".join(m for m in models if m.startswith("gemini-")))
+                    ok = False
 
     # 4. Перевірка локальних CLI — по кожному вендору, бо рецензентом може бути будь-який
     for vendor in _PROVIDERS:
@@ -561,6 +710,8 @@ def main():
         
     role = sys.argv[1].lower()
     
+    if role in ("selftest", "--selftest"):
+        sys.exit(_selftest())
     if role == "doctor":
         success = run_doctor()
         sys.exit(0 if success else 1)
@@ -646,6 +797,21 @@ def main():
     compiled_prompt = "\n".join(compiled_prompt_list)
 
     # 1. Спроба прямого API запиту (пріоритет)
+    role_var = "AUTOSOUND_CRITIC_MODEL" if role == "critic" else "AUTOSOUND_ADVISOR_MODEL"
+    named = any(os.environ.get(v) for v in (role_var, "GEMINI_CRITIC_MODEL" if role == "critic" else "GEMINI_ADVISOR_MODEL"))
+    if not named and api_key_for("google"):
+        # No model NAMED and a Google key present: the key is the thing to ask, and when the
+        # answer is a list the choice is the Arbiter's -- print it and stop, rather than take the
+        # first slug an installed `agy` prints (an agy slug is not an API id: `gemini-3.8-flash-high`
+        # sent to the API answered 404, 2026-09-08) or the first name in the list and call it a
+        # reviewer (the user's rule, 2026-09-08: "коли не знаєш яку -- дати список, щоб вибрав").
+        try:
+            choice = ModelChoiceNeeded("Модель рецензента не задано.", list_gemini_models(api_key_for("google")), role_var)
+        except Exception as e:  # noqa: BLE001
+            print(f">> Модель не задано, і список моделей ключа не читається ({e}).", file=sys.stderr)
+        else:
+            print(choice.render(), file=sys.stderr)
+            sys.exit(3)
     model = resolve_model(role)
     if not model:
         print(">> Не задано модель рецензента і жоден CLI не назвав своєї. "
@@ -675,7 +841,10 @@ def main():
                 "anthropic": call_anthropic_api,
                 "openai": call_openai_api,
             }[provider]
-            response_text, api_model = caller(api_key, model, compiled_prompt)
+            if provider == "google":
+                response_text, api_model = caller(api_key, model, compiled_prompt, role_var)
+            else:
+                response_text, api_model = caller(api_key, model, compiled_prompt)
             print(response_text)
             print(f"\n— [{role}: {api_model}]")
             _persist_review(role, response_text, api_model, "api")
@@ -689,6 +858,11 @@ def main():
             return
         except KeyError:
             print(f">> Невідомий провайдер {provider!r} — у режим CLI/буфера.", file=sys.stderr)
+        except ModelChoiceNeeded as choice:
+            # Not a fall-through: a CLI or the clipboard with the same retired name would only
+            # hide the question. The list is on stderr, the exit code says "choose".
+            print(choice.render(), file=sys.stderr)
+            sys.exit(3)
         except Exception as e:
             print(f">> Помилка виклику API ({e}). Спроба локального CLI або буфера...", file=sys.stderr)
 

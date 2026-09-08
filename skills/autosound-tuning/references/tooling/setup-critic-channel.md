@@ -50,7 +50,7 @@ brew install --cask antigravity-cli      # the REAL agy — NOT a symlink to gem
 >
 > `Error authenticating: IneligibleTierError: This client is no longer supported for Gemini Code Assist for individuals. To continue using Gemini, please migrate to the Antigravity suite of products: https://antigravity.google`
 >
-> Google shut the free OAuth tier the CLI signed in with; `agy` (§1) is what replaced it. **A key does not reopen it as installed:** with a fresh `AQ.`-shaped `GEMINI_API_KEY` in the environment the same CLI still went to its sign-in and printed the text above (probed 2026-09-08 — its stored auth mode decides, not the variable). Treat the `gemini` CLI as closed; the wrappers keep detecting it only to NAME the closed path: "шлях gemini CLI закрито Google, використовуй agy", and they stop rather than fall back to the other model, which fails at the same sign-in. A `GEMINI_API_KEY` still matters for the **direct API** (`autosound_ai.py`, §3), where the models this page used to list for that CLI (`gemini-2.5-pro` / `gemini-2.5-flash`) are the ids a raw key call takes.
+> Google shut the free OAuth tier the CLI signed in with; `agy` (§1) is what replaced it. **A key does not reopen it as installed:** with a fresh `AQ.`-shaped `GEMINI_API_KEY` in the environment the same CLI still went to its sign-in and printed the text above (probed 2026-09-08 — its stored auth mode decides, not the variable). Treat the `gemini` CLI as closed; the wrappers keep detecting it only to NAME the closed path: "шлях gemini CLI закрито Google, використовуй agy", and they stop rather than fall back to the other model, which fails at the same sign-in. A `GEMINI_API_KEY` still matters for the **direct API** (`autosound_ai.py`, §3) — and there the model ids come from the key, not from this page: the `gemini-2.5-pro` / `gemini-2.5-flash` ids this page used to list answered `404 … no longer available to new users` under a working key on 2026-09-08, while `gemini-3.6-flash` and Google's own pointers `gemini-pro-latest` / `gemini-flash-latest` answered. **When the pinned model is gone, or none is named, the script prints the key's list and stops (exit 3) — the choice is the Arbiter's**, not a fall-through to a CLI or the clipboard with the same stale name.
 
 > ℹ️ **`Gemini 3.5/3.1` are Antigravity's own display labels** (what `agy models` shows beside the slug ids), NOT real Gemini versions. Use the name your channel expects: the `agy` CLI wants its slug id (`gemini-3.1-pro-high`; the display label is rejected since agy 1.1.12); a raw `GEMINI_API_KEY` call wants the `gemini-2.5-*` id.
 
@@ -128,8 +128,8 @@ whose it is, and takes that vendor's API or CLI — so the Arbiter can pick a Cl
 reviewer and still get an automated channel rather than the clipboard.
 
 ```bash
-AUTOSOUND_CRITIC_MODEL=claude-opus-5      # or gemini-2.5-pro, gpt-5.2, …
-AUTOSOUND_ADVISOR_MODEL=gemini-2.5-pro    # a DIFFERENT vendor from the Generator is the point
+AUTOSOUND_CRITIC_MODEL=claude-opus-5      # or gemini-pro-latest, gpt-5.2, …
+AUTOSOUND_ADVISOR_MODEL=gemini-pro-latest # a DIFFERENT vendor from the Generator is the point
 # AUTOSOUND_CRITIC_PROVIDER=anthropic     # only when the name does not give the vendor away
 # AUTOSOUND_CRITIC_BIN=claude             # force one binary, whatever is on PATH
 # AUTOSOUND_CRITIC_EFFORT=xhigh           # how hard the reviewer thinks; default xhigh
@@ -156,12 +156,18 @@ a flag would be rejected and the channel would break for one vendor only, quietl
 whatever the vendor — every documented setup exports them and a front-end already sets them, so
 renaming would have broken working installs to tidy a table. `AUTOSOUND_*` wins when both are set.
 
-**There is no default model any more.** With neither variable set, the script asks an installed CLI
-what it can run and uses the first answer; if nothing answers, it says so and goes to clipboard
-mode. It used to fall back to a named model, which is a promise to keep updating a name — the old
-default was two generations stale before anyone noticed, and a stale default fails as an opaque API
-error instead of "nobody told me which model to use". Same reason the display-label→API-id table is
-gone: **a table of model names is a maintenance commitment**, and this file could not keep it.
+**There is no default model any more.** With neither variable set and a Google key present, the
+script asks the key what it can call, **prints that list and stops (exit 3) for you to choose** —
+it does not take the first name (an `agy` slug such as `gemini-3.8-flash-high` is not an API id and
+answered 404 there, 2026-09-08). With no key it asks an installed CLI what it can run and uses the
+first answer; if nothing answers, it says so and goes to clipboard mode. It used to fall back to a
+named model, which is a promise to keep updating a name — the old default was two generations stale
+before anyone noticed, and a stale default fails as an opaque API error instead of "nobody told me
+which model to use". Same reason the display-label→API-id table is gone: **a table of model names
+is a maintenance commitment**, and this file could not keep it. The same rule applies when a pinned
+model retires under you: the 404 becomes the list, and the run stops on it. `gemini-pro-latest` /
+`gemini-flash-latest` are Google's own pointers to the current Pro / Flash, so a pin on them
+follows the models; a dated id stays put until Google retires it.
 
 `scripts/autosound_ai.py doctor` answers the question that actually matters: which vendor the
 chosen reviewer belongs to, and whether THAT vendor's key or CLI is present. A `claude` on PATH

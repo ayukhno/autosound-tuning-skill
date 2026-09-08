@@ -151,15 +151,18 @@ fi
 # (found on a clean install, 2026-08-13). `agy models` remains the way to check;
 # as of that date it also offers gemini-3.6-flash-* , which is newer than the
 # advisor default here and has not been used for a tune.
+# For the (closed) gemini CLI the API ids are Google's own `-latest` pointers, not a dated id
+# that retires: `gemini-2.5-flash` / `-pro` answered 404 "no longer available to new users"
+# under a working key on 2026-09-08.
 gemini_default_model() {
   case "$GEMINI_FLAVOR" in
-    gemini) echo "gemini-2.5-flash" ;;
+    gemini) echo "gemini-flash-latest" ;;
     *)      echo "gemini-3.5-flash-medium" ;;
   esac
 }
 gemini_default_critic_model() {
   case "$GEMINI_FLAVOR" in
-    gemini) echo "gemini-2.5-pro" ;;
+    gemini) echo "gemini-pro-latest" ;;
     *)      echo "gemini-3.1-pro-high" ;;
   esac
 }
@@ -329,7 +332,20 @@ gemini_doctor() {
       kc="$(curl -s -m 10 -o "$kb" -w '%{http_code}' -H @"$kh" "https://generativelanguage.googleapis.com/v1beta/models" 2>/dev/null || echo 000)"
       rm -f "$kh"
       case "$kc" in
-        200) echo "✓ key: GET /v1beta/models → 200 (the key is live)";;
+        200) echo "✓ key: GET /v1beta/models → 200 (the key is live)"
+             # ...and what it can call, from the same answer: the current ids come from the API,
+             # never from a table here (the ids move; a pinned dated id retires under you).
+             if command -v python3 >/dev/null 2>&1; then
+               python3 - "$kb" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+ms = sorted(m["name"].split("/")[-1] for m in d.get("models", []) if "generateContent" in (m.get("supportedGenerationMethods") or []))
+text = [m for m in ms if m.startswith("gemini-") and not any(t in m for t in ("tts", "image", "transcribe", "computer-use", "robotics", "omni"))]
+latest = [m for m in text if "latest" in m]
+print(f"  · it can call {len(ms)} generateContent models; for a reviewer: " + ", ".join(latest + [m for m in text if 'latest' not in m][:6]) + (" …" if len(text) > len(latest) + 6 else ""))
+print("  · a listed dated id may still answer 404 \"no longer available to new users\" (gemini-2.5-* did on 2026-09-08); the -latest pointers follow Google's current ones")
+PY
+             fi;;
         000) echo "· key: GET /v1beta/models → no answer (offline?) — not checked";;
         *)   echo "✗ key: GET /v1beta/models → HTTP $kc$(grep -o 'API_KEY_INVALID' "$kb" | head -1 | sed 's/^/ /') — a new key from https://aistudio.google.com/apikey into ~/.config/autosound/critic-env, then re-run; if the file already holds a new one, unset the shell's export"; ok=0; key_ok=0;;
       esac

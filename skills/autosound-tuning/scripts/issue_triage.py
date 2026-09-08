@@ -91,9 +91,12 @@ Issue Body:
 
 Generate only the markdown body of your proposed reply comment (do not wrap in extra code blocks, just pure reply markdown):"""
 
-    print("Генерую чернетку відповіді через Gemini 2.5 Flash...")
+    # `gemini-flash-latest` is Google's own pointer to the current Flash; the dated id this line
+    # carried (`gemini-2.5-flash`) answered 404 "no longer available to new users" on 2026-09-08.
+    model = os.environ.get("AUTOSOUND_ADVISOR_MODEL") or "gemini-flash-latest"
+    print(f"Генерую чернетку відповіді через {model}...")
     try:
-        reply_text, _ = autosound_ai.call_gemini_api(api_key, "gemini-2.5-flash", prompt)
+        reply_text, _ = autosound_ai.call_gemini_api(api_key, model, prompt, "AUTOSOUND_ADVISOR_MODEL")
         return reply_text.strip()
     except Exception as e:
         print(f"Помилка виклику API: {e}", file=sys.stderr)
