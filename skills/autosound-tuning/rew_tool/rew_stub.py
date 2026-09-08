@@ -18,12 +18,22 @@ What is served, and only that (`rew_api.py` is the list of what is read):
   GET /measurements/{id}                  the same record
   GET /measurements/{id}/frequency-response   {startFreq, ppo, magnitude, phase, smoothing: "None"}
                                           (an RTA record: freqStep instead of ppo, no phase)
-  GET /measurements/{id}/impulse-response {startTime, sampleRate, data}
+  GET /measurements/{id}/impulse-response {startTime, sampleRate, unit: "percent", data}
+                                          peak-normalised to ±1.0 UNLESS `?normalised=false`,
+                                          which serves the raw IR in percent of full scale
 
 Floats travel as REW sends them -- base64 of big-endian float32 -- so `rew_api.decode_floats` is
 the reader on both. Everything else answers 404 with a message, the way REW does: a tool that
 asks for what the stub does not serve fails by name, never silently. GET only: REW may be
 mid-session is the doctrine for the real thing; the stub simply has nothing to write.
+
+The impulse endpoint reproduces REW's one real trap on purpose (`rew-api-quirks.md`, "IR is
+PEAK-NORMALISED by default"): without the parameter every IR comes back with its peak at ±1.0,
+whatever its level was. Until 2026-09-08 the stub served the file's own samples whatever was
+asked, so a reader that forgot the parameter got the right level HERE and the wrong one from
+REW -- and the selftest was green by construction on exactly the defect it should have named
+(hub RES-005). Now a forgotten parameter loses the level on the stub as it does on REW, and
+`_selftest` proves the loss with two channels 20 dB apart.
 """
 from __future__ import annotations
 
@@ -109,10 +119,20 @@ class Measurement:
                         "phase": encode_floats(ph), "smoothing": "None"}
         return self._fr
 
-    def impulse_response(self):
+    def impulse_response(self, normalised=True):
+        """The IR as REW serves it: `unit: percent`; peak-normalised to ±1.0 by default, the raw
+        samples as PERCENT of full scale under `?normalised=false` (the stored array is a
+        fraction of full scale, as a v7/v8 file carries it -- x100 on the wire, /100 in
+        `rew_api.get_impulse_response`)."""
         if self.ir is None:
             return None
-        return {"startTime": self.start_time_s, "sampleRate": self.fs, "data": encode_floats(self.ir)}
+        if normalised:
+            peak = float(np.max(np.abs(self.ir))) if self.ir.size else 0.0
+            data = self.ir / peak if peak > 0 else self.ir
+        else:
+            data = self.ir * 100.0
+        return {"startTime": self.start_time_s, "sampleRate": self.fs, "unit": "percent",
+                "data": encode_floats(data)}
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -130,7 +150,9 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        parts = [p for p in self.path.split("?")[0].split("/") if p]
+        path, _, query = self.path.partition("?")
+        parts = [p for p in path.split("/") if p]
+        params = dict(kv.split("=", 1) if "=" in kv else (kv, "") for kv in query.split("&") if kv)
         ms = self.measurements
         if parts == ["measurements"]:
             return self._json(200, {str(i + 1): m.record(str(i + 1)) for i, m in enumerate(ms)})
@@ -144,7 +166,8 @@ class _Handler(BaseHTTPRequestHandler):
             if parts[2] == "frequency-response":
                 return self._json(200, m.frequency_response())
             if parts[2] == "impulse-response":
-                ir = m.impulse_response()
+                # REW's reading of the flag: anything but a literal false is the default (normalised).
+                ir = m.impulse_response(normalised=params.get("normalised", "").lower() != "false")
                 if ir is None:
                     return self._json(404, {"message": f"{m.title!r} has no impulse response (an RTA)"})
                 return self._json(200, ir)
@@ -173,9 +196,14 @@ def measurements_from_v7_dir(directory, ver):
     for name in sorted(os.listdir(directory)):
         if not name.endswith(".json") or name == "manifest.json":
             continue
-        with open(os.path.join(directory, name), encoding="utf-8") as fh:
-            doc = json.load(fh)
-        if "transferRealSamples" not in doc:
+        import resonalyze_ir
+        try:
+            doc = resonalyze_ir.load_file(os.path.join(directory, name))
+        except resonalyze_ir.ConversionError as exc:
+            if "Unsupported impulse response version" in str(exc):
+                raise SystemExit(f"{directory}/{name}: {exc}")
+            continue                                   # a manifest or some other JSON
+        if doc.get("transferRealSamples") is None:
             continue
         stem = name[:-5]
         code = stem.replace("-ctl", "|ctl").replace("_", "-").replace("|ctl", "-ctl")
@@ -183,7 +211,7 @@ def measurements_from_v7_dir(directory, ver):
         out.append(Measurement(f"{code}_{ver} (sw)", doc["transferRealSamples"], doc["sampleRate"],
                                0.0, notes=rs.get("rewNotes", ""), uid=rs.get("rewUuid")))
     if not out:
-        raise SystemExit(f"{directory}: no v7 impulse-response files")
+        raise SystemExit(f"{directory}: no Resonalyze impulse-response files (v4..v8)")
     return out
 
 
@@ -240,6 +268,13 @@ def _selftest():
         times, ir_back = rew_api.get_impulse_response(mid)
         assert times[0] == 0.0 and abs(times[1] - 1.0 / fs) < 1e-12 and len(ir_back) == n
         assert abs(int(np.argmax(np.abs(ir_back))) - d) <= 1
+        # ...at its LEVEL: the array served is the array stored, through percent and back. The
+        # display form (`normalised=True`) is the same shape with its peak at exactly 1.0, and
+        # the two differ by the channel's own peak -- the quantity that carries the level.
+        assert np.max(np.abs(np.asarray(ir_back) - ir)) < 1e-6 * np.max(np.abs(ir)), "raw = stored"
+        _, ir_norm = rew_api.get_impulse_response(mid, normalised=True)
+        assert abs(np.max(np.abs(ir_norm)) - 1.0) < 1e-6, "REW's default form peaks at 1.0"
+        assert np.max(np.abs(np.asarray(ir_norm) * np.max(np.abs(ir)) - ir)) < 1e-6 * np.max(np.abs(ir))
         # the RTA: no impulse, no phase, a linear axis -- exactly what the tools branch on
         t2 = rew_api.get_timing(rew_api.find_measurement_id("w-L_1 (rta)", listing))
         assert t2["has_ir"] is False, t2
@@ -257,6 +292,27 @@ def _selftest():
         v = _verify.verdict("w-L_1 (sw)", listing)
         assert v["exists"] and v["valid"] and v["stats"]["capture_rate_hz"] == fs, v
         assert abs(v["stats"]["peak_time_ms"] - d / fs * 1000) < 1e-3, v["stats"]   # sub-sample refined, 4 decimals
+        # Two channels 20 dB apart, read the way `predict --rew` reads them: the level relation
+        # must come back as designed. The SAME two channels through REW's default form are one
+        # height -- so this assertion is what fails the day a reader drops `normalised=False`,
+        # which is the day predict's junctions go wrong by each channel's peak (hub RES-005).
+        import predict as _predict
+        loud = Measurement("w-L_9 (sw)", ir, fs, 0.0)
+        quiet = Measurement("sw_9 (sw)", ir * 0.1, fs, 0.0)
+        url2, server2 = serve([loud, quiet])
+        rew_api.BASE_URL = url2
+        try:
+            grid = np.asarray([60.0, 80.0, 100.0])
+            h_loud, _ = _predict.load_solo_rew("w-L_9 (sw)", grid)
+            h_quiet, _ = _predict.load_solo_rew("sw_9 (sw)", grid)
+            gap = 20 * np.log10(np.abs(h_loud) / np.abs(h_quiet))
+            assert np.max(np.abs(gap - 20.0)) < 1e-6, ("the 20 dB between the channels is lost", gap)
+            _, n1 = rew_api.get_impulse_response("1", normalised=True)
+            _, n2 = rew_api.get_impulse_response("2", normalised=True)
+            assert abs(np.max(np.abs(n1)) - np.max(np.abs(n2))) < 1e-6, "the display form is one height"
+        finally:
+            server2.shutdown()
+            rew_api.BASE_URL = url
         # something not served fails by name
         try:
             rew_api._get("/measurements/1/filters")
@@ -267,7 +323,8 @@ def _selftest():
         server.shutdown()
     print("selftest[rew_stub] OK -- the four endpoints read back through rew_api: listing, timing "
           "(loopback / offset / no-IR), log-axis FR (the designed shape comes back), the impulse with its "
-          "start time, a linear-axis RTA without phase or impulse, the capture gate's verdict on a "
+          "start time AT ITS LEVEL (raw = stored; REW's default form peaks at 1.0; two channels 20 dB "
+          "apart stay 20 dB apart through predict), a linear-axis RTA without phase or impulse, the capture gate's verdict on a "
           "served sweep, and a 404 by name for what is not served.")
     return 0
 

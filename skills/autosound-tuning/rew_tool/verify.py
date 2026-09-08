@@ -138,7 +138,11 @@ def verdict(name, measurements=None, f_low=20, f_high=20000):
     # project's real sweeps unusable, which is the failure this whole verdict exists to avoid.
     # An RTA capture legitimately has no impulse at all, so its absence counts against nothing.
     try:
-        times, ir = _api.get_impulse_response(mid)
+        # Raw, so `peak_dB` is the impulse's real peak in dBFS. Read peak-normalised (the
+        # endpoint's default until 2026-09-08) it was 0.0 on every row and said nothing between
+        # titles; the level spread is still read on the live-band mean, because a single peak
+        # sample is a worse ruler for loudness than a band -- but the number is at least true now.
+        times, ir = _api.get_impulse_response(mid, normalised=False)
     except Exception:  # noqa: BLE001
         times, ir = None, None
     if times and ir:
@@ -245,7 +249,8 @@ def _rew_ir_of(title):
     """The impulse response REW holds under `title`, or None (unreachable, missing, no IR)."""
     try:
         mid = _api.find_measurement_id(title, exact=True)
-        times, ir = _api.get_impulse_response(mid)
+        # Raw, the same convention as every reader; the cross-correlation below is scale-free.
+        times, ir = _api.get_impulse_response(mid, normalised=False)
         return ir if ir else None
     except Exception:  # noqa: BLE001 -- the caller falls back to the peak times it already has
         return None
@@ -258,8 +263,9 @@ def session_report(verdicts, processing_rate_hz=None, ir_of=_rew_ir_of):
     Per-title verdicts say whether one curve is usable; this says whether the SESSION is -- the
     things only visible across titles. Level spread is read on each channel's LIVE-band mean
     (`live_mean_dB`: the bins within 20 dB of its own maximum -- a sub read over the whole band
-    would come out 20 dB "quiet"), not the IR peak (REW scales the impulse per measurement, so its
-    peak says nothing between titles and reads 0.0 on every row). The
+    would come out 20 dB "quiet"), not the IR peak: one sample is a poor ruler for loudness, and
+    until 2026-09-08 the impulse arrived peak-normalised, so the column read 0.0 on every row
+    (it is the raw peak in dBFS now, `rew_api.get_impulse_response`). The
     drift is the arrival difference between `<x>-ctl1 (sw)` and `<x>-ctl3 (sw)`, the same driver
     swept first and last in the tripod block, in CAPTURE samples: within half a sample the base
     held; beyond it the solos taken between them are not on one base -- said, not judged, because

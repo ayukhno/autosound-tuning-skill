@@ -352,26 +352,53 @@ def _spectrum_on_grid(ir, fs, t0_s, freqs, drift_samples=0.0):
 
     Sampled at the grid frequencies from the dense FFT (bins ~0.4 Hz apart on a 2.7 s record),
     so the interpolation only ever bridges adjacent bins. `drift_samples` re-times the capture by
-    the drift measured on a control channel (set-02's manifest carries one per channel)."""
+    the drift measured on a control channel (set-02's manifest carries one per channel).
+
+    The time origin is moved to sample 0 by an integer CIRCULAR roll before the FFT, and only the
+    fraction of a sample left over goes into the phase ramp. Not a nicety: REW serves its buffer
+    with t = 0 a whole second in (`startTime` ≈ −0.99 s), and a spectrum whose energy sits 1 s
+    from the origin rotates ~2.3 rad per 0.37 Hz bin -- interpolating real and imaginary parts
+    between such bins shaves the magnitude by up to 1 − cos(half the step), which on `w-L_60`
+    measured **26 dB** at live bins and 155° of phase (2026-09-08, the identity test of hub
+    RES-005: `predict --rew` against `predict --solos` on one series). A v7 file never showed it
+    because `resonalyze_ir.py` rolls the IR to t = 0 before writing; the live REW path did not,
+    so the two entrances of this module gave different numbers on the same measurement. After the
+    roll the phase left for the ramp is under half a bin's worth, the interpolation is exact to
+    1e-4 dB, and both entrances agree to that. The roll is circular because the record is: REW's
+    pre-roll (the Farina harmonic images) wraps to the tail, the same convention the v7 writer
+    and Resonalyze's own estimator use."""
     x = np.asarray(ir, dtype=float)
+    t0 = float(t0_s) - float(drift_samples) / fs
+    shift = -t0 * fs                          # samples from the buffer origin to t = 0
+    k = int(round(shift))
+    if k:
+        x = np.roll(x, -k)                    # sample 0 now sits (shift - k) samples before t = 0
+    t0 = -(shift - k) / fs
     X = np.fft.rfft(x)
     fb = np.fft.rfftfreq(len(x), 1.0 / fs)
     f = np.asarray(freqs, dtype=float)
     H = np.interp(f, fb, X.real) + 1j * np.interp(f, fb, X.imag)
-    t0 = float(t0_s) - float(drift_samples) / fs
     return H * np.exp(-2j * np.pi * f * t0)
 
 
 def load_solo_v7(path, freqs, drift_samples=0.0):
-    """A Resonalyze v7 impulse-response file: sample 0 of `transferRealSamples` is t = 0."""
-    with open(path, encoding="utf-8") as fh:
-        doc = json.load(fh)
-    if doc.get("format") not in (None, "resonalyze-impulse-response") and \
-            "transferRealSamples" not in doc:
-        raise PredictError(f"{path}: not a Resonalyze impulse-response file")
+    """A Resonalyze impulse-response file (v4..v8): sample 0 of `transferRealSamples` is t = 0.
+
+    Read through `resonalyze_ir.load_file`, the one reader of the format in this tree: v7 carries
+    the arrays as JSON numbers, v8 (what the current Resonalyze writes, their #153) as base64
+    float32, and a later version is refused by its number rather than misread (hub RES-008). The
+    name keeps its `v7` because that is what `resonalyze_ir.py` WRITES and what every caller
+    calls the files; `info["source"]` says which version was actually read."""
+    import resonalyze_ir
+    try:
+        doc = resonalyze_ir.load_file(path)
+    except resonalyze_ir.ConversionError as exc:
+        raise PredictError(f"{path}: {exc}") from exc
+    if doc.get("transferRealSamples") is None:
+        raise PredictError(f"{path}: no transferRealSamples -- not a loopback-transfer file")
     fs = int(doc["sampleRate"])
     return _spectrum_on_grid(doc["transferRealSamples"], fs, 0.0, freqs, drift_samples), {
-        "source": "v7", "path": path, "sample_rate": fs,
+        "source": f"v{doc.get('version')}", "path": path, "sample_rate": fs,
         "timing_reference": doc.get("timingReference"),
         "protective": _legs_from_v7((doc.get("rewSource") or {}).get("protectiveHighPass"),
                                     (doc.get("rewSource") or {}).get("protectiveState")),
@@ -458,8 +485,12 @@ def load_solo_rew(title, freqs, api=None):
         raise PredictError(
             f"{title!r}: timing reference {timing.get('reference')!r} with offset {off:.6f} s -- "
             f"not on the shared loopback base, so its arrival is not comparable (timebase.py)")
-    times, ir = api.get_impulse_response(mid)
-    fs = 1.0 / (times[1] - times[0])
+    # LEVEL MATTERS here: this solo is summed with the others, so it must come back at its own
+    # height (a fraction of full scale, as a v7 file carries it), not peak-normalised to ±1.0 --
+    # the default form of the endpoint, which puts a sub and a woofer on one height and turns
+    # every junction's depth and sign into a guess (hub RES-005, the desk of 2026-09-07).
+    times, ir = api.get_impulse_response(mid, normalised=False)
+    fs = round(1.0 / (times[1] - times[0]))   # 1/dt of two accumulated floats is 95999.9999999
     return _spectrum_on_grid(ir, fs, times[0], freqs), {
         "source": "rew", "title": title, "id": str(mid), "sample_rate": fs,
         "timing_reference": timing.get("reference"), "ir_start_s": times[0],
@@ -478,11 +509,16 @@ def load_solos_dir(directory, freqs, drift=None):
         try:
             H, info = load_solo_v7(os.path.join(directory, name), freqs,
                                    drift_samples=(drift or {}).get(code, 0.0))
-        except (PredictError, KeyError, ValueError):
+        except (PredictError, KeyError, ValueError) as exc:
+            # A file this reader cannot open is skipped as before -- a manifest, a control, an
+            # RTA twin -- but one that is refused BY VERSION is named: a directory of v9 files
+            # reading as "no files found" is the silent zero this module is written against.
+            if "Unsupported impulse response version" in str(exc):
+                raise
             continue
         out[code] = (H, info)
     if not out:
-        raise PredictError(f"{directory}: no Resonalyze v7 impulse-response files found")
+        raise PredictError(f"{directory}: no Resonalyze impulse-response files (v4..v8) found")
     return out
 
 

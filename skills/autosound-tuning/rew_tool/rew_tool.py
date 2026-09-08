@@ -86,7 +86,7 @@ def print_fr_analysis(freqs, mag, phase, title="АЧХ / Фаза"):
 def print_ir_analysis(times, ir):
     print_header("Імпульсна відповідь")
     stats = an.analyze_impulse(times, ir)
-    print(f"  Пік:         {stats['peak_time_ms']:.3f} мс  ({stats['peak_dB']:.1f} dB)")
+    print(f"  Пік:         {stats['peak_time_ms']:.3f} мс  ({stats['peak_dB']:.1f} dBFS)")
     print(f"  Предімпульс: {stats['pre_ringing_dB']:.1f} dB відносно піку")
 
 
@@ -763,7 +763,7 @@ def run(mid, curves_dir, show_all=True):
 
     # Impulse Response
     try:
-        times, ir = api.get_impulse_response(mid)
+        times, ir = api.get_impulse_response(mid, normalised=False)   # peak in dBFS, not 0.0
         print_ir_analysis(times, ir)
     except Exception as e:
         print(f"\n  Impulse Response: недоступно ({e})")

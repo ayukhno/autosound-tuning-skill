@@ -365,11 +365,36 @@ def _ir_start_time(data):
         "it is the unstable peak-derived quantity besides")
 
 
-def get_impulse_response(mid):
-    data = _get(f"/measurements/{mid}/impulse-response")
+def get_impulse_response(mid, normalised=False):
+    """`(times, samples)` of a measurement's impulse response, at its LEVEL by default.
+
+    REW's endpoint peak-normalises every IR to ±1.0 unless asked not to (`rew-api-quirks.md`,
+    "IR is PEAK-NORMALISED by default"). Two channels read that way carry no level relation: a
+    subwoofer whose peak really sits ~18 dB under the woofer's comes back the same height, and
+    every sum built on the pair is built on wrong levels -- the wrong sign and the wrong depth at
+    each junction where the partners differ. That is the "−10…−18 dB below 400 Hz" the desk of
+    2026-09-07 could not explain, and it had already cost the research cross-check its runs 1-7
+    in August: the quirk was written down on 2026-08-19, in the reference, and this function went
+    on not asking (hub RES-005).
+
+    So `normalised=False` -- the default, and the only form a caller that has not decided gets --
+    asks for `?normalised=false` and returns the samples as a FRACTION of full scale (REW serves
+    percent; `/100` here), the unit `resonalyze_ir.py` writes into a v7 file, so `predict --rew`
+    and `predict --solos` read one channel at one height. `normalised=True` is REW's display form,
+    peak at exactly ±1.0, for a caller that wants the shape and says so; nothing about its timing
+    differs. A payload in any unit but `percent` is refused rather than scaled by guesswork.
+    """
+    query = "" if normalised else "?normalised=false"
+    data = _get(f"/measurements/{mid}/impulse-response{query}")
+    unit = data.get("unit")
+    if unit not in (None, "percent"):
+        raise ValueError(f"measurement {mid}: impulse response served in unit {unit!r}, expected "
+                         f"'percent' -- the level would be a guess")
     # REW returns the samples under "data" (not "impulseResponse" — that key
     # doesn't exist on this endpoint; the old code KeyError'd here).
     ir = decode_floats(data.get("data") or data["impulseResponse"])
+    if not normalised:
+        ir = [v / 100.0 for v in ir]                     # percent of full scale -> fraction of it
     start_time = _ir_start_time(data)
     sample_rate = data.get("sampleRate", 48000)
     dt = 1.0 / sample_rate

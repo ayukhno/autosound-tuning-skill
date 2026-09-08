@@ -259,7 +259,10 @@ def main(argv=None):
         f, mag, phase = api.get_fr(mid)
         f, mag = np.asarray(f, float), np.asarray(mag, float)
         try:
-            times, ir = api.get_impulse_response(mid)
+            # Level does not matter here -- `ringdown_ms` reads a decay relative to the band's
+            # own maximum -- but the raw form is asked for anyway: one convention for every
+            # reader, and a scale-free use is not a reason to hand the next one the wrong array.
+            times, ir = api.get_impulse_response(mid, normalised=False)
         except Exception:  # noqa: BLE001 -- an RTA has none
             times, ir = None, None
     else:
