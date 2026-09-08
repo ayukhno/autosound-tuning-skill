@@ -28,21 +28,31 @@ Judging tracks play known instruments at known stage positions. If an instrument
 
 ## AYA "Authentic Audio Check" — a category system (a diagnostic frame)
 AYA (Are You Authentic, ayasound.org + Stockfisch-Records) rates a system **BY CATEGORIES — each track isolates one measure.** The official SACD (19 tracks) — audiophile Stockfisch recordings; **the category scheme (German terms) is the transferable diagnostic frame**, regardless of the specific track:
-| Track(s) | Category | What it rates (→ tuning measure) |
-|---|---|---|
-| 01 | L/R Channel | a basic L/R check/routing |
-| 02 | Level Setting | the reference level |
-| 03-04 | **Tiefbass** | deep bass (extension/control <40–50) → sub |
-| 05 · 06 | **Bass** (06=Bass/Stage Height) | bass + stage height → midbass/sub |
-| 07-08 | **Grundton** | foundation/body (lower-mid) → midbass↔mid |
-| 09-10 | **Mittelton** | mids → mid |
-| 11-12 | **Hochton** | top → tweeter |
-| 13-14 | Balance | tonal/L-R balance |
-| 15 | **Raum** (Width/Depth) | stage width+DEPTH → staging-depth |
-| 16 | Focus | image focus |
-| 17 | Height | stage height |
-| 18-19 | Fine Dynamics | microdynamics |
+| Track(s) | Category | What it rates (→ tuning measure) | What to listen for in a car (field hints, one car) |
+|---|---|---|---|
+| 01 | L/R Channel | a basic L/R check/routing | — |
+| 02 | Level Setting | the reference level | — |
+| 03-04 | **Tiefbass** | deep bass (extension/control <40–50) → sub | from which KNOB position the bass sits "behind / all around" rather than in front — one car heard it move behind the head at 55 Hz on the third lamp. A level answer, not a placement one |
+| 05 · 06 | **Bass** (06=Bass/Stage Height) | bass + stage height → midbass/sub | the hit in the chest AND the seam: does the low bass detach from the kick |
+| 07-08 | **Grundton** | foundation/body (lower-mid) → midbass↔mid | a voice with chest and no nasal edge; **use two tracks** — one that shows the nasal edge, one that shows the body a cure would take away |
+| 09-10 | **Mittelton** | mids → mid | transparency of the middle read AGAINST the low end: missing because of masking from below, not because of the top |
+| 11-12 | **Hochton** | top → tweeter | bells and wooden mallets answer "is there ENOUGH treble" — and a "no more needed" here is a **stop signal** against raising the top, which no measurement gives you |
+| 13-14 | Balance | tonal/L-R balance | L/C symmetry on one instrument: mirrored, same height on both sides |
+| 15 | **Raum** (Width/Depth) | stage width+DEPTH → staging-depth | width OFF → ON on female multi-voice: "it widens, it breathed" is the clearest verdict this question gets |
+| 16 | Focus | image focus | image HEIGHT through a series on each position, and where it "breathes" (eyes → dashboard → eyes) |
+| 17 | Height | stage height | as above, read at the start, the middle and the end of the series — a series that climbs is the finding |
+| 18-19 | Fine Dynamics | microdynamics | harshness at volume, and the same again **+6 dB**: "fine" quiet and "on the edge" loud is a different verdict, and the loud one is what a judge hears (Judge Book 2024 §4.5) |
+
+> The right-hand column is **hints from one car's sessions** (Passat B8, 02–07.09.2026, hub `PAS-003`) —
+> the Arbiter's own words where they repeated and told two states apart. They are starting points to be
+> checked on a second car, not criteria. What is not a hint but a format rule: the **+6 dB pass**
+> (§4.5), which is scored separately and is in the routes as `c17`.
 > ⚠️ **Regional AYA-style discs borrow the CATEGORY NAMES** (TIEFBASS, RAUM…) **with DIFFERENT tracks.** The user's disc (`03-TIEFBASS`=Young Jeezy "Put On", `22-RAUM`=Mozart) is NOT the official Stockfisch (which has 19 tracks, other performers). What transfers is the **category→measure**, not the specific track. The user's specific tracks — ask/log, don't assume from the number.
+>
+> That is also why the `AYA` rows in [`test-tracks.md`](references/patterns/test-tracks.md) are cited by
+> **artist and title**, with the number kept only as provenance: an identity that survives a different
+> disc, and one a user can find on streaming. A number read as a category is the failure this warning
+> exists to prevent.
 
 ## EMMA 2024 — music tracks (official descriptions)
 EMMA judges **4 sections of tonal accuracy: Subbass · Midbass · Midrange · Highs** + imaging/staging (positions, depth, levels, separation) + dynamics. The 2024 music tracks (official description, tracks 8–11):

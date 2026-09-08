@@ -33,7 +33,14 @@ When you (Claude) have a **hypothesis to check by ear**:
 `CarMus` = CarMus Test&Demo 2026 (order easy → hard/heavy, "listen to music, not to sounds") · `Chesky` =
 Ultimate Demo Disc, streaming (in each pair the even track is a narrator, the odd one the music) ·
 `EMMA` = the competition discs (`competition.md`; the year matters, formats change between seasons) ·
-`mono` = true MONO recordings (L = R) · `own` = the user's own material.
+`AYA` = an AYA-style judging disc · `mono` = true MONO recordings (L = R) · `own` = the user's own
+material.
+
+⚠️ **On an `AYA` row the ARTIST and TITLE are the identity; the number is not.** Regional AYA-style
+discs borrow the category names (TIEFBASS, RAUM…) and put DIFFERENT tracks under them
+(`competition.md`), so `#08` on one disc is not `#08` on another — the numbers below are the disc one
+Arbiter had, kept as provenance, and every row is cited by artist and title so it can be found on
+another disc or on streaming. Ask which disc the user has; never read a category off a number.
 
 | id | library | number | artist | title | version |
 |---|---|---|---|---|---|
@@ -85,6 +92,16 @@ Ultimate Demo Disc, streaming (in each pair the even track is a narrator, the od
 | EMMA/T8 | EMMA | 2024 T8 | — | depth and body — the piano behind and below the singer (`competition.md`) | EMMA 2024 disc |
 | EMMA/T9 | EMMA | 2024 T9 | — | Hungry Bird | EMMA 2024 disc |
 | EMMA/T11 | EMMA | 2024 T11 | — | stage levels — snare vs tambourine, backing-vocal separation (`competition.md`) | EMMA 2024 disc |
+| AYA/roxanne | AYA | 08 | Petra Magoni & Ferruccio Spinetti | Roxanne (Live) | voice + double bass, live; regional AYA disc |
+| AYA/onereason | AYA | 13 | Tracy Chapman | Give Me One Reason | regional AYA disc |
+| AYA/giorgio | AYA | 23–27 | Daft Punk | Giorgio by Moroder — the FOKUS series, one per position (C · LC · RC · L · R) | regional AYA disc |
+| AYA/readall | AYA | 17 | Emeli Sandé | Read All About It, Pt. III | regional AYA disc |
+| AYA/bangbang | AYA | 16 | Henning May & Amilli | Bang Bang (TRANSPARENZ) | regional AYA disc |
+| AYA/allineed | AYA | 19 | AIR | All I Need | regional AYA disc |
+| AYA/glockenspiel | AYA | 20 | Percussion-Ensemble | Glockenspiel | regional AYA disc |
+| AYA/woodblocks | AYA | 12 | — | Improvisation — wooden mallets | regional AYA disc |
+| AYA/puton | AYA | 03 | Young Jeezy | Put On (TIEFBASS) | regional AYA disc |
+| EMMA/wide | EMMA | 2026 tr.13, tr.15 | — | female multi-voice — width and breath | EMMA 2026 disc |
 | own/favourite | own | — | — | a favourite, well-known track of the user's | whatever they play it from |
 | own/album | own | — | — | a familiar album for the long listen (acoustic + vocal material) | whatever they play it from |
 
@@ -99,26 +116,26 @@ listen for in THIS track — never the generic "sounds right / wrong" phrase, th
 | CarMus#01 | c11 | — | the macrodynamics of the intro |
 | CarMus#02 | c04 | — | many instruments: resolution, timbres, balance |
 | CarMus#02 | c10 | — | the instruments stay separate in the tutti |
-| CarMus#03 | c14 | — | hits on the guitar body — recognisable as wood, not dry knocks or boomy rumble |
+| CarMus#03 | c14 | — | hits on the guitar body — recognisable as wood, not dry knocks. ⚠️ The BOOM in this track is the drum at the start, not the guitar body: "boomy here" is a verdict about the drum, and a cure aimed at the guitar will miss |
 | CarMus#03 | c10 | — | the voice separated from the acoustic guitars |
 | CarMus#04 | c10 | — | studio space and resolution at low level; do the finger snaps read? |
-| CarMus#05 | c08 | — | a calm vocal — not nasal, not pressing, not anorexic |
+| CarMus#05 | c08 | — | a calm vocal — not nasal, not pressing, not anorexic. **Pair it with #08 for any step in 0.8–2 kHz**: this one shows the nasal edge, #08 shows the price — a cure that takes the body out of #08 is too much |
 | CarMus#05 | c07 | — | the treble range with body; guitars not lost among the cymbals; any blanket on the speakers? |
 | CarMus#06 | c07 | — | sibilants; treble resolution and decays |
-| CarMus#06 | c04 | — | evenness of the mids |
+| CarMus#06 | c04 | — | evenness of the mids. "Transparency is lacking" WHILE the sibilants do not bother and separation is fine separates transparency from the top: it is a masking question (see `AYA/allineed`), not a treble one |
 | CarMus#06 | c08 | — | the voice in the mids |
 | CarMus#07 | c09 | — | depth and space — the stage behind the hood |
 | CarMus#07 | c03 | — | the vocal holds its place and size |
-| CarMus#07 | c14 | — | the double bass: droning or bloated vs thin; snaps and plucks |
+| CarMus#07 | c14 | — | the double bass: droning or bloated vs thin; snaps and plucks. When the strings "already sound like a double bass" rather than like strings, that IS the droning |
 | CarMus#07 | c10 | 2:00 | the singer's whispering under the double-bass solo — does it read? |
-| CarMus#08 | c08 | — | a high bright vocal: cutters in the fundamentals and the upper mids |
+| CarMus#08 | c08 | — | a high bright vocal: cutters in the fundamentals and the upper mids. The other half of the #05 pair: here the low chest tone must stay — "this is where it is good" |
 | CarMus#08 | c03 | — | the vocal does not drift or change size on different notes |
 | CarMus#09 | c14 | — | double-bass texture; a warm live piano, not an electric one |
 | CarMus#09 | c08 | 1:20 | the flute — cutters? |
 | CarMus#09 | c04 | — | balance without accents; a different mixing principle from #07/#08 |
 | CarMus#10 | c11 | — | drive, dynamics, attack not smeared |
 | CarMus#10 | c10 | — | acoustic guitars — hear the strings, not "strum-strum" |
-| CarMus#10 | c14 | — | no boomy low end, no lower-mid pressure; LF density |
+| CarMus#10 | c14 | — | droning around 175–192 Hz: "the drums add a boom and the strings go unnoticed" is the flaw; cured, both the start and the middle read |
 | CarMus#10 | c08 | — | vocal cutters |
 | CarMus#11 | c14 | — | the double bass — bloated or losing fullness? |
 | CarMus#11 | c04 | — | live instruments, naturalness, they play together |
@@ -131,7 +148,7 @@ listen for in THIS track — never the generic "sounds right / wrong" phrase, th
 | CarMus#14 | c14 | 2:20 | bass-guitar texture; the tambourine jingles from 2:20 |
 | CarMus#15 | c10 | — | drums: separation and placement; micro-events under load |
 | CarMus#15 | c11 | — | macrodynamics, rate of fire |
-| CarMus#16 | c05 | — | two bass guitars — sub control and the midbass↔sub integration; the lower bass does not detach; the two basses separately, not mush |
+| CarMus#16 | c05 | — | two bass guitars — sub control and the midbass↔sub integration; the lower bass does not detach; the two basses separately, not mush. **"The sub is behind my head" is its own answer** — a level verdict, not a front/back one: it appeared at one knob position and went at the next |
 | CarMus#17 | c12 | — | after the heavy ones: not thin? balance and readability |
 | CarMus#17 | c08 | — | cutters, constriction |
 | CarMus#18 | c11 | — | bright, on the edge: the snare cracks out, the kick with reverb does not get lost |
@@ -173,6 +190,24 @@ listen for in THIS track — never the generic "sounds right / wrong" phrase, th
 | EMMA/T9 | c10 | 0:03 | the jaw harp 3–4 s on the right; voices by position |
 | EMMA/T11 | c15 | 2:52 | the snare vs the tambourine at different stage levels |
 | EMMA/T11 | c10 | 0:46 | backing vocals separated across the stage (also 1:25, 2:00) |
+| AYA/roxanne | c02 | — | the bass guitar BY POSITION: the first hit sits at RC, then "the brain hears it from LC" — that leak into the neighbouring position is the finding; when RC plays, is it RC or R? |
+| AYA/roxanne | c05 | — | voice and double bass together: the bass's body without the boom taking the voice's place |
+| AYA/onereason | c02 | — | LC/RC symmetry on the guitar: mirrored? the same height on both? |
+| AYA/giorgio | c15 | — | image HEIGHT through the series of booms — at the start, in the middle, at the end, on each position; where does it "breathe" (eyes → dashboard → eyes)? |
+| AYA/giorgio | c02 | — | the five FOKUS tracks are one per position: each should sit where it is named, and the series should not climb |
+| AYA/readall | c08 | — | harshness at volume, carried by the tweeters: do St / tCH / EE cut? |
+| AYA/readall | c07 | — | the same asked of the top alone: when the mids are muted, does the harshness remain? then it is not in the mids |
+| AYA/bangbang | c08 | — | multi-voice: harshness that "survives BOTH mutes" is in neither channel alone — look at the sum, not at a driver |
+| AYA/bangbang | c10 | — | many voices at once: do they stay separate |
+| AYA/allineed | c10 | — | the transparency of the middle AGAINST the low end: is it missing because of masking from below rather than because of the top? |
+| AYA/glockenspiel | c07 | — | bells: not cutting, and **no more treble needed** — a stop signal against raising the top, not a fault finder |
+| AYA/woodblocks | c07 | — | wooden mallets: the same stop signal from the other side — dry and clean, or already sharpened? |
+| AYA/puton | c06 | — | the test low tones: from which knob position does the bass sit "behind / all around"; 55 Hz is where one car heard it move behind the head |
+| AYA/puton | c05 | — | deep bass against the midbass: the seam under real level |
+| EMMA/wide | c10 | — | FX / width OFF → ON: "it widens, it breathed" — female multi-voice gives the clearest verdict here when other material does not |
+| CarMus#02 | c17 | — | the same tonal balance, two or three volume steps up: does anything that was even at working level start to press? |
+| CarMus#26 | c17 | — | the punch AND the harshness threshold again at +6 dB: "fine" at working level and "on the edge" louder is a different verdict, and the louder one is what a judge hears |
+| CarMus#08 | c17 | — | the bright vocal at +6 dB: cutters that were absent can appear here |
 | own/favourite | c04 | — | your own track: the first impression, no verdict |
 | own/album | c13 | — | a familiar album, relaxed, 15–20 minutes — does it stay easy or tire you, and which way |
 

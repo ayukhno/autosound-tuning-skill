@@ -64,6 +64,7 @@ characteristic marked `next league` is not for the first pass.
 | c13 | long listen | The long listen — an album, 15–20 min, relaxed | stays easy and inviting | tires you: thick, bright or dark (a tilt), or dead, dry, clinical (over-correction) | a tilt → a broad tilt against MMM, never narrow notches; dead → remove EQ, do not add (3.3) |
 | c14 | LF texture | Low-frequency texture — the double bass | springy, with body and detail | bloated, boomy, or dried out and thin | levels and the sub↔midbass seam (1.3 / 1.4); a broad tilt (3.3) |
 | c15 | height / width | Stage height and width — next league | the stage sits at dash height and reaches past the A-pillars with clean edges | drops to the floor on some notes, or the edges are ragged and the stage collapses | the mid↔tweeter joint (1.3); L/R levels (1.4) — a second visit to Phase 4 |
+| c17 | +6 dB | The same, two or three volume steps louder | balance, punch and voices hold what they held at working level | something that was even starts to press, or a harshness appears that was not there | whatever the quieter pass points at — but the LOUDER verdict is the one a judge hears (EMMA Judge Book 2024 §4.5, "Overall Spectral Balance at higher volume") |
 | c16 | dynamics | Dynamics at volume — headroom | quiet to loud without strain, peaks stay clean | peaks squash or distort, the sound closes up as it gets loud | gain structure and driver limits — not EQ; the protection filters (1.2) |
 
 Order matters: **c01 – c03 first.** If the centre or the positions fail, the rest is too early to
@@ -115,9 +116,33 @@ long listen as its own drive.
 | full | 13 | CarMus#17 | c12 |
 | full | 14 | CarMus#11 | c14 |
 | full | 15 | own/album | c13 |
+| full | 16 | CarMus#02 | c17 |
+| full | 17 | CarMus#26 | c17 |
+| full | 18 | CarMus#08 | c17 |
 | league | 1 | Ch.23 | c15 |
 | league | 2 | Ch.05 | c09 |
 | league | 3 | Ch.29 | c16 |
+| league | 4 | CarMus#26 | c17 |
+| league | 5 | CarMus#08 | c17 |
+
+## Four habits that make verdicts from different days comparable
+
+Learned in the field, and they cost nothing (hub `PAS-003`):
+
+1. **One track, one flaw, three answers.** Ask about ONE thing and take one of: *holds · came back /
+   other / better · the same · worse*. A verdict shaped like that can be laid beside another day's;
+   "sounds good" cannot. **Record the knob positions with it** — a verdict at another position is a
+   verdict about another system (`process.py … capture-knobs`, `phase_0_baseline.md` §3).
+2. **A pair of tracks for one step.** One shows the flaw, the other shows the price: a cure aimed at a
+   nasal edge in one vocal must not take the chest out of another (`CarMus#05 ↔ #08`), and a top lifted
+   for one track must still pass the one that says "no more treble needed" (`AYA/glockenspiel`).
+3. **A pass at +6 dB** for anything being decided (`c17`). Judges listen that way (EMMA Judge Book 2024
+   §4.5), and one real evening had a candidate "fine" at working level and "on the edge" louder — with
+   only the quiet pass, that verdict would have been banked wrong.
+4. **The number and the ear side by side, neither explaining the other away.** One session had the
+   measurement saying "the top is 2 dB under target" and the ear saying "no more treble needed": both
+   were recorded, and the target was named as OURS rather than a judge's. A measurement that contradicts
+   a careful ear is a finding, not an error to argue down.
 
 ## How to report what you hear
 
