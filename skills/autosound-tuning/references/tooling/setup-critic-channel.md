@@ -10,7 +10,7 @@ If no second AI is available, the Generator can run the loop by programmatically
 
 ## 1. Install and Set up the CLI — `agy` (Antigravity)
 
-> 🩺 **Stuck? Run the doctor FIRST:** `scripts/gemini_critic.sh --doctor`. It checks the CLI, macOS quarantine, `.critic-env` syntax, the Contract/Context paths, and runs a live 1-line smoke — printing the exact fix for each, so you diagnose all of §1–§3 in ONE command instead of serially. (A real cold-start hit ~6 papercuts here; the doctor surfaces them at once.)
+> 🩺 **Stuck? Run the doctor FIRST:** `scripts/gemini_critic.sh --doctor`. It checks the CLI, macOS quarantine, `.critic-env` syntax, the Contract/Context paths, the API key's shape and liveness (one free `GET /v1beta/models`), and runs a live 1-line smoke — printing the exact fix for each, so you diagnose all of §1–§3 in ONE command instead of serially. (A real cold-start hit ~6 papercuts here; the doctor surfaces them at once.) It recognises the **closed `gemini` CLI sign-in** (§2) by Google's own words and says "use agy" instead of a generic error.
 
 Google's official CLI is **Antigravity (`agy`)**. It is fully cross-platform (macOS and Windows) and is the sole, unified way to invoke the Gemini Critic-Advisor channel.
 
@@ -40,17 +40,23 @@ brew install --cask antigravity-cli      # the REAL agy — NOT a symlink to gem
 
 ## 2. Models
 
-| Role | `agy` default | `gemini` CLI default |
-|---|---|---|
-| **Critic** | `Gemini 3.1 Pro (High)` | `gemini-2.5-pro` |
-| Advisor / routine | `Gemini 3.5 Flash (Medium)` | `gemini-2.5-flash` |
-| Fallback (quota dry) | Flash | Flash |
+| Role | `agy` default |
+|---|---|
+| **Critic** | `gemini-3.1-pro-high` |
+| Advisor / routine | `gemini-3.5-flash-medium` |
+| Fallback (quota dry) | Flash |
 
-> ℹ️ **`Gemini 3.5/3.1` are Antigravity's own display labels** (what `agy models` shows), NOT real Gemini versions — the direct-API path (`autosound_ai.py`, no CLI) maps them to `gemini-2.5-flash` / `gemini-2.5-pro`. Use the label your channel expects: the `agy` CLI wants the display name; a raw `GEMINI_API_KEY` call wants the `gemini-2.5-*` id.
+> ⛔ **The `gemini` CLI path (`@google/gemini-cli`, `GEMINI_BIN=gemini`) is CLOSED for its own sign-in — 2026-09-08, gemini-cli 0.50.0, both models.** A session in a car followed an older revision of this page, tried it first, and lost ~10 minutes to this, verbatim:
+>
+> `Error authenticating: IneligibleTierError: This client is no longer supported for Gemini Code Assist for individuals. To continue using Gemini, please migrate to the Antigravity suite of products: https://antigravity.google`
+>
+> Google shut the free OAuth tier the CLI signed in with; `agy` (§1) is what replaced it. The `gemini` binary still works **only with a `GEMINI_API_KEY`** (§3), which is the one reason it stays detectable. If you see the text above, do not try the other model — it fails at the same sign-in; the wrapper now says "шлях gemini CLI закрито Google, використовуй agy" and stops rather than falling back. The models this page used to list for that CLI (`gemini-2.5-pro` / `gemini-2.5-flash`) are still the API ids a raw key call takes.
+
+> ℹ️ **`Gemini 3.5/3.1` are Antigravity's own display labels** (what `agy models` shows beside the slug ids), NOT real Gemini versions. Use the name your channel expects: the `agy` CLI wants its slug id (`gemini-3.1-pro-high`; the display label is rejected since agy 1.1.12); a raw `GEMINI_API_KEY` call wants the `gemini-2.5-*` id.
 
 **The Critic defaults to Pro** — a Flash critic praises and misses obvious problems (field-observed); "don't praise" prompt text doesn't fix a too-weak model. Flash remains the advisor/routine default and the automatic fallback (⚠️ agy Starter shares one weekly Flash+Pro quota — Pro burns it faster; when dry, pin Flash or use the manual channel §6). Names drift — list current ones with `agy models`. Override per call:
 ```bash
-GEMINI_CRITIC_MODEL="Gemini 3.5 Flash (Medium)" scripts/gemini_critic.sh pkg.md  # force Flash
+GEMINI_CRITIC_MODEL=gemini-3.5-flash-medium scripts/gemini_critic.sh pkg.md  # force Flash (slug id — agy ≥ 1.1.12 rejects the display label)
 ```
 
 ## 3. Pin config once — the KEY outside the project, the rest in it
@@ -71,6 +77,22 @@ agent, every `env` and `ps e`. The wrappers export it themselves for the length 
 which is as long as it needs to exist. If you call `gemini`/`agy` by hand, export it in that one
 shell rather than in `~/.zshrc`.
 
+**Check the key itself, not only its presence** — the doctor does, and by hand it is one free call:
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' "https://generativelanguage.googleapis.com/v1beta/models?key=$GEMINI_API_KEY"
+# 200 → live · 400 with API_KEY_INVALID in the body → not this key
+```
+Two facts cost a session its time on 2026-09-08, and both are about the KEY, not the channel:
+- **AI Studio issues keys in a new shape — `AQ.` + 53 characters.** The old shape, `AIza` + 39
+  characters, is what every earlier note here showed. An old-shape key answers `API_KEY_INVALID`
+  once a new one has been issued for the project; the doctor prints which shape it sees.
+- **A session's environment does not follow `~/.zshrc`.** A key changed in the profile after the
+  session started is not what that session holds: the old export stays in `env`, the wrappers
+  export it over the file's value for their own run, and a key that is perfectly valid in the
+  profile reads as invalid from inside the session. Which is one more reason the key belongs in
+  the file (§3 above) and not in an export: the file is read fresh on every call. The doctor says
+  when the key it sees came from the shell rather than from a file.
+
 Everything non-secret — models, `GEMINI_BIN`, `PROJECT_MIRROR` — can still sit in the project,
 where it belongs with the car it describes:
 
@@ -88,12 +110,14 @@ backup that is not git.
 dropped with a message — before, this file was `source`d, so a project someone else wrote ran
 arbitrary shell the moment you started the reviewer.
 
-⚠️ **Quote any model name with spaces/parens** — no longer required by the parser, but harmless
-and clearer (`--doctor` catches a malformed line):
+⚠️ **Use the slug ids `agy models` prints in its left column** — the display labels in the right
+column (`Gemini 3.1 Pro (High)`) are rejected by agy ≥ 1.1.12 (`invalid model selection`), and a
+quoted label is what this block used to show. Quotes are harmless either way (`--doctor` catches a
+malformed line):
 ```bash
 GEMINI_BIN=agy
-GEMINI_CRITIC_MODEL="Gemini 3.5 Flash (Medium)"     # quotes REQUIRED
-GEMINI_ADVISOR_MODEL="Gemini 3.1 Pro (High)"
+GEMINI_CRITIC_MODEL=gemini-3.1-pro-high              # Critic = Pro
+GEMINI_ADVISOR_MODEL=gemini-3.5-flash-medium
 # PROJECT_MIRROR=/abs/path/to/project/rew_analitic   # only if CWD differs
 ```
 
@@ -164,11 +188,11 @@ So **launch Claude from the project directory** (CWD = the car you're tuning). `
 printf '## Test\nChannel check: reply with one line "channel works".\n' > /tmp/smoke.md
 scripts/gemini_critic.sh /tmp/smoke.md
 ```
-Expect a one-line reply + a `— [critic: <model>]` tag (or `[advisor: …]`). An **empty reply** (just the tag) ≠ a crash — it's almost always **quota exhausted** (agy's weekly tier) or lost auth; the wrapper prints a loud WARNING. Recover by switching the model group, re-logging-in `agy`, or pinning the gemini API-key path (§2).
+Expect a one-line reply + a `— [critic: <model>]` tag (or `[advisor: …]`). An **empty reply** (just the tag) ≠ a crash — it's almost always **quota exhausted** (agy's weekly tier) or lost auth; the wrapper prints a loud WARNING. Recover by switching the model group, re-logging-in `agy`, or pinning the gemini API-key path (§3 — the `gemini` CLI works with a key only, §2).
 
 ## 7. No CLI — or the CLI is slow/dry? Use a manual channel (the ROLE still happens)
 
-The reviewer role is vendor-agnostic (`review-loop.md`). When there's no CLI — **or `agy` is quota-dry / hanging on a big package** — go manual:
+The reviewer role is vendor-agnostic (`review-loop.md`). When there's no CLI — **or `agy` is quota-dry / hanging on a big package, or the only CLI on the machine is `gemini` with no key (§2)** — go manual:
 1. **Copy-paste into a desktop chat** *(field-proven; the go-to when the CLI chokes)* — `cat package.md | pbcopy`, paste into a **Gemini / Claude / ChatGPT desktop chat** where you have a subscription / tokens, then paste the reply back. No CLI, no quota juggling, no agentic stalls — ideal for a **bulk one-off** review (e.g. several long docs at once). Real use: a 4-language README review the agentic CLI couldn't finish.
 2. **Any other AI** in a second window — same idea, ask it to play the Critic.
 3. **Claude in a SEPARATE session** (cross-session self-review; TWO-PASS anti-anchoring — see `review-loop.md`).

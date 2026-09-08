@@ -81,6 +81,21 @@ else AUDIT="$PROJECT_MIRROR/audit-trail.md"; fi
 # a fresh user who `npm i -g @google/gemini-cli` gets `gemini`. Force either by
 # setting GEMINI_BIN (e.g. in .critic-env). DON'T symlink agy→gemini — just let
 # detection pick gemini; that keeps the model ids + flags correct for each CLI.
+#
+# ⚠️ The `gemini` CLI's OWN sign-in is CLOSED (2026-09-08, gemini-cli 0.50.0, both models):
+#
+#   Error authenticating: IneligibleTierError: This client is no longer supported for Gemini
+#   Code Assist for individuals. To continue using Gemini, please migrate to the Antigravity
+#   suite of products: https://antigravity.google
+#
+# Google shut the free OAuth tier the CLI signed in with; `agy` is what replaced it. `gemini`
+# stays detectable for one reason only: with a GEMINI_API_KEY it still calls the API. Without a
+# key it fails on every model with the text above, which `_is_dead_cli_error` recognises so the
+# wrapper says "the path is closed, use agy" instead of falling back to a second model on the
+# same closed door (hub PAS-004: ~10 minutes of diagnosis in a car, on a fact one line can carry).
+# What the key was before any config file was read -- the doctor tells a stale shell export
+# from a file value with it.
+_GEMINI_KEY_FROM_SHELL="${GEMINI_API_KEY:-}"
 if [[ -z "${GEMINI_BIN:-}" ]]; then
   if command -v agy >/dev/null 2>&1; then GEMINI_BIN=agy
   elif command -v gemini >/dev/null 2>&1; then GEMINI_BIN=gemini
@@ -152,8 +167,33 @@ gemini_preflight() {
   → run the intake to create rew_analitic/data-contract-template.md, or set PROJECT_MIRROR"
   [[ -f "$CONTEXT" ]] || die "context not found: $CONTEXT
   → copy your project's autosound_context.md into rew_analitic/, or set PROJECT_MIRROR"
-  [[ -n "$GEMINI_BIN" ]] || die "no Gemini CLI on PATH — install the official one:
-  npm i -g @google/gemini-cli   (then 'gemini'; see references/tooling/setup-critic-channel.md)"
+  [[ -n "$GEMINI_BIN" ]] || die "no Gemini CLI on PATH — install Antigravity:
+  brew install --cask antigravity-cli   (then 'agy' once to log in; references/tooling/setup-critic-channel.md §1)
+  (the old @google/gemini-cli sign-in is closed since 2026-09-08 — it only works with a GEMINI_API_KEY now)"
+  if [[ "$GEMINI_FLAVOR" == gemini && -z "${GEMINI_API_KEY:-}" ]]; then
+    echo ">> WARNING: $(_dead_cli_message)" >&2
+  fi
+}
+
+# The closed path, recognised by the words Google prints for it. Kept apart from
+# `_is_quota_error`: a quota error is worth a fallback model, this is not -- the second model
+# fails at the same sign-in, and falling back only doubles the wait before the real answer.
+_is_dead_cli_error() {
+  grep -qiE 'IneligibleTierError|no longer supported for Gemini Code Assist|migrate to the Antigravity' <<<"$1"
+}
+_dead_cli_message() {
+  printf '%s' "шлях gemini CLI закрито Google (IneligibleTierError, 2026-09-08: «This client is no longer supported for Gemini Code Assist for individuals … migrate to the Antigravity suite») — використовуй agy: brew install --cask antigravity-cli, потім 'agy' для входу; або дай gemini CLI ключ GEMINI_API_KEY у ~/.config/autosound/critic-env (setup-critic-channel.md §1, §3)"
+}
+
+# What shape a GEMINI_API_KEY has: `AQ.` + 53 chars is the format AI Studio issues now (seen
+# 2026-09-08); `AIza` + 39 was the format before it, and a key of that shape sitting in a shell's
+# environment while the profile already holds a new one is exactly how a working key reads as
+# API_KEY_INVALID (the session's environment does not follow ~/.zshrc after it started).
+_key_format() {
+  local k="$1"
+  if [[ "$k" == AQ.* && ${#k} -eq 53 ]]; then echo "current (AQ.…, 53 chars)"
+  elif [[ "$k" == AIza* && ${#k} -eq 39 ]]; then echo "OLD format (AIza…, 39 chars) — AI Studio issues AQ.… keys now; if the profile holds a new one, this shell has not seen it"
+  else echo "unrecognised shape (${#k} chars, starts ${k:0:3}…)"; fi
 }
 
 # _run_model <model> <prompt_file> — prints raw Gemini output, strips CLI noise.
@@ -177,6 +217,13 @@ gemini_run() {
   local primary="$1" fallback="$2" pf="$3" role="$4" out used
   echo ">> ${role}: $primary  [cli=$GEMINI_FLAVOR]" >&2
   out="$(_run_model "$primary" "$pf" || true)"; used="$primary"
+  if _is_dead_cli_error "$out"; then
+    echo ">> ✗ $(_dead_cli_message)" >&2
+    echo ">>   ($GEMINI_FLAVOR said: $(printf '%s' "$out" | grep -iE 'IneligibleTierError|no longer supported' | head -1 | cut -c1-160))" >&2
+    echo ">>   The fallback model is NOT tried: it fails at the same sign-in." >&2
+    printf '\n— [%s: %s — no reply: the gemini CLI path is closed, use agy]\n' "$role" "$used"
+    return 2
+  fi
   if _is_quota_error "$out"; then
     echo ">> ⚠️  $primary unavailable/exhausted → FALLING BACK to $fallback" >&2
     echo ">>    A fallback model is weaker at judging METHOD validity: it tends to agree" >&2
@@ -208,6 +255,43 @@ gemini_run() {
   fi
 }
 
+# gemini_selfcheck — offline: the recognisers on the words they exist for, and the doctor's
+# closed-path branches driven by a stubbed CLI. No network, no quota. Wired as
+# `gemini_critic.sh --selftest` and into scripts/run-selftests.sh.
+gemini_selfcheck() {
+  local dead='Error authenticating: IneligibleTierError: This client is no longer supported for Gemini Code Assist for individuals. To continue using Gemini, please migrate to the Antigravity suite of products: https://antigravity.google'
+  _is_dead_cli_error "$dead" || { echo "selfcheck: the closed-path text was not recognised"; return 1; }
+  _is_dead_cli_error "channel works" && { echo "selfcheck: a good reply read as the closed path"; return 1; }
+  _is_quota_error "$dead" && { echo "selfcheck: the closed path read as a quota error (it would fall back)"; return 1; }
+  _is_quota_error "Error: 429 RESOURCE_EXHAUSTED" || { echo "selfcheck: a quota error was not recognised"; return 1; }
+  [[ "$(_key_format "AQ.$(printf 'x%.0s' $(seq 1 50))")" == current* ]] || { echo "selfcheck: AQ. key shape"; return 1; }
+  [[ "$(_key_format "AIza$(printf 'x%.0s' $(seq 1 35))")" == OLD* ]] || { echo "selfcheck: AIza key shape"; return 1; }
+  [[ "$(_key_format "nonsense")" == unrecognised* ]] || { echo "selfcheck: odd key shape"; return 1; }
+  # The doctor, on a CLI that answers the smoke with the closed-path text: it must NAME the
+  # path, not report an answered smoke or a quota. Driven through the same functions the real
+  # run uses, with only the CLI call and the key probe stubbed.
+  local saved_bin="$GEMINI_BIN" saved_flavor="$GEMINI_FLAVOR" saved_key="${GEMINI_API_KEY:-}" report
+  GEMINI_BIN=gemini; GEMINI_FLAVOR=gemini; unset GEMINI_API_KEY
+  _run_model() { printf '%s\n' "$dead"; }
+  report="$(gemini_doctor 2>&1 || true)"
+  unset -f _run_model
+  GEMINI_BIN="$saved_bin"; GEMINI_FLAVOR="$saved_flavor"
+  [[ -n "$saved_key" ]] && export GEMINI_API_KEY="$saved_key"
+  grep -q 'gemini without a GEMINI_API_KEY' <<<"$report" || { echo "selfcheck: the doctor did not name a key-less gemini CLI"; printf '%s\n' "$report"; return 1; }
+  grep -q '✗ smoke: шлях gemini CLI закрито' <<<"$report" || { echo "selfcheck: the doctor did not name the closed path in the smoke"; printf '%s\n' "$report"; return 1; }
+  grep -q '✓ smoke' <<<"$report" && { echo "selfcheck: the closed path passed as a smoke"; return 1; }
+  # And gemini_run on the same CLI: the message, no fallback attempt, a non-zero return.
+  local calls=0 pf; pf="$(mktemp)"; printf 'x' > "$pf"
+  _run_model() { calls=$((calls + 1)); printf '%s\n' "$dead"; }
+  GEMINI_FLAVOR=gemini
+  report="$(gemini_run gemini-2.5-pro gemini-2.5-flash "$pf" critic 2>&1)"; local rc=$?
+  unset -f _run_model; rm -f "$pf"; GEMINI_FLAVOR="$saved_flavor"
+  [[ $rc -eq 2 ]] || { echo "selfcheck: gemini_run returned $rc on the closed path, expected 2"; return 1; }
+  grep -q 'закрито Google' <<<"$report" || { echo "selfcheck: gemini_run did not name the closed path"; return 1; }
+  grep -q 'FALLING BACK' <<<"$report" && { echo "selfcheck: gemini_run fell back on the closed path"; return 1; }
+  echo "selftest[gemini-channel] OK -- IneligibleTierError recognised (and not as a quota), key shapes AQ./AIza/odd told apart, the doctor names a key-less gemini CLI and the closed path in its smoke, gemini_run stops at the closed door without a fallback (rc 2)"
+}
+
 # gemini_doctor — one-shot preflight: diagnose the WHOLE channel + run a live smoke,
 # so setup traps surface in ONE command instead of serially (a real cold-start hit
 # ~6 papercuts here). Invoked via the wrappers' `--doctor` flag.
@@ -215,12 +299,33 @@ gemini_doctor() {
   local ok=1 chan_ok=0 envf bin
   echo "== Gemini reviewer channel — doctor =="
   if [[ -z "${GEMINI_BIN:-}" ]]; then
-    echo "✗ CLI: none on PATH. Fix: brew install --cask antigravity-cli (agy, default) OR npm i -g @google/gemini-cli"; ok=0
+    echo "✗ CLI: none on PATH. Fix: brew install --cask antigravity-cli (agy; the old @google/gemini-cli sign-in is closed — it needs a GEMINI_API_KEY now)"; ok=0
   else
     bin="$(command -v "$GEMINI_BIN" 2>/dev/null || echo "$GEMINI_BIN")"
     echo "✓ CLI: $GEMINI_BIN → $bin  (flavor=$GEMINI_FLAVOR · critic='${GEMINI_CRITIC_MODEL:-$(gemini_default_critic_model)}' · advisor='${GEMINI_ADVISOR_MODEL:-$(gemini_default_model)}' · extra='${GEMINI_EXTRA_ARGS}')"
     if [[ "$(uname)" == Darwin && -e "$bin" ]] && xattr -p com.apple.quarantine "$bin" >/dev/null 2>&1; then
       echo "✗ quarantine: $bin is Gatekeeper-quarantined. Fix: xattr -dr com.apple.quarantine \"$bin\""; ok=0
+    fi
+    if [[ "$GEMINI_FLAVOR" == gemini && -z "${GEMINI_API_KEY:-}" ]]; then
+      echo "✗ CLI: gemini without a GEMINI_API_KEY — $(_dead_cli_message)"; ok=0
+    fi
+  fi
+  if [[ -n "${GEMINI_API_KEY:-}" ]]; then
+    echo "· key: GEMINI_API_KEY is set — $(_key_format "$GEMINI_API_KEY")"
+    if [[ -n "$_GEMINI_KEY_FROM_SHELL" && "$_GEMINI_KEY_FROM_SHELL" == "${GEMINI_API_KEY}" ]]; then
+      echo "  ⚠ it came from this shell's environment, not from a critic-env file: a key changed in ~/.zshrc after this session started is NOT what this session holds (setup-critic-channel.md §3)"
+    fi
+    if command -v curl >/dev/null 2>&1; then
+      # One GET that costs nothing (a model listing), the key never printed: the code says live
+      # or not, and API_KEY_INVALID in the body is the old-key-in-a-new-world case by name.
+      local kc kb; kb="$(mktemp)"
+      kc="$(curl -s -m 10 -o "$kb" -w '%{http_code}' "https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}" 2>/dev/null || echo 000)"
+      case "$kc" in
+        200) echo "✓ key: GET /v1beta/models → 200 (the key is live)";;
+        000) echo "· key: GET /v1beta/models → no answer (offline?) — not checked";;
+        *)   echo "✗ key: GET /v1beta/models → HTTP $kc$(grep -o 'API_KEY_INVALID' "$kb" | head -1 | sed 's/^/ /') — a new key from https://aistudio.google.com/apikey into ~/.config/autosound/critic-env, then re-run; if the file already holds a new one, unset the shell's export"; ok=0;;
+      esac
+      rm -f "$kb"
     fi
   fi
   envf=""; for e in "$PWD/rew_analitic/.critic-env" "$PWD/.critic-env"; do [[ -f "$e" ]] && { envf="$e"; break; }; done
@@ -235,7 +340,8 @@ gemini_doctor() {
     echo "— live smoke (1 line) —"
     local sf out; sf="$(mktemp)"; printf 'reply with exactly: channel works' > "$sf"
     out="$(_run_model "$(gemini_default_model)" "$sf" || true)"; rm -f "$sf"
-    if [[ -z "${out//[[:space:]]/}" ]]; then echo "✗ smoke: EMPTY → quota exhausted (agy weekly Starter tier?) or lost auth. agy: run 'agy' in a REAL terminal to log in / check the weekly countdown. gemini: set GEMINI_API_KEY (the OAuth tier is deprecated)."; ok=0
+    if [[ -z "${out//[[:space:]]/}" ]]; then echo "✗ smoke: EMPTY → quota exhausted (agy weekly Starter tier?) or lost auth. agy: run 'agy' in a REAL terminal to log in / check the weekly countdown. gemini: set GEMINI_API_KEY (its own sign-in is closed, see above)."; ok=0
+    elif _is_dead_cli_error "$out"; then echo "✗ smoke: $(_dead_cli_message)"; ok=0
     elif _is_quota_error "$out"; then echo "✗ smoke: model/quota error → $(printf '%s' "$out" | head -1)"; ok=0
     # The smoke asked for exact words; anything else is a failure, however cheerful it looks.
     # This used to pass ANY non-empty reply, so `Error: invalid model selection …` was reported

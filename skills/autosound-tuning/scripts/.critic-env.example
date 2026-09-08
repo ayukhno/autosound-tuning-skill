@@ -24,15 +24,21 @@ GEMINI_BIN=agy
 # which handed anyone who copied it the rubber-stamp reviewer the docs spend paragraphs warning
 # about ("a Flash critic praises"). The reviewer is the role that must NOT agree with you; the
 # advisor answers routine questions, where Flash is the right trade.
-GEMINI_CRITIC_MODEL="Gemini 3.1 Pro (High)"
-GEMINI_ADVISOR_MODEL="Gemini 3.5 Flash (Medium)"
+# Slug ids, as `agy models` prints them in its LEFT column: the display labels this file carried
+# ("Gemini 3.1 Pro (High)") are rejected by agy >= 1.1.12 with "invalid model selection".
+GEMINI_CRITIC_MODEL=gemini-3.1-pro-high
+GEMINI_ADVISOR_MODEL=gemini-3.5-flash-medium
 
-# ---- Fallback: @google/gemini-cli via a FREE API KEY (cross-platform) ----
-# gemini-cli's free OAuth sign-in is deprecated (IneligibleTierError) → use a key.
-# Get one free (no card) at https://aistudio.google.com/apikey
+# ---- Fallback: @google/gemini-cli via an API KEY (cross-platform) ----
+# gemini-cli's OWN sign-in is CLOSED (2026-09-08, IneligibleTierError: "This client is no longer
+# supported for Gemini Code Assist for individuals … migrate to the Antigravity suite") — the
+# binary works with a key ONLY. Get one at https://aistudio.google.com/apikey — the current
+# shape is AQ.… (53 chars); an AIza… (39) key is the old shape and answers API_KEY_INVALID once a
+# new one exists. Keep the key in THIS file (per machine), not in a shell export: a session's
+# environment does not follow ~/.zshrc after it started.
 # GEMINI_BIN=gemini
-# GEMINI_API_KEY=AIza...                      # exported to gemini-cli automatically
-# GEMINI_CRITIC_MODEL=gemini-2.5-flash
-# GEMINI_ADVISOR_MODEL=gemini-2.5-pro
+# GEMINI_API_KEY=AQ....                       # exported to gemini-cli automatically
+# GEMINI_CRITIC_MODEL=gemini-2.5-pro           # API ids for this CLI; Critic = Pro
+# GEMINI_ADVISOR_MODEL=gemini-2.5-flash
 
 # PROJECT_MIRROR=/abs/path/to/project/rew_analitic   # only if CWD differs from the project

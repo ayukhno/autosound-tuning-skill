@@ -15,7 +15,8 @@
 # Config — set inline, via env, or once in rew_analitic/.critic-env
 # (see references/tooling/setup-critic-channel.md). All resolved in _gemini_common.sh:
 #   GEMINI_BIN            CLI to use (auto: agy → gemini)
-#   GEMINI_CRITIC_MODEL   primary model (default per CLI; agy "Gemini 3.5 Flash (Medium)" · gemini gemini-2.5-flash)
+#   GEMINI_CRITIC_MODEL   primary model (default per CLI; agy gemini-3.1-pro-high · gemini gemini-2.5-pro —
+#                         the gemini CLI's own sign-in is closed since 2026-09-08, it needs a GEMINI_API_KEY)
 #   GEMINI_FALLBACK_MODEL fallback when the primary is exhausted/unavailable
 #   GEMINI_EXTRA_ARGS     extra CLI flags (auto: --skip-trust for @google/gemini-cli)
 #   PROJECT_MIRROR        project docs dir (default: $PWD/rew_analitic)  ← context/contract live here
@@ -27,6 +28,8 @@ SCRIPT_NAME="gemini_critic"
 # Preflight: `gemini_critic.sh --doctor` diagnoses CLI/symlink/quarantine/.critic-env/
 # context + runs a live smoke, so setup traps surface in ONE shot.
 if [[ "${1:-}" == "--doctor" ]]; then gemini_doctor && exit 0 || exit 1; fi
+# Offline: the channel's recognisers and the doctor's closed-path branches, no CLI call.
+if [[ "${1:-}" == "--selftest" ]]; then gemini_selfcheck && exit 0 || exit 1; fi
 
 PKG="${1:-}"; TRACE="${2:-}"
 [[ -n "$PKG" ]] || die "usage: gemini_critic.sh <package.md> [trace.csv]"

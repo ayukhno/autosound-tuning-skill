@@ -21,7 +21,9 @@ pass=0 fail=0 failed=()
 run_one() {                       # name, then the argv to hand the module
   local name="$1"; shift
   local out rc
-  out="$("$PY" "$@" 2>&1)"; rc=$?
+  # A `.sh` runs under bash; everything else is a Python module handed to $PY.
+  if [[ "$1" == *.sh ]]; then out="$(bash "$@" 2>&1)"; rc=$?
+  else                        out="$("$PY" "$@" 2>&1)"; rc=$?; fi
   if [ "$rc" -eq 0 ]; then
     pass=$((pass + 1))
     printf '  ok   %-20s %s\n' "$name" "$(printf '%s' "$out" | tail -n1 | cut -c1-72)"
@@ -40,6 +42,9 @@ run_one "upstream-drift" scripts/upstream-drift.py --selftest
 # Issue #21: the console's code page must not be able to destroy a computed result. The checker
 # scans the tree; its own --selftest breaks each rule on purpose first.
 run_one "encoding" scripts/encoding-check.py --selftest
+# The reviewer channel's shell plumbing: the closed gemini-CLI path is recognised and named, not
+# retried on a fallback model (hub PAS-004). Offline -- the CLI call is stubbed.
+run_one "gemini-channel" skills/autosound-tuning/scripts/gemini_critic.sh --selftest
 
 echo
 echo "rew_tool selftests ($PY)"

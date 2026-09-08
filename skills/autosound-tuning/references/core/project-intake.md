@@ -194,7 +194,7 @@ In the new project's root (a git repo; layout and the "what's in git, what isn't
 - **The Critic channel's files — in `rew_analitic/` (where the channel reads them, project-local).** Create/place:
   - **`rew_analitic/autosound_context.md`** — this is the profile above (the channel reads `$PWD/rew_analitic/autosound_context.md`; keep it here, not only in the root).
   - **`rew_analitic/data-contract-template.md`** — copy the bundled template from the skill: `cp <skill>/assets/data-contract-template.md rew_analitic/`, then fill in the `<DSP>` placeholders. (Don't copy someone else's contract — its other car/DSP specifics would leak into the Critic.)
-  - If the channel = `@google/gemini-cli` or the CWD ≠ the project root — add **`rew_analitic/.critic-env`** (`GEMINI_BIN=…`, and `PROJECT_MIRROR=…` if needed). Detail → `references/tooling/setup-critic-channel.md`.
+  - If the channel = `@google/gemini-cli` (key only — its own sign-in is closed since 2026-09-08, `setup-critic-channel.md` §2) or the CWD ≠ the project root — add **`rew_analitic/.critic-env`** (`GEMINI_BIN=…`, and `PROJECT_MIRROR=…` if needed). Detail → `references/tooling/setup-critic-channel.md`.
 - The first changelog entry: "project created; intake done; candidate target: X; preset targets: …".
 
 Next → **Phase 0** (`process-phases.md`).
