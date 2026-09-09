@@ -2,7 +2,7 @@
 
 This phase bootstraps a brand-new tuning project or a fresh system installation.
 
-> 🗺️ **Two modes and a path.** Intake now also picks the path: **full** (a new tune, virtual-first) or **improve an existing tune** (−1 → 3 → 4). Both read the current DSP settings into the ledger. The virtual-first happy path, the gear loss table, the degradation rule and the day-before preparation (−1.4) live in [`virtual-first.md`](references/phases/virtual-first.md) and [`capture-session-sheet.md`](references/phases/capture-session-sheet.md).
+> 🗺️ **One way in.** The method builds a tune **from scratch** — −1 → 0 → desk → 3 → 4 — reading whatever the DSP currently holds into the ledger first. *Improving somebody else's existing tune is not a route laid out here* (user's ruling 2026-09-09): the tools serve it, the order of work is the tuner's own. Say so plainly rather than improvising a shortened phase order. The virtual-first happy path, the gear loss table, the degradation rule and the day-before preparation (−1.4) live in [`virtual-first.md`](references/phases/virtual-first.md) and [`capture-session-sheet.md`](references/phases/capture-session-sheet.md).
 
 ## 🎯 Goal-node
 

@@ -18,19 +18,27 @@ chain, **is** what the microphone would record. So the whole measurement budget 
 disciplined capture session; the tune is then designed at the desk against a predicted sum; the car is
 needed once more, briefly, to verify the prediction and do the fine EQ the desk cannot see.
 
-## Two modes, one path
+## One way in: from scratch
 
-- **Full** (a new tune): −1 → 0 → desk (1–2) → 3 → 4.
-- **Improve an existing tune**: −1 → 3 → 4, with no new solos — Phase 3 already holds a sum
-  measurement, MMM, fine EQ and a verdict. ⚠️ **The two gates do not care which mode you are in**:
-  `enter-phase 3` is a forward move out of baseline, so it refuses without a recorded target curve
-  and a non-empty `acoustics.flaws[]` exactly as `enter-phase 1` does. With no new solos there is
-  nothing for `flaw_map.py` to read, so this mode records them by hand from what the existing
-  measurements and the owner's complaints already say — `project.py <project> flaw <f_hz>
-  <level_db> <kind> <action> --status hypothesis --symptom "..."` — and `target <preset> <curve>`
-  for the curve the tune is being judged against. Two commands, and they are the price of entry. Both modes **read the current DSP settings into the
-  ledger** first. ⚠️ On a Helix there is no reader for PC-Tool 6 — the current setup is transcribed
-  from its screens (EQ is the slowest); say this cost in the intake, it is one-time. The
+**−1 → 0 → desk (1–2) → 3 → 4.** That is the method: every driver is measured on its own, the tune
+is designed at the desk against a predicted sum, and the car verifies it. Whatever state the DSP is
+in, it is **read into the ledger first**.
+
+**Improving somebody else’s existing tune is NOT a route this method lays out** (user’s ruling
+2026-09-09). People do want it, and the tools here serve it — a transcribed setup enters the ledger
+(`setup_import.py`), `predict.py --from-state` predicts a change from the series already in hand,
+and neither the flaw map nor the EQ proposer cares where the state came from. What is not laid out
+is the ORDER of that work, and pretending otherwise would sell a path nobody has walked end to end.
+A tuner who wants it builds that route with their own AI, out of these tools.
+
+Say so plainly when it is asked for, and do **not** improvise a shortened phase order: an
+`enter-phase 3` that skipped the baseline still meets the gates asking for a target curve and a
+flaw map, and answering those with hand-typed placeholders is how a tune ends up built on numbers
+nobody measured.
+
+⚠️ **Reading the current setup costs time, and it is one-time.** On a Helix there is no reader for
+  PC-Tool 6 — the current setup is transcribed from its screens (EQ is the slowest); say that cost
+  in the intake. The
   transcription goes through `setup_import.py <project> transcription.json [--atf code=file.atf]
   --write`: every value is checked against the DSP profile (a delay off the 0.01 ms grid, a gain
   outside the range, an EQ type the DSP does not have — each refused by name, nothing rounded), the
@@ -61,9 +69,8 @@ Step names describe the action, not a command. The joint and L/R **phase** is th
 **set in 1.3, checked on the prediction in 1.5, and checked again after EQ in 2.2**.
 
 ### Phase −1 · Intake (desk) — *goal: decide nothing in the car, and be surprised by nothing*
-- **−1.1** log Phase −1; run the intake (`project-intake.md §0.5`); pick the **mode** (new → full;
-  improve an existing tune → the −1 → 3 → 4 route); read the current DSP settings into the ledger;
-  show the loss table above.
+- **−1.1** log Phase −1; run the intake (`project-intake.md §0.5`); read the current DSP settings
+  into the ledger; show the loss table above.
 - **−1.2** *new DSP* (only if not in the knowledge base): the question session → a profile (rate,
   delay step, crossover families, Q convention, the list of "effects and dynamic processing" to turn
   off) → into the knowledge base with consent (a GitHub Issue; email when the author publishes one).

@@ -18,7 +18,7 @@ Loaded as a system prompt into **both** chats at the session start, together wit
 |**Critic (Challenger)**|Critic AI          |Looks for acoustic risks and false assumptions; **doesn't praise**. **Drift-watch:** runs with a fresh context each call → cross-checks the proposal against the on-disk state; if it contradicts the current DSP state, re-opens a settled/banked decision, or confuses the phase, flags likely Generator context-drift and recommends re-anchoring from disk (or **/clear + resume**).|
 |**Arbiter**            |The user           |The final decision at the top level                                                   |
 
-**Role rotation:** periodically swap the Generator and the Critic (so a model's specific bias doesn't accumulate). Who is the Generator in the current cycle — note it in the package header.
+**No role rotation.** The driver's seat is fixed for the session (`process-control.md` §1) and nothing swaps it (so a model's specific bias doesn't accumulate). Who is the Generator in the current cycle — note it in the package header.
 
 -----
 

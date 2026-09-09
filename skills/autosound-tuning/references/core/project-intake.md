@@ -146,6 +146,12 @@ A new/unfamiliar/long-unmeasured install. Each item is cheap; a skipped one cost
 > `ls knowledge/dsp/` once and move on to the interview; do **not** `find` for it (the skill is
 > installed as a symlink, so a plain `find` returns nothing and costs minutes).
 
+> **Two standing facts, so the table below is read for what it is.** (1) **No DSP hands us its
+> settings.** Reading one means the owner transcribing or exporting its screens; writing back means
+> a separate tool or the DSP's own EQ import. (2) **The REW API reads freely, but firing a sweep
+> needs a Pro licence** (a control POST answers `401` without one) — so a human runs the measurement
+> session either way, and the method is written for that.
+>
 > **🔑 The hinge of applicability = whether you can MEASURE PER-CHANNEL, NOT "whether the DSP is readable".** Two questions decide the method branch:
 > 1. **Is the DSP state readable?** (a dump / screen-read `screen-read-dsp.md` / a file export) — you can see the current crossovers/TA/EQ/gains.
 > 2. **Can you measure PER-CHANNEL?** (solo each output — §3.1, a sweep on each driver separately).

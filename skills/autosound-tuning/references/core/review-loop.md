@@ -39,12 +39,17 @@ Periodically (at milestones, on reversals, or when "we've tried everything") run
 | **Arbiter** | the human: the final word on disagreement, ear / domain truth | always |
 | **Cold-auditor** | another model, cold-start, full history | milestones, reversals, "tried everything" |
 
-Periodically **swap Generator ↔ Critic** (anti-bias). Any AI drops into a role via a thin wrapper (CLI / API) — the wrapper injects the contract + context and logs the audit-trail.
+The driver's seat is **fixed for the session** (`process-control.md` §1): nothing swaps Generator and Critic mid-tune, and no tool here does it. Any AI drops into a role via a thin wrapper (CLI / API) — the wrapper injects the contract + context and logs the audit-trail.
 
 ### Tone protocol (all levels)
 Collaboration, not competition. Don't characterize a colleague's answer ("a weak objection") — convey the technical content and your own technical position. A colleague is right → "X is right: [reason]", without "partly". You disagree → "my position: [argument]". You were wrong → "I was wrong: [exactly what]", without softeners. With the Arbiter — don't agree automatically: if there's a technical argument against, say it plainly.
 
-### Default cadence — ONE critique call per round
+### Default cadence — ONE critique call per tuning round
+
+> **One word, one meaning.** A **tuning round** is one cycle of proposal → apply → measure. A
+> **capture round** is the set of measurements opened by `capture-start` (the machine record names
+> it that). A **critique pass** is one exchange with the reviewer, capped at three. These are three
+> different things, and until 2026-09-09 all three were called "round".
 The default review is **one** stateless critique pass on the **round's whole batch** (crossovers+levels, or the full EQ plan) — not per-parameter, not two-pass. Package → critique → Arbiter. This keeps the loop fast; the escalations below are for specific symptoms, not routine.
 
 ### Triage the critique: verify NUMBERS by script, adopt PHYSICS as redesign

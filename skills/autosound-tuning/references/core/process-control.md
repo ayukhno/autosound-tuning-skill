@@ -11,7 +11,15 @@ self-critique form, field-observed behaviors → countermeasures) lives in
 
 ## 1. The three operating modes (Arbiter picks, consciously)
 
-Reliability-ranked. Pick per session — critical work up the list, casual voicing down it.
+**One is recommended: A — Claude drives, a second vendor reviews.** That is the configuration this
+method was built and measured on, and it is what to offer.
+
+Everything else — B, C, a model reached through `omp`, whatever ships next month — is **the user's
+choice and the user's risk**, and it is offered as such rather than ranked. Models move faster than
+this file can be rewritten, so an opinion about which is better ages into a wrong recommendation
+that still reads as authoritative. What does NOT age is what the DRIVER'S SEAT costs: one
+perspective instead of two, and (below) how much of the process record survives. Say that, and let
+the Arbiter try what they like.
 
 | Mode | Configuration | Reliability | Trade-off |
 |---|---|---|---|
@@ -25,9 +33,10 @@ Notes:
 - Mode C is a legitimate choice (one capable model is most people's reality). It is *not* "mode A
   minus discipline" — it's a different contract: the Arbiter supplies the process spine
   (`driver-discipline.md`), the model supplies acoustics.
-- **Model defaults** (names drift — treat as classes): driver routine = Claude Sonnet class;
-  crossover strategy / Phase-3 verdicts / deadlocks = Claude Opus class; reviewer = Gemini Pro
-  class for round packages and gates, Flash class only for routine advisor pings.
+- **Model names are not maintained here.** A heavier model for search and verdicts, a lighter one
+  for routine, a different VENDOR for the reviewer — that shape holds; which model fills each slot
+  is the user's call, and the app's picker is where it is made. This file gave a table of model
+  classes until 2026-09-09 and it was already drifting.
 
 ## 2. Discipline: where it lives per mode
 
