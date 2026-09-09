@@ -98,7 +98,13 @@ crossover sets · techniques · successful symptom→fix · track markers
 ## The maintenance loop (harvest → fold)
 
 The skill is organically co-developed with the project. **On a refactor request or when enough has piled up** (not per-turn), run this 5-step loop:
-1. **Harvest:** read `rew_analitic/skill-inbox.md` + scan `tuning-changelog` for `Lesson:` / method lines.
+1. **Harvest — one command:** `python3 scripts/harvest_inbox.py <project>` reads
+   `rew_analitic/skill-inbox.md` section by section, picks up every `Lesson:` line from the
+   changelog, and writes the package below in its fixed shape. It **posts nothing**: it prints the
+   path and NAMES anything that looks personal (an e-mail, a home path, a phone, a plate) so the
+   Arbiter decides what is public. `--check` runs only that pass. Until 2026-09-09 this step was
+   prose, and the inbox it describes was read by nobody — which is how a file that four documents
+   fed came to be called dead in a fifth.
 2. **Correlate:** check candidates against the current skill; fold new insights in, clear duplicates.
 3. **Validate:** if a candidate contradicts an existing line, don't just delete the old one — keep it as a conditional **variant** if plausible for other geometries/cabins.
 4. **Provisionality:** treat early claims as provisional, not gospel; replace guesses with confirmed practice.

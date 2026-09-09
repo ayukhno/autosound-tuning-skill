@@ -97,6 +97,7 @@ Tone: equal colleagues. Accept a correct critique fully; argue disagreements in 
 * **Reviewer early.** At the session's first tuning proposal, offer to start the reviewer channel if none is active.
 * **Solo driver (mode B/C)?** Load [`driver-discipline.md`](references/core/driver-discipline.md) — pull-based control + wrapper-only self-critique.
 * **Don't rebuild existing tools.** Check `rew_tool/` and the project before writing a script — inventory → [`rew-tool-docs.md`](references/tooling/rew-tool-docs.md).
+* **A lesson worth keeping?** Write it into the project's `rew_analitic/skill-inbox.md` as it happens (📚 one line + why/evidence). It has a reader: `python3 scripts/harvest_inbox.py <project>` turns the inbox plus the changelog's `Lesson:` lines into a feedback package, names anything that looks personal, and posts nothing — what becomes public is the Arbiter's call.
 * **Tool seems missing / contradicts docs?** The install is a symlink — `find -L` / canonical path before concluding; on a real discrepancy ask the Arbiter (fix locally + `skill-inbox.md` note, or file an issue and pause) → [`installation.md`](references/tooling/installation.md#troubleshooting).
 * **Skill maintenance loop** — only on refactor/close, never per-turn → [`feedback-loop.md`](references/core/feedback-loop.md#the-maintenance-loop-harvest--fold).
 
