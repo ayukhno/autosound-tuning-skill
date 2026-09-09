@@ -33,6 +33,12 @@ over the project's glossary — `sw` (or `sw-f`, `sw-r`), `w-L/R`, `m-L/R`, `tw-
 where they exist.
 
 ```
+BLOCK 0 · OPEN THE ROUND (laptop, ~1 min)                      [0.0]
+  naming.py <project> expect 0 1        → the titles this session owes
+  process.py <project>/process capture-start 1 "<title>" ...
+  without it blocks E and F have nothing to write on: capture-taken,
+    -protective, -knobs and -check all refuse while no round is open
+
 BLOCK A · SESSION LEVELS (handheld, ~5 min, nothing saved)     [0.2]
   loudest driver (usually the sub): sweep → peak −5…−10 dBFS, knobs fixed
   quietest driver: sweep → above the cabin noise (capture-check sees it)

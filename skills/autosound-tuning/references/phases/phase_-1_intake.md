@@ -24,6 +24,6 @@ This phase bootstraps a brand-new tuning project or a fresh system installation.
 
 Do **not** re-derive the steps here. Run the gated first-start flow in [`project-intake.md §0.5`](references/core/project-intake.md) **in order**, clearing each ⛔ gate:
 
-**Language** (§0) → **Reviewer channel** (§0 · Claude+Gemini) → **Interview** (§1–§2) → **REW rig** → ⛔ **Naming/glossary** (before any measurement) → ⛔ **Install verification** (§3 · protective HPFs, ≥1.1×Fs safety minimum) → **Generate project files** (§5 · incl. `preference-profile.md`) → **First baseline** (Phase 0).
+⛔ **Open the phase** (`enter-phase -1`, the entry condition — before the first question) → **Language** (§0) → **Reviewer channel** (§0 · Claude+Gemini) → **Interview** (§1–§2) → **REW rig** → ⛔ **Naming/glossary** (before any measurement) → ⛔ **Install verification** (§3 · protective HPFs, ≥1.1×Fs safety minimum) → **Generate project files** (§5 · incl. `preference-profile.md`) → **First baseline** (Phase 0).
 
 The detail for each step lives in the `project-intake.md` section noted — this phase file is only the goal-node + this pointer.

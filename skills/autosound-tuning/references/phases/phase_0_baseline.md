@@ -61,6 +61,21 @@ Before taking raw baseline measurements, prepare the clean starting preset in He
 * This forms the "pure routing preset" baseline from which all subsequent acoustic tuning is built.
 
 ### 3. Capture the Baseline (per-driver)
+
+**Open the capture round FIRST — before the first sweep that gets saved.** The series this phase
+expects comes off the glossary, so you do not type it from memory:
+
+```
+python3 rew_tool/naming.py <project> expect 0 1        # the titles this phase expects
+python3 rew_tool/state/process.py <project>/process capture-start 1 "sw_1 (sw)" "sw_1 (rta)" ...
+```
+
+The version is the ledger version being measured (`v0` → `1`); the titles are what you ASKED for, so
+`capture-close` can name what never came back. **Everything else on this page refuses until the round
+is open** — `capture-taken`, `capture-skip`, `capture-protective`, `capture-knobs` and
+`capture-check` all answer «no capture round is open: `capture-start <version> [expected ...]`
+first». Opening with no titles is allowed (`capture-start 1`) and costs the outstanding list.
+
 Instruct the user to measure **each driver we'll work with**, solo, on the clean `v0` profile (protective HPFs on fragile drivers; no TA/EQ). ⚠️ **Before any sweep, run the pre-sweep safety gate** `rew_tool/gates/presweep_safety.py` → `require_safe([...])`: a full-range sweep with no/too-low/too-gentle HPF on a fragile driver (tweeter/mid) can destroy it, so the gate refuses unless HPF ≥ 1.1×Fs @ ≥24 dB/oct + level under the safe ceiling + clip headroom. Hardware safety is acoustic-domain but HARD — no waiver (a blown tweeter isn't recoverable).
 
 **Record the protection on the round, in the same breath as the sweep:** `python3 rew_tool/state/process.py <project>/process capture-protective <ch> --hp 1000 LR 24` for every driver swept behind a protective filter, `… capture-protective <ch> OFF` for one swept bare. Doctrine (2026-08-24) → [`project-intake.md §3`](references/core/project-intake.md), the after-the-sweep half: a joint-phase decision read through an unrecorded protective filter is invalid, and Phase 1 answers `check` for an unmarked baseline solo instead of a number. **Two answers, and `OFF` is the default** (user's ruling 2026-09-06): `OFF` means leave the capture alone — bare chain or a working crossover that is part of the tune, read as it is — and a recorded filter is the one the maths removes before analysis. A front-end writes one of the two for every channel it captures, so an unmarked channel means the record came from somewhere else (MCP, a typed call, an older round) or the front-end did not write what it thought it wrote. That is the population `check` now fires on.

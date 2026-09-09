@@ -22,7 +22,13 @@ needed once more, briefly, to verify the prediction and do the fine EQ the desk 
 
 - **Full** (a new tune): −1 → 0 → desk (1–2) → 3 → 4.
 - **Improve an existing tune**: −1 → 3 → 4, with no new solos — Phase 3 already holds a sum
-  measurement, MMM, fine EQ and a verdict. Both modes **read the current DSP settings into the
+  measurement, MMM, fine EQ and a verdict. ⚠️ **The two gates do not care which mode you are in**:
+  `enter-phase 3` is a forward move out of baseline, so it refuses without a recorded target curve
+  and a non-empty `acoustics.flaws[]` exactly as `enter-phase 1` does. With no new solos there is
+  nothing for `flaw_map.py` to read, so this mode records them by hand from what the existing
+  measurements and the owner's complaints already say — `project.py <project> flaw <f_hz>
+  <level_db> <kind> <action> --status hypothesis --symptom "..."` — and `target <preset> <curve>`
+  for the curve the tune is being judged against. Two commands, and they are the price of entry. Both modes **read the current DSP settings into the
   ledger** first. ⚠️ On a Helix there is no reader for PC-Tool 6 — the current setup is transcribed
   from its screens (EQ is the slowest); say this cost in the intake, it is one-time. The
   transcription goes through `setup_import.py <project> transcription.json [--atf code=file.atf]
@@ -73,6 +79,11 @@ Step names describe the action, not a command. The joint and L/R **phase** is th
 Order of channels is the user's in TCC; the path only constrains: handheld before the tripod; the whole
 tripod block in one go, **tripod untouched until Phase 3**; `m-L-ctl1` first and `m-L-ctl3` last in the
 tripod block; every channel both `(sw)` and `(rta)`.
+- **0.0** **open the capture round** — `python3 rew_tool/state/process.py <project>/process
+  capture-start 1 "<title>" ...` (the expected titles: `python3 rew_tool/naming.py <project> expect
+  0 1`). Not a formality and not renumbered into 0.1: 0.6 and 0.7 below, and every `capture-taken`
+  between them, REFUSE while no round is open — the round is what makes these sweeps one series
+  instead of loose titles only REW remembers.
 - **0.1** `v0` into the DSP (a permanent slot — near-field any time later), **effects and dynamic
   processing off** — everything that is not gain, delay, polarity, crossover or EQ. The vendor's own
   names for them are in the profile: `python3 rew_tool/dsp_profile.py effects <profile.json>` prints
@@ -102,15 +113,24 @@ tripod block; every channel both `(sw)` and `(rta)`.
   tripod stands.
 - **0.7** mark the protectives on the round (`capture-protective`); the `.mdat` into the project;
   finish the passport (temperature by eye, optional). **Tripod untouched** → the desk.
+- **0.8** **at the desk, before Phase 1 will open** — the two things `enter-phase 1` refuses without:
+  the **target curve on the record** (`python3 rew_tool/state/process.py <project>/process target
+  <preset> <curve>`, e.g. `target FULL EPY` — a curve named only in the conversation is lost on the
+  next session) and a **non-empty flaw map** (`python3 rew_tool/flaw_map.py --project <project>
+  --solos <dir> [--ellipsoid <dir>] --write`, the rows landing in `acoustics.flaws[]` as
+  hypotheses; `project.py <project> flaw ...` adds one by hand). Both gates fire on the forward move
+  out of Phase 0 (`process.py` `_require_target`, `_require_flaw_map`), so skipping them does not
+  cost a warning — it costs the entry into Phase 1.
 
 *Appendix, not on the path:* **impedance** — what for (driver Fs in its box → protective ≥ 1.1·Fs;
 reveals a broken driver or wiring); without a rig, Fs from the datasheet with margin, and say so.
 
 ### Phases 1–2 · Desk (one sitting) — *goal: a full preset and a predicted sum before anything is entered*
 - **1.1** de-embed the protectives from the solos (the round record is read by both the joint analysis
-  and the prediction — `analyze-joints --process`, `predict --process`); the **flaw map** (Phase 0
-  §3.5): per channel the peaks/nulls, stands/moves (from the ellipsoid), minimum-phase or not,
-  below/above Schroeder → the sole right to an EQ band.
+  and the prediction — `analyze-joints --process`, `predict --process`); **read the flaw map written
+  in 0.8** (`project.py <project> flaws`) — per channel the peaks/nulls, stands/moves (from the
+  ellipsoid), minimum-phase or not, below/above Schroeder → the sole right to an EQ band. Building it
+  here is too late: the map is what the entry into this phase was gated on.
 - **1.2** **crossovers**: 2–3 candidates, scored automatically on magnitude, phase and impulse, each
   with its drivers' strengths and weaknesses and a plain description → **the user chooses**.
 - **1.3** **joints bottom-up** (sub↔sub → subs↔midbass → midbass↔mid → mid↔tweeter): delay × polarity
