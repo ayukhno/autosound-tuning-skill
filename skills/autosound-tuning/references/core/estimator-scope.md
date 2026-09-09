@@ -85,63 +85,16 @@ Worked example — `resonalyze_vc.py` reading a tune against an incomplete DSP p
 them up: *"`parametric_eq.freq_range_hz` not stated → 36 checks on eq"*. Four named gaps instead
 of fifty-three shrugs. That framing is what got them answered in an afternoon rather than filed.
 
-## 1b. ENTERABLE and MODELLABLE are two questions — never one field
+## 1b. ENTERABLE and MODELLABLE — two questions, never one field
 
-A capability list gets asked two different things by two different callers, and they need opposite
-answers:
+A capability list is asked two different things by two different callers: a tool that
+**validates** a choice a person already made asks *can the device be given this?*; a tool that
+**proposes** asks *can we predict what it does?* They need opposite answers, so they get
+separate fields — `enterable` and the model's own verdict — and a value the DSP cannot take
+keeps the number that was asked for rather than being rounded into one it can.
 
-* a tool that **VALIDATES** something a person already chose asks *can the device be given this?*
-* a tool that **PROPOSES** asks *can we predict what it does?*
-
-Chebyshev on a Helix answers yes to the first and no to the second: the processor accepts the
-family, an experiment was run and could not identify its mathematics, so the ripple is unidentified
-and the filter is not DETERMINED. Validating an entered one as enterable is correct. Recommending
-one is not — a search that offers a filter we cannot predict is worse than a search that offers
-nothing, because the tuner enters it and then neither party can account for the result.
-
-**They live in different places, and that is the whole fix.** *Enterable* is a fact about a
-PROCESSOR and belongs in its `dsp_profile.json`. *Modellable* is a fact about US — which
-realisations this code has and trusts — and belongs in `dsp_math.MODELLABLE_FAMILIES`. Putting
-"we cannot model this" into a device profile would be recording our own limitation in a file that
-describes somebody's hardware, identical across every copy of that profile and stale the day our
-maths improves. `dsp_math.options_for(profile_types)` is the intersection, and a proposing tool
-should search that rather than either list alone.
-
-This is the sub's 20–300 Hz UI range in mirror image. There, one field answering two questions
-would have made a tool REFUSE something possible; here it makes a tool PROPOSE something
-unpredictable. Same defect, opposite damage — so when a list is about to be consulted, ask which
-of the two questions is being put to it.
-
-### The intersection is now CACHED in the profile — and why that is not the thing forbidden above
-
-Everything above holds, with one narrowing bought on 2026-09-05 (autosound-hub `RES-003`, from
-`research`). The paragraph before this one forbids writing "we cannot model this" into a device
-profile, for two good reasons: it records our limitation in a file describing somebody's hardware,
-and it goes stale the day our maths improves. Both are objections to a **hand-written** marker, and
-both were right about one.
-
-What they did not cover is the reader who never runs our code. `options_for` is the intersection —
-but a consumer reading `crossover_filters.types` straight off the JSON sees the family, its full
-order ladder, and nothing at all. That is not hypothetical: `research` was that consumer, walked
-`types` with its own loop, and its pilot recorded **`CHEBYSHEV12` as a winning crossover** after
-modelling it with an invented ripple. The rule existed and could not be seen.
-
-So each family now carries `modellable` + `modellable_note`, and the two objections are answered by
-**how** it gets there rather than by argument:
-
-* **it is generated, never typed** — `dsp_profile.annotate_modellable` derives it from
-  `dsp_math.options_for`, and `save_profile` stamps it on every write. There is no second opinion
-  to maintain, only a cached one;
-* **stale fails the build** — `dsp_profile`'s selftest re-derives the marker for every bundled
-  profile and compares. The day our maths improves, a profile still saying `false` stops CI with
-  the family named, which is the opposite of quietly going stale;
-* **absent still means ASK** — a profile written before the stamp carries no marker, and `None` is
-  not `false`. A consumer that finds nothing does what every consumer did before: calls
-  `options_for`. `dsp_profile.modellable_families(profile)` returns exactly that tri-state.
-
-The decision stays in one place. What is in the data is its shadow, and a shadow that cannot drift
-without stopping the build is not a second source of truth — it is the first one, made visible to
-somebody standing outside the code.
+> The full reasoning, the cached intersection and why caching it is not the thing forbidden
+> above → [`CONTRIBUTING.md`](../../../../CONTRIBUTING.md), "Maintainer notes".
 
 ## 2. Where each tool is SILENT — so step order can be derived, not asked
 
@@ -162,58 +115,16 @@ answerable from the table below and should not cost a round trip.
 | `verify_prediction --entry` | point sweeps from the tripod, the complex response (v7 or REW impulse) | an RTA (no impulse: the arrival check has nothing to read; the pair check is refused without `--allow-rta`) | the entry control needs the same base as the prediction |
 | `ear_suspects` | an MMM or a sweep with peaks that clear the local trend | a fourth round (refused); a shelf (that is tone, not a suspect); a one-bin spike (the position) | three suspects × three rounds, then stop — more is over-fitting one afternoon |
 
-## 2a. The one refusal that withholds a NUMBER — what it forbids, what cancelling costs, who signed it
+## 2a. The one refusal that withholds a NUMBER
 
-Written 2026-09-01 (`autosound-hub#31`). Everything in §2 says where a tool is **silent**. This says
-where the method **refuses**, and it exists because that row was the *behaviour* and not the
-*decision*: three commands leaned on a refusal nobody had signed, which is a mechanism that looks
-ratified because it acts ratified.
+Everything in §2 says where a tool is **silent**. There is exactly one place where the method
+**refuses**: `protective.should_de_embed(record, channel, baseline=True)` — a baseline solo
+whose protective filter was never recorded is refused rather than read as configured, because
+a joint-phase decision taken through an unrecorded filter is invalid.
 
-**One verdict, one condition.** `protective.should_de_embed(record, channel, baseline=True)` returns
-`("check", …)` for a channel that is **not marked raw, has no round record, and was captured at
-baseline** — before any crossover existed. Nothing else in the method refuses on this ground.
-`predict.de_embed_solos` is what enforces it: the channel is left out of `solos` and a note
-`"<code>: REFUSED — …"` is added.
-
-| command | when it can fire | what the caller gets instead of a number |
-|---|---|---|
-| `predict …` | only with `--baseline` | the channel is out of the prediction and out of any joint that uses it; `<code>: refused -- see notes` on stderr |
-| `eq_propose --solos …` | always — baseline is passed unconditionally | no EQ package for that channel; `<code>: refused at de-embed …` on stderr in **both** modes (since 2026-09-01; before that it was invisible under `--json`, and the channel simply vanished from the proposal) |
-| `flaw_map --solos …` | always | no flaw rows for it; `refused at de-embed (no recorded protective state): <codes>` in the report |
-
-Every other channel proceeds, no exit code changes, and nothing is guessed on the refused one.
-
-**What it never refuses** — worth listing together, because "it refuses on principle" is the fear:
-
-- a **working** capture — the default is `no`, and that is an answer rather than a shrug;
-- a capture **marked raw** — that one gets de-embedded, which is the whole point;
-- a baseline capture **with a round record** — the record answers the question;
-- a file older than the `protectiveState` mark (writer ≤ 3.0.27) — read as unfiltered, said out loud.
-
-**The price of cancelling it.** Exactly one class of error comes back: rotation belonging to the
-measuring rig, read as the car's phase. On the reference car's own protective set, with this
-module's maths — HPF `LR4 @100` still owes ~52° at 320 Hz; LPF `LR4 @500` ~53.5° at 160 Hz. So a
-junction three-ish times away from a protective corner carries about fifty degrees that is not the
-car's. Live, on the same data through the same engine: the `w/m` left junction read **−49°** with
-the protective filter left in and **+3°** with it removed (cross-check runs 3/4, 2026-08-18) — the
-distance between "badly out of phase, fix it" and "leave it alone".
-
-**Why a refusal and not a warning.** The omission cannot be detected in the data: a protective
-`LR4 @100` and a designed `LR4 @100` are the same filter. The only thing that betrays it is *when*
-the sweep was taken, and only a person knows whether the button was missed. A number produced
-anyway looks exactly like a good one — which is why the answer is withheld rather than flagged.
-
-**Signed off: the user, 2026-09-01 — the refusal stands.** In their own words, the design is this:
-when curves are captured there is a place to declare a protective filter on a driver **with its
-parameters**, and that declaration is exactly what tells the analysis to take it out; **no
-declaration means a working capture**. It was specified that way for both consumers at once — TCC's
-interface, and this method's logic, maths and terminal mode.
-
-The baseline case above is the **one named exception** to that rule, and it was put to the author as
-an exception and kept: at baseline an unmarked capture is *not* read as working — the method
-withholds the number for that channel and asks a person. Cancelling it now takes a decision of the
-same weight, not an edit. Recorded here because until this line existed the mechanism had authority
-with no author (`autosound-hub#31`, split out of `#22`).
+> Who signed that refusal, what cancelling it costs, and why a behaviour that acts ratified is
+> not ratified → [`CONTRIBUTING.md`](../../../../CONTRIBUTING.md), "Maintainer notes"
+> (`autosound-hub#31`).
 
 ## 3. A measurement is not a setting
 

@@ -8,12 +8,13 @@ Two wings of one discipline: **check yourself through someone else's eyes, and k
 
 ## Wing 1 — SELF-REVIEW (project hygiene)
 
-### The truth model (the foundation)
-Every living project must have a **declared** answer to "where the truth lives", or the documents quietly diverge:
-- **Canon** = the stable distillation (system, conventions, key conclusions, disproven hypotheses). Updated **at milestones**, not every session.
-- **Live state** = separate files (the config state, a changelog with a resume block, the detailed round log, the decision audit-trail). Updated every session.
-- Mirrors / fallbacks — explicitly marked ("SNAPSHOT", "mirror of the canon") with a pointer to the original.
-- The truth model is **written identically at every entry point** (canon, the README, the skill) — a new session, from any side, sees the same scheme.
+### Where the truth lives
+
+One line, and it is settled in code rather than in this file: **the machine files are the
+truth** — the ledger `state/<preset>/v_NNN.json`, `process/process-state.json` +
+`journal.jsonl`, `project.json` — and the prose beside them (`audit-trail.md`,
+`tuning-changelog`, `dsp-state-current`) is a human-readable view. Where they disagree, the
+machine files win and the divergence is worth naming out loud (`SKILL.md`, pre-session step 2).
 
 ### Cross-session / cold-start audit (fresh eyes)
 Periodically (at milestones, on reversals, or when "we've tried everything") run an audit **without your own anchors**:

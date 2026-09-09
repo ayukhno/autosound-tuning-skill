@@ -103,3 +103,142 @@ Do not report vulnerabilities in public issues or discussions. See [SECURITY.md]
 ## Additional notes
 - If your contribution includes third-party materials, make sure you have the right to submit them under the project's licenses, or state the licensing constraints in the PR (see `LICENSES/NOTICE.md`).
 - Questions? Open a discussion or an issue with the `question` label.
+
+---
+
+# Maintainer notes — decisions about the method itself
+
+These sections used to sit in `references/`, the folder a tuning session loads while it works. They
+are not tuning steps: they are how the method's own internals were decided, and who signed each one.
+A session in a car paid tokens for them on every phase and never acted on one. They live here now,
+and the reference files carry a summary plus a pointer back (moved 2026-09-09, release review).
+
+### ENTERABLE and MODELLABLE are two questions — never one field
+
+A capability list gets asked two different things by two different callers, and they need opposite
+answers:
+
+* a tool that **VALIDATES** something a person already chose asks *can the device be given this?*
+* a tool that **PROPOSES** asks *can we predict what it does?*
+
+Chebyshev on a Helix answers yes to the first and no to the second: the processor accepts the
+family, an experiment was run and could not identify its mathematics, so the ripple is unidentified
+and the filter is not DETERMINED. Validating an entered one as enterable is correct. Recommending
+one is not — a search that offers a filter we cannot predict is worse than a search that offers
+nothing, because the tuner enters it and then neither party can account for the result.
+
+**They live in different places, and that is the whole fix.** *Enterable* is a fact about a
+PROCESSOR and belongs in its `dsp_profile.json`. *Modellable* is a fact about US — which
+realisations this code has and trusts — and belongs in `dsp_math.MODELLABLE_FAMILIES`. Putting
+"we cannot model this" into a device profile would be recording our own limitation in a file that
+describes somebody's hardware, identical across every copy of that profile and stale the day our
+maths improves. `dsp_math.options_for(profile_types)` is the intersection, and a proposing tool
+should search that rather than either list alone.
+
+This is the sub's 20–300 Hz UI range in mirror image. There, one field answering two questions
+would have made a tool REFUSE something possible; here it makes a tool PROPOSE something
+unpredictable. Same defect, opposite damage — so when a list is about to be consulted, ask which
+of the two questions is being put to it.
+
+### The intersection is now CACHED in the profile — and why that is not the thing forbidden above
+
+Everything above holds, with one narrowing bought on 2026-09-05 (autosound-hub `RES-003`, from
+`research`). The paragraph before this one forbids writing "we cannot model this" into a device
+profile, for two good reasons: it records our limitation in a file describing somebody's hardware,
+and it goes stale the day our maths improves. Both are objections to a **hand-written** marker, and
+both were right about one.
+
+What they did not cover is the reader who never runs our code. `options_for` is the intersection —
+but a consumer reading `crossover_filters.types` straight off the JSON sees the family, its full
+order ladder, and nothing at all. That is not hypothetical: `research` was that consumer, walked
+`types` with its own loop, and its pilot recorded **`CHEBYSHEV12` as a winning crossover** after
+modelling it with an invented ripple. The rule existed and could not be seen.
+
+So each family now carries `modellable` + `modellable_note`, and the two objections are answered by
+**how** it gets there rather than by argument:
+
+* **it is generated, never typed** — `dsp_profile.annotate_modellable` derives it from
+  `dsp_math.options_for`, and `save_profile` stamps it on every write. There is no second opinion
+  to maintain, only a cached one;
+* **stale fails the build** — `dsp_profile`'s selftest re-derives the marker for every bundled
+  profile and compares. The day our maths improves, a profile still saying `false` stops CI with
+  the family named, which is the opposite of quietly going stale;
+* **absent still means ASK** — a profile written before the stamp carries no marker, and `None` is
+  not `false`. A consumer that finds nothing does what every consumer did before: calls
+  `options_for`. `dsp_profile.modellable_families(profile)` returns exactly that tri-state.
+
+The decision stays in one place. What is in the data is its shadow, and a shadow that cannot drift
+without stopping the build is not a second source of truth — it is the first one, made visible to
+somebody standing outside the code.
+
+### The one refusal that withholds a NUMBER
+
+Written 2026-09-01 (`autosound-hub#31`). Everything in §2 says where a tool is **silent**. This says
+where the method **refuses**, and it exists because that row was the *behaviour* and not the
+*decision*: three commands leaned on a refusal nobody had signed, which is a mechanism that looks
+ratified because it acts ratified.
+
+**One verdict, one condition.** `protective.should_de_embed(record, channel, baseline=True)` returns
+`("check", …)` for a channel that is **not marked raw, has no round record, and was captured at
+baseline** — before any crossover existed. Nothing else in the method refuses on this ground.
+`predict.de_embed_solos` is what enforces it: the channel is left out of `solos` and a note
+`"<code>: REFUSED — …"` is added.
+
+| command | when it can fire | what the caller gets instead of a number |
+|---|---|---|
+| `predict …` | only with `--baseline` | the channel is out of the prediction and out of any joint that uses it; `<code>: refused -- see notes` on stderr |
+| `eq_propose --solos …` | always — baseline is passed unconditionally | no EQ package for that channel; `<code>: refused at de-embed …` on stderr in **both** modes (since 2026-09-01; before that it was invisible under `--json`, and the channel simply vanished from the proposal) |
+| `flaw_map --solos …` | always | no flaw rows for it; `refused at de-embed (no recorded protective state): <codes>` in the report |
+
+Every other channel proceeds, no exit code changes, and nothing is guessed on the refused one.
+
+**What it never refuses** — worth listing together, because "it refuses on principle" is the fear:
+
+- a **working** capture — the default is `no`, and that is an answer rather than a shrug;
+- a capture **marked raw** — that one gets de-embedded, which is the whole point;
+- a baseline capture **with a round record** — the record answers the question;
+- a file older than the `protectiveState` mark (writer ≤ 3.0.27) — read as unfiltered, said out loud.
+
+**The price of cancelling it.** Exactly one class of error comes back: rotation belonging to the
+measuring rig, read as the car's phase. On the reference car's own protective set, with this
+module's maths — HPF `LR4 @100` still owes ~52° at 320 Hz; LPF `LR4 @500` ~53.5° at 160 Hz. So a
+junction three-ish times away from a protective corner carries about fifty degrees that is not the
+car's. Live, on the same data through the same engine: the `w/m` left junction read **−49°** with
+the protective filter left in and **+3°** with it removed (cross-check runs 3/4, 2026-08-18) — the
+distance between "badly out of phase, fix it" and "leave it alone".
+
+**Why a refusal and not a warning.** The omission cannot be detected in the data: a protective
+`LR4 @100` and a designed `LR4 @100` are the same filter. The only thing that betrays it is *when*
+the sweep was taken, and only a person knows whether the button was missed. A number produced
+anyway looks exactly like a good one — which is why the answer is withheld rather than flagged.
+
+**Signed off: the user, 2026-09-01 — the refusal stands.** In their own words, the design is this:
+when curves are captured there is a place to declare a protective filter on a driver **with its
+parameters**, and that declaration is exactly what tells the analysis to take it out; **no
+declaration means a working capture**. It was specified that way for both consumers at once — TCC's
+interface, and this method's logic, maths and terminal mode.
+
+The baseline case above is the **one named exception** to that rule, and it was put to the author as
+an exception and kept: at baseline an unmarked capture is *not* read as working — the method
+withholds the number for that channel and asks a person. Cancelling it now takes a decision of the
+same weight, not an edit. Recorded here because until this line existed the mechanism had authority
+with no author (`autosound-hub#31`, split out of `#22`).
+
+### How experience flows back into the skill
+
+- `community-inbox/` (both `setups/` and `case-studies/`) is processed by **this maintenance loop** (harvest → correlate → fold): each item is checked against the skill; the origin tag `[source: <body>/<author>]` is kept.
+- **Contradicts our conclusions → a VARIANT, not a deletion** (maintenance loop rule §2: a different geometry/cabin can make the tip right).
+- **Hardware experience accumulates into the skill's profile library** (each new entry = **copy the blank `_TEMPLATE.md` and fill it**, so the structure/discipline is consistent):
+  - `knowledge/cars/<body>.md` — the cabin map: PART A body-physics / PART B verify-only anomalies and the standing install (placement, aim, passives, enclosure), quirks (template `knowledge/cars/_TEMPLATE.md`; worked example — the Passat B8, de-identified). ⛔ **Never the tune's settings** — no crossovers, delays, EQ, polarities or levels, however well they worked: this base collects physics and how the build is put together, not solutions (`knowledge-architecture.md`);
+  - `knowledge/dsp/<dsp>.md` — the capability profile (layers, EQ-exchange format, presets, quirks) (template `knowledge/dsp/_TEMPLATE.md`; worked example — `helix-dsp-ultra-s.md`).
+  - `knowledge/approaches.md` — the **classifier of whole-system schemes** (crossover/slope approaches as variants tagged by setup context + success story + confidence + any competition result). Each finished tune **appends** the scheme it used; this is the seed of a public, community-rated classifier. ⚠️ A scheme is bound to ITS setup — never a format→slope recipe.
+  At a new car's intake the skill **checks first** whether a profile of this body/DSP already exists (`project-intake.md §4`), and `knowledge/approaches.md` for schemes that worked on a similar setup (a shortlist of hypotheses, not facts).
+- Thanks: a contributor line in the CHANGELOG.
+
+### The truth model, as it was written in prose (superseded)
+
+Every living project must have a **declared** answer to "where the truth lives", or the documents quietly diverge:
+- **Canon** = the stable distillation (system, conventions, key conclusions, disproven hypotheses). Updated **at milestones**, not every session.
+- **Live state** = separate files (the config state, a changelog with a resume block, the detailed round log, the decision audit-trail). Updated every session.
+- Mirrors / fallbacks — explicitly marked ("SNAPSHOT", "mirror of the canon") with a pointer to the original.
+- The truth model is **written identically at every entry point** (canon, the README, the skill) — a new session, from any side, sees the same scheme.
