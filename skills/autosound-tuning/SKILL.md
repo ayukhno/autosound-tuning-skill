@@ -55,7 +55,7 @@ your advice are different versions, and which one is right is their call.
 ## 🏛️ Three Roles
 
 * **Generator / Orchestrator AI:** steers the session, reads REW data, proposes values, packages them for review.
-* **Reviewer AI (Critic-Advisor):** independent challenger + co-builder; a **stateless on-demand call that re-reads state from disk** (never a background agent); ideally a different vendor (cross-vendor anti-anchoring).
+* **Reviewer AI (Critic-Advisor):** independent challenger + co-builder; a **stateless on-demand call that re-reads state from disk** (never a background agent — the ladder in `setup-critic-channel.md` §7 says what to do instead when no channel answers); ideally a different vendor (cross-vendor anti-anchoring). A cold-start audit by another model at a milestone (`review-loop.md` Wing 1) is a DIFFERENT practice and does not stand in for a round's review.
 * **Arbiter (human tuner):** final call on disagreements, runs measurements, enters DSP values.
 
 Tone: equal colleagues. Accept a correct critique fully; argue disagreements in cabin physics and psychoacoustics; state your confidence plainly. Full protocol → `assets/data-contract-template.md` — the same file the wrapper scripts inject into the reviewer, so what you read is what it was told.
@@ -169,7 +169,7 @@ A second, independent reviewer prevents single-perspective bias — strongest cr
 * **Which mode this session?** The Arbiter picks A / B / C → [`process-control.md`](references/core/process-control.md). Modes B/C additionally load `driver-discipline.md`.
 * **Cadence: ONE reviewer call per round** — package the round's whole batch (crossovers+levels, or the full EQ plan), one critique pass, then the Arbiter. **TWO-PASS (open question first) only at phase gates** (Phase-1 strategy, Phase-3 verdict) **or when the reviewer has fully agreed twice in a row** (the anchoring symptom). Up to 3 rounds is a ceiling, not a norm → [`review-loop.md`](references/core/review-loop.md).
 * **How to run:** wrappers `{gemini,claude,codex}_critic.sh` / `_advisor.sh <package.md>`, unified `autosound_ai.py` (any vendor / API / clipboard), or a desktop chat → [`setup-critic-channel.md`](references/tooling/setup-critic-channel.md). ⚠️ Run reviewer CLIs **outside** the driver session (inside = deadlock).
-* **Reviewer unavailable?** Descend the ladder (wait → other vendor → same vendor higher tier → same model context-isolated) — never silently solo → `setup-critic-channel.md` §7.
+* **Reviewer unavailable?** Descend THE ladder — one list, in `setup-critic-channel.md` §7 (wait → other vendor's CLI → clipboard into any desktop chat → same vendor higher tier, said out loud → a separate Claude session → the human). Never silently solo, and **never a background sub-agent as reviewer** — with nothing on the ladder reachable, the round is blocked and says so.
 * **Models:** treat names as classes; current defaults and per-task classes → [`process-control.md`](references/core/process-control.md) §1 notes.
 
 ---

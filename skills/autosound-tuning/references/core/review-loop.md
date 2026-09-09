@@ -17,7 +17,7 @@ Every living project must have a **declared** answer to "where the truth lives",
 
 ### Cross-session / cold-start audit (fresh eyes)
 Periodically (at milestones, on reversals, or when "we've tried everything") run an audit **without your own anchors**:
-- **Who:** another session, ideally **another model** (a cold-start sub-agent). A fresh look carries none of your biases and sees what you've grown used to.
+- **Who:** another session, ideally **another model** (a cold-start sub-agent). A fresh look carries none of your biases and sees what you've grown used to. ⚠️ **This is not the reviewer role.** A milestone audit looks back over a whole history; a round's review is the stateless external call on the ladder (`setup-critic-channel.md` §7), and a cold-start agent never stands in for one.
 - **The mandate (the wording is critical):** "challenge our conclusion · find what's missed · every point falsifiable (how to check it) · if the data contradicts our picture, say so plainly · don't restate what's known".
 - **Give it:** the raw data / access + the log + the current conclusion as the object to attack. Do NOT hand it your interpretation as the frame of the question.
 

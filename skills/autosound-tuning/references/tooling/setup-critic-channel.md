@@ -1,12 +1,6 @@
 # Setting up the Critic-Advisor channel (out-of-the-box)
 
-The reviewer channel is critical to prevent single-perspective bias. **The strongest setup is a second, different AI vendor** — Claude + Gemini — via the CLI wrappers (§1–§4) or a manual chat (§7). The Autopilot self-loop (§0) is a **fallback** for when no second AI is available.
-
-## 0. Autopilot self-loop — FALLBACK (only when you have no second AI)
-If no second AI is available, the Generator can run the loop by programmatically spawning an isolated subagent — **no external API keys or CLI logins required**. ⚠️ Same-model review shares the model's blind spots (**not** true cross-vendor anti-anchoring) and is the mode where long autonomous sessions have drifted (lost DSP state / phase). Prefer §1–§4 or §7 whenever a second vendor exists.
-* **How to verify/smoke-test it:**
-  Simply spawn a quick test subagent named `critic_advisor` with an isolated context and ask: *"Channel check: reply with one line 'Autopilot works'."*.
-  If you get a reply, the fallback is ready. Only rely on it when a second vendor genuinely isn't available (§1–§7).
+The reviewer channel is critical to prevent single-perspective bias. **The strongest setup is a second, different AI vendor** — Claude + Gemini — via the CLI wrappers (§1–§4) or a manual chat (§7). **§7 holds THE ladder** — which channel to reach for, in order, both when setting one up and when the one you have stops answering. Every other file points here rather than keeping its own list.
 
 ## 1. Install and Set up the CLI — `agy` (Antigravity)
 
@@ -212,15 +206,39 @@ scripts/gemini_critic.sh /tmp/smoke.md
 ```
 Expect a one-line reply + a `— [critic: <model>]` tag (or `[advisor: …]`). An **empty reply** (just the tag) ≠ a crash — it's almost always **quota exhausted** (agy's weekly tier) or lost auth; the wrapper prints a loud WARNING. Recover by switching the model group, re-logging-in `agy`, or going to the direct API with a key through `autosound_ai.py` (§3; the `gemini` CLI is closed, §2).
 
-## 7. No CLI — or the CLI is slow/dry? Use a manual channel (the ROLE still happens)
+## 7. THE LADDER — which reviewer to reach for, in order
 
-The reviewer role is vendor-agnostic (`review-loop.md`). When there's no CLI — **or `agy` is quota-dry / hanging on a big package, or the only CLI on the machine is `gemini` (closed, §2)** — go manual:
-1. **Copy-paste into a desktop chat** *(field-proven; the go-to when the CLI chokes)* — `cat package.md | pbcopy`, paste into a **Gemini / Claude / ChatGPT desktop chat** where you have a subscription / tokens, then paste the reply back. No CLI, no quota juggling, no agentic stalls — ideal for a **bulk one-off** review (e.g. several long docs at once). Real use: a 4-language README review the agentic CLI couldn't finish.
-2. **Any other AI** in a second window — same idea, ask it to play the Critic.
-3. **Claude in a SEPARATE session** (cross-session self-review; TWO-PASS anti-anchoring — see `review-loop.md`).
-4. **The human** as reviewer.
+**One list, two uses:** it is the order to set a channel up in (Phase −1), and the order to descend
+when the channel you have stops answering mid-session. Every other file points here instead of
+keeping a list of its own — three lists that disagreed is what this section replaced (2026-09-09).
 
-Never skip the second perspective just because the `agy`/`gemini` channel isn't set up or is slow — use a manual channel instead.
+0. **Wait / retry — mid-session only.** An empty reply is usually an exhausted quota or lost auth,
+   not a crash (§6); a minute or a model-group switch often costs less than changing channel.
+1. **A CLI wrapper on ANOTHER vendor than the one driving** — `scripts/{gemini,claude,codex}_critic.sh`
+   (or `autosound_ai.py` with an API key, §3). This is the recommended default: Generator one vendor,
+   reviewer the other, which is what cross-vendor anti-anchoring means. Verify with `--doctor`.
+2. **Clipboard mode — a desktop or web chat of any vendor** *(field-proven; the go-to when the CLI
+   chokes)*. `cat package.md | pbcopy`, paste into a **Gemini / Claude / ChatGPT** chat where you have
+   a subscription, paste the reply back. No CLI, no quota juggling, no agentic stalls — and the best
+   answer for a **bulk one-off** (a real case: a 4-language README review the agentic CLI could not
+   finish). `autosound_ai.py --mode clipboard` writes the package to `process/reviews/` so a review
+   answered by hand does not look like no review at all.
+3. **The same vendor at a higher tier**, when no second vendor is available at all — weaker, because
+   the blind spots are shared, and it must be said out loud in the round's record.
+4. **Claude in a SEPARATE session** — cross-session, TWO-PASS anti-anchoring (`review-loop.md`).
+   A separate session a human opens; **not** a spawned background agent (see the note below).
+5. **The human** as reviewer.
+
+> ⛔ **What is NOT on this ladder: a background sub-agent as the reviewer.** Spawning an isolated
+> same-model agent to critique your own proposal was a tier here until 2026-09-09 and is gone by the
+> user's ruling. Two reasons, both paid for: the blind spots are the model's own, so the critique
+> agrees with the proposal for the same wrong reason; and spawning a reviewer CLI inside an agent
+> session deadlocks (~15 of 20 field sessions). If no channel on this ladder is reachable, the round
+> is **blocked and says so** — `process.py <project>/process block <step> "<reason>"` — rather than
+> passing a self-review off as a second perspective.
+
+Never skip the second perspective just because the `agy`/`gemini` channel isn't set up or is slow —
+descend the ladder instead.
 
 ---
 
