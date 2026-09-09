@@ -78,7 +78,7 @@ A persistent file, injected into every call; after a round, append: the gist of 
 1. **Default expectation: 1 round.** Max **3 rounds** per question is a ceiling for real disagreements, not a norm; the `[Iteration N/3]` counter is on you.
 2. **Agreement** = no new falsifiable objection.
 3. `3/3` with no agreement → a disagreement table for the Arbiter: Parameter | Generator's position | Critic's position | what's at stake. The Arbiter decides in ~30 s.
-4. After agreement / verdict → a **ready-to-apply artifact** (not prose) + an audit-trail entry (ID, decision, key objection, verdict). The artifact goes straight into the chat as a legible settings-sheet — see the **Interactive Presentation Rule** in `SKILL.md` (never make the Arbiter open files to find the values).
+4. After agreement / verdict → a **ready-to-apply artifact** (not prose) + an audit-trail entry (ID, decision, key objection, verdict). The artifact goes straight into the chat as a legible settings-sheet — see **"Settings land in chat"** in `SKILL.md`'s always-on guardrails (never make the Arbiter open files to find the values).
 
 ### Audit-trail
 The canonical decision log, append-only: each round — a stamp (date, role, model, package); at milestones — a consolidated block of verdicts. Without it, decisions get "banked" in chats and lost on restart.

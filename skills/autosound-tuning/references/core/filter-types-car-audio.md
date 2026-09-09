@@ -181,7 +181,7 @@ The electrical crossover frequency ≠ the acoustic summation point. At the join
 
 - LR4: both legs at 3500 Hz → sum ≈ 0 dB.
 - BE4 by hand: spread them (e.g. mid LP 2500 / tweeter HP 4000–5000) **or** drop one leg's level a touch — so the hump disappears.
-- Via NTT (`process-phases.md` step 5b): you give the tool type/frequency/order → it computes per-band targets with summation coefficients. But cabin phase/path matter too → the resulting targets = **a starting prediction, verify by measuring the real sum**.
+- Via NTT (`tooling/rew-tool-docs.md` → `nono_curves.py`, and `tooling/helix-eq-export.md`): you give the tool type/frequency/order → it computes per-band targets with summation coefficients. But cabin phase/path matter too → the resulting targets = **a starting prediction, verify by measuring the real sum**.
 
 ⚠️ Don't confuse this with **L/R symmetry** (§above: the same type+order on the left and right — remains the law). Here we're talking about choosing the FREQUENCIES at the joint BETWEEN bands, not L vs R.
 

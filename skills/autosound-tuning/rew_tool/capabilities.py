@@ -93,11 +93,11 @@ NOT_ON_BOARD = {
     "run_trigger_eval.py": "an eval harness under evals/, not a tuning tool",
     # the per-vendor wrappers of the review channel: the board names the channel (autosound_ai.py)
     # and setup-critic-channel.md lists the wrappers
+    "_critic_env.sh": "the one config/key loader the three wrappers source",
     "_claude_common.sh": "wrapper internals", "_codex_common.sh": "wrapper internals", "_gemini_common.sh": "wrapper internals",
     "claude_advisor.sh": "review-channel wrapper", "claude_critic.sh": "review-channel wrapper",
     "codex_advisor.sh": "review-channel wrapper", "codex_critic.sh": "review-channel wrapper",
     "gemini_advisor.sh": "review-channel wrapper", "gemini_critic.sh": "review-channel wrapper",
-    "start_gemini_tuner.sh": "a launcher for one vendor's CLI (setup-critic-channel.md)",
     "skill_metrics.sh": "a maintainer's usage-metrics script",
     "make-macos-app.sh": "the app bundle builder, called by the installers",
     "run-selftests.sh": "on the board", "tag-check.sh": "on the board",

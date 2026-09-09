@@ -2,10 +2,8 @@
 # _codex_common.sh — shared plumbing for the Codex reviewer channel
 # (codex_critic.sh + codex_advisor.sh). This file is SOURCED, not executed.
 
-# --- optional per-machine / per-project config -----------------------------
-for _env in "$PWD/rew_analitic/.critic-env" "$PWD/.critic-env"; do
-  if [[ -f "$_env" ]]; then set -a; . "$_env"; set +a; break; fi
-done
+# --- configuration and key: one loader, shared by all three wrappers ---------
+. "$(dirname "${BASH_SOURCE[0]}")/_critic_env.sh"
 
 PROJECT_MIRROR="${PROJECT_MIRROR:-$PWD/rew_analitic}"
 AUTOSOUND_DIR="${AUTOSOUND_DIR:-}"   # OPTIONAL cross-project canon dir; unset by default

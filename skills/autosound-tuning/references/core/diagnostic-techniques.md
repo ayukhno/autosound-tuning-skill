@@ -32,7 +32,7 @@ Practical methods for interpreting REW measurements that have saved us repeatedl
 
 ## 6. Two EQ layers: OUTPUT (asymmetry/surgery) vs VIRTUAL (symmetric voicing)
 - The virtual layer is in the chain **ABOVE the per-driver crossovers** → its phase shift is SHARED across all of the side's drivers → it **does NOT break the inter-driver joints**. So it's the safe place for the tonal/house-curve shape (unlike per-channel EQ after the crossovers).
-- **L/R asymmetry — on OUTPUT** (per-channel); **the symmetric voicing residual — on VIRTUAL** (L=R linked). Then "turn off the virtual = a neutral base" (the base is curve-agnostic — see SKILL §Session lifecycle).
+- **L/R asymmetry — on OUTPUT** (per-channel); **the symmetric voicing residual — on VIRTUAL** (L=R linked). Then "turn off the virtual = a neutral base" (the base is curve-agnostic — see `preset-strategy.md`).
 - Don't double up: the output does the narrow peaks; the virtual stays broad (shelves/tilt), doesn't re-notch.
 
 ## 7. Checking the measurement chain (hard lessons)

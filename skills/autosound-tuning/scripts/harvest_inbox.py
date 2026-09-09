@@ -48,6 +48,17 @@ SECTIONS = ["Setup (equipment classes, no personal data)",
 # model or a driver. Reported, never removed -- a redaction nobody saw is how a package quietly
 # loses the fact that made it worth sending.
 PERSONAL = [
+    # A KEY first, because this is the one that cannot be taken back. The package is the thing most
+    # likely to be pasted into a public issue, and a key pasted once is a key that has left the
+    # machine for good. The rule this serves: the key lives OUTSIDE the project
+    # (`~/.config/autosound/critic-env`), the wrappers refuse a project file that git would take,
+    # the doctor prints only the key's SHAPE — and nothing that leaves here may carry one.
+    ("an API key (AI Studio, current shape)", re.compile(r"\bAQ\.[A-Za-z0-9_\-]{20,}")),
+    ("an API key (AI Studio, older shape)", re.compile(r"\bAIza[A-Za-z0-9_\-]{30,}")),
+    ("an API key (OpenAI shape)", re.compile(r"\bsk-[A-Za-z0-9_\-]{20,}")),
+    ("an API key (Anthropic shape)", re.compile(r"\bsk-ant-[A-Za-z0-9_\-]{20,}")),
+    ("a named key assignment", re.compile(r"(?i)\b[A-Z_]*(?:API_KEY|TOKEN|SECRET)\s*=\s*\S+")),
+    ("a bearer token", re.compile(r"(?i)\bauthorization:\s*bearer\s+\S+")),
     ("an e-mail address", re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+")),
     ("a home path", re.compile(r"(/Users/|/home/|C:\\\\Users\\\\)[^\s/\\\\]+")),
     ("a plate-like token", re.compile(r"\b[A-ZА-ЯІЇЄ]{2}\s?\d{4}\s?[A-ZА-ЯІЇЄ]{2}\b")),
@@ -194,13 +205,25 @@ def _selftest():
         kinds = {what for what, _ in hits}
         assert "an e-mail address" in kinds and "a home path" in kinds, hits
         assert "a phone number" in kinds, hits
+
+        # A KEY is the one that cannot be taken back once a package is pasted in public.
+        for sample, expect in [
+                ("GEMINI_API_KEY=AQ." + "x" * 53, "an API key (AI Studio, current shape)"),
+                ("key AIza" + "y" * 35, "an API key (AI Studio, older shape)"),
+                ("sk-" + "z" * 40, "an API key (OpenAI shape)"),
+                ("Authorization: Bearer abc123def456", "a bearer token"),
+                ("OPENAI_API_KEY=whatever", "a named key assignment")]:
+            found = {what for what, _ in personal_hits(sample)}
+            assert expect in found, (sample[:24], found)
         assert personal_hits("LR24 at 80 Hz, 3.15 kHz, +4 dB") == [], \
             personal_hits("LR24 at 80 Hz, 3.15 kHz, +4 dB")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("selftest OK — inbox sections and changelog `Lesson:` lines land in the fixed package "
           "shape, a missing inbox is refused rather than answered with an empty package, and an "
-          "e-mail / home path / phone are NAMED while ordinary tuning numbers are not")
+          "an API KEY in any of the four shapes, an e-mail, a home path and a phone are NAMED "
+          "while ordinary tuning numbers are not — a key that leaves the machine once has left "
+          "it for good")
     return 0
 
 

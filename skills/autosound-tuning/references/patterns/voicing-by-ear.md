@@ -28,7 +28,7 @@ An applied base for by-ear voicing: when the base is technically correct (Phases
 | **ResoNix Laid-Back** | calm, a roll-off after 2k, "blanket-like" | long trips/jazz |
 | **RAW-Cat** | dense/bassy, −10dB to 1k, dark/massive | fun/EDM/hip-hop |
 
-**See/compare the curves visually:** **https://nonotuningtool.com/** — enter the house curve + crossovers → it shows the shape (the per-channel Nono targets are generated there too, `process-phases.md` step 5b). **Give the user the LINK, don't pile on explanations.** The curves have authors (ResoNix — Nick, Audiofrog — Wehmeyer…) → keep the attribution.
+**See/compare the curves visually:** **https://nonotuningtool.com/** — enter the house curve + crossovers → it shows the shape (the per-channel Nono targets are generated there too — `tooling/rew-tool-docs.md` → `nono_curves.py`). **Give the user the LINK, don't pile on explanations.** The curves have authors (ResoNix — Nick, Audiofrog — Wehmeyer…) → keep the attribution.
 > For a taste of "enjoyment without a bass bias" leaning toward Whitledge warmth — start with **Half Whitledge** (closer to the target), not full Whitledge; the full one — only when a heavy low end is deliberately requested. *(by-ear, a variant — not dogma.)*
 
 **The taste-audit method:** flatten the system (±1 dB) → apply each curve in turn as an EQ profile → listen to a familiar track (e.g. Diana Krall "Temptation" = vocal+bass · Dire Straits "Private Investigations" = stage+dynamics · Daft Punk "Giorgio by Moroder" = electro+impulse) → compare depth/density/brightness. The client chooses → that's their voicing preset.
