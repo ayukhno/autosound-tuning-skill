@@ -107,6 +107,11 @@ EV_LISTENING_VERDICT = "listening_verdict"
 # session -- the journal otherwise starts at whatever the model happened to record first, so
 # "when did this session begin, and did it record anything at all" had no answer.
 EV_SESSION_STARTED = "session_started"
+# A session that stopped in order left NO trace at all: `session-close` reported what was open and
+# exited, so the journal could not tell "we stopped here, cleanly" from "the process was killed
+# mid-step". Written only on a clean close -- with work still open there is nothing to record but
+# the report itself (release review 2026-09-09).
+EV_SESSION_CLOSED = "session_closed"
 # What the Arbiter ruled, as itself. Their half of the conversation was in no machine file at all:
 # the only surviving trace of an answer was a hand-typed evidence string, and a constraint the user
 # set was invisible to the next session unless it happened to be re-read out of prose (SCR-030).
@@ -734,7 +739,21 @@ class Process:
         return entry
 
     def skip_step(self, step_id, superseded_by=None, reason=None):
-        """Supersede a step. It stays in the plan, dimmed — never removed (SCR-004)."""
+        """Supersede a step. It stays in the plan, dimmed — never removed (SCR-004).
+
+        A skip says WHY, or it is refused: either the step that supersedes it or a sentence.
+        On the live project every one of the nine skips on record carried neither, so a later
+        session reading the plan cannot tell a step that was decided against from one that was
+        dropped by accident -- and proposes it again. Same shape as `done` requiring evidence:
+        the refusal belongs to the record, not to the model's discipline (release review
+        2026-09-09).
+        """
+        if not (superseded_by or (reason or "").strip()):
+            raise ProcessError(
+                f"skip {step_id!r} needs a reason: either the step that supersedes it "
+                "(`--superseded-by <id>`) or a sentence saying why it is not being done. "
+                "A skip with no reason is indistinguishable from a step forgotten, and the next "
+                "session proposes it again.")
         state = self.load()
         entry = self._require(state, step_id)
         entry["status"] = STEP_SKIPPED
@@ -1510,7 +1529,10 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
   done <id> <evidence> [evidence ...]    mark done; evidence is REQUIRED and must RESOLVE
                                          (a capture name `c_1 (rta)`, a ledger `v_003` that
                                           exists, or a project file that exists)
-  skip <id> [superseded-by]             supersede a step (kept visible, never deleted)
+  skip <id> <reason ...> [--superseded-by ID]   supersede a step (kept visible, never deleted).
+                                         The reason is REQUIRED: a skip with no why is
+                                         indistinguishable from a step forgotten, and the next
+                                         session proposes it again
   block <id> <reason>                   mark blocked
   reviewer <vendor> <model> [step] [--review PATH] [--mode clipboard]
                                         record a reviewer call and WHERE its text is
@@ -1611,6 +1633,12 @@ def _selftest():
 
     proc.add_step("s1", "A step")
     refuses("a done step with no evidence", lambda: proc.finish_step("s1", []))
+    # a skip says WHY, or it is not a skip (release review 2026-09-09)
+    refuses("a skip with no reason", lambda: proc.skip_step("s1"))
+    refuses("a skip whose reason is blank", lambda: proc.skip_step("s1", reason="   "))
+    proc.skip_step("s1", reason="the front-end answered it")           # a sentence is enough
+    proc.add_step("s2", "Another step")
+    proc.skip_step("s2", superseded_by="s1")                            # so is a superseding step
     refuses("evidence that resolves to nothing",
             lambda: proc.finish_step("s1", ["I looked at the graphs and they seemed fine"]))
     with open(os.path.join(root, "autosound_context.md"), "w", encoding="utf-8") as f:
@@ -1884,7 +1912,8 @@ def _selftest():
     assert [s["attempt"] for s in sp.open_work()["steps_in_progress"]] == [2], sp.open_work()
 
     print(
-        "selftest OK — evidence refused when empty and when it resolves to nothing (SCR-035), "
+        "selftest OK — a skip refused without a reason and taken with either a sentence or a "
+        "superseding step; evidence refused when empty and when it resolves to nothing (SCR-035), "
         "phase -1 refused to end on a folder intake never touched, "
         "phase 0 refused to exit without a target (SCR-036) and without a flaw map (SCR-044) "
         "and opened once the map was recorded; "
@@ -1928,7 +1957,13 @@ def _main(argv):
             entry = p.finish_step(args[0], args[1:])
             print(f"{args[0]} done, evidence: {', '.join(entry['evidence'])}")
         elif cmd == "skip":
-            p.skip_step(args[0], superseded_by=args[1] if len(args) > 1 else None)
+            rest = list(args[1:])
+            superseded_by = None
+            if "--superseded-by" in rest:
+                i = rest.index("--superseded-by")
+                superseded_by = rest[i + 1] if len(rest) > i + 1 else None
+                rest = rest[:i] + rest[i + 2:]
+            p.skip_step(args[0], superseded_by=superseded_by, reason=" ".join(rest) or None)
             print(f"{args[0]} skipped (kept in the plan)")
         elif cmd == "block":
             p.block_step(args[0], " ".join(args[1:]))
@@ -1993,7 +2028,7 @@ def _main(argv):
                     f"STEP IN PROGRESS {entry['id']} {entry.get('name') or ''} "
                     f"(attempt {entry['attempt']})"
                     "\n    close it: done <id> <evidence that RESOLVES>, or block <id> <reason>, "
-                    "or skip <id>")
+                    "or skip <id> <reason>")
             print("\n".join(lines) if lines else
                   "nothing open in the process record — round closed, no step left in progress")
             # Two carriers this module does not own, named rather than checked: saying "also do X"
@@ -2004,6 +2039,12 @@ def _main(argv):
                   "\n  - the session log / handoff line for the next session"
                   "\n  - the car itself: the in-car EXIT CHECKLIST (SKILL.md) — test values reverted, "
                   "knobs back, config backed up")
+            if not owed:
+                # Only a CLEAN stop is an event: with work still open the honest record is the
+                # report above, and `session-close` exits non-zero so "we stopped" cannot be said
+                # over an open round.
+                p._append(EV_SESSION_CLOSED)
+                print("\nrecorded: session_closed")
             return 1 if owed else 0
         elif cmd == "capture-start":
             step = None

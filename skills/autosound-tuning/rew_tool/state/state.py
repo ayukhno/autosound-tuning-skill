@@ -1025,10 +1025,43 @@ def repair_encoding(paths, codec):
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
+def resolve_root(given):
+    """Where the ledger lives, and WHICH answer that was — so a refusal can name it.
+
+    `--root` used to default to the literal `state`, relative to wherever the command was typed.
+    Run from anywhere but a project root -- which is the normal case, since SKILL.md's own
+    pre-session step prints this command with no root -- it read an empty directory and answered
+    "NO ACTIVE SLOT SET" with exit 0. A confident wrong answer about the active slot is worse than
+    no answer: the next proposal is addressed to a slot the reader believes is unset.
+    """
+    if given is not None:
+        return given, "--root"
+    env = os.environ.get("AUTOSOUND_STATE_ROOT")
+    if env:
+        return env, "$AUTOSOUND_STATE_ROOT"
+    project = os.environ.get("AUTOSOUND_PROJECT_DIR")
+    if project:
+        return os.path.join(project, "state"), "$AUTOSOUND_PROJECT_DIR/state"
+    return "state", "the working directory"
+
+
+def _require_root(root, source):
+    """A read against a root that is not there is refused, not answered."""
+    if os.path.isdir(root):
+        return
+    raise SnapshotError(
+        f"no ledger at {root!r} (from {source}). Point at the project's state directory: "
+        "`--root <project>/state`, or export AUTOSOUND_PROJECT_DIR=<project> "
+        "(AUTOSOUND_STATE_ROOT overrides both), or run from the project root. "
+        "Answering from an empty directory would say 'NO ACTIVE SLOT SET' about a project that "
+        "has an active slot.")
+
+
 def _main(argv=None):
     p = argparse.ArgumentParser(description="Versioned hard-params DSP state")
-    p.add_argument("--root", default=os.environ.get("AUTOSOUND_STATE_ROOT", "state"),
-                   help="directory holding <preset>/ snapshots (project-local; env AUTOSOUND_STATE_ROOT)")
+    p.add_argument("--root", default=None,
+                   help="directory holding <preset>/ snapshots (project-local). Default: "
+                        "$AUTOSOUND_STATE_ROOT, else $AUTOSOUND_PROJECT_DIR/state, else ./state")
     sub = p.add_subparsers(dest="cmd")
     for name in ("log", "render", "revert"):
         sp = sub.add_parser(name)
@@ -1060,6 +1093,14 @@ def _main(argv=None):
 
     if args.cmd == "selftest" or args.cmd is None:
         return _selftest()
+
+    # Every verb below reads an existing ledger, so the root is settled -- and named -- once.
+    args.root, _root_source = resolve_root(args.root)
+    try:
+        _require_root(args.root, _root_source)
+    except SnapshotError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     if args.cmd == "repair-encoding":
         presets = set(args.preset or [])
         paths = [p_ for p_ in ledger_files(args.root)
@@ -1505,6 +1546,28 @@ def _selftest():
     assert open(snap_path, "rb").read() == text_before.encode("cp1251"), \
         "a refused repair must leave the file exactly as it found it"
 
+    # ── the root is resolved, and an absent one is REFUSED, not answered (release review 2026-09-09)
+    assert resolve_root("x/state") == ("x/state", "--root"), resolve_root("x/state")
+    _saved = {k: os.environ.pop(k, None) for k in ("AUTOSOUND_STATE_ROOT", "AUTOSOUND_PROJECT_DIR")}
+    try:
+        assert resolve_root(None) == ("state", "the working directory"), resolve_root(None)
+        os.environ["AUTOSOUND_PROJECT_DIR"] = "/tmp/p"
+        assert resolve_root(None) == (os.path.join("/tmp/p", "state"), "$AUTOSOUND_PROJECT_DIR/state")
+        os.environ["AUTOSOUND_STATE_ROOT"] = "/tmp/explicit"
+        assert resolve_root(None) == ("/tmp/explicit", "$AUTOSOUND_STATE_ROOT"), resolve_root(None)
+        missing = os.path.join(root, "no-such-ledger")
+        try:
+            _require_root(missing, "--root")
+            raise AssertionError("a root that does not exist must be refused, not answered")
+        except SnapshotError as exc:
+            assert "no ledger at" in str(exc), str(exc)
+        _require_root(root, "--root")            # the real one passes
+    finally:
+        for k, v in _saved.items():
+            os.environ.pop(k, None)
+            if v is not None:
+                os.environ[k] = v
+
     print(f"selftest OK — 3 snapshots, diff caught the channels+virtual_channels changes (schema "
           f"v2 tier-aware), 5.38 ms → 516 smp @96k (258 @48k), revert forward-only (v_001→v_003), "
           f"validation rejected bad polarity + an unknown EQ type, structured EQ round-tripped "
@@ -1513,6 +1576,8 @@ def _selftest():
           f"encoding (TCC-007): a cp1251 snapshot raised SnapshotError with its repair, "
           f"all 3 code pages decoded it and only cp1251 said the right words, repair round-tripped "
           f"byte-for-byte and kept the original, a page that does not decode was refused. "
+          f"root: --root > $AUTOSOUND_STATE_ROOT > $AUTOSOUND_PROJECT_DIR/state > cwd, and an "
+          f"absent root refused instead of answering 'NO ACTIVE SLOT SET'. "
           f"root={root}")
     return 0
 
