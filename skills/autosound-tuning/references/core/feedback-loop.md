@@ -115,7 +115,7 @@ The same loop processes community contributions (below).
 ## The author's side — how experience flows into the skill
 
 > The maintenance loop that folds a contribution in — harvest, correlate, validate,
-> provisionality, fold and clear — lives in [`CONTRIBUTING.md`](../../../../CONTRIBUTING.md),
+> provisionality, fold and clear — lives in `CONTRIBUTING.md` ([on GitHub](https://github.com/ayukhno/autosound-tuning-skill/blob/main/CONTRIBUTING.md); on disk it is in the repository root beside the skill — through the installed symlink resolve the canonical path, `..` does not lead there),
 > "Maintainer notes". One rule stays HERE, because this is the page that invites a stranger's
 > text and a rule is read where the invitation is:
 

@@ -94,7 +94,7 @@ separate fields — `enterable` and the model's own verdict — and a value the 
 keeps the number that was asked for rather than being rounded into one it can.
 
 > The full reasoning, the cached intersection and why caching it is not the thing forbidden
-> above → [`CONTRIBUTING.md`](../../../../CONTRIBUTING.md), "Maintainer notes".
+> above → `CONTRIBUTING.md` ([on GitHub](https://github.com/ayukhno/autosound-tuning-skill/blob/main/CONTRIBUTING.md); on disk it is in the repository root beside the skill — through the installed symlink resolve the canonical path, `..` does not lead there), "Maintainer notes".
 
 ## 2. Where each tool is SILENT — so step order can be derived, not asked
 
@@ -123,7 +123,7 @@ whose protective filter was never recorded is refused rather than read as config
 a joint-phase decision taken through an unrecorded filter is invalid.
 
 > Who signed that refusal, what cancelling it costs, and why a behaviour that acts ratified is
-> not ratified → [`CONTRIBUTING.md`](../../../../CONTRIBUTING.md), "Maintainer notes"
+> not ratified → `CONTRIBUTING.md` ([on GitHub](https://github.com/ayukhno/autosound-tuning-skill/blob/main/CONTRIBUTING.md); on disk it is in the repository root beside the skill — through the installed symlink resolve the canonical path, `..` does not lead there), "Maintainer notes"
 > (`autosound-hub#31`).
 
 ## 3. A measurement is not a setting
