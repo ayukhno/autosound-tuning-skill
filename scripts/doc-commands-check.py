@@ -27,7 +27,6 @@ reviewer reads most carefully anyway.
 stdlib only.
 """
 import argparse
-import glob
 import os
 import re
 import shlex
