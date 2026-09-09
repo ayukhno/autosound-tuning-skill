@@ -2,6 +2,31 @@
 
 The reviewer channel is critical to prevent single-perspective bias. **The strongest setup is a second, different AI vendor** — Claude + Gemini — via the CLI wrappers (§1–§4) or a manual chat (§7). **§7 holds THE ladder** — which channel to reach for, in order, both when setting one up and when the one you have stops answering. Every other file points here rather than keeping its own list.
 
+## 0. The whole thing in five lines
+
+```bash
+brew install --cask antigravity-cli            # the CLI (macOS; Windows → §1)
+agy login                                      # or put a key in the machine file below
+printf 'GEMINI_CRITIC_MODEL=gemini-pro-latest\n' > ~/.config/autosound/critic-env
+scripts/gemini_critic.sh --doctor              # one command, diagnoses everything in §1–§3
+scripts/gemini_critic.sh package.md            # a real review
+```
+
+**Where the key lives, and why there:** `~/.config/autosound/critic-env` — **outside every
+repository**. A project-local `.critic-env` is still read (for models, paths, `GEMINI_BIN`), but if
+it carries a key AND git would take it — tracked, or not in `.gitignore` — the wrapper **refuses to
+run** and says how to fix it. `.gitignore` alone was never enough: it does not stop `git add -f`, a
+folder copy, or a backup that is not git at all. The key never needs to leave this machine, and
+nothing here prints it — the doctor reports its SHAPE (`current` / `OLD` / `unrecognised, N chars`).
+
+**Which doctor.** The one for the channel you actually use: `scripts/{gemini,claude,codex}_critic.sh
+--doctor` checks that vendor's CLI, its auth, the paths and a live one-line smoke.
+`python3 scripts/autosound_ai.py doctor` is the one for the **direct-API** path (a key, no CLI) and
+checks the contract and context files it would send. They answer different questions; running the
+one for your channel is the answer to "why is the reviewer unreachable".
+
+---
+
 ## 1. Install and Set up the CLI — `agy` (Antigravity)
 
 > 🩺 **Stuck? Run the doctor FIRST:** `scripts/gemini_critic.sh --doctor`. It checks the CLI, macOS quarantine, `.critic-env` syntax, the Contract/Context paths, the API key's shape and liveness (one free `GET /v1beta/models`), and runs a live 1-line smoke — printing the exact fix for each, so you diagnose all of §1–§3 in ONE command instead of serially. (A real cold-start hit ~6 papercuts here; the doctor surfaces them at once.) It recognises the **closed `gemini` CLI sign-in** (§2) by Google's own words and says "use agy" instead of a generic error.
