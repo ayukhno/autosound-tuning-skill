@@ -13,7 +13,7 @@ REW exposes its API at `localhost:4735`, reachable **from the host where Claude/
 
 ## Tool Directory Layout
 
-The Python tool ships **inside this skill** at `<skill-dir>/rew_tool/` (uses standard library only — no external dependencies, no project data). The modules import flat, so run it from its own directory:
+The Python tool ships **inside this skill** at `<skill-dir>/rew_tool/` (**21 of its 54 modules import numpy** and four of those also need scipy — everything that does the DSP maths, `predict.py` and `eq_propose.py` among them; the rest are standard library only. Each module's entry below says which it is. No project data travels with the skill). The modules import flat, so run it from its own directory:
 ```bash
 cd <skill-dir>/rew_tool && python3 rew_tool.py ...
 ```
