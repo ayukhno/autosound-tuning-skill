@@ -27,12 +27,23 @@
 > said and close it in the same breath:
 >
 > ```bash
-> python3 rew_tool/state/process.py <project>/process done -1.1 \
->   "get_tcc_state.language=uk" "autosound_context.md: written in uk"
-> python3 rew_tool/state/process.py <project>/process reviewer google gemini-2.5-pro -1.2
-> python3 rew_tool/state/process.py <project>/process done -1.2 \
->   "get_tcc_state.reviewer.model=gemini-2.5-pro" "reachable=true"
+> # The RULING is recorded the moment it is made, so nobody asks again; the STEP closes
+> # against the artefact that carries it (`autosound_context.md`, written in §5).
+> python3 rew_tool/state/process.py <project>/process decision "dialogue language" "uk" -1.1
+>
+> # The reviewer channel is closed by an ANSWER, not by a setting. One live check, recorded:
+> scripts/gemini_critic.sh --doctor | tee <project>/rew_analitic/reviewer-check.md
+> python3 rew_tool/state/process.py <project>/process reviewer google gemini-2.5-pro -1.2 \
+>   --review rew_analitic/reviewer-check.md
+> python3 rew_tool/state/process.py <project>/process done -1.2 "rew_analitic/reviewer-check.md"
 > ```
+>
+> ⚠️ **Why a live check and not "configured".** Evidence must RESOLVE — a file, a ledger version, a
+> measurement name — and `"reviewer.model=…"`, `"reachable=true"` resolve to nothing, so the step
+> this file used to demonstrate was refused by the gate when run exactly as printed. A channel that
+> was configured and never answered is the one that fails in Phase 1, when a round is waiting on it.
+> The doctor runs a live one-line smoke through the channel; `tee` leaves what it said in the
+> project, and that file is what closes the step (user's ruling 2026-09-09).
 >
 > The evidence names where the answer came from AND where it now lives on disk — a state read is
 > not by itself a fact a later session can check. A reviewer the state reports as **unreachable**

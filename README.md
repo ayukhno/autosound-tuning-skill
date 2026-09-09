@@ -8,7 +8,7 @@
 - **Minimum time in the car:** The main calculations are done at your desk at home. You only do the initial measurements in the car, and then return with ready-to-use numbers to listen to the result and dive into deep tuning step-by-step.
 - **Writes nothing to your DSP — you enter it:** The assistant never touches your processor directly. It only shows you numbers and graphs; you make the decision and enter them manually.
 - **Not a regular chat:** The project state and all settings are saved to files on your disk, so nothing is "forgotten" between sessions and you can always roll back a step.
-- **Two AIs (optional):** The system can use two AIs (Claude and Gemini). One proposes settings, the other criticizes and checks them. But the final judge is your ear: you listen and decide, instead of just blindly approving their ideas.
+- **Two AIs — a reviewer is part of the method:** one AI proposes settings, a second one criticises and checks them. What is optional is the *automatic channel* (a local script that passes packages between them); the reviewer's *role* is not — without a second opinion the method is noticeably worse, and where no channel can be set up you paste the package into any other AI's chat by hand, or read it yourself. But the final judge is your ear: you listen and decide, instead of just blindly approving their ideas.
 - **Works with facts:** A check lacking data will refuse to proceed. The AI doesn't guess settings — if the measurements are done incorrectly or are insufficient, a specific check will simply refuse to calculate and will stop.
 
 ## Proven in Competitions
@@ -36,14 +36,14 @@ You don't need to be a programmer — the app installs with a single command. Bu
 
 1. **Measurement microphone** (e.g., UMIK-1, or preferably an XLR microphone with a sound interface and physical loopback).
 2. **Processor (DSP)** in your car.
-3. **REW (Room EQ Wizard) software** — **beta version** is required (the regular release version has no API tab at all). Get the beta build from [roomeqwizard.com/beta.html](https://www.roomeqwizard.com/beta.html). After launching REW, go to *Preferences → API*, check **Start the API when REW starts**, and click **Start server**.
-4. **Paid Claude subscription (Pro or Max)** — this AI does the heavy lifting and solves complex math problems. Without internet near the car, the session won't work.
+3. **REW (Room EQ Wizard) software** — **beta version** is required (the current release build, V5.31.3 of July 2024, has no API at all — check Help → About before you start). Get the beta build from [roomeqwizard.com/beta.html](https://www.roomeqwizard.com/beta.html). After launching REW, go to *Preferences → API*, check **Start the API when REW starts**, and click **Start server**.
+4. **Paid Claude subscription (Pro or Max)** — this AI does the heavy lifting and solves complex math problems. This is the supported path, and the graphical app is built for it. A run driven entirely by another AI is possible but manual, and you give up the second opinion that the method leans on — see the FAQ, "Can I run the method entirely in Gemini?". Without internet near the car, the session won't work either way.
 
 *(We also recommend having a free GitHub account to automatically back up your tuning history in a private repository. Your Gemini API key does **not** travel with that backup: it lives outside the project, in `~/.config/autosound/critic-env` — `%APPDATA%\autosound\critic-env` on Windows — and a new project is created with a `.gitignore` that keeps the project-local config out of git as well.)*
 
 ## How to Install and Start (Version 3.x — Beta)
 
-We created an installer that downloads everything you need and sets up a convenient **graphical application (Autosound TCC)**. The process takes 10–20 minutes (on macOS, Apple's own installer window opens once for the developer tools — one click, and no password is typed into the script; on Windows, it will show a Git permission dialog).
+We created an installer that downloads everything you need and sets up a convenient **graphical application (Autosound TCC)**. Along with the app it also installs **`omp`** — the piece that lets the app offer models other than Claude; those are **billed per use**, and nothing runs through it unless you pick such a model. If you would rather not have it, add `--no-omp` (macOS/Linux) or `-NoOmp` (Windows) to the command below; the terminal-only install never brings it. The process takes 10–20 minutes (on macOS, Apple's own installer window opens once for the developer tools — one click, and no password is typed into the script; on Windows, it will show a Git permission dialog).
 
 **macOS** — open Terminal (press ⌘-Space, type "terminal", Enter) and paste:
 ```sh
@@ -77,7 +77,7 @@ claude plugin install autosound-tuning
 ## What the Tuning Process Looks Like
 
 1. **Preparation at home:** You tell the AI about your system (which speakers, which processor).
-2. **Measurements in the car (once):** You sit in the car with a mic, turn on the basic protective filters on your DSP, and just record a series of sweeps for each driver. *Note: a midbass without a low-pass filter (LPF) will sound harsh on top during a sweep — this is normal (cone breakup), do not stop the measurements.*
+2. **Measurements in the car (once):** one disciplined session, and the tune is then designed at the desk. You turn on the basic protective filters on your DSP and record each driver on its own — first a hand-held pass, then the same set from a **microphone on a tripod that does not move until the end**, with a control sweep opening and closing it so any drift is visible. Plan **~25 minutes for the mandatory part** (the tripod block) and up to about an hour if you also take the hand-held nine-position set that tells a cabin feature from a spot one. The exact sheet is in the method (`capture-session-sheet.md`); the app walks you through it block by block. *Note: a midbass without a low-pass filter (LPF) will sound harsh on top during a sweep — this is normal (cone breakup), do not stop the measurements.*
 3. **Math at the desk:** You sit at your computer (without the car nearby). The AI analyzes measurements, joins the subwoofer to the midbass, evens out the soundstage, and calculates the EQ. The desk only predicts the results; the car then verifies them. If the desk's predictions do not match reality during verification — the system rolls back the steps.
 4. **Enjoyment in the car:** You go back to the car, enter the ready numbers into the DSP, play test and favorite tracks, and enjoy. If something hums a little, "hurts the ear", or "the stage is off" — you tell the AI, and you pinpoint and correct the issue.
 

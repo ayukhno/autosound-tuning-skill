@@ -12,8 +12,10 @@
 #   * uv + Python 3.12 + TCC    the Autosound TCC desktop app, and a double-clickable .app
 #   * agy                       Google's Antigravity CLI — Gemini as the second AI, the reviewer
 #   * gh                        GitHub's CLI, only if asked — backs up a project's record
-#   * Command Line Tools        macOS only, when missing — Apple's git. The one part that needs an
-#                               administrator password, asked once, at the start.
+#   * Command Line Tools        macOS only, when missing — Apple's git. Installed through APPLE'S
+#                               OWN window, which this script opens and waits for: whatever it asks
+#                               for, it asks in its own dialog. No password passes through anything
+#                               we wrote (see the note at `xcode-select --install` below).
 #
 # What it will not do, and will not pretend to:
 #

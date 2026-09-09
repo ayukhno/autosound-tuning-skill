@@ -231,9 +231,9 @@ You will need a laptop, a measurement microphone, a DSP processor, and a paid **
 1. Open **Terminal** (press `Cmd + Space` → type `Terminal` → press `Enter`).
 2. Paste the following command and press `Enter`:
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/main/install.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.46/install.sh | bash
    ```
-3. The script may ask for your Mac password once to install the official Apple Command Line Tools (git). Wait 10–20 minutes.
+3. On macOS, if Apple's Command Line Tools (git) are missing, **Apple's own installer window** opens once — one click there, and the script waits for it. **The script itself never asks for your password** and contains no `sudo`; anything a password is needed for, macOS asks for in its own dialog. Wait 10–20 minutes.
 
 </details>
 
@@ -243,7 +243,7 @@ You will need a laptop, a measurement microphone, a DSP processor, and a paid **
 1. Open **Windows PowerShell** (press the `Windows key` → type `powershell` → press `Enter`).
 2. Paste the following command and press `Enter`:
    ```powershell
-   irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/main/install.ps1 | iex
+   irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.46/install.ps1 | iex
    ```
 3. If Git is missing, click **Yes** to allow installation. The script will also create a convenient **REW (API on)** shortcut on your Desktop.
 
@@ -292,7 +292,7 @@ The app and the terminal access the exact same project files. You can switch fre
 
 ### AI Models in the App
 
-The app uses your paid Claude subscription (via the official Anthropic SDK) and your free Google account via the local `agy` tool for the AI reviewer. Alternative models are available only if the `omp` system is activated (billed separately).
+The app uses your paid Claude subscription (via the official Anthropic SDK) and your free Google account via the local `agy` tool for the AI reviewer. Models other than Claude come through **`omp`**, which the installer puts in **together with the app** (`--no-omp` / `-NoOmp` leaves it out, and the terminal-only install never brings it). It is billed per use, and nothing goes through it unless you pick such a model.
 
 ### Updates and Bug Reporting
 
@@ -302,7 +302,7 @@ The app updates automatically along with the mathematical core. You can check cu
 
 ## Standalone AI Reviewer Gemini/Antigravity
 
-The double-verification cycle (Generator ↔ Gemini Critic) completely eliminates subjective mathematical errors of the models. The critic catches things the primary AI misses. It runs automatically in the background via a local script — no manual copying is needed. While optional, this provides the greatest benefit for the final tuning result.
+The double-verification cycle (Generator ↔ Gemini Critic) completely eliminates subjective mathematical errors of the models. The critic catches things the primary AI misses. It runs automatically in the background via a local script — no manual copying is needed. What is optional is this *automatic channel*, not the second opinion itself: with no channel set up you paste the package into another AI's chat by hand. Skipping the review entirely is the single biggest quality loss in the method.
 
 ### Installation for macOS and Windows (Recommended)
 
