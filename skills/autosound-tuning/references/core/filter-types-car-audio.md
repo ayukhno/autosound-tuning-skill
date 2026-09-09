@@ -116,7 +116,7 @@ Mid (LP) ←──── BE4 ────→ Tweeter (HP)  [Bessel: if close; LR
 
 ## Starting crossover sets (variants — there can be several)
 
-These are **starting points**, not law: the sets grow over time and get refined by measurement (RTA magnitude + slopes → frequency; joint summation → phase/polarity) and by ear (slope → `method-hashimoto.md`). **A specific project's current choice lives in `dsp-state-current` + profile §4**, not here. **The catalog of whole-system approaches** — schemes as variants tagged with setup context (body→install→ways→gear) + success stories + confidence — is `knowledge/approaches.md` (a scheme is a *hypothesis* for a similar setup, never a format recipe).
+These are **starting points**, not law: the sets grow over time and get refined by measurement (RTA magnitude + slopes → frequency; joint summation → phase/polarity) and by ear (slope → `method-hashimoto.md`). **A specific project's current choice lives in the ledger HEAD + profile §4**, not here. **The catalog of whole-system approaches** — schemes as variants tagged with setup context (body→install→ways→gear) + success stories + confidence — is `knowledge/approaches.md` (a scheme is a *hypothesis* for a similar setup, never a format recipe).
 
 **Set A — "measured hybrid" (3-way + sub; proven on the Passat B8):**
 | Joint | Start | Why |

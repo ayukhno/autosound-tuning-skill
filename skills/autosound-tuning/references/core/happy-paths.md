@@ -22,7 +22,7 @@ Skim these once to see the *shape* of a session end-to-end. They are deliberatel
 
 > User: *"continue my tune / what's my current state"* → the skill fires on the resume triggers.
 
-1. **Reconcile state (do NOT trust memory).** Read `audit-trail.md`, the top **▶️ CONTINUE** block of `tuning-changelog`, and `dsp-state-current`. If multi-slot, read the active-slot banner first (`state.py registry render`) and work only against that slot. → SKILL.md Pre-Session steps.
+1. **Reconcile state (do NOT trust memory) — MACHINE FILES FIRST.** `contract.py check <project>` for the whole picture, then `process.py <project>/process show` (active phase + plan), the ledger HEAD (`state.py --root <project>/state registry render` — multi-slot: the active-slot banner first, and work only against that slot) and `project.py <project> show`. Read `audit-trail.md` and the ▶️ CONTINUE block of `tuning-changelog` alongside as the human-readable **cross-check**, never as the source; where prose and the machine files disagree, **the machine files win**. → SKILL.md Pre-Session step 2.
 2. **Check banked decisions.** Look for 🟡 pending items agreed last time but not yet applied; prompt the Arbiter to apply them.
 3. **Ask what changed.** Anything moved manually since the pause (mic, DSP, cabin)? Is REW reachable?
 4. **Load only the active phase** (+ the next) per the sliding-window rule, then continue from the ▶️ NEXT STEPS list.
@@ -35,7 +35,7 @@ Skim these once to see the *shape* of a session end-to-end. They are deliberatel
 
 > Mid-session: a crossover joint is set, now you're doing EQ.
 
-1. **Re-read `dsp-state-current` before proposing** — including the virtual/VCP EQ layer and any existing per-channel notches (`get_filters` first; never assume a channel is raw).
+1. **Re-read the ledger HEAD before proposing** (`dsp-state-current` is its generated sheet) — including the virtual/VCP EQ layer and any existing per-channel notches (`get_filters` first; never assume a channel is raw).
 2. **Diagnose the whole round, propose the whole batch.** `analyze-batch` for the full deviation picture → all min-phase peaks that need cutting, across every channel that needs hygiene EQ (max boost +6 dB; no auto 30-band registers; excess-phase read to skip interference nulls). One batch, not one filter at a time (`phase_2_eq.md` §2a).
 3. **Review + bank.** ONE critic pass on the round's package → `apply.propose` → Arbiter enters the sheet → `attest` → one re-measure pass.
 4. **⚠️ Re-entrancy:** if the EQ move sits inside a crossover joint band (±~1 octave of a joint), it rotates local phase → **re-open the Phase-2 joint alignment gate** and re-check the summation. A passed gate is not permanent. → `process-phases.md` quality-gate note.

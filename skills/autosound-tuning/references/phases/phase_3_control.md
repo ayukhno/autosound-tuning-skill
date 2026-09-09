@@ -62,6 +62,6 @@ Then **read the result honestly with the Arbiter** and record it:
 Once the technical alignment is accepted by the Arbiter:
 * Save the final DSP configuration file. Copy it to `rew_analitic/dsp-config/` with an updated `README.md` cataloging the changes.
 * Back up the project's REW `.mdat` file.
-* Update `tuning-changelog`, `dsp-state-current`, and `audit-trail.md` (project-local, in the project's `rew_analitic/`).
+* Bank the locked state through `apply.propose` (it writes the `v_NNN` snapshot and re-renders `dsp-state-current` — that sheet is generated, not edited), then write the human narrative: `tuning-changelog` and `audit-trail.md` (project-local, in the project's `rew_analitic/`).
 
 Proceed to **Phase 4** (front listening & fine-tuning) + any **Phase 5** voicing — get the **FRONT** to satisfy the user first. **Center/rear (Phase 5) is optional and comes only once the front satisfies** — don't jump to it straight from the lock.

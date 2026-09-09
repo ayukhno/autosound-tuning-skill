@@ -53,7 +53,7 @@ Apply minor EQ adjustments to resolve specific listening symptoms. Common exampl
 
 ## 5. Spatial variation — Center Channel (optional)
 
-> ⛔ **Only once the FRONT satisfies** (locked + user OK) — center/rear on an unsatisfying front is wasted work. Their levels/polarities/APFs are **project state** (`dsp-state-current`) — **verify by measurement**, never assume from logs.
+> ⛔ **Only once the FRONT satisfies** (locked + user OK) — center/rear on an unsatisfying front is wasted work. Their levels/polarities/APFs are **project state** (the ledger HEAD) — **verify by measurement**, never assume from logs.
 
 Integrating a center introduces a third source that can comb-filter with the L/R mids.
 * **Method A — Manual L+R center:** bandwidth-limit to the core vocal range (HPF+LPF ≈ 1.0–1.2 kHz); keep it **quiet** (a subtle complement); set polarity/APF by **maximum summation at the LP**.
@@ -66,7 +66,7 @@ Goal: a sense of **envelopment** without dragging the front stage back.
 * **Bandwidth-limit** — HPF ≥ 300–315 Hz, LPF ≈ 4–5 kHz (avoid door/cabin resonances).
 * **Haas delay** — the front→rear arrival difference **+ 8–10 ms** (precedence → localizes front, rear = ambience).
 * **Level** — quiet enough to be inaudible from the front, but missed when muted.
-* After: **re-check the full system by ear** (center/rear must not have dragged the front back) and log to `dsp-state-current`.
+* After: **re-check the full system by ear** (center/rear must not have dragged the front back) and bank the change through `apply.propose`, which re-renders `dsp-state-current`.
 
 **Field-validated worked example (first-pass success, 2026-07-15, Helix Ultra S):** differential feed ±50% on the rear VIRTUAL channels (mixer with signed legs; whole-output polarity INV can't build this) · HPF 315 LR24 / LPF 4000 LR24 · one PK per side flattening the rears' own 600–1200 hump (−4.5/−5.5 Q1.5) · delays from MEASURED arrivals: rear arrives (front − rear arrival) + ~9 ms later on BOTH sides (per-side delays differ when the rears sit asymmetrically — here 12.0/9.5 ms) · level via a remote knob ladder. Practical rules that made it work:
 - **Verify the matrix with correlated pink: the rears must go SILENT.** Silence on ordinary (correlated) pink = the differential is wired right; for a *positive* test you need decorrelated material — a live/hall track or uncorrelated dual-mono pink (`test-tracks.md`).

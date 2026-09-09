@@ -29,4 +29,4 @@ In-context self-critique ("now imagine you are a strict judge…") shares every 
 | **Name/label drift** | Filenames, versions, paths in chat ≠ disk (`Passat_B8_Final_v7.6.pct6` vs the real `Jazzi v.6.2_final.pct6`) | Keep the version bridge in `dsp-config/README.md`; read names from disk, not chat |
 | **Fictional consensus** | "Узгоджено з Критиком" when the stateless critic never agreed | Data-contract rule: cite the specific objection being addressed; check `review-log.md` |
 
-What the field run showed **works well** even in mode C: prose state (`dsp-state-current`) stays faithful when the Arbiter reads it; `dsp-config/README.md` version-bridging; de-identified feedback via the side-effect gate; heavy `/clear`+resume windowing instead of long drifting sessions.
+What the field run showed **works well** even in mode C: the generated state sheet (`dsp-state-current`) stays faithful when the Arbiter reads it; `dsp-config/README.md` version-bridging; de-identified feedback via the side-effect gate; heavy `/clear`+resume windowing instead of long drifting sessions.

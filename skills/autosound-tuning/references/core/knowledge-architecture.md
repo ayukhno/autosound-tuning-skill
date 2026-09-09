@@ -11,7 +11,7 @@ normative method separate from per-project data, and starting hypotheses separat
 | 2 | **Pattern Repository** | skill · `references/patterns/` (+ `target-curves/`) | hypotheses, accumulated | "in similar conditions this often worked" — starting points, incl. standard target curves |
 | 3 | **Engineering Profile** | project · `autosound_context.md` | objective, per-car | car/body, install, DSP, drivers, config, constraints, engineering-constraining goals |
 | 4 | **Preference Profile** | project · `preference-profile.md` | subjective, per-car | pure voicing preferences — applied ONLY after the objective tune (Phase 5) |
-| 5 | **Project State** | project · `dsp-state` · `tuning-changelog` · `audit-trail` | dynamic, per-session | measurements, decisions, history, current DSP state |
+| 5 | **Project State** | **machine files first** — the ledger `state/<preset>/v_NNN.json` · `process/process-state.json` + `journal.jsonl` · `project.json`; `tuning-changelog` · `audit-trail` · `dsp-state-current` are the human-readable views beside them | dynamic, per-session | measurements, decisions, history, current DSP state |
 
 **Skill = layers 1–2 (shared, model-agnostic). Project = layers 3–5 (per-car, dynamic.)**
 
