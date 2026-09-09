@@ -211,9 +211,132 @@ def rule_references_orphans(root: str) -> list[str]:
     return bad
 
 
+CAPTURE_CHILDREN = ("capture-protective", "capture-knobs", "capture-check",
+                    "capture-taken", "capture-skip", "capture-close")
+
+
+def rule_capture_round_opened(root: str) -> list[str]:
+    """A runbook that orders `capture-*` orders `capture-start` first.
+
+    Every one of those commands refuses while no round is open ("no capture round is open"),
+    and until 2026-09-09 not one file under `references/phases/` named `capture-start` at all:
+    the whole capture chapter, in three carriers, told the reader to run commands the tool
+    would refuse. A runbook is judged by whether it can be followed.
+    """
+    bad = []
+    phases = os.path.join(root, SKILL, "references", "phases")
+    if not os.path.isdir(phases):
+        return bad
+    for name in sorted(os.listdir(phases)):
+        if not name.endswith(".md"):
+            continue
+        path = os.path.join(phases, name)
+        src = open(path, encoding="utf-8").read()
+        ordered = [c for c in CAPTURE_CHILDREN if c in src]
+        if ordered and "capture-start" not in src:
+            bad.append(f"{os.path.relpath(path, root)}: orders {', '.join(ordered)} but never "
+                       f"`capture-start` — each of those refuses while no round is open, so the "
+                       f"runbook cannot be followed as written")
+    return bad
+
+
+def rule_state_source(root: str) -> list[str]:
+    """`dsp-state-current` is a GENERATED sheet — never the source, never hand-edited.
+
+    `state.py` says so in three places ("Generated-only (never hand-edited)"), and five
+    reference files said the opposite, two of them instructing the reader to "update" or
+    "log to" it — work that the next `apply.propose` silently overwrites.
+    """
+    bad = []
+    told_to_write = re.compile(r"(update|log to|write to|edit)\s+`?dsp-state-current", re.I)
+    # `dsp-state-current` as the SUBJECT of the claim -- a line that names it while pointing the
+    # source elsewhere ("the ledger is the source of truth; dsp-state-current is its view") is the
+    # fix, not the fault, and a rule that cannot tell them apart makes the fix unwritable.
+    called_source = re.compile(
+        r"`?dsp-state-current`?[^.\n]{0,30}?\b(?:is|remains|stays)\b[^.\n]{0,30}?source of truth"
+        r"|source of truth\s*(?:is|=)\s*`?dsp-state-current", re.I)
+    for path in _md_files(root):
+        rel = os.path.relpath(path, root)
+        for n, line in enumerate(open(path, encoding="utf-8").read().splitlines(), 1):
+            if "dsp-state-current" not in line:
+                continue
+            if called_source.search(line):
+                bad.append(f"{rel}:{n}: calls `dsp-state-current` a source of truth — the source "
+                           f"is the ledger `state/<preset>/v_NNN.json`; this file is its "
+                           f"generated view")
+            if told_to_write.search(line):
+                bad.append(f"{rel}:{n}: tells the reader to write `dsp-state-current` — it is "
+                           f"generated (`state.py ... registry render`) and hand edits are lost "
+                           f"on the next `apply.propose`")
+    return bad
+
+
+def rule_ledger_root(root: str) -> list[str]:
+    """A printed `state.py ... registry` command carries `--root`.
+
+    Without it the root defaults to `state` relative to wherever the command is typed, and from
+    anywhere else the ledger reads as empty. It used to answer "NO ACTIVE SLOT SET" with exit 0;
+    it now refuses — but a command a reader copies should work, not teach them what a refusal
+    looks like.
+    """
+    bad = []
+    call = re.compile(r"state\.py[^`\n]*?\bregistry\b[^`\n]*")
+    for path in _md_files(root):
+        rel = os.path.relpath(path, root)
+        for n, line in enumerate(open(path, encoding="utf-8").read().splitlines(), 1):
+            for m in call.finditer(line):
+                if "--root" not in m.group() and "AUTOSOUND_" not in m.group():
+                    bad.append(f"{rel}:{n}: prints `{m.group().strip()}` with no --root — from "
+                               f"anywhere but the project root that reads an empty ledger")
+    return bad
+
+
+def rule_install_ref(root: str) -> list[str]:
+    """Every user-facing file installs the SAME thing, and it is a release, not a branch.
+
+    README (4 languages) pinned a tag while FAQ (4 languages) took `main`, so which software a
+    reader got depended on which file they opened first. And a tag written into eight files rots
+    the moment a release is cut, so it is compared with the newest entry in CHANGELOG.md rather
+    than left to somebody's memory.
+    """
+    bad = []
+    ref_re = re.compile(r"autosound-tuning-skill/([^/\s]+)/install\.(?:sh|ps1)")
+    found = {}
+    for name in sorted(os.listdir(root)):
+        if not (name.startswith(("README", "FAQ")) and name.endswith(".md")):
+            continue
+        for n, line in enumerate(open(os.path.join(root, name), encoding="utf-8").read()
+                                 .splitlines(), 1):
+            for m in ref_re.finditer(line):
+                found.setdefault(m.group(1), []).append(f"{name}:{n}")
+    if not found:
+        return bad
+    if len(found) > 1:
+        where = "; ".join(f"{ref} in {', '.join(w)}" for ref, w in sorted(found.items()))
+        bad.append(f"the install command names {len(found)} different refs — {where}. Which "
+                   f"software a reader gets must not depend on which file they opened")
+    for ref, where in sorted(found.items()):
+        if not re.fullmatch(r"v\d+\.\d+\.\d+", ref):
+            bad.append(f"{where[0]}: installs from '{ref}', which is not a release tag — a branch "
+                       f"changes under the reader between two attempts")
+    changelog = _read(root, "CHANGELOG.md") or ""
+    newest = re.search(r"^##\s*\[?(v\d+\.\d+\.\d+)\]?", changelog, re.M)
+    if newest and len(found) == 1:
+        (ref, where), = found.items()
+        if re.fullmatch(r"v\d+\.\d+\.\d+", ref) and ref != newest.group(1):
+            bad.append(f"the docs install {ref} while CHANGELOG.md's newest release is "
+                       f"{newest.group(1)} ({len(where)} places to update: "
+                       f"{', '.join(where)})")
+    return bad
+
+
 RULES = [("data-not-instructions", rule_data_not_instructions),
          ("phase-source", rule_phase_source),
-         ("references-orphans", rule_references_orphans)]
+         ("references-orphans", rule_references_orphans),
+         ("capture-round-opened", rule_capture_round_opened),
+         ("state-source", rule_state_source),
+         ("ledger-root", rule_ledger_root),
+         ("install-ref", rule_install_ref)]
 
 
 def run(root: str) -> int:
@@ -321,11 +444,67 @@ def _selftest() -> int:
         assert any("one of the two statements is stale" in c
                    for c in rule_references_orphans(both))
 
+        # -- rules 4-7: each is tested by the regression it exists to catch
+        def phase_file(name: str, body: str):
+            root = tempfile.mkdtemp(dir=tmp)
+            d = os.path.join(root, SKILL, "references", "phases")
+            os.makedirs(d)
+            open(os.path.join(d, name), "w", encoding="utf-8").write(body)
+            return root
+
+        unopened = phase_file("phase_0_baseline.md",
+                              "Run `capture-protective <ch> OFF`, then `capture-close`.\n")
+        assert any("never `capture-start`" in c for c in rule_capture_round_opened(unopened))
+        opened = phase_file("phase_0_baseline.md",
+                            "`capture-start 1`, then `capture-protective <ch> OFF`.\n")
+        assert rule_capture_round_opened(opened) == [], rule_capture_round_opened(opened)
+
+        def core_file(body: str):
+            root = tempfile.mkdtemp(dir=tmp)
+            d = os.path.join(root, SKILL, "references", "core")
+            os.makedirs(d)
+            open(os.path.join(d, "naming.md"), "w", encoding="utf-8").write(body)
+            return root
+
+        claimed = core_file("`dsp-state-current` is the source of truth for what is in the base.\n")
+        assert any("a source of truth" in c for c in rule_state_source(claimed))
+        told = core_file("After the change, update `dsp-state-current`.\n")
+        assert any("tells the reader to write" in c for c in rule_state_source(told))
+        # the FIX must pass: the file may be named while the source is pointed elsewhere
+        fixed = core_file("The ledger is the source of truth; `dsp-state-current` is its view.\n")
+        assert rule_state_source(fixed) == [], rule_state_source(fixed)
+
+        rootless = core_file("Run `state.py registry render` to see the slots.\n")
+        assert any("with no --root" in c for c in rule_ledger_root(rootless))
+        rooted = core_file("Run `state.py --root <project>/state registry render`.\n")
+        assert rule_ledger_root(rooted) == [], rule_ledger_root(rooted)
+
+        def docs_root(readme: str, faq: str, changelog: str = "## [v1.2.3] - today\n"):
+            root = tempfile.mkdtemp(dir=tmp)
+            open(os.path.join(root, "README.md"), "w", encoding="utf-8").write(readme)
+            open(os.path.join(root, "FAQ.md"), "w", encoding="utf-8").write(faq)
+            open(os.path.join(root, "CHANGELOG.md"), "w", encoding="utf-8").write(changelog)
+            return root
+
+        tag = "curl .../autosound-tuning-skill/v1.2.3/install.sh | bash\n"
+        split = docs_root(tag, "curl .../autosound-tuning-skill/main/install.sh | bash\n")
+        complaints = rule_install_ref(split)
+        assert any("different refs" in c for c in complaints), complaints
+        assert any("not a release tag" in c for c in complaints), complaints
+        assert rule_install_ref(docs_root(tag, tag)) == [], rule_install_ref(docs_root(tag, tag))
+        # the tag rots the moment a release is cut, so it is compared with the changelog
+        stale = docs_root(tag, tag, "## [v1.3.0] - today\n\n## [v1.2.3] - before\n")
+        assert any("CHANGELOG.md's newest release is v1.3.0" in c
+                   for c in rule_install_ref(stale)), rule_install_ref(stale)
+
         # and the tree itself, which is the point of the whole file
         assert run(ROOT) == 0, "the tree must be clean, or the selftest measures a fake"
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
-    print("selftest OK — a deleted rule, a rule moved out of the always-on section, an inbox page "
+    print("selftest OK — a runbook ordering capture-* without capture-start, dsp-state-current "
+          "called the source and written by hand, a rootless registry call, README/FAQ installing "
+          "different refs and a tag gone stale against CHANGELOG — each caught, and each fix "
+          "accepted; a deleted rule, a rule moved out of the always-on section, an inbox page "
           "without it, a phase source that drifted back to the changelog, a missing tie-break, a "
           "harness tool named as an instruction, a reference with no road, a translation whose base "
           "is lost too, a declaration buried below the head and a file that claims both are each "
