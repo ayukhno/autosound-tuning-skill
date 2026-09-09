@@ -59,6 +59,7 @@ run_one "docs-in-tree" scripts/docs-check.py
 # a random marker, and the warning stands before it. Offline -- the prompt is built, not sent.
 run_one "issue-triage" skills/autosound-tuning/scripts/issue_triage.py --selftest
 run_one "harvest-inbox" skills/autosound-tuning/scripts/harvest_inbox.py --selftest
+run_one "doc-commands" scripts/doc-commands-check.py --selftest
 # HUB-044: README and FAQ live in four languages. The guard compares what can be compared without
 # knowing them -- the heading skeleton and the commands -- and says out loud that it cannot see all
 # four lagging the code together.

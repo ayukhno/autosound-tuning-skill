@@ -93,6 +93,7 @@ NOT_ON_BOARD = {
     "run_trigger_eval.py": "an eval harness under evals/, not a tuning tool",
     # the per-vendor wrappers of the review channel: the board names the channel (autosound_ai.py)
     # and setup-critic-channel.md lists the wrappers
+    "doc-commands-check.py": "a repo-side guard: runs every documented command and reports an argparse refusal as a documentation bug",
     "_critic_env.sh": "the one config/key loader the three wrappers source",
     "_claude_common.sh": "wrapper internals", "_codex_common.sh": "wrapper internals", "_gemini_common.sh": "wrapper internals",
     "claude_advisor.sh": "review-channel wrapper", "claude_critic.sh": "review-channel wrapper",
