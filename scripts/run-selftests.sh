@@ -100,6 +100,29 @@ done <<EOF
 $(find "$TOOL" -name '*.py' | sort)
 EOF
 
+# The LINTER, with the same pin CI uses. Until 2026-09-09 it lived only in the workflow, so a
+# green run here and a green run on GitHub were different statements -- and two pushes went red on
+# one unused import while this script said "all checks passed". It is skipped, LOUDLY, when neither
+# uvx nor ruff is on the machine: a check that quietly does not run is worse than one that is absent.
+echo
+if command -v uvx >/dev/null 2>&1; then
+  if uvx ruff@0.12.0 check >/tmp/_ruff.$$ 2>&1; then
+    echo "  ok   ruff                 $(tail -1 /tmp/_ruff.$$)"; pass=$((pass + 1))
+  else
+    sed 's/^/       /' /tmp/_ruff.$$ >&2; fail=$((fail + 1)); failed+=("ruff")
+  fi
+  rm -f /tmp/_ruff.$$
+elif command -v ruff >/dev/null 2>&1; then
+  if ruff check >/tmp/_ruff.$$ 2>&1; then
+    echo "  ok   ruff                 $(tail -1 /tmp/_ruff.$$) (unpinned local ruff)"; pass=$((pass + 1))
+  else
+    sed 's/^/       /' /tmp/_ruff.$$ >&2; fail=$((fail + 1)); failed+=("ruff")
+  fi
+  rm -f /tmp/_ruff.$$
+else
+  echo "  --   ruff                 NOT RUN: no uvx and no ruff here. CI still runs it" >&2
+fi
+
 echo
 if [ "$fail" -ne 0 ]; then
   echo "FAILED: $fail of $((pass + fail)) -- ${failed[*]}" >&2
