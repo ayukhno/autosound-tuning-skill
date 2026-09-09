@@ -9,11 +9,7 @@ description: >
   pick crossover points, set time delays, phase, or polarity, build per-channel EQ, fix imaging/staging,
   match OR create/build a target/house curve (bring your own, or get ResoNix / Jazzi / Harman /
   Audiofrog from the Nono Tuning Tool — those are their authors' and are not bundled here),
-  pull REW measurements, or run a tuning session. Also fires for driver
-  impedance / Thiele-Small (T-S) measurement and subwoofer-enclosure work: Fs/Qts/Vas, the
-  added-mass method (impedance jig), sealed-box volume & Qtc, box design/leak verification via
-  an impedance sweep, dual-voice-coil (DVC) wiring — series vs parallel, the load it makes and
-  whether the box volume changes — L/R driver matching by impedance. Also fires when RESUMING an
+  pull REW measurements, or run a tuning session. Also fires when RESUMING an
   in-progress car-audio tune — "resume/continue my car-audio tune", "what's my current
   DSP / crossover / time-alignment / gain state", "where did we leave off on the tune",
   «продовжити тюн», «нагадай стан DSP / кросовери / затримки», «на чому зупинились у тюні авто».

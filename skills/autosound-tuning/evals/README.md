@@ -81,3 +81,25 @@ by loading a tuning method (the same shape as the documented status-question lim
 the sibling queries of the same family (a DVC sub in Ukrainian, T-S from a datasheet, box
 verification by impedance sweep, L/R matching) fire every time. The sharpened wording is kept —
 accurate, additive, and recall elsewhere did not move.
+
+## What the set deliberately does NOT ask for (2026-09-09)
+
+Seven bench queries — Thiele-Small by the added-mass method, sealed-box volume for a Qtc, checking a
+built box for leaks, DVC wiring, L/R driver matching by impedance — were removed from the set, and
+the matching sentence was removed from `description`.
+
+**Why, measured rather than assumed.** They were in the description for months, worded with every
+keyword the queries use, and they fired **0 out of 7** — in the long description and in two rewrites
+of it. The diagnosis is not the wording: a model can answer a Thiele-Small or box-volume question
+out of its own knowledge, so it never reaches for a skill. Adding keywords does not change that;
+only a promise the model cannot keep alone would — "measure it with the project's jig workflow and
+record the result in the project" rather than "explain T-S".
+
+The capability did not go anywhere: it is on the board (`references/core/capabilities.md`, four
+rows) and in `references/core/impedance-ts.md`, so a session already working on a car finds it. What
+changed is that the skill no longer *promises* to wake up for a bench question — and the description
+stopped being 200 characters too long to be shown in full, which was costing the DE and PL triggers.
+
+Baselines on the 2026-09-09 set (`--model claude-sonnet-4-6`): the long description scored 15/22
+with 3 false positives; a full rewrite 12/22; a minimal reorder 13/22 with 1. The rewrites were
+discarded — no measured gain, and a run-to-run spread of 2-3 on 22 queries is not a result.

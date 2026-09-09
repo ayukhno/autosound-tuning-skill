@@ -1,39 +1,138 @@
 [
-  {"query": "ok i pulled my ground zero 10\" sub out of the car, it's on the bench. i want to build a proper sealed box but i only know the free-air fs. how do i get qts and vas so i can pick the volume?", "should_trigger": true},
-  {"query": "got a REW impedance jig set up. how do i run the added-mass method to extract thiele-small for my midwoofer? what weight do i stick on the cone?", "should_trigger": true},
-  {"query": "my sub enclosure is finished (sealed, ~30L). can i verify the qtc and that there are no leaks with an impedance sweep before i close it up for good?", "should_trigger": true},
-  {"query": "i suspect my left and right midbass arent matched, one side sounds weaker. any way to check driver matching with impedance measurements?", "should_trigger": true},
-  {"query": "новий сабвуфер dvc 2x2 ома, треба порахувати обєм закритого ящика. як зміряти параметри т-с і чи комутація котушок впливає на замір?", "should_trigger": true},
-  {"query": "the vocal image keeps pulling left toward the A-pillar in my passat, cant get a centered stage. help me fix the imaging with time alignment", "should_trigger": true},
-  {"query": "prepping for an EMMA round next month, need help setting crossover points, slopes and delays on my helix 3-way active front", "should_trigger": true},
-  {"query": "took an MMM sweep, midbass has a fat hump around 90hz and the top feels dull. what EQ gets me closer to the ResoNix Laid-Back curve?", "should_trigger": true},
-  {"query": "how should i wire my dual 4-ohm voice coil subwoofer, and does series-vs-parallel change what box volume i should build?", "should_trigger": true},
-  {"query": "datasheet gives Vas 22L, Qts 0.45, Fs 28Hz for my sub. what sealed box volume gives a qtc around 0.7, and can i confirm it after building?", "should_trigger": true},
-  {"query": "im building a sealed plywood enclosure for my noisy 3d printer to cut fan noise, what internal volume and foam do i need?", "should_trigger": false},
-  {"query": "my home bookshelf speakers are rated 6 ohm, my vintage marantz says 8 ohm minimum. is it safe to drive them?", "should_trigger": false},
-  {"query": "can you explain the physics of why a high-Qts driver prefers a bigger enclosure? just trying to understand thiele-small theory, no project", "should_trigger": false},
-  {"query": "designing a 3d-printed enclosure box in fusion 360 for my raspberry pi cluster, need mounting standoffs and airflow", "should_trigger": false},
-  {"query": "what 12 inch subwoofer should i buy for my car under $250, mostly rap and edm?", "should_trigger": false},
-  {"query": "theres an annoying rattle/resonance in my car door around 60 km/h while driving, how do i track down and fix the buzz?", "should_trigger": false},
-  {"query": "measuring the input impedance of an op-amp circuit on my breadboard with a function generator, getting weird numbers", "should_trigger": false},
-  {"query": "what does Vas actually mean in a speaker spec sheet?", "should_trigger": false},
-  {"query": "help me dial in a flat reference target curve for my studio nearfield monitors for mixing", "should_trigger": false},
-  {"query": "im measuring the characteristic impedance of a coax cable for an antenna project, 50 ohm vs 75 ohm", "should_trigger": false},
-  {"query": "hi, I would like to setup my car audio. could you help me?", "should_trigger": true},
-  {"query": "can you help me tune my speakers? staging feels off and vocals pull to the left", "should_trigger": true},
-  {"query": "i want to create a custom house curve (EPY) for fun, maybe for EMMA later — how do i build one?", "should_trigger": true},
-  {"query": "help me set up my home theater receiver and speaker layout for dolby atmos", "should_trigger": false},
-  {"query": "допоможи налаштувати автозвук у машині — процесор, затримки, кросовери; образ липне вліво до динаміка", "should_trigger": true},
-  {"query": "хочу з нуля налаштувати автозвук на своїй машині, є REW і Helix", "should_trigger": true},
-  {"query": "kannst du mir helfen mein Car-HiFi einzumessen? DSP Laufzeitkorrektur im Auto stimmt nicht", "should_trigger": true},
-  {"query": "pomóż mi ze strojeniem DSP w aucie — opóźnienia czasowe, zwrotnice i korektor", "should_trigger": true},
-  {"query": "допоможи налаштувати домашній кінотеатр і колонки у вітальні", "should_trigger": false},
-  {"query": "hilf mir mein Wohnzimmer-Heimkino und die HiFi-Anlage einzustellen", "should_trigger": false},
-  {"query": "jak ustawić głośniki w komputerze do grania i filmów?", "should_trigger": false},
-  {"query": "resume my car-audio tune — remind me the current crossover and delay settings on my helix", "should_trigger": true},
-  {"query": "продовжуємо тюн авто, нагадай на чому зупинились — кросовери, затримки, гейни й полярність", "should_trigger": true},
-  {"query": "на чому ми зупинились у тюні авто минулого разу? який зараз стан DSP?", "should_trigger": true},
-  {"query": "let's resume — where did we leave off on my code project yesterday?", "should_trigger": false},
-  {"query": "продовжуємо роботу над проєктом, нагадай на чому зупинились минулого разу?", "should_trigger": false},
-  {"query": "what's my current state? remind me where we left off", "should_trigger": false}
+  {
+    "query": "the vocal image keeps pulling left toward the A-pillar in my passat, cant get a centered stage. help me fix the imaging with time alignment",
+    "should_trigger": true
+  },
+  {
+    "query": "prepping for an EMMA round next month, need help setting crossover points, slopes and delays on my helix 3-way active front",
+    "should_trigger": true
+  },
+  {
+    "query": "took an MMM sweep, midbass has a fat hump around 90hz and the top feels dull. what EQ gets me closer to the ResoNix Laid-Back curve?",
+    "should_trigger": true
+  },
+  {
+    "query": "im building a sealed plywood enclosure for my noisy 3d printer to cut fan noise, what internal volume and foam do i need?",
+    "should_trigger": false
+  },
+  {
+    "query": "my home bookshelf speakers are rated 6 ohm, my vintage marantz says 8 ohm minimum. is it safe to drive them?",
+    "should_trigger": false
+  },
+  {
+    "query": "can you explain the physics of why a high-Qts driver prefers a bigger enclosure? just trying to understand thiele-small theory, no project",
+    "should_trigger": false
+  },
+  {
+    "query": "designing a 3d-printed enclosure box in fusion 360 for my raspberry pi cluster, need mounting standoffs and airflow",
+    "should_trigger": false
+  },
+  {
+    "query": "what 12 inch subwoofer should i buy for my car under $250, mostly rap and edm?",
+    "should_trigger": false
+  },
+  {
+    "query": "theres an annoying rattle/resonance in my car door around 60 km/h while driving, how do i track down and fix the buzz?",
+    "should_trigger": false
+  },
+  {
+    "query": "measuring the input impedance of an op-amp circuit on my breadboard with a function generator, getting weird numbers",
+    "should_trigger": false
+  },
+  {
+    "query": "what does Vas actually mean in a speaker spec sheet?",
+    "should_trigger": false
+  },
+  {
+    "query": "help me dial in a flat reference target curve for my studio nearfield monitors for mixing",
+    "should_trigger": false
+  },
+  {
+    "query": "im measuring the characteristic impedance of a coax cable for an antenna project, 50 ohm vs 75 ohm",
+    "should_trigger": false
+  },
+  {
+    "query": "hi, I would like to setup my car audio. could you help me?",
+    "should_trigger": true
+  },
+  {
+    "query": "can you help me tune my speakers? staging feels off and vocals pull to the left",
+    "should_trigger": true
+  },
+  {
+    "query": "i want to create a custom house curve (EPY) for fun, maybe for EMMA later — how do i build one?",
+    "should_trigger": true
+  },
+  {
+    "query": "help me set up my home theater receiver and speaker layout for dolby atmos",
+    "should_trigger": false
+  },
+  {
+    "query": "допоможи налаштувати автозвук у машині — процесор, затримки, кросовери; образ липне вліво до динаміка",
+    "should_trigger": true
+  },
+  {
+    "query": "хочу з нуля налаштувати автозвук на своїй машині, є REW і Helix",
+    "should_trigger": true
+  },
+  {
+    "query": "kannst du mir helfen mein Car-HiFi einzumessen? DSP Laufzeitkorrektur im Auto stimmt nicht",
+    "should_trigger": true
+  },
+  {
+    "query": "pomóż mi ze strojeniem DSP w aucie — opóźnienia czasowe, zwrotnice i korektor",
+    "should_trigger": true
+  },
+  {
+    "query": "допоможи налаштувати домашній кінотеатр і колонки у вітальні",
+    "should_trigger": false
+  },
+  {
+    "query": "hilf mir mein Wohnzimmer-Heimkino und die HiFi-Anlage einzustellen",
+    "should_trigger": false
+  },
+  {
+    "query": "jak ustawić głośniki w komputerze do grania i filmów?",
+    "should_trigger": false
+  },
+  {
+    "query": "resume my car-audio tune — remind me the current crossover and delay settings on my helix",
+    "should_trigger": true
+  },
+  {
+    "query": "продовжуємо тюн авто, нагадай на чому зупинились — кросовери, затримки, гейни й полярність",
+    "should_trigger": true
+  },
+  {
+    "query": "на чому ми зупинились у тюні авто минулого разу? який зараз стан DSP?",
+    "should_trigger": true
+  },
+  {
+    "query": "let's resume — where did we leave off on my code project yesterday?",
+    "should_trigger": false
+  },
+  {
+    "query": "продовжуємо роботу над проєктом, нагадай на чому зупинились минулого разу?",
+    "should_trigger": false
+  },
+  {
+    "query": "what's my current state? remind me where we left off",
+    "should_trigger": false
+  },
+  {
+    "query": "Ich habe einen Helix DSP im Auto und will endlich die Laufzeitkorrektur und die Trennfrequenzen richtig einmessen. Wie fange ich an?",
+    "should_trigger": true
+  },
+  {
+    "query": "Mein Wohnzimmer-Subwoofer brummt bei bestimmten Frequenzen. Wie messe ich meinen Hörraum mit REW ein?",
+    "should_trigger": false
+  },
+  {
+    "query": "Mam procesor DSP w aucie i chcę ustawić opóźnienia czasowe oraz zwrotnice. Od czego zacząć strojenie?",
+    "should_trigger": true
+  },
+  {
+    "query": "Szukam nowych głośników do salonu, jakie kolumny podłogowe polecacie do 5000 zł?",
+    "should_trigger": false
+  }
 ]

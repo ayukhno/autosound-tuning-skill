@@ -135,13 +135,21 @@ def as_argv(cmd, nowhere):
     return argv
 
 
-def run_one(cmd, nowhere, timeout=20):
+def run_one(cmd, nowhere, sandbox, timeout=20):
     """(ok, detail) — ok is False only when ARGPARSE refused the documented form."""
     argv = as_argv(cmd, nowhere)
     if not os.path.exists(argv[1]):
         return False, f"no such module: {os.path.relpath(argv[1], SKILL)}"
     try:
-        p = subprocess.run(argv, cwd=SKILL, capture_output=True, text=True, timeout=timeout)
+        # cwd is a TEMPORARY directory, never the skill: the first full run wrote a plot and a
+        # `…/` folder into `rew_tool/` — a command that got far enough to do real work. A guard
+        # that leaves artefacts in the tree it checks is a guard someone will delete.
+        # The modules import each other FLAT (`from analysis import …`), so running from anywhere
+        # else needs their directories on the path — without it every command dies on ImportError,
+        # which is not an argparse refusal and would make this guard pass everything in silence.
+        env = dict(os.environ, PYTHONPATH=os.pathsep.join(MODULE_DIRS + [SKILL]))
+        p = subprocess.run(argv, cwd=sandbox, env=env, capture_output=True, text=True,
+                           timeout=timeout)
     except subprocess.TimeoutExpired:
         return True, "timed out (not an argparse refusal — ignored)"
     except OSError as exc:
@@ -168,13 +176,15 @@ def main(argv=None):
         return 0
     tmp = tempfile.mkdtemp(prefix="doc_cmd_")
     nowhere = os.path.join(tmp, "no-such-project")
+    sandbox = os.path.join(tmp, "cwd")
+    os.makedirs(sandbox, exist_ok=True)
     bad, ran, skipped = [], 0, 0
     for doc, line, cmd in found:
         if is_destructive(cmd) or is_partial(cmd):
             skipped += 1
             continue
         ran += 1
-        ok, detail = run_one(cmd, nowhere)
+        ok, detail = run_one(cmd, nowhere, sandbox)
         if not ok:
             bad.append(f"{doc}:{line}: `{cmd}` → {detail}")
     for b in bad:
