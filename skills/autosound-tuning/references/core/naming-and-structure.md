@@ -104,6 +104,30 @@ rew_analitic/
 
 Rule of thumb: **what's small + irreplaceable (config binary, analysis md, light exports) → git/GitHub; what's large + reproducible (.mdat) → local only.** Back up milestones (a locked/named state), not every save. Save the config binary **and** keep `dsp-state` readable — the binary restores, the md explains.
 
+## 4b. The file contract, and the encoding of what was written
+
+**Every machine file has an owner and a schema version, and one command prints that contract:**
+`python3 rew_tool/contract.py table`. For one project's live state — does every file this method
+needs exist, validate and agree across files — `python3 rew_tool/contract.py check <project>`
+(`--gate` for the phase −1 entry condition, `--phase0-gate` for the flaw-evidence one).
+⚠️ **A schema change reaches the model at once and the cars on disk never**, until something asks:
+`python3 rew_tool/contract.py gaps` (no path = the current project's neighbours) names the projects
+that are incomplete against the current schema and **which rows** are missing which field. Bought on
+`symptom`: the field appeared 2026-09-02 and two days later was filled in one flaw map out of four —
+and all four were one machine (autosound-hub `CAR-007`).
+
+**Project files are always UTF-8, and an encoding is never guessed.** The writer names the encoding
+explicitly (since v3.0.45; `scripts/encoding-check.py` holds that rule across every module), but
+files written EARLIER on a machine with another code page are already on disks: `«§»` as the single
+byte `0xa7`, Cyrillic as cp1251. Such a file is not garbage — its numbers are intact, only the bytes
+carrying words are broken. So `contract.py check` NAMES it (`encoding_damaged` in the JSON) instead
+of dying with a stack trace, and `python3 rew_tool/contract.py repair-encoding <project>` shows what
+each candidate code page makes the text say, rewriting to UTF-8 only once a page is named explicitly
+(`--from cp1251`); the original bytes stay beside it as `<file>.<codec>.orig`. Guessing is impossible
+by construction: a UTF-8 file read as cp1251 does not fail — it merely says something else, so the
+only one who can tell is whoever knows what it was supposed to say (autosound-hub `TCC-007`, found on
+a user's live Windows project).
+
 ## 5. DSP configuration naming
 
 - Config version = **`vN`**, monotonic, and it **matches the measurement `_N`** (config v18 → measurements `_18`). The full state of the current `vN` always lives in the ledger snapshot `state/<preset>/v_NNN.json` — gains, crossovers, TA, EQ, polarity. `dsp-state-current` is the sheet GENERATED from it (`state.py --root <project>/state registry render`) and is never hand-edited.

@@ -58,7 +58,7 @@ your advice are different versions, and which one is right is their call.
 * **Reviewer AI (Critic-Advisor):** independent challenger + co-builder; a **stateless on-demand call that re-reads state from disk** (never a background agent); ideally a different vendor (cross-vendor anti-anchoring).
 * **Arbiter (human tuner):** final call on disagreements, runs measurements, enters DSP values.
 
-Tone: equal colleagues. Accept a correct critique fully; argue disagreements in cabin physics and psychoacoustics; state your confidence plainly. Full protocol → `references/core/data-contract-universal.md`.
+Tone: equal colleagues. Accept a correct critique fully; argue disagreements in cabin physics and psychoacoustics; state your confidence plainly. Full protocol → `assets/data-contract-template.md` — the same file the wrapper scripts inject into the reviewer, so what you read is what it was told.
 
 ---
 

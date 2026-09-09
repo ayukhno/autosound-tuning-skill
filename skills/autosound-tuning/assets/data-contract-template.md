@@ -24,8 +24,13 @@ Loaded as a system prompt into **both** chats at the session start, together wit
 
 ## 1. Single source of truth + dynamic state
 
+- **The machine files are the truth; the prose is a view of it.** The system's actual state lives in
+  the ledger `state/<preset>/v_NNN.json` (the hard parameters), `process/process-state.json` +
+  `process/journal.jsonl` (phase and plan) and `project.json` (car, glossary, hardware controls).
+  `autosound_context.md` stays the readable narrative for the human and for you — it is not a second
+  source that may drift. Where the two disagree, the Generator trusts the machine files and SAYS the
+  divergence out loud. `dsp-state-current` is a GENERATED sheet of the ledger, never hand-edited.
 - `autosound_context.md` (system, crossovers, history, known anomalies) — into both chats at the start.
-- The context is **dynamic**: after every accepted change the "Current state" block is updated.
 - **The current state rides in EVERY package**, not just at the session start.
 - Each iteration is bound to a **Trace ID** — the real measurement name in REW (e.g. `m-L_split_320Hz_LR4`). Without binding to a trace the proposal is invalid.
 
@@ -57,7 +62,9 @@ Digitized anomalies: <numbers: FR / phase / impulse>  (+ attached trace)
 
 Hypothesis: <the cause of the problem>
 
-Proposal: <a specific filter/action: type, frequency, Q, channel>
+Proposal: <THE WHOLE ROUND AS ONE LIST — a line per action: channel, filter type
+           (LR/BW/BE), frequency, order/Q, level dB, delay. A package is the ROUND
+           (e.g. the full EQ plan), NOT one parameter per review>
 Origin: <Generator-computed (analyze-joints / repair_joint_apf) | Arbiter, hand-dialled in TCC's
          curve window against the predicted sum — SIMULATED on the sweeps in hand, not yet
          verified by a summation sweep>
