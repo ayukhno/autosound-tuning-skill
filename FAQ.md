@@ -231,7 +231,7 @@ You will need a laptop, a measurement microphone, a DSP processor, and a paid **
 1. Open **Terminal** (press `Cmd + Space` → type `Terminal` → press `Enter`).
 2. Paste the following command and press `Enter`:
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.47/install.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.48/install.sh | bash
    ```
 3. On macOS, if Apple's Command Line Tools (git) are missing, **Apple's own installer window** opens once — one click there, and the script waits for it. **The script itself never asks for your password** and contains no `sudo`; anything a password is needed for, macOS asks for in its own dialog. Wait 10–20 minutes.
 
@@ -243,7 +243,7 @@ You will need a laptop, a measurement microphone, a DSP processor, and a paid **
 1. Open **Windows PowerShell** (press the `Windows key` → type `powershell` → press `Enter`).
 2. Paste the following command and press `Enter`:
    ```powershell
-   irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.47/install.ps1 | iex
+   irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.48/install.ps1 | iex
    ```
 3. If Git is missing, click **Yes** to allow installation. The script will also create a convenient **REW (API on)** shortcut on your Desktop.
 
