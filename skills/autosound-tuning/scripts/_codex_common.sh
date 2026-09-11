@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # _codex_common.sh — shared plumbing for the Codex reviewer channel
-# (codex_critic.sh + codex_advisor.sh). This file is SOURCED, not executed.
+# (codex_critic.sh; codex_advisor.sh is a door to it). This file is SOURCED, not executed.
 
 # --- configuration and key: one loader, shared by all three wrappers ---------
 . "$(dirname "${BASH_SOURCE[0]}")/_critic_env.sh"

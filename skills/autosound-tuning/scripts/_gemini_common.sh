@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # _gemini_common.sh — shared plumbing for the Gemini reviewer channel
-# (gemini_critic.sh + gemini_advisor.sh). This file is SOURCED, not executed.
+# (gemini_critic.sh; gemini_advisor.sh is a door to it). This file is SOURCED, not executed.
 #
 # It does three things both wrappers need identically:
 #   1. locate the Contract + the PROJECT's Context (project-local FIRST)
@@ -87,40 +87,61 @@ if [[ -z "${GEMINI_EXTRA_ARGS:-}" ]]; then
   esac
 fi
 
-# Per-CLI default model. agy uses human-readable labels (`agy models`);
-# @google/gemini-cli uses API ids (`gemini models` / the docs).
-# BOTH review roles default to PRO: a Flash reviewer praises, misses obvious
-# problems, and — as an advisor — will endorse both sides of the very question
-# it was asked to settle (field-observed). One stronger model beats pages of
-# "don't praise" prompt text. Flash is the FALLBACK only, for when Pro quota is
-# dry (agy Starter: weekly Flash+Pro group limit); the fallback prints a warning
-# because a weak round reads like a strong one. Override per role via
-# GEMINI_CRITIC_MODEL / GEMINI_ADVISOR_MODEL.
-# ⚠️ Model NAMES drift, and the drift finished. `agy models` prints two columns —
-# the slug id on the left, the display label on the right — and BOTH were accepted
-# until they were not. On agy 1.1.12 the label is rejected outright:
+# The reviewer's model: ONE, and named by the Arbiter — this file names none (the Arbiter's ruling,
+# 2026-09-11: the Critic and the Advisor are one role; hub SKL-032, skill#27).
 #
-#   Error: invalid model selection (--model "Gemini 3.5 Flash (Medium)"):
-#   model … is not recognized as a known model or custom model in settings
+# Why no default at all. There were two here, one per slot, and both were literals:
+# `gemini-3.1-pro-high` for the critic and `gemini-3.5-flash-medium` as the shared fallback. The
+# second one aged out — agy stopped offering the whole 3.5 generation — and because --doctor
+# smoked THAT slot, a channel whose configured model answered fine was reported broken, with a text
+# that read as "the model you chose is gone" (skill#27, 2026-09-11). A table of model names is a
+# promise to keep updating it, and nobody was: `autosound_ai.py` dropped its own for that reason
+# (af09fea, af9d7e3), and the user's rule of 2026-09-08 says what to do instead — "коли не знаєш
+# яку -- дати користувачу список, щоб він вибрав". So: not named → the CLI's list, and stop.
 #
-# even though that exact label is what `agy models` shows. Slug ids only, then
-# (found on a clean install, 2026-08-13). `agy models` remains the way to check;
-# as of that date it also offers gemini-3.6-flash-* , which is newer than the
-# advisor default here and has not been used for a tune.
-# For the (closed) gemini CLI the API ids are Google's own `-latest` pointers, not a dated id
-# that retires: `gemini-2.5-flash` / `-pro` answered 404 "no longer available to new users"
-# under a working key on 2026-09-08.
-gemini_default_model() {
-  case "$GEMINI_FLAVOR" in
-    gemini) echo "gemini-flash-latest" ;;
-    *)      echo "gemini-3.5-flash-medium" ;;
-  esac
+# What stays true from before: slug ids only (`agy models`, LEFT column — agy >= 1.1.12 rejects
+# the display label with "invalid model selection", 2026-08-13), and the reviewer is the role that
+# must not agree with you — a Flash reviewer praises and endorses both sides of the question it was
+# asked to settle (field-observed 2026-08-01). Which tier to name is the Arbiter's call; the list
+# puts it in front of them. A fallback runs only when GEMINI_FALLBACK_MODEL is set.
+
+# gemini_list_models — the CLI's own list of slug ids, one per line; empty when it cannot be asked.
+gemini_list_models() {
+  [[ "$GEMINI_FLAVOR" == agy && -n "${GEMINI_BIN:-}" ]] || return 0
+  local out="" _
+  # Twice: the first `agy models` in a fresh process often exits 0 with nothing on stdout.
+  for _ in 1 2; do
+    out="$("$GEMINI_BIN" models 2>&1 || true)"
+    [[ -n "${out//[[:space:]]/}" ]] && break
+  done
+  printf '%s\n' "$out" | awk '{print $1}' | grep -E '^[a-z0-9][a-z0-9.-]*$' || true
 }
-gemini_default_critic_model() {
-  case "$GEMINI_FLAVOR" in
-    gemini) echo "gemini-pro-latest" ;;
-    *)      echo "gemini-3.1-pro-high" ;;
-  esac
+
+# _print_model_choice <why> — the list, in the shape TCC's picker reads (`>>` + 4 spaces + id).
+_print_model_choice() {
+  local list; list="$(gemini_list_models)"
+  echo ">> $1" >&2
+  if [[ -n "$list" ]]; then
+    echo ">> Models '$GEMINI_BIN' can run — pick one and pin it:" >&2
+    echo ">>   GEMINI_CRITIC_MODEL=<model>   in ~/.config/autosound/critic-env (or rew_analitic/.critic-env)" >&2
+    printf '%s\n' "$list" | sed 's/^/>>     /' >&2
+  else
+    echo ">> '${GEMINI_BIN:-no CLI}' gave no list — set GEMINI_CRITIC_MODEL to an id from 'agy models' (left column)" >&2
+  fi
+}
+
+# gemini_require_model — the named model on stdout; not named → the list on stderr, exit 3
+# (the same "choose" code autosound_ai.py uses, so a front-end reads both doors alike).
+gemini_require_model() {
+  if [[ -n "${GEMINI_CRITIC_MODEL:-}" ]]; then printf '%s\n' "$GEMINI_CRITIC_MODEL"; return 0; fi
+  _print_model_choice "The reviewer's model is not set."
+  exit 3
+}
+
+# The CLI answered, and what it said is that it does not know the model: the channel is alive and
+# only the name is wrong. Kept apart from a quota error (worth a fallback) and from the closed path.
+_is_bad_model_error() {
+  grep -qiE 'invalid model selection|not recognized as a known model|unknown model' <<<"$1"
 }
 
 die() { echo "${SCRIPT_NAME:-gemini}: $*" >&2; exit 1; }
@@ -187,7 +208,17 @@ gemini_run() {
     printf '\n— [%s: %s — no reply: the gemini CLI path is closed, use agy]\n' "$role" "$used"
     return 2
   fi
-  if _is_quota_error "$out"; then
+  if _is_bad_model_error "$out"; then
+    # Not a reply, and not a reason for a second model: the name is what is wrong. Printing the
+    # CLI's error as if it were the review is how "the reviewer is broken" got reported (skill#27).
+    _print_model_choice "'$GEMINI_BIN' does not know the model '$primary' — the CLI answered, only the name is wrong."
+    printf '\n— [%s: %s — no reply: the model name is not one %s knows]\n' "$role" "$primary" "$GEMINI_BIN"
+    return 3
+  fi
+  if _is_quota_error "$out" && [[ -z "$fallback" ]]; then
+    echo ">> ⚠️  $primary unavailable/exhausted, and no GEMINI_FALLBACK_MODEL is set — not switching" >&2
+    echo ">>    to a weaker model on my own. Wait for the quota, or name a fallback in critic-env." >&2
+  elif _is_quota_error "$out"; then
     echo ">> ⚠️  $primary unavailable/exhausted → FALLING BACK to $fallback" >&2
     echo ">>    A fallback model is weaker at judging METHOD validity: it tends to agree" >&2
     echo ">>    with the package it was handed and can endorse both sides of the open" >&2
@@ -234,7 +265,11 @@ gemini_selfcheck() {
   # path, not report an answered smoke or a quota. Driven through the same functions the real
   # run uses, with only the CLI call and the key probe stubbed.
   local saved_bin="$GEMINI_BIN" saved_flavor="$GEMINI_FLAVOR" saved_key="${GEMINI_API_KEY:-}" report
-  GEMINI_BIN=gemini; GEMINI_FLAVOR=gemini; unset GEMINI_API_KEY
+  local saved_model="${GEMINI_CRITIC_MODEL:-}" saved_fb="${GEMINI_FALLBACK_MODEL:-}"
+  # The stubs below replace `_run_model` and then `unset -f` it — which deletes the REAL one too.
+  # Kept here so the checks that go through the real call path can put it back.
+  local real_run_model; real_run_model="$(declare -f _run_model)"
+  GEMINI_BIN=gemini; GEMINI_FLAVOR=gemini; unset GEMINI_API_KEY; GEMINI_CRITIC_MODEL=gemini-pro-latest
   _run_model() { printf '%s\n' "$dead"; }
   report="$(gemini_doctor 2>&1 || true)"
   unset -f _run_model
@@ -252,6 +287,46 @@ gemini_selfcheck() {
   [[ $rc -eq 2 ]] || { echo "selfcheck: gemini_run returned $rc on the closed path, expected 2"; return 1; }
   grep -q 'закрито Google' <<<"$report" || { echo "selfcheck: gemini_run did not name the closed path"; return 1; }
   grep -q 'FALLING BACK' <<<"$report" && { echo "selfcheck: gemini_run fell back on the closed path"; return 1; }
+  # ── one reviewer, one named model, no literal (skill#27, hub SKL-032) ──
+  # agy's answer to a name it does not know, verbatim from 2026-09-11, and its model list.
+  local badmodel='error: invalid model selection (--model "gemini-3.5-flash-medium" --effort ""): model gemini-3.5-flash-medium is not recognized as a known model or custom model in settings'
+  local agylist=$'gemini-3.8-flash-high     Gemini 3.8 Flash (High)\ngemini-3.1-pro-high       Gemini 3.1 Pro (High)'
+  _is_bad_model_error "$badmodel" || { echo "selfcheck: agy's unknown-model text was not recognised"; return 1; }
+  _is_quota_error "$badmodel" && { echo "selfcheck: an unknown model read as a quota error (it would fall back)"; return 1; }
+  pf="$(mktemp)"; printf 'x' > "$pf"; local cf; cf="$(mktemp)"
+  ncalls() { wc -l < "$cf" | tr -d ' '; }
+  eval "$real_run_model"
+  GEMINI_BIN=agy; GEMINI_FLAVOR=agy
+  # The CLI is faked as a function named like the binary: `agy models` lists, anything else is a
+  # model call — which must not happen when the name is unknown or the fallback unset.
+  agy() { if [[ "$1" == models ]]; then printf '%s\n' "$agylist"; else echo x >> "$cf"; printf '%s\n' "$badmodel"; fi; }
+  # Not named → the list, exit 3, and no model is called.
+  unset GEMINI_CRITIC_MODEL; : > "$cf"
+  report="$( (gemini_require_model) 2>&1 )"; rc=$?
+  [[ $rc -eq 3 ]] || { echo "selfcheck: an unset model returned $rc, expected 3"; return 1; }
+  grep -q '^>>     gemini-3.1-pro-high$' <<<"$report" || { echo "selfcheck: the choice did not list agy's ids"; printf '%s\n' "$report"; return 1; }
+  # An unknown name: gemini_run names it, lists, returns 3, and does NOT try a fallback model.
+  GEMINI_CRITIC_MODEL=gemini-3.5-flash-medium; : > "$cf"
+  report="$(gemini_run gemini-3.5-flash-medium gemini-3.8-flash-high "$pf" critic 2>&1)"; rc=$?
+  [[ $rc -eq 3 && $(ncalls) -eq 1 ]] || { echo "selfcheck: unknown model → rc $rc, $(ncalls) model calls (want 3, 1)"; return 1; }
+  grep -q 'FALLING BACK' <<<"$report" && { echo "selfcheck: an unknown model fell back"; return 1; }
+  # The doctor on it: two verdicts, the CLI alive and the name wrong, with the list.
+  report="$(gemini_doctor 2>&1 || true)"
+  grep -q '✓ CLI answered' <<<"$report" || { echo "selfcheck: the doctor hid a live CLI behind the model ✗"; printf '%s\n' "$report"; return 1; }
+  grep -q "✗ model: 'gemini-3.5-flash-medium' is not one" <<<"$report" || { echo "selfcheck: the doctor did not name the unknown model"; return 1; }
+  grep -q 'gemini-3.1-pro-high' <<<"$report" || { echo "selfcheck: the doctor did not list what agy can run"; return 1; }
+  # A quota on the primary with NO fallback named: one call, no second model picked on our own.
+  agy() { if [[ "$1" == models ]]; then printf '%s\n' "$agylist"; else echo x >> "$cf"; echo "Error: 429 RESOURCE_EXHAUSTED"; fi; }
+  : > "$cf"; report="$(gemini_run gemini-3.1-pro-high "" "$pf" critic 2>&1)"
+  [[ $(ncalls) -eq 1 ]] || { echo "selfcheck: quota without a fallback made $(ncalls) calls"; return 1; }
+  grep -q 'no GEMINI_FALLBACK_MODEL is set' <<<"$report" || { echo "selfcheck: quota without a fallback was not said"; return 1; }
+  # A retired advisor variable is named, not silently obeyed.
+  report="$(GEMINI_ADVISOR_MODEL=gemini-3.5-flash-medium reviewer_retired_notice 2>&1)"
+  grep -q 'GEMINI_ADVISOR_MODEL=.*no longer read.*GEMINI_CRITIC_MODEL' <<<"$report" || { echo "selfcheck: the retired advisor variable was not named"; return 1; }
+  unset -f agy ncalls; rm -f "$pf" "$cf"
+  GEMINI_BIN="$saved_bin"; GEMINI_FLAVOR="$saved_flavor"
+  if [[ -n "$saved_model" ]]; then GEMINI_CRITIC_MODEL="$saved_model"; else unset GEMINI_CRITIC_MODEL; fi
+  if [[ -n "$saved_fb" ]]; then GEMINI_FALLBACK_MODEL="$saved_fb"; else unset GEMINI_FALLBACK_MODEL; fi
   # The guard: a key file git would take is refused; ignored, it is read; tracked, refused with
   # the rotate line. A throwaway repository, and no real key anywhere near it.
   local tmp; tmp="$(mktemp -d)"
@@ -267,7 +342,7 @@ gemini_selfcheck() {
     _critic_guard "$tmp/.critic-env" 2>/dev/null || { echo "selfcheck: a file with no key was refused"; exit 1; }
   ) || { rm -rf "$tmp"; return 1; }
   rm -rf "$tmp"
-  echo "selftest[gemini-channel] OK -- IneligibleTierError recognised (and not as a quota), key shapes AQ./AIza/odd told apart, the doctor names a key-less gemini CLI and the closed path in its smoke, gemini_run stops at the closed door without a fallback (rc 2); a project key file git would take is refused (unignored, tracked -> rotate), ignored or keyless it is read"
+  echo "selftest[gemini-channel] OK -- IneligibleTierError recognised (and not as a quota), key shapes AQ./AIza/odd told apart, the doctor names a key-less gemini CLI and the closed path in its smoke, gemini_run stops at the closed door without a fallback (rc 2); a project key file git would take is refused (unignored, tracked -> rotate), ignored or keyless it is read; one reviewer model, no literal: unset -> the CLI list and exit 3, an unknown name -> named + listed, rc 3, no fallback; the doctor tells a live CLI from a wrong name; quota without a named fallback stays on one call; a retired advisor variable is named"
 }
 
 # gemini_doctor — one-shot preflight: diagnose the WHOLE channel + run a live smoke,
@@ -280,7 +355,8 @@ gemini_doctor() {
     echo "✗ CLI: none on PATH. Fix: brew install --cask antigravity-cli (agy; the old @google/gemini-cli sign-in is closed — it needs a GEMINI_API_KEY now)"; ok=0
   else
     bin="$(command -v "$GEMINI_BIN" 2>/dev/null || echo "$GEMINI_BIN")"
-    echo "✓ CLI: $GEMINI_BIN → $bin  (flavor=$GEMINI_FLAVOR · critic='${GEMINI_CRITIC_MODEL:-$(gemini_default_critic_model)}' · advisor='${GEMINI_ADVISOR_MODEL:-$(gemini_default_model)}' · extra='${GEMINI_EXTRA_ARGS}')"
+    echo "✓ CLI: $GEMINI_BIN → $bin  (flavor=$GEMINI_FLAVOR · model='${GEMINI_CRITIC_MODEL:-NOT SET}' · fallback='${GEMINI_FALLBACK_MODEL:-none}' · extra='${GEMINI_EXTRA_ARGS}')"
+    declare -F reviewer_retired_notice >/dev/null && reviewer_retired_notice 2>&1 | sed 's/^>> note: /· /'
     if [[ "$(uname)" == Darwin && -e "$bin" ]] && xattr -p com.apple.quarantine "$bin" >/dev/null 2>&1; then
       echo "✗ quarantine: $bin is Gatekeeper-quarantined. Fix: xattr -dr com.apple.quarantine \"$bin\""; ok=0
     fi
@@ -341,12 +417,28 @@ PY
   else echo "· .critic-env: none (defaults; optional — cp scripts/.critic-env.example rew_analitic/.critic-env)"; fi
   [[ -f "$CONTRACT" ]] && echo "✓ contract: $CONTRACT" || { echo "✗ contract: $CONTRACT not found — run intake or set PROJECT_MIRROR"; ok=0; proj_ok=0; }
   [[ -f "$CONTEXT"  ]] && echo "✓ context:  $CONTEXT"  || { echo "✗ context:  $CONTEXT not found — copy autosound_context.md into rew_analitic/ or set PROJECT_MIRROR"; ok=0; proj_ok=0; }
-  if [[ -n "${GEMINI_BIN:-}" ]]; then
-    echo "— live smoke (1 line) —"
+  # The smoke runs THE model — the one the Arbiter named, which is the one a round will call. It
+  # used to run the built-in fallback literal instead, so a working channel went red on a model
+  # nobody had chosen, and the chosen one was never exercised at all (skill#27, 2026-09-11).
+  if [[ -n "${GEMINI_BIN:-}" && -z "${GEMINI_CRITIC_MODEL:-}" ]]; then
+    echo "✗ model: not set — the reviewer has no default; pick one and pin GEMINI_CRITIC_MODEL:"
+    local _l; _l="$(gemini_list_models)"
+    if [[ -n "$_l" ]]; then printf '%s\n' "$_l" | sed 's/^/    /'; else echo "    ('$GEMINI_BIN' gave no list — ids are the left column of 'agy models')"; fi
+    ok=0
+  elif [[ -n "${GEMINI_BIN:-}" ]]; then
+    echo "— live smoke (1 line, model '$GEMINI_CRITIC_MODEL') —"
     local sf out; sf="$(mktemp)"; printf 'reply with exactly: channel works' > "$sf"
-    out="$(_run_model "$(gemini_default_model)" "$sf" || true)"; rm -f "$sf"
+    out="$(_run_model "$GEMINI_CRITIC_MODEL" "$sf" || true)"; rm -f "$sf"
     if [[ -z "${out//[[:space:]]/}" ]]; then echo "✗ smoke: EMPTY → quota exhausted (agy weekly Starter tier?) or lost auth. agy: run 'agy' in a REAL terminal to log in / check the weekly countdown. gemini: set GEMINI_API_KEY (its own sign-in is closed, see above)."; ok=0
     elif _is_dead_cli_error "$out"; then echo "✗ smoke: $(_dead_cli_message)"; ok=0
+    # Two verdicts, not one: the CLI is alive and signed in (it answered), and the name is what
+    # it rejected. One ✗ used to hide the first behind the second.
+    elif _is_bad_model_error "$out"; then
+      echo "✓ CLI answered — it is signed in and reachable"
+      echo "✗ model: '$GEMINI_CRITIC_MODEL' is not one '$GEMINI_BIN' knows. It can run:"
+      local _m; _m="$(gemini_list_models)"
+      if [[ -n "$_m" ]]; then printf '%s\n' "$_m" | sed 's/^/    /'; else printf '%s\n' "$out" | head -8 | sed 's/^/    /'; fi
+      ok=0
     elif _is_quota_error "$out"; then echo "✗ smoke: model/quota error → $(printf '%s' "$out" | head -1)"; ok=0
     # The smoke asked for exact words; anything else is a failure, however cheerful it looks.
     # This used to pass ANY non-empty reply, so `Error: invalid model selection …` was reported
@@ -367,7 +459,7 @@ PY
   if [[ $ok = 1 ]]; then echo "== ALL GOOD ✓ =="
   elif [[ ${chan_ok:-1} = 1 ]]; then
     echo "== The reviewer channel works ✓ — what failed above:"
-    [[ $proj_ok = 1 ]] || echo "   · project files: this is not a car's folder — run this again from inside one to check those too"
+    [[ $proj_ok = 1 ]] || echo "   · project files: not written yet (the intake writes them at step −1.8), or this is not a car's folder — the channel itself is certified above"
     [[ $key_ok = 1 ]]  || echo "   · the API key: the agy channel does not need it, the direct-API path (autosound_ai.py) does — fix it or drop the stale export"
     [[ $proj_ok = 1 && $key_ok = 1 ]] && echo "   · see the ✗ lines"
     echo "=="

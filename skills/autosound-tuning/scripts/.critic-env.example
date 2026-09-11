@@ -24,14 +24,14 @@
 # file (~/.config/autosound/critic-env) and only models/paths in a project copy.
 # ---- Default: real Antigravity (agy) ----
 GEMINI_BIN=agy
-# Critic = Pro, Advisor = Flash. These were the other way round in this file until 2026-08-12,
-# which handed anyone who copied it the rubber-stamp reviewer the docs spend paragraphs warning
-# about ("a Flash critic praises"). The reviewer is the role that must NOT agree with you; the
-# advisor answers routine questions, where Flash is the right trade.
-# Slug ids, as `agy models` prints them in its LEFT column: the display labels this file carried
-# ("Gemini 3.1 Pro (High)") are rejected by agy >= 1.1.12 with "invalid model selection".
+# ONE reviewer, ONE model (the Arbiter's ruling, 2026-09-11 -- the Critic and the Advisor are one
+# role). There used to be a second line here, GEMINI_ADVISOR_MODEL=gemini-3.5-flash-medium: agy
+# stopped offering that whole generation, and the wrappers no longer read the variable at all.
+# The scripts name NO model: unset, they print `agy models` and stop for you to pick. So the line
+# below is an example to check, not a default -- run `agy models` and take a Pro `-high` id from
+# its LEFT column (the display labels, "Gemini 3.1 Pro (High)", are rejected by agy >= 1.1.12).
 GEMINI_CRITIC_MODEL=gemini-3.1-pro-high
-GEMINI_ADVISOR_MODEL=gemini-3.5-flash-medium
+# GEMINI_FALLBACK_MODEL=<id>   # only if you want a weaker model tried when the quota is dry
 
 # ---- The direct API with a KEY (autosound_ai.py; cross-platform, no CLI) ----
 # @google/gemini-cli is CLOSED (2026-09-08, IneligibleTierError: "This client is no longer
@@ -42,9 +42,9 @@ GEMINI_ADVISOR_MODEL=gemini-3.5-flash-medium
 # new one exists. Keep the key in THIS file (per machine), not in a shell export: a session's
 # environment does not follow ~/.zshrc after it started, and an export reaches every process.
 # GEMINI_API_KEY=AQ....
-# AUTOSOUND_CRITIC_MODEL=gemini-pro-latest     # Google's own pointer to the current Pro; Critic = Pro
-# AUTOSOUND_ADVISOR_MODEL=gemini-flash-latest  # ...and to the current Flash. A dated id (gemini-2.5-*)
-#                                              # retires under you: 404 on 2026-09-08. The script
-#                                              # prints the key's list and stops when a pin is gone.
+# AUTOSOUND_CRITIC_MODEL=gemini-pro-latest     # Google's own pointer to the current Pro. A dated id
+#                                              # (gemini-2.5-*) retires under you: 404 on 2026-09-08.
+#                                              # The script prints the key's list and stops when a
+#                                              # pin is gone.
 
 # PROJECT_MIRROR=/abs/path/to/project/rew_analitic   # only if CWD differs from the project

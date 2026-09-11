@@ -30,7 +30,7 @@ Periodically (at milestones, on reversals, or when "we've tried everything") run
 
 ---
 
-## Wing 2 — MULTI-AI ORCHESTRATION (Critic / Advisor / Arbiter)
+## Wing 2 — MULTI-AI ORCHESTRATION (Reviewer / Arbiter)
 
 ### Roles (vendor-agnostic — the role matters, not the vendor)
 | Role | Essence | When |
@@ -71,8 +71,8 @@ Two additions (field-validated 2026-07-19, three-iteration round vs Gemini 3.1 P
 - **Keep** the reviewer's memory / history (otherwise it re-derives and wastes rounds on the already-rejected) — facts yes, conclusions no.
 - **Validation signal:** if in Pass 1 the reviewer itself caught what you deliberately withheld, the convergence can be trusted.
 
-### Session-memory discipline (for the Advisor)
-A persistent file, injected into every call; after a round, append: the gist of the package → the advice → the decision / measurement. **Hard-separate CONFIRMED vs OPEN** — history should inform, not pre-decide an open question. Honest OVERTURNED entries: mark the disproven, don't erase it (a record of the error = protection against repeating it).
+### Session-memory discipline (the reviewer's memory file)
+A persistent file (`rew_analitic/depth-advisor-memory.md` — the old name, kept so a project's file keeps working), injected into **every** reviewer call whenever it exists — one role, one prompt (the Arbiter's ruling, 2026-09-11; `scripts/reviewer-prompt.txt`); after a round, append: the gist of the package → the advice → the decision / measurement. **Hard-separate CONFIRMED vs OPEN** — history should inform, not pre-decide an open question. Honest OVERTURNED entries: mark the disproven, don't erase it (a record of the error = protection against repeating it).
 
 ### Loop rules
 1. **Default expectation: 1 round.** Max **3 rounds** per question is a ceiling for real disagreements, not a norm; the `[Iteration N/3]` counter is on you.

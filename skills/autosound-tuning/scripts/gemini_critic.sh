@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# gemini_critic.sh — Claude→Gemini "Critic" channel for autosound tuning.
+# gemini_critic.sh — Claude→Gemini reviewer channel for autosound tuning.
 #
-# Sends a Generator package to Gemini acting as the CRITIC (Challenger), per
-# data-contract-template.md. Injects the Data Contract + the PROJECT's
-# autosound_context as system framing so Gemini answers grounded + in format.
+# Sends a Generator package to Gemini acting as the REVIEWER (Critic-Advisor: one role, one
+# model — gemini_advisor.sh is only a second door to this script). The prompt is assembled by
+# _reviewer_prompt.sh: the role, the Data Contract, the PROJECT's autosound_context, the reviewer
+# memory if the project has one, then the package.
 #
 # Usage:
 #   gemini_critic.sh <package.md> [trace.csv]
@@ -15,15 +16,16 @@
 # Config — set inline, via env, or once in rew_analitic/.critic-env
 # (see references/tooling/setup-critic-channel.md). All resolved in _gemini_common.sh:
 #   GEMINI_BIN            CLI to use (auto: agy → gemini)
-#   GEMINI_CRITIC_MODEL   primary model (default per CLI; agy gemini-3.1-pro-high · gemini gemini-2.5-pro —
-#                         the gemini CLI's own sign-in is closed since 2026-09-08, it needs a GEMINI_API_KEY)
-#   GEMINI_FALLBACK_MODEL fallback when the primary is exhausted/unavailable
+#   GEMINI_CRITIC_MODEL   THE reviewer model — no default: unset, the wrapper prints `agy models` and
+#                         stops (exit 3). The name is the Arbiter's; a name kept here ages out.
+#   GEMINI_FALLBACK_MODEL fallback when the primary is exhausted — only if you set it
 #   GEMINI_EXTRA_ARGS     extra CLI flags (auto: --skip-trust for @google/gemini-cli)
 #   PROJECT_MIRROR        project docs dir (default: $PWD/rew_analitic)  ← context/contract live here
 #   AUTOSOUND_DIR         OPTIONAL cross-project canon dir (audit/context fallback; unset by default)
 set -euo pipefail
 SCRIPT_NAME="gemini_critic"
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_gemini_common.sh"
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_reviewer_prompt.sh"
 
 # Preflight: `gemini_critic.sh --doctor` diagnoses CLI/symlink/quarantine/.critic-env/
 # context + runs a live smoke, so setup traps surface in ONE shot.
@@ -36,35 +38,14 @@ PKG="${1:-}"; TRACE="${2:-}"
 [[ -f "$PKG" ]] || die "package not found: $PKG"
 gemini_preflight
 
-PRIMARY_MODEL="${GEMINI_CRITIC_MODEL:-$(gemini_default_critic_model)}"
-FALLBACK_MODEL="${GEMINI_FALLBACK_MODEL:-$(gemini_default_model)}"
+reviewer_retired_notice
+# One model, named by the Arbiter — never by this file. Not named → the CLI's own list, and stop.
+PRIMARY_MODEL="$(gemini_require_model)"
+# A weaker model is never picked for you: the fallback runs only when YOU named one.
+FALLBACK_MODEL="${GEMINI_FALLBACK_MODEL:-}"
 
 PROMPT_FILE="$(mktemp -t autosound_critic.XXXXXX)"
 trap 'rm -f "$PROMPT_FILE"' EXIT
-
-{
-  cat <<'HDR'
-SYSTEM ROLE — YOU ARE THE CRITIC (Challenger) in a two-model car-audio tuning loop.
-Task: find acoustic risks and false assumptions in the Generator's PROPOSAL.
-The car / DSP / system state is in the AUTOSOUND CONTEXT block below; rely only on it, don't assume a different car.
-Rules:
-  • DON'T praise. Don't agree by default.
-  • Objections must be FALSIFIABLE (testable by ear/measurement), not "a vibe".
-  • Think in cabin physics + psychoacoustics, not the math of ideal filters.
-  • Remember: an all-pass is flat in FR — any FR change comes through source SUMMATION.
-Respond STRICTLY in the "Critic → Generator" format from Contract §4, in the language of the AUTOSOUND CONTEXT below (the project's language).
-
-====== DATA CONTRACT (the protocol) ======
-HDR
-  cat "$CONTRACT"
-  printf '\n\n====== AUTOSOUND CONTEXT (the single source of truth) ======\n'
-  cat "$CONTEXT"
-  printf '\n\n====== GENERATOR PACKAGE (critique this) ======\n'
-  cat "$PKG"
-  if [[ -n "$TRACE" && -f "$TRACE" ]]; then
-    printf '\n\n====== ATTACHED TRACE (decimated, to verify the reading of the data) ======\n'
-    cat "$TRACE"
-  fi
-} > "$PROMPT_FILE"
+reviewer_prompt "$PKG" "$TRACE" > "$PROMPT_FILE"
 
 gemini_run "$PRIMARY_MODEL" "$FALLBACK_MODEL" "$PROMPT_FILE" "critic"

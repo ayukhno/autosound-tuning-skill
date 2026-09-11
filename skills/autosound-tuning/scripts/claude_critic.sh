@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# claude_critic.sh — Claude-based "Critic" channel for autosound tuning.
+# claude_critic.sh — Claude-based reviewer channel for autosound tuning.
 #
-# Sends a Generator package to Claude acting as the CRITIC (Challenger), per
-# data-contract-template.md. Injects the Data Contract + the PROJECT's
-# autosound_context as system framing so Claude answers grounded + in format.
+# Sends a Generator package to Claude acting as the REVIEWER (Critic-Advisor: one role,
+# one model — claude_advisor.sh is only a second door to this script). The prompt is assembled
+# by _reviewer_prompt.sh: the role, the Data Contract, the PROJECT's autosound_context, the
+# reviewer memory if the project has one, then the package.
 #
 # Usage:
 #   claude_critic.sh <package.md> [trace.csv]
@@ -15,6 +16,7 @@
 set -euo pipefail
 SCRIPT_NAME="claude_critic"
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_claude_common.sh"
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_reviewer_prompt.sh"
 
 # Preflight: `claude_critic.sh --doctor` diagnoses CLI/context + runs a live smoke.
 if [[ "${1:-}" == "--doctor" ]]; then claude_doctor && exit 0 || exit 1; fi
@@ -29,29 +31,7 @@ PRIMARY_MODEL="${CLAUDE_CRITIC_MODEL:-}"
 PROMPT_FILE="$(mktemp -t autosound_critic.XXXXXX)"
 trap 'rm -f "$PROMPT_FILE"' EXIT
 
-{
-  cat <<'HDR'
-SYSTEM ROLE — YOU ARE THE CRITIC (Challenger) in a two-model car-audio tuning loop.
-Task: find acoustic risks and false assumptions in the Generator's PROPOSAL.
-The car / DSP / system state is in the AUTOSOUND CONTEXT block below; rely only on it, don't assume a different car.
-Rules:
-  • DON'T praise. Don't agree by default.
-  • Objections must be FALSIFIABLE (testable by ear/measurement), not "a vibe".
-  • Think in cabin physics + psychoacoustics, not the math of ideal filters.
-  • Remember: an all-pass is flat in FR — any FR change comes through source SUMMATION.
-Respond STRICTLY in the "Critic → Generator" format from Contract §4, in the language of the AUTOSOUND CONTEXT below (the project's language).
-
-====== DATA CONTRACT (the protocol) ======
-HDR
-  cat "$CONTRACT"
-  printf '\n\n====== AUTOSOUND CONTEXT (the single source of truth) ======\n'
-  cat "$CONTEXT"
-  printf '\n\n====== GENERATOR PACKAGE (critique this) ======\n'
-  cat "$PKG"
-  if [[ -n "$TRACE" && -f "$TRACE" ]]; then
-    printf '\n\n====== ATTACHED TRACE (decimated, to verify the reading of the data) ======\n'
-    cat "$TRACE"
-  fi
-} > "$PROMPT_FILE"
+reviewer_retired_notice
+reviewer_prompt "$PKG" "$TRACE" > "$PROMPT_FILE"
 
 claude_run "$PRIMARY_MODEL" "$PROMPT_FILE" "critic"

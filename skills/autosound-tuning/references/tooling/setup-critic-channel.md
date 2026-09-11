@@ -59,11 +59,17 @@ brew install --cask antigravity-cli      # the REAL agy — NOT a symlink to gem
 
 ## 2. Models
 
-| Role | `agy` default |
+**One reviewer, one model — and no default.** The Critic and the Advisor are one role (the
+Arbiter's ruling, 2026-09-11; hub SKL-032, skill#27): one model variable, one call path —
+`*_advisor.sh` and `autosound_ai.py advisor` are second doors to the critic's. Nothing in the
+scripts names a model: with `GEMINI_CRITIC_MODEL` unset the wrapper prints `agy models` and
+stops (exit 3) for you to pick. A fallback model runs only if you name one
+(`GEMINI_FALLBACK_MODEL`); without it, a dry quota is reported, not papered over with a weaker model.
+
+| What | Where it comes from |
 |---|---|
-| **Critic** | `gemini-3.1-pro-high` |
-| Advisor / routine | `gemini-3.5-flash-medium` |
-| Fallback (quota dry) | Flash |
+| **The reviewer's model** | `GEMINI_CRITIC_MODEL` (`AUTOSOUND_CRITIC_MODEL` for any vendor) — an id from `agy models`, left column; a Pro `-high` tier |
+| Fallback (quota dry) | `GEMINI_FALLBACK_MODEL` — only if set |
 
 > ⛔ **The `gemini` CLI path (`@google/gemini-cli`, `GEMINI_BIN=gemini`) is CLOSED for its own sign-in — 2026-09-08, gemini-cli 0.50.0, both models.** A session in a car followed an older revision of this page, tried it first, and lost ~10 minutes to this, verbatim:
 >
@@ -73,9 +79,9 @@ brew install --cask antigravity-cli      # the REAL agy — NOT a symlink to gem
 
 > ℹ️ **`Gemini 3.5/3.1` are Antigravity's own display labels** (what `agy models` shows beside the slug ids), NOT real Gemini versions. Use the name your channel expects: the `agy` CLI wants its slug id (`gemini-3.1-pro-high`; the display label is rejected since agy 1.1.12); a raw `GEMINI_API_KEY` call wants the `gemini-2.5-*` id.
 
-**The Critic defaults to Pro** — a Flash critic praises and misses obvious problems (field-observed); "don't praise" prompt text doesn't fix a too-weak model. Flash remains the advisor/routine default and the automatic fallback (⚠️ agy Starter shares one weekly Flash+Pro quota — Pro burns it faster; when dry, pin Flash or use the manual channel §6). Names drift — list current ones with `agy models`. Override per call:
+**Name a Pro tier** — a Flash reviewer praises and misses obvious problems, and asked to settle a question it endorsed both sides of it (field-observed — «Which model for which role» below); "don't praise" prompt text doesn't fix a too-weak model. ⚠️ agy Starter shares one weekly Flash+Pro quota — Pro burns it faster; when dry, name a fallback or use the manual channel §6. Names drift — which is exactly why none is kept here: `agy models` is the list, and `--doctor` smokes **the model you named** and prints that list beside it when agy does not know the name. Override per call:
 ```bash
-GEMINI_CRITIC_MODEL=gemini-3.5-flash-medium scripts/gemini_critic.sh pkg.md  # force Flash (slug id — agy ≥ 1.1.12 rejects the display label)
+GEMINI_CRITIC_MODEL=gemini-3.1-pro-high scripts/gemini_critic.sh pkg.md  # slug id — agy ≥ 1.1.12 rejects the display label
 ```
 
 ## 3. Pin config once — the KEY outside the project, the rest in it
@@ -129,7 +135,7 @@ backup that is not git.
 rule, 2026-09-08, after the "it's gitignored" months). Three carriers:
 - **Both doors refuse the dangerous case.** A project-local `.critic-env` that carries an
   `*_API_KEY` line inside a git repository and that git would take — tracked, or not in
-  `.gitignore` — stops `gemini_critic.sh` / `gemini_advisor.sh` and `autosound_ai.py` with the fix
+  `.gitignore` — stops the wrappers (`gemini_critic.sh` and its advisor door) and `autosound_ai.py` with the fix
   printed (add the line, or move the key to the machine file; a TRACKED one also says *rotate*,
   because the history already has it). A file with no key line, or outside any repository, is
   read as before. `--doctor` reports which side of the rule a project file is on.
@@ -151,8 +157,8 @@ quoted label is what this block used to show. Quotes are harmless either way (`-
 malformed line):
 ```bash
 GEMINI_BIN=agy
-GEMINI_CRITIC_MODEL=gemini-3.1-pro-high              # Critic = Pro
-GEMINI_ADVISOR_MODEL=gemini-3.5-flash-medium
+GEMINI_CRITIC_MODEL=gemini-3.1-pro-high              # THE reviewer model (one role) — an id from `agy models`
+# GEMINI_FALLBACK_MODEL=<id>                         # only if you want one when the quota is dry
 # PROJECT_MIRROR=/abs/path/to/project/rew_analitic   # only if CWD differs
 ```
 
@@ -163,8 +169,7 @@ whose it is, and takes that vendor's API or CLI — so the Arbiter can pick a Cl
 reviewer and still get an automated channel rather than the clipboard.
 
 ```bash
-AUTOSOUND_CRITIC_MODEL=claude-opus-5      # or gemini-pro-latest, gpt-5.2, …
-AUTOSOUND_ADVISOR_MODEL=gemini-pro-latest # a DIFFERENT vendor from the Generator is the point
+AUTOSOUND_CRITIC_MODEL=gemini-pro-latest # the reviewer, any vendor — a DIFFERENT one from the Generator is the point
 # AUTOSOUND_CRITIC_PROVIDER=anthropic     # only when the name does not give the vendor away
 # AUTOSOUND_CRITIC_BIN=claude             # force one binary, whatever is on PATH
 # AUTOSOUND_CRITIC_EFFORT=xhigh           # how hard the reviewer thinks; default xhigh
@@ -187,15 +192,18 @@ a flag would be rejected and the channel would break for one vendor only, quietl
 | `anthropic` | `ANTHROPIC_API_KEY` | `claude` | `claude`, `opus`, `sonnet`, `haiku`, `fable` |
 | `openai` | `OPENAI_API_KEY` | `codex` | `gpt`, `o1`, `o3`, `codex` |
 
-`GEMINI_CRITIC_MODEL` / `GEMINI_ADVISOR_MODEL` still work and mean "the reviewer's model",
-whatever the vendor — every documented setup exports them and a front-end already sets them, so
-renaming would have broken working installs to tidy a table. `AUTOSOUND_*` wins when both are set.
+`GEMINI_CRITIC_MODEL` still works and means "the reviewer's model", whatever the vendor — every
+documented setup exports it and a front-end already sets it, so renaming would have broken working
+installs to tidy a table. `AUTOSOUND_CRITIC_MODEL` wins when both are set. The second slot's names
+(`GEMINI_ADVISOR_MODEL`, `AUTOSOUND_ADVISOR_MODEL`, `CLAUDE_/CODEX_ADVISOR_MODEL`) are **no longer
+read** — one reviewer, one model — and a value left in one is named on stderr rather than obeyed.
 
 **There is no default model any more.** With neither variable set and a Google key present, the
 script asks the key what it can call, **prints that list and stops (exit 3) for you to choose** —
 it does not take the first name (an `agy` slug such as `gemini-3.8-flash-high` is not an API id and
-answered 404 there, 2026-09-08). With no key it asks an installed CLI what it can run and uses the
-first answer; if nothing answers, it says so and goes to clipboard mode. It used to fall back to a
+answered 404 there, 2026-09-08). With no key it asks an installed CLI what it can run and **prints
+that list and stops the same way** — it used to take the first answer, which was choosing for the
+Arbiter; if nothing answers, it says so and goes to clipboard mode. It used to fall back to a
 named model, which is a promise to keep updating a name — the old default was two generations stale
 before anyone noticed, and a stale default fails as an opaque API error instead of "nobody told me
 which model to use". Same reason the display-label→API-id table is gone: **a table of model names
@@ -229,7 +237,7 @@ So **launch Claude from the project directory** (CWD = the car you're tuning). `
 printf '## Test\nChannel check: reply with one line "channel works".\n' > /tmp/smoke.md
 scripts/gemini_critic.sh /tmp/smoke.md
 ```
-Expect a one-line reply + a `— [critic: <model>]` tag (or `[advisor: …]`). An **empty reply** (just the tag) ≠ a crash — it's almost always **quota exhausted** (agy's weekly tier) or lost auth; the wrapper prints a loud WARNING. Recover by switching the model group, re-logging-in `agy`, or going to the direct API with a key through `autosound_ai.py` (§3; the `gemini` CLI is closed, §2).
+Expect a one-line reply + a `— [critic: <model>]` tag (the advisor door answers with the same tag — it is the same reviewer). An **empty reply** (just the tag) ≠ a crash — it's almost always **quota exhausted** (agy's weekly tier) or lost auth; the wrapper prints a loud WARNING. Recover by switching the model group, re-logging-in `agy`, or going to the direct API with a key through `autosound_ai.py` (§3; the `gemini` CLI is closed, §2).
 
 ## 7. THE LADDER — which reviewer to reach for, in order
 
@@ -302,7 +310,7 @@ descend the ladder instead.
 
 ## Which model for which role (updated 2026-08-01)
 
-**Both roles now default to Pro.** The Critic already did; the Advisor was on Flash to save the shared weekly quota, and that turned out to be a false economy on any question about *method*.
+**Both roles now default to Pro.** The Critic already did; the Advisor was on Flash to save the shared weekly quota, and that turned out to be a false economy on any question about *method*. *(2026-09-11: there are no longer two roles or any default — one reviewer, the model you name. The case below is why that name should be a Pro tier.)*
 
 Field case: the Advisor was asked to settle whether a per-position residual was a real spatial gradient or measurement noise. The Flash reply called it a genuine gradient in section 1 and explained the same residual as hand-trajectory instability in the Q&A of the same document — **both sides of the one question it existed to answer**, with no acknowledgement of the contradiction. Re-run on `gemini-3.1-pro-high` it settled the question, and additionally overturned the Generator's proposed lever on grounds neither party had raised. Cost of the weak round: one full package cycle.
 

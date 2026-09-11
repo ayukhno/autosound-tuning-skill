@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # _claude_common.sh — shared plumbing for the Claude reviewer channel
-# (claude_critic.sh + claude_advisor.sh). This file is SOURCED, not executed.
+# (claude_critic.sh; claude_advisor.sh is a door to it). This file is SOURCED, not executed.
 
 # --- configuration and key: one loader, shared by all three wrappers ---------
 . "$(dirname "${BASH_SOURCE[0]}")/_critic_env.sh"

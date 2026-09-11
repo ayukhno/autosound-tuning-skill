@@ -7,5 +7,5 @@ if "%arg%"=="--doctor" (
 ) else if "%arg%"=="doctor" (
     %PYCMD% "%~dp0autosound_ai.py" doctor
 ) else (
-    %PYCMD% "%~dp0autosound_ai.py" advisor %*
+    %PYCMD% "%~dp0autosound_ai.py" critic %*
 )

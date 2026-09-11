@@ -4,7 +4,7 @@ autosound_ai.py — Універсальний кросплатформний і
 Сумісний з Windows, macOS та Linux. Працює без сторонніх залежностей (standard library only).
 
 Підтримує:
-  1. Режим Критика (Critic) та Радника (Advisor) per data-contract-template.md.
+  1. Рецензента (Critic-Advisor — одна роль, одна модель) per data-contract-template.md.
   2. Роботу через локальні CLI (agy, gemini) або прямі виклики хмарних API (Gemini, OpenAI, Anthropic).
   3. Магічний режим ручного буфера обміну (Clipboard mode) — компілює весь контекст та дані
      в один markdown-блок і копіює його в буфер обміну для вставки в будь-який Web-чат (Claude.ai, ChatGPT, Gemini).
@@ -12,7 +12,7 @@ autosound_ai.py — Універсальний кросплатформний і
 
 Використання:
   python3 scripts/autosound_ai.py critic <package_file.md> [trace.csv]
-  python3 scripts/autosound_ai.py advisor <package_file.md> [trace.csv]
+  python3 scripts/autosound_ai.py advisor ...   — ті самі двері: той самий рецензент
   python3 scripts/autosound_ai.py doctor
 """
 
@@ -322,11 +322,18 @@ class ModelChoiceNeeded(RuntimeError):
     Arbiter's decision, not this script's (the user's rule, 2026-09-08: "вміти брати нові моделі,
     а коли не знаєш яку -- дати користувачу список, щоб він вибрав"). Carries the list."""
 
-    def __init__(self, why, models, role_var):
-        self.why, self.models, self.role_var = why, models, role_var
+    def __init__(self, why, models, role_var="AUTOSOUND_CRITIC_MODEL", source="key"):
+        self.why, self.models, self.role_var, self.source = why, models, role_var, source
         super().__init__(why)
 
     def render(self):
+        if self.source == "cli":
+            # The CLI's own ids, as it lists them: no key-shaped filter, no Google pointers.
+            lines = [f">> {self.why}",
+                     ">> Моделі, які `agy` може запустити -- вибери одну і закріпи її:",
+                     f">>   {self.role_var}=<модель>   у ~/.config/autosound/critic-env"]
+            lines += [f">>     {name}" for name in self.models]
+            return "\n".join(lines)
         lines = [f">> {self.why}",
                  ">> Моделі, які цей ключ може викликати (generateContent) -- вибери одну і закріпи її:",
                  f">>   {self.role_var}=<модель>   у ~/.config/autosound/critic-env"]
@@ -433,40 +440,50 @@ def detect_cli(provider="google"):
     return None
 
 
-def resolve_model(role):
-    """Which model the reviewer should use, vendor-neutral first.
+#: The reviewer's model variables — ONE model, whatever the door (the Arbiter's ruling, 2026-09-11:
+#: the Critic and the Advisor are one role; hub SKL-032, skill#27). `AUTOSOUND_CRITIC_MODEL` is the
+#: vendor-neutral name; `GEMINI_CRITIC_MODEL` is still read because a front-end sets it (TCC's
+#: picker) and every documented setup exports it. Renaming them to tidy the table would break
+#: working installs, which is why the critic's names became the one name rather than a new one.
+REVIEWER_MODEL_VARS = ("AUTOSOUND_CRITIC_MODEL", "GEMINI_CRITIC_MODEL")
+#: The second slot's names. No longer read — and said so when one is set, because a value left in
+#: an old critic-env would otherwise look like it still steers something. This is the split that
+#: cost a day: TCC set only the critic's model, the advisor door found none, and the reports said
+#: "the critic does not answer" while the critic had answered all along.
+RETIRED_ADVISOR_VARS = ("AUTOSOUND_ADVISOR_MODEL", "GEMINI_ADVISOR_MODEL")
 
-    `AUTOSOUND_CRITIC_MODEL` / `AUTOSOUND_ADVISOR_MODEL` are the names to use. The `GEMINI_*`
-    pair is still read because a front-end already sets it (TCC's Critic picker) and every
-    documented setup exports it -- it means "the reviewer model", whatever the vendor.
+
+def retired_advisor_notice():
+    """One line per retired advisor variable that is set, or []."""
+    return [f"· {v}={os.environ[v]!r} більше не читається — Критик і Радник це один рецензент з "
+            f"однією моделлю; задай {v.replace('ADVISOR', 'CRITIC')}"
+            for v in RETIRED_ADVISOR_VARS if os.environ.get(v)]
+
+
+def resolve_model():
+    """The reviewer's model, as the Arbiter named it — or None.
+
+    None is an answer, not a gap to fill: a hardcoded default is a model that retires (this file
+    defaulted to `gemini-2.5-*`, two generations stale by the time anybody noticed), and taking the
+    first id an installed CLI prints is choosing FOR the Arbiter. Both are what the user's rule of
+    2026-09-08 replaced: "коли не знаєш яку -- дати користувачу список, щоб він вибрав". The caller
+    turns None into that list (`cli_model_choice`, or the key's list) and stops.
     """
-    critic = role == "critic"
-    for var in (
-        "AUTOSOUND_CRITIC_MODEL" if critic else "AUTOSOUND_ADVISOR_MODEL",
-        "GEMINI_CRITIC_MODEL" if critic else "GEMINI_ADVISOR_MODEL",
-    ):
+    for var in REVIEWER_MODEL_VARS:
         value = os.environ.get(var)
         if value:
             return value
-    # Ask the CLI rather than name a model. A hardcoded default is a model that retires: this file
-    # used to default to `gemini-2.5-*`, which was already two generations stale by the time
-    # anybody noticed, and a stale default fails at call time as an opaque API error rather than
-    # as "nobody told me which model to use".
-    listed = _first_cli_model()
-    if listed:
-        return listed
     return None
 
 
-def _first_cli_model():
-    """The first model an installed CLI says it can run, or None.
+def list_cli_models():
+    """The ids an installed `agy` says it can run, as it lists them, or [].
 
-    Preference order is the file's own: google, then anthropic, then openai — the reviewer should
-    be a different vendor from the Generator, and the Generator is Claude in the setup this skill
-    is driven from. Only `agy` can be asked; the others do not list models without a terminal.
+    Only `agy` can be asked; the others do not list models without a terminal. Asked, never
+    tabled — the same rule as `list_gemini_models` for a key.
     """
     if not shutil.which("agy"):
-        return None
+        return []
     proc = None
     # Twice: the first `agy models` in a fresh process often exits 0 with nothing to show, and
     # part of its output lands on stderr when stdout is a pipe.
@@ -474,16 +491,20 @@ def _first_cli_model():
         try:
             proc = subprocess.run(["agy", "models"], capture_output=True, text=True, timeout=20)
         except Exception:  # noqa: BLE001
-            return None
+            return []
         if proc.returncode == 0 and (proc.stdout or proc.stderr or "").strip():
             break
     if proc is None:
-        return None
+        return []
+    import re
+    ids = []
     for line in ((proc.stdout or "") + "\n" + (proc.stderr or "")).splitlines():
-        selector = line.partition("\t")[0].strip()
-        if selector and " " not in selector:
-            return selector
-    return None
+        first = line.split()[0] if line.split() else ""
+        # The slug is the LEFT column; a display label ("Gemini 3.8 Flash (High)") or a header
+        # line does not have its shape, so the same rule TCC's picker reads by keeps them out.
+        if re.fullmatch(r"[a-z0-9][a-z0-9.\-]*", first) and first not in ids:
+            ids.append(first)
+    return ids
 
 
 # How hard the reviewer is asked to think. A Critic that rubber-stamps is worse than no Critic —
@@ -550,11 +571,11 @@ def _selftest():
         text, used = call_gemini_api("K", "gemini-3.6-flash", "hi")
         assert text == "direct API works" and used == "gemini-3.6-flash"
         try:
-            call_gemini_api("K", "gemini-2.5-flash", "hi", "AUTOSOUND_ADVISOR_MODEL")
+            call_gemini_api("K", "gemini-2.5-flash", "hi")
         except ModelChoiceNeeded as choice:
             out = choice.render()
             assert "404" in choice.why and "no longer available" in choice.why, choice.why
-            assert "AUTOSOUND_ADVISOR_MODEL=<модель>" in out and "gemini-3.6-flash" in out, out
+            assert "AUTOSOUND_CRITIC_MODEL=<модель>" in out and "gemini-3.6-flash" in out, out
             assert "embedding-001" not in out, "a model without generateContent is not a choice"
             assert "-tts" not in out, "a speech model is not a reviewer"
         else:
@@ -566,9 +587,51 @@ def _selftest():
         assert sum(":generateContent" in u for u in calls) == 2 and sum("/models?" in u for u in calls) == 3, calls
     finally:
         urllib.request.urlopen = real
+
+    # ── one reviewer, one model (the Arbiter's ruling 2026-09-11; hub SKL-032, skill#27) ──
+    saved = {v: os.environ.pop(v, None) for v in REVIEWER_MODEL_VARS + RETIRED_ADVISOR_VARS}
+    try:
+        # The split that cost a day: only the critic's model set (what TCC writes), and the
+        # advisor door found none. Now there is one model and every door reads it.
+        os.environ["GEMINI_CRITIC_MODEL"] = "gemini-3.1-pro-high"
+        assert resolve_model() == "gemini-3.1-pro-high"
+        # A second-slot variable neither steers nor hides: it is not read, and it is named.
+        os.environ["GEMINI_ADVISOR_MODEL"] = "gemini-3.5-flash-medium"
+        assert resolve_model() == "gemini-3.1-pro-high"
+        notes = retired_advisor_notice()
+        assert len(notes) == 1 and "GEMINI_ADVISOR_MODEL" in notes[0] and "GEMINI_CRITIC_MODEL" in notes[0], notes
+        # Nothing named → None, never a literal and never "the first id a CLI prints".
+        del os.environ["GEMINI_CRITIC_MODEL"]
+        assert resolve_model() is None
+        # The vendor-neutral name wins over the Gemini-era one.
+        os.environ["GEMINI_CRITIC_MODEL"] = "gemini-3.1-pro-high"
+        os.environ["AUTOSOUND_CRITIC_MODEL"] = "claude-opus-5"
+        assert resolve_model() == "claude-opus-5"
+    finally:
+        for v, val in saved.items():
+            os.environ.pop(v, None)
+            if val is not None:
+                os.environ[v] = val
+
+    # The CLI's list becomes a choice in the shape TCC's picker reads (`>>` + 4+ spaces + id).
+    import re
+    cli_out = ModelChoiceNeeded("Модель рецензента не задано.",
+                                ["gemini-3.8-flash-high", "gemini-3.1-pro-high"], source="cli").render()
+    offered = re.findall(r"^>>\s{4,}([a-z0-9][a-z0-9.\-]*)\s*$", cli_out, re.M)
+    assert offered == ["gemini-3.8-flash-high", "gemini-3.1-pro-high"], cli_out
+    assert "AUTOSOUND_CRITIC_MODEL=<модель>" in cli_out and "generateContent" not in cli_out, cli_out
+
+    # One prompt, the same file the bash wrappers read; the memory block only when there is memory.
+    with_mem = compile_prompt("C", "X", "P", memory="CONFIRMED: sub LR24 @ 63", trace="T")
+    head = open(REVIEWER_PROMPT_HEAD, encoding="utf-8").read().splitlines()[0]
+    assert with_mem.startswith(head) and "Critic-Advisor" in head, head
+    assert with_mem.index("====== REVIEWER MEMORY") < with_mem.index("====== GENERATOR PACKAGE") < with_mem.index("====== ATTACHED TRACE")
+    assert "====== REVIEWER MEMORY" not in compile_prompt("C", "X", "P")
     print("selftest[autosound_ai] OK -- the key travels as a header, never in a URL; a retired model "
           "(404) becomes a choice carrying the key's generateContent models, not a fall-through; "
-          "the list is parsed from the API's own shape")
+          "the list is parsed from the API's own shape; one reviewer model read by every door, the "
+          "advisor variables named and ignored, nothing named -> None (no literal, no first-listed id); "
+          "the CLI's list renders in the picker's shape; one prompt file, memory only when present")
     return 0
 
 
@@ -599,7 +662,9 @@ def run_doctor():
         ok = False
         
     # 3. Перевірка ключів API — усі показуємо, але вирішує ключ ОБРАНОГО рецензента
-    model = resolve_model("critic")
+    for line in retired_advisor_notice():
+        print(line)
+    model = resolve_model()
     provider = provider_for(model)
     for vendor, spec in _PROVIDERS.items():
         for var in spec["env"]:
@@ -638,7 +703,27 @@ def run_doctor():
     cli_bin = detect_cli(provider)
     if not cli_bin:
         print(f"· Для рецензента ({provider}) локального CLI не знайдено")
-    print(f"▶ Рецензент: {model} → провайдер {provider}")
+    if model:
+        print(f"▶ Рецензент: {model} → провайдер {provider}")
+    else:
+        # No default to fall back on, on purpose -- so the doctor says so and puts the choice up,
+        # the same list a real call would stop on. With nothing to ask (no key, no CLI) the
+        # clipboard is the path and there is nothing to choose here.
+        offered = []
+        if api_key_for("google"):
+            try:
+                offered = choosable_models(list_gemini_models(api_key_for("google")))
+            except Exception:  # noqa: BLE001 -- the key line above already said what is wrong
+                offered = []
+        offered = offered or list_cli_models()
+        if offered:
+            print(f"✗ Модель рецензента не задано — за замовчуванням її нема. "
+                  f"Вибери одну і закріпи {REVIEWER_MODEL_VARS[0]}=<модель> у ~/.config/autosound/critic-env:")
+            for name in offered:
+                print(f"    {name}")
+            ok = False
+        else:
+            print("· Модель рецензента не задано, і запропонувати нема кому — ручний режим")
 
     # Рекомендація
     if api_provider:
@@ -734,6 +819,33 @@ def _persist_review(role, text, model, mode):
     return rel
 
 
+#: The role's text — ONE file, read by every door: this script and the three bash wrappers
+#: (`_reviewer_prompt.sh`). There were four copies of two prompts; they had already drifted (the
+#: advisor's asked for an "Advisor → Generator" format the contract does not have).
+REVIEWER_PROMPT_HEAD = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reviewer-prompt.txt")
+#: The reviewer's memory, read whenever the project has one. The file keeps its old name: projects
+#: already have one, and a rename would drop what is in it. The 09.09 review kept the two roles
+#: apart for exactly this -- the critic read no memory, the advisor did. One role resolves it by
+#: reading it always: it is on disk like the context, so "the reviewer re-reads everything from
+#: disk" still holds, and its CONFIRMED/OPEN discipline (review-loop.md) keeps it from deciding.
+ADVISOR_MEMORY = os.environ.get("ADVISOR_MEMORY") or os.path.join(PROJECT_MIRROR, "depth-advisor-memory.md")
+
+
+def compile_prompt(contract, context, package, memory="", trace=""):
+    """The whole prompt, in the order `_reviewer_prompt.sh` assembles it."""
+    with open(REVIEWER_PROMPT_HEAD, "r", encoding="utf-8") as f:
+        head = f.read().rstrip("\n")
+    parts = [head,
+             "\n====== DATA CONTRACT (the protocol) ======", contract,
+             "\n====== AUTOSOUND CONTEXT (the single source of truth) ======", context]
+    if memory:
+        parts += ["\n====== REVIEWER MEMORY (confirmed facts and open questions from earlier rounds) ======", memory]
+    parts += ["\n====== GENERATOR PACKAGE (review this) ======", package]
+    if trace:
+        parts += ["\n====== ATTACHED TRACE (decimated, to verify the reading of the data) ======", trace]
+    return "\n".join(parts)
+
+
 def main():
     if len(sys.argv) < 2:
         print("Використання: python3 scripts/autosound_ai.py [critic|advisor|doctor] <package_file.md> [trace.csv]")
@@ -748,8 +860,14 @@ def main():
         sys.exit(0 if success else 1)
         
     if role not in ["critic", "advisor"]:
-        print(f"Невідома роль: {role}. Підтримуються: critic, advisor, doctor")
+        print(f"Невідома роль: {role}. Підтримуються: critic, doctor (advisor — ті самі двері)")
         sys.exit(1)
+    if role == "advisor":
+        # A second door, not a second role (the Arbiter's ruling, 2026-09-11; hub SKL-032). Kept so
+        # a front-end or a runbook that says `advisor` keeps working until it is changed; the call,
+        # the model, the prompt and the record are the critic's.
+        print(">> advisor → critic: Радник тепер той самий рецензент (одна роль, одна модель)", file=sys.stderr)
+        role = "critic"
         
     if len(sys.argv) < 3:
         print(f"Вкажіть файл пакету: python3 scripts/autosound_ai.py {role} <package_file.md> [trace.csv]")
@@ -784,52 +902,18 @@ def main():
         with open(trace_file, "r", encoding="utf-8") as f:
             trace_content = f.read()
 
-    # Побудова системного промпту та роли
-    system_role_desc = ""
-    if role == "critic":
-        system_role_desc = (
-            "SYSTEM ROLE — YOU ARE THE CRITIC (Challenger) in a two-model car-audio tuning loop.\n"
-            "Task: find acoustic risks and false assumptions in the Generator's PROPOSAL.\n"
-            "The car / DSP / system state is in the AUTOSOUND CONTEXT block below; rely only on it, don't assume a different car.\n"
-            "Rules:\n"
-            "  • DON'T praise. Don't agree by default.\n"
-            "  • Objections must be FALSIFIABLE (testable by ear/measurement), not 'a vibe'.\n"
-            "  • Think in cabin physics + psychoacoustics, not the math of ideal filters.\n"
-            "  • Remember: an all-pass is flat in FR — any FR change comes through source SUMMATION.\n"
-            "Respond STRICTLY in the 'Critic → Generator' format from Contract §4, in the language of the AUTOSOUND CONTEXT below (the project's language)."
-        )
-    else:  # advisor
-        system_role_desc = (
-            "SYSTEM ROLE — YOU ARE THE ADVISOR-EXPERT in a collaborative car-audio tuning loop.\n"
-            "Task: bring community best practice, propose concrete acoustic solutions and order of steps, "
-            "build on the Generator's analysis, and suggest targeted checks.\n"
-            "The car / DSP / system state is in the AUTOSOUND CONTEXT block below; rely only on it.\n"
-            "Rules:\n"
-            "  • Support the developer with construction suggestions.\n"
-            "  • Keep continuity with previous steps in the session memory.\n"
-            "  • Pose direct questions to the Arbiter (user) when subjective checks are needed.\n"
-            "Respond in the 'Advisor → Generator' format from Contract §4, in the language of the AUTOSOUND CONTEXT below (the project's language)."
-        )
-
-    # Компіляція єдиного промпту
-    compiled_prompt_list = [
-        system_role_desc,
-        "\n====== DATA CONTRACT (the protocol) ======",
-        contract_content,
-        "\n====== AUTOSOUND CONTEXT (the single source of truth) ======",
-        context_content,
-        "\n====== GENERATOR PACKAGE (critique/advise this) ======",
-        pkg_content
-    ]
-    if trace_content:
-        compiled_prompt_list.append("\n====== ATTACHED TRACE (decimated, to verify data) ======")
-        compiled_prompt_list.append(trace_content)
-        
-    compiled_prompt = "\n".join(compiled_prompt_list)
+    memory_content = ""
+    if os.path.isfile(ADVISOR_MEMORY):
+        with open(ADVISOR_MEMORY, "r", encoding="utf-8") as f:
+            memory_content = f.read()
+    compiled_prompt = compile_prompt(contract_content, context_content, pkg_content,
+                                     memory=memory_content, trace=trace_content)
 
     # 1. Спроба прямого API запиту (пріоритет)
-    role_var = "AUTOSOUND_CRITIC_MODEL" if role == "critic" else "AUTOSOUND_ADVISOR_MODEL"
-    named = any(os.environ.get(v) for v in (role_var, "GEMINI_CRITIC_MODEL" if role == "critic" else "GEMINI_ADVISOR_MODEL"))
+    role_var = REVIEWER_MODEL_VARS[0]
+    for line in retired_advisor_notice():
+        print(line, file=sys.stderr)
+    named = resolve_model()
     if not named and api_key_for("google"):
         # No model NAMED and a Google key present: the key is the thing to ask, and when the
         # answer is a list the choice is the Arbiter's -- print it and stop, rather than take the
@@ -843,11 +927,19 @@ def main():
         else:
             print(choice.render(), file=sys.stderr)
             sys.exit(3)
-    model = resolve_model(role)
+    model = named
     if not model:
-        print(">> Не задано модель рецензента і жоден CLI не назвав своєї. "
-              "Встанови AUTOSOUND_CRITIC_MODEL (або AUTOSOUND_ADVISOR_MODEL) — "
-              "переходжу в ручний режим.", file=sys.stderr)
+        # No key to ask -- then the CLI is: its list, and stop, the same answer the key gives. It
+        # used to take the list's FIRST id and call that the reviewer, which is choosing for the
+        # Arbiter; before that it was a literal that retired. Only with no CLI to ask either is the
+        # clipboard the honest path, and there the model is whichever chat the person pastes into.
+        offered = list_cli_models()
+        if offered:
+            print(ModelChoiceNeeded("Модель рецензента не задано.", offered, role_var, source="cli").render(),
+                  file=sys.stderr)
+            sys.exit(3)
+        print(f">> Модель рецензента не задано, і жоден CLI її не запропонує — ручний режим. "
+              f"Для автоматичного: {role_var}=<модель> у ~/.config/autosound/critic-env.", file=sys.stderr)
     provider = provider_for(model)
     api_key = api_key_for(provider) if model else None
     if api_key and _looks_like_a_display_label(model):
@@ -994,7 +1086,7 @@ def main():
         print("\n✗ Не вдалося автоматично скопіювати у буфер обміну.", file=sys.stderr)
         print(f"👉 Будь ласка, відкрийте файл:\n   {manual_file_path}\n   скопіюйте його вміст вручну та вставте в ШІ-чат.", file=sys.stderr)
         
-    print("\nПісля отримання відповіді від Критика/Радника, скопіюйте її та збережіть у лог або вставте в 'audit-trail.md'.", file=sys.stderr)
+    print("\nПісля отримання відповіді від рецензента, скопіюйте її та збережіть у лог або вставте в 'audit-trail.md'.", file=sys.stderr)
     print("Це дозволить зберегти історію на вашому диску назавжди!", file=sys.stderr)
     print("="*50 + "\n", file=sys.stderr)
 

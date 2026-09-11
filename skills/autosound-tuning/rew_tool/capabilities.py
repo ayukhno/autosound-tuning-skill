@@ -97,6 +97,7 @@ NOT_ON_BOARD = {
     "tool-docs-check.py": "a repo-side guard: each module entry's dependency line and own flags, against the module",
     "_critic_env.sh": "the one config/key loader the three wrappers source",
     "_claude_common.sh": "wrapper internals", "_codex_common.sh": "wrapper internals", "_gemini_common.sh": "wrapper internals",
+    "_reviewer_prompt.sh": "wrapper internals",
     "claude_advisor.sh": "review-channel wrapper", "claude_critic.sh": "review-channel wrapper",
     "codex_advisor.sh": "review-channel wrapper", "codex_critic.sh": "review-channel wrapper",
     "gemini_advisor.sh": "review-channel wrapper", "gemini_critic.sh": "review-channel wrapper",
