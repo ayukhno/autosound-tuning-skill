@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # gemini_critic.sh — Claude→Gemini reviewer channel for autosound tuning.
 #
-# Sends a Generator package to Gemini acting as the REVIEWER (Critic-Advisor: one role, one
-# model — gemini_advisor.sh is only a second door to this script). The prompt is assembled by
+# Sends a Generator package to Gemini acting as the REVIEWER (Critic-Advisor: one channel, one
+# model, two tasks — gemini_advisor.sh runs this script with the ADVISOR task). The prompt is assembled by
 # _reviewer_prompt.sh: the role, the Data Contract, the PROJECT's autosound_context, the reviewer
 # memory if the project has one, then the package.
 #
@@ -48,4 +48,4 @@ PROMPT_FILE="$(mktemp -t autosound_critic.XXXXXX)"
 trap 'rm -f "$PROMPT_FILE"' EXIT
 reviewer_prompt "$PKG" "$TRACE" > "$PROMPT_FILE"
 
-gemini_run "$PRIMARY_MODEL" "$FALLBACK_MODEL" "$PROMPT_FILE" "critic"
+gemini_run "$PRIMARY_MODEL" "$FALLBACK_MODEL" "$PROMPT_FILE" "$REVIEW_TASK"

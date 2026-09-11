@@ -36,7 +36,7 @@ Periodically (at milestones, on reversals, or when "we've tried everything") run
 | Role | Essence | When |
 |---|---|---|
 | **Generator** | analyzes, forms the proposal | you (the main agent) |
-| **Critic-Advisor** <br>*(Критик-Радник)* | Unified reviewer: stress-tests physical hypotheses (falsifiable acoustic objections) AND provides constructive architectural advice + maintains process consistency and session memory; **does not praise** | checking proposals, guiding state transitions, preventing infinite loops |
+| **Reviewer** <br>*(Критик-Радник)* | **One channel, one model, three tasks** — the difference is the question and its wording, not the implementation. **Critic:** stress-tests a proposal (falsifiable acoustic objections). **Advisor:** searches for a solution to an open question (Pass 1 of TWO-PASS, staging). Both tuning, regulated (tuning contract + context + session memory). **Ask:** a plain question — translation, wording of a letter — under the interaction contract only (`assets/interaction-contract.md`). **Does not praise** | Critic — checking proposals (the round's default); Advisor — open questions, solution search; Ask — anything that is not a tuning decision |
 | **Arbiter** | the human: the final word on disagreement, ear / domain truth | always |
 | **Cold-auditor** | another model, cold-start, full history | milestones, reversals, "tried everything" |
 

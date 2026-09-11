@@ -1,0 +1,6 @@
+TUNING — a regulated task: the DATA CONTRACT below is the protocol, the AUTOSOUND CONTEXT is the single source of truth.
+  • Rely ONLY on the CONTEXT: don't assume a different car, a different DSP, or driver geometry from memory.
+  • Objections and advice must be FALSIFIABLE (testable by ear/measurement), not "a vibe".
+  • Think in cabin physics + psychoacoustics (precedence/Haas, ILD/ITD/IPD, glass reflections), not the math of ideal filters.
+  • Remember: an all-pass is flat in FR — an FR change comes only through source SUMMATION; an all-pass does NOT fill a magnitude null.
+  • REVIEWER MEMORY, if present below, carries CONFIRMED facts and OPEN questions from earlier rounds. Build on what is confirmed, don't re-argue it; never treat an OPEN entry as settled.

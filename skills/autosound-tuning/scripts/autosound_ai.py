@@ -4,7 +4,8 @@ autosound_ai.py — Універсальний кросплатформний і
 Сумісний з Windows, macOS та Linux. Працює без сторонніх залежностей (standard library only).
 
 Підтримує:
-  1. Рецензента (Critic-Advisor — одна роль, одна модель) per data-contract-template.md.
+  1. Рецензента — один канал і одна модель, дві задачі: critic (перевірити пропозицію) і
+     advisor (шукати рішення на відкрите питання) — per data-contract-template.md.
   2. Роботу через локальні CLI (agy, gemini) або прямі виклики хмарних API (Gemini, OpenAI, Anthropic).
   3. Магічний режим ручного буфера обміну (Clipboard mode) — компілює весь контекст та дані
      в один markdown-блок і копіює його в буфер обміну для вставки в будь-який Web-чат (Claude.ai, ChatGPT, Gemini).
@@ -12,7 +13,7 @@ autosound_ai.py — Універсальний кросплатформний і
 
 Використання:
   python3 scripts/autosound_ai.py critic <package_file.md> [trace.csv]
-  python3 scripts/autosound_ai.py advisor ...   — ті самі двері: той самий рецензент
+  python3 scripts/autosound_ai.py advisor <package_file.md> [trace.csv]
   python3 scripts/autosound_ai.py doctor
 """
 
@@ -441,7 +442,7 @@ def detect_cli(provider="google"):
 
 
 #: The reviewer's model variables — ONE model, whatever the door (the Arbiter's ruling, 2026-09-11:
-#: the Critic and the Advisor are one role; hub SKL-032, skill#27). `AUTOSOUND_CRITIC_MODEL` is the
+#: the Critic and the Advisor are one channel, two tasks; hub SKL-032, skill#27). `AUTOSOUND_CRITIC_MODEL` is the
 #: vendor-neutral name; `GEMINI_CRITIC_MODEL` is still read because a front-end sets it (TCC's
 #: picker) and every documented setup exports it. Renaming them to tidy the table would break
 #: working installs, which is why the critic's names became the one name rather than a new one.
@@ -623,15 +624,38 @@ def _selftest():
 
     # One prompt, the same file the bash wrappers read; the memory block only when there is memory.
     with_mem = compile_prompt("C", "X", "P", memory="CONFIRMED: sub LR24 @ 63", trace="T")
-    head = open(REVIEWER_PROMPT_HEAD, encoding="utf-8").read().splitlines()[0]
-    assert with_mem.startswith(head) and "Critic-Advisor" in head, head
+    assert with_mem.startswith("====== INTERACTION CONTRACT") and _read(REVIEWER_CONTRACT) in with_mem
+    # The two tuning tasks, one channel: the prompts differ in the TASK block and nowhere else.
+    adv = compile_prompt("C", "X", "P", memory="M", task="advisor")
+    cri = compile_prompt("C", "X", "P", memory="M", task="critic")
+    assert "TASK: ADVISOR" in adv and "TASK: CRITIC" in cri and "TASK: CRITIC" not in adv
+    strip = lambda t, k: t.replace(open(reviewer_task_file(k), encoding="utf-8").read().rstrip("\n"), "")
+    assert strip(adv, "advisor") == strip(cri, "critic"), "the two tasks differ outside the TASK block"
+    # `ask`: the interaction contract and the question — no tuning rules, no tuning contract, no
+    # memory; the context rides along as background only when there is one.
+    ask = compile_prompt("C", "X", "P", memory="M", task="ask")
+    assert "TASK: ASK" in ask and _read(REVIEWER_CONTRACT) in ask, ask[:200]
+    for absent in ("DATA CONTRACT", "REVIEWER MEMORY ======", _read(REVIEWER_TUNING)):
+        assert absent not in ask, absent
+    assert "====== PROJECT CONTEXT (background only)" in ask
+    assert "====== PROJECT CONTEXT" not in compile_prompt("", "", "P", task="ask")
+    # The interaction contract is not about tuning: the tuning words live in the tuning layer.
+    for word in ("all-pass", "crossover", "DSP", "cabin"):
+        assert word not in _read(REVIEWER_CONTRACT), word
+    try:
+        compile_prompt("C", "X", "P", task="judge")
+        raise AssertionError("an unknown task was accepted")
+    except ValueError:
+        pass
     assert with_mem.index("====== REVIEWER MEMORY") < with_mem.index("====== GENERATOR PACKAGE") < with_mem.index("====== ATTACHED TRACE")
     assert "====== REVIEWER MEMORY" not in compile_prompt("C", "X", "P")
     print("selftest[autosound_ai] OK -- the key travels as a header, never in a URL; a retired model "
           "(404) becomes a choice carrying the key's generateContent models, not a fall-through; "
           "the list is parsed from the API's own shape; one reviewer model read by every door, the "
           "advisor variables named and ignored, nothing named -> None (no literal, no first-listed id); "
-          "the CLI's list renders in the picker's shape; one prompt file, memory only when present")
+          "the CLI's list renders in the picker's shape; one prompt file, memory only when present; "
+          "critic/advisor differ only in the TASK block; ask carries the interaction contract and "
+          "the question only, no tuning layer")
     return 0
 
 
@@ -819,28 +843,62 @@ def _persist_review(role, text, model, mode):
     return rel
 
 
-#: The role's text — ONE file, read by every door: this script and the three bash wrappers
-#: (`_reviewer_prompt.sh`). There were four copies of two prompts; they had already drifted (the
-#: advisor's asked for an "Advisor → Generator" format the contract does not have).
-REVIEWER_PROMPT_HEAD = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reviewer-prompt.txt")
-#: The reviewer's memory, read whenever the project has one. The file keeps its old name: projects
-#: already have one, and a rename would drop what is in it. The 09.09 review kept the two roles
-#: apart for exactly this -- the critic read no memory, the advisor did. One role resolves it by
-#: reading it always: it is on disk like the context, so "the reviewer re-reads everything from
-#: disk" still holds, and its CONFIRMED/OPEN discipline (review-loop.md) keeps it from deciding.
+#: The reviewer's prompt, in layers — the same files `_reviewer_prompt.sh` reads, so the four doors
+#: (this script, three bash wrappers) cannot drift again: four copies of two prompts already had
+#: (the advisor's asked for an "Advisor → Generator" format the contract does not have).
+#:   assets/interaction-contract.md   every task — how Generator and Reviewer talk; NOT tuning
+#:   reviewer-tuning.txt              critic, advisor — the regulated tuning rules
+#:   reviewer-task-<task>.txt         the task itself — the only thing the tasks do not share
+#: One channel, one model, three tasks (the Arbiter's ruling, 2026-09-11; hub SKL-032): `ask` is a
+#: plain question — a translation, a letter's wording — and needs no tuning contract, so it works in
+#: a folder the intake has not reached; `critic` and `advisor` are tuning, and regulated.
+_SCRIPTS = os.path.dirname(os.path.abspath(__file__))
+REVIEWER_CONTRACT = os.path.join(os.path.dirname(_SCRIPTS), "assets", "interaction-contract.md")
+REVIEWER_TUNING = os.path.join(_SCRIPTS, "reviewer-tuning.txt")
+REVIEW_TASKS = ("critic", "advisor", "ask")
+TUNING_TASKS = ("critic", "advisor")
+
+
+def reviewer_task_file(task):
+    if task not in REVIEW_TASKS:
+        raise ValueError(f"unknown review task {task!r} — one of {REVIEW_TASKS}")
+    return os.path.join(_SCRIPTS, f"reviewer-task-{task}.txt")
+
+
+#: The reviewer's memory, read on every tuning task whenever the project has one. The file keeps its
+#: old name: projects already have one, and a rename would drop what is in it. The 09.09 review kept
+#: the two roles apart for exactly this -- the critic read no memory, the advisor did. One channel
+#: resolves it by reading it always: it is on disk like the context, so "the reviewer re-reads
+#: everything from disk" still holds, and its CONFIRMED/OPEN discipline (review-loop.md) keeps it
+#: from deciding.
 ADVISOR_MEMORY = os.environ.get("ADVISOR_MEMORY") or os.path.join(PROJECT_MIRROR, "depth-advisor-memory.md")
 
 
-def compile_prompt(contract, context, package, memory="", trace=""):
-    """The whole prompt, in the order `_reviewer_prompt.sh` assembles it."""
-    with open(REVIEWER_PROMPT_HEAD, "r", encoding="utf-8") as f:
-        head = f.read().rstrip("\n")
-    parts = [head,
-             "\n====== DATA CONTRACT (the protocol) ======", contract,
-             "\n====== AUTOSOUND CONTEXT (the single source of truth) ======", context]
-    if memory:
-        parts += ["\n====== REVIEWER MEMORY (confirmed facts and open questions from earlier rounds) ======", memory]
-    parts += ["\n====== GENERATOR PACKAGE (review this) ======", package]
+def _read(path):
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read().rstrip("\n")
+
+
+def compile_prompt(contract, context, package, memory="", trace="", task="critic"):
+    """The whole prompt, in the order `_reviewer_prompt.sh` assembles it.
+
+    A tuning task needs `contract` and `context`; `ask` takes `context` as background if given."""
+    parts = ["====== INTERACTION CONTRACT (how we work together — every task) ======",
+             _read(REVIEWER_CONTRACT)]
+    tuning = task in TUNING_TASKS
+    if tuning:
+        parts.append(_read(REVIEWER_TUNING))
+    parts.append(_read(reviewer_task_file(task)))
+    if tuning:
+        parts += ["\n====== DATA CONTRACT (the tuning protocol) ======", contract,
+                  "\n====== AUTOSOUND CONTEXT (the single source of truth) ======", context]
+        if memory:
+            parts += ["\n====== REVIEWER MEMORY (confirmed facts and open questions from earlier rounds) ======", memory]
+        parts += ["\n====== GENERATOR PACKAGE (review this) ======", package]
+    else:
+        if context:
+            parts += ["\n====== PROJECT CONTEXT (background only) ======", context]
+        parts += ["\n====== GENERATOR'S QUESTION ======", package]
     if trace:
         parts += ["\n====== ATTACHED TRACE (decimated, to verify the reading of the data) ======", trace]
     return "\n".join(parts)
@@ -848,7 +906,7 @@ def compile_prompt(contract, context, package, memory="", trace=""):
 
 def main():
     if len(sys.argv) < 2:
-        print("Використання: python3 scripts/autosound_ai.py [critic|advisor|doctor] <package_file.md> [trace.csv]")
+        print("Використання: python3 scripts/autosound_ai.py [critic|advisor|ask|doctor] <package_file.md> [trace.csv]")
         sys.exit(1)
         
     role = sys.argv[1].lower()
@@ -859,15 +917,13 @@ def main():
         success = run_doctor()
         sys.exit(0 if success else 1)
         
-    if role not in ["critic", "advisor"]:
-        print(f"Невідома роль: {role}. Підтримуються: critic, doctor (advisor — ті самі двері)")
+    if role not in REVIEW_TASKS:
+        print(f"Невідома задача: {role}. Підтримуються: critic, advisor, ask, doctor")
         sys.exit(1)
-    if role == "advisor":
-        # A second door, not a second role (the Arbiter's ruling, 2026-09-11; hub SKL-032). Kept so
-        # a front-end or a runbook that says `advisor` keeps working until it is changed; the call,
-        # the model, the prompt and the record are the critic's.
-        print(">> advisor → critic: Радник тепер той самий рецензент (одна роль, одна модель)", file=sys.stderr)
-        role = "critic"
+    # `critic` / `advisor` / `ask` is the TASK of this call on the one channel (the Arbiter's
+    # ruling, 2026-09-11; hub SKL-032): the same model and path — the prompt's layers differ by
+    # task (see compile_prompt). The marker and the record carry the task's name.
+    tuning = role in TUNING_TASKS
         
     if len(sys.argv) < 3:
         print(f"Вкажіть файл пакету: python3 scripts/autosound_ai.py {role} <package_file.md> [trace.csv]")
@@ -880,20 +936,24 @@ def main():
         print(f"Помилка: Файл пакету не знайдено: {pkg_file}")
         sys.exit(1)
         
-    # Префлайт перевірка локальних файлів
-    if not CONTRACT or not os.path.isfile(CONTRACT):
+    # Префлайт: тюнінгова задача регламентована — без контракту й контексту виклику нема.
+    # `ask` — просте питання (переклад, формулювання): не потребує ні того, ні іншого (skill#27).
+    if tuning and (not CONTRACT or not os.path.isfile(CONTRACT)):
         _assets = os.path.join(SKILL_DIR, "assets")
         print(f"Помилка: Не знайдено контракт data-contract-template.md — ні в '{PROJECT_MIRROR}', ні в проєкті, ні в AUTOSOUND_DIR, ні у скілі ('{_assets}').", file=sys.stderr)
         sys.exit(1)
-    if not CONTEXT or not os.path.isfile(CONTEXT):
+    if tuning and (not CONTEXT or not os.path.isfile(CONTEXT)):
         print(f"Помилка: Не знайдено контекст проекту autosound_context.md у '{PROJECT_MIRROR}' чи в AUTOSOUND_DIR.", file=sys.stderr)
         sys.exit(1)
 
     # Зчитування файлів
-    with open(CONTRACT, "r", encoding="utf-8") as f:
-        contract_content = f.read()
-    with open(CONTEXT, "r", encoding="utf-8") as f:
-        context_content = f.read()
+    contract_content = context_content = ""
+    if tuning:
+        with open(CONTRACT, "r", encoding="utf-8") as f:
+            contract_content = f.read()
+    if CONTEXT and os.path.isfile(CONTEXT):
+        with open(CONTEXT, "r", encoding="utf-8") as f:
+            context_content = f.read()
     with open(pkg_file, "r", encoding="utf-8") as f:
         pkg_content = f.read()
         
@@ -903,11 +963,11 @@ def main():
             trace_content = f.read()
 
     memory_content = ""
-    if os.path.isfile(ADVISOR_MEMORY):
+    if tuning and os.path.isfile(ADVISOR_MEMORY):
         with open(ADVISOR_MEMORY, "r", encoding="utf-8") as f:
             memory_content = f.read()
     compiled_prompt = compile_prompt(contract_content, context_content, pkg_content,
-                                     memory=memory_content, trace=trace_content)
+                                     memory=memory_content, trace=trace_content, task=role)
 
     # 1. Спроба прямого API запиту (пріоритет)
     role_var = REVIEWER_MODEL_VARS[0]

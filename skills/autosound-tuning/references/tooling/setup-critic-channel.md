@@ -59,9 +59,17 @@ brew install --cask antigravity-cli      # the REAL agy — NOT a symlink to gem
 
 ## 2. Models
 
-**One reviewer, one model — and no default.** The Critic and the Advisor are one role (the
-Arbiter's ruling, 2026-09-11; hub SKL-032, skill#27): one model variable, one call path —
-`*_advisor.sh` and `autosound_ai.py advisor` are second doors to the critic's. Nothing in the
+**One channel, one model, three tasks — and no default model.** The Critic and the Advisor are
+one channel (the Arbiter's ruling, 2026-09-11; hub SKL-032, skill#27): one model variable, one
+call path; the difference is the question and its wording — the TASK block of the prompt.
+
+| Task | What it is for | How to call | Contract |
+|---|---|---|---|
+| **critic** | check a proposal (the round's default) | `gemini_critic.sh pkg.md` · `autosound_ai.py critic pkg.md` | interaction + **tuning** (contract + context required, memory if present) |
+| **advisor** | search for a solution to an open question | `gemini_advisor.sh pkg.md` · `autosound_ai.py advisor pkg.md` | the same |
+| **ask** | a plain question — translation, a letter's wording, a second opinion on a text | `AUTOSOUND_REVIEW_TASK=ask gemini_critic.sh q.md` · `autosound_ai.py ask q.md` | interaction only (`assets/interaction-contract.md`); works before the intake |
+
+Nothing in the
 scripts names a model: with `GEMINI_CRITIC_MODEL` unset the wrapper prints `agy models` and
 stops (exit 3) for you to pick. A fallback model runs only if you name one
 (`GEMINI_FALLBACK_MODEL`); without it, a dry quota is reported, not papered over with a weaker model.

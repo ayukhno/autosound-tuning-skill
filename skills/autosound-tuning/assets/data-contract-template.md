@@ -3,6 +3,11 @@
 **Purpose:** the single rulebook for the interaction of two AIs (Generator + Critic) to tune car audio (REW + `<DSP>`).
 Loaded as a system prompt into **both** chats at the session start, together with `autosound_context.md`.
 
+> **This is the TUNING contract** — for the Critic and Advisor tasks. Under it, on every call, sits
+> the skill's **interaction contract** (`assets/interaction-contract.md`): how the two AIs talk, not
+> what they tune. A plain question (the `ask` task — a translation, a letter's wording) goes under
+> the interaction contract alone.
+
 > **This is a TEMPLATE** (bundled with the skill). When a project is created it's copied to `rew_analitic/data-contract-template.md`. Fill in the `<…>` placeholders for your system; the rest — the generic protocol, leave it as is.
 
 **Version:** 1.0 · arbiter — the user

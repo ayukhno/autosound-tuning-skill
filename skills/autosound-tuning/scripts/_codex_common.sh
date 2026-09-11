@@ -25,8 +25,12 @@ AUTOSOUND_CRITIC_EFFORT="${AUTOSOUND_CRITIC_EFFORT:-xhigh}"
 die() { echo "${SCRIPT_NAME:-codex}: $*" >&2; exit 1; }
 
 codex_preflight() {
-  [[ -f "$CONTRACT" ]] || die "contract not found: $CONTRACT"
-  [[ -f "$CONTEXT" ]] || die "context not found: $CONTEXT"
+  # A tuning task is regulated (contract + context, or no call); `ask` is a plain question and
+  # needs neither — it has to work in a folder the intake has not reached yet (skill#27).
+  if ! declare -F reviewer_is_tuning >/dev/null || reviewer_is_tuning; then
+    [[ -f "$CONTRACT" ]] || die "contract not found: $CONTRACT"
+    [[ -f "$CONTEXT" ]] || die "context not found: $CONTEXT"
+  fi
   command -v "$CODEX_BIN" >/dev/null 2>&1 || die "no Codex CLI on PATH — install/link Codex (codex)"
 }
 
@@ -57,7 +61,7 @@ codex_run() {
   printf '\n— [%s: codex (%s)]\n' "$role" "$display_model"
   { printf '%s | %s=codex(%s) | package=%s%s\n' "$(date '+%Y-%m-%d %H:%M')" \
       "$role" "$display_model" "$(basename "${PKG:-?}")" "${TRACE:+ | trace=$(basename "$TRACE")}"; } \
-    >> "$AUDIT" 2>/dev/null || true
+    2>/dev/null >> "$AUDIT" || true
   # Full round transcript → review-log (session reconstruction / observability). Disable with REVIEW_LOG=.
   local rlog="${REVIEW_LOG-$PROJECT_MIRROR/review-log.md}"
   if [[ -n "$rlog" ]]; then
@@ -69,7 +73,7 @@ codex_run() {
       fi
       printf '\n### Package (Generator → reviewer)\n```\n%s\n```\n\n### Reply (reviewer → Generator)\n%s\n' \
         "$(cat "${PKG:-/dev/null}" 2>/dev/null)" "$out"
-    } >> "$rlog" 2>/dev/null || true
+    } 2>/dev/null >> "$rlog" || true
   fi
 }
 

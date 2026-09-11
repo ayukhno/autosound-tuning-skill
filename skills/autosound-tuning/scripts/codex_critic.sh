@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # codex_critic.sh — Codex-based reviewer channel for autosound tuning.
 #
-# Sends a Generator package to Codex acting as the REVIEWER (Critic-Advisor: one role,
-# one model — codex_advisor.sh is only a second door to this script). The prompt is assembled
+# Sends a Generator package to Codex acting as the REVIEWER (Critic-Advisor: one channel,
+# one model, two tasks — codex_advisor.sh runs this script with the ADVISOR task). The prompt is assembled
 # by _reviewer_prompt.sh: the role, the Data Contract, the PROJECT's autosound_context, the
 # reviewer memory if the project has one, then the package.
 #
@@ -34,4 +34,4 @@ trap 'rm -f "$PROMPT_FILE"' EXIT
 reviewer_retired_notice
 reviewer_prompt "$PKG" "$TRACE" > "$PROMPT_FILE"
 
-codex_run "$PRIMARY_MODEL" "$PROMPT_FILE" "critic"
+codex_run "$PRIMARY_MODEL" "$PROMPT_FILE" "$REVIEW_TASK"

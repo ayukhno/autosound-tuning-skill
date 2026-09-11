@@ -21,8 +21,12 @@ CLAUDE_BIN="${CLAUDE_BIN:-claude}"
 die() { echo "${SCRIPT_NAME:-claude}: $*" >&2; exit 1; }
 
 claude_preflight() {
-  [[ -f "$CONTRACT" ]] || die "contract not found: $CONTRACT"
-  [[ -f "$CONTEXT" ]] || die "context not found: $CONTEXT"
+  # A tuning task is regulated (contract + context, or no call); `ask` is a plain question and
+  # needs neither — it has to work in a folder the intake has not reached yet (skill#27).
+  if ! declare -F reviewer_is_tuning >/dev/null || reviewer_is_tuning; then
+    [[ -f "$CONTRACT" ]] || die "contract not found: $CONTRACT"
+    [[ -f "$CONTEXT" ]] || die "context not found: $CONTEXT"
+  fi
   command -v "$CLAUDE_BIN" >/dev/null 2>&1 || die "no Claude CLI on PATH — install Claude Code (claude)"
 }
 
@@ -51,7 +55,7 @@ claude_run() {
   printf '\n— [%s: claude (%s)]\n' "$role" "$display_model"
   { printf '%s | %s=claude(%s) | package=%s%s\n' "$(date '+%Y-%m-%d %H:%M')" \
       "$role" "$display_model" "$(basename "${PKG:-?}")" "${TRACE:+ | trace=$(basename "$TRACE")}"; } \
-    >> "$AUDIT" 2>/dev/null || true
+    2>/dev/null >> "$AUDIT" || true
   # Full round transcript → review-log (session reconstruction / observability). Disable with REVIEW_LOG=.
   local rlog="${REVIEW_LOG-$PROJECT_MIRROR/review-log.md}"
   if [[ -n "$rlog" ]]; then
@@ -63,7 +67,7 @@ claude_run() {
       fi
       printf '\n### Package (Generator → reviewer)\n```\n%s\n```\n\n### Reply (reviewer → Generator)\n%s\n' \
         "$(cat "${PKG:-/dev/null}" 2>/dev/null)" "$out"
-    } >> "$rlog" 2>/dev/null || true
+    } 2>/dev/null >> "$rlog" || true
   fi
 }
 

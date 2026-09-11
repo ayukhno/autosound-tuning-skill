@@ -88,7 +88,7 @@ if [[ -z "${GEMINI_EXTRA_ARGS:-}" ]]; then
 fi
 
 # The reviewer's model: ONE, and named by the Arbiter — this file names none (the Arbiter's ruling,
-# 2026-09-11: the Critic and the Advisor are one role; hub SKL-032, skill#27).
+# 2026-09-11: the Critic and the Advisor are one channel, two tasks; hub SKL-032, skill#27).
 #
 # Why no default at all. There were two here, one per slot, and both were literals:
 # `gemini-3.1-pro-high` for the critic and `gemini-3.5-flash-medium` as the shared fallback. The
@@ -147,10 +147,16 @@ _is_bad_model_error() {
 die() { echo "${SCRIPT_NAME:-gemini}: $*" >&2; exit 1; }
 
 gemini_preflight() {
-  [[ -f "$CONTRACT" ]] || die "contract not found: $CONTRACT
-  → run the intake to create rew_analitic/data-contract-template.md, or set PROJECT_MIRROR"
-  [[ -f "$CONTEXT" ]] || die "context not found: $CONTEXT
-  → copy your project's autosound_context.md into rew_analitic/, or set PROJECT_MIRROR"
+  # A tuning task is regulated (contract + context, or no call); `ask` is a plain question and
+  # needs neither — it has to work in a folder the intake has not reached yet (skill#27).
+  if ! declare -F reviewer_is_tuning >/dev/null || reviewer_is_tuning; then
+    [[ -f "$CONTRACT" ]] || die "contract not found: $CONTRACT
+  → run the intake to create rew_analitic/data-contract-template.md, or set PROJECT_MIRROR
+  (a plain question — translation, wording — needs no contract: AUTOSOUND_REVIEW_TASK=ask)"
+    [[ -f "$CONTEXT" ]] || die "context not found: $CONTEXT
+  → copy your project's autosound_context.md into rew_analitic/, or set PROJECT_MIRROR
+  (a plain question — translation, wording — needs no context: AUTOSOUND_REVIEW_TASK=ask)"
+  fi
   [[ -n "$GEMINI_BIN" ]] || die "no Gemini CLI on PATH — install Antigravity:
   brew install --cask antigravity-cli   (then 'agy' once to log in; references/tooling/setup-critic-channel.md §1)
   (the old @google/gemini-cli sign-in is closed since 2026-09-08, a key in the environment did not reopen it)"
@@ -233,7 +239,7 @@ gemini_run() {
   printf '\n— [%s: %s]\n' "$role" "$used"
   { printf '%s | %s=%s | package=%s%s\n' "$(date '+%Y-%m-%d %H:%M')" \
       "$role" "$used" "$(basename "${PKG:-?}")" "${TRACE:+ | trace=$(basename "$TRACE")}"; } \
-    >> "$AUDIT" 2>/dev/null || true
+    2>/dev/null >> "$AUDIT" || true
   # Full round transcript → review-log (session reconstruction / observability). Disable with REVIEW_LOG=.
   local rlog="${REVIEW_LOG-$PROJECT_MIRROR/review-log.md}"
   if [[ -n "$rlog" ]]; then
@@ -245,7 +251,7 @@ gemini_run() {
       fi
       printf '\n### Package (Generator → reviewer)\n```\n%s\n```\n\n### Reply (reviewer → Generator)\n%s\n' \
         "$(cat "${PKG:-/dev/null}" 2>/dev/null)" "$out"
-    } >> "$rlog" 2>/dev/null || true
+    } 2>/dev/null >> "$rlog" || true
   fi
 }
 

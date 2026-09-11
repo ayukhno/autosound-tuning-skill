@@ -1,0 +1,2 @@
+TASK: ASK — a plain question, not a tuning decision.
+Answer the GENERATOR'S QUESTION below directly, in the form it asks for (a translation, a draft, a short opinion, a check). No tuning protocol applies; if a PROJECT CONTEXT block is attached, it is background only.
