@@ -17,8 +17,16 @@ import shutil
 import subprocess
 import urllib.parse
 
-# The feedback destination is HARDCODED here — it is NEVER resolved by a model, a search, or an arg.
-FEEDBACK_REPO = "ayukhno/autosound-tuning-skill"
+# The feedback destinations are HARDCODED here — NEVER resolved by a model, a search, or an arg.
+# A caller names a CHANNEL from this closed set; the repo behind the name is not the caller's.
+# Two, because a finding has two owners: the method (the skill) and the front-end (TCC). With one
+# route, a TCC finding had nowhere to go — the model refused, correctly, and the report landed on
+# the skill instead (skill#27, 2026-09-11).
+CHANNELS = {
+    "skill": "ayukhno/autosound-tuning-skill",
+    "tcc": "ayukhno/autosound-tcc",
+}
+FEEDBACK_REPO = CHANNELS["skill"]
 _EXPECTED_PREFIX = f"https://github.com/{FEEDBACK_REPO}/"
 
 #: Images ride on an ORPHAN branch of that same hardcoded repo, never on `main`: an issue body
@@ -80,26 +88,45 @@ def _extract_url(text):
     return None
 
 
+def channel_repo(channel):
+    """The hardcoded repo behind a channel name. Anything outside `CHANNELS` is refused — a repo
+    spelled out by the caller (`owner/name`) included, because that is exactly the #23 path."""
+    if channel not in CHANNELS:
+        raise ValueError(f"unknown feedback channel {channel!r} — one of {sorted(CHANNELS)}; "
+                         "the repo is never the caller's to name")
+    return CHANNELS[channel]
+
+
+def _verify_issue_on(repo):
+    """Post-verify: gh succeeded AND the returned URL is on `repo` (one of the hardcoded ones)."""
+    prefix = f"https://github.com/{repo}/"
+
+    def _verify(rc, out, err):
+        if rc != 0:
+            return False, f"gh exited {rc}"
+        url = _extract_url(out) or _extract_url(err)
+        if not url:
+            return False, "no issue URL in gh output (did it actually post?)"
+        # normalize + host/path check — reject a look-alike host or a different repo.
+        p = urllib.parse.urlparse(url)
+        if p.scheme != "https" or p.netloc != "github.com":
+            return False, f"URL host is {p.netloc!r}, expected github.com — refusing ({url})"
+        if not url.startswith(prefix):
+            return False, f"URL {url} is NOT on {repo} — refusing (wrong-repo guard)"
+        return True, f"verified on {repo}: {url}"
+
+    return _verify
+
+
 def verify_feedback_url(rc, out, err):
-    """Post-verify: gh succeeded AND the returned URL is on the HARDCODED feedback repo."""
-    if rc != 0:
-        return False, f"gh exited {rc}"
-    url = _extract_url(out) or _extract_url(err)
-    if not url:
-        return False, "no issue URL in gh output (did it actually post?)"
-    # normalize + host/path check — reject a look-alike host or a different repo.
-    p = urllib.parse.urlparse(url)
-    if p.scheme != "https" or p.netloc != "github.com":
-        return False, f"URL host is {p.netloc!r}, expected github.com — refusing ({url})"
-    if not url.startswith(_EXPECTED_PREFIX):
-        return False, f"URL {url} is NOT on {FEEDBACK_REPO} — refusing (wrong-repo guard)"
-    return True, f"verified on {FEEDBACK_REPO}: {url}"
+    """Post-verify: gh succeeded AND the returned URL is on the HARDCODED skill repo."""
+    return _verify_issue_on(FEEDBACK_REPO)(rc, out, err)
 
 
 _DEDUP_HOURS = 24.0
 
 
-def _recent_duplicate(title, runner, hours=_DEDUP_HOURS):
+def _recent_duplicate(title, runner, hours=_DEDUP_HOURS, repo=FEEDBACK_REPO):
     """URL of an open issue with the EXACT same title created within `hours`, else None.
 
     A real double-post happened (issues #3/#4, 5 s apart). A list failure returns None —
@@ -107,7 +134,7 @@ def _recent_duplicate(title, runner, hours=_DEDUP_HOURS):
     """
     import json
     from datetime import datetime, timezone, timedelta
-    argv = ["gh", "issue", "list", "--repo", FEEDBACK_REPO, "--state", "open",
+    argv = ["gh", "issue", "list", "--repo", repo, "--state", "open",
             "--search", f'in:title "{title}"',
             "--json", "title,url,createdAt", "--limit", "20"]
     try:
@@ -126,7 +153,7 @@ def _recent_duplicate(title, runner, hours=_DEDUP_HOURS):
         except ValueError:
             continue
         if now - created <= timedelta(hours=hours):
-            return it.get("url") or f"https://github.com/{FEEDBACK_REPO}/issues"
+            return it.get("url") or f"https://github.com/{repo}/issues"
     return None
 
 
@@ -196,15 +223,18 @@ def post_dsp_profile(profile_file, vendor, model, mode="new", prior_url=None,
     return guarded_run(argv, _verify_dsp_profile_update(prior_url), runner=runner, dry_run=dry_run)
 
 
-def post_feedback(body_file, car, dsp, runner=_subprocess_runner, dry_run=False):
+def post_feedback(body_file, car, dsp, runner=_subprocess_runner, dry_run=False, channel="skill"):
     """Post the de-identified feedback issue with the repo HARDCODED + returned-URL verified.
 
     Never let a model fill in the repo — that's the whole point. `car`/`dsp` only shape the title.
+    `channel` picks WHOSE finding it is — "skill" (the method, its scripts, its documents) or "tcc"
+    (the front-end window) — and the repo comes from `CHANNELS`, never from the argument itself.
     Dedup guard: if an identical-title open issue exists newer than 24 h, SKIP loudly instead of
     double-posting (returns {"skipped": True, "duplicate_url": …}).
     """
     import os
     import sys
+    repo = channel_repo(channel)
     if not os.path.isfile(body_file):
         raise ValueError(f"body-file not found: {body_file!r} (write the feedback file first)")
     # Only require the real `gh` binary when we're about to actually shell out to it — an injected
@@ -214,14 +244,14 @@ def post_feedback(body_file, car, dsp, runner=_subprocess_runner, dry_run=False)
         raise EnvironmentError("`gh` CLI not found — install/auth it, or use the copy-paste block.")
     title = f"Feedback: {car} · {dsp}"
     if not dry_run:
-        dup = _recent_duplicate(title, runner)
+        dup = _recent_duplicate(title, runner, repo=repo)
         if dup:
             print(f"⛔ SKIP — identical feedback issue already posted (<{_DEDUP_HOURS:.0f}h): {dup}",
                   file=sys.stderr)
             return {"skipped": True, "duplicate_url": dup, "title": title}
-    argv = ["gh", "issue", "create", "--repo", FEEDBACK_REPO,
+    argv = ["gh", "issue", "create", "--repo", repo,
             "--title", title, "--body-file", body_file]
-    return guarded_run(argv, verify_feedback_url, runner=runner, dry_run=dry_run)
+    return guarded_run(argv, _verify_issue_on(repo), runner=runner, dry_run=dry_run)
 
 
 def verify_asset_url(rc, out, err):
@@ -359,6 +389,38 @@ def _selftest():
         except SideEffectRefused:
             pass
 
+    # ── the second channel: a TCC finding goes to TCC's repo, still hardcoded (skill#27) ──
+    tcc_repo = CHANNELS["tcc"]
+    tcc_good = lambda argv: (0, f"https://github.com/{tcc_repo}/issues/28\n", "")
+    t = post_feedback(body, "car", "dsp", runner=tcc_good, channel="tcc")
+    assert t["argv"][:5] == ["gh", "issue", "create", "--repo", tcc_repo], t["argv"]
+    assert t["detail"] == f"verified on {tcc_repo}: https://github.com/{tcc_repo}/issues/28", t
+    # dedup looks in the channel's own repo, not in the skill's.
+    seen = []
+    def _tcc_lister(argv):
+        seen.append(argv)
+        return (0, "[]", "") if argv[1:3] == ["issue", "list"] else tcc_good(argv)
+    post_feedback(body, "car", "dsp", runner=_tcc_lister, channel="tcc")
+    assert seen[0][seen[0].index("--repo") + 1] == tcc_repo, seen[0]
+    # each channel verifies against ITS repo: a TCC post that comes back on the skill's repo is
+    # the wrong-repo case, not a success, and the same the other way round.
+    for ch, lands_on in (("tcc", FEEDBACK_REPO), ("skill", tcc_repo)):
+        try:
+            post_feedback(body, "car", "dsp", channel=ch,
+                          runner=lambda argv, r=lands_on: (0, f"https://github.com/{r}/issues/1\n", ""))
+            raise AssertionError(f"channel {ch!r} accepted a post that landed on {lands_on}")
+        except SideEffectRefused:
+            pass
+    # the channel is a NAME from a closed set; a repo spelled out by the caller is refused before
+    # anything runs — that is the #23 path with a new door.
+    for bad_channel in ("ayukhno/autosound-tcc", "TCC", "hub", "", None):
+        try:
+            post_feedback(body, "car", "dsp", runner=good, channel=bad_channel)
+            raise AssertionError(f"accepted channel {bad_channel!r}")
+        except ValueError:
+            pass
+    assert post_feedback(body, "car", "dsp", dry_run=True, channel="tcc")["argv"][4] == tcc_repo
+
     # missing body-file → deterministic refusal before any command runs.
     try:
         post_feedback("/no/such/file.md", "car", "dsp", runner=good)
@@ -440,6 +502,8 @@ def _selftest():
     print("selftest OK — verified good post; dedup guard skips a <24h duplicate (stale + broken "
           "list still post); FAIL LOUD on wrong-repo / confabulated-success / gh-failure / "
           "look-alike host; refused missing body-file + shell-string argv; dry-run safe. "
+          "Channels: tcc posts to its hardcoded repo and dedups there, each channel refuses a post "
+          "that lands on the other's repo, a caller-spelled repo or unknown name is refused. "
           "Upload: refused without consent, repo+branch hardcoded, name reduced to a basename, "
           "loud on wrong repo / look-alike host / non-raw host / gh failure, verified URL "
           "returned under ['url'].")

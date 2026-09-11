@@ -53,7 +53,12 @@ Presents it as **a list where EACH item is already PRE-SELECTED (☑)**. The use
 **Trigger (proactive):** at **any satisfaction milestone** (the tune is "mostly there / sounds great"), the end of a project, or a significant session — and **repeatably** at later milestones — Claude **proposes itself** "build a feedback package for the skill's author?" — without waiting to be asked (it also fires on "build feedback"). The proactivity is only on the *proposing and preparing* side; **a human always does the sending** (see step 2 — the safety principle). **The mechanics — two separate stages:**
 
 1. **Building and recording (locally).** The skill collects data from `skill-inbox.md` + the changelog (`Lesson:` lines) + the profile and writes **`feedback-YYYY-MM-DD.md`** in the project per the template. The user reads it, edits, says "OK" → the file is **recorded in the project**. At this stage **nothing has been sent anywhere** — but there's value already: the recorded packages sit nearby and can be handed over together/later.
-2. **Delivery to the author (optional, a separate explicit decision).** The user sends the file themselves via one of the channels below — or asks Claude to do it for them, and then Claude **shows the final text and waits for explicit confirmation** before sending. The "OK" from stage 1 ≠ consent to send. ⚠️ **When Claude posts it, go through the side-effect gate — never let the model resolve the repo.** Use `rew_tool/gates/side_effect.py` → `post_feedback(body_file, car, dsp)`: it runs the EXACT `gh issue create --repo ayukhno/autosound-tuning-skill …` (repo HARDCODED) and **verifies the returned URL is on that repo, FAIL LOUD otherwise**. This exists because a weak generator once confabulated a stranger's repo + a fake "posted successfully" (issue #23); prose is not a rail, a gate that refuses is.
+2. **Delivery to the author (optional, a separate explicit decision).** The user sends the file themselves via one of the channels below — or asks Claude to do it for them, and then Claude **shows the final text and waits for explicit confirmation** before sending. The "OK" from stage 1 ≠ consent to send. ⚠️ **When Claude posts it, go through the side-effect gate — never let the model resolve the repo.** Use `rew_tool/gates/side_effect.py` → `post_feedback(body_file, car, dsp, channel=…)`: it runs the EXACT `gh issue create --repo <hardcoded repo of that channel> …` and **verifies the returned URL is on that repo, FAIL LOUD otherwise**. This exists because a weak generator once confabulated a stranger's repo + a fake "posted successfully" (issue #23); prose is not a rail, a gate that refuses is.
+   **Two channels, by whose finding it is** — the caller names the channel, never the repo:
+   - `channel="skill"` (default) → `ayukhno/autosound-tuning-skill`: the method, its scripts (`rew_tool/`, `scripts/`), its documents, the reviewer channel.
+   - `channel="tcc"` → `ayukhno/autosound-tcc`: the front-end window itself — what TCC shows, its buttons, its own calls.
+
+   Unsure which — show the person both and let them pick; do not guess. A finding with a part on each side is two issues, each on its own channel, each linking the other. Any other channel name, or a repo written out by hand, is refused before anything runs.
 
 ### The package template
 
@@ -84,7 +89,7 @@ crossover sets · techniques · successful symptom→fix · track markers
 
 ### Sending channels (by increasing formality)
 
-1. **A GitHub Issue** in the skill's repo per the issue template — the default: transparent, threaded, the history visible to all. **In English** (public repo — see the note above).
+1. **A GitHub Issue** in the skill's repo per the issue template — the default: transparent, threaded, the history visible to all. **In English** (public repo — see the note above). A finding about the TCC window goes to TCC's repo instead — `channel="tcc"`, same rules.
 2. **A PR**: a per-vehicle setup+feedback package in `community-inbox/setups/<body>-<date>.md` (narrative case studies go in `community-inbox/case-studies/` instead).
 3. Without git: the file to the author by messenger/email.
 
