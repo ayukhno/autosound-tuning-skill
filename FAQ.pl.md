@@ -233,7 +233,7 @@ Będziesz potrzebować laptopa, mikrofonu pomiarowego, procesora DSP oraz płatn
 1. Otwórz program **Terminal** (naciśnij klawisze `Cmd + Spacja` → wpisz `Terminal` → naciśnij `Enter`).
 2. Wklej poniższą komendę i naciśnij `Enter`:
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.48/install.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.49/install.sh | bash
    ```
 3. Skrypt może poprosić o hasło do Twojego Maca w celu instalacji oficjalnego pakietu Apple Command Line Tools (git). Poczekaj 10–20 minut.
 
@@ -245,7 +245,7 @@ Będziesz potrzebować laptopa, mikrofonu pomiarowego, procesora DSP oraz płatn
 1. Otwórz program **Windows PowerShell** (naciśnij klawisz `Win` → wpisz `powershell` → naciśnij `Enter`).
 2. Wklej poniższą komendę i naciśnij `Enter`:
    ```powershell
-   irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.48/install.ps1 | iex
+   irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.49/install.ps1 | iex
    ```
 3. Jeśli w systemie nie ma programu Git, kliknij **Tak** w oknie zapytania o uprawnienia. Skrypt utworzy również wygodny skrót **REW (API on)** na Twoim Pulpicie.
 
