@@ -208,3 +208,17 @@ keeps the one point worth keeping.
 Done looks like: that point beside "writes nothing to your DSP" in all four READMEs, checked against
 the tools as they stand then — whether the Helix PC-Tool still imports REW's file, and which
 processors the helper covers.
+
+## S-008 · `install.ps1`'s beta order has not yet met a real candidate
+**Status**: open
+
+**Due:** when the first `beta-v3.*-rc1` is published.
+
+`Select-NewestOnChannel` in `install.ps1` is READ by `scripts/installer-consistency.py` (its tag shapes
+and sort key), not run: CI runs `install.sh`'s `newest_on_channel` on six fixed cases, on Linux and,
+since v3.0.51, on `windows-latest` too — the bash half both times. The Windows VM run of 2026-09-13
+went through the beta branch with no candidate published, so it could only return the newest release.
+
+Done looks like: `install.ps1 -Channel beta -DryRun` on Windows naming `beta-v3.1.0-rc1` over `v3.0.x`,
+and `v3.1.0` over its own candidates once released — or `installers-windows` in CI running the
+PowerShell function itself on the same six cases, which would close this before any candidate exists.
