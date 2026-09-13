@@ -23,7 +23,7 @@
 > * **1. Platz in der Klasse AMATEUR 5000 beim AYA-Wettbewerb (25.07.2026, Horst)**. Ein Sieg in der nächsten Klasse, der mit Hilfe dieses Skills und dem eigenen Gehör errungen wurde.
 > * **2. Platz in der Klasse AMATEUR 5000 beim AYA-Wettbewerb (15.08.2026, Schmallenberg)**. Ein anderer Klangjuror als im Juli; seine Bewertungskarte ist der Ausgangspunkt für die nächste Runde.
 > * **3. Platz in SQ Entry Unlimited beim EMMA Sound Off 2026 (15.08.2026, Schmallenberg)**. Erster Start nach EMMA-Reglement, am selben Tag und mit derselben Abstimmung wie beim AYA oben.
-> * **3. Platz in SQ Entry Unlimited beim Deutschen EMMA Finale 2026 (September 2026, Frankfurt)**. Eine Nachabstimmung desselben Setups — bereits mit Skill 3.x.
+> * **3. Platz in SQ Entry Unlimited beim Deutschen EMMA Finale 2026 (12.09.2026, Frankfurt)**. Eine Nachabstimmung desselben Setups — bereits mit Skill 3.x.
 > 
 > <p align="left">
 >   <img src="assets/awards/aya-may26-einsteiger5000.jpg" width="100" alt="AYA May 2026 Einsteiger 5000">

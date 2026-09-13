@@ -23,7 +23,7 @@
 > * **1st place in AMATEUR 5000 class at AYA competition (July 25, 2026, Horst)**. A victory in the next class, achieved using this skill and your own ears.
 > * **2nd place in AMATEUR 5000 class at AYA competition (August 15, 2026, Schmallenberg)**. A different sound judge than in July; his score card is the input for the next round.
 > * **3rd place in SQ Entry Unlimited at EMMA Sound Off 2026 (August 15, 2026, Schmallenberg)**. First outing under the EMMA ruleset, same day and same tune as the AYA above.
-> * **3rd place in SQ Entry Unlimited at the German EMMA Final 2026 (September 2026, Frankfurt)**. A refinement of the same tune, this time already with skill 3.x applied.
+> * **3rd place in SQ Entry Unlimited at the German EMMA Final 2026 (September 12, 2026, Frankfurt)**. A refinement of the same tune, this time already with skill 3.x applied.
 > 
 > <p align="left">
 >   <img src="assets/awards/aya-may26-einsteiger5000.jpg" width="100" alt="AYA May 2026 Einsteiger 5000">

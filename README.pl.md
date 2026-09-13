@@ -23,7 +23,7 @@
 > * **1 miejsce w klasie AMATEUR 5000 na zawodach AYA (25.07.2026, Horst)**. Zwycięstwo w kolejnej klasie, osiągnięte przy pomocy tego skilla i własnego słuchu.
 > * **2 miejsce w klasie AMATEUR 5000 na zawodach AYA (15.08.2026, Schmallenberg)**. Inny sędzia dźwięku niż w lipcu; jego karta ocen jest wejściem do kolejnej rundy.
 > * **3 miejsce w SQ Entry Unlimited na EMMA Sound Off 2026 (15.08.2026, Schmallenberg)**. Pierwszy start według regulaminu EMMA, tego samego dnia i na tym samym strojeniu co AYA powyżej.
-> * **3 miejsce w SQ Entry Unlimited w finale EMMA Niemiec 2026 (wrzesień 2026, Frankfurt)**. Dopracowanie tego samego strojenia — już z użyciem skilla 3.x.
+> * **3 miejsce w SQ Entry Unlimited w finale EMMA Niemiec 2026 (12.09.2026, Frankfurt)**. Dopracowanie tego samego strojenia — już z użyciem skilla 3.x.
 > 
 > <p align="left">
 >   <img src="assets/awards/aya-may26-einsteiger5000.jpg" width="100" alt="AYA May 2026 Einsteiger 5000">
