@@ -185,3 +185,26 @@ threshold set on a synthetic pair would be wrong in a car; the trigger above is 
 number.
 
 **Raised** 2026-09-05, same reading as S-005.
+
+## S-007 · The README never says the EQ reaches the processor without retyping it
+**Status**: open
+
+**Due:** in the documentation pass before v3.1.0, when the READMEs are reworked for the release.
+
+"Writes nothing to your DSP — you enter it" reads as "type every filter in by hand", and that is not
+the work it is. REW exports the EQ as a file the Helix PC-Tool imports in one go, and for processors
+without a file import (Musway, ESX, Zapco) the
+[REW-EQ-CopyPaste-Assistant](https://github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant) pastes it.
+Today `FAQ.md` links the assistant and nothing in `main` mentions the Helix import or which processors
+the helper covers.
+
+Where it came from: the unmerged branch `docs/readme-review` (2026-08-17, nine commits, last
+`18eee3b`), whose README said: *"Never touches your processor: nothing changes in the car unless you
+put it there. That does not mean retyping everything: REW exports your EQ as a file the Helix PC-Tool
+imports in one go, and a copy-paste helper covers processors without file import, such as Musway,
+ESX and Zapco."* The rest of that branch is superseded (two awards of five, English only); this item
+keeps the one point worth keeping.
+
+Done looks like: that point beside "writes nothing to your DSP" in all four READMEs, checked against
+the tools as they stand then — whether the Helix PC-Tool still imports REW's file, and which
+processors the helper covers.
