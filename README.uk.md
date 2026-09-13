@@ -23,7 +23,7 @@
   <img src="assets/awards/aya-aug26-amateur5000.jpg" height="120" alt="AYA серпень 2026, Amateur 5000, 2 місце">
   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
   <img src="assets/awards/emma-aug26-entry-unlimited.jpg" height="120" alt="EMMA Sound Off 2026, SQ Entry Unlimited, 3 місце">
-  &nbsp;&nbsp;&nbsp;
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
   <img src="assets/awards/emma-sep26-final-entry-unlimited.jpg" height="120" alt="Фінал EMMA Німеччини 2026, Франкфурт, SQ Entry Unlimited, 3 місце">
 </p>
 

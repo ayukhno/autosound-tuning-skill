@@ -23,7 +23,7 @@ Dzięki wersji 2.x tej metody, samochód autora zdobył cztery nagrody w 2026 ro
   <img src="assets/awards/aya-aug26-amateur5000.jpg" height="120" alt="AYA Sierpień 2026, Amateur 5000, 2. miejsce">
   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
   <img src="assets/awards/emma-aug26-entry-unlimited.jpg" height="120" alt="EMMA Sound Off 2026, SQ Entry Unlimited, 3. miejsce">
-  &nbsp;&nbsp;&nbsp;
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
   <img src="assets/awards/emma-sep26-final-entry-unlimited.jpg" height="120" alt="Finał EMMA Niemiec 2026, Frankfurt, SQ Entry Unlimited, 3. miejsce">
 </p>
 
