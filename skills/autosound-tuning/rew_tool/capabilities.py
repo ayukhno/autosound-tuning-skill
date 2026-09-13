@@ -63,6 +63,9 @@ NOT_ON_BOARD = {
     "secret-scan.py": "the checker that keeps a key out of every repository (the user's rule, "
                       "2026-09-08): the tree, the staged change, the pre-commit hook. Repo hygiene, "
                       "not a decision a tuner makes",
+    "commit-lang.py": "the checker that keeps a non-English commit message off GitHub (the user's "
+                      "rule, 2026-09-13): the commit-msg hook. Repo hygiene, not a decision a "
+                      "tuner makes",
     "__init__.py": "not a tool",
     "analysis.py": "library; its functions are on the board by name",
     "dsp_math.py": "library; its functions are on the board by name",
