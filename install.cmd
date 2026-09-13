@@ -20,6 +20,7 @@ REM
 REM  Everything real happens in install.ps1. This file finds it and hands over,
 REM  options included:  install.cmd -Terminal   install.cmd -NoReviewer
 REM                     install.cmd -DryRun     install.cmd -Uninstall
+REM                     install.cmd -Channel beta   (release candidates too)
 REM
 REM  To pin versions, pass BOTH as one pair -- they are released and tested
 REM  together, and a mixed pair is untested:

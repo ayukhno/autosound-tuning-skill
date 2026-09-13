@@ -41,6 +41,8 @@
 #   .\install.ps1 -DryRun             say what it would do, change nothing
 #   .\install.ps1 -Yes                yes to every question; sign-ins are printed, not run
 #   .\install.ps1 -SkillRef v3.0.33   a specific skill version (default: the newest 3.x tag)
+#   .\install.ps1 -Channel beta       also release candidates, to try one before it is released
+#                                     (default: stable, releases only; -SkillRef wins over both)
 #   .\install.ps1 -TccRef v0.1.22     the app version released WITH that one -- quote the two
 #                                     together or not at all; a mixed pair is untested
 #   .\install.ps1 -Uninstall          remove what this script installed -- NEVER your projects
@@ -60,6 +62,7 @@ param(
     [switch]$Yes,
     [string]$SkillRef = "",
     [string]$TccRef = "",
+    [string]$Channel = "stable",
     [switch]$Uninstall,
     [switch]$All,
     [switch]$Help,
@@ -105,8 +108,14 @@ $SkillRepoUrl = $SkillRepo -replace '\.git$', ''
 # can READ the policy instead of re-deriving it from the pipeline below. Same rule as install.sh's
 # SKILL_TAG_GLOB and TCC's updater; when the supported line moves, this is the line that moves.
 $SkillTagGlob = "v3.*"
+# The beta channel's candidates for the same line (hub RELEASE-CHANNEL.md s11): "beta-" + the line's
+# glob. The different first letter keeps a candidate out of $SkillTagGlob, so the stable channel --
+# the default, and TCC's updater -- never sees one. Same value as SKILL_BETA_GLOB in install.sh.
+$SkillBetaGlob = "beta-v3.*"
 # The app's supported line -- `v*`, not `v3.*`: the app versions independently of the method.
 $TccTagGlob   = "v*"
+# ...and the app's candidates, the same way.
+$TccBetaGlob   = "beta-v*"
 #: The uv release this installer pins. Must equal UV_VERSION in install.sh.
 $UvVersion    = "0.12.10"
 $TccRepo      = "https://github.com/ayukhno/autosound-tcc"
@@ -145,6 +154,8 @@ Autosound tuning -- installer for Windows
   install.ps1 -DryRun             say what it would do, change nothing
   install.ps1 -Yes                yes to every question; sign-ins are printed, not run
   install.ps1 -SkillRef v3.0.33   a specific skill version (default: the newest 3.x tag)
+  install.ps1 -Channel beta       also release candidates, to try one before it is released
+                                  (default: stable, releases only; -SkillRef wins over both)
   install.ps1 -TccRef v0.1.22     the app version released WITH that one -- quote the two
                                   together or not at all; a mixed pair is untested
   install.ps1 -Uninstall          remove what this script installed -- NEVER your projects
@@ -157,6 +168,10 @@ Through the one-liner, options go on the scriptblock:
     exit 0
 }
 
+if ($Channel -notin @("stable", "beta")) {
+    Write-Host "unknown channel: '$Channel' (stable or beta)"
+    exit 2
+}
 $Mode         = if ($Terminal -and -not $Tcc) { "terminal" } else { "tcc" }   # -Tcc is the default, kept for old command lines
 $WantReviewer = -not $NoReviewer
 # omp comes WITH the app (2026-08-19, same change as install.sh): it is what fills TCC's model
@@ -173,6 +188,23 @@ function Say  { param($m) Write-Host "  $m" }
 function Step { param($m) Write-Host ""; Write-Host "==> $m" -ForegroundColor Cyan }
 function Warn { param($m) Write-Host "  ! $m" -ForegroundColor Yellow }
 function Have { param($n) [bool](Get-Command $n -ErrorAction SilentlyContinue) }
+# The newest tag on the beta channel (hub RELEASE-CHANNEL.md s11.2). A release sorts as
+# (X,Y,Z,1,0) and a candidate as (X,Y,Z,0,N): v3.1.0 above beta-v3.1.0-rc2, rc10 above rc2, and a
+# candidate for v3.1.0 above v3.0.49. [version] cannot say this -- it throws on a "beta-" name. A
+# name of neither shape is not installable and is dropped. Same order as newest_on_channel in
+# install.sh, which installer-consistency.py RUNS; this half is only read there, not run.
+function Select-NewestOnChannel {
+    param([string[]]$Names)
+    $keyed = @(foreach ($n in $Names) {
+        if ($n -match '^v(\d+)\.(\d+)\.(\d+)$') {
+            [pscustomobject]@{ Name = $n; X = [int]$Matches[1]; Y = [int]$Matches[2]; Z = [int]$Matches[3]; R = 1; N = 0 }
+        } elseif ($n -match '^beta-v(\d+)\.(\d+)\.(\d+)-rc(\d+)$') {
+            [pscustomobject]@{ Name = $n; X = [int]$Matches[1]; Y = [int]$Matches[2]; Z = [int]$Matches[3]; R = 0; N = [int]$Matches[4] }
+        }
+    })
+    if ($keyed.Count -eq 0) { return $null }
+    return @($keyed | Sort-Object X, Y, Z, R, N)[-1].Name
+}
 # Paths on screen with the profile as `~`: a person reads "~\.zshrc" as a place; the same path
 # spelled out from C:\Users reads as a warning.
 function Pretty { param($p) if ($p -and $p.StartsWith($HOME)) { "~" + $p.Substring($HOME.Length) } else { $p } }
@@ -699,18 +731,27 @@ if ($Uv) {
 
 # -- the tuning method -------------------------------------------------------------------------
 Step "The tuning method"
+$refHow = ""
 if (-not $SkillRef) {
     # The newest 3.x tag, by name rather than "main": main is where development lands, and an
     # installer should put you on a release unless you say otherwise.
     $tags = @()
     if (Have git) {
-        $tags = @((& git ls-remote --tags --refs $SkillRepo $SkillTagGlob 2>$null) |
-                  ForEach-Object { ($_ -split "/")[-1] } |
-                  Sort-Object { [version]($_ -replace '^v', '') })
+        if ($Channel -eq "beta") {
+            $names  = @((& git ls-remote --tags --refs $SkillRepo $SkillTagGlob $SkillBetaGlob 2>$null) |
+                        ForEach-Object { ($_ -split "/")[-1] })
+            $newest = Select-NewestOnChannel $names
+            if ($newest) { $tags = @($newest) }
+            $refHow = " (beta channel)"
+        } else {
+            $tags = @((& git ls-remote --tags --refs $SkillRepo $SkillTagGlob 2>$null) |
+                      ForEach-Object { ($_ -split "/")[-1] } |
+                      Sort-Object { [version]($_ -replace '^v', '') })
+        }
     }
     if ($tags.Count -gt 0) { $SkillRef = $tags[-1] } else { $SkillRef = "main" }
 }
-Say "version $SkillRef"
+Say "version $SkillRef$refHow"
 $linkExists = Test-Path $SkillHome
 $isOurs = $false
 if ($linkExists) {
@@ -823,18 +864,27 @@ if ($Mode -eq "tcc") {
         # ref, `git+URL` means HEAD of the default branch, so a fresh install handed somebody
         # unfinished work while the app's own update button offered the newest release. The two
         # ways of getting the app have to agree (SCR-054).
+        $tccHow = ""
         if (-not $TccRef) {
             $tccTags = @()
             if (Get-Command git -ErrorAction SilentlyContinue) {
-                $tccTags = @((& git ls-remote --tags --refs $TccRepo $TccTagGlob 2>$null) |
-                             ForEach-Object { ($_ -split "/")[-1] } |
-                             Sort-Object { [version]($_ -replace '^v', '') })
+                if ($Channel -eq "beta") {
+                    $names  = @((& git ls-remote --tags --refs $TccRepo $TccTagGlob $TccBetaGlob 2>$null) |
+                                ForEach-Object { ($_ -split "/")[-1] })
+                    $newest = Select-NewestOnChannel $names
+                    if ($newest) { $tccTags = @($newest) }
+                    $tccHow = " (beta channel)"
+                } else {
+                    $tccTags = @((& git ls-remote --tags --refs $TccRepo $TccTagGlob 2>$null) |
+                                 ForEach-Object { ($_ -split "/")[-1] } |
+                                 Sort-Object { [version]($_ -replace '^v', '') })
+                }
             }
             if ($tccTags.Count -gt 0) { $TccRef = $tccTags[-1] }
         }
         if ($TccRef) {
             $TccSpec = "autosound-tcc[gui,claude] @ git+$TccRepo@$TccRef"
-            Say "version $TccRef"
+            Say "version $TccRef$tccHow"
         } else {
             # No network, no git, or no tags yet. The default branch still installs, and saying so
             # is better than stopping over a version number.

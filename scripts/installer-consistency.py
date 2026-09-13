@@ -19,6 +19,8 @@ same THING. Only that the values they were given are the same values. A rewritte
 one file alone still passes here — read all three.
 """
 import re
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -50,6 +52,46 @@ def one(pattern, text, what, where):
     if len(found) != 1:
         return None, f"{where}: expected exactly one {what}, found {len(found)}"
     return found[0], None
+
+
+#: The order the beta channel must produce (hub RELEASE-CHANNEL.md §11.2, HUB-060), as (tags
+#: offered, the one to install): numeric where a number sits, a release above its own candidates, a
+#: candidate for a newer version above an older release, and nothing of another shape.
+CHANNEL_CASES = (
+    (["v3.0.9", "v3.0.10", "v3.0.49"], "v3.0.49"),
+    (["v3.0.49", "beta-v3.1.0-rc1"], "beta-v3.1.0-rc1"),
+    (["beta-v3.1.0-rc10", "v3.0.49", "beta-v3.1.0-rc2"], "beta-v3.1.0-rc10"),
+    (["beta-v3.1.0-rc2", "v3.1.0", "v3.0.49"], "v3.1.0"),
+    (["v3.1.1-foo", "beta-v3.1.1", "beta-v3.2.0-rc", "v3.0.49"], "v3.0.49"),
+    ([], ""),
+)
+#: What install.ps1's `Select-NewestOnChannel` must still carry. Read, not run: there is no
+#: PowerShell on the author's Mac or in CI, so this half is shapes and sort key, not behaviour.
+PS1_CHANNEL_SHAPES = ("'^v(\\d+)\\.(\\d+)\\.(\\d+)$'", "'^beta-v(\\d+)\\.(\\d+)\\.(\\d+)-rc(\\d+)$'",
+                      "Sort-Object X, Y, Z, R, N")
+
+
+def channel_order_problems(sh):
+    """Run install.sh's own `newest_on_channel` on CHANNEL_CASES; [] when it gives every answer.
+
+    The function is cut out of the installer's text and run as it stands -- a copy of it here would be
+    a second implementation, agreeing with this file while the installer drifted.
+    """
+    m = re.search(r"^newest_on_channel\(\) \{\n.*?^\}\n", sh, re.M | re.S)
+    if not m:
+        return ["install.sh: no `newest_on_channel() { ... }` -- the beta channel's order cannot be checked"]
+    if not shutil.which("bash"):
+        return ["no bash on PATH -- install.sh's beta order cannot be run, and unrun is not agreed"]
+    out = []
+    for offered, want in CHANNEL_CASES:
+        r = subprocess.run(["bash", "-c", m.group(0) + "newest_on_channel"],
+                           input="".join(t + "\n" for t in offered), capture_output=True, text=True,
+                           encoding="utf-8", errors="replace")
+        got = r.stdout.strip()
+        if r.returncode != 0 or got != want:
+            out.append(f"install.sh newest_on_channel: {offered} gave {got!r}, want {want!r}"
+                       + (f" (exit {r.returncode}: {r.stderr.strip()[:80]})" if r.returncode else ""))
+    return out
 
 
 def main():
@@ -114,6 +156,34 @@ def main():
                             f"install.ps1 {ps_tglob!r}")
         else:
             checked.append(f"app tag glob agrees ({sh_tglob})")
+
+    # 2c. the beta channel's globs (hub RELEASE-CHANNEL.md §11, HUB-060): the same in both files, and
+    # each is `beta-` + its line's stable glob -- a candidate from ANOTHER line arriving on the beta
+    # channel would be a line change nobody asked for.
+    for what, sh_name, ps_name, stable in (("skill", "SKILL_BETA_GLOB", "SkillBetaGlob", sh_glob),
+                                            ("app", "TCC_BETA_GLOB", "TccBetaGlob", sh_tglob)):
+        b_sh, err_a = one(rf'^{sh_name}="([^"]+)"', sh, sh_name, "install.sh")
+        b_ps, err_b = one(rf'^\${ps_name}\s*=\s*"([^"]+)"', ps1, f"${ps_name}", "install.ps1")
+        if err_a or err_b:
+            problems.extend(e for e in (err_a, err_b) if e)
+        elif b_sh != b_ps:
+            problems.append(f"{what} beta glob differs — install.sh {b_sh!r} vs install.ps1 {b_ps!r}")
+        elif stable and b_sh != f"beta-{stable}":
+            problems.append(f"{what} beta glob {b_sh!r} is not `beta-` + the stable glob {stable!r}")
+        else:
+            checked.append(f"{what} beta glob agrees ({b_sh})")
+
+    # 2d. the beta channel's ORDER: install.sh's function RUN on fixed names; install.ps1's READ.
+    order = channel_order_problems(sh)
+    if order:
+        problems.extend(order)
+    else:
+        checked.append(f"install.sh picks the newest beta tag right in {len(CHANNEL_CASES)} cases (run)")
+    missing = [shape for shape in PS1_CHANNEL_SHAPES if shape not in ps1]
+    if missing:
+        problems.append("install.ps1 Select-NewestOnChannel no longer carries " + ", ".join(missing))
+    else:
+        checked.append("install.ps1 carries the same tag shapes and sort key (read, not run)")
 
     # 3. install.cmd hardcodes the URL it fetches install.ps1 from; it must be THIS repo's, on main
     ps1url, err = one(r'^set "PS1URL=(\S+)"', cmd, "PS1URL", "install.cmd")
@@ -257,8 +327,8 @@ def main():
 
 #: ── A CONSUMER CONTRACT, not just a convenience ──────────────────────────────────────────────
 #: TCC's test suite reads `--print`, parses `NAME=value` and compares four of its own constants
-#: against ours (their F-030, closed 2026-08-26). So the SIX NAMES and the `NAME=value` shape are
-#: an interface: renaming a value or changing the output format breaks their suite, and it breaks
+#: against ours (their F-030, closed 2026-08-26). So the NAMES (six then, two beta globs added for
+#: HUB-060) and the `NAME=value` shape are an interface: renaming a value or changing the output format breaks their suite, and it breaks
 #: it the way `name_key`'s tuple did — quietly, in a consumer we do not build. Add names freely;
 #: change or remove one only after telling them. Values themselves are expected to change: that is
 #: what the flag is for.
@@ -278,6 +348,10 @@ def values():
     if v: out["SKILL_TAG_GLOB"] = v
     v, _ = one(r'^TCC_TAG_GLOB="([^"]+)"', sh, "TCC_TAG_GLOB", "install.sh")
     if v: out["TCC_TAG_GLOB"] = v
+    v, _ = one(r'^SKILL_BETA_GLOB="([^"]+)"', sh, "SKILL_BETA_GLOB", "install.sh")
+    if v: out["SKILL_BETA_GLOB"] = v
+    v, _ = one(r'^TCC_BETA_GLOB="([^"]+)"', sh, "TCC_BETA_GLOB", "install.sh")
+    if v: out["TCC_BETA_GLOB"] = v
     m = re.search(r"--skill-ref\s+(v[0-9.]+)", sh)
     if m: out["SKILL_REF_EXAMPLE"] = m.group(1)
     m = re.search(r"--tcc-ref\s+(v[0-9.]+)", sh)

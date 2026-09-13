@@ -70,7 +70,9 @@ def versions(root: str, rel: str) -> list[dict]:
     found = []
     for i, line in enumerate(lines):
         m = VERSION_HEAD.match(line)
-        if not m:
+        # `## [Unreleased]`, above every version, is what the next one will carry -- not a
+        # version, so no row (hub RELEASE-CHANNEL.md §11.5).
+        if not m or m.group("ver").lower() == "unreleased":
             continue
         if found:
             found[-1]["body_end"] = i

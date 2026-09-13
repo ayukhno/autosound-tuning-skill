@@ -34,6 +34,8 @@
 #   ./install.sh --dry-run           say what it would do, change nothing
 #   ./install.sh --yes               yes to every question; sign-ins are printed, not run
 #   ./install.sh --skill-ref v3.0.33 a specific skill version (default: the newest 3.x tag)
+#   ./install.sh --channel beta      also release candidates, to try one before it is released
+#                                    (default: stable, releases only; --skill-ref wins over both)
 #   ./install.sh --tcc-ref v0.1.22   the app version released WITH that one — quote the two
 #                                    together or not at all; a mixed pair is untested
 #   ./install.sh --uninstall         remove what this script installed — NEVER your projects
@@ -49,10 +51,16 @@ SKILL_REPO_URL="${SKILL_REPO%.git}"
 # can READ the policy instead of re-deriving it from the pipeline below. It is the same rule
 # install.ps1 and TCC's updater apply; when the supported line moves, this is the line that moves.
 SKILL_TAG_GLOB="v3.*"
+# The beta channel's candidates for the same line (hub RELEASE-CHANNEL.md §11): `beta-` + the line's
+# glob. The different first letter is what keeps a candidate out of SKILL_TAG_GLOB, so the stable
+# channel -- the default, and TCC's updater -- never sees one.
+SKILL_BETA_GLOB="beta-v3.*"
 # The app's supported line. It is `v*` and not `v3.*` because the app versions independently of the
 # method -- they are different products that ship together, and pinning them to one number is the
 # coupling SCR-055 is arguing about, not a thing to bake in here.
 TCC_TAG_GLOB="v*"
+# ...and the app's candidates, the same way.
+TCC_BETA_GLOB="beta-v*"
 #: The uv release this installer pins. See the note beside the download for how to raise it.
 UV_VERSION="0.12.10"
 TCC_REPO="https://github.com/ayukhno/autosound-tcc"
@@ -90,6 +98,9 @@ REMOVE_ALL=0
 DRY_RUN=0
 ASSUME_YES=0
 SKILL_REF=""
+# stable (the default): releases only. beta: releases AND release candidates, for trying a version
+# before it is released. An explicit --skill-ref / --tcc-ref wins over either.
+CHANNEL="stable"
 # Same idea for the app: empty means "the newest release", not "whatever is on main".
 # Resolved beside the install itself, where the app is actually asked for.
 TCC_REF=""
@@ -113,6 +124,8 @@ Autosound tuning — installer for macOS (and Linux)
   install.sh --dry-run           say what it would do, change nothing
   install.sh --yes               yes to every question; sign-ins are printed, not run
   install.sh --skill-ref v3.0.33 a specific skill version (default: the newest 3.x tag)
+  install.sh --channel beta      also release candidates, to try one before it is released
+                                 (default: stable, releases only; --skill-ref wins over both)
   install.sh --tcc-ref v0.1.22   the app version released WITH that one — quote the two
                                  together or not at all; a mixed pair is untested
   install.sh --uninstall         remove what this script installed — NEVER your projects
@@ -122,6 +135,23 @@ Autosound tuning — installer for macOS (and Linux)
 Through the one-liner, options go after `bash -s --`:
   curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.46/install.sh | bash -s -- --terminal
 USAGE
+}
+
+# The newest tag on the beta channel (hub RELEASE-CHANNEL.md §11.2), from tag names on stdin. A
+# release sorts as (X,Y,Z,1,0) and a candidate as (X,Y,Z,0,N): v3.1.0 above beta-v3.1.0-rc2, rc10
+# above rc2, and a candidate for v3.1.0 above v3.0.49. `sort -V` cannot say this -- it puts every
+# `beta-` name after every `v` one. A name of neither shape is not installable and is dropped.
+# scripts/installer-consistency.py cuts THIS function out and runs it on fixed names.
+newest_on_channel() {
+  awk '
+    /^v[0-9]+\.[0-9]+\.[0-9]+$/ {
+      split(substr($0, 2), v, "."); print v[1] + 0, v[2] + 0, v[3] + 0, 1, 0, $0; next
+    }
+    /^beta-v[0-9]+\.[0-9]+\.[0-9]+-rc[0-9]+$/ {
+      s = substr($0, 7); i = index(s, "-rc"); split(substr(s, 1, i - 1), v, ".")
+      print v[1] + 0, v[2] + 0, v[3] + 0, 0, substr(s, i + 3) + 0, $0
+    }
+  ' | sort -n -k1,1 -k2,2 -k3,3 -k4,4 -k5,5 | tail -n 1 | awk '{print $6}'
 }
 
 while [ $# -gt 0 ]; do
@@ -139,12 +169,17 @@ while [ $# -gt 0 ]; do
     --dry-run)     DRY_RUN=1 ;;
     --yes|-y)      ASSUME_YES=1 ;;
     --skill-ref)   SKILL_REF="${2:-}"; shift ;;
+    --channel)     CHANNEL="${2:-}"; shift ;;
     --tcc-ref)     TCC_REF="${2:-}"; shift ;;
     --help|-h)     usage; exit 0 ;;
     *) echo "unknown option: $1 (try --help)" >&2; exit 2 ;;
   esac
   shift
 done
+case "$CHANNEL" in
+  stable|beta) ;;
+  *) echo "unknown channel: '$CHANNEL' (stable or beta)" >&2; exit 2 ;;
+esac
 
 # omp follows the app — see `WANT_OMP` above. `--terminal` is the method in a plain terminal, where
 # the model is Claude Code's own and a picker for TCC's models has nothing to pick for.
@@ -696,14 +731,21 @@ fi
 
 # ── the tuning method ─────────────────────────────────────────────────────────
 step "The tuning method"
+SKILL_REF_HOW=""
 if [ -z "$SKILL_REF" ]; then
   # The newest 3.x tag. Asked for by name rather than "main": main is where development lands,
   # and an installer should put you on a release unless you say otherwise.
-  SKILL_REF="$(git ls-remote --tags --refs "$SKILL_REPO" "$SKILL_TAG_GLOB" 2>/dev/null \
-      | awk -F/ '{print $NF}' | sort -V | tail -1)" || SKILL_REF=""
+  if [ "$CHANNEL" = "beta" ]; then
+    SKILL_REF="$(git ls-remote --tags --refs "$SKILL_REPO" "$SKILL_TAG_GLOB" "$SKILL_BETA_GLOB" 2>/dev/null \
+        | awk -F/ '{print $NF}' | newest_on_channel)" || SKILL_REF=""
+    SKILL_REF_HOW=" (beta channel)"
+  else
+    SKILL_REF="$(git ls-remote --tags --refs "$SKILL_REPO" "$SKILL_TAG_GLOB" 2>/dev/null \
+        | awk -F/ '{print $NF}' | sort -V | tail -1)" || SKILL_REF=""
+  fi
   [ -z "$SKILL_REF" ] && SKILL_REF="main"
 fi
-say "  version $SKILL_REF"
+say "  version $SKILL_REF$SKILL_REF_HOW"
 
 ours=0
 if [ -L "$SKILL_HOME" ]; then
@@ -842,13 +884,18 @@ if [ "$MODE" = "tcc" ]; then
   # update button -- which pins the newest tag -- then read that build as ahead of every release.
   # The two ways of getting the app have to agree, or "update" and "install" mean different
   # things on the same machine (SCR-054).
-  if [ -z "$TCC_REF" ]; then
+  TCC_REF_HOW=""
+  if [ -z "$TCC_REF" ] && [ "$CHANNEL" = "beta" ]; then
+    TCC_REF="$(git ls-remote --tags --refs "$TCC_REPO" "$TCC_TAG_GLOB" "$TCC_BETA_GLOB" 2>/dev/null \
+        | awk -F/ '{print $NF}' | newest_on_channel)" || TCC_REF=""
+    TCC_REF_HOW=" (beta channel)"
+  elif [ -z "$TCC_REF" ]; then
     TCC_REF="$(git ls-remote --tags --refs "$TCC_REPO" "$TCC_TAG_GLOB" 2>/dev/null \
         | awk -F/ '{print $NF}' | sort -V | tail -1)" || TCC_REF=""
   fi
   if [ -n "$TCC_REF" ]; then
     TCC_SPEC="autosound-tcc[gui,claude] @ git+${TCC_REPO}@${TCC_REF}"
-    say "  version $TCC_REF"
+    say "  version $TCC_REF$TCC_REF_HOW"
   else
     # No network, or a repository with no tags yet. The default branch is still an install that
     # works, and saying so is better than stopping over a version number.

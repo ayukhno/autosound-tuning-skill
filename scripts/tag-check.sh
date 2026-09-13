@@ -2,10 +2,18 @@
 # Everything that must be true BEFORE `git tag vX.Y.Z`. Run it, read it, then tag.
 #
 #   scripts/tag-check.sh v3.0.30
+#   scripts/tag-check.sh --candidate v3.1.0     a release candidate for v3.1.0; the hub names its rcN
 #
 # A patch tag is a PUBLICATION: install.sh, install.ps1 and the TCC updater all install the newest
 # tag matching v3.*, so a tag is on somebody's machine the moment it is pushed. Every check below
 # is something that has already shipped wrong once, or that cannot be undone once it has.
+#
+# A CANDIDATE (`beta-vX.Y.Z-rcN`, hub RELEASE-CHANNEL.md §11) is checked the same way, with two
+# differences: its CHANGELOG entry may still be `## [Unreleased]` -- a candidate can be cut before
+# the version is named -- and the channel half asks the hub for the next attempt's name. The manifest
+# must ALREADY say X.Y.Z: the release tag lands on the newest candidate's commit (§11.3), so what was
+# tried has to identify as the version it becomes. The same rule means the LAST candidate before a
+# release carries `## [vX.Y.Z]` too; one still under Unreleased can be tried, not released.
 #
 # THE GIT HALF IS NOT HERE. Everything about the release channel -- clean tree, HEAD published,
 # push.followTags, the newest tag on the remote, the tag being free, the tag rule and the hook's
@@ -30,15 +38,17 @@ PREFLIGHT="${PREFLIGHT:-$(cd .. && pwd)/hub/scripts/release-preflight.py}"
 
 # 1. The intended tag is REQUIRED -- a check whose input is missing must FAIL, not report
 #    "no objection" about a version it was never told (references/core/estimator-scope.md).
+MODE="release"
+if [ "${1-}" = "--candidate" ]; then MODE="candidate"; shift; fi
 TAG="${1-}"
 if [ -z "$TAG" ]; then
-  echo "usage: scripts/tag-check.sh vX.Y.Z" >&2
+  echo "usage: scripts/tag-check.sh vX.Y.Z | --candidate vX.Y.Z" >&2
   echo "the tag you intend to cut is required: with no version there is nothing to check against," >&2
   echo "and a check with no input is a failure, not a pass." >&2
   exit 2
 fi
 if ! printf '%s' "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
-  echo "usage: scripts/tag-check.sh vX.Y.Z (got '$TAG')" >&2
+  echo "usage: scripts/tag-check.sh vX.Y.Z | --candidate vX.Y.Z (got '$TAG')" >&2
   exit 2
 fi
 VER="${TAG#v}"
@@ -47,12 +57,15 @@ pass=0 fail=0 failed=()
 ok()  { pass=$((pass + 1)); printf '  ok   %-16s %s\n' "$1" "${2-}"; }
 bad() { fail=$((fail + 1)); failed+=("$1"); printf '  FAIL %-16s %s\n' "$1" "$2"; }
 
-echo "pre-tag checks for $TAG"
+if [ "$MODE" = "candidate" ]; then echo "pre-tag checks for a candidate for $TAG"
+else echo "pre-tag checks for $TAG"; fi
 
 # 2. v3.0.24 shipped with .claude-plugin/plugin.json still saying 3.0.23 -- the manifest bump rode
 #    in a separate commit and was forgotten. Parsed as json: grep would match a nested "version".
 if mver="$("$PY" -c 'import json;print(json.load(open(".claude-plugin/plugin.json"))["version"])' 2>&1)"; then
   if [ "$mver" = "$VER" ]; then ok manifest "plugin.json version = $mver"
+  elif [ "$MODE" = "candidate" ]; then
+    bad manifest "plugin.json says $mver, the candidate is for $VER -- the release lands on this commit, so it must already say $VER"
   else bad manifest "plugin.json says $mver, tag says $VER (the v3.0.24 mistake)"; fi
 else
   bad manifest "cannot read version from .claude-plugin/plugin.json: $mver"
@@ -62,6 +75,23 @@ fi
 #    already carry this version, [Unreleased] must be gone, and the body must say something.
 if [ ! -f CHANGELOG.md ]; then
   bad changelog "CHANGELOG.md is missing"
+elif [ "$MODE" = "candidate" ]; then
+  # `## [vX.Y.Z]` when the version is already named, else `## [Unreleased]`. Either must say what is
+  # being tried: an empty note is a forgotten note for a candidate too.
+  if grep -qF "## [$TAG]" CHANGELOG.md; then head="## [$TAG]"
+  else head="$(grep -iE -m1 '^## \[unreleased\]' CHANGELOG.md || true)"; fi
+  if [ -z "$head" ]; then
+    bad changelog-note "neither '## [$TAG]' nor '## [Unreleased]' in CHANGELOG.md -- nothing says what the candidate carries"
+  else
+    body="$(awk -v h="$head" 'index($0,h)==1{f=1;next} f&&/^## /{exit} f&&NF{n++} END{print n+0}' CHANGELOG.md)"
+    if [ "$body" -lt 1 ]; then
+      bad changelog-note "$head has no entry -- an empty note is a forgotten note"
+    elif [ "$head" = "## [$TAG]" ]; then
+      ok changelog-note "[$TAG] section, $body non-empty lines -- releasable on this commit"
+    else
+      ok changelog-note "[Unreleased], $body non-empty lines -- can be TRIED, not released as is: name [$TAG] in the last candidate"
+    fi
+  fi
 else
   if grep -qE '^## \[[Uu]nreleased\]' CHANGELOG.md; then
     bad changelog-note "a '## [Unreleased]' heading is still there -- rename it to [$TAG] first"
@@ -87,10 +117,11 @@ fi
 #    verbatim underneath, in the hub's language: a verdict restated in other words is a second
 #    copy of it, and this whole ticket exists because two copies drifted. A missing carrier is a
 #    FAILURE, not a skip -- without it the git side is unchecked, and unchecked is not "fine".
+if [ "$MODE" = "candidate" ]; then CHAN_ARGS=(--candidate "$TAG"); else CHAN_ARGS=(--tag "$TAG"); fi
 echo
 if [ ! -f "$PREFLIGHT" ]; then
   bad channel "no carrier at $PREFLIGHT -- the channel checks are the hub's; set PREFLIGHT=<path to hub/scripts/release-preflight.py>"
-elif chan_out="$("$PY" "$PREFLIGHT" --root . --role skill --tag "$TAG" 2>&1)"; then
+elif chan_out="$("$PY" "$PREFLIGHT" --root . --role skill "${CHAN_ARGS[@]}" 2>&1)"; then
   ok channel "hub preflight passed -- its own lines below"
   printf '%s\n' "$chan_out" | sed 's/^/         /'
 else
@@ -142,9 +173,16 @@ else
   esac
 fi
 
+# The name to cut. For a candidate it is the hub's: the next rcN is counted there, not here.
+LABEL="$TAG"
+if [ "$MODE" = "candidate" ]; then
+  cand="$(printf '%s' "${chan_out-}" | grep -oE 'beta-v[0-9]+\.[0-9]+\.[0-9]+-rc[0-9]+' | head -n 1)"
+  LABEL="${cand:-a candidate for $TAG}"
+fi
+
 echo
 if [ "$fail" -ne 0 ]; then
-  echo "NOT READY TO TAG $TAG: $fail of $((pass + fail)) checks failed -- ${failed[*]}" >&2
+  echo "NOT READY TO TAG $LABEL: $fail of $((pass + fail)) checks failed -- ${failed[*]}" >&2
   exit 1
 fi
-echo "all $pass checks passed -- ready: git tag -a $TAG && git push origin $TAG"
+echo "all $pass checks passed -- ready: git tag -a $LABEL && git push origin $LABEL"
