@@ -53,9 +53,12 @@ if exist "%PS1%" (
     REM Only the .cmd was downloaded, so fetch the script it is a door to. Not
     REM saved to disk first: a saved copy would be quarantined and would go
     REM stale, and this way there is one source of truth for the real work.
+    REM Run this way the script has no file, so it does not exit on its own --
+    REM that would end a user's PowerShell under the README one-liner. It leaves
+    REM the code in $global:AutosoundInstallExit, and this line exits with it.
     echo install.ps1 is not beside this file -- fetching it from GitHub
     "%PS%" -NoProfile -ExecutionPolicy Bypass -Command ^
-        "[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12; $s = irm '%PS1URL%' -UseBasicParsing; & ([scriptblock]::Create($s)) %*"
+        "[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12; $s = irm '%PS1URL%' -UseBasicParsing; & ([scriptblock]::Create($s)) %*; $ok = $?; if ($global:AutosoundInstallExit) { exit $global:AutosoundInstallExit } elseif (-not $ok) { exit 1 }"
 )
 
 set "RC=%ERRORLEVEL%"

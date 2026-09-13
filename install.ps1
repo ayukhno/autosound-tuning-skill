@@ -71,7 +71,26 @@ param(
 # -Log <file>: a full transcript, for reading a run that happened on somebody else's machine. A
 # `| Tee-Object` on the outside sees none of this script's own lines (they go to the host, not
 # the pipeline), which is how the first Windows log arrived holding two errors and nothing else.
-if ($Log) { try { Start-Transcript -Path $Log -Force | Out-Null } catch { Write-Host "  (no transcript: $($_.Exception.Message))" } }
+$AutosoundTranscriptOn = $false
+if ($Log) { try { Start-Transcript -Path $Log -Force | Out-Null; $AutosoundTranscriptOn = $true } catch { Write-Host "  (no transcript: $($_.Exception.Message))" } }
+
+# How the installer stops early. Run as a FILE -- install.cmd uses -File -- `exit` is right: it ends
+# that powershell.exe and hands install.cmd the code. Run as the README one-liner (`irm ... | iex`,
+# or a scriptblock) there is no file, and `exit` ends the user's OWN PowerShell: the window closed
+# over the very line that said why it stopped (2026-09-13). So there Stop-Installer only records the
+# code, and the call site's `return` ends the script -- every call site is at the script's top
+# level, where `return` does exactly that. The code is left in $global:AutosoundInstallExit, which
+# install.cmd's download path reads, and in $LASTEXITCODE. scripts/installer-consistency.py fails on
+# a bare `exit` anywhere else, and on a Stop-Installer call without its `; return`.
+$AutosoundRunAsFile = [bool]$PSCommandPath
+if (-not $AutosoundRunAsFile) { $global:AutosoundInstallExit = 0 }
+function Stop-Installer {
+    param([int]$Code)
+    if ($AutosoundTranscriptOn) { try { Stop-Transcript | Out-Null } catch { $null = $_ } }
+    if ($AutosoundRunAsFile) { exit $Code }
+    $global:AutosoundInstallExit = $Code
+    $global:LASTEXITCODE = $Code
+}
 
 # Native commands (git, winget, uv, claude...) write ordinary progress to stderr, and under
 # `$ErrorActionPreference = "Stop"` Windows PowerShell 5.1 turns that into a terminating error the
@@ -165,12 +184,12 @@ Autosound tuning -- installer for Windows
 Through the one-liner, options go on the scriptblock:
   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/main/install.ps1))) -Terminal
 "@ | Write-Host
-    exit 0
+    Stop-Installer 0; return
 }
 
 if ($Channel -notin @("stable", "beta")) {
     Write-Host "unknown channel: '$Channel' (stable or beta)"
-    exit 2
+    Stop-Installer 2; return
 }
 $Mode         = if ($Terminal -and -not $Tcc) { "terminal" } else { "tcc" }   # -Tcc is the default, kept for old command lines
 $WantReviewer = -not $NoReviewer
@@ -521,7 +540,7 @@ if ($Uninstall) {
         Say "Re-run with -Uninstall -All to remove those too."
     }
     Say "Every tuning project you have is untouched."
-    exit 0
+    Stop-Installer 0; return
 }
 
 # =============================================================================================
@@ -611,7 +630,7 @@ if (-not $DryRun) {
     if (-not (Ask "Go ahead?" "n")) {
         Write-Host ""
         Say "Nothing installed. Re-run when you want to."
-        exit 0
+        Stop-Installer 0; return
     }
 }
 if (-not $DryRun) { New-Item -ItemType Directory -Force -Path $LocalBin | Out-Null }
@@ -669,7 +688,7 @@ if (-not $HaveGit) {
     elseif (-not $DryRun) {
         Warn "git is still not found. Install Git for Windows from git-scm.com/download/win, open a NEW"
         Warn "window, and run this again. Nothing below works without it."
-        exit 1
+        Stop-Installer 1; return
     }
 }
 
@@ -1258,3 +1277,6 @@ Say "the tuning method   $SkillRepoUrl"
 Say "the desktop app     $TccRepo"
 Say "something wrong, or an idea -- open an issue in whichever of the two it belongs to."
 Write-Host ""
+# The normal end. Run as a file the process ending closes a -Log transcript; run as the one-liner
+# the session goes on, so the transcript is stopped here rather than left recording it.
+if ($AutosoundTranscriptOn) { try { Stop-Transcript | Out-Null } catch { $null = $_ } }

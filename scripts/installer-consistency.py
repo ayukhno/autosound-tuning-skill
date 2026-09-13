@@ -94,6 +94,33 @@ def channel_order_problems(sh):
     return out
 
 
+def ps1_stop_problems(ps1):
+    """install.ps1 stops only through Stop-Installer; [] when it does.
+
+    Under the README one-liner (`irm ... | iex`) there is no file, and a bare `exit` ends the user's
+    own PowerShell -- the window closed over the line that said why (2026-09-13). The one `exit`
+    that is right lives inside Stop-Installer, for a run as a file; every call is followed by
+    `; return`, which is what ends the script when there is no file.
+    """
+    lines = ps1.splitlines()
+    fn = re.search(r"^function Stop-Installer \{\n.*?^\}$", ps1, re.M | re.S)
+    if not fn:
+        return ["install.ps1: no `function Stop-Installer { ... }` -- the one-liner's stops cannot be checked"]
+    first = ps1.count("\n", 0, fn.start()) + 1
+    last = ps1.count("\n", 0, fn.end()) + 1
+    out = []
+    for n, line in enumerate(lines, 1):
+        if line.lstrip().startswith("#") or first <= n <= last:
+            continue
+        if re.search(r"\bexit\b", line):
+            out.append(f"install.ps1:{n}: a bare `exit` -- under the one-liner it closes the user's "
+                       f"window; use `Stop-Installer N; return`")
+        elif re.search(r"\bStop-Installer\b", line) and not re.match(r"^\s*Stop-Installer \d+; return\s*$", line):
+            out.append(f"install.ps1:{n}: Stop-Installer without `; return` on its line -- without "
+                       f"the return the one-liner runs on past the stop")
+    return out
+
+
 def main():
     sh, ps1, cmd = read(SH), read(PS1), read(CMD)
     problems, checked = [], []
@@ -241,6 +268,14 @@ def main():
                                 f"options it forwards, so it must show the same pair")
             else:
                 checked.append(f"{what} version example agrees in all three ({v})")
+
+    # 4b. install.ps1 stops without closing a one-liner user's window (see ps1_stop_problems).
+    stops = ps1_stop_problems(ps1)
+    if stops:
+        problems.extend(stops)
+    else:
+        calls = len(re.findall(r"^\s*Stop-Installer \d+; return\s*$", ps1, re.M))
+        checked.append(f"install.ps1 stops through Stop-Installer ({calls} calls, each with return), no bare exit")
 
     # 5. the default mode. `--terminal` is the opt-out in both, so both must default to tcc.
     if not re.search(r'^MODE="tcc"', sh, re.M):
