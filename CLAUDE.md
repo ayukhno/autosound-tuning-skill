@@ -29,9 +29,9 @@ message with Cyrillic in it and names the line (its `--selftest` runs in CI).
 - **A tag takes the whole tree**, so its note must describe everything standing in front of it, not
   only the change that prompted it.
 - **A minor or major is tried first.** `scripts/tag-check.sh --candidate vX.Y.Z`, then the tag
-  `beta-vX.Y.Z-rcN`, which only the installers' beta channel takes. The release tag lands on the
-  newest candidate's commit (hub RELEASE-CHANNEL.md §11.3), so the last candidate already carries
-  the manifest bump and `## [vX.Y.Z]`; one still under `## [Unreleased]` can be tried, not released.
+  `beta-vX.Y.Z-rcN`, which only the installers' beta channel takes. The release is the newest
+  candidate's commit plus only its bookkeeping — renaming `## [Unreleased]`, the manifest, the install
+  pins (hub RELEASE-CHANNEL.md §11.3) — so nothing else may land between the last candidate and the tag.
 
 ## The installers are a TRIPLET
 

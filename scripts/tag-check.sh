@@ -8,12 +8,11 @@
 # tag matching v3.*, so a tag is on somebody's machine the moment it is pushed. Every check below
 # is something that has already shipped wrong once, or that cannot be undone once it has.
 #
-# A CANDIDATE (`beta-vX.Y.Z-rcN`, hub RELEASE-CHANNEL.md §11) is checked the same way, with two
-# differences: its CHANGELOG entry may still be `## [Unreleased]` -- a candidate can be cut before
-# the version is named -- and the channel half asks the hub for the next attempt's name. The manifest
-# must ALREADY say X.Y.Z: the release tag lands on the newest candidate's commit (§11.3), so what was
-# tried has to identify as the version it becomes. The same rule means the LAST candidate before a
-# release carries `## [vX.Y.Z]` too; one still under Unreleased can be tried, not released.
+# A CANDIDATE (`beta-vX.Y.Z-rcN`, hub RELEASE-CHANNEL.md §11) is checked the same way, with three
+# differences: its CHANGELOG entry may still be `## [Unreleased]`, its manifest may still carry the
+# previous version, and the channel half asks the hub for the next attempt's name. A release is the
+# newest candidate's commit plus only its bookkeeping -- the rename to `## [vX.Y.Z]`, the manifest and
+# the install pins (§11.3, hub #141) -- so a candidate is not asked to carry any of them.
 #
 # THE GIT HALF IS NOT HERE. Everything about the release channel -- clean tree, HEAD published,
 # push.followTags, the newest tag on the remote, the tag being free, the tag rule and the hook's
@@ -65,7 +64,7 @@ else echo "pre-tag checks for $TAG"; fi
 if mver="$("$PY" -c 'import json;print(json.load(open(".claude-plugin/plugin.json"))["version"])' 2>&1)"; then
   if [ "$mver" = "$VER" ]; then ok manifest "plugin.json version = $mver"
   elif [ "$MODE" = "candidate" ]; then
-    bad manifest "plugin.json says $mver, the candidate is for $VER -- the release lands on this commit, so it must already say $VER"
+    ok manifest "plugin.json says $mver -- the release commit bumps it to $VER (bookkeeping, hub §11.3)"
   else bad manifest "plugin.json says $mver, tag says $VER (the v3.0.24 mistake)"; fi
 else
   bad manifest "cannot read version from .claude-plugin/plugin.json: $mver"
@@ -87,9 +86,9 @@ elif [ "$MODE" = "candidate" ]; then
     if [ "$body" -lt 1 ]; then
       bad changelog-note "$head has no entry -- an empty note is a forgotten note"
     elif [ "$head" = "## [$TAG]" ]; then
-      ok changelog-note "[$TAG] section, $body non-empty lines -- releasable on this commit"
+      ok changelog-note "[$TAG] section, $body non-empty lines"
     else
-      ok changelog-note "[Unreleased], $body non-empty lines -- can be TRIED, not released as is: name [$TAG] in the last candidate"
+      ok changelog-note "[Unreleased], $body non-empty lines -- renamed to [$TAG] in the release commit"
     fi
   fi
 else
