@@ -13,7 +13,8 @@ a translation gets an English commit message. A commit subject is not private: G
 the title of the CI run it triggers, so a Ukrainian subject puts Ukrainian into the public Actions
 list. Bought 2026-09-13, when the `checks` runs read "Збір 11.09: v3.0.49 опубліковано…" and
 "Рецензент: один канал, три задачі…". Pushed history is not rewritten for this; the rule applies
-from here on.
+from here on. The check is `scripts/commit-lang.py --install-hook`: a commit-msg hook that refuses a
+message with Cyrillic in it and names the line (its `--selftest` runs in CI).
 
 ## Releasing
 

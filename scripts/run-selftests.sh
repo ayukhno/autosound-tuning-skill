@@ -46,6 +46,9 @@ run_one "encoding" scripts/encoding-check.py --selftest
 # in a tracked file or a tracked/unignored key file fails the suite, and CI, before a tag).
 run_one "secret-scan" scripts/secret-scan.py --selftest
 run_one "secrets-in-tree" scripts/secret-scan.py
+# Everything that reaches GitHub is in English, and a commit subject is the title of its CI run
+# (2026-09-13). The commit-msg hook's own mechanics, through git in a throwaway repository.
+run_one "commit-lang" scripts/commit-lang.py --selftest
 # HUB-040: in the curve visualizer a dropped file's name (and the `#curve=` link) is data, never
 # markup. The checker's own mechanics, then every .html in the tree.
 run_one "html-data" scripts/html-data-check.py --selftest
