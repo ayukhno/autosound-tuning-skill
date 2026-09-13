@@ -4,6 +4,17 @@ Each of these was bought with real damage. Working arrangements specific to the 
 sessions live in `CLAUDE.local.md`, which is not tracked: this repo is public, and internal process
 is noise to anyone reading the code.
 
+## Everything that reaches GitHub is in English
+
+Commit messages, CI job and step names, issues, PRs, review comments, and every tracked file are
+written in English. The one exception is the language versions of the skill — `README.{uk,de,pl}.md`,
+`FAQ.{uk,de,pl}.md`, translated references, native-language trigger phrases — and even a change *to*
+a translation gets an English commit message. A commit subject is not private: GitHub shows it as
+the title of the CI run it triggers, so a Ukrainian subject puts Ukrainian into the public Actions
+list. Bought 2026-09-13, when the `checks` runs read "Збір 11.09: v3.0.49 опубліковано…" and
+"Рецензент: один канал, три задачі…". Pushed history is not rewritten for this; the rule applies
+from here on.
+
 ## Releasing
 
 - **A patch tag is a publication.** `install.sh`, `install.ps1` and the TCC updater all install the
