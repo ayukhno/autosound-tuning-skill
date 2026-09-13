@@ -18,6 +18,7 @@ What it does NOT check, so nobody reads a pass as more than it is: that the thre
 same THING. Only that the values they were given are the same values. A rewritten update path in
 one file alone still passes here — read all three.
 """
+import os
 import re
 import shutil
 import subprocess
@@ -71,6 +72,49 @@ PS1_CHANNEL_SHAPES = ("'^v(\\d+)\\.(\\d+)\\.(\\d+)$'", "'^beta-v(\\d+)\\.(\\d+)\
                       "Sort-Object X, Y, Z, R, N")
 
 
+def _is_wsl_launcher(path, environ=os.environ):
+    """True for a `bash.exe` under the Windows system directory: WSL's launcher, not a shell."""
+    sysroot = environ.get("SystemRoot") or environ.get("windir") or "C:\\Windows"
+    p = os.path.normcase(os.path.abspath(path))
+    return any(p.startswith(os.path.normcase(os.path.join(sysroot, d)) + os.sep)
+               for d in ("System32", "Sysnative", "SysWOW64"))
+
+
+def find_bash(windows=None, which=shutil.which, environ=os.environ):
+    """`(path, None)` for a bash that can run install.sh's function, else `(None, why)`.
+
+    On Windows the `bash` on PATH is often `C:\\Windows\\System32\\bash.exe`, WSL's launcher: with no
+    Linux distribution installed it prints a UTF-16 notice instead of running anything, and v3.0.50's
+    order check reported six false divergences on GitHub's windows-latest (hub TCC-010). So on
+    Windows the bash is Git for Windows' own, found beside `git` or in its usual place, and the
+    launcher is never taken for one.
+    """
+    windows = (os.name == "nt") if windows is None else windows
+    if not windows:
+        found = which("bash")
+        return (found, None) if found else (None, "no bash on PATH")
+    candidates = []
+    git = which("git")
+    if git:
+        here = Path(git).resolve().parent                # ...\Git\cmd, ...\Git\mingw64\bin, ...
+        for up in [here] + list(here.parents)[:3]:
+            candidates += [up / "bin" / "bash.exe", up / "usr" / "bin" / "bash.exe"]
+    for var in ("ProgramFiles", "ProgramW6432", "ProgramFiles(x86)", "LOCALAPPDATA"):
+        if environ.get(var):
+            base = Path(environ[var])
+            candidates += [base / "Git" / "bin" / "bash.exe", base / "Programs" / "Git" / "bin" / "bash.exe"]
+    on_path = which("bash")
+    if on_path:
+        candidates.append(Path(on_path))
+    for c in candidates:
+        if c.is_file() and not _is_wsl_launcher(str(c), environ):
+            return str(c), None
+    if on_path and _is_wsl_launcher(on_path, environ):
+        return None, (f"no usable bash on Windows: the `bash` on PATH is WSL's launcher ({on_path}), "
+                      "and no Git for Windows bash was found")
+    return None, "no usable bash on Windows: none on PATH, and no Git for Windows bash was found"
+
+
 def channel_order_problems(sh):
     """Run install.sh's own `newest_on_channel` on CHANNEL_CASES; [] when it gives every answer.
 
@@ -80,17 +124,22 @@ def channel_order_problems(sh):
     m = re.search(r"^newest_on_channel\(\) \{\n.*?^\}\n", sh, re.M | re.S)
     if not m:
         return ["install.sh: no `newest_on_channel() { ... }` -- the beta channel's order cannot be checked"]
-    if not shutil.which("bash"):
-        return ["no bash on PATH -- install.sh's beta order cannot be run, and unrun is not agreed"]
+    bash, why = find_bash()
+    if not bash:
+        return [f"{why} -- install.sh's beta order cannot be run, and unrun is not agreed"]
     out = []
     for offered, want in CHANNEL_CASES:
-        r = subprocess.run(["bash", "-c", m.group(0) + "newest_on_channel"],
-                           input="".join(t + "\n" for t in offered), capture_output=True, text=True,
-                           encoding="utf-8", errors="replace")
-        got = r.stdout.strip()
+        # The function and the names go in on stdin, as BYTES: an argument is re-quoted on Windows, and
+        # a text pipe there turns "\n" into "\r\n", which bash reads as part of each command. /usr/bin
+        # goes first so Git Bash's own sort and awk answer, not Windows' sort.exe.
+        script = ('export PATH="/usr/bin:$PATH"\n' + m.group(0)
+                  + "newest_on_channel <<'TAGS'\n" + "".join(t + "\n" for t in offered) + "TAGS\n")
+        r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True)
+        got = r.stdout.decode("utf-8", "replace").strip()
+        err = r.stderr.decode("utf-8", "replace").strip()
         if r.returncode != 0 or got != want:
-            out.append(f"install.sh newest_on_channel: {offered} gave {got!r}, want {want!r}"
-                       + (f" (exit {r.returncode}: {r.stderr.strip()[:80]})" if r.returncode else ""))
+            out.append(f"install.sh newest_on_channel via {bash}: {offered} gave {got[:60]!r}, want {want!r}"
+                       + (f" (exit {r.returncode}: {err[:80]})" if r.returncode else ""))
     return out
 
 

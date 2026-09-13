@@ -63,3 +63,20 @@ jobs:
         run: |
           python -m pip install ruff==0.12.0
           ruff check
+
+  # The installer triplet on Windows (hub TCC-010). v3.0.50's beta-channel order check ran `bash`, and
+  # on windows-latest that is WSL's launcher: six false divergences, seen first in TCC's Windows CI.
+  # This job runs installer-consistency.py on the runner that consumer uses, so a Windows break is red
+  # here before a tag rather than there after it. PYTHONUTF8 because a redirected stdout on Windows is
+  # the locale's code page, and the checker prints non-ASCII when it fails.
+  installers-windows:
+    runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1     # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+      - name: installer consistency (Windows)
+        run: python scripts/installer-consistency.py
