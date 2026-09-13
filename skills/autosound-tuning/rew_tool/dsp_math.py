@@ -482,7 +482,7 @@ def robust_worst_null(freqs_hz, A, B, band, perturbations=ROBUST_PERT):
 
 
 # ---------- sum loss: the junction metric ported from Resonalyze ----------
-# upstream: DIMOSUS/Resonalyze dsp/VirtualCrossoverAnalysis.cs @ b4a5ddf (MIT) --
+# upstream: DIMOSUS/Resonalyze dsp/VirtualCrossoverAnalysis.cs @ 23f2e70 (MIT) --
 # `DetailedLoss`, `SumLossCurve`, `MeasureJunctionSpectrum` (the ripple), `DipExcessPenaltyWeight`,
 # `MinBinAmplitudeRatio`, `SumLossLevelGateDb`. A port of the DEFINITION (formula and
 # constants), written fresh in numpy; see LICENSES/NOTICE.md. Checked against our own earlier
@@ -512,6 +512,11 @@ def robust_worst_null(freqs_hz, A, B, band, perturbations=ROBUST_PERT):
 #           link reads a band's energy onset below 300 Hz). Arrival detection, not the metric:
 #           DetailedLoss, SumLossCurve, MeasureJunctionSpectrum and every constant untouched.
 #           Re-pinned after reading the diff (hub TCC-008, 2026-09-08).
+# reviewed: 23f2e70 (#187, 2026-09-13) -- one commit since b4a5ddf, 42 lines: a new
+#           `StepResponse(impulseResponse, start, count)`, the running sum of the IR's real
+#           samples for their Virtual DSP step view. A function beside the metric, not the
+#           metric: DetailedLoss, SumLossCurve, MeasureJunctionSpectrum and every constant
+#           untouched. Re-pinned after reading the diff (hub PAS-007, 2026-09-13).
 # deviation: d(ln f) per bin instead of their bare 1/f weight -- see `_log_weights`
 #            (their 1/f is a log-frequency average only on a uniform-Hz FFT grid).
 # deviation: candidates tie-break by our own near-tie rule (smallest |tau| within

@@ -94,13 +94,19 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
-# upstream: DIMOSUS/Resonalyze source/Tools/VirtualCrossover/VirtualCrossoverProjectFile.cs @ 319e873 (MIT) --
+# upstream: DIMOSUS/Resonalyze source/Tools/VirtualCrossover/VirtualCrossoverProjectFile.cs @ 23f2e70 (MIT) --
 #   the session schema v7..v10 (`VirtualCrossoverChannelSettings`, `VirtualCrossoverChannelPairSettings`),
 #   `Migrate` steps v7→v8 (the all-pass stage into the PEQ bank, `EqualizationCurve.MaxBandCount`),
 #   v8→v9 (the zone) and v9→v10 (the phase control), `PhaseReferenceHz` (LP on a Sub block, HP
 #   otherwise, AS CONFIGURED), `Validate()`'s ranges.
 # format-version: 10 -- their `CurrentVersion`; `scripts/upstream-drift.py` reads it out of the
 #   upstream file and names a mismatch as a drift of the FORMAT.
+# reviewed: 23f2e70 (#187, 2026-09-13) -- one commit since 319e873, 20 lines: two view flags,
+#           `ShowStepView` and `ShowSumCurveStep` (with its `[JsonIgnore]` accessor), for their
+#           Virtual DSP step view. Presentation, not the session: no channel, pair or migration
+#           field changes, and `CurrentVersion` stays 10. This reader reads no view flag (the
+#           v10 fixture already carries `showPhaseView`). Re-pinned after reading the diff
+#           (hub PAS-007, 2026-09-13).
 # deviation: reads and never writes -- the migration runs in memory and the file stays as it was;
 #            their `LoadOrDefault` rewrites the project on the next save. See `migrate_session`.
 # deviation: `IsTransparent` is recomputed here and a transparent band is DROPPED and listed,
