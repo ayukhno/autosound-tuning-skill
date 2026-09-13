@@ -29,11 +29,11 @@ Third-party resources (icons, external target curves, data) with their own licen
   > THIS SOFTWARE.
 
 - **[Resonalyze](https://github.com/DIMOSUS/Resonalyze) by DIMOSUS — parts of this method's DSP
-  maths follow that project's logic**, and two modules are direct ports of it. Resonalyze is a
+  maths follow that project's logic**, and three modules are direct ports of it. Resonalyze is a
   Virtual DSP for car audio; where it and this method answer the same question, the answer here is
   **its** answer, written fresh in numpy rather than re-derived — deliberately, so that a tuner who
   moves between the two tools does not get two different numbers for one filter. The debt is
-  larger than the two files below: this method's junction vocabulary and its reading of a virtual
+  larger than the three files below: this method's junction vocabulary and its reading of a virtual
   crossover both start there (`references/tooling/resonalyze-virtual-dsp.md`), and the exchange has
   run both ways — the Helix phase-control law was measured on our bench and implemented by
   Resonalyze's author from that data (DIMOSUS/Resonalyze#88), and we then ported his
@@ -50,6 +50,10 @@ Third-party resources (icons, external target curves, data) with their own licen
     constants) is a port of `dsp/PhaseRotationControl.cs` at commit `bc957c8`; the biquad it
     evaluates is this repo's own `apf2_response`, and the deviations are declared in the file's
     header.
+  - `skills/autosound-tuning/rew_tool/windows.py` — **group delay through the FDW**
+    (`windowed_group_delay`) follows the *definition* in `docs/specs/fdw-group-delay.md` §2 at commit
+    `23f2e70` (Resonalyze #186): the energy arrival τ = Re[T·conj(H)]/|H|² inside the window, not the
+    slope of the windowed phase. Written fresh in numpy on this module's own FDW.
 
   Resonalyze is used under the MIT License:
 

@@ -90,8 +90,41 @@ def print_ir_analysis(times, ir):
     print(f"  Предімпульс: {stats['pre_ringing_dB']:.1f} dB відносно піку")
 
 
+def print_fdw_gd_analysis(times, ir, cycles=6.0):
+    """Group delay through the direct sound, beside REW's: τ through an FDW of `cycles`, per band.
+
+    The same impulse the report pulls, read through the gate predict reads junctions with (6 cycles)
+    as the energy arrival τ = Re[T·conj(H)]/|H|² (`windows.windowed_group_delay`, hub RES-010). It is
+    junction timing, not the cabin's group delay, so it is its own block and never subtracted from
+    REW's.
+    """
+    import numpy as np
+    import windows
+    t = np.asarray(times, dtype=float)
+    x = np.asarray(ir, dtype=float)
+    fs = 1.0 / float(t[1] - t[0])
+    freqs = 500.0 * 2.0 ** (np.arange(int(round(np.log2(10000.0 / 500.0) * 48)) + 1) / 48.0)
+    tau, info = windows.windowed_group_delay(x, fs, float(t[0]), freqs, cycles=cycles)
+    if tau is None:
+        print_header(f"Group Delay — крізь FDW-{cycles:g}")
+        print(f"  вікно відмовило: {info.get('refused')}")
+        return
+    smooth = info.get("smooth_oct")
+    smooth_txt = f"згладжування 1/{round(1 / smooth)} окт" if smooth else "без згладжування"
+    print_header(f"Group Delay — крізь FDW-{cycles:g} (прямий звук, {smooth_txt})")
+    for f_lo, f_hi in ((500, 2000), (2000, 10000)):
+        m = (freqs >= f_lo) & (freqs <= f_hi) & np.isfinite(tau)
+        if m.any():
+            ms = tau[m] * 1000.0
+            print(f"  {f_lo:>5}–{f_hi:<6} Hz  mean={ms.mean():6.2f} мс  "
+                  f"max={ms.max():6.2f} мс @ {freqs[m][int(np.argmax(ms))]:.0f} Hz  Δ={np.ptp(ms):.2f} мс")
+    lo_v, hi_v = info["validated_hz"]
+    print(f"  Час приходу прямого звуку, не GD кабіни: з блоком REW вище не віднімати. "
+          f"Перевірено {lo_v:.0f}–{hi_v:.0f} Гц.")
+
+
 def print_gd_analysis(freqs, gd):
-    print_header("Group Delay")
+    print_header("Group Delay — REW (його вікно: кабіна разом із прямим звуком)")
     bands = [(20, 100), (100, 500), (500, 2000), (2000, 10000)]
     for f_lo, f_hi in bands:
         stats = an.analyze_group_delay(freqs, gd, f_lo, f_hi)
@@ -754,19 +787,33 @@ def run(mid, curves_dir, show_all=True):
     freqs, mag, phase = api.get_fr(mid)
     print_fr_analysis(freqs, mag, phase)
 
-    # Group Delay
+    # The impulse first: the group delay is read through it as well (FDW), beside REW's own.
+    times = ir = ir_error = None
+    try:
+        times, ir = api.get_impulse_response(mid, normalised=False)   # peak in dBFS, not 0.0
+    except Exception as e:
+        ir_error = e
+
+    # Group Delay -- REW's (the cabin in it), then through the direct sound (hub RES-010)
     try:
         gd_freqs, gd = api.get_group_delay(mid)
         print_gd_analysis(gd_freqs, gd)
     except Exception as e:
         print(f"\n  Group Delay: недоступно ({e})")
+    if ir is not None:
+        try:
+            print_fdw_gd_analysis(times, ir)
+        except Exception as e:
+            print(f"\n  Group Delay крізь FDW: недоступно ({e})")
 
     # Impulse Response
-    try:
-        times, ir = api.get_impulse_response(mid, normalised=False)   # peak in dBFS, not 0.0
-        print_ir_analysis(times, ir)
-    except Exception as e:
-        print(f"\n  Impulse Response: недоступно ({e})")
+    if ir is None:
+        print(f"\n  Impulse Response: недоступно ({ir_error})")
+    else:
+        try:
+            print_ir_analysis(times, ir)
+        except Exception as e:
+            print(f"\n  Impulse Response: недоступно ({e})")
 
     # Distortion
     dist = api.get_distortion(mid)

@@ -45,6 +45,12 @@ is 300 ms at 20 Hz and 0.6 ms at 10 kHz, which is what makes one curve show the 
 and the treble without it. Implemented as it is defined -- one DFT per grid frequency over that
 frequency's own window -- not as a smoothing that approximates it.
 
+GROUP DELAY through the gate (`windowed_group_delay`, hub `RES-010`) is the energy arrival inside
+the window, τ = Re[T·conj(H)]/|H|², with T the time-weighted twin of H read through the very same
+window -- the definition Resonalyze took for its #186, pinned below. It is junction timing through
+the direct sound, not the cabin's group delay: across seven hand-held positions on `_49` it moved
+×0.16-0.29 as much as REW's own group delay did, which is the room it leaves out.
+
 Deps: numpy. `--selftest` is offline and synthetic.
 """
 from __future__ import annotations
@@ -140,19 +146,12 @@ def _taper(n):
     return np.hanning(2 * n)[n:]
 
 
-def windowed_spectrum(ir, fs, t0_s, freqs, *, gate_ms=None, cycles=None, band=None,
-                      drift_samples=0.0, i_edge=None, max_ms=None):
-    """`(H, info)` -- the complex response through the GATE, on `freqs`, phase referenced to t = 0.
+def _windowed(ir, fs, t0_s, freqs, *, gate_ms, cycles, band, drift_samples, i_edge, max_ms, twin):
+    """`(H, T, info)` -- the one implementation of the gated read.
 
-    One DFT per grid frequency over that frequency's own window, which is the definition of a
-    windowed spectrum and (for FDW) the only way to get one without approximating it. The phase
-    keeps the ABSOLUTE time base (`t0_s` is the time of sample 0, the loopback reference), so a
-    gated reading still carries arrival -- which is what the L−R arrival check reads.
-
-    The window: full weight from `PRE_MS` before the detected arrival, then the decay over
-    `gate_ms` (or `cycles`/f) FROM THE ARRIVAL. `i_edge` pins that arrival from outside -- two
-    channels compared over one band should be anchored the same way, and a caller that has already
-    located it (or wants the pair anchored on one member) says so rather than having it re-derived.
+    `windowed_spectrum` and `windowed_group_delay` are its two faces, so a spectrum and its
+    time-weighted twin cannot be read through two different windows. `T` is None unless `twin`;
+    `(None, None, info)` when the start of the response cannot be located.
     """
     x = np.asarray(ir, dtype=float)
     fs = float(fs)
@@ -163,7 +162,7 @@ def windowed_spectrum(ir, fs, t0_s, freqs, *, gate_ms=None, cycles=None, band=No
         i0, anchor = onset_index(x, fs, t0_s=t0, band=band)
         info["anchor"] = anchor
         if i0 is None:
-            return None, dict(info, refused=anchor["why"])
+            return None, None, dict(info, refused=anchor["why"])
         i_edge = i0 + int(round(PRE_MS / 1000.0 * fs))
     else:
         i_edge = int(i_edge)
@@ -178,6 +177,7 @@ def windowed_spectrum(ir, fs, t0_s, freqs, *, gate_ms=None, cycles=None, band=No
     info["length_ms"] = [float(v) for v in lens]
     flat = x[i0:i_edge]                                  # the margin, at full weight
     H = np.zeros(f.size, dtype=complex)
+    T = np.zeros(f.size, dtype=complex) if twin else None
     # Grouped by window length: every frequency asking for the same number of samples shares one
     # windowed segment, so a fixed gate is ONE segment and an FDW is one per distinct length.
     n_by_len = np.maximum(np.round(lens / 1000.0 * fs).astype(int), 1)
@@ -185,8 +185,84 @@ def windowed_spectrum(ir, fs, t0_s, freqs, *, gate_ms=None, cycles=None, band=No
         which = np.nonzero(n_by_len == n)[0]
         seg = np.concatenate([flat, x[i_edge:i_edge + n] * _taper(int(n))])
         t = t0 + (i0 + np.arange(seg.size)) / fs
-        H[which] = np.exp(-2j * np.pi * np.outer(f[which], t)) @ seg
+        E = np.exp(-2j * np.pi * np.outer(f[which], t))
+        H[which] = E @ seg
+        if twin:
+            T[which] = E @ (t * seg)                     # the same window, each sample weighted by its time
+    return H, T, info
+
+
+def windowed_spectrum(ir, fs, t0_s, freqs, *, gate_ms=None, cycles=None, band=None,
+                      drift_samples=0.0, i_edge=None, max_ms=None):
+    """`(H, info)` -- the complex response through the GATE, on `freqs`, phase referenced to t = 0.
+
+    One DFT per grid frequency over that frequency's own window, which is the definition of a
+    windowed spectrum and (for FDW) the only way to get one without approximating it. The phase
+    keeps the ABSOLUTE time base (`t0_s` is the time of sample 0, the loopback reference), so a
+    gated reading still carries arrival -- which is what the L−R arrival check reads.
+
+    The window: full weight from `PRE_MS` before the detected arrival, then the decay over
+    `gate_ms` (or `cycles`/f) FROM THE ARRIVAL. `i_edge` pins that arrival from outside -- two
+    channels compared over one band should be anchored the same way, and a caller that has already
+    located it (or wants the pair anchored on one member) says so rather than having it re-derived.
+    """
+    H, _, info = _windowed(ir, fs, t0_s, freqs, gate_ms=gate_ms, cycles=cycles, band=band,
+                           drift_samples=drift_samples, i_edge=i_edge, max_ms=max_ms, twin=False)
     return H, info
+
+
+#: The smoothing a gated group delay is read with unless the caller names another: 1/12 octave,
+#: numerator and energy apart -- what hub RES-010 measured the across-position scatter with. REW
+#: reads its own group delay at 1/24, so two GD readings compare only at one smoothing AND one window.
+GD_SMOOTH_OCT = 1.0 / 12.0
+
+
+# upstream: DIMOSUS/Resonalyze docs/specs/fdw-group-delay.md @ 23f2e70 (MIT) -- the definition of group
+#     delay through an FDW (spec §2, their #186): the energy arrival inside the window,
+#     τ = Re[T·conj(H)]/|H|² with T the time-weighted twin of H, numerator and energy smoothed apart.
+# deviation: one DFT per grid frequency over that frequency's own window (this module's FDW), not their
+#            bank of three windows per octave blended linearly between centres -- see `_windowed`.
+# deviation: one anchor for every frequency, so their extraction-start correction to T is zero by
+#            construction rather than applied -- see `_windowed` (`i_edge`).
+# deviation: smoothed over the grid's own bins, `smooth_oct` 1/12 octave by default, not over FFT bins
+#            with a minimum half-width from the effective window -- see `windowed_group_delay`.
+def windowed_group_delay(ir, fs, t0_s, freqs, *, gate_ms=None, cycles=None, band=None,
+                         drift_samples=0.0, i_edge=None, max_ms=None, smooth_oct=GD_SMOOTH_OCT):
+    """`(tau_s, info)` -- group delay through the GATE, as the energy arrival inside the window.
+
+    τ(f) = Re[T·conj(H)] / |H|², where H is exactly `windowed_spectrum`'s spectrum and T its twin
+    weighted by time through the same window; numerator and energy are smoothed SEPARATELY over
+    `smooth_oct` of the grid (0 for none) before the division. Seconds, on the absolute base
+    `arrival_ms` is on. `(None, info)` when the start of the response cannot be located.
+
+    Not −d(phase)/dω of the gated phase: under an FDW the window slides with frequency, and the slope picks
+    that slide up (hub RES-010: 5-47 % more scatter across microphone positions than τ).
+
+    What it is for is junction timing through the direct sound. Across seven hand-held positions on
+    `_49` (junctions 1.6 and 2.7 kHz, both sides) τ through 8 cycles scattered ×0.16-0.29 as much as
+    REW's own group delay did, per driver, median over fc/2..2·fc (hub RES-010). It is NOT the cabin's
+    group delay -- the room is what the window leaves out -- so the two are never subtracted as one
+    quantity. Validated 800-5400 Hz; lower down a 6-8-cycle window grows long and takes the cabin back.
+    """
+    H, T, info = _windowed(ir, fs, t0_s, freqs, gate_ms=gate_ms, cycles=cycles, band=band,
+                           drift_samples=drift_samples, i_edge=i_edge, max_ms=max_ms, twin=True)
+    if H is None:
+        return None, info
+    f = np.asarray(freqs, dtype=float)
+    num = (T * np.conj(H)).real
+    en = np.abs(H) ** 2
+    if smooth_oct:
+        half = 2.0 ** (float(smooth_oct) / 2.0)
+        num_s, en_s = np.empty(f.size), np.empty(f.size)
+        for k, fk in enumerate(f):
+            m = (f >= fk / half) & (f <= fk * half)
+            num_s[k], en_s[k] = num[m].sum(), en[m].sum()
+        num, en = num_s, en_s
+    with np.errstate(divide="ignore", invalid="ignore"):
+        tau = np.where(en > 0.0, num / en, np.nan)
+    info = dict(info, quantity="group delay as the energy arrival tau = Re[T*conj(H)]/|H|^2, s, absolute base",
+                smooth_oct=smooth_oct, validated_hz=[800.0, 5400.0])
+    return tau, info
 
 
 def gate_ir(ir, fs, *, t0_s=0.0, band=None, gate_ms=1.0, i_edge=None):
@@ -440,6 +516,34 @@ def _selftest():
     _, sub_anchor = onset_index(sub, fs, t0_s=t0)
     assert sub_anchor["verdict"] == "ILL-POSED" and sub_anchor["spread_ms"] > 1.0, sub_anchor
 
+    # GROUP DELAY through the gate (hub RES-010): the energy arrival τ = Re[T·conj(H)]/|H|² through
+    # the very window the spectrum is read with. The twin does not disturb the spectrum; a pure delay
+    # reads flat on the absolute base, smoothed or not; under a reflection 6 ms after the arrival an
+    # FDW of 8 cycles reads the DIRECT arrival wherever the reflection is outside it (above ~1.3 kHz),
+    # while a 200 ms window -- the room in it -- swings by more than a millisecond.
+    gd_f = 1000.0 * 2.0 ** (np.arange(3 * 96 + 1) / 96.0)                  # 1-8 kHz at 96 per octave
+    pure = np.zeros(n)
+    i_p = int(round((5.0 / 1000.0 - t0) * fs))
+    pure[i_p] = 1.0
+    Hs, _ = windowed_spectrum(pure, fs, t0, gd_f, cycles=8.0)
+    Ht, Tt, _ = _windowed(pure, fs, t0, gd_f, gate_ms=None, cycles=8.0, band=None, drift_samples=0.0,
+                          i_edge=None, max_ms=None, twin=True)
+    assert np.array_equal(Hs, Ht) and Tt is not None, "the twin must not change the spectrum"
+    for smooth in (0, GD_SMOOTH_OCT):
+        tau_p, gi = windowed_group_delay(pure, fs, t0, gd_f, cycles=8.0, smooth_oct=smooth)
+        worst_p = float(np.max(np.abs(tau_p * 1000.0 - 5.0)))
+        assert worst_p < 0.01, f"a pure 5 ms delay reads {worst_p:.4f} ms off (smooth_oct={smooth})"
+    assert gi["smooth_oct"] == GD_SMOOTH_OCT and gi["window"] == GATE
+    pure[i_p + int(round(0.006 * fs))] = 0.5                                # a reflection 6 ms later, -6 dB
+    up = gd_f >= 2000.0
+    tau_r, _ = windowed_group_delay(pure, fs, t0, gd_f, cycles=8.0, smooth_oct=0)
+    worst_r = float(np.max(np.abs(tau_r[up] * 1000.0 - 5.0)))
+    assert worst_r < 0.05, f"FDW-8 group delay strays {worst_r:.3f} ms from the direct arrival above 2 kHz"
+    tau_w, _ = windowed_group_delay(pure, fs, t0, gd_f, gate_ms=200.0, smooth_oct=0)
+    swing = float(np.ptp(tau_w[up] * 1000.0))
+    assert swing >= 1.0, f"a 200 ms window must show the reflection's swing, got {swing:.2f} ms"
+    assert windowed_group_delay(np.zeros(n), fs, t0, gd_f, cycles=8.0)[0] is None
+
     print("selftest[windows] OK -- the gate is anchored on the DETECTED START (a bigger reflection "
           "does not move it, and the triangulation verdict says the peak would have been wrong), "
           "a 2 ms gate reads a single impulse flat where the whole record combs, "
@@ -449,7 +553,9 @@ def _selftest():
           "the gated arrival ruler recovers a pure 0.260 ms delay at gates 0.7-5 ms and only when "
           "each record's own t0 is given (ignoring it costs exactly the 0.535 ms offset -- the "
           "desk's 05.09 sign error), and a response with no locatable start returns its verdict "
-          "instead of a number")
+          "instead of a number; group delay through the gate is the energy arrival -- a pure 5 ms delay "
+          f"reads flat, and under a reflection 6 ms later FDW-8 stays within {worst_r:.3f} ms of the "
+          f"direct arrival above 2 kHz where a 200 ms window swings {swing:.1f} ms")
     return 0
 
 

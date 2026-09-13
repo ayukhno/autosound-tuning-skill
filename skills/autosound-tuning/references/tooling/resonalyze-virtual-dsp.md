@@ -235,6 +235,14 @@ shorter than the two members' arrivals are apart is not a reading at all — at 
 "cancellation" that is the window. Our magnitude window stays the whole record (2.73 s) rather than
 their ~680 ms; the difference is the very late tail, and it is named rather than adopted silently.
 
+**Group delay through the FDW** — their #186 (`docs/specs/fdw-group-delay.md` §2 @ `23f2e70`): the energy
+arrival inside the window, τ = Re[T·conj(H)]/|H|², with T the time-weighted twin of H through the same
+window and numerator and energy smoothed apart — not −dφ/dω of the FDW phase, which picks up a term from
+the window sliding with frequency. We took that definition as well (`windows.windowed_group_delay`, pinned
+in its header) and ran the seat-to-seat check their PR lists as not run (hub `RES-010`): over seven
+hand-held positions on `_49`, τ through FDW-8 scattered ×0.16–0.29 of REW's own group delay per driver,
+and the phase slope 5–47 % more than τ. Junction timing through the direct sound, validated 800–5400 Hz.
+
 ## Where this meets the skill's own tools
 
 `rew_tool/resonalyze_ir.py` writes v7 impulse-response files REW → Resonalyze and READS v4..v8 (v8,
