@@ -13,7 +13,7 @@
 
 ## Sprawdzone na zawodach
 
-Dzięki wersji 2.x tej metody, samochód autora zdobył cztery nagrody w 2026 roku na mistrzostwach **EMMA** i **AYA** (pierwsza nagroda została zdobyta jeszcze przed sformowaniem metody w skill, za pomocą wskazówek AI z tych samych wykresów, co dało pomysł na jego stworzenie). Najnowsza wersja 3.x (z interfejsem graficznym) jest obecnie w fazie beta i jeszcze nie udowodniła swojej wartości na zawodach, dlatego dla gwarantowanego rezultatu wiele osób wybiera sprawdzoną wersję 2.8.x.
+Dzięki wersji 2.x tej metody, samochód autora zdobył cztery nagrody w 2026 roku na mistrzostwach **EMMA** i **AYA** (pierwsza nagroda została zdobyta jeszcze przed sformowaniem metody w skill, za pomocą wskazówek AI z tych samych wykresów, co dało pomysł na jego stworzenie). Najnowsza wersja 3.x (z interfejsem graficznym) jest obecnie w fazie beta i właśnie rozpoczęła próby na zawodach: piąta nagroda — 3. miejsce w **finale EMMA Niemiec 2026** — to efekt dopracowania istniejącego strojenia za pomocą 3.x, a nie strojenia od zera. Dlatego dla gwarantowanego rezultatu wiele osób wybiera sprawdzoną wersję 2.8.x.
 
 <p align="left">
   <img src="assets/awards/aya-may26-einsteiger5000.jpg" height="120" alt="AYA Maj 2026, Einsteiger 5000, 1. miejsce">
@@ -23,6 +23,8 @@ Dzięki wersji 2.x tej metody, samochód autora zdobył cztery nagrody w 2026 ro
   <img src="assets/awards/aya-aug26-amateur5000.jpg" height="120" alt="AYA Sierpień 2026, Amateur 5000, 2. miejsce">
   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
   <img src="assets/awards/emma-aug26-entry-unlimited.jpg" height="120" alt="EMMA Sound Off 2026, SQ Entry Unlimited, 3. miejsce">
+  &nbsp;&nbsp;&nbsp;
+  <img src="assets/awards/emma-sep26-final-entry-unlimited.jpg" height="120" alt="Finał EMMA Niemiec 2026, Frankfurt, SQ Entry Unlimited, 3. miejsce">
 </p>
 
 *Twój system też może brzmieć na poziomie mistrzów!*

@@ -13,7 +13,7 @@
 
 ## Auf Wettbewerben bewährt
 
-Mit der Version 2.x dieser Methode holte das Auto des Autors im Jahr 2026 vier Auszeichnungen bei **EMMA**- und **AYA**-Meisterschaften (die erste Auszeichnung wurde errungen, bevor die Methode zu einem Skill wurde, durch KI-Tipps anhand derselben Graphen, was die Idee für diesen Skill lieferte). Die neueste Version 3.x (mit grafischer Oberfläche) befindet sich derzeit in der Beta-Phase und hat sich bei Wettbewerben noch nicht bewiesen. Für ein garantiertes Ergebnis entscheiden sich daher viele für die bewährte Version 2.8.x.
+Mit der Version 2.x dieser Methode holte das Auto des Autors im Jahr 2026 vier Auszeichnungen bei **EMMA**- und **AYA**-Meisterschaften (die erste Auszeichnung wurde errungen, bevor die Methode zu einem Skill wurde, durch KI-Tipps anhand derselben Graphen, was die Idee für diesen Skill lieferte). Die neueste Version 3.x (mit grafischer Oberfläche) befindet sich derzeit in der Beta-Phase und hat ihre Wettbewerbserprobung gerade begonnen: Die fünfte Auszeichnung — der 3. Platz beim **Deutschen EMMA Finale 2026** — entstand durch die Nachabstimmung des bestehenden Setups mit 3.x, nicht durch ein Tuning von Grund auf. Für ein garantiertes Ergebnis entscheiden sich daher viele weiterhin für die bewährte Version 2.8.x.
 
 <p align="left">
   <img src="assets/awards/aya-may26-einsteiger5000.jpg" height="120" alt="AYA Mai 2026, Einsteiger 5000, 1. Platz">
@@ -23,6 +23,8 @@ Mit der Version 2.x dieser Methode holte das Auto des Autors im Jahr 2026 vier A
   <img src="assets/awards/aya-aug26-amateur5000.jpg" height="120" alt="AYA August 2026, Amateur 5000, 2. Platz">
   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
   <img src="assets/awards/emma-aug26-entry-unlimited.jpg" height="120" alt="EMMA Sound Off 2026, SQ Entry Unlimited, 3. Platz">
+  &nbsp;&nbsp;&nbsp;
+  <img src="assets/awards/emma-sep26-final-entry-unlimited.jpg" height="120" alt="Deutsches EMMA Finale 2026, Frankfurt, SQ Entry Unlimited, 3. Platz">
 </p>
 
 *Deine Anlage kann auch wie ein Champion klingen!*

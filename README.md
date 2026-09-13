@@ -13,7 +13,7 @@
 
 ## Proven in Competitions
 
-With version 2.x of this method, the author's car took four awards in 2026 at **EMMA** and **AYA** championships (the first award was won before it was bundled into a skill, using AI hints from the same graphs, which inspired this project). The latest version 3.x (with a graphical interface) is currently in beta and hasn't proven itself in competitions yet, so for a guaranteed result, many choose to stick with the time-tested version 2.8.x.
+With version 2.x of this method, the author's car took four awards in 2026 at **EMMA** and **AYA** championships (the first award was won before it was bundled into a skill, using AI hints from the same graphs, which inspired this project). The latest version 3.x (with a graphical interface) is currently in beta and has just begun its competition trials: the fifth award — 3rd place at the **German EMMA Final 2026** — came from refining the existing tune with 3.x, not from tuning from scratch. So for a guaranteed result, many still choose to stick with the time-tested version 2.8.x.
 
 <p align="left">
   <img src="assets/awards/aya-may26-einsteiger5000.jpg" height="120" alt="AYA May 2026, Einsteiger 5000, 1st place">
@@ -23,6 +23,8 @@ With version 2.x of this method, the author's car took four awards in 2026 at **
   <img src="assets/awards/aya-aug26-amateur5000.jpg" height="120" alt="AYA August 2026, Amateur 5000, 2nd place">
   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
   <img src="assets/awards/emma-aug26-entry-unlimited.jpg" height="120" alt="EMMA Sound Off 2026, SQ Entry Unlimited, 3rd place">
+  &nbsp;&nbsp;&nbsp;
+  <img src="assets/awards/emma-sep26-final-entry-unlimited.jpg" height="120" alt="German EMMA Final 2026, Frankfurt, SQ Entry Unlimited, 3rd place">
 </p>
 
 *Your system can sound like a champion too!*
