@@ -49,12 +49,12 @@
 
 **macOS** — відкрий Terminal (натисни ⌘-Space, набери «terminal», Enter) і встав:
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.49/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.50/install.sh | bash
 ```
 
 **Windows** — відкрий PowerShell (натисни Пуск, набери «powershell», Enter) і встав:
 ```powershell
-irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.49/install.ps1 | iex
+irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.50/install.ps1 | iex
 ```
 
 **Після встановлення:**

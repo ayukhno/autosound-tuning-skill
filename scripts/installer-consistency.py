@@ -333,6 +333,19 @@ def main():
     elif pasted and released:
         checked.append(f"all four READMEs paste the same install line, at {released}")
 
+    # ...and install.cmd's download path, which fetches install.ps1 BY TAG. It stayed on v3.0.46 for
+    # three releases (found 2026-09-13), so a Windows user without a local install.ps1 was handed the
+    # installer of three releases ago. Same rule as the READMEs: that tag is the released version.
+    if ps1url and released:
+        cmd_tag = re.search(r"autosound-tuning-skill/(v3\.[0-9.]+)/install\.ps1", ps1url)
+        if not cmd_tag:
+            problems.append(f"install.cmd PS1URL names no v3 tag — {ps1url}")
+        elif cmd_tag.group(1) != released:
+            problems.append(f"install.cmd fetches install.ps1 at {cmd_tag.group(1)} but CHANGELOG's newest is "
+                            f"{released} — bump PS1URL with the release")
+        else:
+            checked.append(f"install.cmd fetches install.ps1 at the released tag ({released})")
+
     # And the app: `install-tcc.md` is the OTHER way into TCC, so it must pin too (SCR-054).
     tcc_doc = read(ROOT / "commands" / "install-tcc.md")
     tcc_refs = set(re.findall(r"autosound-tcc(@v[0-9.]+)?'", tcc_doc))
