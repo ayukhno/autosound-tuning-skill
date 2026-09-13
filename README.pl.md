@@ -18,11 +18,12 @@
 
 > [!TIP]
 > **Nagrody i Osiągnięcia**
-> To podejście zostało stworzone nie tylko dla czystej przyjemności ze słuchania, ale także po to, by wygrywać. Udowodniło już swoją skuteczność w praktyce, przynosząc cztery nagrody:
+> To podejście zostało stworzone nie tylko dla czystej przyjemności ze słuchania, ale także po to, by wygrywać. Udowodniło już swoją skuteczność w praktyce, przynosząc pięć nagród:
 > * **1 miejsce w klasie EINSTEIGER 5000 na zawodach AYA (30.05.2026, Lemgo)**. Wynik ten został osiągnięty dzięki analizie wykresów i poradom od Gemini.
 > * **1 miejsce w klasie AMATEUR 5000 na zawodach AYA (25.07.2026, Horst)**. Zwycięstwo w kolejnej klasie, osiągnięte przy pomocy tego skilla i własnego słuchu.
 > * **2 miejsce w klasie AMATEUR 5000 na zawodach AYA (15.08.2026, Schmallenberg)**. Inny sędzia dźwięku niż w lipcu; jego karta ocen jest wejściem do kolejnej rundy.
 > * **3 miejsce w SQ Entry Unlimited na EMMA Sound Off 2026 (15.08.2026, Schmallenberg)**. Pierwszy start według regulaminu EMMA, tego samego dnia i na tym samym strojeniu co AYA powyżej.
+> * **3 miejsce w SQ Entry Unlimited w finale EMMA Niemiec 2026 (wrzesień 2026, Frankfurt)**. Dopracowanie tego samego strojenia — już z użyciem skilla 3.x.
 > 
 > <p align="left">
 >   <img src="assets/awards/aya-may26-einsteiger5000.jpg" width="100" alt="AYA May 2026 Einsteiger 5000">
@@ -32,6 +33,8 @@
 >   <img src="assets/awards/aya-aug26-amateur5000.jpg" width="100" alt="AYA Aug 2026 Amateur 5000, 2nd place">
 >   &nbsp;&nbsp;&nbsp;
 >   <img src="assets/awards/emma-aug26-entry-unlimited.jpg" width="60" alt="EMMA Sound Off 2026 SQ Entry Unlimited, 3rd place">
+>   &nbsp;&nbsp;&nbsp;
+>   <img src="assets/awards/emma-sep26-final-entry-unlimited.jpg" width="60" alt="German EMMA Final 2026 SQ Entry Unlimited, 3rd place">
 > </p>
 > 
 > *Tutaj może być też twoja nagroda!*

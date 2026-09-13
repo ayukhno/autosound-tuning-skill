@@ -18,11 +18,12 @@
 
 > [!TIP]
 > **Нагороди та досягнення**
-> Цей підхід створений не лише для насолоди звуком, а й для перемог. Він уже довів свою ефективність на практиці та приніс чотири нагороди:
+> Цей підхід створений не лише для насолоди звуком, а й для перемог. Він уже довів свою ефективність на практиці та приніс п'ять нагород:
 > * **1 місце у класі EINSTEIGER 5000 на змаганнях AYA (30.05.2026, Lemgo)**. Результат здобуто завдяки аналізу графіків та порадам від Gemini.
 > * **1 місце у класі AMATEUR 5000 на змаганнях AYA (25.07.2026, Horst)**. Перемога у наступному класі, здобута за допомогою цього скіла та власного слуху.
 > * **2 місце у класі AMATEUR 5000 на змаганнях AYA (15.08.2026, Schmallenberg)**. Інший суддя звуку, ніж у липні; його картка — вхід для наступного раунду.
 > * **3 місце у SQ Entry Unlimited на EMMA Sound Off 2026 (15.08.2026, Schmallenberg)**. Перший вихід за регламентом EMMA, того ж дня і на тому ж налаштуванні, що й AYA вище.
+> * **3 місце у SQ Entry Unlimited на фіналі EMMA Німеччини 2026 (вересень 2026, Frankfurt)**. Доопрацювання того самого налаштування — вже із застосуванням скіла 3.x.
 > 
 > <p align="left">
 >   <img src="assets/awards/aya-may26-einsteiger5000.jpg" width="100" alt="AYA May 2026 Einsteiger 5000">
@@ -32,6 +33,8 @@
 >   <img src="assets/awards/aya-aug26-amateur5000.jpg" width="100" alt="AYA Aug 2026 Amateur 5000, 2nd place">
 >   &nbsp;&nbsp;&nbsp;
 >   <img src="assets/awards/emma-aug26-entry-unlimited.jpg" width="60" alt="EMMA Sound Off 2026 SQ Entry Unlimited, 3rd place">
+>   &nbsp;&nbsp;&nbsp;
+>   <img src="assets/awards/emma-sep26-final-entry-unlimited.jpg" width="60" alt="German EMMA Final 2026 SQ Entry Unlimited, 3rd place">
 > </p>
 > 
 > *Тут може бути і твоя нагорода!*

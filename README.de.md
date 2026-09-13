@@ -18,11 +18,12 @@
 
 > [!TIP]
 > **Auszeichnungen & Erfolge**
-> Dieser Ansatz ist nicht nur für den reinen Hörgenuss gedacht, sondern auch um zu gewinnen. Er hat seine Wirksamkeit in der Praxis bereits bewiesen und vier Auszeichnungen eingebracht:
+> Dieser Ansatz ist nicht nur für den reinen Hörgenuss gedacht, sondern auch um zu gewinnen. Er hat seine Wirksamkeit in der Praxis bereits bewiesen und fünf Auszeichnungen eingebracht:
 > * **1. Platz in der Klasse EINSTEIGER 5000 beim AYA-Wettbewerb (30.05.2026, Lemgo)**. Dieses Ergebnis wurde durch Diagrammanalysen und Ratschläge von Gemini erzielt.
 > * **1. Platz in der Klasse AMATEUR 5000 beim AYA-Wettbewerb (25.07.2026, Horst)**. Ein Sieg in der nächsten Klasse, der mit Hilfe dieses Skills und dem eigenen Gehör errungen wurde.
 > * **2. Platz in der Klasse AMATEUR 5000 beim AYA-Wettbewerb (15.08.2026, Schmallenberg)**. Ein anderer Klangjuror als im Juli; seine Bewertungskarte ist der Ausgangspunkt für die nächste Runde.
 > * **3. Platz in SQ Entry Unlimited beim EMMA Sound Off 2026 (15.08.2026, Schmallenberg)**. Erster Start nach EMMA-Reglement, am selben Tag und mit derselben Abstimmung wie beim AYA oben.
+> * **3. Platz in SQ Entry Unlimited beim Deutschen EMMA Finale 2026 (September 2026, Frankfurt)**. Eine Nachabstimmung desselben Setups — bereits mit Skill 3.x.
 > 
 > <p align="left">
 >   <img src="assets/awards/aya-may26-einsteiger5000.jpg" width="100" alt="AYA May 2026 Einsteiger 5000">
@@ -32,6 +33,8 @@
 >   <img src="assets/awards/aya-aug26-amateur5000.jpg" width="100" alt="AYA Aug 2026 Amateur 5000, 2nd place">
 >   &nbsp;&nbsp;&nbsp;
 >   <img src="assets/awards/emma-aug26-entry-unlimited.jpg" width="60" alt="EMMA Sound Off 2026 SQ Entry Unlimited, 3rd place">
+>   &nbsp;&nbsp;&nbsp;
+>   <img src="assets/awards/emma-sep26-final-entry-unlimited.jpg" width="60" alt="German EMMA Final 2026 SQ Entry Unlimited, 3rd place">
 > </p>
 > 
 > *Hier könnte auch deine Auszeichnung stehen!*

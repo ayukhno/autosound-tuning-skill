@@ -18,11 +18,12 @@
 
 > [!TIP]
 > **Awards & Achievements**
-> This approach is designed not just for personal listening pleasure, but for winning. It has already proven its effectiveness in practice, bringing home four awards:
+> This approach is designed not just for personal listening pleasure, but for winning. It has already proven its effectiveness in practice, bringing home five awards:
 > * **1st place in EINSTEIGER 5000 class at AYA competition (May 30, 2026, Lemgo)**. This result was achieved through graph analysis and advice from Gemini.
 > * **1st place in AMATEUR 5000 class at AYA competition (July 25, 2026, Horst)**. A victory in the next class, achieved using this skill and your own ears.
 > * **2nd place in AMATEUR 5000 class at AYA competition (August 15, 2026, Schmallenberg)**. A different sound judge than in July; his score card is the input for the next round.
 > * **3rd place in SQ Entry Unlimited at EMMA Sound Off 2026 (August 15, 2026, Schmallenberg)**. First outing under the EMMA ruleset, same day and same tune as the AYA above.
+> * **3rd place in SQ Entry Unlimited at the German EMMA Final 2026 (September 2026, Frankfurt)**. A refinement of the same tune, this time already with skill 3.x applied.
 > 
 > <p align="left">
 >   <img src="assets/awards/aya-may26-einsteiger5000.jpg" width="100" alt="AYA May 2026 Einsteiger 5000">
@@ -32,6 +33,8 @@
 >   <img src="assets/awards/aya-aug26-amateur5000.jpg" width="100" alt="AYA Aug 2026 Amateur 5000, 2nd place">
 >   &nbsp;&nbsp;&nbsp;
 >   <img src="assets/awards/emma-aug26-entry-unlimited.jpg" width="60" alt="EMMA Sound Off 2026 SQ Entry Unlimited, 3rd place">
+>   &nbsp;&nbsp;&nbsp;
+>   <img src="assets/awards/emma-sep26-final-entry-unlimited.jpg" width="60" alt="German EMMA Final 2026 SQ Entry Unlimited, 3rd place">
 > </p>
 > 
 > *Your award could be here too!*
