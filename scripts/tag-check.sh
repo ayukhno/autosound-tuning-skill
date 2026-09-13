@@ -20,7 +20,7 @@
 # `hub/scripts/release-preflight.py`, and is CALLED from here (hub governance/RELEASE-CHANNEL.md §9,
 # ticket HUB-004). Two of those checks never existed in this file: push.followTags was compared by
 # hand, and nothing ever asked the hook. What stays here is this repo's inventory -- the manifest,
-# the note, the installer triplet, this repo's CI -- because no second copy of it exists anywhere
+# the note, the installer triplet -- because no second copy of it exists anywhere
 # to drift against. The carrier only reports; the tag is still cut by a human afterwards.
 #
 # No `set -e`: every check runs, so one invocation names everything that is not ready and the
@@ -129,48 +129,10 @@ else
 fi
 echo
 
-# 6. CI green ON THE SHA THE TAG WILL NAME. Until HUB-004 this was a printed reminder and the one
-#    thing in the list held by attention instead of by a gate -- the same shape as the
-#    push.followTags gap that ticket closed. It is a gate now: the selftests are still not rerun
-#    here (CI runs scripts/run-selftests.sh on every push, and what matters is that it was green on
-#    the sha, not on this checkout), but whether it WAS green is now asked rather than assumed.
-#    Not knowing is not a pass: no gh, no answer from it, no run on this sha, or a run still going
-#    are each "not ready", and each says which.
-sha="$(git rev-parse HEAD 2>/dev/null || true)"
-if [ -z "$sha" ]; then
-  bad ci-green "cannot resolve HEAD -- there is no sha to ask about"
-elif ! command -v gh >/dev/null 2>&1; then
-  bad ci-green "gh is not on PATH: CI on ${sha:0:12} is unverified, and unverified is not green"
-elif ! runs="$(gh run list --commit "$sha" --limit 50 --json status,conclusion,workflowName 2>&1)"; then
-  bad ci-green "gh run list failed: $(printf '%s' "$runs" | tr '\n' ' ' | cut -c1-140)"
-elif ! ci_msg="$("$PY" -c '
-import json, sys
-runs = json.loads(sys.argv[1])
-if not runs:
-    print("FAIL no run on this sha -- CI has not seen the commit the tag would name")
-    raise SystemExit
-pending = sorted({r["workflowName"] for r in runs if r["status"] != "completed"})
-broken = sorted({r["workflowName"] + ":" + str(r["conclusion"]) for r in runs
-                 if r["status"] == "completed"
-                 and r["conclusion"] not in ("success", "skipped", "neutral")})
-green = sorted({r["workflowName"] for r in runs if r["conclusion"] == "success"})
-if pending:
-    print("FAIL still running: " + ", ".join(pending) + " -- a run in flight is not a green run")
-elif broken:
-    print("FAIL " + ", ".join(broken) + " -- red on the sha the tag would name")
-elif not green:
-    print("FAIL nothing succeeded on this sha: "
-          + ", ".join(sorted({str(r["conclusion"]) for r in runs})))
-else:
-    print("OK " + ", ".join(green) + " green on " + sys.argv[2][:12])
-' "$runs" "$sha" 2>&1)"; then
-  bad ci-green "cannot read gh output: $(printf '%s' "$ci_msg" | tr '\n' ' ' | cut -c1-140)"
-else
-  case "$ci_msg" in
-    OK*) ok ci-green "${ci_msg#OK }" ;;
-    *)   bad ci-green "${ci_msg#FAIL }" ;;
-  esac
-fi
+# CI green on the sha the tag will name is asked ONCE, by the hub preflight above (`ci-green`,
+# HUB-057): this file had its own reader until HUB-059, and the two counted different runs -- this
+# one every run on the sha, Pages included; the hub's only this repo's own workflows on push. A red
+# Pages build does not hold a tag: installers and TCC's updater fetch the tag from git, not the site.
 
 # The name to cut. For a candidate it is the hub's: the next rcN is counted there, not here.
 LABEL="$TAG"
