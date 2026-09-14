@@ -40,7 +40,9 @@ not descend into one.
 install, a developer symlink, a per-project pin, all legitimate and none announcing itself. **Say
 which one you loaded, and check it against the project's, before proposing anything**:
 `python3 rew_tool/deployment.py <project>` (exit 0 one method, 3 they disagree, 4 cannot tell). A
-disagreement is a **finding for the user**, never something to resolve by picking — the maths behind
+front-end that runs a copy of its own (TCC's beta channel) declares it in `$AUTOSOUND_SKILL_ROOT`;
+the personal copy then counts as another channel, and the check holds this copy and the project's to
+the declared one. A disagreement is a **finding for the user**, never something to resolve by picking — the maths behind
 their numbers and the method behind your advice are different versions, and which is right is their
 call. Why this is silent by construction → [`why-these-rules.md`](references/core/why-these-rules.md).
 

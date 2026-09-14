@@ -31,8 +31,16 @@ different checkouts -- the fact that stays true no matter which one wins.
 matching would be this module's own failure mode wearing a green tick, so it is a refusal of its
 own (exit 4), separate from a real disagreement (exit 3).
 
+**A copy a front-end DECLARES is checked, not guessed at.** A companion app that runs a checkout of
+its own -- TCC's beta channel keeps a second one beside the terminal's (autosound-hub #145) -- sets
+`AUTOSOUND_SKILL_ROOT` to that copy's skill folder. Then this copy and the project's link must BE
+that checkout, and a personal copy at another commit is reported as the terminal's channel instead
+of refused: the session was not loaded from it, and a project's scripts reach it only through
+`bind()`'s fallback, which is never silent. Without the variable nothing changes.
+
     python3 rew_tool/deployment.py               # this copy and the personal one
     python3 rew_tool/deployment.py <project>     # ... plus that project's own pin
+    AUTOSOUND_SKILL_ROOT=<skill folder> python3 rew_tool/deployment.py <project>   # a declared copy
     python3 rew_tool/deployment.py --selftest
 
 Exit: 0 one method  |  3 candidates disagree  |  4 a candidate has no identity, or there is none.
@@ -50,6 +58,11 @@ import sys
 #: above hands out this path and only this path, which is why the version has to be answerable
 #: from inside it rather than from a root the consumer never sees.
 SKILL_DIRNAME = "autosound-tuning"
+
+#: The declaration above: a front-end names the skill folder its session runs (SKILL.md, "Resolving
+#: paths", reads the same variable). Only `main()` reads the environment; every function below takes
+#: the path as an argument, so the selftest never depends on the shell it runs in.
+DECLARED_ENV = "AUTOSOUND_SKILL_ROOT"
 
 #: Same budget as `provenance._TIMEOUT`, same reason: a wedged git must not hold up the run it is
 #: describing.
@@ -128,15 +141,18 @@ def describe(path):
     }
 
 
-def candidates(project_dir=None, home=None):
+def candidates(project_dir=None, home=None, declared=None):
     """Every deployment a run on this machine can reach, in the order a project's scripts try them.
 
     `here` is first because it is the copy doing the talking -- a report that left itself out would
     be the "two partial sets, each believing it was the whole" that `run-selftests.sh` already has
-    a paragraph about.
+    a paragraph about. `declared` is the folder a front-end named in `DECLARED_ENV`; it comes second,
+    so the row the others are held to sits under the copy doing the talking.
     """
     home = home or os.path.expanduser("~")
     out = [dict(describe(skill_dir()), origin="here", link=skill_dir())]
+    if declared:
+        out.append(dict(describe(declared), origin="declared", link=declared))
     if project_dir:
         link = os.path.join(project_dir, ".claude", "skills", SKILL_DIRNAME)
         out.append(dict(describe(link), origin="project", link=link))
@@ -152,6 +168,9 @@ def verdict(cands):
     normal, healthy case; grouping by path would call that a fault and train everybody to ignore
     the check. So the grouping key is the sha, and two paths agree when their shas do.
     """
+    declared = next((c for c in cands if c["origin"] == "declared"), None)
+    if declared is not None:
+        return _declared_verdict(declared, cands)
     live = [c for c in cands if c["exists"]]
     if not live:
         return 4, "no deployment of the method found — nothing to compare, and nothing to run"
@@ -175,6 +194,37 @@ def verdict(cands):
     return 0, f"one method: {live[0]['version'] or '?'} ({live[0]['ref'] or live[0]['sha'][:12]})"
 
 
+def _declared_verdict(declared, cands):
+    """(exit code, one line) when a front-end named the copy its session runs.
+
+    `here` is the copy answering and `project` is what the project's scripts bind, so both ARE this
+    run: either at another commit is the split this module exists for, declared or not. The personal
+    copy is the one thing a declaration changes -- the session was not loaded from it, so another
+    commit there is the terminal's channel, reported and not refused. The declared folder must have
+    an identity of its own: a declaration nothing can check is not one.
+    """
+    if not declared["exists"] or not declared["sha"]:
+        return 4, (f"{DECLARED_ENV} names {declared['link']}, which cannot say which checkout it is"
+                   f" — unknown is not agreement")
+    run = [c for c in cands if c["origin"] in ("here", "project") and c["exists"]]
+    nameless = [c for c in run if not c["sha"]]
+    if nameless:
+        where = ", ".join(c["link"] for c in nameless)
+        return 4, f"a deployment cannot say which checkout it is: {where} — unknown is not agreement"
+    named = declared["ref"] or declared["sha"][:12]
+    off = [c for c in run if c["sha"] != declared["sha"]]
+    if off:
+        where = "; ".join(f"{c['origin']} is {c['ref'] or c['sha'][:12]} ({c['path']})" for c in off)
+        return 3, f"{DECLARED_ENV} declares {named}, and this run reaches another checkout: {where}"
+    line = f"one method, declared: {declared['version'] or '?'} ({named})"
+    other = [c for c in cands
+             if c["origin"] == "personal" and c["exists"] and c["sha"] != declared["sha"]]
+    if other:
+        seen = other[0]["ref"] or other[0]["sha"][:12] or "a copy with no identity"
+        line += f"; the personal copy is {seen} — another channel, not this run's"
+    return 0, line
+
+
 def report(cands):
     """The table, widest field first so the shas line up under each other."""
     rows = []
@@ -195,6 +245,9 @@ _USAGE = """usage: deployment.py [<project-dir>] [--json] [--selftest]
   <project-dir>    also that project's own .claude/skills/autosound-tuning
   --json           the same facts as a machine object
   --selftest       this module's own gates, on throwaway repositories
+
+  AUTOSOUND_SKILL_ROOT=<skill folder>   a front-end's declared copy: this copy and the project's
+                   must be that checkout; a personal copy at another commit is another channel
 
 exit  0 one method   3 checkouts disagree   4 a deployment has no identity, or there is none
 """
@@ -270,6 +323,27 @@ def _selftest():
                            dict(describe(b), origin="personal", link=b)])
         assert "S-001" not in line, f"two moving branches were called a pin: {line}"
 
+        # -- a DECLARED copy (autosound-hub #145): the run's own copies are held to it, and the
+        #    personal one is another channel. `a` plays the beta copy, `b` the terminal's release --
+        def row(skill, origin):
+            return dict(describe(skill), origin=origin, link=skill)
+
+        code, line = verdict([row(a, "here"), row(a, "declared"), row(b, "personal")])
+        assert code == 0, f"a declared copy with the terminal on another commit read as {code}: {line}"
+        assert "another channel" in line, f"the personal copy was not named as the other one: {line}"
+        code, _ = verdict([row(a, "here"), row(b, "personal")])
+        assert code == 3, "without a declaration the same pair must still be refused"
+        code, line = verdict([row(b, "here"), row(a, "declared"), row(b, "personal")])
+        assert code == 3, f"a session running another copy than it declared read as {code}: {line}"
+        code, line = verdict([row(a, "here"), row(a, "declared"), row(b, "project"),
+                              row(b, "personal")])
+        assert code == 3 and "project" in line, f"a project bound elsewhere read as {code}: {line}"
+        code, line = verdict([row(a, "here"), row(os.path.join(tmp, "gone"), "declared")])
+        assert code == 4, f"a declaration naming nothing read as {code}: {line}"
+        code, line = verdict([row(a, "here"), row(os.path.join(clone, "skills", SKILL_DIRNAME),
+                                                   "declared"), row(b, "personal")])
+        assert code == 0, f"the declared commit at another path read as {code}: {line}"
+
         # -- a copy in NO repository is refused, and refused differently from a disagreement --
         loose = os.path.join(tmp, "loose", "skills", SKILL_DIRNAME)
         os.makedirs(loose)
@@ -310,7 +384,7 @@ def main(argv=None):
     if len(argv) > 1:
         print(_USAGE, file=sys.stderr)
         return 2
-    cands = candidates(argv[0] if argv else None)
+    cands = candidates(argv[0] if argv else None, declared=os.environ.get(DECLARED_ENV) or None)
     code, line = verdict(cands)
     if as_json:
         print(json.dumps({"verdict": code, "summary": line, "deployments": cands},

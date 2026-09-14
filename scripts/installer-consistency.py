@@ -55,6 +55,25 @@ def one(pattern, text, what, where):
     return found[0], None
 
 
+def home_path_sh(sh, name):
+    """`NAME="${HOME}/<path>"` in install.sh -> `<path>`, or (None, why)."""
+    return one(rf'^{name}="\$\{{HOME\}}/([^"]+)"', sh, name, "install.sh")
+
+
+def checkout_paths(sh, ps1, sh_name, ps_name, problems):
+    """One checkout path from each installer, relative to the home folder, slashes forward.
+
+    install.sh spells it `"${HOME}/.claude/..."` and install.ps1 `Join-Path $HOME ".claude\\..."`,
+    so both are read down to the part after the home folder: the comparison is about the place,
+    not the punctuation. A path either file no longer spells that way is a problem, not a pass.
+    """
+    p_sh, err_a = home_path_sh(sh, sh_name)
+    p_ps, err_b = one(rf'^\${ps_name}\s*=\s*Join-Path \$HOME "([^"]+)"', ps1, f"${ps_name}",
+                      "install.ps1")
+    problems.extend(e for e in (err_a, err_b) if e)
+    return p_sh, (p_ps.replace("\\", "/") if p_ps else None)
+
+
 #: The order the beta channel must produce (hub RELEASE-CHANNEL.md §11.2, HUB-060), as (tags
 #: offered, the one to install): numeric where a number sits, a release above its own candidates, a
 #: candidate for a newer version above an older release, and nothing of another shape.
@@ -261,6 +280,18 @@ def main():
     else:
         checked.append("install.ps1 carries the same tag shapes and sort key (read, not run)")
 
+    # 2e. the method's two checkouts (autosound-hub #145): the terminal's and the beta channel's. A
+    # consumer runs the beta one BY PATH, so the two installers putting it in different places would
+    # leave one platform's app looking for a copy that is not there.
+    for what, sh_name, ps_name in (("terminal", "SKILL_SRC", "SkillSrc"),
+                                   ("beta", "SKILL_BETA_SRC", "SkillBetaSrc")):
+        p_sh, p_ps = checkout_paths(sh, ps1, sh_name, ps_name, problems)
+        if p_sh and p_ps:
+            if p_sh != p_ps:
+                problems.append(f"the {what} checkout differs — install.sh {p_sh!r} vs install.ps1 {p_ps!r}")
+            else:
+                checked.append(f"the {what} checkout agrees (~/{p_sh})")
+
     # 3. install.cmd hardcodes the URL it fetches install.ps1 from; it must be THIS repo's, on main
     ps1url, err = one(r'^set "PS1URL=(\S+)"', cmd, "PS1URL", "install.cmd")
     if err:
@@ -449,6 +480,11 @@ def values():
     if v: out["SKILL_BETA_GLOB"] = v
     v, _ = one(r'^TCC_BETA_GLOB="([^"]+)"', sh, "TCC_BETA_GLOB", "install.sh")
     if v: out["TCC_BETA_GLOB"] = v
+    # The method's two checkouts, relative to the home folder (autosound-hub #145): an app that runs
+    # the beta channel's copy finds it by path, and reads the path here rather than copying it.
+    for name in ("SKILL_SRC", "SKILL_BETA_SRC"):
+        v, _ = home_path_sh(sh, name)
+        if v: out[name] = v
     m = re.search(r"--skill-ref\s+(v[0-9.]+)", sh)
     if m: out["SKILL_REF_EXAMPLE"] = m.group(1)
     m = re.search(r"--tcc-ref\s+(v[0-9.]+)", sh)

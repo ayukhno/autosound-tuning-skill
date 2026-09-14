@@ -77,7 +77,8 @@ second line, and the scan is what says whether either line held.
 `~/dev/autosound/skill` is where the method is edited and versioned. Every other copy on a machine
 is a **deployment**: the installer's clone at a tag (`install.sh` puts it in
 `~/.claude/skills/.autosound-tuning-src` and symlinks `~/.claude/skills/autosound-tuning` at it),
-a per-project pin a run holds detached so its numbers stay reproducible, the submodule
+the beta channel's second clone `~/.claude/skills/.autosound-tuning-beta` that no link points at (an
+app runs it by path and declares it in `AUTOSOUND_SKILL_ROOT`), a per-project pin a run holds detached so its numbers stay reproducible, the submodule
 `autosound-tcc` records by sha. Several at once is normal and none of them is wrong.
 
 **What is wrong is a deployment that cannot say which it is.** The version lives in

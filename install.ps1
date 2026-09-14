@@ -41,8 +41,10 @@
 #   .\install.ps1 -DryRun             say what it would do, change nothing
 #   .\install.ps1 -Yes                yes to every question; sign-ins are printed, not run
 #   .\install.ps1 -SkillRef v3.0.33   a specific skill version (default: the newest 3.x tag)
-#   .\install.ps1 -Channel beta       also release candidates, to try one before it is released
-#                                     (default: stable, releases only; -SkillRef wins over both)
+#   .\install.ps1 -Channel beta       also release candidates: for the app, and in a SECOND copy of the
+#                                     method that only an app asking for beta runs -- the terminal's
+#                                     copy stays on releases (default: stable, releases only;
+#                                     -SkillRef sets the terminal's copy, -TccRef the app)
 #   .\install.ps1 -TccRef v0.1.22     the app version released WITH that one -- quote the two
 #                                     together or not at all; a mixed pair is untested
 #   .\install.ps1 -Uninstall          remove what this script installed -- NEVER your projects
@@ -142,6 +144,9 @@ $SkillHome    = Join-Path $HOME ".claude\skills\autosound-tuning"
 # The checkout lives beside the skill and the skill points at it (a junction) -- see install.sh
 # for why moving the subdirectory out instead leaves something no later run can update.
 $SkillSrc     = Join-Path $HOME ".claude\skills\.autosound-tuning-src"
+# The beta channel's copy, beside it and with no junction pointing at it -- see install.sh
+# (SKILL_BETA_SRC, autosound-hub #145) for why the terminal and a beta app cannot share one checkout.
+$SkillBetaSrc = Join-Path $HOME ".claude\skills\.autosound-tuning-beta"
 # Where uv, Claude Code, gh and the app's own commands land -- the same folder on every platform.
 $LocalBin     = Join-Path $HOME ".local\bin"
 # What THIS script put on the machine, one name per line. -Uninstall removes what is listed here
@@ -173,8 +178,9 @@ Autosound tuning -- installer for Windows
   install.ps1 -DryRun             say what it would do, change nothing
   install.ps1 -Yes                yes to every question; sign-ins are printed, not run
   install.ps1 -SkillRef v3.0.33   a specific skill version (default: the newest 3.x tag)
-  install.ps1 -Channel beta       also release candidates, to try one before it is released
-                                  (default: stable, releases only; -SkillRef wins over both)
+  install.ps1 -Channel beta       also release candidates: for the app, and in a SECOND copy of
+                                  the method that only an app asking for beta runs -- the
+                                  terminal's copy stays on releases (default: stable)
   install.ps1 -TccRef v0.1.22     the app version released WITH that one -- quote the two
                                   together or not at all; a mixed pair is untested
   install.ps1 -Uninstall          remove what this script installed -- NEVER your projects
@@ -456,6 +462,12 @@ if ($Uninstall) {
             Warn "$SkillHome is a real directory this script did not create -- left alone"
         }
     } else { Say "no tuning method installed by this script" }
+    # The beta channel's copy has no junction to judge ownership by. Its name is the claim: this
+    # script makes that folder, and nothing but this script and an app moving it writes there.
+    if (Test-Path $SkillBetaSrc) {
+        Say "removing the beta channel's copy of the method"
+        Run { Remove-Item $SkillBetaSrc -Recurse -Force } "remove beta checkout" | Out-Null
+    }
 
     $uv = Find-Bin uv
     if ($uv -and (((& $uv tool list 2>$null) -join "`n") -match 'autosound-tcc')) {
@@ -749,28 +761,61 @@ if ($Uv) {
 }
 
 # -- the tuning method -------------------------------------------------------------------------
+# Put a checkout of the method at $Dir on $Ref: move it when it is already a checkout, clone it
+# when there is none. ONE function for both copies -- the terminal's and the beta channel's
+# (autosound-hub #145) -- the mirror of checkout_method in install.sh. $true unless a clone failed;
+# a failed MOVE is warned about and leaves the copy where it was.
+function Sync-MethodCheckout {
+    param([string]$Dir, [string]$Ref, [string]$What)
+    if (Test-Path (Join-Path $Dir ".git")) {
+        # Fetch the ref BY NAME: the clone was made with --depth 1 --branch <tag>, so it holds
+        # that tag and nothing else; FETCH_HEAD is whatever was just fetched.
+        # CHECKED, both of them, and the mirror of install.sh. Unchecked, a network blip or a
+        # moved ref left the method on the previous version while this script printed
+        # "updating to <ref>" and carried on -- the one failure mode where the user is told the
+        # opposite of what happened (HUB-042).
+        $fetched  = Run { & git -C $Dir fetch --quiet --depth 1 origin $Ref } "git fetch $Ref"
+        $checked  = $fetched -and (Run { & git -c advice.detachedHead=false -C $Dir checkout --quiet FETCH_HEAD } "git checkout FETCH_HEAD")
+        if (-not $DryRun) {
+            $at = (& git -C $Dir describe --tags --always 2>$null)
+            if (-not $checked) {
+                Warn "could not update $What to $Ref -- it is STILL at $at."
+                Warn "check the network, then run this script again; nothing was changed."
+            } elseif ((& git -C $Dir rev-parse HEAD 2>$null) -ne (& git -C $Dir rev-parse FETCH_HEAD 2>$null)) {
+                # What it was supposed to PRODUCE, not just that it exited 0.
+                Warn "the update did not take: HEAD is not what was just fetched; $What is still at $at"
+            }
+        }
+        return $true
+    }
+    if ($DryRun) { Say "would run: git clone --branch $Ref --depth 1 $SkillRepo $(Pretty $Dir)"; return $true }
+    # A shallow clone of an ANNOTATED tag makes git print "warning: refs/tags/vX.Y.Z <sha>
+    # is not a commit!" -- it is complaining that the tag OBJECT is not a commit, which is
+    # what an annotated tag is; HEAD lands on exactly what the tag peels to. Under Windows
+    # PowerShell that one line arrived as a red NativeCommandError block (2026-08-17).
+    # Everything else git says survives.
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "SilentlyContinue"
+    $gitOut = @(& git -c advice.detachedHead=false clone --quiet --branch $Ref --depth 1 $SkillRepo $Dir 2>&1)
+    $ErrorActionPreference = $prev
+    $gitOut | ForEach-Object { "$_" } | Where-Object { $_ -and ($_ -notmatch 'is not a commit!') } | ForEach-Object { Write-Host "  $_" }
+    return (Test-Path (Join-Path $Dir "skills\autosound-tuning"))
+}
+
 Step "The tuning method"
-$refHow = ""
 if (-not $SkillRef) {
     # The newest 3.x tag, by name rather than "main": main is where development lands, and an
-    # installer should put you on a release unless you say otherwise.
+    # installer should put you on a release unless you say otherwise. On EITHER channel: this is
+    # the copy Claude Code in a terminal loads, and the terminal runs releases (autosound-hub
+    # #145). A candidate goes into its own copy, below.
     $tags = @()
     if (Have git) {
-        if ($Channel -eq "beta") {
-            $names  = @((& git ls-remote --tags --refs $SkillRepo $SkillTagGlob $SkillBetaGlob 2>$null) |
-                        ForEach-Object { ($_ -split "/")[-1] })
-            $newest = Select-NewestOnChannel $names
-            if ($newest) { $tags = @($newest) }
-            $refHow = " (beta channel)"
-        } else {
-            $tags = @((& git ls-remote --tags --refs $SkillRepo $SkillTagGlob 2>$null) |
-                      ForEach-Object { ($_ -split "/")[-1] } |
-                      Sort-Object { [version]($_ -replace '^v', '') })
-        }
+        $tags = @((& git ls-remote --tags --refs $SkillRepo $SkillTagGlob 2>$null) |
+                  ForEach-Object { ($_ -split "/")[-1] } |
+                  Sort-Object { [version]($_ -replace '^v', '') })
     }
     if ($tags.Count -gt 0) { $SkillRef = $tags[-1] } else { $SkillRef = "main" }
 }
-Say "version $SkillRef$refHow"
+Say "version $SkillRef"
 $linkExists = Test-Path $SkillHome
 $isOurs = $false
 if ($linkExists) {
@@ -788,49 +833,43 @@ if ($linkExists) {
 if ((-not $linkExists) -or $isOurs) {
     if (Test-Path (Join-Path $SkillSrc ".git")) {
         Say "already installed -- updating to $SkillRef"
-        # Fetch the ref BY NAME: the clone was made with --depth 1 --branch <tag>, so it holds
-        # that tag and nothing else; FETCH_HEAD is whatever was just fetched.
-        # CHECKED, both of them, and the mirror of install.sh. Unchecked, a network blip or a
-        # moved ref left the method on the previous version while this script printed
-        # "updating to <ref>" and carried on -- the one failure mode where the user is told the
-        # opposite of what happened (HUB-042).
-        $fetched  = Run { & git -C $SkillSrc fetch --quiet --depth 1 origin $SkillRef } "git fetch $SkillRef"
-        $checked  = $fetched -and (Run { & git -c advice.detachedHead=false -C $SkillSrc checkout --quiet FETCH_HEAD } "git checkout FETCH_HEAD")
-        if (-not $DryRun) {
-            $at = (& git -C $SkillSrc describe --tags --always 2>$null)
-            if (-not $checked) {
-                Warn "could not update the method to $SkillRef -- it is STILL at $at."
-                Warn "check the network, then run this script again; nothing was changed."
-            } elseif ((& git -C $SkillSrc rev-parse HEAD 2>$null) -ne (& git -C $SkillSrc rev-parse FETCH_HEAD 2>$null)) {
-                # What it was supposed to PRODUCE, not just that it exited 0.
-                Warn "the update did not take: HEAD is not what was just fetched; still at $at"
-            }
-        }
+        Sync-MethodCheckout $SkillSrc $SkillRef "the method" | Out-Null
     } else {
         Say "into ~\.claude\skills\autosound-tuning"
-        if (-not $DryRun) {
-            New-Item -ItemType Directory -Force -Path (Split-Path $SkillHome) | Out-Null
-            # A shallow clone of an ANNOTATED tag makes git print "warning: refs/tags/vX.Y.Z <sha>
-            # is not a commit!" -- it is complaining that the tag OBJECT is not a commit, which is
-            # what an annotated tag is; HEAD lands on exactly what the tag peels to. Under Windows
-            # PowerShell that one line arrived as a red NativeCommandError block (2026-08-17).
-            # Everything else git says survives.
-            $prev = $ErrorActionPreference; $ErrorActionPreference = "SilentlyContinue"
-            $gitOut = @(& git -c advice.detachedHead=false clone --quiet --branch $SkillRef --depth 1 $SkillRepo $SkillSrc 2>&1)
-            $ErrorActionPreference = $prev
-            $gitOut | ForEach-Object { "$_" } | Where-Object { $_ -and ($_ -notmatch 'is not a commit!') } | ForEach-Object { Write-Host "  $_" }
-            if (Test-Path (Join-Path $SkillSrc "skills\autosound-tuning")) {
-                if (Test-Path $SkillHome) {
-                    $old = Get-Item $SkillHome -Force
-                    if ($old.LinkType) { [System.IO.Directory]::Delete($SkillHome) } else { Remove-Item $SkillHome -Force -Recurse }
-                }
-                # A JUNCTION, not a symlink: junctions work for directories without Developer Mode
-                # or an elevated prompt, which symlinks on Windows still require (INSTALLER-TZ section 3).
-                New-Item -ItemType Junction -Path $SkillHome -Target (Join-Path $SkillSrc "skills\autosound-tuning") | Out-Null
-            } else {
-                Warn "clone failed -- is the network up? Nothing below can use the method until it is here."
+        if (-not $DryRun) { New-Item -ItemType Directory -Force -Path (Split-Path $SkillHome) | Out-Null }
+        $cloned = Sync-MethodCheckout $SkillSrc $SkillRef "the method"
+        if ($cloned -and -not $DryRun) {
+            if (Test-Path $SkillHome) {
+                $old = Get-Item $SkillHome -Force
+                if ($old.LinkType) { [System.IO.Directory]::Delete($SkillHome) } else { Remove-Item $SkillHome -Force -Recurse }
             }
-        } else { Say "would run: git clone --branch $SkillRef --depth 1 $SkillRepo $(Pretty $SkillSrc)" }
+            # A JUNCTION, not a symlink: junctions work for directories without Developer Mode
+            # or an elevated prompt, which symlinks on Windows still require (INSTALLER-TZ section 3).
+            New-Item -ItemType Junction -Path $SkillHome -Target (Join-Path $SkillSrc "skills\autosound-tuning") | Out-Null
+        } elseif (-not $cloned) {
+            Warn "clone failed -- is the network up? Nothing below can use the method until it is here."
+        }
+    }
+}
+
+# The beta channel's copy (autosound-hub #145): the newest release OR candidate, in a checkout of
+# its own that no junction points at. Claude Code in a terminal never loads it; an app that asks
+# for beta runs it by path and declares it in AUTOSOUND_SKILL_ROOT. A failure here is a warning --
+# the terminal's method above is already in place.
+if ($Channel -eq "beta") {
+    $betaRef = $null
+    if (Have git) {
+        $names   = @((& git ls-remote --tags --refs $SkillRepo $SkillTagGlob $SkillBetaGlob 2>$null) |
+                     ForEach-Object { ($_ -split "/")[-1] })
+        $betaRef = Select-NewestOnChannel $names
+    }
+    if (-not $betaRef) {
+        Warn "could not read the method's candidates -- the beta channel's copy was left as it is"
+    } else {
+        Say "beta channel: $betaRef in $(Pretty $SkillBetaSrc) -- only an app that asks for beta runs it"
+        if (-not (Sync-MethodCheckout $SkillBetaSrc $betaRef "the beta channel's copy")) {
+            Warn "the beta channel's copy did not clone -- see above; the terminal's method is not affected"
+        }
     }
 }
 
@@ -1105,6 +1144,15 @@ if (Test-Path (Join-Path $SkillHome "rew_tool\contract.py")) {
     Warn "the skill at $SkillHome is the 2.x line -- TCC cannot drive it"; $ok = $false
 } elseif (-not $DryRun) {
     Warn "no tuning method at $SkillHome"; $ok = $false
+}
+if ($Channel -eq "beta" -and -not $DryRun) {
+    if (Test-Path (Join-Path $SkillBetaSrc "skills\autosound-tuning\rew_tool\contract.py")) {
+        $betaAt = (& git -C $SkillBetaSrc describe --tags --always 2>$null)
+        $termAt = if (Test-Path (Join-Path $SkillSrc ".git")) { (& git -C $SkillSrc describe --tags --always 2>$null) } else { "?" }
+        Say "OK   the beta channel's copy, $betaAt -- for the app; the terminal stays on $termAt"
+    } else {
+        Warn "no beta channel copy at $(Pretty $SkillBetaSrc) -- an app asking for beta has nothing to run"; $ok = $false
+    }
 }
 if ($Mode -eq "tcc" -and -not $DryRun) {
     if ($TccExe -and (Test-Path $DesktopLnk)) { Say "OK   Autosound TCC -- on your Desktop and in the Start Menu" }

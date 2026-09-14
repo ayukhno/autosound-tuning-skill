@@ -69,6 +69,38 @@ It does not tell you which one to prefer, on purpose. Which candidate wins is de
 doing the asking — Claude Code's skill loader and a script's `sys.path` are two mechanisms with two
 rules — so the fact worth reporting is the disagreement, which is true whichever one wins.
 
+### Two channels on one machine
+
+`install.sh --channel beta` (`install.ps1 -Channel beta`) keeps **two** checkouts, and a terminal
+never loads the second one (autosound-hub #145):
+
+| copy | where | on | loaded by |
+|---|---|---|---|
+| the terminal's | `~/.claude/skills/.autosound-tuning-src`, linked from `~/.claude/skills/autosound-tuning` | the newest release, `v3.*` | Claude Code in a terminal |
+| the beta channel's | `~/.claude/skills/.autosound-tuning-beta` — **no link** | the newest of `v3.*` and `beta-v3.*` | a front-end that asks for beta, by path |
+
+`python3 scripts/installer-consistency.py --print SKILL_BETA_SRC` prints the second path (relative
+to the home folder), so a consumer reads it instead of copying it.
+
+A front-end that runs the beta copy does two things, and the method checks the second:
+
+1. loads the skill from `~/.claude/skills/.autosound-tuning-beta/skills/autosound-tuning` (TCC: as
+   its plugin directory);
+2. sets `AUTOSOUND_SKILL_ROOT` to that same folder in the session's environment. `deployment.py`
+   then requires the copy it runs from and the project's link to BE that checkout, and reports a
+   personal copy at another commit as the terminal's channel instead of refusing. Without the
+   variable the personal copy is a disagreement as before — a beta session that forgets it is
+   refused at step 0, not silently mixed.
+
+Still the front-end's to get right:
+
+- **The project's own link.** `<project>/.claude/skills/autosound-tuning` is read by a terminal
+  session in that project too. Pointed at the beta copy, it hands the candidate to the terminal.
+- **Moving the beta copy** is the same two commands as the terminal's: `git -C <copy> fetch --depth 1
+  origin <tag>`, then `git -C <copy> checkout FETCH_HEAD`.
+- **Python packages** come from the terminal copy's `requirements.txt`. A candidate that adds one
+  needs `python3 -m pip install -r <copy>/skills/autosound-tuning/requirements.txt`.
+
 ## Troubleshooting
 
 - **Antigravity / agy sandbox — state snapshots vanish.** Some agent environments restrict certain file writes to the session's own directory (observed on Antigravity: an artifact-write outside `…/brain/<session>/` was refused). If versioned snapshots don't land where you expect, point `AUTOSOUND_STATE_ROOT` inside the project and verify it's writable **from within the session**: `python3 rew_tool/state/state.py selftest` (must print `selftest OK`); confirm the root actually fills after the first `apply.py propose`.

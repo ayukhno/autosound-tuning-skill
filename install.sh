@@ -34,8 +34,10 @@
 #   ./install.sh --dry-run           say what it would do, change nothing
 #   ./install.sh --yes               yes to every question; sign-ins are printed, not run
 #   ./install.sh --skill-ref v3.0.33 a specific skill version (default: the newest 3.x tag)
-#   ./install.sh --channel beta      also release candidates, to try one before it is released
-#                                    (default: stable, releases only; --skill-ref wins over both)
+#   ./install.sh --channel beta      also release candidates: for the app, and in a SECOND copy of the
+#                                    method that only an app asking for beta runs -- the terminal's
+#                                    copy stays on releases (default: stable, releases only;
+#                                    --skill-ref sets the terminal's copy, --tcc-ref the app)
 #   ./install.sh --tcc-ref v0.1.22   the app version released WITH that one — quote the two
 #                                    together or not at all; a mixed pair is untested
 #   ./install.sh --uninstall         remove what this script installed — NEVER your projects
@@ -71,6 +73,11 @@ SKILL_HOME="${HOME}/.claude/skills/autosound-tuning"
 # script twice (2026-08-12). A checkout plus a symlink also makes `git -C … checkout v3.0.1` the
 # whole of an upgrade, and matches what the README already teaches for staying on 2.x.
 SKILL_SRC="${HOME}/.claude/skills/.autosound-tuning-src"
+# The beta channel's copy of the method, BESIDE that one and with no link pointing at it
+# (autosound-hub #145). The terminal runs releases and a session an app starts on beta runs a
+# candidate; while both read one checkout, `--channel beta` moved the terminal too. An app runs
+# this copy by path -- installer-consistency.py compares it with install.ps1 and prints it for them.
+SKILL_BETA_SRC="${HOME}/.claude/skills/.autosound-tuning-beta"
 # Everything this script installs lands in one folder: uv, claude, agy, gh, omp, and the app's own
 # command. One folder means one PATH line, however many of them there are — the second directory
 # (/opt/homebrew/bin) is gone with Homebrew, and with it the day `agy` installed and was not found.
@@ -99,7 +106,8 @@ DRY_RUN=0
 ASSUME_YES=0
 SKILL_REF=""
 # stable (the default): releases only. beta: releases AND release candidates, for trying a version
-# before it is released. An explicit --skill-ref / --tcc-ref wins over either.
+# before it is released -- for the app, and in the method's second copy (SKILL_BETA_SRC); the
+# terminal's copy stays on releases either way. --skill-ref sets the terminal's copy, --tcc-ref the app.
 CHANNEL="stable"
 # Same idea for the app: empty means "the newest release", not "whatever is on main".
 # Resolved beside the install itself, where the app is actually asked for.
@@ -124,8 +132,9 @@ Autosound tuning — installer for macOS (and Linux)
   install.sh --dry-run           say what it would do, change nothing
   install.sh --yes               yes to every question; sign-ins are printed, not run
   install.sh --skill-ref v3.0.33 a specific skill version (default: the newest 3.x tag)
-  install.sh --channel beta      also release candidates, to try one before it is released
-                                 (default: stable, releases only; --skill-ref wins over both)
+  install.sh --channel beta      also release candidates: for the app, and in a SECOND copy of
+                                 the method that only an app asking for beta runs -- the
+                                 terminal's copy stays on releases (default: stable)
   install.sh --tcc-ref v0.1.22   the app version released WITH that one — quote the two
                                  together or not at all; a mixed pair is untested
   install.sh --uninstall         remove what this script installed — NEVER your projects
@@ -432,6 +441,12 @@ if [ "$UNINSTALL" = 1 ]; then
   else
     say "  no tuning method installed by this script"
   fi
+  # The beta channel's copy has no link to judge ownership by. Its name is the claim: this script
+  # makes that folder, and nothing but this script and an app moving it writes there.
+  if [ -d "$SKILL_BETA_SRC" ]; then
+    say "  removing the beta channel's copy of the method"
+    run rm -rf "$SKILL_BETA_SRC"
+  fi
 
   UV="$(find_bin uv || true)"
   if [ -n "$UV" ] && "$UV" tool list 2>/dev/null | grep -q '^autosound-tcc'; then
@@ -730,22 +745,67 @@ else
 fi
 
 # ── the tuning method ─────────────────────────────────────────────────────────
+# Put a checkout of the method at <dir> on <ref>: move it when it is already a checkout, clone it
+# when there is none. ONE function for both copies -- the terminal's and the beta channel's
+# (autosound-hub #145) -- so a lesson learned on one cannot miss the other. <what> names the copy
+# in a warning. Returns 1 only when a clone fails; a failed MOVE is warned about and leaves the copy
+# where it was.
+checkout_method() {
+  _co_dir="$1"; _co_ref="$2"; _co_what="$3"
+  if [ -d "$_co_dir/.git" ]; then
+    # Fetch the ref BY NAME. The checkout was made with `--depth 1 --branch <tag>`, so it contains
+    # that tag and nothing else; FETCH_HEAD is whatever was just fetched, so this handles a tag, a
+    # branch or a sha the same way (2026-08-13).
+    # CHECKED, both of them. Unchecked, a network blip or a moved ref left the method sitting on
+    # the previous version while this script printed "updating to <ref>" and carried on -- the one
+    # failure mode where the user is told the opposite of what happened (HUB-042).
+    if run git -C "$_co_dir" fetch --quiet --depth 1 origin "$_co_ref" &&
+       run git -c advice.detachedHead=false -C "$_co_dir" checkout --quiet FETCH_HEAD; then
+      # And verify what it was supposed to produce, not just that the command exited 0.
+      if [ "$DRY_RUN" = 0 ] &&
+         [ "$(git -C "$_co_dir" rev-parse HEAD 2>/dev/null)" != \
+           "$(git -C "$_co_dir" rev-parse FETCH_HEAD 2>/dev/null)" ]; then
+        warn "the update did not take: HEAD is not what was just fetched."
+        warn "$_co_what is still at $(git -C "$_co_dir" describe --tags --always 2>/dev/null || echo unknown)"
+      fi
+    else
+      warn "could not update $_co_what to $_co_ref -- it is STILL at" \
+           "$(git -C "$_co_dir" describe --tags --always 2>/dev/null || echo unknown)."
+      warn "check the network, then re-run this script; nothing was changed."
+    fi
+    return 0
+  fi
+  # Not `run`, because this one call needs its stderr filtered. A shallow clone of an ANNOTATED
+  # tag makes git print `warning: refs/tags/vX.Y.Z <sha> is not a commit!` — it is complaining
+  # that the tag OBJECT is not a commit, which is what an annotated tag is. Verified harmless.
+  # Dropped because the word "warning" during a first install reads as something the person did
+  # wrong. Every other line of stderr survives, and a real failure still stops the script.
+  if [ "$DRY_RUN" = 1 ]; then
+    say "  would run: git clone --branch $_co_ref --depth 1 $SKILL_REPO $(pretty "$_co_dir")"
+    return 0
+  fi
+  _err="$(mktemp)"
+  if git -c advice.detachedHead=false clone --quiet --branch "$_co_ref" --depth 1 \
+       "$SKILL_REPO" "$_co_dir" 2>"$_err"; then
+    grep -v 'is not a commit!' "$_err" >&2 || true
+    rm -f "$_err"
+    return 0
+  fi
+  cat "$_err" >&2; rm -f "$_err"
+  return 1
+}
+
 step "The tuning method"
-SKILL_REF_HOW=""
 if [ -z "$SKILL_REF" ]; then
   # The newest 3.x tag. Asked for by name rather than "main": main is where development lands,
-  # and an installer should put you on a release unless you say otherwise.
-  if [ "$CHANNEL" = "beta" ]; then
-    SKILL_REF="$(git ls-remote --tags --refs "$SKILL_REPO" "$SKILL_TAG_GLOB" "$SKILL_BETA_GLOB" 2>/dev/null \
-        | awk -F/ '{print $NF}' | newest_on_channel)" || SKILL_REF=""
-    SKILL_REF_HOW=" (beta channel)"
-  else
-    SKILL_REF="$(git ls-remote --tags --refs "$SKILL_REPO" "$SKILL_TAG_GLOB" 2>/dev/null \
-        | awk -F/ '{print $NF}' | sort -V | tail -1)" || SKILL_REF=""
-  fi
+  # and an installer should put you on a release unless you say otherwise. On EITHER channel: this
+  # is the copy Claude Code in a terminal loads, and the terminal runs releases (autosound-hub
+  # #145). A candidate goes into its own copy, below.
+  SKILL_REF="$(git ls-remote --tags --refs "$SKILL_REPO" "$SKILL_TAG_GLOB" 2>/dev/null \
+      | awk -F/ '{print $NF}' | sort -V | tail -1)" || SKILL_REF=""
   [ -z "$SKILL_REF" ] && SKILL_REF="main"
 fi
-say "  version $SKILL_REF$SKILL_REF_HOW"
+say "  version $SKILL_REF"
 
 ours=0
 if [ -L "$SKILL_HOME" ]; then
@@ -761,48 +821,30 @@ elif [ -d "$SKILL_HOME" ] && [ ! -L "$SKILL_HOME" ]; then
   warn "move it aside and re-run if you want this script to manage it."
 elif [ -d "$SKILL_SRC/.git" ]; then
   say "  already installed — updating to $SKILL_REF"
-  # Fetch the ref BY NAME. The checkout was made with `--depth 1 --branch <tag>`, so it contains
-  # that tag and nothing else; FETCH_HEAD is whatever was just fetched, so this handles a tag, a
-  # branch or a sha the same way (2026-08-13).
-  # CHECKED, both of them. Unchecked, a network blip or a moved ref left the method sitting on
-  # the previous version while this script printed "updating to <ref>" and carried on -- the one
-  # failure mode where the user is told the opposite of what happened (HUB-042).
-  if run git -C "$SKILL_SRC" fetch --quiet --depth 1 origin "$SKILL_REF" &&
-     run git -c advice.detachedHead=false -C "$SKILL_SRC" checkout --quiet FETCH_HEAD; then
-    # And verify what it was supposed to produce, not just that the command exited 0.
-    if [ "$DRY_RUN" = 0 ] &&
-       [ "$(git -C "$SKILL_SRC" rev-parse HEAD 2>/dev/null)" != \
-         "$(git -C "$SKILL_SRC" rev-parse FETCH_HEAD 2>/dev/null)" ]; then
-      warn "the update did not take: HEAD is not what was just fetched."
-      warn "the method is still at $(git -C "$SKILL_SRC" describe --tags --always 2>/dev/null || echo unknown)"
-    fi
-  else
-    warn "could not update the method to $SKILL_REF -- it is STILL at" \
-         "$(git -C "$SKILL_SRC" describe --tags --always 2>/dev/null || echo unknown)."
-    warn "check the network, then re-run this script; nothing was changed."
-  fi
+  checkout_method "$SKILL_SRC" "$SKILL_REF" "the method"
 else
   say "  into ~/.claude/skills/autosound-tuning"
   if [ "$DRY_RUN" = 0 ]; then mkdir -p "$(dirname "$SKILL_HOME")"; fi
-  # Not `run`, because this one call needs its stderr filtered. A shallow clone of an ANNOTATED
-  # tag makes git print `warning: refs/tags/vX.Y.Z <sha> is not a commit!` — it is complaining
-  # that the tag OBJECT is not a commit, which is what an annotated tag is. Verified harmless.
-  # Dropped because the word "warning" during a first install reads as something the person did
-  # wrong. Every other line of stderr survives, and a real failure still stops the script.
-  if [ "$DRY_RUN" = 1 ]; then
-    say "  would run: git clone --branch $SKILL_REF --depth 1 $SKILL_REPO $(pretty "$SKILL_SRC")"
-  else
-    _err="$(mktemp)"
-    if git -c advice.detachedHead=false clone --quiet --branch "$SKILL_REF" --depth 1 \
-         "$SKILL_REPO" "$SKILL_SRC" 2>"$_err"; then
-      grep -v 'is not a commit!' "$_err" >&2 || true
-    else
-      cat "$_err" >&2; rm -f "$_err"
-      echo "clone failed — see above" >&2; exit 1
-    fi
-    rm -f "$_err"
+  checkout_method "$SKILL_SRC" "$SKILL_REF" "the method" || { echo "clone failed — see above" >&2; exit 1; }
+  if [ "$DRY_RUN" = 0 ]; then
     rm -f "$SKILL_HOME"
     ln -s "$SKILL_SRC/skills/autosound-tuning" "$SKILL_HOME"
+  fi
+fi
+
+# The beta channel's copy (autosound-hub #145): the newest release OR candidate, in a checkout of
+# its own that no link points at. Claude Code in a terminal never loads it; an app that asks for
+# beta runs it by path and declares it in AUTOSOUND_SKILL_ROOT, which rew_tool/deployment.py
+# checks. A failure here is a warning -- the terminal's method above is already in place.
+if [ "$CHANNEL" = "beta" ]; then
+  SKILL_BETA_REF="$(git ls-remote --tags --refs "$SKILL_REPO" "$SKILL_TAG_GLOB" "$SKILL_BETA_GLOB" 2>/dev/null \
+      | awk -F/ '{print $NF}' | newest_on_channel)" || SKILL_BETA_REF=""
+  if [ -z "$SKILL_BETA_REF" ]; then
+    warn "could not read the method's candidates -- the beta channel's copy was left as it is"
+  else
+    say "  beta channel: $SKILL_BETA_REF in $(pretty "$SKILL_BETA_SRC") -- only an app that asks for beta runs it"
+    checkout_method "$SKILL_BETA_SRC" "$SKILL_BETA_REF" "the beta channel's copy" \
+      || warn "the beta channel's copy did not clone -- see above; the terminal's method is not affected"
   fi
 fi
 
@@ -1090,6 +1132,14 @@ elif [ -f "$SKILL_HOME/rew_tool/rew_api.py" ]; then
 elif [ "$DRY_RUN" = 0 ]; then
   warn "no tuning method at $SKILL_HOME"
   ok=0
+fi
+if [ "$CHANNEL" = "beta" ] && [ "$DRY_RUN" = 0 ]; then
+  if [ -f "$SKILL_BETA_SRC/skills/autosound-tuning/rew_tool/contract.py" ]; then
+    say "  ✓ the beta channel's copy, $(git -C "$SKILL_BETA_SRC" describe --tags --always 2>/dev/null || echo '?') — for the app; the terminal stays on $(git -C "$SKILL_SRC" describe --tags --always 2>/dev/null || echo '?')"
+  else
+    warn "no beta channel copy at $(pretty "$SKILL_BETA_SRC") — an app asking for beta has nothing to run"
+    ok=0
+  fi
 fi
 if [ "$MODE" = "tcc" ] && [ "$DRY_RUN" = 0 ]; then
   if on_mac && [ -d "$APP" ]; then
