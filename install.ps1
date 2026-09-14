@@ -774,15 +774,19 @@ function Sync-MethodCheckout {
         # moved ref left the method on the previous version while this script printed
         # "updating to <ref>" and carried on -- the one failure mode where the user is told the
         # opposite of what happened (HUB-042).
-        $fetched  = Run { & git -C $Dir fetch --quiet --depth 1 origin $Ref } "git fetch $Ref"
+        # A TAG also lands in refs/tags; fetched by bare name it left `describe` a bare sha -- see
+        # checkout_method in install.sh. `${Ref}`, braced: "$Ref:refs" would read as a scoped variable.
+        $spec     = if ($Ref -match '^(beta-)?v\d') { "+refs/tags/${Ref}:refs/tags/${Ref}" } else { $Ref }
+        $fetched  = Run { & git -C $Dir fetch --quiet --depth 1 origin $spec } "git fetch $Ref"
         $checked  = $fetched -and (Run { & git -c advice.detachedHead=false -C $Dir checkout --quiet FETCH_HEAD } "git checkout FETCH_HEAD")
         if (-not $DryRun) {
             $at = (& git -C $Dir describe --tags --always 2>$null)
             if (-not $checked) {
                 Warn "could not update $What to $Ref -- it is STILL at $at."
                 Warn "check the network, then run this script again; nothing was changed."
-            } elseif ((& git -C $Dir rev-parse HEAD 2>$null) -ne (& git -C $Dir rev-parse FETCH_HEAD 2>$null)) {
-                # What it was supposed to PRODUCE, not just that it exited 0.
+            } elseif ((& git -C $Dir rev-parse HEAD 2>$null) -ne (& git -C $Dir rev-parse 'FETCH_HEAD^{commit}' 2>$null)) {
+                # What it was supposed to PRODUCE, not just that it exited 0 -- against the COMMIT:
+                # for an annotated tag FETCH_HEAD is the tag object (install.sh, 2026-09-14).
                 Warn "the update did not take: HEAD is not what was just fetched; $What is still at $at"
             }
         }

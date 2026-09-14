@@ -756,15 +756,23 @@ checkout_method() {
     # Fetch the ref BY NAME. The checkout was made with `--depth 1 --branch <tag>`, so it contains
     # that tag and nothing else; FETCH_HEAD is whatever was just fetched, so this handles a tag, a
     # branch or a sha the same way (2026-08-13).
+    # A TAG also lands in refs/tags. Fetched by bare name it moved HEAD and stored no tag, so
+    # `describe` named the copy by a bare sha: "the terminal stays on bc6423e" on a machine that was
+    # on v3.0.52 (Windows VM, 2026-09-14). A branch or a sha is fetched as before.
+    _co_spec="$_co_ref"
+    case "$_co_ref" in v[0-9]*|beta-v[0-9]*) _co_spec="+refs/tags/$_co_ref:refs/tags/$_co_ref" ;; esac
     # CHECKED, both of them. Unchecked, a network blip or a moved ref left the method sitting on
     # the previous version while this script printed "updating to <ref>" and carried on -- the one
     # failure mode where the user is told the opposite of what happened (HUB-042).
-    if run git -C "$_co_dir" fetch --quiet --depth 1 origin "$_co_ref" &&
+    if run git -C "$_co_dir" fetch --quiet --depth 1 origin "$_co_spec" &&
        run git -c advice.detachedHead=false -C "$_co_dir" checkout --quiet FETCH_HEAD; then
-      # And verify what it was supposed to produce, not just that the command exited 0.
+      # And verify what it was supposed to produce, not just that the command exited 0. Against the
+      # COMMIT: for an annotated tag -- every release -- FETCH_HEAD is the tag object, which HEAD
+      # never equals, so each update warned "the update did not take" when it had (Windows VM,
+      # 2026-09-14).
       if [ "$DRY_RUN" = 0 ] &&
          [ "$(git -C "$_co_dir" rev-parse HEAD 2>/dev/null)" != \
-           "$(git -C "$_co_dir" rev-parse FETCH_HEAD 2>/dev/null)" ]; then
+           "$(git -C "$_co_dir" rev-parse "FETCH_HEAD^{commit}" 2>/dev/null)" ]; then
         warn "the update did not take: HEAD is not what was just fetched."
         warn "$_co_what is still at $(git -C "$_co_dir" describe --tags --always 2>/dev/null || echo unknown)"
       fi
