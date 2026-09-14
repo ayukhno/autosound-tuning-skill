@@ -28,10 +28,12 @@ message with Cyrillic in it and names the line (its `--selftest` runs in CI).
   reasoning is in the CHANGELOG's own doctrine section.
 - **A tag takes the whole tree**, so its note must describe everything standing in front of it, not
   only the change that prompted it.
-- **A minor or major is tried first.** `scripts/tag-check.sh --candidate vX.Y.Z`, then the tag
-  `beta-vX.Y.Z-rcN`, which only the installers' beta channel takes. The release is the newest
-  candidate's commit plus only its bookkeeping — renaming `## [Unreleased]`, the manifest, the install
-  pins (hub RELEASE-CHANNEL.md §11.3) — so nothing else may land between the last candidate and the tag.
+- **Releases come in waves** (hub `governance/WAVES.md`, HUB-065): one branch per wave, the version
+  bump and the CHANGELOG entry committed on it, one PR with the full CI, `git merge --ff-only` and push
+  `main`, then `scripts/tag-check.sh vX.Y.Z` and the tag on that commit. A work branch runs no CI on
+  push; `gh workflow run checks --ref <branch>` runs it by hand, and only for a change to Windows or the
+  installers. A candidate (`scripts/tag-check.sh --candidate vX.Y.Z`, tag `beta-vX.Y.Z-rcN`) is optional,
+  even for a minor; when one exists the release lands on it plus only its bookkeeping (§11.3).
 
 ## The installers are a TRIPLET
 

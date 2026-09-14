@@ -9,9 +9,17 @@ name: checks
 # Dependencies are NOT pinned. A break caused by a new numpy or scipy is real information: these
 # tools ship to people who will install current versions, so we would rather learn it here.
 
+# Once per wave (hub governance/WAVES.md, HUB-065). The full run is the PULL REQUEST's. A push to main
+# first asks whether a green pull-request run of this workflow exists on the same commit: yes -- the
+# heavy jobs are skipped and the run still ends `success`, which is what the hub's release gate
+# reads; no -- a merge without a PR, or GitHub's button making a new commit -- they run here. A work
+# branch runs nothing on push; `workflow_dispatch` runs it by hand, for a change that touches Windows
+# or the installers. 149 runs from 8 to 14.09 are what this replaces.
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 # Nothing here writes anything: the job reads the tree, runs selftests and a linter, and reports.
 # Without this block GITHUB_TOKEN gets whatever the ACCOUNT defaults to, which can be write -- a
@@ -19,6 +27,8 @@ on:
 # default later (HUB-038).
 permissions:
   contents: read
+  # `gate` reads this workflow's own runs. Read, nothing more.
+  actions: read
 
 # A newer push supersedes an in-flight run on the same ref; stale runs are noise, not signal.
 concurrency:
@@ -26,7 +36,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Decides whether the jobs below run. Anything it cannot establish -- no answer from the API, an
+  # unexpected shape -- counts as "not found", so the tests run: a skip needs a green run to point at.
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.pr.outputs.run }}
+    steps:
+      - id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" != "push" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          found="$(gh api "repos/${{ github.repository }}/actions/workflows/checks.yml/runs?head_sha=${{ github.sha }}&event=pull_request&status=success" --jq '.total_count' 2>/dev/null || echo 0)"
+          if [ "${found:-0}" -gt 0 ] 2>/dev/null; then
+            echo "a green pull-request run of checks exists on ${{ github.sha }} -- the tests are not run twice"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "no green pull-request run on ${{ github.sha }} -- running the tests on main"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
   selftests:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
     steps:
       # Pinned to a COMMIT, not to `@v7`. A major tag moves onto new commits without our
@@ -70,6 +105,8 @@ jobs:
   # here before a tag rather than there after it. PYTHONUTF8 because a redirected stdout on Windows is
   # the locale's code page, and the checker prints non-ASCII when it fails.
   installers-windows:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: windows-latest
     env:
       PYTHONUTF8: "1"
