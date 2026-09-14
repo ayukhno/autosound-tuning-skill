@@ -222,3 +222,13 @@ went through the beta branch with no candidate published, so it could only retur
 Done looks like: `install.ps1 -Channel beta -DryRun` on Windows naming `beta-v3.1.0-rc1` over `v3.0.x`,
 and `v3.1.0` over its own candidates once released — or `installers-windows` in CI running the
 PowerShell function itself on the same six cases, which would close this before any candidate exists.
+
+## S-009 · `install.ps1` lists the app as "will install" right after installing it
+**Status**: open
+
+**Found** 2026-09-14 on the Windows VM, in one PowerShell window: the `-Channel beta` run from `v3.0.52`
+ended "OK   installed" and "OK   Autosound TCC -- on your Desktop and in the Start Menu"; the next run
+of the same line (from branch `test-fixes-2026-09-14`) opened with "--   Autosound TCC, the desktop app
+will install". Recorded only — not diagnosed (hub `governance/WAVES.md` §1).
+
+Done looks like: a second run in the same window lists the app as already on the machine.
