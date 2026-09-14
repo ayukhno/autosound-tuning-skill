@@ -245,3 +245,13 @@ calling the app, or the app itself) is for the wave review. Recorded only (hub `
 the line about the Desktop and Start Menu shortcuts.
 
 Done looks like: the install either shows no such window, or says what it is when it opens.
+
+## S-011 · Close the wave on branch `test-fixes-2026-09-14`
+**Status**: open
+
+**Due:** when the user says the wave is tested (hub `governance/WAVES.md` §1).
+
+On the branch: the false "the update did not take" fix (confirmed on the Windows VM), CI once per wave
+(hub #149, HUB-065), and the findings S-009 and S-010. Left: the review with the user of what goes in,
+the full suite, the version bump and CHANGELOG entry on the branch, one PR, `--ff-only` into `main`,
+the tag. Hub #149 closes after that merge, once the `gate` job on `main` is seen skipping the tests.
