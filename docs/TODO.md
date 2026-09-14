@@ -241,4 +241,7 @@ Done looks like: a second run in the same window lists the app as already on the
 the app opens at its own start. Whether that is expected is not known yet; whose it is (`install.ps1`
 calling the app, or the app itself) is for the wave review. Recorded only (hub `governance/WAVES.md` §1).
 
+**When:** right after the app step prints "version v0.1.39 (beta channel)" and "OK   installed" — before
+the line about the Desktop and Start Menu shortcuts.
+
 Done looks like: the install either shows no such window, or says what it is when it opens.
