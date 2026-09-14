@@ -232,3 +232,13 @@ of the same line (from branch `test-fixes-2026-09-14`) opened with "--   Autosou
 will install". Recorded only — not diagnosed (hub `governance/WAVES.md` §1).
 
 Done looks like: a second run in the same window lists the app as already on the machine.
+
+## S-010 · A terminal window pops up during the Windows install
+**Status**: open
+
+**Found** 2026-09-14 on the Windows VM, running `install.ps1 -Channel beta` from branch
+`test-fixes-2026-09-14`: during the install a terminal window appears — the user recognises it as the one
+the app opens at its own start. Whether that is expected is not known yet; whose it is (`install.ps1`
+calling the app, or the app itself) is for the wave review. Recorded only (hub `governance/WAVES.md` §1).
+
+Done looks like: the install either shows no such window, or says what it is when it opens.
