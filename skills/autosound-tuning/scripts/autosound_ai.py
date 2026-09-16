@@ -19,6 +19,8 @@ autosound_ai.py — Універсальний кросплатформний і
 
 import sys
 import os
+import re
+import shlex
 import subprocess
 import json
 import urllib.error
@@ -519,22 +521,170 @@ def list_cli_models():
 CRITIC_EFFORT = os.environ.get("AUTOSOUND_CRITIC_EFFORT", "xhigh").strip().lower()
 
 
+def cli_flavor(binary):
+    """`agy`, `gemini`, `claude`, `codex` -- what the binary really is.
+
+    An `agy` on PATH that is a symlink to `gemini` is the gemini CLI wearing agy's name, the setup
+    trap the retired shell doors caught (`_gemini_common.sh`): agy's flags sent to it fail."""
+    name = os.path.basename(str(binary)).lower()
+    for suffix in (".exe", ".cmd", ".bat", ".ps1"):
+        if name.endswith(suffix):
+            name = name[: -len(suffix)]
+    if name == "agy":
+        real = os.path.realpath(shutil.which(binary) or binary)
+        if "gemini" in os.path.basename(real).lower():
+            return "gemini"
+    return name
+
+
+def extra_cli_args():
+    """`AUTOSOUND_CRITIC_CLI_ARGS`, split as a shell would: a per-run flag the method does not set
+    for anyone (hub TCC-014 ask 5). `--dangerously-skip-permissions` is agy's own per-run remedy
+    and approves EVERY tool for that run, which a reviewer that only reads text never needs."""
+    return shlex.split(os.environ.get("AUTOSOUND_CRITIC_CLI_ARGS", ""))
+
+
 def cli_command(provider, binary, model, prompt_path, prompt_text):
-    """Each vendor's CLI takes the prompt its own way: a path, or the text itself.
+    """Each vendor's CLI takes the prompt its own way: a path, the text, or the text on stdin.
 
     Effort is a third axis they disagree on. Anthropic and OpenAI take it as a flag; Google does
     NOT — `agy` publishes each tier as its own model (`gemini-3.1-pro-high` vs `-low`), so for that
     vendor the effort IS the model name and a flag would be rejected. Passing it anyway is how a
     reviewer channel breaks for one vendor only, silently, in a way nobody notices until the
     critique stops arriving.
+
+    `agy` gets the prompt on stdin as one stream-json message (`cli_stdin`). It used to get the
+    PATH of a temp file as its prompt, so answering meant a `read_file`, which headless mode
+    auto-denies wherever agy has not been told to approve every tool -- a clean Windows machine,
+    and the call fell into the clipboard (hub TCC-014). The text itself as an argument would hit
+    Windows' 32K command line; stdin has no such limit and reads no file.
     """
+    extra = extra_cli_args()
     if provider == "anthropic":
-        return [binary, "--model", model, "--effort", CRITIC_EFFORT, "-p", prompt_text]
+        return [binary, "--model", model, "--effort", CRITIC_EFFORT] + extra + ["-p", prompt_text]
     if provider == "openai":
         return [binary, "exec", "--model", model,
-                "-c", f"model_reasoning_effort={CRITIC_EFFORT}", prompt_text]
-    extra = ["--skip-trust"] if binary == "gemini" else []
-    return [binary, "--model", model] + extra + ["-p", prompt_path]
+                "-c", f"model_reasoning_effort={CRITIC_EFFORT}"] + extra + [prompt_text]
+    if cli_flavor(binary) == "agy":
+        return [binary, "--model", model] + extra + [
+            "--input-format", "stream-json", "--output-format", "stream-json", "--print="]
+    return [binary, "--model", model, "--skip-trust"] + extra + ["-p", prompt_path]
+
+
+def cli_stdin(provider, binary, prompt_text):
+    """What goes to the CLI's stdin, or None. agy's stream-json input: one `user` event."""
+    if provider == "google" and cli_flavor(binary) == "agy":
+        return json.dumps({"event": "user", "message": {"content": prompt_text}}, ensure_ascii=False) + "\n"
+    return None
+
+
+def cli_reply(provider, binary, returncode, stdout, stderr):
+    """`(text, None)` for an answer, `(None, what went wrong)` otherwise.
+
+    agy's stream-json says it in its `result` event: `status`, `response`, `error`. The others
+    answer on stdout with an exit code."""
+    if provider == "google" and cli_flavor(binary) == "agy":
+        for line in reversed((stdout or "").splitlines()):
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(event, dict) and event.get("event") == "result":
+                result = event.get("result") or {}
+                text = result.get("response") or ""
+                if result.get("status") == "SUCCESS" and text.strip():
+                    return text, None
+                return None, (result.get("error") or f"agy: status {result.get('status')!r}, no answer")
+        return None, ((stderr or "").strip() or "agy: no result in its output")
+    if returncode == 0 and (stdout or "").strip():
+        return stdout, None
+    return None, ((stderr or "").strip() or (stdout or "").strip() or f"exit {returncode}, no output")
+
+
+#: What a reviewer CLI's failure says, by its own words -- the recognisers the retired shell
+#: doors carried (`_gemini_common.sh`, skill #41), so the one door knows what four did.
+_FAILURES = (
+    ("dead_cli", r"IneligibleTierError|no longer supported for Gemini Code Assist|migrate to the Antigravity"),
+    ("tool_denied", r"headless mode cannot prompt|auto-denied"),
+    ("bad_model", r"invalid model selection|not recognized as a known model|unknown model"),
+    ("quota", r"quota|capacity|exhausted|RESOURCE_EXHAUSTED|TerminalQuotaError|\b429\b"),
+)
+
+
+def classify_failure(text):
+    for kind, pattern in _FAILURES:
+        if re.search(pattern, text or "", re.I):
+            return kind
+    return "other"
+
+
+#: What each failure means for the Arbiter, and the ladder's next rung (setup-critic-channel.md §7).
+FAILURE_ADVICE = {
+    "dead_cli": "шлях gemini CLI закрито Google (IneligibleTierError) — постав agy: "
+                "brew install --cask antigravity-cli, потім `agy` у звичайному терміналі для входу",
+    "tool_denied": "agy спробував інструмент (read_file), а безголовий режим його не дозволяє. Пакет "
+                   "іде текстом, тож це означає, що сам пакет відсилає до файлу — вклади дані в пакет. "
+                   "Не вмикай `toolPermission: always-proceed`: рецензентові інструменти не потрібні",
+    "quota": "квоту або ємність вичерпано — сходинка 0: зачекай і повтори; вищий рівень тієї ж моделі "
+             "— лише сказавши це вголос (setup-critic-channel.md §7)",
+    "timeout": "CLI не відповів вчасно (AUTOSOUND_CLI_TIMEOUT) — повтори з окремого термінала",
+    "other": "",
+}
+
+
+#: Marks of running INSIDE an agent session. A reviewer CLI started from inside one deadlocks
+#: often (~15 of 20 field sessions), and a warning followed by a silent wait read as "the reviewer
+#: is thinking" (hub TCC-014 ask 3) -- so the CLI is not started at all.
+_NESTED_MARKERS = ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "ANTIGRAVITY", "AGY_", "GEMINI_SESSION")
+
+
+def nested_session_marker(env=None):
+    env = os.environ if env is None else env
+    if env.get("AUTOSOUND_ALLOW_NESTED_CLI") == "1":
+        return None
+    return next((k for k in env if k.startswith(_NESTED_MARKERS)), None)
+
+def call_cli(provider, cli_bin, model, prompt, timeout=None):
+    """One reviewer call through a local CLI: `(text, None, None)` or `(None, kind, error)`.
+
+    The one place a CLI is run, for a review and for the doctor's smoke alike -- the smoke is worth
+    something only if it goes the way a round goes (skill#27: it used to run a model nobody chose)."""
+    timeout = timeout or int(os.environ.get("AUTOSOUND_CLI_TIMEOUT", "300"))
+    prompt_path = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", prefix="autosound_prompt_",
+                                         suffix=".txt", delete=False) as tf:
+            prompt_path = tf.name
+            tf.write(prompt)
+        try:
+            # На Windows потрібен shell=True, щоб запускати .cmd обгортки типу agy.cmd від npm/scoop
+            proc = subprocess.run(cli_command(provider, cli_bin, model, prompt_path, prompt),
+                                  input=cli_stdin(provider, cli_bin, prompt), capture_output=True,
+                                  text=True, encoding="utf-8", timeout=timeout,
+                                  shell=(sys.platform == "win32"))
+        except subprocess.TimeoutExpired:
+            return None, "timeout", f"no answer in {timeout} s"
+        text, error = cli_reply(provider, cli_bin, proc.returncode, proc.stdout, proc.stderr)
+        if text:
+            return text, None, None
+        return None, classify_failure(error), error
+    finally:
+        if prompt_path:
+            try:
+                os.remove(prompt_path)
+            except OSError:
+                pass
+
+
+def gemini_key_shape(key):
+    """What a GEMINI_API_KEY looks like: AI Studio issues `AQ.` + 50 now (53 chars); `AIza` + 35 was
+    the shape before -- an old one in a shell while the config holds a new one reads as a dead key."""
+    if key.startswith("AQ.") and len(key) == 53:
+        return "current (AQ.…, 53 chars)"
+    if key.startswith("AIza") and len(key) == 39:
+        return "OLD format (AIza…, 39 chars) — AI Studio issues AQ.… keys now"
+    return f"unrecognised shape ({len(key)} chars)"
+
 
 def _selftest():
     """Offline: a retired model becomes a CHOICE carrying the key's list (never a fall-through),
@@ -649,17 +799,126 @@ def _selftest():
         pass
     assert with_mem.index("====== REVIEWER MEMORY") < with_mem.index("====== GENERATOR PACKAGE") < with_mem.index("====== ATTACHED TRACE")
     assert "====== REVIEWER MEMORY" not in compile_prompt("C", "X", "P")
+    # ── one door for the reviewer's CLI (skill #41, hub TCC-014) ─────────────────────────────
+    headless = ('jetski: no output produced — a tool required the "read_file" permission that headless mode '
+                'cannot prompt for, so it was auto-denied. Add an allow-rule under permissions.allow in '
+                'settings.json (e.g. read_file(<target>)). Alternatively, re-run with --dangerously-skip-'
+                'permissions to auto-approve all tools.')
+    dead = ("Error authenticating: IneligibleTierError: This client is no longer supported for Gemini Code "
+            "Assist for individuals. To continue using Gemini, please migrate to the Antigravity suite")
+    badmodel = ('error: invalid model selection (--model "gemini-3.5-flash-medium" --effort ""): model '
+                'gemini-3.5-flash-medium is not recognized as a known model or custom model in settings')
+    assert [classify_failure(t) for t in (headless, dead, badmodel, "Error: 429 RESOURCE_EXHAUSTED", "channel works")] \
+        == ["tool_denied", "dead_cli", "bad_model", "quota", "other"]
+    saved_args = os.environ.pop("AUTOSOUND_CRITIC_CLI_ARGS", None)
+    try:
+        # agy: the prompt on stdin as one stream-json message -- no path to read, no argv limit.
+        argv = cli_command("google", "agy", "gemini-3.8-flash-low", "/tmp/p.txt", "PROMPT")
+        assert argv == ["agy", "--model", "gemini-3.8-flash-low", "--input-format", "stream-json",
+                        "--output-format", "stream-json", "--print="], argv
+        assert "/tmp/p.txt" not in argv and "PROMPT" not in " ".join(argv)
+        assert json.loads(cli_stdin("google", "agy.cmd", "PROMPT")) == {"event": "user", "message": {"content": "PROMPT"}}
+        assert cli_stdin("anthropic", "claude", "PROMPT") is None
+        os.environ["AUTOSOUND_CRITIC_CLI_ARGS"] = '--sandbox --log-file "C:/logs/agy run.log"'
+        argv = cli_command("google", "agy", "m", "/tmp/p.txt", "PROMPT")
+        assert argv[3:6] == ["--sandbox", "--log-file", "C:/logs/agy run.log"], argv
+    finally:
+        os.environ.pop("AUTOSOUND_CRITIC_CLI_ARGS", None)
+        if saved_args is not None:
+            os.environ["AUTOSOUND_CRITIC_CLI_ARGS"] = saved_args
+    ok_out = '{"event":"init"}\n{"event":"result","result":{"status":"SUCCESS","response":"pong\\n"}}'
+    bad_out = json.dumps({"event": "result", "result": {"status": "ERROR", "response": "", "error": headless}})
+    assert cli_reply("google", "agy", 0, ok_out, "") == ("pong\n", None)
+    assert cli_reply("google", "agy", 1, bad_out, "")[1] == headless
+    assert cli_reply("openai", "codex", 0, "answer", "") == ("answer", None)
+    assert cli_reply("openai", "codex", 2, "", "boom")[1] == "boom"
+    # A marker of an agent session stops the CLI; the escape hatch is named and deliberate.
+    assert nested_session_marker({"CLAUDECODE": "1"}) == "CLAUDECODE"
+    assert nested_session_marker({"CLAUDECODE": "1", "AUTOSOUND_ALLOW_NESTED_CLI": "1"}) is None
+    assert nested_session_marker({"HOME": "/x"}) is None
+    # `agy` that is a symlink to gemini is gemini.
+    with tempfile.TemporaryDirectory() as bindir:
+        real = os.path.join(bindir, "gemini")
+        open(real, "w").close()
+        link = os.path.join(bindir, "agy")
+        try:
+            os.symlink(real, link)
+        except (OSError, NotImplementedError):
+            link = None
+        if link:
+            assert cli_flavor(link) == "gemini" and cli_flavor("agy.cmd") == "agy"
+    assert gemini_key_shape("AQ." + "x" * 50).startswith("current") and gemini_key_shape("AIza" + "x" * 35).startswith("OLD")
+
+    # The whole run, on a fake agy: a failed call is a REFUSAL (exit 4) that files no review and
+    # writes the package into the PROJECT; an answer is filed; a session marker starts no CLI.
+    import contextlib
+    markers = {k: os.environ.pop(k) for k in list(os.environ)
+               if k.startswith(_NESTED_MARKERS) or k in ("GEMINI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY",
+                                                         "AUTOSOUND_CRITIC_MODEL", "GEMINI_CRITIC_MODEL",
+                                                         "AUTOSOUND_CRITIC_BIN", "GEMINI_BIN", "AUTOSOUND_PROJECT_DIR",
+                                                         "AUTOSOUND_ALLOW_NESTED_CLI")}
+    real_run, real_copy, real_argv = subprocess.run, globals()["copy_to_clipboard"], sys.argv
+    runs = []
+    with tempfile.TemporaryDirectory() as project:
+        open(os.path.join(project, "project.json"), "w").close()
+        pkg = os.path.join(project, "question.md")
+        with open(pkg, "w", encoding="utf-8") as f:
+            f.write("Translate: stage")
+        os.environ.update({"AUTOSOUND_PROJECT_DIR": project, "AUTOSOUND_CRITIC_MODEL": "gemini-3.8-flash-low",
+                           "AUTOSOUND_CRITIC_BIN": os.path.join(project, "bin", "agy")})
+        reviews = os.path.join(project, "process", "reviews")
+
+        def run_main(*args):
+            sys.argv = ["autosound_ai.py", *args]
+            with contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(io.StringIO()) as err:
+                try:
+                    main()
+                    code = 0
+                except SystemExit as stop:
+                    code = stop.code
+            return code, out.getvalue(), err.getvalue()
+
+        try:
+            globals()["copy_to_clipboard"] = lambda text: False
+            subprocess.run = lambda cmd, **kw: (runs.append((cmd, kw.get("input"))),
+                                                subprocess.CompletedProcess(cmd, 1, bad_out, ""))[1]
+            code, out, err = run_main("ask", pkg)
+            filed = sorted(os.listdir(reviews))
+            assert code == 4 and "РЕЦЕНЗІЇ НЕ ОТРИМАНО" in err and "read_file" in err, (code, err)
+            assert len(filed) == 1 and filed[0].endswith("-ask-package.md"), filed
+            assert "Запиши посилання" not in err and "REVIEW_FILE" not in err, err
+            assert json.loads(runs[-1][1])["message"]["content"].endswith("Translate: stage"), runs[-1]
+            os.environ["CLAUDECODE"] = "1"
+            before = len(runs)
+            code, out, err = run_main("ask", pkg)
+            assert code == 4 and len(runs) == before and "агент-сесії" in err, (code, err)
+            del os.environ["CLAUDECODE"]
+            code, out, err = run_main("ask", pkg, "--mode", "clipboard")
+            assert code == 0 and len(runs) == before and "РЕЦЕНЗІЇ НЕ ОТРИМАНО" not in err, (code, err)
+            subprocess.run = lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, ok_out, "")
+            code, out, err = run_main("ask", pkg)
+            assert code == 0 and "pong" in out and "REVIEW_FILE: " in err, (code, err)
+            assert [n for n in os.listdir(reviews) if n.endswith("-ask.md")], os.listdir(reviews)
+        finally:
+            subprocess.run, sys.argv = real_run, real_argv
+            globals()["copy_to_clipboard"] = real_copy
+            for k in ("AUTOSOUND_PROJECT_DIR", "AUTOSOUND_CRITIC_MODEL", "AUTOSOUND_CRITIC_BIN", "CLAUDECODE"):
+                os.environ.pop(k, None)
+            os.environ.update(markers)
+
     print("selftest[autosound_ai] OK -- the key travels as a header, never in a URL; a retired model "
           "(404) becomes a choice carrying the key's generateContent models, not a fall-through; "
           "the list is parsed from the API's own shape; one reviewer model read by every door, the "
           "advisor variables named and ignored, nothing named -> None (no literal, no first-listed id); "
           "the CLI's list renders in the picker's shape; one prompt file, memory only when present; "
           "critic/advisor differ only in the TASK block; ask carries the interaction contract and "
-          "the question only, no tuning layer")
+          "the question only, no tuning layer; agy takes the prompt on stdin (no file to read); a failed "
+          "call exits 4 and files no review, the package goes into the project; a session marker "
+          "starts no CLI; --mode clipboard is a rung, not a failure")
     return 0
 
 
-def run_doctor():
+def run_doctor(smoke=True):
     print("=== ДІАГНОСТИКА СЕРЕДОВИЩА (DOCTOR MODE) ===")
     ok = True
     
@@ -727,6 +986,26 @@ def run_doctor():
     cli_bin = detect_cli(provider)
     if not cli_bin:
         print(f"· Для рецензента ({provider}) локального CLI не знайдено")
+    else:
+        # What the retired shell doors checked before a single call (skill #41).
+        where = shutil.which(cli_bin) or cli_bin
+        if cli_flavor(cli_bin) == "gemini" and os.path.basename(cli_bin).lower().startswith("agy"):
+            print(f"✗ `agy` на PATH — це посилання на gemini ({os.path.realpath(where)}), а не Antigravity: "
+                  "brew install --cask antigravity-cli")
+            ok = False
+        if cli_flavor(cli_bin) == "gemini" and not api_key_for("google"):
+            print(f"✗ CLI gemini без GEMINI_API_KEY — {FAILURE_ADVICE['dead_cli']}")
+            ok = False
+        if sys.platform == "darwin" and os.path.exists(where) and shutil.which("xattr") and subprocess.run(
+                ["xattr", "-p", "com.apple.quarantine", where], capture_output=True).returncode == 0:
+            print(f"✗ {where} у карантині Gatekeeper. Виправлення: xattr -dr com.apple.quarantine \"{where}\"")
+            ok = False
+    if os.environ.get("GEMINI_API_KEY"):
+        print(f"· GEMINI_API_KEY: {gemini_key_shape(os.environ['GEMINI_API_KEY'])}")
+    nested = nested_session_marker()
+    if cli_bin and nested:
+        print(f"· Ми всередині агент-сесії ({nested}): CLI рецензента тут не запускається — "
+              "перевір канал з окремого термінала")
     if model:
         print(f"▶ Рецензент: {model} → провайдер {provider}")
     else:
@@ -749,6 +1028,33 @@ def run_doctor():
         else:
             print("· Модель рецензента не задано, і запропонувати нема кому — ручний режим")
 
+    # Живий виклик тим шляхом, яким піде раунд, і тією моделлю, яку назвав Арбітр (skill#27).
+    if model and smoke:
+        prompt = "Reply with exactly: channel works"
+        text = kind = error = None
+        if api_provider:
+            try:
+                caller = {"google": call_gemini_api, "anthropic": call_anthropic_api, "openai": call_openai_api}[provider]
+                text = caller(api_key_for(provider), model, prompt)[0]
+            except Exception as e:  # noqa: BLE001
+                kind, error = classify_failure(str(e)), str(e)
+        elif cli_bin and not nested:
+            text, kind, error = call_cli(provider, cli_bin, model, prompt, timeout=120)
+        if text is not None or error is not None:
+            if text and "channel works" in text.lower():
+                print(f"✓ Живий виклик: {text.strip().splitlines()[0]}")
+            elif text:
+                print(f"✗ Рецензент відповів, але не тим, про що просили: {text.strip()[:120]}")
+                ok = False
+            elif kind == "bad_model":
+                print("✓ CLI відповів — він живий і в нього виконано вхід")
+                print(f"✗ Модель `{model}` йому не відома. Він може запустити: " + ", ".join(list_cli_models()))
+                ok = False
+            else:
+                advice = FAILURE_ADVICE.get(kind, "")
+                print(f"✗ Живий виклик не вдався: {(error or '').strip()[:200]}" + (f" → {advice}" if advice else ""))
+                ok = False
+
     # Рекомендація
     if api_provider:
         print(f"▶ Режим роботи: АВТОМАТИЧНИЙ (через API {api_provider})")
@@ -767,7 +1073,7 @@ def run_doctor():
 _OWN_REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-def _review_target():
+def _review_target(what="Рецензію"):
     """Where a review belongs, or None — resolved from what it is ABOUT, not from where we stand.
 
     The old rule was `AUTOSOUND_PROJECT_DIR or CWD`, and the fallback is what broke: run the
@@ -794,14 +1100,14 @@ def _review_target():
         return stated
     here = os.path.abspath(CWD)
     if here == _OWN_REPO or here.startswith(_OWN_REPO + os.sep):
-        print(">> Рецензію НЕ збережено: скрипт запущено всередині репозиторію методу, а рецензія "
+        print(f">> {what} НЕ збережено: скрипт запущено всередині репозиторію методу, а запис "
               "належить ПРОЕКТУ. Задайте AUTOSOUND_PROJECT_DIR=<тека проекту> і повторіть — "
               "текст вище не втрачено.", file=sys.stderr)
         return None
     looks_like_project = any(os.path.exists(os.path.join(here, name))
                              for name in ("project.json", "rew_analitic", "process", ".tcc"))
     if not looks_like_project:
-        print(f">> Рецензію НЕ збережено: {here} не схожа на теку проекту (нема project.json, "
+        print(f">> {what} НЕ збережено: {here} не схожа на теку проекту (нема project.json, "
               f"rew_analitic/, process/ чи .tcc/), а писати запис проекту в довільну теку — це те, "
               f"як він потім знаходиться в чужому git. Задайте AUTOSOUND_PROJECT_DIR.",
               file=sys.stderr)
@@ -814,8 +1120,9 @@ def _persist_review(role, text, model, mode):
 
     The reasoning used to exist only in the chat stream, so a session rendered from disk showed
     that a critique happened and how it was resolved but not what was argued -- the part worth
-    reading back a week later, and the part an audit needs. Clipboard mode writes the compiled
-    package to the same place, so a review answered by hand does not look like no review at all.
+    reading back a week later, and the part an audit needs. Only an ANSWER is filed here: the
+    clipboard rung writes the outgoing package beside it as `-package.md` (`_write_package`), and
+    an answer brought back by hand is saved by the person under this name (hub TCC-014 ask 4).
 
     Returns a PROJECT-RELATIVE path: it goes into the journal, and an absolute path from one
     machine is noise on another.
@@ -841,6 +1148,34 @@ def _persist_review(role, text, model, mode):
     print(f">> Запиши посилання: process.py <project>/process reviewer <vendor> {model} "
           f"--review {rel}", file=sys.stderr)
     return rel
+
+
+def _write_package(role, text):
+    """The outgoing package for the clipboard rung, as `<project>/process/reviews/<ts>-<role>-package.md`.
+
+    Named a PACKAGE, never a review: filed under the review's name it read as a critique that did
+    not exist, and the printed next step would have put a pointer to it in the journal (hub
+    TCC-014 ask 4). Written into the PROJECT, never into the current folder: `combined_prompt.md`
+    used to land in `<cwd>/rew_analitic`, and a run from the method's folder dirtied the method's
+    checkout, which TCC's updater then refuses to move (ask 2). With no project to write into, a
+    temp file -- the clipboard carries the text either way. Returns `(path, rel or None)`.
+    """
+    stamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+    project = _review_target(what="Пакет")
+    if project:
+        rel = os.path.join("process", "reviews", f"{stamp}-{role}-package.md")
+        path = os.path.join(project, rel)
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(text)
+            return path, rel
+        except OSError as e:
+            print(f">> Пакет не записано в проект ({e}) — пишу в тимчасову теку.", file=sys.stderr)
+    fd, path = tempfile.mkstemp(prefix=f"autosound_{role}_package_", suffix=".md")
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(text)
+    return path, None
 
 
 #: The reviewer's prompt, in layers — the same files `_reviewer_prompt.sh` reads, so the four doors
@@ -909,12 +1244,24 @@ def main():
         print("Використання: python3 scripts/autosound_ai.py [critic|advisor|ask|doctor] <package_file.md> [trace.csv]")
         sys.exit(1)
         
+    argv = list(sys.argv)
+    # `--mode clipboard` — the ladder's clipboard rung, asked for by name (setup-critic-channel.md §7).
+    # The docs named this flag while nothing read it.
+    mode = None
+    if "--mode" in argv:
+        i = argv.index("--mode")
+        mode = (argv[i + 1] if i + 1 < len(argv) else "").lower()
+        del argv[i:i + 2]
+        if mode != "clipboard":
+            print(f"Невідомий режим {mode!r}: є лише --mode clipboard", file=sys.stderr)
+            sys.exit(1)
+    sys.argv = argv
     role = sys.argv[1].lower()
     
     if role in ("selftest", "--selftest"):
         sys.exit(_selftest())
     if role == "doctor":
-        success = run_doctor()
+        success = run_doctor(smoke="--no-smoke" not in sys.argv)
         sys.exit(0 if success else 1)
         
     if role not in REVIEW_TASKS:
@@ -974,7 +1321,7 @@ def main():
     for line in retired_advisor_notice():
         print(line, file=sys.stderr)
     named = resolve_model()
-    if not named and api_key_for("google"):
+    if not named and api_key_for("google") and mode != "clipboard":
         # No model NAMED and a Google key present: the key is the thing to ask, and when the
         # answer is a list the choice is the Arbiter's -- print it and stop, rather than take the
         # first slug an installed `agy` prints (an agy slug is not an API id: `gemini-3.8-flash-high`
@@ -988,7 +1335,7 @@ def main():
             print(choice.render(), file=sys.stderr)
             sys.exit(3)
     model = named
-    if not model:
+    if not model and mode != "clipboard":
         # No key to ask -- then the CLI is: its list, and stop, the same answer the key gives. It
         # used to take the list's FIRST id and call that the reviewer, which is choosing for the
         # Arbiter; before that it was a literal that retired. Only with no CLI to ask either is the
@@ -1016,6 +1363,9 @@ def main():
             f"рецензент мовчки перейде на CLI або буфер обміну.",
             file=sys.stderr,
         )
+    failures = []
+    if mode == "clipboard":
+        api_key = None
     if api_key:
         print(f">> Підключення до API ({provider}, {model})...", file=sys.stderr)
         try:
@@ -1047,108 +1397,71 @@ def main():
             print(choice.render(), file=sys.stderr)
             sys.exit(3)
         except Exception as e:
-            print(f">> Помилка виклику API ({e}). Спроба локального CLI або буфера...", file=sys.stderr)
+            print(f">> Помилка виклику API ({e}). Спроба локального CLI...", file=sys.stderr)
+            failures.append(f"API {provider}: {e}")
 
-    # 2. Спроба локального CLI (per-vendor: agy/gemini · claude · codex)
-    cli_bin = detect_cli(provider)
-    if cli_bin:
+    # 2. Локальний CLI (per-vendor: agy/gemini · claude · codex)
+    cli_bin = detect_cli(provider) if (model and mode != "clipboard") else None
+    nested = nested_session_marker() if cli_bin else None
+    if cli_bin and nested:
+        # Not started at all: a CLI inside an agent session deadlocks often, and a warning followed
+        # by a silent wait was read as the reviewer thinking (hub TCC-014 ask 3).
+        failures.append(f"CLI '{cli_bin}' не запущено: ми всередині агент-сесії (маркер {nested}), де "
+                        "виклик CLI часто зависає. Запусти рецензента з окремого термінала, або дай "
+                        "ключ API, або бери буфер обміну (AUTOSOUND_ALLOW_NESTED_CLI=1 — якщо свідомо)")
+    elif cli_bin:
         print(f">> Виклик локального CLI '{cli_bin}' ({provider})...", file=sys.stderr)
-        # Тимчасовий файл промпту — з унікальним іменем і правами 0600, які дає сама бібліотека.
-        #
-        # Було: `$TEMP|$TMPDIR|/tmp` + `autosound_<role>.txt` — передбачуване ім'я з правами за
-        # umask. У файл лягає скомпільований промпт: контекст проєкту, вміст контракту, дані
-        # тюнінгу. На macOS і Windows тека вже приватна на користувача, тож ризик там малий; на
-        # СПІЛЬНОМУ Linux `/tmp` світ-записуваний, і передбачуване ім'я — це і TOCTOU через
-        # символьне посилання на чужий файл, і видимість вмісту сусідові. `tempfile` знімає обидва
-        # без окремої гілки на кожну ОС і коштує рівно нічого (HUB-041).
-        temp_prompt_path = None
         try:
-            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", prefix=f"autosound_{role}_",
-                                             suffix=".txt", delete=False) as tf:
-                temp_prompt_path = tf.name
-                tf.write(compiled_prompt)
-
-            # Agent-inside-agent = chronic deadlock (observed ~15/20 field sessions).
-            # Best-effort detection: warn, then still try — but ALWAYS with a timeout.
-            nested = [k for k in os.environ
-                      if k.startswith(("ANTIGRAVITY", "AGY_", "CLAUDECODE", "CLAUDE_CODE", "GEMINI_SESSION"))]
-            if nested:
-                print(f">> ⚠️ Схоже, ми ВСЕРЕДИНІ агент-сесії (маркер: {nested[0]}). "
-                      "Виклик CLI зсередини сесії часто DEADLOCK'ає — надійніше запустити "
-                      "рецензента з ОКРЕМОГО термінала або Clipboard Mode. Пробую з таймаутом…",
-                      file=sys.stderr)
-            cli_timeout = int(os.environ.get("AUTOSOUND_CLI_TIMEOUT", "120"))
-            cmd = cli_command(provider, cli_bin, model, temp_prompt_path, compiled_prompt)
-            # На Windows потрібен shell=True, щоб запускати .cmd обгортки типу gemini.cmd / agy.cmd від npm/scoop
-            use_shell = (sys.platform == "win32")
+            text, kind, error = call_cli(provider, cli_bin, model, compiled_prompt)
+        except Exception as e:  # noqa: BLE001
+            text, kind, error = None, "other", f"не виконано: {e}"
+        if text:
+            print(text)
+            print(f"\n— [{role}: {model}]")
+            _persist_review(role, text, model, "cli")
             try:
-                proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
-                                      timeout=cli_timeout, shell=use_shell)
-            except subprocess.TimeoutExpired:
-                print(f">> ⛔ CLI '{cli_bin}' завис і вбитий по таймауту ({cli_timeout} с) — "
-                      "класична ознака agent-inside-agent deadlock. НЕ рахуй «вручну»: "
-                      "запусти рецензента з окремого термінала, або скористайся Clipboard Mode "
-                      "(нижче). Таймаут налаштовується: AUTOSOUND_CLI_TIMEOUT.",
-                      file=sys.stderr)
-                raise RuntimeError("CLI timeout — falling back to Clipboard Mode")
-            if proc.returncode == 0 and proc.stdout.strip():
-                print(proc.stdout)
-                print(f"\n— [{role}: {model}]")
-                _persist_review(role, proc.stdout, model, "cli")
-                # Логування в аудит
-                try:
-                    with open(AUDIT_TRAIL, "a", encoding="utf-8") as f:
-                        f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M')} | {role}={model} | package={os.path.basename(pkg_file)}\n")
-                except Exception:
-                    pass
-                return
-            else:
-                print(f">> Помилка виконання CLI. Спроба буфера обміну. Деталі: {proc.stderr}", file=sys.stderr)
-        except Exception as e:
-            print(f">> Не вдалося виконати CLI ({e}). Перехід у ручний режим...", file=sys.stderr)
-        finally:
-            # У `finally`, а не в гілці успіху: раніше файл прибирався ТІЛЬКИ коли CLI відпрацював
-            # чисто, тож після таймауту, помилки чи будь-якого винятку промпт із контекстом
-            # проєкту лишався в спільній теці назавжди — і саме падіння було тим випадком, коли
-            # він там залишався.
-            if temp_prompt_path:
-                try:
-                    os.remove(temp_prompt_path)
-                except OSError:
-                    pass
+                with open(AUDIT_TRAIL, "a", encoding="utf-8") as f:
+                    f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M')} | {role}={model} | package={os.path.basename(pkg_file)}\n")
+            except Exception:
+                pass
+            return
+        if kind == "bad_model":
+            # The CLI is alive and the NAME is what it refused: a choice, not a fall-through.
+            print(ModelChoiceNeeded(f"Модель `{model}` CLI '{cli_bin}' не знає: {error[:200]}",
+                                    list_cli_models(), role_var, source="cli").render(), file=sys.stderr)
+            sys.exit(3)
+        advice = FAILURE_ADVICE.get(kind, "")
+        failures.append(f"CLI '{cli_bin}': {error.strip()[:400]}" + (f"\n     → {advice}" if advice else ""))
 
-    # 3. Ручний режим — Clipboard Mode (Кросплатформний порятунок)
-    print("\n" + "="*50, file=sys.stderr)
-    print("▶ РУЧНИЙ РЕЖИМ: БУФЕР ОБМІНУ (CLIPBOARD MODE)", file=sys.stderr)
-    print("="*50, file=sys.stderr)
-    
-    # Створимо файл для ручного перенесення про всяк випадок
-    manual_file_path = os.path.join(PROJECT_MIRROR, "combined_prompt.md")
-    try:
-        os.makedirs(os.path.dirname(manual_file_path), exist_ok=True)
-        with open(manual_file_path, "w", encoding="utf-8") as mf:
-            mf.write(compiled_prompt)
-        print(f"✓ Пакет збережено локально: {manual_file_path}", file=sys.stderr)
-    except Exception as e:
-        print(f"Не вдалося зберегти файл: {e}", file=sys.stderr)
-
-    # The package, not an answer -- but on the record all the same: a review worked by hand must
-    # not look like no review at all (SCR-027, `mode: clipboard` on the event).
-    _persist_review(role, compiled_prompt, os.environ.get("GEMINI_CRITIC_MODEL", ""), "clipboard")
-
-    # Копіювання у буфер обміну
-    copied = copy_to_clipboard(compiled_prompt)
-    if copied:
-        print("\n🚀 КРУТО! Повний промпт та контекст успішно СКОПІЙОВАНО у ваш буфер обміну!", file=sys.stderr)
-        print("👉 Тепер просто відкрийте будь-який ШІ-чат (Claude.ai, ChatGPT, Gemini у браузері)", file=sys.stderr)
-        print("   та натисніть Ctrl+V (або Cmd+V) для вставки.", file=sys.stderr)
+    # 3. Буфер обміну — сходинка драбини, а не «рецензія».
+    print("\n" + "=" * 50, file=sys.stderr)
+    if failures:
+        # A failed call is a REFUSAL (skill #41): nothing was reviewed, so nothing is filed or
+        # announced as a review, and the exit code says so. The package is still made ready for the
+        # clipboard rung, because that is the next step the person can take.
+        print("⛔ РЕЦЕНЗІЇ НЕ ОТРИМАНО — нічого не збережено як рецензію:", file=sys.stderr)
+        for line in failures:
+            print(f"   · {line}", file=sys.stderr)
+        print("   Наступна сходинка — буфер обміну (нижче) або окремий термінал (setup-critic-channel.md §7).",
+              file=sys.stderr)
     else:
-        print("\n✗ Не вдалося автоматично скопіювати у буфер обміну.", file=sys.stderr)
-        print(f"👉 Будь ласка, відкрийте файл:\n   {manual_file_path}\n   скопіюйте його вміст вручну та вставте в ШІ-чат.", file=sys.stderr)
-        
-    print("\nПісля отримання відповіді від рецензента, скопіюйте її та збережіть у лог або вставте в 'audit-trail.md'.", file=sys.stderr)
-    print("Це дозволить зберегти історію на вашому диску назавжди!", file=sys.stderr)
-    print("="*50 + "\n", file=sys.stderr)
+        print("▶ РУЧНИЙ РЕЖИМ: БУФЕР ОБМІНУ (CLIPBOARD MODE)", file=sys.stderr)
+    print("=" * 50, file=sys.stderr)
+
+    package_path, package_rel = _write_package(role, compiled_prompt)
+    print(f"✓ Пакет (запит, не рецензія): {package_path}", file=sys.stderr)
+    print(f">> PACKAGE_FILE: {package_rel or package_path}", file=sys.stderr)
+    if copy_to_clipboard(compiled_prompt):
+        print("✓ Пакет скопійовано в буфер обміну — встав його в будь-який ШІ-чат (Ctrl+V / Cmd+V).", file=sys.stderr)
+    else:
+        print("✗ У буфер не скопійовано — відкрий файл вище і скопіюй вручну.", file=sys.stderr)
+    answer = (package_rel or os.path.join("process", "reviews", os.path.basename(package_path))).replace("-package.md", ".md")
+    print(f"Коли відповідь буде: збережи її як {answer} у проекті і запиши:\n"
+          f"   process.py <project>/process reviewer <vendor> <model> --review {answer} --mode clipboard",
+          file=sys.stderr)
+    print("=" * 50 + "\n", file=sys.stderr)
+    if failures:
+        sys.exit(4)
 
 if __name__ == "__main__":
     main()
