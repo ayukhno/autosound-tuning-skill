@@ -25,11 +25,11 @@ has.
 * **Modifiers** (`FX`, `c FX`, …) and **transient experiment tags** (`INV`, `i`, `+Δτ`) sit
   between the code and `_N`. A tag is temporary by design: once the change is baked into the base
   it drops from the name, and `dsp-state-current` — not the title — says what is committed.
-* **A clarification after the method** (`noXO`, `case35l, NO cotton wool`) is free-form text about
-  how the graph was taken. It is NOT part of which measurement it is: `r-L_17 (sw) noXO` is the
-  measurement `r-L_17 (sw)`, taken with a clarification (the user, 2026-09-16), so it answers a
-  round that asked for `r-L_17 (sw)`. It is kept in `params`. A position among it (`x0`, `p3`) is
-  still a position, and a position IS identity (skill #34).
+* **A clarification after the method** (`noXO`, `case35l, NO cotton wool`) is free-form text that
+  says what a measurement is and what it is for. It makes ANOTHER measurement in the SAME series:
+  `r-L_17 (sw) noXO` is not `r-L_17 (sw)`, and both are `_17` (the user, 2026-09-16). It is kept in
+  `params`, and `name_key` counts it with the modifier. A position among it (`x0`, `p3`) is still a
+  position (skill #34).
 
 The glossary is per-car and **not** a fixed list: this is the module's whole point. One project
 has no rear speakers and a disabled centre; generating `r-L_2` or `c_2` for it would invent
@@ -369,8 +369,8 @@ def explain_name(title, glossary=None):
         # captured measurement look missing, which is the checker crying wolf.
         "version_n": int(version) if version and version.isdigit() else None,
         "method": method,
-        # The clarification typed after the method (`noXO`), or None. Kept, never part of
-        # `name_key`: it says how the graph was taken, not which measurement it is.
+        # The clarification typed after the method (`noXO`), or None: what the measurement is and
+        # what it is for. Part of which measurement it is -- `name_key` counts it with the modifier.
         "params": tail,
         "title": text,
     }, None
@@ -378,7 +378,8 @@ def explain_name(title, glossary=None):
 
 def name_key(parsed):
     """Identity of a measurement for comparison: code, modifier, version, method, position, control.
-    NOT the clarification typed after the method (`params`): `r-L_17 (sw) noXO` is `r-L_17 (sw)`.
+    The clarification typed after the method (`params`) is counted in the modifier's slot, so the
+    tuple keeps its shape: `r-L_17 (sw) noXO` is `r-L noXO_17 (sw)`, and neither is `r-L_17 (sw)`.
 
     **The tuple's SHAPE is part of the contract, and it has changed once.** It was 4 fields
     (code, modifier, version, method) until v3.0.31, and is 6 since — `position` (`p1`…`p9`, `x0`)
@@ -404,7 +405,8 @@ def name_key(parsed):
     if version is None:
         version = parsed.get("version")
     code = parsed.get("code_current") or parsed.get("code")
-    return (code, parsed.get("modifier"), version, parsed.get("method"),
+    modifier = " ".join(part for part in (parsed.get("modifier"), parsed.get("params")) if part) or None
+    return (code, modifier, version, parsed.get("method"),
             parsed.get("position"), parsed.get("control"))
 
 
@@ -623,9 +625,10 @@ def _selftest():
                              position=pp["position"], control=pp["control"]) == title, (title, pp)
     assert parse_name("m-L FX p3_49 (sw)", g)["modifier"] == "FX", "a modifier and a position coexist"
 
-    # -- skill #34, and the user 2026-09-16: a clarification typed after the method. It is the SAME
-    #    measurement, "the graph taken with a clarification". The titles are the issue's own, from
-    #    a live REW session; each used to be refused here or to lose its `_N` in `process.py`.
+    # -- skill #34, and the user 2026-09-16: a clarification typed after the method. "The
+    #    measurement is always another one; the series is the same." The titles are the issue's
+    #    own, from a live REW session; each used to be refused here or to lose its `_N` in
+    #    `process.py`.
     car = Glossary({"channels": [{"code": c} for c in ("c", "m-L", "r-L")]})
     for title in ("c_49 (sw) x0", "m-L_49 (sw) x0"):
         p = parse_name(title, car)
@@ -633,13 +636,14 @@ def _selftest():
     rear = parse_name("r-L_17 (sw) noXO", car)
     assert (rear["code"], rear["modifier"], rear["version_n"], rear["method"], rear["position"],
             rear["params"]) == ("r-L", None, 17, "sw", None, "noXO"), rear
-    assert name_key(rear) == name_key(parse_name("r-L_17 (sw)", car)), \
-        "a clarification does not make it another measurement"
-    assert name_key(parse_name("r-L noXO_17 (sw)", car)) != name_key(rear), \
-        "a modifier before `_N` still does -- that is what a modifier is"
+    plain_rear = parse_name("r-L_17 (sw)", car)
+    assert name_key(rear) != name_key(plain_rear) and rear["version"] == plain_rear["version"], \
+        "another measurement, the same series"
+    assert name_key(parse_name("r-L noXO_17 (sw)", car)) == name_key(rear), \
+        "typed after the method or before `_N`, one measurement"
     spaced = parse_name("m-L_49 (sw) noXO  mic 2cm x0", car)
     assert (spaced["params"], spaced["position"]) == ("noXO mic 2cm", "x0"), spaced
-    assert name_key(spaced) == name_key(parse_name("m-L_49 (sw) x0", car)), "the position stays identity"
+    assert name_key(spaced) != name_key(parse_name("m-L_49 (sw) x0", car)), "the clarification is identity"
     assert parse_name("m-L_49 (sw) (mic at 2cm)", car)["params"] == "(mic at 2cm)"
     for title in ("r-L_17 (sw) noXO", "m-L_49ctl (sw) again", "m-L p3_49 (sw) 2nd try"):
         p = parse_name(title, car)
@@ -683,7 +687,7 @@ def _selftest():
     print("selftest OK — grammar round-trips, padding-insensitive version match, and a renamed "
           "channel's old captures resolve to it (SCR-039); positions p1..p9/x0 and controls "
           "ctl1/ctl3/ctl/rep parse in both forms and are identity, not code; a clarification "
-          "after the method is the same measurement (#34), (imp) without `_N` (#33), refusals "
+          "after the method is another measurement in the same series (#34), (imp) without `_N` (#33), refusals "
           "with a reason, and no ledger version for `_N` (#37)")
     return 0
 

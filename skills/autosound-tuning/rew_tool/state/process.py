@@ -452,38 +452,12 @@ def resolves(item, project_dir, versions=None, naming=None):
     return False
 
 
-def _capture_key(title, naming=None, glossary=None):
-    """Which measurement a title names -- `naming.name_key` -- or the title itself when the grammar
-    cannot say. A round compares measurements, not strings: `r-L_17 (sw) noXO` is the graph of
-    `r-L_17 (sw)` taken with a clarification (the user, 2026-09-16), and `_01` is `_1`. Compared as
-    strings, the one that came back was "unplanned" and the one asked for stayed outstanding."""
-    parsed = naming.parse_name(str(title), glossary) if naming is not None else None
-    return naming.name_key(parsed) if parsed else str(title)
-
-
-def _answers(round_, title, naming=None, glossary=None):
-    """`[(taken title, entry)]` of `round_["taken"]` that are the measurement `title` names -- the
-    exact title first, then the others in the order they came back."""
-    key = _capture_key(title, naming, glossary)
-    taken = round_.get("taken") or {}
-    exact = [(t, e) for t, e in taken.items() if t == title]
-    return exact + [(t, e) for t, e in taken.items()
-                    if t != title and _capture_key(t, naming, glossary) == key]
-
-
-def _is_skipped(round_, title, naming=None, glossary=None):
-    key = _capture_key(title, naming, glossary)
-    return any(s == title or _capture_key(s, naming, glossary) == key
-               for s in (round_.get("skipped") or {}))
-
-
-def _outstanding(round_, naming=None, glossary=None):
-    """Expected captures of one round that are neither taken nor skipped, as measurements."""
+def _outstanding(round_):
+    """Expected captures of one round that are neither taken nor skipped."""
     return [
         title
         for title in round_.get("expected", [])
-        if not _answers(round_, title, naming, glossary)
-        and not _is_skipped(round_, title, naming, glossary)
+        if title not in round_.get("taken", {}) and title not in round_.get("skipped", {})
     ]
 
 
@@ -598,14 +572,6 @@ class Process:
     def project_dir(self):
         """The project this `process/` belongs to — what evidence paths are resolved against."""
         return os.path.dirname(os.path.abspath(self.dir))
-
-    def _grammar(self):
-        """`naming` and this project's glossary: what a round needs to tell which measurement a
-        title is. `(None, None)` when the grammar cannot load -- titles then compare as strings."""
-        naming = _load_naming()
-        if naming is None:
-            return None, None
-        return naming, naming.Glossary.for_project(self.project_dir)
 
     @property
     def state_path(self):
@@ -902,12 +868,9 @@ class Process:
         title = str(title).strip()
         if not title:
             raise ProcessError("a capture needs its REW title")
-        naming, glossary = self._grammar()
-        key = _capture_key(title, naming, glossary)
-        planned = any(_capture_key(e, naming, glossary) == key for e in round_["expected"])
+        planned = title in round_["expected"]
         round_["taken"][title] = {"at": at or _now(), "planned": planned}
-        for skipped in [s for s in round_["skipped"] if _capture_key(s, naming, glossary) == key]:
-            round_["skipped"].pop(skipped)  # taken after all
+        round_["skipped"].pop(title, None)  # taken after all
         self._write(state)
         self._append(
             EV_CAPTURE_TAKEN,
@@ -1255,27 +1218,14 @@ class Process:
                 "verify.py could not be loaded — cannot check captures. "
                 "The curves are still there; this is the checker, not the data."
             )
-        naming, glossary = self._grammar()
-        expected = [str(t) for t in (round_.get("expected") or [])]
-        if titles:
-            wanted = [str(t) for t in titles]
-        else:
-            # What REW holds is the title a capture was TAKEN as: `r-L_17 (sw) noXO` answers
-            # `r-L_17 (sw)`, and asking REW for the latter would find nothing.
-            wanted = []
-            for title in expected:
-                for answer in [t for t, _ in _answers(round_, title, naming, glossary)] or [title]:
-                    if answer not in wanted:
-                        wanted.append(answer)
+        wanted = [str(t) for t in (titles or round_.get("expected") or [])]
         if not wanted:
             raise ProcessError("this round expects no captures — nothing to check")
-        expected_keys = {_capture_key(t, naming, glossary) for t in expected}
         verdicts = verifier.verify(wanted)
         for verdict in verdicts:
             title = verdict["name"]
             entry = round_.setdefault("taken", {}).setdefault(
-                title, {"at": _now(),
-                        "planned": _capture_key(title, naming, glossary) in expected_keys}
+                title, {"at": _now(), "planned": title in round_.get("expected", [])}
             )
             entry["verified"] = {
                 "ok": bool(verdict.get("valid")),
@@ -1340,13 +1290,12 @@ class Process:
         round_ = state.get("capture") or {}
         if not round_ or round_.get("closed"):
             return []
-        naming, glossary = self._grammar()
         out = []
         for title in round_.get("expected", []):
-            if _is_skipped(round_, title, naming, glossary):
+            if title in (round_.get("skipped") or {}):
                 continue  # a decision, and decisions are recorded, not re-litigated
-            answers = _answers(round_, title, naming, glossary)
-            if not any((entry.get("verified") or {}).get("ok") for _, entry in answers):
+            entry = (round_.get("taken") or {}).get(title)
+            if not entry or not (entry.get("verified") or {}).get("ok"):
                 out.append(title)
         return out
 
@@ -1363,7 +1312,7 @@ class Process:
         round_ = state.get("capture") or {}
         if not round_ or round_.get("closed"):
             return []
-        return _outstanding(round_, *self._grammar())
+        return _outstanding(round_)
 
     def _require_capture(self):
         state = self.load()
@@ -1379,7 +1328,7 @@ class Process:
     def _close_capture(self, state, round_, reason=None):
         # Worked out BEFORE the round is marked closed: `capture_outstanding` answers about the
         # open round, and it is the closing event that most needs the answer.
-        outstanding = _outstanding(round_, *self._grammar())
+        outstanding = _outstanding(round_)
         round_["closed"] = _now()
         round_["closed_reason"] = reason
         self._append(
@@ -1468,7 +1417,7 @@ class Process:
         if round_:
             out["capture_round"] = {
                 "id": round_.get("id"), "version": round_.get("version"),
-                "outstanding": _outstanding(round_, *self._grammar()),
+                "outstanding": _outstanding(round_),
                 "taken": len(round_.get("taken", {})), "skipped": len(round_.get("skipped", {})),
             }
         for entry in steps:
@@ -1980,35 +1929,6 @@ def _selftest():
     sp.start_attempt("0.1")
     assert [s["attempt"] for s in sp.open_work()["steps_in_progress"]] == [2], sp.open_work()
 
-    # -- a round counts MEASUREMENTS, not strings (skill #39; the user, 2026-09-16): a clarification
-    #    typed after the method is the graph of the measurement asked for, and `_017` is `_17`.
-    #    Compared as strings, both came back "unplanned" and all three stayed outstanding.
-    cl = Process(os.path.join(tempfile.mkdtemp(prefix="autosound_clarify_"), "process"))
-    cl.start_capture("17", ["r-L_17 (sw)", "r-R_17 (sw)", "c_17 (rta)"], phase="0")
-    assert cl.record_capture("r-L_17 (sw) noXO")["taken"]["r-L_17 (sw) noXO"]["planned"] is True
-    assert cl.record_capture("r-R_017 (sw)")["taken"]["r-R_017 (sw)"]["planned"] is True
-    assert cl.record_capture("tw-L_17 (sw)")["taken"]["tw-L_17 (sw)"]["planned"] is False
-    assert cl.capture_outstanding() == ["c_17 (rta)"], cl.capture_outstanding()
-    cl.skip_capture("c_17 (rta) mic moved", "not today")
-    assert cl.capture_outstanding() == [] and cl.open_work()["capture_round"]["outstanding"] == []
-
-    class _Asked:
-        """REW's verdict, faked: every title is usable, and what was asked is remembered."""
-        asked = []
-
-        def verify(self, titles):
-            self.asked.extend(titles)
-            return [{"name": t, "valid": True, "exists": True, "stats": {"uuid": "u-" + t}}
-                    for t in titles]
-
-    cl.check_captures(verifier=_Asked())
-    assert _Asked.asked == ["r-L_17 (sw) noXO", "r-R_017 (sw)", "c_17 (rta)"], \
-        f"REW is asked for the titles it holds, not the ones planned: {_Asked.asked}"
-    assert cl.unusable_captures() == [], cl.unusable_captures()
-    cl.skip_capture("r-R_17 (sw)", "retake later")
-    cl.record_capture("r-R_17 (sw) retake")
-    assert "r-R_17 (sw)" not in cl.load()["capture"]["skipped"], "taken after all, under a clarification"
-
     print(
         "selftest OK — a skip refused without a reason and taken with either a sentence or a "
         "superseding step; evidence refused when empty and when it resolves to nothing (SCR-035), "
@@ -2020,8 +1940,7 @@ def _selftest():
         "the journal headed itself with the writing checkout and re-headed only when it changed; "
         "and STOPPING is an event: `open_work` names the open round and every step left in "
         "progress, drops a round once it is closed, and owes a step again when it is picked "
-        "back up; a round counts measurements, not strings -- a clarification after the method "
-        "and `_017` answer what was asked, and REW is asked for the title a capture came back as. "
+        "back up. "
         f"root={root}"
     )
     return 0
@@ -2168,16 +2087,13 @@ def _main(argv):
                     processing_rate_hz=None, rate_note=None)
                 print(verifier.render_session(probe))
                 print()
-            naming, glossary = p._grammar()
             for title in round_.get("expected", []):
-                answers = _answers(round_, title, naming, glossary)
-                good = [t for t, e in answers if (e.get("verified") or {}).get("ok")]
-                if good:
-                    print(f"OK      {title}" + (f"  (as {good[0]})" if good[0] != title else ""))
-                elif _is_skipped(round_, title, naming, glossary):
+                verdict = ((round_.get("taken") or {}).get(title) or {}).get("verified") or {}
+                if verdict.get("ok"):
+                    print(f"OK      {title}")
+                elif title in (round_.get("skipped") or {}):
                     print(f"SKIP    {title}")
                 else:
-                    verdict = (answers[0][1].get("verified") if answers else None) or {}
                     reason = "; ".join(verdict.get("issues") or ["не перевірено"])
                     print(f"UNUSABLE {title} — {reason}")
             left = p.unusable_captures()
