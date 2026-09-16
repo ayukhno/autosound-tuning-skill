@@ -32,8 +32,8 @@
 > python3 rew_tool/state/process.py <project>/process decision "dialogue language" "uk" -1.1
 >
 > # The reviewer channel is closed by an ANSWER, not by a setting. One live check, recorded:
-> scripts/gemini_critic.sh --doctor | tee <project>/rew_analitic/reviewer-check.md
-> python3 rew_tool/state/process.py <project>/process reviewer google gemini-2.5-pro -1.2 \
+> python3 scripts/autosound_ai.py doctor | tee <project>/rew_analitic/reviewer-check.md
+> python3 rew_tool/state/process.py <project>/process reviewer <vendor> <the model you named> -1.2 \
 >   --review rew_analitic/reviewer-check.md
 > python3 rew_tool/state/process.py <project>/process done -1.2 "rew_analitic/reviewer-check.md"
 > ```
@@ -56,7 +56,7 @@
 - **Your DSP's software** and a way to load EQ into it (ideally a file import; we'll find out in §4).
 - The review protocol lives in **`references/core/review-loop.md`** (roles, TWO-PASS anti-anchoring, the loop rules) — read it before the first review round.
 - **🔑 The reviewer (Critic-Advisor) — SET IT UP AT THE START. It's the CORE of the method, not an option** — the synergy of a second expert is a colossal quality gain (single-perspective tuning is noticeably worse). **Offer it to the user** and pick what's available (the fallback ladder):
-  **The order to try is THE ladder — one list, and it lives in [`setup-critic-channel.md` §7](references/tooling/setup-critic-channel.md):** another vendor's CLI wrapper (the recommended default — Generator one vendor, reviewer the other; verify with `scripts/gemini_critic.sh --doctor`) → clipboard into any desktop chat → the same vendor at a higher tier, said out loud → a separate Claude session → the human. **A background sub-agent is not on it** (removed 2026-09-09): same-model review shares the model's blind spots, and a reviewer CLI spawned inside an agent session deadlocks. With nothing reachable, the round is blocked and says so.
+  **The order to try is THE ladder — one list, and it lives in [`setup-critic-channel.md` §7](references/tooling/setup-critic-channel.md):** wait / retry → another vendor through `scripts/autosound_ai.py` (the recommended default — Generator one vendor, reviewer the other; verify with `python3 scripts/autosound_ai.py doctor`) → clipboard into any desktop chat → the same vendor at a higher tier, said out loud → a separate Claude session → the human. **A background sub-agent is not on it** (removed 2026-09-09): same-model review shares the model's blind spots, and a reviewer CLI spawned inside an agent session deadlocks. With nothing reachable, the round is blocked and says so.
   ⚠️ **Don't skip this step.** (The CLI CHANNEL is optional; the reviewer ROLE is not.)
 - **What a working session looks like:** Pre-session checklist (hardware) → Resume (state) → work by phases (`process-phases.md`) → **Session close** (stopping is an event with a fixed order — `process.py … session-close` names what is still open; `SKILL.md` Pre-Session & Resume item 4, `process-control.md`) → Session log (handoff to the next session). A new project's first session = this whole file + Phase 0.
 

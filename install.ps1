@@ -1297,9 +1297,8 @@ if ($Mode -eq "tcc") {
 # -- when you have time ------------------------------------------------------------------------
 Step "When you have time"
 if ($ReviewerIn) {
-    Say "* Check the reviewer really answers -- finding the command is not the same as it working."
-    Say "  In Git Bash (Start Menu -> Git -> Git Bash):"
-    Say "      ~/.claude/skills/autosound-tuning/scripts/gemini_critic.sh --doctor"
+    Say "* Check the reviewer really answers -- finding the command is not the same as it working:"
+    Say "      python3 `"$HOME\.claude\skills\autosound-tuning\scripts\autosound_ai.py`" doctor"
     if ($AgySkipped) { Say "  (it needs the sign-in above first:  agy)" }
 } elseif ($WantReviewer) {
     Say "* A second AI as reviewer is where most of the value is. Add it later:"

@@ -135,10 +135,8 @@ def main():
                 if os.environ.get(k)), None)
     print(f"  · local CLI : {cli or 'none (agy/gemini not on PATH → Clipboard Mode)'}")
     print(f"  · API key   : {api or 'none (Clipboard Mode fallback)'}")
-    if sys.platform == "win32":
-        wr = [w for w in ("gemini_critic.cmd", "gemini_advisor.cmd")
-              if os.path.isfile(os.path.join(HERE, w))]
-        print(f"  · win .cmd wrappers: {', '.join(wr) or 'MISSING ✗'}")
+    door = os.path.join(HERE, "autosound_ai.py")
+    print(f"  · reviewer door: {'autosound_ai.py' if os.path.isfile(door) else 'autosound_ai.py MISSING ✗'}")
 
     failed = [n for ok, n in _results if not ok]
     print("\n" + ("=== PASS — core tooling healthy ✓ ===" if not failed

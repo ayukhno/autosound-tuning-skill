@@ -47,8 +47,8 @@ def machine_config_path():
 
     The project folder is the one the README tells you to back up to a private GitHub, so a key
     kept there is one `git push` from leaving; and `.gitignore` stops none of `git add -f`, a
-    folder copy, or a backup that is not git (HUB-025). Mirrors `_gemini_common.sh`, which must
-    resolve the same file -- the shell wrappers and this script are two doors into one channel.
+    folder copy, or a backup that is not git (HUB-025). The one door since the shell wrappers were
+    retired (skill #41), so the one place the path is resolved.
     """
     if os.name == "nt" or os.environ.get("APPDATA"):
         appdata = os.environ.get("APPDATA")
@@ -62,8 +62,8 @@ def machine_config_path():
 def _refuse_if_git_would_take(path):
     """A project-local config that carries a KEY and that git would take -- tracked, or not
     ignored -- stops the run. The user's rule (2026-09-08): a file that can carry a key MUST be
-    ignored so it never reaches GitHub. Mirrors `_critic_guard` in `_gemini_common.sh`: two doors,
-    one rule. A file with no key line, or outside any repository, is read as before."""
+    ignored so it never reaches GitHub. A file with no key line, or outside any repository, is read
+    as before."""
     try:
         with open(path, encoding="utf-8", errors="replace") as fh:
             if not any(line.strip().lstrip("export ").split("=", 1)[0].strip().endswith("API_KEY")
@@ -120,10 +120,9 @@ def load_env_file():
                         line = line[len("export "):].strip()
                     if "=" not in line:
                         continue
-                    # A value that can RUN something is not a value. This file is not sourced
-                    # here -- but `_gemini_common.sh` reads the SAME file, so a line dropped
-                    # there must be dropped here too, or the two doors disagree about what the
-                    # config says.
+                    # A value that can RUN something is not a value: the file was once
+                    # `source`d by the shell wrappers, and a project somebody else wrote ran its
+                    # lines the moment the reviewer started.
                     if "$(" in line or "`" in line or ";" in line:
                         print(f"critic-env: рядок відкинуто (виконуваний вміст): "
                               f"{line.split('=', 1)[0]}", file=sys.stderr)
@@ -1178,9 +1177,9 @@ def _write_package(role, text):
     return path, None
 
 
-#: The reviewer's prompt, in layers — the same files `_reviewer_prompt.sh` reads, so the four doors
-#: (this script, three bash wrappers) cannot drift again: four copies of two prompts already had
-#: (the advisor's asked for an "Advisor → Generator" format the contract does not have).
+#: The reviewer's prompt, in layers — kept as files, not strings, since four doors once held four
+#: copies of two prompts and they drifted (the advisor's asked for an "Advisor → Generator" format
+#: the contract does not have). One door now (skill #41); the layers stay files.
 #:   assets/interaction-contract.md   every task — how Generator and Reviewer talk; NOT tuning
 #:   reviewer-tuning.txt              critic, advisor — the regulated tuning rules
 #:   reviewer-task-<task>.txt         the task itself — the only thing the tasks do not share
@@ -1215,7 +1214,7 @@ def _read(path):
 
 
 def compile_prompt(contract, context, package, memory="", trace="", task="critic"):
-    """The whole prompt, in the order `_reviewer_prompt.sh` assembles it.
+    """The whole prompt, layer by layer.
 
     A tuning task needs `contract` and `context`; `ask` takes `context` as background if given."""
     parts = ["====== INTERACTION CONTRACT (how we work together — every task) ======",

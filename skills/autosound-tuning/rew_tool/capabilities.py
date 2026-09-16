@@ -94,16 +94,8 @@ NOT_ON_BOARD = {
     "issue_triage.py": "on the board",
     "smoke_test.py": "on the board",
     "run_trigger_eval.py": "an eval harness under evals/, not a tuning tool",
-    # the per-vendor wrappers of the review channel: the board names the channel (autosound_ai.py)
-    # and setup-critic-channel.md lists the wrappers
     "doc-commands-check.py": "a repo-side guard: runs every documented command and reports an argparse refusal as a documentation bug",
     "tool-docs-check.py": "a repo-side guard: each module entry's dependency line and own flags, against the module",
-    "_critic_env.sh": "the one config/key loader the three wrappers source",
-    "_claude_common.sh": "wrapper internals", "_codex_common.sh": "wrapper internals", "_gemini_common.sh": "wrapper internals",
-    "_reviewer_prompt.sh": "wrapper internals",
-    "claude_advisor.sh": "review-channel wrapper", "claude_critic.sh": "review-channel wrapper",
-    "codex_advisor.sh": "review-channel wrapper", "codex_critic.sh": "review-channel wrapper",
-    "gemini_advisor.sh": "review-channel wrapper", "gemini_critic.sh": "review-channel wrapper",
     "skill_metrics.sh": "a maintainer's usage-metrics script",
     "make-macos-app.sh": "the app bundle builder, called by the installers",
     "run-selftests.sh": "on the board", "tag-check.sh": "on the board",

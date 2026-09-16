@@ -1336,7 +1336,7 @@ fi
 step "When you have time"
 if [ "$REVIEWER_IN" = 1 ]; then
   say "  • Check the reviewer really answers — finding the command is not the same as it working:"
-  say "        $(pretty "$SKILL_HOME")/scripts/gemini_critic.sh --doctor"
+  say "        python3 $(pretty "$SKILL_HOME")/scripts/autosound_ai.py doctor"
   [ "$AGY_SKIPPED" = 1 ] && say "    (it needs the sign-in above first:  agy)"
 elif [ "$WANT_REVIEWER" = 1 ]; then
   say "  • A second AI as reviewer is where most of the value is. Add it later:"

@@ -1,35 +1,35 @@
 # Setting up the Critic-Advisor channel (out-of-the-box)
 
-The reviewer channel is critical to prevent single-perspective bias. **The strongest setup is a second, different AI vendor** — Claude + Gemini — via the CLI wrappers (§1–§4) or a manual chat (§7). **§7 holds THE ladder** — which channel to reach for, in order, both when setting one up and when the one you have stops answering. Every other file points here rather than keeping its own list.
+The reviewer channel is critical to prevent single-perspective bias. **The strongest setup is a second, different AI vendor** — Claude + Gemini — via `scripts/autosound_ai.py` — a key, or the vendor's CLI (§1–§4) — or a manual chat (§7). **§7 holds THE ladder** — which channel to reach for, in order, both when setting one up and when the one you have stops answering. Every other file points here rather than keeping its own list.
 
 ## 0. The whole thing in five lines
 
 ```bash
 brew install --cask antigravity-cli            # the CLI (macOS; Windows → §1)
-agy login                                      # or put a key in the machine file below
-printf 'GEMINI_CRITIC_MODEL=gemini-pro-latest\n' > ~/.config/autosound/critic-env
-scripts/gemini_critic.sh --doctor              # one command, diagnoses everything in §1–§3
-scripts/gemini_critic.sh package.md            # a real review
+agy                                            # sign in once, in a real terminal (§1)
+printf 'GEMINI_CRITIC_MODEL=gemini-3.1-pro-high\n' > ~/.config/autosound/critic-env
+python3 scripts/autosound_ai.py doctor         # one command, diagnoses everything in §1–§3
+python3 scripts/autosound_ai.py critic package.md   # a real review
 ```
 
 **Where the key lives, and why there:** `~/.config/autosound/critic-env` — **outside every
 repository**. A project-local `.critic-env` is still read (for models, paths, `GEMINI_BIN`), but if
-it carries a key AND git would take it — tracked, or not in `.gitignore` — the wrapper **refuses to
+it carries a key AND git would take it — tracked, or not in `.gitignore` — the script **refuses to
 run** and says how to fix it. `.gitignore` alone was never enough: it does not stop `git add -f`, a
 folder copy, or a backup that is not git at all. The key never needs to leave this machine, and
 nothing here prints it — the doctor reports its SHAPE (`current` / `OLD` / `unrecognised, N chars`).
 
-**Which doctor.** The one for the channel you actually use: `scripts/{gemini,claude,codex}_critic.sh
---doctor` checks that vendor's CLI, its auth, the paths and a live one-line smoke.
-`python3 scripts/autosound_ai.py doctor` is the one for the **direct-API** path (a key, no CLI) and
-checks the contract and context files it would send. They answer different questions; running the
-one for your channel is the answer to "why is the reviewer unreachable".
+**One door, one doctor** (skill #41: the shell wrappers are gone). `python3 scripts/autosound_ai.py
+doctor` says which vendor the named reviewer belongs to and whether its key or CLI is there, checks
+the CLI's traps (an `agy` that is a symlink to gemini, macOS quarantine, the closed gemini sign-in),
+the contract and context files it would send, and runs a live one-line smoke on **the model you
+named**, the way a round calls it (`--no-smoke` skips the call).
 
 ---
 
 ## 1. Install and Set up the CLI — `agy` (Antigravity)
 
-> 🩺 **Stuck? Run the doctor FIRST:** `scripts/gemini_critic.sh --doctor`. It checks the CLI, macOS quarantine, `.critic-env` syntax, the Contract/Context paths, the API key's shape and liveness (one free `GET /v1beta/models`), and runs a live 1-line smoke — printing the exact fix for each, so you diagnose all of §1–§3 in ONE command instead of serially. (A real cold-start hit ~6 papercuts here; the doctor surfaces them at once.) It recognises the **closed `gemini` CLI sign-in** (§2) by Google's own words and says "use agy" instead of a generic error.
+> 🩺 **Stuck? Run the doctor FIRST:** `python3 scripts/autosound_ai.py doctor`. It checks the CLI, macOS quarantine, `.critic-env` syntax, the Contract/Context paths, the API key's shape and liveness (one free `GET /v1beta/models`), and runs a live 1-line smoke — printing the exact fix for each, so you diagnose all of §1–§3 in ONE command instead of serially. (A real cold-start hit ~6 papercuts here; the doctor surfaces them at once.) It recognises the **closed `gemini` CLI sign-in** (§2) by Google's own words and says "use agy" instead of a generic error.
 
 Google's official CLI is **Antigravity (`agy`)**. It is fully cross-platform (macOS and Windows) and is the sole, unified way to invoke the Gemini Critic-Advisor channel.
 
@@ -55,7 +55,7 @@ brew install --cask antigravity-cli      # the REAL agy — NOT a symlink to gem
   - **OAuth Verification Code:** Open the generated URL in a browser, log in with your Google account, copy the code, and paste it back into your terminal.
   The authorization token will be saved and persist across sessions. (Do not smoke-test `agy --version`/`-p` before completing this login, as they will hang/re-trigger OAuth).
 - **Quota:** Antigravity's free *Starter* tier is a **WEEKLY** Flash+Pro group limit. At 0% the channel returns empty for ~a week (`agy` shows the countdown) — fall back to manual channel (§6) when it's dry.
-- ⚠️ **Agentic — slow / hangs on BIG inputs.** `agy` is an *agentic* CLI; on a large `-p` package (tens of KB — e.g. several long docs at once) it can think for minutes or hang outright (seen: a 34 KB review timed out at 5 min, no output). Keep packages **lean** (decimated numbers, one focus — `analysis-playbook.md`). For a genuine bulk one-off review, skip the CLI and use the **copy-paste desktop channel (§6)** — faster and more reliable.
+- ⚠️ **Agentic — slow / hangs on BIG inputs.** `agy` is an *agentic* CLI; on a large package (tens of KB — e.g. several long docs at once) it can think for minutes or hang outright (seen: a 34 KB review timed out at 5 min, no output). Keep packages **lean** (decimated numbers, one focus — `analysis-playbook.md`). For a genuine bulk one-off review, skip the CLI and use the **copy-paste desktop channel (§6)** — faster and more reliable.
 
 ## 2. Models
 
@@ -65,38 +65,37 @@ call path; the difference is the question and its wording — the TASK block of 
 
 | Task | What it is for | How to call | Contract |
 |---|---|---|---|
-| **critic** | check a proposal (the round's default) | `gemini_critic.sh pkg.md` · `autosound_ai.py critic pkg.md` | interaction + **tuning** (contract + context required, memory if present) |
-| **advisor** | search for a solution to an open question | `gemini_advisor.sh pkg.md` · `autosound_ai.py advisor pkg.md` | the same |
-| **ask** | a plain question — translation, a letter's wording, a second opinion on a text | `AUTOSOUND_REVIEW_TASK=ask gemini_critic.sh q.md` · `autosound_ai.py ask q.md` | interaction only (`assets/interaction-contract.md`); works before the intake |
+| **critic** | check a proposal (the round's default) | `python3 scripts/autosound_ai.py critic pkg.md [trace.csv]` | interaction + **tuning** (contract + context required, memory if present) |
+| **advisor** | search for a solution to an open question | `python3 scripts/autosound_ai.py advisor pkg.md` | the same |
+| **ask** | a plain question — translation, a letter's wording, a second opinion on a text | `python3 scripts/autosound_ai.py ask q.md` | interaction only (`assets/interaction-contract.md`); works before the intake |
 
 Nothing in the
-scripts names a model: with `GEMINI_CRITIC_MODEL` unset the wrapper prints `agy models` and
-stops (exit 3) for you to pick. A fallback model runs only if you name one
-(`GEMINI_FALLBACK_MODEL`); without it, a dry quota is reported, not papered over with a weaker model.
+script names a model: with `GEMINI_CRITIC_MODEL` unset it prints `agy models` and stops (exit 3)
+for you to pick. There is no fallback model: a dry quota is a refusal that names the ladder (§7 —
+wait, or a higher tier said out loud), never a weaker model swapped in quietly.
 
 | What | Where it comes from |
 |---|---|
 | **The reviewer's model** | `GEMINI_CRITIC_MODEL` (`AUTOSOUND_CRITIC_MODEL` for any vendor) — an id from `agy models`, left column; a Pro `-high` tier |
-| Fallback (quota dry) | `GEMINI_FALLBACK_MODEL` — only if set |
 
 > ⛔ **The `gemini` CLI path (`@google/gemini-cli`, `GEMINI_BIN=gemini`) is CLOSED for its own sign-in — 2026-09-08, gemini-cli 0.50.0, both models.** A session in a car followed an older revision of this page, tried it first, and lost ~10 minutes to this, verbatim:
 >
 > `Error authenticating: IneligibleTierError: This client is no longer supported for Gemini Code Assist for individuals. To continue using Gemini, please migrate to the Antigravity suite of products: https://antigravity.google`
 >
-> Google shut the free OAuth tier the CLI signed in with; `agy` (§1) is what replaced it. **A key does not reopen it as installed:** with a fresh `AQ.`-shaped `GEMINI_API_KEY` in the environment the same CLI still went to its sign-in and printed the text above (probed 2026-09-08 — its stored auth mode decides, not the variable). Treat the `gemini` CLI as closed; the wrappers keep detecting it only to NAME the closed path: "шлях gemini CLI закрито Google, використовуй agy", and they stop rather than fall back to the other model, which fails at the same sign-in. A `GEMINI_API_KEY` still matters for the **direct API** (`autosound_ai.py`, §3) — and there the model ids come from the key, not from this page: the `gemini-2.5-pro` / `gemini-2.5-flash` ids this page used to list answered `404 … no longer available to new users` under a working key on 2026-09-08, while `gemini-3.6-flash` and Google's own pointers `gemini-pro-latest` / `gemini-flash-latest` answered. **When the pinned model is gone, or none is named, the script prints the key's list and stops (exit 3) — the choice is the Arbiter's**, not a fall-through to a CLI or the clipboard with the same stale name.
+> Google shut the free OAuth tier the CLI signed in with; `agy` (§1) is what replaced it. **A key does not reopen it as installed:** with a fresh `AQ.`-shaped `GEMINI_API_KEY` in the environment the same CLI still went to its sign-in and printed the text above (probed 2026-09-08 — its stored auth mode decides, not the variable). Treat the `gemini` CLI as closed; `autosound_ai.py` keeps detecting it only to NAME the closed path: "шлях gemini CLI закрито Google", and stops rather than try another model, which fails at the same sign-in. A `GEMINI_API_KEY` still matters for the **direct API** (`autosound_ai.py`, §3) — and there the model ids come from the key, not from this page: the `gemini-2.5-pro` / `gemini-2.5-flash` ids this page used to list answered `404 … no longer available to new users` under a working key on 2026-09-08, while `gemini-3.6-flash` and Google's own pointers `gemini-pro-latest` / `gemini-flash-latest` answered. **When the pinned model is gone, or none is named, the script prints the key's list and stops (exit 3) — the choice is the Arbiter's**, not a fall-through to a CLI or the clipboard with the same stale name.
 
 > ℹ️ **`Gemini 3.5/3.1` are Antigravity's own display labels** (what `agy models` shows beside the slug ids), NOT real Gemini versions. Use the name your channel expects: the `agy` CLI wants its slug id (`gemini-3.1-pro-high`; the display label is rejected since agy 1.1.12); a raw `GEMINI_API_KEY` call wants the `gemini-2.5-*` id.
 
-**Name a Pro tier** — a Flash reviewer praises and misses obvious problems, and asked to settle a question it endorsed both sides of it (field-observed — «Which model for which role» below); "don't praise" prompt text doesn't fix a too-weak model. ⚠️ agy Starter shares one weekly Flash+Pro quota — Pro burns it faster; when dry, name a fallback or use the manual channel §6. Names drift — which is exactly why none is kept here: `agy models` is the list, and `--doctor` smokes **the model you named** and prints that list beside it when agy does not know the name. Override per call:
+**Name a Pro tier** — a Flash reviewer praises and misses obvious problems, and asked to settle a question it endorsed both sides of it (field-observed — «Which model for which role» below); "don't praise" prompt text doesn't fix a too-weak model. ⚠️ agy Starter shares one weekly Flash+Pro quota — Pro burns it faster; when dry, wait or take the clipboard rung (§7). Names drift — which is exactly why none is kept here: `agy models` is the list, and `--doctor` smokes **the model you named** and prints that list beside it when agy does not know the name. Override per call:
 ```bash
-GEMINI_CRITIC_MODEL=gemini-3.1-pro-high scripts/gemini_critic.sh pkg.md  # slug id — agy ≥ 1.1.12 rejects the display label
+GEMINI_CRITIC_MODEL=gemini-3.1-pro-high python3 scripts/autosound_ai.py critic pkg.md  # slug id — agy ≥ 1.1.12 rejects the display label
 ```
 
 ## 3. Pin config once — the KEY outside the project, the rest in it
 
 **The API key does not go in the project folder.** That folder is the one the README suggests
 backing up to a private GitHub, so a key kept there is one `git push` from leaving. It lives
-per-machine instead, and both the shell wrappers and `autosound_ai.py` read it from there first:
+per-machine instead, and `autosound_ai.py` reads it from there first:
 
 ```bash
 mkdir -p ~/.config/autosound                       # Windows: %APPDATA%\autosound\
@@ -106,8 +105,8 @@ chmod 600 ~/.config/autosound/critic-env
 
 **And do not `export GEMINI_API_KEY` from your shell profile.** A file is read by whoever knows
 its path; an exported variable is handed to **every** process you start — every npm package, every
-agent, every `env` and `ps e`. The wrappers export it themselves for the length of their own run,
-which is as long as it needs to exist. If you call `gemini`/`agy` by hand, export it in that one
+agent, every `env` and `ps e`. `autosound_ai.py` reads the file into its own process for the length
+of its run, which is as long as it needs to exist. If you call `gemini`/`agy` by hand, export it in that one
 shell rather than in `~/.zshrc`.
 
 **Check the key itself, not only its presence** — the doctor does, and by hand it is one free call:
@@ -120,9 +119,8 @@ Two facts cost a session its time on 2026-09-08, and both are about the KEY, not
   characters, is what every earlier note here showed. An old-shape key answers `API_KEY_INVALID`
   once a new one has been issued for the project; the doctor prints which shape it sees.
 - **A session's environment does not follow `~/.zshrc`.** A key changed in the profile after the
-  session started is not what that session holds: the old export stays in `env`, the wrappers
-  export it over the file's value for their own run, and a key that is perfectly valid in the
-  profile reads as invalid from inside the session. Which is one more reason the key belongs in
+  session started is not what that session holds: the old export stays in `env`, and a key that is
+  perfectly valid in the profile reads as invalid from inside the session. Which is one more reason the key belongs in
   the file (§3 above) and not in an export: the file is read fresh on every call. The doctor says
   when the key it sees came from the shell rather than from a file.
 
@@ -141,12 +139,12 @@ backup that is not git.
 
 **A file that can carry a key MUST be ignored — and that is checked, not promised** (the user's
 rule, 2026-09-08, after the "it's gitignored" months). Three carriers:
-- **Both doors refuse the dangerous case.** A project-local `.critic-env` that carries an
+- **The script refuses the dangerous case.** A project-local `.critic-env` that carries an
   `*_API_KEY` line inside a git repository and that git would take — tracked, or not in
-  `.gitignore` — stops the wrappers (`gemini_critic.sh` and its advisor door) and `autosound_ai.py` with the fix
+  `.gitignore` — stops `autosound_ai.py` with the fix
   printed (add the line, or move the key to the machine file; a TRACKED one also says *rotate*,
   because the history already has it). A file with no key line, or outside any repository, is
-  read as before. `--doctor` reports which side of the rule a project file is on.
+  read as before.
 - **`scripts/secret-scan.py`** scans a repository for a tracked/unignored key file and for
   key-shaped strings in tracked text (Google `AIza…`/`AQ.…`, Anthropic, OpenAI, or a real value
   under a `*_API_KEY=` name) — naming the file and line, never the value. `scripts/run-selftests.sh`
@@ -161,14 +159,41 @@ arbitrary shell the moment you started the reviewer.
 
 ⚠️ **Use the slug ids `agy models` prints in its left column** — the display labels in the right
 column (`Gemini 3.1 Pro (High)`) are rejected by agy ≥ 1.1.12 (`invalid model selection`), and a
-quoted label is what this block used to show. Quotes are harmless either way (`--doctor` catches a
-malformed line):
+quoted label is what this block used to show. Quotes are harmless either way:
 ```bash
 GEMINI_BIN=agy
 GEMINI_CRITIC_MODEL=gemini-3.1-pro-high              # THE reviewer model (one role) — an id from `agy models`
-# GEMINI_FALLBACK_MODEL=<id>                         # only if you want one when the quota is dry
 # PROJECT_MIRROR=/abs/path/to/project/rew_analitic   # only if CWD differs
 ```
+
+### The key on each platform, and what `agy` needs (skill #28)
+
+`agy` takes no key from the method: it signs in with a Google account, once, in a real terminal
+(`agy`, §1), and keeps that sign-in itself. The method's key is for the **direct API** path of
+`autosound_ai.py` — and it goes into the machine file, not into an environment variable a whole
+login session hands to every process:
+
+| Platform | File | Line |
+|---|---|---|
+| macOS / Linux | `~/.config/autosound/critic-env` (`chmod 600`) | `GEMINI_API_KEY=AQ.…` |
+| Windows | `%APPDATA%\autosound\critic-env` — PowerShell: `New-Item -ItemType Directory -Force "$env:APPDATA\autosound"; notepad "$env:APPDATA\autosound\critic-env"` | `GEMINI_API_KEY=AQ.…` |
+
+Check it took: `python3 scripts/autosound_ai.py doctor` names the key it found, its shape
+(`current` / `OLD` / `unrecognised`) and whether the key's own model list answers.
+
+### Running a CLI reviewer headless (hub TCC-014)
+
+- **The prompt goes to `agy` on stdin** (one stream-json message), never as a file for it to read.
+  Headless `agy` auto-denies `read_file` wherever it is not told to approve every tool, so a path
+  as the prompt failed on a clean Windows machine. If `agy` still reports a denied tool, the
+  PACKAGE points at a file — put the data into the package. Do not set `toolPermission:
+  always-proceed` for this: a reviewer reads text and needs no tools.
+- **`AUTOSOUND_CRITIC_CLI_ARGS`** passes per-run flags to the CLI (e.g. `--sandbox`).
+- **Inside an agent session the CLI is not started** (`CLAUDECODE` and similar markers): it
+  deadlocks there often, and a silent wait reads as the reviewer thinking. The call is refused
+  (exit 4) with the next rung; run it from a separate terminal, give a key, or take the clipboard.
+  `AUTOSOUND_ALLOW_NESTED_CLI=1` is the deliberate way past it.
+- **A failed call is a refusal** (exit 4): every reason listed, nothing filed as a review.
 
 ### Any vendor, not only Gemini (SCR-033)
 
@@ -226,7 +251,7 @@ does nothing for a Gemini reviewer.
 
 ## 5. Where the channel reads the project from (no cross-project leaks)
 
-The wrappers inject the **Contract** (protocol) + your **project's `autosound_context.md`** as system framing, resolved **project-local FIRST**:
+`autosound_ai.py` injects the **Contract** (protocol) + your **project's `autosound_context.md`** as system framing, resolved **project-local FIRST**:
 ```
 $PWD/rew_analitic/data-contract-template.md   ← preferred
 $PWD/rew_analitic/autosound_context.md        ← preferred
@@ -236,16 +261,16 @@ So **launch Claude from the project directory** (CWD = the car you're tuning). `
 
 > ⚠️ If the Critic ever cites a vehicle/history you don't recognise, it loaded a *different* project's context — fix the path here (or `PROJECT_MIRROR`), don't argue with the output.
 
-> ⚠️ **Keep the mirror's `autosound_context.md` CURRENT — the Critic grades you against it.** Field case (2026-07-15): a mirror assembled from a stale copy (predating the build's center channel) made the Critic flag the Generator's *correct* statement as "context drift — re-read the config". When you assemble/copy a `PROJECT_MIRROR` for the wrappers, reconcile the context file with the live ledger/state first (append a dated ADDENDUM with the current channel map and active preset if the original is user-owned). A critic on stale context spends its round policing ghosts.
+> ⚠️ **Keep the mirror's `autosound_context.md` CURRENT — the Critic grades you against it.** Field case (2026-07-15): a mirror assembled from a stale copy (predating the build's center channel) made the Critic flag the Generator's *correct* statement as "context drift — re-read the config". When you assemble/copy a `PROJECT_MIRROR` for the reviewer, reconcile the context file with the live ledger/state first (append a dated ADDENDUM with the current channel map and active preset if the original is user-owned). A critic on stale context spends its round policing ghosts.
 
 ## 6. Smoke-test before you rely on it
 
-`--doctor` (top of file) already runs a live smoke. Or by hand after any CLI/model change:
+`doctor` (top of file) already runs a live smoke. Or by hand after any CLI/model change:
 ```bash
-printf '## Test\nChannel check: reply with one line "channel works".\n' > /tmp/smoke.md
-scripts/gemini_critic.sh /tmp/smoke.md
+printf 'Channel check: reply with one line "channel works".\n' > /tmp/smoke.md
+python3 scripts/autosound_ai.py ask /tmp/smoke.md
 ```
-Expect a one-line reply + a `— [critic: <model>]` tag (the advisor door answers with the same tag — it is the same reviewer). An **empty reply** (just the tag) ≠ a crash — it's almost always **quota exhausted** (agy's weekly tier) or lost auth; the wrapper prints a loud WARNING. Recover by switching the model group, re-logging-in `agy`, or going to the direct API with a key through `autosound_ai.py` (§3; the `gemini` CLI is closed, §2).
+Expect a one-line reply + a `— [ask: <model>]` tag (every task answers with its own tag — it is the same reviewer). No answer is a **refusal (exit 4)** that lists why — almost always **quota exhausted** (agy's weekly tier) or lost auth — and files nothing as a review. Recover by switching the model group, re-logging-in `agy`, or going to the direct API with a key through `autosound_ai.py` (§3; the `gemini` CLI is closed, §2).
 
 ## 7. THE LADDER — which reviewer to reach for, in order
 
@@ -255,15 +280,18 @@ keeping a list of its own — three lists that disagreed is what this section re
 
 0. **Wait / retry — mid-session only.** An empty reply is usually an exhausted quota or lost auth,
    not a crash (§6); a minute or a model-group switch often costs less than changing channel.
-1. **A CLI wrapper on ANOTHER vendor than the one driving** — `scripts/{gemini,claude,codex}_critic.sh`
-   (or `autosound_ai.py` with an API key, §3). This is the recommended default: Generator one vendor,
-   reviewer the other, which is what cross-vendor anti-anchoring means. Verify with `--doctor`.
+1. **ANOTHER vendor than the one driving** — `python3 scripts/autosound_ai.py critic|advisor|ask`,
+   through that vendor's key (§3) or its CLI. This is the recommended default: Generator one vendor,
+   reviewer the other, which is what cross-vendor anti-anchoring means. Verify with `doctor`. From
+   inside an agent session only the key works — the CLI is refused there (§3).
 2. **Clipboard mode — a desktop or web chat of any vendor** *(field-proven; the go-to when the CLI
    chokes)*. `cat package.md | pbcopy`, paste into a **Gemini / Claude / ChatGPT** chat where you have
    a subscription, paste the reply back. No CLI, no quota juggling, no agentic stalls — and the best
    answer for a **bulk one-off** (a real case: a 4-language README review the agentic CLI could not
-   finish). `autosound_ai.py --mode clipboard` writes the package to `process/reviews/` so a review
-   answered by hand does not look like no review at all.
+   finish). `python3 scripts/autosound_ai.py critic pkg.md --mode clipboard` writes the PACKAGE as
+   `process/reviews/<ts>-critic-package.md` and copies it; save the answer beside it as
+   `<ts>-critic.md` and record it (`process.py <project>/process reviewer <vendor> <model> --review
+   process/reviews/<ts>-critic.md --mode clipboard`) — the package itself is never filed as a review.
 3. **The same vendor at a higher tier**, when no second vendor is available at all — weaker, because
    the blind spots are shared, and it must be said out loud in the round's record.
 4. **Claude in a SEPARATE session** — cross-session, TWO-PASS anti-anchoring (`review-loop.md`).
@@ -314,7 +342,7 @@ descend the ladder instead.
 4. **Завершіть авторизацію:**
    Після вставки коду та натискання `Enter` ви успішно увійдете в систему. Напишіть `/quit`, щоб вийти з інтерактивного режиму `agy`. 
    
-   Токен збережеться локально, і тепер виклики Радника/Критика через скрипти (наприклад, `scripts/gemini_critic.sh`) працюватимуть автоматично і безперешкодно!
+   Токен збережеться локально, і тепер виклики рецензента (`python3 scripts/autosound_ai.py critic <пакет>`) працюватимуть автоматично — з окремого термінала, не зсередини агент-сесії.
 
 ## Which model for which role (updated 2026-08-01)
 
@@ -322,7 +350,7 @@ descend the ladder instead.
 
 Field case: the Advisor was asked to settle whether a per-position residual was a real spatial gradient or measurement noise. The Flash reply called it a genuine gradient in section 1 and explained the same residual as hand-trajectory instability in the Q&A of the same document — **both sides of the one question it existed to answer**, with no acknowledgement of the contradiction. Re-run on `gemini-3.1-pro-high` it settled the question, and additionally overturned the Generator's proposed lever on grounds neither party had raised. Cost of the weak round: one full package cycle.
 
-Rule of thumb: **routine pings and "does this look sane" → Flash is fine; anything that decides whether a method, a metric, or an error bar is valid → Pro.** If quota forces a fallback, the wrapper now says so loudly — treat that round as advisory and re-run before banking anything resting on it.
+Rule of thumb: **routine pings and "does this look sane" → Flash is fine; anything that decides whether a method, a metric, or an error bar is valid → Pro.** There is no automatic fallback: a dry quota is a refusal, and a round answered by a lower tier said out loud is advisory — re-run before banking anything resting on it.
 
 ⚠️ **Model names drift.** `agy models` has moved from display labels (`Gemini 3.1 Pro (High)`) to slug ids (`gemini-3.1-pro-high`); both forms were accepted as of 2026-08-01. List the current names before assuming a pinned name still resolves — an unresolvable name is one of the ways the channel returns an empty reply.
 

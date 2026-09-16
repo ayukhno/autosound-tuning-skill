@@ -76,7 +76,6 @@ run_one "changelog-index" scripts/changelog-index.py --selftest
 run_one "changelog-fresh" scripts/changelog-index.py --check
 # The reviewer channel's shell plumbing: the closed gemini-CLI path is recognised and named, not
 # retried on a fallback model (hub PAS-004). Offline -- the CLI call is stubbed.
-run_one "gemini-channel" skills/autosound-tuning/scripts/gemini_critic.sh --selftest
 # The direct-API reviewer: the key travels as a header, a retired model becomes a CHOICE carrying
 # the key's own list (never a fall-through to a CLI or the clipboard). Offline -- urlopen stubbed.
 run_one "autosound-ai" skills/autosound-tuning/scripts/autosound_ai.py selftest

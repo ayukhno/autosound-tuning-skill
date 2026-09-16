@@ -68,7 +68,7 @@ correctly, and with nothing to say why.
 A file that can carry an API key (`.critic-env`, `critic-env`) is ignored by `.gitignore` wherever
 it can land, and the rule has three carriers rather than a sentence: `scripts/secret-scan.py`
 (the tree, run by `run-selftests.sh` and so by CI; `--staged` as the pre-commit hook it installs
-with `--install-hook`), and the reviewer wrappers themselves, which refuse a project-local key
+with `--install-hook`), and the reviewer door itself (`scripts/autosound_ai.py`), which refuses a project-local key
 file that git would take. The user's ruling, 2026-09-08 — after this page and the setup reference
 had said "it's gitignored" for months while nothing wrote a `.gitignore` (HUB-025). The key itself
 belongs in `~/.config/autosound/critic-env`, outside every repository; the ignore rule is the

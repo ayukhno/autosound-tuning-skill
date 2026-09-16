@@ -17,7 +17,7 @@ Don't ask the model to be disciplined — put the discipline at the moments the 
 
 ## 2. Solo self-critique: through the wrapper, never "in your head"
 
-In-context self-critique ("now imagine you are a strict judge…") shares every anchor of the proposal it judges — it produces praise, not review (`review-loop.md`, TWO-PASS rationale). In solo modes the **mandatory form of self-critique for a round package or a phase gate** is a **stateless call of the critic wrapper on your own package** (`gemini_critic.sh <package.md>` — clean context + the contract §4 objection format). In-prompt self-critique is acceptable only for routine micro-decisions that don't change DSP state.
+In-context self-critique ("now imagine you are a strict judge…") shares every anchor of the proposal it judges — it produces praise, not review (`review-loop.md`, TWO-PASS rationale). In solo modes the **mandatory form of self-critique for a round package or a phase gate** is a **stateless call of the critic wrapper on your own package** (`python3 scripts/autosound_ai.py critic <package.md>` — clean context + the contract §4 objection format). In-prompt self-critique is acceptable only for routine micro-decisions that don't change DSP state.
 
 ## 3. Known driver behaviors (field-observed) → countermeasures
 
@@ -27,6 +27,6 @@ In-context self-critique ("now imagine you are a strict judge…") shares every 
 | **Confabulated completion** | "Збережено/оновлено!" with no artifact (e.g. the faked `/chat save`) | §1.2 — "done costs a path" |
 | **Manual-fallback drift** | A tool fails → "I did the check by hand" → precise-looking numbers | §1.3 — spot-check the numbers; fix/replace the tool rather than trust manual math |
 | **Name/label drift** | Filenames, versions, paths in chat ≠ disk (`Passat_B8_Final_v7.6.pct6` vs the real `Jazzi v.6.2_final.pct6`) | Keep the version bridge in `dsp-config/README.md`; read names from disk, not chat |
-| **Fictional consensus** | "Узгоджено з Критиком" when the stateless critic never agreed | Data-contract rule: cite the specific objection being addressed; check `review-log.md` |
+| **Fictional consensus** | "Узгоджено з Критиком" when the stateless critic never agreed | Data-contract rule: cite the specific objection being addressed; check the review itself in `process/reviews/` |
 
 What the field run showed **works well** even in mode C: the generated state sheet (`dsp-state-current`) stays faithful when the Arbiter reads it; `dsp-config/README.md` version-bridging; de-identified feedback via the side-effect gate; heavy `/clear`+resume windowing instead of long drifting sessions.
