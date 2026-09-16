@@ -305,12 +305,24 @@ def validate(data):
 TIME_DOMAIN_KINDS = ("energy_lag", "ringing", "decay_asymmetry")
 FLAW_KINDS = (
     "room_gain", "modal_peak", "cabin_null", "sbir", "floor_bounce",
-    "driver_resonance", "non_min_phase", "thd_spike", "pair_suckout",
+    "driver_resonance", "non_min_phase", "thd_spike", "pair_suckout", "level_tilt",
 ) + TIME_DOMAIN_KINDS
+#: `level_tilt` (skill #30): one side hotter than the other across a BAND -- not a peak, not a
+#: dip, not a null. The method already knew it (`phase_2_eq.md`: "a pure level tilt -> balance by
+#: level"; the Passat cabin file names the LHD case) and the map had nowhere to put it, so the
+#: largest single thing a baseline found lived in prose. `channels` is the pair, `level_db` is
+#: signed FIRST minus SECOND, `f_hz` the band's centre and `bw_oct` its width.
+LEVEL_TILT = "level_tilt"
+#: `thd_spike` (skill #31): the feature is a PERCENTAGE, which `level_db` cannot hold -- a live row
+#: printed `+0 dB` while 2.6 % lived in `why`. `thd_pct` is the measured THD at `f_hz`;
+#: `fundamental_db` the fundamental's level there, which is what makes the row stand against the
+#: null-artifact rule (`phase_0_baseline.md`). `level_db` stays null for this kind.
+THD_SPIKE = "thd_spike"
 # What may be DONE about it -- the load-bearing half. Closed for the same reason, and because the
 # whole point of writing the map down is that "don't EQ-boost this null" survives the session that
 # discovered it.
-FLAW_ACTIONS = ("notch", "leave", "no_boost", "geometry", "delay", "crossover")
+FLAW_ACTIONS = ("notch", "leave", "no_boost", "geometry", "delay", "crossover", "level")
+#: `level` (skill #30): balance by level -- cut the hotter side, never boost the colder one.
 
 #: Which rows a front-end shows the CAR'S OWNER, as opposed to the ones it keeps for the tune
 #: (user, 2026-09-02). The line is not "important vs unimportant" -- it is **what stays in the car
@@ -360,6 +372,7 @@ KIND_HEARD = {
     "non_min_phase": "the sound smears and gets harsher, and EQ does not clean it",
     "thd_spike": "it buzzes or breaks up when pushed",
     "pair_suckout": "it comes from both sides at once instead of from the centre",
+    "level_tilt": "the sound leans to one side and the stage sits off centre",
     "energy_lag": "the bass arrives late, behind the beat",
     "ringing": "notes hang on after they should have stopped",
     "decay_asymmetry": "one side sounds drier than the other",
@@ -471,16 +484,37 @@ def validate_flaw(entry):
         if not isinstance(f, (int, float)) or isinstance(f, bool) or f <= 0:
             raise ProjectError(f"f_hz must be a positive Hz, got {f!r}")
         level = entry.get("level_db")
-        if not isinstance(level, (int, float)) or isinstance(level, bool):
+        thd = entry.get("thd_pct")
+        if entry.get("kind") == THD_SPIKE and level is None:
+            if not isinstance(thd, (int, float)) or isinstance(thd, bool) or thd <= 0:
+                raise ProjectError(
+                    f"a thd_spike's feature is a percentage: give `thd_pct` (the measured THD at "
+                    f"f_hz, e.g. 2.6) -- `level_db` has no meaning for it (got thd_pct={thd!r})"
+                )
+        elif not isinstance(level, (int, float)) or isinstance(level, bool):
             raise ProjectError(
                 f"level_db must be a number: the FEATURE, signed — + a hump, - a dip. Not the "
                 f"correction you would apply to it (got {level!r})"
+            )
+        if entry.get("kind") == LEVEL_TILT and len(entry.get("channels") or []) != 2:
+            raise ProjectError(
+                f"a level_tilt is between TWO channels -- `channels` is the pair, and level_db is "
+                f"the first minus the second (got {entry.get('channels')!r})"
             )
         if entry.get("t_ms") is not None:
             raise ProjectError(
                 f"t_ms belongs to a time-domain kind ({', '.join(TIME_DOMAIN_KINDS)}), not to "
                 f"{entry.get('kind')!r}"
             )
+    for field in ("thd_pct", "fundamental_db"):
+        value = entry.get(field)
+        if value is None:
+            continue
+        if entry.get("kind") != THD_SPIKE:
+            raise ProjectError(f"{field} belongs to a thd_spike row, not to {entry.get('kind')!r}")
+        if not isinstance(value, (int, float)) or isinstance(value, bool) or \
+                (field == "thd_pct" and value <= 0):
+            raise ProjectError(f"{field} must be a {'positive ' if field == 'thd_pct' else ''}number, got {value!r}")
     if entry.get("kind") not in FLAW_KINDS:
         raise ProjectError(
             f"kind must be one of {', '.join(FLAW_KINDS)} (got {entry.get('kind')!r})"
@@ -1128,9 +1162,13 @@ _USAGE = """usage: project.py <project-dir> <command> [args]
                                                  - a dip. NOT the correction you would apply
       --why W --evidence "t1,t2"               kind: room_gain|modal_peak|cabin_null|sbir|
                                                  floor_bounce|driver_resonance|non_min_phase|
-                                                 thd_spike|pair_suckout
+                                                 thd_spike|pair_suckout|level_tilt
                                                action: notch|leave|no_boost|geometry|delay|
-                                                 crossover  (a dip can never be `notch`)
+                                                 crossover|level  (a dip can never be `notch`)
+                                               level_tilt: --channels L,R (the pair), level_db =
+                                                 first minus second, --bw-oct the band (#30)
+                                               thd_spike: level_db `-`, --thd-pct P, and
+                                                 --fundamental-db D where it was read (#31)
                                                --symptom: OPTIONAL. What the OWNER hears, one
                                                  sentence in their words, for the rows they are
                                                  shown (geometry|leave|no_boost) -- a communication
@@ -1171,6 +1209,15 @@ def _parse_kv(pairs, source=None):
             v = fact(v, source=source)
         out[k] = v
     return out
+
+
+def flaw_feature(entry):
+    """The row's feature as a person reads it: `+4.8 dB`, or `THD 2.6 %` for a distortion row --
+    never the `+0 dB` a placeholder printed while the percentage sat in `why` (#31)."""
+    if entry.get("thd_pct") is not None:
+        return f"THD {entry['thd_pct']:g} %"
+    level = entry.get("level_db")
+    return f"{level:+g} dB" if level is not None else "—"
 
 
 def _flaw_prose(entry, owner_only):
@@ -1319,7 +1366,11 @@ def _main(argv):
             # this flag not being read at all used to do, silently and with exit 0.
             status = _flag(args, "--status")
             symptom = _flag(args, "--symptom")
+            thd_pct = _flag(args, "--thd-pct")
+            fundamental_db = _flag(args, "--fundamental-db")
             said = {k: v for k, v in (("status", status), ("symptom", symptom)) if v}
+            said.update({k: float(v) for k, v in (("thd_pct", thd_pct), ("fundamental_db", fundamental_db))
+                         if v is not None})
             # A time-domain row has no frequency and no dB, so it cannot use the positional form:
             #   flaw --t-ms 1.1 energy_lag geometry --channels m-L --why … --evidence …
             if t_ms is not None:
@@ -1336,7 +1387,8 @@ def _main(argv):
                 return 0
             entry = proj.add_flaw(
                 f_hz=float(args[0]),
-                level_db=float(args[1]),
+                # `-` for a row whose feature is not a dB: a thd_spike carries --thd-pct (#31).
+                level_db=None if args[1] in ("-", "null") else float(args[1]),
                 kind=args[2],
                 action=args[3],
                 q=float(q) if q else None,
@@ -1349,7 +1401,7 @@ def _main(argv):
             width = f" Q{entry['q']:g}" if entry.get("q") else (
                 f" {entry['bw_oct']:g}oct" if entry.get("bw_oct") else "")
             mark = "" if flaw_status(entry) == DEFAULT_FLAW_STATUS else f" ({flaw_status(entry)})"
-            print(f"{entry['f_hz']:g} Hz{width} {entry['level_db']:+g} dB "
+            print(f"{entry['f_hz']:g} Hz{width} {flaw_feature(entry)} "
                   f"[{entry['kind']}]{mark} -> {entry['action']}")
         elif cmd == "flaws":
             # The same split the panel makes, available to anyone with a terminal: a front-end is
@@ -1367,7 +1419,7 @@ def _main(argv):
                           f"{entry['kind']:<16} {entry['action']:<10} {who:<12} "
                           f"{_flaw_prose(entry, owner_only)}")
                     continue
-                print(f"{entry['f_hz']:>7.6g} Hz{width:>8} {entry['level_db']:+6g} dB  "
+                print(f"{entry['f_hz']:>7.6g} Hz{width:>8} {flaw_feature(entry):>9}  "
                       f"{entry['kind']:<16} {entry['action']:<10} {who:<12} "
                       f"{_flaw_prose(entry, owner_only)}")
         else:
@@ -1500,6 +1552,38 @@ def _selftest():
     assert heard in shown.getvalue(), shown.getvalue()
     assert "(no owner's line yet" in shown.getvalue(), shown.getvalue()
     assert "127.4" not in shown.getvalue() and "39" not in shown.getvalue(), "plan rows leaked"
+
+    # -- skill #30 / #31: the two findings the map had nowhere to put ------------------------------
+    # A tilt between the sides across a band, and a distortion row whose feature is a percentage.
+    # Round-trip, the way a producer's field is owed: command -> file -> printer.
+    tilt_root = tempfile.mkdtemp(prefix="autosound_project_tilt_")
+    assert _main(["p", tilt_root, "flaw", "900", "+3.5", "level_tilt", "level", "--bw-oct", "4.3",
+                  "--channels", "m-L,m-R", "--why", "L-R +3..+4.8 dB over 200 Hz-4 kHz",
+                  "--evidence", "m-L_01 (rta),m-R_01 (rta)"]) == 0
+    assert _main(["p", tilt_root, "flaw", "56", "-", "thd_spike", "crossover", "--channels", "w-L",
+                  "--thd-pct", "2.6", "--fundamental-db", "78", "--why", "midbass THD over 50-63 Hz",
+                  "--evidence", "w-L_01 (sw)"]) == 0
+    rows = {f["kind"]: f for f in Project(tilt_root).flaws()}
+    assert (rows["level_tilt"]["channels"], rows["level_tilt"]["level_db"], rows["level_tilt"]["bw_oct"]) == \
+        (["m-L", "m-R"], 3.5, 4.3), rows["level_tilt"]
+    assert (rows["thd_spike"]["level_db"], rows["thd_spike"]["thd_pct"], rows["thd_spike"]["fundamental_db"]) == \
+        (None, 2.6, 78.0), rows["thd_spike"]
+    with contextlib.redirect_stdout(_io.StringIO()) as shown:
+        _main(["p", tilt_root, "flaws"])
+    assert "THD 2.6 %" in shown.getvalue() and "+0 dB" not in shown.getvalue(), shown.getvalue()
+    assert "+3.5 dB" in shown.getvalue() and "level_tilt" in shown.getvalue(), shown.getvalue()
+    for refused in (
+            ["900", "+3", "level_tilt", "level", "--channels", "m-L"],          # a tilt needs the pair
+            ["56", "-", "thd_spike", "crossover", "--channels", "w-L"],         # no % and no dB
+            ["80", "+4", "modal_peak", "notch", "--thd-pct", "1.2"],            # % on a non-THD row
+            ["56", "-", "thd_spike", "crossover", "--thd-pct", "-1"]):          # a negative %
+        assert _main(["p", tilt_root, "flaw", *refused, *said]) == 1, refused
+    assert len(Project(tilt_root).flaws()) == 2, "a refused row must not have written one"
+    # A row written before the field (`+0 dB`, the % in `why`) still loads -- no migration -- and
+    # the contract names it as owing a percentage.
+    legacy = {"f_hz": 56, "level_db": 0.0, "kind": "thd_spike", "action": "crossover",
+              "channels": ["w-L"], "why": "THD 2.6 percent", "evidence": ["w-L_01 (sw)"]}
+    assert validate_flaw(dict(legacy)) and flaw_feature(legacy) == "+0 dB"
 
     # -- time-domain install properties (inbox 3.12) -------------------------------------------
     # The row shape that did not exist: one door's energy lagging the other's is a real install

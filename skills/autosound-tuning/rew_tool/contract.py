@@ -408,6 +408,12 @@ _ROW_FIELDS = (
      lambda e: e.get("action") in project.OWNER_FACING_ACTIONS,
      lambda e: project.symptom_said(e) is not None,
      False),
+    # A distortion row's feature is its percentage (skill #31), and Phase 1 reads it for the
+    # crossover corners. A row written before the field says `+0 dB` and nothing else.
+    ("acoustics.flaws[].thd_pct",
+     lambda e: e.get("kind") == project.THD_SPIKE,
+     lambda e: isinstance(e.get("thd_pct"), (int, float)),
+     False),
 )
 
 
@@ -420,7 +426,7 @@ def flaw_field_gaps(project_data):
     for name, owes, has, gates in _ROW_FIELDS:
         owing = [e for e in flaws if owes(e)]
         missing = [e for e in owing if not has(e)]
-        drafts = [e for e in missing if project.symptom_is_draft(e)]
+        drafts = [e for e in missing if project.symptom_is_draft(e)] if name.endswith(".symptom") else []
         out.append({"field": name, "rows": len(flaws), "owing": len(owing),
                     "missing": len(missing), "drafts": len(drafts), "gates": gates,
                     "rows_missing": [_row_label(e) for e in missing]})
@@ -841,6 +847,11 @@ def render_report(report):
                          f"measurement** — a flaw is computed, not heard, and a row with no evidence "
                          f"is a guess. Phase 0 is not finished until every row stands on a capture "
                          f"(`--phase0-gate`); the rows: " + "; ".join(gap["rows_missing"]))
+        elif gap["field"].endswith(".thd_pct"):
+            lines.append(f"- {gap['field']}: {gap['missing']} of {gap['owing']} thd_spike row(s) carry "
+                         f"no percentage — the number Phase 1's crossover corners read, which "
+                         f"`level_db` cannot hold (#31). Enter the row again with --thd-pct (and "
+                         f"--fundamental-db): " + "; ".join(gap["rows_missing"]))
         else:
             drafts = f" ({gap['drafts']} a machine DRAFT)" if gap["drafts"] else ""
             lines.append(f"- {gap['field']}: {gap['missing']} of {gap['owing']} owner-facing row(s) "
@@ -1091,6 +1102,17 @@ def _selftest():
     assert "1 fact(s) carried in from another project" in shown and "channels.tw-L.fs_hz = 1000" in shown, shown
     assert "source no longer exists: /nowhere/old-car" in shown, shown
     assert provenance({}) == {"inherited": [], "sources_gone": []}
+    # skill #31: a distortion row written before `thd_pct` owes it -- reported, not gated, and
+    # not counted as a symptom DRAFT, which is another field's business.
+    thd_rows = {"acoustics": {"flaws": [
+        {"f_hz": 56, "level_db": 0.0, "kind": "thd_spike", "action": "crossover", "channels": ["w-L"],
+         "why": "THD 2.6 percent", "evidence": ["w-L_01 (sw)"]},
+        {"f_hz": 60, "level_db": None, "thd_pct": 1.4, "kind": "thd_spike", "action": "crossover",
+         "channels": ["w-R"], "why": "THD", "evidence": ["w-R_01 (sw)"]}]}}
+    thd_gap = [g for g in flaw_field_gaps(thd_rows) if g["field"].endswith(".thd_pct")][0]
+    assert (thd_gap["owing"], thd_gap["missing"], thd_gap["drafts"], thd_gap["gates"]) == (2, 1, 0, False), thd_gap
+    shown = render_report(dict(report, row_gaps=[thd_gap], map_ready=True))
+    assert "1 of 2 thd_spike row(s) carry no percentage" in shown and "catch-up" not in shown, shown
 
     # render_report doesn't crash on either shape and mentions the cross-check findings.
     text = render_report(report2)

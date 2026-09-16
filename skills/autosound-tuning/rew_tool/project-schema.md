@@ -117,16 +117,20 @@ front-end can render it and a later phase can consult it without re-reading a ca
 |---|---|
 | `f_hz` | centre frequency, required, positive |
 | `q` / `bw_oct` | width, either form, optional |
-| `level_db` | **the feature**, signed: `+` a hump, `−` a dip. Not the correction |
-| `kind` | `room_gain` · `modal_peak` · `cabin_null` · `sbir` · `floor_bounce` · `driver_resonance` · `non_min_phase` · `thd_spike` · `pair_suckout` |
-| `action` | `notch` · `leave` · `no_boost` · `geometry` · `delay` · `crossover` |
+| `level_db` | **the feature**, signed: `+` a hump, `−` a dip. Not the correction. For `level_tilt`: the first channel minus the second. `null` on a `thd_spike` |
+| `thd_pct` / `fundamental_db` | `thd_spike` only (skill #31): the measured THD at `f_hz`, and the fundamental's level there — what makes the row stand against the null-artifact rule. `thd_pct` is required when `level_db` is null |
+| `kind` | `room_gain` · `modal_peak` · `cabin_null` · `sbir` · `floor_bounce` · `driver_resonance` · `non_min_phase` · `thd_spike` · `pair_suckout` · `level_tilt` · time-domain `energy_lag` · `ringing` · `decay_asymmetry` (`t_ms`, no dB) |
+| `action` | `notch` · `leave` · `no_boost` · `geometry` · `delay` · `crossover` · `level` |
 | `channels` | the codes it was measured on |
 | `why` | the audit trail: the measurement, the cross-check, the doubt, the section it argues with. No limit, and it is read by the next SESSION |
 | `symptom` | optional, ≤200 chars — one sentence in the OWNER's words, what they *hear*. `why` is not this and cannot stand in for it |
 | `evidence` | the captures it was read off; a flaw with no measurement behind it is a rumour |
 
 Both lists are closed: a consumer colours by `action`, and "what may NOT be done here" is the half
-that has to survive the session that found it. `status` is `hypothesis` or `confirmed`, and **absent means confirmed** — every map written before the field existed was written as fact. A hypothesis is a finding the session raised and has not settled: the pair-coherence dips measured before time alignment are the worked example, since they are expected to move once TA lands. It still needs `why` and `evidence` — a hypothesis is a question with a measurement behind it, not a guess.
+that has to survive the session that found it. `level_tilt` (skill #30) is one side hotter than the
+other across a band — `channels` is the pair (exactly two), `f_hz` the band's centre, `bw_oct` its
+width — and its action is usually `level`: balance by level, cutting the hotter side, never boosting
+the colder one (`phase_2_eq.md`). `status` is `hypothesis` or `confirmed`, and **absent means confirmed** — every map written before the field existed was written as fact. A hypothesis is a finding the session raised and has not settled: the pair-coherence dips measured before time alignment are the worked example, since they are expected to move once TA lands. It still needs `why` and `evidence` — a hypothesis is a question with a measurement behind it, not a guess.
 
 **Two readers, and the row must serve both** (user, 2026-09-02). `why` is written for the next
 session and is good at it; on a live 18-row map its median was 131 characters and its longest 763,
