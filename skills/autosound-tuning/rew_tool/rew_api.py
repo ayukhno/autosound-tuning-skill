@@ -294,8 +294,23 @@ def get_timing(mid):
     return timebase.timing_of(_get(f"/measurements/{mid}"), mid=mid)
 
 
-def get_fr(mid):
-    data = _get(f"/measurements/{mid}/frequency-response")
+def _smoothing_query(smoothing):
+    """`?smoothing=<value>` for a read, or "" to take the payload as the view has it."""
+    return "" if smoothing is None else "?smoothing=" + urllib.parse.quote(str(smoothing), safe="/")
+
+
+def get_fr(mid, smoothing=None):
+    """`(freqs, mag, phase)` of a measurement.
+
+    `smoothing` asks REW to compute that smoothing ON THE WAY OUT -- `"None"` for the raw curve,
+    `"1/6"` for a tonal read, `"1/48"` -- and leaves the measurement's own setting, which is what the
+    Arbiter sees in REW, exactly as it was. Verified on a live REW 5.40 beta 132 (API 0.9.6),
+    2026-09-16: a view at 1/24 stayed 1/24 through `?smoothing=None`, and `None` came back linear
+    (`freqStep`, 54,559 points for one sweep). Without it the payload is smoothed however the view
+    happens to be. The method used to change the view to read (`set_smoothing`, since removed): a
+    session stopped between "off" and "back on" leaves the Arbiter's REW changed (hub TCC-015).
+    """
+    data = _get(f"/measurements/{mid}/frequency-response{_smoothing_query(smoothing)}")
     mag = decode_floats(data["magnitude"])
     # RTA measurements carry no phase (rew-api-quirks.md "Timing"); return None
     # so magnitude-only callers keep working instead of hitting a KeyError.
@@ -312,15 +327,17 @@ def fr_smoothing(mid):
     already smoothed — the payload carries a `smoothing` field — and `curve_view`'s fine scale needs
     an UNSMOOTHED input or it double-smooths and reports a clean system that is not. A caller feeding
     `get_fr` into `curve_view.report(..., input_smoothing=fr_smoothing(mid))` gets a loud refusal
-    instead of an empty feature list. For fine analysis, `set_smoothing(mid, "None")` first.
+    instead of an empty feature list. For fine analysis, read it raw: `get_fr(mid, smoothing="None")`
+    -- never by changing the measurement's smoothing (hub TCC-015).
     """
     data = _get(f"/measurements/{mid}/frequency-response")
     v = data.get("smoothing")
     return str(v) if v not in (None, "") else None
 
 
-def get_group_delay(mid):
-    data = _get(f"/measurements/{mid}/group-delay")
+def get_group_delay(mid, smoothing=None):
+    """`(freqs, gd)`; `smoothing` as in `get_fr` -- asked on the read, the view untouched."""
+    data = _get(f"/measurements/{mid}/group-delay{_smoothing_query(smoothing)}")
     # GD values come under key "magnitude" (verified); accept "groupDelay" too.
     gd = decode_floats(data.get("groupDelay") or data["magnitude"])
     freqs = freq_axis(data, len(gd))
@@ -516,19 +533,6 @@ def excess_phase_version(mid, append_lf_tail=False, append_hf_tail=False,
         "include cal": include_cal, "replicate data": replicate_data})
 
 
-def set_smoothing(mid, smoothing="1/6"):
-    """Apply REW's own smoothing to a measurement (`Smooth` command) so a later
-
-    ⚠️ The `1/6` default is for a MAGNITUDE/tonal read. For `curve_view`'s FINE scale
-    (`find_features`, width routing) the FR must be UNSMOOTHED — call `set_smoothing(mid, "None")`
-    first, or pass `fr_smoothing(mid)` to `curve_view` so it refuses rather than double-smoothing
-    (fork session, 2026-08-25). Original note:
-    `get_fr` returns REW-smoothed data — avoids the home-brew perceptual_smooth
-    drift. Values per `/measurements/frequency-response/smoothing-choices`
-    (e.g. '1/1'…'1/48', 'Var', 'Psy', 'None')."""
-    return measurement_command(mid, "Smooth", {"smoothing": smoothing})
-
-
 def get_distortion(mid):
     """THD-vs-frequency table computed by REW from a normal log sweep
     (endpoint /measurements/{id}/distortion; verified live 2026-07-14).
@@ -582,6 +586,19 @@ def _selftest():
         f, m, p = get_fr("stub")
         assert p is None, "RTA: phase must be None, not a KeyError"
         assert len(m) == 3 and len(f) == 3, "RTA: magnitude/freqs still returned"
+
+        # hub TCC-015: the smoothing is ASKED on the read, never set on the measurement.
+        asked = []
+        _get = lambda path: (asked.append(path), {"magnitude": _enc([1.0]), "startFreq": 20.0, "freqStep": 1.0})[1]
+        get_fr("7", smoothing="None")
+        get_fr("7", smoothing="1/6")
+        get_fr("7")
+        get_group_delay("7", smoothing="None")
+        assert asked == ["/measurements/7/frequency-response?smoothing=None",
+                         "/measurements/7/frequency-response?smoothing=1/6",
+                         "/measurements/7/frequency-response",
+                         "/measurements/7/group-delay?smoothing=None"], asked
+        assert "set_smoothing" not in globals(), "the method does not change what the Arbiter sees in REW"
     finally:
         _get = _orig
 
@@ -645,9 +662,6 @@ def _selftest():
         assert sent["data"]["parameters"]["replicate data"] is False, sent
         minimum_phase_version(7)
         assert sent["data"]["command"] == "Minimum phase version", sent
-        set_smoothing(7, "1/6")
-        assert sent["data"] == {"command": "Smooth",
-                                "parameters": {"smoothing": "1/6"}}, sent
     finally:
         _post = _origp
 

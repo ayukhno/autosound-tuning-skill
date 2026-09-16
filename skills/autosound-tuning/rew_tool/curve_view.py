@@ -32,7 +32,7 @@ class CurveViewError(ValueError):
     """The input cannot be read at the FINE scale — chiefly: it is already smoothed.
 
     REW returns a frequency response with its own smoothing already applied (the payload carries a
-    `smoothing` field), and the skill's own `rew_api.set_smoothing` defaults to `1/6`. Smoothing a
+    `smoothing` field) unless the read asks `rew_api.get_fr(mid, smoothing="None")`. Smoothing a
     second time here adds widths in quadrature: at REW `1/6` the effective fine becomes ~1/5.8, which
     nearly meets the 1/3 macro, so `residual = fine - macro -> 0` and `find_features` reports a CLEAN
     system that is not — silently, an empty list, no error. That is the trap this refusal makes loud
@@ -116,9 +116,10 @@ def find_features(view, min_prominence_db=2.0, source="sweep"):
             f"the input is already smoothed at {view.get('input_smoothing')!r}; smoothing it again at "
             f"1/{view.get('fine_frac')} makes the effective fine {eff_s} oct, so the fine residual "
             f"(vs the 1/{view.get('macro_frac')} macro) is understated or collapses to zero and this "
-            f"would report a CLEAN system that is not. Pull the FR UNSMOOTHED for fine analysis: "
-            f"`rew_api.set_smoothing(mid, 'None')` before `get_fr`, or read `rew_api.fr_smoothing(mid)` "
-            f"and pass it as `input_smoothing`. MACRO / macro_summary is unaffected and may be used "
+            f"would report a CLEAN system that is not. Read the FR UNSMOOTHED for fine analysis: "
+            f"`rew_api.get_fr(mid, smoothing='None')` -- REW computes it on the way out and the "
+            f"measurement's own smoothing, what the Arbiter sees, is not touched. Never change that "
+            f"setting to read (hub TCC-015). MACRO / macro_summary is unaffected and may be used "
             f"on smoothed input.")
     g, r = view["grid"], view["residual"]
     hot = np.abs(r) >= min_prominence_db
