@@ -349,10 +349,33 @@ def cross_check_rew(process_state, glossary, snapshots):
     if not expected:
         out["note"] = f"capture round {round_.get('id')} asked for nothing explicit -- skipped"
         return out
-    verdict = naming.validate_series(titles, expected, glossary)
     out.update({"phase": round_.get("phase"), "version": round_.get("version"),
-                "round": round_.get("id"), **verdict})
+                "round": round_.get("id"), **round_verdict(titles, round_, glossary)})
     return out
+
+
+def round_verdict(titles, round_, glossary=None):
+    """What REW holds against what the round asked for -- with a capture DECIDED against kept
+    apart from one still owed (skill #32).
+
+    `capture-skip` insists on a reason precisely so the two never render alike; reporting a skip as
+    MISSING sent a reader looking for work that was settled, and dropped the reason on the way.
+    `skipped` maps each such title to its reason; `missing` is what is neither taken nor skipped,
+    and `complete` means nothing is.
+    """
+    expected = [str(x) for x in (round_.get("expected") or []) if str(x).strip()]
+    verdict = naming.validate_series(titles, expected, glossary)
+    decided = {str(t): (entry or {}).get("reason") for t, entry in (round_.get("skipped") or {}).items()}
+    verdict["skipped"] = {t: decided[t] for t in verdict["missing"] if t in decided}
+    verdict["missing"] = [t for t in verdict["missing"] if t not in decided]
+    verdict["complete"] = not verdict["missing"]
+    return verdict
+
+
+def round_label(version):
+    """How a round's key reads: `v_001` as recorded, a bare `_N` as `_17` -- never `vv_001` (#32)."""
+    text = str(version if version is not None else "?")
+    return text if text.startswith("v") or text == "?" else f"_{text}"
 
 
 # ── the whole report ────────────────────────────────────────────────────────────
@@ -765,9 +788,13 @@ def render_report(report):
         if "note" in rew:
             lines.append(f"- REW: {rew['note']}")
         else:
+            skipped = rew.get("skipped") or {}
             lines.append(f"- REW (round {rew['round']}, phase {rew['phase']}, "
-                         f"v{rew['version']}): {len(rew['found'])}/{len(rew['expected'])} captured"
+                         f"{round_label(rew['version'])}): {len(rew['found'])}/{len(rew['expected'])} captured"
+                         + (f", {len(skipped)} skipped" if skipped else "")
                          + ("" if rew["complete"] else f" — MISSING {rew['missing']}"))
+            for title, reason in skipped.items():
+                lines.append(f"    skipped: {title} — {reason or 'no reason on record'}")
     else:
         lines.append(f"- REW: {rew.get('note', 'not reachable')}")
     for gap in report.get("row_gaps") or []:
@@ -985,6 +1012,21 @@ def _selftest():
 
     # REW check, explicitly skipped, is reported as such rather than attempted.
     assert report["cross_checks"]["rew"] == {"reachable": False, "note": "skipped (--no-rew)"}, report
+    # skill #32: a capture decided against is not a capture owed, and the reason it was decided
+    # travels to where a person reads the verdict. And a round keyed `v_001` reads as `v_001`.
+    round_ = {"id": "cap_001", "phase": "0", "version": "v_001",
+              "expected": ["w-L_01 (sw)", "r-L_01 (sw)", "r-R_01 (sw)"],
+              "skipped": {"r-L_01 (sw)": {"at": "t", "reason": "rears muted for this pass"}}}
+    rv = round_verdict(["w-L_01 (sw)"], round_)
+    assert (rv["missing"], rv["skipped"], rv["complete"]) == \
+        (["r-R_01 (sw)"], {"r-L_01 (sw)": "rears muted for this pass"}, False), rv
+    shown = render_report(dict(report, cross_checks=dict(report["cross_checks"], rew={
+        "reachable": True, "round": "cap_001", "phase": "0", "version": "v_001", **rv})))
+    assert "(round cap_001, phase 0, v_001): 1/3 captured, 1 skipped — MISSING ['r-R_01 (sw)']" in shown, shown
+    assert "skipped: r-L_01 (sw) — rears muted for this pass" in shown and "vv_" not in shown, shown
+    assert round_label("17") == "_17" and round_label("v_001") == "v_001"
+    done = round_verdict(["w-L_01 (sw)", "r-R_01 (sw)"], round_)
+    assert done["complete"] and done["missing"] == [], done
 
     # render_report doesn't crash on either shape and mentions the cross-check findings.
     text = render_report(report2)
