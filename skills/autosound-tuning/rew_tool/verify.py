@@ -282,6 +282,7 @@ def session_report(verdicts, processing_rate_hz=None, ir_of=_rew_ir_of):
                      "mean_dB": st.get("live_mean_dB", st.get("mean_dB")), "peak_dB": st.get("peak_dB"),
                      "peak_time_ms": st.get("peak_time_ms"), "pre_ringing_dB": st.get("pre_ringing_dB"),
                      "capture_rate_hz": st.get("capture_rate_hz"),
+                     "applicable": v.get("applicable", True) is not False,
                      "issues": list(v.get("issues") or [])})
     _p = {r["name"]: _naming.parse_name(r["name"]) for r in rows}
     sweeps = [r for r in rows if r["valid"] and r["mean_dB"] is not None
@@ -341,8 +342,11 @@ def session_report(verdicts, processing_rate_hz=None, ir_of=_rew_ir_of):
 
 
 def render_session(report):
-    lines = [f"  session probe -- {report['counts']['total']} titles, {report['counts']['ok']} usable, "
-             f"{report['counts']['missing']} missing, {report['counts']['invalid']} unusable", ""]
+    counts = report["counts"]
+    lines = [f"  session probe -- {counts['total']} titles, {counts['ok']} usable, "
+             f"{counts['missing']} missing, {counts['invalid']} unusable"
+             + (f", {counts['not_applicable']} not checked (not a sweep)"
+                if counts.get("not_applicable") else ""), ""]
     lines.append(f"  {'title':24}{'live dB':>9}{'IR peak':>9}{'pre-ring':>10}{'arrival ms':>12}{'rate':>7}  ")
     lines.append("  " + "-" * 74)
     for r in report["rows"]:
@@ -381,11 +385,18 @@ def render_session(report):
 
 
 def summary(verdicts):
-    """Counts a caller can act on without walking the list."""
+    """Counts a caller can act on without walking the list.
+
+    A capture this check does not apply to (an RTA, `applicable: False`) is counted apart, never
+    as `invalid`: counting it there is how every `(rta)` of a phase-0 round read as unusable in
+    the header of the very output whose rows said "nothing here was checked" (skill #29).
+    """
+    not_applicable = [v for v in verdicts if v["exists"] and v.get("applicable", True) is False]
     return {
         "total": len(verdicts),
         "missing": sum(1 for v in verdicts if not v["exists"]),
-        "invalid": sum(1 for v in verdicts if v["exists"] and not v["valid"]),
+        "invalid": sum(1 for v in verdicts if v["exists"] and not v["valid"]) - len(not_applicable),
+        "not_applicable": len(not_applicable),
         "ok": sum(1 for v in verdicts if v["valid"]),
     }
 
@@ -431,14 +442,16 @@ def _main(argv):
             print(render_session(session_report(verdicts)))
             print()
         for v in verdicts:
-            mark = "OK  " if v["valid"] else ("MISSING" if not v["exists"] else "INVALID")
+            mark = ("OK  " if v["valid"] else "MISSING" if not v["exists"]
+                    else "N/A " if v.get("applicable", True) is False else "INVALID")
             print(f"{mark} {v['name']}")
             for issue in v["issues"]:
                 print(f"      - {issue}")
         counts = summary(verdicts)
         print(f"{counts['ok']}/{counts['total']} usable, "
-              f"{counts['missing']} missing, {counts['invalid']} unusable")
-    return 0 if all(v["valid"] for v in verdicts) else 1
+              f"{counts['missing']} missing, {counts['invalid']} unusable"
+              + (f", {counts['not_applicable']} not checked (not a sweep)" if counts["not_applicable"] else ""))
+    return 0 if all(v["valid"] or v.get("applicable", True) is False for v in verdicts) else 1
 
 
 def _selftest():
@@ -476,6 +489,13 @@ def _selftest():
         assert v_sw["applicable"] is True and v_sw["kind"] == _api.SWEEP, v_sw
         # And the swept one really did get checked -- otherwise the assert above proves nothing.
         assert v_sw["stats"].get("range_dB") is not None, v_sw
+        # skill #29: the counts keep what the verdict said. An RTA is "not checked", never
+        # "unusable" -- in the counts, in the session rows, and in the header a person reads.
+        counts = summary([v_rta, v_sw])
+        assert (counts["invalid"], counts["not_applicable"]) == (0, 1), counts
+        probe = session_report([v_rta, v_sw])
+        assert [r["applicable"] for r in probe["rows"]] == [False, True], probe["rows"]
+        assert "0 unusable, 1 not checked (not a sweep)" in render_session(probe).splitlines()[0]
     finally:
         _api.get_measurements, _api.get_fr = _orig_gm, _orig_fr
 

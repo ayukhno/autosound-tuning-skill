@@ -1230,6 +1230,9 @@ class Process:
             entry["verified"] = {
                 "ok": bool(verdict.get("valid")),
                 "exists": bool(verdict.get("exists")),
+                # False for a capture the check does not apply to (an RTA): not bad, not good, and
+                # not a reason to hold a step (skill #29). Dropped here, it read as "bad" below.
+                "applicable": verdict.get("applicable", True) is not False,
                 "uuid": (verdict.get("stats") or {}).get("uuid"),
                 "at": _now(),
                 "issues": list(verdict.get("issues") or []),
@@ -1266,7 +1269,9 @@ class Process:
             capture=round_["id"],
             step=round_.get("step"),
             ok=sorted(v["name"] for v in verdicts if v.get("valid")),
-            bad=sorted(v["name"] for v in verdicts if not v.get("valid")),
+            bad=sorted(v["name"] for v in verdicts
+                       if not v.get("valid") and v.get("applicable", True) is not False),
+            not_applicable=sorted(v["name"] for v in verdicts if v.get("applicable", True) is False),
             rate_note=rate_note,
         )
         # Told AFTER the record is on disk, never before -- issue #21. This print used to sit
@@ -1295,7 +1300,10 @@ class Process:
             if title in (round_.get("skipped") or {}):
                 continue  # a decision, and decisions are recorded, not re-litigated
             entry = (round_.get("taken") or {}).get(title)
-            if not entry or not (entry.get("verified") or {}).get("ok"):
+            verified = (entry or {}).get("verified") or {}
+            if verified.get("applicable") is False:
+                continue  # checked, and the check does not apply to it (an RTA): not unusable (#29)
+            if not entry or not verified.get("ok"):
                 out.append(title)
         return out
 
@@ -1929,6 +1937,29 @@ def _selftest():
     sp.start_attempt("0.1")
     assert [s["attempt"] for s in sp.open_work()["steps_in_progress"]] == [2], sp.open_work()
 
+    # -- skill #29: phase 0 asks for (sw) AND (rta). The verdict marks an RTA `applicable: False`
+    #    ("nothing here was checked"); the round must KEEP that and the step must not read it as
+    #    bad. Round-trip, the way a producer's field is owed: verdict -> disk -> gate.
+    na = Process(os.path.join(tempfile.mkdtemp(prefix="autosound_na_"), "process"))
+    na.start_capture("1", ["w-L_1 (sw)", "w-L_1 (rta)", "w-R_1 (sw)"], phase="0")
+
+    class _Verdicts:
+        def verify(self, titles):
+            return [{"name": "w-L_1 (sw)", "exists": True, "valid": True, "applicable": True,
+                     "stats": {"uuid": "a"}, "issues": []},
+                    {"name": "w-L_1 (rta)", "exists": True, "valid": False, "applicable": False,
+                     "stats": {"uuid": "b"}, "issues": ["this check is for swept captures"]},
+                    {"name": "w-R_1 (sw)", "exists": True, "valid": False, "applicable": True,
+                     "stats": {"uuid": "c"}, "issues": ["flat to under a dB"]}]
+
+    na.check_captures(verifier=_Verdicts())
+    taken = Process(na.dir).load()["capture"]["taken"]
+    assert taken["w-L_1 (rta)"]["verified"]["applicable"] is False, taken["w-L_1 (rta)"]
+    assert taken["w-L_1 (sw)"]["verified"]["applicable"] is True, taken["w-L_1 (sw)"]
+    assert na.unusable_captures() == ["w-R_1 (sw)"], "an RTA is not unusable; a flat sweep is"
+    verified = [e for e in na.events() if e.get("type") == EV_CAPTURE_VERIFIED][-1]
+    assert (verified["bad"], verified["not_applicable"]) == (["w-R_1 (sw)"], ["w-L_1 (rta)"]), verified
+
     print(
         "selftest OK — a skip refused without a reason and taken with either a sentence or a "
         "superseding step; evidence refused when empty and when it resolves to nothing (SCR-035), "
@@ -1940,7 +1971,7 @@ def _selftest():
         "the journal headed itself with the writing checkout and re-headed only when it changed; "
         "and STOPPING is an event: `open_work` names the open round and every step left in "
         "progress, drops a round once it is closed, and owes a step again when it is picked "
-        "back up. "
+        "back up; an RTA the check does not apply to is kept as such and holds no step (#29). "
         f"root={root}"
     )
     return 0
@@ -2083,7 +2114,8 @@ def _main(argv):
             if session and round_.get("session"):
                 verifier = p._load_verifier()
                 probe = dict(round_["session"], counts=verifier.summary(
-                    [{"exists": r["exists"], "valid": r["valid"]} for r in round_["session"]["rows"]]),
+                    [{"exists": r["exists"], "valid": r["valid"], "applicable": r.get("applicable", True)}
+                     for r in round_["session"]["rows"]]),
                     processing_rate_hz=None, rate_note=None)
                 print(verifier.render_session(probe))
                 print()
@@ -2093,6 +2125,8 @@ def _main(argv):
                     print(f"OK      {title}")
                 elif title in (round_.get("skipped") or {}):
                     print(f"SKIP    {title}")
+                elif verdict.get("applicable") is False:
+                    print(f"N/A     {title} — {'; '.join(verdict.get('issues') or [])}")
                 else:
                     reason = "; ".join(verdict.get("issues") or ["не перевірено"])
                     print(f"UNUSABLE {title} — {reason}")
