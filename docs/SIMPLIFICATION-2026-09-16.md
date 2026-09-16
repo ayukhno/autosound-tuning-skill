@@ -300,13 +300,16 @@ Recommendations:
 1–3 fit one wave. 4 and 7 are the same pass over the documents. G (method gaps) and #26 stay on
 their own tracks.
 
-## 7. Decisions for the user
+## 7. Decisions — taken 2026-09-16
 
-1. `_N` renamed to "DSP state number" everywhere, including titles already on disk? (Rename in docs
-   and parser only, accept old titles as-is — recommended — or migrate.)
-2. Shell reviewer wrappers: keep as shims, or delete once `autosound_ai.py doctor` carries their
-   diagnostics? (Delete — recommended; one code path is the point.)
-3. Phase −1: `project-intake.md` becomes the phase file, or the procedure moves to `phases/`?
-   (Move the procedure; leave doctrine — recommended, it matches `knowledge-architecture.md`.)
-4. Install story: clone+symlink only until the catalog pin moves? (Yes — recommended.)
-5. `gh` default: off, opt-in flag? (Yes.) omp default in TCC mode: #25 says opt-in. (Agree.)
+1. `_N` = "DSP state number" in docs and parser only; titles already on disk stay and are accepted.
+   No migration. → #39.
+2. Shell reviewer wrappers are deleted, not shimmed; `autosound_ai.py` is the one entry and
+   carries their `--doctor` diagnostics. → #41.
+3. Phase −1: the procedure moves to `phases/`, doctrine stays in `core/project-intake.md`.
+4. Install story: clone+symlink only, until the catalog pin moves off 2.8.3; `installation.md`
+   describes that path alone.
+5. `gh` off by default, `--github` opts in; `omp` off by default, `--omp` opts in (closes #25 when
+   done).
+6. Tickets now: steps 1–3 only — #39 (parser), #40 (provenance + round-trip guard), #41 (reviewer
+   entry). Steps 4–8 wait for that wave to land.
