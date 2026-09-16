@@ -36,6 +36,13 @@ Rules:
    times), or it must **say in its own first lines that it is off the map on purpose** and where
    its door is. A silent orphan reads exactly like a forgotten one.
 
+8. **`protective-floor`** (docs/SIMPLIFICATION-2026-09-16.md §2.2: the most-copied rule of the
+   method, eight homes). The protective high-pass sits at ≥ 1.1 × the driver's Fs and ≥ 24 dB/oct —
+   and the numbers have ONE home, the gate that enforces them: `rew_tool/gates/presweep_safety.py`
+   (`HPF_FS_MARGIN`, `HPF_MIN_SLOPE`). Every document that states a multiplier of Fs must state that
+   margin (or 1.5, the top of the recommended range), and every "≥ N dB/oct" said of a protective or
+   safety filter must be that slope. A copy that drifts is the one a session reads first.
+
 Run: `scripts/docs-check.py` (from anywhere), `--selftest` for the checker's own mechanics.
 stdlib only.
 """
@@ -330,13 +337,58 @@ def rule_install_ref(root: str) -> list[str]:
     return bad
 
 
+#: A multiplier of a driver's Fs as prose writes it: `1.1×Fs`, `1.1 × Fs`, `1.1·Fs`, `$1.1 \times F_s$`,
+#: `1.1× installed Fs`, `1.1× the driver's INSTALLED Fs`.
+_FS_MULT = re.compile(r"(\d+(?:\.\d+)?)\s*(?:×|·|\\times)\s*\$?\s*(?:[A-Za-z']+\s+){0,3}F_?s\b", re.I)
+_SLOPE_FLOOR = re.compile(r"≥\s*(\d+)\s*dB/oct")
+_PROTECTIVE = re.compile(r"protect|HPF|high-pass|safety|sweep", re.I)
+#: The top of the recommended range (`project-intake.md` §3: "1.1 × Fs (never lower) to 1.5 × Fs").
+_FS_RANGE_TOP = 1.5
+
+
+def _gate_constants(root: str):
+    text = _read(root, os.path.join(SKILL, "rew_tool", "gates", "presweep_safety.py")) or ""
+    margin = re.search(r"^HPF_FS_MARGIN\s*=\s*([\d.]+)", text, re.M)
+    slope = re.search(r"^HPF_MIN_SLOPE\s*=\s*(\d+)", text, re.M)
+    return (float(margin.group(1)) if margin else None, int(slope.group(1)) if slope else None)
+
+
+def rule_protective_floor(root: str) -> list[str]:
+    """The protective high-pass numbers in every document equal the gate's own constants."""
+    margin, slope = _gate_constants(root)
+    if margin is None or slope is None:
+        return []                      # no gate in this tree: nothing to compare against
+    bad = []
+    skill = os.path.join(root, SKILL)
+    for dirpath, _dirs, files in os.walk(skill):
+        for name in sorted(files):
+            if not name.endswith(".md"):
+                continue
+            path = os.path.join(dirpath, name)
+            rel = os.path.relpath(path, root)
+            for n, line in enumerate(open(path, encoding="utf-8").read().splitlines(), 1):
+                for m in _FS_MULT.finditer(line):
+                    value = float(m.group(1))
+                    if value not in (margin, _FS_RANGE_TOP):
+                        bad.append(f"{rel}:{n}: states {m.group(0)!r} — the protective margin is "
+                                   f"{margin:g} × Fs (`presweep_safety.HPF_FS_MARGIN`), the range's "
+                                   f"top {_FS_RANGE_TOP:g}")
+                if _PROTECTIVE.search(line):
+                    for m in _SLOPE_FLOOR.finditer(line):
+                        if int(m.group(1)) != slope:
+                            bad.append(f"{rel}:{n}: states {m.group(0)!r} for a protective filter — "
+                                       f"the floor is ≥ {slope} dB/oct (`presweep_safety.HPF_MIN_SLOPE`)")
+    return bad
+
+
 RULES = [("data-not-instructions", rule_data_not_instructions),
          ("phase-source", rule_phase_source),
          ("references-orphans", rule_references_orphans),
          ("capture-round-opened", rule_capture_round_opened),
          ("state-source", rule_state_source),
          ("ledger-root", rule_ledger_root),
-         ("install-ref", rule_install_ref)]
+         ("install-ref", rule_install_ref),
+         ("protective-floor", rule_protective_floor)]
 
 
 def run(root: str) -> int:
@@ -497,6 +549,24 @@ def _selftest() -> int:
         assert any("CHANGELOG.md's newest release is v1.3.0" in c
                    for c in rule_install_ref(stale)), rule_install_ref(stale)
 
+        # -- rule 8: the protective floor has one home, the gate's constants
+        def floor_tree(doc: str, margin: str = "1.1", slope: str = "24"):
+            root = tempfile.mkdtemp(dir=tmp)
+            gates = os.path.join(root, SKILL, "rew_tool", "gates")
+            os.makedirs(gates)
+            open(os.path.join(gates, "presweep_safety.py"), "w", encoding="utf-8").write(
+                f"HPF_FS_MARGIN = {margin}\nHPF_MIN_SLOPE = {slope}\n")
+            open(os.path.join(root, SKILL, "phase.md"), "w", encoding="utf-8").write(doc)
+            return root
+
+        agreed = floor_tree("HPF ≥ 1.1×Fs @ ≥24 dB/oct; set it at $1.1 \\times F_s$ to 1.5 × Fs; "
+                            "floor 1.1× installed Fs; gentler slopes (e.g. 12 dB/oct) do not protect.\n")
+        assert rule_protective_floor(agreed) == [], rule_protective_floor(agreed)
+        drifted_floor = rule_protective_floor(floor_tree("protective HPF at ≥ 1.2·Fs, ≥ 18 dB/oct\n"))
+        assert any("1.2·Fs" in c for c in drifted_floor) and any("≥ 18 dB/oct" in c for c in drifted_floor), drifted_floor
+        moved_code = rule_protective_floor(floor_tree("HPF ≥ 1.1×Fs @ ≥24 dB/oct\n", margin="1.2"))
+        assert any("1.1×Fs" in c for c in moved_code), "the gate is the home: a doc left behind is named"
+
         # and the tree itself, which is the point of the whole file
         assert run(ROOT) == 0, "the tree must be clean, or the selftest measures a fake"
     finally:
@@ -508,7 +578,9 @@ def _selftest() -> int:
           "without it, a phase source that drifted back to the changelog, a missing tie-break, a "
           "harness tool named as an instruction, a reference with no road, a translation whose base "
           "is lost too, a declaration buried below the head and a file that claims both are each "
-          "named; a mapped file, its translation and an honest off-map declaration are not")
+          "named; a mapped file, its translation and an honest off-map declaration are not; a "
+          "protective floor that drifted from the gate's constants, in a document or in the gate, "
+          "is named")
     return 0
 
 
