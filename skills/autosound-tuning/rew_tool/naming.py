@@ -5,19 +5,30 @@ The grammar and the per-car glossary have until now lived only as prose:
 means two readings, and the front-end ended up hard-coding a capture series that no car actually
 has.
 
-    name = <channel|pair|combo|joint>[ <modifier>]_<version>[ (<method>)]
+    name = <channel|pair|combo|joint>[ <modifier>]_<N>[ (<method>)][ <free-form parameters>]
+         | <channel>[ <modifier>] (imp)[ <free-form parameters>]
 
     sw_1 (sw)        w-L_2 (rta)      ALL+C_25 (rta)      L w+m_3 (sw)      tw-R_final (rta)
     sw-f_1 (sw)      sw-r_1 (sw)      SWs_1 (sw)          SWs+Ws_2 (rta)      (two subwoofers:
                      front and rear are channels, `SWs` is their pair, `SWs+Ws` the joint)
+    r-L_17 (sw) noXO                  w-L (imp)           sw (imp) case35l, NO cotton wool
 
-* **`_N` is the DSP config version the measurement was taken under**, not a counter. Bump it when
-  the config changes; that is what lets "before vs after" line up. `final` is allowed (phase 3).
+* **`_N` is the number of the DSP state the measurement was taken on.** Every capture on that
+  state shares it (`_04 (sw)`, later `_04 (rta)`); it moves when the DSP is changed before the
+  next measurement. Saving to a DSP slot or a backup file does not move it, and it is not the
+  ledger's `v_NNN`: that counter also moves for changes that are not the DSP's (skill #37, hub
+  TCC-016). `final` is allowed (phase 3).
 * **Method suffix**: `(sw)` = acoustic sweep, for phase/time/distortion; `(rta)` = MMM RTA, for
-  magnitude/tone. Phases 0 and 2 want both per driver.
+  magnitude/tone; `(imp)` = impedance sweep, for a driver's resonance in the install -- the one
+  method with no `_N`, since no DSP state moves a resonance (skill #33). Phases 0 and 2 want sw and
+  rta per driver.
 * **Modifiers** (`FX`, `c FX`, …) and **transient experiment tags** (`INV`, `i`, `+Δτ`) sit
   between the code and `_N`. A tag is temporary by design: once the change is baked into the base
   it drops from the name, and `dsp-state-current` — not the title — says what is committed.
+* **Free-form parameters after the method** (`noXO`, `case35l, NO cotton wool`) are how a title is
+  typed in the car, and they are a modifier written in another place: part of WHICH measurement
+  it is, since a sweep without the crossover is not the solo with it. A position among them (`x0`,
+  `p3`) is still a position (skill #34; the user, 2026-09-16).
 
 The glossary is per-car and **not** a fixed list: this is the module's whole point. One project
 has no rear speakers and a disabled centre; generating `r-L_2` or `c_2` for it would invent
@@ -36,7 +47,8 @@ SCHEMA_VERSION = 1
 
 METHOD_SWEEP = "sw"
 METHOD_RTA = "rta"
-METHODS = (METHOD_SWEEP, METHOD_RTA)
+METHOD_IMPEDANCE = "imp"
+METHODS = (METHOD_SWEEP, METHOD_RTA, METHOD_IMPEDANCE)
 
 # `<body>_<version>[ctl|rep][ (method)][ <position>]`. `body` is greedy up to the LAST underscore
 # so codes that contain one still parse; version is digits or the literal `final`.
@@ -55,7 +67,22 @@ _NAME_RE = re.compile(
     r"^(?P<body>.+)_(?P<version>\d+|final)(?P<control>ctl|rep)?"
     r"(?:\s*\((?P<method>[A-Za-z]+)\))?(?:\s+(?P<pos2>p[1-9]|x0))?\s*$"
 )
+# Two more forms, tried only when `_NAME_RE` has refused -- so every title that parsed before still
+# parses to the same parts:
+#   * FREE-FORM PARAMETERS after the method (skill #34; the user, 2026-09-16): `r-L_17 (sw) noXO`.
+#     `_NAME_RE` takes a lone position there and nothing else, so a whole solo set typed this way
+#     read as "not ours" while `process.py` read its `_N` as unknown.
+#   * an IMPEDANCE sweep, the one method with no `_N` (skill #33): `w-L (imp)`,
+#     `sw2 (imp) case35l, NO cotton wool`. Its body holds no bracket, so the method is the first one.
+_TAGGED_RE = re.compile(
+    r"^(?P<body>.+)_(?P<version>\d+|final)(?P<control>ctl|rep)?"
+    r"\s*\((?P<method>[A-Za-z]+)\)\s+(?P<tail>\S.*?)\s*$"
+)
+_UNVERSIONED_RE = re.compile(
+    r"^(?P<body>[^()]+?)\s*\((?P<method>[A-Za-z]+)\)(?:\s+(?P<tail>\S.*?))?\s*$"
+)
 _POS_RE = re.compile(r"^(?P<code>.+?)\s+(?P<pos>p[1-9]|x0)$")
+_POS_WORD_RE = re.compile(r"(?<!\S)(?:p[1-9]|x0)(?!\S)")
 _CTL_RE = re.compile(r"^(?P<code>.+?)-(?P<ctl>ctl[0-9])$")
 POSITIONS = tuple(f"p{i}" for i in range(1, 10)) + ("x0",)
 CONTROL_OPEN = ("ctl1", "ctl")
@@ -126,7 +153,7 @@ class Glossary:
 
         A REW title is typed by a human and cannot be rewritten afterwards, so a channel renamed
         mid-project (a `m-L` that turned out to be a woofer) keeps its old captures under the old
-        name forever. Those captures are still that channel's, taken at that DSP config version, so
+        name forever. Those captures are still that channel's, taken on that DSP state, so
         a checker that cannot resolve them reports missing work that is sitting right there.
 
         An unknown code comes back unchanged — a name this glossary never heard of is not ours to
@@ -190,7 +217,8 @@ class Glossary:
 
 
 def generate_name(code, version, method=None, modifier=None, position=None, control=None):
-    """Build a measurement title. `version` is an int or `"final"`.
+    """Build a measurement title. `version` is the DSP state number -- an int, its digits, or
+    `"final"` -- and None only for `(imp)`, which has no `_N`.
 
     >>> generate_name("w-L", 2, "sw")
     'w-L_2 (sw)'
@@ -200,11 +228,25 @@ def generate_name(code, version, method=None, modifier=None, position=None, cont
     'm-L p1_49 (sw)'
     >>> generate_name("m-L", 49, "sw", control="ctl1")
     'm-L-ctl1_49 (sw)'
+    >>> generate_name("w-L", None, "imp")
+    'w-L (imp)'
     """
     if not code:
         raise NamingError("a measurement name needs a channel/pair/combo/joint code")
     if method is not None and method not in METHODS:
         raise NamingError(f"unknown method {method!r}; expected one of {', '.join(METHODS)}")
+    if version is None:
+        if method != METHOD_IMPEDANCE:
+            raise NamingError("a sweep or an RTA needs `_N`, the number of the DSP state it is taken "
+                              "on; only `(imp)` goes without")
+        if control in ("ctl", "rep"):
+            raise NamingError(f"control {control!r} is glued to `_N`, and `(imp)` has none")
+    elif isinstance(version, bool) or not (str(version).isdigit() or version == "final"):
+        # A string interpolated as given built `tw-L_v_001 (sw)`: a plausible list no panel will
+        # ever emit, and a capture round opened against it without a word (skill #37).
+        raise NamingError(
+            f"version {version!r} is not a DSP state number: `_N` is an integer or `final`, and a "
+            "ledger version such as `v_001` is a different counter (naming-and-structure.md §3)")
     if position is not None and position not in POSITIONS:
         raise NamingError(f"unknown position {position!r}; expected one of {', '.join(POSITIONS)}")
     if control is not None and control not in CONTROL_OPEN + CONTROL_CLOSE:
@@ -217,7 +259,7 @@ def generate_name(code, version, method=None, modifier=None, position=None, cont
         body = f"{body} {modifier}"
     if position:
         body = f"{body} {position}"
-    name = f"{body}_{version}"
+    name = body if version is None else f"{body}_{version}"
     if control in ("ctl", "rep"):
         name = f"{name}{control}"
     return f"{name} ({method})" if method else name
@@ -228,33 +270,72 @@ def parse_name(title, glossary=None):
 
     Returning None rather than raising is deliberate: REW lists contain things nobody named to
     this convention (imports, room-sim results), and a reader must be able to say "not one of
-    ours" without treating it as an error.
+    ours" without treating it as an error. Where a person reads the verdict, `explain_name` says
+    WHY a title is not one.
 
     With a glossary the code and modifier are separated properly (`L w+m` is a joint, not the side
     `L` with a modifier). Without one, the whole body is reported as the code, since guessing
     where a code ends is exactly the ambiguity the glossary exists to remove.
+
+    This is the grammar's ONE reader. A module that needs the `_N` of a title asks here: a second
+    pattern in `process.py` did not know the position typed after the method, and a whole solo set
+    (`c_49 (sw) x0`) read as version-unknown there while this function accepted it (skill #34).
     """
-    if not title:
-        return None
-    match = _NAME_RE.match(title.strip())
+    return explain_name(title, glossary)[0]
+
+
+def explain_name(title, glossary=None):
+    """`(parts, None)` for a title in the grammar, `(None, reason)` naming what could not be placed.
+
+    The parts are `parse_name`'s -- same keys, same values. The reason is for the places a person
+    reads the verdict (`naming.py parse`, `naming.py check`): a refusal nobody can see is how a
+    title's `_N` went missing without a word (skill #34).
+    """
+    text = str(title or "").strip()
+    if not text:
+        return None, "an empty title"
+    match = _NAME_RE.match(text) or _TAGGED_RE.match(text) or _UNVERSIONED_RE.match(text)
     if not match:
-        return None
-    method = match.group("method")
+        return None, ("not in the grammar: `<code>_<N> (sw|rta)` or `<code> (imp)`, free-form "
+                      "parameters after the method (naming-and-structure.md §3)")
+    parts = match.groupdict()
+    method = parts.get("method")
     if method is not None and method.lower() not in METHODS:
-        return None  # `(foo)` is not a method suffix; the title isn't ours
-    body = match.group("body").strip()
-    position = match.group("pos2")
+        return None, f"`({method})` is not a method: {', '.join(METHODS)}"
+    method = method.lower() if method else None
+    version = parts.get("version")
+    if version is None and method != METHOD_IMPEDANCE:
+        return None, (f"no `_N` before `({method})`: a measurement is named for the DSP state it "
+                      f"was taken on (`w-L_1 ({method})`), and only `(imp)` goes without")
+    body = parts["body"].strip()
+    position = parts.get("pos2")
+    tail = parts.get("tail")
+    if tail:
+        found = _POS_WORD_RE.findall(tail)
+        if len(found) > 1:
+            return None, f"two positions after the method: {', '.join(found)}"
+        if found:
+            position = found[0]
+            tail = _POS_WORD_RE.sub(" ", tail)
+        tail = " ".join(tail.split()) or None
     pm = _POS_RE.match(body)
     if pm:
         if position:
-            return None  # a position on both sides of the method is not a title, it is a typo
+            # a position on both sides of the method is not a title, it is a typo
+            return None, (f"a position on both sides of the method: `{pm.group('pos')}` and "
+                          f"`{position}`")
         body, position = pm.group("code").strip(), pm.group("pos")
-    control = match.group("control")
+    control = parts.get("control")
     cm = _CTL_RE.match(body)
     if cm:
         if control:
-            return None  # `m-L-ctl1_49ctl` says two things about one measurement
+            # `m-L-ctl1_49ctl` says two things about one measurement
+            return None, f"two controls on one measurement: `-{cm.group('ctl')}` and `{control}`"
         body, control = cm.group("code").strip(), cm.group("ctl")
+    if tail:
+        # Typed after the method, read as if typed before `_N` -- which is where `generate_name`
+        # puts it, so the canonical form of a title is the same measurement as the title.
+        body = f"{body} {tail}"
 
     code, modifier = body, None
     if glossary:
@@ -266,7 +347,6 @@ def parse_name(title, glossary=None):
                 code, modifier = candidate, body[len(candidate) + 1 :].strip() or None
                 break
 
-    version = match.group("version")
     return {
         "code": code,
         # The channel's name TODAY (SCR-039). Equal to `code` for every title but one taken before
@@ -279,14 +359,15 @@ def parse_name(title, glossary=None):
         # of the measurement's identity, neither part of the channel's code.
         "position": position,
         "control": control,
+        # None only for `(imp)`, which is named for a driver rather than for a DSP state.
         "version": version,
-        # Numeric form, so `_01` and `_1` are recognised as the same DSP config version. REW
+        # Numeric form, so `_01` and `_1` are recognised as the same DSP state number. REW
         # titles are typed by hand and zero-padding is common; comparing raw strings makes a
         # captured measurement look missing, which is the checker crying wolf.
-        "version_n": int(version) if version.isdigit() else None,
-        "method": method.lower() if method else None,
-        "title": title.strip(),
-    }
+        "version_n": int(version) if version and version.isdigit() else None,
+        "method": method,
+        "title": text,
+    }, None
 
 
 def name_key(parsed):
@@ -304,7 +385,7 @@ def name_key(parsed):
     same measurement, and what lets a checker survive the padding a human happens to type.
 
     The code used is the channel's current name (SCR-039), so `m-L_2 (sw)` taken before a rename
-    and `w-L_2 (sw)` taken after it are ONE measurement: same channel, same DSP config version,
+    and `w-L_2 (sw)` taken after it are ONE measurement: same channel, same DSP state number,
     same method. A rename is a label being corrected, not a reason to re-measure — and a checker
     that disagreed would mark work undone that is already on disk. `parse_name` needs a glossary
     for this; without one the code as typed is all there is, which is the same answer it has always
@@ -449,7 +530,7 @@ _USAGE = """usage: naming.py <project-dir> <command> [args]
 
   codes                          list the glossary's codes (inactive channels marked)
   name <code> <version> [method] build one title
-  parse <title>                  split a title into code/modifier/version/method
+  parse <title>                  split a title into code/modifier/version/method, or say why not
   expect <phase> <version>       the capture series a phase expects
   check <phase> <version>        compare that series against what REW currently holds
   selftest                       run this module's own checks (no project needed)
@@ -468,7 +549,7 @@ def _selftest():
     plain = Glossary({"channels": [{"code": "w-L", "active": True}]})
     assert parse_name("w-L_2 (sw)", plain)["code"] == "w-L"
     assert parse_name("not a measurement") is None
-    # `_01` and `_1` are the same DSP config version -- a human types the padding, not the tool.
+    # `_01` and `_1` are the same DSP state number -- a human types the padding, not the tool.
     assert name_key(parse_name("c_01 (rta)", plain)) == name_key(parse_name("c_1 (rta)", plain))
 
     # -- SCR-039: `m-L` was renamed to `w-L`; its captures still say `m-L` and always will.
@@ -497,7 +578,7 @@ def _selftest():
     assert old["code"] == "m-L", "the title says what REW shows, unedited"
     assert old["code_current"] == "w-L", old
     assert name_key(old) == name_key(parse_name("w-L_2 (sw)", g)), \
-        "one channel, one config version, one method -- a rename does not make it two measurements"
+        "one channel, one DSP state, one method -- a rename does not make it two measurements"
     # the modifier still splits off an old code, which is why former names are in `all_codes`.
     assert parse_name("m-L FX_2 (sw)", g)["modifier"] == "FX"
     # without a glossary there is no history to consult, and the answer is what it always was.
@@ -535,9 +616,69 @@ def _selftest():
                              position=pp["position"], control=pp["control"]) == title, (title, pp)
     assert parse_name("m-L FX p3_49 (sw)", g)["modifier"] == "FX", "a modifier and a position coexist"
 
+    # -- skill #34, and the user 2026-09-16: free-form parameters of the measurement after the
+    #    method. The titles are the issue's own, from a live REW session; each used to be refused
+    #    here or to lose its `_N` in `process.py`.
+    car = Glossary({"channels": [{"code": c} for c in ("c", "m-L", "r-L")]})
+    for title in ("c_49 (sw) x0", "m-L_49 (sw) x0"):
+        p = parse_name(title, car)
+        assert (p["version"], p["position"], p["modifier"]) == ("49", "x0", None), p
+    rear = parse_name("r-L_17 (sw) noXO", car)
+    assert (rear["code"], rear["modifier"], rear["version_n"], rear["method"], rear["position"]) == \
+        ("r-L", "noXO", 17, "sw", None), rear
+    assert name_key(rear) == name_key(parse_name("r-L noXO_17 (sw)", car)), \
+        "typed after the method or before `_N`, one measurement"
+    assert name_key(rear) != name_key(parse_name("r-L_17 (sw)", car)), \
+        "a sweep without the crossover is not the solo with it"
+    spaced = parse_name("m-L_49 (sw) noXO  mic 2cm x0", car)
+    assert (spaced["modifier"], spaced["position"]) == ("noXO mic 2cm", "x0"), spaced
+    assert parse_name("m-L_49 (sw) (mic at 2cm)", car)["modifier"] == "(mic at 2cm)"
+    for title in ("r-L_17 (sw) noXO", "m-L_49 (sw) noXO  mic 2cm x0", "m-L_49ctl (sw) p3 again"):
+        p = parse_name(title, car)
+        again = generate_name(p["code"], p["version"], p["method"], p["modifier"],
+                              position=p["position"], control=p["control"])
+        assert name_key(parse_name(again, car)) == name_key(p), (title, again)
+    # -- skill #33: an impedance sweep, the seven titles of the issue verbatim. No `_N`.
+    seven = ["sw2 (imp) case35l, NO cotton wool", "w-L (imp)", "w-R (imp)", "m-L (imp)",
+             "m-R (imp)", "tw-L (imp)", "tw-R (imp)"]
+    for title in seven:
+        p, why = explain_name(title)
+        assert p and (p["method"], p["version"], p["version_n"]) == ("imp", None, None), (title, why)
+    box = parse_name(seven[0], Glossary({"channels": [{"code": "sw2"}]}))
+    assert (box["code"], box["modifier"]) == ("sw2", "case35l, NO cotton wool"), box
+    assert parse_name(seven[0])["code"] == "sw2 case35l, NO cotton wool", \
+        "without a glossary the body is the code, parameters and all -- as it always was"
+    assert generate_name("w-L", None, "imp") == "w-L (imp)"
+    assert name_key(parse_name("w-L_1 (imp)")) != name_key(parse_name("w-L (imp)")) != \
+        name_key(parse_name("w-L_1 (sw)"))
+    # -- a refusal says what it could not place, and every title that parsed before still does.
+    for title, words in (("w-L (sw)", "no `_N`"), ("w-L_1 (foo)", "not a method"),
+                         ("m-L p1_49 (sw) x0", "both sides"), ("m-L-ctl1_49ctl (sw)", "two controls"),
+                         ("m-L_49 (sw) x0 p3", "two positions"), ("Room sim", "not in the grammar"),
+                         ("", "empty")):
+        p, why = explain_name(title)
+        assert p is None and words in why, (title, why)
+    # -- skill #37: a ledger version is not `_N`. It is refused, not interpolated into a list of
+    #    titles no panel will ever emit.
+    for bad in ("v_001", None, True, -1):
+        try:
+            generate_name("tw-L", bad, "sw")
+        except NamingError:
+            continue
+        raise AssertionError(f"generate_name took {bad!r} for `_N`")
+    try:
+        expected_groups("0", plain, "v_001")
+    except NamingError:
+        pass
+    else:
+        raise AssertionError("expected_groups built titles from a ledger version")
+    assert expected_groups("0", plain, "01")[0]["names"] == ["w-L_01 (sw)"]
+
     print("selftest OK — grammar round-trips, padding-insensitive version match, and a renamed "
           "channel's old captures resolve to it (SCR-039); positions p1..p9/x0 and controls "
-          "ctl1/ctl3/ctl/rep parse in both forms and are identity, not code")
+          "ctl1/ctl3/ctl/rep parse in both forms and are identity, not code; free-form parameters "
+          "after the method (#34), (imp) without `_N` (#33), refusals with a reason, and no "
+          "ledger version for `_N` (#37)")
     return 0
 
 
@@ -561,8 +702,8 @@ def _main(argv):
         elif cmd == "name":
             print(generate_name(args[0], args[1], args[2] if len(args) > 2 else None))
         elif cmd == "parse":
-            parsed = parse_name(args[0], g)
-            print(json.dumps(parsed, ensure_ascii=False) if parsed else "not a measurement name")
+            parsed, why = explain_name(args[0], g)
+            print(json.dumps(parsed, ensure_ascii=False) if parsed else f"not a measurement name: {why}")
             return 0 if parsed else 1
         elif cmd == "expect":
             for name in expected_series(args[0], g, args[1]):
@@ -580,8 +721,9 @@ def _main(argv):
                 print(f"  extra   {name}")
             for name in verdict["foreign"]:
                 # Not an error, but the one a tuner most needs to see: a title REW holds that
-                # isn't in the convention at all, so no analysis will ever find it by name.
-                print(f"  ?name   {name}")
+                # isn't in the convention at all, so no analysis will ever find it by name -- and
+                # what in it could not be placed, so the fix is one rename rather than a hunt.
+                print(f"  ?name   {name}  -- {explain_name(name, g)[1]}")
             print(f"{len(verdict['found'])}/{len(verdict['expected'])} captured")
             return 0 if verdict["complete"] else 1
         else:

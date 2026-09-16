@@ -252,6 +252,6 @@ Done looks like: the install either shows no such window, or says what it is whe
 **Due:** when the user says the wave is tested (hub `governance/WAVES.md` §1).
 
 On the branch: the false "the update did not take" fix (confirmed on the Windows VM), CI once per wave
-(hub #149, HUB-065), and the findings S-009 and S-010. Left: the review with the user of what goes in,
+(hub #149, HUB-065), the findings S-009 and S-010, and one title parser (#39: #33, #34, hub #152). Left: the review with the user of what goes in,
 the full suite, the version bump and CHANGELOG entry on the branch, one PR, `--ff-only` into `main`,
 the tag. Hub #149 closes after that merge, once the `gate` job on `main` is seen skipping the tests.

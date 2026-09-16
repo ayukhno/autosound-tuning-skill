@@ -364,14 +364,25 @@ def _load_rew_tool_module(name):
         return None
 
 
+_NAMING = []
+
+
 def _load_naming():
-    """`naming.py` from the same checkout, by path.
+    """`naming.py` from the same checkout, by path -- loaded once per process.
 
     Not `import naming`: that needs `rew_tool/` on `sys.path`, and the consumer front-end loads
     these modules by explicit path precisely to keep names like `state` off the global import path.
     Returns None when it cannot be loaded -- an unreadable grammar must not make evidence
     unrecordable, it just means one of the three shapes cannot be recognised here.
+
+    Once, because `_title_version` asks it for every title of every round a lookup replays.
     """
+    if not _NAMING:
+        _NAMING.append(_load_naming_uncached())
+    return _NAMING[0]
+
+
+def _load_naming_uncached():
     import importlib.util
 
     path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "naming.py")
@@ -430,8 +441,8 @@ def resolves(item, project_dir, versions=None, naming=None):
             return True
     naming = _load_naming() if naming is None else naming
     if naming is not None:
-        # A capture is `<code>_<version> (sw|rta)`, and the METHOD is what makes it one. The
-        # grammar leaves it optional -- it also describes DSP-config version strings -- but here
+        # A capture is a title in the grammar WITH a method (`naming-and-structure.md §3`). The
+        # grammar leaves the method optional -- it also describes DSP state strings -- but here
         # optional means "banked as v_003" parses as a measurement called "banked as v", and the
         # sentence walks straight through the gate it was written to stop.
         for candidate in (text,) + tuple(text.split(" + ")):
@@ -802,13 +813,15 @@ class Process:
 
     # -- capture rounds (SCR-034) --
     def start_capture(self, version, expected=(), phase=None, note=None, step=None):
-        """Open a capture round: what was asked for, at which ledger version, in which phase.
+        """Open a capture round: what was asked for, at which `_N`, in which phase.
 
-        A ROUND, not a version. The task was keyed by the ledger HEAD, which is right for naming
-        the measurements (`_N` is the config they were taken under) and wrong for identifying the
-        pass: two rounds at the same config are then the same thing, and what the Arbiter asks
-        about is "this session's task". Opening a second round while one is open closes the first
-        -- a round nobody closed is a round that ended when the next one began.
+        `version` is the DSP state the titles carry (`_N`); a round opened with a ledger version
+        (`v_001`) is still found, since `protective_record_for` matches either -- but the two are
+        different counters (`naming-and-structure.md §5`), and neither is derived from the other.
+
+        A ROUND, not a version: two rounds on the same DSP state are two passes, and what the
+        Arbiter asks about is "this session's task". Opening a second round while one is open
+        closes the first -- a round nobody closed is a round that ended when the next one began.
         """
         state = self.load()
         previous = state.get("capture")
@@ -990,7 +1003,7 @@ class Process:
 
     @staticmethod
     def _version_key(v):
-        # `_01` and `_1` are one DSP config version (`naming.parse_name` says the same): REW
+        # `_01` and `_1` are one DSP state number (`naming.parse_name` says the same): REW
         # titles are typed by hand and zero-padding is common, and a string compare here would
         # make a recorded round invisible to the solos it was recorded for.
         v = str(v).strip()
@@ -998,10 +1011,13 @@ class Process:
 
     @staticmethod
     def _title_version(title):
-        """The `_N` of a measurement title (`m-L_49 (sw)` -> `49`), or None. Same grammar as
-        `naming.parse_name`: the version is what follows the LAST underscore, digits or `final`."""
-        m = re.search(r"_(\d+|final)(?:\s*\([A-Za-z]+\))?\s*$", str(title))
-        return m.group(1) if m else None
+        """The `_N` of a measurement title (`m-L_49 (sw)` -> `49`), or None -- as `naming.parse_name`
+        reads it, and never by a pattern of this module's own. A second pattern here did not know
+        what follows the method (`c_49 (sw) x0`, `r-L_17 (sw) noXO`), so a whole solo set read as
+        version-unknown while naming accepted every title of it (skill #34)."""
+        naming = _load_naming()
+        parsed = naming.parse_name(str(title)) if naming is not None else None
+        return parsed.get("version") if parsed else None
 
     def capture_rounds(self):
         """Every round ever opened, oldest first: id, the version it was keyed by, its phase, and
@@ -1830,7 +1846,9 @@ def _selftest():
     rounds = pr.capture_rounds()
     assert rounds[-1]["id"] == by_title["series"] and rounds[-1]["title_versions"] == ["49"], rounds[-1]
     assert Process._title_version("m-L p3_01 (sw)") == "01" and Process._title_version("ALL_final (rta)") == "final"
-    assert Process._title_version("c_49 (sw) x0") is None, "a foreign suffix is not parsed, not guessed"
+    assert Process._title_version("c_49 (sw) x0") == "49" and \
+        Process._title_version("r-L_17 (sw) noXO") == "17", "what follows the method keeps the `_N` (#34)"
+    assert Process._title_version("w-L (imp)") is None and Process._title_version("sweep 49") is None
     # No open round is "no round to ask about", never "there was no protection".
     pr.close_capture(reason="done")
     assert pr.protective_record()["channels"]["m-L"]["hp"]["f"] == 100, "a closed round still says"

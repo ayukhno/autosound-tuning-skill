@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import sys
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -87,14 +86,6 @@ def _load_vendored(name):
     if d not in sys.path:
         sys.path.insert(0, d)
     return __import__(name)
-
-
-def _ledger_version_number(snap):
-    """`"v_002"` -> `"2"` -- the plain version token `naming.expected_series` expects, matching
-    the measurement-name grammar's `_N` (config vN <-> measurements `_N`, `naming-and-structure.md
-    §5`). `None` if the snapshot has no parseable version (e.g. never seeded)."""
-    m = re.match(r"^v_0*(\d+)$", str(snap.get("version") or ""))
-    return m.group(1) if m else None
 
 
 # ── per-file checks ────────────────────────────────────────────────────────────

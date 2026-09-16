@@ -188,8 +188,11 @@ silently becomes `None` (#34, 16 titles), impedance sweeps have no legal title (
 refused), and the `_N` suffix is read by the tester as "the saved configuration" (#152) — the
 opposite of the ledger's meaning. Change: one function that returns a typed record (code, DSP
 state number, method, tag, kind) or a refusal naming the part it could not place; every consumer
-(`process.py`, `contract.py`, `flaw_map.py`, `project.py`) takes the record, never the string.
-Rename in docs: `_N` = **DSP state number** (`v_NNN` in the ledger), never "config version". Cost:
+(`state/process.py` had its own pattern; `contract.py`, `verify.py`, `level_offsets.py`,
+`resonalyze_ir.py` already asked `naming`) takes the record, never the string.
+Rename in docs: `_N` = **DSP state number**, never "config version" — and **not** the ledger's `v_NNN`
+(corrected 2026-09-16: #37's own comment shows the ledger moving `v_001 → v_002` with nothing
+re-measured, and a real project at `v_001` measured as `_49`). Cost:
 M (one module, four consumers, selftests). Removes four findings, three of them the same one.
 
 ### 3.3 Round-trip guard for the schema (cluster A — #29, #30, #31, #32, #36)
@@ -288,7 +291,7 @@ Recommendations:
 
 | # | change | cluster | removes | cost | where |
 |---|---|---|---|---|---|
-| 1 | one title parser, `_N` = DSP state number | B | #33 #34 #152 #37 | M | `rew_tool/naming.py` + 4 consumers; `naming-and-structure.md` |
+| 1 | one title parser, `_N` = DSP state number | B | #33 #34 #152 #37 | M | `rew_tool/naming.py`, `state/process.py`, `contract.py`; `naming-and-structure.md` |
 | 2 | provenance slot + resolvable source; round-trip guard | A | #36 first; #29 #30 #31 #32 | S×5 + M | `project.py`, `flaw_map.py`, `contract.py`, `state/process.py` |
 | 3 | one reviewer entry (`autosound_ai.py`), project-dir, honest failure, flag pass-through | D | #27 hub#130 #28 hub#150.1/.2/.4/.5 | M | `scripts/`, `setup-critic-channel.md`, `SKILL.md:176–178` |
 | 4 | one home per rule + rule index + `docs-check`; fix contradictions 1–5 | C | #35 #28 S-007; prevents the next #27 | M | `references/core`, `references/phases`, `scripts/docs-check.py` |

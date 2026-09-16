@@ -204,7 +204,7 @@ touched** — their keys are ids, so they stay valid and immutable, which is the
 are not touched either**, because they cannot be: a title is typed by hand and the captures a
 channel took under its old name are the only ones it has. `naming.Glossary.resolve_code` maps an
 old name to the current one, so `m-L_2 (sw)` and `w-L_2 (sw)` are one measurement — same channel,
-same DSP config version — and a checklist does not ask for work already sitting in REW.
+same DSP state number — and a checklist does not ask for work already sitting in REW.
 
 Refused, because both make a capture's owner ambiguous: two channels with the same `id`, and a
 `previous_names` entry that is another channel's live `code`.
