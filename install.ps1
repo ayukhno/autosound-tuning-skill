@@ -36,7 +36,7 @@
 #   .\install.ps1                     everything above; asks once, then runs on its own
 #   .\install.ps1 -Terminal           the method only, no desktop app (~700 MB less)
 #   .\install.ps1 -NoReviewer         without the Gemini reviewer
-#   .\install.ps1 -GitHub             with the GitHub CLI (default: asks); -NoGitHub: without
+#   .\install.ps1 -GitHub             with the GitHub CLI, for the project backup (default: without)
 #   .\install.ps1 -NoOmp              without omp, which offers TCC every non-Claude model
 #   .\install.ps1 -DryRun             say what it would do, change nothing
 #   .\install.ps1 -Yes                yes to every question; sign-ins are printed, not run
@@ -173,7 +173,7 @@ Autosound tuning -- installer for Windows
                                   method, the TCC app, the Gemini reviewer; asks once, then runs
   install.ps1 -Terminal           the method only, no desktop app (~700 MB less)
   install.ps1 -NoReviewer         without the Gemini reviewer
-  install.ps1 -GitHub             with the GitHub CLI (default: asks); -NoGitHub: without
+  install.ps1 -GitHub             with the GitHub CLI, for the project backup (default: without)
   install.ps1 -NoOmp              without omp, which offers TCC every non-Claude model (metered)
   install.ps1 -DryRun             say what it would do, change nothing
   install.ps1 -Yes                yes to every question; sign-ins are printed, not run
@@ -206,7 +206,8 @@ $WantReviewer = -not $NoReviewer
 # -- see the note in install.sh. Parked, not closed: issue #25 holds the question, both reasons,
 # and what would change the answer.
 $WantOmp      = if ($NoOmp) { $false } elseif ($WithOmp) { $true } else { $Mode -eq "tcc" }
-$WantGitHub   = if ($GitHub) { "1" } elseif ($NoGitHub) { "0" } else { "ask" }
+# gh only with -GitHub, no question on the way (the user, 2026-09-16) -- see the note in install.sh.
+$WantGitHub   = if ($GitHub) { "1" } elseif ($NoGitHub) { "0" } else { "auto" }
 
 # -- small tools ------------------------------------------------------------------------------
 function Say  { param($m) Write-Host "  $m" }
@@ -587,19 +588,10 @@ if ($RewApi)      { Say "  OK   REW, and its API is on" }
 elseif ($RewApp)  { Say "  OK   REW -- its API is off; a shortcut that starts REW with it on goes on your Desktop" }
 else              { Say "  --   REW not found -- install a BETA from roomeqwizard.com/beta.html (the release has no API)" }
 
-# One optional question, here because the answer changes the download list below (SCR-049) -- and
-# only when there is something to decide. `gh` already on the machine means the answer was given on
-# an earlier run, and asking again is a question with no download behind it (user, 2026-08-19).
-# Nothing outward-facing rides on it: the installer never pushes a project anywhere.
-if ($WantGitHub -eq "ask" -and $HaveGh) { $WantGitHub = "1" }
-if ($WantGitHub -eq "ask") {
-    Write-Host ""
-    Say "Optional: back each car's record up to a free, private GitHub repository -- the ledger of"
-    Say "every setting, the journal, the DSP config backups. Weeks of decisions, a few kilobytes,"
-    Say "and the one thing a dead disk does not give back. Needs a free GitHub account; installs"
-    Say "GitHub's gh command. The measurements themselves stay on your disk either way."
-    if (Ask "Back projects up to GitHub?" "n") { $WantGitHub = "1" } else { $WantGitHub = "0" }
-}
+# `gh` already on the machine means the answer was given on an earlier run, so its backup sign-in
+# stays offered; otherwise it comes only with -GitHub. Nothing outward-facing rides on it: the
+# installer never pushes a project anywhere (SCR-049).
+if ($WantGitHub -eq "auto") { $WantGitHub = if ($HaveGh) { "1" } else { "0" } }
 
 # ONE screen naming everything that will be downloaded, before any of it happens.
 Write-Host ""
@@ -638,6 +630,10 @@ if ($WantReviewer)     { $opts += "-NoReviewer" }
 if ($WantGitHub -eq "1") { $opts += "-NoGitHub" }
 if ($WantOmp)          { $opts += "-NoOmp" }
 if ($opts.Count -gt 0) { Say "To leave something out, answer n and re-run with an option: $($opts -join ', '). -Help lists them all." }
+if ($WantGitHub -eq "0") {
+    Say "Optional: -GitHub also installs GitHub's gh, to back each car's record up to a free, private"
+    Say "repository -- the ledger, the journal, the DSP config backups; the measurements stay on your disk."
+}
 if (-not $DryRun) {
     if (-not (Ask "Go ahead?" "n")) {
         Write-Host ""

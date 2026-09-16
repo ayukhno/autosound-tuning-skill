@@ -29,7 +29,7 @@
 #   ./install.sh                     everything above; asks once, then runs on its own
 #   ./install.sh --terminal          the method only, no desktop app (~700 MB less)
 #   ./install.sh --no-reviewer       without the Gemini reviewer
-#   ./install.sh --github            with the GitHub CLI (default: asks); --no-github: without
+#   ./install.sh --github            with the GitHub CLI, for the project backup (default: without)
 #   ./install.sh --no-omp            without omp, which offers TCC every non-Claude model
 #   ./install.sh --dry-run           say what it would do, change nothing
 #   ./install.sh --yes               yes to every question; sign-ins are printed, not run
@@ -99,7 +99,10 @@ WANT_REVIEWER=1
 #: on a second Mac from the README's own one-liner). Now: on with the app, `--no-omp` to leave it
 #: out, and named on the one screen that lists everything before anything downloads.
 WANT_OMP="auto"
-WANT_GITHUB="ask"
+#: `gh` comes only when asked for with `--github` -- no question on the way (the user, 2026-09-16:
+#: every question an install asks is a branch nobody has walked on Windows). A machine that already
+#: has `gh` keeps getting its backup sign-in at the end, as before.
+WANT_GITHUB="auto"
 UNINSTALL=0
 REMOVE_ALL=0
 DRY_RUN=0
@@ -127,7 +130,7 @@ Autosound tuning — installer for macOS (and Linux)
                                  reviewer; asks once, then runs on its own
   install.sh --terminal          the method only, no desktop app (~700 MB less)
   install.sh --no-reviewer       without the Gemini reviewer
-  install.sh --github            with the GitHub CLI (default: asks); --no-github: without
+  install.sh --github            with the GitHub CLI, for the project backup (default: without)
   install.sh --no-omp            without omp, which offers TCC every non-Claude model (metered)
   install.sh --dry-run           say what it would do, change nothing
   install.sh --yes               yes to every question; sign-ins are printed, not run
@@ -593,21 +596,11 @@ fi
 # One optional question, and it goes here because the answer changes the download list below.
 # Private by default, never automatic: pushing somebody's car, DSP and measurements anywhere is an
 # outward-facing action, and it needs their word (SCR-049).
-# ...and only when there is something to decide. `gh` already on the machine means the answer was
-# given on an earlier run (or by whoever installed it), and asking again on every re-run is a
-# question with no download behind it — a re-run to fix an icon walked the person back through it
-# (user, 2026-08-19). Nothing outward-facing rides on this: the installer never pushes a project
-# anywhere; it installs a command, and that command is already here (SCR-049 is about the pushing).
-if [ "$WANT_GITHUB" = "ask" ] && [ "$HAVE_GH" = 1 ]; then
-  WANT_GITHUB=1
-fi
-if [ "$WANT_GITHUB" = "ask" ]; then
-  say ""
-  say "  Optional: back each car's record up to a free, private GitHub repository — the ledger of"
-  say "  every setting, the journal, the DSP config backups. Weeks of decisions, a few kilobytes,"
-  say "  and the one thing a dead disk does not give back. Needs a free GitHub account; installs"
-  say "  GitHub's gh command. The measurements themselves stay on your disk either way."
-  if ask "Back projects up to GitHub?" n; then WANT_GITHUB=1; else WANT_GITHUB=0; fi
+# `gh` already on the machine means the answer was given on an earlier run (or by whoever installed
+# it), so its backup sign-in stays offered; otherwise it comes only with `--github`. Nothing
+# outward-facing rides on this: the installer never pushes a project anywhere (SCR-049).
+if [ "$WANT_GITHUB" = "auto" ]; then
+  if [ "$HAVE_GH" = 1 ]; then WANT_GITHUB=1; else WANT_GITHUB=0; fi
 fi
 
 # ONE screen naming everything that will be downloaded, before any of it happens, while the person
@@ -665,6 +658,10 @@ _opts=""
 [ "$WANT_OMP" = 1 ]       && _opts="$_opts --no-omp,"
 if [ -n "$_opts" ]; then
   say "  To leave something out, answer n and re-run with an option:${_opts%,}. --help lists them all."
+fi
+if [ "$WANT_GITHUB" = 0 ]; then
+  say "  Optional: --github also installs GitHub's gh, to back each car's record up to a free, private"
+  say "  repository — the ledger, the journal, the DSP config backups; the measurements stay on your disk."
 fi
 if [ "$DRY_RUN" = 0 ]; then
   # Consent given once, in full. Nothing below asks again until the sign-ins, which are offers,

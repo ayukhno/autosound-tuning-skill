@@ -115,7 +115,7 @@ This is the SCR-056 test:
 
 ### 2a. `gh`'s download is checked before it is unpacked (HUB-031)
 
-Only on a run that installs `gh` (`-GitHub`, or answer yes when asked). The Unix installer has
+Only on a run that installs `gh` (`-GitHub`; since 2026-09-16 there is no question). The Unix installer has
 verified gh's SHA256 against the checksums file of the same release since 2026-09-07;
 `install.ps1` got the same step on 2026-09-09 and **it has never run on Windows** — this is the
 line that tests it.

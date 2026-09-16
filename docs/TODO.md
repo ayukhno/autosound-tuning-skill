@@ -281,4 +281,40 @@ macOS only. Each command below is one line, for a PowerShell paste.
    the app right after installing it, and does a terminal window still pop up? Write down what is
    seen, under those items.
 
+6. **The wave branch's installer, dry** (gh comes only with `-GitHub` now, no question):
+   `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/wave-2026-09-16/install.ps1))) -DryRun -Terminal`
+   — no "Back projects up to GitHub?" question; on a machine without `gh` an "Optional: -GitHub also
+   installs GitHub's gh…" line under the plan; with `-GitHub` added, gh is in the plan.
+
 Done when each numbered line has its observation written here, with the VM and the date.
+
+## S-013 · Each REW reader names the smoothing it reads
+**Status**: open
+
+**Due:** with the user — which tool reads what is a method decision, not a code one.
+
+`rew_api.get_fr(mid, smoothing=…)` asks REW for a smoothing on the read and leaves the Arbiter's view
+alone (hub TCC-015, 2026-09-16). The callers below still call it without one, so what they compute
+depends on what the person has set for viewing — a 1/6 view and a 1/24 view give different numbers:
+
+- `rew_tool.py:286` (`analyze-batch`, band means), `:663-664` and `:706` (joints), `:787`
+- `verify.py:99` (the post-sweep checks), `verify_prediction.py:135`, `ear_suspects.py:259`, `spot_check.py:80`
+
+Raw (`"None"`) answers linear, ~55k points per sweep, so a band MEAN over it weighs the treble more
+than today's log-spaced points do — a tool that averages over points cannot just switch. Recommended
+per tool, for the user to confirm: `"1/48"` where a tool wants today's log-spaced shape without the
+view's smoothing (`analyze-batch`, joints, `verify`), `"1/6"` where it reads tone (`ear_suspects`),
+`"None"` where it does its own smoothing (`verify_prediction`). Done when every call names one and a
+selftest pins the query each tool sends.
+
+## S-014 · `omp` opt-in — asked once more, with its history
+**Status**: open
+
+**Due:** 2026-09-17, a question for the user before anything changes.
+
+On 2026-09-16 the user chose "gh off, omp only with a flag" from a menu (docs/SIMPLIFICATION-2026-09-16.md
+§7). The gh half is done on `wave-2026-09-16`. The omp half would reverse a decision taken twice —
+2026-08-19 and 2026-09-09 — for a reason the menu did not show: *the person who wants omp is the person
+who does not know the flag exists* (issue #25, and the comment above `WANT_OMP` in `install.sh`). What
+changed since: the README and FAQ now name `omp` and `--no-omp` at the install step (issue #25's
+2026-09-09 comment). Ask: keep omp on with the app, or make it `--with-omp` only. Close #25 either way.
