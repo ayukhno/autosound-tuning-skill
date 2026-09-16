@@ -27,7 +27,14 @@ confirming is a person's verdict after the car has been heard, and `project.py f
 is recorded.
 
     python3 rew_tool/flaw_map.py --project DIR --solos DIR [--ellipsoid DIR] [--write] [--json]
+    python3 rew_tool/flaw_map.py --project DIR --rew N [--channels a,b] [--process DIR] [--write] [--json]
     python3 rew_tool/flaw_map.py --selftest
+
+`--rew N` reads the solos a Phase-0 round left IN REW (`<code>_N (sw)`), which is where they are:
+the v7 files `--solos` wants come from a different pipeline that Phase 0 never asks for (skill #35).
+What was in each chain comes from the round's own protective record (`capture-protective`), the
+same source `predict.py --rew` reads; the ellipsoid, where REW holds positions, comes along. The
+solos are read as impulse responses, so REW's display smoothing does not reach them (hub TCC-015).
 
 Without `--write` the rows are printed and nothing changes. With it they go through
 `project.Project.add_flaw`, which validates each row again and replaces a row at the same
@@ -166,33 +173,89 @@ def rows_for(freqs, mag_db, code, evidence, gate=None, ell=None, raw_db=None):
     return rows, left
 
 
-def run(project_dir, solos_dir, ellipsoid_dir=None, write=False):
-    f = P.grid(20, 20000, 96)
-    loaded = P.load_solos_dir(solos_dir, f)
+def _load_from_rew(project_dir, ver, f, channels=None, process_dir=None):
+    """`(loaded, record, notes)` for `--rew`: the round's solos out of REW and its protective record.
+
+    Refuses rather than guesses where the answer is not on record: no channel codes to ask for, none
+    of the solos in REW, or no capture round for `_N` -- reading a baseline solo "as configured" on
+    top of a missing record is how a protective filter stays in a flaw row unseen."""
+    import naming
+    codes = list(channels) if channels else naming.Glossary.for_project(project_dir).channel_codes(active_only=True)
+    if not codes:
+        raise SystemExit("refusing: --rew needs the channel codes -- a glossary in the project, or --channels")
+    loaded, notes = {}, []
+    for code in codes:
+        title = f"{code}_{ver} (sw)"
+        try:
+            loaded[code] = P.load_solo_rew(title, f, keep_ir=True)
+        except (P.PredictError, KeyError, ValueError) as exc:
+            notes.append(f"{code}: not read from REW ({exc})")
     if not loaded:
-        raise SystemExit(f"refusing: no solo v7 files in {solos_dir}")
-    solos, notes, refused = P.de_embed_solos(loaded, f, baseline=True)
-    result = {"rows": [], "left_out": [], "refused": sorted(refused), "notes": notes}
+        raise SystemExit("refusing: REW holds none of the round's solos -- " + "; ".join(notes))
+    proc_dir = process_dir or os.path.join(project_dir, "process")
+    record = None
+    if os.path.isdir(proc_dir):
+        state_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state")
+        if state_dir not in sys.path:
+            sys.path.insert(0, state_dir)
+        from process import Process
+        proc = Process(proc_dir)
+        record = proc.protective_record_for(ver)
+        rounds = proc.capture_rounds()
+    else:
+        rounds = []
+    if record is None:
+        raise SystemExit(
+            f"refusing: no capture round on record for _{ver} in {proc_dir} -- what was in each chain "
+            "is the round's to say (`capture-protective`), and a baseline solo read without it can carry "
+            "a protective filter into a row. Rounds on record: "
+            + ("; ".join(f"{r['id']} version {r['version']!r}" for r in rounds) or "none"))
+    return loaded, record, notes
+
+
+def run(project_dir, solos_dir=None, ellipsoid_dir=None, write=False, rew_ver=None, channels=None,
+        process_dir=None):
+    f = P.grid(20, 20000, 96)
+    record, rew_notes = None, []
+    if rew_ver is not None:
+        loaded, record, rew_notes = _load_from_rew(project_dir, rew_ver, f, channels, process_dir)
+    else:
+        loaded = P.load_solos_dir(solos_dir, f)
+        if not loaded:
+            raise SystemExit(f"refusing: no solo v7 files in {solos_dir}")
+    solos, notes, refused = P.de_embed_solos(loaded, f, record=record, baseline=True)
+    result = {"rows": [], "left_out": [], "refused": sorted(refused), "notes": rew_notes + notes}
     for code, H in sorted(solos.items()):
         if "+" in code or code == "ALL":
             continue
         info = loaded[code][1]
         gate = None
-        try:
-            import resonalyze_ir
-            doc = resonalyze_ir.load_file(info["path"])           # v7 numbers or v8 base64 alike
-            gate = gate_from_ir(doc["transferRealSamples"], doc["sampleRate"])
-        except (OSError, KeyError, ValueError):
-            pass
+        if info.get("source") == "rew":
+            ir = info.get("ir") or {}
+            if ir.get("ir") is not None:
+                gate = gate_from_ir(ir["ir"], ir["sample_rate"])
+        else:
+            try:
+                import resonalyze_ir
+                doc = resonalyze_ir.load_file(info["path"])           # v7 numbers or v8 base64 alike
+                gate = gate_from_ir(doc["transferRealSamples"], doc["sampleRate"])
+            except (OSError, KeyError, ValueError):
+                pass
         ell = None
-        if ellipsoid_dir:
+        if ellipsoid_dir or rew_ver is not None:
             import ellipsoid as E
             try:
-                ell = E.analyse(f, E.load_positions_v7(ellipsoid_dir, code, f))
+                positions = (E.load_positions_rew(code, rew_ver, f) if rew_ver is not None
+                             else E.load_positions_v7(ellipsoid_dir, code, f))
+                ell = E.analyse(f, positions)
             except Exception as exc:         # a channel without positions is not an error, it is unasked
-                result["notes"].append(f"{code}: no ellipsoid ({exc})")
-        evidence = [os.path.basename(info["path"])] + ([os.path.basename(ellipsoid_dir.rstrip("/"))]
-                                                       if ell else [])
+                if ellipsoid_dir:
+                    result["notes"].append(f"{code}: no ellipsoid ({exc})")
+        if rew_ver is not None:
+            evidence = [info["title"]] + ([f"{code} p1..p9_{rew_ver} (sw)"] if ell else [])
+        else:
+            evidence = [os.path.basename(info["path"])] + ([os.path.basename(ellipsoid_dir.rstrip("/"))]
+                                                           if ell else [])
         raw_H = loaded[code][0]
         rows, left = rows_for(f, 20 * np.log10(np.abs(H) + 1e-12), code, evidence, gate, ell,
                               raw_db=20 * np.log10(np.abs(raw_H) + 1e-12))
@@ -295,11 +358,52 @@ def _selftest():
         run(proj, solos, write=True)
         again = [e for e in pj.load()["acoustics"]["flaws"] if e["channels"] == ["m-L"] and abs(math.log2(e["f_hz"] / 1000)) < 0.2]
         assert len(again) == 1, again
+
+        # --- skill #35: the same set, where a Phase-0 round leaves it -- IN REW (the stub serves the
+        #     very impulses above), with what was in each chain from the round's own record ---
+        import rew_api
+        import rew_stub
+        state_dir = os.path.join(_HERE, "state")
+        if state_dir not in sys.path:
+            sys.path.insert(0, state_dir)
+        from process import Process
+        grid = P.grid(20, 20000, 96)
+        from_files = P.load_solos_dir(solos, grid)
+        codes = sorted(c for c in from_files if "+" not in c and c != "ALL")
+        rew_proj = os.path.join(tmp, "proj_rew")
+        os.makedirs(rew_proj)
+        rp = _project.Project(rew_proj)
+        rp.save(rp.load())
+        url, server = rew_stub.serve(rew_stub.measurements_from_v7_dir(solos, "1"))
+        saved_url = rew_api.BASE_URL
+        try:
+            rew_api.BASE_URL = url
+            try:
+                run(rew_proj, rew_ver="1", channels=codes)
+                raise AssertionError("--rew ran with no capture round on record")
+            except SystemExit as refusal:
+                assert "no capture round on record for _1" in str(refusal), refusal
+            proc = Process(os.path.join(rew_proj, "process"))
+            proc.start_capture("1", expected=[f"{c}_1 (sw)" for c in codes], phase="0")
+            for code in codes:
+                legs = from_files[code][1].get("protective")
+                proc.set_protective(code, legs if legs and any(legs.get(k) for k in ("hp", "lp")) else "OFF")
+            via_rew = run(rew_proj, rew_ver="1", channels=codes)
+        finally:
+            rew_api.BASE_URL = saved_url
+            server.shutdown()
+        found = [x for x in via_rew["rows"] if x["channels"] == ["m-L"] and abs(math.log2(x["f_hz"] / 1000)) < 0.2]
+        assert found and found[0]["kind"] == "driver_resonance" and found[0]["evidence"] == ["m-L_1 (sw)"], via_rew["rows"]
+        same = lambda rows: sorted((x["channels"][0], x["kind"], x["action"], round(math.log2(x["f_hz"]), 1)) for x in rows)
+        assert same(via_rew["rows"]) == same(r["rows"]), (same(via_rew["rows"]), same(r["rows"]))
+        assert not via_rew["refused"], via_rew["refused"]
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("selftest OK -- every classifier rule on definitions (stays/moves, narrow, tone, Schroeder, "
           "gate BLOCK/WARN/ALLOW); the planted 1 kHz resonance is written for m-L alone as a "
-          "hypothesis with evidence, and a second run replaces rather than duplicates it")
+          "hypothesis with evidence, and a second run replaces rather than duplicates it; the same set "
+          "read from REW (--rew) with the round's protective record gives the same rows, and with no "
+          "round on record it refuses")
     return 0
 
 
@@ -307,12 +411,18 @@ def _main(argv=None):
     import argparse
     ap = argparse.ArgumentParser(description="the acoustic flaw map, proposed from the measurements")
     ap.add_argument("--project", required=True)
-    ap.add_argument("--solos", required=True, metavar="DIR", help="v7 solos (protectives marked in the files)")
+    source = ap.add_mutually_exclusive_group(required=True)
+    source.add_argument("--solos", metavar="DIR", help="v7 solos (protectives marked in the files)")
+    source.add_argument("--rew", metavar="N", help="the round's solos in REW, `<code>_N (sw)` (skill #35)")
+    ap.add_argument("--channels", metavar="a,b", help="with --rew: the codes to read (default: the glossary's active channels)")
+    ap.add_argument("--process", metavar="DIR", help="with --rew: the process dir holding the round (default: <project>/process)")
     ap.add_argument("--ellipsoid", metavar="DIR", help="v7 positions `<code>-pN.json` -- stays/moves")
     ap.add_argument("--write", action="store_true", help="record the rows (as hypotheses) in project.json")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
-    r = run(args.project, args.solos, args.ellipsoid, args.write)
+    channels = [c.strip() for c in args.channels.split(",") if c.strip()] if args.channels else None
+    r = run(args.project, args.solos, args.ellipsoid, args.write, rew_ver=args.rew, channels=channels,
+            process_dir=args.process)
     print(json.dumps(r, indent=2, ensure_ascii=False) if args.json else render(r))
     return 0
 

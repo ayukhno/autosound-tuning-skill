@@ -124,7 +124,9 @@ them first and let the EQ-ability map follow. Reading the list top-to-bottom cos
 that, and the cost is real work: the excess-phase versions are one REW round trip per channel.
 
 **Record the map as DATA, not only as prose** (SCR-015). The rows can be PROPOSED from the solos
-first — `python3 rew_tool/flaw_map.py --project <project> --solos DIR [--ellipsoid DIR]` reads the
+first — `python3 rew_tool/flaw_map.py --project <project> --rew 1` (the round's solos where the round
+left them, in REW, with what was in each chain from the round's own record; `--solos DIR [--ellipsoid DIR]`
+for a directory of v7 files) reads the
 features, asks the ellipsoid what stays and the excess-phase gate what is minimum-phase, and prints
 the rows it would write (driver resonance / cabin mode → `notch`, a null below Schroeder or a
 non-minimum-phase feature → `no_boost`) **and every finding it will NOT write, with the reason**;
