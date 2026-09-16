@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -442,6 +443,39 @@ def _row_label(entry):
     return f"{chans} {what} {entry.get('kind', '?')}/{entry.get('action', '?')}{state}"
 
 
+#: A path written into free text, as a token: starts at a drive, a home or the root, and has at
+#: least two separators -- so `L/R` and `1/6-oct` are prose, and `Z:/dev/projects/old-car` is not.
+_PATH_TOKEN = re.compile(r"(?<![\w/:])((?:[A-Za-z]:[\\/]|~[\\/]|/)[^\s,;'\"()]*[\\/][^\s,;'\"()]+)")
+
+
+def provenance(project_data):
+    """What this project did not establish itself, and whether where it came from still exists
+    (skill #36). Reported, never gated: a project legitimately outlives its source, and a car keeps
+    its drivers -- but a fact nobody here confirmed is a question, and a source that is gone turns
+    re-checkable data into data that can only be trusted.
+
+    `inherited`: `[{"path", "value", "from", "from_exists"}]`, from `project.inherited_facts`.
+    `sources_gone`: every path the project names as a source -- `seeded_from.path`, each fact's
+    `inherited_from`, a path written into `sources[]` -- that no longer resolves.
+    """
+    data = project_data if isinstance(project_data, dict) else {}
+
+    def exists(path):
+        return bool(path) and os.path.exists(os.path.expanduser(str(path)))
+
+    inherited = [{"path": path, "value": project.fact_value(wrapper), "from": wrapper.get("inherited_from"),
+                  "from_exists": exists(wrapper.get("inherited_from"))}
+                 for path, wrapper in project.inherited_facts(data)]
+    named = [(data.get("seeded_from") or {}).get("path")] + [row["from"] for row in inherited]
+    for line in data.get("sources") or []:
+        named += _PATH_TOKEN.findall(str(line))
+    gone = []
+    for path in named:
+        if path and not exists(path) and path not in gone:
+            gone.append(path)
+    return {"inherited": inherited, "sources_gone": gone}
+
+
 def check_project(project_dir, skip_rew=False):
     files = []
     project_entry, project_data = check_project_json(project_dir)
@@ -496,6 +530,7 @@ def check_project(project_dir, skip_rew=False):
     row_gaps = flaw_field_gaps(project_data)
     map_ready = all(g["missing"] == 0 for g in row_gaps if g["gates"])
     to_confirm = flaw_hypotheses(project_data)
+    carried = provenance(project_data)
     # Which files are not UTF-8, as a FIELD rather than as sentences inside `issues` (TCC-007).
     # A consumer app reading this JSON gets one repair to offer for the whole project, and it gets
     # it whether the damage landed on `project.json`, on a snapshot, or on both -- reading it back
@@ -510,6 +545,7 @@ def check_project(project_dir, skip_rew=False):
                for e in _load_vendored("state").encoding_survey(project_text_files(project_dir))]
     return {"project_dir": project_dir, "ok": ok, "complete": complete, "missing": missing,
             "map_ready": map_ready, "row_gaps": row_gaps, "to_confirm": to_confirm,
+            "inherited": carried["inherited"], "sources_gone": carried["sources_gone"],
             "encoding_damaged": damaged,
             "legacy": looks_like_2x(project_dir, files), "prose": prose,
             "files": files, "cross_checks": cross}
@@ -819,6 +855,16 @@ def render_report(report):
         lines.append(f"- {len(report['to_confirm'])} hypothesis row(s) — settled by a MEASUREMENT on "
                      f"this build (ask the owner for the capture when in doubt), never by ear; "
                      f"watched through the tune, not a gate: " + "; ".join(report["to_confirm"]))
+    if report.get("inherited"):
+        lines.append(f"- ⚠️ {len(report['inherited'])} fact(s) carried in from another project, not "
+                     "established on this build — put each to the Arbiter: confirm it here (set it "
+                     "again, `--source user`) or measure it again; a protective high-pass does not "
+                     "stand on one until then: "
+                     + "; ".join(f"{row['path']} = {row['value']!r} (from {row['from'] or 'unrecorded'})"
+                                 for row in report["inherited"]))
+    for path in report.get("sources_gone") or []:
+        lines.append(f"- ⚠️ source no longer exists: {path} — what came from it stays valid, but can no "
+                     "longer be re-checked there")
     if report.get("row_gaps") and report.get("map_ready"):
         lines.append("- flaw map: every row stands on a measurement.")
     lines.append("")
@@ -1027,6 +1073,24 @@ def _selftest():
     assert round_label("17") == "_17" and round_label("v_001") == "v_001"
     done = round_verdict(["w-L_01 (sw)", "r-R_01 (sw)"], round_)
     assert done["complete"] and done["missing"] == [], done
+    # skill #36: what this build did not establish is named, and so is a source that is gone --
+    # reported, never gated. `L/R`, `1/6-oct` and a URL in prose are not paths.
+    alive = tempfile.mkdtemp(prefix="autosound_source_")
+    carried = {"schema_version": 3, "project_rev": 1,
+               "seeded_from": {"path": "/nowhere/old-car", "at": "2026-08-23", "keys": ["channels"]},
+               "sources": [f"measured in {alive}, L/R at 1/6-oct, https://example.com/a/b",
+                           "hand-copied from Z:/dev/autosound_projects/projects/resonalyze-passat"],
+               "channels": [{"code": "tw-L", "fs_hz": {"value": 1000, "source": "measured", "at": None,
+                                                      "origin": "inherited", "inherited_from": "/nowhere/old-car"}},
+                            {"code": "m-L", "fs_hz": {"value": 220, "source": "measured", "at": "t"}}]}
+    prov = provenance(carried)
+    assert prov["inherited"] == [{"path": "channels.tw-L.fs_hz", "value": 1000, "from": "/nowhere/old-car",
+                                  "from_exists": False}], prov
+    assert prov["sources_gone"] == ["/nowhere/old-car", "Z:/dev/autosound_projects/projects/resonalyze-passat"], prov
+    shown = render_report(dict(report, **prov))
+    assert "1 fact(s) carried in from another project" in shown and "channels.tw-L.fs_hz = 1000" in shown, shown
+    assert "source no longer exists: /nowhere/old-car" in shown, shown
+    assert provenance({}) == {"inherited": [], "sources_gone": []}
 
     # render_report doesn't crash on either shape and mentions the cross-check findings.
     text = render_report(report2)

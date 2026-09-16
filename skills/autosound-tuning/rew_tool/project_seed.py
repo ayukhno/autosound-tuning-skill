@@ -280,6 +280,29 @@ def write_gitignore(target):
     return True
 
 
+def _mark_inherited(obj, source):
+    """Mark every `fact()` under `obj` as carried in from `source`, in place (skill #36).
+
+    A channel's bare `fs_hz` is wrapped first: it is the one number a safety gate binds a filter
+    to, and a bare value has nowhere to say where it came from. A fact the source had itself
+    inherited keeps the project it was first carried from.
+    """
+    if isinstance(obj, list):
+        for item in obj:
+            _mark_inherited(item, source)
+        return
+    if not isinstance(obj, dict):
+        return
+    if "value" in obj and "source" in obj and "at" in obj:
+        if obj.get("origin") != "inherited":
+            obj["origin"], obj["inherited_from"] = "inherited", source
+        return
+    if "code" in obj and "fs_hz" in obj and obj["fs_hz"] is not None and not isinstance(obj["fs_hz"], dict):
+        obj["fs_hz"] = {"value": obj["fs_hz"], "source": None, "at": None}
+    for value in obj.values():
+        _mark_inherited(value, source)
+
+
 def seed(source, target, *, include_findings=False, copy_profile=True, note=DEFAULT_NOTE,
          today=None):
     """Copy `source`'s system parameters into `target`. Never writes into `source`.
@@ -335,6 +358,12 @@ def seed(source, target, *, include_findings=False, copy_profile=True, note=DEFA
         f"system parameters seeded from project '{name}' on {when} — "
         "inherited, not re-measured here"
     ]
+    # The sentence above is for a person; these two are for the checks (skill #36). Every fact
+    # that came across says so itself, and the project says where from, as a path a check can
+    # resolve -- a source deleted two weeks later went unnoticed through four `contract.py check`s.
+    _mark_inherited(seeded, source)
+    seeded["seeded_from"] = {"path": source, "at": when,
+                             "keys": sorted(k for k in seeded if k not in ("project_rev", "sources"))}
 
     result = Seeded(True)
     try:
@@ -450,7 +479,10 @@ def _source_project(root):
         "car": {"make": "VW", "model": "Passat B8", "year": 2017},
         "dsp": {"vendor": "Audiotec-Fischer", "model": "Helix DSP Ultra S"},
         "amps": [{"name": "A"}, {"name": "B"}],
-        "channels": [{"code": "w-L", "role": "woofer"}, {"code": "sw", "role": "sub"}],
+        "channels": [{"code": "w-L", "role": "woofer", "fs_hz": 38},
+                     {"code": "sw", "role": "sub",
+                      "fs_hz": {"value": 29, "source": "measured", "at": "2026-07-01",
+                                "origin": "inherited", "inherited_from": "/first/build"}}],
         "glossary": {"channels": [{"code": "w-L"}]},
         # A real flaw row, because `Project.save()` validates them: a cabin null is interference,
         # so `leave`, and `evidence` names a capture that exists only in THIS project -- which is
@@ -512,6 +544,17 @@ def _selftest():
         # The file says what happened to it.
         assert any("seeded from project 'old-car' on 2026-08-23" in s for s in got["sources"]), got
         assert "measured 2026-07-01" in got["sources"], got
+        # ...and so does every fact that came across, as a field a check reads (skill #36): the
+        # project names its source as a path, and a bare Fs is wrapped so it can say it too.
+        assert got["seeded_from"]["path"] == os.path.abspath(src) and got["seeded_from"]["at"] == "2026-08-23"
+        assert "channels" in got["seeded_from"]["keys"], got["seeded_from"]
+        import project as _project
+        carried = dict(_project.inherited_facts(got))
+        assert carried["channels.w-L.fs_hz"]["value"] == 38 and \
+            carried["channels.w-L.fs_hz"]["inherited_from"] == os.path.abspath(src), carried
+        assert carried["channels.sw.fs_hz"]["origin"] == "inherited", carried
+        assert carried["channels.sw.fs_hz"]["inherited_from"] == "/first/build", \
+            "a fact the source had itself inherited keeps where it was first carried from"
 
         # An allowlist, not a blocklist: the ledger is not excluded by a rule, it is never reached.
         assert not os.path.exists(os.path.join(dst, "state")), "the ledger must not travel"

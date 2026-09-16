@@ -48,6 +48,13 @@ SCHEMA_VERSION = 3
 # that already has a live `Process` instance never needs the module import at all.
 _EV_CONFIG_CHANGE = "config_change"
 FACT_SOURCES = ("user", "measured", "datasheet")
+#: Where a fact was established (skill #36): on THIS build, or carried in from another project.
+#: The two-state discipline `acoustics.flaws[].status` already has, for the same reason: a value's
+#: origin is part of the value. A driver's Fs copied from another build went straight into the
+#: protective high-passes of `v_001`, and the only marker was a sentence in `source` nothing reads.
+#: Absent means `here` -- every fact written before this existed was written in its own project.
+FACT_ORIGINS = ("here", "inherited")
+DEFAULT_FACT_ORIGIN = "here"
 
 IMPACT_NONE = "none"
 IMPACT_REBASELINE = "full_rebaseline"
@@ -61,12 +68,57 @@ def _now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def fact(value, source=None, at=None):
+def fact(value, source=None, at=None, origin=None, inherited_from=None):
     """Wrap one individually-provenanced fact (SCR-014) — amp gain, driver Fs, a hardware
     control's dialled position: the ones a `config_change` event will point back at later.
     `source` should be one of `FACT_SOURCES` when given, but isn't enforced here (see `validate`'s
-    "lenient on free-text" split) — a typo'd source is a code-review nit, not a corrupted file."""
-    return {"value": value, "source": source, "at": at or (_now() if value is not None else None)}
+    "lenient on free-text" split) — a typo'd source is a code-review nit, not a corrupted file.
+
+    `origin` is `FACT_ORIGINS`, and IS enforced (`validate`): `inherited` with `inherited_from`
+    naming the project it was carried from. The default stays out of the file."""
+    out = {"value": value, "source": source, "at": at or (_now() if value is not None else None)}
+    if origin not in (None, DEFAULT_FACT_ORIGIN):
+        out["origin"] = origin
+    if inherited_from:
+        out["inherited_from"] = inherited_from
+    return out
+
+
+def is_fact(obj):
+    """A `fact()` wrapper -- the same test `open_questions` has always used."""
+    return isinstance(obj, dict) and "value" in obj and "source" in obj and "at" in obj
+
+
+def fact_origin(x):
+    """`here` or `inherited`. A bare value was written in this project: nothing carried it in."""
+    return (x.get("origin") or DEFAULT_FACT_ORIGIN) if is_fact(x) else DEFAULT_FACT_ORIGIN
+
+
+def facts(data):
+    """Every `fact()` wrapper in a project.json as `(path, wrapper)`, a channel named by its code:
+    `channels.tw-L.fs_hz`, `hardware.controls.RearRC`, `amps.0.gain_db`."""
+    out = []
+
+    def walk(prefix, obj):
+        if is_fact(obj):
+            out.append((prefix.rstrip("."), obj))
+        elif isinstance(obj, dict):
+            for key, value in obj.items():
+                if key != "_open_questions":
+                    walk(f"{prefix}{key}.", value)
+        elif isinstance(obj, list):
+            for i, value in enumerate(obj):
+                label = value.get("code") if isinstance(value, dict) and value.get("code") else i
+                walk(f"{prefix}{label}.", value)
+
+    walk("", data if isinstance(data, dict) else {})
+    return out
+
+
+def inherited_facts(data):
+    """The facts this build did not establish (skill #36): `[(path, wrapper)]`. Each is a question
+    for the Arbiter -- confirm it here, or measure it again -- not an error: a car keeps its drivers."""
+    return [(path, wrapper) for path, wrapper in facts(data) if fact_origin(wrapper) != DEFAULT_FACT_ORIGIN]
 
 
 def fact_value(x):
@@ -220,6 +272,16 @@ def validate(data):
                     "current code of another channel — a capture titled with it could belong to "
                     "either (SCR-039)"
                 )
+    for path, wrapper in facts(data):
+        if wrapper.get("origin", DEFAULT_FACT_ORIGIN) not in FACT_ORIGINS:
+            raise ProjectError(
+                f"{path}: origin must be one of {', '.join(FACT_ORIGINS)}, got {wrapper['origin']!r} "
+                "-- where a fact was established is read by gates, so a spelling nobody reads is "
+                "not allowed to stand in for it (skill #36)")
+    seeded_from = data.get("seeded_from")
+    if seeded_from is not None and not (isinstance(seeded_from, dict)
+                                        and isinstance(seeded_from.get("path"), str)):
+        raise ProjectError(f"seeded_from must be an object with a string 'path', got {seeded_from!r}")
     if "hardware" in data and not isinstance(data["hardware"], dict):
         raise ProjectError("hardware must be an object")
     if "glossary" in data and not isinstance(data["glossary"], dict):
@@ -1781,6 +1843,23 @@ def _selftest():
     except ProjectError as exc:
         assert "two answers" in str(exc), exc
     assert mproj.load()["dsp"]["sample_rate_hz"] == 48000, "refusal wrote"
+
+    # -- skill #36: where a fact was established is part of the fact, and a gate can read it.
+    here = fact(1400, source="measured")
+    carried = fact(1400, source="measured", origin="inherited", inherited_from="/gone/old-car")
+    assert "origin" not in here and fact_origin(here) == "here" and fact_origin(1400) == "here"
+    assert fact_origin(carried) == "inherited" and carried["inherited_from"] == "/gone/old-car"
+    tree = {"channels": [{"code": "tw-L", "fs_hz": carried}, {"code": "m-L", "fs_hz": here}],
+            "amps": [{"gain_db": fact(-3, source="user")}]}
+    assert [path for path, _ in facts(tree)] == ["channels.tw-L.fs_hz", "channels.m-L.fs_hz", "amps.0.gain_db"]
+    assert inherited_facts(tree) == [("channels.tw-L.fs_hz", carried)], inherited_facts(tree)
+    spelled = proj.load()
+    spelled["channels"] = [{"code": "tw-L", "fs_hz": dict(carried, origin="copied")}]
+    try:
+        validate(spelled)
+        raise AssertionError("validate accepted an origin no gate reads")
+    except ProjectError as exc:
+        assert "origin must be one of here, inherited" in str(exc), exc
 
     # unsupported schema_version is a deterministic refusal.
     bad = proj.load()

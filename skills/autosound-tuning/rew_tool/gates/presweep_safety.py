@@ -28,14 +28,26 @@ def check_presweep(channel, driver_fs=None, hpf=None, level_db=None,
     """Return a list of safety problems for one channel (empty list = safe to sweep).
 
     channel     : name, for messages.
-    driver_fs   : the driver's free-air resonance (Hz). If given and `fragile`, HPF protection is
-                  required. Omit for a driver that carries no LF risk.
+    driver_fs   : the driver's resonance (Hz), or its `project.json` fact as written (a `fact()`
+                  wrapper). If given and `fragile`, HPF protection is required. Omit for a driver
+                  that carries no LF risk. Pass the FACT: an Fs carried in from another project
+                  (`origin: inherited`) is refused until the Arbiter confirms it or it is measured
+                  on this build -- the filter would stand on a number nobody here established
+                  (skill #36).
     hpf         : the high-pass ACTIVE during the sweep — None/"OFF", or {f, type, slope}.
     level_db    : the sweep output level (relative). Checked against `safe_level_db`.
     headroom_db : gain/clip headroom before the converter/amp clips. <0 = clipping.
     fragile     : True for tweeters/mids (LF-fragile). A woofer/sub can pass fragile=False.
     """
     problems = []
+    fs_fact = driver_fs if isinstance(driver_fs, dict) else None
+    if fs_fact is not None:
+        driver_fs = fs_fact.get("value")
+        if driver_fs and fragile and fs_fact.get("origin") == "inherited":
+            problems.append(f"{channel}: Fs={driver_fs:g} Hz was carried in from "
+                            f"{fs_fact.get('inherited_from') or 'another project'}, not established on "
+                            "this build — confirm it with the Arbiter (set it again with --source user) "
+                            f"or measure it here (an impedance sweep, `{channel} (imp)`)")
     if driver_fs and fragile:
         need = HPF_FS_MARGIN * driver_fs
         if hpf is None or hpf == "OFF":
@@ -108,8 +120,20 @@ def _selftest():
     except UnsafeToSweep as e:
         assert "tw-L" in str(e) and "m-R" in str(e), str(e)
 
+    # skill #36: the Fs as project.json holds it. Established here -- the same verdict as the bare
+    # number; carried in from another build -- refused, however well the filter sits on it.
+    here = {"value": 1400, "source": "measured", "at": "2026-09-16"}
+    carried = dict(here, origin="inherited", inherited_from="/gone/old-car")
+    guard = {"f": 5000, "type": "BE", "slope": 24}
+    assert check_presweep("tw-R", driver_fs=here, hpf=guard) == []
+    refused = check_presweep("tw-R", driver_fs=carried, hpf=guard)
+    assert len(refused) == 1 and "carried in from /gone/old-car" in refused[0] and "(imp)" in refused[0], refused
+    assert check_presweep("w-L", driver_fs=dict(carried, value=45), hpf="OFF", fragile=False) == [], \
+        "a driver with no LF risk is not asked about its Fs"
+
     print("selftest OK — protected tweeter passes; caught NO-HPF, too-low + too-gentle HPF, "
-          "hot-level + clipping; woofer fragile=False exempt; require_safe FAILs LOUD listing all.")
+          "hot-level + clipping; woofer fragile=False exempt; require_safe FAILs LOUD listing all; "
+          "an Fs carried in from another build is refused until confirmed or measured (#36).")
     return 0
 
 

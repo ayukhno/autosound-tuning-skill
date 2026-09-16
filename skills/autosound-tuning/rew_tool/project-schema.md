@@ -279,6 +279,15 @@ Two granularities, deliberately not one:
   needs to point back at: amp gain, driver `fs_hz`, a hardware control's dialled position.
   `fact_value(x)` unwraps either shape (wrapped or bare) — a reader never needs to know which
   fields are wrapped.
+- **Where it was established** (skill #36) — `"origin": "inherited"` with `"inherited_from":
+  "<path of the project it came from>"` on a fact carried in from another build; absent means
+  `here`. Enforced by `validate` (`FACT_ORIGINS`), the same two-state discipline as a flaw row's
+  `status`. `project_seed.py` marks every fact it copies (a bare channel `fs_hz` is wrapped first)
+  and writes `"seeded_from": {"path", "at", "keys"}`. `contract.py check` lists inherited facts and
+  every source path that no longer exists — reported, never gated — and the pre-sweep gate refuses
+  a fragile driver's Fs passed as an inherited fact. Confirming one is setting it again here:
+  `project.py <dir> set-channel <code> fs_hz=<Hz> --source user` (the Arbiter vouches) or
+  `--source measured` after an `(imp)` sweep.
 
 `open_questions(data)` walks the whole structure (mirrors `dsp_profile.py`'s walker exactly): a
 bare `null` OR a `fact()` wrapper whose `value` is `null` is an open question; `_open_questions`
