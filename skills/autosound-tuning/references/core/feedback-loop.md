@@ -45,7 +45,7 @@ Presents it as **a list where EACH item is already PRE-SELECTED (☑)**. The use
 
 - **The canon = the skill's git repository** (the `autosound-tuning` skill, with the review process in `references/core/review-loop.md`), **without project data**: the method is separated from the car (the `autosound_context.md` profile, measurements, dsp-state — live locally in the user's project and never enter the skill).
 - **Versions:** git tags `vN` + `CHANGELOG.md` (a line per refactor; the source — the "Last refactor" entries from the author's skill-inbox).
-- **Installing for new hands:** clone → a copy/symlink into the tuner's project `.claude/skills/` → the first session starts from `project-intake.md`. Updates = `git pull` (the user's own files — the profile, the inbox — live in their project, so a pull doesn't touch them).
+- **Installing for new hands:** clone → a copy/symlink into the tuner's project `.claude/skills/` → the first session starts from `phase_-1_intake.md`. Updates = `git pull` (the user's own files — the profile, the inbox — live in their project, so a pull doesn't touch them).
 - Optionally, with a tool that is NOT part of this repo (`package_skill.py`, from skill-creator) → a `.skill` file for installing into claude.ai.
 
 ## Collecting experience — the feedback package
@@ -82,7 +82,7 @@ crossover sets · techniques · successful symptom→fix · track markers
 ```
 
 > **Write the feedback package in English.** Local project files follow the user's chosen language
-> (EN/UK/DE/PL, `project-intake.md §5`), but a feedback package becomes a **public GitHub issue** read
+> (EN/UK/DE/PL, `phase_-1_intake.md §0.5` step 1), but a feedback package becomes a **public GitHub issue** read
 > by the maintainer and the whole community — so the issue **title and body are always English**,
 > regardless of the session language. If the tune was run in UK/DE/PL, translate the package on the way
 > out. (The title is already English — `post_feedback` builds `Feedback: <car> · <DSP>`; keep the body English too.)

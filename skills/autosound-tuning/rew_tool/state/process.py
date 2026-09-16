@@ -245,7 +245,7 @@ def _require_intake(phase, previous, project_dir):
         + ". This is the phase −1 quality gate, and it is the whole reason a consumer front-end "
         "has something to render — a prose-only intake is not a complete one. Run "
         "`python3 rew_tool/contract.py check <project> --gate` to see it yourself; finish the "
-        "intake flow in `references/core/project-intake.md §0.5` rather than working around this."
+        "intake flow in `references/phases/phase_-1_intake.md §0.5` rather than working around this."
     )
 
 

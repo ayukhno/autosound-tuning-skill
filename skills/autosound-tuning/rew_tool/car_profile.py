@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Has this CABIN been described before? — the car-side twin of `dsp_profile.find_bundled`.
 
-`project-intake.md:172` asks one question about two libraries: "first check whether there's already
+`project-intake.md` §4 asks one question about two libraries: "first check whether there's already
 a profile in `knowledge/dsp/` (and `knowledge/cars/` for this body)". Only half of it was backed by
 code. For the processor there is a tool, it returns a clean "no" (`bundled_exact_match: null`), and
 a consumer can put the answer in front of the person. For the body there was prose, so the check
@@ -167,7 +167,7 @@ def car_identity(project_dir):
 def find_prior_projects(dirs, make, model, generation="", body=""):
     """Previous projects on the SAME body, and the ones that could not say — `(matches, unknown)`.
 
-    The second place `project-intake.md:172` asks about, and the half that had no command: the
+    The second place `project-intake.md` §4 asks about, and the half that had no command: the
     library answers "has this cabin been described", this answers "have WE built on it before".
     A previous build of the same shell carries a measured flaw map, and on the live intake that
     material sat unused for two days because nothing put it in front of the person (`#19`).

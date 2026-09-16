@@ -2,7 +2,7 @@
 
 One DSP config = **one OUTPUT base (correctness, curve-agnostic)** + **several VIRTUAL voicing presets** for different goals (the base+voicing mechanism → `diagnostic-techniques.md §6`, `SKILL.md`, the base/voicing rule in the pre-session steps). Switching a preset = swapping the **voicing/upper-layer settings**, not the base. Here — *which presets* are worth setting up and how they differ.
 
-> The specific preset set is a project decision (determined at intake: purpose + the DSP's preset-count limit, `project-intake.md §2/§4`). Below — a typical reference library, not dogma.
+> The specific preset set is a project decision (determined at intake: purpose + the DSP's preset-count limit, `phase_-1_intake.md §2`, `project-intake.md §4`). Below — a typical reference library, not dogma.
 
 ## What varies BETWEEN presets (and what doesn't)
 - **The base (does NOT vary):** crossovers, TA, polarity, joint phase, per-channel linearization, L/R shape-match. This is the "correct instrument" — one for all presets.

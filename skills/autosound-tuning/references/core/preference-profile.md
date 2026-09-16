@@ -26,7 +26,7 @@ These **shape the engineering**, so they are objective goals, not skippable tast
 
 ## Where it's used
 
-- **Seeded** at intake — [`project-intake.md` §2](references/core/project-intake.md).
+- **Seeded** at intake — [`phase_-1_intake.md` §2](references/phases/phase_-1_intake.md).
 - **Held out** of Phases 0–5 (the objective tune).
 - **Applied** in **Phase 5** — [`phase_5_variations.md`](references/phases/phase_5_variations.md)
   via [`voicing-by-ear.md`](references/patterns/voicing-by-ear.md),

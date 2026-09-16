@@ -69,7 +69,7 @@ Step names describe the action, not a command. The joint and L/R **phase** is th
 **set in 1.3, checked on the prediction in 1.5, and checked again after EQ in 2.2**.
 
 ### Phase −1 · Intake (desk) — *goal: decide nothing in the car, and be surprised by nothing*
-- **−1.1** log Phase −1; run the intake (`project-intake.md §0.5`); read the current DSP settings
+- **−1.1** log Phase −1; run the intake (`phase_-1_intake.md §0.5`); read the current DSP settings
   into the ledger; show the loss table above.
 - **−1.2** *new DSP* (only if not in the knowledge base): the question session → a profile (rate,
   delay step, crossover families, Q convention, the list of "effects and dynamic processing" to turn
