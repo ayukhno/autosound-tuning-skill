@@ -16,6 +16,8 @@ call** · **needs · refuses without** (a check whose input is missing FAILS, it
 
 `rew_tool/capabilities.py --selftest` keeps this board honest: every command, flag and function
 named here must exist, and every module with a command line must be on the board.
+`python3 rew_tool/capabilities.py find "<what you want>"` asks it in the user's words, EN or UK, and
+prints the rows that match, best first — read those instead of the whole board.
 
 ## A · Talking to REW
 

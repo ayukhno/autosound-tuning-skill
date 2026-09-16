@@ -25,6 +25,11 @@ exactly like one with none.
 
     python3 rew_tool/capabilities.py --selftest     (in the suite)
     python3 rew_tool/capabilities.py                 (print the board's row count per section)
+    python3 rew_tool/capabilities.py find "<what you want>"   (the rows that match, best first)
+
+`find` is the board QUERIED instead of read (docs/SIMPLIFICATION-2026-09-16.md §5): a session that
+wants one capability asks for it in the user's words -- English or Ukrainian, the board carries both
+-- and reads three rows, not 41 KB.
 """
 from __future__ import annotations
 
@@ -131,6 +136,26 @@ def _rows(text):
     return out
 
 
+def find(query, board_path=BOARD, limit=5):
+    """Board rows matching `query`, best first: `[(score, section, cells)]`.
+
+    A word scores 2 where the user's own words are (`what you want`), 1 anywhere else in the row;
+    words of fewer than three letters are skipped ("a", "to", "з"). No stemming and no synonyms --
+    the board's first column already carries the words people say, in two languages, and a
+    matcher cleverer than that would find rows nobody wrote for the question."""
+    words = [w for w in re.findall(r"[\w+.-]+", str(query).lower()) if len(w) >= 3]
+    if not words:
+        return []
+    scored = []
+    for section, cells in _rows(open(board_path, encoding="utf-8").read()):
+        want, rest = cells[0].lower(), " ".join(cells[1:]).lower()
+        score = sum(2 if w in want else 1 if w in rest else 0 for w in words)
+        if score:
+            scored.append((score, section, cells))
+    scored.sort(key=lambda row: -row[0])
+    return scored[:limit]
+
+
 def check(board_path=BOARD):
     """Every problem as one line; empty = the board and the tree agree."""
     problems = []
@@ -210,6 +235,12 @@ def _selftest():
         print("\n".join(problems))
         raise AssertionError(f"capabilities.md and the tree disagree in {len(problems)} place(s)")
     assert n >= 40, f"the board has only {n} rows -- was a section lost?"
+    # `find`: the board answers a question in the user's words, in either language it carries.
+    banked = find("bank a proposed change")
+    assert banked and "apply.propose" in banked[0][2][2], banked[:1]
+    read_dsp = find("зчитати чинні налаштування процесора")
+    assert read_dsp and "setup_import.py" in read_dsp[0][2][2], read_dsp[:1]
+    assert find("zz qq") == [] and find("a to") == [], "nothing to match is an empty answer"
     print(f"selftest[capabilities] OK -- {n} board rows: every module, flag, verb, function and read pointer "
           f"named on the board exists; every module with a command line is on the board or listed as "
           f"deliberately not.")
@@ -221,6 +252,14 @@ if __name__ == "__main__":
     console.install()
     if "--selftest" in sys.argv:
         sys.exit(_selftest())
+    if len(sys.argv) > 2 and sys.argv[1] == "find":
+        rows = find(" ".join(sys.argv[2:]))
+        if not rows:
+            print("no row of the board matches -- read references/core/capabilities.md by section")
+            sys.exit(1)
+        for score, section, cells in rows:
+            print(f"[{section}]  {cells[0]}\n    get:  {cells[1]}\n    run:  {cells[2]}\n    read: {cells[6]}\n")
+        sys.exit(0)
     problems, n = check()
     text = open(BOARD, encoding="utf-8").read()
     counts = {}
