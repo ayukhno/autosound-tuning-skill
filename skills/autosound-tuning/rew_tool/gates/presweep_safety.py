@@ -46,8 +46,9 @@ def check_presweep(channel, driver_fs=None, hpf=None, level_db=None,
         if driver_fs and fragile and fs_fact.get("origin") == "inherited":
             problems.append(f"{channel}: Fs={driver_fs:g} Hz was carried in from "
                             f"{fs_fact.get('inherited_from') or 'another project'}, not established on "
-                            "this build — confirm it with the Arbiter (set it again with --source user) "
-                            f"or measure it here (an impedance sweep, `{channel} (imp)`)")
+                            "this build — the Arbiter's conscious decision passes it: confirm the value "
+                            "(set it again with --source user), or measure it here (an impedance sweep, "
+                            f"`{channel} (imp)`)")
     if driver_fs and fragile:
         need = HPF_FS_MARGIN * driver_fs
         if hpf is None or hpf == "OFF":

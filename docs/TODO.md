@@ -247,7 +247,7 @@ the line about the Desktop and Start Menu shortcuts.
 Done looks like: the install either shows no such window, or says what it is when it opens.
 
 ## S-011 · Close the wave on branch `test-fixes-2026-09-14`
-**Status**: open
+**Status**: done 2026-09-16 · `git ls-remote --tags origin v3.0.53` · merged `--ff-only` into `main`
 
 **Due:** when the user says the wave is tested (hub `governance/WAVES.md` §1).
 
