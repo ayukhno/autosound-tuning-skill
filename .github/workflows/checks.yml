@@ -84,6 +84,11 @@ jobs:
       - name: selftests and installer consistency
         run: scripts/run-selftests.sh
 
+      # The installer is read by installer-consistency.py, never parsed by the shell that runs it; an
+      # edit that breaks its syntax would reach a person's machine first. `-n` reads, runs nothing.
+      - name: install.sh parses
+        run: bash -n install.sh
+
       # The linter is PINNED while numpy and scipy above are not, and the difference is deliberate.
       # A new numpy breaking us is information about the code. A new ruff going red is information
       # about ruff -- it ships new rules, and a check that turns red without anybody touching the
@@ -117,3 +122,13 @@ jobs:
           python-version: "3.12"
       - name: installer consistency (Windows)
         run: python scripts/installer-consistency.py
+      # The same for install.ps1, with PowerShell's own parser: no network, nothing executed. The
+      # author's Mac has no PowerShell, so without this an edit to install.ps1 is first parsed on a
+      # user's Windows machine (the gh change of 2026-09-16 was the case that asked for it).
+      - name: install.ps1 parses
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path install.ps1).Path, [ref]$null, [ref]$errors) | Out-Null
+          if ($errors.Count) { $errors | ForEach-Object { Write-Host $_.ToString() }; exit 1 }
+          Write-Host "install.ps1 parses: 0 errors"
