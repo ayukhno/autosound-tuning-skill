@@ -257,3 +257,28 @@ could not hold what the method teaches (#40: #29, #30, #31, #32, #36), and one r
 (#41: #28, hub #150; the shell wrappers are gone). Left: the review with the user of what goes in,
 the full suite, the version bump and CHANGELOG entry on the branch, one PR, `--ff-only` into `main`,
 the tag. Hub #149 closes after that merge, once the `gate` job on `main` is seen skipping the tests.
+
+## S-012 · Run v3.0.53 on the Windows VM
+**Status**: open
+
+**Due:** 2026-09-17 — the user's word ("the Windows run, for tomorrow"). v3.0.53 is published with
+one `install.ps1` line changed that no VM has run, and the reviewer fix of hub TCC-014 was proven on
+macOS only. Each command below is one line, for a PowerShell paste.
+
+1. **Update an install that has v3.0.52:**
+   `irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.53/install.ps1 | iex`
+   — the Checking step names `v3.0.53`, no "the update did not take" warning, and the last block
+   prints `python3 "C:\Users\<you>\.claude\skills\autosound-tuning\scripts\autosound_ai.py" doctor`.
+2. **That line, pasted as printed** — `doctor` runs (PowerShell quoting holds) and names the channel.
+3. **The reviewer through `agy`, from an ordinary PowerShell, not inside Claude Code** (the fix of
+   TCC-014: the prompt goes on stdin, nothing for agy to read):
+   `$env:AUTOSOUND_PROJECT_DIR="C:\Users\<you>\_autosound\testTCC8"; $env:AUTOSOUND_CRITIC_MODEL="gemini-3.8-flash-low"; "Translate into Ukrainian, one word: stage" | Out-File -Encoding utf8 $env:TEMP\q.md; python3 "$HOME\.claude\skills\autosound-tuning\scripts\autosound_ai.py" ask $env:TEMP\q.md`
+   — an answer and `>> REVIEW_FILE: process\reviews\…-ask.md` in the project, no `read_file` denial,
+   exit 0.
+4. **Nothing left in the method's checkout:**
+   `git -C "$HOME\.claude\skills\.autosound-tuning-src" status --short` — empty.
+5. **What S-009 and S-010 look like on this version** — does the plan still say "will install" for
+   the app right after installing it, and does a terminal window still pop up? Write down what is
+   seen, under those items.
+
+Done when each numbered line has its observation written here, with the VM and the date.
