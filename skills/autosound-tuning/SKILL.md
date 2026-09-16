@@ -129,7 +129,7 @@ Read the active phase from `process/process-state.json` (`python3 rew_tool/state
 | **[knowledge/](knowledge/)** | **A DSP, car or approach this skill already knows — LOOK HERE FIRST, before asking.** Naming is fixed, so you can build the path from the answer instead of searching: `knowledge/dsp/<vendor>-<model>.md` (slug-cased, e.g. "Helix DSP Ultra S" → `knowledge/dsp/helix-dsp-ultra-s.md`), `knowledge/cars/<make>-<model>.md`, `knowledge/approaches.md`. Read the file; if it is not there, `ls knowledge/dsp/` — never `find`. |
 | [core/knowledge-architecture.md](references/core/knowledge-architecture.md) | Where a piece of knowledge belongs (5-layer model). |
 | [core/preference-profile.md](references/core/preference-profile.md) | Subjective voicing vs objective engineering goals. |
-| [tooling/installation.md](references/tooling/installation.md) | Install, update, troubleshoot the skill/plugin. |
+| [tooling/installation.md](references/tooling/installation.md) | Install and update (3.x: the installer only — the plugin catalogue is pinned at 2.8.3), which copy is running, troubleshooting. |
 | [core/process-phases.md](references/core/process-phases.md) | Phase transitions, the seven phases (−1…5). |
 | [core/happy-paths.md](references/core/happy-paths.md) | Short end-to-end session walkthroughs. |
 | [core/project-intake.md](references/core/project-intake.md) | The doctrine intake stands on: the briefing and the reviewer (§0), install verification and the protective-filter minima (§3), the DSP's capability level (§4). The interview and the files are the Phase −1 runbook. |

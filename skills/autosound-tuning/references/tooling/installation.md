@@ -4,34 +4,37 @@ This document describes how to install, update, and set up the `autosound-tuning
 
 ## Installation Methods
 
-### 1. Claude Code Plugin (Recommended)
-This skill ships as a **Claude Code plugin** (the `autosound-tuning-skill` repo is a single-plugin marketplace). Run these commands **one by one** (do not copy and paste them together, as Claude Code's prompt is interactive and pasting them together deadlocks):
-```bash
-/plugin marketplace add ayukhno/autosound-tuning-skill
-```
+**One supported way to install 3.x: the installer** (the user's decision, 2026-09-16 —
+docs/SIMPLIFICATION-2026-09-16.md §7.4). The plugin catalogue is pinned at 2.8.3 and moves only with
+3.1.0; until then two install stories were one too many.
 
-```bash
-/plugin install autosound-tuning
-```
+### 1. The installer (recommended — the only supported path for 3.x)
+The one-liner is in `README.md` §Install (it names the current release, and `scripts/docs-check.py`
+keeps every README and FAQ on the same tag): `install.sh` on macOS/Linux, `install.ps1` on Windows. It
+clones the method at the newest `v3.*` release into `~/.claude/skills/.autosound-tuning-src` and links
+`~/.claude/skills/autosound-tuning` at it — a clone plus a symlink, done for you.
 
-```bash
-/reload-plugins
-```
-
-* **Update:** `/plugin update autosound-tuning` (or re-install from the marketplace). The plugin bundles the whole skill — `references/` (incl. the review-loop method, now `references/core/review-loop.md`), `scripts/`, `rew_tool/`, `knowledge/`.
+* **Update:** run the same one-liner again; it moves the clone to the newest release.
+* **Options:** `install.sh --help` / `install.ps1 -Help` (the method only with `--terminal`, the
+  GitHub backup with `--github`, the beta channel below).
 
 ---
 
 ### 2. Developer / Author Setup
-A clone + a symlink of the inner `skills/autosound-tuning` into `~/.claude/skills/` also works (edits go live; update = `git pull`). 
+A clone + a symlink of the inner `skills/autosound-tuning` into `~/.claude/skills/` (edits go live;
+update = `git pull`). This is what the installer does, pointed at your own checkout.
 
 > [!WARNING]
 > Never `git clone` the whole repo *into* `~/.claude/skills/autosound-tuning/` — `SKILL.md` then sits one level too deep → "Unknown skill"; symlink the **inner** `skills/autosound-tuning` instead.
 
 ---
 
-### 3. Plain File Copy (Legacy fallback)
-If you find this installed as a **plain file copy** that the user wants to keep updated, we recommend offering to switch to the plugin (above) to avoid manual copying/clone-syncing over it each time which can lead to drift.
+### 3. Found installed some other way
+* **As a Claude Code plugin** (`/plugin install autosound-tuning`): that catalogue entry is pinned at
+  **2.8.3**, not 3.x. Offer to switch to the installer (§1) and remove the plugin
+  (`/plugin uninstall autosound-tuning`), or two copies of the method answer to one name —
+  `deployment.py` below names both.
+* **As a plain file copy:** offer to switch to the installer as well; a copy updated by hand drifts.
 
 ---
 
@@ -47,7 +50,7 @@ python3 skills/autosound-tuning/scripts/smoke_test.py     # exit 0 = healthy · 
 
 ## Which method is actually running here (one command)
 
-The three shapes above can all be present **at the same time**, and that is normal: a plugin
+Several shapes can be present **at the same time**, and that is normal: a plugin
 install pinned by sha, a developer symlink into a clone that moves with `main`, a per-project
 `.claude/skills/autosound-tuning` a run keeps detached at a tag so its numbers stay reproducible.
 Nothing is wrong with having several. What goes wrong is that none of them says which it is — so a
@@ -104,7 +107,7 @@ Still the front-end's to get right:
 ## Troubleshooting
 
 - **Antigravity / agy sandbox — state snapshots vanish.** Some agent environments restrict certain file writes to the session's own directory (observed on Antigravity: an artifact-write outside `…/brain/<session>/` was refused). If versioned snapshots don't land where you expect, point `AUTOSOUND_STATE_ROOT` inside the project and verify it's writable **from within the session**: `python3 rew_tool/state/state.py selftest` (must print `selftest OK`); confirm the root actually fills after the first `apply.py propose`.
-- **Reviewer CLI hangs inside an agent session.** Spawning a reviewer CLI (agy/claude) from *inside* another agent session deadlocks chronically (agent-inside-agent; observed ~15/20 field sessions). `autosound_ai.py` kills a hung CLI after `AUTOSOUND_CLI_TIMEOUT` (default 120 s) and falls back to Clipboard Mode — but the reliable pattern is running reviewer wrappers from a **separate terminal**. See [process-control.md](references/core/process-control.md).
+- **Reviewer CLI inside an agent session.** A reviewer CLI (agy/claude) started from *inside* another agent session deadlocks chronically (agent-inside-agent; observed ~15/20 field sessions), so `autosound_ai.py` does not start one there: the call is refused (exit 4) with the next rung — run it from a **separate terminal**, give the reviewer a key (the direct API works inside a session), or take the clipboard. Outside a session a CLI that does not answer is stopped after `AUTOSOUND_CLI_TIMEOUT` (default 300 s). See [setup-critic-channel.md](references/tooling/setup-critic-channel.md) §3.
 - **A tool/file looks MISSING, or the skill seems to contradict its own docs — symlink-blind search (Lesson 2026-07-08).** The dev/author install is a **symlink** (`~/.claude/skills/autosound-tuning` → the repo), and a plain `find` does **not** traverse a symlink on macOS → a false "this file/tool doesn't exist". **Real incident:** `rew_tool/target_bands.py` was declared a "gap" while it existed and was documented as the solution; the whole session then went the wrong way on that false premise. **Fix:** before concluding anything is missing or broken, re-check with `find -L` / `ls`, or resolve the install to the real checkout the symlink points at — `readlink -f ~/.claude/skills/autosound-tuning` (`Get-Item … | Select Target` on Windows) — and search THERE, never a symlink-blind `find`; when the code contradicts the docs, read the actual source.
   - ⚠️ **Why the damage is systemic, not one file.** A symlink-blind search silently hides *arbitrary* skill content across BOTH tiers — e.g. the always-loaded **sample-rate** guardrail in `SKILL.md` (DSP-agnostic: samples at the wrong native rate ruin the alignment) *and* the equipment-specific value it points to (`knowledge/dsp/helix-dsp-ultra-s.md`: Helix native rate = 96 kHz) — none of which the user ever saw flagged. So the moment you notice a symlink-blind read, treat your whole view of the skill as **partial**: re-resolve the install, re-load from the canonical path, and treat conclusions reached earlier in the session as suspect until re-checked — don't just patch the one visible symptom.
   - **When it's a real discrepancy, the operational rule (ASK the Arbiter → fix/inbox or wait/file-issue) lives in `SKILL.md` guardrails.** The issue-triage / auto-answer side (`scripts/issue_triage.py`) is intentionally still WIP — asking + filing + an honest "wait" is the part that must always happen.
