@@ -159,7 +159,7 @@ Read the active phase from `process/process-state.json` (`python3 rew_tool/state
 | [tooling/resonalyze-virtual-dsp.md](references/tooling/resonalyze-virtual-dsp.md) | Resonalyze's IR and Virtual-DSP session files: what we read, which versions, and the drift check on the ported readers. |
 | [tooling/screen-read-dsp.md](references/tooling/screen-read-dsp.md) | Reading DSP params off screenshots. |
 | [core/review-loop.md](references/core/review-loop.md) | Review cadence, TWO-PASS, deadlocks, audits. |
-| [core/process-control.md](references/core/process-control.md) | Operating modes A/B/C, model classes, pull-based control. |
+| [core/process-control.md](references/core/process-control.md) | Operating modes A/B/C, pull-based control. |
 | [core/driver-discipline.md](references/core/driver-discipline.md) | Solo driver (mode B/C): anti-confabulation rules. |
 | [tooling/setup-critic-channel.md](references/tooling/setup-critic-channel.md) | CLI setup, .critic-env, models, `--doctor`, ladder. |
 | [core/feedback-loop.md](references/core/feedback-loop.md) | Session-close feedback ritual (issues in English). |
@@ -175,7 +175,7 @@ A second, independent reviewer prevents single-perspective bias — strongest cr
 * **Cadence: ONE reviewer call per round** — package the round's whole batch (crossovers+levels, or the full EQ plan), one critique pass, then the Arbiter. **TWO-PASS (open question first) only at phase gates** (Phase-1 strategy, Phase-3 verdict) **or when the reviewer has fully agreed twice in a row** (the anchoring symptom). Up to 3 rounds is a ceiling, not a norm → [`review-loop.md`](references/core/review-loop.md).
 * **How to run:** one door — `python3 scripts/autosound_ai.py critic|advisor|ask <package.md>` (any vendor: its key, its CLI, or `--mode clipboard`); `doctor` checks the channel → [`setup-critic-channel.md`](references/tooling/setup-critic-channel.md). ⚠️ A reviewer CLI is refused **inside** the driver session (it deadlocks there): a key works, or run it from a separate terminal.
 * **Reviewer unavailable?** Descend THE ladder — one list, in `setup-critic-channel.md` §7 (wait → other vendor's CLI → clipboard into any desktop chat → same vendor higher tier, said out loud → a separate Claude session → the human). Never silently solo, and **never a background sub-agent as reviewer** — with nothing on the ladder reachable, the round is blocked and says so.
-* **Models:** treat names as classes; current defaults and per-task classes → [`process-control.md`](references/core/process-control.md) §1 notes.
+* **Models:** a name is the Arbiter's pick and no file keeps a table of them — the shape (a heavier model for search and verdicts, a lighter one for routine, another VENDOR for the reviewer) → [`process-control.md`](references/core/process-control.md) §1; the reviewer's own model → [`setup-critic-channel.md`](references/tooling/setup-critic-channel.md) §2.
 
 ---
 

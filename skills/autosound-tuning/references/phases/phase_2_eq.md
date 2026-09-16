@@ -24,7 +24,7 @@ This is the core technical execution phase. All operations **MUST** be performed
 ---
 
 ## 2a — Hygiene EQ of Each Channel
-Linearize each individual channel to its own **per-band target** (from Phase 1 §5 / `target_bands.py`), using its **`<ch>_2 (rta)`** for the magnitude to EQ and its **`<ch>_2 (sw)`** excess-phase to decide what is EQ-able. Calculate the correction from `analysis.py` **`compute_deviation`** (measured − target) — don't eyeball it; and **read the channel's current filters first** (`get_filters`/`get_equaliser`) — never assume it is raw (a real bug overwrote the user's manual notches).
+Linearize each individual channel to its own **per-band target** (from Phase 1 §5 / `target_bands.py`), using its **`<ch>_2 (rta)`** for the magnitude to EQ and its **`<ch>_2 (sw)`** excess-phase to decide what is EQ-able. **Boost ceiling: +6 dB on any band** — a band that asks for more is a null or an install problem, not missing level (the excess-phase read says which). Calculate the correction from `analysis.py` **`compute_deviation`** (measured − target) — don't eyeball it; and **read the channel's current filters first** (`get_filters`/`get_equaliser`) — never assume it is raw (a real bug overwrote the user's manual notches).
 
 > **⚡ Mass read in one shot:** get the whole-batch picture with `python3 rew_tool.py analyze-batch "_2 (rta)"` — one consolidated deviation matrix (every `_2` driver vs its per-band target, band means + `anchor` + `ripple`), one review pass, ~5× fewer API round-trips than pulling each driver in the interactive REPL. Read the matrix first to see which channels need hygiene EQ; drill into a specific driver interactively only where a cell looks off (or the excess-phase decision is needed).
 
@@ -76,7 +76,7 @@ Align the relative phase response of the channels in their overlap regions.
 
 > **⚡ Compute all joints in one pass:** `python3 rew_tool.py analyze-joints --joint "sw,w-L,60,<pair>" --joint "w-L,m-L,400" --joint "m-L,tw-L,3000" …` renders one table (polarity · drift-immune delay · residual · APF) for every joint, reusing `joint_analysis.py`. Pass `--process <project>/process` so the capture round's protective record is read: a solo marked raw is de-embedded first, an unmarked *baseline* solo comes back `check`, and a `_2` solo — measured through the crossover you designed — is left alone, because there the filter is the tune (`project-intake.md §3`). It is **honest by construction** and matches the rule above: a computed delay/APF is emitted **only** when a measured `pair` reproduces the complex solos (`phase_trust_gate` ✓); no pair → **UNVERIFIED** (confirm by summation); gate trips → **BLOCK** (no delay — flip polarity + re-measure, the magnitude power-sum is the verdict). Use it to get the whole-joint picture in one shot, then confirm each by the actual measured summation before entering it. **An all-pass the Arbiter dialled by hand** (TCC's curve window applies an APF1/APF2 to a measured trace and draws the predicted sum live) is a *candidate*, not a finding: verify it with `analyze-joints … --apf "ch,APF2,f0,Q"` before it goes into a package — the line under the joint says whether the rotation closes the null, or only moves it along the band — and it enters the Critic's package as any other proposal does (§3 of the data contract, with `Origin:` naming the Arbiter and the simulation), never as something already checked.
 
-> 🔍 **Critic checkpoint (1 of 2):** with the joints/polarity set, run a cross-vendor review round on the phase alignment **before** EQ — a falsifiable challenge of the joints, the alignment sequence, and the summation verdicts.
+> 🔍 **Critic checkpoint — only when joint alignment was reworked** (the quality gate above: one checkpoint per round is the rule since 2026-07-11, a second is the escalation): with the joints/polarity set, run a cross-vendor review round on the phase alignment **before** EQ — a falsifiable challenge of the joints, the alignment sequence, and the summation verdicts.
 
 ---
 
@@ -105,6 +105,6 @@ Shape the technical response of the entire summed system — the `(rta)` of the 
 * Since the Virtual Layer sits above crossovers in the DSP routing chain, its phase shifts are identical for both sides, **never breaking the acoustic joints** set in Step 2b.
 * Save client-preference voicing requests for Phase 5. This layer is purely technical target accuracy.
 
-> 🔍 **Critic checkpoint (2 of 2):** with the EQ done, run a cross-vendor review round on the linearized + target-matched result **before** the Phase-3 lock.
+> 🔍 **Critic checkpoint — the round's one:** with the EQ done, run a cross-vendor review round on the round's full package — the linearized + target-matched result — **before** the Phase-3 lock.
 
 Once the final curve is aligned and verified, transition to the **Phase 3** control gate.
