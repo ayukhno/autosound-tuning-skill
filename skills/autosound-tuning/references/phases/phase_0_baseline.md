@@ -29,7 +29,7 @@ This phase establishes the raw baseline measurement of the car's current acousti
 ## Step-by-Step Runbook
 
 ### 1. Agree on Naming Conventions (ONCE)
-Before any measurements are taken, establish the channel abbreviations (`sw / w-L/R / m-L/R / tw-L/R / c / r`) and the title grammar — its one home is [naming-and-structure.md §3](references/core/naming-and-structure.md): `(sw)` sweep, `(rta)` MMM RTA, `_N` the number of the DSP state measured (starts at `_1`, NOT "baseline"), free-form parameters welcome after the method. *Examples:* `m-L_1 (sw)`, `w-R_1 (rta)`.
+Before any measurements are taken, establish the channel abbreviations (`sw / w-L/R / m-L/R / tw-L/R / c / r`) and the title grammar — its one home is [naming-and-structure.md §3](references/core/naming-and-structure.md): `(sw)` sweep, `(rta)` MMM RTA, `_N` the number of the DSP state measured (starts at `_1`, NOT "baseline"), a free-form clarification welcome after the method (same measurement). *Examples:* `m-L_1 (sw)`, `w-R_1 (rta)`.
 
 Give the user copy-paste-ready specifics containing the exact save PATH, short comma-separated measurement names, and a brief explanation of the immediate goal. Follow the history hygiene details in [naming-and-structure.md](references/core/naming-and-structure.md).
 

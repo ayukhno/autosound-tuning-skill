@@ -5,8 +5,8 @@ The grammar and the per-car glossary have until now lived only as prose:
 means two readings, and the front-end ended up hard-coding a capture series that no car actually
 has.
 
-    name = <channel|pair|combo|joint>[ <modifier>]_<N>[ (<method>)][ <free-form parameters>]
-         | <channel>[ <modifier>] (imp)[ <free-form parameters>]
+    name = <channel|pair|combo|joint>[ <modifier>]_<N>[ (<method>)][ <clarification>]
+         | <channel>[ <modifier>] (imp)[ <clarification>]
 
     sw_1 (sw)        w-L_2 (rta)      ALL+C_25 (rta)      L w+m_3 (sw)      tw-R_final (rta)
     sw-f_1 (sw)      sw-r_1 (sw)      SWs_1 (sw)          SWs+Ws_2 (rta)      (two subwoofers:
@@ -25,10 +25,11 @@ has.
 * **Modifiers** (`FX`, `c FX`, …) and **transient experiment tags** (`INV`, `i`, `+Δτ`) sit
   between the code and `_N`. A tag is temporary by design: once the change is baked into the base
   it drops from the name, and `dsp-state-current` — not the title — says what is committed.
-* **Free-form parameters after the method** (`noXO`, `case35l, NO cotton wool`) are how a title is
-  typed in the car, and they are a modifier written in another place: part of WHICH measurement
-  it is, since a sweep without the crossover is not the solo with it. A position among them (`x0`,
-  `p3`) is still a position (skill #34; the user, 2026-09-16).
+* **A clarification after the method** (`noXO`, `case35l, NO cotton wool`) is free-form text about
+  how the graph was taken. It is NOT part of which measurement it is: `r-L_17 (sw) noXO` is the
+  measurement `r-L_17 (sw)`, taken with a clarification (the user, 2026-09-16), so it answers a
+  round that asked for `r-L_17 (sw)`. It is kept in `params`. A position among it (`x0`, `p3`) is
+  still a position, and a position IS identity (skill #34).
 
 The glossary is per-car and **not** a fixed list: this is the module's whole point. One project
 has no rear speakers and a disabled centre; generating `r-L_2` or `c_2` for it would invent
@@ -69,7 +70,7 @@ _NAME_RE = re.compile(
 )
 # Two more forms, tried only when `_NAME_RE` has refused -- so every title that parsed before still
 # parses to the same parts:
-#   * FREE-FORM PARAMETERS after the method (skill #34; the user, 2026-09-16): `r-L_17 (sw) noXO`.
+#   * a CLARIFICATION after the method (skill #34; the user, 2026-09-16): `r-L_17 (sw) noXO`.
 #     `_NAME_RE` takes a lone position there and nothing else, so a whole solo set typed this way
 #     read as "not ours" while `process.py` read its `_N` as unknown.
 #   * an IMPEDANCE sweep, the one method with no `_N` (skill #33): `w-L (imp)`,
@@ -216,7 +217,8 @@ class Glossary:
         }
 
 
-def generate_name(code, version, method=None, modifier=None, position=None, control=None):
+def generate_name(code, version, method=None, modifier=None, position=None, control=None,
+                  params=None):
     """Build a measurement title. `version` is the DSP state number -- an int, its digits, or
     `"final"` -- and None only for `(imp)`, which has no `_N`.
 
@@ -230,6 +232,8 @@ def generate_name(code, version, method=None, modifier=None, position=None, cont
     'm-L-ctl1_49 (sw)'
     >>> generate_name("w-L", None, "imp")
     'w-L (imp)'
+    >>> generate_name("r-L", 17, "sw", params="noXO")
+    'r-L_17 (sw) noXO'
     """
     if not code:
         raise NamingError("a measurement name needs a channel/pair/combo/joint code")
@@ -262,7 +266,10 @@ def generate_name(code, version, method=None, modifier=None, position=None, cont
     name = body if version is None else f"{body}_{version}"
     if control in ("ctl", "rep"):
         name = f"{name}{control}"
-    return f"{name} ({method})" if method else name
+    if params and not method:
+        raise NamingError("a clarification follows the method, and this title has none")
+    name = f"{name} ({method})" if method else name
+    return f"{name} {params}" if params else name
 
 
 def parse_name(title, glossary=None):
@@ -296,8 +303,8 @@ def explain_name(title, glossary=None):
         return None, "an empty title"
     match = _NAME_RE.match(text) or _TAGGED_RE.match(text) or _UNVERSIONED_RE.match(text)
     if not match:
-        return None, ("not in the grammar: `<code>_<N> (sw|rta)` or `<code> (imp)`, free-form "
-                      "parameters after the method (naming-and-structure.md §3)")
+        return None, ("not in the grammar: `<code>_<N> (sw|rta)` or `<code> (imp)`, a clarification "
+                      "after the method (naming-and-structure.md §3)")
     parts = match.groupdict()
     method = parts.get("method")
     if method is not None and method.lower() not in METHODS:
@@ -332,10 +339,6 @@ def explain_name(title, glossary=None):
             # `m-L-ctl1_49ctl` says two things about one measurement
             return None, f"two controls on one measurement: `-{cm.group('ctl')}` and `{control}`"
         body, control = cm.group("code").strip(), cm.group("ctl")
-    if tail:
-        # Typed after the method, read as if typed before `_N` -- which is where `generate_name`
-        # puts it, so the canonical form of a title is the same measurement as the title.
-        body = f"{body} {tail}"
 
     code, modifier = body, None
     if glossary:
@@ -366,12 +369,16 @@ def explain_name(title, glossary=None):
         # captured measurement look missing, which is the checker crying wolf.
         "version_n": int(version) if version and version.isdigit() else None,
         "method": method,
+        # The clarification typed after the method (`noXO`), or None. Kept, never part of
+        # `name_key`: it says how the graph was taken, not which measurement it is.
+        "params": tail,
         "title": text,
     }, None
 
 
 def name_key(parsed):
     """Identity of a measurement for comparison: code, modifier, version, method, position, control.
+    NOT the clarification typed after the method (`params`): `r-L_17 (sw) noXO` is `r-L_17 (sw)`.
 
     **The tuple's SHAPE is part of the contract, and it has changed once.** It was 4 fields
     (code, modifier, version, method) until v3.0.31, and is 6 since — `position` (`p1`…`p9`, `x0`)
@@ -616,38 +623,37 @@ def _selftest():
                              position=pp["position"], control=pp["control"]) == title, (title, pp)
     assert parse_name("m-L FX p3_49 (sw)", g)["modifier"] == "FX", "a modifier and a position coexist"
 
-    # -- skill #34, and the user 2026-09-16: free-form parameters of the measurement after the
-    #    method. The titles are the issue's own, from a live REW session; each used to be refused
-    #    here or to lose its `_N` in `process.py`.
+    # -- skill #34, and the user 2026-09-16: a clarification typed after the method. It is the SAME
+    #    measurement, "the graph taken with a clarification". The titles are the issue's own, from
+    #    a live REW session; each used to be refused here or to lose its `_N` in `process.py`.
     car = Glossary({"channels": [{"code": c} for c in ("c", "m-L", "r-L")]})
     for title in ("c_49 (sw) x0", "m-L_49 (sw) x0"):
         p = parse_name(title, car)
-        assert (p["version"], p["position"], p["modifier"]) == ("49", "x0", None), p
+        assert (p["version"], p["position"], p["modifier"], p["params"]) == ("49", "x0", None, None), p
     rear = parse_name("r-L_17 (sw) noXO", car)
-    assert (rear["code"], rear["modifier"], rear["version_n"], rear["method"], rear["position"]) == \
-        ("r-L", "noXO", 17, "sw", None), rear
-    assert name_key(rear) == name_key(parse_name("r-L noXO_17 (sw)", car)), \
-        "typed after the method or before `_N`, one measurement"
-    assert name_key(rear) != name_key(parse_name("r-L_17 (sw)", car)), \
-        "a sweep without the crossover is not the solo with it"
+    assert (rear["code"], rear["modifier"], rear["version_n"], rear["method"], rear["position"],
+            rear["params"]) == ("r-L", None, 17, "sw", None, "noXO"), rear
+    assert name_key(rear) == name_key(parse_name("r-L_17 (sw)", car)), \
+        "a clarification does not make it another measurement"
+    assert name_key(parse_name("r-L noXO_17 (sw)", car)) != name_key(rear), \
+        "a modifier before `_N` still does -- that is what a modifier is"
     spaced = parse_name("m-L_49 (sw) noXO  mic 2cm x0", car)
-    assert (spaced["modifier"], spaced["position"]) == ("noXO mic 2cm", "x0"), spaced
-    assert parse_name("m-L_49 (sw) (mic at 2cm)", car)["modifier"] == "(mic at 2cm)"
-    for title in ("r-L_17 (sw) noXO", "m-L_49 (sw) noXO  mic 2cm x0", "m-L_49ctl (sw) p3 again"):
+    assert (spaced["params"], spaced["position"]) == ("noXO mic 2cm", "x0"), spaced
+    assert name_key(spaced) == name_key(parse_name("m-L_49 (sw) x0", car)), "the position stays identity"
+    assert parse_name("m-L_49 (sw) (mic at 2cm)", car)["params"] == "(mic at 2cm)"
+    for title in ("r-L_17 (sw) noXO", "m-L_49ctl (sw) again", "m-L p3_49 (sw) 2nd try"):
         p = parse_name(title, car)
         again = generate_name(p["code"], p["version"], p["method"], p["modifier"],
-                              position=p["position"], control=p["control"])
-        assert name_key(parse_name(again, car)) == name_key(p), (title, again)
+                              position=p["position"], control=p["control"], params=p["params"])
+        assert again == title, (title, again)
     # -- skill #33: an impedance sweep, the seven titles of the issue verbatim. No `_N`.
     seven = ["sw2 (imp) case35l, NO cotton wool", "w-L (imp)", "w-R (imp)", "m-L (imp)",
              "m-R (imp)", "tw-L (imp)", "tw-R (imp)"]
     for title in seven:
         p, why = explain_name(title)
         assert p and (p["method"], p["version"], p["version_n"]) == ("imp", None, None), (title, why)
-    box = parse_name(seven[0], Glossary({"channels": [{"code": "sw2"}]}))
-    assert (box["code"], box["modifier"]) == ("sw2", "case35l, NO cotton wool"), box
-    assert parse_name(seven[0])["code"] == "sw2 case35l, NO cotton wool", \
-        "without a glossary the body is the code, parameters and all -- as it always was"
+    box = parse_name(seven[0])
+    assert (box["code"], box["modifier"], box["params"]) == ("sw2", None, "case35l, NO cotton wool"), box
     assert generate_name("w-L", None, "imp") == "w-L (imp)"
     assert name_key(parse_name("w-L_1 (imp)")) != name_key(parse_name("w-L (imp)")) != \
         name_key(parse_name("w-L_1 (sw)"))
@@ -676,9 +682,9 @@ def _selftest():
 
     print("selftest OK — grammar round-trips, padding-insensitive version match, and a renamed "
           "channel's old captures resolve to it (SCR-039); positions p1..p9/x0 and controls "
-          "ctl1/ctl3/ctl/rep parse in both forms and are identity, not code; free-form parameters "
-          "after the method (#34), (imp) without `_N` (#33), refusals with a reason, and no "
-          "ledger version for `_N` (#37)")
+          "ctl1/ctl3/ctl/rep parse in both forms and are identity, not code; a clarification "
+          "after the method is the same measurement (#34), (imp) without `_N` (#33), refusals "
+          "with a reason, and no ledger version for `_N` (#37)")
     return 0
 
 
