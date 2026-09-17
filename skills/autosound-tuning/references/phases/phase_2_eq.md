@@ -84,6 +84,15 @@ Align the relative phase response of the channels in their overlap regions — *
 ## 2c — Summed Curve Alignment
 Align the summed acoustic groups to match the target — **each side whole first (L, R), then everything together (ALL).**
 
+> 🎧 **Between the two halves — the scene's two presets, by ear** (research RES-011, the user's plan, 2026-09-17).
+> With both sides whole and **the centre channel off**, the tuner hears A, the base as it stands (arrivals aligned,
+> the near-side pull by level), against B, the same pull by time: `python3 rew_tool/scene_presets.py --project DIR
+> --cut w=2,m=4,tw=4` builds B's ladder from the version (the near side later by 0.15–0.30 ms, its cut reduced 16 dB per
+> ms, both channels of each pair trimmed so centred content stays as loud, within 0.5 dB) and writes one delta per
+> rung. Protocol: `patterns/listening-cheat-sheet.md`, "Two presets for the centre" — A-B-B-A, three rounds; no
+> consistent difference → keep A; the centre moving with pitch in BOTH is an L/R mismatch, back to 2a. **Only then
+> everything together:** an offset between the sides changes the L+R sum, so ALL is tuned on the chosen preset.
+
 ### Verification Steps
 Measure and analyze the MMM RTA of the following combinations:
 * **Ws, Ms, TWs** (L+R sums of each band pair).
@@ -92,7 +101,9 @@ Measure and analyze the MMM RTA of the following combinations:
 
 ### Correction Rules
 * **Band-to-band alignment:** Adjust levels so they sum smoothly. An overlap hump is a summation issue, not a hot driver.
-* **L vs. R Balance (compare by FR):** overlay left-side vs right-side FR **level-normalized** (a level offset ≠ a shape difference — `analysis-playbook.md`) in the imaging region ($200\text{ Hz}$ to $1.5\text{ kHz}$). A pure **level tilt** → balance by level ("take from the louder side, add to the quieter", don't overboost); a **shape** difference → cabin/geometry, handle per side (don't force a clone). Use **MMM**, not a single point, for the HF part of this compare (a fixed-mic read above ~4 kHz is corrupted by the windshield reflection — `diagnostic-techniques.md`).
+* **L vs. R Balance (compare by FR):** overlay left-side vs right-side FR **level-normalized** (a level offset ≠ a shape difference — `analysis-playbook.md`) in the imaging region ($200\text{ Hz}$ to $1.5\text{ kHz}$). A pure **level tilt** → balance by level ("take from the louder side, add to the quieter", don't overboost) — **read
+  relative to the deliberate near-side cut** (Phase 1's base pulls the scene by level; balancing that away erases the pull,
+  and the two presets above become one); a **shape** difference → cabin/geometry, handle per side (don't force a clone). Use **MMM**, not a single point, for the HF part of this compare (a fixed-mic read above ~4 kHz is corrupted by the windshield reflection — `diagnostic-techniques.md`).
 * **Summation Checks:** Use REW's trace arithmetic ($A+B$) to predict summation outcomes prior to applying changes.
 
 ---

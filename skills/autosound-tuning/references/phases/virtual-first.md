@@ -177,13 +177,11 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
   against tape set (b) — the tape is the arbiter.
 - **1.6** **levels, and how the scene is centred**: levels from geometry (distances and angles from the
   tape), cut-only — a first estimate; a second from the measurement; a divergence is a finding, not an
-  error. Then, on the chosen variant, **two ways to centre the scene**: the arrivals aligned to the seat,
-  or a time offset with a cut on the near side. Resonalyze's manual gives the magnitudes to expect, "not
-  settings to copy" (`MANUAL.md:1111-1131`): level only — the near side down about 5–8 dB; time and level —
-  *Offset* 0.2–0.3 ms for a typical sedan (0.25 ms is the project default) and the near side down about
-  2–4 dB. In the engine, *Near side cut* is the level difference handed to the gain balance, which runs only
-  with `--gains`. The virtual DSP shows both; **the ear decides**, as two presets A/B. Which two, and how the
-  centre is judged, is asked of research (hub #158).
+  error. **The scene is centred by level here, and that is the BASE** (research's answer, RES-011, on the
+  user's plan): the arrivals aligned to the seat (scene offset 0) and the near-side pull as channel gain
+  (Resonalyze's gain balance, "levels only" — `resonalyze_engine.py run --gains`; the Passat's is 2 / 4 / 4 dB on
+  midbass / mid / tweeter). No choice is asked in Phase 1: the second preset — the same pull by time — is built
+  from this base in Phase 2, after each side is whole, and the ear decides there (2.1; `scene_presets.py`).
 - **1.7** **predict the sums, describe the variants, and the tuner chooses** (`predict`): L, R, ALL; the
   sum loss per joint; L−R per band; a graph — for each variant on the table, with its per-term numbers
   **and in words**: what changes and how it will sound, written by the generator and reviewed by the
@@ -242,7 +240,13 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
   **the rear under everything**. Only cuts of minimum-phase peaks that stay across the positions; below
   ~150–200 Hz a point is trusted, above only what survives the ellipsoid; zero boosts. **A step whose EQ
   touched a junction's band (±1 oct) re-checks that junction's delay (1.5); otherwise the delays stay** —
-  a package says which junctions it reaches (`recheck_junctions`) before it is banked.
+  a package says which junctions it reaches (`recheck_junctions`) before it is banked. **Between "each side
+  whole" and "everything together" the scene's two presets go to the ear** (RES-011): A is the base as it stands,
+  B the same pull by time — `scene_presets.py --project DIR --cut w=2,m=4,tw=4` builds the ladder (0.15–0.30 ms,
+  the near side later, its cut reduced 16 dB/ms, both channels trimmed to the base's centred level) as deltas for
+  the sheet; the comparison is the cheat-sheet's protocol (centre off, loudness matched, A-B-B-A three rounds; no
+  consistent difference → keep A). The L+R sum is tuned only after the choice, because an offset between the
+  sides changes it.
   Every package names the listening characteristic that checks it.
 - **2.2** **check after EQ**: predict again — joints and L/R on the same rulers **and through the same
   windows** (EQ inside a joint band rotates phase). `verify_prediction` reads the measured set through

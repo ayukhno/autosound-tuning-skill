@@ -100,6 +100,36 @@ mehrere Hördurchgänge verteilt, mit dem langen Hören als eigener Fahrt.
 | league | 2 | Ch.05 | c09 |
 | league | 3 | Ch.29 | c16 |
 
+## Zwei Presets für die Mitte — per Pegel oder per Zeit (Phase 2c)
+
+Das Protokoll der Forschung (RES-011, nach Lee 2010, Audiofrogs UMI-1-Notizen, dem EMMA Judge Book 2024, AES20). **A**
+ist die Basis, wie sie nach „jede Seite als Ganzes" steht: Ankünfte auf den Sitz ausgerichtet, die nahe Seite per
+Gain herangezogen. **B** ist derselbe Zug per Zeit: die nahe Seite 0,15–0,30 ms später mit verringerter Absenkung,
+Lautheit angeglichen (`rew_tool/scene_presets.py`). Beide ziehen die Mitte gleich weit; das Ohr vergleicht den Mechanismus.
+
+**Vor dem Hören**
+1. Mono-Rosarauschen ergibt EIN Bild zwischen den Lautsprechern. Zwei Quellen → Delay oder Polarität stimmt nicht, nicht die Zentrierung.
+2. Nenne den vorhergesagten Zug jedes Presets (das `f` des Blatts, Zeit und Pegel getrennt). Ein Paar, dessen Züge sich um
+   weniger als 10 % der halben Bühne unterscheiden, ist „wahrscheinlich unhörbar — beides geht"; ein aus A gebautes B
+   unterscheidet sich nur im Mechanismus.
+3. Beide Presets spielen am Sitz gleich laut, innerhalb von 0,5 dB: die Absenkung macht A leiser, und lauter gewinnt.
+4. Der Center-Kanal ist für den Vergleich aus; Sitz und Kopf dort, wo das Mikrofon stand; eine moderate Lautstärke.
+
+**Hören**
+5. Mono-Rosarauschen breitbandig, dann in Bändern (UMI-1, Tracks 2–5): ein Punkt? Wo?
+6. Ein Fünf-Positionen-Track (EMMA, Tracks 2–6, oder UMI-1, Tracks 6–10): **sitzt C genau in der Mitte zwischen dem
+   äußersten Links und Rechts, das du hörst, und sitzen LC und RC wieder in der Mitte?** Ort und Größe jedes Bildes notieren.
+7. Eine mittige Stimme, dann ein mittiges **gehaltenes** hohes Instrument (Streicher, Orgel, eine gehaltene Trompete):
+   derselbe Ort? Eine Mitte, die mit der Tonhöhe wandert, ziehen die Juroren ab; verdächtig ist das Zeit-Panning.
+8. Den Kopf 3–5 cm nach links und rechts bewegen: wie weit folgt die Mitte, und teilt sie sich?
+
+**Umschalten und aufhören**
+9. Dieselbe Passage, schnelles Umschalten, A-B-B-A, drei Runden; blind, wenn jemand anderes den Knopf drücken kann.
+10. **Aufhören**, wenn drei Runden keinen beständigen Unterschied geben (blind: 4 oder weniger richtig von 6): A bleibt,
+    es hat weniger Einstellungen. Ein gehörter Unterschied wird in Bühnenworten benannt — Ort, Größe, Tonhöhe, Kopf — und dann gewählt.
+11. **Wandert die Mitte in BEIDEN Presets mit der Tonhöhe, die Zentrierung stoppen:** das ist eine L/R-Frequenzgang-Abweichung —
+    zurück zu 2a, erst die Paare angleichen.
+
 ## Wie du berichtest, was du hörst
 
 Nenne das Merkmal, die Richtung und den Track: *„CarMus#07 — der Kontrabass bläht sich auf; die Stimme

@@ -20,14 +20,14 @@ where this file says "recommended", it is the session's advice the user accepted
    into a dip (as `eq_propose` does) — BEFORE the delays, because a PEQ changes phase (Resonalyze's order, `MANUAL.md:782`).
 8. **Delays and levels** on the virtual DSP with that EQ in the chains: front and sub first, then centre and rear placed
    against the settled front (Resonalyze's staging, `MANUAL.md:1015-1028`; centre read against both sides at 1–4 kHz).
-9. **Scene centring, its own step on the chosen variant, after the coarse EQ and the delays:** arrival aligned, against a time offset plus a near-side cut.
-   Resonalyze's manual names the two ways (`MANUAL.md:1111-1131`): level only (Offset 0, the near side cut by about
-   5–8 dB) and time and level (Offset "0.2–0.3 ms is a reasonable start" for a typical sedan, the near side cut by
-   about 2–4 dB) — "the magnitude to expect, not settings to copy". The project default is 0.25 ms
-   (`VirtualCrossoverProjectFile.cs:644`). *Near side cut* is not an Auto delay parameter: it is the level difference
-   handed to the gain balance (`GainBalanceEngine`), which runs only when "Balance channel gains" is on (off by
-   default). The virtual DSP shows both; the ear decides (two presets, A/B). The user's own trial on Resonalyze's data:
-   the two differed by small changes of gain and delay.
+9. **Scene centring: Phase 1 builds the BASE by level, and the ear decides in Phase 2** (research's answer, RES-011 /
+   hub #161, on the user's plan of 2026-09-17). The base: the arrivals aligned to the seat (scene offset 0) and the
+   near-side pull as channel gain (Resonalyze's gain balance, "levels only"; the Passat's is 2 / 4 / 4 dB on midbass /
+   mid / tweeter). No choice is asked here. The second preset — the same pull by time: the near side later by
+   0.15–0.30 ms with its cut reduced 16 dB per ms, loudness matched — is built from the base after Phase 2's "each side
+   whole" and compared by ear before "everything together" (`rew_tool/scene_presets.py`; `phase_2_eq.md` 2c). Lee 2010:
+   0.25 ms ≈ 4 dB ≈ a third of the half-stage, so the two differ in mechanism, not in where the centre lands; the
+   user's trial on Resonalyze's data (the author's two presets, Δf +8 %) said the same.
 10. **What is shown:** one mathematical variant and up to two built from the tuner's wishes; a fully automatic run keeps
     at most three. More only if the tuner wants to dig, and then the Resonalyze app itself is the better place.
 11. **The breakdown in words** — what changes and how it will sound — written by the generator and reviewed by the
@@ -145,7 +145,11 @@ the upstream repository.
   window's code, not with the window.
 - The centre and the rear come out at Low confidence on the Passat (rear r = 0.08 / 0.16, one centre reading on the
   refinement edge): numbers to show with their confidence, not to enter blind.
-- SQ practice for centring the scene by time or by level, with sources: asked of research, hub #158 (SKL-040).
+- ~~SQ practice for centring the scene by time or by level~~ — answered by research (hub #158 → RFC RES-011, #161,
+  `research/docs/SKL-040-scene-centring.md`): the base by level, the time preset of the same pull, the ear in Phase 2;
+  built as `rew_tool/scene_presets.py` and the cheat-sheet's protocol (§6, 6). One question back to research: piece 4's
+  "|Δf| < 10 % → probably inaudible, no choice" cannot apply to the ladder, whose presets have the base's pull by
+  construction — there the ear compares the mechanism; the module says so instead of refusing the choice.
 - Analysing a tune that already exists: noted, not started (`docs/TODO.md` S-017).
 - Resonalyze's session file is at v11 on the pin while `rew_tool/resonalyze_vc.py` reads v7–v10: the ordinary drift
   check, apart from this design.
@@ -201,4 +205,12 @@ Engine-independent steps first, on `wave-2026-09-17b`; each with its selftest, t
      artifacts named for the pin, on a tag push and by hand, and runs the synthetic set through the Linux and Apple
      Silicon ones; `resonalyze_engine.py` runs a prebuilt engine (`AUTOSOUND_RESONALYZE_ENGINE`, or `install-binary --from
      <zip>` into a folder per pin and platform) before it reaches for the .NET SDK. The release half — attaching the
-     artifacts to a release, and the installers fetching one — waits for the hub's release channel.
+     artifacts to a release, and the installers fetching one — waits for the hub's release channel (SKL-041).
+6. ~~**Scene presets** (RES-011, hub #161).~~ Done 2026-09-17: `rew_tool/scene_presets.py` — from the ledger version the base
+   stands in after 2c and the near-side cut Phase 1 gave it, one preset per rung (0.15 / 0.20 / 0.25 / 0.30 ms): the
+   near side later by t on the device's grid, its cut reduced to max(0, cut − 16 t), both channels of the pair trimmed
+   so the centred (coherent L+R) level stays the base's; each described by its pull with the time and level parts
+   apart, the difference from the base per pair (a band whose cut ran out pulls more, and is named), deltas for
+   `apply.propose`, a rung over the device's ceiling refused. `phase_2_eq.md` 2c holds the comparison between "each
+   side whole" and "everything together" and reads the L/R balance relative to the deliberate cut; `virtual-first.md`
+   1.6 / 2.1 and the listening cheat-sheet (en, uk, de, pl) carry the protocol.
