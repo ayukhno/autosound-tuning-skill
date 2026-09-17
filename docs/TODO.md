@@ -261,7 +261,7 @@ the tag. Hub #149 closes after that merge, once the `gate` job on `main` is seen
 ## S-012 · Run v3.0.53 on the Windows VM
 **Status**: open
 
-**Due:** 2026-09-17 — the user's word ("the Windows run, for tomorrow"). v3.0.53 is published with
+**Due:** after the other S-items of this wave are done — the user's word on 2026-09-17 ("after Sxxx"), so one VM run covers the final state of `wave-2026-09-16`. First asked for 2026-09-17 ("the Windows run, for tomorrow"). v3.0.53 is published with
 one `install.ps1` line changed that no VM has run, and the reviewer fix of hub TCC-014 was proven on
 macOS only. Each command below is one line, for a PowerShell paste.
 
@@ -285,13 +285,18 @@ macOS only. Each command below is one line, for a PowerShell paste.
    `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/wave-2026-09-16/install.ps1))) -DryRun -Terminal`
    — no "Back projects up to GitHub?" question; on a machine without `gh` an "Optional: -GitHub also
    installs GitHub's gh…" line under the plan; with `-GitHub` added, gh is in the plan.
+7. **omp only with `-WithOmp`** (S-014), same dry-run form: without `-Terminal`, no omp in the plan and an
+   "Optional: -WithOmp also installs omp…" line; with `-WithOmp`, omp in the plan; with `-WithOmp
+   -Terminal`, the line "-WithOmp: omp is for the app's model picker … left out." at the top and no error.
 
 Done when each numbered line has its observation written here, with the VM and the date.
 
 ## S-013 · Each REW reader names the smoothing it reads
-**Status**: open
+**Status**: doing
 
-**Due:** with the user — which tool reads what is a method decision, not a code one.
+**Due:** research first — the user, 2026-09-17: "don't know, it needs researching". Measure each reader
+on live REW data under None / 1/48 / the view / 1/6 (asked on the read, the view untouched), write the
+findings to a file, then the user decides.
 
 `rew_api.get_fr(mid, smoothing=…)` asks REW for a smoothing on the read and leaves the Arbiter's view
 alone (hub TCC-015, 2026-09-16). The callers below still call it without one, so what they compute
@@ -308,7 +313,7 @@ view's smoothing (`analyze-batch`, joints, `verify`), `"1/6"` where it reads ton
 selftest pins the query each tool sends.
 
 ## S-014 · `omp` opt-in — asked once more, with its history
-**Status**: open
+**Status**: done 2026-09-17 · the user: "install by flag" · `python3 scripts/installer-consistency.py` (check 5a) · commit `317dd6e`
 
 **Due:** 2026-09-17, a question for the user before anything changes.
 
