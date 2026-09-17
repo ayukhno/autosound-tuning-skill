@@ -509,3 +509,39 @@ says "the delete will come back to you".
 /`upload` step landing in the same place. Then either a Bash permission rule for exactly
 `gh release …` in this tree's settings, or a line in `RELEASE-CHANNEL.md` saying the last keystroke
 is the user's by design.
+
+## S-020 · The installers can fetch the engine archive now that a release carries it
+**Status**: open 2026-09-17 · the archives exist as of `v3.0.57`; SKL-041's own follow-up, named open in `docs/DESIGN-2026-09-17-phase1-variants.md` §5c
+
+**Due when:** someone installs the method on a machine without the .NET SDK and wants Phase 1's desk
+step. Not before — a person with the SDK loses nothing today.
+
+**State today.** `v3.0.57`'s release carries three archives, each built AND run through the synthetic
+set on its own runner, with `SHA256SUMS` beside them (hub HUB-070, `RELEASE-CHANNEL.md` §12):
+
+```
+resonalyze-engine-b0ce9fb-win-x64.zip · resonalyze-engine-b0ce9fb-win-arm64.zip · resonalyze-engine-b0ce9fb-osx-arm64.zip
+```
+
+The installers do not know they exist. `install.sh` / `install.ps1` / `install.cmd` put the method
+in place; `resonalyze_engine.engine_command` then looks for a prebuilt engine in
+`installed_dir()` — which is empty unless the person ran `install-binary --from <zip>` by hand —
+and otherwise reaches for the SDK, or says by name that neither is there.
+
+**The form, when it becomes due.** The file name is computable from the tag and the platform, which
+is why §12 requires that shape: `resonalyze-engine-<pin>-<rid>.zip`, the pin being
+`resonalyze_engine.ENGINE_PIN` and the rid `resonalyze_engine.rid()`. So an installer can fetch
+exactly one file from the tag it is installing, check it against `SHA256SUMS`, and hand it to
+`install_binary`. Three things to decide with the user first, because each is a change in what an
+install DOES:
+
+1. **Asked or default?** ≈30 MB per platform on every install, against an SDK build on first use.
+2. **A platform with no archive** (`linux-*`, `osx-x64`, and any future rid): the installer must say
+   which way it went, not silently fall back.
+3. **A pin that has no archive on that tag** — the engine pin moves with the submodule, not with the
+   tag, so a tag whose run did not attach (v3.0.56 is one) has none. The installer reads the pin
+   from the tree it just installed and asks for that name; a 404 is then "build from the SDK", said
+   out loud, not an error.
+
+Done when an install on a machine without the SDK ends with a working prebuilt engine, the choice is
+the person's, and `installer-consistency.py` holds the three installers to the same decision.
