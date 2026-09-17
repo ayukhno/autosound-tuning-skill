@@ -396,6 +396,19 @@ not. The method's tools call `python3`, in a terminal and in Claude Code's Bash 
 Done looks like: in a new window after the install, `python3 -V` answers with the Python the installer
 set up. The VM is left as found, so the fix can be checked on it.
 
+## S-017 · Analysing a tune that already exists — noted, not started
+**Status**: open
+
+**Due when:** Phase 1's variants (issue #38) work on a fresh system, and a tuner brings a car that is already
+tuned. The user, 2026-09-17: "note it with the source, we do not go there yet".
+
+**What Resonalyze has, read in the fork** (`Resonalyze-fork`, local): its AI bridge asks whether the user wants "a
+look over a tune they already made" and judges every step against the user's tune, not the step before
+(`docs/agent/AGENT_GUIDE.md:5-15`); its junction tune is "the crossover engine for a tune that already works" and
+keeps the current crossover unless a candidate beats it by 0.5 dB (`REFERENCE.md:3334-3347`,
+`dsp/CrossoverJunctionTuner.cs:242-248`). It has no importer for a whole third-party DSP project; only per-channel
+PEQ banks travel, Helix's included (`MANUAL.md:991-996`).
+
 ## S-013 · Each REW reader names the smoothing it reads
 **Status**: done 2026-09-17 · `scripts/run-selftests.sh` (73/73; `python3 skills/autosound-tuning/rew_tool/rew_api.py --selftest` holds every reader to its ask) · commits `c7c8e17`, `596a389` · decisions in `docs/RESEARCH-2026-09-17-reader-smoothing.md` §6
 
