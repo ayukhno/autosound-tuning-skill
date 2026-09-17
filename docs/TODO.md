@@ -258,16 +258,16 @@ could not hold what the method teaches (#40: #29, #30, #31, #32, #36), and one r
 the full suite, the version bump and CHANGELOG entry on the branch, one PR, `--ff-only` into `main`,
 the tag. Hub #149 closes after that merge, once the `gate` job on `main` is seen skipping the tests.
 
-## S-012 · Run v3.0.53 on the Windows VM
+## S-012 · Run v3.0.54 on the Windows VM
 **Status**: open
 
-**Due:** after the other S-items of this wave are done — the user's word on 2026-09-17 ("after Sxxx"), so one VM run covers the final state of `wave-2026-09-16`. First asked for 2026-09-17 ("the Windows run, for tomorrow"). v3.0.53 is published with
-one `install.ps1` line changed that no VM has run, and the reviewer fix of hub TCC-014 was proven on
+**Due:** after the other S-items of this wave are done — the user's word on 2026-09-17 ("after Sxxx"), so one VM run covers the final state of `wave-2026-09-16`, released as v3.0.54 on 2026-09-17. First asked for 2026-09-17 ("the Windows run, for tomorrow"). v3.0.53 was published with
+one `install.ps1` line changed that no VM has run, v3.0.54 with its `gh` and `omp` defaults, and the reviewer fix of hub TCC-014 was proven on
 macOS only. Each command below is one line, for a PowerShell paste.
 
-1. **Update an install that has v3.0.52:**
-   `irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.53/install.ps1 | iex`
-   — the Checking step names `v3.0.53`, no "the update did not take" warning, and the last block
+1. **Update an install that has v3.0.52 or v3.0.53:**
+   `irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.54/install.ps1 | iex`
+   — the Checking step names `v3.0.54`, no "the update did not take" warning, and the last block
    prints `python3 "C:\Users\<you>\.claude\skills\autosound-tuning\scripts\autosound_ai.py" doctor`.
 2. **That line, pasted as printed** — `doctor` runs (PowerShell quoting holds) and names the channel.
 3. **The reviewer through `agy`, from an ordinary PowerShell, not inside Claude Code** (the fix of
@@ -281,8 +281,8 @@ macOS only. Each command below is one line, for a PowerShell paste.
    the app right after installing it, and does a terminal window still pop up? Write down what is
    seen, under those items.
 
-6. **The wave branch's installer, dry** (gh comes only with `-GitHub` now, no question):
-   `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/wave-2026-09-16/install.ps1))) -DryRun -Terminal`
+6. **The released installer, dry** (gh comes only with `-GitHub` now, no question):
+   `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.54/install.ps1))) -DryRun -Terminal`
    — no "Back projects up to GitHub?" question; on a machine without `gh` an "Optional: -GitHub also
    installs GitHub's gh…" line under the plan; with `-GitHub` added, gh is in the plan.
 7. **omp only with `-WithOmp`** (S-014), same dry-run form: without `-Terminal`, no omp in the plan and an

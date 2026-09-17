@@ -317,7 +317,7 @@ their own tracks.
 6. Tickets now: steps 1–3 only — #39 (parser), #40 (provenance + round-trip guard), #41 (reviewer
    entry). Steps 4–8 wait for that wave to land.
 
-## 8. Status — 2026-09-17, after a night on `wave-2026-09-16`
+## 8. Status — 2026-09-17, `wave-2026-09-16` released as v3.0.54
 
 | # | step | where it stands |
 |---|---|---|
@@ -325,7 +325,7 @@ their own tracks.
 | 2 | provenance + round-trip guard | released in v3.0.53 (#40) |
 | 3 | one reviewer entry | released in v3.0.53 (#41) |
 | 4 | one home per rule | contradictions 1–5 closed (4 went with the wrappers; 2, 3, 5 in `87a303d`); `docs-check` rule 8 `protective-floor` ties the HPF floor's 12 written copies to the gate's constants (`64d67b5`). The other doctrines of §2.2 have no guard yet |
-| 5 | one live REW reader | readers ask REW for the smoothing on the read and never change the view — verified live, REW 5.40 b132 (`cf811b4`, hub #151); `flaw_map --rew` reads a round's solos from REW (`eac6a0e`, #35). Which smoothing each existing reader should ask for is TODO S-013 — the user's call |
-| 6 | Windows installer in CI; no prompts | `gh` only with `--github`, no question (`d370566`); both installers parsed by their own shells in CI (`be74ada`). `omp` opt-in is TODO S-014 — it reverses a decision taken twice; the installer's functions still do not RUN in CI |
+| 5 | one live REW reader | readers ask REW for the smoothing on the read and never change the view — verified live, REW 5.40 b132 (`cf811b4`, hub #151); `flaw_map --rew` reads a round's solos from REW (`eac6a0e`, #35). Each reader names its smoothing, decided by the user on research, and `analyze-joints` reads the impulse (TODO S-013, `c7c8e17`, `596a389`) |
+| 6 | Windows installer in CI; no prompts | `gh` only with `--github`, no question (`d370566`); both installers parsed by their own shells in CI (`be74ada`). `omp` only with `--with-omp`, asked with its history (TODO S-014, `317dd6e`); the installer's functions still do not RUN in CI |
 | 7 | structural moves | (a) Phase −1 procedure in its phase file (`41c1b3b`); the install story is the installer alone (`98d1767`). (b)–(e) not done: SKILL.md's Three Roles and Review Channel are short and always loaded, and the other three move text without a finding behind them |
 | 8 | board queried, not read | `capabilities.py find` (`4f9992d`) |
