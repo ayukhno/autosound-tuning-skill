@@ -82,7 +82,9 @@ band re-checks that junction's delay; otherwise the delays stay.
 
 ## 5. Open
 
-- The .NET 10 SDK on the development Mac (the skill cannot build the wrapper without it).
+- ~~The .NET 10 SDK on the development Mac~~ — settled 2026-09-17: the user-level SDK the fork already builds with,
+  `~/.dotnet` (10.0.301, the version the fork's `global.json` pins). The wrapper's build script takes `dotnet` from
+  PATH and falls back to `~/.dotnet/dotnet`; nothing is installed or changed system-wide (the user's choice).
 - How installs get the binary.
 - SQ practice for centring the scene by time or by level, with sources: asked of research, hub #158 (SKL-040).
 - Analysing a tune that already exists: noted, not started (`docs/TODO.md` S-017).
