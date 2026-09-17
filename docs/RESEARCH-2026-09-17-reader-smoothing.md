@@ -237,6 +237,11 @@ auto-EQ resolution.
 recommended option. 1, 4 and 6 follow from the Arbiter's `None` = `1/48` and were put to him with
 "say if not"; no objection came.
 
+**Built the same day** on `wave-2026-09-16` (`c7c8e17`, and the joints commit after it); on the
+reference car's six `_01` junctions the impulse reading turned m-L↔tw-L at 4 kHz from INV with a −21 dB
+residual to NORM with −3 dB, moved m-R↔tw-R from −1.17 to −0.35 ms, and asks for an all-pass at two
+junctions instead of five. No measured pair was on the session, so neither reading is verified there.
+
 **Standing position of the Arbiter (2026-09-17): `None` and `1/48` are one level.** Finer than 1/48
 brings nothing for this chain (Scarlett, Helix) and adds interference. §2.1, §2.2 and §4 agree:
 
