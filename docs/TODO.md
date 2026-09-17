@@ -449,3 +449,40 @@ On 2026-09-16 the user chose "gh off, omp only with a flag" from a menu (docs/SI
 who does not know the flag exists* (issue #25, and the comment above `WANT_OMP` in `install.sh`). What
 changed since: the README and FAQ now name `omp` and `--no-omp` at the install step (issue #25's
 2026-09-09 comment). Ask: keep omp on with the app, or make it `--with-omp` only. Close #25 either way.
+
+## S-018 · RES-013's guard misses the cells it was written for: above 1 kHz the score follows a lying witness
+**Status**: open 2026-09-17 · waiting for research's ticket (the user, 2026-09-17: "почекай інформацію від рісьочера, зараз формує тікет")
+
+**Due:** research's ticket on this, which the user said is being written. Not before — the rule is
+theirs (hub `#168` is an `rfc`, `ROLES.md` §0), and this item is the measurement, not a redesign.
+
+RES-013 as accepted is implemented and green (`commit b8d98d1`, hub `#168`): at or above 1 kHz a
+whole-cycle disagreement between the sum-loss score and the arrival witness is recorded
+`chosen="unverified"` instead of being resolved. Then its own falsification (a) was run against the
+integrated code, on the BMW F30 archive research measured it on — `hub/scratch/skill/res013_check.py`
+through research's own cell loader, `REW_TOOL=<this tree>/skills/autosound-tuning/rew_tool
+~/dev/autosound/research/.venv/bin/python res013_check.py`:
+
+| tune · side | proposal, cycles from the owner's tune | chosen |
+|---|---|---|
+| root · head90 R | −4.53 | score ← **unmarked** |
+| v3 · session R | −0.86 | unverified |
+| v3 · validated R | −0.83 | unverified |
+| v5 · manual L | +1.03 | unverified |
+| v5 · manual R | −3.98 | score ← **unmarked** |
+| v6 · session R | −4.36 | score ← **unmarked** |
+
+(the four left sides not listed sit within 0.1 cycles of the tune and pass as `score`.)
+
+**3 of 10 cells still overrule the hand tune by ~4 cycles with nothing marked**, so falsification (a)
+fires. The guard tests whether the two CANDIDATES disagree; in those three cells they AGREE with each
+other — the full-record witness reads the right tweeter 2.6–2.9 ms late and the score's best goes
+there with it. A guard on disagreement cannot see a witness the score follows. The numbers reproduce
+research's own table (their score's best, cycles from tune: −4.52 / −0.84 / −0.85 / −3.97 / −4.37) to
+the second decimal, so this is the rule's shape and not the harness.
+
+**What would settle it (for research to decide, not this tree).** A criterion that does not rely on
+the two candidates disagreeing — e.g. above 1 kHz mark `unverified` whenever the proposal moves the
+junction a whole cycle or more from the delay the DSP already holds (that makes the metric 0 of 10,
+at the price of asking for a pair measurement on every large first-time move). Reported to the user
+2026-09-17; research's ticket is what this waits for.
