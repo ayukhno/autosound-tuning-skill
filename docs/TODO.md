@@ -451,7 +451,7 @@ changed since: the README and FAQ now name `omp` and `--no-omp` at the install s
 2026-09-09 comment). Ask: keep omp on with the app, or make it `--with-omp` only. Close #25 either way.
 
 ## S-018 · RES-013's guard misses the cells it was written for: above 1 kHz the score follows a lying witness
-**Status**: open 2026-09-17 · waiting for research's ticket (the user, 2026-09-17: "почекай інформацію від рісьочера, зараз формує тікет")
+**Status**: done 2026-09-17 · research answered with RES-016 (hub `#172`): the guard reads a second witness, the 2-cycle direct-sound cut, and fires on the proposal a cycle from it, on the two witnesses half a cycle apart, on RES-013's disagreement, or -- with no cut -- on a whole cycle moved · `python3 skills/autosound-tuning/rew_tool/predict.py --selftest` (cases i, k, l, m) · `hub/scratch/skill/res013_check.py` → 0 of 10 missed, 0 false alarms · wave-2026-09-17b
 
 **Due:** research's ticket on this, which the user said is being written. Not before — the rule is
 theirs (hub `#168` is an `rfc`, `ROLES.md` §0), and this item is the measurement, not a redesign.

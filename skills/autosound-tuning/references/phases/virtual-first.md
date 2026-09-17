@@ -170,7 +170,7 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
   `aligned-delta.json` for `apply.propose`); near-tie through both polarities; an all-pass if a null
   remains (`--apf` hints one). **Above 1 kHz a delay candidate is confirmed on the TUNED pair's
   arrival, not banked off the desk** (hub `RES-013`): whole cycles look alike on a sum and on a
-  phase view, so where the score and the arrival witness disagree by a cycle the joint comes back
+  phase view, so where the direct-sound reading (a 2-cycle cut) and the whole-record one disagree, or the proposal sits a cycle from the direct-sound reading (hub `RES-016`), the joint comes back
   `UNVERIFIED` with both candidates — measure the pair (a sweep of the two together, or both solos
   through these chains), record which candidate it picks, and only then bank that joint. **Front and sub first; then the centre and the rear are placed against
   the settled front** — the centre read against both sides where the front mids play (1–4 kHz), as
