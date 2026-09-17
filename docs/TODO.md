@@ -292,11 +292,13 @@ macOS only. Each command below is one line, for a PowerShell paste.
 Done when each numbered line has its observation written here, with the VM and the date.
 
 ## S-013 · Each REW reader names the smoothing it reads
-**Status**: doing
+**Status**: doing — research done (`docs/RESEARCH-2026-09-17-reader-smoothing.md`), waiting for the user's decisions on its §6
 
-**Due:** research first — the user, 2026-09-17: "don't know, it needs researching". Measure each reader
-on live REW data under None / 1/48 / the view / 1/6 (asked on the read, the view untouched), write the
-findings to a file, then the user decides.
+**Due:** research first — the user, 2026-09-17: "don't know, it needs researching". Done the same day:
+live REW (nine positions × seven channels), math, REW's documentation, papers, practice. The user's
+position from that conversation: `None` and `1/48` are one level, finer brings only interference —
+the data agrees (§2.1). What each analysis asks is §6 of the research, for the user to decide
+proposal by proposal. The recommendation below predates the research and is superseded by it.
 
 `rew_api.get_fr(mid, smoothing=…)` asks REW for a smoothing on the read and leaves the Arbiter's view
 alone (hub TCC-015, 2026-09-16). The callers below still call it without one, so what they compute
