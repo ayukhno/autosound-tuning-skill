@@ -210,7 +210,7 @@ the tools as they stand then — whether the Helix PC-Tool still imports REW's f
 processors the helper covers.
 
 ## S-008 · `install.ps1`'s beta order has not yet met a real candidate
-**Status**: open
+**Status**: dropped 2026-09-17 · the beta channel is not being developed (the user: releases go out as tags, and no `beta-v3.*-rc` is planned), so the trigger never comes; `Select-NewestOnChannel` stays as it is, read by `scripts/installer-consistency.py`
 
 **Due:** when the first `beta-v3.*-rc1` is published.
 
