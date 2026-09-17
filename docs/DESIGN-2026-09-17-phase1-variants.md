@@ -103,9 +103,11 @@ Engine-independent steps first, on `wave-2026-09-17b`; each with its selftest, t
    the description, the choice); `phase_1_foundation.md` (§5.5 coarse EQ before the delays, the gate), `phase_2_eq.md`
    (2a–2d in the new order), SKILL.md's map and the FAQ's roadmap say the same. Where a step names the engine, it says
    the engine is not built yet (§3).
-3. **`eq_propose` in two parts:** Phase 1's coarse per-driver package; Phase 2's sequence (L/R pairs per band → junctions
-   per side → sub with mids → sides → everything → centre → rear), with the junction re-check when a step touches a
-   junction's band.
+3. ~~**`eq_propose` in two parts.**~~ Done 2026-09-17: `--part 1` (the coarse per-driver resonances, Phase 1's) and
+   `--part 2` (the pairs' L/R shape, then tone); every package names the junctions its bands reach into
+   (`recheck_junctions`), so the delay there is re-read before it is banked. Phase 2's later steps — junctions per
+   side, sub with mids, sides, everything, centre, rear — are read on the sums (`predict`, `verify_prediction`, the
+   MMM), not proposed by this module; the phase document carries the order.
 4. **Predicted sums for the target-curve visualizer**, smoothed 1/6 or psychoacoustically, beside the target.
 5. **The engine wrapper** — after the fork's integration brief and golden outputs (§4): `Resonalyze.Dsp` as a pinned
    submodule, the C# console wrapper and its JSON contract, the Python caller, the acceptance test on the Passat's data,

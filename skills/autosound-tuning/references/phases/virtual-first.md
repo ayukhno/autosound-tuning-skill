@@ -153,7 +153,7 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
   §3). **At most three on the table**: one mathematical and up to two from the wishes; more is what the
   Resonalyze app is for. The choice is made at 1.7, after the sums are predicted.
 - **1.4** **coarse EQ per driver — BEFORE the delays** (the user's decision, 2026-09-17; Resonalyze's
-  order too): the first package of `eq_propose` — resonances per driver group — cuts of minimum-phase
+  order too): the first part of `eq_propose` (`--part 1`) — resonances per driver group — cuts of minimum-phase
   peaks that stay across the positions, away from the junctions, Q no narrower than the ellipsoid's
   ceiling, toward each driver's own per-band target; zero boosts. A PEQ rotates phase, so a delay
   computed without it is a delay redone after it. The rest of EQ is Phase 2.
@@ -219,14 +219,15 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
     — no EQ into a cancellation, no improvement claimed without a measurement after (the virtual-DSP desk
     spec's requirement В8, as the user put it on 2026-09-17).
 - **2.1** **the second part of EQ, in this order** (the user's decision, 2026-09-17), as packages
-  (`eq_propose`, with `ellipsoid` for σ(f), stays/moves and the Q ceiling), each accepted or refused
+  (`eq_propose --part 2`, with `ellipsoid` for σ(f), stays/moves and the Q ceiling), each accepted or refused
   whole and banked as one version (`apply.propose`): **L/R pairs per band** (one shape, broadly, on the
   louder side, Q ≤ 1 — what skews the stage is the L/R difference, not the distance from the target) →
   **the junctions of each side**, left and right apart → **sub with mids** → **each side whole** → **everything
   together**, the tone per pair toward the target within max(1 dB, 2σ) → **the centre under everything** →
   **the rear under everything**. Only cuts of minimum-phase peaks that stay across the positions; below
   ~150–200 Hz a point is trusted, above only what survives the ellipsoid; zero boosts. **A step whose EQ
-  touched a junction's band (±1 oct) re-checks that junction's delay (1.5); otherwise the delays stay.**
+  touched a junction's band (±1 oct) re-checks that junction's delay (1.5); otherwise the delays stay** —
+  a package says which junctions it reaches (`recheck_junctions`) before it is banked.
   Every package names the listening characteristic that checks it.
 - **2.2** **check after EQ**: predict again — joints and L/R on the same rulers **and through the same
   windows** (EQ inside a joint band rotates phase). `verify_prediction` reads the measured set through
