@@ -292,7 +292,7 @@ The app and the terminal access the exact same project files. You can switch fre
 
 ### AI Models in the App
 
-The app uses your paid Claude subscription (via the official Anthropic SDK) and your free Google account via the local `agy` tool for the AI reviewer. Models other than Claude come through **`omp`**, which the installer puts in **together with the app** (`--no-omp` / `-NoOmp` leaves it out, and the terminal-only install never brings it). It is billed per use, and nothing goes through it unless you pick such a model.
+The app uses your paid Claude subscription (via the official Anthropic SDK) and your free Google account via the local `agy` tool for the AI reviewer. Models other than Claude come through **`omp`**, which the installer adds **only when asked** (`--with-omp` / `-WithOmp`; the terminal-only install never brings it). It is billed per use, and nothing goes through it unless you pick such a model.
 
 ### Updates and Bug Reporting
 

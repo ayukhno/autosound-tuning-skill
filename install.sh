@@ -30,7 +30,7 @@
 #   ./install.sh --terminal          the method only, no desktop app (~700 MB less)
 #   ./install.sh --no-reviewer       without the Gemini reviewer
 #   ./install.sh --github            with the GitHub CLI, for the project backup (default: without)
-#   ./install.sh --no-omp            without omp, which offers TCC every non-Claude model
+#   ./install.sh --with-omp          with omp, which offers TCC every non-Claude model (default: without)
 #   ./install.sh --dry-run           say what it would do, change nothing
 #   ./install.sh --yes               yes to every question; sign-ins are printed, not run
 #   ./install.sh --skill-ref v3.0.33 a specific skill version (default: the newest 3.x tag)
@@ -91,14 +91,13 @@ DESKTOP_LINK="${HOME}/Desktop/Autosound TCC.app"
 
 MODE="tcc"
 WANT_REVIEWER=1
-#: Resolved after the options are read, because it follows the MODE: omp is what fills TCC's model
-#: picker with everything that is not Claude, so it belongs with the app and means nothing without
-#: it. It was opt-in (`--with-omp`) and that was wrong in the one way an option cannot fix — the
-#: person who would want it is the person who does not know the flag exists, and a clean install
-#: left them with a picker that offers two vendors and no clue why (user, 2026-08-19, installing
-#: on a second Mac from the README's own one-liner). Now: on with the app, `--no-omp` to leave it
-#: out, and named on the one screen that lists everything before anything downloads.
-WANT_OMP="auto"
+#: omp fills TCC's model picker with everything that is not Claude, billed per use. It comes ONLY
+#: with `--with-omp` (the user, 2026-09-17, closing issue #25). The history, so the next change is
+#: made knowing it: opt-in first; on with the app from 2026-08-19 (the person who wants it does not
+#: know the flag exists) and again 2026-09-09; opt-in again now -- the README names the flag at the
+#: install step, the plan screen offers it, and omp is still the one foreign script left that can
+#: be neither signed nor checksummed.
+WANT_OMP=0
 #: `gh` comes only when asked for with `--github` -- no question on the way (the user, 2026-09-16:
 #: every question an install asks is a branch nobody has walked on Windows). A machine that already
 #: has `gh` keeps getting its backup sign-in at the end, as before.
@@ -131,7 +130,7 @@ Autosound tuning — installer for macOS (and Linux)
   install.sh --terminal          the method only, no desktop app (~700 MB less)
   install.sh --no-reviewer       without the Gemini reviewer
   install.sh --github            with the GitHub CLI, for the project backup (default: without)
-  install.sh --no-omp            without omp, which offers TCC every non-Claude model (metered)
+  install.sh --with-omp          with omp, which offers TCC every non-Claude model (metered; default: without)
   install.sh --dry-run           say what it would do, change nothing
   install.sh --yes               yes to every question; sign-ins are printed, not run
   install.sh --skill-ref v3.0.33 a specific skill version (default: the newest 3.x tag)
@@ -172,8 +171,8 @@ while [ $# -gt 0 ]; do
     --tcc)         MODE="tcc" ;;
     --no-reviewer) WANT_REVIEWER=0 ;;
     --reviewer)    WANT_REVIEWER=1 ;;
-    --with-omp)    WANT_OMP=1 ;;   # kept: it was the way to ask for omp before it was default
-    --no-omp)      WANT_OMP=0 ;;
+    --with-omp)    WANT_OMP=1 ;;
+    --no-omp)      WANT_OMP=0 ;;   # the default since 2026-09-17; still accepted
     --github)      WANT_GITHUB=1 ;;
     --no-github)   WANT_GITHUB=0 ;;
     --uninstall)   UNINSTALL=1 ;;
@@ -197,13 +196,10 @@ esac
 # the model is Claude Code's own and a picker for TCC's models has nothing to pick for.
 # An `if`, not `[ … ] && …`: this script runs under `set -e`, where a top-level test that comes out
 # false is an exit status and ends the install.
-if [ "$WANT_OMP" = "auto" ]; then
-  # HUB-031 asks for omp to be opt-in. DECIDED THE OTHER WAY, twice: 2026-08-19 and again
-  # 2026-09-09, for the reason the ticket does not answer -- the person who wants omp is the
-  # person who does not know the flag exists. It is the one foreign script left that we can
-  # neither sign nor checksum, so the question is not closed, it is PARKED: issue #25 holds it
-  # with both reasons and what would change the answer. Do not flip this without that issue.
-  if [ "$MODE" = "tcc" ]; then WANT_OMP=1; else WANT_OMP=0; fi
+if [ "$WANT_OMP" = 1 ] && [ "$MODE" != "tcc" ]; then
+  # omp serves the app's model picker; with no app it has nothing to serve.
+  printf '%s\n' "  --with-omp: omp is for the app's model picker, and --terminal installs no app -- left out."
+  WANT_OMP=0
 fi
 
 # ── small tools ───────────────────────────────────────────────────────────────
@@ -655,9 +651,12 @@ _opts=""
 [ "$MODE" = "tcc" ]       && _opts="$_opts --terminal (no app),"
 [ "$WANT_REVIEWER" = 1 ]  && _opts="$_opts --no-reviewer,"
 [ "$WANT_GITHUB" = 1 ]    && _opts="$_opts --no-github,"
-[ "$WANT_OMP" = 1 ]       && _opts="$_opts --no-omp,"
 if [ -n "$_opts" ]; then
   say "  To leave something out, answer n and re-run with an option:${_opts%,}. --help lists them all."
+fi
+if [ "$MODE" = "tcc" ] && [ "$WANT_OMP" = 0 ] && [ "$HAVE_OMP" = 0 ]; then
+  say "  Optional: --with-omp also installs omp, so the app can offer models other than Claude"
+  say "  (billed per use; nothing goes through it unless you pick such a model)."
 fi
 if [ "$WANT_GITHUB" = 0 ]; then
   say "  Optional: --github also installs GitHub's gh, to back each car's record up to a free, private"

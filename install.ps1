@@ -37,7 +37,7 @@
 #   .\install.ps1 -Terminal           the method only, no desktop app (~700 MB less)
 #   .\install.ps1 -NoReviewer         without the Gemini reviewer
 #   .\install.ps1 -GitHub             with the GitHub CLI, for the project backup (default: without)
-#   .\install.ps1 -NoOmp              without omp, which offers TCC every non-Claude model
+#   .\install.ps1 -WithOmp            with omp, which offers TCC every non-Claude model (default: without)
 #   .\install.ps1 -DryRun             say what it would do, change nothing
 #   .\install.ps1 -Yes                yes to every question; sign-ins are printed, not run
 #   .\install.ps1 -SkillRef v3.0.33   a specific skill version (default: the newest 3.x tag)
@@ -56,8 +56,8 @@ param(
     [switch]$Terminal,
     [switch]$Tcc,
     [switch]$NoReviewer,
-    [switch]$WithOmp,   # kept: the way to ask for omp before it came with the app
-    [switch]$NoOmp,
+    [switch]$WithOmp,   # the way to ask for omp -- it comes only when asked (2026-09-17)
+    [switch]$NoOmp,     # the default since 2026-09-17; still accepted
     [switch]$GitHub,
     [switch]$NoGitHub,
     [switch]$DryRun,
@@ -174,7 +174,7 @@ Autosound tuning -- installer for Windows
   install.ps1 -Terminal           the method only, no desktop app (~700 MB less)
   install.ps1 -NoReviewer         without the Gemini reviewer
   install.ps1 -GitHub             with the GitHub CLI, for the project backup (default: without)
-  install.ps1 -NoOmp              without omp, which offers TCC every non-Claude model (metered)
+  install.ps1 -WithOmp            with omp, which offers TCC every non-Claude model (metered; default: without)
   install.ps1 -DryRun             say what it would do, change nothing
   install.ps1 -Yes                yes to every question; sign-ins are printed, not run
   install.ps1 -SkillRef v3.0.33   a specific skill version (default: the newest 3.x tag)
@@ -199,13 +199,12 @@ if ($Channel -notin @("stable", "beta")) {
 }
 $Mode         = if ($Terminal -and -not $Tcc) { "terminal" } else { "tcc" }   # -Tcc is the default, kept for old command lines
 $WantReviewer = -not $NoReviewer
-# omp comes WITH the app (2026-08-19, same change as install.sh): it is what fills TCC's model
-# picker with everything that is not Claude, so it belongs with the app and means nothing
-# without it. -NoOmp leaves it out; -Terminal never brings it.
-# HUB-031 asks for this to become opt-in. Decided the other way twice (2026-08-19, 2026-09-09)
-# -- see the note in install.sh. Parked, not closed: issue #25 holds the question, both reasons,
-# and what would change the answer.
-$WantOmp      = if ($NoOmp) { $false } elseif ($WithOmp) { $true } else { $Mode -eq "tcc" }
+# omp only with -WithOmp (the user, 2026-09-17, issue #25) -- the history is in install.sh's note.
+$WantOmp      = [bool]$WithOmp -and -not $NoOmp
+if ($WantOmp -and $Mode -ne "tcc") {
+    Write-Host "  -WithOmp: omp is for the app's model picker, and -Terminal installs no app -- left out."   # Say is defined below
+    $WantOmp = $false
+}
 # gh only with -GitHub, no question on the way (the user, 2026-09-16) -- see the note in install.sh.
 $WantGitHub   = if ($GitHub) { "1" } elseif ($NoGitHub) { "0" } else { "auto" }
 
@@ -628,8 +627,11 @@ $opts = @()
 if ($Mode -eq "tcc")   { $opts += "-Terminal (no app)" }
 if ($WantReviewer)     { $opts += "-NoReviewer" }
 if ($WantGitHub -eq "1") { $opts += "-NoGitHub" }
-if ($WantOmp)          { $opts += "-NoOmp" }
 if ($opts.Count -gt 0) { Say "To leave something out, answer n and re-run with an option: $($opts -join ', '). -Help lists them all." }
+if ($Mode -eq "tcc" -and -not $WantOmp -and -not $HaveOmp) {
+    Say "Optional: -WithOmp also installs omp, so the app can offer models other than Claude"
+    Say "(billed per use; nothing goes through it unless you pick such a model)."
+}
 if ($WantGitHub -eq "0") {
     Say "Optional: -GitHub also installs GitHub's gh, to back each car's record up to a free, private"
     Say "repository -- the ledger, the journal, the DSP config backups; the measurements stay on your disk."

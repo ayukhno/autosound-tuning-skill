@@ -45,7 +45,7 @@ You don't need to be a programmer — the app installs with a single command. Bu
 
 ## How to Install and Start (Version 3.x — Beta)
 
-We created an installer that downloads everything you need and sets up a convenient **graphical application (Autosound TCC)**. Along with the app it also installs **`omp`** — the piece that lets the app offer models other than Claude; those are **billed per use**, and nothing runs through it unless you pick such a model. If you would rather not have it, add `--no-omp` (macOS/Linux) or `-NoOmp` (Windows) to the command below; the terminal-only install never brings it. The process takes 10–20 minutes (on macOS, Apple's own installer window opens once for the developer tools — one click, and no password is typed into the script; on Windows, it will show a Git permission dialog).
+We created an installer that downloads everything you need and sets up a convenient **graphical application (Autosound TCC)**. Models other than Claude come through **`omp`**, which the installer adds **only when you ask**: `--with-omp` (macOS/Linux) or `-WithOmp` (Windows) after the command below. Those models are **billed per use**, and nothing runs through `omp` unless you pick one; the terminal-only install never brings it. The process takes 10–20 minutes (on macOS, Apple's own installer window opens once for the developer tools — one click, and no password is typed into the script; on Windows, it will show a Git permission dialog).
 
 **macOS** — open Terminal (press ⌘-Space, type "terminal", Enter) and paste:
 ```sh

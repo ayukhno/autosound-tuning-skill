@@ -365,6 +365,18 @@ def main():
     else:
         checked.append("both default to mode tcc (--terminal / -Terminal is the opt-out)")
 
+    # 5a. the optional extras come only when asked (the user, 2026-09-16/17, issue #25): omp with
+    # --with-omp / -WithOmp, gh with --github / -GitHub. A default flipped in one installer and not
+    # the other installs a different set of things on a Mac than on a PC.
+    if not re.search(r'^WANT_OMP=0$', sh, re.M):
+        problems.append("install.sh: omp is no longer off by default (WANT_OMP=0)")
+    elif not re.search(r'^\$WantOmp\s*=\s*\[bool\]\$WithOmp\b', ps1, re.M):
+        problems.append("install.ps1: $WantOmp no longer comes from -WithOmp alone, the way install.sh's does")
+    elif not re.search(r'^WANT_GITHUB="auto"$', sh, re.M) or not re.search(r'else \{ "auto" \}', ps1):
+        problems.append('gh\'s default differs: install.sh WANT_GITHUB="auto" and install.ps1 "auto" (gh only with the flag, or already here)')
+    else:
+        checked.append("both install omp only with --with-omp / -WithOmp, and gh only with --github / -GitHub or when already here")
+
     # 5b. the PINNED uv version. Pinning is only worth anything while both sides pin the SAME
     # thing: two installers on two versions of a third-party bootstrap is the drift this file
     # exists to catch, and it would show up as "works on my machine" (HUB-031).
