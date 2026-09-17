@@ -131,6 +131,8 @@ the upstream repository.
   confirms them in the window on Windows (the brief, §6).
 - **Nothing to the upstream author or the upstream repository.**
 
+**Added 2026-09-17, research RES-014 (hub #170):** the engine's ranked pool is **re-ranked here, not replaced**. `ProposeRanked` builds a pool (4 options per junction, ≤ 512 combinations, trimmed to 50 by its magnitude score); the harness exports the top 5 (`primaryRankedTop5`, whole-chain proposals with `totalScore` in dB), and `resonalyze_engine.rerank_pool` scores each with the junction group-delay penalty (the filters alone, aligned as they sum best; 1 dB per ms over the Blauert & Laws threshold, clamped below 500 Hz). The report shows **two leaders** — the engine's and the experimental one — and the run continues with the engine's (the user's rule: after the candidates are computed, show Resonalyze's leader and the alternative leader by our own, still experimental, logic). The sum's deviation across positions, where a multi-position capture exists, is not in the re-rank yet.
+
 ## 5. Open
 
 - ~~The .NET 10 SDK on the development Mac~~ — settled 2026-09-17: the user-level SDK the fork already builds with,

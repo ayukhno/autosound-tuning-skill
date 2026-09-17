@@ -158,7 +158,7 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
   corner by the tuner (the best that wish can do, held to the same limits). The per-driver candidates stay
   beside it (`xover_candidates` → `xover_select`, `select_neighbor_pair`, every corner through `crossover_checks`).
   **At most three on the table**: one mathematical and up to two from the wishes; more is what the
-  Resonalyze app is for. The choice is made at 1.7, after the sums are predicted.
+  Resonalyze app is for. The choice is made at 1.7, after the sums are predicted. **Two leaders** (hub `RES-014`): beside the engine's best, the alternative by the experimental group-delay term — the crossover pair's swing against the Blauert & Laws threshold at each junction, 1 dB per ms over it, clamped below 500 Hz — shown with each junction's swing/threshold; the run continues with the engine's leader, the alternative's edges are on the table for the tuner.
 - **1.4** **coarse EQ per driver — BEFORE the delays** (the user's decision, 2026-09-17; Resonalyze's
   order too): the first part of `eq_propose` (`--part 1`) — resonances per driver group — cuts of minimum-phase
   peaks that stay across the positions, away from the junctions, Q no narrower than the ellipsoid's

@@ -543,6 +543,77 @@ def _corner(prop_lower, prop_upper):
     return float((lp or hp or {}).get("frequencyHz") or 632.0)
 
 
+#: The grid the pool's filter pairs are read on: 48 points per octave, 20 Hz to 20 kHz (`predict.grid`'s density).
+_RERANK_GRID = None
+
+
+def _rerank_grid():
+    global _RERANK_GRID
+    if _RERANK_GRID is None:
+        import numpy as np
+        _RERANK_GRID = np.geomspace(20.0, 20000.0, 480)
+    return _RERANK_GRID
+
+
+def rerank_pool(result, weight=None):
+    """Resonalyze's ranked pool, re-ranked with the junction group-delay penalty (hub RES-014) -- TWO leaders.
+
+    The harness exports the top 5 of `CrossoverAutoSetup.ProposeRanked`'s pool (`primaryRankedTop5`: whole-chain
+    proposals with the engine's own `totalScore`, dB, lower is better). Each is read here junction by junction on the
+    front chain: the two facing edges as filters alone (no drivers -- the term is about what the crossover does to
+    timing), aligned as the filters themselves sum best (the pool carries no delays yet), and `dsp_math.
+    junction_gd_swing` gives the swing against the Blauert & Laws threshold. `experimental_score = totalScore +
+    the penalties, summed over the junctions`. Returns None without a pool; else `{engine_leader, experimental_leader,
+    changed, rows, note}` -- the ENGINE's leader stays what the run continues with, the experimental one is shown
+    beside it (the user, 2026-09-17: after the candidates are computed, show Resonalyze's leader AND the alternative
+    leader by our own, still experimental, logic). A junction on a family the skill cannot model is not scored and
+    the row says so.
+    """
+    import numpy as np
+    import dsp_math
+    ac = result.get("autoCrossover") or {}
+    pool, pairs = ac.get("primaryRankedTop5") or [], chain_pairs(result)
+    if not pool or not pairs:
+        return None
+    f = _rerank_grid()
+    weight = dsp_math.GD_PENALTY_DB_PER_MS if weight is None else weight
+    rows = []
+    for rank, cand in enumerate(pool, start=1):
+        props = {p["block"]: p for p in cand.get("proposals") or []}
+        junctions, unread, penalty = [], [], 0.0
+        for lower, upper in pairs:
+            lp, hp = (props.get(lower) or {}).get("lowPass"), (props.get(upper) or {}).get("highPass")
+            if not lp or not hp:
+                continue                                   # no facing pair of edges: nothing the crossover does here
+            fam_lo, fam_hi = FAMILY_CODE.get(lp["family"], lp["family"]), FAMILY_CODE.get(hp["family"], hp["family"])
+            if fam_lo not in ENGINE_FAMILY or fam_hi not in ENGINE_FAMILY:
+                unread.append(f"{lower} ↔ {upper}: {lp['family']}/{hp['family']} is not modelled here")
+                continue
+            fc = math.sqrt(float(lp["frequencyHz"]) * float(hp["frequencyHz"]))
+            band = (fc / 2.0, fc * 2.0)
+            h_lo = dsp_math.xo_response(f, float(lp["frequencyHz"]), int(lp["slopeDbPerOctave"]), "lp", fam_lo)
+            h_hi = dsp_math.xo_response(f, float(hp["frequencyHz"]), int(hp["slopeDbPerOctave"]), "hp", fam_hi)
+            pol, tau = dsp_math.align_sum_loss(f, h_lo, h_hi, band, max_delay_ms=3.0, step_ms=0.01)[:2]
+            gd = dsp_math.junction_gd_swing(f, h_lo + pol * h_hi * np.exp(-2j * np.pi * f * tau / 1000.0), band,
+                                            fc_hz=fc, weight=weight)
+            junctions.append({"lower": lower, "upper": upper, "fc_hz": round(fc, 1), "lowPass": lp, "highPass": hp,
+                              "swing_ms": gd["swing_ms"], "threshold_ms": gd["threshold_ms"], "over_ms": gd["over_ms"],
+                              "penalty_db": gd["penalty_db"], "clamped": gd["clamped"]})
+            penalty += gd["penalty_db"] or 0.0
+        total = float(cand.get("totalScore") or 0.0)
+        rows.append({"rank_engine": rank, "total_score_db": total, "magnitude_score_db": cand.get("magnitudeScore"),
+                     "is_conventional_24": bool(cand.get("isConventional24")), "gd_penalty_db": round(penalty, 3),
+                     "experimental_score_db": round(total + penalty, 4), "junctions": junctions, "unread": unread,
+                     "proposals": cand.get("proposals") or []})
+    leader = min(rows, key=lambda r: (r["experimental_score_db"], r["rank_engine"]))
+    return {"engine_leader": rows[0], "experimental_leader": leader, "changed": leader is not rows[0], "rows": rows,
+            "note": (f"the engine's pool as its harness exports it: the top {len(rows)} of ProposeRanked by its own "
+                     f"score; the penalty is {weight:g} dB per ms of group-delay swing over the Blauert & Laws "
+                     "threshold at each front-chain junction (clamped to 3.2 ms below 500 Hz), read on the filters "
+                     "alone, aligned as they sum best. Experimental (hub RES-014): shown beside the engine's leader, "
+                     "not applied -- the run continues with the engine's")}
+
+
 def plan_repairs(result, layout, checks, channels, xo):
     """What must change before the engine's best can be shown: `(repairs, fixes, notes)`.
 
@@ -733,6 +804,7 @@ def variants_from(layout, channels, xo, wishes=None, notes=(), problems=(), dotn
                            f"{((result_a or {}).get('autoCrossover') or {}).get('error') or err.strip()[-300:]}"]
         return out
     checks_a = check_result(result_a, layout, channels, xo)
+    out["rerank"] = rerank_pool(result_a)
     repairs, fixes, repair_notes = plan_repairs(result_a, layout, checks_a, channels, xo)
     rows = _xw.check_wishes(wishes, channels, xo) if wishes else []
     items, skipped = wish_items(rows, layout, result_a, channels, xo)
@@ -832,6 +904,27 @@ def render_variants(v):
                          f"{d.get('kind', '')}{', ' + d['confidence'] if d.get('confidence') else ''}")
     elif delay.get("error"):
         lines.append(f"  Auto delay refused: {delay['error']}")
+    rr = v.get("rerank")
+    if rr:
+        lines += ["", "  TWO LEADERS -- the engine's, and the alternative by our EXPERIMENTAL ranking (hub RES-014: the crossover "
+                      "pair's group-delay swing against the Blauert & Laws threshold, 1 dB per ms over it; lower score is better)"]
+        lines.append(f"  {'':3}{'engine rank':>12}{'engine dB':>11}{'gd penalty':>12}{'experimental':>14}  junctions: swing/threshold ms")
+        for r in rr["rows"]:
+            tag = ("E" if r is rr["engine_leader"] else " ") + ("X" if r is rr["experimental_leader"] else " ")
+            js = "; ".join(f"{j['lower'].split(' ', 1)[-1]}↔{j['upper'].split(' ', 1)[-1]} {j['swing_ms']:.1f}/{j['threshold_ms']:.1f}"
+                           + ("!" if j["over_ms"] else "") + ("c" if j["clamped"] else "")
+                           for j in r["junctions"] if j["swing_ms"] is not None) or "--"
+            lines.append(f"  {tag:3}{r['rank_engine']:>12}{r['total_score_db']:>11.2f}{r['gd_penalty_db']:>12.2f}"
+                         f"{r['experimental_score_db']:>14.2f}  {js}" + (f"  ({'; '.join(r['unread'])})" if r["unread"] else ""))
+        if rr["changed"]:
+            x = rr["experimental_leader"]
+            lines.append(f"  the experimental leader is the engine's #{x['rank_engine']} -- its edges, for the tuner to take instead:")
+            for p in x["proposals"]:
+                lines.append(f"    {p['block']:12}{_edge_short(p.get('highPass')):20}{_edge_short(p.get('lowPass')):20}")
+        else:
+            lines.append("  both rankings agree on the leader")
+        lines.append(f"  E = the engine's leader (what this run continues with) · X = the experimental leader · ! = over the "
+                     f"threshold · c = the below-500 Hz clamp. {rr['note'].split('. ', 1)[0]}.")
     if v.get("costs") or v.get("wishes_skipped"):
         lines += ["", "  THE WISHES, against the best (dB of the junction score; lower is better)"]
     for c in v.get("costs") or []:
@@ -1293,6 +1386,34 @@ def _selftest():
     assert repairs[0]["tune"]["minHz"] == 217.0 and repairs[0]["tune"]["maxHz"] == 310.0, repairs[0]["tune"]
     assert repairs[0]["tune"]["families"] == ["Butterworth", "LinkwitzRiley", "Bessel"]
     assert fixes == {"E Centre": {"highPass": {"family": "LinkwitzRiley", "frequencyHz": 990.0, "slopeDbPerOctave": 24}}}, fixes
+
+    # RES-014: the pool re-ranked with the group-delay penalty -- two leaders. A steep pair at the low junction swings
+    # past the (clamped) threshold and pays; the gentler pair does not; above 2 kHz the term is silent.
+    def cand(total, lp_fam, lp_slope, hp_fam, hp_slope, fc=320.0, conventional=False):
+        return {"totalScore": total, "magnitudeScore": total, "achievabilityPenaltyDb": None, "isConventional24": conventional,
+                "proposals": [{"block": "A Sub", "kind": "LowPass", "lowPass": edge("LinkwitzRiley", 24, 80.0), "highPass": None},
+                              {"block": "B Woofer", "kind": "BandPass", "highPass": edge("LinkwitzRiley", 24, 80.0),
+                               "lowPass": edge(lp_fam, lp_slope, fc)},
+                              {"block": "C Mid", "kind": "BandPass", "highPass": edge(hp_fam, hp_slope, fc),
+                               "lowPass": edge("LinkwitzRiley", 24, 2300.0)},
+                              {"block": "D Tweeter", "kind": "HighPass", "highPass": edge("LinkwitzRiley", 24, 2300.0), "lowPass": None}]}
+    steep, gentle = (cand(1.00, "LinkwitzRiley", 48, "LinkwitzRiley", 48, fc=200.0),
+                     cand(1.30, "LinkwitzRiley", 24, "LinkwitzRiley", 24, fc=200.0))
+    res_pool = {"autoCrossover": dict(res_a["autoCrossover"], primaryRankedTop5=[steep, gentle])}
+    rr = rerank_pool(res_pool)
+    j_steep = {j["upper"]: j for j in rr["rows"][0]["junctions"]}
+    j_gentle = {j["upper"]: j for j in rr["rows"][1]["junctions"]}
+    assert j_steep["C Mid"]["swing_ms"] > j_gentle["C Mid"]["swing_ms"] and j_steep["C Mid"]["clamped"], (j_steep, j_gentle)
+    assert j_steep["D Tweeter"]["penalty_db"] == 0.0 and j_gentle["D Tweeter"]["penalty_db"] == 0.0, "silent above 2 kHz"
+    assert rr["engine_leader"] is rr["rows"][0] and rr["rows"][0]["rank_engine"] == 1
+    want = min(rr["rows"], key=lambda r: r["total_score_db"] + r["gd_penalty_db"])
+    assert rr["experimental_leader"] is want and rr["changed"] == (want is not rr["rows"][0]), rr
+    assert j_steep["C Mid"]["penalty_db"] > 0.3, ("the steep pair must pay for the test to mean anything", j_steep["C Mid"])
+    assert rr["changed"], "1.3 - 1.0 = 0.3 dB of engine score against a larger penalty: the leader flips"
+    assert rerank_pool({"autoCrossover": dict(res_a["autoCrossover"])}) is None, "no pool, no re-rank"
+    txt_rr = render_variants({"delays": {}, "rerank": rr, "checks_final": [], "notes": []})
+    assert "TWO LEADERS" in txt_rr and "  E " in txt_rr and "   X" in txt_rr, txt_rr
+    assert "experimental leader is the engine's #2" in txt_rr, txt_rr
 
     # the wishes: a corner is a probe, a family without a corner a tune, a broken or unsure wish is not computed,
     # and a pair that is no junction of this chain says so

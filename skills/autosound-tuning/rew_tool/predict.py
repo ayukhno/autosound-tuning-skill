@@ -762,6 +762,38 @@ def joints_from_chains(chains):
 
 
 # ---------------------------------------------------------------- the prediction
+def junction_gd(freqs, chain_lo, chain_hi, band, fc):
+    """The FILTER pair's group-delay swing at a junction (hub RES-014, `dsp_math.junction_gd_swing`).
+
+    The two rows' crossover legs, delay and polarity summed -- the drivers, the EQ and the phase
+    control left out: the term describes what the CROSSOVER choice does to timing, and the
+    cabin's own group delay is a reading of its own. The delay the two rows share is taken out
+    first (the swing does not depend on it; the grid's unwrap does). `None` numbers when a member
+    is muted or the band has too few bins.
+    """
+    f = np.asarray(freqs, dtype=float)
+
+    def bare(ch):
+        return dict(ch, eq=[], phase=None, gain_db=0.0)
+
+    lo, hi = bare(chain_lo), bare(chain_hi)
+    if lo.get("muted") or hi.get("muted"):
+        return dsp_math.junction_gd_swing(f, np.zeros(len(f), dtype=complex), band, fc_hz=fc)
+    bulk = min(float(lo.get("ta_ms") or 0.0), float(hi.get("ta_ms") or 0.0))
+    return dsp_math.junction_gd_swing(f, chain_response(f, lo) + chain_response(f, hi), band,
+                                      fc_hz=fc, bulk_ms=bulk)
+
+
+def gd_note(name, gd):
+    """The sentence a junction over the threshold prints -- the number, the ruler, the clamp."""
+    return (f"{name}: the crossover pair's group delay swings {gd['swing_ms']:.1f} ms across the "
+            f"junction band, over the Blauert & Laws audibility threshold of {gd['threshold_ms']:.1f} ms"
+            + (" (no published threshold below 500 Hz: the 500 Hz value, clamped -- hub RES-014)"
+               if gd["clamped"] else "")
+            + f" by {gd['over_ms']:.1f} ms -- a gentler edge at this junction is worth a candidate "
+              f"(`xover_candidates`, or the variants' re-rank)")
+
+
 def predict(freqs, solos, chains, joints=None, band_oct=1.0, solos_gate=None, gate_spec=None,
             gate_anchors=None):
     """`solos`: {code: complex response on freqs}; `chains`: {code: chain}. Returns a dict.
@@ -883,6 +915,7 @@ def predict(freqs, solos, chains, joints=None, band_oct=1.0, solos_gate=None, ga
         ok = ceil > 0
         null = 20.0 * np.log10(np.abs(A[m] + B[m])[ok] / ceil[ok] + 1e-12)
         k = int(np.argmin(null)) if ok.any() else None
+        gd = junction_gd(f, chains[lo], chains[hi], band, fc)
         junctions.append({
             "lo": lo, "hi": hi, "fc": fc, "band": [band[0], band[1]], "window": used,
             "sum_loss_avg_db": sl["avg_db"], "sum_loss_dip_db": sl["dip_db"],
@@ -890,7 +923,12 @@ def predict(freqs, solos, chains, joints=None, band_oct=1.0, solos_gate=None, ga
                       "sum_ripple_db": sl["ripple_db"],
             "worst_null_db": (float(null[k]) if k is not None else None),
             "worst_null_hz": (float(f[m][ok][k]) if k is not None else None),
+            # RES-014: the filter pair's timing, beside the sum's magnitude
+            "gd_swing_ms": gd["swing_ms"], "gd_threshold_ms": gd["threshold_ms"],
+            "gd_over_ms": gd["over_ms"], "gd_clamped": gd["clamped"],
         })
+        if gd["over_ms"]:
+            notes.append(gd_note(f"{lo}↔{hi}", gd))
 
     # The centre against the front it plays into: a PAIR, not a junction -- there is no crossover
     # between them, and what a tuner needs to know is whether they add or fight where both play.
@@ -1504,7 +1542,8 @@ def ladder_report(freqs, solos, chains, lo, hi, *, delays_ms, polarities=("NORM"
                               **{k: row[k] for k in ("sum_loss_avg_db", "sum_loss_dip_db",
                                                       "sum_loss_dip_hz", "sum_loss_score_db",
                                                       "sum_ripple_db", "worst_null_db",
-                                                      "worst_null_hz", "window")}})
+                                                      "worst_null_hz", "window", "gd_swing_ms",
+                                                      "gd_threshold_ms", "gd_over_ms", "gd_clamped")}})
     return {"junction": [lo, hi], "fc": fc, "applied_to": hi, "rungs": rungs,
             "note": ("the rungs are in the order they were asked for: a reading, not a proposal -- "
                      "read them and decide, or run --align, which searches, proposes and says so")}
@@ -1516,13 +1555,15 @@ def render_ladder(rep):
              + f", applied to {rep['applied_to']}",
              "  delays are ± around that row's current value; polarity and an edge are absolute", ""]
     lines.append(f"  {'rung':44}{'avg':>8}{'dip':>8}{'@Hz':>7}{'score':>8}{'ripple':>8}"
-                 f"{'worst null':>12}{'@Hz':>7}{'window':>8}")
-    lines.append("  " + "-" * 110)
+                 f"{'worst null':>12}{'@Hz':>7}{'window':>8}{'gd swing/thr':>14}")
+    lines.append("  " + "-" * 124)
     for r in rep["rungs"]:
+        gd_s = (f"{r['gd_swing_ms']:.1f}/{r['gd_threshold_ms']:.1f}" + ("!" if r.get("gd_over_ms") else "")
+                if r.get("gd_swing_ms") is not None else "--")
         lines.append(f"  {r['label']:44}{r['sum_loss_avg_db']:>+8.2f}{r['sum_loss_dip_db']:>+8.1f}"
                      f"{(r['sum_loss_dip_hz'] or 0):>7.0f}{r['sum_loss_score_db']:>+8.2f}"
                      f"{r['sum_ripple_db']:>8.2f}{(r['worst_null_db'] or 0):>+12.1f}"
-                     f"{(r['worst_null_hz'] or 0):>7.0f}{r['window']:>8}")
+                     f"{(r['worst_null_hz'] or 0):>7.0f}{r['window']:>8}{gd_s:>14}")
     lines.append("")
     lines.append(f"  {rep['note']}")
     return "\n".join(lines)
@@ -1641,23 +1682,29 @@ def render(result):
         lines.append(f"  {c:6} {chain_label(chain)}")
     lines.append("")
     lines.append(f"  {'junction/pair':14}{'fc':>6}{'band':>12}{'sum-loss avg':>13}{'dip':>8}"
-                 f"{'@Hz':>7}{'score':>7}{'ripple':>8} | {'worst null':>10}{'@Hz':>7}")
-    lines.append("  " + "-" * 96)
+                 f"{'@Hz':>7}{'score':>7}{'ripple':>8} | {'worst null':>10}{'@Hz':>7} | {'gd swing/thr ms':>16}")
+    lines.append("  " + "-" * 116)
     for j in result["junctions"]:
         name = j["lo"] + "↔" + j["hi"]
         band_s = "%.0f-%.0f" % (j["band"][0], j["band"][1])
+        gd_s = (f"{j['gd_swing_ms']:.1f}/{j['gd_threshold_ms']:.1f}"
+                + ("!" if j.get("gd_over_ms") else "") + ("c" if j.get("gd_clamped") else "")
+                if j.get("gd_swing_ms") is not None else "--")
         lines.append(
             f"  {name:14}{j['fc']:>6.0f}{band_s:>12}"
             f"{j['sum_loss_avg_db']:>+13.2f}{j['sum_loss_dip_db']:>+8.1f}"
             f"{(j['sum_loss_dip_hz'] or 0):>7.0f}{j['sum_loss_score_db']:>+7.2f}"
             f"{j['sum_ripple_db']:>8.2f} | "
-            f"{j['worst_null_db']:>+10.1f}{(j['worst_null_hz'] or 0):>7.0f}")
+            f"{j['worst_null_db']:>+10.1f}{(j['worst_null_hz'] or 0):>7.0f} | {gd_s:>16}")
     for pr in result.get("pairs", []):
         lines.append(f"  {pr['pair']:14}{'pair':>6}{'%.0f-%.0f' % (pr['band'][0], pr['band'][1]):>12}"
                      f"{pr['sum_loss_avg_db']:>+13.2f}{pr['sum_loss_dip_db']:>+8.1f}"
                      f"{(pr['sum_loss_dip_hz'] or 0):>7.0f}{pr['sum_loss_score_db']:>+7.2f}"
                      f"{pr['sum_ripple_db']:>8.2f} | "
                      f"{'(' + '+'.join(pr['members']) + ')':>18}")
+    if any(j.get("gd_swing_ms") is not None for j in result["junctions"]):
+        lines.append("  gd swing/thr: the crossover pair's group-delay spread over the junction band against the "
+                     "Blauert & Laws threshold; ! = over it, c = the threshold is the below-500 Hz clamp (hub RES-014)")
     lines.append("")
     if result.get("all_plus_c") is not None:
         d = _db(result["all_plus_c"]) - _db(result["all"])

@@ -640,6 +640,88 @@ def sum_loss_score(avg_db, dip_db, weight=SUM_LOSS_DIP_WEIGHT):
     return float(avg_db + weight * (dip_db - avg_db))
 
 
+#: Blauert & Laws (1978), "Group delay distortions in electroacoustical systems", JASA 63(5): the
+#: group-delay change a listener notices, by frequency -- the one published audibility threshold
+#: for group delay, and the ruler a junction's timing is judged against (hub RES-014, research's
+#: RFC 2026-09-17). Nothing is published BELOW 500 Hz, so the table is CLAMPED there at its 500 Hz
+#: value: a decision, not a measurement, named here and wherever the number is printed -- and it
+#: is exactly where the penalty is largest (a door woofer's junction). Above 8 kHz it is clamped
+#: the same way. Interpolated on log frequency in between.
+GD_AUDIBILITY_MS = {500.0: 3.2, 1000.0: 2.0, 2000.0: 1.0, 4000.0: 1.5, 8000.0: 2.0}
+GD_CLAMP_BELOW_HZ = 500.0
+#: The swing: the spread of the summed pair's group delay over the junction band, read as the 95th
+#: minus the 5th percentile -- the bulk delay drops out of a difference (a constant shifts, it
+#: does not smear), and the tails of an unwrapped phase derivative do not decide it.
+GD_SWING_PERCENTILES = (5.0, 95.0)
+#: dB per millisecond OVER the threshold, added to whatever ranks crossover candidates. Measured
+#: on the Passat's _49 ellipsoid (6468 candidates per junction): the same winner at 0.5, 1 and
+#: 2 dB per ms, 5.37 dB ahead of the group-delay-blind pick at woofer<->mid; silent at mid<->tweeter,
+#: where every candidate swings a tenth of the threshold.
+GD_PENALTY_DB_PER_MS = 1.0
+
+
+def gd_threshold_ms(fc_hz):
+    """The audibility threshold at this junction: Blauert & Laws on log frequency, clamped below
+    `GD_CLAMP_BELOW_HZ` (and above 8 kHz) where the table has no entry."""
+    ks = sorted(GD_AUDIBILITY_MS)
+    fc = float(fc_hz)
+    if fc <= GD_CLAMP_BELOW_HZ:
+        return float(GD_AUDIBILITY_MS[GD_CLAMP_BELOW_HZ])
+    return float(np.interp(np.log(fc), np.log(ks), [GD_AUDIBILITY_MS[k] for k in ks]))
+
+
+def group_delay_ms(freqs_hz, H):
+    """-d(phase)/d(omega) of a complex response, in ms, on whatever grid `freqs_hz` is (non-uniform is fine:
+    `np.gradient` takes the coordinates). The phase is unwrapped first; a bin where H is zero or
+    not finite has no phase and reads NaN."""
+    f = np.asarray(freqs_hz, dtype=float)
+    H = np.asarray(H, dtype=complex)
+    ok = np.isfinite(H) & (np.abs(H) > 0)
+    gd = np.full(len(f), np.nan)
+    if ok.sum() < 3:
+        return gd
+    ph = np.unwrap(np.angle(H[ok]))
+    gd[ok] = -np.gradient(ph, 2.0 * np.pi * f[ok]) * 1000.0
+    return gd
+
+
+def junction_gd_swing(freqs_hz, H_sum, band, fc_hz=None, weight=GD_PENALTY_DB_PER_MS, bulk_ms=0.0):
+    """`sum_loss`'s sibling: how much the SUMMED pair's group delay swings over `band`.
+
+    `H_sum` is the pair already added -- the two crossover chains with their delay and polarity,
+    the drivers left OUT on purpose: the term ranks what the crossover choice controls, and the
+    cabin's own group delay, which no filter removes, is read elsewhere. Returns `swing_ms` (the
+    95th minus the 5th percentile of the group delay over the band's bins -- log-spaced bins, as
+    `predict.grid` lays them, so the octaves weigh alike), `threshold_ms` at `fc_hz` (the band's
+    geometric centre when not given), `over_ms = max(0, swing - threshold)`, `penalty_db = weight
+    * over_ms`, `clamped` (True when the threshold is the below-500 Hz clamp, which the report
+    must say), and the curve. A band with fewer than 3 usable bins returns None for the numbers.
+
+    `bulk_ms` is a delay both members carry (the smaller of the two rows' delays, say): it is
+    taken OUT before the phase is differentiated. The swing does not depend on it, but the grid
+    does -- a phase that turns more than half a cycle between adjacent bins cannot be unwrapped,
+    and a 5 ms bulk on a 48-ppo grid does that from ~3 kHz up. Pass the common delay; leave in
+    only what differs between the members.
+    """
+    f = np.asarray(freqs_hz, dtype=float)
+    m = (f >= band[0]) & (f <= band[1])
+    fc = float(fc_hz) if fc_hz else float(np.sqrt(band[0] * band[1]))
+    H = np.asarray(H_sum, dtype=complex)[m] * np.exp(+2j * np.pi * f[m] * float(bulk_ms) / 1000.0)
+    gd = group_delay_ms(f[m], H)
+    good = np.isfinite(gd)
+    thr = gd_threshold_ms(fc)
+    out = {"swing_ms": None, "threshold_ms": thr, "over_ms": None, "penalty_db": None,
+           "clamped": fc <= GD_CLAMP_BELOW_HZ, "fc_hz": fc, "gd_ms": gd, "freqs_hz": f[m],
+           "n_bins": int(good.sum())}
+    if good.sum() < 3:
+        return out
+    lo_p, hi_p = np.percentile(gd[good], GD_SWING_PERCENTILES)
+    swing = float(hi_p - lo_p)
+    over = max(0.0, swing - thr)
+    out.update({"swing_ms": swing, "over_ms": over, "penalty_db": float(weight * over)})
+    return out
+
+
 def align_sum_loss(freqs_hz, A, B, band, max_delay_ms=3.0, step_ms=0.01,
                    polarities=(1, -1), tie_db=0.02):
     """Delay tau (applied to B) and polarity that maximise the sum-loss SCORE in `band`.
@@ -1495,6 +1577,40 @@ def _selftest():
     # (g) an unbound session still computes -- but says "assumed", so nothing reads it as stated
     reset_processing_rate()
     assert processing_rate()[1] == "assumed" and rate_note(None) is not None
+
+    # ── RES-014: the junction's group-delay swing and the Blauert & Laws ruler ──────────────────
+    # (a) the threshold: the table at its knots, log-interpolated between, CLAMPED below 500 Hz
+    assert gd_threshold_ms(500) == 3.2 and gd_threshold_ms(1000) == 2.0 and gd_threshold_ms(2000) == 1.0
+    assert gd_threshold_ms(320) == 3.2 and gd_threshold_ms(88) == 3.2, "below 500 Hz the clamp, not zero"
+    assert abs(gd_threshold_ms((1000 * 2000) ** 0.5) - 1.5) < 1e-9, "log-frequency interpolation"
+    assert gd_threshold_ms(16000) == 2.0
+    # (b) a pure delay swings nothing: the bulk drops out of a percentile difference
+    fg = np.geomspace(20.0, 20000.0, 480)
+    pure = np.exp(-2j * np.pi * fg * 0.5e-3)
+    assert abs(group_delay_ms(fg, pure) - 0.5).max() < 1e-6
+    sw0 = junction_gd_swing(fg, pure, (160, 640), fc_hz=320)
+    assert sw0["swing_ms"] < 1e-6 and sw0["over_ms"] == 0.0 and sw0["penalty_db"] == 0.0 and sw0["clamped"], sw0
+    #     ... and a bulk the grid could NOT unwrap (5 ms at 480 points over 20-20k) is taken out by
+    #     name, so the same reading comes back; left in, it would alias at the top of a tweeter band
+    late = np.exp(-2j * np.pi * fg * 5.0e-3)
+    assert junction_gd_swing(fg, late, (2000, 8000), bulk_ms=5.0)["swing_ms"] < 1e-6
+    # (c) an aligned LR24 pair sums to an all-pass whose group delay bumps at the corner: a real
+    #     swing, and the SAME filter an octave lower swings twice the milliseconds -- which is why a
+    #     door woofer's junction is where the ruler bites and a tweeter's is not
+    def lr_pair(fc):
+        return xo_response(fg, fc, 24, "lp", "LR") + xo_response(fg, fc, 24, "hp", "LR")
+    s320 = junction_gd_swing(fg, lr_pair(320.0), (160, 640), fc_hz=320)
+    s640 = junction_gd_swing(fg, lr_pair(640.0), (320, 1280), fc_hz=640)
+    assert s320["swing_ms"] > 0.5 and abs(s320["swing_ms"] / s640["swing_ms"] - 2.0) < 0.1, (s320, s640)
+    assert not s640["clamped"] and s640["threshold_ms"] > 2.0
+    # (d) the penalty is linear over the threshold, at the named weight, and zero under it
+    hot = junction_gd_swing(fg, lr_pair(320.0) * xo_response(fg, 320, 48, "lp", "BE"), (160, 640), fc_hz=320)
+    assert hot["swing_ms"] > s320["swing_ms"], "a steeper leg swings more"
+    assert abs(hot["penalty_db"] - GD_PENALTY_DB_PER_MS * max(0.0, hot["swing_ms"] - 3.2)) < 1e-9, hot
+    half = junction_gd_swing(fg, lr_pair(320.0), (160, 640), fc_hz=320, weight=0.5)
+    assert abs(half["penalty_db"] - 0.5 * half["over_ms"]) < 1e-12
+    # (e) too few bins -> no number, never a guess
+    assert junction_gd_swing(fg, pure, (20, 20.4))["swing_ms"] is None
 
     print("selftest[dsp_math] OK -- APF1 (-90 deg at f0, 0..-180, 1/(pi f0) delay far below f0), "
           "APF2 (-180 deg at f0, 0..-360 with -360 EXACTLY at Nyquist, Q steepens), "
