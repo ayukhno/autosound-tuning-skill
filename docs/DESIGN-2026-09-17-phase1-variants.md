@@ -98,10 +98,11 @@ Engine-independent steps first, on `wave-2026-09-17b`; each with its selftest, t
    floor (`crossover_checks.fs_margin`: REFUSE under 1.1 × Fs, CAUTION up to the craft convention, which relaxes with the
    slope), and names the nearest allowed setting ("→ enter BW2 from 1044 Hz"). Phase 1 §3, the capabilities board and
    `rew-tool-docs.md` say so.
-2. **The phase documents.** Phase 1 as in §1 (wishes, the best configuration first, a second pass with the wishes, coarse
-   per-driver EQ before the delays, front and sub then centre and rear, the centring step, at most three variants, the
-   breakdown and the choice with the tuner's OK, free play); Phase 2 as the second part of EQ in the §1 order. Touches
-   `phase_1_foundation.md`, `phase_2_eq.md`, `virtual-first.md`, SKILL.md's map, the capabilities board, the FAQ's roadmap.
+2. ~~**The phase documents.**~~ Done 2026-09-17: `virtual-first.md` 1.2–1.7 and 2.1 carry the §1 order (wishes → variants,
+   best first → coarse per-driver EQ → joints with it in the chains, front and sub first → levels and centring → the sums,
+   the description, the choice); `phase_1_foundation.md` (§5.5 coarse EQ before the delays, the gate), `phase_2_eq.md`
+   (2a–2d in the new order), SKILL.md's map and the FAQ's roadmap say the same. Where a step names the engine, it says
+   the engine is not built yet (§3).
 3. **`eq_propose` in two parts:** Phase 1's coarse per-driver package; Phase 2's sequence (L/R pairs per band → junctions
    per side → sub with mids → sides → everything → centre → rear), with the junction re-check when a step touches a
    junction's band.

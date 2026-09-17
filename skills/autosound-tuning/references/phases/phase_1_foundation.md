@@ -1,10 +1,10 @@
-# Phase 1 — Crossovers, Levels & Preliminary Delay
+# Phase 1 — Crossovers, Coarse EQ, Levels & Delays
 
-This phase establishes the physical foundation of the tune: crossovers, preliminary level balance, raw driver timing, and band-specific targets.
+This phase establishes the physical foundation of the tune: the tuner's wishes checked, the crossovers as variants, band-specific targets, the coarse per-driver EQ, and the levels and delays computed with it — the tuner choosing at the end (the order the user set on 2026-09-17, `docs/DESIGN-2026-09-17-phase1-variants.md`).
 
 > 🗺️ **Virtual-first?** If Phase −1 chose the virtual-first path (one capture session → design at the desk), the ORDER of work in Phases 0–3 changes — the phase numbers do not. Read [`virtual-first.md`](references/phases/virtual-first.md) alongside this file; it is the one home of that path. This file stays the authority on the iterative fallback and on every gate.
 
-> On virtual-first, Phases 1–2 are one desk sitting that ends in a **predicted sum** (`predict.py`; the junctions by `predict --align`, the virtual tier through `--route`, the EQ as packages by `eq_propose` with `ellipsoid` for what stays) before anything is entered into the DSP — see [`virtual-first.md`](references/phases/virtual-first.md) §"Phases 1–2".
+> On virtual-first, Phases 1–2 are one desk sitting that ends in a **predicted sum** (`predict.py`; the junctions by `predict --align`, the virtual tier through `--route`, the EQ as packages by `eq_propose` with `ellipsoid` for what stays) before anything is entered into the DSP — see [`virtual-first.md`](references/phases/virtual-first.md) §"Phases 1–2". Its order: the wishes (1.2) → the variants, best first (1.3) → coarse EQ per driver (1.4) → the joints with that EQ in the chains, front and sub first (1.5) → levels and how the scene is centred (1.6) → the sums predicted, the variants described, the tuner chooses (1.7). Phase 2 is the second part of EQ.
 
 ## 🎯 Goal-node
 
@@ -12,16 +12,17 @@ This phase establishes the physical foundation of the tune: crossovers, prelimin
 >
 > ⛔ **And the DSP's own numbers must be on record:** `enter-phase 1` refuses while the profile has no `dsp_processing_rate_hz` (the DSP's PROCESSING rate; the legacy name `sample_rate_hz` is still read — and it is NOT the capture rate: a UMIK-1 capturing at 48k under a 96k DSP is legitimate, said once, never refused), no `delay` step, or no `crossover_filters` for a tier whose `fields` declare `hp`/`lp`. Every delay in samples is computed from that rate — a rate nobody wrote down is a rate the next session assumes. Record with `dsp_profile.py set-field`, then `finalize`; `dsp_profile.py open-questions <project>/dsp_profile.json` lists everything still open.
 
-**Purpose:** establish the physical foundation — crossovers, raw driver timing (arrival TA), preliminary level balance, per-band targets — so Phase 2 EQ works on a correctly-aligned system.
+**Purpose:** establish the physical foundation — the tuner's wishes checked, crossovers as variants, per-band targets, the coarse per-driver EQ, raw driver timing (arrival TA), the levels — so Phase 2's EQ works on a correctly-aligned system whose delays already carry the coarse EQ's phase.
 
 **Questions this phase answers:**
 - Who arrives latest (the TA reference), and what is each driver's true acoustic arrival?
 - What crossover frequencies/slopes/types suit these drivers + this cabin geometry?
 - What per-band targets sum to the house curve without a joint hump?
+- What does each of the tuner's wishes cost against the best the maths finds — and which of at most three variants does the tuner choose?
 
 **Required evidence:** per-channel MMM RTA (FR) + sweep-with-loopback (IR/phase/GD) for every isolated driver; the active DSP delay state during measurement.
 
-**✅ Quality gate → Phase 2:** arrival TA set from **manually-inspected IR onsets** (not REW auto-estimates); L/R-symmetric crossovers agreed via the review loop and applied to the DSP; per-band NTT targets generated, verified (`_SUM` +3…6 dB vs single) and loaded; `<prefix>_v1_foundation.pct6` saved to `rew_analitic/dsp-config/`.
+**✅ Quality gate → Phase 2:** the tuner's wishes checked (`xover_wishes`) and the variants described — at most three, the choice recorded with the tuner's OK; arrival TA set from **manually-inspected IR onsets** (not REW auto-estimates); L/R-symmetric crossovers agreed via the review loop and applied to the DSP; the coarse per-driver EQ (§5.5) banked with them, the delays computed with it in the chains; per-band NTT targets generated, verified (`_SUM` +3…6 dB vs single) and loaded; `<prefix>_v1_foundation.pct6` saved to `rew_analitic/dsp-config/`.
 
 **⚠️ Failure modes:** trusting REW auto-delay (locks onto reflections / prior DSP offsets) → inspect IR onset by hand · assuming the midbass is latest → measure it · detuning crossovers L/R to fix a cabin asymmetry (kills the phantom center) → fix with EQ instead.
 
@@ -92,12 +93,15 @@ It bakes in the crossover roll-off, the two-speaker **summation offset** (~6 dB 
 * Save into `rew_analitic/target-curves/<name>/`, load into REW, and use them for Phase 2a hygiene EQ.
 * *(Alternative — manual:* [nonotuningtool.com](https://nonotuningtool.com) does the same in a web UI with a "Stereo" config — mention it to the user as an option.)
 
+### 5.5 Coarse EQ per driver — before the delays
+The first part of EQ is Phase 1's (the user's decision, 2026-09-17; Resonalyze's order too — `MANUAL.md` §7 → §8 → §9): a PEQ rotates phase, so a joint delay computed without it is a delay redone after it. On the `_1` solos with the `v1` crossovers in the chains, propose **only the per-driver resonance package** — `python3 rew_tool/eq_propose.py --project DIR --rew --ver 1 --process DIR/process --house FILE [--ellipsoid DIR]`: cuts of minimum-phase peaks that stay across the positions, away from the junctions (±1 oct is the delay's business), Q no narrower than the ellipsoid's ceiling, toward each driver's own per-band target (§5); **zero boosts**. Accept it whole (`--accept`), and it rides in the `v1` sheet with the crossovers and levels. The L/R shape, the tone and everything summed are Phase 2. The joint delays — 2b on this path, 1.5 at the desk — are then computed **with this EQ in the chains**.
+
 ### 6. Apply `v1` explicitly, then capture `_2` (hand-off to Phase 2)
 **Before capturing `_2`, command the user to enter the FULL `v1` config into the DSP and save it — no silently assumed state.** Output it as an explicit step-by-step list (Golden Standard Format):
 * **Crossovers** — freq / slope / type per channel.
 * **Delays (TA)** — per channel, in **samples AND ms** (state the assumed DSP sample rate).
 * **Gains** — per-channel levels (from `level_offsets.py`).
-* **EQ** — as decided so far (flat / none yet at this hand-off — Phase 2a builds it).
+* **EQ** — the coarse per-driver package of §5.5, as a file import (`atf_eq.py` on a Helix); the rest is Phase 2.
 * **REW sweep Time Offset** — set it (≈ the reference driver's arrival) **before** the sweeps, so phase reads flat.
 
 **Then re-measure each channel** post-`v1` — `<ch>_2 (sw)` + `<ch>_2 (rta)`. This `_2` set (not the raw `_1` baseline) is what Phase 2 works on.

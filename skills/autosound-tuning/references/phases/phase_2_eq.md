@@ -1,6 +1,6 @@
 # Phase 2 — Linearization & Acoustic Alignment
 
-This is the core technical execution phase. All operations **MUST** be performed in this exact chronological order: Hygiene EQ (2a) → Joint Phase Alignment (2b) → Summed Alignment (2c) → Final Technical EQ (2d).
+This is the core technical execution phase — **the second part of EQ**. The first part, the coarse per-driver resonance package, and the joint delays computed with it in the chains are Phase 1's (`phase_1_foundation.md` §5.5; `virtual-first.md` 1.4–1.5). The order here is the user's decision of 2026-09-17 and it **MUST** be held: **2a** the L/R pairs per band, and what the coarse pass left per channel → **2b** the junctions of each side, then the sub with the mids — the delays re-checked only where a step's EQ touched a junction's band, otherwise left → **2c** each side whole, then everything together → **2d** the final tone to target, then the centre under everything, then the rear.
 
 > 🗺️ **Virtual-first?** If Phase −1 chose the virtual-first path (one capture session → design at the desk), the ORDER of work in Phases 0–3 changes — the phase numbers do not. Read [`virtual-first.md`](references/phases/virtual-first.md) alongside this file; it is the one home of that path. This file stays the authority on the iterative fallback and on every gate.
 
@@ -23,7 +23,8 @@ This is the core technical execution phase. All operations **MUST** be performed
 
 ---
 
-## 2a — Hygiene EQ of Each Channel
+## 2a — L/R Pairs per Band, and What the Coarse Pass Left
+The per-driver resonance package is already banked (Phase 1 §5.5). 2a starts from **the L/R shape per pair** — left and right become one shape, broadly, on the louder side, Q ≤ 1, because what skews the stage is the L/R difference, not the distance from the target — and then takes whatever the coarse pass left on a channel, by the rules below.
 Linearize each individual channel to its own **per-band target** (from Phase 1 §5 / `target_bands.py`), using its **`<ch>_2 (rta)`** for the magnitude to EQ and its **`<ch>_2 (sw)`** excess-phase to decide what is EQ-able. **Boost ceiling: +6 dB on any band** — a band that asks for more is a null or an install problem, not missing level (the excess-phase read says which). Calculate the correction from `analysis.py` **`compute_deviation`** (measured − target) — don't eyeball it; and **read the channel's current filters first** (`get_filters`/`get_equaliser`) — never assume it is raw (a real bug overwrote the user's manual notches).
 
 > **⚡ Mass read in one shot:** get the whole-batch picture with `python3 rew_tool.py analyze-batch "_2 (rta)"` — one consolidated deviation matrix (every `_2` driver vs its per-band target, band means + `anchor` + `ripple`), one review pass, ~5× fewer API round-trips than pulling each driver in the interactive REPL. Read the matrix first to see which channels need hygiene EQ; drill into a specific driver interactively only where a cell looks off (or the excess-phase decision is needed).
@@ -60,7 +61,7 @@ Linearize each individual channel to its own **per-band target** (from Phase 1 �
 ---
 
 ## 2b — Joint Phase Alignment (Fine Delay)
-Align the relative phase response of the channels in their overlap regions.
+Align the relative phase response of the channels in their overlap regions — **the junctions of each side first, left and right apart, then the sub with the mids.** On the desk path the delays were computed in Phase 1 with the coarse EQ in the chains (`virtual-first.md` 1.5): here they are **re-checked only where 2a's EQ touched a junction's band (±1 oct)** and otherwise left; on the iterative path this is where they are set.
 
 ### Refined Phase Flow
 1. **Raw Sweep:** Capture the phase of the raw signals (after gross TA, before crossover filters) as a reference.
@@ -81,7 +82,7 @@ Align the relative phase response of the channels in their overlap regions.
 ---
 
 ## 2c — Summed Curve Alignment
-Align the summed acoustic groups to match the target.
+Align the summed acoustic groups to match the target — **each side whole first (L, R), then everything together (ALL).**
 
 ### Verification Steps
 Measure and analyze the MMM RTA of the following combinations:
@@ -96,8 +97,8 @@ Measure and analyze the MMM RTA of the following combinations:
 
 ---
 
-## 2d — Final EQ to Target
-Shape the technical response of the entire summed system — the `(rta)` of the summed groups vs the target — to the session's target curve.
+## 2d — Final EQ to Target, then the Centre and the Rear
+Shape the technical response of the entire summed system — the `(rta)` of the summed groups vs the target — to the session's target curve. **Then the centre under everything, then the rear**, each as its own zone: the centre is read against both sides where the front mids play (1–4 kHz) and summed under the condition it was measured in (`virtual-first.md` 1.5, 1.7); a rear pair sits in its side's sum.
 
 ### Rules of Action
 * Apply **broad, smooth acoustic moves** (tilts, shelves, high/low Q shaping).
