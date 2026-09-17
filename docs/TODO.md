@@ -486,3 +486,26 @@ the two candidates disagreeing — e.g. above 1 kHz mark `unverified` whenever t
 junction a whole cycle or more from the delay the DSP already holds (that makes the metric 0 of 10,
 at the price of asking for a pair measurement on every large first-time move). Reported to the user
 2026-09-17; research's ticket is what this waits for.
+
+## S-019 · The release role cannot run `gh release delete` itself: the harness refuses it
+
+**Status**: open — noted 2026-09-17 on #173, where the user ran the command by hand.
+
+Clearing the v3.0.56 draft needed `gh release delete v3.0.56 --repo ayukhno/autosound-tuning-skill
+--yes`. Two walls, and only the second is ours to think about:
+
+* `gh api -X DELETE .../releases/391041153` — refused by `guard-release.py`, correctly: `gh api`
+  writes are content for every role, `release` included (`hub:governance/RELEASE-CHANNEL.md` §8.7).
+  The path the guard leaves open is `gh release <sub>` from the `release` role.
+* `gh release delete …` — passed the hub's guard and was then refused by Claude Code's own
+  permission classifier as a destructive command. The user pasted it into the session instead
+  (`! gh release delete …`), which is what actually deleted the release.
+
+So the release role's one sanctioned write path currently needs a human keystroke every time. That
+is not wrong — the release channel is content — but it is undocumented: nothing in the role's start
+says "the delete will come back to you".
+
+**What would make it due**: the next release that needs a draft cleared, or a `gh release edit`
+/`upload` step landing in the same place. Then either a Bash permission rule for exactly
+`gh release …` in this tree's settings, or a line in `RELEASE-CHANNEL.md` saying the last keystroke
+is the user's by design.
