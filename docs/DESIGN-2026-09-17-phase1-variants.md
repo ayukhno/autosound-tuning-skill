@@ -88,3 +88,22 @@ band re-checks that junction's delay; otherwise the delays stay.
 - How installs get the binary.
 - SQ practice for centring the scene by time or by level, with sources: asked of research, hub #158 (SKL-040).
 - Analysing a tune that already exists: noted, not started (`docs/TODO.md` S-017).
+
+## 6. Work plan (skill side)
+
+Engine-independent steps first, on `wave-2026-09-17b`; each with its selftest, the full suite once at the end.
+
+1. **Wishes against hard limits.** Read the tuner's free-form crossover wishes per junction (family, slope, frequency, "not
+   sure"), check each against the protective floor and the device profile, and name the nearest allowed setting
+   ("BW2 on your tweeter from 3400 Hz") instead of computing a forbidden one.
+2. **The phase documents.** Phase 1 as in §1 (wishes, the best configuration first, a second pass with the wishes, coarse
+   per-driver EQ before the delays, front and sub then centre and rear, the centring step, at most three variants, the
+   breakdown and the choice with the tuner's OK, free play); Phase 2 as the second part of EQ in the §1 order. Touches
+   `phase_1_foundation.md`, `phase_2_eq.md`, `virtual-first.md`, SKILL.md's map, the capabilities board, the FAQ's roadmap.
+3. **`eq_propose` in two parts:** Phase 1's coarse per-driver package; Phase 2's sequence (L/R pairs per band → junctions
+   per side → sub with mids → sides → everything → centre → rear), with the junction re-check when a step touches a
+   junction's band.
+4. **Predicted sums for the target-curve visualizer**, smoothed 1/6 or psychoacoustically, beside the target.
+5. **The engine wrapper** — after the fork's integration brief and golden outputs (§4): `Resonalyze.Dsp` as a pinned
+   submodule, the C# console wrapper and its JSON contract, the Python caller, the acceptance test on the Passat's data,
+   `setup-dotnet` in CI, and per-platform binaries for installs.
