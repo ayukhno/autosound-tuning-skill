@@ -342,8 +342,33 @@ reasons and the package, as designed. Recorded only — not diagnosed (hub `gove
 openai alike and does not name agy; the key is `GEMINI_API_KEY` in the old `AIza…` format, refused with
 HTTP 400.
 
+**Where it comes from on this VM** (2026-09-17, the review): Windows' USER environment holds
+`GEMINI_API_KEY` = `AIza…` (39 chars) and `GEMINI_BIN=gemini`; the Machine scope holds neither, and there
+is no `critic-env` — the AQ key the user set up is in neither scope. `GEMINI_BIN` wins in `detect_cli` for
+EVERY vendor, which is why `doctor` printed `gemini` for anthropic and openai too — without saying a
+variable forced it. agy, asked in another window, reported the same `GEMINI_API_KEY` (`AIzaSy…`) as its
+auth. In a new window `doctor` (through the full python path, see S-016) also said "Модель рецензента не
+задано", listed the models, and still printed "▶ Режим роботи: АВТОМАТИЧНИЙ (через API google)" under
+its ✗ lines; the window blinked once while it ran.
+
 Done looks like: step 3 of S-012 answers through agy on this VM, or the refusal says why agy was not the
 CLI it ran.
+
+## S-016 · In a new PowerShell window after the install, `python3` is the Microsoft Store alias
+**Status**: open
+
+**Found** 2026-09-17 on the Windows VM, after S-012: the `doctor` line the installer prints, run in a NEW
+window — "Python was not found; run without arguments to install from the Microsoft Store, or disable
+this shortcut from Settings > Apps > Advanced app settings > App execution aliases.", exit 9009.
+`Get-Command python3 -All`: `~\AppData\Local\Microsoft\WindowsApps\python3.exe` first, then
+`~\.local\bin\python3.exe`. The USER PATH lists WindowsApps before `~\.local\bin`; the Machine PATH
+holds neither. The installer's own window worked because the installer puts `~\.local\bin` first in
+that window's PATH only (`Sync-ProcessPath`). `install.ps1`'s comment at its uv step says uv puts
+`~\.local\bin` at the FRONT of the user PATH; on this VM (uv already installed before this run) it is
+not. The method's tools call `python3`, in a terminal and in Claude Code's Bash tool alike.
+
+Done looks like: in a new window after the install, `python3 -V` answers with the Python the installer
+set up. The VM is left as found, so the fix can be checked on it.
 
 ## S-013 · Each REW reader names the smoothing it reads
 **Status**: done 2026-09-17 · `scripts/run-selftests.sh` (73/73; `python3 skills/autosound-tuning/rew_tool/rew_api.py --selftest` holds every reader to its ask) · commits `c7c8e17`, `596a389` · decisions in `docs/RESEARCH-2026-09-17-reader-smoothing.md` §6
