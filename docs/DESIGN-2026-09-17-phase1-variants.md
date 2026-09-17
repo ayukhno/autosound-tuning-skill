@@ -90,8 +90,11 @@ fork's untracked `scratchpad/phase1-engines/`, read at fork `b0ce9fb`).
   - **no distortion curve for REW-converted files**: the harmonic positions in REW's buffer are a guess; on the Passat
     removing it changed nothing;
   - **the delay range from the project's device profile.** Resonalyze's catalog has no range for the HELIX DSP ULTRA S
-    and falls back to the engine default, 50 ms; the Helix holds 20.82 ms per tier (the user's PC-Tool reading,
-    `dsp_profile.json`). The window-default golden puts the Passat's rear at 23.67 ms — a number this car cannot hold.
+    and falls back to the engine default, 50 ms. The Helix holds 20.82 ms on a driver output and 20.82 ms on a virtual
+    channel, and the two add (the user's PC-Tool reading, `dsp_profile.json`; "they can be summed, on the rear for
+    sure", 2026-09-17): an output fed by a virtual channel reaches 41.64 ms, split free only where that virtual channel
+    feeds it alone. The window-default golden's rear at 23.67 ms fits as 20.82 + 2.85. The fork has the facts for its
+    catalog (a note handed over on the user's word, 2026-09-17).
 - **The tuner's wishes go through the junction tuner, not the wizard.** `ProposeRanked` takes only global families and a
   global corner window. `CrossoverJunctionTuner.Probe` reads any variants of one junction, each after its own best delay —
   "what the wish costs against the best", directly; `Tune` searches one junction under families, slopes and a corner
@@ -133,7 +136,10 @@ the upstream repository.
 - ~~The .NET 10 SDK on the development Mac~~ — settled 2026-09-17: the user-level SDK the fork already builds with,
   `~/.dotnet` (10.0.301, the version the fork's `global.json` pins). The wrapper's build script takes `dotnet` from
   PATH and falls back to `~/.dotnet/dotnet`; nothing is installed or changed system-wide (the user's choice).
-- How installs get the binary.
+- ~~How installs get the binary~~ — decided 2026-09-17 (the user): CI builds one self-contained executable per platform
+  and the release carries them, so a user needs no .NET. The skill's half is built (§6, 5c); attaching them to a release
+  is the hub's release role (`gh release` is that role's, hub `RELEASE-CHANNEL.md`), and so is whether the installers
+  fetch one.
 - The window confirmation of the goldens — the user's step on Windows (the brief, §6): open the session, Auto crossover →
   Apply, Auto delay → Run → Apply, export. Until then the acceptance test compares the wrapper with a copy of the
   window's code, not with the window.
@@ -173,10 +179,10 @@ Engine-independent steps first, on `wave-2026-09-17b`; each with its selftest, t
      hold refused with its numbers); `rew_tool/resonalyze_engine.py` (the layout from the project, the run, every edge
      through `xover_wishes.check_setting`, the rear fill that fits, Low confidence named); four goldens in
      `engines/resonalyze/golden/` — the fork's window defaults, types and gains, each reproduced identically through
-     the skill's own layout, and the Helix's range — `acceptance` 4 of 4; `upstream-drift.py` reads the `//` headers
+     the skill's own layout, and the Helix's two delay tiers — `acceptance` 4 of 4; `upstream-drift.py` reads the `//` headers
      (21 files, all current); CI builds the pin and runs a synthetic set. On the Passat with the skill's layout the
      engine's best puts the mids' high-pass at LR24 200 Hz, under their 217 Hz floor — REFUSED, which is what 5b's
-     constrained search is for — and with the rear taken the Helix's 20.82 ms holds a rear fill of 14.5 ms, not 15.
+     constrained search is for.
    - ~~**5b.**~~ Done 2026-09-17. The wrapper's junction stage (`engines/resonalyze/JunctionStage.cs`): Auto delay committed
      to the settings as the window's Apply does; **repairs** — a `Tune` whose best is written back, then Auto delay again;
      **junctions** — `Probe` of named variants and `Tune` of a family, slopes and a window, read-only. `resonalyze_engine.py
@@ -185,8 +191,14 @@ Engine-independent steps first, on `wave-2026-09-17b`; each with its selftest, t
      allowed, Auto delay runs, the wishes are read (`--wishes`: a corner → a probe, a family or slope → a tune held to the
      limits). A default rear fill that does not fit the device is lowered to the largest that fits, and said so; a fill
      the tuner gave is not touched. On the Passat with the rear: the mids' 200 Hz becomes 250 Hz (the score +0.01 dB,
-     CAUTION until 278 Hz), the rear fill 15 → 12.5 ms (rear L 20.78 ms of 20.82); the user's sentence reads "BE4
+     CAUTION until 278 Hz); counted on one delay tier the rear fill had to drop 15 → 12.5 ms, on the Helix's two tiers
+     (20.82 + 20.82 ms) it stays 15; the user's sentence reads "BE4
      between tweeter and mid" at its best as BE24 1050 Hz, −1.25 dB against what stands but in CAUTION on the tweeters,
      and "BW2 between sub and midbass" as BW12 110 Hz at the window's edge, +9.40 dB. Not measured yet: a wish's full
      variant with its own Auto delay (the probe gives the junction's own delay only).
-   - **5c.** Per-platform binaries for installs (§5).
+   - **5c.** Per-platform binaries for installs (§5). The skill's half, 2026-09-17: `.github/workflows/engine-binaries.yml`
+     publishes a single-file self-contained engine for linux-x64, win-x64, osx-arm64 and osx-x64 (≈80 MB each) as workflow
+     artifacts named for the pin, on a tag push and by hand, and runs the synthetic set through the Linux and Apple
+     Silicon ones; `resonalyze_engine.py` runs a prebuilt engine (`AUTOSOUND_RESONALYZE_ENGINE`, or `install-binary --from
+     <zip>` into a folder per pin and platform) before it reaches for the .NET SDK. The release half — attaching the
+     artifacts to a release, and the installers fetching one — waits for the hub's release channel.

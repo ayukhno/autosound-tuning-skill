@@ -172,7 +172,8 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
   the settled front** — the centre read against both sides where the front mids play (1–4 kHz), as
   Resonalyze stages it; its Auto delay does the same in the same `resonalyze_engine.py run`, and says when a
   placement is at Low confidence (the Passat's centre and rear are) or when the device cannot hold the
-  delays — with the rear fill that would fit (the Helix holds 20.82 ms). L/R: the pair-arrival difference
+  delays — with the rear fill that would fit (the Helix holds 20.82 ms on an output and 20.82 on the virtual
+  channel feeding it, and the two add: a rear delay past one tier is split between them). L/R: the pair-arrival difference
   against tape set (b) — the tape is the arbiter.
 - **1.6** **levels, and how the scene is centred**: levels from geometry (distances and angles from the
   tape), cut-only — a first estimate; a second from the measurement; a divergence is a finding, not an

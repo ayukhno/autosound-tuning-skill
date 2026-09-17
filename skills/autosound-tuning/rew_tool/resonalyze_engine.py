@@ -12,7 +12,8 @@ brief and goldens, PAS-008, hub #159). This module is the skill's side of the ca
     file's protective high-pass is read from the set's manifest and divided out in memory, as Resonalyze's own capture
     does -- left in, the Passat's mids and tweeters flip polarity. No distortion curve from REW-converted files (the
     harmonic positions in REW's buffer are a guess). The processing rate and the DELAY RANGE are the project's device
-    profile: Resonalyze's catalog has no range for the Helix and falls back to 50 ms, the Helix holds 20.82;
+    profile: Resonalyze's catalog has no range for the Helix and falls back to 50 ms; the Helix holds 20.82 ms on an
+    output and 20.82 on the virtual channel feeding it, and the two add (`delay_tiers`);
   * **the run** -- `dotnet` on PATH, else `~/.dotnet/dotnet`; the wrapper is built on demand and the submodule fetched
     on demand (`update = none` keeps it out of recursive clones of the skill);
   * **the limits** -- every proposed edge goes through `xover_wishes.check_setting` (the device's families, slopes,
@@ -69,6 +70,11 @@ SUBMODULE = os.path.join(REPO, "vendor", "Resonalyze")
 CSPROJ = os.path.join(ENGINE_DIR, "ResonalyzeEngine.csproj")
 DLL = os.path.join(ENGINE_DIR, "bin", "Release", "net10.0", "ResonalyzeEngine.dll")
 GOLDEN_DIR = os.path.join(ENGINE_DIR, "golden")
+#: The fork commit the wrapper is built against -- the submodule's record; the selftest holds the two together. A prebuilt
+#: engine is installed per pin and platform, so a binary built against another pin is never picked up.
+ENGINE_PIN = "b0ce9fb"
+#: An engine executable named by the person, ahead of everything else.
+ENGINE_ENV = "AUTOSOUND_RESONALYZE_ENGINE"
 
 LAYOUT_CONTRACT = "autosound.resonalyze-layout.v1"
 RESULT_CONTRACT = "autosound.resonalyze-result.v1"
@@ -127,6 +133,71 @@ def pin():
     return {"recorded": recorded, "checked_out": checked}
 
 
+def rid():
+    """.NET's runtime identifier for this machine: win-x64, osx-arm64, linux-x64 ..."""
+    import platform
+    arch = "arm64" if platform.machine().lower() in ("arm64", "aarch64") else "x64"
+    system = "win" if sys.platform.startswith("win") else "osx" if sys.platform == "darwin" else "linux"
+    return f"{system}-{arch}"
+
+
+def installed_dir():
+    """Where a prebuilt engine for this pin and platform lives: %LOCALAPPDATA% on Windows, ~/.local/share elsewhere."""
+    base = os.environ.get("LOCALAPPDATA") if sys.platform.startswith("win") else None
+    base = base or os.path.join(os.path.expanduser("~"), ".local", "share")
+    return os.path.join(base, "autosound", "engines", "resonalyze", ENGINE_PIN, rid())
+
+
+def _exe_name():
+    return "ResonalyzeEngine.exe" if sys.platform.startswith("win") else "ResonalyzeEngine"
+
+
+def engine_command(dotnet=None):
+    """How to start the engine: `(argv prefix, how)`, or `(None, what is missing)`.
+
+    1. `AUTOSOUND_RESONALYZE_ENGINE` -- an executable a person named;
+    2. a prebuilt self-contained engine installed for this pin and platform (`install-binary`) -- no .NET needed;
+    3. the .NET SDK and this checkout's wrapper, built on demand -- a developer's machine and CI.
+    """
+    named = os.environ.get(ENGINE_ENV)
+    if named:
+        if os.path.isfile(named) and os.access(named, os.X_OK):
+            return [named], f"{ENGINE_ENV}={named}"
+        return None, f"{ENGINE_ENV} names {named}, which is not an executable file"
+    prebuilt = os.path.join(installed_dir(), _exe_name())
+    if os.path.isfile(prebuilt) and os.access(prebuilt, os.X_OK):
+        return [prebuilt], f"the prebuilt engine {prebuilt}"
+    dotnet = dotnet or find_dotnet()
+    if dotnet:
+        if not os.path.isfile(DLL):
+            ok, msg = build(dotnet=dotnet)
+            if not ok:
+                return None, msg
+        return [dotnet, DLL], f"the wrapper built here ({DLL})"
+    return None, (f"no engine: no prebuilt one in {installed_dir()} (install-binary --from <zip>), and no .NET SDK to "
+                  "build one (dotnet on PATH or ~/.dotnet/dotnet)")
+
+
+def install_binary(source):
+    """Put a prebuilt engine (a folder or a .zip holding `ResonalyzeEngine[.exe]`) where `engine_command` finds it."""
+    import zipfile
+    target = installed_dir()
+    os.makedirs(target, exist_ok=True)
+    if os.path.isdir(source):
+        for name in os.listdir(source):
+            shutil.copy2(os.path.join(source, name), os.path.join(target, name))
+    elif zipfile.is_zipfile(source):
+        with zipfile.ZipFile(source) as z:
+            z.extractall(target)
+    else:
+        raise SystemExit(f"{source}: neither a folder nor a zip")
+    exe = os.path.join(target, _exe_name())
+    if not os.path.isfile(exe):
+        raise SystemExit(f"{source}: holds no {_exe_name()} -- a build for another platform? this machine is {rid()}")
+    os.chmod(exe, 0o755)
+    return exe
+
+
 def build(fetch=True, dotnet=None):
     """(True, dll) or (False, what is missing). Fetches the submodule when it is not checked out and `fetch` allows."""
     dotnet = dotnet or find_dotnet()
@@ -148,11 +219,9 @@ def build(fetch=True, dotnet=None):
 
 def run_engine(layout, out_dir, dotnet=None):
     """Write the layout, run the wrapper, read the result. Returns (exit code, result or None, stderr)."""
-    dotnet = dotnet or find_dotnet()
-    if not os.path.isfile(DLL):
-        ok, msg = build(dotnet=dotnet)
-        if not ok:
-            return 2, None, msg
+    command, how = engine_command(dotnet)
+    if command is None:
+        return 2, None, how
     os.makedirs(out_dir, exist_ok=True)
     layout_path = os.path.join(out_dir, "layout.json")
     result_path = os.path.join(out_dir, "result.json")
@@ -160,13 +229,13 @@ def run_engine(layout, out_dir, dotnet=None):
         json.dump(layout, fh, indent=1, ensure_ascii=False)
     if os.path.exists(result_path):
         os.remove(result_path)
-    r = subprocess.run([dotnet, DLL, layout_path, result_path, "--log", os.path.join(out_dir, "engine.log")],
+    r = subprocess.run([*command, layout_path, result_path, "--log", os.path.join(out_dir, "engine.log")],
                        capture_output=True, text=True, encoding="utf-8", errors="replace")
     result = None
     if os.path.isfile(result_path):
         with open(result_path, encoding="utf-8") as fh:
             result = json.load(fh)
-        result["pin"] = pin()
+        result["pin"] = dict(pin(), engine=how)
         with open(result_path, "w", encoding="utf-8") as fh:
             json.dump(result, fh, indent=1, ensure_ascii=False)
     return r.returncode, result, r.stderr
@@ -218,6 +287,38 @@ def read_set(set_dir, pick=None):
         out[code] = {"file": stem + ".json", "protective": protective, "title": rec.get("rewTitle")}
     rew_converted = "resonalyze_ir" in str(manifest.get("converter", ""))
     return out, rew_converted, problems
+
+
+def delay_tiers(profile, rows):
+    """`(ceiling per tier in ms, how many tiers add up)` for the device.
+
+    A Helix holds 20.82 ms on a driver output AND 20.82 ms on the virtual channel that feeds it, and the two add (the
+    profile's `delay.scope`; the user, 2026-09-17: "they can be summed, on the rear for sure"). So an output fed by a
+    virtual channel can be delayed up to the sum. Two tiers are counted only when the profile scopes the ceiling to a
+    virtual channel too AND the project has virtual channels; otherwise one.
+    """
+    delay = (profile or {}).get("delay") or {}
+    tier = delay.get("max_ms")
+    scope = " ".join(str(x).lower() for x in delay.get("scope") or [])
+    virtual = "virtual" in scope and any((r or {}).get("role") == "virtual" for r in rows or [])
+    return (float(tier) if tier is not None else None), (2 if virtual else 1)
+
+
+def split_notes(delay_result, layout):
+    """A delay longer than one tier holds, split as the device takes it: the tier's ceiling on the output, the rest on
+    the virtual channel that feeds it -- free only where that virtual channel feeds this output alone."""
+    proc = (layout or {}).get("processor") or {}
+    tier, tiers = proc.get("delayPerTierMs"), proc.get("delayTiers") or 1
+    out = []
+    if not tier or tiers < 2:
+        return out
+    for row in (delay_result or {}).get("result") or []:
+        d = float(row["delayMs"])
+        if d > tier + 0.005:
+            out.append(f"{row['channel']}: {d:.2f} ms is more than one tier holds ({tier:g} ms) -- enter {tier:g} on the "
+                       f"output and {d - tier:.2f} on the virtual channel that feeds it; free only when that virtual "
+                       "channel feeds this output alone (the rear's does), otherwise every output it feeds moves too")
+    return out
 
 
 def layout_from(rows, car, dsp, profile, solos, rew_converted, set_dir, *, include_hidden=False, window_defaults=False,
@@ -281,7 +382,8 @@ def layout_from(rows, car, dsp, profile, solos, rew_converted, set_dir, *, inclu
     rate = (dsp or {}).get("dsp_processing_rate_hz") or (profile or {}).get("dsp_processing_rate_hz")
     if not rate:
         problems.append("no processing rate on record -- project.json dsp.dsp_processing_rate_hz")
-    max_ms = ENGINE_DEFAULT_MAX_DELAY_MS if window_defaults else ((profile or {}).get("delay") or {}).get("max_ms")
+    tier_ms, tiers = delay_tiers(profile, rows)
+    max_ms = ENGINE_DEFAULT_MAX_DELAY_MS if window_defaults else (tier_ms * tiers if tier_ms is not None else None)
     if max_ms is None:
         problems.append("no delay range on record -- the device profile's delay.max_ms (Resonalyze's catalog is no "
                         "substitute: without a range it assumes 50 ms)")
@@ -291,7 +393,8 @@ def layout_from(rows, car, dsp, profile, solos, rew_converted, set_dir, *, inclu
                  else "the skill's layout: types from the channel map, the device profile's delay range"),
         "dataDir": os.path.abspath(set_dir),
         "processor": {"model": " ".join(x for x in ((dsp or {}).get("vendor"), (dsp or {}).get("model")) if x) or None,
-                      "sampleRateHz": int(rate or 0), "maxDelayMs": float(max_ms if max_ms is not None else 0)},
+                      "sampleRateHz": int(rate or 0), "maxDelayMs": float(max_ms if max_ms is not None else 0),
+                      "delayPerTierMs": tier_ms, "delayTiers": tiers},
         "distortion": "file" if (window_defaults or not rew_converted) else "none",
         "blocks": blocks,
         "autoCrossover": {"run": True},
@@ -676,8 +779,9 @@ def variants_from(layout, channels, xo, wishes=None, notes=(), problems=(), dotn
                                 "delays that were never computed would mislead")
     out["checks_final"] = check_result({"autoCrossover": {"result": final_proposals(result_b)}}, second, channels, xo)
     out["costs"] = wish_costs(result_b, second, channels, xo)
-    out["notes"] += notes_on({"autoCrossover": result_a.get("autoCrossover"),
-                              "autoDelay": result_b.get("autoDelayAfterRepairs") or result_b.get("autoDelay")})
+    final_delay = result_b.get("autoDelayAfterRepairs") or result_b.get("autoDelay")
+    out["notes"] += notes_on({"autoCrossover": result_a.get("autoCrossover"), "autoDelay": final_delay})
+    out["notes"] += split_notes(final_delay, second)
     return out
 
 
@@ -1030,6 +1134,19 @@ def smoke(dotnet=None, echo=print):
 
 def _selftest():
     assert driver_type("woofer", True) == "Midbass" and driver_type("woofer", False) == "Woofer"
+    recorded = pin()["recorded"]
+    assert recorded is None or recorded.startswith(ENGINE_PIN), (recorded, ENGINE_PIN)   # the constant follows the submodule
+    assert rid().split("-")[0] in ("win", "osx", "linux") and installed_dir().endswith(os.path.join(ENGINE_PIN, rid()))
+    saved = os.environ.get(ENGINE_ENV)
+    try:
+        os.environ[ENGINE_ENV] = os.path.join(tempfile.gettempdir(), "no-such-engine")
+        command, how = engine_command()
+        assert command is None and "not an executable" in how, how
+    finally:
+        if saved is None:
+            os.environ.pop(ENGINE_ENV, None)
+        else:
+            os.environ[ENGINE_ENV] = saved
     assert driver_type("center", True) == "Midrange" and driver_type("rear", True) == "Woofer"
 
     rows = [{"code": "sw", "role": "sub"}, {"code": "w-L", "role": "woofer"}, {"code": "w-R", "role": "woofer"},
@@ -1082,6 +1199,13 @@ def _selftest():
         assert not more and tb["E Centre"]["type"] == "Tweeter" and tb["B Woofer"]["type"] == "Woofer"
         _, _, more = layout_from(rows, car, dsp, profile, solos, rew, tmp, types={"c": "Horn"})
         assert more and "not a driver type" in more[0], more
+        # two delay tiers add: an output and the virtual channel feeding it (the Helix: 20.82 + 20.82)
+        helix = {"delay": {"max_ms": 20.82, "scope": ["per driver output", "per virtual channel"]}}
+        assert delay_tiers(helix, rows) == (20.82, 2) and delay_tiers(helix, [r for r in rows if r["role"] != "virtual"]) == (20.82, 1)
+        tl2, _, _ = layout_from(rows, car, dsp, helix, solos, rew, tmp, include_hidden=True)
+        assert tl2["processor"]["maxDelayMs"] == 41.64 and tl2["processor"]["delayTiers"] == 2, tl2["processor"]
+        split = split_notes({"result": [{"channel": "F Rear L", "delayMs": 23.67}, {"channel": "C Mid L", "delayMs": 6.1}]}, tl2)
+        assert len(split) == 1 and "enter 20.82 on the output and 2.85 on the virtual channel" in split[0], split
         # no delay range on record is a refusal, never Resonalyze's 50 ms by default
         _, _, more = layout_from(rows, car, dsp, {}, solos, rew, tmp)
         assert any("delay range" in m for m in more), more
@@ -1253,6 +1377,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("build", help="fetch the submodule when needed and build the wrapper")
+    p = sub.add_parser("install-binary", help="install a prebuilt engine for this pin and platform")
+    p.add_argument("--from", dest="source", required=True, metavar="ZIP|DIR")
     for name in ("run", "layout"):
         p = sub.add_parser(name)
         p.add_argument("project")
@@ -1279,6 +1405,9 @@ def main(argv=None):
         ok, msg = build()
         print(f"  {'built' if ok else 'not built'}: {msg}")
         return 0 if ok else 1
+    if a.cmd == "install-binary":
+        print(f"  installed: {install_binary(a.source)}")
+        return 0
     if a.cmd == "acceptance":
         return acceptance(a.set, a.project, keep=a.keep)
     if a.cmd == "smoke":
