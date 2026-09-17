@@ -202,12 +202,17 @@ Engine-independent steps first, on `wave-2026-09-17b`; each with its selftest, t
      between tweeter and mid" at its best as BE24 1050 Hz, −1.25 dB against what stands but in CAUTION on the tweeters,
      and "BW2 between sub and midbass" as BW12 110 Hz at the window's edge, +9.40 dB. Not measured yet: a wish's full
      variant with its own Auto delay (the probe gives the junction's own delay only).
-   - **5c.** Per-platform binaries for installs (§5). The skill's half, 2026-09-17: `.github/workflows/engine-binaries.yml`
-     publishes a single-file self-contained engine for linux-x64, win-x64, osx-arm64 and osx-x64 (≈80 MB each) as workflow
-     artifacts named for the pin, on a tag push and by hand, and runs the synthetic set through the Linux and Apple
-     Silicon ones; `resonalyze_engine.py` runs a prebuilt engine (`AUTOSOUND_RESONALYZE_ENGINE`, or `install-binary --from
-     <zip>` into a folder per pin and platform) before it reaches for the .NET SDK. The release half — attaching the
-     artifacts to a release, and the installers fetching one — waits for the hub's release channel (SKL-041).
+   - **5c.** Per-platform binaries for installs (§5). Done 2026-09-17 (hub SKL-041 #166 → HUB-070 #169, the user's
+     decision): `.github/workflows/engine-binaries.yml` builds a single-file self-contained engine (≈80 MB) for **two**
+     platforms — win-x64 and osx-arm64, each ON its own runner and each RUN through the synthetic set there — and, when
+     the run was started by a **tag push**, attaches them to that tag's release itself: draft → files → publish, as a
+     pre-release that is never `Latest`, `SHA256SUMS` beside the archives and the fork's `License.md` +
+     `THIRD-PARTY-NOTICES.md` inside each, named `resonalyze-engine-<pin>-<rid>.zip`; a release already published for
+     the tag is not touched and the job fails. The rule and its conditions are hub `RELEASE-CHANNEL.md` §12: the tag is
+     the gate, so no session runs `gh release` and nobody re-uploads a CI build. Any other platform builds from the .NET
+     SDK on demand; `resonalyze_engine.py` runs a prebuilt engine (`AUTOSOUND_RESONALYZE_ENGINE`, or `install-binary
+     --from <zip>` into a folder per pin and platform) before it reaches for the SDK. Still open: the installers
+     fetching the file for their platform (SKL-041's follow-up).
 6. ~~**Scene presets** (RES-011, hub #161).~~ Done 2026-09-17: `rew_tool/scene_presets.py` — from the ledger version the base
    stands in after 2c and the near-side cut Phase 1 gave it, one preset per rung (0.15 / 0.20 / 0.25 / 0.30 ms): the
    near side later by t on the device's grid, its cut reduced to max(0, cut − 16 t), both channels of the pair trimmed
