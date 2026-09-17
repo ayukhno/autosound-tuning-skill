@@ -224,7 +224,7 @@ and `v3.1.0` over its own candidates once released — or `installers-windows` i
 PowerShell function itself on the same six cases, which would close this before any candidate exists.
 
 ## S-009 · `install.ps1` lists the app as "will install" right after installing it
-**Status**: doing — fixed on `wave-2026-09-17` (the plan reads the app's launchers in `~\.local\bin`); the Windows VM run is what closes it
+**Status**: done 2026-09-17 · the branch's installer on the Windows VM: "OK   Autosound TCC, the desktop app -- updates to its newest release" on a machine with the app · commit `1b77afd`
 
 **Found** 2026-09-14 on the Windows VM, in one PowerShell window: the `-Channel beta` run from `v3.0.52`
 ended "OK   installed" and "OK   Autosound TCC -- on your Desktop and in the Start Menu"; the next run
@@ -333,7 +333,7 @@ transcript `~/Downloads/тест/s012.txt` on the Mac:
    omp block, no error.
 
 ## S-015 · On the Windows VM the reviewer's CLI rung runs `gemini`, not agy
-**Status**: doing — `doctor` fixed on `wave-2026-09-17`; the Windows VM run is what closes it
+**Status**: done 2026-09-17 · `python3 skills/autosound-tuning/scripts/autosound_ai.py selftest` (the doctor block) and `doctor` on the Windows VM: the key "з файлу …\autosound\critic-env", "✓ Живий виклик (API google)", "▶ Режим роботи: АВТОМАТИЧНИЙ (відповів API google)" · commit `1b77afd`. The forced-`GEMINI_BIN` ✗ is proven by the selftest only: the VM's variable was already gone
 
 **Found** 2026-09-17 on the Windows VM, S-012 step 3, from an ordinary PowerShell:
 `autosound_ai.py ask` with `AUTOSOUND_CRITIC_MODEL=gemini-3.8-flash-low` tried the Gemini API first
@@ -377,7 +377,7 @@ Done looks like: step 3 of S-012 answers through agy on this VM, or the refusal 
 CLI it ran.
 
 ## S-016 · In a new PowerShell window after the install, `python3` is the Microsoft Store alias
-**Status**: doing — `install.ps1` fixed on `wave-2026-09-17` (`~\.local\bin` first in the user PATH, and the check reads a NEW window's `python3`); the Windows VM run is what closes it
+**Status**: done 2026-09-17 · the branch's installer on the Windows VM: "~\.local\bin now leads your user PATH -- a new window's python3 was …\WindowsApps\python3.exe" and "OK   python3 in a new window is ~\.local\bin\python3.exe"; a NEW window: `python3 -V` → 3.12.14, `Get-Command python3 -All` lists `.local\bin` first · commit `1b77afd`
 
 **Found** 2026-09-17 on the Windows VM, after S-012: the `doctor` line the installer prints, run in a NEW
 window — "Python was not found; run without arguments to install from the Microsoft Store, or disable
