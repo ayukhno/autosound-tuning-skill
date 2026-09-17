@@ -230,7 +230,12 @@ Not verified (secondary sources only):
 Nothing found recommends finer than 1/12 octave for a tuning decision, and no car DSP publishes an
 auto-EQ resolution.
 
-## 6. Proposals — for the Arbiter to decide
+## 6. Proposals — decided by the Arbiter 2026-09-17
+
+**Decided in the conversation of 2026-09-17**: 2 → `1/6`, 3 → `Var`, 5 → the impulse through a window
+(`1/48` until then; which window is a decision of its own), 7 → `1/6` with `--smoothing`, each the
+recommended option. 1, 4 and 6 follow from the Arbiter's `None` = `1/48` and were put to him with
+"say if not"; no objection came.
 
 **Standing position of the Arbiter (2026-09-17): `None` and `1/48` are one level.** Finer than 1/48
 brings nothing for this chain (Scarlett, Helix) and adds interference. §2.1, §2.2 and §4 agree:

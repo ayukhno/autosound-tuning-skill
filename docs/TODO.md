@@ -292,7 +292,7 @@ macOS only. Each command below is one line, for a PowerShell paste.
 Done when each numbered line has its observation written here, with the VM and the date.
 
 ## S-013 · Each REW reader names the smoothing it reads
-**Status**: doing — research done (`docs/RESEARCH-2026-09-17-reader-smoothing.md`), waiting for the user's decisions on its §6
+**Status**: doing — research done and decided 2026-09-17 (`docs/RESEARCH-2026-09-17-reader-smoothing.md` §6): verify 1/6 · analyze-batch 1/6 · run EQ cuts Var · ear_suspects and curve_view 1/48 · joints from the impulse through a window (1/48 until then) · verify_prediction 1/48 · spot_check 1/6 with --smoothing
 
 **Due:** research first — the user, 2026-09-17: "don't know, it needs researching". Done the same day:
 live REW (nine positions × seven channels), math, REW's documentation, papers, practice. The user's
