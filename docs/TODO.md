@@ -248,6 +248,10 @@ calling the app, or the app itself) is for the wave review. Recorded only (hub `
 **When:** right after the app step prints "version v0.1.39 (beta channel)" and "OK   installed" — before
 the line about the Desktop and Start Menu shortcuts.
 
+**Not seen** 2026-09-17 on `v3.0.54` (S-012 step 1, the stable channel, app v0.1.39): no terminal window
+during the install, by the user's watch. Found on the beta channel, not seen on the stable one; whether
+that closes it is for the wave review.
+
 Done looks like: the install either shows no such window, or says what it is when it opens.
 
 ## S-011 · Close the wave on branch `test-fixes-2026-09-14`
@@ -263,7 +267,7 @@ the full suite, the version bump and CHANGELOG entry on the branch, one PR, `--f
 the tag. Hub #149 closes after that merge, once the `gate` job on `main` is seen skipping the tests.
 
 ## S-012 · Run v3.0.54 on the Windows VM
-**Status**: open
+**Status**: done 2026-09-17 · the transcript `~/Downloads/тест/s012.txt` and step 2's output below · open from it: S-009 (seen again), S-015 (agy not reached)
 
 **Due:** after the other S-items of this wave are done — the user's word on 2026-09-17 ("after Sxxx"), so one VM run covers the final state of `wave-2026-09-16`, released as v3.0.54 on 2026-09-17. First asked for 2026-09-17 ("the Windows run, for tomorrow"). v3.0.53 was published with
 one `install.ps1` line changed that no VM has run, v3.0.54 with its `gh` and `omp` defaults, and the reviewer fix of hub TCC-014 was proven on
@@ -303,7 +307,11 @@ transcript `~/Downloads/тест/s012.txt` on the Mac:
    end and was skipped with `s`), and the `autosound_ai.py" doctor` line printed under "When you have
    time". The Checking step says "the tuning method (3.x)" and names no version on any run — the
    expectation above asked for more than it prints.
-2. Not run yet.
+2. The printed line, pasted as is, ran (`doctor`, exit code 1). It names the channel — "▶ Рецензент:
+   gemini-3.8-flash-low → провайдер google", "▶ Режим роботи: АВТОМАТИЧНИЙ (через API google)" — and ends
+   "ПОТРЕБУЄ ВИПРАВЛЕННЯ ✗" with: no `.critic-env`; "Контекст autosound_context.md НЕ ЗНАЙДЕНО"; key
+   `GEMINI_API_KEY` found, "OLD format (AIza…, 39 chars)", its model list "HTTP Error 400"; "Знайдено
+   локальний CLI" `gemini` for google, anthropic AND openai; the live call "API key not valid".
 3. **agy was not reached.** Exit 4, a refusal as designed: the reasons were listed — "API google: … HTTP
    Error 400: Bad Request — API key not valid" and "CLI 'gemini': Warning: 256-color support not
    detected … Ripgrep is not available … Error when talking to Gemini API" — the package went to
@@ -311,7 +319,7 @@ transcript `~/Downloads/тест/s012.txt` on the Mac:
    review. The CLI rung ran `gemini`, so the stdin fix of TCC-014 is still unproven on Windows (S-015).
    The garbled Cyrillic and the NativeCommandError lines came from the probe's own `2>&1 | Out-Host`.
 4. `git status --short` in the method's checkout: empty.
-5. S-009 seen again (under that item). S-010: the user's answer pending.
+5. S-009 seen again (under that item). S-010 not seen: no terminal window (under that item).
 6. `-DryRun`: no question, no omp block, and neither "Optional:" line — omp and gh are both already on
    this VM (step 7 shows omp "OK   already here"), which is exactly what hides them; the hints themselves
    cannot be seen on this machine.
@@ -330,7 +338,9 @@ whose output was the Gemini CLI's own ("256-color support not detected", "Ripgre
 Falling back to GrepTool.", "Error when talking to Gemini API"). The installer on the same run reported
 "Gemini reviewer (agy) -- already set up" at `~\AppData\Local\agy\bin\agy.exe`. Exit 4 with the
 reasons and the package, as designed. Recorded only — not diagnosed (hub `governance/WAVES.md` §1);
-`doctor` (S-012 step 2) has not been run yet.
+`doctor` on the same VM (S-012 step 2) lists "Знайдено локальний CLI" as `gemini` for google, anthropic and
+openai alike and does not name agy; the key is `GEMINI_API_KEY` in the old `AIza…` format, refused with
+HTTP 400.
 
 Done looks like: step 3 of S-012 answers through agy on this VM, or the refusal says why agy was not the
 CLI it ran.
