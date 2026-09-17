@@ -380,6 +380,384 @@ def notes_on(result):
     return out
 
 
+# ---------------------------------------------------------------- the variants: the best within the limits, the wishes
+
+#: The families the window's Auto crossover searches (Chebyshev is not among them), by the profile's code.
+ENGINE_FAMILY = {"BW": "Butterworth", "LR": "LinkwitzRiley", "BE": "Bessel"}
+
+
+def lattice(f):
+    """`CrossoverAutoSetup.RoundToLattice`: 5 Hz steps under 100 Hz, 10 under 1 kHz, 50 above."""
+    step = 5.0 if f < 100 else 10.0 if f < 1000 else 50.0
+    return max(20.0, round(f / step) * step)
+
+
+def floor_hz(codes, channels, xo):
+    """The protective floor (1.1 x installed Fs, on the device's step) of the strictest fragile driver among `codes`,
+    or None when none is fragile or no Fs is on record -- a floor nobody measured is not guessed."""
+    worst = None
+    for code in codes:
+        row = channels.get(code) or {}
+        if row.get("role") not in _xw.FRAGILE_ROLES:
+            continue
+        fs, _ = _xw._fs_of(row)
+        if fs is not None and (worst is None or fs > worst):
+            worst = fs
+    if worst is None:
+        return None
+    f, _ = _xw._snap(math.ceil(round(_xw._cc.FS_FLOOR * worst, 6)), xo)
+    return float(f)
+
+
+def _engine_families(xo):
+    names = [ENGINE_FAMILY[c] for c in ("BW", "LR", "BE") if xo is None or c in (xo.get("types") or {})]
+    return names or list(ENGINE_FAMILY.values())
+
+
+def _device_slopes(xo, families):
+    if xo is None:
+        return None
+    code_of = {v: k for k, v in ENGINE_FAMILY.items()}
+    slopes = set()
+    for fam in families:
+        for order in ((xo.get("types") or {}).get(code_of[fam]) or {}).get("orders_db_per_oct") or []:
+            if order >= 12:
+                slopes.add(int(order))
+    return sorted(slopes) or None
+
+
+def chain_pairs(result):
+    """The front chain's junctions, low to high, as Auto crossover ordered the primary group: [(lower, upper)]."""
+    for group in (result.get("autoCrossover") or {}).get("groups") or []:
+        if group.get("primary"):
+            order = group.get("chainOrder") or []
+            return list(zip(order, order[1:]))
+    return []
+
+
+def _corner(prop_lower, prop_upper):
+    lp, hp = (prop_lower or {}).get("lowPass"), (prop_upper or {}).get("highPass")
+    return float((lp or hp or {}).get("frequencyHz") or 632.0)
+
+
+def plan_repairs(result, layout, checks, channels, xo):
+    """What must change before the engine's best can be shown: `(repairs, fixes, notes)`.
+
+    A junction of the front chain whose edge broke a limit (REFUSED: under the fragile driver's floor; ADJUSTED: a
+    family or slope the device does not have) is searched again by the junction tuner inside the limits -- the
+    device's families and slopes, the corner window from the floor up -- and its best is written back (`repairs`).
+    A lone block's edge (a centre, a rear fill) is set to the nearest allowed setting (`fixes`). An edge nobody can
+    check is left as it is and said to be unchecked.
+    """
+    by = {(c["block"], c["edge"]): c for c in checks}
+    props = {p["block"]: p for p in (result.get("autoCrossover") or {}).get("result") or []}
+    blocks = {b["name"]: b for b in layout.get("blocks") or []}
+    families = _engine_families(xo)
+    slopes = _device_slopes(xo, families)
+    repairs, fixes, notes, in_chain = [], {}, [], set()
+    for lower, upper in chain_pairs(result):
+        in_chain.update((lower, upper))
+        hp, lp = by.get((upper, "high-pass")), by.get((lower, "low-pass"))
+        broken = [c for c in (hp, lp) if c and c["verdict"] in ("REFUSED", "ADJUSTED")]
+        if not broken:
+            continue
+        current = _corner(props.get(lower), props.get(upper))
+        floor = floor_hz(((blocks.get(upper) or {}).get("channels") or {}).values(), channels, xo)
+        lo, hi = lattice(current / math.sqrt(2)), lattice(current * math.sqrt(2))
+        low = max(lo, floor) if floor else lo
+        high = max(hi, lattice(low * math.sqrt(2)))
+        repairs.append({"lower": lower, "upper": upper,
+                        "purpose": "; ".join(f"{c['block']} {c['edge']} {c['setting']} {c['verdict']}" for c in broken),
+                        "tune": {"families": families, "slopes": slopes, "minHz": float(low), "maxHz": float(high)}})
+    for c in checks:
+        if c["block"] in in_chain or c["verdict"] not in ("REFUSED", "ADJUSTED"):
+            continue
+        a = c.get("allowed") or {}
+        fam = ENGINE_FAMILY.get(a.get("family"))
+        if not (fam and a.get("order_db") and a.get("f_hz")):
+            notes.append(f"{c['block']} {c['edge']} {c['setting']}: {c['verdict']} and no setting the engines can hold "
+                         "is named -- left for the tuner")
+            continue
+        key = "highPass" if c["edge"] == "high-pass" else "lowPass"
+        fixes.setdefault(c["block"], {})[key] = {"family": fam, "frequencyHz": float(a["f_hz"]),
+                                                 "slopeDbPerOctave": int(a["order_db"])}
+    return repairs, fixes, notes
+
+
+def _block_of_role(layout, role, chain):
+    names = [b["name"] for b in layout.get("blocks") or [] if b.get("role") == role]
+    inside = [n for n in names if n in chain]
+    return (inside or names or [None])[0]
+
+
+def wish_items(rows, layout, result, channels, xo):
+    """The tuner's checked wishes as junction items: `(items, not_computed)`.
+
+    A wish with a corner is a PROBE -- the setting read against the best on one band, each after its own delay. A wish
+    with a family or slope and no corner (or a range) is a TUNE -- the best that family and slope can do at that
+    junction. A wish that broke a limit, that nobody can check, or that names no junction of this chain is not
+    computed, and says why.
+    """
+    chain = [x for pair in chain_pairs(result) for x in pair]
+    order = list(dict.fromkeys(chain))
+    items, skipped = [], []
+    for row in rows:
+        said = row.get("clause", "").strip()
+        if row["verdict"] in ("REFUSED", "UNKNOWN", "UNSURE", "UNCHECKED"):
+            skipped.append((said, row["verdict"], "; ".join(row.get("why") or [])))
+            continue
+        roles = row.get("junction") or []
+        if len(roles) == 1:
+            upper = _block_of_role(layout, roles[0], order)
+            lower = order[order.index(upper) - 1] if upper in order and order.index(upper) > 0 else None
+            only_high = True
+        else:
+            lower, upper = _block_of_role(layout, roles[0], order), _block_of_role(layout, roles[-1], order)
+            only_high = False
+        if not lower or not upper or (lower, upper) not in chain_pairs(result):
+            skipped.append((said, row["verdict"], f"{' ↔ '.join(roles)} is not a junction of the front chain "
+                                                  f"({' → '.join(order) or 'none'})"))
+            continue
+        allowed = row.get("allowed") or {}
+        fam = ENGINE_FAMILY.get(allowed.get("family")) if allowed.get("family") else None
+        if allowed.get("family") and not fam:
+            skipped.append((said, row["verdict"], f"{allowed['family']} is not a family the engines search (BW, LR, BE)"))
+            continue
+        order_db, f = allowed.get("order_db"), allowed.get("f_hz")
+        f_range = (row.get("wish") or {}).get("f_range_hz")
+        item = {"lower": lower, "upper": upper, "purpose": f"wish: {said}", "verdict": row["verdict"]}
+        if f is not None and not f_range and fam and order_db:
+            edge = {"family": fam, "frequencyHz": float(f), "slopeDbPerOctave": int(order_db)}
+            item["probe"] = [{"label": said, "highPass": edge, **({} if only_high else {"lowPass": edge})}]
+        else:
+            floor = floor_hz(((next((b for b in layout["blocks"] if b["name"] == upper), {})).get("channels") or {}).values(),
+                             channels, xo)
+            tune = {"families": [fam] if fam else _engine_families(xo),
+                    "slopes": [int(order_db)] if order_db else _device_slopes(xo, [fam] if fam else _engine_families(xo))}
+            if f_range:
+                tune["minHz"], tune["maxHz"] = float(f_range[0]), float(f_range[1])
+            if floor:
+                tune["minHz"] = max(float(tune.get("minHz") or 0.0), floor)
+            item["tune"] = tune
+        items.append(item)
+    return items, skipped
+
+
+def final_proposals(result):
+    """The settings every block ends with, in `autoCrossover.result`'s shape, from `settingsFinal` (the left side:
+    a crossover is one filter for both)."""
+    out = []
+    for row in result.get("settingsFinal") or []:
+        left = row.get("left") or {}
+        out.append({"block": row["block"], "kind": left.get("crossover"), "highPass": left.get("highPass"),
+                    "lowPass": left.get("lowPass"), "gainDb": left.get("gainDb")})
+    return out
+
+
+def _on_edge(edge, window):
+    """A best at the end of its search window: the window may be what stopped it."""
+    if not edge or not window:
+        return False
+    f = float(edge["frequencyHz"])
+    return any(abs(f - float(w)) <= (5.0 if w < 100 else 10.0 if w < 1000 else 50.0) for w in window)
+
+
+def wish_costs(result, layout=None, channels=None, xo=None):
+    """Per junction item: what the wish costs against what stands, in dB of the tuner's score (lower is better).
+    A tune's best is held to the same limits as any proposal (`check_setting` on its high-pass), and a best found at
+    the end of its search window is marked so."""
+    blocks = {b["name"]: b for b in (layout or {}).get("blocks") or []}
+    out = []
+    for j in result.get("junctions") or []:
+        entry = {"purpose": j.get("purpose"), "lower": j["lower"], "upper": j["upper"], "error": j.get("error")}
+        probe = j.get("probe")
+        if probe:
+            base, *rest = probe["entries"]
+            for e in rest:
+                shared = {s["side"]: s["scoreDb"] for s in e["sharedBandSides"]}
+                base_shared = {s["side"]: s["scoreDb"] for s in base["sharedBandSides"]}
+                after = {a["side"]: a["lossDb"] for a in e["afterDelay"]}
+                base_after = {a["side"]: a["lossDb"] for a in base["afterDelay"]}
+                entry.setdefault("probes", []).append({
+                    "label": e["label"], "unavailable": e.get("unavailable"),
+                    "scoreDeltaDb": {k: round(shared[k] - base_shared[k], 2) for k in shared if k in base_shared},
+                    "afterDelayLossDb": {k: (after.get(k), base_after.get(k)) for k in after}})
+        tune = j.get("tune")
+        if tune:
+            best_high = tune["best"].get("highPass")
+            limit = None
+            if best_high and channels is not None:
+                codes = [c for c in ((blocks.get(j["upper"]) or {}).get("channels") or {}).values() if c in channels]
+                fam = FAMILY_CODE.get(best_high["family"], best_high["family"])
+                limit = _xw.check_setting({c: (None, c) for c in codes}, fam, int(best_high["slopeDbPerOctave"]),
+                                          float(best_high["frequencyHz"]), channels, xo)
+            entry["tune"] = {"best": (tune["best"].get("lowPass") or best_high),
+                             "limit": limit, "atWindowEdge": _on_edge(best_high or tune["best"].get("lowPass"),
+                                                                     tune.get("windowHz")),
+                             "scoreDeltaDb": round(tune["best"]["rankingScoreDb"] - tune["current"]["rankingScoreDb"], 2)
+                             if tune["best"].get("rankingScoreDb") is not None and tune["current"].get("rankingScoreDb") is not None
+                             else None,
+                             "windowHz": tune.get("windowHz")}
+        out.append(entry)
+    return out
+
+
+def variants(project_dir, set_dir, wishes=None, dotnet=None, out_dir=None, **kw):
+    """Phase 1's crossover step at the desk: the engine's best, held to the limits and repaired inside them, with its
+    delays; then each wish read against it. Two runs of the wrapper: Auto crossover alone (fast), then the repairs,
+    Auto delay and the wishes on the crossovers it proposed. Returns a dict for `render_variants` and the JSON."""
+    layout, notes, problems, channels, xo = build_layout(project_dir, set_dir, **kw)
+    return variants_from(layout, channels, xo, wishes, notes, problems, dotnet, out_dir,
+                         fill_given=kw.get("rear_fill_ms") is not None)
+
+
+def variants_from(layout, channels, xo, wishes=None, notes=(), problems=(), dotnet=None, out_dir=None, fill_given=False):
+    """`variants` on a layout already built -- the project's facts passed in rather than read from a folder.
+
+    When Auto delay cannot fit the device and the rear fill is the default rather than the tuner's, the run is repeated
+    once with the largest fill that fits, and says so; a fill the tuner gave is not changed -- the fill that would fit
+    is named instead."""
+    out = {"layout": layout, "notes": list(notes), "problems": list(problems)}
+    if problems:
+        return out
+    out_dir = out_dir or tempfile.mkdtemp(prefix="resonalyze-variants-")
+    first = json.loads(json.dumps(layout))
+    first["autoDelay"]["run"] = False
+    rc, result_a, err = run_engine(first, os.path.join(out_dir, "1-crossover"), dotnet)
+    out.update(rc_crossover=rc, crossover=result_a)
+    if result_a is None or (result_a.get("autoCrossover") or {}).get("error"):
+        out["problems"] = [f"Auto crossover did not run (exit {rc}): "
+                           f"{((result_a or {}).get('autoCrossover') or {}).get('error') or err.strip()[-300:]}"]
+        return out
+    checks_a = check_result(result_a, layout, channels, xo)
+    repairs, fixes, repair_notes = plan_repairs(result_a, layout, checks_a, channels, xo)
+    rows = _xw.check_wishes(wishes, channels, xo) if wishes else []
+    items, skipped = wish_items(rows, layout, result_a, channels, xo)
+    out.update(checks_crossover=checks_a, repairs_planned=repairs, fixes=fixes, wishes=rows, wishes_skipped=skipped)
+    out["notes"] += repair_notes
+
+    second = json.loads(json.dumps(layout))
+    props = {p["block"]: p for p in result_a["autoCrossover"]["result"]}
+    order = result_a["autoCrossover"].get("blockOrderAfterReorder") or [b["name"] for b in second["blocks"]]
+    second["blocks"].sort(key=lambda b: order.index(b["name"]) if b["name"] in order else len(order))
+    for b in second["blocks"]:
+        p = props[b["name"]]
+        crossover = {"kind": p["kind"], "highPass": p.get("highPass"), "lowPass": p.get("lowPass")}
+        for key, edge in (fixes.get(b["name"]) or {}).items():
+            crossover[key] = edge
+        b["crossover"], b["gainDb"] = crossover, p["gainDb"]
+    second["autoCrossover"] = {"run": False}
+    second["repairs"], second["junctions"] = repairs, items
+    rc, result_b, err = run_engine(second, os.path.join(out_dir, "2-delays-and-wishes"), dotnet)
+    first_fill, needed = second["autoDelay"]["rearFillOffsetMs"], None
+    for _ in range(3):     # a repair moves the delays, so the fill that fits is read again after each run
+        if result_b is None or rc != EXIT_REFUSED or fill_given:
+            break
+        refused = result_b.get("autoDelayAfterRepairs") or result_b.get("autoDelay") or {}
+        fill = fill_that_fits(refused.get("overRange"))
+        if fill is None or fill >= second["autoDelay"]["rearFillOffsetMs"]:
+            break
+        needed = refused["overRange"]
+        second["autoDelay"]["rearFillOffsetMs"] = fill
+        rc, result_b, err = run_engine(second, os.path.join(out_dir, "2-delays-and-wishes"), dotnet)
+    if needed is not None:
+        out["notes"].append(f"rear fill {first_fill:g} → {second['autoDelay']['rearFillOffsetMs']:g} ms: with "
+                            f"{first_fill:g} the rear did not fit the device's {needed['limitMs']:g} ms -- the fill was "
+                            "the default, so the desk took the largest that fits; the tuner may set another")
+    out.update(rc_delays=rc, delays=result_b, out_dir=out_dir)
+    if result_b is None:
+        out["problems"] = [f"the second run wrote nothing (exit {rc}): {err.strip()[-300:]}"]
+        return out
+    if rc != 0:
+        unread = [what for what, planned, key in (("the repairs", repairs, "repairs"), ("the wishes", items, "junctions"))
+                  if planned and result_b.get(key) is None]
+        if unread:
+            out["notes"].append(f"{' and '.join(unread)} were not read: Auto delay refused, and a junction read at "
+                                "delays that were never computed would mislead")
+    out["checks_final"] = check_result({"autoCrossover": {"result": final_proposals(result_b)}}, second, channels, xo)
+    out["costs"] = wish_costs(result_b, second, channels, xo)
+    out["notes"] += notes_on({"autoCrossover": result_a.get("autoCrossover"),
+                              "autoDelay": result_b.get("autoDelayAfterRepairs") or result_b.get("autoDelay")})
+    return out
+
+
+def _edge_short(e):
+    return f"{FAMILY_CODE.get(e['family'], e['family'])}{e['slopeDbPerOctave']} {float(e['frequencyHz']):g} Hz" if e else "--"
+
+
+def _junction_short(candidate):
+    """One junction's two facing edges: one label when they are the same filter, both when they differ."""
+    lp, hp = candidate.get("lowPass"), candidate.get("highPass")
+    return _edge_short(lp or hp) if (lp == hp or not lp or not hp) else f"{_edge_short(lp)} | {_edge_short(hp)}"
+
+
+def render_variants(v):
+    lines = []
+    if v.get("problems"):
+        return "\n".join(f"  ✗ {p}" for p in v["problems"])
+    b = v.get("delays") or {}
+    delay = b.get("autoDelayAfterRepairs") or b.get("autoDelay") or {}
+    lines.append("  THE BEST WITHIN THE LIMITS -- Resonalyze's Auto crossover, every edge held to this car's limits"
+                 + (", repaired where it broke one" if v.get("repairs_planned") or v.get("fixes") else ""))
+    lines.append(f"  {'block':12}{'high-pass':20}{'low-pass':20}{'gain':>6}")
+    for p in final_proposals(b):
+        lines.append(f"  {p['block']:12}{_edge_short(p.get('highPass')):20}{_edge_short(p.get('lowPass')):20}"
+                     f"{float(p.get('gainDb') or 0):>+6.1f}")
+    for r in b.get("repairs") or []:
+        t = r.get("tune") or {}
+        if r.get("error") or not t:
+            lines.append(f"  ! repair {r['lower']} ↔ {r['upper']} did not run: {r.get('error')}")
+            continue
+        cur, best = t["current"], t["best"]
+        delta = (best.get("rankingScoreDb") or 0) - (cur.get("rankingScoreDb") or 0)
+        lines.append(f"  repaired {r['lower']} ↔ {r['upper']}: {_junction_short(cur)} → {_junction_short(best)} "
+                     f"({r.get('purpose')}); the score {delta:+.2f} dB")
+    for block, edges in (v.get("fixes") or {}).items():
+        lines.append(f"  set {block}: " + ", ".join(f"{k} {_edge_short(e)}" for k, e in edges.items()) + " (the nearest allowed)")
+    flagged = [c for c in v.get("checks_final") or [] if c["verdict"] not in ("OK",)]
+    if flagged:
+        lines.append("  still to settle:")
+        lines += [f"    {c['block']} {c['edge']} {c['setting']} -- {c['verdict']}: {'; '.join(c['why'])}" for c in flagged]
+    if delay.get("result"):
+        lines.append("")
+        lines.append(f"  delays ({'after the repairs' if b.get('autoDelayAfterRepairs') else 'Auto delay'}; scene offset "
+                     f"{delay['request']['sceneOffsetMs']:g} ms, rear fill {delay['request']['rearFillOffsetMs']:g} ms)")
+        for row in delay["result"]:
+            d = row.get("decision") or {}
+            lines.append(f"  {row['channel']:22}{row['delayMs']:>7.2f} ms  {'inverted' if row['invertPolarity'] else 'normal':9}"
+                         f"{d.get('kind', '')}{', ' + d['confidence'] if d.get('confidence') else ''}")
+    elif delay.get("error"):
+        lines.append(f"  Auto delay refused: {delay['error']}")
+    if v.get("costs") or v.get("wishes_skipped"):
+        lines += ["", "  THE WISHES, against the best (dB of the junction score; lower is better)"]
+    for c in v.get("costs") or []:
+        head = f"  {c['purpose']} -- {c['lower']} ↔ {c['upper']}"
+        if c.get("error"):
+            lines.append(f"{head}: not read ({c['error']})")
+            continue
+        for pr in c.get("probes") or []:
+            per_side = ", ".join(f"{k} {d:+.2f}" for k, d in pr["scoreDeltaDb"].items())
+            after = ", ".join(f"{k} {w:+.2f} vs {b_:+.2f}" for k, (w, b_) in pr["afterDelayLossDb"].items()
+                              if w is not None and b_ is not None)
+            lines.append(f"{head}: {per_side} on the shared band; the sum loss after its own delay {after}")
+        if c.get("tune"):
+            t = c["tune"]
+            delta = "n/a" if t["scoreDeltaDb"] is None else f"{t['scoreDeltaDb']:+.2f} dB"
+            lines.append(f"{head}: the best of that wish is {_edge_short(t['best'])}, {delta} against what stands "
+                         f"(searched {t['windowHz'][0]:g}-{t['windowHz'][1]:g} Hz"
+                         + (", found at the window's edge" if t.get("atWindowEdge") else "") + ")")
+            lim = t.get("limit")
+            if lim and lim["verdict"] != "OK":
+                lines.append(f"      {lim['verdict']}: {'; '.join(lim['why'])}")
+    for said, verdict, why in v.get("wishes_skipped") or []:
+        lines.append(f"  {said or '(a clause)'} -- {verdict}, not computed: {why}")
+    if v.get("notes"):
+        lines.append("")
+        lines += [f"  ! {n}" for n in v["notes"]]
+    lines += ["", "  The engine proposes; nothing is entered without the tuner's OK."]
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------- the goldens
 
 def _edge_label(edge):
@@ -583,24 +961,28 @@ def render(layout, result, checks, notes):
 # ---------------------------------------------------------------- smoke: a synthetic set end to end
 
 def smoke(dotnet=None, echo=print):
-    """A synthetic sub + three-way front through the wrapper: it builds, runs, and returns a sane proposal."""
+    """A synthetic sub + three-way front through both passes: Auto crossover, the repairs inside the limits, Auto delay,
+    and a wish read against the best. It builds, runs, and comes back sane."""
     import numpy as np
     from scipy import signal
 
     import resonalyze_ir as _ri
     fs, n, pre = 96000, 1 << 16, 1 << 14
     rng = np.random.default_rng(7)
-    drivers = {  # code: (role, arrival ms, high-pass Hz or None, low-pass Hz or None)
-        "sw": ("sub", 5.0, 25.0, 120.0),
-        "w-L": ("woofer", 3.0, 45.0, 1500.0), "w-R": ("woofer", 3.4, 45.0, 1500.0),
-        "m-L": ("midrange", 2.8, 250.0, 9000.0), "m-R": ("midrange", 3.2, 250.0, 9000.0),
-        "tw-L": ("tweeter", 2.6, 1800.0, None), "tw-R": ("tweeter", 3.0, 1800.0, None),
+    drivers = {  # code: (role, installed Fs, arrival ms, high-pass Hz or None, low-pass Hz or None)
+        "sw": ("sub", 30.0, 5.0, 25.0, 120.0),
+        "w-L": ("woofer", 45.0, 3.0, 45.0, 1500.0), "w-R": ("woofer", 45.0, 3.4, 45.0, 1500.0),
+        "m-L": ("midrange", 150.0, 2.8, 250.0, 9000.0), "m-R": ("midrange", 150.0, 3.2, 250.0, 9000.0),
+        "tw-L": ("tweeter", 1600.0, 2.6, 1800.0, None), "tw-R": ("tweeter", 1600.0, 3.0, 1800.0, None),
     }
+    xo = {"types": {"BE": {"orders_db_per_oct": [6, 12, 18, 24, 30, 36, 42]},
+                    "BW": {"orders_db_per_oct": [6, 12, 18, 24, 30, 36, 42]},
+                    "LR": {"orders_db_per_oct": [12, 24, 36]}}, "range": [20.0, 20480.0], "step": 1.0}
     with tempfile.TemporaryDirectory() as tmp:
         set_dir = os.path.join(tmp, "set")
         os.makedirs(set_dir)
         files = {}
-        for code, (role, arrival, hp, lp) in drivers.items():
+        for code, (role, _fs, arrival, hp, lp) in drivers.items():
             x = np.zeros(n)
             x[pre + int(round(arrival * 1e-3 * fs))] = 0.3
             if hp:
@@ -614,26 +996,33 @@ def smoke(dotnet=None, echo=print):
             files[stem] = {"rewTitle": f"{code}_1 (sw)"}
         with open(os.path.join(set_dir, "manifest.json"), "w", encoding="utf-8") as fh:
             json.dump({"converter": "autosound-tuning-skill rew_tool/resonalyze_ir.py", "files": files}, fh)
-        rows = [{"code": c, "role": r} for c, (r, *_rest) in drivers.items()]
+        rows = [{"code": c, "role": r, "fs_hz": {"value": f}} for c, (r, f, *_rest) in drivers.items()]
+        channels = {r["code"]: r for r in rows}
         solos, rew, problems = read_set(set_dir)
         layout, notes, more = layout_from(rows, {"wheel": "LHD"}, {"dsp_processing_rate_hz": 96000},
                                           {"delay": {"max_ms": 20.0}}, solos, rew, set_dir)
         assert not problems and not more, (problems, more)
-        rc, result, err = run_engine(layout, os.path.join(tmp, "out"), dotnet)
-        assert result is not None, f"the wrapper wrote nothing (exit {rc}): {err[-600:]}"
-        assert rc == 0, f"exit {rc}: {json.dumps(result.get('autoDelay'))[:600]} {err[-400:]}"
-        assert result["contract"] == RESULT_CONTRACT
-        props = {p["block"]: p for p in result["autoCrossover"]["result"]}
-        assert set(props) == {"A Sub", "B Woofer", "C Mid", "D Tweeter"}, props
-        assert props["A Sub"]["lowPass"] and props["D Tweeter"]["highPass"], props
-        delays = {r["channel"]: r["delayMs"] for r in result["autoDelay"]["result"]}
-        assert len(delays) == 7 and all(0.0 <= v <= 20.0 for v in delays.values()), delays
+        v = variants_from(layout, channels, xo, wishes="BE4 між мідом і твітером на 2400", notes=notes,
+                          dotnet=dotnet, out_dir=os.path.join(tmp, "out"))
+        assert not v["problems"], v["problems"]
+        b = v["delays"]
+        assert v["rc_delays"] == 0 and b["contract"] == RESULT_CONTRACT, (v["rc_delays"], json.dumps(b)[:600])
+        assert {p["block"] for p in v["crossover"]["autoCrossover"]["result"]} == {"A Sub", "B Woofer", "C Mid", "D Tweeter"}
+        for r in b.get("repairs") or []:
+            assert not r.get("error") and r["tune"]["applied"], r
+        assert not [c for c in v["checks_final"] if c["verdict"] == "REFUSED"], v["checks_final"]
+        delay = b.get("autoDelayAfterRepairs") or b["autoDelay"]
+        delays = {r["channel"]: r["delayMs"] for r in delay["result"]}
+        assert len(delays) == 7 and all(0.0 <= d <= 20.0 for d in delays.values()), delays
         # the tweeter arrives 0.4 ms before the woofer on its side, and a woofer's low-pass only adds lag: it waits
         assert delays["D Tweeter L"] > delays["B Woofer L"], delays
-        echo(render(layout, result, check_result(result, layout, {c: {"code": c, "role": r} for c, (r, *_x) in
-                                                                  drivers.items()}, None), notes_on(result)))
-    echo("smoke[resonalyze_engine] OK -- a synthetic sub + three-way front built, ran through both engines, and came "
-         "back with a proposal per block and seven delays inside the range, the early tweeter held back")
+        probes = [pr for c in v["costs"] for pr in c.get("probes") or []]
+        assert probes and set(probes[0]["scoreDeltaDb"]) == {"left", "right"}, v["costs"]
+        echo(render_variants(v))
+        echo(f"  repairs planned: {len(v['repairs_planned'])}, fixes: {len(v['fixes'])}")
+    echo("smoke[resonalyze_engine] OK -- a synthetic sub + three-way front through both passes: a proposal per block, "
+         "every repair applied and nothing left under a floor, seven delays inside the range with the early tweeter "
+         "held back, and the wish read on both sides against the best")
     return 0
 
 
@@ -753,6 +1142,66 @@ def _selftest():
     diffs = compare(moved, gold)
     assert len(diffs) == 3 and any("polarity" in d for d in diffs) and any("501" in d for d in diffs), diffs
 
+    # the repairs: a front-chain corner under a floor is searched again from the floor up, on the device's families
+    # and slopes; a lone centre's corner under its floor is set to the nearest allowed; the corner lattice is the engine's
+    assert lattice(212.0) == 210.0 and lattice(97.0) == 95.0 and lattice(1760.0) == 1750.0 and lattice(12.0) == 20.0
+    ch2 = dict(channels, c={"code": "c", "role": "center", "fs_hz": {"value": 900.0}})
+    assert floor_hz(["m-L", "m-R"], ch2, xo) == 217.0 and floor_hz(["w-L"], ch2, xo) is None
+    assert _device_slopes(xo, ["Butterworth", "LinkwitzRiley", "Bessel"]) == [12, 18, 24, 30, 36, 42]
+    lay2 = {"blocks": [{"name": "A Sub", "role": "sub", "channels": {"left": "sw"}},
+                       {"name": "B Woofer", "role": "woofer", "channels": {"left": "w-L", "right": "w-R"}},
+                       {"name": "C Mid", "role": "midrange", "channels": {"left": "m-L", "right": "m-R"}},
+                       {"name": "D Tweeter", "role": "tweeter", "channels": {"left": "tw-L", "right": "tw-R"}},
+                       {"name": "E Centre", "role": "center", "channels": {"left": "c"}}]}
+    res_a = {"autoCrossover": {
+        "groups": [{"group": "FrontChain", "primary": True, "chainOrder": ["A Sub", "B Woofer", "C Mid", "D Tweeter"]},
+                   {"group": "Center", "primary": False, "chainOrder": ["E Centre"]}],
+        "result": [{"block": "A Sub", "kind": "LowPass", "lowPass": edge("LinkwitzRiley", 24, 80.0), "highPass": None, "gainDb": 0},
+                   {"block": "B Woofer", "kind": "BandPass", "highPass": edge("LinkwitzRiley", 24, 80.0),
+                    "lowPass": edge("LinkwitzRiley", 24, 200.0), "gainDb": -2.2},
+                   {"block": "C Mid", "kind": "BandPass", "highPass": edge("LinkwitzRiley", 24, 200.0),
+                    "lowPass": edge("LinkwitzRiley", 24, 2300.0), "gainDb": -3.5},
+                   {"block": "D Tweeter", "kind": "HighPass", "highPass": edge("LinkwitzRiley", 24, 2300.0), "lowPass": None, "gainDb": 0},
+                   {"block": "E Centre", "kind": "HighPass", "highPass": edge("LinkwitzRiley", 24, 900.0), "lowPass": None, "gainDb": 0}]}}
+    assert chain_pairs(res_a) == [("A Sub", "B Woofer"), ("B Woofer", "C Mid"), ("C Mid", "D Tweeter")]
+    repairs, fixes, _ = plan_repairs(res_a, lay2, check_result(res_a, lay2, ch2, xo), ch2, xo)
+    assert [(r["lower"], r["upper"]) for r in repairs] == [("B Woofer", "C Mid")], repairs
+    assert repairs[0]["tune"]["minHz"] == 217.0 and repairs[0]["tune"]["maxHz"] == 310.0, repairs[0]["tune"]
+    assert repairs[0]["tune"]["families"] == ["Butterworth", "LinkwitzRiley", "Bessel"]
+    assert fixes == {"E Centre": {"highPass": {"family": "LinkwitzRiley", "frequencyHz": 990.0, "slopeDbPerOctave": 24}}}, fixes
+
+    # the wishes: a corner is a probe, a family without a corner a tune, a broken or unsure wish is not computed,
+    # and a pair that is no junction of this chain says so
+    rows_w = _xw.check_wishes("BE4 між мідом і твітером на 2300, BW2 між сабом і мідбасом, не знаю між мідбасом і "
+                              "мідом, BW2 для твітера від 900, LR4 між сабом і твітером", ch2, xo)
+    items, skipped = wish_items(rows_w, lay2, res_a, ch2, xo)
+    assert [(i["lower"], i["upper"], "probe" in i, "tune" in i) for i in items] == [
+        ("C Mid", "D Tweeter", True, False), ("A Sub", "B Woofer", False, True)], items
+    assert items[0]["probe"][0]["lowPass"] == edge("Bessel", 24, 2300.0) == items[0]["probe"][0]["highPass"]
+    assert items[1]["tune"] == {"families": ["Butterworth"], "slopes": [12]}, items[1]
+    assert [v for _, v, _ in skipped] == ["UNSURE", "REFUSED", "OK"] and "not a junction" in skipped[2][2], skipped
+
+    # the costs: a probe per side against what stands; a tune's best held to the limits and marked at the window's edge
+    res_b = {"junctions": [
+        {"lower": "C Mid", "upper": "D Tweeter", "purpose": "wish: X", "probe": {"entries": [
+            {"label": "as it stands", "sharedBandSides": [{"side": "left", "scoreDb": 9.0}, {"side": "right", "scoreDb": 11.5}],
+             "afterDelay": [{"side": "left", "lossDb": -1.1}, {"side": "right", "lossDb": -1.7}]},
+            {"label": "X", "sharedBandSides": [{"side": "left", "scoreDb": 14.0}, {"side": "right", "scoreDb": 11.2}],
+             "afterDelay": [{"side": "left", "lossDb": -1.0}, {"side": "right", "lossDb": -2.1}], "unavailable": None}]}},
+        {"lower": "C Mid", "upper": "D Tweeter", "purpose": "wish: Y", "tune": {
+            "windowHz": [1044.0, 3250.0], "current": {"rankingScoreDb": 9.78},
+            "best": {"rankingScoreDb": 8.53, "lowPass": edge("Bessel", 24, 1050.0), "highPass": edge("Bessel", 24, 1050.0)}}}],
+        "settingsFinal": [{"block": "C Mid", "left": {"crossover": "BandPass", "highPass": edge("LinkwitzRiley", 24, 250.0),
+                                                      "lowPass": edge("LinkwitzRiley", 24, 2300.0), "gainDb": -3.5}}]}
+    costs = wish_costs(res_b, lay2, ch2, xo)
+    assert costs[0]["probes"][0]["scoreDeltaDb"] == {"left": 5.0, "right": -0.3}, costs[0]
+    assert costs[1]["tune"]["scoreDeltaDb"] == -1.25 and costs[1]["tune"]["atWindowEdge"], costs[1]
+    assert costs[1]["tune"]["limit"]["verdict"] == "CAUTION", costs[1]["tune"]["limit"]
+    assert final_proposals(res_b)[0]["highPass"]["frequencyHz"] == 250.0
+    shown = render_variants({"delays": res_b, "costs": costs, "repairs_planned": repairs, "fixes": fixes,
+                             "wishes_skipped": skipped, "checks_final": [], "notes": []})
+    assert "THE BEST WITHIN THE LIMITS" in shown and "found at the window's edge" in shown and "not computed" in shown, shown
+
     # the PEQ bands travel as RBJ's Q on both sides: Resonalyze's analog magnitude (EqualizationCurve.cs) against the
     # skill's biquad, well below Nyquist where the two must agree
     import numpy as np
@@ -778,7 +1227,9 @@ def _selftest():
           "hidden rear left out and taken when asked), types from the roles (a woofer beside a sub is a midbass, a "
           "centre a midrange), the protective filters from the set's manifest, the device's delay range or a refusal; "
           "the window-default layout; a tweeter corner under its Fs floor refused with 1044 Hz named; the rear fill "
-          "that fits the Helix (12 ms); the cross-OS tolerance; and the PEQ Q the same on both sides")
+          "that fits the Helix (12 ms); a mid corner under its floor re-searched from 217 Hz and a centre's set to "
+          "990 Hz; wishes as probes and tunes, the broken and the unsure not computed; a tune's best at the window's "
+          "edge and in CAUTION said so; the cross-OS tolerance; and the PEQ Q the same on both sides")
     return 0
 
 
@@ -815,6 +1266,7 @@ def main(argv=None):
         p.add_argument("--rear-fill", type=float, metavar="MS")
         p.add_argument("--near-side-cut", type=float, metavar="DB")
         p.add_argument("--gains", action="store_true", help="balance the channel gains after the delays")
+        p.add_argument("--wishes", metavar="TEXT", help="run: the tuner's crossover wishes in free words (xover_wishes)")
         p.add_argument("--json", action="store_true")
     p = sub.add_parser("acceptance")
     p.add_argument("--set")
@@ -832,17 +1284,17 @@ def main(argv=None):
     if a.cmd == "smoke":
         return smoke()
 
-    layout, notes, problems, channels, xo = build_layout(
-        a.project, a.set, pick=_pairs(a.file, "--file"), include_hidden=a.include_hidden,
-        window_defaults=a.window_defaults, types=_pairs(a.type, "--type"), scene_offset_ms=a.scene_offset,
-        rear_fill_ms=a.rear_fill, adjust_gains=a.gains, near_side_cut_db=a.near_side_cut)
-    for n in notes:
-        print(f"  · {n}", file=sys.stderr)
-    if problems:
-        for pr in problems:
-            print(f"  ✗ {pr}", file=sys.stderr)
-        return 2
     if a.cmd == "layout":
+        layout, notes, problems, _, _ = build_layout(
+            a.project, a.set, pick=_pairs(a.file, "--file"), include_hidden=a.include_hidden,
+            window_defaults=a.window_defaults, types=_pairs(a.type, "--type"), scene_offset_ms=a.scene_offset,
+            rear_fill_ms=a.rear_fill, adjust_gains=a.gains, near_side_cut_db=a.near_side_cut)
+        for n in notes:
+            print(f"  · {n}", file=sys.stderr)
+        if problems:
+            for pr in problems:
+                print(f"  ✗ {pr}", file=sys.stderr)
+            return 2
         text = json.dumps(layout, indent=1, ensure_ascii=False)
         if a.out:
             with open(a.out, "w", encoding="utf-8") as fh:
@@ -851,21 +1303,22 @@ def main(argv=None):
         else:
             print(text)
         return 0
-    out_dir = a.out or tempfile.mkdtemp(prefix="resonalyze-run-")
-    rc, result, err = run_engine(layout, out_dir)
-    if result is None:
-        print(f"  the wrapper wrote nothing (exit {rc}): {err.strip()[-600:]}", file=sys.stderr)
-        return 1
-    checks = check_result(result, layout, channels, xo)
-    notes_after = notes_on(result)
-    with open(os.path.join(out_dir, "checks.json"), "w", encoding="utf-8") as fh:
-        json.dump({"checks": checks, "notes": notes_after}, fh, indent=1, ensure_ascii=False)
+    v = variants(a.project, a.set, wishes=a.wishes, out_dir=a.out, pick=_pairs(a.file, "--file"),
+                 include_hidden=a.include_hidden, window_defaults=a.window_defaults, types=_pairs(a.type, "--type"),
+                 scene_offset_ms=a.scene_offset, rear_fill_ms=a.rear_fill, adjust_gains=a.gains,
+                 near_side_cut_db=a.near_side_cut)
+    if v.get("out_dir"):
+        with open(os.path.join(v["out_dir"], "variants.json"), "w", encoding="utf-8") as fh:
+            json.dump({k: v[k] for k in v if k not in ("crossover", "delays")}, fh, indent=1, ensure_ascii=False)
     if a.json:
-        print(json.dumps({"result": result, "checks": checks, "notes": notes_after}, indent=1, ensure_ascii=False))
+        print(json.dumps(v, indent=1, ensure_ascii=False))
     else:
-        print(render(layout, result, checks, notes_after))
-        print(f"\n  wrote {out_dir}/layout.json, result.json, engine.log, checks.json")
-    return 0 if rc == 0 else EXIT_REFUSED
+        print(render_variants(v))
+        if v.get("out_dir"):
+            print(f"\n  wrote {v['out_dir']}/1-crossover, 2-delays-and-wishes, variants.json")
+    if v.get("problems"):
+        return 1
+    return 0 if v.get("rc_delays") == 0 else EXIT_REFUSED
 
 
 if __name__ == "__main__":

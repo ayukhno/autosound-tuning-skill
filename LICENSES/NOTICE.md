@@ -57,9 +57,9 @@ Third-party resources (icons, external target curves, data) with their own licen
   - `vendor/Resonalyze` — the Resonalyze fork `ayukhno/Resonalyze` as a git submodule, pinned to a commit
     (`b0ce9fb`, equal to the upstream's `main` on 2026-09-17), so Phase 1 can **call** its Auto crossover and
     Auto delay rather than re-derive them. Nothing of it is copied into this tree except what follows.
-  - `engines/resonalyze/` — the C# wrapper around those engines. `WindowReplica.cs`, `Model.cs` and `Shims.cs`
-    are **copied** from the Virtual DSP window's classes (`source/Tools/VirtualCrossover/`,
-    `source/Measurements/`) at that commit, each method naming its origin, because the window's work around
+  - `engines/resonalyze/` — the C# wrapper around those engines. `WindowReplica.cs`, `Model.cs`, `Shims.cs` and
+    parts of `JunctionStage.cs` are **copied** from the Virtual DSP window's classes (`source/Tools/VirtualCrossover/`,
+    `source/Measurements/`, `source/Integration/AgentBridge/`) at that commit, each method naming its origin, because the window's work around
     the engines sits in WinForms classes that cannot be compiled here; eight WinForms-free files are compiled
     unchanged out of the submodule. Each file's header lists what it copies or calls and the deviations, and
     `scripts/upstream-drift.py` watches every one of them.

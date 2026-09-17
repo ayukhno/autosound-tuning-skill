@@ -9,6 +9,8 @@
 // In:  autosound.resonalyze-layout.v1 -- written by skills/autosound-tuning/rew_tool/resonalyze_engine.py.
 // Out: autosound.resonalyze-result.v1 -- engine results only, no timings, so two runs compare byte for byte.
 // Exit 0 done; 2 the layout cannot be used; 3 an engine refused (the JSON still says what ran and why it stopped).
+// Stages, each optional: Auto crossover (or the crossovers the layout gives), Auto delay (committed to the settings),
+// repairs (JunctionStage: a tune written back, then Auto delay again), junctions (probes and tunes, read-only).
 //
 // upstream: DIMOSUS/Resonalyze dsp/CrossoverAutoSetup.cs @ b0ce9fb (MIT) -- called: EstimateBand, Propose, ProposeRanked, ProposeSingle, ReferenceLevelDb, OffsetToReferenceLevel, MeasuredSubElevationDb
 // upstream: DIMOSUS/Resonalyze dsp/AutoAlignmentEngine.cs @ b0ce9fb (MIT) -- called: Compute, ComputeStereo
@@ -182,12 +184,54 @@ output["settingsBeforeDelay"] = new JsonArray(ordered.Select(block => (JsonNode)
     ["right"] = block.Right != null && !block.Mono ? SettingsJson(block.Right.Settings) : null
 }).ToArray());
 
-// ---- Auto delay
-if (runDelay)
+// ---- Auto delay, committed to the settings as the window's Apply does
+if (runDelay && !RunDelay("autoDelay", logPath))
+{
+    exitCode = 3;
+}
+
+// ---- The junction stage: repairs first (a tune whose best is written back, then Auto delay again on the repaired
+// chains), then the read-only junctions (probes of named variants, constrained searches) on what stands after them.
+if (exitCode == 0 && layout["repairs"] is JsonArray repairs && repairs.Count > 0)
+{
+    var repairJson = new JsonArray();
+    bool anyApplied = false;
+    foreach (JsonNode? item in repairs)
+    {
+        repairJson.Add(JunctionStage.Run(item!, ordered, processorRate, applyBest: true, out bool applied));
+        anyApplied |= applied;
+    }
+    output["repairs"] = repairJson;
+    if (anyApplied && runDelay && !RunDelay("autoDelayAfterRepairs", logPath == null ? null : logPath + ".after-repairs"))
+    {
+        exitCode = 3;
+    }
+}
+if (exitCode == 0 && layout["junctions"] is JsonArray junctions && junctions.Count > 0)
+{
+    output["junctions"] = new JsonArray(junctions
+        .Select(item => (JsonNode)JunctionStage.Run(item!, ordered, processorRate, applyBest: false, out _))
+        .ToArray());
+}
+
+output["settingsFinal"] = new JsonArray(ordered.Select(block => (JsonNode)new JsonObject
+{
+    ["block"] = block.Name,
+    ["left"] = SettingsJson(block.Left.Settings),
+    ["right"] = block.Right != null && !block.Mono ? SettingsJson(block.Right.Settings) : null
+}).ToArray());
+
+File.WriteAllText(outPath, output.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n");
+Console.Error.WriteLine($"wrote {outPath}");
+return exitCode;
+
+// ---------------------------------------------------------------- Auto delay
+
+bool RunDelay(string key, string? log)
 {
     clock.Restart();
     var delayJson = new JsonObject { ["request"] = RequestJson(request) };
-    output["autoDelay"] = delayJson;
+    output[key] = delayJson;
     try
     {
         WindowReplica.AutoDelayRun delay = WindowReplica.AutoDelayStereo(ordered, processorRate, maxDelayMs, request);
@@ -198,11 +242,13 @@ if (runDelay)
             ["bandHz"] = new JsonArray(R(delay.BridgeBandLowHz, 2), R(delay.BridgeBandHighHz, 2))
         };
         delayJson["result"] = DelayResultJson(delay, ordered);
-        if (logPath != null)
+        JunctionStage.CommitAutoDelay(delay);
+        if (log != null)
         {
-            File.WriteAllText(logPath, delay.Log.ToString());
+            File.WriteAllText(log, delay.Log.ToString());
         }
-        Console.Error.WriteLine($"auto delay in {clock.ElapsedMilliseconds} ms");
+        Console.Error.WriteLine($"{key} in {clock.ElapsedMilliseconds} ms");
+        return true;
     }
     catch (Exception error) when (error is InvalidOperationException or ArgumentException or NotSupportedException)
     {
@@ -218,13 +264,9 @@ if (runDelay)
                 ["widestCarriesFill"] = range.WidestCarriesFill
             };
         }
-        exitCode = 3;
+        return false;
     }
 }
-
-File.WriteAllText(outPath, output.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n");
-Console.Error.WriteLine($"wrote {outPath}");
-return exitCode;
 
 // ---------------------------------------------------------------- inputs
 
@@ -428,6 +470,8 @@ static JsonObject SettingsJson(VirtualCrossoverChannelSettings settings) => new(
     ["highPass"] = settings.CrossoverKind is CrossoverKind.HighPass or CrossoverKind.BandPass ? Edge(settings.HighPassEdge) : null,
     ["lowPass"] = settings.CrossoverKind is CrossoverKind.LowPass or CrossoverKind.BandPass ? Edge(settings.LowPassEdge) : null,
     ["gainDb"] = settings.GainDb,
+    ["delayMs"] = settings.DelayMs,
+    ["invertPolarity"] = settings.InvertPolarity,
     ["phaseRotationDegrees"] = settings.PhaseRotationDegrees,
     ["peqBands"] = settings.PeqBands.Count
 };

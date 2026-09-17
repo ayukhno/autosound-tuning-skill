@@ -177,6 +177,16 @@ Engine-independent steps first, on `wave-2026-09-17b`; each with its selftest, t
      (21 files, all current); CI builds the pin and runs a synthetic set. On the Passat with the skill's layout the
      engine's best puts the mids' high-pass at LR24 200 Hz, under their 217 Hz floor — REFUSED, which is what 5b's
      constrained search is for — and with the rear taken the Helix's 20.82 ms holds a rear fill of 14.5 ms, not 15.
-   - **5b.** The wishes through `CrossoverJunctionTuner.Probe` (cost against the best, each after its own delay) and
-     `Tune` (a constrained search after Auto delay).
+   - ~~**5b.**~~ Done 2026-09-17. The wrapper's junction stage (`engines/resonalyze/JunctionStage.cs`): Auto delay committed
+     to the settings as the window's Apply does; **repairs** — a `Tune` whose best is written back, then Auto delay again;
+     **junctions** — `Probe` of named variants and `Tune` of a family, slopes and a window, read-only. `resonalyze_engine.py
+     run` became two passes: Auto crossover alone; then the front-chain junctions whose edge broke a limit are re-searched
+     inside it (the device's families and slopes, the window from the floor up), a lone block's edge is set to the nearest
+     allowed, Auto delay runs, the wishes are read (`--wishes`: a corner → a probe, a family or slope → a tune held to the
+     limits). A default rear fill that does not fit the device is lowered to the largest that fits, and said so; a fill
+     the tuner gave is not touched. On the Passat with the rear: the mids' 200 Hz becomes 250 Hz (the score +0.01 dB,
+     CAUTION until 278 Hz), the rear fill 15 → 12.5 ms (rear L 20.78 ms of 20.82); the user's sentence reads "BE4
+     between tweeter and mid" at its best as BE24 1050 Hz, −1.25 dB against what stands but in CAUTION on the tweeters,
+     and "BW2 between sub and midbass" as BW12 110 Hz at the window's edge, +9.40 dB. Not measured yet: a wish's full
+     variant with its own Auto delay (the probe gives the junction's own delay only).
    - **5c.** Per-platform binaries for installs (§5).

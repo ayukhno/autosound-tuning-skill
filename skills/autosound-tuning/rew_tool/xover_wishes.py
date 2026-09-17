@@ -320,8 +320,8 @@ def check_setting(members, family, order, f, channels, xo=None):
             return {"verdict": "UNCHECKED", "allowed": {"family": family, "order_db": order, "f_hz": f}, "why": why}
         code, fs = strictest
         verdict = _cc.fs_margin(f, fs, order=poles)
-        floor_f, _ = _snap(math.ceil(_cc.FS_FLOOR * fs), xo)
-        clear_f, _ = _snap(math.ceil(verdict["convention"] * fs), xo)
+        floor_f, _ = _snap(math.ceil(round(_cc.FS_FLOOR * fs, 6)), xo)   # 1.1 x 900 is 990.0000000000001
+        clear_f, _ = _snap(math.ceil(round(verdict["convention"] * fs, 6)), xo)
         label = f"{family or ''}{poles}".strip() or f"{order} dB/oct"
         if verdict["verdict"] == _cc.REFUSE:
             why.append(f"{code}: {verdict['why']} (Fs {fs:g} Hz)")

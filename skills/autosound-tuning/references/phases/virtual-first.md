@@ -151,10 +151,12 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
   called on the project's own layout: `resonalyze_engine.py run <project> <set> --out <dir>` (the driver types
   from the channel map, the protective filters divided out, the device's delay range;
   `docs/DESIGN-2026-09-17-phase1-variants.md` §3). Every edge it proposes is held to the same limits as a wish:
-  on the Passat its best put the mids' high-pass at 200 Hz, under their 217 Hz floor, and that comes back
-  REFUSED with the nearest allowed corner. The per-driver candidates stay beside it (`xover_candidates` →
-  `xover_select`, `select_neighbor_pair`, every corner through `crossover_checks`). The wishes' cost against
-  the best, junction by junction, is the engine's junction probe — not built yet (design §6, 5b).
+  on the Passat its best put the mids' high-pass at 200 Hz, under their 217 Hz floor, so that junction is
+  searched again inside the limits by Resonalyze's junction tuner (250 Hz, the score +0.01 dB) before anything
+  is shown. The wishes are read against that best with `--wishes "..."`: a wish with a corner by the junction
+  probe (the score per side on one shared band, the sum loss after its own delay), a family or slope without a
+  corner by the tuner (the best that wish can do, held to the same limits). The per-driver candidates stay
+  beside it (`xover_candidates` → `xover_select`, `select_neighbor_pair`, every corner through `crossover_checks`).
   **At most three on the table**: one mathematical and up to two from the wishes; more is what the
   Resonalyze app is for. The choice is made at 1.7, after the sums are predicted.
 - **1.4** **coarse EQ per driver — BEFORE the delays** (the user's decision, 2026-09-17; Resonalyze's
