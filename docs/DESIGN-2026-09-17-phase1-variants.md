@@ -108,7 +108,9 @@ Engine-independent steps first, on `wave-2026-09-17b`; each with its selftest, t
    (`recheck_junctions`), so the delay there is re-read before it is banked. Phase 2's later steps — junctions per
    side, sub with mids, sides, everything, centre, rear — are read on the sums (`predict`, `verify_prediction`, the
    MMM), not proposed by this module; the phase document carries the order.
-4. **Predicted sums for the target-curve visualizer**, smoothed 1/6 or psychoacoustically, beside the target.
+4. ~~**Predicted sums for the target-curve visualizer.**~~ Done 2026-09-17: `rew_tool/sums_export.py` writes ALL, L, R and
+   ALL+C from `predicted.json` as visualizer files (named in the header, the variant's label in each), smoothed 1/6 by
+   default, or 1/3 · 1/12 · 1/24 · 1/48 · REW's psychoacoustic (1/3 → 1/6, cubic mean) · none.
 5. **The engine wrapper** — after the fork's integration brief and golden outputs (§4): `Resonalyze.Dsp` as a pinned
    submodule, the C# console wrapper and its JSON contract, the Python caller, the acceptance test on the Passat's data,
    `setup-dotnet` in CI, and per-platform binaries for installs.

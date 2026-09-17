@@ -173,8 +173,9 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
 - **1.7** **predict the sums, describe the variants, and the tuner chooses** (`predict`): L, R, ALL; the
   sum loss per joint; L−R per band; a graph — for each variant on the table, with its per-term numbers
   **and in words**: what changes and how it will sound, written by the generator and reviewed by the
-  critic. The predicted sums go into the target-curve visualizer beside the target (1/6 or psychoacoustic
-  smoothing); listening is offered, not required. **The tuner chooses, and with that OK the variant goes to
+  critic. The predicted sums go into the target-curve visualizer beside the target — `sums_export.py --predicted
+  DIR/predicted.json --out DIR/curves --label <variant> --smoothing 1/6|psy`, one file per sum, two variants dropped
+  together are two lines; listening is offered, not required. **The tuner chooses, and with that OK the variant goes to
   the sheet (2.3)** — nothing enters the DSP or the ledger before it. A bad joint → back to 1.3/1.5 —
   iterations exist, but at the desk. Free play afterwards: the tuner changes settings as they like, the
   desk computes and compares where it can, or the tuner decides alone.
