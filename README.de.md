@@ -51,12 +51,12 @@ Wir haben einen Installer entwickelt, der alles Nötige herunterlädt und eine p
 
 **macOS** — öffne das Terminal (⌘-Space drücken, "terminal" tippen, Enter) und füge ein:
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.54/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.55/install.sh | bash
 ```
 
 **Windows** — öffne PowerShell (Start drücken, "powershell" tippen, Enter) und füge ein:
 ```powershell
-irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.54/install.ps1 | iex
+irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.55/install.ps1 | iex
 ```
 
 **Nach der Installation:**

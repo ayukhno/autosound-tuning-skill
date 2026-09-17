@@ -49,21 +49,21 @@ We created an installer that downloads everything you need and sets up a conveni
 
 **macOS** — open Terminal (press ⌘-Space, type "terminal", Enter) and paste:
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.54/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.55/install.sh | bash
 ```
 
 **Windows** — open PowerShell (press Start, type "powershell", Enter) and paste:
 ```powershell
-irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.54/install.ps1 | iex
+irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.55/install.ps1 | iex
 ```
 
 **Options:** `--with-omp` (models other than Claude), `--github` (the backup), `--terminal` (the method without the app), `--dry-run` (show the plan, change nothing). On macOS they go after `bash -s --`:
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.54/install.sh | bash -s -- --github
+curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.55/install.sh | bash -s -- --github
 ```
 On Windows they are `-WithOmp`, `-GitHub`, `-Terminal`, `-DryRun`, on this form:
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.54/install.ps1))) -GitHub
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.55/install.ps1))) -GitHub
 ```
 
 **After installation:**
