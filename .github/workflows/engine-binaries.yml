@@ -16,6 +16,8 @@ name: engine-binaries
 #   * every attached build was STARTED in this run                   -> `smoke` on both platforms, on their own runner
 #   * SHA256SUMS beside the files; the licence and the third-party   -> the `attach` job stages both from the fork it
 #     notices INSIDE each archive (the fork is MIT)                      checks out at the same commit
+#   * what is attached is COMPLETE -- a half-uploaded asset holds the   -> the upload step clears a `starter` record by
+#     name and answers HTTP 500 to every later attempt (v3.0.56)            ID and retries, file by file
 #   * the name is computable by an installer                         -> resonalyze-engine-<pin>-<rid>.zip, the pin as
 #                                                                        `resonalyze_engine.ENGINE_PIN` (7 characters)
 #
@@ -145,7 +147,36 @@ jobs:
           notes="Resonalyze engine builds for \`$TAG\` (fork pin \`$PIN\`), attached by the tag's own CI (hub \`RELEASE-CHANNEL.md\` §12)."
           notes="$notes"$'\n\n'"Each archive holds one self-contained \`ResonalyzeEngine\` with the fork's \`License.md\` and \`THIRD-PARTY-NOTICES.md\`, built AND run through the synthetic set on its own platform in this run. Install it with \`python3 rew_tool/resonalyze_engine.py install-binary --from <zip>\`; any other platform builds from the .NET SDK on demand. Check \`SHA256SUMS\` against what you fetched."
           gh release create "$TAG" --draft --prerelease --latest=false --title "$TAG" --notes "$notes"
+      # One file at a time, and a stuck record cleared by ID first. Measured on v3.0.56 (2026-09-17): an upload that
+      # fails leaves the asset behind in state `starter`, holding the NAME -- and `--clobber`, which deletes by name
+      # through the assets list, does not clear that one. Every following attempt then answers `HTTP 500: Error saving
+      # asset` for as long as the record stands, on this run and on any re-run. Three attempts per file, because the
+      # first 500 was GitHub's own and the rest were its leftovers.
       - name: the files
-        run: gh release upload "$TAG" dist/*.zip dist/SHA256SUMS --clobber
+        run: |
+          set -euo pipefail
+          id=$(gh release view "$TAG" --json databaseId --jq '.databaseId')
+          for f in dist/*.zip dist/SHA256SUMS; do
+            name=$(basename "$f")
+            for attempt in 1 2 3; do
+              stuck=$(gh api "repos/$GITHUB_REPOSITORY/releases/$id/assets" --paginate \
+                        --jq ".[] | select(.name == \"$name\") | .id" || true)
+              for a in $stuck; do
+                echo "clearing the asset record $a ($name), state $(gh api "repos/$GITHUB_REPOSITORY/releases/assets/$a" --jq .state)"
+                gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$a"
+              done
+              if gh release upload "$TAG" "$f"; then
+                echo "$name uploaded on attempt $attempt"
+                break
+              fi
+              if [ "$attempt" = 3 ]; then
+                echo "::error::$name did not upload in 3 attempts -- the release stays a DRAFT with nothing published"
+                exit 1
+              fi
+              echo "attempt $attempt for $name failed; clearing what it left and trying again"
+              sleep 15
+            done
+          done
+          gh release view "$TAG" --json assets --jq '.assets[] | "\(.name) \(.state) \(.size)"'
       - name: publish
         run: gh release edit "$TAG" --draft=false --prerelease --latest=false
