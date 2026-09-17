@@ -29,7 +29,7 @@ This phase establishes the raw baseline measurement of the car's current acousti
 ## Step-by-Step Runbook
 
 ### 1. Agree on Naming Conventions (ONCE)
-Before any measurements are taken, establish the channel abbreviations (`sw / w-L/R / m-L/R / tw-L/R / c / r`) and the title grammar — its one home is [naming-and-structure.md §3](references/core/naming-and-structure.md): `(sw)` sweep, `(rta)` MMM RTA, `_N` the number of the DSP state measured (starts at `_1`, NOT "baseline"), a free-form clarification welcome after the method (another measurement, the same series). *Examples:* `m-L_1 (sw)`, `w-R_1 (rta)`.
+Before any measurements are taken, establish the channel abbreviations (`sw / w-L/R / m-L/R / tw-L/R / c / r`) and the title grammar — its one home is [naming-and-structure.md §3](references/core/naming-and-structure.md): `(sw)` sweep, `(rta)` MMM RTA, `_N` the number of the measurement series (starts at `_1`, NOT "baseline"; a DSP state can have several), a free-form clarification welcome after the method (another measurement, the same series). *Examples:* `m-L_1 (sw)`, `w-R_1 (rta)`.
 
 Give the user copy-paste-ready specifics containing the exact save PATH, short comma-separated measurement names, and a brief explanation of the immediate goal. Follow the history hygiene details in [naming-and-structure.md](references/core/naming-and-structure.md).
 
@@ -66,7 +66,7 @@ python3 rew_tool/naming.py <project> expect 0 1        # the titles this phase e
 python3 rew_tool/state/process.py <project>/process capture-start 1 "sw_1 (sw)" "sw_1 (rta)" ...
 ```
 
-The version is the `_N` the titles carry — the DSP state being measured, not the ledger's `v_NNN`
+The version is the `_N` the titles carry — the series being measured (a DSP state can have several), not the ledger's `v_NNN`
 (naming-and-structure.md §3); the titles are what you ASKED for, so
 `capture-close` can name what never came back. **Everything else on this page refuses until the round
 is open** — `capture-taken`, `capture-skip`, `capture-protective`, `capture-knobs` and

@@ -13,14 +13,14 @@ has.
                      front and rear are channels, `SWs` is their pair, `SWs+Ws` the joint)
     r-L_17 (sw) noXO                  w-L (imp)           sw (imp) case35l, NO cotton wool
 
-* **`_N` is the number of the DSP state the measurement was taken on.** Every capture on that
-  state shares it (`_04 (sw)`, later `_04 (rta)`); it moves when the DSP is changed before the
-  next measurement. Saving to a DSP slot or a backup file does not move it, and it is not the
-  ledger's `v_NNN`: that counter also moves for changes that are not the DSP's (skill #37, hub
-  TCC-016). `final` is allowed (phase 3).
+* **`_N` is the number of the measurement series.** Every capture of a series shares it
+  (`_04 (sw)`, `_04 (rta)`). The relation runs one way: a DSP state has several series, and a
+  changed DSP starts a new one -- `_N` does not number DSP states (the user, 2026-09-17). Saving to
+  a DSP slot or a backup file does not move it, and it is not the ledger's `v_NNN`: that counter
+  also moves for changes that are not the DSP's (skill #37, hub TCC-016). `final` is allowed.
 * **Method suffix**: `(sw)` = acoustic sweep, for phase/time/distortion; `(rta)` = MMM RTA, for
   magnitude/tone; `(imp)` = impedance sweep, for a driver's resonance in the install -- the one
-  method with no `_N`, since no DSP state moves a resonance (skill #33). Phases 0 and 2 want sw and
+  method with no `_N`: an impedance measurement is not tied to a DSP state (skill #33). Phases 0 and 2 want sw and
   rta per driver.
 * **Modifiers** (`FX`, `c FX`, …) and **transient experiment tags** (`INV`, `i`, `+Δτ`) sit
   between the code and `_N`. A tag is temporary by design: once the change is baked into the base
@@ -154,7 +154,7 @@ class Glossary:
 
         A REW title is typed by a human and cannot be rewritten afterwards, so a channel renamed
         mid-project (a `m-L` that turned out to be a woofer) keeps its old captures under the old
-        name forever. Those captures are still that channel's, taken on that DSP state, so
+        name forever. Those captures are still that channel's, taken in that series, so
         a checker that cannot resolve them reports missing work that is sitting right there.
 
         An unknown code comes back unchanged — a name this glossary never heard of is not ours to
@@ -219,7 +219,7 @@ class Glossary:
 
 def generate_name(code, version, method=None, modifier=None, position=None, control=None,
                   params=None):
-    """Build a measurement title. `version` is the DSP state number -- an int, its digits, or
+    """Build a measurement title. `version` is the series number -- an int, its digits, or
     `"final"` -- and None only for `(imp)`, which has no `_N`.
 
     >>> generate_name("w-L", 2, "sw")
@@ -241,15 +241,15 @@ def generate_name(code, version, method=None, modifier=None, position=None, cont
         raise NamingError(f"unknown method {method!r}; expected one of {', '.join(METHODS)}")
     if version is None:
         if method != METHOD_IMPEDANCE:
-            raise NamingError("a sweep or an RTA needs `_N`, the number of the DSP state it is taken "
-                              "on; only `(imp)` goes without")
+            raise NamingError("a sweep or an RTA needs `_N`, the number of the series it belongs "
+                              "to; only `(imp)` goes without")
         if control in ("ctl", "rep"):
             raise NamingError(f"control {control!r} is glued to `_N`, and `(imp)` has none")
     elif isinstance(version, bool) or not (str(version).isdigit() or version == "final"):
         # A string interpolated as given built `tw-L_v_001 (sw)`: a plausible list no panel will
         # ever emit, and a capture round opened against it without a word (skill #37).
         raise NamingError(
-            f"version {version!r} is not a DSP state number: `_N` is an integer or `final`, and a "
+            f"version {version!r} is not a series number: `_N` is an integer or `final`, and a "
             "ledger version such as `v_001` is a different counter (naming-and-structure.md §3)")
     if position is not None and position not in POSITIONS:
         raise NamingError(f"unknown position {position!r}; expected one of {', '.join(POSITIONS)}")
@@ -312,8 +312,8 @@ def explain_name(title, glossary=None):
     method = method.lower() if method else None
     version = parts.get("version")
     if version is None and method != METHOD_IMPEDANCE:
-        return None, (f"no `_N` before `({method})`: a measurement is named for the DSP state it "
-                      f"was taken on (`w-L_1 ({method})`), and only `(imp)` goes without")
+        return None, (f"no `_N` before `({method})`: a measurement is named for the series it "
+                      f"belongs to (`w-L_1 ({method})`), and only `(imp)` goes without")
     body = parts["body"].strip()
     position = parts.get("pos2")
     tail = parts.get("tail")
@@ -362,9 +362,9 @@ def explain_name(title, glossary=None):
         # of the measurement's identity, neither part of the channel's code.
         "position": position,
         "control": control,
-        # None only for `(imp)`, which is named for a driver rather than for a DSP state.
+        # None only for `(imp)`, which is named for a driver rather than for a series.
         "version": version,
-        # Numeric form, so `_01` and `_1` are recognised as the same DSP state number. REW
+        # Numeric form, so `_01` and `_1` are recognised as the same series number. REW
         # titles are typed by hand and zero-padding is common; comparing raw strings makes a
         # captured measurement look missing, which is the checker crying wolf.
         "version_n": int(version) if version and version.isdigit() else None,
@@ -393,7 +393,7 @@ def name_key(parsed):
     same measurement, and what lets a checker survive the padding a human happens to type.
 
     The code used is the channel's current name (SCR-039), so `m-L_2 (sw)` taken before a rename
-    and `w-L_2 (sw)` taken after it are ONE measurement: same channel, same DSP state number,
+    and `w-L_2 (sw)` taken after it are ONE measurement: same channel, same series number,
     same method. A rename is a label being corrected, not a reason to re-measure — and a checker
     that disagreed would mark work undone that is already on disk. `parse_name` needs a glossary
     for this; without one the code as typed is all there is, which is the same answer it has always
@@ -558,7 +558,7 @@ def _selftest():
     plain = Glossary({"channels": [{"code": "w-L", "active": True}]})
     assert parse_name("w-L_2 (sw)", plain)["code"] == "w-L"
     assert parse_name("not a measurement") is None
-    # `_01` and `_1` are the same DSP state number -- a human types the padding, not the tool.
+    # `_01` and `_1` are the same series number -- a human types the padding, not the tool.
     assert name_key(parse_name("c_01 (rta)", plain)) == name_key(parse_name("c_1 (rta)", plain))
 
     # -- SCR-039: `m-L` was renamed to `w-L`; its captures still say `m-L` and always will.
@@ -587,7 +587,7 @@ def _selftest():
     assert old["code"] == "m-L", "the title says what REW shows, unedited"
     assert old["code_current"] == "w-L", old
     assert name_key(old) == name_key(parse_name("w-L_2 (sw)", g)), \
-        "one channel, one DSP state, one method -- a rename does not make it two measurements"
+        "one channel, one series, one method -- a rename does not make it two measurements"
     # the modifier still splits off an old code, which is why former names are in `all_codes`.
     assert parse_name("m-L FX_2 (sw)", g)["modifier"] == "FX"
     # without a glossary there is no history to consult, and the answer is what it always was.

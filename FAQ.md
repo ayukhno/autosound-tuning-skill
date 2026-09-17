@@ -375,14 +375,14 @@ For detailed REW configuration for USB microphones, refer to the video guide: [M
 
 Calculation tools look for correct charts strictly by their names in REW:
 
-* `m-L_01 (sw)` — channel `m-L` (left midrange), measured in DSP state `01`, sweep measurement. The number is the state of the DSP, not the registry's version number.
+* `m-L_01 (sw)` — channel `m-L` (left midrange), measurement series `01`, sweep measurement. A DSP state can have several series; the number is not the registry's version number either.
 * `m-L_01 (rta)` — moving-mic RTA measurement for the same speaker.
 * `sw_01 (sw)`, `w-R_01 (sw)`, `tw-L_01 (sw)` — subwoofer, right woofer (midbass), left tweeter respectively.
 * `L_01 (rta)`, `ALL_01 (rta)` — sum RTA measurement of the complete left side or the entire system.
 * `m-L p5_01 (sw)` — speaker measured at a spatial checkpoint `p5` (alternatively named `m-L_01 (sw) p5`).
 * `m-L-ctl1_01 (sw)` and `m-L-ctl3_01 (sw)` — timing control: the first opens the speaker series, the second closes it (can be named `m-L_01ctl` and `m-L_01rep` in the car).
 * `m-L_final (sw)` — verification measurement after saving final parameters.
-* `w-L (imp)` — impedance measurement of a driver; it carries no state number.
+* `w-L (imp)` — impedance measurement of a driver; it is not tied to a DSP state and carries no series number.
 * Text after the method makes it **another measurement of the same series**: `r-L_17 (sw) noXO` is not `r-L_17 (sw)`.
 
 Titles are matched exactly as typed. A title that does not match what the step expects is a question the AI asks you, never a guess.

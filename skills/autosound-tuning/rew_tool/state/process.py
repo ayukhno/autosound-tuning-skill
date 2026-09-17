@@ -442,7 +442,7 @@ def resolves(item, project_dir, versions=None, naming=None):
     naming = _load_naming() if naming is None else naming
     if naming is not None:
         # A capture is a title in the grammar WITH a method (`naming-and-structure.md §3`). The
-        # grammar leaves the method optional -- it also describes DSP state strings -- but here
+        # grammar leaves the method optional -- it also describes version strings -- but here
         # optional means "banked as v_003" parses as a measurement called "banked as v", and the
         # sentence walks straight through the gate it was written to stop.
         for candidate in (text,) + tuple(text.split(" + ")):
@@ -815,7 +815,7 @@ class Process:
     def start_capture(self, version, expected=(), phase=None, note=None, step=None):
         """Open a capture round: what was asked for, at which `_N`, in which phase.
 
-        `version` is the DSP state the titles carry (`_N`); a round opened with a ledger version
+        `version` is the series number the titles carry (`_N`); a round opened with a ledger version
         (`v_001`) is still found, since `protective_record_for` matches either -- but the two are
         different counters (`naming-and-structure.md §5`), and neither is derived from the other.
 
@@ -1003,7 +1003,7 @@ class Process:
 
     @staticmethod
     def _version_key(v):
-        # `_01` and `_1` are one DSP state number (`naming.parse_name` says the same): REW
+        # `_01` and `_1` are one series number (`naming.parse_name` says the same): REW
         # titles are typed by hand and zero-padding is common, and a string compare here would
         # make a recorded round invisible to the solos it was recorded for.
         v = str(v).strip()
