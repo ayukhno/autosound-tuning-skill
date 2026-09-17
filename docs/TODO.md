@@ -26,7 +26,7 @@ be done — and specifically why it cannot be fixed by doing the work, since any
 `open` with a tired author.
 
     ## S-007 · Something that was due and is now finished
-    **Status**: done 2026-09-17 · `grep -n "REW-EQ-CopyPaste-Assistant" README.md` — the README's first list says the EQ is loaded, not retyped (the user asked for README and FAQ to be current, English first)
+    **Status**: done 2026-09-06 · `scripts/run-selftests.sh` (53/53) · commit `abc1234`
 
 The `**Due when:**` line stays as it was written. An item that turned out to be due for a reason
 nobody predicted keeps its original trigger and says so in the status line: what actually brought
@@ -187,7 +187,7 @@ number.
 **Raised** 2026-09-05, same reading as S-005.
 
 ## S-007 · The README never says the EQ reaches the processor without retyping it
-**Status**: open
+**Status**: done 2026-09-17 · `grep -n "REW-EQ-CopyPaste-Assistant" README.md` — the README's first list says the EQ is loaded, not retyped (the user asked for README and FAQ to be current, English first; commit `6fa281a`)
 
 **Due:** in the documentation pass before v3.1.0, when the READMEs are reworked for the release.
 
