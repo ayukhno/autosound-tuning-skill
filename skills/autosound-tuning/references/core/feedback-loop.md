@@ -60,6 +60,13 @@ Presents it as **a list where EACH item is already PRE-SELECTED (☑)**. The use
 
    Unsure which — show the person both and let them pick; do not guess. A finding with a part on each side is two issues, each on its own channel, each linking the other. Any other channel name, or a repo written out by hand, is refused before anything runs.
 
+   **Without GitHub — the Arbiter's form** (hub TCC-017, his decision 2026-09-17). When `gh` is missing or not signed in, or when the person prefers it, the same text goes to the Arbiter's Google Form: `post_feedback(…, via="form")`, or `via="auto"`, which picks the form when GitHub is not at hand. The address and the questions are fixed in the gate; **"sent" is only what the form confirms**, never what the request did. Before the consent, the session asks what the form asks, in the person's own words:
+   - **who is writing** — a name and a contact, so the Arbiter can answer (the person's own entry; nothing is filled in for them) → `sender`;
+   - **the kind** — a problem, a wish or feedback → `kind="problem" | "wish" | "feedback"` (`"test"` is only for a probe of the channel, and a real report never uses it);
+   - **for a problem, how far it stops the tuning** — it stops the tuning · it gets in the way but can be worked around · it does not → `impact="stops" | "workaround" | "none"`.
+
+   Then it shows the final text — those answers, the message, and the versions line the gate adds (`method <version> · <OS> · lang=<code> · about=<channel>`) — waits for the yes, and passes `consented=True`. **The message goes in the person's language** (the Arbiter, 2026-09-17: the form reaches only him, so the English rule for a public issue does not apply); Markdown travels as typed. **Text only: pictures do not go through the form** — a screenshot still needs GitHub, or goes to the author separately. The form keeps no read-back, so there is no duplicate guard: send once.
+
 ### The package template
 
 ```markdown
@@ -81,17 +88,19 @@ crossover sets · techniques · successful symptom→fix · track markers
 ## This body's cabin anomalies (→ knowledge/cars/)
 ```
 
-> **Write the feedback package in English.** Local project files follow the user's chosen language
+> **Write the feedback package in English** when it goes to GitHub. Local project files follow the user's chosen language
 > (EN/UK/DE/PL, `phase_-1_intake.md §0.5` step 1), but a feedback package becomes a **public GitHub issue** read
 > by the maintainer and the whole community — so the issue **title and body are always English**,
 > regardless of the session language. If the tune was run in UK/DE/PL, translate the package on the way
 > out. (The title is already English — `post_feedback` builds `Feedback: <car> · <DSP>`; keep the body English too.)
+> The Arbiter's form is the exception: it reaches only him, so the message stays in the person's language.
 
 ### Sending channels (by increasing formality)
 
 1. **A GitHub Issue** in the skill's repo per the issue template — the default: transparent, threaded, the history visible to all. **In English** (public repo — see the note above). A finding about the TCC window goes to TCC's repo instead — `channel="tcc"`, same rules.
 2. **A PR**: a per-vehicle setup+feedback package in `community-inbox/setups/<body>-<date>.md` (narrative case studies go in `community-inbox/case-studies/` instead).
-3. Without git: the file to the author by messenger/email.
+3. **Without GitHub: the Arbiter's form** — text only, in the person's language, through the gate (`via="form"`); the questions and the consent are in step 2 above.
+4. Without either: the file to the author by messenger/email.
 
 ### Package safety rules
 

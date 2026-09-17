@@ -166,7 +166,7 @@ prints the rows that match, best first — read those instead of the whole board
 | a second AI's independent review of a package / Критик, Радник | the review text, via a CLI, an API, or a clipboard block for any web chat | `scripts/autosound_ai.py critic <package.md> [trace.csv]`, `advisor …`, `doctor` | `.critic-env` (or clipboard mode); `doctor` says what is missing | review points of every phase | field | `tooling/setup-critic-channel.md`, `core/review-loop.md` |
 | turn a project's lessons into a feedback package / зібрати уроки проєкту | the fixed package shape filled from `skill-inbox.md` + the changelog's `Lesson:` lines, with anything that looks personal NAMED; posts nothing | `scripts/harvest_inbox.py <project> [--check] [--json]` | an inbox in the project — refuses without one | any | field | `core/feedback-loop.md` |
 | the review cadence, deadlocks, audits / як рецензувати | TWO-PASS, when the Arbiter breaks a tie | (doctrine) | — | any | field | `core/review-loop.md` |
-| send experience back (a DSP profile, feedback) / зворотний звʼязок | a GitHub Issue, deduplicated, never a confabulated "posted" | `gates/side_effect.py` (dry-run first); `scripts/issue_triage.py` | `gh` and consent | 4 | field | `core/feedback-loop.md` |
+| send experience back (a DSP profile, feedback) / зворотний звʼязок | a GitHub Issue, deduplicated, never a confabulated "posted"; without GitHub the Arbiter's form, text only, "sent" only when the form confirms | `gates/side_effect.py` (dry-run first; `post_feedback(…, via="form")`); `scripts/issue_triage.py` | `gh` and consent — or, for the form, who is writing, the kind, and consent | 4 | field | `core/feedback-loop.md` |
 
 ## L · Safety and abstention
 
