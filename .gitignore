@@ -35,3 +35,7 @@ CLAUDE.local.md
 # rule is scripts/secret-scan.py (run by scripts/run-selftests.sh and by the pre-commit hook).
 .critic-env
 critic-env
+
+# The Resonalyze engine wrapper build (engines/resonalyze): machine-built, never tracked.
+engines/resonalyze/bin/
+engines/resonalyze/obj/

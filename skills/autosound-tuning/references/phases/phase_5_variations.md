@@ -78,4 +78,4 @@ Goal: a sense of **envelopment** without dragging the front stage back.
 
 ---
 
-When the chosen variations are saved (base untouched) and the user is done, **close the session** — see Phase 4's finish (backup + experience via a GitHub Issue). ♻️ Return anytime to add or tweak a variation.
+When the chosen variations are saved (base untouched) and the user is done, **close the session** — see Phase 4's finish (backup + experience via a GitHub Issue, or the Arbiter's form without GitHub). ♻️ Return anytime to add or tweak a variation.

@@ -22,8 +22,8 @@ Dependencies: numpy, scipy (via dsp_math). fs is fixed at 96 kHz in dsp_math.FS.
 """
 import numpy as np
 
-from dsp_math import (XO_OPTIONS, align_delay_polarity, apf_search, eq_complex,
-                      greedy_eq_fit, mag_db, xo_response)
+from dsp_math import (GD_PENALTY_DB_PER_MS, XO_OPTIONS, align_delay_polarity, apf_search, eq_complex,
+                      greedy_eq_fit, junction_gd_swing, mag_db, xo_response)
 
 
 def fit_weight(freqs, target_mag_db, trust_band):
@@ -215,28 +215,65 @@ def repair_joint_apf_multi(freqs, snapshots, band, *, min_gain_db=0.5,
 
 
 def select_neighbor_pair(freqs, branches_lo, branches_hi, fits_lo, fits_hi,
-                         band, house_mag_db, *, max_delay_ms=3.0):
+                         band, house_mag_db, *, max_delay_ms=3.0, filters_lo=None, filters_hi=None,
+                         fc_hz=None, gd_weight=GD_PENALTY_DB_PER_MS):
     """Joint-aware pair selection (MANDATORY between adjacent bands).
     branches_*: candidate complex branches (post-apply_realization).
     fits_*: matching per-driver fit_rms_db lists.
     Returns (i_lo, i_hi, details) minimizing
-      0.5*(fit_lo+fit_hi) + sum_rms_vs_house + 0.5*max(0, -null-3)."""
+      0.5*(fit_lo+fit_hi) + sum_rms_vs_house + 0.5*max(0, -null-3) [+ gd_penalty_db].
+
+    The group-delay term (hub RES-014, research 2026-09-17): with `filters_lo` / `filters_hi` -- each
+    candidate's ELECTRICAL crossover response alone (no driver, no EQ), in the same order as the
+    branches -- the summed filter pair at the branches' own delay and polarity is read by
+    `dsp_math.junction_gd_swing`, and `gd_weight` dB per ms of swing OVER the Blauert & Laws
+    threshold at `fc_hz` (the band's geometric centre when not given; clamped to 3.2 ms below
+    500 Hz) is added to the score. On the Passat's woofer<->mid junction this moved the winner by
+    5.37 dB of margin and cut the swing from 7.0/4.9 to 3.3/2.1 ms; at mid<->tweeter every candidate
+    swings a tenth of the threshold and the term is silent. Without the filters nothing changes.
+    `details` then also carries `gd_swing_ms`, `gd_threshold_ms`, `gd_over_ms`, `gd_penalty_db`,
+    `gd_clamped`, and two runners-up so the tuner can take either: `best_without_gd` (the pair the
+    magnitude terms alone would pick) and `best_under_threshold` (the best pair whose swing stays
+    under the threshold), each as `(i_lo, i_hi, score)` or None."""
     m = (freqs >= band[0]) & (freqs <= band[1])
+    with_gd = filters_lo is not None and filters_hi is not None
     best = None
+    best_raw = best_under = None
     for i, (bl, fl) in enumerate(zip(branches_lo, fits_lo)):
         for j, (bh, fh) in enumerate(zip(branches_hi, fits_hi)):
             pol, tau, null, margin = align_delay_polarity(freqs, bl, bh, band,
                                                           max_delay_ms=max_delay_ms)
-            s = bl[m] + pol * bh[m] * np.exp(-2j * np.pi * freqs[m] * tau / 1000.0)
+            rot = pol * np.exp(-2j * np.pi * freqs[m] * tau / 1000.0)
+            s = bl[m] + bh[m] * rot
             sm = mag_db(s)
             anchor = np.median(sm - house_mag_db[m])
             rms = float(np.sqrt(np.mean((sm - house_mag_db[m] - anchor) ** 2)))
-            score = 0.5 * (fl + fh) + rms + 0.5 * max(0.0, -null - 3.0)
+            raw = 0.5 * (fl + fh) + rms + 0.5 * max(0.0, -null - 3.0)
+            gd = None
+            if with_gd:
+                hs = np.zeros(len(freqs), dtype=complex)
+                hs[m] = np.asarray(filters_lo[i])[m] + np.asarray(filters_hi[j])[m] * rot
+                gd = junction_gd_swing(freqs, hs, band, fc_hz=fc_hz, weight=gd_weight)
+            score = raw + ((gd["penalty_db"] or 0.0) if gd else 0.0)
+            if best_raw is None or raw < best_raw[2]:
+                best_raw = (i, j, round(raw, 3))
+            if gd and gd["over_ms"] == 0.0 and (best_under is None or score < best_under[2]):
+                best_under = (i, j, round(score, 3))
             if best is None or score < best[0]:
-                best = (score, i, j, {"polarity": pol, "delay_ms": round(tau, 2),
-                                      "worst_null_db": round(null, 2),
-                                      "polarity_margin_db": round(margin, 2),
-                                      "sum_vs_house_rms_db": round(rms, 2)})
+                det = {"polarity": pol, "delay_ms": round(tau, 2),
+                       "worst_null_db": round(null, 2),
+                       "polarity_margin_db": round(margin, 2),
+                       "sum_vs_house_rms_db": round(rms, 2), "score": round(score, 3)}
+                if gd:
+                    det.update(gd_swing_ms=(round(gd["swing_ms"], 2) if gd["swing_ms"] is not None else None),
+                               gd_threshold_ms=round(gd["threshold_ms"], 2),
+                               gd_over_ms=(round(gd["over_ms"], 2) if gd["over_ms"] is not None else None),
+                               gd_penalty_db=(round(gd["penalty_db"], 2) if gd["penalty_db"] is not None else None),
+                               gd_clamped=gd["clamped"])
+                best = (score, i, j, det)
+    if with_gd:
+        best[3]["best_without_gd"] = best_raw
+        best[3]["best_under_threshold"] = best_under
     return best[1], best[2], best[3]
 
 
@@ -296,7 +333,34 @@ def _selftest():
     house = np.zeros_like(freqs)
     i, j, det = select_neighbor_pair(freqs, [lo_a, lo_b], [hi_a], [1.0, 1.0], [1.0],
                                      (150, 600), house)
-    assert i == 0, (i, det)
+    assert i == 0 and "gd_penalty_db" not in det, (i, det)
+
+    # 4b) RES-014: with the electrical filters given, the group-delay swing joins the score. At a
+    #     200 Hz junction a matched LR48 pair sums as flat as LR24 (the magnitude terms cannot tell
+    #     them apart) but swings 4.8 ms against 1.2 -- over the clamped 3.2 ms threshold -- so the
+    #     penalty picks the gentler pair, names what the magnitude terms alone would have picked,
+    #     and the best under the threshold. At 3 kHz the same two pairs swing a tenth of the
+    #     threshold and the term is silent: the winner is whatever the magnitude terms say.
+    for fc_t, silent in ((200.0, False), (3000.0, True)):
+        band_t = (fc_t / 2, fc_t * 2)
+        f_lo = [xo_response(freqs, fc_t, 48, "lp", "LR"), xo_response(freqs, fc_t, 24, "lp", "LR")]
+        f_hi = [xo_response(freqs, fc_t, 48, "hp", "LR"), xo_response(freqs, fc_t, 24, "hp", "LR")]
+        b_lo, b_hi = [flat * h for h in f_lo], [flat * h for h in f_hi]
+        # fits: the steep pair a hair better on paper, so only the swing can move the choice
+        i_g, j_g, det_g = select_neighbor_pair(freqs, b_lo, b_hi, [0.9, 1.0], [0.9, 1.0], band_t, house,
+                                               filters_lo=f_lo, filters_hi=f_hi, fc_hz=fc_t)
+        assert det_g["gd_swing_ms"] is not None and det_g["gd_threshold_ms"] > 0, det_g
+        if silent:
+            assert (i_g, j_g) == (0, 0) and det_g["gd_penalty_db"] == 0.0, (i_g, j_g, det_g)
+            assert det_g["best_without_gd"][:2] == (0, 0) and not det_g["gd_clamped"], det_g
+        else:
+            assert (i_g, j_g) == (1, 1) and det_g["gd_penalty_db"] == 0.0 and det_g["gd_clamped"], (i_g, j_g, det_g)
+            assert det_g["best_without_gd"][:2] == (0, 0), det_g
+            assert det_g["best_under_threshold"][:2] == (1, 1), det_g
+            # the steep pair's own reading, for the record: over the threshold by name
+            _, _, det_s = select_neighbor_pair(freqs, b_lo[:1], b_hi[:1], [0.9], [0.9], band_t, house,
+                                               filters_lo=f_lo[:1], filters_hi=f_hi[:1], fc_hz=fc_t)
+            assert det_s["gd_over_ms"] > 1.0 and det_s["gd_penalty_db"] > 1.0 and det_s["best_under_threshold"] is None, det_s
 
     # 5) APF repair on a synthetic allpass-induced notch. Low-Q rotation is
     # absorbed by delay during alignment (verified: null -0.26 dB, repair

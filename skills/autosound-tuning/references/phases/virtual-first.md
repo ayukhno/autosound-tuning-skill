@@ -138,17 +138,63 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
   in 0.8** (`project.py <project> flaws`) — per channel the peaks/nulls, stands/moves (from the
   ellipsoid), minimum-phase or not, below/above Schroeder → the sole right to an EQ band. Building it
   here is too late: the map is what the entry into this phase was gated on.
-- **1.2** **crossovers**: 2–3 candidates, scored automatically on magnitude, phase and impulse, each
-  with its drivers' strengths and weaknesses and a plain description → **the user chooses**.
-- **1.3** **joints bottom-up** (sub↔sub → subs↔midbass → midbass↔mid → mid↔tweeter): delay × polarity
-  by how much the pair loses when summed vs the ideal (`predict --align`: each joint read on the member
-  below AS IT WILL NOW PLAY, delays on the DSP's grid, the proposal as `aligned-delta.json` for
-  `apply.propose`); near-tie through both polarities; an all-pass if a null remains (`--apf` hints
-  one). L/R: the pair-arrival difference against tape set (b) — the tape is the arbiter.
-- **1.4** **levels**: from geometry (distances and angles from the tape), cut-only — a first estimate;
-  a second from the measurement; a divergence is a finding, not an error.
-- **1.5** **predict the sums** (`predict`): L, R, ALL; the sum loss per joint; L−R per band; a graph. A
-  bad joint → back to 1.2/1.3 — iterations exist, but at the desk.
+- **1.2** **the tuner's wishes first, in free words** — "BE4 between tweeter and mid, BW2 between sub and
+  midbass, not sure between midbass and mid" is a complete answer. `rew_tool/xover_wishes.py <project>
+  "<the sentence>"` names the junction each clause is about and checks it against the hard limits: the
+  DSP's families, slopes and corner range (the profile) and the fragile driver's Fs floor
+  (`crossover_checks.fs_margin` — REFUSE under 1.1 × Fs, CAUTION up to the craft convention, which a
+  steeper slope relaxes). A wish that breaks a limit is **not computed**; the nearest allowed setting is
+  offered instead ("BW2 on your tweeter from 1044 Hz"). "Not sure" says the desk proposes there.
+- **1.3** **crossovers — the variants**: **the best the maths finds first, without the wishes**; then a
+  pass **with** them, so each wish shows what it costs against the best. The whole configuration at once —
+  every junction, both sides, the centre and the rear as their own zones — is Resonalyze's Auto crossover,
+  called on the project's own layout: `resonalyze_engine.py run <project> <set> --out <dir>` (the driver types
+  from the channel map, the protective filters divided out, the device's delay range;
+  `docs/DESIGN-2026-09-17-phase1-variants.md` §3). Every edge it proposes is held to the same limits as a wish:
+  on the Passat its best put the mids' high-pass at 200 Hz, under their 217 Hz floor, so that junction is
+  searched again inside the limits by Resonalyze's junction tuner (250 Hz, the score +0.01 dB) before anything
+  is shown. The wishes are read against that best with `--wishes "..."`: a wish with a corner by the junction
+  probe (the score per side on one shared band, the sum loss after its own delay), a family or slope without a
+  corner by the tuner (the best that wish can do, held to the same limits). The per-driver candidates stay
+  beside it (`xover_candidates` → `xover_select`, `select_neighbor_pair`, every corner through `crossover_checks`).
+  **At most three on the table**: one mathematical and up to two from the wishes; more is what the
+  Resonalyze app is for. The choice is made at 1.7, after the sums are predicted. **Two leaders** (hub `RES-014`): beside the engine's best, the alternative by the experimental group-delay term — the crossover pair's swing against the Blauert & Laws threshold at each junction, 1 dB per ms over it, clamped below 500 Hz — shown with each junction's swing/threshold; the run continues with the engine's leader, the alternative's edges are on the table for the tuner.
+- **1.4** **coarse EQ per driver — BEFORE the delays** (the user's decision, 2026-09-17; Resonalyze's
+  order too): the first part of `eq_propose` (`--part 1`) — resonances per driver group — cuts of minimum-phase
+  peaks that stay across the positions, away from the junctions, Q no narrower than the ellipsoid's
+  ceiling, toward each driver's own per-band target; zero boosts. A PEQ rotates phase, so a delay
+  computed without it is a delay redone after it. The rest of EQ is Phase 2.
+- **1.5** **joints bottom-up, with the coarse EQ in the chains** (sub↔sub → subs↔midbass → midbass↔mid →
+  mid↔tweeter): delay × polarity by how much the pair loses when summed vs the ideal (`predict --align`:
+  each joint read on the member below AS IT WILL NOW PLAY, delays on the DSP's grid, the proposal as
+  `aligned-delta.json` for `apply.propose`); near-tie through both polarities; an all-pass if a null
+  remains (`--apf` hints one). **Above 1 kHz a delay candidate is confirmed on the TUNED pair's
+  arrival, not banked off the desk** (hub `RES-013`): whole cycles look alike on a sum and on a
+  phase view, so where the direct-sound reading (a 2-cycle cut) and the whole-record one disagree, or the proposal sits a cycle from the direct-sound reading (hub `RES-016`), the joint comes back
+  `UNVERIFIED` with both candidates — measure the pair (a sweep of the two together, or both solos
+  through these chains), record which candidate it picks, and only then bank that joint. **Front and sub first; then the centre and the rear are placed against
+  the settled front** — the centre read against both sides where the front mids play (1–4 kHz), as
+  Resonalyze stages it; its Auto delay does the same in the same `resonalyze_engine.py run`, and says when a
+  placement is at Low confidence (the Passat's centre and rear are) or when the device cannot hold the
+  delays — with the rear fill that would fit (the Helix holds 20.82 ms on an output and 20.82 on the virtual
+  channel feeding it, and the two add: a rear delay past one tier is split between them). L/R: the pair-arrival difference
+  against tape set (b) — the tape is the arbiter.
+- **1.6** **levels, and how the scene is centred**: levels from geometry (distances and angles from the
+  tape), cut-only — a first estimate; a second from the measurement; a divergence is a finding, not an
+  error. **The scene is centred by level here, and that is the BASE** (research's answer, RES-011, on the
+  user's plan): the arrivals aligned to the seat (scene offset 0) and the near-side pull as channel gain
+  (Resonalyze's gain balance, "levels only" — `resonalyze_engine.py run --gains`; the Passat's is 2 / 4 / 4 dB on
+  midbass / mid / tweeter). No choice is asked in Phase 1: the second preset — the same pull by time — is built
+  from this base in Phase 2, after each side is whole, and the ear decides there (2.1; `scene_presets.py`).
+- **1.7** **predict the sums, describe the variants, and the tuner chooses** (`predict`): L, R, ALL; the
+  sum loss per joint; L−R per band; a graph — for each variant on the table, with its per-term numbers
+  **and in words**: what changes and how it will sound, written by the generator and reviewed by the
+  critic. The predicted sums go into the target-curve visualizer beside the target — `sums_export.py --predicted
+  DIR/predicted.json --out DIR/curves --label <variant> --smoothing 1/6|psy`, one file per sum, two variants dropped
+  together are two lines; listening is offered, not required. **The tuner chooses, and with that OK the variant goes to
+  the sheet (2.3)** — nothing enters the DSP or the ledger before it. A bad joint → back to 1.3/1.5 —
+  iterations exist, but at the desk. Free play afterwards: the tuner changes settings as they like, the
+  desk computes and compares where it can, or the tuner decides alone.
   - **A junction at the desk is computed by `predict`, or it is not computed.** A script written for
     one evening is not evidence: the desk's own three misses of 02–07.09.2026 were all outside the
     tool — a summation done in magnitudes only (which cannot see a sign, and predicted −1.2 dB where
@@ -184,14 +230,28 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
     −4 (hub `RES-007`).
   - **`--delta-vs` for what a change does, `--ladder` for what the rungs give.** The delta reports only
     the rows that differ and the junctions they are in; the ladder prints one junction's variants in
-    the order asked and **does not sort them** — ordering by score is a proposal, and the desk does not
-    propose (`--align` is the search, and it says that it searched).
-- **2.1** **coarse EQ as packages** (`eq_propose`, with `ellipsoid` for σ(f), stays/moves and the Q
-  ceiling): resonances per driver group → L/R shape per pair → tone per pair, each package accepted or
-  refused whole and banked as one version (`apply.propose`); only cuts of minimum-phase peaks that
-  stay across the positions, away from the junctions; below ~150–200 Hz a point is trusted, above only
-  what survives the ellipsoid; tolerance to the target max(1 dB, 2σ); zero boosts. Every package names
-  the listening characteristic that checks it.
+    the order asked and **does not sort them** — a reading stays a reading, and a proposal says it is one
+    (`--align` searches and proposes). **The desk proposes; the Arbiter decides:** a variant is shown,
+    explained, advised and discussed, and nothing goes into the DSP or the ledger without the Arbiter's OK
+    — no EQ into a cancellation, no improvement claimed without a measurement after (the virtual-DSP desk
+    spec's requirement В8, as the user put it on 2026-09-17).
+- **2.1** **the second part of EQ, in this order** (the user's decision, 2026-09-17), as packages
+  (`eq_propose --part 2`, with `ellipsoid` for σ(f), stays/moves and the Q ceiling), each accepted or refused
+  whole and banked as one version (`apply.propose`): **L/R pairs per band** (one shape, broadly, on the
+  louder side, Q ≤ 1 — what skews the stage is the L/R difference, not the distance from the target) →
+  **the junctions of each side**, left and right apart → **sub with mids** → **each side whole** → **everything
+  together**, the tone per pair toward the target within max(1 dB, 2σ) → **the centre under everything** →
+  **the rear under everything**. Only cuts of minimum-phase peaks that stay across the positions; below
+  ~150–200 Hz a point is trusted, above only what survives the ellipsoid; zero boosts. **A step whose EQ
+  touched a junction's band (±1 oct) re-checks that junction's delay (1.5); otherwise the delays stay** —
+  a package says which junctions it reaches (`recheck_junctions`) before it is banked. **Between "each side
+  whole" and "everything together" the scene's two presets go to the ear** (RES-011): A is the base as it stands,
+  B the same pull by time — `scene_presets.py --project DIR --cut w=2,m=4,tw=4` builds the ladder (0.15–0.30 ms,
+  the near side later, its cut reduced 16 dB/ms, both channels trimmed to the base's centred level) as deltas for
+  the sheet; the comparison is the cheat-sheet's protocol (centre off, loudness matched, A-B-B-A three rounds; no
+  consistent difference → keep A). The L+R sum is tuned only after the choice, because an offset between the
+  sides changes it.
+  Every package names the listening characteristic that checks it.
 - **2.2** **check after EQ**: predict again — joints and L/R on the same rulers **and through the same
   windows** (EQ inside a joint band rotates phase). `verify_prediction` reads the measured set through
   the window the prediction carries (`predicted.json`'s `window_spec`), per junction, so a gated

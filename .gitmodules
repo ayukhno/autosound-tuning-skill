@@ -1,0 +1,4 @@
+[submodule "vendor/Resonalyze"]
+	path = vendor/Resonalyze
+	url = https://github.com/ayukhno/Resonalyze.git
+	update = none

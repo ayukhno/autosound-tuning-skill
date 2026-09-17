@@ -508,7 +508,7 @@ def _side_of(ch):
     return "sub" if _is_sub(ch) else "other"   # center/rear ('other') → Phase 5, skip
 
 
-def _joints_from_state(state_root, preset=None, ver_state=None):
+def _joints_from_state(state_root, preset=None, ver_state=None, with_rows=False):
     """Derive the joint map (adjacent driver pairs + crossover freq) from a
     versioned state snapshot's crossovers — so `analyze-joints` needn't be
     hand-fed `lo,hi,fc`. Works against the ACTIVE slot by default (the multi-
@@ -516,7 +516,9 @@ def _joints_from_state(state_root, preset=None, ver_state=None):
     trust gate is a measurement-naming convention, not in state, so state-derived
     joints carry no pair (→ UNVERIFIED) until the user attaches one via --joint.
 
-    Returns (preset, version, [(lo, hi, fc, None), …]) sorted low→high per side.
+    Returns (preset, version, [(lo, hi, fc, None), …]) sorted low→high per side -- and, with
+    `with_rows=True`, the snapshot's channel rows as a fourth element, for what else a joint's two
+    rows say (the crossover pair's group-delay swing, hub RES-014).
     """
     state_dir = os.path.join(os.path.dirname(__file__), "state")
     if state_dir not in sys.path:
@@ -554,7 +556,37 @@ def _joints_from_state(state_root, preset=None, ver_state=None):
                 continue
             seen.add((lo, hi))
             joints.append((lo, hi, float(fc), None))
+    if with_rows:
+        return preset, snap.get("version"), joints, channels
     return preset, snap.get("version"), joints
+
+
+def joint_gd_from_rows(joint_specs, channels, band_oct=1.0):
+    """`{(lo, hi): gd}` -- the crossover pair's group-delay swing per joint, from the ledger rows alone
+    (`predict.junction_gd`, hub RES-014): the two facing legs with their delay and polarity, no driver.
+    A member the rows cannot model (a sub group, a missing row) has no entry."""
+    import predict as P
+    out = {}
+    f = P.grid()
+    for lo, hi, fc, _pair in joint_specs:
+        if lo not in channels or hi not in channels or not fc:
+            continue
+        try:
+            ch_lo, ch_hi = P.chain_from_row(channels[lo], lo), P.chain_from_row(channels[hi], hi)
+        except P.PredictError:
+            continue
+        band = (fc / (2 ** band_oct), fc * (2 ** band_oct))
+        out[(lo, hi)] = P.junction_gd(f, ch_lo, ch_hi, band, float(fc))
+    return out
+
+
+def _gd_line(gd):
+    if not gd or gd.get("swing_ms") is None:
+        return None
+    return (f"crossover pair gd swing {gd['swing_ms']:.1f} ms vs threshold {gd['threshold_ms']:.1f}"
+            + (" (clamped below 500 Hz)" if gd.get("clamped") else "")
+            + (f" -- OVER by {gd['over_ms']:.1f} ms: a gentler edge is worth a candidate (RES-014)"
+               if gd.get("over_ms") else " -- under"))
 
 
 def _read_joint_rew(lo, hi, lo_title, hi_title, pair_title, fc, window):
@@ -614,7 +646,7 @@ def _read_joint_rew(lo, hi, lo_title, hi_title, pair_title, fc, window):
 
 
 def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
-                   protective_record=None, baseline=None, window=None):
+                   protective_record=None, baseline=None, window=None, gd_by_joint=None):
     """Batch joint/group analysis: walk every adjacent joint in ONE pass and
     render one consolidated table (polarity + drift-immune delay + residual +
     APF suggestion per joint), reusing joint_analysis.py unchanged.
@@ -647,6 +679,10 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
     never from REW's frequency response, whose phase follows the view's smoothing (S-013): a junction
     the window cannot hold is read steady and its row says why (`_read_joint_rew`). Every joint in
     one command instead of hand-driving joint_analysis.py pair-by-pair.
+
+    `gd_by_joint` (`joint_gd_from_rows`, from `--from-state`): the crossover pair's group-delay swing
+    against the Blauert & Laws threshold, printed under the joint's row and kept in it as `gd` --
+    a reading of the filters, beside the measured junction (hub RES-014).
     """
     import predict as P
     window = dict(window or JOINT_WINDOW)
@@ -803,6 +839,10 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
                      "residual_null_db": al["residual_null_db"],
                      "needs_allpass": al["needs_allpass"], "verdict": verdict,
                      "window": read["window"]})
+        gd = (gd_by_joint or {}).get((lo, hi))
+        if _gd_line(gd):
+            print(f"  {'':<15}  ↳ {_gd_line(gd)}")
+            rows[-1]["gd"] = {k: gd[k] for k in ("swing_ms", "threshold_ms", "over_ms", "clamped")}
         if lo in candidates or hi in candidates:
             # The hand-dialled all-pass against THIS joint's measured solos. Printed under the
             # row it belongs to and carrying that row's trust: a candidate on an UNVERIFIED
@@ -1115,6 +1155,20 @@ def _selftest():
         # joint or move the problem" that a candidate line exists to show.
         rows_1 = analyze_joints([("w-L", "m-L", 400.0, None)], ver="2",
                                 candidates={"w-L": ("APF1", 400.0, None)})
+        # RES-014: from the ledger rows alone, the crossover pair's group-delay swing rides under the
+        # joint's row -- a steep pair at 200 Hz is over the (clamped) threshold and says so, a matched
+        # LR24 at 400 Hz is under; a joint whose rows are missing has no line and no `gd`.
+        rows_gd = {"w-L": {"hp": {"f": 80, "type": "LR", "slope": 24}, "lp": {"f": 200, "type": "LR", "slope": 48},
+                           "gain_db": 0, "ta_ms": 0, "polarity": "NORM"},
+                   "m-L": {"hp": {"f": 200, "type": "LR", "slope": 48}, "lp": {"f": 2500, "type": "LR", "slope": 24},
+                           "gain_db": 0, "ta_ms": 0.3, "polarity": "NORM"}}
+        gd_map = joint_gd_from_rows([("w-L", "m-L", 200.0, None), ("m-L", "tw-L", 2500.0, None)], rows_gd)
+        assert set(gd_map) == {("w-L", "m-L")} and gd_map[("w-L", "m-L")]["over_ms"] > 1.0, gd_map
+        assert gd_map[("w-L", "m-L")]["clamped"] and "OVER" in _gd_line(gd_map[("w-L", "m-L")])
+        rows_g = analyze_joints([("w-L", "m-L", 400.0, None)], ver="2",
+                                gd_by_joint={("w-L", "m-L"): gd_map[("w-L", "m-L")]})
+        assert rows_g[0]["gd"]["over_ms"] > 1.0 and rows_g[0]["gd"]["threshold_ms"] == 3.2, rows_g[0]
+        assert "gd" not in rows_1[0], "no map, no line"
         one = rows_1[0]["candidate"]
         assert -25.0 < one["with_null_db"] < -10.0 and one["with_null_hz"] > 600.0, one
         assert one["helps"] is True, "shallower than −39.5 counts as help, and the line says where"
@@ -1290,11 +1344,13 @@ def main():
             sys.exit(1)
         try:
             specs = []
+            gd_by_joint = None
             if args.from_state:
-                preset, ver_s, specs = _joints_from_state(
-                    args.state_root, args.preset, args.state_ver)
+                preset, ver_s, specs, state_rows = _joints_from_state(
+                    args.state_root, args.preset, args.state_ver, with_rows=True)
                 print(f"\n  Стики з кросоверів слота '{preset}' ({ver_s or 'HEAD'}): "
                       f"{len(specs)} шт.")
+                gd_by_joint = joint_gd_from_rows(specs, state_rows, args.band_oct)
             # user --joint entries override/add by (lo,hi) — e.g. to attach a pair
             by_key = {(lo, hi): (lo, hi, fc, pair) for (lo, hi, fc, pair) in specs}
             for lo, hi, fc, pair in (_parse_joint(s) for s in args.joint):
@@ -1334,7 +1390,8 @@ def main():
                       {"cycles": args.fdw} if args.fdw else None)
             analyze_joints(specs, ver=args.ver, band_oct=args.band_oct,
                            candidates=candidates, protective_record=record,
-                           baseline=True if args.baseline else None, window=window)
+                           baseline=True if args.baseline else None, window=window,
+                           gd_by_joint=gd_by_joint)
         except ValueError as e:
             print(f"Помилка: {e}")
             sys.exit(1)

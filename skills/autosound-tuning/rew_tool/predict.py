@@ -762,6 +762,38 @@ def joints_from_chains(chains):
 
 
 # ---------------------------------------------------------------- the prediction
+def junction_gd(freqs, chain_lo, chain_hi, band, fc):
+    """The FILTER pair's group-delay swing at a junction (hub RES-014, `dsp_math.junction_gd_swing`).
+
+    The two rows' crossover legs, delay and polarity summed -- the drivers, the EQ and the phase
+    control left out: the term describes what the CROSSOVER choice does to timing, and the
+    cabin's own group delay is a reading of its own. The delay the two rows share is taken out
+    first (the swing does not depend on it; the grid's unwrap does). `None` numbers when a member
+    is muted or the band has too few bins.
+    """
+    f = np.asarray(freqs, dtype=float)
+
+    def bare(ch):
+        return dict(ch, eq=[], phase=None, gain_db=0.0)
+
+    lo, hi = bare(chain_lo), bare(chain_hi)
+    if lo.get("muted") or hi.get("muted"):
+        return dsp_math.junction_gd_swing(f, np.zeros(len(f), dtype=complex), band, fc_hz=fc)
+    bulk = min(float(lo.get("ta_ms") or 0.0), float(hi.get("ta_ms") or 0.0))
+    return dsp_math.junction_gd_swing(f, chain_response(f, lo) + chain_response(f, hi), band,
+                                      fc_hz=fc, bulk_ms=bulk)
+
+
+def gd_note(name, gd):
+    """The sentence a junction over the threshold prints -- the number, the ruler, the clamp."""
+    return (f"{name}: the crossover pair's group delay swings {gd['swing_ms']:.1f} ms across the "
+            f"junction band, over the Blauert & Laws audibility threshold of {gd['threshold_ms']:.1f} ms"
+            + (" (no published threshold below 500 Hz: the 500 Hz value, clamped -- hub RES-014)"
+               if gd["clamped"] else "")
+            + f" by {gd['over_ms']:.1f} ms -- a gentler edge at this junction is worth a candidate "
+              f"(`xover_candidates`, or the variants' re-rank)")
+
+
 def predict(freqs, solos, chains, joints=None, band_oct=1.0, solos_gate=None, gate_spec=None,
             gate_anchors=None):
     """`solos`: {code: complex response on freqs}; `chains`: {code: chain}. Returns a dict.
@@ -883,6 +915,7 @@ def predict(freqs, solos, chains, joints=None, band_oct=1.0, solos_gate=None, ga
         ok = ceil > 0
         null = 20.0 * np.log10(np.abs(A[m] + B[m])[ok] / ceil[ok] + 1e-12)
         k = int(np.argmin(null)) if ok.any() else None
+        gd = junction_gd(f, chains[lo], chains[hi], band, fc)
         junctions.append({
             "lo": lo, "hi": hi, "fc": fc, "band": [band[0], band[1]], "window": used,
             "sum_loss_avg_db": sl["avg_db"], "sum_loss_dip_db": sl["dip_db"],
@@ -890,7 +923,12 @@ def predict(freqs, solos, chains, joints=None, band_oct=1.0, solos_gate=None, ga
                       "sum_ripple_db": sl["ripple_db"],
             "worst_null_db": (float(null[k]) if k is not None else None),
             "worst_null_hz": (float(f[m][ok][k]) if k is not None else None),
+            # RES-014: the filter pair's timing, beside the sum's magnitude
+            "gd_swing_ms": gd["swing_ms"], "gd_threshold_ms": gd["threshold_ms"],
+            "gd_over_ms": gd["over_ms"], "gd_clamped": gd["clamped"],
         })
+        if gd["over_ms"]:
+            notes.append(gd_note(f"{lo}↔{hi}", gd))
 
     # The centre against the front it plays into: a PAIR, not a junction -- there is no crossover
     # between them, and what a tuner needs to know is whether they add or fight where both play.
@@ -1037,8 +1075,39 @@ def arrival_difference_ms(freqs, A, B, band, max_ms=25.0, step_ms=0.02):
     return float(-taus[int(np.argmax(env))] * 1000.0)    # ms; + means B arrives later than A
 
 
+#: How far apart the score's best and the arrival alignment must sit before they are calling two
+#: different alignments rather than one with a fraction of error on it.
+ALIAS_CYCLES = 0.75
+#: BELOW this the witness DECIDES; at or above it, it only WITNESSES (hub RES-013, #168, the
+#: Arbiter's decision 2026-09-17). Measured: at the bottom the full-record witness is validated (an
+#: 88 Hz sub 12 ms late, a live tune 2026-08-26), and above ~1 kHz it is not -- on the BMW F30
+#: archive it put five owner hand tunes 4.2-4.9 cycles from "the physical alignment" on every right
+#: side, and Resonalyze #128 found the same shape on its own archive (3.4-4.7 periods, while passing
+#: every trust gate). Trusting it there overrules good tunes; silencing it hides a real alias.
+#: Nothing tested so far tells the two apart without a measurement of the TUNED pair. The boundary
+#: is taken from #128's range, not measured here -- which is why it is a constant with a name.
+WITNESS_DECIDES_BELOW_HZ = 1000.0
+#: The windows a disagreeing witness is read through, beside the full record, so the tuner sees
+#: whether the disagreement survives a direct-sound cut: 6 cycles is what `analyze-joints` reads
+#: junctions through (`windows.py`), 2 cycles is the short cut that held on all ten BMW cells --
+#: UNCONFIRMED, since its length was chosen on those same cells (hub RES-013).
+WITNESS_CUT_CYCLES = (6.0, 2.0)
+WITNESS_CUT_UNCONFIRMED = (2.0,)
+#: hub RES-016 (#172, replacing RES-013's trigger): above the boundary the guard does not wait for the
+#: two candidates to DISAGREE -- on 3 of the 10 BMW cells the score and the full-record witness agreed
+#: with each other and were both ~4 cycles wrong (S-018). The second witness is the 2-cycle
+#: direct-sound cut; the junction is UNVERIFIED when the proposal sits `ALIAS_CYCLES` from THAT
+#: reading, or when the two witnesses sit `WITNESSES_APART_CYCLES` apart (the reading itself is not
+#: trustworthy there). The cut is a GUARD, never an answer: its length was chosen on those same cells.
+#: On the archive: 6 of 10 marked, every cell 0.85-4.5 cycles from the owner's tune, none of the four
+#: within 0.15. When the cut cannot be read, the fallback is the proposal MOVING the junction a whole
+#: cycle from the delay the DSP already holds (S-018's own suggestion).
+GUARD_CUT_CYCLES = 2.0
+WITNESSES_APART_CYCLES = 0.5
+
+
 def align_joints(freqs, solos, chains, joints=None, *, step_ms=0.01, max_delay_ms=3.0,
-                 band_oct=1.0, tie_db=0.02, apf=False, delay_max_ms=None):
+                 band_oct=1.0, tie_db=0.02, apf=False, delay_max_ms=None, witness_cuts=None):
     """Delay x polarity per junction, bottom-up, by sum loss -- the desk half of Phase 1.3.
 
     Each junction is read on the SOLOS x the ledger chains (crossovers, gains and EQ the tune
@@ -1062,6 +1131,15 @@ def align_joints(freqs, solos, chains, joints=None, *, step_ms=0.01, max_delay_m
     reported with how many cycles at fc it sits from that arrival -- a score can be excellent one
     cycle off, and nothing in the score says so. A non-zero cycle count is a note by name; the
     choice stays the tuner's.
+
+    BELOW `WITNESS_DECIDES_BELOW_HZ` a whole-cycle disagreement is resolved for the tuner: the
+    physical candidate is proposed and the alias is named. AT or ABOVE it (hub RES-013) the desk
+    decides nothing -- the junction is recorded `chosen="unverified"`, the chain keeps the SCORE's
+    best so the junctions above can still be read, and the junction is NOT bankable until the tuner
+    picks a candidate after measuring the tuned pair's arrival. `witness_cuts` -- `{cycles: {code:
+    H}}`, the gated solos on this same grid (`gated_solos(..., cycles=N)`) -- adds the witness read
+    through those direct-sound cuts beside the full record; without it the record says the cuts were
+    not read rather than implying they agreed.
 
     Reports and proposes; banks nothing. `delta` is the shape `apply.propose` takes.
     """
@@ -1089,6 +1167,71 @@ def align_joints(freqs, solos, chains, joints=None, *, step_ms=0.01, max_delay_m
         if pol < 0:
             ch["polarity"] = "INV" if ch["polarity"] == "NORM" else "NORM"
         _refresh(code)
+
+    def _witness(lo, hi, band, fc, tau, pol, arr):
+        """The witness read through every window at hand, plus the UNTUNED pair's own arrival.
+
+        Read on the same pair as the junction (the members through the chains they are read with),
+        so the readings differ only by the window. The untuned reading is the raw solos: on the
+        Passat it was what showed that the tune, not the witness, sat off the arrival.
+        """
+        def _cycles(a):
+            if a is None:
+                return None
+            return round(float((tau + a) * fc / 1000.0 + (0.5 if pol < 0 else 0.0)), 2)
+
+        readings = [{"window": "full record", "arrival_ms": round(arr, 3), "cycles_off": _cycles(arr)}]
+        for cycles in WITNESS_CUT_CYCLES:
+            cut = (witness_cuts or {}).get(cycles)
+            label = f"{cycles:g}-cycle cut" + (" (unconfirmed, hub RES-013)"
+                                               if cycles in WITNESS_CUT_UNCONFIRMED else "")
+            if not cut or lo not in cut or hi not in cut:
+                readings.append({"window": label, "arrival_ms": None, "cycles_off": None,
+                                 "not_read": "no gated solo for this pair -- the impulses were not "
+                                             "kept, or the gate was refused on a member"})
+                continue
+            a = arrival_difference_ms(f, cut[lo] * chain_response(f, chains[lo]),
+                                      cut[hi] * chain_response(f, chains[hi]), band)
+            readings.append({"window": label, "arrival_ms": (round(a, 3) if a is not None else None),
+                             "cycles_off": _cycles(a)})
+        untuned = arrival_difference_ms(f, solos[lo], solos[hi], band) if lo in solos and hi in solos else None
+        return {"readings": readings,
+                "untuned_ms": (round(untuned, 3) if untuned is not None else None)}
+
+    def _guard(witness, cyc_full, tau, pol, fc):
+        """Which condition, if any, makes a junction above the boundary UNVERIFIED (hub RES-016).
+
+        Writes `apart_cycles` / `moved_cycles` / `cut_read` / `trigger` into `witness` and returns the
+        trigger sentence, or None. The order is the RFC's: the proposal against the cut witness, the
+        two witnesses against each other, then RES-013's own disagreement with the full record;
+        without a cut reading, the fallback -- a whole cycle moved -- and the same disagreement.
+        """
+        full = witness["readings"][0]
+        cut = next((r for r in witness["readings"]
+                    if r["window"].startswith(f"{GUARD_CUT_CYCLES:g}-cycle") and r["arrival_ms"] is not None), None)
+        witness["cut_read"] = cut is not None
+        witness["apart_cycles"] = witness["moved_cycles"] = None
+        trigger = None
+        if cut is not None:
+            apart = abs(cut["arrival_ms"] - full["arrival_ms"]) * fc / 1000.0
+            witness["apart_cycles"] = round(float(apart), 2)
+            if abs(cut["cycles_off"]) >= ALIAS_CYCLES:
+                trigger = (f"the proposal sits {cut['cycles_off']:+.2f} cycle(s) from the {GUARD_CUT_CYCLES:g}-cycle "
+                           f"direct-sound witness")
+            elif apart >= WITNESSES_APART_CYCLES:
+                trigger = (f"the full-record and the {GUARD_CUT_CYCLES:g}-cycle witnesses sit {apart:.2f} cycle(s) "
+                           f"apart -- the reading itself is not trustworthy at this junction")
+        else:
+            moved = abs(tau * fc / 1000.0 + (0.5 if pol < 0 else 0.0))
+            witness["moved_cycles"] = round(float(moved), 2)
+            if moved >= ALIAS_CYCLES:
+                trigger = (f"the {GUARD_CUT_CYCLES:g}-cycle cut could not be read, and the proposal moves the junction "
+                           f"{moved:.2f} cycle(s) from the delay the DSP already holds (the fallback)")
+        if trigger is None and abs(cyc_full) >= ALIAS_CYCLES:
+            trigger = (f"the score's best and the full-record witness disagree by {cyc_full:+.2f} cycle(s) "
+                       f"(RES-013's condition)")
+        witness["trigger"] = trigger
+        return trigger
 
     def _record(kind, lo, hi, fc, band, A, B):
         before = dsp_math.sum_loss(f, A, B, band)
@@ -1119,14 +1262,24 @@ def align_joints(freqs, solos, chains, joints=None, *, step_ms=0.01, max_delay_m
                         best = {"tau_ms": float(t), "polarity": pol_c, "score_db": s_["score_db"],
                                 "avg_db": s_["avg_db"], "dip_db": s_["dip_db"]}
             physical = best
-        chosen = "score"
-        cyc = None
+        chosen, cyc, witness = "score", None, None
         if arr is not None and fc:
             cyc = (tau + arr) * fc / 1000.0 + (0.5 if pol < 0 else 0.0)
-            if abs(cyc) >= 0.75 and physical is not None:
-                # An alias: the score is good and the impulse is not one. The proposal takes the
-                # physical answer; the alias stays in the record for the tuner to overrule.
-                chosen = "physical"
+            if fc < WITNESS_DECIDES_BELOW_HZ:
+                if abs(cyc) >= ALIAS_CYCLES and physical is not None:
+                    # The score is good and the impulse is not one. Below the boundary the witness
+                    # is validated, so the proposal takes the physical answer and the alias stays in
+                    # the record for the tuner to overrule.
+                    chosen = "physical"
+            else:
+                # At or above it the witness is not trustworthy enough to overrule a tune (hub
+                # RES-013), and its agreeing with the score proves nothing (RES-016): the pair is
+                # read again through the direct-sound cut BEFORE the correction goes into the chain,
+                # and the guard says whether a measurement of the pair is required. The chain keeps
+                # the score's best either way, so the junctions above can still be read.
+                witness = _witness(lo, hi, band, fc, tau, pol, arr)
+                if _guard(witness, cyc, tau, pol, fc):
+                    chosen = "unverified"
         alias = {"tau_ms": tau, "polarity": int(pol), "score_db": score, "avg_db": avg, "dip_db": dip}
         if chosen == "physical":
             tau, pol = physical["tau_ms"], physical["polarity"]
@@ -1136,7 +1289,7 @@ def align_joints(freqs, solos, chains, joints=None, *, step_ms=0.01, max_delay_m
                "tau_ms": tau, "steps": int(round(tau / step_ms)), "polarity": int(pol),
                "polarity_margin_db": margin, "window_ms": window, "chosen": chosen,
                "arrival_ms": (round(arr, 3) if arr is not None else None), "cycles_off": None,
-               "physical": physical, "score_best": alias,
+               "physical": physical, "score_best": alias, "witness": witness,
                "before": {k: before[k] for k in ("avg_db", "dip_db", "dip_hz", "score_db")},
                "after": {k: after[k] for k in ("avg_db", "dip_db", "dip_hz", "score_db")},
                "apf": None, "notes": []}
@@ -1156,6 +1309,26 @@ def align_joints(freqs, solos, chains, joints=None, *, step_ms=0.01, max_delay_m
                     f"arrival alignment -- a good score, not one impulse. TAKEN: the physical answer "
                     f"({tau:+.3f} ms{' INV' if pol < 0 else ''}, score {physical['score_db']:+.2f} dB); "
                     f"overrule only after the junction is verified by ear and measurement")
+            elif chosen == "unverified":
+                p = physical
+                reads = "; ".join(
+                    f"{r['window']} " + (f"{r['arrival_ms']:+.2f} ms ({r['cycles_off']:+.2f} cyc)"
+                                         if r["arrival_ms"] is not None else "not read")
+                    for r in witness["readings"])
+                untuned = (f"{witness['untuned_ms']:+.2f} ms" if witness["untuned_ms"] is not None
+                           else "not read")
+                apart = (f"; the two witnesses {witness['apart_cycles']:.2f} cycle(s) apart"
+                         if witness.get("apart_cycles") is not None else "")
+                rec["notes"].append(
+                    f"UNVERIFIED above {WITNESS_DECIDES_BELOW_HZ:g} Hz (hub RES-016): {witness['trigger']} "
+                    f"at {fc:g} Hz. The candidates -- the score's best ({alias['tau_ms']:+.3f} ms"
+                    f"{' INV' if alias['polarity'] < 0 else ''}, score {alias['score_db']:+.2f} dB) "
+                    f"and the arrival candidate ({p['tau_ms']:+.3f} ms"
+                    f"{' INV' if p['polarity'] < 0 else ''}, score {p['score_db']:+.2f} dB). "
+                    f"KEPT for reading on: the score's best, so the junctions above can be read. "
+                    f"NOT BANKABLE: measure the TUNED pair's arrival (a sweep of the pair, or both "
+                    f"solos through these chains) and record which candidate it picks. Witness -- "
+                    f"{reads}{apart}; untuned pair {untuned}")
             elif abs(cyc) >= 0.25:
                 rec["notes"].append(
                     f"off the arrival alignment ({-arr:+.2f} ms) by {cyc:+.2f} cycle(s) at {fc:g} Hz "
@@ -1206,6 +1379,21 @@ def align_joints(freqs, solos, chains, joints=None, *, step_ms=0.01, max_delay_m
         notes.append(f"every channel shifted by +{shift:.3f} ms so that no delay is negative -- "
                      f"relations unchanged")
     warnings = []
+    unverified = [{"joint": f"{st['lo']}<->{st['hi']}", "channel": st["hi"], "fc": st["fc"],
+                   "trigger": (st.get("witness") or {}).get("trigger")}
+                  for st in steps if st.get("chosen") == "unverified"]
+    if unverified:
+        # The one thing a reader must not miss: the delta below carries a NUMBER for these channels
+        # (the score's best, so the junctions above could be read), and that number is not a
+        # proposal to type in.
+        warnings.append(
+            "NOT BANKABLE until measured (hub RES-013): "
+            + ", ".join(f"{u['joint']} at {u['fc']:g} Hz -> `{u['channel']}`" for u in unverified)
+            + f" -- at or above {WITNESS_DECIDES_BELOW_HZ:g} Hz the desk's reading of a junction can be "
+              "fooled by the cabin, and here the guard says it may have been (each row says which "
+              "condition). The delay in the proposal for those channels is the score's best, kept so "
+              "the junctions above could be read; measure the tuned pair's arrival and record the "
+              "pick before entering it.")
     if delay_max_ms:
         for c in system:
             if chains[c]["ta_ms"] > delay_max_ms + 1e-9:
@@ -1224,7 +1412,7 @@ def align_joints(freqs, solos, chains, joints=None, *, step_ms=0.01, max_delay_m
     out = {c: chains[c] for c in chains if c != SUB_GROUP}
     return {"steps": steps, "chains": out, "delta": delta, "shift_ms": shift,
             "step_ms": step_ms, "max_delay_ms": max_delay_ms, "warnings": warnings,
-            "notes": notes}
+            "unverified": unverified, "notes": notes}
 
 
 def render_alignment(result, original=None, rate_hz=None):
@@ -1240,9 +1428,10 @@ def render_alignment(result, original=None, rate_hz=None):
         b, a = st["before"], st["after"]
         arr = f"  arrival {st['arrival_ms']:+.2f} ms" if st.get("arrival_ms") is not None else ""
         cyc = f" ({st['cycles_off']:+.2f} cyc)" if st.get("cycles_off") else ""
+        mark = "  UNVERIFIED" if st.get("chosen") == "unverified" else ""
         lines.append(f"  {name:16}{fc:>6}{b['avg_db']:>+8.2f}/{b['dip_db']:>+7.2f}"
                      f"{st['tau_ms']:>+9.3f}{'INV' if st['polarity'] < 0 else 'same':>5}"
-                     f"{a['avg_db']:>+8.2f}/{a['dip_db']:>+7.2f}{st['polarity_margin_db']:>+8.2f}{arr}{cyc}")
+                     f"{a['avg_db']:>+8.2f}/{a['dip_db']:>+7.2f}{st['polarity_margin_db']:>+8.2f}{arr}{cyc}{mark}")
         for n in st["notes"]:
             lines.append(f"  {'':16}  ! {n}")
         if st.get("apf"):
@@ -1253,9 +1442,12 @@ def render_alignment(result, original=None, rate_hz=None):
     if result["delta"]["channels"]:
         lines.append("  proposal (aligned-delta.json; bank it with `apply.propose(history, delta)` and "
                      "enter by hand from the sheet it emits):")
+        held = {u["channel"] for u in result.get("unverified") or ()}
         for c, ch in sorted(result["delta"]["channels"].items()):
             o = (original or {}).get(c) or {}
             parts = []
+            if c in held:
+                parts.append("UNVERIFIED -- not bankable until the pair is measured")
             if "ta_ms" in ch:
                 smp = f" = {ch['ta_ms'] * rate_hz / 1000.0:.0f} smp" if rate_hz else ""
                 parts.append(f"delay {float(o.get('ta_ms') or 0.0):.3f} -> {ch['ta_ms']:.4f} ms{smp}")
@@ -1370,9 +1562,12 @@ def ladder_report(freqs, solos, chains, lo, hi, *, delays_ms, polarities=("NORM"
     """One junction, every named variant, read the same way: delay x polarity x crossover edge.
 
     A LADDER, not a search: the rungs come from the caller and the table is printed in the order
-    they were asked for. It is deliberately not sorted by score -- the desk reads and the Arbiter
-    decides, and a table ordered by the metric is a proposal wearing a table's clothes (the desk's
-    own doctrine B8; `align_joints` is the search, and it exists separately and says what it did).
+    they were asked for. A reading stays a reading -- sorted by score it would be a proposal that
+    does not say it is one. The desk DOES propose: `align_joints` searches and says what it did, and
+    a proposal is shown, explained, discussed and taken only with the Arbiter's OK. That is the
+    virtual-DSP desk spec's requirement В8 (Cyrillic В, 2026-09-05) as the user put it on 2026-09-17:
+    nothing goes into the DSP or the ledger without that OK, no EQ into a cancellation, and no
+    improvement claimed without a measurement after.
     """
     f = np.asarray(freqs, dtype=float)
     base = chains[hi]
@@ -1400,11 +1595,11 @@ def ladder_report(freqs, solos, chains, lo, hi, *, delays_ms, polarities=("NORM"
                               **{k: row[k] for k in ("sum_loss_avg_db", "sum_loss_dip_db",
                                                       "sum_loss_dip_hz", "sum_loss_score_db",
                                                       "sum_ripple_db", "worst_null_db",
-                                                      "worst_null_hz", "window")}})
+                                                      "worst_null_hz", "window", "gd_swing_ms",
+                                                      "gd_threshold_ms", "gd_over_ms", "gd_clamped")}})
     return {"junction": [lo, hi], "fc": fc, "applied_to": hi, "rungs": rungs,
-            "note": ("the rungs are in the order they were asked for; sorting them by score would "
-                     "be a proposal, and the desk does not propose (doctrine B8) -- read them and "
-                     "decide, or run --align, which searches and says so")}
+            "note": ("the rungs are in the order they were asked for: a reading, not a proposal -- "
+                     "read them and decide, or run --align, which searches, proposes and says so")}
 
 
 def render_ladder(rep):
@@ -1413,13 +1608,15 @@ def render_ladder(rep):
              + f", applied to {rep['applied_to']}",
              "  delays are ± around that row's current value; polarity and an edge are absolute", ""]
     lines.append(f"  {'rung':44}{'avg':>8}{'dip':>8}{'@Hz':>7}{'score':>8}{'ripple':>8}"
-                 f"{'worst null':>12}{'@Hz':>7}{'window':>8}")
-    lines.append("  " + "-" * 110)
+                 f"{'worst null':>12}{'@Hz':>7}{'window':>8}{'gd swing/thr':>14}")
+    lines.append("  " + "-" * 124)
     for r in rep["rungs"]:
+        gd_s = (f"{r['gd_swing_ms']:.1f}/{r['gd_threshold_ms']:.1f}" + ("!" if r.get("gd_over_ms") else "")
+                if r.get("gd_swing_ms") is not None else "--")
         lines.append(f"  {r['label']:44}{r['sum_loss_avg_db']:>+8.2f}{r['sum_loss_dip_db']:>+8.1f}"
                      f"{(r['sum_loss_dip_hz'] or 0):>7.0f}{r['sum_loss_score_db']:>+8.2f}"
                      f"{r['sum_ripple_db']:>8.2f}{(r['worst_null_db'] or 0):>+12.1f}"
-                     f"{(r['worst_null_hz'] or 0):>7.0f}{r['window']:>8}")
+                     f"{(r['worst_null_hz'] or 0):>7.0f}{r['window']:>8}{gd_s:>14}")
     lines.append("")
     lines.append(f"  {rep['note']}")
     return "\n".join(lines)
@@ -1538,23 +1735,29 @@ def render(result):
         lines.append(f"  {c:6} {chain_label(chain)}")
     lines.append("")
     lines.append(f"  {'junction/pair':14}{'fc':>6}{'band':>12}{'sum-loss avg':>13}{'dip':>8}"
-                 f"{'@Hz':>7}{'score':>7}{'ripple':>8} | {'worst null':>10}{'@Hz':>7}")
-    lines.append("  " + "-" * 96)
+                 f"{'@Hz':>7}{'score':>7}{'ripple':>8} | {'worst null':>10}{'@Hz':>7} | {'gd swing/thr ms':>16}")
+    lines.append("  " + "-" * 116)
     for j in result["junctions"]:
         name = j["lo"] + "↔" + j["hi"]
         band_s = "%.0f-%.0f" % (j["band"][0], j["band"][1])
+        gd_s = (f"{j['gd_swing_ms']:.1f}/{j['gd_threshold_ms']:.1f}"
+                + ("!" if j.get("gd_over_ms") else "") + ("c" if j.get("gd_clamped") else "")
+                if j.get("gd_swing_ms") is not None else "--")
         lines.append(
             f"  {name:14}{j['fc']:>6.0f}{band_s:>12}"
             f"{j['sum_loss_avg_db']:>+13.2f}{j['sum_loss_dip_db']:>+8.1f}"
             f"{(j['sum_loss_dip_hz'] or 0):>7.0f}{j['sum_loss_score_db']:>+7.2f}"
             f"{j['sum_ripple_db']:>8.2f} | "
-            f"{j['worst_null_db']:>+10.1f}{(j['worst_null_hz'] or 0):>7.0f}")
+            f"{j['worst_null_db']:>+10.1f}{(j['worst_null_hz'] or 0):>7.0f} | {gd_s:>16}")
     for pr in result.get("pairs", []):
         lines.append(f"  {pr['pair']:14}{'pair':>6}{'%.0f-%.0f' % (pr['band'][0], pr['band'][1]):>12}"
                      f"{pr['sum_loss_avg_db']:>+13.2f}{pr['sum_loss_dip_db']:>+8.1f}"
                      f"{(pr['sum_loss_dip_hz'] or 0):>7.0f}{pr['sum_loss_score_db']:>+7.2f}"
                      f"{pr['sum_ripple_db']:>8.2f} | "
                      f"{'(' + '+'.join(pr['members']) + ')':>18}")
+    if any(j.get("gd_swing_ms") is not None for j in result["junctions"]):
+        lines.append("  gd swing/thr: the crossover pair's group-delay spread over the junction band against the "
+                     "Blauert & Laws threshold; ! = over it, c = the threshold is the below-500 Hz clamp (hub RES-014)")
     lines.append("")
     if result.get("all_plus_c") is not None:
         d = _db(result["all_plus_c"]) - _db(result["all"])
@@ -1753,9 +1956,10 @@ def main(argv=None):
         ap.error("--gate and --fdw are two window definitions: name one")
     gate_kw = ({"gate_ms": args.gate} if args.gate else
                ({"cycles": args.fdw} if args.fdw else None))
-    # The impulses are kept only when a second reading needs them -- a gated spectrum or an
-    # arrival -- so the ordinary run allocates nothing it will not read.
-    keep_ir = bool(gate_kw or args.arrival)
+    # The impulses are kept only when a second reading needs them -- a gated spectrum, an arrival,
+    # or the witness cuts an alignment reads when two candidates disagree (hub RES-013) -- so the
+    # ordinary run allocates nothing it will not read.
+    keep_ir = bool(gate_kw or args.arrival or args.align)
     if args.solos:
         loaded = load_solos_dir(args.solos, f, drift, keep_ir=keep_ir)
     else:
@@ -1858,9 +2062,18 @@ def main(argv=None):
     if args.align:
         rate, delay_max = _profile_limits(args.project)
         step = args.step_ms or (1000.0 / rate if rate else 0.01)
+        # The witness through the direct-sound cuts, for the junctions where the two candidates
+        # disagree by a whole cycle (hub RES-013). Read from the kept impulses; a member whose
+        # start cannot be located simply has no cut reading, and the record says so.
+        cuts = {}
+        for cycles in WITNESS_CUT_CYCLES:
+            cut, _cut_notes, _cut_anchors = gated_solos(loaded, f, cycles=cycles)
+            if cut:
+                cuts[cycles] = cut
         alignment = align_joints(f, solos, chains, joints=joints, step_ms=step,
                                  max_delay_ms=args.max_delay_ms, band_oct=args.band_oct,
-                                 tie_db=args.tie_db, apf=args.apf, delay_max_ms=delay_max)
+                                 tie_db=args.tie_db, apf=args.apf, delay_max_ms=delay_max,
+                                 witness_cuts=cuts or None)
         if not rate and not args.step_ms:
             alignment["notes"].insert(0, "no processing rate known (no --project profile): delays "
                                          "on a 0.01 ms grid, not the DSP's -- pass --step-ms")
@@ -2376,6 +2589,109 @@ def _selftest():
     r7g2 = align_joints(f, {"sw": late, "w-L": e0}, ch_g, step_ms=step, tie_db=0.001, max_delay_ms=3.0)
     g2 = r7g2["steps"][0]
     assert g2["window_ms"] >= 13, "the window must follow the arrival, not the hand-set default"
+    # (i) hub RES-013: the same disagreement at a mid<->tweeter junction. ABOVE 1 kHz the desk does
+    #     NOT overrule the tune on the witness: both candidates are recorded, the chain keeps the
+    #     SCORE's best so the junctions above can still be read, and the junction is not bankable.
+    #     The witness is FORCED to read a cycle late here -- exactly the lie the BMW cabins told it
+    #     (hub #168) -- because what is under test is the verdict, not the physics of the reading.
+    fc_i = 2000.0
+    # The mid already waits 0.2 ms, so the answer the score finds is a real change in the delta --
+    # which is where a reader must see that the number is not one to type in.
+    ch_i = {"m-L": chain_from_row({"hp": "OFF", "lp": {"f": fc_i, "type": "LR", "slope": 24},
+                                   "gain_db": 0, "ta_ms": 0.2, "polarity": "NORM"}),
+            "tw-L": chain_from_row({"hp": {"f": fc_i, "type": "LR", "slope": 24}, "lp": "OFF",
+                                    "gain_db": 0, "ta_ms": 0, "polarity": "NORM"})}
+    solos_i, joints_i = {"m-L": e0, "tw-L": e0}, [("m-L", "tw-L", fc_i)]
+    real_witness = arrival_difference_ms
+    try:
+        # The full record reads a cycle late; every later read (the cuts, the untuned pair) reads
+        # the truth -- so the record shows a disagreement that does NOT survive a direct-sound cut.
+        lies = iter([1000.0 / fc_i])
+        globals()["arrival_difference_ms"] = lambda *a, **k: next(lies, 0.0)
+        r7i = align_joints(f, solos_i, ch_i, joints=joints_i, step_ms=step, tie_db=0.001)
+        lies = iter([1000.0 / fc_i])
+        r7i_cut = align_joints(f, solos_i, ch_i, joints=joints_i, step_ms=step, tie_db=0.001,
+                               witness_cuts={6.0: solos_i, 2.0: solos_i})
+    finally:
+        globals()["arrival_difference_ms"] = real_witness
+    i_ = r7i["steps"][0]
+    assert i_["chosen"] == "unverified" and abs(i_["cycles_off"]) >= ALIAS_CYCLES, i_
+    assert i_["tau_ms"] == i_["score_best"]["tau_ms"] and i_["polarity"] == i_["score_best"]["polarity"], i_
+    assert abs(r7i["chains"]["tw-L"]["ta_ms"] - i_["score_best"]["tau_ms"]) < 1e-9, r7i["chains"]["tw-L"]
+    assert i_["physical"] and abs(i_["physical"]["tau_ms"] - i_["tau_ms"]) > 0.3, i_["physical"]
+    assert any("UNVERIFIED" in n and "NOT BANKABLE" in n for n in i_["notes"]), i_["notes"]
+    assert r7i["unverified"][0]["joint"] == "m-L<->tw-L" and r7i["unverified"][0]["channel"] == "tw-L", r7i["unverified"]
+    assert any("NOT BANKABLE" in w and "tw-L" in w for w in r7i["warnings"]), r7i["warnings"]
+    wins = [r["window"] for r in i_["witness"]["readings"]]
+    assert wins == ["full record", "6-cycle cut", "2-cycle cut (unconfirmed, hub RES-013)"], wins
+    assert all(r.get("not_read") for r in i_["witness"]["readings"][1:]), i_["witness"]
+    # without a cut: the fallback saw 0.4 cycles moved (silent), and RES-013's own disagreement fired
+    assert not i_["witness"]["cut_read"] and i_["witness"]["moved_cycles"] < ALIAS_CYCLES, i_["witness"]
+    assert "RES-013" in i_["witness"]["trigger"] and i_["witness"]["trigger"] in r7i["unverified"][0]["trigger"]
+    cut_reads = r7i_cut["steps"][0]["witness"]["readings"]
+    assert all(r["arrival_ms"] is not None and not r.get("not_read") for r in cut_reads), cut_reads
+    assert abs(cut_reads[1]["cycles_off"]) < ALIAS_CYCLES, "the cut read the truth here"
+    assert r7i_cut["steps"][0]["witness"]["untuned_ms"] is not None
+    # with the cut: the two witnesses a whole cycle apart is what fires (RES-016's second condition)
+    w_cut = r7i_cut["steps"][0]["witness"]
+    assert w_cut["cut_read"] and abs(w_cut["apart_cycles"] - 1.0) < 0.05 and "apart" in w_cut["trigger"], w_cut
+    txt_i = render_alignment(r7i, original=ch_i, rate_hz=fs)
+    assert "UNVERIFIED" in txt_i and "not bankable" in txt_i and "RES-016" in txt_i, txt_i
+
+    # (k) hub RES-016 -- the BMW shape RES-013's trigger could not see: the score's best and the
+    #     full-record witness AGREE (both a lie the cabin told), and only the 2-cycle cut disagrees.
+    #     The order of reads: the full record, the 6-cycle cut, the 2-cycle cut, the untuned pair.
+    def _with_reads(values, **kw):
+        reads = iter(values)
+        real = arrival_difference_ms
+        globals()["arrival_difference_ms"] = lambda *a, **k_: next(reads, 0.0)
+        try:
+            return align_joints(f, solos_i, ch_i, joints=joints_i, step_ms=step, tie_db=0.001, **kw)
+        finally:
+            globals()["arrival_difference_ms"] = real
+    cuts_i = {6.0: solos_i, 2.0: solos_i}
+    r7k = _with_reads([-0.2, -0.2, 0.8], witness_cuts=cuts_i)      # full agrees with the score; the cut says 2 cycles later
+    k_ = r7k["steps"][0]
+    assert abs(k_["cycles_off"]) < 0.1, ("the full record agrees with the score here", k_["cycles_off"])
+    assert k_["chosen"] == "unverified" and "direct-sound witness" in k_["witness"]["trigger"], k_["witness"]
+    assert abs(k_["witness"]["apart_cycles"] - 2.0) < 0.05, k_["witness"]
+    # (l) every reading agrees: the proposal is taken, the witness is still in the record
+    r7l = _with_reads([-0.2, -0.2, -0.2], witness_cuts=cuts_i)
+    l_ = r7l["steps"][0]
+    assert l_["chosen"] == "score" and l_["witness"]["trigger"] is None and l_["witness"]["apart_cycles"] < 0.05, l_["witness"]
+    assert not r7l["unverified"] and abs(r7l["chains"]["tw-L"]["ta_ms"] - 0.2) < 0.02, r7l["chains"]["tw-L"]
+    # (m) the fallback: no cut can be read, the full record agrees, and the proposal moves the
+    #     junction a whole cycle (the mid waits 0.5 ms = 1 cycle at 2 kHz) -> UNVERIFIED by the fallback
+    ch_m = dict(ch_i, **{"m-L": dict(ch_i["m-L"], ta_ms=0.5)})
+    reads_m = iter([-0.5])
+    real_witness = arrival_difference_ms
+    globals()["arrival_difference_ms"] = lambda *a, **k_: next(reads_m, 0.0)
+    try:
+        r7m = align_joints(f, solos_i, ch_m, joints=joints_i, step_ms=step, tie_db=0.001)
+    finally:
+        globals()["arrival_difference_ms"] = real_witness
+    m_ = r7m["steps"][0]
+    assert m_["chosen"] == "unverified" and "fallback" in m_["witness"]["trigger"], m_["witness"]
+    assert not m_["witness"]["cut_read"] and abs(m_["witness"]["moved_cycles"] - 1.0) < 0.05, m_["witness"]
+    # below the boundary NOTHING changed: the same forced lie at a 500 Hz junction is resolved for
+    # the tuner -- the physical candidate is proposed and the alias is named, as it always was.
+    fc_j = 500.0
+    ch_j = {"w-L": chain_from_row({"hp": "OFF", "lp": {"f": fc_j, "type": "LR", "slope": 24},
+                                   "gain_db": 0, "ta_ms": 0.2, "polarity": "NORM"}),
+            "m-L": chain_from_row({"hp": {"f": fc_j, "type": "LR", "slope": 24}, "lp": "OFF",
+                                   "gain_db": 0, "ta_ms": 0, "polarity": "NORM"})}
+    real_witness = arrival_difference_ms
+    try:
+        lies = iter([1000.0 / fc_j])
+        globals()["arrival_difference_ms"] = lambda *a, **k: next(lies, 0.0)
+        r7j = align_joints(f, {"w-L": e0, "m-L": e0}, ch_j, joints=[("w-L", "m-L", fc_j)],
+                           step_ms=step, tie_db=0.001)
+    finally:
+        globals()["arrival_difference_ms"] = real_witness
+    j_ = r7j["steps"][0]
+    assert j_["chosen"] == "physical" and j_["witness"] is None, j_
+    assert j_["tau_ms"] == j_["physical"]["tau_ms"] and any("ALIAS" in n for n in j_["notes"]), j_
+    assert not r7j["unverified"] and not any("BANKABLE" in w for w in r7j["warnings"]), r7j["warnings"]
     txt = render_alignment(r7d, original=ch3, rate_hz=fs)
     assert "proposal" in txt and "w-L" in txt and "smp" in txt, txt
 
@@ -2487,7 +2803,8 @@ def _selftest():
     assert "nothing to report" in render_delta(delta_report(f, same, ch6, dict(ch6)))
 
     # `ladder_report`: the rungs in the order asked, NOT sorted, and the 0/NORM rung is the
-    # prediction itself. A ladder that sorts is a proposal, and the desk does not propose.
+    # prediction itself. A ladder that sorted would be a proposal that does not say it is one; the
+    # desk's proposals come from --align, which says it searched (В8 as clarified 2026-09-17).
     lad = ladder_report(f, same, ch6, "m-L", "tw-L", delays_ms=[-0.02, 0.0, 0.02],
                         polarities=("NORM", "INV"))
     assert [r["label"].split(" · ")[1] for r in lad["rungs"]] == ["NORM"] * 3 + ["INV"] * 3
@@ -2497,7 +2814,7 @@ def _selftest():
     assert abs(zero["sum_loss_avg_db"] - base_j["sum_loss_avg_db"]) < 1e-9
     assert lad["rungs"] != sorted(lad["rungs"], key=lambda r: -r["sum_loss_score_db"]), \
         "the rungs must not come out sorted by score"
-    assert "does not propose" in render_ladder(lad)
+    assert "a reading, not a proposal" in render_ladder(lad) and "--align" in render_ladder(lad)
     # An edge rung reaches the upper member's crossover, and the label says which.
     lad_e = ladder_report(f, same, ch6, "m-L", "tw-L", delays_ms=[0.0], polarities=("NORM",),
                           edges=(("hp", {"f": 2500.0, "type": "LR", "slope": 24}),))
@@ -2535,6 +2852,12 @@ def _selftest():
           "reads a pure delay, JSON complete; align: a 0.5 ms pair lands on the grid as +0.5 on the "
           "lower member, a backwards wire is found, an aligned pair buys nothing, three-way bottom-up "
           "and a sub pair keep every relation with no negative delay, the ceiling warns by name; "
+          "RES-013/016: a whole-cycle disagreement is resolved to the physical answer at 500 Hz; at 2 kHz "
+          "the guard fires on the proposal sitting a cycle from the 2-cycle cut witness, on the two "
+          "witnesses a cycle apart, on RES-013's disagreement, and -- with no cut -- on a whole cycle "
+          "moved (the fallback), while agreeing readings take the proposal; both candidates recorded, "
+          "the cuts said to be unread when they are not given, the chain keeping the score's best, and "
+          "the junction named not bankable in the warning and in the proposal; "
           "RES-006: a gated junction loses the reflection's comb and says `gate`, a window under 5 "
           "cycles of fc or shorter than the two arrivals are apart falls back to steady and says the "
           "number, FDW holds where a fixed gate cannot, a state divided out and multiplied back "

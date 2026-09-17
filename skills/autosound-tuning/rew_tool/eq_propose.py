@@ -18,21 +18,29 @@ decides what a deviation is.
 and what skews the stage is the L/R DIFFERENCE, not the distance from the target -- so the first
 package makes left and right one shape (broadly), and only then does the pair go to the target.
 
-Packages, in the order they are computed and decided (phase_2_eq: 2a -> 2c -> 2d; each read on
-the curves as the earlier packages leave them):
-  1. `res:<group>`      resonances, one per driver group (sub+midbass / mids / tweeters), cuts only,
-                        Q <= the measured ceiling (borrowed 6 when the ellipsoid is absent) (c14/c05, c08, c07)
-  2. `lr:<pair>`        L/R shape, one per stereo pair (Ws, Ms, TWs): shelves / Q <= 1, cut the louder
-                        side, until |L-R| <= 1 dB per 1/3 oct in 300-4000 Hz          (listen: c01, c02)
-  3. `tone:<pair>`      the pair toward the target on the 1/3-oct macro scale, identically on both
-                        sides, tolerance max(1 dB, 2 sigma(f)) from the ellipsoid           (c04)
+Packages, in the order they are computed and decided, each read on the curves as the earlier
+packages leave them. EQ is in TWO PARTS since 2026-09-17 (the user's order; docs/DESIGN-2026-09-17-
+phase1-variants.md): the coarse per-driver part belongs to Phase 1 and goes in BEFORE the delays,
+because a PEQ rotates phase and a delay computed without it is a delay redone after it; the rest
+is Phase 2. `--part 1` / `--part 2` emit one part; `--part all` (the default) everything in order.
+  part 1  `res:<group>`  resonances, one per driver group (sub+midbass / mids / tweeters), cuts only,
+                         Q <= the measured ceiling (borrowed 6 when the ellipsoid is absent) (c14/c05, c08, c07)
+  part 2  `lr:<pair>`    L/R shape, one per stereo pair (Ws, Ms, TWs): shelves / Q <= 1, cut the louder
+                         side, until |L-R| <= 1 dB per 1/3 oct in 300-4000 Hz          (listen: c01, c02)
+          `tone:<pair>`  the pair toward the target on the 1/3-oct macro scale, identically on both
+                         sides, tolerance max(1 dB, 2 sigma(f)) from the ellipsoid           (c04)
+Phase 2's later steps -- the junctions of each side, sub with mids, each side whole, everything,
+the centre, the rear -- are read on the SUMS (`predict`, `verify_prediction`, the MMM in the car),
+not proposed here. What this module does say is when a package's bands reach into a junction's
+band (+-1 oct of its corner): `recheck_junctions` names the junction, and the delay there is
+re-read (`predict --align`) before the package is banked -- otherwise the delays stay.
 
 Budgets: <= 6 bands per channel, <= 6 dB per band, no boosts unless `--allow-boost` AND the
 excess-phase gate allows. Every package carries WHY (which gates said yes) and a score before /
 after on the scale where the curve is true (1/3-oct residual vs target, and L-R per band).
 
     python3 rew_tool/eq_propose.py --project P --solos DIR [--ellipsoid DIR] [--route VFL=w-L,m-L,tw-L ...]
-                                   --house curve.txt [--out DIR] [--accept lr:Ms,res:mid]
+                                   --house curve.txt [--part 1|2|all] [--out DIR] [--accept lr:Ms,res:mid]
 
 Proposes; banks nothing. The delta files it writes are what `apply.propose` takes. The numbers
 (tolerances, budgets, Schroeder 150-200 Hz, the borrowed Q 6) are the doctrine's starting values,
@@ -368,9 +376,35 @@ def package_tone(f, pair, members, meas, targets, ellipsoids):
 
 
 # ---------------------------------------------------------------- assembly
+PARTS = ("1", "2", "all")
+
+
+def _recheck_junctions(pk, joints):
+    """The junctions whose band (+-JUNCTION_EXCL_OCT of the corner) a package's bands reach into,
+    on a channel that belongs to the junction -- their delay is re-read before the package is
+    banked (the user's rule, 2026-09-17: a step whose EQ touched a junction's band re-checks it;
+    otherwise the delays stay). A resonance package never reaches one by construction."""
+    hit = []
+    for code, bands in pk.get("bands", {}).items():
+        for b in bands:
+            f0 = float(b["f"])
+            for lo, hi, fc in joints:
+                if code not in (lo, hi):
+                    continue
+                if fc / 2 ** JUNCTION_EXCL_OCT <= f0 <= fc * 2 ** JUNCTION_EXCL_OCT:
+                    label = f"{lo}↔{hi}"
+                    if label not in hit:
+                        hit.append(label)
+    return hit
+
+
 def propose(f, meas, targets, chains, roles, pairs, joints, ellipsoids=None, gates=None,
-            allow_boost=False, routes=None):
-    """All packages, in decision order. `pairs`: {name: [L, R]}. Returns the list."""
+            allow_boost=False, routes=None, part="all"):
+    """The packages of `part` ("1": the coarse per-driver resonances, Phase 1's, before the delays;
+    "2": L/R shape then tone per pair, Phase 2's; "all": both, in order), in decision order.
+    `pairs`: {name: [L, R]}. Returns the list."""
+    if part not in PARTS:
+        raise ValueError(f"part must be one of {PARTS}, not {part!r}")
     ellipsoids = ellipsoids or {}
     gates = gates or {}
     out = []
@@ -386,26 +420,34 @@ def propose(f, meas, targets, chains, roles, pairs, joints, ellipsoids=None, gat
         if g is None:
             g = "low" if P._is_sub(code) else ("high" if code.startswith("tw") else "mid")
         groups.setdefault(g, []).append(code)
-    for g in ("low", "mid", "high"):
-        if g in groups:
-            pk = package_res(f, g, sorted(groups[g]), meas, targets, joints, ellipsoids, gates, allow_boost)
-            out.append(pk)
-            for code, bands in pk["bands"].items():
-                meas[code] = _apply_bands(f, meas[code], bands)
-    for name, members in pairs.items():
-        pk = package_lr(f, name, members, meas, targets)
-        if pk:
-            pk["assumes"] = [p["id"] for p in out if p.get("needed")]
-            out.append(pk)
-            for code, bands in pk["bands"].items():
-                meas[code] = _apply_bands(f, meas[code], bands)
-    for name, members in pairs.items():
-        pk = package_tone(f, name, members, meas, targets, ellipsoids)
-        if pk:
-            pk["assumes"] = [p["id"] for p in out if p.get("needed")]
-            out.append(pk)
+    # Part 1 -- the coarse per-driver resonances. In part 2 they are not recomputed: the ledger's
+    # chains carry the bands Phase 1 banked, and `meas` was built through those chains.
+    if part in ("1", "all"):
+        for g in ("low", "mid", "high"):
+            if g in groups:
+                pk = package_res(f, g, sorted(groups[g]), meas, targets, joints, ellipsoids, gates, allow_boost)
+                pk["part"] = "1"
+                out.append(pk)
+                for code, bands in pk["bands"].items():
+                    meas[code] = _apply_bands(f, meas[code], bands)
+    if part in ("2", "all"):
+        for name, members in pairs.items():
+            pk = package_lr(f, name, members, meas, targets)
+            if pk:
+                pk["part"] = "2"
+                pk["assumes"] = [p["id"] for p in out if p.get("needed")]
+                out.append(pk)
+                for code, bands in pk["bands"].items():
+                    meas[code] = _apply_bands(f, meas[code], bands)
+        for name, members in pairs.items():
+            pk = package_tone(f, name, members, meas, targets, ellipsoids)
+            if pk:
+                pk["part"] = "2"
+                pk["assumes"] = [p["id"] for p in out if p.get("needed")]
+                out.append(pk)
     for pk in out:
         pk["delta"] = to_delta(pk, chains, routes)
+        pk["recheck_junctions"] = _recheck_junctions(pk, joints)
     return out
 
 
@@ -455,7 +497,10 @@ def merge_deltas(packages):
 
 
 def render(packages):
-    lines = ["  EQ proposals -- packages, in decision order (say yes or no to a package, not a band)", ""]
+    parts = sorted({pk.get("part", "?") for pk in packages})
+    which = ("part 1, the coarse per-driver EQ -- Phase 1's, before the delays" if parts == ["1"] else
+             "part 2, the pairs and the tone -- Phase 2's" if parts == ["2"] else "both parts")
+    lines = [f"  EQ proposals -- packages, in decision order ({which}); say yes or no to a package, not a band", ""]
     for pk in packages:
         head = f"  [{pk['id']}]  " + ("PROPOSED" if pk.get("needed") else "nothing to do")
         if pk["kind"] == "lr":
@@ -477,6 +522,9 @@ def render(packages):
             lines.append(f"      why: {w}")
         if pk.get("assumes"):
             lines.append(f"      assumes accepted: {', '.join(pk['assumes'])}")
+        if pk.get("recheck_junctions"):
+            lines.append(f"      → re-check the delay at {', '.join(pk['recheck_junctions'])} before banking this "
+                         f"(predict --align): its bands reach into the junction's band")
         lines.append(f"      listen: {', '.join(pk['listen'])}")
         lines.append("")
     return "\n".join(lines)
@@ -500,6 +548,8 @@ def main(argv=None):
     ap.add_argument("--route", action="append", default=[], metavar="VIRTUAL=out1,out2")
     ap.add_argument("--preset", default=None)
     ap.add_argument("--allow-boost", action="store_true")
+    ap.add_argument("--part", default="all", choices=PARTS,
+                    help="1 = the coarse per-driver EQ (Phase 1, before the delays); 2 = pairs and tone (Phase 2); all")
     ap.add_argument("--accept", default=None, help="comma list of package ids to merge into eq-delta.json")
     ap.add_argument("--out", metavar="DIR", default=None)
     ap.add_argument("--json", action="store_true")
@@ -583,7 +633,7 @@ def main(argv=None):
             except E.EllipsoidError:
                 continue
     packages = propose(f, meas, targets, chains, roles, pairs, joints, ellipsoids, gates,
-                       allow_boost=args.allow_boost, routes=routes)
+                       allow_boost=args.allow_boost, routes=routes, part=args.part)
     # A channel refused at de-embed gets no EQ package, and until 2026-09-01 that was ALL that
     # happened: `refused` was bound and never read, and the note explaining it rode in `notes`,
     # which is truncated to eight lines and printed only in the human mode. So under `--json` a
@@ -731,6 +781,22 @@ def _selftest():
     assert "res:mid" in txt and "listen: c08" in txt and "why:" in txt
     tmp = tempfile.mkdtemp(prefix="autosound_eqp_")
     json.dump(list(pk.values()), open(os.path.join(tmp, "p.json"), "w", encoding="utf-8"), default=float)
+    # 6. Two parts (2026-09-17): part 1 is the resonances only, part 2 the pairs only -- and a part-2
+    #    package whose bands reach into a junction's band names the junction for a delay re-check,
+    #    while a resonance package never does (its mask excludes the band by construction).
+    ids1 = [p["id"] for p in propose(f, meas4, targets, chains, roles, pairs, joints, part="1")]
+    ids2 = [p["id"] for p in propose(f, meas4, targets, chains, roles, pairs, joints, part="2")]
+    assert ids1 == ["res:mid"] and ids2 == ["lr:Ms", "tone:Ms"], (ids1, ids2)
+    with_joint = [("m-L", "tw-L", 2000.0), ("m-R", "tw-R", 2000.0)]     # the shelf at 1 kHz sits within +-1 oct
+    pk6 = {p["id"]: p for p in propose(f, meas4, targets, chains, roles, pairs, with_joint)}
+    assert pk6["lr:Ms"]["recheck_junctions"] == ["m-R↔tw-R"], pk6["lr:Ms"]["recheck_junctions"]
+    assert pk6["res:mid"]["recheck_junctions"] == [], pk6["res:mid"]["recheck_junctions"]
+    assert "re-check the delay at m-R↔tw-R" in render([pk6["lr:Ms"]]) and "part 2" in render([pk6["lr:Ms"]])
+    try:
+        propose(f, meas4, targets, chains, roles, pairs, joints, part="3")
+        raise AssertionError("part 3 accepted")
+    except ValueError:
+        pass
     print("selftest[eq_propose] OK -- a +5 dB Q4 resonance is cut where it is and only on its channel; a "
           "comb is not boosted and its dips are listed with the reason; a peak that MOVES in the "
           "ellipsoid is not proposed and one that STAYS is; a 2.5 dB shelf difference is cut on the louder "

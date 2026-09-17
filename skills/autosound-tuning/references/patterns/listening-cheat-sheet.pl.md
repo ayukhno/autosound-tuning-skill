@@ -99,6 +99,35 @@ jako osobną przejażdżką.
 | league | 2 | Ch.05 | c09 |
 | league | 3 | Ch.29 | c16 |
 
+## Dwa presety dla środka — poziomem albo czasem (faza 2c)
+
+Protokół badań (RES-011, wg Lee 2010, notatek Audiofrog do UMI-1, EMMA Judge Book 2024, AES20). **A** to baza, jak
+stoi po „każda strona w całości": dojścia wyrównane na fotel, bliska strona przyciągnięta gainem. **B** to to samo
+przyciągnięcie czasem: bliska strona później o 0,15–0,30 ms ze zmniejszonym cięciem, głośność wyrównana
+(`rew_tool/scene_presets.py`). Oba ciągną środek tak samo daleko; ucho porównuje mechanizm.
+
+**Przed odsłuchem**
+1. Mono szum różowy daje JEDEN obraz między głośnikami. Dwa źródła → złe opóźnienie albo polaryzacja, nie centrowanie.
+2. Nazwij przewidziane przyciągnięcie każdego presetu (`f` z arkusza, czas i poziom osobno). Para, której przyciągnięcia
+   różnią się o mniej niż 10 % pół-sceny, jest „pewnie niesłyszalna — oba są dobre"; B zbudowane z A różni się tylko mechanizmem.
+3. Oba presety grają na fotelu równie głośno, w granicach 0,5 dB: cięcie ścisza A, a głośniejszy wygrywa.
+4. Kanał centralny na czas porównania wyłączony; fotel i głowa tam, gdzie stał mikrofon; jedna umiarkowana głośność.
+
+**Słuchaj**
+5. Mono szum różowy w całym paśmie, potem pasmami (UMI-1, utwory 2–5): jeden punkt? Gdzie?
+6. Utwór z pięcioma pozycjami (EMMA, utwory 2–6, albo UMI-1, utwory 6–10): **czy C jest dokładnie pośrodku między
+   najdalszym lewym i prawym, które słyszysz, a LC i RC znów pośrodku?** Zapisz miejsce i rozmiar każdego obrazu.
+7. Głos pośrodku, potem **wybrzmiewający** wysoki instrument pośrodku (smyczki, organy, trzymana trąbka): to samo miejsce?
+   Środek, który wędruje z wysokością dźwięku, sędziowie odejmują; podejrzany jest panning czasem.
+8. Przesuń głowę o 3–5 cm w lewo i w prawo: jak daleko środek idzie za nią i czy się rozdwaja?
+
+**Przełączaj i kończ**
+9. Ten sam fragment, szybkie przełączanie, A-B-B-A, trzy rundy; w ciemno, jeśli przycisk może nacisnąć ktoś inny.
+10. **Stop**, gdy trzy rundy nie dają stałej różnicy (w ciemno: 4 lub mniej trafień z 6): zostaje A, które ma mniej
+    ustawień. Usłyszaną różnicę nazwij słowami sceny — miejsce, rozmiar, wysokość, głowa — i wtedy wybierz.
+11. **Jeśli środek wędruje z wysokością w OBU presetach, przerwij centrowanie:** to niedopasowanie pasma L/P — wróć do 2a,
+    najpierw dopasuj pary.
+
 ## Jak zgłaszać, co słyszysz
 
 Nazwij cechę, kierunek i utwór: *„CarMus#07 — kontrabas się nadyma; wokal trzyma”* — to pełny raport.

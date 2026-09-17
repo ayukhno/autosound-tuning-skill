@@ -1,6 +1,6 @@
 # Phase 2 — Linearization & Acoustic Alignment
 
-This is the core technical execution phase. All operations **MUST** be performed in this exact chronological order: Hygiene EQ (2a) → Joint Phase Alignment (2b) → Summed Alignment (2c) → Final Technical EQ (2d).
+This is the core technical execution phase — **the second part of EQ**. The first part, the coarse per-driver resonance package, and the joint delays computed with it in the chains are Phase 1's (`phase_1_foundation.md` §5.5; `virtual-first.md` 1.4–1.5). The order here is the user's decision of 2026-09-17 and it **MUST** be held: **2a** the L/R pairs per band, and what the coarse pass left per channel → **2b** the junctions of each side, then the sub with the mids — the delays re-checked only where a step's EQ touched a junction's band, otherwise left → **2c** each side whole, then everything together → **2d** the final tone to target, then the centre under everything, then the rear.
 
 > 🗺️ **Virtual-first?** If Phase −1 chose the virtual-first path (one capture session → design at the desk), the ORDER of work in Phases 0–3 changes — the phase numbers do not. Read [`virtual-first.md`](references/phases/virtual-first.md) alongside this file; it is the one home of that path. This file stays the authority on the iterative fallback and on every gate.
 
@@ -23,7 +23,8 @@ This is the core technical execution phase. All operations **MUST** be performed
 
 ---
 
-## 2a — Hygiene EQ of Each Channel
+## 2a — L/R Pairs per Band, and What the Coarse Pass Left
+The per-driver resonance package is already banked (Phase 1 §5.5). 2a starts from **the L/R shape per pair** — left and right become one shape, broadly, on the louder side, Q ≤ 1, because what skews the stage is the L/R difference, not the distance from the target — and then takes whatever the coarse pass left on a channel, by the rules below.
 Linearize each individual channel to its own **per-band target** (from Phase 1 §5 / `target_bands.py`), using its **`<ch>_2 (rta)`** for the magnitude to EQ and its **`<ch>_2 (sw)`** excess-phase to decide what is EQ-able. **Boost ceiling: +6 dB on any band** — a band that asks for more is a null or an install problem, not missing level (the excess-phase read says which). Calculate the correction from `analysis.py` **`compute_deviation`** (measured − target) — don't eyeball it; and **read the channel's current filters first** (`get_filters`/`get_equaliser`) — never assume it is raw (a real bug overwrote the user's manual notches).
 
 > **⚡ Mass read in one shot:** get the whole-batch picture with `python3 rew_tool.py analyze-batch "_2 (rta)"` — one consolidated deviation matrix (every `_2` driver vs its per-band target, band means + `anchor` + `ripple`), one review pass, ~5× fewer API round-trips than pulling each driver in the interactive REPL. Read the matrix first to see which channels need hygiene EQ; drill into a specific driver interactively only where a cell looks off (or the excess-phase decision is needed).
@@ -60,7 +61,7 @@ Linearize each individual channel to its own **per-band target** (from Phase 1 �
 ---
 
 ## 2b — Joint Phase Alignment (Fine Delay)
-Align the relative phase response of the channels in their overlap regions.
+Align the relative phase response of the channels in their overlap regions — **the junctions of each side first, left and right apart, then the sub with the mids.** On the desk path the delays were computed in Phase 1 with the coarse EQ in the chains (`virtual-first.md` 1.5): here they are **re-checked only where 2a's EQ touched a junction's band (±1 oct)** and otherwise left; on the iterative path this is where they are set.
 
 ### Refined Phase Flow
 1. **Raw Sweep:** Capture the phase of the raw signals (after gross TA, before crossover filters) as a reference.
@@ -81,7 +82,16 @@ Align the relative phase response of the channels in their overlap regions.
 ---
 
 ## 2c — Summed Curve Alignment
-Align the summed acoustic groups to match the target.
+Align the summed acoustic groups to match the target — **each side whole first (L, R), then everything together (ALL).**
+
+> 🎧 **Between the two halves — the scene's two presets, by ear** (research RES-011, the user's plan, 2026-09-17).
+> With both sides whole and **the centre channel off**, the tuner hears A, the base as it stands (arrivals aligned,
+> the near-side pull by level), against B, the same pull by time: `python3 rew_tool/scene_presets.py --project DIR
+> --cut w=2,m=4,tw=4` builds B's ladder from the version (the near side later by 0.15–0.30 ms, its cut reduced 16 dB per
+> ms, both channels of each pair trimmed so centred content stays as loud, within 0.5 dB) and writes one delta per
+> rung. Protocol: `patterns/listening-cheat-sheet.md`, "Two presets for the centre" — A-B-B-A, three rounds; no
+> consistent difference → keep A; the centre moving with pitch in BOTH is an L/R mismatch, back to 2a. **Only then
+> everything together:** an offset between the sides changes the L+R sum, so ALL is tuned on the chosen preset.
 
 ### Verification Steps
 Measure and analyze the MMM RTA of the following combinations:
@@ -91,13 +101,15 @@ Measure and analyze the MMM RTA of the following combinations:
 
 ### Correction Rules
 * **Band-to-band alignment:** Adjust levels so they sum smoothly. An overlap hump is a summation issue, not a hot driver.
-* **L vs. R Balance (compare by FR):** overlay left-side vs right-side FR **level-normalized** (a level offset ≠ a shape difference — `analysis-playbook.md`) in the imaging region ($200\text{ Hz}$ to $1.5\text{ kHz}$). A pure **level tilt** → balance by level ("take from the louder side, add to the quieter", don't overboost); a **shape** difference → cabin/geometry, handle per side (don't force a clone). Use **MMM**, not a single point, for the HF part of this compare (a fixed-mic read above ~4 kHz is corrupted by the windshield reflection — `diagnostic-techniques.md`).
+* **L vs. R Balance (compare by FR):** overlay left-side vs right-side FR **level-normalized** (a level offset ≠ a shape difference — `analysis-playbook.md`) in the imaging region ($200\text{ Hz}$ to $1.5\text{ kHz}$). A pure **level tilt** → balance by level ("take from the louder side, add to the quieter", don't overboost) — **read
+  relative to the deliberate near-side cut** (Phase 1's base pulls the scene by level; balancing that away erases the pull,
+  and the two presets above become one); a **shape** difference → cabin/geometry, handle per side (don't force a clone). Use **MMM**, not a single point, for the HF part of this compare (a fixed-mic read above ~4 kHz is corrupted by the windshield reflection — `diagnostic-techniques.md`).
 * **Summation Checks:** Use REW's trace arithmetic ($A+B$) to predict summation outcomes prior to applying changes.
 
 ---
 
-## 2d — Final EQ to Target
-Shape the technical response of the entire summed system — the `(rta)` of the summed groups vs the target — to the session's target curve.
+## 2d — Final EQ to Target, then the Centre and the Rear
+Shape the technical response of the entire summed system — the `(rta)` of the summed groups vs the target — to the session's target curve. **Then the centre under everything, then the rear**, each as its own zone: the centre is read against both sides where the front mids play (1–4 kHz) and summed under the condition it was measured in (`virtual-first.md` 1.5, 1.7); a rear pair sits in its side's sum.
 
 ### Rules of Action
 * Apply **broad, smooth acoustic moves** (tilts, shelves, high/low Q shaping).

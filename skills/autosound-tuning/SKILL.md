@@ -113,8 +113,8 @@ Read the active phase from `process/process-state.json` (`python3 rew_tool/state
 
 * **Phase -1: Project Intake & Checklist** ──► [phase_-1_intake.md](references/phases/phase_-1_intake.md)
 * **Phase 0: Baseline & Target Selection** ──► [phase_0_baseline.md](references/phases/phase_0_baseline.md)
-* **Phase 1: Crossovers, Levels, & Delays** ──► [phase_1_foundation.md](references/phases/phase_1_foundation.md)
-* **Phase 2: EQ & Acoustic Alignment** ──► [phase_2_eq.md](references/phases/phase_2_eq.md)
+* **Phase 1: Wishes, Crossovers as Variants, Coarse EQ, Levels & Delays** ──► [phase_1_foundation.md](references/phases/phase_1_foundation.md)
+* **Phase 2: EQ, the second part — pairs, junctions, sides, everything, centre, rear** ──► [phase_2_eq.md](references/phases/phase_2_eq.md)
 * **Phase 3: Technical Verdict & Lock** ──► [phase_3_control.md](references/phases/phase_3_control.md)
 * **Phase 4: Targeted Listening → Feedback → Close** ──► [phase_4_listening.md](references/phases/phase_4_listening.md)
 * **Phase 5: Variations (cyclical) — Voicing + Center/Rear** ──► [phase_5_variations.md](references/phases/phase_5_variations.md)

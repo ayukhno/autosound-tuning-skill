@@ -1,0 +1,380 @@
+{
+ "contract": "autosound.resonalyze-golden.v1",
+ "what": "the window's defaults with 'Balance channel gains' on, near side cut 1 dB",
+ "source": {
+  "session": "skill, 2026-09-17, on the fork session's reference call and brief (PAS-008, hub #159)",
+  "fork": "ayukhno/Resonalyze @ b0ce9fb (= DIMOSUS/Resonalyze main, 2026-09-17)",
+  "status": "headless -- the engines through a copy of the window's code; the window run on Windows confirms it (brief §6)",
+  "forkGolden": "scratchpad/phase1-engines/golden/GOLDEN.passat-ir-v7_49-deembedded.gains.json (md5 65559d0cbff25200d8c4d4d048394103) -- identical in autoCrossover.result and autoDelay.result"
+ },
+ "set": {
+  "path": "car/passat-b8-2026/data/ir-v7_49 (tripod, loopback, RAW state, 2026-08-25)",
+  "md5": {
+   "c.json": "f3c75f8acbd8bc31962a4889bbeee898",
+   "m_L.json": "832fd90cecbb1da8eebcc4640f5d4fe9",
+   "m_R.json": "634b07296984299948f3e396e99990df",
+   "r_L.json": "ea9701e0f8ec51c7c4fbd7b25151016d",
+   "r_R.json": "9f94d6420df69b49a7b0a82f3cc66b42",
+   "sw.json": "e816f01b03a43f990b65e802d58e03c6",
+   "tw_L.json": "f657e1e30220bbe8ff0eb9510e3081cc",
+   "tw_R.json": "d2eacd719c738b89e6c60f22c3c96cae",
+   "w_L.json": "ec30bcd5c905e66a3252f890cbd07431",
+   "w_R.json": "354ceb67fe71fd8faa5dbd44c8c7529b"
+  }
+ },
+ "layout": {
+  "mode": "window-defaults",
+  "includeHidden": true,
+  "adjustGains": true
+ },
+ "expect": {
+  "autoCrossover": {
+   "channels": [
+    {
+     "block": "A Sub",
+     "suggestedType": "Subwoofer",
+     "typeUsed": "Subwoofer"
+    },
+    {
+     "block": "B Woofer",
+     "suggestedType": "Midbass",
+     "typeUsed": "Midbass"
+    },
+    {
+     "block": "C Mid",
+     "suggestedType": "Midbass",
+     "typeUsed": "Midbass"
+    },
+    {
+     "block": "D Tweeter",
+     "suggestedType": "Tweeter",
+     "typeUsed": "Tweeter"
+    },
+    {
+     "block": "E Centre",
+     "suggestedType": "Tweeter",
+     "typeUsed": "Tweeter"
+    },
+    {
+     "block": "F Rear",
+     "suggestedType": "Woofer",
+     "typeUsed": "Woofer"
+    }
+   ],
+   "result": [
+    {
+     "block": "A Sub",
+     "kind": "LowPass",
+     "highPass": null,
+     "lowPass": {
+      "family": "LinkwitzRiley",
+      "frequencyHz": 80,
+      "slopeDbPerOctave": 24
+     },
+     "gainDb": -0.1
+    },
+    {
+     "block": "B Woofer",
+     "kind": "BandPass",
+     "highPass": {
+      "family": "LinkwitzRiley",
+      "frequencyHz": 80,
+      "slopeDbPerOctave": 24
+     },
+     "lowPass": {
+      "family": "Bessel",
+      "frequencyHz": 500,
+      "slopeDbPerOctave": 24
+     },
+     "gainDb": -0.1
+    },
+    {
+     "block": "C Mid",
+     "kind": "BandPass",
+     "highPass": {
+      "family": "Bessel",
+      "frequencyHz": 500,
+      "slopeDbPerOctave": 18
+     },
+     "lowPass": {
+      "family": "LinkwitzRiley",
+      "frequencyHz": 2300,
+      "slopeDbPerOctave": 24
+     },
+     "gainDb": 0
+    },
+    {
+     "block": "D Tweeter",
+     "kind": "HighPass",
+     "highPass": {
+      "family": "LinkwitzRiley",
+      "frequencyHz": 2300,
+      "slopeDbPerOctave": 24
+     },
+     "lowPass": null,
+     "gainDb": -0.1
+    },
+    {
+     "block": "E Centre",
+     "kind": "HighPass",
+     "highPass": {
+      "family": "LinkwitzRiley",
+      "frequencyHz": 2300,
+      "slopeDbPerOctave": 24
+     },
+     "lowPass": null,
+     "gainDb": 0
+    },
+    {
+     "block": "F Rear",
+     "kind": "HighPass",
+     "highPass": {
+      "family": "LinkwitzRiley",
+      "frequencyHz": 65,
+      "slopeDbPerOctave": 24
+     },
+     "lowPass": null,
+     "gainDb": -8.8
+    }
+   ],
+   "blockOrderAfterReorder": [
+    "A Sub",
+    "B Woofer",
+    "C Mid",
+    "D Tweeter",
+    "F Rear",
+    "E Centre"
+   ]
+  },
+  "autoDelay": {
+   "request": {
+    "sceneOffsetMs": 0.25,
+    "rightHandDrive": false,
+    "adjustGains": true,
+    "nearSideCutDb": 1,
+    "levelDifferenceDb": -1,
+    "rearFillOffsetMs": 15
+   },
+   "bridge": {
+    "left": "D Tweeter L",
+    "right": "D Tweeter R",
+    "bandHz": [
+     2300,
+     20000
+    ]
+   },
+   "result": [
+    {
+     "channel": "A Sub (mono)",
+     "file": "sw.json",
+     "delayMs": 0,
+     "invertPolarity": false,
+     "gainDb": -0.1,
+     "gainAdjusted": false,
+     "decision": {
+      "kind": "Search",
+      "confidence": "Low",
+      "detail": "vs B Woofer L: margin 0.7 dB; mono co-move +0.53 ms, both sides' junctions gain 0.07 dB"
+     },
+     "gainBalance": {
+      "adjusted": false,
+      "skipReason": "mono channel",
+      "levelDb": -14.558,
+      "proposedGainDb": -0.1,
+      "confidence": null,
+      "detail": "kept (mono channel)"
+     }
+    },
+    {
+     "channel": "B Woofer L",
+     "file": "w_L.json",
+     "delayMs": 6.11,
+     "invertPolarity": false,
+     "gainDb": -0.1,
+     "gainAdjusted": false,
+     "decision": {
+      "kind": "Search",
+      "confidence": "Medium",
+      "detail": "vs C Mid L: margin 0.8 dB"
+     },
+     "gainBalance": {
+      "adjusted": false,
+      "skipReason": "band mostly below 300 Hz",
+      "levelDb": -18.953,
+      "proposedGainDb": -0.1,
+      "confidence": null,
+      "detail": "kept (band mostly below 300 Hz)"
+     }
+    },
+    {
+     "channel": "B Woofer R",
+     "file": "w_R.json",
+     "delayMs": 5.39,
+     "invertPolarity": false,
+     "gainDb": -0.1,
+     "gainAdjusted": false,
+     "decision": {
+      "kind": "Locked",
+      "confidence": null,
+      "detail": "vs C Mid R + A Sub (mono): margin -2.8 dB, scene-locked; far-side polish, now -0.25 ms off the scene position (<= 0.25 ms)"
+     },
+     "gainBalance": {
+      "adjusted": false,
+      "skipReason": "band mostly below 300 Hz",
+      "levelDb": -19.77,
+      "proposedGainDb": -0.1,
+      "confidence": null,
+      "detail": "kept (band mostly below 300 Hz)"
+     }
+    },
+    {
+     "channel": "C Mid L",
+     "file": "m_L.json",
+     "delayMs": 5.88,
+     "invertPolarity": false,
+     "gainDb": -5.1,
+     "gainAdjusted": true,
+     "decision": {
+      "kind": "Search",
+      "confidence": "Low",
+      "detail": "vs D Tweeter L: margin -0.3 dB"
+     },
+     "gainBalance": {
+      "adjusted": true,
+      "skipReason": null,
+      "levelDb": -23.213,
+      "proposedGainDb": -5.1,
+      "confidence": "Medium",
+      "detail": "in-band spread 3.9 dB"
+     }
+    },
+    {
+     "channel": "C Mid R",
+     "file": "m_R.json",
+     "delayMs": 4.37,
+     "invertPolarity": false,
+     "gainDb": 0,
+     "gainAdjusted": true,
+     "decision": {
+      "kind": "Locked",
+      "confidence": null,
+      "detail": "vs D Tweeter R: margin -3.8 dB, scene-locked"
+     },
+     "gainBalance": {
+      "adjusted": true,
+      "skipReason": null,
+      "levelDb": -27.284,
+      "proposedGainDb": 0,
+      "confidence": "Medium",
+      "detail": "L-R spread 3.6 dB"
+     }
+    },
+    {
+     "channel": "D Tweeter L",
+     "file": "tw_L.json",
+     "delayMs": 5.61,
+     "invertPolarity": false,
+     "gainDb": -6.5,
+     "gainAdjusted": true,
+     "decision": {
+      "kind": "Reference",
+      "confidence": null,
+      "detail": "reference (others align to it)"
+     },
+     "gainBalance": {
+      "adjusted": true,
+      "skipReason": null,
+      "levelDb": -21.794,
+      "proposedGainDb": -6.5,
+      "confidence": "Medium",
+      "detail": "in-band spread 2.6 dB"
+     }
+    },
+    {
+     "channel": "D Tweeter R",
+     "file": "tw_R.json",
+     "delayMs": 4.13,
+     "invertPolarity": false,
+     "gainDb": -4,
+     "gainAdjusted": true,
+     "decision": {
+      "kind": "Bridge",
+      "confidence": "High",
+      "detail": "bridge to D Tweeter L: arrival SNR 85 / 83 dB"
+     },
+     "gainBalance": {
+      "adjusted": true,
+      "skipReason": null,
+      "levelDb": -23.317,
+      "proposedGainDb": -4,
+      "confidence": "Medium",
+      "detail": "L-R spread 3.7 dB"
+     }
+    },
+    {
+     "channel": "F Rear L",
+     "file": "r_L.json",
+     "delayMs": 23.67,
+     "invertPolarity": false,
+     "gainDb": -8.1,
+     "gainAdjusted": true,
+     "decision": {
+      "kind": "Search",
+      "confidence": "Low",
+      "detail": "placed as a rear group against C Mid L in 500-2300 Hz, r 0.08, held back 15 ms"
+     },
+     "gainBalance": {
+      "adjusted": true,
+      "skipReason": null,
+      "levelDb": -20.195,
+      "proposedGainDb": -8.1,
+      "confidence": "Low",
+      "detail": "in-band spread 9.9 dB"
+     }
+    },
+    {
+     "channel": "F Rear R",
+     "file": "r_R.json",
+     "delayMs": 19.42,
+     "invertPolarity": false,
+     "gainDb": -9.9,
+     "gainAdjusted": true,
+     "decision": {
+      "kind": "Search",
+      "confidence": "Low",
+      "detail": "placed as a rear group against C Mid R in 500-2300 Hz, r 0.16, held back 15 ms"
+     },
+     "gainBalance": {
+      "adjusted": true,
+      "skipReason": null,
+      "levelDb": -17.393,
+      "proposedGainDb": -9.9,
+      "confidence": "Medium",
+      "detail": "L-R spread 3.8 dB"
+     }
+    },
+    {
+     "channel": "E Centre (mono)",
+     "file": "c.json",
+     "delayMs": 4.78,
+     "invertPolarity": false,
+     "gainDb": 0,
+     "gainAdjusted": false,
+     "decision": {
+      "kind": "Search",
+      "confidence": "Low",
+      "detail": "placed midway between D Tweeter L and D Tweeter R in 2300-20000 Hz - a reading was pinned to its refinement edge, so it is the arrival rather than a phase measurement; the correlation is too weak to trust - this placement is a best guess"
+     },
+     "gainBalance": {
+      "adjusted": false,
+      "skipReason": "mono channel",
+      "levelDb": -25.056,
+      "proposedGainDb": 0,
+      "confidence": null,
+      "detail": "kept (mono channel)"
+     }
+    }
+   ]
+  }
+ }
+}

@@ -8,8 +8,14 @@ that gets found again three months later as a surprise.
 ## How an item is closed
 
 **An item dies with a status line, never by being deleted.** Every item carries `**Status**:` on
-the line under its heading — `open` · `doing` · `done` · `dropped` — and a closed one keeps its
-text where it stands, with what closed it written into that line.
+the line under its heading — `open` · `doing` · `waiting` · `deferred` · `done` · `dropped` — and a
+closed one keeps its text where it stands, with what closed it written into that line.
+
+The board reads the **first word** after `**Status**:` (hub `PROTOCOL.md` §4.10, HUB-066); the rest of
+the line is free text. Two words are not open work and are not closed either: **`waiting`** — released,
+waiting for the user's test (the line names the version and what to test); **`deferred`** — put off by
+the user's word (the line quotes it and says what would bring it back). `done` and `dropped` close;
+any other word is open work.
 
 Deleting is what this file did until 2026-09-06, because no item had yet been closed and the form
 had never been needed. It loses the one thing worth keeping: a deleted item is indistinguishable
@@ -36,7 +42,7 @@ it in is worth more than a tidy record.
 
 ## S-001 · `deployment.py` cannot tell a DECLARED pin from a split
 
-**Status**: open
+**Status**: deferred 2026-09-17 · the user, at the wave's review: "agreed — and recall we had the `frozen` mode, this seems to be about such cases"; it comes back with the first `frozen` run (hub `docs/PLAN.md` §8)
 
 **Due when:** the first tuning project is pinned to a version and still being worked on. Not before.
 
@@ -65,6 +71,10 @@ the failure this module was written for — the 2026-08-13 rule about the person
 a memory file, was contradicted by `install.sh:774`, and nothing noticed for thirteen days. A
 declaration is only worth having where a check reads it.
 
+**The case already has a name** (the user, 2026-09-17): hub `docs/PLAN.md` §8 `frozen` — a competition run on its own
+repo, the method's pin fixed for the whole run. Its pin is the declaration this item wants read; the hub has not built
+the mode yet (`hub-join-machine`, `hub-add-project`), so the first `frozen` run is when this is due.
+
 **Trigger is live, not written down:** `deployment.py` already names this gap in its refusal when
 one of the disagreeing checkouts is held (`DETACHED`), and points here. It arrives with the case.
 
@@ -74,7 +84,7 @@ one of the disagreeing checkouts is held (`DETACHED`), and points here. It arriv
 
 ## S-002 · A proposed delay is printed in ms the device cannot hold
 
-**Status**: open
+**Status**: dropped 2026-09-17 · handed to research: `gh issue view 156 --repo ayukhno/autosound-hub` (SKL-039) — the user: a research question, not skill work until a measurement or an RFC comes back through the skill's gate; the text below stays as the question's record
 
 **Due when:** the first alignment sheet is entered by hand and the verdict is read at a tweeter
 joint — or when the delay quantiser's direction (below) is measured, whichever comes first.
@@ -98,7 +108,7 @@ profile) — a snap in the wrong direction is a whole sample off, worse than no 
 
 ## S-003 · `apf1_response` models the typed corner; the Helix places a lower one
 
-**Status**: open
+**Status**: dropped 2026-09-17 · handed to research: `gh issue view 156 --repo ayukhno/autosound-hub` (SKL-039) — the user: a research question, not skill work until a measurement or an RFC comes back through the skill's gate; the text below stays as the question's record
 
 **Due when:** an AP1 band is prescribed on this hardware above ~2 kHz, or a second processor is
 measured and the deviation turns out to be Helix-specific.
@@ -120,7 +130,7 @@ bench would need the octaves in between first.
 
 ## S-004 · The phase control's ceiling is known at one rate
 
-**Status**: open
+**Status**: dropped 2026-09-17 · handed to research: `gh issue view 156 --repo ayukhno/autosound-hub` (SKL-039) — the user: a research question, not skill work until a measurement or an RFC comes back through the skill's gate; the text below stays as the question's record
 
 **Due when:** a 48 kHz Audiotec-Fischer unit (a MATCH, or an older HELIX) is on a bench.
 
@@ -137,7 +147,7 @@ or 18 kHz. The constant is the one line to correct; the selftest's 48 kHz case (
 
 ## S-005 · The alias guard reads the whole record; above 1 kHz the record is the cabin
 
-**Status**: open
+**Status**: dropped 2026-09-17 · handed to research: `gh issue view 156 --repo ayukhno/autosound-hub` (SKL-039) — the user: a research question, not skill work until a measurement or an RFC comes back through the skill's gate; the text below stays as the question's record
 
 **Due when:** a mid↔tweeter junction proposed by `predict.py align` lands 0.75 cycles or more from
 a tune verified by ear and measurement. The record already carries `chosen`, `arrival_ms` and
@@ -166,7 +176,7 @@ read the arrival on gated solos and compare: one junction, one cabin, before any
 
 ## S-006 · The junction ripple is read, not scored
 
-**Status**: open
+**Status**: dropped 2026-09-17 · handed to research: `gh issue view 156 --repo ayukhno/autosound-hub` (SKL-039) — the user: a research question, not skill work until a measurement or an RFC comes back through the skill's gate; the text below stays as the question's record
 
 **Due when:** a real junction reads `sum_loss_avg_db` better than −0.5 dB with `sum_ripple_db`
 above 3 dB — a pair that adds coherently into a hump. Until one does, the number has not earned a
@@ -210,7 +220,7 @@ the tools as they stand then — whether the Helix PC-Tool still imports REW's f
 processors the helper covers.
 
 ## S-008 · `install.ps1`'s beta order has not yet met a real candidate
-**Status**: open
+**Status**: dropped 2026-09-17 · the beta channel is not being developed (the user: releases go out as tags, and no `beta-v3.*-rc` is planned), so the trigger never comes; `Select-NewestOnChannel` stays as it is, read by `scripts/installer-consistency.py`
 
 **Due:** when the first `beta-v3.*-rc1` is published.
 
@@ -392,6 +402,19 @@ not. The method's tools call `python3`, in a terminal and in Claude Code's Bash 
 Done looks like: in a new window after the install, `python3 -V` answers with the Python the installer
 set up. The VM is left as found, so the fix can be checked on it.
 
+## S-017 · Analysing a tune that already exists — noted, not started
+**Status**: deferred 2026-09-17 · the user: "note it with the source, we do not go there yet"; it comes back when Phase 1's variants work on a fresh system and a tuner brings a car that is already tuned
+
+**Due when:** Phase 1's variants (issue #38) work on a fresh system, and a tuner brings a car that is already
+tuned. The user, 2026-09-17: "note it with the source, we do not go there yet".
+
+**What Resonalyze has, read in the fork** (`Resonalyze-fork`, local): its AI bridge asks whether the user wants "a
+look over a tune they already made" and judges every step against the user's tune, not the step before
+(`docs/agent/AGENT_GUIDE.md:5-15`); its junction tune is "the crossover engine for a tune that already works" and
+keeps the current crossover unless a candidate beats it by 0.5 dB (`REFERENCE.md:3334-3347`,
+`dsp/CrossoverJunctionTuner.cs:242-248`). It has no importer for a whole third-party DSP project; only per-channel
+PEQ banks travel, Helix's included (`MANUAL.md:991-996`).
+
 ## S-013 · Each REW reader names the smoothing it reads
 **Status**: done 2026-09-17 · `scripts/run-selftests.sh` (73/73; `python3 skills/autosound-tuning/rew_tool/rew_api.py --selftest` holds every reader to its ask) · commits `c7c8e17`, `596a389` · decisions in `docs/RESEARCH-2026-09-17-reader-smoothing.md` §6
 
@@ -426,3 +449,40 @@ On 2026-09-16 the user chose "gh off, omp only with a flag" from a menu (docs/SI
 who does not know the flag exists* (issue #25, and the comment above `WANT_OMP` in `install.sh`). What
 changed since: the README and FAQ now name `omp` and `--no-omp` at the install step (issue #25's
 2026-09-09 comment). Ask: keep omp on with the app, or make it `--with-omp` only. Close #25 either way.
+
+## S-018 · RES-013's guard misses the cells it was written for: above 1 kHz the score follows a lying witness
+**Status**: done 2026-09-17 · research answered with RES-016 (hub `#172`): the guard reads a second witness, the 2-cycle direct-sound cut, and fires on the proposal a cycle from it, on the two witnesses half a cycle apart, on RES-013's disagreement, or -- with no cut -- on a whole cycle moved · `python3 skills/autosound-tuning/rew_tool/predict.py --selftest` (cases i, k, l, m) · `hub/scratch/skill/res013_check.py` → 0 of 10 missed, 0 false alarms · wave-2026-09-17b
+
+**Due:** research's ticket on this, which the user said is being written. Not before — the rule is
+theirs (hub `#168` is an `rfc`, `ROLES.md` §0), and this item is the measurement, not a redesign.
+
+RES-013 as accepted is implemented and green (`commit b8d98d1`, hub `#168`): at or above 1 kHz a
+whole-cycle disagreement between the sum-loss score and the arrival witness is recorded
+`chosen="unverified"` instead of being resolved. Then its own falsification (a) was run against the
+integrated code, on the BMW F30 archive research measured it on — `hub/scratch/skill/res013_check.py`
+through research's own cell loader, `REW_TOOL=<this tree>/skills/autosound-tuning/rew_tool
+~/dev/autosound/research/.venv/bin/python res013_check.py`:
+
+| tune · side | proposal, cycles from the owner's tune | chosen |
+|---|---|---|
+| root · head90 R | −4.53 | score ← **unmarked** |
+| v3 · session R | −0.86 | unverified |
+| v3 · validated R | −0.83 | unverified |
+| v5 · manual L | +1.03 | unverified |
+| v5 · manual R | −3.98 | score ← **unmarked** |
+| v6 · session R | −4.36 | score ← **unmarked** |
+
+(the four left sides not listed sit within 0.1 cycles of the tune and pass as `score`.)
+
+**3 of 10 cells still overrule the hand tune by ~4 cycles with nothing marked**, so falsification (a)
+fires. The guard tests whether the two CANDIDATES disagree; in those three cells they AGREE with each
+other — the full-record witness reads the right tweeter 2.6–2.9 ms late and the score's best goes
+there with it. A guard on disagreement cannot see a witness the score follows. The numbers reproduce
+research's own table (their score's best, cycles from tune: −4.52 / −0.84 / −0.85 / −3.97 / −4.37) to
+the second decimal, so this is the rule's shape and not the harness.
+
+**What would settle it (for research to decide, not this tree).** A criterion that does not rely on
+the two candidates disagreeing — e.g. above 1 kHz mark `unverified` whenever the proposal moves the
+junction a whole cycle or more from the delay the DSP already holds (that makes the metric 0 of 10,
+at the price of asking for a pair measurement on every large first-time move). Reported to the user
+2026-09-17; research's ticket is what this waits for.

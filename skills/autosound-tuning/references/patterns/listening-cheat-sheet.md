@@ -144,6 +144,35 @@ Learned in the field, and they cost nothing (hub `PAS-003`):
    were recorded, and the target was named as OURS rather than a judge's. A measurement that contradicts
    a careful ear is a finding, not an error to argue down.
 
+## Two presets for the centre — by level or by time (Phase 2c)
+
+Research's protocol (RES-011, on Lee 2010, Audiofrog's UMI-1 notes, the EMMA Judge Book 2024, AES20). **A** is the
+base as it stands after each side is whole: arrivals aligned to the seat, the near side pulled down by gain. **B** is
+the same pull by time: the near side later by 0.15–0.30 ms with its cut reduced, loudness matched
+(`rew_tool/scene_presets.py`). Both pull the centre the same distance; the ear compares the mechanism.
+
+**Before listening**
+1. Mono pink noise gives ONE image between the speakers. Two sources → a delay or polarity is wrong, not the centring.
+2. Say the predicted pull of each preset (the sheet's `f`, time and level apart). A pair whose pulls differ under
+   10 % of the half-stage is "probably inaudible — either is fine"; B built from A differs only in mechanism.
+3. The two presets play equally loud at the seat, within 0.5 dB — the cut makes A quieter, and louder wins.
+4. The centre channel is off for the comparison; the seat and the head where the microphone was; one moderate volume.
+
+**Listen**
+5. Mono pink noise, full band, then in bands (UMI-1 tracks 2–5): one point? Where?
+6. A five-position track (EMMA tracks 2–6, or UMI-1 tracks 6–10): **is C exactly midway between the furthest left and
+   right you hear, and are LC and RC midway again?** Note the placement and the size of each image.
+7. A centred voice, then a centred **sustained** high-pitched instrument (strings, organ, a held trumpet): the same
+   place? A centre that moves with pitch is what the judges deduct, and time panning is the suspect.
+8. Move the head 3–5 cm left and right: how far does the centre follow, and does it split?
+
+**Switch and stop**
+9. Same passage, quick switching, A-B-B-A, three rounds; blind if someone else can press the button.
+10. **Stop** when three rounds give no consistent difference (blind: 4 or fewer right of 6): keep A, which has fewer
+    settings. A difference heard is named in stage words — placement, size, pitch, head — and then chosen.
+11. **If the centre moves with pitch in BOTH presets, stop centring:** that is an L/R response mismatch — back to 2a and
+    match the pairs first.
+
 ## How to report what you hear
 
 Say the characteristic, the direction, and the track: *"CarMus#07 — the double bass bloats; the

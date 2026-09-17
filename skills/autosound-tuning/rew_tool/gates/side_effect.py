@@ -13,9 +13,12 @@ a model-resolved target), then hands the real output to `verify`. If verify reje
 delete. The concrete `post_feedback` wires it for the GitHub feedback issue with the repo HARDCODED.
 """
 
+import platform
 import shutil
 import subprocess
+import urllib.error
 import urllib.parse
+import urllib.request
 
 # The feedback destinations are HARDCODED here — NEVER resolved by a model, a search, or an arg.
 # A caller names a CHANNEL from this closed set; the repo behind the name is not the caller's.
@@ -38,6 +41,32 @@ ASSET_BRANCH = "issue-assets"
 #: cannot be reused here: it rejects everything that is not `github.com`, and that is correct
 #: for what it guards. Two hosts, two verifiers, one hardcoded repo.
 _ASSET_PREFIX = f"https://raw.githubusercontent.com/{FEEDBACK_REPO}/{ASSET_BRANCH}/"
+
+
+#: The route WITHOUT GitHub: the Arbiter's own Google Form (hub TCC-017, his decision 2026-09-17). A tester who
+#: installed without `gh` -- the ordinary case since the installers stopped installing it unless asked -- had
+#: nowhere to send a finding. Text only: a file question would make Google demand a sign-in for the whole form.
+#: The address, the question ids and the choice words are the form's as published, fixed here like the repos
+#: above -- a destination a model can fill in is what this module exists to refuse. The same form, the same
+#: answers, as TCC's window sends (`autosound-tcc` `core/form_report.py`).
+FORM_POST_URL = ("https://docs.google.com/forms/d/e/"
+                 "1FAIpQLSdMzITv6Rzh8PWITy5QWc3xQMcAn9aDl1k0QbpZykHEQd6A4g/formResponse")
+FORM_FIELD_SENDER = "entry.240346646"      # «Від кого», required: a name and a contact, so the Arbiter can answer
+FORM_FIELD_KIND = "entry.2096497360"       # «Тип», required
+FORM_FIELD_IMPACT = "entry.42935929"       # «Наскільки заважає налаштуванню», asked of a problem
+FORM_FIELD_MESSAGE = "entry.970390217"     # «Повідомлення», required; Markdown travels as typed
+FORM_FIELD_VERSIONS = "entry.1476583291"   # «Версії»
+#: The form's own words: a choice it does not list is not an answer it takes.
+FORM_KINDS = {"problem": "Проблема", "wish": "Побажання", "feedback": "Відгук", "test": "Тест"}
+#: What a PERSON's report is. `test` is for a probe of the channel: its row is marked, so nothing needs cleaning.
+FORM_PERSON_KINDS = ("problem", "wish", "feedback")
+FORM_IMPACTS = {"stops": "Зупиняє: далі налаштовувати не можу",
+                "workaround": "Заважає, але можна обійти",
+                "none": "Не заважає"}
+#: Only the confirmation page carries it (the "submit another response" link); a form that did not take the answer
+#: replies 200 with its own page, which does not. Measured 2026-09-17 by TCC with entries that reached the sheet.
+FORM_ACCEPTED_MARKER = "usp=form_confirm"
+FORM_TIMEOUT_S = 20
 
 
 class SideEffectRefused(RuntimeError):
@@ -223,7 +252,121 @@ def post_dsp_profile(profile_file, vendor, model, mode="new", prior_url=None,
     return guarded_run(argv, _verify_dsp_profile_update(prior_url), runner=runner, dry_run=dry_run)
 
 
-def post_feedback(body_file, car, dsp, runner=_subprocess_runner, dry_run=False, channel="skill"):
+def form_answers(sender, kind, message, impact="", versions=""):
+    """The form's question ids with their answers. Raises `ValueError` for what the form would not take."""
+    if not str(sender or "").strip():
+        raise ValueError("the form asks who is writing -- a name and a contact the Arbiter can answer; ask the person")
+    if not str(message or "").strip():
+        raise ValueError("a report without words is not a report")
+    if kind not in FORM_KINDS:
+        raise ValueError(f"the kind is one of {', '.join(FORM_KINDS)}, not {kind!r}")
+    if impact and impact not in FORM_IMPACTS:
+        raise ValueError(f"how far it stops the tuning is one of {', '.join(FORM_IMPACTS)}, not {impact!r}")
+    answers = {FORM_FIELD_SENDER: str(sender).strip(), FORM_FIELD_KIND: FORM_KINDS[kind],
+               FORM_FIELD_MESSAGE: str(message).strip()}
+    if impact:
+        answers[FORM_FIELD_IMPACT] = FORM_IMPACTS[impact]
+    if str(versions or "").strip():
+        answers[FORM_FIELD_VERSIONS] = str(versions).strip()
+    return answers
+
+
+def method_version():
+    """The method's version as a person quotes it: the tag this checkout is at, `v3.0.55-12-ga61d9f4` past it, or
+    `unknown` -- never guessed. A signature for a person, nothing is decided by comparing it."""
+    import os
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))))
+    try:
+        proc = subprocess.run(["git", "-C", root, "describe", "--tags", "--always"], capture_output=True, text=True,
+                              encoding="utf-8", errors="replace", timeout=10)
+        if proc.returncode == 0 and proc.stdout.strip():
+            return proc.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return "unknown"
+
+
+def versions_line(lang, channel="skill", version=None, system=None):
+    """`method v3.0.55 · Darwin 25.6.0 · lang=uk · about=skill` -- what the report ran on, and whose finding it is."""
+    channel_repo(channel)
+    system = system if system is not None else f"{platform.system()} {platform.release()}".strip()
+    return f"method {version or method_version()} · {system or 'unknown'} · lang={lang} · about={channel}"
+
+
+def _form_context():
+    import ssl
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:  # noqa: BLE001 -- no certifi: the system's store is what there is
+        return ssl.create_default_context()
+
+
+def _form_post(url, data, timeout):
+    request = urllib.request.Request(url, data=data,
+                                     headers={"Content-Type": "application/x-www-form-urlencoded; charset=utf-8"})
+    with urllib.request.urlopen(request, timeout=timeout, context=_form_context()) as response:
+        return response.status, response.read().decode("utf-8", "replace")
+
+
+def verify_form_reply(status, body):
+    """Post-verify a form send: 200 AND the confirmation page's marker. A 200 without it is the form refusing."""
+    if status != 200:
+        return False, f"the form answered HTTP {status}"
+    if FORM_ACCEPTED_MARKER not in (body or ""):
+        return False, ("the form did not confirm (no confirmation page) -- closed, changed, or a required answer "
+                       "missing; nothing was received")
+    return True, "confirmed by the form"
+
+
+def post_form(sender, kind, message, *, lang, channel="skill", impact="", consented=False, post=_form_post,
+              dry_run=False, versions=None):
+    """Send ONE report to the Arbiter's form. "Sent" is what the form CONFIRMS; anything else raises.
+
+    `consented` is the same rail as for an upload: the person has seen the final text -- who, the kind, how far it
+    stops the tuning, the message and the versions line -- and said yes. `channel` says whose finding it is and goes
+    into the versions line; the destination is not the caller's.
+    """
+    versions = versions if versions is not None else versions_line(lang, channel)
+    answers = form_answers(sender, kind, message, impact, versions)
+    if not consented:
+        raise SideEffectRefused(
+            "⛔ SIDE-EFFECT REFUSED — no consent recorded for sending to the Arbiter's form.\n"
+            "  reason : show the person the final text -- who is writing, the kind, for a problem how far it stops "
+            "the tuning, the message and the versions line -- wait for a yes, and pass consented=True.")
+    if dry_run:
+        print("DRY-RUN — would send to the Arbiter's form:\n  " + FORM_POST_URL + "\n" +
+              "\n".join(f"  {k} = {v[:80]}" for k, v in answers.items()))
+        return {"dry_run": True, "via": "form", "answers": answers}
+    data = urllib.parse.urlencode(answers).encode("utf-8")
+    try:
+        status, body = post(FORM_POST_URL, data, FORM_TIMEOUT_S)
+    except urllib.error.HTTPError as exc:
+        status, body = exc.code, ""
+    except (urllib.error.URLError, OSError) as exc:
+        raise SideEffectRefused(f"⛔ SIDE-EFFECT REFUSED — the form could not be reached: "
+                                f"{getattr(exc, 'reason', None) or exc}") from exc
+    ok, detail = verify_form_reply(status, body)
+    if not ok:
+        raise SideEffectRefused("⛔ SIDE-EFFECT REFUSED — output failed post-verification.\n"
+                                f"  sent to : {FORM_POST_URL}\n  reason  : {detail}")
+    return {"dry_run": False, "via": "form", "answers": answers, "detail": detail}
+
+
+def gh_ready(runner=_subprocess_runner):
+    """Can this machine post an issue: `gh` present AND signed in. Nothing leaves the machine to find out."""
+    if runner is _subprocess_runner and shutil.which("gh") is None:
+        return False
+    try:
+        rc, _out, _err = runner(["gh", "auth", "status"])
+    except OSError:
+        return False
+    return rc == 0
+
+
+def post_feedback(body_file, car, dsp, runner=_subprocess_runner, dry_run=False, channel="skill", via="auto",
+                  sender=None, kind="feedback", impact="", lang="en", consented=False, post=_form_post,
+                  gh_is_ready=None):
     """Post the de-identified feedback issue with the repo HARDCODED + returned-URL verified.
 
     Never let a model fill in the repo — that's the whole point. `car`/`dsp` only shape the title.
@@ -231,17 +374,34 @@ def post_feedback(body_file, car, dsp, runner=_subprocess_runner, dry_run=False,
     (the front-end window) — and the repo comes from `CHANNELS`, never from the argument itself.
     Dedup guard: if an identical-title open issue exists newer than 24 h, SKIP loudly instead of
     double-posting (returns {"skipped": True, "duplicate_url": …}).
+
+    `via`: "github" (an issue), "form" (the Arbiter's form, `post_form`), or "auto" -- the issue when `gh` is
+    present and signed in, the form otherwise. The form asks who is writing (`sender`), the kind, for a problem how
+    far it stops the tuning (`impact`), in the person's own language (`lang`), and takes the body file's text as the
+    message; it has no read-back, so there is no duplicate guard -- send once. Whether GitHub is at hand is asked of
+    this machine's `gh` only when the real runner is in use: an injected runner (TCC's tests, `smoke_test.py`) is
+    taken as GitHub, as it always was, unless `gh_is_ready` says otherwise.
     """
     import os
     import sys
     repo = channel_repo(channel)
+    if via not in ("auto", "github", "form"):
+        raise ValueError(f"via is 'auto', 'github' or 'form', not {via!r}")
     if not os.path.isfile(body_file):
         raise ValueError(f"body-file not found: {body_file!r} (write the feedback file first)")
-    # Only require the real `gh` binary when we're about to actually shell out to it — an injected
-    # runner (tests, smoke_test.py) never touches the filesystem's `gh`, so it must stay installable-
-    # and-runnable on a box with no `gh` on PATH (the whole point of dependency injection here).
-    if runner is _subprocess_runner and shutil.which("gh") is None and not dry_run:
-        raise EnvironmentError("`gh` CLI not found — install/auth it, or use the copy-paste block.")
+    if gh_is_ready is None:
+        gh_is_ready = (lambda: gh_ready(runner)) if runner is _subprocess_runner else (lambda: True)
+    if via == "form" or (via == "auto" and not dry_run and not gh_is_ready()):
+        if not str(sender or "").strip():
+            raise EnvironmentError(
+                "no GitHub here (`gh` missing or not signed in) -- the route is the Arbiter's form: ask the person "
+                "who is writing (a name and a contact), the kind (problem / wish / feedback) and, for a problem, how "
+                "far it stops the tuning; show the final text; then post_feedback(..., via='form', sender=…, "
+                "kind=…, impact=…, lang=…, consented=True). Pictures do not go through the form.")
+        with open(body_file, encoding="utf-8") as fh:
+            message = fh.read()
+        return post_form(sender, kind, message, lang=lang, channel=channel, impact=impact, consented=consented,
+                         post=post, dry_run=dry_run)
     title = f"Feedback: {car} · {dsp}"
     if not dry_run:
         dup = _recent_duplicate(title, runner, repo=repo)
@@ -388,6 +548,66 @@ def _selftest():
             raise AssertionError(f"accepted bad output: {why}")
         except SideEffectRefused:
             pass
+
+    # ── the route without GitHub: the Arbiter's form (hub TCC-017) -- the network is faked ──
+    ans = form_answers("Олена, t.me/x", "problem", "**зламалось** на кроці 2", "workaround", "method v3 · lang=uk")
+    assert ans == {FORM_FIELD_SENDER: "Олена, t.me/x", FORM_FIELD_KIND: "Проблема", FORM_FIELD_MESSAGE: "**зламалось** на кроці 2",
+                   FORM_FIELD_IMPACT: "Заважає, але можна обійти", FORM_FIELD_VERSIONS: "method v3 · lang=uk"}, ans
+    assert FORM_FIELD_IMPACT not in form_answers("a", "wish", "b")
+    for bad in (("", "wish", "b"), ("a", "wish", " "), ("a", "bug", "b"), ("a", "problem", "b", "blocks")):
+        try:
+            form_answers(*bad)
+            raise AssertionError(f"the form's answers took {bad!r}")
+        except ValueError:
+            pass
+    assert "test" in FORM_KINDS and "test" not in FORM_PERSON_KINDS
+    line = versions_line("uk", "tcc", version="v3.0.55", system="Windows 11")
+    assert line == "method v3.0.55 · Windows 11 · lang=uk · about=tcc", line
+    sent = []
+    def _confirming(url, data, timeout):
+        sent.append((url, urllib.parse.parse_qs(data.decode("utf-8"))))
+        return 200, '<a href="https://docs.google.com/forms/d/e/x/viewform?usp=form_confirm">'
+    try:
+        post_form("a", "feedback", "b", lang="en", post=_confirming)
+        raise AssertionError("the form took a send nobody consented to")
+    except SideEffectRefused:
+        pass
+    assert not sent, "a refused send must not reach the network"
+    done = post_form("Олена", "feedback", "текст", lang="uk", consented=True, post=_confirming, versions="v")
+    assert done["detail"] == "confirmed by the form" and sent[0][0] == FORM_POST_URL, done
+    assert sent[0][1][FORM_FIELD_KIND] == ["Відгук"] and sent[0][1][FORM_FIELD_SENDER] == ["Олена"], sent[0]
+    for reply, why in (((200, "<html>the form page</html>"), "a 200 without the confirmation page"),
+                       ((500, "?usp=form_confirm"), "an error status")):
+        try:
+            post_form("a", "wish", "b", lang="en", consented=True, post=lambda u, d, t, r=reply: r, versions="v")
+            raise AssertionError(f"the form's reply was accepted: {why}")
+        except SideEffectRefused:
+            pass
+    def _down(url, data, timeout):
+        raise urllib.error.URLError("no route")
+    try:
+        post_form("a", "wish", "b", lang="en", consented=True, post=_down, versions="v")
+        raise AssertionError("an unreachable form was reported as sent")
+    except SideEffectRefused:
+        pass
+    # auto: signed in → the issue, as before; not signed in → the form, which first needs who is writing
+    no_auth = lambda argv: (1, "", "not logged in") if argv[:3] == ["gh", "auth", "status"] else good(argv)
+    assert gh_ready(good) and not gh_ready(no_auth)
+    try:
+        post_feedback(body, "car", "dsp", runner=no_auth, gh_is_ready=lambda: gh_ready(no_auth))
+        raise AssertionError("no GitHub and no sender, yet something was sent")
+    except EnvironmentError as e:
+        assert "Arbiter's form" in str(e) and "Pictures do not go" in str(e), e
+    sent.clear()
+    via_form = post_feedback(body, "car", "dsp", runner=no_auth, channel="tcc", sender="Олена", kind="problem",
+                             impact="stops", lang="uk", consented=True, post=_confirming,
+                             gh_is_ready=lambda: gh_ready(no_auth))
+    assert via_form["via"] == "form" and sent[0][1][FORM_FIELD_MESSAGE] == ["# Feedback\nbody"], sent
+    assert sent[0][1][FORM_FIELD_VERSIONS][0].endswith("lang=uk · about=tcc"), sent[0][1]
+    assert sent[0][1][FORM_FIELD_IMPACT] == ["Зупиняє: далі налаштовувати не можу"]
+    # the person may pick the form even with GitHub at hand
+    assert post_feedback(body, "car", "dsp", runner=good, via="form", sender="a", consented=True,
+                         post=_confirming)["via"] == "form"
 
     # ── the second channel: a TCC finding goes to TCC's repo, still hardcoded (skill#27) ──
     tcc_repo = CHANNELS["tcc"]

@@ -1,0 +1,151 @@
+name: engine-binaries
+
+# Resonalyze's engines as ONE self-contained executable per platform, so a person without the .NET SDK can run Phase 1's
+# desk step (docs/DESIGN-2026-09-17-phase1-variants.md §6, 5c): `resonalyze_engine.py install-binary --from <zip>` puts
+# one where the caller finds it.
+#
+# This workflow builds them AND, on a tag push, attaches them to that tag's release -- hub `governance/RELEASE-CHANNEL.md`
+# §12 (the user's decision on hub #166/#169): the TAG is the gate, and a file that rides on the tag's own run needs no
+# second permission. A session still runs no `gh release` outside the `release` role (§8), and nobody downloads a CI
+# build to upload it again. The conditions §12 puts on such a run, and where each is met here:
+#
+#   * only the run started by the TAG PUSH, never a manual one       -> the `attach` job's `if`
+#   * draft -> files -> publish, as a pre-release, never `Latest`     -> the `attach` job's steps ("Latest" on this repo
+#     (immutable releases refuse a file added after publishing)          belongs to channel A's v2.8.3)
+#   * a release already PUBLISHED for the tag is not touched         -> the job fails and says so
+#   * every attached build was STARTED in this run                   -> `smoke` on both platforms, on their own runner
+#   * SHA256SUMS beside the files; the licence and the third-party   -> the `attach` job stages both from the fork it
+#     notices INSIDE each archive (the fork is MIT)                      checks out at the same commit
+#   * the name is computable by an installer                         -> resonalyze-engine-<pin>-<rid>.zip, the pin as
+#                                                                        `resonalyze_engine.ENGINE_PIN` (7 characters)
+#
+# `permissions: contents: write` is on the attaching job ALONE; the builds stay read-only.
+#
+# TWO platforms are published -- win-x64 and osx-arm64 (the user, 2026-09-17: nothing for Intel Macs or Linux). Any
+# other platform builds from the .NET SDK on demand (`resonalyze_engine.engine_command`, path 3), and a machine without
+# the SDK is told so by name. The `engine` job in checks.yml keeps building and running the pin on Linux through the SDK.
+#
+# When: on a tag push -- the version installers take -- and by hand (a manual run builds and attaches nothing). Not on
+# every pull request: the same pin built again is the `engine` job's question in checks.yml asked twice.
+on:
+  push:
+    tags: ["v3.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: engine-binaries-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Each platform builds ON its platform, because each must also RUN there: Windows is where the user tests,
+          # and on macOS the SDK signs the apphost ad hoc -- an unsigned arm64 executable is killed on start.
+          - { os: windows-latest, rid: win-x64 }
+          - { os: macos-latest, rid: osx-arm64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1     # v7
+      - name: the Resonalyze fork at the pin
+        run: git submodule update --init --checkout vendor/Resonalyze
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: engines/resonalyze/global.json
+      - name: publish ${{ matrix.rid }}
+        run: >-
+          dotnet publish engines/resonalyze/ResonalyzeEngine.csproj -c Release -r ${{ matrix.rid }}
+          --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:DebugType=none -o out/${{ matrix.rid }}
+      - name: the pin in the artifact's name
+        shell: bash
+        run: echo "PIN=$(git -C vendor/Resonalyze rev-parse --short=7 HEAD)" >> "$GITHUB_ENV"
+      # The SDK signs the apphost ad hoc, and Microsoft's macOS deployment page documents that signing as a manual
+      # step -- so the FILE is the evidence, checked here before it can be attached to anything (hub #169).
+      - if: runner.os == 'macOS'
+        name: the published binary is signed
+        run: codesign --verify --verbose out/${{ matrix.rid }}/ResonalyzeEngine
+      # The binary that runs here goes through the same synthetic set as the checks job's wrapper: a binary that builds
+      # and does not start is exactly what an install would otherwise find first, and GitHub neither runs nor tests a
+      # release file (§12).
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+      - name: the published binary through the synthetic set
+        shell: bash
+        env:
+          AUTOSOUND_RESONALYZE_ENGINE: ${{ github.workspace }}/out/${{ matrix.rid }}/ResonalyzeEngine${{ runner.os == 'Windows' && '.exe' || '' }}
+        run: |
+          python -m pip install --upgrade pip numpy scipy
+          python skills/autosound-tuning/rew_tool/resonalyze_engine.py smoke
+      # The fork is MIT: it may be redistributed only with its copyright notice, so the notices travel INSIDE the
+      # archive, beside the binary that bundles them. `install_binary` extracts the zip flat and sets the exec bit.
+      - name: the fork's licence and notices beside the binary
+        shell: bash
+        run: cp vendor/Resonalyze/License.md vendor/Resonalyze/THIRD-PARTY-NOTICES.md out/${{ matrix.rid }}/
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: resonalyze-engine-${{ env.PIN }}-${{ matrix.rid }}
+          path: out/${{ matrix.rid }}
+          if-no-files-found: error
+
+  attach:
+    # ONLY the run started by the tag push: a manual run has no tag decision behind it, so it builds and attaches
+    # nothing (hub RELEASE-CHANNEL.md §12). `needs` means a platform that failed to build or to start attaches nothing
+    # either -- the job does not run at all.
+    needs: build
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v3.')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1     # v7
+      - name: the Resonalyze fork at the pin
+        run: git submodule update --init --checkout vendor/Resonalyze
+      - name: the pin this tag builds
+        run: echo "PIN=$(git -C vendor/Resonalyze rev-parse --short=7 HEAD)" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          path: staged
+      # A published release is what someone may already have downloaded, and with immutable releases on it cannot take
+      # another file: refuse, do not repair (§12). A DRAFT from a re-run of the same tag is picked up and finished.
+      - name: a published release for this tag is not touched
+        run: |
+          set -euo pipefail
+          state=$(gh release view "$TAG" --json isDraft --jq '.isDraft' 2>/dev/null || echo "none")
+          case "$state" in
+            none)  echo "DRAFT=create" >> "$GITHUB_ENV" ;;
+            true)  echo "DRAFT=finish" >> "$GITHUB_ENV" ;;
+            false) echo "::error::$TAG already has a PUBLISHED release -- nothing is added to it. With immutable releases on GitHub would refuse the file anyway, and someone may already have downloaded what is there. Delete that release (not the tag) and re-run this workflow, or attach nothing." ; exit 1 ;;
+          esac
+      - name: one archive per platform, named as an installer computes it
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for rid in win-x64 osx-arm64; do
+            name="resonalyze-engine-${PIN}-${rid}"
+            test -d "staged/$name" || { echo "::error::staged/$name is missing -- the build for $rid did not reach this job"; exit 1; }
+            test -f "staged/$name/License.md" || { echo "::error::$name carries no License.md"; exit 1; }
+            (cd "staged/$name" && zip -q -r -X "$GITHUB_WORKSPACE/dist/$name.zip" .)
+          done
+          cd dist && sha256sum ./*.zip > SHA256SUMS && cat SHA256SUMS
+      # draft -> files -> publish, as a PRE-RELEASE and never Latest: Latest on this repository belongs to channel A's
+      # v2.8.3, and the engine archives are an addition to a release, not a release of their own.
+      - name: the draft release
+        if: env.DRAFT == 'create'
+        run: |
+          notes="Resonalyze engine builds for \`$TAG\` (fork pin \`$PIN\`), attached by the tag's own CI (hub \`RELEASE-CHANNEL.md\` §12)."
+          notes="$notes"$'\n\n'"Each archive holds one self-contained \`ResonalyzeEngine\` with the fork's \`License.md\` and \`THIRD-PARTY-NOTICES.md\`, built AND run through the synthetic set on its own platform in this run. Install it with \`python3 rew_tool/resonalyze_engine.py install-binary --from <zip>\`; any other platform builds from the .NET SDK on demand. Check \`SHA256SUMS\` against what you fetched."
+          gh release create "$TAG" --draft --prerelease --latest=false --title "$TAG" --notes "$notes"
+      - name: the files
+        run: gh release upload "$TAG" dist/*.zip dist/SHA256SUMS --clobber
+      - name: publish
+        run: gh release edit "$TAG" --draft=false --prerelease --latest=false
