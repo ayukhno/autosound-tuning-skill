@@ -65,6 +65,10 @@ the failure this module was written for — the 2026-08-13 rule about the person
 a memory file, was contradicted by `install.sh:774`, and nothing noticed for thirteen days. A
 declaration is only worth having where a check reads it.
 
+**The case already has a name** (the user, 2026-09-17): hub `docs/PLAN.md` §8 `frozen` — a competition run on its own
+repo, the method's pin fixed for the whole run. Its pin is the declaration this item wants read; the hub has not built
+the mode yet (`hub-join-machine`, `hub-add-project`), so the first `frozen` run is when this is due.
+
 **Trigger is live, not written down:** `deployment.py` already names this gap in its refusal when
 one of the disagreeing checkouts is held (`DETACHED`), and points here. It arrives with the case.
 
@@ -74,7 +78,7 @@ one of the disagreeing checkouts is held (`DETACHED`), and points here. It arriv
 
 ## S-002 · A proposed delay is printed in ms the device cannot hold
 
-**Status**: open
+**Status**: dropped 2026-09-17 · handed to research: `gh issue view 156 --repo ayukhno/autosound-hub` (SKL-039) — the user: a research question, not skill work until a measurement or an RFC comes back through the skill's gate; the text below stays as the question's record
 
 **Due when:** the first alignment sheet is entered by hand and the verdict is read at a tweeter
 joint — or when the delay quantiser's direction (below) is measured, whichever comes first.
@@ -98,7 +102,7 @@ profile) — a snap in the wrong direction is a whole sample off, worse than no 
 
 ## S-003 · `apf1_response` models the typed corner; the Helix places a lower one
 
-**Status**: open
+**Status**: dropped 2026-09-17 · handed to research: `gh issue view 156 --repo ayukhno/autosound-hub` (SKL-039) — the user: a research question, not skill work until a measurement or an RFC comes back through the skill's gate; the text below stays as the question's record
 
 **Due when:** an AP1 band is prescribed on this hardware above ~2 kHz, or a second processor is
 measured and the deviation turns out to be Helix-specific.
@@ -120,7 +124,7 @@ bench would need the octaves in between first.
 
 ## S-004 · The phase control's ceiling is known at one rate
 
-**Status**: open
+**Status**: dropped 2026-09-17 · handed to research: `gh issue view 156 --repo ayukhno/autosound-hub` (SKL-039) — the user: a research question, not skill work until a measurement or an RFC comes back through the skill's gate; the text below stays as the question's record
 
 **Due when:** a 48 kHz Audiotec-Fischer unit (a MATCH, or an older HELIX) is on a bench.
 
@@ -137,7 +141,7 @@ or 18 kHz. The constant is the one line to correct; the selftest's 48 kHz case (
 
 ## S-005 · The alias guard reads the whole record; above 1 kHz the record is the cabin
 
-**Status**: open
+**Status**: dropped 2026-09-17 · handed to research: `gh issue view 156 --repo ayukhno/autosound-hub` (SKL-039) — the user: a research question, not skill work until a measurement or an RFC comes back through the skill's gate; the text below stays as the question's record
 
 **Due when:** a mid↔tweeter junction proposed by `predict.py align` lands 0.75 cycles or more from
 a tune verified by ear and measurement. The record already carries `chosen`, `arrival_ms` and
@@ -166,7 +170,7 @@ read the arrival on gated solos and compare: one junction, one cabin, before any
 
 ## S-006 · The junction ripple is read, not scored
 
-**Status**: open
+**Status**: dropped 2026-09-17 · handed to research: `gh issue view 156 --repo ayukhno/autosound-hub` (SKL-039) — the user: a research question, not skill work until a measurement or an RFC comes back through the skill's gate; the text below stays as the question's record
 
 **Due when:** a real junction reads `sum_loss_avg_db` better than −0.5 dB with `sum_ripple_db`
 above 3 dB — a pair that adds coherently into a hump. Until one does, the number has not earned a
