@@ -8,8 +8,14 @@ that gets found again three months later as a surprise.
 ## How an item is closed
 
 **An item dies with a status line, never by being deleted.** Every item carries `**Status**:` on
-the line under its heading — `open` · `doing` · `done` · `dropped` — and a closed one keeps its
-text where it stands, with what closed it written into that line.
+the line under its heading — `open` · `doing` · `waiting` · `deferred` · `done` · `dropped` — and a
+closed one keeps its text where it stands, with what closed it written into that line.
+
+The board reads the **first word** after `**Status**:` (hub `PROTOCOL.md` §4.10, HUB-066); the rest of
+the line is free text. Two words are not open work and are not closed either: **`waiting`** — released,
+waiting for the user's test (the line names the version and what to test); **`deferred`** — put off by
+the user's word (the line quotes it and says what would bring it back). `done` and `dropped` close;
+any other word is open work.
 
 Deleting is what this file did until 2026-09-06, because no item had yet been closed and the form
 had never been needed. It loses the one thing worth keeping: a deleted item is indistinguishable
@@ -36,7 +42,7 @@ it in is worth more than a tidy record.
 
 ## S-001 · `deployment.py` cannot tell a DECLARED pin from a split
 
-**Status**: open
+**Status**: deferred 2026-09-17 · the user, at the wave's review: "agreed — and recall we had the `frozen` mode, this seems to be about such cases"; it comes back with the first `frozen` run (hub `docs/PLAN.md` §8)
 
 **Due when:** the first tuning project is pinned to a version and still being worked on. Not before.
 
@@ -397,7 +403,7 @@ Done looks like: in a new window after the install, `python3 -V` answers with th
 set up. The VM is left as found, so the fix can be checked on it.
 
 ## S-017 · Analysing a tune that already exists — noted, not started
-**Status**: open
+**Status**: deferred 2026-09-17 · the user: "note it with the source, we do not go there yet"; it comes back when Phase 1's variants work on a fresh system and a tuner brings a car that is already tuned
 
 **Due when:** Phase 1's variants (issue #38) work on a fresh system, and a tuner brings a car that is already
 tuned. The user, 2026-09-17: "note it with the source, we do not go there yet".
