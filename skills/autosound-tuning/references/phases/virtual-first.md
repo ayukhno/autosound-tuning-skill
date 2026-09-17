@@ -184,8 +184,11 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
     −4 (hub `RES-007`).
   - **`--delta-vs` for what a change does, `--ladder` for what the rungs give.** The delta reports only
     the rows that differ and the junctions they are in; the ladder prints one junction's variants in
-    the order asked and **does not sort them** — ordering by score is a proposal, and the desk does not
-    propose (`--align` is the search, and it says that it searched).
+    the order asked and **does not sort them** — a reading stays a reading, and a proposal says it is one
+    (`--align` searches and proposes). **The desk proposes; the Arbiter decides:** a variant is shown,
+    explained, advised and discussed, and nothing goes into the DSP or the ledger without the Arbiter's OK
+    — no EQ into a cancellation, no improvement claimed without a measurement after (the virtual-DSP desk
+    spec's requirement В8, as the user put it on 2026-09-17).
 - **2.1** **coarse EQ as packages** (`eq_propose`, with `ellipsoid` for σ(f), stays/moves and the Q
   ceiling): resonances per driver group → L/R shape per pair → tone per pair, each package accepted or
   refused whole and banked as one version (`apply.propose`); only cuts of minimum-phase peaks that

@@ -1370,9 +1370,12 @@ def ladder_report(freqs, solos, chains, lo, hi, *, delays_ms, polarities=("NORM"
     """One junction, every named variant, read the same way: delay x polarity x crossover edge.
 
     A LADDER, not a search: the rungs come from the caller and the table is printed in the order
-    they were asked for. It is deliberately not sorted by score -- the desk reads and the Arbiter
-    decides, and a table ordered by the metric is a proposal wearing a table's clothes (the desk's
-    own doctrine B8; `align_joints` is the search, and it exists separately and says what it did).
+    they were asked for. A reading stays a reading -- sorted by score it would be a proposal that
+    does not say it is one. The desk DOES propose: `align_joints` searches and says what it did, and
+    a proposal is shown, explained, discussed and taken only with the Arbiter's OK. That is the
+    virtual-DSP desk spec's requirement В8 (Cyrillic В, 2026-09-05) as the user put it on 2026-09-17:
+    nothing goes into the DSP or the ledger without that OK, no EQ into a cancellation, and no
+    improvement claimed without a measurement after.
     """
     f = np.asarray(freqs, dtype=float)
     base = chains[hi]
@@ -1402,9 +1405,8 @@ def ladder_report(freqs, solos, chains, lo, hi, *, delays_ms, polarities=("NORM"
                                                       "sum_ripple_db", "worst_null_db",
                                                       "worst_null_hz", "window")}})
     return {"junction": [lo, hi], "fc": fc, "applied_to": hi, "rungs": rungs,
-            "note": ("the rungs are in the order they were asked for; sorting them by score would "
-                     "be a proposal, and the desk does not propose (doctrine B8) -- read them and "
-                     "decide, or run --align, which searches and says so")}
+            "note": ("the rungs are in the order they were asked for: a reading, not a proposal -- "
+                     "read them and decide, or run --align, which searches, proposes and says so")}
 
 
 def render_ladder(rep):
@@ -2487,7 +2489,8 @@ def _selftest():
     assert "nothing to report" in render_delta(delta_report(f, same, ch6, dict(ch6)))
 
     # `ladder_report`: the rungs in the order asked, NOT sorted, and the 0/NORM rung is the
-    # prediction itself. A ladder that sorts is a proposal, and the desk does not propose.
+    # prediction itself. A ladder that sorted would be a proposal that does not say it is one; the
+    # desk's proposals come from --align, which says it searched (В8 as clarified 2026-09-17).
     lad = ladder_report(f, same, ch6, "m-L", "tw-L", delays_ms=[-0.02, 0.0, 0.02],
                         polarities=("NORM", "INV"))
     assert [r["label"].split(" · ")[1] for r in lad["rungs"]] == ["NORM"] * 3 + ["INV"] * 3
@@ -2497,7 +2500,7 @@ def _selftest():
     assert abs(zero["sum_loss_avg_db"] - base_j["sum_loss_avg_db"]) < 1e-9
     assert lad["rungs"] != sorted(lad["rungs"], key=lambda r: -r["sum_loss_score_db"]), \
         "the rungs must not come out sorted by score"
-    assert "does not propose" in render_ladder(lad)
+    assert "a reading, not a proposal" in render_ladder(lad) and "--align" in render_ladder(lad)
     # An edge rung reaches the upper member's crossover, and the label says which.
     lad_e = ladder_report(f, same, ch6, "m-L", "tw-L", delays_ms=[0.0], polarities=("NORM",),
                           edges=(("hp", {"f": 2500.0, "type": "LR", "slope": 24}),))
