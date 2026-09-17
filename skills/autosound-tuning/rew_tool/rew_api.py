@@ -745,6 +745,7 @@ _DECIDED_ASKS = {
     ("rew_tool.py", "analyze_batch", "get_fr"): ["1/6"],
     ("rew_tool.py", "run", "get_fr"): ["1/6", "Var"],
     ("rew_tool.py", "run", "get_group_delay"): ["1/12"],
+    ("rew_tool.py", "_read_joint_rew", "get_fr"): ["1/48"],   # an RTA pair: magnitude only
     ("ear_suspects.py", "main", "get_fr"): ["1/48"],
     ("verify_prediction.py", "measured_from_rew", "get_fr"): ["1/48"],
     ("spot_check.py", "_fetch", "get_fr"): ["<arg>"],

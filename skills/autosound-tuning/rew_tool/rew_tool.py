@@ -31,6 +31,11 @@ TONE_SMOOTHING = "1/6"   # tone against a target, band means: the skill's standa
 EQ_SMOOTHING = "Var"     # EQ cuts: REW's own advice for a response to be equalised -- 1/48 below 100 Hz,
                          # where the detail is the car's modes, 1/6 at 1 kHz and 1/3 above 10 kHz, where
                          # finer detail is mostly the microphone's position (§2.5)
+# Junctions are read from the IMPULSE through a window, never from REW's frequency response: REW smooths
+# phase together with magnitude, and a window EXCLUDES the late sound a smoothing only averages in (the
+# user, 2026-09-17, research §6). The window is the skill's standing one (`windows.py`, hub RES-006):
+# six cycles reproduced the measured pairs to 0.03-0.36 dB where the whole record missed one by 2.6 dB.
+JOINT_WINDOW = {"cycles": 6.0}
 GD_SMOOTHING = "1/12"    # REW's own group delay, printed beside the one through the gate: the same width
                          # the gated reading uses (`windows.GD_SMOOTH_OCT`), so the two differ by window only
 
@@ -330,24 +335,6 @@ def analyze_batch(pattern, curves_dir, vs_targets=True):
     return matches
 
 
-def _resample_complex(freqs, mag_db, phase_deg, query_freqs):
-    """Resample a (mag_db, phase_deg) trace onto `query_freqs` by linear
-    interpolation of the COMPLEX real/imag parts (wrap-safe — never linear-
-    interpolates raw wrapped phase). Two solo sweeps from different measurements
-    can land on different grids; the joint math needs them index-aligned."""
-    n = min(len(mag_db), len(phase_deg))
-    re = [10 ** (mag_db[k] / 20.0) * math.cos(math.radians(phase_deg[k])) for k in range(n)]
-    im = [10 ** (mag_db[k] / 20.0) * math.sin(math.radians(phase_deg[k])) for k in range(n)]
-    re_q = interpolate_target(freqs[:n], re, query_freqs)
-    im_q = interpolate_target(freqs[:n], im, query_freqs)
-    mag_q, ph_q = [], []
-    for r, i in zip(re_q, im_q):
-        amp = math.hypot(r, i)
-        mag_q.append(20 * math.log10(amp) if amp > 0 else -120.0)
-        ph_q.append(math.degrees(math.atan2(i, r)))
-    return mag_q, ph_q
-
-
 def _protective_verdict(record, channel, baseline):
     """What to do with one solo before its phase is read: `("no"|"yes"|"check", detail)`.
 
@@ -570,8 +557,64 @@ def _joints_from_state(state_root, preset=None, ver_state=None):
     return preset, snap.get("version"), joints
 
 
+def _read_joint_rew(lo, hi, lo_title, hi_title, pair_title, fc, window):
+    """One junction as the joint math reads it, from REW's IMPULSES through `window`.
+
+    Returns `{f, a: (mag_db, phase_deg), b: ..., pair: mag_db | None, pair_missing, window, why,
+    notes, anchors}`. The solos come through `predict.load_solo_rew` (the loopback base, refused
+    otherwise) and `predict.gated_solos`, and `predict._read_pair` decides whether the window can
+    hold this junction -- the rules `predict` reads junctions by, so the two tools cannot disagree
+    about a window. A measured pair goes through the SAME window: a sweep through its own impulse;
+    an RTA has none, so a junction with an RTA pair is read steady and says so. Raises `KeyError`
+    for a missing solo and `predict.PredictError` for one that cannot be read on a shared base.
+    """
+    import numpy as np
+    import predict as P
+    import windows as W
+    f = P.grid()
+    loaded = {lo: P.load_solo_rew(lo_title, f, api=api, keep_ir=True),
+              hi: P.load_solo_rew(hi_title, f, api=api, keep_ir=True)}
+    steady = {c: H for c, (H, _) in loaded.items()}
+    gated, notes, anchors = P.gated_solos(loaded, f, **window)
+    reading, used, why = P._read_pair(steady, gated, lo, hi, fc, spec=window, anchors=anchors)
+    if used != W.GATE and why is None:
+        why = "; ".join(n for n in notes if "no gated reading" in n) or "no gated reading"
+    pair, pair_missing = None, False
+    if pair_title:
+        try:
+            timing = api.get_timing(api.find_measurement_id(pair_title))
+        except KeyError:
+            pair_missing = True
+        else:
+            if timing.get("has_ir", True):
+                Hp, pinfo = P.load_solo_rew(pair_title, f, api=api, keep_ir=True)
+                if used == W.GATE:
+                    raw = pinfo["ir"]
+                    Hg, winfo = W.windowed_spectrum(raw["ir"], raw["sample_rate"], raw["t0_s"], f, **window)
+                    if Hg is None:
+                        reading, used = steady, W.STEADY
+                        why = f"read STEADY: the pair has no gated reading -- {winfo.get('refused')}"
+                    else:
+                        Hp = Hg
+                amp = np.abs(np.asarray(Hp))
+                pair = [float(v) for v in 20.0 * np.log10(np.maximum(amp, 1e-12))]
+            else:
+                if used == W.GATE:
+                    reading, used = steady, W.STEADY
+                    why = "read STEADY: the pair is an RTA (no impulse), and one window reads all three"
+                fp, mp, _ = api.get_fr(api.find_measurement_id(pair_title), smoothing=api.FINEST_SMOOTHING)
+                pair = [float(v) for v in interpolate_target(fp, mp, [float(x) for x in f])]
+
+    def trace(H):
+        H = np.asarray(H)
+        mag = 20.0 * np.log10(np.maximum(np.abs(H), 1e-12))
+        return [float(v) for v in mag], [float(v) for v in np.degrees(np.angle(H))]
+    return {"f": [float(x) for x in f], "a": trace(reading[lo]), "b": trace(reading[hi]), "pair": pair,
+            "pair_missing": pair_missing, "window": used, "why": why, "notes": notes, "anchors": anchors}
+
+
 def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
-                   protective_record=None, baseline=None):
+                   protective_record=None, baseline=None, window=None):
     """Batch joint/group analysis: walk every adjacent joint in ONE pass and
     render one consolidated table (polarity + drift-immune delay + residual +
     APF suggestion per joint), reusing joint_analysis.py unchanged.
@@ -600,20 +643,21 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
     refused as `check` (the Arbiter's question, not a number); anything else is a working
     capture and left alone. `baseline` defaults from the record's phase, else from `ver == "1"`.
 
-    Speed: ONE get_measurements() for the whole batch; per joint, two FR pulls
-    (the two solo sweeps) + an optional pair pull — every joint in one command
-    instead of hand-driving joint_analysis.py pair-by-pair.
+    The solos are read from their IMPULSES through `window` (default `JOINT_WINDOW`, six cycles),
+    never from REW's frequency response, whose phase follows the view's smoothing (S-013): a junction
+    the window cannot hold is read steady and its row says why (`_read_joint_rew`). Every joint in
+    one command instead of hand-driving joint_analysis.py pair-by-pair.
     """
-    ms = api.get_measurements()                     # ONE call for the whole batch
-
-    def resolve(name):
-        return api.find_measurement_id(name, measurements=ms, exact=True)
+    import predict as P
+    window = dict(window or JOINT_WINDOW)
 
     print_header(f"BATCH-АНАЛІЗ СТИКІВ  ({len(joint_specs)} стик(ів) · solo = _{ver} (sw))")
     print("  align_by_summation = дрейф-імунна полярність+затримка з сумування; "
           "trust = чи комплексні solo відтворюють виміряну пару.")
     print("  ⚠️ Без пари (nopair) або BLOCK → НЕ вводь обчислену затримку/APF: "
           "перекинь полярність і переміряй сумування.")
+    print(f"  Solo — з імпульсу, не з АЧХ REW: вікно {P._gate_label(window)}; стик, якого вікно не "
+          f"тримає, читається steady і каже чому.")
     candidates = dict(candidates or {})
     if baseline is None:
         # The round's phase decides; a round that never learnt its phase (opened before any phase
@@ -672,18 +716,25 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
         band_s = f"{band[0]:.0f}-{band[1]:.0f}"
         jl = f"{lo}↔{hi}"
         try:
-            fA, mA, pA = api.get_fr(resolve(f"{lo}_{ver} (sw)"), smoothing=api.FINEST_SMOOTHING)
-            fB, mB, pB = api.get_fr(resolve(f"{hi}_{ver} (sw)"), smoothing=api.FINEST_SMOOTHING)
+            read = _read_joint_rew(lo, hi, f"{lo}_{ver} (sw)", f"{hi}_{ver} (sw)", pair_name, fc, window)
         except KeyError as e:
             print(f"  {jl:<15}{fc:>6.0f}  — відсутній solo-замір: {e}")
             continue
-        if pA is None or pB is None:
-            print(f"  {jl:<15}{fc:>6.0f}  — потрібен sweep із фазою (RTA не має фази)")
+        except P.PredictError as e:           # off the loopback base, or an RTA where a solo belongs
+            print(f"  {jl:<15}{fc:>6.0f}  — {e}")
             continue
+        fA = read["f"]
+        (mA, pA), (mB, pB) = read["a"], read["b"]
+        if read["window"] == "gate":
+            arr = read["anchors"]
+            window_note = (f"window: {P._gate_label(window)}; arrivals {lo} {arr[lo]['arrival_ms']:.2f} ms, "
+                           f"{hi} {arr[hi]['arrival_ms']:.2f} ms")
+        else:
+            window_note = f"window: steady -- {read['why']}"
         # The phase is read on the DRIVER, not on the driver behind whatever protected it during
         # the sweep -- an LR4 @100 still leaves ~52 deg at 320 Hz, and a real junction read -49 deg
         # with it in and +3 deg with it out. Marked raw -> take it out; unmarked baseline -> ask.
-        refused, notes = None, []
+        refused, notes = None, [window_note]
         for ch, side in ((lo, "lo"), (hi, "hi")):
             action, detail = _protective_verdict(protective_record, ch, baseline)
             if action == "check":
@@ -693,7 +744,7 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
                 if side == "lo":
                     mA, pA, info = _de_embed_trace(fA, mA, pA, detail)
                 else:
-                    mB, pB, info = _de_embed_trace(fB, mB, pB, detail)
+                    mB, pB, info = _de_embed_trace(fA, mB, pB, detail)
                 cap = ""
                 if info.get("capped_below_hz"):
                     cap = f"; phase NOT recovered below {info['capped_below_hz']:.0f} Hz"
@@ -706,24 +757,23 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
                   f"{'?':>5}{'—':>9}{'—':>7}{'—':>10}  CHECK: {ch} — {why}")
             rows.append({"joint": jl, "fc": fc, "trust": None, "polarity": None,
                          "delay_ms": None, "verdict": "check protective",
-                         "channel": ch, "ask": why})
+                         "channel": ch, "ask": why, "window": read["window"]})
             continue
         for note in notes:
             print(f"  {'':<15}  ↳ {note}")
-        mB2, pB2 = _resample_complex(fB, mB, pB, fA)
+        mB2, pB2 = mB, pB                    # one grid: both solos were read onto `fA`
 
         trusted, trust_lbl, js_call = None, "—(nopair)", ""
         if pair_name:
-            try:
-                fP, mP, _ = api.get_fr(resolve(pair_name), smoothing=api.FINEST_SMOOTHING)
-                mP2 = interpolate_target(fP, mP, fA)     # pair magnitude (RTA-ok)
+            if read["pair_missing"]:
+                trust_lbl = "pair?"
+            else:
+                mP2 = read["pair"]                # through the same window as the solos
                 tg = ja.phase_trust_gate(fA, mA, pA, mB2, pB2, mP2, band=band)
                 js = ja.joint_summation_check(fA, mA, mB2, mP2, band=band)
                 trusted = tg["phase_reliable"]
                 trust_lbl = f"{tg['agreement']:.2f}" + ("✓" if trusted else " BLOCK")
                 js_call = js["call"]
-            except KeyError:
-                trust_lbl = "pair?"
 
         if trusted is False:
             # Phase not trustworthy → do NOT compute/emit a delay. Magnitude only.
@@ -731,7 +781,8 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
                   f"{'?':>5}{'—':>9}{'—':>7}{'—':>10}  "
                   f"phase unreliable → power-sum: {js_call}; flip polarity + remeasure")
             rows.append({"joint": jl, "fc": fc, "trust": trusted,
-                         "polarity": None, "delay_ms": None, "verdict": "blocked"})
+                         "polarity": None, "delay_ms": None, "verdict": "blocked",
+                         "window": read["window"]})
             continue
 
         al = ja.align_by_summation(fA, mA, pA, mB2, pB2, band=band)
@@ -750,7 +801,8 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
         rows.append({"joint": jl, "fc": fc, "trust": trusted,
                      "polarity": al["polarity"], "delay_ms": al["delay_ms"],
                      "residual_null_db": al["residual_null_db"],
-                     "needs_allpass": al["needs_allpass"], "verdict": verdict})
+                     "needs_allpass": al["needs_allpass"], "verdict": verdict,
+                     "window": read["window"]})
         if lo in candidates or hi in candidates:
             # The hand-dialled all-pass against THIS joint's measured solos. Printed under the
             # row it belongs to and carrying that row's trust: a candidate on an UNVERIFIED
@@ -854,6 +906,81 @@ def run(mid, curves_dir, show_all=True):
     print(f"\n{SEP}\n")
 
 
+def _selftest_joint_impulse():
+    """`_read_joint_rew` on synthetic impulses behind a fake REW (S-013): the junction comes from the
+    impulses through the window, a reflection the window leaves out does not move the answer, and
+    each case the window cannot hold is read steady with its reason -- a gate too short, arrivals
+    too far apart, an RTA pair -- while a solo off the loopback base is refused, not read."""
+    import contextlib
+    import io
+    import types
+    global api
+    fs, n, t0 = 50000, 1 << 15, -0.1
+
+    def ir(*arrivals):
+        x = [0.0] * n
+        for t, a in arrivals:
+            x[int(round((t - t0) * fs))] += a
+        return x
+    irs = {"w-L_7 (sw)": ir((0.0030, 1.0)),
+           # inverted, 0.2 ms later, and a strong reflection 12 ms after it that only this one has
+           "m-L_7 (sw)": ir((0.0032, -1.0), (0.0152, -0.9)),
+           "tw-L_7 (sw)": ir((0.0070, 1.0)),               # 4 ms after w-L: a 3 ms window at 2 kHz cannot hold both
+           "L_7 (sw)": ir((0.0030, 1.0), (0.0032, -1.0))}
+    rta = {"L_7 (rta)": ([20.0 * 2 ** (k / 48) for k in range(481)], [80.0] * 481, None)}
+    offset = {"r-L_7 (sw)": 0.0077}
+    irs["r-L_7 (sw)"] = ir((0.0030, 1.0))
+
+    def find(title, measurements=None, exact=True):
+        if title in irs or title in rta:
+            return title
+        raise KeyError(title)
+    fake = types.SimpleNamespace(
+        FINEST_SMOOTHING="1/48", find_measurement_id=find,
+        get_timing=lambda mid: {"has_ir": mid in irs, "reference": "Loopback",
+                                "offset_s": offset.get(mid, 0.0)},
+        get_impulse_response=lambda mid, normalised=False: ([t0 + i / fs for i in range(n)], irs[mid]),
+        get_fr=lambda mid, smoothing=None: rta[mid])
+    real, api = api, fake
+    try:
+        r = _read_joint_rew("w-L", "m-L", "w-L_7 (sw)", "m-L_7 (sw)", "L_7 (sw)", 2000.0, JOINT_WINDOW)
+        assert r["window"] == "gate", r["why"]
+        band = (1000.0, 4000.0)
+        al = ja.align_by_summation(r["f"], *r["a"], *r["b"], band=band)
+        assert al["polarity"] == -1 and abs(al["delay_ms"] + 0.2) < 0.02, al
+        assert r["pair"] is not None and len(r["pair"]) == len(r["f"]), "the pair came through the gate"
+        tg = ja.phase_trust_gate(r["f"], *r["a"], *r["b"], r["pair"], band=band)
+        assert tg["phase_reliable"] is True, tg
+        short = _read_joint_rew("w-L", "m-L", "w-L_7 (sw)", "m-L_7 (sw)", None, 2000.0, {"gate_ms": 1.0})
+        assert short["window"] == "steady" and "needs 5" in short["why"], short["why"]
+        # What the window is FOR: the delay search is robust either way, but the steady read carries
+        # the reflection into the junction as a residual null the gated read does not have.
+        al_s = ja.align_by_summation(short["f"], *short["a"], *short["b"], band=band)
+        assert al["residual_null_db"] > -0.1 and al_s["residual_null_db"] < -0.5, (al, al_s)
+        apart = _read_joint_rew("w-L", "tw-L", "w-L_7 (sw)", "tw-L_7 (sw)", None, 2000.0, JOINT_WINDOW)
+        assert apart["window"] == "steady" and "cannot hold both" in apart["why"], apart["why"]
+        on_rta = _read_joint_rew("w-L", "m-L", "w-L_7 (sw)", "m-L_7 (sw)", "L_7 (rta)", 2000.0, JOINT_WINDOW)
+        assert on_rta["window"] == "steady" and "RTA" in on_rta["why"], on_rta["why"]
+        assert len(on_rta["pair"]) == len(on_rta["f"]), "the RTA pair is on the solos' grid"
+        gone = _read_joint_rew("w-L", "m-L", "w-L_7 (sw)", "m-L_7 (sw)", "LR_7 (sw)", 2000.0, JOINT_WINDOW)
+        assert gone["pair_missing"] is True and gone["pair"] is None, gone
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rows = analyze_joints([("r-L", "m-L", 2000.0, None), ("w-L", "m-L", 2000.0, None)], ver="7",
+                                  baseline=False)
+        out = buf.getvalue()
+        assert "loopback" in out and len(rows) == 1, out                # r-L refused, w-L computed
+        assert rows[0]["window"] == "gate" and rows[0]["polarity"] == -1, rows
+        assert "window: 6 cycles at each frequency" in out, out
+    finally:
+        api = real
+    print(f"selftest[joints:impulse] OK — solos read from the impulse through {JOINT_WINDOW['cycles']:g} "
+          f"cycles: INV and {al['delay_ms']:+.3f} ms, residual {al['residual_null_db']:+.1f} dB where the "
+          f"steady read carries a reflection as {al_s['residual_null_db']:+.1f} dB; a 1 ms "
+          f"gate, arrivals 4 ms apart and an RTA pair read steady with the reason; a solo off the "
+          f"loopback base refused.")
+
+
 def _selftest():
     """Offline check of the batch orchestration + rendering (no live REW).
 
@@ -920,12 +1047,26 @@ def _selftest():
     phB = [180.0 - 360.0 * f * (tau / 1000.0) for f in hz]
     jmeas = {"10": {"title": "w-L_2 (sw)"}, "11": {"title": "m-L_2 (sw)"}}
     jfr = {10: (hz, magA, phA), 11: (hz, magB, phB)}
-    orig_gm2, orig_fr2 = api.get_measurements, api.get_fr
-    orig_find_id = api.find_measurement_id
-    api.get_measurements = lambda: jmeas
-    api.get_fr = lambda mid, smoothing=None: jfr[int(mid)]
-    api.find_measurement_id = lambda name, measurements=None, exact=True: \
-        next(k for k, v in jmeas.items() if v["title"] == name)
+    # The joint MATH is fed its traces through the reader; the impulse reader has its own test below.
+    def _trace_reader(lo, hi, lo_title, hi_title, pair_title, fc, window):
+        def trace(title):
+            for k, v in jmeas.items():
+                if v["title"] == title:
+                    return jfr[int(k)]
+            raise KeyError(title)
+        fa, ma, pa = trace(lo_title)
+        _, mb, pb = trace(hi_title)
+        pair, missing = None, False
+        if pair_title:
+            try:
+                pair = trace(pair_title)[1]
+            except KeyError:
+                missing = True
+        return {"f": fa, "a": (ma, pa), "b": (mb, pb), "pair": pair, "pair_missing": missing,
+                "window": "gate", "why": None, "notes": [],
+                "anchors": {lo: {"arrival_ms": 0.0}, hi: {"arrival_ms": 0.0}}}
+    orig_reader = globals()["_read_joint_rew"]
+    globals()["_read_joint_rew"] = _trace_reader
     try:
         rows = analyze_joints([("w-L", "m-L", 400.0, None)], ver="2")
         assert rows and rows[0]["polarity"] == -1, rows          # INV recovered
@@ -1027,8 +1168,9 @@ def _selftest():
               f"(≈−{tau}); left in → off by {bias:.2f} ms; unmarked baseline → CHECK; "
               "unmarked _2 → working capture.")
     finally:
-        api.get_measurements, api.get_fr = orig_gm2, orig_fr2
-        api.find_measurement_id = orig_find_id
+        globals()["_read_joint_rew"] = orig_reader
+
+    _selftest_joint_impulse()
 
     # ── state-map: joints auto-derived from a snapshot's crossovers ───────────
     import tempfile
@@ -1116,6 +1258,13 @@ def main():
     pj.add_argument("--baseline", action="store_true",
                     help="treat the solos as a BASELINE capture even if the record does not say "
                          "so: an unmarked channel then returns CHECK instead of a number")
+    pjw = pj.add_mutually_exclusive_group()
+    pjw.add_argument("--fdw", type=float, metavar="CYCLES",
+                     help="the window the solos are read through: N cycles at each frequency "
+                          "(default 6, windows.py / hub RES-006)")
+    pjw.add_argument("--gate", type=float, metavar="MS",
+                     help="a fixed gate of MS after the arrival instead; a junction it holds under "
+                          "five cycles is read steady and says so")
     pj.add_argument("--apf", action="append", default=[], metavar="ch,APF1,f0 | ch,APF2,f0,Q",
                     help="Кандидат all-pass ПЕРЕВІРИТИ (не запропонувати): виставлений вручну "
                          "в TCC. Напр. --apf 'm-L,APF2,300,0.71'. Повторюваний, один на канал.")
@@ -1181,9 +1330,11 @@ def main():
                                      + "/_".join(r["title_versions"] or ["?"]) for r in rounds)
                            or "жодного") + ". Відкрий раунд для цих назв або прибери --process, "
                         "щоб свідомо читати соло як є.")
+            window = ({"gate_ms": args.gate} if args.gate else
+                      {"cycles": args.fdw} if args.fdw else None)
             analyze_joints(specs, ver=args.ver, band_oct=args.band_oct,
                            candidates=candidates, protective_record=record,
-                           baseline=True if args.baseline else None)
+                           baseline=True if args.baseline else None, window=window)
         except ValueError as e:
             print(f"Помилка: {e}")
             sys.exit(1)
