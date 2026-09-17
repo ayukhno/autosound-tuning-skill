@@ -93,9 +93,11 @@ band re-checks that junction's delay; otherwise the delays stay.
 
 Engine-independent steps first, on `wave-2026-09-17b`; each with its selftest, the full suite once at the end.
 
-1. **Wishes against hard limits.** Read the tuner's free-form crossover wishes per junction (family, slope, frequency, "not
-   sure"), check each against the protective floor and the device profile, and name the nearest allowed setting
-   ("BW2 on your tweeter from 3400 Hz") instead of computing a forbidden one.
+1. ~~**Wishes against hard limits.**~~ Done 2026-09-17: `rew_tool/xover_wishes.py` reads the tuner's free-form wishes per
+   junction (family, slope, frequency, "not sure"), checks each against the device profile and the fragile driver's Fs
+   floor (`crossover_checks.fs_margin`: REFUSE under 1.1 × Fs, CAUTION up to the craft convention, which relaxes with the
+   slope), and names the nearest allowed setting ("→ enter BW2 from 1044 Hz"). Phase 1 §3, the capabilities board and
+   `rew-tool-docs.md` say so.
 2. **The phase documents.** Phase 1 as in §1 (wishes, the best configuration first, a second pass with the wishes, coarse
    per-driver EQ before the delays, front and sub then centre and rear, the centring step, at most three variants, the
    breakdown and the choice with the tuner's OK, free play); Phase 2 as the second part of EQ in the §1 order. Touches
