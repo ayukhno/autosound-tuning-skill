@@ -8,6 +8,11 @@ Every port of somebody else's maths into `rew_tool` carries a header block (the 
     # format-version: <N> -- <why>          (only on a port of a FILE FORMAT; optional)
     # deviation: <what we did differently> -- see <where in our code>
 
+The C# wrapper around Resonalyze's engines (`engines/resonalyze/`, docs/DESIGN-2026-09-17-phase1-variants.md
+§3) carries the same block with `//`: one line per file it copies from, compiles unchanged out of the
+submodule, or calls. A copy drifts like a port; a compiled or called file drifts past the submodule's pin
+-- either way the upstream moved and somebody has to look (the fork session's ask, PAS-008).
+
 This script reads those headers and answers, per port, whether `path` has changed in the upstream
 since `<sha>`. It says WHICH commits touched the file, so the reader can go and look — it does not
 say whether the change matters, because that needs a person who understands both sides.
@@ -43,19 +48,26 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
-PORT_ROOTS = [os.path.join(REPO, "skills", "autosound-tuning", "rew_tool")]
+PORT_ROOTS = [os.path.join(REPO, "skills", "autosound-tuning", "rew_tool"), os.path.join(REPO, "engines", "resonalyze")]
+#: Files a header block may sit in, and the folders a build writes (never a port, and slow to walk).
+PORT_SUFFIXES = (".py", ".cs")
+SKIP_DIRS = {"bin", "obj", "__pycache__"}
 
+# `#` in Python, `//` in C#: one grammar, two comment marks.
+_MARK = r"(?:#|//)"
+COMMENT_MARKS = ("#", "//")
 UPSTREAM_RE = re.compile(
-    r"^#\s*upstream:\s*(?P<repo>[\w.-]+/[\w.-]+)\s+(?P<path>\S+)\s+@\s+(?P<sha>[0-9a-fA-F]{7,40})")
-DEVIATION_RE = re.compile(r"^#\s*deviation:\s*(?P<text>.+)$")
-FORMAT_VERSION_RE = re.compile(r"^#\s*format-version:\s*(?P<n>\d+)")
-CONTINUATION_RE = re.compile(r"^#\s{4,}(?P<text>\S.*)$")
+    _MARK + r"\s*upstream:\s*(?P<repo>[\w.-]+/[\w.-]+)\s+(?P<path>\S+)\s+@\s+(?P<sha>[0-9a-fA-F]{7,40})")
+DEVIATION_RE = re.compile(_MARK + r"\s*deviation:\s*(?P<text>.+)$")
+FORMAT_VERSION_RE = re.compile(_MARK + r"\s*format-version:\s*(?P<n>\d+)")
+CONTINUATION_RE = re.compile(_MARK + r"\s{4,}(?P<text>\S.*)$")
 # What the upstream's file says its writer produces. C# today; a second language gets a second
 # pattern here, not a second script.
 CURRENT_VERSION_RE = re.compile(r"\bconst\s+int\s+CurrentVersion\s*=\s*(?P<n>\d+)\s*;")
@@ -65,9 +77,10 @@ def find_headers(roots):
     """Every `# upstream:` block under `roots`: [{file, line, repo, path, sha, deviations}]."""
     out = []
     for root in roots:
-        for dirpath, _, names in os.walk(root):
+        for dirpath, dirnames, names in os.walk(root):
+            dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
             for name in sorted(names):
-                if not name.endswith(".py"):
+                if not name.endswith(PORT_SUFFIXES):
                     continue
                 fp = os.path.join(dirpath, name)
                 with open(fp, encoding="utf-8") as fh:
@@ -86,7 +99,7 @@ def find_headers(roots):
                     j = i + 1
                     # ...and stops at the next `# upstream:` line: two ports declared back to back
                     # with no code between them are two blocks, not one with a swallowed header.
-                    while j < len(lines) and lines[j].startswith("#") and not UPSTREAM_RE.match(lines[j]):
+                    while j < len(lines) and lines[j].startswith(COMMENT_MARKS) and not UPSTREAM_RE.match(lines[j]):
                         d = DEVIATION_RE.match(lines[j])
                         v = FORMAT_VERSION_RE.match(lines[j])
                         c = CONTINUATION_RE.match(lines[j])
@@ -141,13 +154,20 @@ def _format_check(entry, upstream_text):
             "format_drift": theirs != entry["format_version"]}
 
 
+_COMPARE_CACHE = {}
+
+
 def drift_via_api(entry):
     """Commits since `sha` that touch `path`, through `gh api …/compare/<sha>...HEAD`."""
-    r = subprocess.run(["gh", "api", f"repos/{entry['repo']}/compare/{entry['sha']}...HEAD"],
-                       capture_output=True, text=True)
-    if r.returncode != 0:
-        return {"error": f"gh api failed: {r.stderr.strip()[:160]}"}
-    data = json.loads(r.stdout)
+    key = (entry["repo"], entry["sha"])
+    if key not in _COMPARE_CACHE:
+        # One call per pin, not per file: the engine wrapper declares sixteen files at one commit.
+        r = subprocess.run(["gh", "api", f"repos/{entry['repo']}/compare/{entry['sha']}...HEAD"],
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            return {"error": f"gh api failed: {r.stderr.strip()[:160]}"}
+        _COMPARE_CACHE[key] = json.loads(r.stdout)
+    data = _COMPARE_CACHE[key]
     touched = any(f.get("filename") == entry["path"] for f in data.get("files", []))
     commits = []
     if touched:
@@ -291,6 +311,22 @@ def _selftest():
                      "# format-version: 7 -- their CurrentVersion\n"
                      f"# upstream: who/what dsp/Other.cs @ {sha_fmt7} -- pinned as if a format\n"
                      "# format-version: 1\n")
+        # The C# wrapper's grammar: `//` marks, a build folder that is never walked.
+        os.makedirs(os.path.join(ports, "cs", "obj"))
+        with open(os.path.join(ports, "cs", "Replica.cs"), "w") as fh:
+            fh.write("// what the window does\n"
+                     f"// upstream: who/what dsp/Metric.cs @ {sha1} (MIT) -- Copied, Twice\n"
+                     "// deviation: dialogs read their defaults --\n"
+                     "//            non-interactive\n"
+                     "using System;\n")
+        with open(os.path.join(ports, "cs", "obj", "Generated.cs"), "w") as fh:
+            fh.write(f"// upstream: who/what dsp/Other.cs @ {sha1} -- a build artefact, never a port\n")
+        cs = find_headers([os.path.join(ports, "cs")])
+        assert [(e["path"], e["sha"]) for e in cs] == [("dsp/Metric.cs", sha1)], cs
+        assert cs[0]["deviations"] == ["dialogs read their defaults -- non-interactive"], cs[0]
+        assert len(check(cs, clone=clone)[0]["commits"]) == 1
+        shutil.rmtree(os.path.join(ports, "cs"))
+
         entries = find_headers([ports])
         assert [e["sha"] for e in entries] == [sha1, sha2, sha2, sha_fmt7, sha_fmt7], entries
         assert [e["format_version"] for e in entries] == [None, None, None, 7, 1], entries
@@ -328,7 +364,8 @@ def _selftest():
         # The exit code is what a CI step reads: 2 = drifted, distinct from 1 = broken.
         rc_drift = 2 if any(r["commits"] for r in results) else 0
         assert rc_drift == 2
-    print("selftest[upstream-drift] OK -- headers parsed with wrapped deviations, drift = exactly the "
+    print("selftest[upstream-drift] OK -- headers parsed with wrapped deviations (`#` and `//`, build folders "
+          "skipped), drift = exactly the "
           "commits that touched the ported file since the pinned sha, a pin at the change reads as "
           "current, an unknown sha is an error, exit 2 on drift; a format-version pin is compared "
           "with the upstream's CurrentVersion (7 = 7 current and said so; 7 vs 8 is a FORMAT drift "

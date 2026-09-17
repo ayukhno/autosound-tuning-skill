@@ -56,7 +56,7 @@ _ROLE_WORDS = (
     # longest first inside each role, so "midbass" is not read as "mid" + "bass"
     ("sub", ("subwoofer", "sub", "сабвуфер", "саб", "sw")),
     ("woofer", ("midbass", "mid-bass", "woofer", "мідбас", "мидбас", "мід-бас", "нч", "w")),
-    ("midrange", ("midrange", "mid-range", "mids", "mid", "середина", "середні", "сч", "m")),
+    ("midrange", ("midrange", "mid-range", "mids", "mid", "середина", "середні", "мід", "мид", "сч", "m")),
     ("tweeter", ("tweeters", "tweeter", "твітер", "твитер", "пищалка", "вч", "tw")),
     ("center", ("center", "centre", "центр", "c")),
     ("rear", ("rear", "rears", "тил", "задні", "задние", "r")),
@@ -100,6 +100,8 @@ def _roles_in(clause):
             # a Cyrillic word is read in any case ending ("мідбасом", "саба", "твітером"); a Latin
             # one whole, so "mid" never matches inside "midbass"
             tail = r"[а-яіїєґ]{0,3}" if re.search(r"[а-яіїєґ]", w) else ""
+            if w in ("мід", "мид"):
+                tail = r"(?!бас)" + tail          # "мідбас" is the woofer, not "мід" + a case ending
             for m in re.finditer(r"(?<!\w)" + re.escape(w) + tail + r"(?!\w)", low):
                 if best is None or m.start() < best:
                     best = m.start()
@@ -262,6 +264,82 @@ def _snap(f, xo):
     return f, note
 
 
+def check_setting(members, family, order, f, channels, xo=None):
+    """One crossover setting against the device and the fragile driver's Fs -- a wish's check, and the
+    same check on a setting somebody else proposed (`resonalyze_engine` holds the engine's edges to it).
+
+    `members`: `_members()`'s shape, `{key: (lower_code, upper_code)}`; the UPPER code is the one a
+    high-pass sits on, so a low-pass is checked against the device alone with `members={}`.
+    `family`: the profile's code (BW, LR, BE, ...), `order`: dB/oct, `f`: Hz -- any may be None.
+    Returns `{verdict, allowed, why}`: OK | CAUTION | ADJUSTED | REFUSED | UNCHECKED, and the setting as
+    it can be entered (ADJUSTED/REFUSED name the nearest allowed one).
+    """
+    why, adjusted, refused, verdict_out = [], False, False, None
+    # 1. the device: family, slope, corner
+    if xo is not None:
+        types = xo["types"]
+        if family and family not in types:
+            have = ", ".join(sorted(types)) or "none on record"
+            why.append(f"this DSP has no {family} family (it has: {have})")
+            return {"verdict": "REFUSED", "allowed": None, "why": why}
+        if family and isinstance(types.get(family), dict) and types[family].get(_dp.MODELLABLE_KEY) is False:
+            why.append(f"{family} is on the device but the method cannot predict it -- a variant on it cannot be computed")
+            return {"verdict": "REFUSED", "allowed": None, "why": why}
+        orders = (types.get(family) or {}).get("orders_db_per_oct") if family else None
+        if order and orders and order not in orders:
+            steeper = [o for o in orders if o > order]
+            nearest = min(steeper) if steeper else max(orders)
+            why.append(f"{family} has no {order} dB/oct on this DSP (it has {', '.join(str(o) for o in orders)}); "
+                       f"the nearest {'steeper' if steeper else 'available'} is {nearest}")
+            order, adjusted = nearest, True
+    if f is not None:
+        f2, note = _snap(f, xo)
+        if note:
+            why.append(note)
+            adjusted = True
+        f = f2
+    # 2. the fragile member's Fs: the high-pass side of the junction
+    fragile = []
+    for key, (lo_c, hi_c) in members.items():
+        hi_row = channels[hi_c]
+        if hi_row.get("role") in FRAGILE_ROLES:
+            fragile.append((key, hi_c, hi_row))
+    if f is not None and fragile:
+        poles = max(1, int(round((order or 24) / 6)))
+        unchecked = []
+        strictest = None
+        for key, code, hi_row in fragile:
+            fs, reason = _fs_of(hi_row)
+            if fs is None:
+                unchecked.append(f"{code}: {reason}")
+                continue
+            if strictest is None or fs > strictest[1]:
+                strictest = (code, fs)
+        if unchecked:
+            why.extend(unchecked)
+            return {"verdict": "UNCHECKED", "allowed": {"family": family, "order_db": order, "f_hz": f}, "why": why}
+        code, fs = strictest
+        verdict = _cc.fs_margin(f, fs, order=poles)
+        floor_f, _ = _snap(math.ceil(_cc.FS_FLOOR * fs), xo)
+        clear_f, _ = _snap(math.ceil(verdict["convention"] * fs), xo)
+        label = f"{family or ''}{poles}".strip() or f"{order} dB/oct"
+        if verdict["verdict"] == _cc.REFUSE:
+            why.append(f"{code}: {verdict['why']} (Fs {fs:g} Hz)")
+            why.append(f"nearest allowed: {label} on {code} from {floor_f:g} Hz -- clear of caution from {clear_f:g} Hz")
+            f, refused = floor_f, True
+        elif verdict["verdict"] == _cc.CAUTION:
+            why.append(f"{code}: {verdict['why']} (Fs {fs:g} Hz); clear of caution from {clear_f:g} Hz")
+        else:
+            why.append(f"{code}: {verdict['why']} (Fs {fs:g} Hz)")
+        if not refused and not adjusted and verdict["verdict"] == _cc.CAUTION:
+            verdict_out = "CAUTION"
+    elif f is None and fragile and (family or order):
+        why.append("no corner named -- the family and slope are checked, the Fs floor waits for a frequency")
+    if verdict_out is None:
+        verdict_out = "REFUSED" if refused else "ADJUSTED" if adjusted else "OK"
+    return {"verdict": verdict_out, "allowed": {"family": family, "order_db": order, "f_hz": f}, "why": why}
+
+
 def check_wishes(text, channels, xo=None):
     """Every clause of `text` against the channels' Fs and the device's crossover facts.
 
@@ -294,75 +372,9 @@ def check_wishes(text, channels, xo=None):
             row["why"].append("no wish here -- the desk proposes for this junction")
             continue
 
-        family, order, f = w["family"], w["order_db"], w["f_hz"]
-        why, adjusted, refused = row["why"], False, False
-        # 1. the device: family, slope, corner
-        if xo is not None:
-            types = xo["types"]
-            if family and family not in types:
-                have = ", ".join(sorted(types)) or "none on record"
-                why.append(f"this DSP has no {family} family (it has: {have})")
-                row["verdict"] = "REFUSED"
-                continue
-            if family and isinstance(types.get(family), dict) and types[family].get(_dp.MODELLABLE_KEY) is False:
-                why.append(f"{family} is on the device but the method cannot predict it -- a variant on it cannot be computed")
-                row["verdict"] = "REFUSED"
-                continue
-            orders = (types.get(family) or {}).get("orders_db_per_oct") if family else None
-            if order and orders and order not in orders:
-                steeper = [o for o in orders if o > order]
-                nearest = min(steeper) if steeper else max(orders)
-                why.append(f"{family} has no {order} dB/oct on this DSP (it has {', '.join(str(o) for o in orders)}); "
-                           f"the nearest {'steeper' if steeper else 'available'} is {nearest}")
-                order, adjusted = nearest, True
-        if f is not None:
-            f2, note = _snap(f, xo)
-            if note:
-                why.append(note)
-                adjusted = True
-            f = f2
-        # 2. the fragile member's Fs: the high-pass side of the junction
-        fragile = []
-        for key, (lo_c, hi_c) in members.items():
-            hi_row = channels[hi_c]
-            if hi_row.get("role") in FRAGILE_ROLES:
-                fragile.append((key, hi_c, hi_row))
-        if f is not None and fragile:
-            poles = max(1, int(round((order or 24) / 6)))
-            unchecked = []
-            strictest = None
-            for key, code, hi_row in fragile:
-                fs, reason = _fs_of(hi_row)
-                if fs is None:
-                    unchecked.append(f"{code}: {reason}")
-                    continue
-                if strictest is None or fs > strictest[1]:
-                    strictest = (code, fs)
-            if unchecked:
-                why.extend(unchecked)
-                row["verdict"] = "UNCHECKED"
-                row["allowed"] = {"family": family, "order_db": order, "f_hz": f}
-                continue
-            code, fs = strictest
-            verdict = _cc.fs_margin(f, fs, order=poles)
-            floor_f, _ = _snap(math.ceil(_cc.FS_FLOOR * fs), xo)
-            clear_f, _ = _snap(math.ceil(verdict["convention"] * fs), xo)
-            label = f"{family or ''}{poles}".strip() or f"{order} dB/oct"
-            if verdict["verdict"] == _cc.REFUSE:
-                why.append(f"{code}: {verdict['why']} (Fs {fs:g} Hz)")
-                why.append(f"nearest allowed: {label} on {code} from {floor_f:g} Hz -- clear of caution from {clear_f:g} Hz")
-                f, refused = floor_f, True
-            elif verdict["verdict"] == _cc.CAUTION:
-                why.append(f"{code}: {verdict['why']} (Fs {fs:g} Hz); clear of caution from {clear_f:g} Hz")
-            else:
-                why.append(f"{code}: {verdict['why']} (Fs {fs:g} Hz)")
-            if not refused and not adjusted and verdict["verdict"] == _cc.CAUTION:
-                row["verdict"] = "CAUTION"
-        elif f is None and fragile and (family or order):
-            why.append("no corner named -- the family and slope are checked, the Fs floor waits for a frequency")
-        row["allowed"] = {"family": family, "order_db": order, "f_hz": f}
-        if row["verdict"] is None:
-            row["verdict"] = "REFUSED" if refused else "ADJUSTED" if adjusted else "OK"
+        res = check_setting(members, w["family"], w["order_db"], w["f_hz"], channels, xo)
+        row["why"].extend(res["why"])
+        row["verdict"], row["allowed"] = res["verdict"], res["allowed"]
     return rows
 
 
@@ -400,6 +412,14 @@ def _selftest():
                     "BW": {"orders_db_per_oct": [6, 12, 18, 24, 30, 36, 42], "modellable": True},
                     "LR": {"orders_db_per_oct": [12, 24, 36], "modellable": True}},
           "range": [20.0, 20480.0], "step": 1.0}
+
+    # "мід" is the mid in any case ending, and never the front of "мідбас" (the Passat sentence of 2026-09-17)
+    assert _roles_in("BE4 між мідом і твітером на 2300") == ["midrange", "tweeter"]
+    assert _roles_in("не знаю між мідбасом і мідом") == ["woofer", "midrange"] and _roles_in("мідбас") == ["woofer"]
+    # the setting check alone: a low-pass is the device's business only; a high-pass meets the Fs floor
+    assert check_setting({}, "LR", 48, 80.0, ch, xo)["verdict"] == "ADJUSTED"
+    hp = check_setting({"own": (None, "tw-L")}, "LR", 24, 900.0, ch, xo)
+    assert hp["verdict"] == "REFUSED" and hp["allowed"]["f_hz"] == 1034.0, hp
 
     # the user's own sentence: three clauses, two wishes and one "not sure"
     rows = check_wishes("думаю про BE4 між ВЧ та СЧ, BW2 на НЧ між саб і мідбас, і не знаю що краще між мідбасом і СЧ", ch, xo)

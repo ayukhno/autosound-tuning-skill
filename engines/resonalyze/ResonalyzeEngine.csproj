@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The skill's wrapper around Resonalyze's engines (docs/DESIGN-2026-09-17-phase1-variants.md §3): Resonalyze.Dsp
+       by ProjectReference from the pinned submodule vendor/Resonalyze, plus the WinForms-free files of the Virtual
+       DSP window compiled in as they are. Everything the window does inside WinForms classes is copied into
+       WindowReplica.cs with a pointer to its origin. Built by rew_tool/resonalyze_engine.py (build); the
+       submodule is fetched on demand (`update = none` in .gitmodules). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Resonalyze</RootNamespace>
+    <AssemblyName>ResonalyzeEngine</AssemblyName>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Fork>$(MSBuildThisFileDirectory)../../vendor/Resonalyze/</Fork>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(Fork)dsp/Resonalyze.Dsp.csproj" />
+  </ItemGroup>
+
+  <!-- Compiled unchanged from the fork. -->
+  <ItemGroup>
+    <Compile Include="$(Fork)source/Tools/VirtualCrossover/AlignmentReprocessor.cs" Link="fork/AlignmentReprocessor.cs" />
+    <Compile Include="$(Fork)source/Tools/VirtualCrossover/VirtualCrossoverJunctions.cs" Link="fork/VirtualCrossoverJunctions.cs" />
+    <Compile Include="$(Fork)source/Tools/VirtualCrossover/VirtualCrossoverGroupPlacement.cs" Link="fork/VirtualCrossoverGroupPlacement.cs" />
+    <Compile Include="$(Fork)source/Tools/VirtualCrossover/VirtualCrossoverAlignmentStage.cs" Link="fork/VirtualCrossoverAlignmentStage.cs" />
+    <Compile Include="$(Fork)source/Tools/VirtualCrossover/VirtualCrossoverZone.cs" Link="fork/VirtualCrossoverZone.cs" />
+    <Compile Include="$(Fork)source/Tools/VirtualCrossover/VirtualCrossoverAutoSetupOrder.cs" Link="fork/VirtualCrossoverAutoSetupOrder.cs" />
+    <Compile Include="$(Fork)source/Measurements/ImpulseMeasurementView.cs" Link="fork/ImpulseMeasurementView.cs" />
+    <Compile Include="$(Fork)source/Measurements/MeasuredBand.cs" Link="fork/MeasuredBand.cs" />
+  </ItemGroup>
+</Project>

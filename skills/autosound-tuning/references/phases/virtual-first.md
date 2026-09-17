@@ -146,11 +146,16 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
   steeper slope relaxes). A wish that breaks a limit is **not computed**; the nearest allowed setting is
   offered instead ("BW2 on your tweeter from 1044 Hz"). "Not sure" says the desk proposes there.
 - **1.3** **crossovers — the variants**: **the best the maths finds first, without the wishes**; then a
-  pass **with** them, so each wish shows what it costs against the best. Today the candidates come per
-  driver (`xover_candidates` → `xover_select`, the neighbour pair by `select_neighbor_pair`, every
-  corner through `crossover_checks`); the whole configuration at once — every junction, both sides,
-  the centre and the rear as their own zones — comes with the engine (`docs/DESIGN-2026-09-17-phase1-variants.md`
-  §3). **At most three on the table**: one mathematical and up to two from the wishes; more is what the
+  pass **with** them, so each wish shows what it costs against the best. The whole configuration at once —
+  every junction, both sides, the centre and the rear as their own zones — is Resonalyze's Auto crossover,
+  called on the project's own layout: `resonalyze_engine.py run <project> <set> --out <dir>` (the driver types
+  from the channel map, the protective filters divided out, the device's delay range;
+  `docs/DESIGN-2026-09-17-phase1-variants.md` §3). Every edge it proposes is held to the same limits as a wish:
+  on the Passat its best put the mids' high-pass at 200 Hz, under their 217 Hz floor, and that comes back
+  REFUSED with the nearest allowed corner. The per-driver candidates stay beside it (`xover_candidates` →
+  `xover_select`, `select_neighbor_pair`, every corner through `crossover_checks`). The wishes' cost against
+  the best, junction by junction, is the engine's junction probe — not built yet (design §6, 5b).
+  **At most three on the table**: one mathematical and up to two from the wishes; more is what the
   Resonalyze app is for. The choice is made at 1.7, after the sums are predicted.
 - **1.4** **coarse EQ per driver — BEFORE the delays** (the user's decision, 2026-09-17; Resonalyze's
   order too): the first part of `eq_propose` (`--part 1`) — resonances per driver group — cuts of minimum-phase
@@ -163,13 +168,19 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
   `aligned-delta.json` for `apply.propose`); near-tie through both polarities; an all-pass if a null
   remains (`--apf` hints one). **Front and sub first; then the centre and the rear are placed against
   the settled front** — the centre read against both sides where the front mids play (1–4 kHz), as
-  Resonalyze stages it. L/R: the pair-arrival difference against tape set (b) — the tape is the arbiter.
+  Resonalyze stages it; its Auto delay does the same in the same `resonalyze_engine.py run`, and says when a
+  placement is at Low confidence (the Passat's centre and rear are) or when the device cannot hold the
+  delays — with the rear fill that would fit (the Helix holds 20.82 ms). L/R: the pair-arrival difference
+  against tape set (b) — the tape is the arbiter.
 - **1.6** **levels, and how the scene is centred**: levels from geometry (distances and angles from the
   tape), cut-only — a first estimate; a second from the measurement; a divergence is a finding, not an
   error. Then, on the chosen variant, **two ways to centre the scene**: the arrivals aligned to the seat,
-  or a time offset with a cut on the near side (Resonalyze's *Offset*, 0.25 ms by default — "the factory
-  default, not tuned for a cabin" — and *Near side cut*). The virtual DSP shows both; **the ear decides**,
-  as two presets A/B. Which two, and how the centre is judged, is asked of research (hub #158).
+  or a time offset with a cut on the near side. Resonalyze's manual gives the magnitudes to expect, "not
+  settings to copy" (`MANUAL.md:1111-1131`): level only — the near side down about 5–8 dB; time and level —
+  *Offset* 0.2–0.3 ms for a typical sedan (0.25 ms is the project default) and the near side down about
+  2–4 dB. In the engine, *Near side cut* is the level difference handed to the gain balance, which runs only
+  with `--gains`. The virtual DSP shows both; **the ear decides**, as two presets A/B. Which two, and how the
+  centre is judged, is asked of research (hub #158).
 - **1.7** **predict the sums, describe the variants, and the tuner chooses** (`predict`): L, R, ALL; the
   sum loss per joint; L−R per band; a graph — for each variant on the table, with its per-term numbers
   **and in words**: what changes and how it will sound, written by the generator and reviewed by the

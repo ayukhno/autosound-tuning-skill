@@ -1,0 +1,167 @@
+{
+ "contract": "autosound.resonalyze-golden.v1",
+ "what": "the skill's own layout on the Helix's 20.82 ms: types from the map, no distortion curve -- the rear does not fit",
+ "source": {
+  "session": "skill, 2026-09-17, on the fork session's reference call and brief (PAS-008, hub #159)",
+  "fork": "ayukhno/Resonalyze @ b0ce9fb (= DIMOSUS/Resonalyze main, 2026-09-17)",
+  "status": "headless -- the engines through a copy of the window's code; the window run on Windows confirms it (brief §6)",
+  "derived": "not a fork golden: the types golden's F Rear L (20.88 ms at a 50 ms range) is 0.06 ms over the Helix's 20.82; this pins that refusal and the fill that fits"
+ },
+ "set": {
+  "path": "car/passat-b8-2026/data/ir-v7_49 (tripod, loopback, RAW state, 2026-08-25)",
+  "md5": {
+   "c.json": "f3c75f8acbd8bc31962a4889bbeee898",
+   "m_L.json": "832fd90cecbb1da8eebcc4640f5d4fe9",
+   "m_R.json": "634b07296984299948f3e396e99990df",
+   "r_L.json": "ea9701e0f8ec51c7c4fbd7b25151016d",
+   "r_R.json": "9f94d6420df69b49a7b0a82f3cc66b42",
+   "sw.json": "e816f01b03a43f990b65e802d58e03c6",
+   "tw_L.json": "f657e1e30220bbe8ff0eb9510e3081cc",
+   "tw_R.json": "d2eacd719c738b89e6c60f22c3c96cae",
+   "w_L.json": "ec30bcd5c905e66a3252f890cbd07431",
+   "w_R.json": "354ceb67fe71fd8faa5dbd44c8c7529b"
+  }
+ },
+ "layout": {
+  "mode": "skill",
+  "includeHidden": true
+ },
+ "expect": {
+  "autoCrossover": {
+   "channels": [
+    {
+     "block": "A Sub",
+     "suggestedType": "Subwoofer",
+     "typeUsed": "Subwoofer"
+    },
+    {
+     "block": "B Woofer",
+     "suggestedType": "Midbass",
+     "typeUsed": "Midbass"
+    },
+    {
+     "block": "C Mid",
+     "suggestedType": "Midbass",
+     "typeUsed": "Midrange"
+    },
+    {
+     "block": "D Tweeter",
+     "suggestedType": "Tweeter",
+     "typeUsed": "Tweeter"
+    },
+    {
+     "block": "E Centre",
+     "suggestedType": "Tweeter",
+     "typeUsed": "Midrange"
+    },
+    {
+     "block": "F Rear",
+     "suggestedType": "Woofer",
+     "typeUsed": "Woofer"
+    }
+   ],
+   "result": [
+    {
+     "block": "A Sub",
+     "kind": "LowPass",
+     "highPass": null,
+     "lowPass": {
+      "family": "LinkwitzRiley",
+      "frequencyHz": 80,
+      "slopeDbPerOctave": 24
+     },
+     "gainDb": 0
+    },
+    {
+     "block": "B Woofer",
+     "kind": "BandPass",
+     "highPass": {
+      "family": "LinkwitzRiley",
+      "frequencyHz": 80,
+      "slopeDbPerOctave": 24
+     },
+     "lowPass": {
+      "family": "LinkwitzRiley",
+      "frequencyHz": 200,
+      "slopeDbPerOctave": 24
+     },
+     "gainDb": -2.2
+    },
+    {
+     "block": "C Mid",
+     "kind": "BandPass",
+     "highPass": {
+      "family": "LinkwitzRiley",
+      "frequencyHz": 200,
+      "slopeDbPerOctave": 24
+     },
+     "lowPass": {
+      "family": "LinkwitzRiley",
+      "frequencyHz": 2300,
+      "slopeDbPerOctave": 24
+     },
+     "gainDb": -3.5
+    },
+    {
+     "block": "D Tweeter",
+     "kind": "HighPass",
+     "highPass": {
+      "family": "LinkwitzRiley",
+      "frequencyHz": 2300,
+      "slopeDbPerOctave": 24
+     },
+     "lowPass": null,
+     "gainDb": 0
+    },
+    {
+     "block": "E Centre",
+     "kind": "HighPass",
+     "highPass": {
+      "family": "LinkwitzRiley",
+      "frequencyHz": 1050,
+      "slopeDbPerOctave": 24
+     },
+     "lowPass": null,
+     "gainDb": 0
+    },
+    {
+     "block": "F Rear",
+     "kind": "HighPass",
+     "highPass": {
+      "family": "LinkwitzRiley",
+      "frequencyHz": 65,
+      "slopeDbPerOctave": 24
+     },
+     "lowPass": null,
+     "gainDb": -8.7
+    }
+   ],
+   "blockOrderAfterReorder": [
+    "A Sub",
+    "B Woofer",
+    "C Mid",
+    "D Tweeter",
+    "F Rear",
+    "E Centre"
+   ]
+  },
+  "autoDelay": {
+   "request": {
+    "sceneOffsetMs": 0.25,
+    "rightHandDrive": false,
+    "adjustGains": false,
+    "nearSideCutDb": 1,
+    "levelDifferenceDb": -1,
+    "rearFillOffsetMs": 15
+   },
+   "error": "The staged alignment does not fit the DSP delay range: F Rear L needs 20.88 ms with the earliest channel at 0, but the limit is 20.82 ms (rear fill 15 ms on 2 channel(s)).",
+   "overRange": {
+    "channel": "F Rear L",
+    "neededMs": 20.88,
+    "limitMs": 20.82,
+    "rearFillMs": 15,
+    "widestCarriesFill": true
+   }
+  }
+ }
+}
