@@ -224,7 +224,7 @@ and `v3.1.0` over its own candidates once released — or `installers-windows` i
 PowerShell function itself on the same six cases, which would close this before any candidate exists.
 
 ## S-009 · `install.ps1` lists the app as "will install" right after installing it
-**Status**: open
+**Status**: doing — fixed on `wave-2026-09-17` (the plan reads the app's launchers in `~\.local\bin`); the Windows VM run is what closes it
 
 **Found** 2026-09-14 on the Windows VM, in one PowerShell window: the `-Channel beta` run from `v3.0.52`
 ended "OK   installed" and "OK   Autosound TCC -- on your Desktop and in the Start Menu"; the next run
@@ -238,7 +238,7 @@ installed". Recorded only.
 Done looks like: a second run in the same window lists the app as already on the machine.
 
 ## S-010 · A terminal window pops up during the Windows install
-**Status**: open
+**Status**: done 2026-09-17 · not seen on the stable channel during S-012's install (the user's watch; transcript `~/Downloads/тест/s012.txt`) — closed at the wave's review
 
 **Found** 2026-09-14 on the Windows VM, running `install.ps1 -Channel beta` from branch
 `test-fixes-2026-09-14`: during the install a terminal window appears — the user recognises it as the one
@@ -333,7 +333,7 @@ transcript `~/Downloads/тест/s012.txt` on the Mac:
    omp block, no error.
 
 ## S-015 · On the Windows VM the reviewer's CLI rung runs `gemini`, not agy
-**Status**: open
+**Status**: doing — `doctor` fixed on `wave-2026-09-17`; the Windows VM run is what closes it
 
 **Found** 2026-09-17 on the Windows VM, S-012 step 3, from an ordinary PowerShell:
 `autosound_ai.py ask` with `AUTOSOUND_CRITIC_MODEL=gemini-3.8-flash-low` tried the Gemini API first
@@ -358,17 +358,26 @@ its ✗ lines; the window blinked once while it ran.
 **After the user moved the key** into `%APPDATA%\autosound\critic-env` and removed both user variables,
 `doctor` in a new window: the config file found, "Ключ живий: 41 моделей", "current (AQ.…, 53 chars)",
 local CLI google `agy`, anthropic `claude`. It still ended ✗: `gemini-3.8-flash-low` — an `agy` id — is not
-in the key's list (the API has `gemini-3.8-flash`), so the live call got HTTP 404, while the same run of `ask`
-answers through agy once the API call fails. Left for the wave: `doctor` does not say that `GEMINI_BIN`
+in the key's list (the API has `gemini-3.8-flash`), so the live call got HTTP 404. A round does the same with
+a key present: a model the key cannot call stops it with the key's list (exit 3) and does NOT fall through to
+agy — step 3 of S-012 reached agy only because the key file was set aside for that run. Left for the wave: `doctor` does not say that `GEMINI_BIN`
 forced the CLI; it prints `~/.config/autosound/critic-env` as the place to pin a model on Windows too; it
 prints "АВТОМАТИЧНИЙ (через API google)" under a failed live call; one model variable serves two doors
 whose ids differ. Also seen: `install.sh --help` still shows a `v3.0.46` one-liner.
+
+**Fixed on `wave-2026-09-17`** (`scripts/autosound_ai.py`, its selftest covers each): a key and a forced CLI say
+where they came from — a config file, or the environment every program inherits; a `GEMINI_BIN` naming the
+closed `gemini` while `agy` is on PATH is a ✗ that says to remove it; every hint names this platform's config
+file (`%APPDATA%\autosound\critic-env` on Windows); a model the key cannot call also says the other door
+(remove the key, and the CLI with its own ids answers); the live call walks the round's ladder — an API failure
+hands over to the CLI, a model the key cannot call stops at the choice — and the mode line says what answered,
+or that nothing did. Seen on the Mac too, the same afternoon: the old `AIza` key exported from `~/.zshrc`.
 
 Done looks like: step 3 of S-012 answers through agy on this VM, or the refusal says why agy was not the
 CLI it ran.
 
 ## S-016 · In a new PowerShell window after the install, `python3` is the Microsoft Store alias
-**Status**: open
+**Status**: doing — `install.ps1` fixed on `wave-2026-09-17` (`~\.local\bin` first in the user PATH, and the check reads a NEW window's `python3`); the Windows VM run is what closes it
 
 **Found** 2026-09-17 on the Windows VM, after S-012: the `doctor` line the installer prints, run in a NEW
 window — "Python was not found; run without arguments to install from the Microsoft Store, or disable

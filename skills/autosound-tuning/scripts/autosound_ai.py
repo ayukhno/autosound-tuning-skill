@@ -59,6 +59,18 @@ def machine_config_path():
     return os.path.join(base, "autosound", "critic-env")
 
 
+def config_hint():
+    """`machine_config_path()` as a person types it here: `%APPDATA%\\autosound\\critic-env` on Windows,
+    `~/.config/autosound/critic-env` elsewhere. Advice that named the second one on Windows sent a
+    person to a folder the script never reads (S-015, the Windows VM, 2026-09-17)."""
+    path = machine_config_path()
+    appdata = os.environ.get("APPDATA")
+    if (os.name == "nt" or appdata) and appdata and path.startswith(appdata):
+        return "%APPDATA%" + path[len(appdata):]
+    home = os.path.expanduser("~")
+    return "~" + path[len(home):] if path.startswith(home) else path
+
+
 def _refuse_if_git_would_take(path):
     """A project-local config that carries a KEY and that git would take -- tracked, or not
     ignored -- stops the run. The user's rule (2026-09-08): a file that can carry a key MUST be
@@ -78,12 +90,12 @@ def _refuse_if_git_would_take(path):
         return
     if subprocess.run(["git", "-C", d, "ls-files", "--error-unmatch", "--", name], capture_output=True).returncode == 0:
         print(f"critic-env: {path} carries a key AND is TRACKED by git — відмова.\n"
-              f"  fix: git rm --cached '{path}'; '{name}' у .gitignore; ключ — у ~/.config/autosound/critic-env; "
+              f"  fix: git rm --cached '{path}'; '{name}' у .gitignore; ключ — у {config_hint()}; "
               f"ключ ЗМІНИТИ (він уже в історії).", file=sys.stderr)
         sys.exit(2)
     if subprocess.run(["git", "-C", d, "check-ignore", "-q", "--", name], capture_output=True).returncode != 0:
         print(f"critic-env: {path} carries a key and git would ADD it (нема в .gitignore) — відмова.\n"
-              f"  fix: додай '{name}' у .gitignore репозиторію — або перенеси ключ у ~/.config/autosound/critic-env "
+              f"  fix: додай '{name}' у .gitignore репозиторію — або перенеси ключ у {config_hint()} "
               f"(setup-critic-channel.md §3).", file=sys.stderr)
         sys.exit(2)
 
@@ -134,10 +146,27 @@ def load_env_file():
                     # Прибираємо лапки
                     v = v.strip().strip("'\"")
                     os.environ[k] = v
+                    ENV_ORIGIN[k] = path
             used.append(path)
         except Exception as e:
             print(f"Помилка зчитування .critic-env {path}: {e}", file=sys.stderr)
     return used
+
+
+#: Where each variable a config file set came from. A variable not here was INHERITED from the
+#: environment -- which every program started from that session sees too, and which a file loaded
+#: here overrides. An old key and a `GEMINI_BIN` in the Windows user environment passed for the
+#: reviewer's own settings for an afternoon, with `doctor` unable to say where they lived (S-015).
+ENV_ORIGIN = {}
+_ENV_BEFORE = frozenset(os.environ)
+
+
+def env_origin(var):
+    """Where `var` came from, in words a person can act on."""
+    path = ENV_ORIGIN.get(var)
+    if path:
+        return f"з файлу {path}" + ("; він переписав однойменну змінну середовища" if var in _ENV_BEFORE else "")
+    return "зі змінної середовища: її бачить кожна програма, запущена з цього сеансу"
 
 
 ENV_FILES_USED = load_env_file()
@@ -333,12 +362,12 @@ class ModelChoiceNeeded(RuntimeError):
             # The CLI's own ids, as it lists them: no key-shaped filter, no Google pointers.
             lines = [f">> {self.why}",
                      ">> Моделі, які `agy` може запустити -- вибери одну і закріпи її:",
-                     f">>   {self.role_var}=<модель>   у ~/.config/autosound/critic-env"]
+                     f">>   {self.role_var}=<модель>   у {config_hint()}"]
             lines += [f">>     {name}" for name in self.models]
             return "\n".join(lines)
         lines = [f">> {self.why}",
                  ">> Моделі, які цей ключ може викликати (generateContent) -- вибери одну і закріпи її:",
-                 f">>   {self.role_var}=<модель>   у ~/.config/autosound/critic-env"]
+                 f">>   {self.role_var}=<модель>   у {config_hint()}"]
         for name in choosable_models(self.models):
             lines.append(f">>     {name}")
         lines.append(">> `gemini-pro-latest` / `gemini-flash-latest` -- Google's own pointers to the current "
@@ -425,15 +454,24 @@ def call_gemini_api(api_key, model, prompt, role_var="AUTOSOUND_CRITIC_MODEL"):
         raise RuntimeError(f"Помилка запиту до Gemini API: {e}")
 
 # Пошук бінарників для CLI режиму
-def detect_cli(provider="google"):
+def forced_cli():
+    """`(variable, value)` when a variable names the CLI for EVERY vendor, else None."""
+    for var in ("AUTOSOUND_CRITIC_BIN", "GEMINI_BIN"):
+        if os.environ.get(var):
+            return var, os.environ[var]
+    return None
+
+
+def detect_cli(provider="google", honour_forced=True):
     """The reviewer's local CLI for one vendor, or None (SCR-033).
 
     `GEMINI_BIN` still wins, under its historical name: it is what existing setups export, and
-    renaming an env var to tidy a table is how a working install breaks.
+    renaming an env var to tidy a table is how a working install breaks. `honour_forced=False`
+    answers what the search alone would find -- what `doctor` sets beside a forced one.
     """
-    forced_bin = os.environ.get("AUTOSOUND_CRITIC_BIN") or os.environ.get("GEMINI_BIN")
-    if forced_bin:
-        return forced_bin
+    forced = forced_cli() if honour_forced else None
+    if forced:
+        return forced[1]
 
     # Автодетект через shutil.which (надійно знаходить exe/cmd/bat/ps1 на Windows)
     for binary in _PROVIDERS.get(provider, {}).get("cli", ()):
@@ -905,6 +943,70 @@ def _selftest():
                 os.environ.pop(k, None)
             os.environ.update(markers)
 
+    # -- doctor (S-015): it says where a key and a forced CLI came from, names the config path of THIS
+    #    platform, and its live call walks the round's own ladder: an API that fails hands over to the
+    #    CLI, a model the key cannot call stops at the choice, and the mode line says what answered.
+    saved_env = {k: os.environ.pop(k) for k in list(os.environ)
+                 if k.startswith(_NESTED_MARKERS) or k in ("GEMINI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY",
+                                                         "AUTOSOUND_CRITIC_MODEL", "GEMINI_CRITIC_MODEL",
+                                                         "AUTOSOUND_CRITIC_BIN", "GEMINI_BIN", "APPDATA")}
+    real = {n: globals()[n] for n in ("call_gemini_api", "call_cli", "list_gemini_models")}
+    real_which = shutil.which
+    try:
+        os.environ["APPDATA"] = os.path.join(os.sep, "Users", "me", "AppData", "Roaming")
+        assert config_hint().startswith("%APPDATA%") and config_hint().endswith("critic-env"), config_hint()
+        del os.environ["APPDATA"]
+        assert config_hint().startswith("~") or config_hint() == machine_config_path(), config_hint()
+        ENV_ORIGIN["X_FROM_FILE"] = "/tmp/critic-env"
+        assert env_origin("X_FROM_FILE").startswith("з файлу /tmp/critic-env"), env_origin("X_FROM_FILE")
+        assert "змінної середовища" in env_origin("X_NOWHERE"), env_origin("X_NOWHERE")
+        del ENV_ORIGIN["X_FROM_FILE"]
+
+        os.environ.update({"GEMINI_BIN": "gemini", "AUTOSOUND_CRITIC_MODEL": "gemini-3.1-pro-high"})
+        shutil.which = lambda name, *a, **k: {"agy": "/opt/fake/agy", "claude": "/opt/fake/claude"}.get(name)
+        assert forced_cli() == ("GEMINI_BIN", "gemini") and detect_cli("anthropic") == "gemini"
+        assert detect_cli("anthropic", honour_forced=False) == "claude"
+        assert detect_cli("google", honour_forced=False) == "agy"
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            run_doctor(smoke=False)
+        out = buf.getvalue()
+        assert "GEMINI_BIN=gemini задає CLI для КОЖНОГО" in out and "прибери GEMINI_BIN" in out, out
+        del os.environ["GEMINI_BIN"]
+
+        os.environ["GEMINI_API_KEY"] = "AQ." + "x" * 50
+        globals()["list_gemini_models"] = lambda key: ["gemini-3.1-pro-high"]
+
+        def _api_down(*a, **k):
+            raise RuntimeError("Помилка запиту до Gemini API: <urlopen error timed out>")
+        globals()["call_gemini_api"] = _api_down
+        globals()["call_cli"] = lambda provider, binary, model, prompt, timeout=None: ("channel works", None, None)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            run_doctor(smoke=True)
+        out = buf.getvalue()
+        assert "як і раунд, пробую CLI agy" in out and "відповів CLI agy" in out, out
+
+        cli_calls = []
+
+        def _no_such_model(*a, **k):
+            raise ModelChoiceNeeded("Модель `gemini-3.8-flash-low` цей ключ викликати не може: HTTP 404",
+                                    ["gemini-3.1-pro-high"])
+        globals()["call_gemini_api"] = _no_such_model
+        globals()["call_cli"] = lambda *a, **k: (cli_calls.append(a), ("channel works", None, None))[1]
+        os.environ["AUTOSOUND_CRITIC_MODEL"] = "gemini-3.8-flash-low"
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            run_doctor(smoke=True)
+        out = buf.getvalue()
+        assert not cli_calls and "не автоматичний" in out and "прибери ключ" in out, out
+    finally:
+        shutil.which = real_which
+        globals().update(real)
+        for k in ("GEMINI_BIN", "AUTOSOUND_CRITIC_MODEL", "GEMINI_API_KEY", "APPDATA"):
+            os.environ.pop(k, None)
+        os.environ.update(saved_env)
+
     print("selftest[autosound_ai] OK -- the key travels as a header, never in a URL; a retired model "
           "(404) becomes a choice carrying the key's generateContent models, not a fall-through; "
           "the list is parsed from the API's own shape; one reviewer model read by every door, the "
@@ -913,7 +1015,8 @@ def _selftest():
           "critic/advisor differ only in the TASK block; ask carries the interaction contract and "
           "the question only, no tuning layer; agy takes the prompt on stdin (no file to read); a failed "
           "call exits 4 and files no review, the package goes into the project; a session marker "
-          "starts no CLI; --mode clipboard is a rung, not a failure")
+          "starts no CLI; --mode clipboard is a rung, not a failure; doctor names where a key and a forced "
+          "CLI came from and this platform's config path, and its live call walks the round's ladder")
     return 0
 
 
@@ -951,8 +1054,10 @@ def run_doctor(smoke=True):
     for vendor, spec in _PROVIDERS.items():
         for var in spec["env"]:
             if os.environ.get(var):
-                print(f"✓ Знайдено ключ API: {var} ({vendor})")
+                print(f"✓ Знайдено ключ API: {var} ({vendor}) -- {env_origin(var)}")
     api_provider = provider if api_key_for(provider) else None
+    cli_bin = detect_cli(provider)
+    nested = nested_session_marker() if cli_bin else None
     if not api_provider:
         print(f"· Ключа API для рецензента ({provider}) немає — буде CLI або ручне копіювання")
     elif provider == "google":
@@ -972,17 +1077,30 @@ def run_doctor(smoke=True):
                 else:
                     print(f"✗ Модель рецензента `{model}` НЕ в списку ключа — вибери одну з: "
                           + ", ".join(m for m in models if m.startswith("gemini-")))
+                    if cli_bin:
+                        # With a key the API is asked FIRST, and a model it cannot call stops the
+                        # round with this list (exit 3) -- it does not fall through to the CLI,
+                        # whose ids are its own (`agy models`).
+                        print(f"  або прибери ключ, і рецензентом стане CLI {cli_bin} з його назвами моделей")
                     ok = False
 
     # 4. Перевірка локальних CLI — по кожному вендору, бо рецензентом може бути будь-який
+    forced = forced_cli()
+    if forced:
+        var, val = forced
+        print(f"· {var}={val} задає CLI для КОЖНОГО вендора замість пошуку ({env_origin(var)})")
+        free = detect_cli("google", honour_forced=False)
+        if (cli_flavor(val) == "gemini" and not os.path.basename(val).lower().startswith("agy")
+                and free and os.path.basename(free).lower().startswith("agy")):
+            print(f"✗ {var} примушує `{val}`, хоча `agy` є на PATH — прибери {var}, і рецензент знайде agy")
+            ok = False
     for vendor in _PROVIDERS:
         found = detect_cli(vendor)
         if found:
-            print(f"✓ Знайдено локальний CLI ({vendor}): {found}")
+            print(f"✓ Знайдено локальний CLI ({vendor}): {found}" + (f" -- задано {forced[0]}" if forced else ""))
     # The one that matters is the chosen reviewer's own: a `claude` on PATH does not help a
     # Gemini reviewer, and reporting the first CLI found is how "автоматичний" came to be
     # printed for a channel that would have fallen through to the clipboard.
-    cli_bin = detect_cli(provider)
     if not cli_bin:
         print(f"· Для рецензента ({provider}) локального CLI не знайдено")
     else:
@@ -1001,7 +1119,6 @@ def run_doctor(smoke=True):
             ok = False
     if os.environ.get("GEMINI_API_KEY"):
         print(f"· GEMINI_API_KEY: {gemini_key_shape(os.environ['GEMINI_API_KEY'])}")
-    nested = nested_session_marker()
     if cli_bin and nested:
         print(f"· Ми всередині агент-сесії ({nested}): CLI рецензента тут не запускається — "
               "перевір канал з окремого термінала")
@@ -1020,7 +1137,7 @@ def run_doctor(smoke=True):
         offered = offered or list_cli_models()
         if offered:
             print(f"✗ Модель рецензента не задано — за замовчуванням її нема. "
-                  f"Вибери одну і закріпи {REVIEWER_MODEL_VARS[0]}=<модель> у ~/.config/autosound/critic-env:")
+                  f"Вибери одну і закріпи {REVIEWER_MODEL_VARS[0]}=<модель> у {config_hint()}:")
             for name in offered:
                 print(f"    {name}")
             ok = False
@@ -1028,20 +1145,35 @@ def run_doctor(smoke=True):
             print("· Модель рецензента не задано, і запропонувати нема кому — ручний режим")
 
     # Живий виклик тим шляхом, яким піде раунд, і тією моделлю, яку назвав Арбітр (skill#27).
+    answered = None
+    smoked = False
     if model and smoke:
         prompt = "Reply with exactly: channel works"
-        text = kind = error = None
+        text = kind = error = via = None
         if api_provider:
             try:
                 caller = {"google": call_gemini_api, "anthropic": call_anthropic_api, "openai": call_openai_api}[provider]
+                via = f"API {provider}"
                 text = caller(api_key_for(provider), model, prompt)[0]
+            except ModelChoiceNeeded as choice:
+                # What a round does too: a model the key cannot call is a choice (exit 3), not a
+                # fall-through -- so the check does not try the CLI either.
+                kind, error = "model_choice", str(choice.why) if hasattr(choice, "why") else str(choice)
             except Exception as e:  # noqa: BLE001
                 kind, error = classify_failure(str(e)), str(e)
+                if cli_bin and not nested:
+                    # ...while any other API failure hands the call to the CLI, as `main` does.
+                    print(f"· API не відповів ({str(e).strip()[:120]}) -- як і раунд, пробую CLI {cli_bin}")
+                    via = f"CLI {cli_bin}"
+                    text, kind, error = call_cli(provider, cli_bin, model, prompt, timeout=120)
         elif cli_bin and not nested:
+            via = f"CLI {cli_bin}"
             text, kind, error = call_cli(provider, cli_bin, model, prompt, timeout=120)
         if text is not None or error is not None:
+            smoked = True
             if text and "channel works" in text.lower():
-                print(f"✓ Живий виклик: {text.strip().splitlines()[0]}")
+                print(f"✓ Живий виклик ({via}): {text.strip().splitlines()[0]}")
+                answered = via
             elif text:
                 print(f"✗ Рецензент відповів, але не тим, про що просили: {text.strip()[:120]}")
                 ok = False
@@ -1054,8 +1186,14 @@ def run_doctor(smoke=True):
                 print(f"✗ Живий виклик не вдався: {(error or '').strip()[:200]}" + (f" → {advice}" if advice else ""))
                 ok = False
 
-    # Рекомендація
-    if api_provider:
+    # Рекомендація -- after a live call, what ANSWERED; without one, what is configured.
+    if smoked:
+        if answered:
+            print(f"▶ Режим роботи: АВТОМАТИЧНИЙ (відповів {answered})")
+        else:
+            print("▶ Режим роботи: не автоматичний -- живий виклик не вдався (див. ✗ вище); "
+                  "раунд віддасть пакет у буфер обміну")
+    elif api_provider:
         print(f"▶ Режим роботи: АВТОМАТИЧНИЙ (через API {api_provider})")
     elif cli_bin:
         print(f"▶ Режим роботи: АВТОМАТИЧНИЙ (через локальний CLI {cli_bin})")
@@ -1345,7 +1483,7 @@ def main():
                   file=sys.stderr)
             sys.exit(3)
         print(f">> Модель рецензента не задано, і жоден CLI її не запропонує — ручний режим. "
-              f"Для автоматичного: {role_var}=<модель> у ~/.config/autosound/critic-env.", file=sys.stderr)
+              f"Для автоматичного: {role_var}=<модель> у {config_hint()}.", file=sys.stderr)
     provider = provider_for(model)
     api_key = api_key_for(provider) if model else None
     if api_key and _looks_like_a_display_label(model):

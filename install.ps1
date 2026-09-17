@@ -283,6 +283,43 @@ function Sync-ProcessPath {
     $u = [Environment]::GetEnvironmentVariable("Path", "User")
     $env:Path = "$LocalBin;$m;$u"
 }
+# The PATH a NEW window gets: the machine's entries, then the user's -- how Windows builds it. This
+# window's own PATH was rebuilt with ~\.local\bin first (Sync-ProcessPath), so Get-Command here
+# answers for this window only, and that is how the Store's python3 shortcut hid behind a working
+# install until a new window was opened (skill TODO S-016, the Windows VM, 2026-09-17).
+function Get-NewWindowCommand {
+    param($name)
+    $dirs = (@([Environment]::GetEnvironmentVariable("Path", "Machine"),
+               [Environment]::GetEnvironmentVariable("Path", "User")) -join ";") -split ";"
+    foreach ($d in $dirs) {
+        if (-not $d) { continue }
+        try { $p = Join-Path ([Environment]::ExpandEnvironmentVariables($d)) "$name.exe" } catch { continue }
+        if (Test-Path -LiteralPath $p) { return $p }
+    }
+    return $null
+}
+# ~\.local\bin at the FRONT of the user PATH, where uv's own installer means it to be. Windows keeps
+# its WindowsApps folder in the user PATH too, and a python3.exe THERE is a Store shortcut that opens
+# the Store instead of running anything: when it comes first, every `python3` the method runs in a
+# new window -- and in Claude Code's Bash tool -- is that shortcut (S-016). Written through the
+# registry so the value keeps its REG_EXPAND_SZ kind and every %VAR% entry stays as it was; setting
+# and clearing a variable through .NET is what tells running programs that the environment changed.
+function Set-LocalBinFirst {
+    $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey("Environment", $true)
+    if (-not $key) { return $false }
+    try {
+        $raw = [string]$key.GetValue("Path", "", [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+        $want = $LocalBin.TrimEnd("\")
+        $same = { param($e) ([Environment]::ExpandEnvironmentVariables($e)).TrimEnd("\") -ieq $want }
+        $parts = @($raw -split ";" | Where-Object { $_ -ne "" })
+        if ($parts.Count -gt 0 -and (& $same $parts[0])) { return $false }
+        $rest = @($parts | Where-Object { -not (& $same $_) })
+        $key.SetValue("Path", ((@($LocalBin) + $rest) -join ";"), [Microsoft.Win32.RegistryValueKind]::ExpandString)
+    } finally { $key.Close() }
+    [Environment]::SetEnvironmentVariable("AUTOSOUND_PATH_CHANGED", "1", "User")
+    [Environment]::SetEnvironmentVariable("AUTOSOUND_PATH_CHANGED", $null, "User")
+    return $true
+}
 # A tool on PATH, or in one of the folders the installers above use -- because right after an
 # install, before the PATH refresh, `Get-Command` alone says "not found" about a tool that is
 # there (the same blindness the macOS script had for ~/.local/bin, 2026-08-13).
@@ -571,6 +608,9 @@ $HaveAgy    = [bool](Find-Bin agy)
 $HaveGh     = [bool](Find-Bin gh)
 $HaveOmp    = [bool](Find-Bin omp)
 $HavePy3    = Test-Path (Join-Path $LocalBin "python3.exe")
+# The app's launchers, where `uv tool install` puts them -- the plan used to promise "will install"
+# for an app installed a minute earlier (S-009).
+$HaveTcc    = (Test-Path (Join-Path $LocalBin "autosound-tcc-gui.exe")) -or (Test-Path (Join-Path $LocalBin "autosound-tcc.exe"))
 $RewExe     = Get-RewExe
 $RewApp     = [bool]$RewExe
 $RewApi     = Test-RewApi
@@ -579,7 +619,10 @@ Say "Already on this machine:"
 if ($HaveGit)    { Say "  OK   Git for Windows (git, Git Bash)" } else { Say "  --   Git for Windows (git, Git Bash)   will install" }
 if ($HaveClaude) { Say "  OK   Claude Code" }                       else { Say "  --   Claude Code                        will install" }
 if ($HaveUv)     { Say "  OK   uv (installs Python)" }              else { Say "  --   uv, and a Python 3.12             will install" }
-if ($Mode -eq "tcc") { Say "  --   Autosound TCC, the desktop app     will install" }
+if ($Mode -eq "tcc") {
+    if ($HaveTcc) { Say "  OK   Autosound TCC, the desktop app -- updates to its newest release" }
+    else          { Say "  --   Autosound TCC, the desktop app     will install" }
+}
 if ($WantReviewer) {
     if ($HaveAgy) { Say "  OK   Gemini reviewer (agy)" } else { Say "  --   Gemini reviewer (agy)              will install" }
 }
@@ -756,6 +799,15 @@ if ($Uv) {
     }
 } elseif (-not $DryRun) {
     Warn "uv did not install; without it there is no Python for the method's tools and no app."
+}
+# What a NEW window will run for `python3` -- not this window, whose PATH this script rebuilt.
+if (Test-Path $Py3) {
+    $NewPy = Get-NewWindowCommand "python3"
+    if (-not $NewPy -or ($NewPy -ine $Py3)) {
+        $was = if ($NewPy) { $NewPy } else { "nothing" }
+        if ($DryRun) { Say "would move $(Pretty $LocalBin) to the front of your user PATH: a new window's python3 is $was" }
+        elseif (Set-LocalBinFirst) { Say "OK   $(Pretty $LocalBin) now leads your user PATH -- a new window's python3 was $was" }
+    }
 }
 
 # -- the tuning method -------------------------------------------------------------------------
@@ -1141,6 +1193,16 @@ if (Test-Path (Join-Path $SkillHome "rew_tool\contract.py")) {
         Warn "numpy is NOT importable by python3: crossover selection, the EQ gate, the DSP maths and"
         Warn "plot rendering will fail when the method reaches them."
         $ok = $false
+    }
+    if (Test-Path $Py3) {
+        $NewPy = Get-NewWindowCommand "python3"
+        if ($NewPy -and ($NewPy -ieq $Py3)) { Say "OK   python3 in a new window is $(Pretty $Py3)" }
+        else {
+            $was = if ($NewPy) { $NewPy } else { "not found" }
+            Warn "python3 in a NEW window is $was, not $(Pretty $Py3) -- the method's tools will not run there."
+            Warn "Run this installer again, or switch python3 off in Settings > Apps > Advanced app settings > App execution aliases."
+            $ok = $false
+        }
     }
 } elseif (Test-Path (Join-Path $SkillHome "rew_tool\rew_api.py")) {
     Warn "the skill at $SkillHome is the 2.x line -- TCC cannot drive it"; $ok = $false
