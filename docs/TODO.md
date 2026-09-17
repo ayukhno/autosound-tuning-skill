@@ -231,6 +231,10 @@ ended "OK   installed" and "OK   Autosound TCC -- on your Desktop and in the Sta
 of the same line (from branch `test-fixes-2026-09-14`) opened with "--   Autosound TCC, the desktop app
 will install". Recorded only — not diagnosed (hub `governance/WAVES.md` §1).
 
+**Seen again** 2026-09-17 on `v3.0.54` (S-012): the real run and the two app dry-runs after it, in one
+window, each list "--   Autosound TCC, the desktop app     will install" while the real run ended "OK
+installed". Recorded only.
+
 Done looks like: a second run in the same window lists the app as already on the machine.
 
 ## S-010 · A terminal window pops up during the Windows install
@@ -290,6 +294,46 @@ macOS only. Each command below is one line, for a PowerShell paste.
    -Terminal`, the line "-WithOmp: omp is for the app's model picker … left out." at the top and no error.
 
 Done when each numbered line has its observation written here, with the VM and the date.
+
+**Observations 2026-09-17** — the Windows VM (Parallels, ARM64), Windows PowerShell, in one window;
+transcript `~/Downloads/тест/s012.txt` on the Mac:
+
+1. Updated: the method block reads "version v3.0.54 / already installed -- updating to v3.0.54", no
+   "the update did not take" warning, no GitHub question (gh is already here, so its sign-in came at the
+   end and was skipped with `s`), and the `autosound_ai.py" doctor` line printed under "When you have
+   time". The Checking step says "the tuning method (3.x)" and names no version on any run — the
+   expectation above asked for more than it prints.
+2. Not run yet.
+3. **agy was not reached.** Exit 4, a refusal as designed: the reasons were listed — "API google: … HTTP
+   Error 400: Bad Request — API key not valid" and "CLI 'gemini': Warning: 256-color support not
+   detected … Ripgrep is not available … Error when talking to Gemini API" — the package went to
+   `process\reviews\2026-09-17T10-24-06-ask-package.md` and the clipboard, and nothing was filed as a
+   review. The CLI rung ran `gemini`, so the stdin fix of TCC-014 is still unproven on Windows (S-015).
+   The garbled Cyrillic and the NativeCommandError lines came from the probe's own `2>&1 | Out-Host`.
+4. `git status --short` in the method's checkout: empty.
+5. S-009 seen again (under that item). S-010: the user's answer pending.
+6. `-DryRun`: no question, no omp block, and neither "Optional:" line — omp and gh are both already on
+   this VM (step 7 shows omp "OK   already here"), which is exactly what hides them; the hints themselves
+   cannot be seen on this machine.
+7. `-DryRun -GitHub -WithOmp`: the omp block ("omp -- every non-Claude model for TCC's picker
+   (metered) / OK   already here") and the gh block in the plan. `-DryRun -WithOmp -Terminal`: first
+   line "-WithOmp: omp is for the app's model picker, and -Terminal installs no app -- left out.", no
+   omp block, no error.
+
+## S-015 · On the Windows VM the reviewer's CLI rung runs `gemini`, not agy
+**Status**: open
+
+**Found** 2026-09-17 on the Windows VM, S-012 step 3, from an ordinary PowerShell:
+`autosound_ai.py ask` with `AUTOSOUND_CRITIC_MODEL=gemini-3.8-flash-low` tried the Gemini API first
+("HTTP Error 400: Bad Request — API key not valid"), then "Виклик локального CLI 'gemini' (google)",
+whose output was the Gemini CLI's own ("256-color support not detected", "Ripgrep is not available.
+Falling back to GrepTool.", "Error when talking to Gemini API"). The installer on the same run reported
+"Gemini reviewer (agy) -- already set up" at `~\AppData\Local\agy\bin\agy.exe`. Exit 4 with the
+reasons and the package, as designed. Recorded only — not diagnosed (hub `governance/WAVES.md` §1);
+`doctor` (S-012 step 2) has not been run yet.
+
+Done looks like: step 3 of S-012 answers through agy on this VM, or the refusal says why agy was not the
+CLI it ran.
 
 ## S-013 · Each REW reader names the smoothing it reads
 **Status**: done 2026-09-17 · `scripts/run-selftests.sh` (73/73; `python3 skills/autosound-tuning/rew_tool/rew_api.py --selftest` holds every reader to its ask) · commits `c7c8e17`, `596a389` · decisions in `docs/RESEARCH-2026-09-17-reader-smoothing.md` §6
