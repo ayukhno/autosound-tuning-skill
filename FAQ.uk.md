@@ -2,6 +2,8 @@
 
 🇬🇧 [English](FAQ.md) · 🇩🇪 [Deutsch](FAQ.de.md) · 🇵🇱 [Polski](FAQ.pl.md) · 🇺🇦 **Українська** · 📄 [README](README.uk.md) · <img src="assets/icons/roadmap.svg" width="14" height="14" valign="middle" alt="Roadmap" /> [Roadmap (EN, чернетка)](ROADMAP.md)
 
+> ⏳ **Translation lags the English original:** англійську версію оновлено 17.09.2026 — параметри встановлення, входи наприкінці, рецензент і його ключ, назви замірів; цей переклад ще попередній.
+
 Реальні запитання користувачів про встановлення та налаштування системи за допомогою цього інструменту. [README](README.uk.md) — це стисла версія; на цій сторінці зібрано всі деталі.
 
 ---

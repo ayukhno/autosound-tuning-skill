@@ -6,7 +6,7 @@
 
 - **You measure — AI calculates:** It works together with REW software, analyzes your cabin acoustics, and proposes exact settings for EQ, crossovers, and time alignment.
 - **Minimum time in the car:** The main calculations are done at your desk at home. You only do the initial measurements in the car, and then return with ready-to-use numbers to listen to the result and dive into deep tuning step-by-step.
-- **Writes nothing to your DSP — you enter it:** The assistant never touches your processor directly. It only shows you numbers and graphs; you make the decision and enter them manually.
+- **Writes nothing to your DSP — you load it:** The assistant never touches your processor directly. It shows you numbers and graphs and prepares the EQ for import: on a Helix the whole Full EQ bank goes in through DSP PC-Tool in one step, and for processors without a file import the free [REW-EQ-CopyPaste-Assistant](https://github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant) pastes it. You decide what goes in.
 - **Not a regular chat:** The project state and all settings are saved to files on your disk, so nothing is "forgotten" between sessions and you can always roll back a step.
 - **Two AIs — a reviewer is part of the method:** one AI proposes settings, a second one criticises and checks them. What is optional is the *automatic channel* (a local script that passes packages between them); the reviewer's *role* is not — without a second opinion the method is noticeably worse, and where no channel can be set up you paste the package into any other AI's chat by hand, or read it yourself. But the final judge is your ear: you listen and decide, instead of just blindly approving their ideas.
 - **Works with facts:** A check lacking data will refuse to proceed. The AI doesn't guess settings — if the measurements are done incorrectly or are insufficient, a specific check will simply refuse to calculate and will stop.
@@ -41,11 +41,11 @@ You don't need to be a programmer — the app installs with a single command. Bu
 3. **REW (Room EQ Wizard) software** — **beta version** is required (the current release build, V5.31.3 of July 2024, has no API at all — check Help → About before you start). Get the beta build from [roomeqwizard.com/beta.html](https://www.roomeqwizard.com/beta.html). After launching REW, go to *Preferences → API*, check **Start the API when REW starts**, and click **Start server**.
 4. **Paid Claude subscription (Pro or Max)** — this AI does the heavy lifting and solves complex math problems. This is the supported path, and the graphical app is built for it. A run driven entirely by another AI is possible but manual, and you give up the second opinion that the method leans on — see the FAQ, "Can I run the method entirely in Gemini?". Without internet near the car, the session won't work either way.
 
-*(We also recommend having a free GitHub account to automatically back up your tuning history in a private repository. Your Gemini API key does **not** travel with that backup: it lives outside the project, in `~/.config/autosound/critic-env` — `%APPDATA%\autosound\critic-env` on Windows — and a new project is created with a `.gitignore` that keeps the project-local config out of git as well.)*
+*(We also recommend a free GitHub account to back your tuning history up to a private repository — the installer adds GitHub's `gh` for that when you ask: `--github`, or `-GitHub` on Windows. Your Gemini API key, if you use one, does **not** travel with that backup: it lives outside the project, in `~/.config/autosound/critic-env` — `%APPDATA%\autosound\critic-env` on Windows — and a new project is created with a `.gitignore` that keeps the project-local config out of git as well.)*
 
 ## How to Install and Start (Version 3.x — Beta)
 
-We created an installer that downloads everything you need and sets up a convenient **graphical application (Autosound TCC)**. Models other than Claude come through **`omp`**, which the installer adds **only when you ask**: `--with-omp` (macOS/Linux) or `-WithOmp` (Windows) after the command below. Those models are **billed per use**, and nothing runs through `omp` unless you pick one; the terminal-only install never brings it. The process takes 10–20 minutes (on macOS, Apple's own installer window opens once for the developer tools — one click, and no password is typed into the script; on Windows, it will show a Git permission dialog).
+We created an installer that downloads everything you need and sets up a convenient **graphical application (Autosound TCC)**. Models other than Claude come through **`omp`**, which the installer adds **only when you ask** (options below). Those models are **billed per use**, and nothing runs through `omp` unless you pick one; the terminal-only install never brings it. The process takes 10–20 minutes (on macOS, Apple's own installer window opens once for the developer tools — one click, and no password is typed into the script; on Windows, it will show a Git permission dialog).
 
 **macOS** — open Terminal (press ⌘-Space, type "terminal", Enter) and paste:
 ```sh
@@ -57,11 +57,21 @@ curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0
 irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.54/install.ps1 | iex
 ```
 
+**Options:** `--with-omp` (models other than Claude), `--github` (the backup), `--terminal` (the method without the app), `--dry-run` (show the plan, change nothing). On macOS they go after `bash -s --`:
+```sh
+curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.54/install.sh | bash -s -- --github
+```
+On Windows they are `-WithOmp`, `-GitHub`, `-Terminal`, `-DryRun`, on this form:
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.54/install.ps1))) -GitHub
+```
+
 **After installation:**
-1. The **Autosound TCC** app will appear on your desktop. Open it.
-2. Create a new empty folder for your car (e.g., `MyCarTuning`) and select it in the app.
-3. **IMPORTANT:** Before your first message, make sure the effort level for **Claude Opus** is set to no lower than `xhigh` (this is the default value). For very complex steps, use `max`. This is critical: a weaker model doesn't stop with an error; it just agrees with you, leading to "silent failures" in your tuning. *Note: effort level changes apply only to the next session.*
-4. Type in the app chat: **"tune a new car from scratch"**. The AI will start asking questions and lead you by the hand.
+1. The installer's last step signs you in: Claude in the browser, then the Gemini reviewer through Google's `agy` (Enter signs in, `s` skips), and GitHub if `gh` is there.
+2. The **Autosound TCC** app will appear on your desktop. Open it.
+3. Create a new empty folder for your car (e.g., `MyCarTuning`) and select it in the app, with **AI main: Claude Opus (SDK)** and **AI critic: Gemini Pro (High)**.
+4. **IMPORTANT:** Before your first message, make sure the effort level for **Claude Opus** is set to no lower than `xhigh` (this is the default value). For very complex steps, use `max`. This is critical: a weaker model doesn't stop with an error; it just agrees with you, leading to "silent failures" in your tuning. *Note: effort level changes apply only to the next session.*
+5. Type in the app chat: **"tune a new car from scratch"**. The AI will start asking questions and lead you by the hand.
 
 ▶ **[Open Target Curve Visualizer online](https://ayukhno.github.io/autosound-tuning-skill/_curve-visualizer.html?lang=en)** — drag your curve or a standard one from [Nono Tuning Tool](https://nonotuningtool.com), compare graphs, and save it.
 

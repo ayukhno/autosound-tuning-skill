@@ -2,6 +2,8 @@
 
 🇬🇧 [English](README.md) · 🇩🇪 [Deutsch](README.de.md) · 🇵🇱 **Polski** · 🇺🇦 [Українська](README.uk.md) · ❓ [FAQ](FAQ.pl.md) · <img src="assets/icons/roadmap.svg" width="14" height="14" valign="middle" alt="Roadmap" /> [Roadmap (EN)](ROADMAP.md)
 
+> ⏳ **Translation lags the English original:** wersja angielska została zaktualizowana 17.09.2026 — opcje instalacji, logowania na końcu, recenzent i jego klucz, nazwy pomiarów; to tłumaczenie jeszcze nie.
+
 **Prostymi słowami:** To twój osobisty mistrz AI do strojenia car audio. Chcesz idealnej sceny i równego balansu tonalnego, ale wykresy, fazy i opóźnienia wydają ci się zbyt skomplikowane? Ten asystent weźmie najtrudniejsze na siebie. Czyta twoje pomiary z mikrofonu i krok po kroku prowadzi cię do idealnego dźwięku.
 
 - **Ty mierzysz — AI liczy:** Współpracuje z programem REW, analizuje akustykę twojej kabiny i proponuje dokładne ustawienia dla korektora, zwrotnic i opóźnień (time alignment).

@@ -26,7 +26,7 @@ be done — and specifically why it cannot be fixed by doing the work, since any
 `open` with a tired author.
 
     ## S-007 · Something that was due and is now finished
-    **Status**: done 2026-09-06 · `scripts/run-selftests.sh` (53/53) · commit `abc1234`
+    **Status**: done 2026-09-17 · `grep -n "REW-EQ-CopyPaste-Assistant" README.md` — the README's first list says the EQ is loaded, not retyped (the user asked for README and FAQ to be current, English first)
 
 The `**Due when:**` line stays as it was written. An item that turned out to be due for a reason
 nobody predicted keeps its original trigger and says so in the status line: what actually brought
@@ -318,6 +318,10 @@ transcript `~/Downloads/тест/s012.txt` on the Mac:
    `process\reviews\2026-09-17T10-24-06-ask-package.md` and the clipboard, and nothing was filed as a
    review. The CLI rung ran `gemini`, so the stdin fix of TCC-014 is still unproven on Windows (S-015).
    The garbled Cyrillic and the NativeCommandError lines came from the probe's own `2>&1 | Out-Host`.
+   **Re-run the same day, after the user environment was cleaned (S-015)**, in a new window, with the key
+   file set aside for the one run so the API could not answer first: ">> Виклик локального CLI 'agy'
+   (google)...", the answer "етап", `REVIEW_FILE: process\reviews\2026-09-17T10-51-40-ask.md`, exit 0 —
+   agy took the prompt on stdin on Windows (TCC-014's fix).
 4. `git status --short` in the method's checkout: empty.
 5. S-009 seen again (under that item). S-010 not seen: no terminal window (under that item).
 6. `-DryRun`: no question, no omp block, and neither "Optional:" line — omp and gh are both already on
@@ -350,6 +354,15 @@ variable forced it. agy, asked in another window, reported the same `GEMINI_API_
 auth. In a new window `doctor` (through the full python path, see S-016) also said "Модель рецензента не
 задано", listed the models, and still printed "▶ Режим роботи: АВТОМАТИЧНИЙ (через API google)" under
 its ✗ lines; the window blinked once while it ran.
+
+**After the user moved the key** into `%APPDATA%\autosound\critic-env` and removed both user variables,
+`doctor` in a new window: the config file found, "Ключ живий: 41 моделей", "current (AQ.…, 53 chars)",
+local CLI google `agy`, anthropic `claude`. It still ended ✗: `gemini-3.8-flash-low` — an `agy` id — is not
+in the key's list (the API has `gemini-3.8-flash`), so the live call got HTTP 404, while the same run of `ask`
+answers through agy once the API call fails. Left for the wave: `doctor` does not say that `GEMINI_BIN`
+forced the CLI; it prints `~/.config/autosound/critic-env` as the place to pin a model on Windows too; it
+prints "АВТОМАТИЧНИЙ (через API google)" under a failed live call; one model variable serves two doors
+whose ids differ. Also seen: `install.sh --help` still shows a `v3.0.46` one-liner.
 
 Done looks like: step 3 of S-012 answers through agy on this VM, or the refusal says why agy was not the
 CLI it ran.

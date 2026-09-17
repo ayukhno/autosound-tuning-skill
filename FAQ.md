@@ -57,7 +57,7 @@ Real user questions about installing and tuning your system with this tool. [REA
 
 * 🖥️ **Option 1 · Version 3.x in Graphical Window (Autosound TCC)**
   The most automated and visual path. The installer sets up Claude Code, Python, the core method, the graphical UI, and the automatic AI reviewer.
-  * **Requirements:** macOS or Windows, paid Claude Pro/Max, REW beta with API enabled, ~700 MB free disk space.
+  * **Requirements:** macOS or Windows, paid Claude Pro/Max, REW beta with API enabled, about 800 MB to download.
   * **Pros:** You see the system tree, measurement curves, step-by-step plan, and chat window in a single interface. The state is saved automatically, and any action in the version registry can be undone with a single click.
   * **Cons:** The graphical app is still young and currently in beta testing.
 
@@ -203,7 +203,7 @@ The AI handles the routine calculations and cabin physics: it analyzes phases, c
 ### Subscription Options and AI Budget
 
 * **Option 1 (Recommended Basic): Claude Pro ($20/mo) + free Gemini as Critic**
-  The best balance of reliability and cost. Use a free Gemini API key generated in Google AI Studio. The Claude Pro subscription can be cancelled as soon as you finish tuning your car.
+  The best balance of reliability and cost. The critic runs through Google's `agy` with your Google account, or through a free API key from Google AI Studio. The Claude Pro subscription can be cancelled as soon as you finish tuning your car.
 * **Option 2 (Budget Compromise): Gemini Only ($10 prepay on Google Cloud)**
   Extremely inexpensive, but requires you to manually verify every single digit and regularly clear chat history with the `/clear` command before each new phase, as there is no independent critic to supervise.
 * **Option 3 (Professional): Claude Pro ($20) + paid Gemini Cloud API**
@@ -258,25 +258,29 @@ All files are stored strictly within your user profile:
 | Component | Installation Path | Purpose |
 | :--- | :--- | :--- |
 | **Claude Code** | Official Anthropic directory | The main AI assistant guiding the process |
-| **Tuning Method** | `~/.claude/skills/.autosound-tuning-src` | The folder where Claude Code searches for skills |
+| **Tuning Method** | `~/.claude/skills/.autosound-tuning-src`, linked as `~/.claude/skills/autosound-tuning` | The method's checkout, and the name Claude Code finds it under |
+| **Python 3.12** | `~/.local/bin/python3` (through `uv`) | Runs the method's tools |
 | **Autosound TCC** | User folder & Desktop shortcut | The graphical app and an isolated Python 3.12 environment |
 | **`agy` tool** | User profile | Google CLI tool for fast background communication with the Gemini Critic |
+| **Reviewer config** | `~/.config/autosound/critic-env` (`%APPDATA%\autosound\critic-env` on Windows) | The reviewer's model and, if you use one, the API key — outside every project |
+| **`gh`, `omp`** | User profile — only when asked (`--github`, `--with-omp`) | Project backup to GitHub; models other than Claude in the app |
 
 ---
 
 ### First Launch and Account Login
 
-1. **Login to Claude:** At the end of the installation, the script will automatically run the `claude auth login` command. Log in with your paid account in the browser and click **Authorize**.
-2. **Login to Gemini:** Run the `agy` command once in a new terminal window and log in with the Google account that has Antigravity access.
-3. **Start Working:** Create an empty folder for your car files (e.g., `MyCarTuning`). Open it in **Autosound TCC** (via the *Browse…* button) or in a new terminal (`cd path` → type `claude`) and write in the chat: **"tune a new car from scratch"**. The AI will start asking questions and lead you by the hand.
+1. **Sign-ins at the end of the install:** the installer signs you in to Claude (log in with your paid account in the browser and click **Authorize**), then offers the Gemini reviewer's own sign-in through `agy` (Enter signs in, `s` skips — `agy` in a new terminal does it later), and GitHub when `gh` is installed.
+2. **Turn on REW's API:** *Preferences → API*, tick **Start the API when REW starts** and press **Start server** — or on Windows start REW from the **REW (API on)** shortcut on your Desktop.
+3. **Start Working:** Create an empty folder for your car files (e.g., `MyCarTuning`). Open it in **Autosound TCC** (via the *Browse…* button; AI main: Claude Opus (SDK), AI critic: Gemini Pro (High)) or in a new terminal (`cd path` → type `claude`) and write in the chat: **"tune a new car from scratch"**. The AI will start asking questions and lead you by the hand.
 
 ---
 
 ### Updating, Locking Version, and Uninstallation
 
 * **Updating:** Simply run the installation command again. The script will automatically download the latest tag `v3.*` (this is a pre-release, not a stable line — stable is 2.8.x) and won't affect your project files.
-* **Locking Version:** Use the `--skill-ref v3.0.33` and `--tcc-ref v0.1.22` flags — quote them as a **pair**, since those two were released and tested together; a mixed pair is untested on macOS, or `-SkillRef` and `-TccRef` on Windows during installation.
-* **Uninstallation:** Run the installer with the `--uninstall` flag (or add `--all` for a complete cleanup of development environments). Your project folders will never be deleted.
+* **Options:** they go after `bash -s --` on macOS and after the `& ([scriptblock]::Create((irm …)))` form on Windows (both shown in the [README](README.md#how-to-install-and-start-version-3x--beta)): `--terminal` / `-Terminal` (no app), `--github` / `-GitHub`, `--with-omp` / `-WithOmp`, `--no-reviewer` / `-NoReviewer`, `--dry-run` / `-DryRun`.
+* **Locking Version:** `--skill-ref` and `--tcc-ref` (`-SkillRef` and `-TccRef` on Windows) pin the method and the app to the versions released together — quote the two as a **pair** or not at all; a mixed pair is untested.
+* **Uninstallation:** Run the installer with `--uninstall` (`-Uninstall`); `--all` also removes uv, Claude Code and `~/.claude`, and `agy`/`gh`/`omp` when the installer put them there — it asks first. Your project folders are never deleted.
 
 ---
 
@@ -302,33 +306,35 @@ The app updates automatically along with the mathematical core. You can check cu
 
 ## Standalone AI Reviewer Gemini/Antigravity
 
-The double-verification cycle (Generator ↔ Gemini Critic) completely eliminates subjective mathematical errors of the models. The critic catches things the primary AI misses. It runs automatically in the background via a local script — no manual copying is needed. What is optional is this *automatic channel*, not the second opinion itself: with no channel set up you paste the package into another AI's chat by hand. Skipping the review entirely is the single biggest quality loss in the method.
+The double-verification cycle (Generator ↔ Gemini Critic) catches errors a single model makes and does not see. The critic catches things the primary AI misses. It runs automatically in the background via a local script — no manual copying is needed. What is optional is this *automatic channel*, not the second opinion itself: with no channel set up you paste the package into another AI's chat by hand. Skipping the review entirely is the single biggest quality loss in the method.
 
 ### Installation for macOS and Windows (Recommended)
 
-The official **Antigravity CLI (`agy`)** from Google requires no API keys and uses a free OAuth login via the browser.
+The official **Antigravity CLI (`agy`)** from Google needs no API key: you sign in with your Google account in the browser.
 
 1. **Installation:** The installer sets this up automatically. For manual installation, run:
    * *macOS:* `curl -fsSL https://antigravity.google/cli/install.sh | bash`
    * *Windows:* `irm https://antigravity.google/cli/install.ps1 | iex`
 2. **Login:** Run the `agy` command in a new terminal, log in in the browser with your Google account, then return to the console and type `/quit`.
-3. **Test:** Verify operation with the `agy -p "Hello, world!"` command.
+3. **Pick the reviewer's model** — there is no default. Put an id from `agy models` (the left column; a Pro `-high` tier) into the reviewer's config file, `~/.config/autosound/critic-env` (`%APPDATA%\autosound\critic-env` on Windows), as the line `AUTOSOUND_CRITIC_MODEL=gemini-3.1-pro-high`. The app sets it from its own picker.
+4. **Check:** `python3 ~/.claude/skills/autosound-tuning/scripts/autosound_ai.py doctor` names the model, the CLI and the key it found, makes one short live call, and prints the fix for anything wrong.
 
 ---
 
 ### Fallback Option: Direct Gemini API Key
 
-On Linux systems or if you exhaust your Antigravity quotas, you can use free Gemini API keys directly:
+On Linux systems or if you exhaust your Antigravity quotas, you can use a free Gemini API key directly. With a key present the reviewer calls the API **first**, and `agy` only if that call fails.
 
-1. Get a free API key at **[aistudio.google.com/apikey](https://aistudio.google.com/apikey)**.
-2. Create a text file named `.critic-env` inside your **project folder** (inside `rew_analitic/` or the directory you run the session from) and save:
-   ```env
-   GEMINI_API_KEY=your_key_here
-   ```
-3. Scripts will automatically detect the key and switch to direct HTTPS requests to the Gemini API.
+1. Get a free API key at **[aistudio.google.com/apikey](https://aistudio.google.com/apikey)** — current keys start with `AQ.`.
+2. Put it into the reviewer's config file — **outside every project**, never into a project folder, and not into environment variables or a shell profile, where every program you start inherits it:
+   * *macOS / Linux:* the line `GEMINI_API_KEY=AQ.…` in `~/.config/autosound/critic-env`, then `chmod 600 ~/.config/autosound/critic-env`
+   * *Windows:* the same line in `%APPDATA%\autosound\critic-env` — PowerShell: `New-Item -ItemType Directory -Force "$env:APPDATA\autosound"; notepad "$env:APPDATA\autosound\critic-env"`
+3. Name a model the key can call: `doctor` prints the key's own list (for example `gemini-pro-latest`). Its ids differ from `agy`'s.
+
+A project-local `.critic-env` that carries a key and that git would take is refused. `doctor` never prints the key, only its shape (`current` / `OLD`).
 
 > [!TIP]
-> If neither the key nor the `agy` tool is found, the system will automatically fall back to background self-loops or prompt you to use Clipboard Mode.
+> If no channel answers, the reviewer refuses (exit code 4): it lists why, saves the package into the project's `process/reviews/`, and copies it to the clipboard — paste it into any AI chat.
 
 ---
 
@@ -369,13 +375,17 @@ For detailed REW configuration for USB microphones, refer to the video guide: [M
 
 Calculation tools look for correct charts strictly by their names in REW:
 
-* `m-L_01 (sw)` — channel `m-L` (left midrange), measurement round `01`, sweep measurement.
+* `m-L_01 (sw)` — channel `m-L` (left midrange), measured in DSP state `01`, sweep measurement. The number is the state of the DSP, not the registry's version number.
 * `m-L_01 (rta)` — moving-mic RTA measurement for the same speaker.
 * `sw_01 (sw)`, `w-R_01 (sw)`, `tw-L_01 (sw)` — subwoofer, right woofer (midbass), left tweeter respectively.
 * `L_01 (rta)`, `ALL_01 (rta)` — sum RTA measurement of the complete left side or the entire system.
 * `m-L p5_01 (sw)` — speaker measured at a spatial checkpoint `p5` (alternatively named `m-L_01 (sw) p5`).
 * `m-L-ctl1_01 (sw)` and `m-L-ctl3_01 (sw)` — timing control: the first opens the speaker series, the second closes it (can be named `m-L_01ctl` and `m-L_01rep` in the car).
 * `m-L_final (sw)` — verification measurement after saving final parameters.
+* `w-L (imp)` — impedance measurement of a driver; it carries no state number.
+* Text after the method makes it **another measurement of the same series**: `r-L_17 (sw) noXO` is not `r-L_17 (sw)`.
+
+Titles are matched exactly as typed. A title that does not match what the step expects is a question the AI asks you, never a guess.
 
 The complete measurement flow is described in [`references/phases/capture-session-sheet.md`](skills/autosound-tuning/references/phases/capture-session-sheet.md).
 
@@ -429,7 +439,7 @@ A single folder on your disk contains complete documentation and configuration o
 
 > [!IMPORTANT]
 > **Take care to back up these small text and JSON files.**
-> Extremely large REW `.mdat` measurement files (from 16 to 112 MB per file) do not need to be archived, as measurements can be redone at any time. Our installer offers an option to set up automated, free, and private backups of your project folder to GitHub.
+> Extremely large REW `.mdat` measurement files (from 16 to 112 MB per file) do not need to be archived, as measurements can be redone at any time. For a free, private backup of the project folder to GitHub, install with `--github` (`-GitHub` on Windows) and ask the AI to back the project up — it knows what stays out (the sweeps).
 
 ---
 
@@ -453,5 +463,5 @@ Everything else works as usual, and the combined frequency response is physicall
 
 ### Where can I find the full list of capabilities?
 
-A detailed overview of all 68 capabilities and tools (with exact commands, abort conditions, development status, and scientific background) is located in the interactive Capabilities board:
-[`references/core/capabilities.md`](skills/autosound-tuning/references/core/capabilities.md).
+A detailed overview of every capability and tool (with exact commands, abort conditions, development status, and scientific background) is located in the interactive Capabilities board:
+[`references/core/capabilities.md`](skills/autosound-tuning/references/core/capabilities.md). To get only the rows you need: `python3 ~/.claude/skills/autosound-tuning/rew_tool/capabilities.py find "phase"`.
