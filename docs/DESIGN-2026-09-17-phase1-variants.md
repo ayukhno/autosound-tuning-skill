@@ -19,9 +19,10 @@ this file says "recommended", it is the session's advice the user accepted or le
    into a dip (as `eq_propose` does) — BEFORE the delays, because a PEQ changes phase (Resonalyze's order, `MANUAL.md:782`).
 8. **Delays and levels** on the virtual DSP with that EQ in the chains: front and sub first, then centre and rear placed
    against the settled front (Resonalyze's staging, `MANUAL.md:1015-1028`; centre read against both sides at 1–4 kHz).
-9. **Scene centring, its own step on the chosen variant:** arrival aligned, against a time offset plus a near-side cut
+9. **Scene centring, its own step on the chosen variant, after the coarse EQ and the delays:** arrival aligned, against a time offset plus a near-side cut
    (Resonalyze's *Offset*, default 0.25 ms — "the factory default, not tuned for a cabin" — and *Near side cut*). The
-   virtual DSP shows both; the ear decides (two presets, A/B).
+   virtual DSP shows both; the ear decides (two presets, A/B). The user's own trial on Resonalyze's data: the two
+   differed by small changes of gain and delay.
 10. **What is shown:** one mathematical variant and up to two built from the tuner's wishes; a fully automatic run keeps
     at most three. More only if the tuner wants to dig, and then the Resonalyze app itself is the better place.
 11. **The breakdown in words** — what changes and how it will sound — written by the generator and reviewed by the
@@ -83,5 +84,5 @@ band re-checks that junction's delay; otherwise the delays stay.
 
 - The .NET 10 SDK on the development Mac (the skill cannot build the wrapper without it).
 - How installs get the binary.
-- A research question: SQ practice for centring the scene by time or by level, with sources.
+- SQ practice for centring the scene by time or by level, with sources: asked of research, hub #158 (SKL-040).
 - Analysing a tune that already exists: noted, not started (`docs/TODO.md` S-017).
