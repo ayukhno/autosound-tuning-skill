@@ -132,7 +132,7 @@ def measured_from_rew(titles, api=None, allow_rta=False, freqs=None, window=None
                 gated = (_db(Hg), Hg)
             out[title] = (fg, _db(H), "sw", H, gated)
             continue
-        f, mag, phase = api.get_fr(mid)
+        f, mag, phase = api.get_fr(mid, smoothing=READ_SMOOTHING)
         if not timing.get("has_ir", True) or phase is None:
             if not allow_rta:
                 raise VerifyError(
@@ -205,6 +205,9 @@ def measured_from_v7_dir(directory, freqs=None, window=None):
 
 # ---------------------------------------------------------------- the comparison
 ENTRY_SMOOTHING_OCT = 1.0 / 6.0   # both sides of a channel-shape comparison, before rms and worst
+# What an RTA is read at from REW: the finest level (`None` = `1/48`, rew_api.FINEST_SMOOTHING), so the
+# 1/6 mean above is the only smoothing -- a `Psy` or `1/6` view under it would widen it to ~1/4.2 (S-013).
+READ_SMOOTHING = "1/48"
 
 
 def _smooth_oct(f, y, octaves):

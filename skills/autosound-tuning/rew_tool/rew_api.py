@@ -294,6 +294,15 @@ def get_timing(mid):
     return timebase.timing_of(_get(f"/measurements/{mid}"), mid=mid)
 
 
+# The finest smoothing worth reading at: `None` and `1/48` are ONE level (the user, 2026-09-17). On the
+# reference car, detail finer than 1/48 was 81-88 % different at each of nine head positions above
+# 640 Hz and the same curve below 320 Hz; 1/48 keeps >= 97 % of a Q 15 resonance; REW's own log grid
+# holds nothing finer ("smoothed to ppo/2"); and an RTA asked `None` answers `1/48` whenever its view
+# is smoothed. `None` itself comes back LINEAR -- 54,559 points a sweep, a grid a band mean weighs
+# toward the treble (docs/RESEARCH-2026-09-17-reader-smoothing.md).
+FINEST_SMOOTHING = "1/48"
+
+
 def _smoothing_query(smoothing):
     """`?smoothing=<value>` for a read, or "" to take the payload as the view has it."""
     return "" if smoothing is None else "?smoothing=" + urllib.parse.quote(str(smoothing), safe="/")
@@ -302,8 +311,8 @@ def _smoothing_query(smoothing):
 def get_fr(mid, smoothing=None):
     """`(freqs, mag, phase)` of a measurement.
 
-    `smoothing` asks REW to compute that smoothing ON THE WAY OUT -- `"None"` for the raw curve,
-    `"1/6"` for a tonal read, `"1/48"` -- and leaves the measurement's own setting, which is what the
+    `smoothing` asks REW to compute that smoothing ON THE WAY OUT -- `FINEST_SMOOTHING` (`"1/48"`) for
+    the finest read, `"1/6"` for a tonal read, `"Var"` for an EQ decision -- and leaves the measurement's own setting, which is what the
     Arbiter sees in REW, exactly as it was. Verified on a live REW 5.40 beta 132 (API 0.9.6),
     2026-09-16: a view at 1/24 stayed 1/24 through `?smoothing=None`, and `None` came back linear
     (`freqStep`, 54,559 points for one sweep). Without it the payload is smoothed however the view
@@ -327,7 +336,7 @@ def fr_smoothing(mid):
     already smoothed — the payload carries a `smoothing` field — and `curve_view`'s fine scale needs
     an UNSMOOTHED input or it double-smooths and reports a clean system that is not. A caller feeding
     `get_fr` into `curve_view.report(..., input_smoothing=fr_smoothing(mid))` gets a loud refusal
-    instead of an empty feature list. For fine analysis, read it raw: `get_fr(mid, smoothing="None")`
+    instead of an empty feature list. For fine analysis, read it at the finest: `get_fr(mid, smoothing=FINEST_SMOOTHING)`
     -- never by changing the measurement's smoothing (hub TCC-015).
     """
     data = _get(f"/measurements/{mid}/frequency-response")
@@ -602,6 +611,26 @@ def _selftest():
     finally:
         _get = _orig
 
+    # S-013: every reader NAMES the smoothing it reads at, and the ones decided on 2026-09-17 stay decided.
+    # A call without `smoothing=` reads whatever the Arbiter's view holds, which is how one table mixed
+    # 1/6 and 1/24 rows. Read from the source, so a new reader is held to it on the day it is written.
+    asks = reader_smoothing()
+    unnamed = [f"{m}:{line} {fn}()" for (m, fn, call), found in asks.items() for line, v in found if v is _UNNAMED]
+    assert not unnamed, "reads without a smoothing (they follow the view): " + ", ".join(unnamed)
+    for key, want in _DECIDED_ASKS.items():
+        got = sorted({v for _, v in asks.get(key, [])})
+        assert got == sorted(want), (key, got, want)
+    # ...and the rule sees a read that names nothing (RED first: a scan that found nothing would pass).
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        with open(os.path.join(tmp, "new_reader.py"), "w", encoding="utf-8") as fh:
+            fh.write("import rew_api as api\nLEVEL = '1/6'\n"
+                     "def a(mid):\n    return api.get_fr(mid)\n"
+                     "def b(mid):\n    return api.get_group_delay(mid, smoothing=LEVEL)\n")
+        probe = reader_smoothing(tmp)
+    assert probe == {("new_reader.py", "a", "get_fr"): [(4, _UNNAMED)],
+                     ("new_reader.py", "b", "get_group_delay"): [(6, "1/6")]}, probe
+
     # ── the IR time base (2026-08-23) ─────────────────────────────────────────
     # Measured on a live REW: `physical arrival = delay + timingOffset`, and `timingReference`
     # says "Loopback" whether the offset is 0 or 7.7 ms — so the field that looks like the guard
@@ -707,6 +736,64 @@ def _selftest():
     print("rew_api selftest OK — get_fr handles sweep/RTA phase branch; "
           "excess/min-phase + smooth command wrappers post correct bodies; "
           "duplicate titles are found; an HTTP error carries REW's own explanation")
+
+
+# What each reader was decided to ask, (module, function, call) -> the values its calls name
+# (docs/RESEARCH-2026-09-17-reader-smoothing.md §6). `<arg>` = passed through from its own caller.
+_DECIDED_ASKS = {
+    ("verify.py", "verdict", "get_fr"): ["1/6"],
+    ("rew_tool.py", "analyze_batch", "get_fr"): ["1/6"],
+    ("rew_tool.py", "run", "get_fr"): ["1/6", "Var"],
+    ("rew_tool.py", "run", "get_group_delay"): ["1/12"],
+    ("ear_suspects.py", "main", "get_fr"): ["1/48"],
+    ("verify_prediction.py", "measured_from_rew", "get_fr"): ["1/48"],
+    ("spot_check.py", "_fetch", "get_fr"): ["<arg>"],
+}
+_UNNAMED = "<none>"
+
+
+def reader_smoothing(root=None):
+    """{(module, function, call): [(line, ask)]} for every `get_fr` / `get_group_delay` call in rew_tool.
+
+    `ask` is the value the call names -- a literal, a module constant resolved in that module or in
+    this one, `<arg>` when it is passed through, `<none>` when the call names none.
+    """
+    import ast
+    root = root or os.path.dirname(os.path.abspath(__file__))
+    here = {"FINEST_SMOOTHING": FINEST_SMOOTHING}
+    out = {}
+    for dirpath, _, files in os.walk(root):
+        for name in sorted(files):
+            if not name.endswith(".py") or name in ("rew_api.py", "rew_stub.py"):
+                continue
+            path = os.path.join(dirpath, name)
+            tree = ast.parse(open(path, encoding="utf-8").read())
+            consts = {t.id: n.value.value for n in tree.body if isinstance(n, ast.Assign)
+                      and isinstance(n.value, ast.Constant) for t in n.targets if isinstance(t, ast.Name)}
+            rel = os.path.relpath(path, root)
+
+            def visit(node, fn):
+                for child in ast.iter_child_nodes(node):
+                    here_fn = child.name if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) else fn
+                    if isinstance(child, ast.Call):
+                        f = child.func
+                        called = f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", None)
+                        if called in ("get_fr", "get_group_delay") and not (fn or "").startswith("_selftest"):
+                            kw = next((k.value for k in child.keywords if k.arg == "smoothing"), None)
+                            if kw is None:
+                                ask = _UNNAMED
+                            elif isinstance(kw, ast.Constant):
+                                ask = kw.value
+                            elif isinstance(kw, ast.Name) and kw.id in consts:
+                                ask = consts[kw.id]
+                            elif isinstance(kw, ast.Attribute) and kw.attr in here:
+                                ask = here[kw.attr]
+                            else:
+                                ask = "<arg>"
+                            out.setdefault((rel, fn, called), []).append((child.lineno, ask))
+                    visit(child, here_fn)
+            visit(tree, None)
+    return out
 
 
 if __name__ == "__main__":

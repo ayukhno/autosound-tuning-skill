@@ -37,6 +37,14 @@ import joint_analysis as _joint  # noqa: E402
 import naming as _naming  # noqa: E402
 import rew_api as _api  # noqa: E402
 
+# The smoothing this check reads at, ASKED on the read -- the Arbiter's view is never touched (hub
+# TCC-015). The level below is a mean over bins, so the GRID decides it more than the width does: REW's
+# raw read is linear and put 69 % of a woofer's live bins above 1 kHz, which moved channel levels by up
+# to 3 dB and changed their order on the reference car; every fractional read is log-spaced and agrees
+# within 0.3 dB. 1/6 is the tone standard (docs/RESEARCH-2026-09-17-reader-smoothing.md §2.4, §6; the
+# user's decision 2026-09-17). Without it the numbers followed whatever the view happened to hold.
+READ_SMOOTHING = "1/6"
+
 # An FR flat to within a fraction of a dB across the whole band is not a loudspeaker in a car; it
 # is a loopback, a dead input, or REW handing back a placeholder. Seen as a "successful" capture.
 _FLAT_RANGE_DB = 1.0
@@ -96,7 +104,7 @@ def verdict(name, measurements=None, f_low=20, f_high=20000):
         return out
 
     try:
-        freqs, mag, phase = _api.get_fr(mid)
+        freqs, mag, phase = _api.get_fr(mid, smoothing=READ_SMOOTHING)
     except Exception as exc:  # noqa: BLE001
         out["issues"].append(f"frequency response unreadable: {exc}")
         return out
@@ -476,8 +484,9 @@ def _selftest():
     try:
         _api.get_measurements = lambda: listing
         # A real-looking sweep: rising then falling, nothing flat, nothing silent.
-        _api.get_fr = lambda mid: ([20 * (10 ** (k / 100.0)) for k in range(301)],
-                                   [70 + 10 * (k % 7) for k in range(301)], None)
+        asked = []
+        _api.get_fr = lambda mid, smoothing=None: (asked.append(smoothing), (
+            [20 * (10 ** (k / 100.0)) for k in range(301)], [70 + 10 * (k % 7) for k in range(301)], None))[1]
         v_rta = verdict("ALL_60 (rta)", measurements=listing)
         assert v_rta["exists"] is True, v_rta
         assert v_rta["applicable"] is False and v_rta["kind"] == _api.RTA, v_rta
@@ -487,6 +496,8 @@ def _selftest():
 
         v_sw = verdict("sw_60 (sw)", measurements=listing)
         assert v_sw["applicable"] is True and v_sw["kind"] == _api.SWEEP, v_sw
+        # S-013: the read names its smoothing, so the verdict no longer depends on the view.
+        assert asked == [READ_SMOOTHING], asked
         # And the swept one really did get checked -- otherwise the assert above proves nothing.
         assert v_sw["stats"].get("range_dB") is not None, v_sw
         # skill #29: the counts keep what the verdict said. An RTA is "not checked", never

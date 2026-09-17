@@ -256,7 +256,9 @@ def main(argv=None):
         if not args.title:
             ap.error("--rew needs --title")
         mid = api.find_measurement_id(args.title)
-        f, mag, phase = api.get_fr(mid)
+        # The finest read, asked: the detector smooths to 1/12 itself, and a 1/6 view underneath cut the
+        # suspects found again at five of nine positions by 30-66 % on the reference car (S-013).
+        f, mag, phase = api.get_fr(mid, smoothing=api.FINEST_SMOOTHING)
         f, mag = np.asarray(f, float), np.asarray(mag, float)
         try:
             # Level does not matter here -- `ringdown_ms` reads a decay relative to the band's

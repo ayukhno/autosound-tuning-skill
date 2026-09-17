@@ -26,13 +26,17 @@ Pure numpy. Skill home: rew_tool/curve_view.py. Selftest: --selftest.
 import numpy as np
 
 PPO = 96  # analysis grid density (points per octave)
+# The finest input REW's log grid holds, and a clean one here: `None` and `1/48` are one level (the
+# user, 2026-09-17; rew_api.FINEST_SMOOTHING). At the 1/24 fine scale it makes the effective fine
+# ~1/21.5 and keeps >= 97 % of a Q 15 resonance; what is finer was position-random on the reference car.
+CLEAN_INPUT_FRAC = 48.0
 
 
 class CurveViewError(ValueError):
     """The input cannot be read at the FINE scale — chiefly: it is already smoothed.
 
     REW returns a frequency response with its own smoothing already applied (the payload carries a
-    `smoothing` field) unless the read asks `rew_api.get_fr(mid, smoothing="None")`. Smoothing a
+    `smoothing` field) unless the read asks for one: `rew_api.get_fr(mid, smoothing="1/48")`, the finest. Smoothing a
     second time here adds widths in quadrature: at REW `1/6` the effective fine becomes ~1/5.8, which
     nearly meets the 1/3 macro, so `residual = fine - macro -> 0` and `find_features` reports a CLEAN
     system that is not — silently, an empty list, no error. That is the trap this refusal makes loud
@@ -109,15 +113,16 @@ def find_features(view, min_prominence_db=2.0, source="sweep"):
     route}. kind: 'peak'|'dip'. source: 'sweep' (single-point — narrow
     features need MMM/mic-shift arbitration first, §13) or 'mmm' (already
     spatially averaged — narrow features are real in space, route by kind)."""
-    if view.get("input_frac") is not None:
+    frac = view.get("input_frac")
+    if frac is not None and (frac == "?" or frac < CLEAN_INPUT_FRAC):
         eff = view.get("effective_fine_frac")
         eff_s = f"~1/{eff:.1f}" if eff else "unknown (a non-fractional REW mode)"
         raise CurveViewError(
             f"the input is already smoothed at {view.get('input_smoothing')!r}; smoothing it again at "
             f"1/{view.get('fine_frac')} makes the effective fine {eff_s} oct, so the fine residual "
             f"(vs the 1/{view.get('macro_frac')} macro) is understated or collapses to zero and this "
-            f"would report a CLEAN system that is not. Read the FR UNSMOOTHED for fine analysis: "
-            f"`rew_api.get_fr(mid, smoothing='None')` -- REW computes it on the way out and the "
+            f"would report a CLEAN system that is not. Read the FR at the finest for fine analysis: "
+            f"`rew_api.get_fr(mid, smoothing='1/48')` -- REW computes it on the way out and the "
             f"measurement's own smoothing, what the Arbiter sees, is not touched. Never change that "
             f"setting to read (hub TCC-015). MACRO / macro_summary is unaffected and may be used "
             f"on smoothed input.")
@@ -236,7 +241,7 @@ def _selftest():
         except CurveViewError as e:
             assert str(sm) in str(e) or must in str(e), (sm, str(e))
     # None / "None" / "" are the clean case and pass; and the effective-fine estimate is right in order.
-    for clean in (None, "None", "none", ""):
+    for clean in (None, "None", "none", "", "1/48"):
         find_features(multiscale(f, curve, (100.0, 10000.0), input_smoothing=clean))
     assert abs(_effective_fine_frac(24, 6) - 5.8) < 0.2, _effective_fine_frac(24, 6)
     assert _effective_fine_frac(24, None) == 24.0 and _effective_fine_frac(24, "?") is None

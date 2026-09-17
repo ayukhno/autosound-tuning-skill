@@ -10,6 +10,10 @@ CATCHES slips (a cut aimed at 2450 Hz when the measured peak sat at 2202 Hz).
 Reads magnitude only (RTA-safe). Measurement titles are resolved by NAME right
 before the pull (rew-api-quirks: ordinal ids are not stable).
 
+A number is checked at the smoothing it was quoted at, and that smoothing is printed beside it:
+`--smoothing` (default 1/6, the standard agreed with the critic) is ASKED on the read, so the
+Arbiter's view in REW is never changed and never decides the answer (S-013, the user 2026-09-17).
+
 CLI (REW running on :4735):
   python3 spot_check.py "L_09 (rta)" "R_09 (rta)" --at 160,2540 --peak 2000-3000 --claim 2543.8
   python3 spot_check.py "ALL_09 (rta)" --target "Jazzi_0db_REW" --at 2540 --anchor 300-3000
@@ -17,6 +21,10 @@ CLI (REW running on :4735):
 """
 import argparse
 import sys
+
+DEFAULT_SMOOTHING = "1/6"
+# REW's own list (`GET /measurements/frequency-response/smoothing-choices`, REW 5.40).
+SMOOTHING_CHOICES = ("1/1", "1/2", "1/3", "1/6", "1/12", "1/24", "1/48", "Var", "Psy", "ERB", "None")
 
 
 def level_at(freqs, mag, f):
@@ -74,10 +82,10 @@ def _log2(x):
     return math.log2(x)
 
 
-def _fetch(title):
+def _fetch(title, smoothing=DEFAULT_SMOOTHING):
     import rew_api
     mid, _ = rew_api.get_measurement_by_name(title)
-    freqs, mag, _phase = rew_api.get_fr(mid)
+    freqs, mag, _phase = rew_api.get_fr(mid, smoothing=smoothing)
     return freqs, mag
 
 
@@ -98,6 +106,8 @@ def main(argv=None):
     ap.add_argument("--claim", type=float, default=None, help="the claimed peak frequency to verify")
     ap.add_argument("--target", default=None, help="target measurement title for anchored deviation")
     ap.add_argument("--anchor", default="300-3000", help="anchor band for --target (default 300-3000)")
+    ap.add_argument("--smoothing", default=DEFAULT_SMOOTHING, choices=SMOOTHING_CHOICES,
+                    help="the smoothing the claim was read at, asked on the read (default 1/6)")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args(argv)
 
@@ -107,12 +117,12 @@ def main(argv=None):
 
     at = _parse_freqs(a.at) if a.at else []
     if len(a.names) == 2:
-        fa, ma = _fetch(a.names[0])
-        fb, mb = _fetch(a.names[1])
+        fa, ma = _fetch(a.names[0], a.smoothing)
+        fb, mb = _fetch(a.names[1], a.smoothing)
         rep = pair_report(fa, ma, fb, mb, at,
                           peak_band=_parse_band(a.peak) if a.peak else None,
                           claimed_peak_hz=a.claim)
-        print(f"== {a.names[0]}  vs  {a.names[1]} ==")
+        print(f"== {a.names[0]}  vs  {a.names[1]}  (smoothing {a.smoothing}) ==")
         for r in rep["points"]:
             print(f"{r['hz']:>7.0f} Hz:  A={r['a_db']:7.2f}  B={r['b_db']:7.2f}  A-B={r['delta_db']:+6.2f} dB")
         if "a_peak" in rep:
@@ -123,10 +133,10 @@ def main(argv=None):
                          f"{'OK' if p['claim_ok'] else 'OFF by %.2f oct' % p['claim_off_octaves']}")
             print(line)
     elif len(a.names) == 1 and a.target:
-        f, m = _fetch(a.names[0])
-        tf, tm = _fetch(a.target)
+        f, m = _fetch(a.names[0], a.smoothing)
+        tf, tm = _fetch(a.target, a.smoothing)
         rep = target_report(f, m, tf, tm, at, _parse_band(a.anchor))
-        print(f"== {a.names[0]} vs target {a.target} (anchored {a.anchor}, offset {rep['anchor_db']:+.2f} dB) ==")
+        print(f"== {a.names[0]} vs target {a.target} (anchored {a.anchor}, offset {rep['anchor_db']:+.2f} dB, smoothing {a.smoothing}) ==")
         for r in rep["points"]:
             print(f"{r['hz']:>7.0f} Hz:  deviation {r['deviation_db']:+6.2f} dB")
     else:

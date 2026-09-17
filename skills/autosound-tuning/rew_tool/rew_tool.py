@@ -23,6 +23,17 @@ DEFAULT_CURVES_DIR = os.path.expanduser(
 
 SEP = "─" * 70
 
+# The smoothing each reading here ASKS REW for, on the read. The Arbiter's view is never touched
+# (hub TCC-015), and a number no longer follows whatever that view happens to hold -- on the reference
+# car one table mixed 1/6 and 1/24 rows. Decided per analysis by the user, 2026-09-17, on
+# docs/RESEARCH-2026-09-17-reader-smoothing.md §6:
+TONE_SMOOTHING = "1/6"   # tone against a target, band means: the skill's standard and the critic's
+EQ_SMOOTHING = "Var"     # EQ cuts: REW's own advice for a response to be equalised -- 1/48 below 100 Hz,
+                         # where the detail is the car's modes, 1/6 at 1 kHz and 1/3 above 10 kHz, where
+                         # finer detail is mostly the microphone's position (§2.5)
+GD_SMOOTHING = "1/12"    # REW's own group delay, printed beside the one through the gate: the same width
+                         # the gated reading uses (`windows.GD_SMOOTH_OCT`), so the two differ by window only
+
 # Canonical analysis bands (short labels for the batch matrix columns).
 BANDS = [
     ("Суббас",  20,    80),
@@ -267,6 +278,7 @@ def analyze_batch(pattern, curves_dir, vs_targets=True):
         return matches
 
     print_header(f"BATCH-АНАЛІЗ: '{pattern}'  ({len(matches)} замірів)")
+    print(f"  Згладжування {TONE_SMOOTHING}, запитане при читанні (вигляд у REW не змінюється).")
     band_names = [b[0] for b in BANDS]
     if vs_targets:
         print(f"  Цілі з: {curves_dir}")
@@ -283,7 +295,7 @@ def analyze_batch(pattern, curves_dir, vs_targets=True):
 
     no_target = []
     for mid, title in matches:
-        freqs, mag, phase = api.get_fr(mid)        # ONE GET per driver (FR-only)
+        freqs, mag, phase = api.get_fr(mid, smoothing=TONE_SMOOTHING)   # ONE GET per driver (FR-only)
         row = f"  {title:<20}"
         if vs_targets:
             tfile, tdata = find_target_curve(title, curves_dir)
@@ -660,8 +672,8 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
         band_s = f"{band[0]:.0f}-{band[1]:.0f}"
         jl = f"{lo}↔{hi}"
         try:
-            fA, mA, pA = api.get_fr(resolve(f"{lo}_{ver} (sw)"))
-            fB, mB, pB = api.get_fr(resolve(f"{hi}_{ver} (sw)"))
+            fA, mA, pA = api.get_fr(resolve(f"{lo}_{ver} (sw)"), smoothing=api.FINEST_SMOOTHING)
+            fB, mB, pB = api.get_fr(resolve(f"{hi}_{ver} (sw)"), smoothing=api.FINEST_SMOOTHING)
         except KeyError as e:
             print(f"  {jl:<15}{fc:>6.0f}  — відсутній solo-замір: {e}")
             continue
@@ -703,7 +715,7 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
         trusted, trust_lbl, js_call = None, "—(nopair)", ""
         if pair_name:
             try:
-                fP, mP, _ = api.get_fr(resolve(pair_name))
+                fP, mP, _ = api.get_fr(resolve(pair_name), smoothing=api.FINEST_SMOOTHING)
                 mP2 = interpolate_target(fP, mP, fA)     # pair magnitude (RTA-ok)
                 tg = ja.phase_trust_gate(fA, mA, pA, mB2, pB2, mP2, band=band)
                 js = ja.joint_summation_check(fA, mA, mB2, mP2, band=band)
@@ -783,8 +795,11 @@ def run(mid, curves_dir, show_all=True):
     print(f"  Режим: {'КРОСОВЕР (x0 → Generic/Extended)' if mode=='crossover' else 'EQ (Audiotec Fischer / Full EQ 30-band)'}")
     print(f"{'='*70}")
 
+    print(f"  Згладжування: тон {TONE_SMOOTHING} · зрізи EQ {EQ_SMOOTHING} · GD REW {GD_SMOOTHING} "
+          f"(запитані при читанні; вигляд у REW не змінюється)")
+
     # FR + Phase
-    freqs, mag, phase = api.get_fr(mid)
+    freqs, mag, phase = api.get_fr(mid, smoothing=TONE_SMOOTHING)
     print_fr_analysis(freqs, mag, phase)
 
     # The impulse first: the group delay is read through it as well (FDW), beside REW's own.
@@ -796,7 +811,7 @@ def run(mid, curves_dir, show_all=True):
 
     # Group Delay -- REW's (the cabin in it), then through the direct sound (hub RES-010)
     try:
-        gd_freqs, gd = api.get_group_delay(mid)
+        gd_freqs, gd = api.get_group_delay(mid, smoothing=GD_SMOOTHING)
         print_gd_analysis(gd_freqs, gd)
     except Exception as e:
         print(f"\n  Group Delay: недоступно ({e})")
@@ -825,9 +840,10 @@ def run(mid, curves_dir, show_all=True):
         t_freqs, t_mag = target_data
         print_deviation(freqs, mag, t_freqs, t_mag, target_file)
 
-        suggestions = suggest_eq_cuts(freqs, mag, t_freqs, t_mag)
+        eq_freqs, eq_mag, _ = api.get_fr(mid, smoothing=EQ_SMOOTHING)
+        suggestions = suggest_eq_cuts(eq_freqs, eq_mag, t_freqs, t_mag)
         if suggestions:
-            print_header("Рекомендовані PEQ фільтри (тільки зрізання)")
+            print_header(f"Рекомендовані PEQ фільтри (тільки зрізання, згладжування {EQ_SMOOTHING})")
             print(f"  {'Freq (Hz)':>10}  {'Gain (dB)':>10}  {'Q':>6}  {'Type':<6}")
             print(f"  {'-'*10}  {'-'*10}  {'-'*6}  {'-'*6}")
             for s in suggestions:
@@ -860,12 +876,15 @@ def _selftest():
     orig_find = tc.find_target_curve
     globals()["find_target_curve"] = lambda title, cd: ("flat.txt", tgt)
     api.get_measurements = lambda: fake
-    api.get_fr = lambda mid: fr[int(mid)]
+    asked = []
+    api.get_fr = lambda mid, smoothing=None: (asked.append(smoothing), fr[int(mid)])[1]
     try:
         matches = analyze_batch("_2 (rta)", "/nonexistent", vs_targets=True)
         assert [t for _, t in matches] == ["m-L_2 (rta)", "m-R_2 (rta)"], matches
         # sw_1 (sw) must be filtered out by the pattern
         assert all("(sw)" not in t for _, t in matches), matches
+        # S-013: every read names the tone smoothing, so the table does not follow the view.
+        assert asked == [TONE_SMOOTHING, TONE_SMOOTHING], asked
         print("selftest[batch] OK — filtered to 2 rta measurements, "
               "one get_measurements + one get_fr each, matrix rendered.")
     finally:
@@ -904,7 +923,7 @@ def _selftest():
     orig_gm2, orig_fr2 = api.get_measurements, api.get_fr
     orig_find_id = api.find_measurement_id
     api.get_measurements = lambda: jmeas
-    api.get_fr = lambda mid: jfr[int(mid)]
+    api.get_fr = lambda mid, smoothing=None: jfr[int(mid)]
     api.find_measurement_id = lambda name, measurements=None, exact=True: \
         next(k for k, v in jmeas.items() if v["title"] == name)
     try:
