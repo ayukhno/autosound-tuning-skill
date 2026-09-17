@@ -203,8 +203,10 @@ Engine-independent steps first, on `wave-2026-09-17b`; each with its selftest, t
      and "BW2 between sub and midbass" as BW12 110 Hz at the window's edge, +9.40 dB. Not measured yet: a wish's full
      variant with its own Auto delay (the probe gives the junction's own delay only).
    - **5c.** Per-platform binaries for installs (§5). Done 2026-09-17 (hub SKL-041 #166 → HUB-070 #169, the user's
-     decision): `.github/workflows/engine-binaries.yml` builds a single-file self-contained engine (≈80 MB) for **two**
-     platforms — win-x64 and osx-arm64, each ON its own runner and each RUN through the synthetic set there — and, when
+     decision): `.github/workflows/engine-binaries.yml` builds a single-file self-contained engine (≈80 MB) for **three**
+     platforms — win-x64, win-arm64 and osx-arm64, each ON its own runner and each RUN through the synthetic set there
+     (win-arm64 because a Windows guest in Parallels or UTM on an Apple Silicon Mac is ARM, which is where the method
+     is tested) — and, when
      the run was started by a **tag push**, attaches them to that tag's release itself: draft → files → publish, as a
      pre-release that is never `Latest`, `SHA256SUMS` beside the archives and the fork's `License.md` +
      `THIRD-PARTY-NOTICES.md` inside each, named `resonalyze-engine-<pin>-<rid>.zip`; a release already published for

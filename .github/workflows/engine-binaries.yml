@@ -23,9 +23,12 @@ name: engine-binaries
 #
 # `permissions: contents: write` is on the attaching job ALONE; the builds stay read-only.
 #
-# TWO platforms are published -- win-x64 and osx-arm64 (the user, 2026-09-17: nothing for Intel Macs or Linux). Any
-# other platform builds from the .NET SDK on demand (`resonalyze_engine.engine_command`, path 3), and a machine without
-# the SDK is told so by name. The `engine` job in checks.yml keeps building and running the pin on Linux through the SDK.
+# THREE platforms are published -- win-x64, win-arm64 and osx-arm64 (the user, 2026-09-17: nothing for Intel Macs or
+# Linux). win-arm64 is not a spare: a Windows guest in Parallels or UTM on an Apple Silicon Mac IS ARM, which is where
+# the method is tested, and `resonalyze_engine.rid()` computes `win-arm64` there -- so without this build that machine
+# finds no prebuilt engine at all, or runs the x64 one through Windows' emulation. Any other platform builds from the
+# .NET SDK on demand (`resonalyze_engine.engine_command`, path 3), and a machine without the SDK is told so by name.
+# The `engine` job in checks.yml keeps building and running the pin on Linux through the SDK.
 #
 # When: on a tag push -- the version installers take -- and by hand (a manual run builds and attaches nothing). Not on
 # every pull request: the same pin built again is the `engine` job's question in checks.yml asked twice.
@@ -50,6 +53,7 @@ jobs:
           # Each platform builds ON its platform, because each must also RUN there: Windows is where the user tests,
           # and on macOS the SDK signs the apphost ad hoc -- an unsigned arm64 executable is killed on start.
           - { os: windows-latest, rid: win-x64 }
+          - { os: windows-11-arm, rid: win-arm64 }
           - { os: macos-latest, rid: osx-arm64 }
     runs-on: ${{ matrix.os }}
     steps:
@@ -132,7 +136,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          for rid in win-x64 osx-arm64; do
+          for rid in win-x64 win-arm64 osx-arm64; do
             name="resonalyze-engine-${PIN}-${rid}"
             test -d "staged/$name" || { echo "::error::staged/$name is missing -- the build for $rid did not reach this job"; exit 1; }
             test -f "staged/$name/License.md" || { echo "::error::$name carries no License.md"; exit 1; }
