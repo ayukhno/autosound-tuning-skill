@@ -168,7 +168,11 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
   mid↔tweeter): delay × polarity by how much the pair loses when summed vs the ideal (`predict --align`:
   each joint read on the member below AS IT WILL NOW PLAY, delays on the DSP's grid, the proposal as
   `aligned-delta.json` for `apply.propose`); near-tie through both polarities; an all-pass if a null
-  remains (`--apf` hints one). **Front and sub first; then the centre and the rear are placed against
+  remains (`--apf` hints one). **Above 1 kHz a delay candidate is confirmed on the TUNED pair's
+  arrival, not banked off the desk** (hub `RES-013`): whole cycles look alike on a sum and on a
+  phase view, so where the score and the arrival witness disagree by a cycle the joint comes back
+  `UNVERIFIED` with both candidates — measure the pair (a sweep of the two together, or both solos
+  through these chains), record which candidate it picks, and only then bank that joint. **Front and sub first; then the centre and the rear are placed against
   the settled front** — the centre read against both sides where the front mids play (1–4 kHz), as
   Resonalyze stages it; its Auto delay does the same in the same `resonalyze_engine.py run`, and says when a
   placement is at Low confidence (the Passat's centre and rear are) or when the device cannot hold the
