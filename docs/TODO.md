@@ -545,3 +545,41 @@ install DOES:
 
 Done when an install on a machine without the SDK ends with a working prebuilt engine, the choice is
 the person's, and `installer-consistency.py` holds the three installers to the same decision.
+
+## S-021 · Phase 1's variants run end to end on a fresh system
+
+**Status**: waiting 2026-09-18 · the last of issue #38's three open pieces, split off at the user's
+word so the other two are not held behind it. Waiting for the user's test on the tag this wave lands
+in; the software side is in place (`docs/DESIGN-2026-09-17-phase1-variants.md` §6: 1–4, 5a–5c, 6 all
+done, S-020 the last of them).
+
+**Due when:** now — it waits for a run, not for work.
+
+**What to test, in the order §1 puts it.** A car and a system the method has not seen, from intake:
+
+1. **Intake and capture** (Phase −1, Phase 0) — one impulse per driver from the tripod, loopback,
+   `Repetitions 4`; the machine files validate (`contract.py check <project> --gate` exits 0).
+2. **The tuner's crossover wishes in free words**, no form — a sentence like "BE4 between tweeter and
+   mid, BW2 between sub and midbass, not sure between midbass and mid".
+3. **The best configuration first, then the wishes against it** —
+   `python3 rew_tool/resonalyze_engine.py run <project> <set> --out <dir> --wishes "…"`. What to
+   watch: the driver types come from the roles and not from the engine's suggestion; an edge under a
+   fragile driver's Fs floor comes back REFUSED with the nearest allowed setting named; the rear fill
+   that does not fit the device is lowered and said so; a wish that broke a limit is not computed and
+   says why.
+4. **Coarse EQ before the delays** (`eq_propose --part 1`), then the delays and levels with it in the
+   chains, then the sums into the target-curve visualizer (`sums_export.py`).
+5. **The description in words, and the choice** — two or three variants, what each buys and what it
+   spends; nothing entered without the tuner's OK.
+
+**What would say it works:** a tuner who has not built any of this gets to a DSP setting they accept,
+without a session reaching for a tool by hand that the phase documents do not name, and without a
+number that has to be explained away. **What would say it does not:** a step that needs the author to
+run it, a refusal whose nearest allowed setting is wrong for the car, or a variant nobody can choose
+between because the description does not say what it costs.
+
+**Known gap going in, and it is issue #38's own second piece** (`DESIGN-2026-09-17-phase1-variants.md`
+§6, 5b): a wish with a corner is read as a PROBE — that junction with its own delay — not as a full
+variant with its own Auto delay across the chain. So "what this wish costs" is exact at the junction
+and approximate for the whole configuration. Worth knowing when a variant is judged in the test;
+it is not a reason to hold the run.
