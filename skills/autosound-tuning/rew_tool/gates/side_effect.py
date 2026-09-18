@@ -48,7 +48,14 @@ _ASSET_PREFIX = f"https://raw.githubusercontent.com/{FEEDBACK_REPO}/{ASSET_BRANC
 #: nowhere to send a finding. Text only: a file question would make Google demand a sign-in for the whole form.
 #: The address, the question ids and the choice words are the form's as published, fixed here like the repos
 #: above -- a destination a model can fill in is what this module exists to refuse. The same form, the same
-#: answers, as TCC's window sends (`autosound-tcc` `core/form_report.py`).
+#: answers, as TCC's window sends -- and since TCC v0.1.41 its window keeps NO copy of them: `core/form_report.py`
+#: reads the address, the ids, the words and the "counts as sent" rule out of this module (hub SCR-057). That makes
+#: the `FORM_*` names, `form_answers` and `verify_form_reply` a CONTRACT with another repo, not internals. A rename
+#: does not raise over there: `is_available()` finds a name missing, `post_url()` comes back empty, and the form
+#: route simply disappears from the window -- a person is offered GitHub only, and nobody sees an error. The form's
+#: own questions are the same kind of fact: TCC renders the choices in four languages and maps them by KEY, so a new
+#: key arrives as a choice it has no label for and is dropped rather than shown. Change any of it and say the move in
+#: the **Upgrading** note of the tag that carries it; the selftest pins the surface so it breaks here first.
 FORM_POST_URL = ("https://docs.google.com/forms/d/e/"
                  "1FAIpQLSdMzITv6Rzh8PWITy5QWc3xQMcAn9aDl1k0QbpZykHEQd6A4g/formResponse")
 FORM_FIELD_SENDER = "entry.240346646"      # «Від кого», required: a name and a contact, so the Arbiter can answer
@@ -549,6 +556,41 @@ def _selftest():
         except SideEffectRefused:
             pass
 
+    # ── the surface `autosound-tcc` reads by name (hub SCR-057) ─────────────────────────────
+    # Pinned the way `rew_api.get_timing` is: it crosses a repo boundary, and there the cost of a
+    # rename is not an exception but a form route that quietly disappears from TCC's window.
+    surface = ("FORM_POST_URL", "FORM_FIELD_SENDER", "FORM_FIELD_KIND", "FORM_FIELD_IMPACT",
+               "FORM_FIELD_MESSAGE", "FORM_FIELD_VERSIONS", "FORM_KINDS", "FORM_IMPACTS",
+               "FORM_PERSON_KINDS", "FORM_TIMEOUT_S", "form_answers", "verify_form_reply")
+    gone = [name for name in surface if name not in globals()]
+    assert not gone, f"autosound-tcc asks the gate for these by name: {gone} -- say the move in the Upgrading note"
+    # The KEYS are what TCC labels in four languages; the words are what the sheet stores. A key it
+    # has no label for is dropped from the window rather than shown, which is why a new one is news.
+    assert tuple(FORM_KINDS) == ("problem", "wish", "feedback", "test"), FORM_KINDS
+    assert tuple(FORM_IMPACTS) == ("stops", "workaround", "none"), FORM_IMPACTS
+    assert FORM_PERSON_KINDS == ("problem", "wish", "feedback"), FORM_PERSON_KINDS
+    assert isinstance(FORM_TIMEOUT_S, (int, float)) and FORM_TIMEOUT_S > 0, FORM_TIMEOUT_S
+    # TCC calls the verifier itself, so its (ok, detail) pair is part of the surface too.
+    ok, detail = verify_form_reply(200, f'<a href="https://docs.google.com/forms/d/e/x/viewform?{FORM_ACCEPTED_MARKER}">')
+    assert ok is True and isinstance(detail, str) and detail, (ok, detail)
+    refused, why = verify_form_reply(200, "<html>the form page</html>")
+    assert refused is False and isinstance(why, str) and why, (refused, why)
+    # The values go in as a FINGERPRINT, not as a second copy of each literal: a search-and-replace
+    # over an id or a name rewrites a pinned copy along with the definition, and a pin that moves
+    # with the edit says nothing (measured 2026-09-18 -- a copy of the five ids passed a moved id).
+    # The digest does not move, so the edit stops here and this is where the note is asked for.
+    import hashlib
+    import inspect
+    fingerprint = "\n".join(
+        f"{name}{inspect.signature(globals()[name])}" if callable(globals()[name])
+        else f"{name}={globals()[name]!r}"
+        for name in surface)
+    digest = hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()[:16]
+    assert digest == "0b9e64d5aeed03ad", (
+        f"the form's surface changed (digest {digest}, was 0b9e64d5aeed03ad). TCC reads these at run time and "
+        "degrades silently -- name the move in the CHANGELOG's Upgrading note, then put the new digest here:\n"
+        + fingerprint)
+
     # ── the route without GitHub: the Arbiter's form (hub TCC-017) -- the network is faked ──
     ans = form_answers("Олена, t.me/x", "problem", "**зламалось** на кроці 2", "workaround", "method v3 · lang=uk")
     assert ans == {FORM_FIELD_SENDER: "Олена, t.me/x", FORM_FIELD_KIND: "Проблема", FORM_FIELD_MESSAGE: "**зламалось** на кроці 2",
@@ -726,7 +768,8 @@ def _selftest():
           "that lands on the other's repo, a caller-spelled repo or unknown name is refused. "
           "Upload: refused without consent, repo+branch hardcoded, name reduced to a basename, "
           "loud on wrong repo / look-alike host / non-raw host / gh failure, verified URL "
-          "returned under ['url'].")
+          "returned under ['url']. Form: the surface autosound-tcc reads is pinned by name, "
+          "question id and choice key; a send counts only as the form confirms it.")
     return 0
 
 
