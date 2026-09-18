@@ -31,6 +31,8 @@
 #   ./install.sh --no-reviewer       without the Gemini reviewer
 #   ./install.sh --github            with the GitHub CLI, for the project backup (default: without)
 #   ./install.sh --with-omp          with omp, which offers TCC every non-Claude model (default: without)
+#   ./install.sh --no-engine         without Phase 1's desk engine (default: fetched only when this
+#   ./install.sh --engine            machine has no .NET SDK to build it from; --engine fetches anyway)
 #   ./install.sh --dry-run           say what it would do, change nothing
 #   ./install.sh --yes               yes to every question; sign-ins are printed, not run
 #   ./install.sh --skill-ref v3.0.33 a specific skill version (default: the newest 3.x tag)
@@ -102,6 +104,16 @@ WANT_OMP=0
 #: every question an install asks is a branch nobody has walked on Windows). A machine that already
 #: has `gh` keeps getting its backup sign-in at the end, as before.
 WANT_GITHUB="auto"
+#: Phase 1's desk engine: a self-contained binary, one per platform, attached to the tag's own
+#: release (hub `RELEASE-CHANNEL.md` §12). `auto` fetches it ONLY on a machine with no .NET SDK --
+#: a machine that can build one loses nothing by waiting for first use, and a machine that cannot
+#: would otherwise discover that in the middle of a tune. `--engine` fetches it anyway, `--no-engine`
+#: never. The name is computed by the method from its own engine pin and this platform, so nothing
+#: here lists a release; a tag that carries none for that pair is an answer, said out loud.
+WANT_ENGINE="auto"
+#: Where a fetched engine lands -- `resonalyze_engine.installed_dir()` owns this path; the line here
+#: is the uninstaller's, so what this script put on the machine can come off it.
+ENGINE_HOME="${HOME}/.local/share/autosound/engines"
 UNINSTALL=0
 REMOVE_ALL=0
 DRY_RUN=0
@@ -131,6 +143,8 @@ Autosound tuning — installer for macOS (and Linux)
   install.sh --no-reviewer       without the Gemini reviewer
   install.sh --github            with the GitHub CLI, for the project backup (default: without)
   install.sh --with-omp          with omp, which offers TCC every non-Claude model (metered; default: without)
+  install.sh --no-engine         without Phase 1's desk engine; --engine fetches it even where the
+                                 .NET SDK could build it (default: fetched only when there is no SDK)
   install.sh --dry-run           say what it would do, change nothing
   install.sh --yes               yes to every question; sign-ins are printed, not run
   install.sh --skill-ref v3.0.33 a specific skill version (default: the newest 3.x tag)
@@ -173,6 +187,8 @@ while [ $# -gt 0 ]; do
     --reviewer)    WANT_REVIEWER=1 ;;
     --with-omp)    WANT_OMP=1 ;;
     --no-omp)      WANT_OMP=0 ;;   # the default since 2026-09-17; still accepted
+    --engine)      WANT_ENGINE=1 ;;
+    --no-engine)   WANT_ENGINE=0 ;;
     --github)      WANT_GITHUB=1 ;;
     --no-github)   WANT_GITHUB=0 ;;
     --uninstall)   UNINSTALL=1 ;;
@@ -445,6 +461,12 @@ if [ "$UNINSTALL" = 1 ]; then
   if [ -d "$SKILL_BETA_SRC" ]; then
     say "  removing the beta channel's copy of the method"
     run rm -rf "$SKILL_BETA_SRC"
+  fi
+  # Phase 1's desk engine, one folder per pin and platform. Nothing but the method writes there,
+  # and ~30 MB left behind is not a courtesy -- it is a binary nobody can account for later.
+  if [ -d "$ENGINE_HOME" ]; then
+    say "  removing Phase 1's desk engine ($(pretty "$ENGINE_HOME"))"
+    run rm -rf "$ENGINE_HOME"
   fi
 
   UV="$(find_bin uv || true)"
@@ -889,6 +911,40 @@ else
     run "$PY_BIN" -m pip install --quiet --user --no-warn-script-location --disable-pip-version-check -r "$REQS" \
       || warn "install failed — see above"
   fi
+fi
+
+# ── Phase 1's desk engine ─────────────────────────────────────────────────────
+# Two ways to have one, and the method takes whichever is there: this archive (~30 MB, nothing else
+# needed) or the .NET SDK, which builds the wrapper on first use. See WANT_ENGINE above for why the
+# default fetches only where there is no SDK. The method computes the file's name itself, checks
+# what arrives against the release's SHA256SUMS, and refuses a file that does not match -- so this
+# step names the tag and reads back what the method says it did.
+step "Phase 1's desk engine"
+ENGINE_PY="${SKILL_REAL:-$SKILL_HOME}/rew_tool/resonalyze_engine.py"
+have_dotnet() { find_bin dotnet >/dev/null 2>&1 || [ -x "$HOME/.dotnet/dotnet" ]; }
+if [ "$WANT_ENGINE" = 0 ]; then
+  say "  --no-engine: not fetched. It builds from the .NET SDK on first use, or later with"
+  say "    python3 $(pretty "$ENGINE_PY") fetch-binary --tag $SKILL_REF"
+elif [ "$WANT_ENGINE" = "auto" ] && have_dotnet; then
+  say "  the .NET SDK is here — the engine builds from the method's own checkout on first use"
+  say "  (--engine fetches the prebuilt one instead: no build, no SDK needed)"
+elif ! usable python3; then
+  warn "no python3 — the engine cannot be fetched; the method's tools cannot run either (above)"
+elif [ "$DRY_RUN" = 1 ]; then
+  say "  would run: python3 $(pretty "$ENGINE_PY") fetch-binary --tag $SKILL_REF"
+elif [ ! -f "$ENGINE_PY" ]; then
+  warn "no $(pretty "$ENGINE_PY") — the method's checkout is not where this script expects it;"
+  warn "the engine was not fetched, and Phase 1's desk step will ask for one when it is reached"
+else
+  say "  ~30 MB for $SKILL_REF, checked against the release's SHA256SUMS"
+  ENGINE_RC=0
+  python3 "$ENGINE_PY" fetch-binary --tag "$SKILL_REF" || ENGINE_RC=$?
+  case "$ENGINE_RC" in
+    0) ;;   # the method printed the file, the tag and where it landed
+    4) say "  so the engine builds from the .NET SDK when there is one; nothing else is affected" ;;
+    *) warn "the engine was not fetched (code $ENGINE_RC) — the method is installed and works;"
+       warn "Phase 1's desk step is the part that waits for an engine" ;;
+  esac
 fi
 
 # ── the desktop app ───────────────────────────────────────────────────────────

@@ -389,6 +389,37 @@ def main():
     elif uv_sh:
         checked.append(f"both pin uv at {uv_sh}")
 
+    # 5c. Phase 1's desk engine (TODO S-020, the user's decision 2026-09-18). Three things have to
+    # be the same decision in all three files, or a Mac and a PC do not end up with the same
+    # machine: WHEN it is fetched (only where no .NET SDK can build one), WHO computes the file's
+    # name and checks its digest (the method, through its own `fetch-binary` -- an installer that
+    # spelled the name itself would be a second copy of hub RELEASE-CHANNEL.md §12), and what exit
+    # 4 means (this release carries none for this pin and platform: say so, carry on).
+    engine = []
+    if not re.search(r'^WANT_ENGINE="auto"$', sh, re.M):
+        engine.append('install.sh: WANT_ENGINE is no longer "auto" — the engine would be fetched '
+                      "on machines that can build one, or not at all")
+    if not re.search(r'^\$WantEngine\s*=\s*if \(\$Engine\) \{ "1" \} elseif \(\$NoEngine\) \{ "0" \} '
+                     r'else \{ "auto" \}', ps1, re.M):
+        engine.append("install.ps1: $WantEngine no longer comes from -Engine / -NoEngine the way "
+                      "install.sh's comes from --engine / --no-engine")
+    for text, where, flag in ((sh, "install.sh", "--no-engine"), (ps1, "install.ps1", "-NoEngine"),
+                              (cmd, "install.cmd", "-NoEngine")):
+        if flag not in text:
+            engine.append(f"{where}: {flag} is not offered — the fetch cannot be refused there")
+    for text, where in ((sh, "install.sh"), (ps1, "install.ps1")):
+        if "fetch-binary --tag" not in text:
+            engine.append(f"{where}: no `fetch-binary --tag` — the archive's name and its digest are "
+                          "the method's to compute, not an installer's")
+    if not re.search(r'^\s*4\)', sh, re.M) or "$engineRc -eq 4" not in ps1:
+        engine.append("the meaning of exit 4 is not carried by both — a release with no archive for "
+                      "this platform must be said out loud, not read as a failure")
+    if engine:
+        problems.extend(engine)
+    else:
+        checked.append("all three agree on the desk engine: fetched only where there is no .NET SDK, "
+                       "by the method's own fetch-binary, exit 4 = this release carries none")
+
     # 6. the TAG the world is told to paste. HUB-030 moved the one-liners off `main`, and a pinned
     # URL is only worth pinning while it is current: a stale one keeps handing new users a build
     # that is not the newest. Compared against the CHANGELOG's own top entry, which is what this

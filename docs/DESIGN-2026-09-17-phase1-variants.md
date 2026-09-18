@@ -213,8 +213,10 @@ Engine-independent steps first, on `wave-2026-09-17b`; each with its selftest, t
      the tag is not touched and the job fails. The rule and its conditions are hub `RELEASE-CHANNEL.md` §12: the tag is
      the gate, so no session runs `gh release` and nobody re-uploads a CI build. Any other platform builds from the .NET
      SDK on demand; `resonalyze_engine.py` runs a prebuilt engine (`AUTOSOUND_RESONALYZE_ENGINE`, or `install-binary
-     --from <zip>` into a folder per pin and platform) before it reaches for the SDK. Still open: the installers
-     fetching the file for their platform (SKL-041's follow-up).
+     --from <zip>` into a folder per pin and platform) before it reaches for the SDK. **The installers fetch it**
+     (2026-09-18, TODO S-020): `fetch-binary --tag vX.Y.Z` computes the name from the pin and the platform, checks
+     `SHA256SUMS` and installs it; all three installers do it only where there is no .NET SDK (`--engine` /
+     `--no-engine` override), and a release with no archive for that pair is said out loud. Not run on Windows yet.
 6. ~~**Scene presets** (RES-011, hub #161).~~ Done 2026-09-17: `rew_tool/scene_presets.py` — from the ledger version the base
    stands in after 2c and the near-side cut Phase 1 gave it, one preset per rung (0.15 / 0.20 / 0.25 / 0.30 ms): the
    near side later by t on the device's grid, its cut reduced to max(0, cut − 16 t), both channels of the pair trimmed

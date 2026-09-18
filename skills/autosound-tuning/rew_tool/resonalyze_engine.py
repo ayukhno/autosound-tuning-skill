@@ -75,6 +75,13 @@ GOLDEN_DIR = os.path.join(ENGINE_DIR, "golden")
 ENGINE_PIN = "b0ce9fb"
 #: An engine executable named by the person, ahead of everything else.
 ENGINE_ENV = "AUTOSOUND_RESONALYZE_ENGINE"
+#: Where a tag's release keeps the prebuilt engines. The file NAME is computable -- that is what hub `RELEASE-CHANNEL.md`
+#: §12 requires it for -- so nothing here lists a release or picks an asset: pin and platform say which file, and
+#: `SHA256SUMS` beside it says whether what arrived is that file.
+RELEASE_DOWNLOAD = "https://github.com/ayukhno/autosound-tuning-skill/releases/download"
+SUMS_NAME = "SHA256SUMS"
+#: ~30 MB over whatever line the person has, so not the 20 s a form gets.
+FETCH_TIMEOUT_S = 180
 
 LAYOUT_CONTRACT = "autosound.resonalyze-layout.v1"
 RESULT_CONTRACT = "autosound.resonalyze-result.v1"
@@ -196,6 +203,83 @@ def install_binary(source):
         raise SystemExit(f"{source}: holds no {_exe_name()} -- a build for another platform? this machine is {rid()}")
     os.chmod(exe, 0o755)
     return exe
+
+
+def archive_name(engine_pin=None, runtime_id=None):
+    """`resonalyze-engine-<pin>-<rid>.zip` -- the name hub `RELEASE-CHANNEL.md` §12 holds the release job to."""
+    return f"resonalyze-engine-{engine_pin or ENGINE_PIN}-{runtime_id or rid()}.zip"
+
+
+def _http_get(url, timeout=FETCH_TIMEOUT_S):
+    """`(bytes, None)` or `(None, why)`. A 404 is a WHY, not an exception: a tag whose run attached nothing, and a
+    platform nobody builds for, are both ordinary -- the caller then says which way it went and builds from the SDK."""
+    import ssl
+    import urllib.error
+    import urllib.request
+    try:
+        import certifi
+        context = ssl.create_default_context(cafile=certifi.where())
+    except Exception:  # noqa: BLE001 -- no certifi: the system's store is what there is
+        context = ssl.create_default_context()
+    try:
+        with urllib.request.urlopen(url, timeout=timeout, context=context) as response:
+            return response.read(), None
+    except urllib.error.HTTPError as e:
+        return None, f"HTTP {e.code}"
+    except Exception as e:  # noqa: BLE001 -- a name that does not resolve, a proxy, a timeout: all "not reachable"
+        return None, str(e) or e.__class__.__name__
+
+
+def _sum_for(sums_text, name):
+    """The digest `SHA256SUMS` records for `name`, or None. The job writes `sha256sum ./*.zip`, so the path is `./name`."""
+    for line in (sums_text or "").splitlines():
+        parts = line.split()
+        if len(parts) == 2 and os.path.basename(parts[1]) == name:
+            return parts[0].lower()
+    return None
+
+
+def fetch_binary(tag, get=_http_get):
+    """Fetch THIS pin and platform's prebuilt engine from `tag`'s release, check it, install it.
+
+    `{"status": ..., "detail": ...}`, and the status is the whole point:
+
+    * `installed` -- the digest matched `SHA256SUMS` and the engine is where `engine_command` looks;
+    * `absent` -- that release carries no archive for this pin and platform. Ordinary, not an error: the engine pin
+      moves with the submodule rather than with the tag, and only three platforms are built. The SDK is the way then,
+      and a caller must SAY which way it went rather than fall through in silence;
+    * `unreachable` -- nothing answered.
+
+    A file that ARRIVES and whose digest disagrees is REFUSED (`SystemExit`), never installed: the one outcome worse
+    than no engine is a binary nobody can account for.
+    """
+    name = archive_name()
+    base = f"{RELEASE_DOWNLOAD}/{tag}"
+    sums, why = get(f"{base}/{SUMS_NAME}")
+    if sums is None:
+        status = "absent" if str(why).startswith("HTTP 404") else "unreachable"
+        return {"status": status, "name": name, "tag": tag,
+                "detail": f"no {SUMS_NAME} on {tag} ({why})" if status == "absent"
+                          else f"{SUMS_NAME} on {tag} did not answer ({why})"}
+    want = _sum_for(sums.decode("utf-8", "replace"), name)
+    if not want:
+        return {"status": "absent", "name": name, "tag": tag,
+                "detail": f"{tag} carries no {name} (this machine is {rid()}, the engine pin {ENGINE_PIN})"}
+    blob, why = get(f"{base}/{name}")
+    if blob is None:
+        status = "absent" if str(why).startswith("HTTP 404") else "unreachable"
+        return {"status": status, "name": name, "tag": tag,
+                "detail": f"{name} is listed in {SUMS_NAME} but did not download ({why})"}
+    got = hashlib.sha256(blob).hexdigest()
+    if got != want:
+        raise SystemExit(f"{name} from {tag} does not match {SUMS_NAME}: {got} != {want} -- nothing was installed")
+    with tempfile.TemporaryDirectory() as tmp:
+        zip_path = os.path.join(tmp, name)
+        with open(zip_path, "wb") as fh:
+            fh.write(blob)
+        exe = install_binary(zip_path)
+    return {"status": "installed", "name": name, "tag": tag, "sha256": got, "exe": exe,
+            "detail": f"{name} from {tag}, sha256 checked, in {installed_dir()}"}
 
 
 def build(fetch=True, dotnet=None):
@@ -1242,6 +1326,70 @@ def _selftest():
             os.environ[ENGINE_ENV] = saved
     assert driver_type("center", True) == "Midrange" and driver_type("rear", True) == "Woofer"
 
+    # ── fetching the prebuilt engine from a tag's release (TODO S-020; hub `RELEASE-CHANNEL.md` §12) ──
+    # The network is faked. What is held here: the NAME is computed from the pin and this machine, a
+    # file that does not match `SHA256SUMS` is refused rather than installed, and "this release has
+    # none for you" is an ANSWER -- the installers print it and build from the SDK instead.
+    import io as _io
+    import zipfile as _zipfile
+    _buf = _io.BytesIO()
+    with _zipfile.ZipFile(_buf, "w") as _z:
+        _z.writestr(_exe_name(), "#!/bin/sh\nexit 0\n")
+        _z.writestr("License.md", "the fork's licence rides inside the archive")
+    _archive = _buf.getvalue()
+    _name = archive_name()
+    assert _name == f"resonalyze-engine-{ENGINE_PIN}-{rid()}.zip", _name
+    _digest = hashlib.sha256(_archive).hexdigest()
+    # `sha256sum ./*.zip` writes the path as `./<name>`, and the release carries the other platforms too.
+    _sums = (f"{_digest}  ./{_name}\n"
+             f"{'0' * 64}  ./resonalyze-engine-{ENGINE_PIN}-somewhere-else.zip\n").encode("utf-8")
+
+    def _server(sums_reply, zip_reply):
+        def get(url, timeout=None):
+            if url.endswith(SUMS_NAME):
+                return sums_reply
+            return zip_reply if url.endswith(_name) else (None, "HTTP 404")
+        return get
+
+    def _with_temp_home(fn):
+        real = globals()["installed_dir"]
+        with tempfile.TemporaryDirectory() as home:
+            globals()["installed_dir"] = lambda: os.path.join(home, "engines", ENGINE_PIN, rid())
+            try:
+                return fn(), home
+            finally:
+                globals()["installed_dir"] = real
+
+    def _installing():                     # the checks live inside: the temporary home is gone on the way out
+        got = fetch_binary("v9.9.9", get=_server((_sums, None), (_archive, None)))
+        return dict(got, exe_there=os.path.isfile(got["exe"]), exe_name=os.path.basename(got["exe"]),
+                    licence_there=os.path.isfile(os.path.join(installed_dir(), "License.md")))
+    got, _ = _with_temp_home(_installing)
+    assert got["status"] == "installed" and got["sha256"] == _digest and got["name"] == _name, got
+    assert got["exe_there"] and got["exe_name"] == _exe_name() and got["licence_there"], got
+
+    # A file that ARRIVES and does not match is the one case that must not degrade quietly.
+    def _mismatched():
+        try:
+            fetch_binary("v9.9.9", get=_server((_sums, None), (b"another build entirely", None)))
+        except SystemExit as e:
+            return str(e), glob.glob(os.path.join(installed_dir(), "*"))
+        raise AssertionError("a zip that does not match SHA256SUMS was accepted")
+    (said, left), _ = _with_temp_home(_mismatched)
+    assert SUMS_NAME in said and "nothing was installed" in said, said
+    assert not left, left
+    # A tag whose run attached nothing, a pin no archive was built for, a platform nobody builds:
+    # one answer, and it names this machine so the line a person reads says why.
+    absent, _ = _with_temp_home(lambda: fetch_binary("v3.0.56", get=_server((None, "HTTP 404"), (None, "HTTP 404"))))
+    assert absent["status"] == "absent" and SUMS_NAME in absent["detail"], absent
+    unlisted, _ = _with_temp_home(lambda: fetch_binary("v9.9.9", get=_server((b"%s  ./nothing-of-ours.zip\n" % (b"0" * 64), None), (None, "HTTP 404"))))
+    assert unlisted["status"] == "absent" and rid() in unlisted["detail"] and ENGINE_PIN in unlisted["detail"], unlisted
+    down, _ = _with_temp_home(lambda: fetch_binary("v9.9.9", get=_server((None, "<urlopen error [Errno 8]>"), (None, "x"))))
+    assert down["status"] == "unreachable", down
+    # Listed, but the file itself does not come down: still not an error to stop an install over.
+    half, _ = _with_temp_home(lambda: fetch_binary("v9.9.9", get=_server((_sums, None), (None, "HTTP 404"))))
+    assert half["status"] == "absent" and _name in half["detail"], half
+
     rows = [{"code": "sw", "role": "sub"}, {"code": "w-L", "role": "woofer"}, {"code": "w-R", "role": "woofer"},
             {"code": "m-L", "role": "midrange", "fs_hz": {"value": 194.8}},
             {"code": "m-R", "role": "midrange", "fs_hz": {"value": 196.7}},
@@ -1474,7 +1622,9 @@ def _selftest():
           "the window-default layout; a tweeter corner under its Fs floor refused with 1044 Hz named; the rear fill "
           "that fits the Helix (12 ms); a mid corner under its floor re-searched from 217 Hz and a centre's set to "
           "990 Hz; wishes as probes and tunes, the broken and the unsure not computed; a tune's best at the window's "
-          "edge and in CAUTION said so; the cross-OS tolerance; and the PEQ Q the same on both sides")
+          "edge and in CAUTION said so; the cross-OS tolerance; the PEQ Q the same on both sides; and the prebuilt "
+          "engine fetched by its computed name with the digest checked -- a mismatch refused with nothing installed, "
+          "a release that carries none answered rather than failed")
     return 0
 
 
@@ -1500,6 +1650,8 @@ def main(argv=None):
     sub.add_parser("build", help="fetch the submodule when needed and build the wrapper")
     p = sub.add_parser("install-binary", help="install a prebuilt engine for this pin and platform")
     p.add_argument("--from", dest="source", required=True, metavar="ZIP|DIR")
+    p = sub.add_parser("fetch-binary", help="fetch this pin and platform's prebuilt engine from a tag's release")
+    p.add_argument("--tag", required=True, metavar="vX.Y.Z", help="the tag whose release carries the archives")
     for name in ("run", "layout"):
         p = sub.add_parser(name)
         p.add_argument("project")
@@ -1529,6 +1681,11 @@ def main(argv=None):
     if a.cmd == "install-binary":
         print(f"  installed: {install_binary(a.source)}")
         return 0
+    if a.cmd == "fetch-binary":
+        got = fetch_binary(a.tag)
+        print(f"  {got['status']}: {got['detail']}")
+        # 0 installed · 4 nothing to install, and the caller says which way it went · 3 refused (above, loudly).
+        return 0 if got["status"] == "installed" else 4
     if a.cmd == "acceptance":
         return acceptance(a.set, a.project, keep=a.keep)
     if a.cmd == "smoke":

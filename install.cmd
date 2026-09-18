@@ -22,6 +22,9 @@ REM  options included:  install.cmd -Terminal   install.cmd -NoReviewer
 REM                     install.cmd -DryRun     install.cmd -Uninstall
 REM                     install.cmd -Channel beta   (candidates: the app, and a
 REM                                                  2nd copy of the method)
+REM                     install.cmd -NoEngine   install.cmd -Engine
+REM                                 (Phase 1's desk engine: fetched by default only
+REM                                  on a machine with no .NET SDK to build it from)
 REM
 REM  To pin versions, pass BOTH as one pair -- they are released and tested
 REM  together, and a mixed pair is untested:

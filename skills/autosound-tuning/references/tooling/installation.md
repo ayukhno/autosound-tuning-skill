@@ -17,6 +17,15 @@ clones the method at the newest `v3.*` release into `~/.claude/skills/.autosound
 * **Update:** run the same one-liner again; it moves the clone to the newest release.
 * **Options:** `install.sh --help` / `install.ps1 -Help` (the method only with `--terminal`, the
   GitHub backup with `--github`, the beta channel below).
+* **Phase 1's desk engine comes with it on a machine that cannot build one.** The engine is a
+  self-contained binary attached to the tag's own release (~30 MB, one per platform); the installer
+  fetches it **only when there is no .NET SDK** to build the wrapper from, checks it against the
+  release's `SHA256SUMS`, and says which way it went. `--engine` / `-Engine` fetches it anyway,
+  `--no-engine` / `-NoEngine` never. A release that carries no archive for this platform or this
+  engine pin — only `win-x64`, `win-arm64` and `osx-arm64` are built — is said out loud, and the
+  SDK route stands. By hand later, from the method's own folder:
+  `python3 rew_tool/resonalyze_engine.py fetch-binary --tag v3.0.57` (or `install-binary --from <zip>`
+  for a file you already have). `--uninstall` removes the engine with the rest.
 
 ---
 

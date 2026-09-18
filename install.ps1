@@ -38,6 +38,8 @@
 #   .\install.ps1 -NoReviewer         without the Gemini reviewer
 #   .\install.ps1 -GitHub             with the GitHub CLI, for the project backup (default: without)
 #   .\install.ps1 -WithOmp            with omp, which offers TCC every non-Claude model (default: without)
+#   .\install.ps1 -NoEngine           without Phase 1's desk engine (default: fetched only when this
+#   .\install.ps1 -Engine             machine has no .NET SDK to build it from; -Engine fetches anyway)
 #   .\install.ps1 -DryRun             say what it would do, change nothing
 #   .\install.ps1 -Yes                yes to every question; sign-ins are printed, not run
 #   .\install.ps1 -SkillRef v3.0.33   a specific skill version (default: the newest 3.x tag)
@@ -60,6 +62,8 @@ param(
     [switch]$NoOmp,     # the default since 2026-09-17; still accepted
     [switch]$GitHub,
     [switch]$NoGitHub,
+    [switch]$Engine,    # fetch the prebuilt desk engine even where the .NET SDK could build one
+    [switch]$NoEngine,  # never fetch it
     [switch]$DryRun,
     [switch]$Yes,
     [string]$SkillRef = "",
@@ -175,6 +179,8 @@ Autosound tuning -- installer for Windows
   install.ps1 -NoReviewer         without the Gemini reviewer
   install.ps1 -GitHub             with the GitHub CLI, for the project backup (default: without)
   install.ps1 -WithOmp            with omp, which offers TCC every non-Claude model (metered; default: without)
+  install.ps1 -NoEngine           without Phase 1's desk engine; -Engine fetches it even where the
+                                  .NET SDK could build it (default: fetched only when there is no SDK)
   install.ps1 -DryRun             say what it would do, change nothing
   install.ps1 -Yes                yes to every question; sign-ins are printed, not run
   install.ps1 -SkillRef v3.0.33   a specific skill version (default: the newest 3.x tag)
@@ -207,6 +213,13 @@ if ($WantOmp -and $Mode -ne "tcc") {
 }
 # gh only with -GitHub, no question on the way (the user, 2026-09-16) -- see the note in install.sh.
 $WantGitHub   = if ($GitHub) { "1" } elseif ($NoGitHub) { "0" } else { "auto" }
+# Phase 1's desk engine: "auto" fetches the prebuilt binary ONLY where there is no .NET SDK to build
+# one from -- the reasoning is in install.sh's note beside WANT_ENGINE, and both installers must make
+# the same call or a Mac and a PC end up with different machines.
+$WantEngine   = if ($Engine) { "1" } elseif ($NoEngine) { "0" } else { "auto" }
+# Where a fetched engine lands on Windows -- `resonalyze_engine.installed_dir()` owns this path
+# (%LOCALAPPDATA%); the line here is the uninstaller's.
+$EngineHome   = Join-Path $env:LOCALAPPDATA "autosound\engines"
 
 # -- small tools ------------------------------------------------------------------------------
 function Say  { param($m) Write-Host "  $m" }
@@ -504,6 +517,12 @@ if ($Uninstall) {
     if (Test-Path $SkillBetaSrc) {
         Say "removing the beta channel's copy of the method"
         Run { Remove-Item $SkillBetaSrc -Recurse -Force } "remove beta checkout" | Out-Null
+    }
+    # Phase 1's desk engine, one folder per pin and platform. Nothing but the method writes there,
+    # and ~30 MB left behind is not a courtesy -- it is a binary nobody can account for later.
+    if ($EngineHome -and (Test-Path $EngineHome)) {
+        Say "removing Phase 1's desk engine ($(Pretty $EngineHome))"
+        Run { Remove-Item $EngineHome -Recurse -Force } "remove the desk engine" | Out-Null
     }
 
     $uv = Find-Bin uv
@@ -958,6 +977,43 @@ if ($DryRun -and -not (Test-Path $reqs)) {
             # "pip failed" with everything working is the kind of thing people re-run for hours.
             Say "  (pip reported an error, but numpy and scipy import fine -- already installed)"
         }
+    }
+}
+
+# -- Phase 1's desk engine ----------------------------------------------------------------------
+# Two ways to have one, and the method takes whichever is there: the prebuilt archive attached to
+# the tag's own release (~30 MB, nothing else needed) or the .NET SDK, which builds the wrapper on
+# first use. The method computes the file's name from its own engine pin and this platform, checks
+# what arrives against the release's SHA256SUMS and refuses a file that does not match -- so this
+# step names the tag and reads back what the method says it did. Same decision as install.sh.
+Step "Phase 1's desk engine"
+$EnginePy = Join-Path $SkillHome "rew_tool\resonalyze_engine.py"
+$HaveDotnet = (Have dotnet) -or (Test-Path (Join-Path $HOME ".dotnet\dotnet.exe"))
+if ($WantEngine -eq "0") {
+    Say "-NoEngine: not fetched. It builds from the .NET SDK on first use, or later with"
+    Say "  `"$Py3`" `"$EnginePy`" fetch-binary --tag $SkillRef"
+} elseif ($WantEngine -eq "auto" -and $HaveDotnet) {
+    Say "the .NET SDK is here -- the engine builds from the method's own checkout on first use"
+    Say "(-Engine fetches the prebuilt one instead: no build, no SDK needed)"
+} elseif (-not (Test-Path $Py3)) {
+    Warn "no python3 -- the engine cannot be fetched; the method's tools cannot run either (above)"
+} elseif ($DryRun) {
+    Say "would run: python3 $(Pretty $EnginePy) fetch-binary --tag $SkillRef"
+} elseif (-not (Test-Path $EnginePy)) {
+    Warn "no $(Pretty $EnginePy) -- the method's checkout is not where this script expects it;"
+    Warn "the engine was not fetched, and Phase 1's desk step will ask for one when it is reached"
+} else {
+    Say "~30 MB for $SkillRef, checked against the release's SHA256SUMS"
+    $global:LASTEXITCODE = 0
+    & $Py3 $EnginePy fetch-binary --tag $SkillRef
+    $engineRc = $LASTEXITCODE
+    # 0 installed (the method printed where it landed) · 4 this release carries none for this
+    # machine · anything else, something went wrong and the install carries on regardless.
+    if ($engineRc -eq 4) {
+        Say "so the engine builds from the .NET SDK when there is one; nothing else is affected"
+    } elseif ($engineRc -ne 0) {
+        Warn "the engine was not fetched (code $engineRc) -- the method is installed and works;"
+        Warn "Phase 1's desk step is the part that waits for an engine"
     }
 }
 

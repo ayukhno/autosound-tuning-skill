@@ -511,7 +511,7 @@ says "the delete will come back to you".
 is the user's by design.
 
 ## S-020 · The installers can fetch the engine archive now that a release carries it
-**Status**: open 2026-09-17 · the archives exist as of `v3.0.57`; SKL-041's own follow-up, named open in `docs/DESIGN-2026-09-17-phase1-variants.md` §5c
+**Status**: doing 2026-09-18 · built on `wave-2026-09-18`, the three decisions taken with the user: fetch only where there is no .NET SDK, `--engine` / `--no-engine` to override, a missing archive said out loud. `python3 skills/autosound-tuning/rew_tool/resonalyze_engine.py fetch-binary --tag v3.0.57` → installed, sha256 checked; `… resonalyze_engine.py smoke` then ran the whole synthetic set on the FETCHED engine; `bash install.sh --dry-run --terminal --engine` and `--no-engine` print the two branches; `python3 scripts/installer-consistency.py` (check 5c) holds the three installers to one decision. **Left, and it is what the Done-when asks for:** the installer's own step on a machine with no SDK — the Windows VM, on the tag this lands in
 
 **Due when:** someone installs the method on a machine without the .NET SDK and wants Phase 1's desk
 step. Not before — a person with the SDK loses nothing today.
