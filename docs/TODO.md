@@ -546,12 +546,12 @@ install DOES:
 Done when an install on a machine without the SDK ends with a working prebuilt engine, the choice is
 the person's, and `installer-consistency.py` holds the three installers to the same decision.
 
-## S-021 · Phase 1's variants run end to end on a fresh system
+## S-021 · Phase 1's variants run end to end on a fresh system, and what a wish really costs
 
-**Status**: waiting 2026-09-18 · the last of issue #38's three open pieces, split off at the user's
-word so the other two are not held behind it. Waiting for the user's test on the tag this wave lands
-in; the software side is in place (`docs/DESIGN-2026-09-17-phase1-variants.md` §6: 1–4, 5a–5c, 6 all
-done, S-020 the last of them).
+**Status**: waiting 2026-09-18 · issue #38's two remaining pieces, in one item at the user's word:
+the end-to-end run, and the probe-vs-full-variant question the run answers (§6, 5b). Waiting for the
+user's test on the tag this wave lands in; the software side is in place
+(`docs/DESIGN-2026-09-17-phase1-variants.md` §6: 1–4, 5a–5c, 6 all done, S-020 the last of them).
 
 **Due when:** now — it waits for a run, not for work.
 
@@ -578,8 +578,19 @@ number that has to be explained away. **What would say it does not:** a step tha
 run it, a refusal whose nearest allowed setting is wrong for the car, or a variant nobody can choose
 between because the description does not say what it costs.
 
-**Known gap going in, and it is issue #38's own second piece** (`DESIGN-2026-09-17-phase1-variants.md`
-§6, 5b): a wish with a corner is read as a PROBE — that junction with its own delay — not as a full
-variant with its own Auto delay across the chain. So "what this wish costs" is exact at the junction
-and approximate for the whole configuration. Worth knowing when a variant is judged in the test;
-it is not a reason to hold the run.
+**6. The question this run also answers — issue #38's second piece** (`DESIGN-2026-09-17-phase1-variants.md`
+§6, 5b). A wish with a corner is read as a PROBE: that one junction, each side after its own delay
+(`rew_tool/resonalyze_engine.py` `wish_items`, `engines/resonalyze/JunctionStage.cs` `Probe`). It is
+NOT a full variant with its own Auto delay across the chain, so "what this wish costs" is exact at
+the junction and approximate for the whole configuration. On the Passat the probe said BE24 1050 Hz
+at −1.25 dB against the best and BW12 110 Hz at +9.40 dB; how far those move when the delays are
+re-laid across the chain is not measured.
+
+**So the test watches one thing here: could the tuner choose?** If the probe's number was enough to
+pick a variant and the control measurement in Phase 3 did not contradict it, the probe stays as it
+is and this piece closes with the run. If the choice was made on a number the whole configuration
+then did not honour — the wish's variant behaving differently once every delay moved — that is the
+trigger to build the full variant: the wish written into the settings, Auto delay over the chain as
+`run`'s own second pass does it, and a fifth golden beside the four in `engines/resonalyze/golden/`
+(`passat-ir-v7_49.wishes.json`, on the set the others were made on) plus a wish case in `smoke` for
+CI. Only then, and as its own item — this one is a run, not work.
