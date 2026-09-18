@@ -58,11 +58,20 @@ _ASSET_PREFIX = f"https://raw.githubusercontent.com/{FEEDBACK_REPO}/{ASSET_BRANC
 #: the **Upgrading** note of the tag that carries it; the selftest pins the surface so it breaks here first.
 FORM_POST_URL = ("https://docs.google.com/forms/d/e/"
                  "1FAIpQLSdMzITv6Rzh8PWITy5QWc3xQMcAn9aDl1k0QbpZykHEQd6A4g/formResponse")
-FORM_FIELD_SENDER = "entry.240346646"      # «Від кого», required: a name and a contact, so the Arbiter can answer
-FORM_FIELD_KIND = "entry.2096497360"       # «Тип», required
-FORM_FIELD_IMPACT = "entry.42935929"       # «Наскільки заважає налаштуванню», asked of a problem
-FORM_FIELD_MESSAGE = "entry.970390217"     # «Повідомлення», required; Markdown travels as typed
-FORM_FIELD_VERSIONS = "entry.1476583291"   # «Версії»
+FORM_FIELD_SENDER = "entry.240346646"      # required: a name and a contact, so the Arbiter can answer
+FORM_FIELD_KIND = "entry.2096497360"       # required
+FORM_FIELD_IMPACT = "entry.42935929"       # asked of a problem
+FORM_FIELD_MESSAGE = "entry.970390217"     # required; Markdown travels as typed
+FORM_FIELD_VERSIONS = "entry.1476583291"
+#: What the form CALLS each question, in its order, keyed by the question id -- so the dict
+#: `form_answers()` returns can be labelled straight, without a second table anywhere. Exported
+#: because a report the form did not take goes to the clipboard instead, and the lines there are
+#: read beside the sheet, whose columns wear exactly these words (hub SCR-057: until now TCC wrote
+#: them from its own copy). The words are the form's Ukrainian, not a translation: TCC shows its
+#: four languages for what a person CHOOSES, while a column's name belongs to the form.
+FORM_LABELS = {FORM_FIELD_SENDER: "Від кого", FORM_FIELD_KIND: "Тип",
+               FORM_FIELD_IMPACT: "Наскільки заважає налаштуванню",
+               FORM_FIELD_MESSAGE: "Повідомлення", FORM_FIELD_VERSIONS: "Версії"}
 #: The form's own words: a choice it does not list is not an answer it takes.
 FORM_KINDS = {"problem": "Проблема", "wish": "Побажання", "feedback": "Відгук", "test": "Тест"}
 #: What a PERSON's report is. `test` is for a probe of the channel: its row is marked, so nothing needs cleaning.
@@ -561,7 +570,8 @@ def _selftest():
     # rename is not an exception but a form route that quietly disappears from TCC's window.
     surface = ("FORM_POST_URL", "FORM_FIELD_SENDER", "FORM_FIELD_KIND", "FORM_FIELD_IMPACT",
                "FORM_FIELD_MESSAGE", "FORM_FIELD_VERSIONS", "FORM_KINDS", "FORM_IMPACTS",
-               "FORM_PERSON_KINDS", "FORM_TIMEOUT_S", "form_answers", "verify_form_reply")
+               "FORM_PERSON_KINDS", "FORM_TIMEOUT_S", "FORM_LABELS", "form_answers",
+               "verify_form_reply")
     gone = [name for name in surface if name not in globals()]
     assert not gone, f"autosound-tcc asks the gate for these by name: {gone} -- say the move in the Upgrading note"
     # The KEYS are what TCC labels in four languages; the words are what the sheet stores. A key it
@@ -570,6 +580,12 @@ def _selftest():
     assert tuple(FORM_IMPACTS) == ("stops", "workaround", "none"), FORM_IMPACTS
     assert FORM_PERSON_KINDS == ("problem", "wish", "feedback"), FORM_PERSON_KINDS
     assert isinstance(FORM_TIMEOUT_S, (int, float)) and FORM_TIMEOUT_S > 0, FORM_TIMEOUT_S
+    # Every answer the form takes has a label, and no label names a question that is not asked --
+    # checked against `form_answers` rather than against a copy of the ids.
+    full = form_answers("a", "problem", "b", "stops", "v")
+    assert set(full) <= set(FORM_LABELS) and set(FORM_LABELS) == {
+        FORM_FIELD_SENDER, FORM_FIELD_KIND, FORM_FIELD_IMPACT, FORM_FIELD_MESSAGE, FORM_FIELD_VERSIONS}, FORM_LABELS
+    assert all(str(label).strip() for label in FORM_LABELS.values()), FORM_LABELS
     # TCC calls the verifier itself, so its (ok, detail) pair is part of the surface too.
     ok, detail = verify_form_reply(200, f'<a href="https://docs.google.com/forms/d/e/x/viewform?{FORM_ACCEPTED_MARKER}">')
     assert ok is True and isinstance(detail, str) and detail, (ok, detail)
@@ -586,8 +602,8 @@ def _selftest():
         else f"{name}={globals()[name]!r}"
         for name in surface)
     digest = hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()[:16]
-    assert digest == "0b9e64d5aeed03ad", (
-        f"the form's surface changed (digest {digest}, was 0b9e64d5aeed03ad). TCC reads these at run time and "
+    assert digest == "8e0d1b84d7aae4d0", (
+        f"the form's surface changed (digest {digest}, was 8e0d1b84d7aae4d0). TCC reads these at run time and "
         "degrades silently -- name the move in the CHANGELOG's Upgrading note, then put the new digest here:\n"
         + fingerprint)
 
