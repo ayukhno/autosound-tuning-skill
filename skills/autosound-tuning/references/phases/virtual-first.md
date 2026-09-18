@@ -158,7 +158,23 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
   corner by the tuner (the best that wish can do, held to the same limits). The per-driver candidates stay
   beside it (`xover_candidates` → `xover_select`, `select_neighbor_pair`, every corner through `crossover_checks`).
   **At most three on the table**: one mathematical and up to two from the wishes; more is what the
-  Resonalyze app is for. The choice is made at 1.7, after the sums are predicted. **Two leaders** (hub `RES-014`): beside the engine's best, the alternative by the experimental group-delay term — the crossover pair's swing against the Blauert & Laws threshold at each junction, 1 dB per ms over it, clamped below 500 Hz — shown with each junction's swing/threshold; the run continues with the engine's leader, the alternative's edges are on the table for the tuner.
+  Resonalyze app is for.
+  - **The engine is not required, and nobody is made to use it.** It is a binary the installer fetches
+    only on a machine with no .NET SDK, and refuses to fetch on `--no-engine` / `-NoEngine`; nothing in
+    the method turns it on by itself. Without one, `resonalyze_engine.py` says so and stops — *"no
+    engine: no prebuilt one in `<that folder>`, and no .NET SDK to build one"* — it does not fall back
+    silently, because a proposal from a tool that did not run is the one thing worse than no proposal.
+    **Phase 1 then runs the per-driver way, which is the path this method had before the engine and
+    still keeps in full:** candidates per driver (`xover_candidates` → `xover_select`, every corner
+    through `crossover_checks` and the wish check), delays and polarity joint by joint bottom-up
+    (`predict --align` with the RES-013/RES-016 guard at 1.5), levels from the geometry and then from
+    the measurement (1.6), the sums and the description (1.7), EQ by `eq_propose`, the scene presets by
+    `scene_presets`. What is NOT available without the engine, and should be said to the tuner rather
+    than worked around: the whole configuration proposed at once (every junction, both sides, the centre
+    and the rear as their own zones), Resonalyze's Auto delay staging and its gain balance, and what a
+    wish costs — neither the junction probe nor the whole-configuration variant. Those are proposals,
+    not measurements: a tune done without them is a tune done the way every tune here was done until
+    2026-09-17. The choice is made at 1.7, after the sums are predicted. **Two leaders** (hub `RES-014`): beside the engine's best, the alternative by the experimental group-delay term — the crossover pair's swing against the Blauert & Laws threshold at each junction, 1 dB per ms over it, clamped below 500 Hz — shown with each junction's swing/threshold; the run continues with the engine's leader, the alternative's edges are on the table for the tuner.
 - **1.4** **coarse EQ per driver — BEFORE the delays** (the user's decision, 2026-09-17; Resonalyze's
   order too): the first part of `eq_propose` (`--part 1`) — resonances per driver group — cuts of minimum-phase
   peaks that stay across the positions, away from the junctions, Q no narrower than the ellipsoid's
