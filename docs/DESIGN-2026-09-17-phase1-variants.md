@@ -200,8 +200,18 @@ Engine-independent steps first, on `wave-2026-09-17b`; each with its selftest, t
      CAUTION until 278 Hz); counted on one delay tier the rear fill had to drop 15 → 12.5 ms, on the Helix's two tiers
      (20.82 + 20.82 ms) it stays 15; the user's sentence reads "BE4
      between tweeter and mid" at its best as BE24 1050 Hz, −1.25 dB against what stands but in CAUTION on the tweeters,
-     and "BW2 between sub and midbass" as BW12 110 Hz at the window's edge, +9.40 dB. Not measured yet: a wish's full
-     variant with its own Auto delay (the probe gives the junction's own delay only).
+     and "BW2 between sub and midbass" as BW12 110 Hz at the window's edge, +9.40 dB. **A wish's full variant is built** (2026-09-18, the
+     user's word; the piece issue #38 had left): a third pass per wish — what stands after the repairs given rather
+     than searched, the wish's edges at its own junction, **Auto delay again over the whole chain**, every junction
+     then read as it stands (`"probe": []`). On the Passat: "BE4 between tweeter and mid" gains 0.16 dB left /
+     0.60 dB right of sum loss at its junction and moves eight delays while **flipping both tweeters' polarity**;
+     "BW2 between sub and midbass" costs 0.41 / 0.32 dB over the chain and moves the whole chain by about 3.9 ms
+     (the sub's own delay 0.00 → 1.03 ms). The probe's direction agreed with the configuration's on both; its
+     magnitude is a different quantity (a junction ranking score, not a sum loss), and the delays and the polarity it
+     cannot show are what the tuner would have met in the car. Held by the synthetic `smoke` (CI) and by the module's
+     offline selftest; NOT by a golden — `acceptance` models one engine run against recorded values and a variant is a
+     sequence of three, so a golden for it means teaching that harness the sequence. Worth doing when a second car
+     needs the same guard.
    - **5c.** Per-platform binaries for installs (§5). Done 2026-09-17 (hub SKL-041 #166 → HUB-070 #169, the user's
      decision): `.github/workflows/engine-binaries.yml` builds a single-file self-contained engine (≈80 MB) for **three**
      platforms — win-x64, win-arm64 and osx-arm64, each ON its own runner and each RUN through the synthetic set there

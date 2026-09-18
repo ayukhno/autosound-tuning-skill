@@ -797,8 +797,148 @@ def wish_items(rows, layout, result, channels, xo):
             if floor:
                 tune["minHz"] = max(float(tune.get("minHz") or 0.0), floor)
             item["tune"] = tune
+            # A tune's junction is read AS IT STANDS as well (`"probe": []` is the reading with no variant): without
+            # it this junction has no "before", and the whole-configuration variant below could say what every other
+            # junction cost and nothing about the wish's own.
+            item["probe"] = []
         items.append(item)
     return items, skipped
+
+
+def baseline_junctions(chain, named=()):
+    """Every junction of the chain read AS IT STANDS -- `"probe": []` is a reading with no variant, since the probe's
+    first entry is always the configuration itself. Junctions a wish already names are left to the wish's own item, so
+    no junction is read twice."""
+    seen = {(j["lower"], j["upper"]) for j in named}
+    return [{"lower": lo, "upper": up, "purpose": "as it stands", "probe": []}
+            for lo, up in chain if (lo, up) not in seen]
+
+
+def junction_table(result):
+    """This configuration by junction: `{(lower, upper): {"afterDelay": {side: lossDb}, "shared": {side: scoreDb}}}`.
+
+    The numbers are the probe's FIRST entry, which is the junction as it stands whatever variants follow it -- so one
+    reader serves the best and a wish's variant alike. `afterDelay` is what a junction costs once its two blocks are
+    aligned; `shared` is the same pair read on the band they share."""
+    table = {}
+    for j in result.get("junctions") or []:
+        entries = ((j.get("probe") or {}).get("entries")) or []
+        if not entries:
+            continue
+        base = entries[0]
+        table[(j["lower"], j["upper"])] = {
+            "cornerHz": base.get("cornerHz"),
+            "shared": {side["side"]: side["scoreDb"] for side in base.get("sharedBandSides") or []},
+            "afterDelay": {a["side"]: a["lossDb"] for a in base.get("afterDelay") or []}}
+    return table
+
+
+def delay_map(result):
+    """`{channel: (delayMs, invertPolarity)}` from whichever Auto delay ran last."""
+    run = result.get("autoDelayAfterRepairs") or result.get("autoDelay") or {}
+    return {row["channel"]: (row.get("delayMs"), row.get("invertPolarity")) for row in run.get("result") or []}
+
+
+def wish_edges(item, read):
+    """The two facing edges a wish would put at its junction: from the probe it asked for, or from what its tune found.
+
+    `None` when there is nothing to build a variant from -- a tune that came back empty, a junction that errored."""
+    if item.get("probe"):
+        asked = item["probe"][0]
+        return {"highPass": asked.get("highPass"), "lowPass": asked.get("lowPass")}
+    best = ((read or {}).get("tune") or {}).get("best") or {}
+    if best.get("highPass") or best.get("lowPass"):
+        edge = best.get("highPass") or best.get("lowPass")
+        # A tune searches ONE crossover for both sides of the junction, as the window writes it back.
+        return {"highPass": best.get("highPass") or edge, "lowPass": best.get("lowPass") or edge}
+    return None
+
+
+def wish_variant_layout(second, result_b, item, edges, chain):
+    """The layout for ONE wish as a WHOLE CONFIGURATION, not as a junction read on its own.
+
+    What stands after the repairs is given as the crossovers (so nothing is searched again), this wish's edges are
+    written into its junction the way a repair writes a tuner's best, **Auto delay runs again over the whole chain**,
+    and every junction is read as it then stands. That is the difference from a probe: a probe holds the rest of the
+    configuration still and aligns the one junction; here every delay is free to move, which is what the tuner will
+    actually hear (`docs/DESIGN-2026-09-17-phase1-variants.md` §1.5, issue #38)."""
+    third = json.loads(json.dumps(second))
+    third["repairs"] = []
+    settings = {p["block"]: p for p in final_proposals(result_b)}
+    for b in third["blocks"]:
+        p = settings.get(b["name"])
+        if not p:
+            continue
+        b["crossover"] = {"kind": p["kind"], "highPass": p.get("highPass"), "lowPass": p.get("lowPass")}
+        if p.get("gainDb") is not None:
+            b["gainDb"] = p["gainDb"]
+        if b["name"] == item["upper"] and edges.get("highPass"):
+            b["crossover"]["highPass"] = edges["highPass"]
+        if b["name"] == item["lower"] and edges.get("lowPass"):
+            b["crossover"]["lowPass"] = edges["lowPass"]
+    third["junctions"] = baseline_junctions(chain)
+    return third
+
+
+def wish_variants(second, result_b, items, chain, channels=None, xo=None, dotnet=None, out_dir=None, run=None):
+    """Each computable wish run as its own whole configuration, and read against the best.
+
+    One engine run per wish -- the cost of the honest answer: a delay that moves at one junction moves what every
+    other junction is summing. Each entry carries its own junction's cost, what the OTHER junctions gained or lost,
+    the delays that moved, and a refusal when the wish does not fit the device.
+    """
+    run = run or (lambda layout, path: run_engine(layout, path, dotnet))
+    best = junction_table(result_b)
+    best_delays = delay_map(result_b)
+    reads = {(j["lower"], j["upper"], j.get("purpose")): j for j in result_b.get("junctions") or []}
+    out = []
+    for n, item in enumerate(items, start=1):
+        read = reads.get((item["lower"], item["upper"], item.get("purpose"))) or {}
+        entry = {"purpose": item.get("purpose"), "lower": item["lower"], "upper": item["upper"]}
+        if read.get("error"):
+            entry["not_built"] = read["error"]
+            out.append(entry)
+            continue
+        edges = wish_edges(item, read)
+        if not edges:
+            entry["not_built"] = "nothing to build a variant from: the wish named no corner and its tune found none"
+            out.append(entry)
+            continue
+        entry["edges"] = edges
+        layout = wish_variant_layout(second, result_b, item, edges, chain)
+        rc, result_c, err = run(layout, os.path.join(out_dir or tempfile.mkdtemp(prefix="resonalyze-wish-"),
+                                                     f"3-wish-{n}"))
+        entry["rc"] = rc
+        if result_c is None:
+            entry["not_built"] = f"the run wrote nothing (exit {rc}): {err.strip()[-200:]}"
+            out.append(entry)
+            continue
+        delay = result_c.get("autoDelayAfterRepairs") or result_c.get("autoDelay") or {}
+        if delay.get("overRange"):
+            entry["over_range"] = delay["overRange"]
+        table = junction_table(result_c)
+        entry["junctions"] = [{
+            "lower": lo, "upper": up, "cornerHz": (table.get((lo, up)) or {}).get("cornerHz"),
+            "afterDelayLossDb": (table.get((lo, up)) or {}).get("afterDelay") or {},
+            "deltaDb": {side: round(loss - (best.get((lo, up), {}).get("afterDelay") or {})[side], 2)
+                        for side, loss in ((table.get((lo, up)) or {}).get("afterDelay") or {}).items()
+                        if side in (best.get((lo, up), {}).get("afterDelay") or {})},
+            "wish": (lo, up) == (item["lower"], item["upper"])} for lo, up in chain]
+        now = delay_map(result_c)
+        moved = {}
+        for ch, (ms, _) in now.items():
+            was = best_delays.get(ch, (None, None))[0]
+            # The device's own grid is coarser than this, so a difference under 0.01 ms is not a move.
+            if was is not None and ms is not None and abs(ms - was) >= 0.01:
+                moved[ch] = {"was": was, "now": ms, "deltaMs": round(ms - was, 2)}
+        entry["delays_moved"] = moved
+        entry["polarity_flipped"] = [ch for ch, (_, inv) in now.items()
+                                     if ch in best_delays and bool(inv) != bool(best_delays[ch][1])]
+        entry["checks"] = check_result({"autoCrossover": {"result": final_proposals(result_c)}}, layout, channels, xo) \
+            if channels is not None else []
+        entry["settings"] = final_proposals(result_c)
+        out.append(entry)
+    return out
 
 
 def final_proposals(result):
@@ -827,6 +967,8 @@ def wish_costs(result, layout=None, channels=None, xo=None):
     blocks = {b["name"]: b for b in (layout or {}).get("blocks") or []}
     out = []
     for j in result.get("junctions") or []:
+        if j.get("purpose") == "as it stands":
+            continue      # read for the configuration's own table (`junction_table`), not asked for by a tuner
         entry = {"purpose": j.get("purpose"), "lower": j["lower"], "upper": j["upper"], "error": j.get("error")}
         probe = j.get("probe")
         if probe:
@@ -906,7 +1048,10 @@ def variants_from(layout, channels, xo, wishes=None, notes=(), problems=(), dotn
             crossover[key] = edge
         b["crossover"], b["gainDb"] = crossover, p["gainDb"]
     second["autoCrossover"] = {"run": False}
-    second["repairs"], second["junctions"] = repairs, items
+    chain = chain_pairs(result_a)
+    # The wishes' junctions, and then every other junction of the chain read as it stands: a wish's variant moves
+    # delays all along the chain, and "what it cost elsewhere" needs a before to be a number at all.
+    second["repairs"], second["junctions"] = repairs, items + baseline_junctions(chain, items)
     rc, result_b, err = run_engine(second, os.path.join(out_dir, "2-delays-and-wishes"), dotnet)
     first_fill, needed = second["autoDelay"]["rearFillOffsetMs"], None
     for _ in range(3):     # a repair moves the delays, so the fill that fits is read again after each run
@@ -935,6 +1080,12 @@ def variants_from(layout, channels, xo, wishes=None, notes=(), problems=(), dotn
                                 "delays that were never computed would mislead")
     out["checks_final"] = check_result({"autoCrossover": {"result": final_proposals(result_b)}}, second, channels, xo)
     out["costs"] = wish_costs(result_b, second, channels, xo)
+    out["chain"] = chain
+    out["best_junctions"] = {f"{lo} ↔ {up}": t for (lo, up), t in junction_table(result_b).items()}
+    # Each wish as a WHOLE configuration -- one engine run per wish, and only when the best itself came out clean:
+    # a variant read against delays that were never computed would be a number with nothing behind it.
+    if items and rc == 0:
+        out["full_variants"] = wish_variants(second, result_b, items, chain, channels, xo, dotnet, out_dir)
     final_delay = result_b.get("autoDelayAfterRepairs") or result_b.get("autoDelay")
     out["notes"] += notes_on({"autoCrossover": result_a.get("autoCrossover"), "autoDelay": final_delay})
     out["notes"] += split_notes(final_delay, second)
@@ -1032,6 +1183,44 @@ def render_variants(v):
                 lines.append(f"      {lim['verdict']}: {'; '.join(lim['why'])}")
     for said, verdict, why in v.get("wishes_skipped") or []:
         lines.append(f"  {said or '(a clause)'} -- {verdict}, not computed: {why}")
+    if v.get("full_variants"):
+        lines += ["", "  EACH WISH AS A WHOLE CONFIGURATION -- its edges written in, Auto delay run again over the "
+                      "chain, every junction then read as it stands. The probe above holds the rest of the "
+                      "configuration still; here every delay is free to move, which is what the tuner hears."]
+    for fv in v.get("full_variants") or []:
+        head = f"  {fv['purpose']} -- {fv['lower']} ↔ {fv['upper']}"
+        if fv.get("not_built"):
+            lines.append(f"{head}: no variant built ({fv['not_built']})")
+            continue
+        lines.append(f"{head}: {_junction_short(fv['edges'])}")
+        if fv.get("over_range"):
+            o = fv["over_range"]
+            lines.append(f"    Auto delay did not fit the device ({o.get('limitMs')} ms) -- this wish is not on offer "
+                         "as it stands")
+        totals = {}
+        for j in fv.get("junctions") or []:
+            loss = ", ".join(f"{side} {value:+.2f}" for side, value in sorted(j["afterDelayLossDb"].items()))
+            moved = ", ".join(f"{side} {d:+.2f}" for side, d in sorted(j["deltaDb"].items()))
+            for side, d in j["deltaDb"].items():
+                totals[side] = round(totals.get(side, 0.0) + d, 2)
+            mark = "  ← the wish" if j["wish"] else ""
+            corner = f"{j['cornerHz']:g} Hz" if j.get("cornerHz") else "--"
+            lines.append(f"    {j['lower']} ↔ {j['upper']} at {corner}: sum loss {loss or '--'}"
+                         + (f" ({moved} against the best)" if moved else "") + mark)
+        if totals:
+            lines.append("    over the chain's junctions, against the best: "
+                         + ", ".join(f"{side} {d:+.2f} dB" for side, d in sorted(totals.items()))
+                         + " -- a sum of per-junction losses, not a ranking")
+        if fv.get("delays_moved"):
+            lines.append("    delays that moved: " + ", ".join(
+                f"{ch} {m['was']:.2f} → {m['now']:.2f} ms ({m['deltaMs']:+.2f})"
+                for ch, m in sorted(fv["delays_moved"].items())))
+        else:
+            lines.append("    no delay moved by 0.01 ms or more -- at this junction the probe above was the whole story")
+        if fv.get("polarity_flipped"):
+            lines.append("    polarity flipped: " + ", ".join(sorted(fv["polarity_flipped"])))
+        for c in [c for c in fv.get("checks") or [] if c["verdict"] != "OK"]:
+            lines.append(f"    {c['block']} {c['edge']} {c['setting']} -- {c['verdict']}: {'; '.join(c['why'])}")
     if v.get("notes"):
         lines.append("")
         lines += [f"  ! {n}" for n in v["notes"]]
@@ -1299,11 +1488,22 @@ def smoke(dotnet=None, echo=print):
         assert delays["D Tweeter L"] > delays["B Woofer L"], delays
         probes = [pr for c in v["costs"] for pr in c.get("probes") or []]
         assert probes and set(probes[0]["scoreDeltaDb"]) == {"left", "right"}, v["costs"]
+        # The wish as a WHOLE configuration (issue #38): the third pass runs, reads every junction of the chain,
+        # marks the wish's own, and -- the reason the pass exists -- the delays it reports are its own, not the best's.
+        full = v["full_variants"]
+        assert len(full) == 1 and not full[0].get("not_built"), full
+        assert [(j["lower"], j["upper"]) for j in full[0]["junctions"]] == v["chain"], (full[0]["junctions"], v["chain"])
+        assert sum(1 for j in full[0]["junctions"] if j["wish"]) == 1, full[0]["junctions"]
+        assert full[0]["delays_moved"], "the wish moved no delay at all -- the probe would have been the whole story"
+        for ch, m in full[0]["delays_moved"].items():
+            assert abs(m["now"] - m["was"] - m["deltaMs"]) < 0.005, (ch, m)
+        assert set(v["best_junctions"]) == {f"{lo} ↔ {up}" for lo, up in v["chain"]}, v["best_junctions"]
         echo(render_variants(v))
         echo(f"  repairs planned: {len(v['repairs_planned'])}, fixes: {len(v['fixes'])}")
-    echo("smoke[resonalyze_engine] OK -- a synthetic sub + three-way front through both passes: a proposal per block, "
-         "every repair applied and nothing left under a floor, seven delays inside the range with the early tweeter "
-         "held back, and the wish read on both sides against the best")
+    echo("smoke[resonalyze_engine] OK -- a synthetic sub + three-way front through all three passes: a proposal per "
+         "block, every repair applied and nothing left under a floor, seven delays inside the range with the early "
+         "tweeter held back, the wish read on both sides against the best, and the same wish run as a whole "
+         "configuration -- every junction read after its own Auto delay, and the delays it moved named")
     return 0
 
 
@@ -1325,6 +1525,83 @@ def _selftest():
         else:
             os.environ[ENGINE_ENV] = saved
     assert driver_type("center", True) == "Midrange" and driver_type("rear", True) == "Woofer"
+
+    # ── a wish as a WHOLE configuration: the third pass's plumbing, with no engine (issue #38) ──
+    # What is held here is what the engine cannot say for us: the layout that goes out asks for the settings that
+    # STAND (not another search), carries the wish's edges at its own junction and nowhere else, reads every junction
+    # as it stands, and the answer that comes back is read against the best rather than against the probe.
+    def _edge(hz, fam="Bessel", slope=24):
+        return {"family": fam, "frequencyHz": float(hz), "slopeDbPerOctave": slope}
+
+    def _side(block_name, lp=None, hp=None, gain=0.0):
+        return {"block": block_name, "left": {"crossover": "LinkwitzRiley", "lowPass": lp, "highPass": hp, "gainDb": gain}}
+
+    def _probe(lower, upper, purpose, loss, corner=1000.0, extra=()):
+        entries = [{"label": "as it stands", "cornerHz": corner,
+                    "sharedBandSides": [{"side": "left", "scoreDb": 1.0}, {"side": "right", "scoreDb": 1.0}],
+                    "afterDelay": [{"side": "left", "lossDb": loss}, {"side": "right", "lossDb": loss}]}]
+        entries += list(extra)
+        return {"lower": lower, "upper": upper, "purpose": purpose, "probe": {"entries": entries}}
+
+    chain_pairs_fixed = [("A Sub", "B Woofer"), ("B Woofer", "C Mid")]
+    second_fixed = {"blocks": [{"name": "A Sub"}, {"name": "B Woofer"}, {"name": "C Mid"}],
+                    "autoCrossover": {"run": False}, "autoDelay": {"run": True},
+                    "repairs": [{"lower": "A Sub", "upper": "B Woofer"}], "junctions": []}
+    result_best = {
+        "settingsFinal": [_side("A Sub", lp=_edge(80, "LinkwitzRiley")), _side("B Woofer", hp=_edge(80, "LinkwitzRiley"),
+                          lp=_edge(500, "LinkwitzRiley"), gain=-2.0), _side("C Mid", hp=_edge(500, "LinkwitzRiley"))],
+        "junctions": [_probe("A Sub", "B Woofer", "as it stands", -0.20, 80.0),
+                      _probe("B Woofer", "C Mid", "wish: BW2 at 400", -0.50, 500.0)],
+        "autoDelayAfterRepairs": {"result": [{"channel": "B Woofer L", "delayMs": 2.00, "invertPolarity": False},
+                                             {"channel": "C Mid L", "delayMs": 3.00, "invertPolarity": False}]}}
+    result_variant = {
+        "settingsFinal": result_best["settingsFinal"],
+        "junctions": [_probe("A Sub", "B Woofer", "as it stands", -0.25, 80.0),
+                      _probe("B Woofer", "C Mid", "as it stands", -0.30, 400.0)],
+        "autoDelay": {"result": [{"channel": "B Woofer L", "delayMs": 2.00, "invertPolarity": False},
+                                 {"channel": "C Mid L", "delayMs": 3.40, "invertPolarity": True}]}}
+
+    sent = []
+
+    def _fake_run(layout, path):
+        sent.append((layout, path))
+        return 0, result_variant, ""
+
+    wish = {"lower": "B Woofer", "upper": "C Mid", "purpose": "wish: BW2 at 400",
+            "probe": [{"label": "BW2 at 400", "highPass": _edge(400, "Butterworth", 12),
+                       "lowPass": _edge(400, "Butterworth", 12)}]}
+    got = wish_variants(second_fixed, result_best, [wish], chain_pairs_fixed, run=_fake_run, out_dir=tempfile.gettempdir())
+    layout_sent = sent[0][0]
+    assert layout_sent["repairs"] == [] and layout_sent["autoCrossover"] == {"run": False}, layout_sent
+    given = {b["name"]: b.get("crossover") for b in layout_sent["blocks"]}
+    assert given["A Sub"]["lowPass"] == _edge(80, "LinkwitzRiley"), given          # what stands, given rather than searched
+    assert given["C Mid"]["highPass"] == _edge(400, "Butterworth", 12), given      # the wish, at its own junction
+    assert given["B Woofer"]["lowPass"] == _edge(400, "Butterworth", 12), given
+    assert given["B Woofer"]["highPass"] == _edge(80, "LinkwitzRiley"), given      # and nowhere else
+    assert [(j["lower"], j["upper"], j["probe"]) for j in layout_sent["junctions"]] == \
+           [(lo, up, []) for lo, up in chain_pairs_fixed], layout_sent["junctions"]
+    one = got[0]
+    assert [(j["lower"], j["upper"]) for j in one["junctions"]] == chain_pairs_fixed, one["junctions"]
+    # the junction the wish did not touch moved too -- that is the whole reason for this pass
+    untouched = next(j for j in one["junctions"] if not j["wish"])
+    assert untouched["deltaDb"] == {"left": -0.05, "right": -0.05}, untouched
+    assert next(j for j in one["junctions"] if j["wish"])["deltaDb"] == {"left": 0.20, "right": 0.20}, one["junctions"]
+    assert one["delays_moved"] == {"C Mid L": {"was": 3.0, "now": 3.4, "deltaMs": 0.4}}, one["delays_moved"]
+    assert one["polarity_flipped"] == ["C Mid L"], one["polarity_flipped"]
+    assert "EACH WISH AS A WHOLE CONFIGURATION" in render_variants(
+        {"full_variants": got, "chain": chain_pairs_fixed}), "the report does not show the variants"
+    # a tune's best is what its variant is built from; a junction that errored builds nothing, and says so
+    tuned = wish_variants(second_fixed, {**result_best, "junctions": [
+        {"lower": "B Woofer", "upper": "C Mid", "purpose": "wish: BW anywhere",
+         "tune": {"best": {"highPass": _edge(300, "Butterworth", 12)}}}]},
+        [{"lower": "B Woofer", "upper": "C Mid", "purpose": "wish: BW anywhere", "tune": {}}],
+        chain_pairs_fixed, run=_fake_run, out_dir=tempfile.gettempdir())
+    assert tuned[0]["edges"]["highPass"] == _edge(300, "Butterworth", 12) == tuned[0]["edges"]["lowPass"], tuned[0]
+    broken = wish_variants(second_fixed, {**result_best, "junctions": [
+        {"lower": "B Woofer", "upper": "C Mid", "purpose": "wish: x", "error": "no block named 'C Mid'"}]},
+        [{"lower": "B Woofer", "upper": "C Mid", "purpose": "wish: x", "probe": [{"highPass": _edge(400)}]}],
+        chain_pairs_fixed, run=_fake_run, out_dir=tempfile.gettempdir())
+    assert broken[0]["not_built"] == "no block named 'C Mid'" and "edges" not in broken[0], broken[0]
 
     # ── fetching the prebuilt engine from a tag's release (TODO S-020; hub `RELEASE-CHANNEL.md` §12) ──
     # The network is faked. What is held here: the NAME is computed from the pin and this machine, a
@@ -1568,8 +1845,9 @@ def _selftest():
     rows_w = _xw.check_wishes("BE4 між мідом і твітером на 2300, BW2 між сабом і мідбасом, не знаю між мідбасом і "
                               "мідом, BW2 для твітера від 900, LR4 між сабом і твітером", ch2, xo)
     items, skipped = wish_items(rows_w, lay2, res_a, ch2, xo)
-    assert [(i["lower"], i["upper"], "probe" in i, "tune" in i) for i in items] == [
-        ("C Mid", "D Tweeter", True, False), ("A Sub", "B Woofer", False, True)], items
+    # A tune carries an EMPTY probe list beside it -- the junction read as it stands, so its variant has a before.
+    assert [(i["lower"], i["upper"], bool(i.get("probe")), "tune" in i, "probe" in i) for i in items] == [
+        ("C Mid", "D Tweeter", True, False, True), ("A Sub", "B Woofer", False, True, True)], items
     assert items[0]["probe"][0]["lowPass"] == edge("Bessel", 24, 2300.0) == items[0]["probe"][0]["highPass"]
     assert items[1]["tune"] == {"families": ["Butterworth"], "slopes": [12]}, items[1]
     assert [v for _, v, _ in skipped] == ["UNSURE", "REFUSED", "OK"] and "not a junction" in skipped[2][2], skipped
@@ -1624,7 +1902,9 @@ def _selftest():
           "990 Hz; wishes as probes and tunes, the broken and the unsure not computed; a tune's best at the window's "
           "edge and in CAUTION said so; the cross-OS tolerance; the PEQ Q the same on both sides; and the prebuilt "
           "engine fetched by its computed name with the digest checked -- a mismatch refused with nothing installed, "
-          "a release that carries none answered rather than failed")
+          "a release that carries none answered rather than failed; and a wish's whole-configuration variant: the "
+          "settings that stand given rather than searched, the wish's edges at its own junction and nowhere else, "
+          "every junction read as it stands, and the answer taken against the best -- delays, polarity and all")
     return 0
 
 

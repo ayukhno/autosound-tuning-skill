@@ -114,7 +114,10 @@ internal static class JunctionStage
 
         try
         {
-            if (item["probe"] is JsonArray asked && asked.Count > 0)
+            // An EMPTY probe list is a reading, not a no-op: "as it stands" is always the first entry, so a caller
+            // that wants this junction's own number in the configuration that stands asks for no variants at all.
+            // That is how a wish's full variant is read back -- every junction of the chain, after its own Auto delay.
+            if (item["probe"] is JsonArray asked)
             {
                 var variants = new List<JunctionProbeVariant>
                 {

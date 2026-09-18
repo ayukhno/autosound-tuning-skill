@@ -548,9 +548,10 @@ the person's, and `installer-consistency.py` holds the three installers to the s
 
 ## S-021 · Phase 1's variants run end to end on a fresh system, and what a wish really costs
 
-**Status**: waiting 2026-09-18 · issue #38's two remaining pieces, in one item at the user's word:
-the end-to-end run, and the probe-vs-full-variant question the run answers (§6, 5b). Waiting for the
-user's test on the tag this wave lands in; the software side is in place
+**Status**: waiting 2026-09-18 · issue #38's remaining piece. The second one is no longer a question
+for the test to answer: the user asked for the full variant to be built without waiting for a car, and
+it is (`wish_variants`, on `wave-2026-09-18`) — so what waits is the run itself, on the tag this wave
+lands in; the software side is in place
 (`docs/DESIGN-2026-09-17-phase1-variants.md` §6: 1–4, 5a–5c, 6 all done, S-020 the last of them).
 
 **Due when:** now — it waits for a run, not for work.
@@ -578,19 +579,39 @@ number that has to be explained away. **What would say it does not:** a step tha
 run it, a refusal whose nearest allowed setting is wrong for the car, or a variant nobody can choose
 between because the description does not say what it costs.
 
-**6. The question this run also answers — issue #38's second piece** (`DESIGN-2026-09-17-phase1-variants.md`
-§6, 5b). A wish with a corner is read as a PROBE: that one junction, each side after its own delay
-(`rew_tool/resonalyze_engine.py` `wish_items`, `engines/resonalyze/JunctionStage.cs` `Probe`). It is
-NOT a full variant with its own Auto delay across the chain, so "what this wish costs" is exact at
-the junction and approximate for the whole configuration. On the Passat the probe said BE24 1050 Hz
-at −1.25 dB against the best and BW12 110 Hz at +9.40 dB; how far those move when the delays are
-re-laid across the chain is not measured.
+**6. What the run now judges — issue #38's second piece, built 2026-09-18.** A wish is no longer read
+only as a PROBE (that one junction, each side after its own delay). Every computable wish is also run
+as its own WHOLE CONFIGURATION: its edges written in, Auto delay again over the chain, every junction
+then re-read, with the delays that moved and any polarity that flipped named
+(`rew_tool/resonalyze_engine.py` `wish_variants`; `DESIGN-2026-09-17-phase1-variants.md` §6, 5b). On
+the Passat that read differently from the probe in the part a tuner would have met in the car: the
+BE4 wish flips BOTH tweeters' polarity, and the BW2 wish moves the whole chain by about 3.9 ms.
 
-**So the test watches one thing here: could the tuner choose?** If the probe's number was enough to
-pick a variant and the control measurement in Phase 3 did not contradict it, the probe stays as it
-is and this piece closes with the run. If the choice was made on a number the whole configuration
-then did not honour — the wish's variant behaving differently once every delay moved — that is the
-trigger to build the full variant: the wish written into the settings, Auto delay over the chain as
-`run`'s own second pass does it, and a fifth golden beside the four in `engines/resonalyze/golden/`
-(`passat-ir-v7_49.wishes.json`, on the set the others were made on) plus a wish case in `smoke` for
-CI. Only then, and as its own item — this one is a run, not work.
+So the test is no longer asking whether to build it. It asks the two questions only a car answers:
+**does the whole-configuration report let the tuner choose** — is "what this wish costs" said in
+terms they can act on — and **does Phase 3's control measurement agree with it** on the variant they
+picked. A disagreement there is a finding about the model, not about the report's shape.
+
+One guard is deliberately missing, and the test does not need it: there is no golden for a variant.
+`acceptance` models ONE engine run against recorded values, and a variant is a sequence of three, so
+a golden means teaching that harness the sequence. The synthetic `smoke` (CI) and the module's
+offline selftest hold the pass instead. Worth building when a second car needs the same guard.
+
+## S-022 · A prebuilt engine is found by the FORK's pin, so a changed wrapper runs the old binary
+
+**Status**: open 2026-09-18 · met while building #38's full variant: the wrapper changed, and the run
+kept using the engine fetched from `v3.0.57` until it was deleted by hand.
+
+**Due when:** a second person develops the wrapper, or a user updates the method by hand (a `git pull`
+in the checkout rather than the installer) and the wrapper changed under the same fork pin.
+
+`installed_dir()` is `…/engines/resonalyze/<ENGINE_PIN>/<rid>`, and `ENGINE_PIN` is the **fork's**
+commit — the submodule's. The wrapper in `engines/resonalyze/*.cs` is ours and changes on its own; two
+skill tags can carry one fork pin and two different wrappers, and `engine_command` prefers a prebuilt
+engine over building this checkout. So a machine that has one runs the OLD wrapper, and says nothing:
+the result's `pin` names the fork, which matches. An install or update through the installer overwrites
+it (`fetch-binary` runs on every install), so the ordinary user is covered; a developer is not.
+
+**The shape when it becomes due:** put the WRAPPER's own identity into the path or beside the binary —
+the archive is built per tag, so the tag it came from is the honest name — and let `engine_command` say
+which it is running when the two disagree. Not the fork pin alone.
