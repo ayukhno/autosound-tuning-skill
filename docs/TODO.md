@@ -511,7 +511,7 @@ says "the delete will come back to you".
 is the user's by design.
 
 ## S-020 · The installers can fetch the engine archive now that a release carries it
-**Status**: doing 2026-09-18 · built on `wave-2026-09-18`, the three decisions taken with the user: fetch only where there is no .NET SDK, `--engine` / `--no-engine` to override, a missing archive said out loud. `python3 skills/autosound-tuning/rew_tool/resonalyze_engine.py fetch-binary --tag v3.0.57` → installed, sha256 checked; `… resonalyze_engine.py smoke` then ran the whole synthetic set on the FETCHED engine; `bash install.sh --dry-run --terminal --engine` and `--no-engine` print the two branches; `python3 scripts/installer-consistency.py` (check 5c) holds the three installers to one decision. **Left, and it is what the Done-when asks for:** the installer's own step on a machine with no SDK — the Windows VM, on the tag this lands in
+**Status**: doing 2026-09-18 · built on `wave-2026-09-18`, the three decisions taken with the user: fetch only where there is no .NET SDK, `--engine` / `--no-engine` to override, a missing archive said out loud. `python3 skills/autosound-tuning/rew_tool/resonalyze_engine.py fetch-binary --tag v3.0.57` → installed, sha256 checked; `… resonalyze_engine.py smoke` then ran the whole synthetic set on the FETCHED engine; `bash install.sh --dry-run --terminal --engine` and `--no-engine` print the two branches; `python3 scripts/installer-consistency.py` (check 5c) holds the three installers to one decision. **Left, and it is what the Done-when asks for:** the installer's own step on a machine with no SDK — the Windows VM, on **`v3.0.58`** (tagged 2026-09-18; its release carries `resonalyze-engine-b0ce9fb-{win-x64,win-arm64,osx-arm64}.zip` and `SHA256SUMS`). What to run there: the README one-liner at that tag on a VM with no .NET SDK — the step should say it fetched ~30 MB and checked it — then `python3 rew_tool/resonalyze_engine.py smoke`, which should run with nothing built; and `-NoEngine` on a second run, which should refuse the fetch and say how to do it later
 
 **Due when:** someone installs the method on a machine without the .NET SDK and wants Phase 1's desk
 step. Not before — a person with the SDK loses nothing today.
@@ -550,8 +550,8 @@ the person's, and `installer-consistency.py` holds the three installers to the s
 
 **Status**: waiting 2026-09-18 · issue #38's remaining piece. The second one is no longer a question
 for the test to answer: the user asked for the full variant to be built without waiting for a car, and
-it is (`wish_variants`, on `wave-2026-09-18`) — so what waits is the run itself, on the tag this wave
-lands in; the software side is in place
+it is (`wish_variants`, on `wave-2026-09-18`) — so what waits is the run itself, on **`v3.0.58`** (tagged
+2026-09-18); the software side is in place
 (`docs/DESIGN-2026-09-17-phase1-variants.md` §6: 1–4, 5a–5c, 6 all done, S-020 the last of them).
 
 **Due when:** now — it waits for a run, not for work.
