@@ -934,3 +934,45 @@ WAS bulk.
 **The shape:** provenance on the record, the way `fs_hz` carries it — `source: user | front_end |
 default` — and `should_de_embed` treating a front-end default as `check`, not as an answer. Same class
 as S-024: a fact whose origin is not written reads as everybody's word.
+
+---
+
+## S-037 · The Arbiter's read of the form prototype — eight points, and two of them are not about the form
+
+**Status**: open 2026-09-19 · W-1 collection · his review of `intake_form.py`'s first page 19.09,
+deferred by his own word to a session of its own: «давай це в окрему сесію відкладемо — тут
+потенціал». Nothing below is implemented; this item is what that session starts from.
+
+**Due when:** that session opens. S-033 holds the spec it is changing.
+
+1. **Open the first page.** No tab is active until the URL carries a hash — the page should land on
+   the first group.
+2. **Two languages, not one.** The AI's language and the person's can differ — measured in practice,
+   his words. The interface language is TCC's when TCC is there; the form may show it, not own it.
+   Today `project.language` is one field and the page assumes it answers both.
+3. **The reviewer channel is a CHOICE from what is available**, like picking a base model — not a
+   line of free text. And it may already be settled before the intake (see 4).
+4. **«Where does this project live» is not a question.** The skill knows the directory it was
+   started in; asking it is asking a person to retype what the tool holds. He puts 3 and 4 together:
+   both look like things settled when the PROJECT is created, and the intake should simply know them.
+5. **Drop the examples from the labels.** `Модель (назва на шильдику — Passat)` → the model is
+   obvious; `Покоління (серія випуску — B8)` → drop `B8`. An example in a label reads as part of the
+   question.
+6. **`Ліво- чи правостороннє кермо` goes to the TOP of the page.** It is coupled with the reference
+   seat for a reason, and it shapes every asymmetry decision that follows.
+7. **The DSP is picked from the library** — `knowledge/dsp/profiles/` via `dsp_profile.py
+   list-bundled` / `find-bundled` — and only a processor that is NOT there is typed in by hand.
+   The vendor is not required: the model settles it.
+8. **«Можливості DSP» is not a user's question.** His words: it looks like clutter that complicates
+   the process — check it. And the questions after it come with no choice at all (`dsp.tiers`,
+   `max_count`, `eq`, `crossovers`, `delays`, `presets` are free text).
+
+**What 7 and 8 are really saying, and it is one thing.** The capability block is the DSP profile's
+interview, and the method's own rule is that it is asked ONLY when the library has no exact
+vendor+model match (`project-intake.md` §4, `dsp_profile.find-bundled` refuses to approximate). The
+Helix DSP Ultra S IS in the library. So the form is putting thirteen questions to a person that a
+bundled profile already answers — the interview is the fallback, and the prototype renders it as the
+default. Fixing that removes most of the free-text fields he was reacting to.
+
+Also from the same reading: the Ukrainian label for `car_identity` was `Машина — одна особа`, which
+reads as "one person". It is `the four parts are one identity` — «чотири частини однієї назви».
