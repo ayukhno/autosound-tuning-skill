@@ -798,3 +798,28 @@ Two halves, and the second is why rewording alone will not fix it:
 list (the dotted paths, as `open-questions` prints them) that a window can expand and a session can tick off
 mechanically. Same class as hub `CLAUDE.md` §9.20 and the Arbiter's standing rule: a bare number is not a
 subject. When `covers` exists, TCC's window renders it — that half rides on a ticket, not on this item.
+
+---
+
+## S-032 · A different reference seat is a different PROJECT, not an option inside one
+
+**Status**: open 2026-09-19 · W-1 collection · the user, from the test: tuning the stage for the PASSENGER
+means taking every raw curve again and walking the whole process, so it belongs in its own project rather
+than as a setting in an existing one. He adds, as a guess and not a decision: the «for ALL seats»
+configuration is probably the same — and it is **not** to be confused with the FULL preset, which is about
+the rears and surround.
+
+**Due when:** the intake's seat question is next touched, or a second seat is actually tuned.
+
+What the method says today: `goal.reference_seat` is an enum inside ONE project —
+`{driver | driver_and_passenger | all_seats}` — coupled with `car.drive_side` in the `seat` couple
+(`rew_tool/intake.py`), and that couple exists because «driver only» was corrected to «driver and front
+passenger» five minutes later and a recorded decision had to be voided. The coupling fixed the FORM; this
+finding says the fix was too small. A seat is not a field that can be corrected — changing it invalidates
+the measurement base, which is what the voided decision was really telling us.
+
+**What it changes, if the Arbiter confirms it:** the seat stops being a revisable answer and becomes part of
+what a project IS; presets stay what they are (SQ/FULL live in one project on one measurement base — FULL is
+rears and surround, not a seat); and the car package from hub `#185` gets its clearest use — starting the
+passenger's project from the driver's DESCRIPTION (car, channel map, DSP, mic, amps) with none of its
+measurements, which is exactly the class split that ticket asks for.
