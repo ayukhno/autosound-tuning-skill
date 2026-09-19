@@ -1119,3 +1119,51 @@ and they are fixed in different places.
   `previous_names` instead of returning whatever sat before the last underscore.
 - The six ids already on disk in the other notation are data, not code: correcting them is the
   Arbiter's call, and the check that would have caught them is `id` ∈ {code} ∪ `previous_names`.
+
+---
+
+## S-043 · Phase 0 asked for a whole-system sum, which its own capture plan never listed — FIXED
+
+**Status**: done 2026-09-19 · W-1 collection · the Arbiter, reading the session's Phase-0 plan: step
+0.5 («Сума `ALL_1` / `ALL+C_1`») «чомусь потребує п.0.5, хоч це абсурд зараз міряти будь-які суми —
+виправ в скілі».
+
+He is right twice over. **Nothing is aligned at Phase 0** — no delays, no tuned crossovers — so `ALL_1`
+measures the unaligned system and answers a question nobody asked. And on this car it could not be
+taken at all: the protective high-passes sit below 1.1 × Fs, so the pre-sweep safety gate refuses any
+new sweep through the mids and tweeters. The demand also contradicted the method's own capture plan,
+which lists Phase 0 as solos and the whole-system captures at the verify pass
+(`naming-and-structure.md` §3).
+
+**Fixed, not just recorded** (his instruction): `phase_0_baseline.md`'s centre bullet now captures the
+centre like any other channel and says plainly that the with/without-centre SUM is not a Phase-0
+capture, pointing at `ALL_final` / `ALL+C_final` where an aligned state exists to check the prediction
+against; and `naming-and-structure.md` §3's Phase-3 row now names `ALL+C_final (rta)` beside
+`ALL_final`, so the two documents say one thing.
+
+---
+
+## S-044 · A phase boundary has no cleanup procedure, and the session cannot clear itself
+
+**Status**: open 2026-09-19 · W-1 collection · the Arbiter asked the session what to do about clearing
+after Phase −1 and there is no such procedure — «раніше ми обговорювали, що добре кожну фазу починати з
+чистої сесії — що можемо зробити?».
+
+**Due when:** the next phase boundary. It is a mechanism question, not a prose one.
+
+What exists today: the session can neither restart itself nor `/clear` — it said so and improvised the
+rest well (it recorded the phase, named what is on disk, told him which REW session to keep open and
+what to say afterwards). TCC keys its sessions BY PHASE, so the next launch in a new phase already
+opens a fresh one. What is missing is the half that makes clearing safe: nothing CHECKS that everything
+the next session needs is on disk before the chat is thrown away.
+
+**The shape: a handoff that refuses.** `process.py <project>/process handoff` verifies, and prints one
+resume line when it passes: the phase is recorded; every plan step of the closing phase is done,
+skipped with a reason, or superseded; no capture round is left open; the ledger HEAD exists for the
+active preset; the ▶️ CONTINUE block and the phase's decisions are written. Refuse — naming what is
+missing — and the session keeps working instead of the Arbiter losing a chat that held the only copy.
+The line it prints is what he says next («продовжуй»), plus what must stay open (the REW session with
+the round's captures), so the instruction is not improvised twice.
+
+TCC's half is one offer at the boundary — «почати фазу з чистої сесії» — and it already has the
+session-per-phase key it needs; it rides as a ticket once the command exists.

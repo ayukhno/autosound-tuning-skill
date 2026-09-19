@@ -52,7 +52,7 @@ Rule of thumb: **magnitude / tone / summation / target → `(rta)`**; **phase / 
 | **0 baseline** | each driver solo: `<ch>_1 (sw)` **+** `<ch>_1 (rta)` | **both**, one pass/driver |
 | **1** (analyzes `_1`, **no new capture**) | — | TA/Time-Offset/excess-phase ← `(sw)`; crossover freq & level ← `(rta)` |
 | **2** (needs the re-measured `_2`) | each driver solo post-`v1`: `<ch>_2 (sw)` **+** `<ch>_2 (rta)`; then groups `Ws_2/Ms_2/TWs_2 (rta)`, `L_2/R_2 (rta)`, `SW+Ws_2 (rta)` (two subs: `SWs_2` and `SWs+Ws_2`) | **both** solo, then **rta** groups |
-| **3 verify** | `<ch>_final (rta)`, `Ws/Ms/TWs_final (rta)`, `SW+Ws_final (rta)` (two subs: `SWs_final`, `SWs+Ws_final`), `L/R` sides, `ALL_final (rta)` | **rta** (+ `(sw)` spot-checks) |
+| **3 verify** | `<ch>_final (rta)`, `Ws/Ms/TWs_final (rta)`, `SW+Ws_final (rta)` (two subs: `SWs_final`, `SWs+Ws_final`), `L/R` sides, `ALL_final (rta)` — with a centre, also `ALL+C_final (rta)` under one condition, one signal on both inputs | **rta** (+ `(sw)` spot-checks) |
 
 - **2a** needs `_2 (rta)` (magnitude to EQ) **+** `_2 (sw)` (excess-phase → what's EQ-able); **2b** needs `_2 (sw)` (phase/summation); **2c/2d** the `(rta)` groups.
 
