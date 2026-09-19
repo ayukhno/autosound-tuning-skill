@@ -751,3 +751,24 @@ user. A question that did not reach him is not «you closed it» — it is nothi
 the text, with no claim about why. Same class as hub `CLAUDE.md` «відмова механізму не переказується», with
 the extra harm that here the retelling named the user as its cause, and he had to correct a report about
 himself.
+
+---
+
+## S-030 · The input that does not stick is AUX, and the trigger named in the knowledge row is the wrong one
+
+**Status**: open 2026-09-19 · W-1 collection · the user, correcting the row this session's reply quoted to
+him: switching the input from BT to AUX does not hold — at the next configuration write or DSP reconnection
+the input stands at BT again. So it hits exactly ONE input: AUX, which is where the Scarlett feeds the
+measurement signal. «запиши це собі як задачку виправити потім».
+
+**Due when:** the knowledge row or the pre-session checklist is next touched.
+
+`knowledge/dsp/helix-dsp-ultra-s.md` line 13 (Presets) records the symptom as «switching can silently reset
+the INPUT to another card — check the input after every switch (Pre-session #4)». The symptom is real; the
+trigger is not the one the Arbiter sees on his own machine. Preset switching is what got blamed, and a check
+tied to it fires at the wrong moments and misses the ones that matter.
+
+**The shape:** the row says what was observed — AUX is not retained across a configuration write or a
+reconnect, and the fallback is BT — and the check moves from «after every preset switch» to «after every
+configuration write, every reconnect, and before every series», because the input that silently disappears
+is the MEASUREMENT input. A series captured after it reverted is a series through the wrong path.
