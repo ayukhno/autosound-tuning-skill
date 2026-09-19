@@ -1000,6 +1000,11 @@ alias rules and the ILL-POSED verdict said out loud. A prose reading at Phase 0 
 guards, which is why the session had to hedge it. A hedged number in the dialogue is worse than no
 number: the Arbiter now carries a half-conclusion into a phase that would have produced a whole one.
 
+**Seen twice, so it is structural.** The same midbass reading — «the two midbass drivers reach the mic
+only 0.2 ms apart … I'll cross-check this before using it» — came back in a FRESH session after the
+Arbiter cleared the chat at the phase boundary. A habit that survives a clear is not a session's whim:
+it is coming from the method's own text or from what the tools hand back.
+
 **The shape:** after the check, the session says WHAT THE CHECK SAID — how many captures are usable,
 what is flagged, what could not be checked and why, and the drift record — and stops. The arrivals are
 in the round; interpreting them is Phase 1's work, by the tools built for it. Same house rule as the
@@ -1186,6 +1191,13 @@ pre-session — the two places that say what to reconcile before speaking — do
 The only remaining source is the front-end's own report (`get_tcc_state` carries `language`), and it did
 not reach this session.
 
+**Corrected the same day, and it moves the root.** The next session's own report said: «This session
+was started with English as the project language, but TCC's record says Ukrainian (your decision #1).
+You may want to align that in TCC.» So the front-end's record WAS there, the session READ it, NAMED the
+mismatch — and answered in English anyway, then advised him to go fix it in the app. Storage is half the
+fault; the other half is that nothing makes a session act on what it just read about the person it is
+talking to. A read value that changes nothing is not a setting, it is trivia.
+
 **Why the damage is disproportionate to the fix:** the first reply is already in the wrong language, so
 the person's first act after a clean start is to correct the machine about himself.
 
@@ -1193,3 +1205,37 @@ the person's first act after a clean start is to correct the machine about himse
 answer, and the pre-session reconcile reads it BEFORE the first reply — a front-end's report still wins
 when it is there, because the app is where the person actually set it. Two fields, not one, if his
 S-037 point 2 stands: the AI's language and the person's can differ.
+
+---
+
+## S-046 · The reply reports everything the session checked, and the reader has to find the one line that is for him
+
+**Status**: open 2026-09-19 · W-1 collection · the Arbiter, handing over a whole session reply: «ось
+приклад зайвої інформації». It is the first message after a clean start, and the exhibit is kept below
+because the item is about proportion, which a paraphrase destroys.
+
+**Due when:** the reporting rule is next written — with S-038 and S-040, which are the same failure in
+smaller pieces.
+
+**What the reader owed**, on his own reading: he is at step 0.6, it is desk work, it needs no new
+measurements — start it or not. Three lines.
+
+**What arrived:** the method version matching on both sides · the project-file check being clean · the
+only saved DSP state and the fact that nothing was agreed-and-unentered · REW being open with all eight
+solos · the full list of the four still-open steps · why Phase 1 will not open · a preview dump of 44
+proposed flaw rows with per-channel counts and three caveats about them, before any of it was asked for
+· the midbass arrival reading again (S-038) · a four-row table of protective minima for a sweep that is
+blocked anyway · three sub-points on why that sweep cannot be verified · two «small things in the
+files» · and finally the question.
+
+**The rule that would have cut nine tenths of it: A CHECK THAT PASSED SAYS NOTHING.** The version match,
+the clean project file, the open REW session, the ledger HEAD — every one of those is a session
+reassuring itself in the reader's time. They belong in the reply only when they FAIL, and then as the
+blocker they are. Same for a tool preview nobody asked for: `flaw_map --rew 1` was run to see, not to
+report, and 44 rows with counts per channel is a working note, not an answer.
+
+**The shape:** a step reply is three things — where we are (one line), what is next and what it needs
+(one line), and the question that actually needs him. A blocker replaces the second line and says what
+it blocks. Everything else — the inventory, the caveats, the previews, the reasoning — is available on
+request and lives in the files it came from. Same family as the hub's rule that a mechanism's refusal is
+not retold: here it is the mechanism's SUCCESS that is not retold.
