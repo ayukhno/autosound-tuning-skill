@@ -1247,3 +1247,32 @@ failed check replaces the second line: what it blocks, and what to do — or the
 first. Everything else — the inventory, the caveats, the previews, the reasoning — is available on
 request and lives in the files it came from. Same family as the hub's rule that a mechanism's refusal is
 not retold: here it is the mechanism's SUCCESS that is not retold.
+
+---
+
+## S-047 · The flaw map writes «the question was not asked» on every row, and has no way to ask it
+
+**Status**: open 2026-09-19 · W-1 collection · the Arbiter: «чому скіл сам не запитав про такий
+замір?» — after offering, unprompted, the nine-position sweep set he already had on disk
+(`9points-mes.mdat`, 63 sweeps `<ch> p1…p9_49 (sw)`).
+
+**Due when:** the flaw map is next run on a project with no ellipsoid.
+
+The session's own account is honest and incomplete: it says the method tells it to ask the owner for
+the measurement that settles a hypothesis — the first example named there being a set of positions —
+and that it substituted the moving-mic RTA because that was already on disk, then wrote 43 rows marked
+«stays put — assumed». True, and it is the second time this wave that a rule living only in prose did
+not fire (S-038, S-046 are the same shape).
+
+**What makes this one sharp:** the TOOL already knows. `flaw_map.py` says it in its own words —
+«absence of positions does not mean "stays"; it means the question was not asked» — and stamps every
+such row `no positions measured -- staying is ASSUMED, not shown`, `status: hypothesis`. So the missing
+question is computed, written 43 times, and carried nowhere. Meanwhile the reader for that data exists
+(`ellipsoid.py`), and the way to express the request exists too: when he finally asked, the session
+opened `cap_006` with 63 expected titles in the grammar, correctly, in one move.
+
+**The shape:** a run that produced ASSUMED rows ends with the request, not with the rows — the channels
+affected, the titles that would settle them (`<ch> p1…p9_<N> (sw)`), and the offer to open the round
+(`capture-start`). The phase does not close while assumed rows exist and no request is on record. And
+one sentence earlier in the phase — «чи є у вас заміри позицій?» — would have found this file before 43
+hypotheses were written from a substitute.
