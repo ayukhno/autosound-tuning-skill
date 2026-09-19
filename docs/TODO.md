@@ -1276,3 +1276,29 @@ affected, the titles that would settle them (`<ch> p1…p9_<N> (sw)`), and the o
 (`capture-start`). The phase does not close while assumed rows exist and no request is on record. And
 one sentence earlier in the phase — «чи є у вас заміри позицій?» — would have found this file before 43
 hypotheses were written from a substitute.
+
+---
+
+## S-048 · Another project's series number walks into this one, and nothing says it is foreign
+
+**Status**: open 2026-09-19 · W-1 collection · the Arbiter, on the nine-position file the session was
+about to take in: «а ще 49 сесія це ж з попереднього проекту — запиши що це треба правити».
+
+**Due when:** measurements are next brought into a project from outside it.
+
+The session saw it and said it — «це серія `_49` зі старого проєкту, не червнева `_1`, на якій стоїть
+карта» — and then opened round `cap_006` **as series 49**, with 63 expected titles `<ch> p1…p9_49 (sw)`,
+which writes another project's numbering into this project's record as if it were its own.
+
+`_N` is project-scoped in fact and nowhere in writing: `naming-and-structure.md` §3 defines `_N` as the
+series number and spends a paragraph separating it from the ledger's `v_NNN`, but never says the number
+belongs to ONE project. Two projects both have a `_49` and they mean different DSP states on different
+days. Joining a foreign `_49` to a flaw map built on this project's `_1` is the same class as S-024's
+imported `fs_hz`: data from another build arriving with nothing on it that says so.
+
+**The shape:** captures that come from outside the project are recorded with their ORIGIN — the project
+they were taken in and the series they were `_N` of — and this project gives them its own series for
+anything it will join. A round refuses a series number that is not this project's unless that origin is
+on record; `naming.py` says `_N` is scoped to the project in the same breath as it says it is not
+`v_NNN`. The acoustic question the session asked — was anything changed in the install between the two
+dates — stays a question for the Arbiter; this one is mechanical and should never have reached him.
