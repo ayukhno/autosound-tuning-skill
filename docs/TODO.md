@@ -733,3 +733,21 @@ x86_64, where `python3` falls over on `xcrun`.
 **Due when:** the doctor block is next touched. The finding is that the session diagnosed this itself and
 carried the workaround by hand — `selftest`/`doctor` said nothing, so the next session on that machine
 starts by rediscovering it.
+
+---
+
+## S-029 · A session said the user closed the question window; no window had appeared
+
+**Status**: open 2026-09-19 · W-1 collection · the user, on the reply he got in `EPY-Sep2026` after the
+cleanup: «в відповіді побачив ось таку фразу "Вікно питань ви закрили — лишаю їх текстом, відповісте як
+зручно." — а вікна не було».
+
+**Due when:** the method next says how to ask. `references/core/feedback-loop.md` tells a session to ask
+closed questions with ready options (`AskUserQuestion`), and says nothing about the case where the call
+does not reach the user — so this session filled the gap by inventing an action the user never took.
+
+**The rule to write:** the questioning MECHANISM is never retold, and its outcome is never attributed to the
+user. A question that did not reach him is not «you closed it» — it is nothing at all: the questions go into
+the text, with no claim about why. Same class as hub `CLAUDE.md` «відмова механізму не переказується», with
+the extra harm that here the retelling named the user as its cause, and he had to correct a report about
+himself.
