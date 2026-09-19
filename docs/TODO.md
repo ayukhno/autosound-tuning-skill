@@ -1071,3 +1071,45 @@ page (S-037); the arrivals the session analysed at the reader's expense after th
 and the method's own English spoken untranslated, which stopped him mid-wave (S-040). Read together
 they say the phase asks a person to carry the method's internals — its vocabulary, its capability
 interview, its reasoning — while the only thing he owes it is the facts about his car.
+
+---
+
+## S-042 · Channel ids were minted in a notation the method does not have, and the parser does not refuse it
+
+**Status**: open 2026-09-19 · W-1 collection · the Arbiter, after the gate refused on his machine:
+«подивись нотацію і пропонуй назви в нотації (здається так і було) і перевір розбор назв, щоб там була
+та сама нотація». The session that hit it described two resolvers reading identity from different
+places; measured here, it is narrower and worse.
+
+**Due when:** the naming grammar or `channel_id` is next touched.
+
+**What is on disk** (`car/passat-b8-2026`, read 2026-09-19): the channel codes are the documented
+notation — `sw`, `w-L/R`, `m-L/R`, `tw-L/R`, `r-L/R`, `c` — while `channels[].id` carries `w_L`, `m_L`,
+`tw_L` … for six of them and is **absent** for `sw` and `c`; the ledger keys its rows by the CODE
+(`state/FULL/v_001.json`: `c`, `m-L`, `m-R`, `r-L`, `r-R`, `sw`, `tw-L`, `tw-R`, `w-L`, `w-R`). So
+`channel_id()` answers `w_L` where the ledger holds `w-L`, and nothing renamed anything.
+
+That contradicts the id's own contract (`project.py channel_id`): the id **defaults to today's code**
+precisely so that a project which renames nothing cannot tell the difference, and the two diverge only
+after a rename. Here they diverge with no rename, because somebody minted ids in `snake_case`. An id in
+another notation is a second name for the same channel — which is the thing the id was introduced to
+abolish.
+
+**And the parser does not hold the line:** `naming.py parse "w_L_1 (sw)"` returns
+`{"code": "w_L", "code_current": "w_L", "version": "1"}` — no refusal, and the code it reports exists in
+no glossary. `_` is the series separator, so a code containing one is split on the LAST underscore and
+whatever precedes it becomes a channel name. The grammar's prose home says codes look like `w-L`
+(`naming-and-structure.md` §3); the code has no such rule.
+
+**The notation, proposed as he asked:**
+
+- A channel is written the same everywhere a person or a file sees it: `sw`, `w-L/R`, `m-L/R`,
+  `tw-L/R`, `r-L/R`, `c` — plus `sw-f`/`sw-r` and `c-H`/`c-L` where the car has them. A hyphen carries
+  the side or the variant; an underscore never appears inside a code.
+- `_` is reserved for the series (`_49`) and appears in a title only there.
+- `id` equals the code at birth and never changes; after a rename the CODE moves and the id stays —
+  in the same notation it was born in.
+- `parse` refuses a code with `_` in it, and resolves the code against the glossary and
+  `previous_names` instead of returning whatever sat before the last underscore.
+- The six ids already on disk in the other notation are data, not code: correcting them is the
+  Arbiter's call, and the check that would have caught them is `id` ∈ {code} ∪ `previous_names`.
