@@ -1167,3 +1167,29 @@ the round's captures), so the instruction is not improvised twice.
 
 TCC's half is one offer at the boundary — «почати фазу з чистої сесії» — and it already has the
 session-per-phase key it needs; it rides as a ticket once the command exists.
+
+---
+
+## S-045 · After `/clear` the session came back in English: the language has no machine home
+
+**Status**: open 2026-09-19 · W-1 collection · the Arbiter, right after clearing by hand at the phase
+boundary: «після очистки мова переключилась на англійську».
+
+**Due when:** immediately after S-044's handoff — clearing is the moment this bites, and the two are
+one story.
+
+Measured: `intake.field("project.language")` carries `writes: None` and `lands: "a recorded decision
+(-1.1) + every project file"`, and `car/passat-b8-2026/project.json` has no `language` key at all. So a
+fresh session has nowhere to READ it: the conversation that settled it is gone, the recorded decision is
+free text that nothing in the start sequence goes looking for, and `happy-paths.md` §1 and SKILL.md's
+pre-session — the two places that say what to reconcile before speaking — do not mention the language.
+The only remaining source is the front-end's own report (`get_tcc_state` carries `language`), and it did
+not reach this session.
+
+**Why the damage is disproportionate to the fix:** the first reply is already in the wrong language, so
+the person's first act after a clean start is to correct the machine about himself.
+
+**The shape:** `project.json` carries the language, `intake.save` writes it like any other confirmed
+answer, and the pre-session reconcile reads it BEFORE the first reply — a front-end's report still wins
+when it is there, because the app is where the person actually set it. Two fields, not one, if his
+S-037 point 2 stands: the AI's language and the person's can differ.
