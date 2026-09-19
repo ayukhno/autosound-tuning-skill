@@ -1302,3 +1302,31 @@ anything it will join. A round refuses a series number that is not this project'
 on record; `naming.py` says `_N` is scoped to the project in the same breath as it says it is not
 `v_NNN`. The acoustic question the session asked — was anything changed in the install between the two
 dates — stays a question for the Arbiter; this one is mechanical and should never have reached him.
+
+---
+
+## S-049 · No desk engine on the test MacBook, and nothing said so until Phase 1.3
+
+**Status**: open 2026-09-19 · W-1 collection · the Arbiter: «ось що бачу на MacBook Pro — немає
+рушия!». The session had to stop at step 1.3 (crossover variants) and ask him to install one, mid-tune.
+
+**Due when:** the version installed there is known — that is the one fact this item is missing.
+
+Measured here: `v3.0.58`'s `install.sh` already carries the engine logic (`WANT_ENGINE`, `auto` =
+fetch where the machine has no .NET SDK to build from), and the release carries the right asset —
+`resonalyze-engine-b0ce9fb-osx-arm64.zip` with `SHA256SUMS`. `v3.0.57`'s installer has none of it. The
+session reported that machine has neither a prebuilt engine nor .NET, which under `auto` is exactly the
+case that fetches. So either the install there predates 18.09, or the fetch did not run — and either
+way it was silent.
+
+**The part that is a fault regardless of the root:** `install.sh`'s own comment says the reason for
+fetching is that a person «would otherwise discover that in the middle of a tune». He discovered it in
+the middle of a tune. A guarantee whose failure is only visible at the moment it was meant to prevent
+is not a guarantee: the engine's presence belongs in `doctor`/`selftest`, named on a machine BEFORE a
+project opens, and a fetch that fails during install has to be loud rather than left for Phase 1 to
+find.
+
+**Needed from him, two lines:** the skill version on that MacBook (`git -C ~/.claude/skills/…` or the
+installer's own banner), and whether the install printed anything about the engine. With those this
+splits into «an old install» (nothing to fix but the doctor) or «the fetch is broken on macOS arm64»
+(which S-020 shipped and S-021 is still waiting to verify end to end on a fresh system).
