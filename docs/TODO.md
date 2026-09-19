@@ -1051,3 +1051,23 @@ or `v_NNN` is «стан ДСП» and the Phase-1 word stays. His call; one word
 and the first time a project's report mentions the ledger, it says in one clause what it is: the full
 DSP state banked as an immutable version, not the measurement `_N`. Once per project, not once per
 message.
+
+---
+
+## S-041 · Phase −1 walked end to end is hard work, and the dialogue is most of the weight
+
+**Status**: open 2026-09-19 · W-1 collection · the Arbiter, having gone through the whole of Phase −1
+himself: «я пройшов фазу −1 і це, я тобі скажу, ГЕМОР!!! дуже складно». Two things settled by him in
+the same breath — the intake gets simplified, that part is not a question; and the DIALOGUE gets cut,
+because the explanations in it are not the user's business. The session transcript follows and becomes
+this item's evidence.
+
+**Due when:** the transcript arrives. Nothing is designed before it: the point of reading it is to see
+WHERE the weight actually sits, not to guess.
+
+This is the umbrella over four findings already in this wave, and they are all the same complaint seen
+from different sides: the form that would replace the chat (S-033) and the eight faults in its first
+page (S-037); the arrivals the session analysed at the reader's expense after the raw capture (S-038);
+and the method's own English spoken untranslated, which stopped him mid-wave (S-040). Read together
+they say the phase asks a person to carry the method's internals — its vocabulary, its capability
+interview, its reasoning — while the only thing he owes it is the facts about his car.
