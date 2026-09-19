@@ -1024,3 +1024,22 @@ and a typo becomes permanent evidence of a measurement that does not exist.
 **The shape:** the same one the plan already uses — the mistyped capture stays in the round, marked
 superseded, naming the title it was corrected to. Not deletion: a round that quietly loses a row is a
 round nobody can audit.
+
+---
+
+## S-040 · The report says «сію v_001», and the Arbiter had to ask what that means
+
+**Status**: open 2026-09-19 · W-1 collection · his question, mid-wave: «а що означає "сію" ось тут
+"Записую ручки на раунд і рішення, потім сію `v_001`"? і що таке v_ серія?».
+
+**Due when:** the reports are next read for language.
+
+The word is the method's own English carried across untranslated: `phase_-1_intake.md` §153 says «the
+first ledger snapshot — **seed** it with every tier the DSP profile declares», and the session rendered
+`seed` as «сію». It is not wrong; it is a metaphor the reader does not share, and it cost a stop in the
+middle of a wave to unpack. `v_NNN` got the same treatment — used as if it were common ground.
+
+**The shape:** a report names the thing, not the metaphor — «записую перший знімок реєстру (`v_001`)» —
+and the first time a project's report mentions the ledger, it says in one clause what it is: the full
+DSP state banked as an immutable version, not the measurement `_N`. Once per project, not once per
+message.
