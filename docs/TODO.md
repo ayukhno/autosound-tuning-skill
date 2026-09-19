@@ -615,3 +615,27 @@ it (`fetch-binary` runs on every install), so the ordinary user is covered; a de
 **The shape when it becomes due:** put the WRAPPER's own identity into the path or beside the binary —
 the archive is built per tag, so the tag it came from is the honest name — and let `engine_command` say
 which it is running when the two disagree. Not the fork pin alone.
+
+---
+
+## S-023 · SCR-059 is done in `main` and has no tag: close the ticket, or wait for one?
+
+**Status**: waiting 2026-09-19 · the work is in `9de1085` (`rew_tool/intake.py` — the intake's fields,
+enumerations and couples as data, the gate's list read off `contract.GATE_REQUIRED`, and the writer for
+the car / channel map / measurement chain), the whole suite green (78/78), the CHANGELOG entry under
+`## [Unreleased]`. Hub `#178` is still `accepted` — the question was put to the Arbiter and the session
+stopped before it was answered.
+
+**Due when:** the Arbiter answers. Three ways, and the first is the one recommended:
+
+1. **Close `#178` now, let the tag come with the wave.** TCC vendors the method by sha, so its half
+   (the form) can be built against `9de1085` today and pinned to the tag when the wave cuts one. The
+   receipt names the commit and the run, which is what a proof line owes.
+2. **Hold it in work until `v3.0.59` exists.** Honest about "released", but TCC does not learn its half
+   is ready and waits for nothing.
+3. **Cut the release now** — branch, PR with the full CI, `ff-only`, `tag-check.sh v3.0.59`. An hour or
+   two, and outside the wave's order; only worth it if the tag is needed on a machine today.
+
+**What is NOT owed here.** Nothing in the method waits on this: the module, its selftest, the board row,
+`phase_-1_intake.md` §0.6 and the schema doc all landed together. This item is the bus's bookkeeping and
+the release's timing, not unfinished work.
