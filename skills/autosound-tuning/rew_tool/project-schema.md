@@ -34,11 +34,19 @@ machine-readable to render for its Project/System/Car-audio-analysis panels eith
   "sources": ["user, confirmed at intake 2026-07-20", "datasheet: Audiofrog GB25 spec sheet"],
   "car": {"make": "VW", "model": "Passat", "generation": "B8",     // SCR-043 -- see below
           "body": "sedan", "year": 2018},
-  "source": {"head_unit": "OEM"},
+  "source": {"head_unit": "OEM",                             // SCR-059 -- written by `intake.py`:
+             "kind": "head_unit",                            //   what plays the music
+             "connection": "optical",                        //   how the signal ENTERS the DSP
+             "listening_input": "Optical 1",                 //   one question, two answers --
+             "measurement_input": "Coax 2"},                 //   Pre-session checklist #4 reads them
   "dsp": {"vendor": "Audiotec-Fischer", "model": "Helix DSP Ultra S"},   // links dsp_profile.json
   "amps": [{"role": "front", "make": "Helix", "model": "P Six DSP",
             "gain_db": {"value": -6.0, "source": "measured", "at": "2026-07-20T12:00:00+00:00"}}],
-  "mic": {"model": "UMIK-1", "calibration_file": "umik1_cal.txt"},
+  "mic": {"model": "UMIK-1", "calibration_file": "umik1_cal.txt",
+          "calibration_file_90": "umik1_cal_90.txt"},
+  "measurement": {"loopback": "physical",                    // SCR-059: the RIG, not the DSP.
+                  "sample_rate_hz": 48000,                   //   the CAPTURE rate -- it keeps its
+                  "interface": "UMIK-1 USB"},                //   own name (dsp.* is the processing rate)
   "paths": {"rew_project": null},                          // SCR-018 -- filled once intake records it
   "presets": ["FULL", "SQ"],
 
@@ -55,7 +63,9 @@ machine-readable to render for its Project/System/Car-audio-analysis panels eith
                                                              //   every project that never renamed
      "driver": {"make": "Audiofrog", "model": "GB25"},
      "fs_hz": {"value": 62, "source": "datasheet", "at": "…"},
-     "impedance_ohm": 4, "hidden": false},
+     "impedance_ohm": 4, "hidden": false,
+     "position": "door", "enclosure": "free_air",            // SCR-059: asked of every channel and
+     "condition": "broken_in"},                              //   enumerated (`intake.POSITIONS`, ...)
     {"code": "vrf", "slot": "F", "hidden": true,             // SCR-003: no physical driver assigned
      "role": "unused", "tier": "virtual_channels"}           // SCR-042: which tier it is spare OF.
                                                              //   Slot letters REPEAT across tiers (this
@@ -107,6 +117,23 @@ machine-readable to render for its Project/System/Car-audio-analysis panels eith
   "_open_questions": ["source.head_unit trim level"]
 }
 ```
+
+### Who WRITES this file during intake (SCR-059)
+
+`project.py` is the general writer and stays that. What `rew_tool/intake.py` adds is the intake's
+own half — the fields Phase −1 asks, as data, with a writer that enforces what the questions
+themselves imply:
+
+| call | what it refuses, and why |
+|---|---|
+| `intake.py set-car <dir> <make> <model> <generation> <body>` | any of the four blank. A make+model with no generation and no body matches no cabin in the library and no earlier build on this car (SCR-043) — and the part skipped as obvious is the body |
+| `intake.py set-channel <dir> <code> slot=C tier=channels …` | a `slot` with no `tier`. Slot letters REPEAT across tiers, so one letter is a legal address in more than one of them (SCR-042); enumerated fields (`position`, `enclosure`, `condition`, `hidden`) are checked against `intake.FIELDS` |
+| `intake.py set <dir> <field-id> <value>` | a value outside the field's enumeration, naming the choices; a field that belongs to another writer, naming which one (`dsp_profile.set_field` for the processor, `save_channel` for a channel row) |
+| `intake.py set-amp <dir> [--index N] key=value …` | a key that is not an amp field |
+
+Every refusal writes nothing. `intake.py missing <dir>` says which required fields are still open,
+and reports the goals, taste and curve seed as **not machine-readable** rather than as gaps — they
+land in prose and in recorded decisions, and calling them missing would be a lie a form would act on.
 
 ### `acoustics.flaws[]` — what this cabin does, and what may be done about it (SCR-015)
 

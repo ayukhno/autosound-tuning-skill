@@ -50,6 +50,43 @@ A new project's first contact has a fixed order, but the detail is spread across
 
 ---
 
+### 0.6 — A front-end MAY collect this intake up front. What it still owes the session
+
+The questions below are a fixed set with fixed answers, and since SCR-059 they are also **data**:
+
+```bash
+python3 rew_tool/intake.py fields --json        # every field: id, group, the question, required, its enumeration, where it lands
+python3 rew_tool/intake.py couplings            # the fields that are ONE question -- render each as one control
+python3 rew_tool/intake.py gate <project>       # the files and keys the phase-0 gate decides on, before anything is opened
+python3 rew_tool/intake.py missing <project>    # answered / missing / not machine-readable, right now
+```
+
+So a window may put §1–§2 on one form and hand the session the answers. **That is a supported way
+in, not a shortcut around the phase order** — it was asked for after two intakes on the Arbiter's
+own machine, where the car half was not asked by any window and arrived in free text only after the
+Phase-0 gate refused, with the project already open.
+
+**What a front-end may do:** ask the fields, in its own words and its own language (the tables carry
+KEYS; the labels are the consumer's), and write what the person CONFIRMED —
+`intake.py set-car | set-channel | set-amp | set <field> <value>` for the car, the channel map, the
+measurement chain and the rig; `dsp_profile.py set-field` for the processor's half.
+
+**What it still owes, unchanged:**
+
+* **The phase is opened first** — `enter_phase("-1")` is the entry condition above, not a step, and
+  collecting answers earlier does not move it.
+* **Every ruling is still RECORDED** (`process.py <project>/process decision …`), and an answer that
+  arrived on a form is an answered step — closed with what it said, never re-asked in conversation.
+* **The gates do not move:** names agreed and written before any measurement (step 5), install
+  verified before any tuning (step 6), the curve **seeded with the person** and never defaulted (§2.6).
+* **The prose is still written** (§5): `autosound_context.md` and `preference-profile.md` are what
+  the human and the Critic read, and a form's answers do not replace them.
+* **What the form could not ask stays a question**, not a blank: `intake.py missing` says which
+  required fields are still open, and the goals, taste and curve seed come back as *not
+  machine-readable* — they live in prose and in recorded decisions, so a session asks them.
+
+---
+
 ### 1. Interview: equipment and system → the project profile
 
 Ask in blocks, record the answers right away in `autosound_context.md` (structure — §5 below). Don't assume — ask; "I don't know" is also an answer (then we measure / look in the DSP software).

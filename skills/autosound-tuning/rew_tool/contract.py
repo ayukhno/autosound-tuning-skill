@@ -50,9 +50,11 @@ FORMAT_VERSION = 3
 #: project whose ledger code is the thing that is broken. `helix_ch` is the one that matters —
 #: the only identity field the RELEASED 2.x line ever wrote.
 _MOVED_OUT_OF_LEDGER = ("helix_ch", "slot", "descr", "role", "order", "hidden", "tag_value")
-#: What phase −1 cannot be left without. Not every row of CONTRACT: the registry is only for a
+#: What phase −1 cannot be left without. PUBLIC because a front-end collecting the intake
+#: needs the same list before it opens anything (`intake.gate_requirements`, SCR-059): a copy of it
+#: over there would drift from the gate that enforces it. Not every row of CONTRACT: the registry is only for a
 #: multi-slot DSP, and the journal is written by the first event rather than by intake.
-_GATE_REQUIRED = (
+GATE_REQUIRED = (
     "project.json",
     "dsp_profile.json",
     "glossary.json (or project.json.glossary)",
@@ -512,7 +514,7 @@ def check_project(project_dir, skip_rew=False):
     # `ok`       — nothing here is WRONG. A fresh folder qualifies, and should: intake has not run.
     # `complete` — everything the method needs before phase 0 EXISTS and is valid. That is the
     #              gate's question, and only that one.
-    missing = [f["file"] for f in files if not f["exists"] and f["file"] in _GATE_REQUIRED]
+    missing = [f["file"] for f in files if not f["exists"] and f["file"] in GATE_REQUIRED]
     # The ledger has no fixed row name — `check_ledgers` reports one row per preset directory, and
     # a project with no `state/` at all reports none. Absence of the row IS the missing ledger,
     # which a name-based check cannot see.

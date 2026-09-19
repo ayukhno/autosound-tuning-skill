@@ -188,7 +188,7 @@ def _validate_group(g):
 #: Rates a DSP actually runs at. Not a closed list of the world's rates -- a closed list of the
 #: ones that are not a typo. A profile claiming 96 kHz as `"96 kHz-ish"` or as `96` (kHz, not Hz)
 #: is the same defect wearing two costumes, and phase 1 turns both into sample counts.
-_PLAUSIBLE_RATES_HZ = (32000, 44100, 48000, 88200, 96000, 176400, 192000)
+PLAUSIBLE_RATES_HZ = (32000, 44100, 48000, 88200, 96000, 176400, 192000)
 
 
 def _validate_in_scope(group):
@@ -227,13 +227,13 @@ def _validate_rate(profile):
         raise ValueError(
             f"profile.{PROCESSING_RATE_KEY} must be a number in HERTZ, got {rate!r}. Every delay in "
             "samples is computed from it — a value that is not a number makes every alignment "
-            f"number wrong. Common rates: {', '.join(str(r) for r in _PLAUSIBLE_RATES_HZ)}."
+            f"number wrong. Common rates: {', '.join(str(r) for r in PLAUSIBLE_RATES_HZ)}."
         )
-    if rate not in _PLAUSIBLE_RATES_HZ:
+    if rate not in PLAUSIBLE_RATES_HZ:
         raise ValueError(
             f"profile.{PROCESSING_RATE_KEY} = {rate!r} is not a rate any DSP runs at. In HERTZ, not kHz "
-            f"(96000, not 96). Known: {', '.join(str(r) for r in _PLAUSIBLE_RATES_HZ)}. If this "
-            "processor genuinely runs at something else, add it to `_PLAUSIBLE_RATES_HZ` in the "
+            f"(96000, not 96). Known: {', '.join(str(r) for r in PLAUSIBLE_RATES_HZ)}. If this "
+            "processor genuinely runs at something else, add it to `PLAUSIBLE_RATES_HZ` in the "
             "same commit as the profile — a rate nobody has seen deserves a second reader."
         )
 

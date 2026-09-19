@@ -18,6 +18,12 @@ numbers did not change, so a `project-intake.md §3` or `§4` pointer still land
 > before this conversation started — **do not ask them to confirm it.** Ask only about what the
 > state leaves blank or what contradicts the disk.
 >
+> **And it may have asked more than those two.** The intake's fields, their enumerations and
+> the couples that must be asked as ONE control are data since SCR-059 (`rew_tool/intake.py`),
+> so a window may collect §1–§2 on a form and hand the answers over. What that changes and what
+> it does NOT — the phase still opened first, the rulings still recorded, the gates unmoved —
+> is `phases/phase_-1_intake.md` §0.6.
+>
 > This changes which of the questions below you actually put: with a front-end, the language is the
 > one the app is already speaking and the reviewer channel is already picked, so steps 1 and 2 of
 > the sequence collapse into "note what the state says and move on". With no front-end, ask them
