@@ -639,3 +639,97 @@ stopped before it was answered.
 **What is NOT owed here.** Nothing in the method waits on this: the module, its selftest, the board row,
 `phase_-1_intake.md` §0.6 and the schema doc all landed together. This item is the bus's bookkeeping and
 the release's timing, not unfinished work.
+
+---
+
+## S-024 · An imported fact keeps saying `measured`, so the intake cannot tell a copy from a measurement
+
+**Status**: open 2026-09-19 · W-1 collection, found in the export package
+`passat-b8-2026-car-2026-09-18.zip` (tcc 0.1.41, method 3.0.58): its seven `channels[].fs_hz` facts carry
+`"source": "measured"` with the source build's `at` (`2026-08-21T15:18:52`), and land that way in a project
+created on 18.09 on another machine. TCC's half rides as hub `#185`.
+
+**Due when:** TCC writes the import record and the imported provenance asked for in `#185`. Until then the
+method has no way to read what it is looking at, and this session watched the cost: the skill's opening
+report had to INFER the seed from the folder's history and then handed the user a contradiction
+(project named `EPY-Sep2026`, inherited `preference-profile.md` describing a competition tune that calls
+EPY its opposite) as a decision for him — when it was not his choice at all, but a consequence of the copy.
+
+**What the method owes, once the record exists:**
+
+1. **Read the import record, do not guess the seed.** A section the user deliberately excluded (the cabin
+   flaws, in this case) is «to be measured here», not «missing» — and today those two are indistinguishable.
+2. **An imported `fs_hz` is closed by the Arbiter's word, not by a second impedance run.** The user's
+   decision 2026-09-19: «галочка вмикнута (стоїть) — імпеданс складна штука і міряти його другий раз це
+   подвиг». So the gate must NOT demand a remeasurement, and a protective HPF may be derived from an
+   imported Fs — but the fact stays marked as imported, and any report that uses it names where the number
+   came from and when it was measured there.
+
+---
+
+## S-025 · `hardware.controls` mixes the control module's knobs with the processor's features, and accepts any key
+
+**Status**: open 2026-09-19 · W-1 collection · the user, on the six entries the export carries: «не лізь
+туди, там ще складніша логіка роботи — просто OFF для налаштування».
+
+**Due when:** the intake touches `hardware.controls` again. The rule to carry is ONE line — during tuning
+the control module is OFF (TC/RTC, FX) — and the method does not model the module's logic, its modes or
+what a step is worth.
+
+What was measured on the package: `hardware.controls` holds `RTC`, `RealCenter`, `RearRC`,
+`RemoteToneControl`, `SubRC`, `VirtualX`, and (a) the Conductor is ONE physical knob whose modes cycle by
+press — volume → sub → rear → tone — so four of those «controls» are modes of one knob, while `RealCenter`
+and `VirtualX` are processor features, not knobs at all; (b) the knob set is a property of the control
+module (a Conductor; other modules carry other knobs) and is itself configurable, so it can be asked but
+never assumed; (c) `VirtualX` is not in the bundled DSP profile's feature list
+(`knowledge/dsp/profiles/audiotec-fischer-helix-dsp-ultra-s.json`: RealCenter, DynamicBass, SubXpander,
+ActiveToneControl, RemoteToneControl, SubRC, RearRC), and nothing refused the unknown key; (d) the values
+are not positions but decision history, dates and measurement numbers.
+
+**Not owed:** modelling the module. The user closed that explicitly.
+
+---
+
+## S-026 · The level a series was measured at lives in the taste profile, and is unreadable as a quantity
+
+**Status**: open 2026-09-19 · W-1 collection · `preference-profile.md` line 28 of the exported
+`passat-b8-2026`: «Суддівський рівень: 7 лампочок майстра, ГП USB → Douk U2 → оптика», while the scale sits
+in the prose of a different field — `hardware.controls.SubRC`: «майстер: 60 дБ кроками 1 дБ, лампочка = 5
+дБ, у лампочці 5 кроків яскравості».
+
+**Due when:** the next capture round is opened on a car whose level is set on a Conductor.
+
+Two faults, and the second is the one that bites. First, the level at which a series was captured is a
+CONDITION OF THE SERIES, not taste — and it was sitting in the one file that (the user's decision
+2026-09-19, hub `#185`) must never travel to another project, so it disappears exactly when a new build
+needs it. Second, «7 лампочок» is not a quantity: to read it in dB you need three more facts the file does
+not hold — twelve lamps, five 1 dB steps per lamp, the top lamp is 0 dB. The user supplied them 19.09, so
+the arithmetic is now closed: **7 lamps = −25 dB rel. max** (the eighth lamp starts with the next step).
+
+**The shape:** the round records the level as a quantity — `−25 dB rel. max` — with «7 лампочок майстра» kept
+as how it is read off the Conductor, not as the number itself.
+
+---
+
+## S-027 · A prose source line is read as a path, and the intake reports the file as gone
+
+**Status**: open 2026-09-19 · W-1 collection · `project.json.sources` holds
+`autosound-measurements/.../2026-08-20_front-set-02/{README.md,manifest.json,dsp-state.json} (стан DSP та
+стенда під час baseline)` — a brace list of three files inside a prose citation. The skill's opening report
+in `EPY-Sep2026` named it as `.../{README.md` and said it «more does not exist».
+
+**Due when:** the intake checks a source line's existence. Either it parses the brace list, or — better —
+it does not treat a `sources` line as a path at all: the field is prose with a note in parentheses, and
+three of the six lines in that file are not paths to begin with (`REW-сесія new-logic-EPY.mdat: імпеданс-свіпи (imp) → виміряні Fs`).
+
+---
+
+## S-028 · The session's `python3` dies on `xcrun` in an x86_64 shell, and the doctor does not name it
+
+**Status**: open 2026-09-19 · W-1 collection · the skill session working on `EPY-Sep2026` had to run every
+command as `arch -arm64 /usr/bin/python3` and told the user so as a footnote: its shell was running as
+x86_64, where `python3` falls over on `xcrun`.
+
+**Due when:** the doctor block is next touched. The finding is that the session diagnosed this itself and
+carried the workaround by hand — `selftest`/`doctor` said nothing, so the next session on that machine
+starts by rediscovering it.
