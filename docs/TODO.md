@@ -867,3 +867,70 @@ live in four languages under `scripts/i18n-check.py`.
 
 **TCC's half rides as a ticket when the page exists** — opening it, and rendering a plan step's `covers`
 (S-031) in the same window.
+
+---
+
+## S-034 · The feedback rail can only CREATE an issue, so commenting goes around it
+
+**Status**: open 2026-09-19 · W-1 collection · the session on the test machine, after sending five
+findings: the gateway does not comment, only create, so it sent the four comments with raw `gh`,
+taking the repository out of `side_effect.CHANNELS` rather than из its own head and checking every
+returned URL against it.
+
+**Due when:** the next finding has to be added to an issue that already exists.
+
+That session did the careful thing, and the carefulness is the point: `gates/side_effect.py` exists
+because a model once invented a plausible repository and reported a fabricated issue URL (skill `#23`).
+Its rail is `post_feedback` → `gh issue create --repo <hardcoded>` with the returned URL verified. There
+is no `post_comment`, so «add this to #39» has **no guarded path at all** — and the way round it is a
+raw `gh` call with the target chosen by whoever is typing, which is the exact shape the rail refuses.
+
+**The shape:** a `post_comment(issue_url_or_number, body_file, channel=…)` beside `post_feedback` —
+same closed `CHANNELS`, same `guarded_run`, same returned-URL verification (the comment URL carries the
+repo and the issue number, so it verifies the same way). `--repo` never comes from the caller.
+
+---
+
+## S-035 · Every feedback issue from one car gets the same title, and the 24-hour dedup guard eats the second one
+
+**Status**: open 2026-09-19 · W-1 collection · the session on the test machine: «Заголовок шлюз складає
+з авто+DSP, ігноруючи назву в тілі» — both new issues arrived as `Feedback: VW Passat B8 · Helix DSP
+Ultra S` and were renamed by hand right after creation.
+
+**Due when:** two findings are sent from one car inside a day — which is what a test session IS.
+
+`side_effect.post_feedback` builds `title = f"Feedback: {car} · {dsp}"` and the body's own heading is
+never read. Renaming afterwards is not the whole cost: the function also guards against double-posting
+with `_recent_duplicate(title, …)` over `_DEDUP_HOURS` (24 h), and since the title does not vary, the
+SECOND finding from the same car in one day is refused as a duplicate of the first. On 19.09 that did
+not bite only because the session renamed each issue immediately after it was created — an accident of
+its own tidiness, not a property of the rail.
+
+**The shape:** take the title from the caller (the body's first heading is the obvious source), keep
+`car · dsp` as a suffix or a label so the provenance survives, and let the dedup guard compare what is
+actually distinguishing. A guard keyed on a constant is not a guard.
+
+---
+
+## S-036 · A protective record cannot tell a considered OFF from a front-end's bulk default
+
+**Status**: open 2026-09-19 · W-1 collection · the session on the test machine refused to accept what
+TCC wrote: «Під час імпорту TCC записав `протектив = OFF` на всі 10 каналів за одну секунду, включно з
+тилом поза раундом», while the Arbiter's words were the opposite — the filters were in the chain. It
+recorded the need for his word instead of writing the fact, which is the right call: a false `OFF`
+means a filtered sweep is later read as bare.
+
+**Due when:** the next round is marked by a front-end rather than by hand.
+
+`state/process.py set_protective` is deliberate about this: `"OFF"` is an ANSWER («swept with nothing
+in the chain»), and a channel left out is «nobody said», which `protective.should_de_embed(...,
+baseline=True)` answers `check` for. What the record cannot carry is WHO said it. Ten channels in one
+second is a default being written as ten answers, and every later reader — `predict`, `analyze-joints
+--process`, `eq_propose` — takes them as the Arbiter's word. Two smaller things fall out of the same
+write: the record accepts a channel the round never captured (the rear), because `set_protective`
+checks the open round but not the round's own `expected` list; and a bulk write leaves no trace that it
+WAS bulk.
+
+**The shape:** provenance on the record, the way `fs_hz` carries it — `source: user | front_end |
+default` — and `should_de_embed` treating a front-end default as `check`, not as an answer. Same class
+as S-024: a fact whose origin is not written reads as everybody's word.
