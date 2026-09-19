@@ -1039,6 +1039,14 @@ first ledger snapshot — **seed** it with every tier the DSP profile declares»
 `seed` as «сію». It is not wrong; it is a metaphor the reader does not share, and it cost a stop in the
 middle of a wave to unpack. `v_NNN` got the same treatment — used as if it were common ground.
 
+**The Arbiter's own wording, 19.09:** «тобто "записую в ДСП", конфігурація v_001». Two things to keep
+straight when it is adopted. The DIRECTION: nothing is written INTO the processor by the method — the
+person types the settings in PC-Tool and the ledger records what stands there — so the phrase is
+«записую, що зараз у ДСП: конфігурація `v_001`». And the COLLISION: «конфігурація» already means
+something else in Phase 1, where a whole configuration is a candidate set of crossovers and delays the
+engine searches as one (skill `#38`). Either `v_NNN` takes «конфігурація» and Phase 1 says «варіант»,
+or `v_NNN` is «стан ДСП» and the Phase-1 word stays. His call; one word cannot carry both in one report.
+
 **The shape:** a report names the thing, not the metaphor — «записую перший знімок реєстру (`v_001`)» —
 and the first time a project's report mentions the ledger, it says in one clause what it is: the full
 DSP state banked as an immutable version, not the measurement `_N`. Once per project, not once per
