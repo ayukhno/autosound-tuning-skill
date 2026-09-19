@@ -1330,3 +1330,39 @@ find.
 installer's own banner), and whether the install printed anything about the engine. With those this
 splits into «an old install» (nothing to fix but the doctor) or «the fetch is broken on macOS arm64»
 (which S-020 shipped and S-021 is still waiting to verify end to end on a fresh system).
+
+---
+
+## S-050 · W-1: collection is closed — what the review has to decide
+
+**Status**: open 2026-09-19 · the Arbiter closed the wave's first step with «на сьогодні все, збір
+закінчено». Written as the to-do for later, and nothing was started after his word.
+
+**Due when:** he opens the review (WAVES.md §1 step 2).
+
+**What is in the pool:** S-024 … S-049 — twenty-six items, one of them already done (S-043, the
+whole-system sum removed from Phase 0 at his instruction). On the bus: hub `#185` (what a car package
+may carry, per class, his decisions of 19.09) and `#186` (four things nobody has decided), plus a
+comment on `#185` carrying the import's name-store half. In the skill's own repo: `#47` from the test
+session, and `#38` untouched.
+
+**What the review owes, in the order the items force:**
+
+1. **The milestone.** None exists in either repo and none was opened here on purpose: `W-1` is read,
+   not agreed (`WAVES.md` §1), and its five lines need the decisions this review makes (hub `#180`).
+2. **The reporting rule** — S-046 with S-038, S-040, S-041 under it. It is the one change that touches
+   every session on every car, and it is cheap: a passed check costs one word.
+3. **The intake**, which he settled twice over: simplified (S-041) and served as a form (S-033), with
+   the eight points of his first reading (S-037) and the two that are not about the form at all — the
+   reviewer channel and the project directory belong to project creation, and the DSP capability block
+   should never be asked for a processor the library already describes.
+4. **Provenance**, the shape shared by S-024, S-036, S-042, S-045 and S-048: an imported Fs, a bulk
+   `OFF`, a minted id, the language, a foreign `_N` — five facts whose ORIGIN is not written, each read
+   later as somebody's word.
+5. **The mechanisms that carry a rule instead of prose** — S-047 (the flaw map cannot ask for what it
+   needs), S-044 (a handoff that refuses), S-034/S-035 (the feedback rail), S-039 (supersede a capture).
+6. **S-049 needs two lines from him first** (the version on that MacBook, what the installer said);
+   until then it cannot be split into «an old install» and «the fetch is broken».
+
+**Not for this wave unless he says so:** the branch `w1-intake-form` carries the form prototype and the
+whole pool. It has no PR: what ships in W-1 is the review's call, not the branch's.
