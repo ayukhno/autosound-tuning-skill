@@ -772,3 +772,29 @@ tied to it fires at the wrong moments and misses the ones that matter.
 reconnect, and the fallback is BT — and the check moves from «after every preset switch» to «after every
 configuration write, every reconnect, and before every series», because the input that silently disappears
 is the MEASUREMENT input. A series captured after it reverted is a series through the wrong path.
+
+---
+
+## S-031 · A plan step carries a COUNT, and has nowhere to carry what it covers
+
+**Status**: open 2026-09-19 · W-1 collection · the user, on the plan rendered in TCC's window: «ось такий
+пункт в плані зовсім не зрозумілий» — the step reads `Закрити відкриті поля: project.json (8) і
+dsp_profile.json (5)` and nothing else. Thirteen fields, named nowhere he can see.
+
+**Due when:** the plan's steps are next written or rendered.
+
+Two halves, and the second is why rewording alone will not fix it:
+
+1. **The names exist and were dropped.** `project.py <dir> open-questions` and `dsp_profile.py
+   open-questions` print the unresolved facts as dotted paths, and the same session had already named
+   several of them in the chat («вхід для свіпів, гейни трьох підсилювачів, моделі драйверів тилу
+   r-L/r-R»; profile: «чи всі яруси перелічені», the 60-band budget). The plan — the one artefact the
+   Arbiter acts on — kept only the two counts.
+2. **A step has no field for its content.** `state/process.py` `add_step` writes `id`, `name`, `status`,
+   `source`, `attempt`, `skip`, `phase`, `evidence`. There is no `covers`/`detail`, so the substance can
+   only be crammed into the title, and a front-end that renders a checkbox list has nothing else to show.
+
+**The shape:** the name names the things — the first two or three and `+N` — AND the step gains a `covers`
+list (the dotted paths, as `open-questions` prints them) that a window can expand and a session can tick off
+mechanically. Same class as hub `CLAUDE.md` §9.20 and the Arbiter's standing rule: a bare number is not a
+subject. When `covers` exists, TCC's window renders it — that half rides on a ticket, not on this item.
