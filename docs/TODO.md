@@ -976,3 +976,51 @@ default. Fixing that removes most of the free-text fields he was reacting to.
 
 Also from the same reading: the Ukrainian label for `car_identity` was `Машина — одна особа`, which
 reads as "one person". It is `the four parts are one identity` — «чотири частини однієї назви».
+
+---
+
+## S-038 · After the raw capture the session ANALYSED the arrivals, and Phase 1 exists to do exactly that
+
+**Status**: open 2026-09-19 · W-1 collection · the Arbiter, reading the dialogue that followed the raw
+sweeps: «щось забагато розмови! навіщо аналіз затримок, як там ціла математика на наступних кроках, а
+базу перевірили функціями».
+
+**Due when:** `phase_0_baseline.md`'s post-capture step is next touched.
+
+What happened: `capture-check --session` ran and answered — 8 sweeps usable, 8 RTA unchecked, levels,
+arrivals, no `ctl1`/`ctl3` so the session drift is unknown. That is the verdict, and it came from the
+functions. The session then added a prose reading ON TOP of it: right-side mids and tweeters arriving
+~1.2 ms later, converted to ~41 cm and called plausible for a left-hand-drive driver's seat; a warning
+that the midbasses differ by only 0.2 ms (~7 cm) with its own confidence disclaimer about the broad
+impulse peak; and a note that this is «a candidate for cross-check in Phase 1».
+
+**Why that last line is the tell.** It is a candidate for Phase 1 because Phase 1 is where the reading
+belongs — `predict --align` and `arrival_triangulate` do it through a window, with the trust gate, the
+alias rules and the ILL-POSED verdict said out loud. A prose reading at Phase 0 has none of those
+guards, which is why the session had to hedge it. A hedged number in the dialogue is worse than no
+number: the Arbiter now carries a half-conclusion into a phase that would have produced a whole one.
+
+**The shape:** after the check, the session says WHAT THE CHECK SAID — how many captures are usable,
+what is flagged, what could not be checked and why, and the drift record — and stops. The arrivals are
+in the round; interpreting them is Phase 1's work, by the tools built for it. Same house rule as the
+hub's «відмова механізму не переказується», in the other direction: a function's verdict is not
+re-derived in prose.
+
+---
+
+## S-039 · A capture recorded under a mistyped title cannot be removed from the round
+
+**Status**: open 2026-09-19 · W-1 collection · from the same report: a ghost `r-R_1 (se)` — a typo
+that was fixed in REW, while the round kept the original.
+
+**Due when:** the next round takes a capture whose title is wrong.
+
+`state/process.py` has `record_capture` and `skip_capture`, and nothing that drops or renames a
+capture already taken. The plan's steps solved the same problem years-equivalent ago and solved it
+well — `supersede` keeps a step in the plan, dimmed, never removed (SCR-004), so «we tried this twice»
+survives. A round's captures have no such move, so the only states are «taken» and «never mentioned»,
+and a typo becomes permanent evidence of a measurement that does not exist.
+
+**The shape:** the same one the plan already uses — the mistyped capture stays in the round, marked
+superseded, naming the title it was corrected to. Not deletion: a round that quietly loses a row is a
+round nobody can audit.
