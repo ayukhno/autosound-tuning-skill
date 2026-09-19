@@ -823,3 +823,47 @@ what a project IS; presets stay what they are (SQ/FULL live in one project on on
 rears and surround, not a seat); and the car package from hub `#185` gets its clearest use — starting the
 passenger's project from the driver's DESCRIPTION (car, channel map, DSP, mic, amps) with none of its
 measurements, which is exactly the class split that ticket asks for.
+
+---
+
+## S-033 · The intake as a form the skill itself serves — Ukrainian prototype first
+
+**Status**: open 2026-09-19 · W-1 collection · the Arbiter's decisions, taken in conversation 19.09. The
+intake is 71 fields, 38 of them required (`rew_tool/intake.py`, SCR-059), and today they are asked in chat:
+a front-end cannot render them, and the car half has twice arrived as free text AFTER the gate refused.
+
+**Due when:** the wave's review takes it; the spec below is what was settled, not a plan that starts itself.
+
+**Where it lives — the skill, not TCC.** The page and a small local server are generated from `FIELDS` /
+`COUPLINGS`, and TCC opens that page in a webview. The Arbiter, 19.09: the intake is needed beyond TCC —
+a terminal session must be able to hand a person a form too. One renderer, one definition; TCC writes no
+questions of its own, which is the drift that the car package already cost us (hub `#185`).
+
+**The shape as settled:**
+
+- **Three kinds of control, because the fields are three kinds.** 30 fields carry an enumeration → pick
+  lists and checkboxes. 22 are per entity (12 per channel, 4 per tier, 4 per amp, 1 per virtual channel,
+  1 per control) → a TABLE, not a flat form; on the Passat that is 12 columns by 20 rows. 23 are typed
+  free text, and some of them are valuable precisely because they are (`goal.wishes`, `constraints`,
+  reference tracks).
+- **The 7 couplings render as ONE control each.** That is the whole fix for the voided seat decision.
+- **Probes, not questions:** `rew.api_reachable`, `rew.input_clip_checked`, `dsp.readable` are things the
+  tool can answer; a form that asks them asks the person to do the tool's job. Same class as S-030's AUX
+  input — a check, not a question.
+- **Colours are computed, nothing new is bookkept:** red = required by the gate and empty
+  (`gate_requirements()`), yellow = optional and empty, green = filled (`open-questions` says which).
+- **Groups and tabs:** the 8 groups can be asked one at a time without walking the whole intake, as long as
+  a couple is not torn apart; the full form stays reachable on tabs. `target_curve` (10 fields, 1 required)
+  is taste and belongs at Phase 5, not at the intake.
+- **The form never closes the gate.** The gate is `contract.py check --gate`; the page shows its verdict.
+- **Writing goes through the writers that exist** — `intake.save()/save_car()/save_channel()/save_amp()` —
+  and the session reads the result from the project's files, not from the chat.
+
+**Language — the Arbiter's decision 19.09:** the prototype is in **Ukrainian**, because he proofreads it
+himself; the other languages come before the release, and the Advisor helps with them. This is the one part
+a form cannot get for free: the session translates the method's English questions on the fly, a static page
+cannot, so the labels ship as DATA (a label per language beside each field), the way `README`/`FAQ` already
+live in four languages under `scripts/i18n-check.py`.
+
+**TCC's half rides as a ticket when the page exists** — opening it, and rendering a plan step's `covers`
+(S-031) in the same window.
