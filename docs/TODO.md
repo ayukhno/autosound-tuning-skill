@@ -1101,6 +1101,12 @@ no glossary. `_` is the series separator, so a code containing one is split on t
 whatever precedes it becomes a channel name. The grammar's prose home says codes look like `w-L`
 (`naming-and-structure.md` §3); the code has no such rule.
 
+**Two levels, and the Arbiter separated them 19.09:** «це назва проекту і не має відношення до назв
+кривих». The CURVE names are REW titles (`w-L_1 (sw)`) — that is where the grammar and the parser live.
+The names INSIDE the project — a channel's `id`, the project folder — are project data and do not reach
+a title. This item mixed them; below, the parser half is the curves' and the id half is the project's,
+and they are fixed in different places.
+
 **The notation, proposed as he asked:**
 
 - A channel is written the same everywhere a person or a file sees it: `sw`, `w-L/R`, `m-L/R`,
