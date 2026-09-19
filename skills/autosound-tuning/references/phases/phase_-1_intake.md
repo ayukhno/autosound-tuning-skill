@@ -66,6 +66,15 @@ in, not a shortcut around the phase order** — it was asked for after two intak
 own machine, where the car half was not asked by any window and arrived in free text only after the
 Phase-0 gate refused, with the project already open.
 
+**And the skill serves a form of its own** (`intake_form.py`, S-033), so "a window" is not only
+TCC's: `python3 rew_tool/intake_form.py serve <project>` puts all 71 fields on one local page —
+groups as tabs, each couple as ONE control, the channel and amplifier halves as tables, and every
+field coloured by what is owed (red required-and-missing, yellow optional-and-missing, green
+answered, grey lands in prose). A terminal session hands a person that URL instead of asking 71
+questions in chat; a front-end opens the same page rather than writing the questions a second time.
+The page decides nothing — it writes through the same writers below and prints the gate's own
+verdict. Labels are data (`intake_i18n/<lang>.json`); Ukrainian is the one that exists today.
+
 **What a front-end may do:** ask the fields, in its own words and its own language (the tables carry
 KEYS; the labels are the consumer's), and write what the person CONFIRMED —
 `intake.py set-car | set-channel | set-amp | set <field> <value>` for the car, the channel map, the
