@@ -1228,14 +1228,22 @@ proposed flaw rows with per-channel counts and three caveats about them, before 
 blocked anyway · three sub-points on why that sweep cannot be verified · two «small things in the
 files» · and finally the question.
 
-**The rule that would have cut nine tenths of it: A CHECK THAT PASSED SAYS NOTHING.** The version match,
-the clean project file, the open REW session, the ledger HEAD — every one of those is a session
-reassuring itself in the reader's time. They belong in the reply only when they FAIL, and then as the
-blocker they are. Same for a tool preview nobody asked for: `flaw_map --rew 1` was run to see, not to
+**The rule, in his own correction (19.09): A CHECK THAT PASSED COSTS ONE WORD — «Зроблено».** Not
+silence: he wants to see that the checks ran, and he does not want a paragraph each. So the whole
+reconcile is one line — the checks, done — and a check that FAILED is the only one that gets sentences,
+and gets them in the useful form: **what to do about it, or the options to choose from, with the one I
+recommend named first and why** (his standing rule for menus). The draft below said silence; his version
+is better, because a session that says nothing about its checks is indistinguishable from one that
+skipped them.
+
+**What that replaces:** The version match,
+the clean project file, the open REW session, the ledger HEAD — four sentences in the exhibit, one word
+between them under the rule. Same for a tool preview nobody asked for: `flaw_map --rew 1` was run to see, not to
 report, and 44 rows with counts per channel is a working note, not an answer.
 
-**The shape:** a step reply is three things — where we are (one line), what is next and what it needs
-(one line), and the question that actually needs him. A blocker replaces the second line and says what
-it blocks. Everything else — the inventory, the caveats, the previews, the reasoning — is available on
+**The shape:** a step reply is three things — where we are (one line, the checks folded into it as
+«зроблено»), what is next and what it needs (one line), and the question that actually needs him. A
+failed check replaces the second line: what it blocks, and what to do — or the options, recommendation
+first. Everything else — the inventory, the caveats, the previews, the reasoning — is available on
 request and lives in the files it came from. Same family as the hub's rule that a mechanism's refusal is
 not retold: here it is the mechanism's SUCCESS that is not retold.
