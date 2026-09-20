@@ -5,12 +5,20 @@ A tune outlives any single session: months later you may chase a different targe
 ## 1. Project hierarchy
 
 ```
-PROJECT  = one car + one install (drivers, DSP, amps, wiring). Lives for years.
+PROJECT  = one car + one install (drivers, DSP, amps, wiring) + ONE listening point. Lives for years.
   └ SESSION = tuning toward ONE target curve. May span days (a Mac restart wipes the chat).
       └ PHASE −1…5 (process-phases.md): intake (new project) → baseline/capture → crossovers/levels/delays
         → EQ + joint phase → technical verdict & lock → listening → variations (voicing, centre/rear)
           └ STEP (the user's path) → GENERATOR↔CRITIC cycle (≤3 rounds) → Arbiter
 ```
+
+**The listening point is part of what the project IS** (`project.json` `project_type`, one of
+**driver · passenger · both · all · rear_left · rear_right**), not a setting inside it — the Arbiter's
+ruling 2026-09-20. Tuning the stage for another seat means taking every raw curve again and walking
+the whole process, so it is ANOTHER project: started from this one's DESCRIPTION (car, channel map,
+DSP, mic, amps) and none of its measurements. It is written once and a second, different value is
+refused. **Do not confuse it with the presets** — SQ and FULL live in ONE project on ONE measurement
+base, and FULL is the rears and surround, not a seat.
 
 The **path defines the process** — the ordered steps the user described, refined by experience (`process-phases.md`). Keep it; that ordering (delays → phase → EQ; raw-sweep refs; MMM-for-magnitude / sweep-for-phase) is hard-won.
 

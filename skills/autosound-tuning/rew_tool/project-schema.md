@@ -91,6 +91,16 @@ machine-readable to render for its Project/System/Car-audio-analysis panels eith
     }
   },
 
+  "project_type": "driver",                                  // S-032: WHAT this project is tuned
+                                                             //   for. driver | passenger | both |
+                                                             //   all | rear_left | rear_right.
+                                                             //   WRITTEN ONCE: another seat is
+                                                             //   another project, because every
+                                                             //   raw curve here was measured for
+                                                             //   this listening point. Not the
+                                                             //   presets — SQ and FULL are one
+                                                             //   project on one measurement base
+
   "language": {                                              // S-045: the REPLY language, and only it
     "reply": "uk"                                            //   en | uk | de | pl; null = ASK, never guess
   },                                                         //   the INTERFACE language is a front-end's

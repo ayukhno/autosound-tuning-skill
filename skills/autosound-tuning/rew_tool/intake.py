@@ -110,7 +110,10 @@ FORMATS = ("EMMA", "AYA", "CARMusic")
 #: ⚠️ THE field this ticket was opened over. Three choices, one control: asked as two turns it was
 #: answered "driver only" and corrected five minutes later, and the decision already recorded had
 #: to be voided (`tcc:docs/SESSION-ANALYSIS-2026-09-14.md` §4a).
-REFERENCE_SEATS = ("driver", "driver_and_passenger", "all_seats")
+#: S-032: the six kinds of project, from `project.py` so the question and the stored answer cannot
+#: drift. The field id stays `goal.reference_seat` because a consumer's form is keyed by it; what
+#: changed is what it MEANS — not a goal inside a project, but what the project IS.
+REFERENCE_SEATS = project.PROJECT_TYPES
 STAGE_PRIORITIES = ("width", "depth", "height", "center_focus", "envelopment", "front_only")
 LOVES = ("bass", "vocals", "winds_strings", "acoustic", "electronica")
 LOUDNESS = ("loud", "moderate")
@@ -364,12 +367,17 @@ FIELDS = (
        ask_with="purpose", lands="`autosound_context.md` + a recorded decision",
        note="Required once `goal.purpose` includes competition. Several formats = separate presets, "
             "not one tune: crossfeed stabilises an EMMA stage and is never used for AYA."),
-    _f("goal.reference_seat", "goal", "Who is the tune for — the driver / the front passenger too / all seats?",
+    _f("goal.reference_seat", "goal",
+       "Who is the tune for — driver / passenger / both / all / rear left / rear right?",
        required=True, enum=REFERENCE_SEATS, ask_with="seat",
-       lands="`autosound_context.md` (Engineering Profile) + a recorded decision",
-       note="A GOAL, not a detail: a single seat can be fully centred and imaged; all seats is a "
-            "deliberate compromise with no perfect phantom centre for anyone. It decides the "
-            "centering/TA strategy, so it is settled up front."),
+       writes="project:project_type",
+       lands="`project.json` `project_type` + `autosound_context.md` + a recorded decision",
+       note="This is WHAT THE PROJECT IS, not a goal inside it, and it is written ONCE (S-032, the "
+            "Arbiter 2026-09-20). A single seat can be fully centred and imaged; `all` is a "
+            "deliberate compromise with no perfect phantom centre for anyone. Tuning another seat "
+            "means taking every raw curve again, so it is ANOTHER project — started from this "
+            "one's description and none of its measurements. Not the presets: SQ and FULL live in "
+            "one project on one measurement base, and FULL is the rears and surround, not a seat."),
     _f("goal.mode", "goal", "A tune from scratch, improving an existing one, or a light touch?",
        required=True, enum=MODES, lands="`autosound_context.md` + a recorded decision",
        note="An INTENT, orthogonal to the capability level. Both modes read the current DSP state "
@@ -664,6 +672,10 @@ def save(project_dir, field_id, value):
     if f["per"]:
         raise IntakeError(f"{field_id} is asked per {f['per']} — see `writes`: {writes}")
     handle = project.Project(project_dir)
+    if writes == "project:project_type":
+        # Through its own writer, not `_set_path`: it is written ONCE, and a generic path write
+        # would walk straight past the refusal that makes it mean anything (S-032).
+        return handle.set_project_type(value)
     data = handle.load()
     _set_path(data, writes.split(":", 1)[1], value)
     handle.save(data)
@@ -946,6 +958,7 @@ def _selftest():
 
     # ── the enumerations refuse, and say what they would take ─────────────────────────────────
     for bad, fid in (("saloon", "car.body"), ("RHS", "car.drive_side"),
+                     # `driver_only` is the OLD spelling and is not one of the six (S-032)
                      ("driver_only", "goal.reference_seat"), ("4", "dsp.capability_level")):
         try:
             check_value(fid, bad)
@@ -1002,13 +1015,29 @@ def _selftest():
         for fid, value, expect in (("channel_map.code", "w-R", "save_channel"),
                                    ("amps.make", "Helix", "save_amp"),
                                    ("dsp.eq", "10 PK bands", "dsp_profile.set_field"),
-                                   ("goal.reference_seat", "driver", "autosound_context"),
                                    ("channel_map.glossary_agreed", "yes", "glossary.json")):
             try:
                 save(root, fid, value)
                 raise AssertionError(f"{fid} was written by the wrong writer")
             except IntakeError as exc:
                 assert expect in str(exc), (fid, exc)
+
+        # ── S-032: the seat is what the project IS, and it is written ONCE ──────────────────
+        # Fails on the old code at the first line: the field had `writes: None` (it "landed" in
+        # prose and a recorded decision), and its enumeration was three values inside one project.
+        assert field("goal.reference_seat")["writes"] == "project:project_type", field("goal.reference_seat")
+        assert REFERENCE_SEATS == project.PROJECT_TYPES == (
+            "driver", "passenger", "both", "all", "rear_left", "rear_right"), REFERENCE_SEATS
+        save(root, "goal.reference_seat", "driver")
+        assert project.project_type(project.Project(root).load()) == "driver"
+        save(root, "goal.reference_seat", "driver")          # the same answer again is a no-op
+        try:
+            save(root, "goal.reference_seat", "passenger")
+            raise AssertionError("a project changed which seat it is tuned for")
+        except (IntakeError, project.ProjectError) as exc:
+            # The refusal has to carry the ROUTE, or it is a dead end rather than a rule.
+            assert "ANOTHER PROJECT" in str(exc) and "none of its measurements" in str(exc), exc
+        assert project.project_type(project.Project(root).load()) == "driver", "nothing was written"
 
         # ── a slot with no tier is refused, and refused BEFORE anything is written ───────────
         try:
@@ -1048,7 +1077,10 @@ def _selftest():
         before = missing(root)
         assert "car.make" in [r["id"] for r in before["answered"]], before["answered"]
         assert "rew.mic_model" in before["required_missing"], before["required_missing"]
-        assert "goal.reference_seat" in [r["id"] for r in before["not_machine_readable"]], before
+        # S-032: it used to be the example of a field with no machine home. It has one now, and it
+        # is ANSWERED above -- so the example moves to a field that still lands only in prose.
+        assert "goal.reference_seat" in [r["id"] for r in before["answered"]], before["answered"]
+        assert before["not_machine_readable"], "some fields still land in prose, and say so"
         save(root, "rew.mic_model", "UMIK-1")
         after = missing(root)
         assert "rew.mic_model" not in after["required_missing"]
@@ -1062,7 +1094,9 @@ def _selftest():
 
     print("selftest OK (intake) — the field table names only real destinations; every capability "
           "question is claimed by a field and quoted, not paraphrased; the gate list is read off "
-          "contract.GATE_REQUIRED; enumerations refuse and name the choices; the car refuses three "
+          "contract.GATE_REQUIRED; enumerations refuse and name the choices; the seat is WHAT THE "
+          "PROJECT IS and is written once, a second different one refused with the route out "
+          "(S-032); the car refuses three "
           "parts, a slot refuses to go in without its tier, and neither refusal writes anything; "
           "`missing` reports prose as unreadable rather than as a gap.")
     return 0

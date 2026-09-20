@@ -171,6 +171,10 @@ def _empty_project():
         "paths": {}, "presets": [],
         "channels": [], "hardware": {"controls": {}},
         "glossary": {}, "channel_summary": {},
+        # S-032: WHAT this project is tuned for -- one of `PROJECT_TYPES`, and it is not an option
+        # inside the project but the project's own identity. A slot, never a default: guessing
+        # "driver" would be guessing the thing the whole measurement base rests on.
+        "project_type": None,
         # S-045: the REPLY language, and it is a slot rather than a default -- a project with no
         # answer here must ask, not fall back to the language of the last message. The interface
         # language is a front-end's and is not stored here; the input language is stored nowhere.
@@ -220,6 +224,12 @@ def validate(data):
     rev = data.get("project_rev")
     if not isinstance(rev, int) or isinstance(rev, bool) or rev < 0:
         raise ProjectError(f"project_rev must be a non-negative int, got {rev!r}")
+    kind = project_type(data)
+    if kind is not None and kind not in PROJECT_TYPES:
+        raise ProjectError(
+            f"project_type {kind!r} is not one of {', '.join(PROJECT_TYPES)}. It says what this "
+            "project is tuned FOR, and a value outside the list is a project nothing downstream "
+            "can reason about")
     for key in ("amps", "presets", "channels", "sources", "_open_questions"):
         if key in data and not isinstance(data[key], list):
             raise ProjectError(f"{key!r} must be a list")
@@ -570,6 +580,22 @@ def validate_flaw(entry):
 LANGUAGES = ("en", "uk", "de", "pl")
 
 
+#: What a project IS tuned for, and a project is exactly ONE of them (S-032, the Arbiter's ruling
+#: 2026-09-20: «проект може бути тільки одного типу: водій, пасажир, обидва, всі, задній пасажир
+#: ліворуч, задній пасажир праворуч»). Not an option inside a project: tuning the stage for another
+#: seat means taking every raw curve again and walking the whole process, so it is another project.
+#: The rear seats are named left and right separately because on an asymmetric install they are not
+#: one place. NOT to be confused with the presets: SQ and FULL live in ONE project on ONE
+#: measurement base, and FULL is about the rears and surround, not about a seat.
+PROJECT_TYPES = ("driver", "passenger", "both", "all", "rear_left", "rear_right")
+
+
+def project_type(data):
+    """Which of `PROJECT_TYPES` this project is, or None when nobody has said."""
+    value = fact_value((data or {}).get("project_type"))
+    return str(value) if value else None
+
+
 def reply_language(data, front_end=None):
     """Which language this session WRITES in, and where that came from.
 
@@ -839,6 +865,45 @@ class Project:
         done["symptom_drafts"] = drafted
         return done
 
+
+    def set_project_type(self, value):
+        """What this project is tuned FOR — written ONCE, because it is not a revisable answer.
+
+        The Arbiter's ruling 2026-09-20: «проект може бути тільки одного типу: водій, пасажир,
+        обидва, всі, задній пасажир ліворуч, задній пасажир праворуч». Tuning the stage for another
+        seat means taking every raw curve again and walking the whole process, so changing this
+        would not correct a field — it would invalidate the measurement base underneath everything
+        already in the project. That is what an earlier case was really telling us: «driver only»
+        was corrected to «driver and front passenger» five minutes later and a recorded decision had
+        to be voided; the fix then was to couple the question with the drive side, and the fix was
+        too small (S-032).
+
+        So a SECOND, different value is refused, and the refusal names the route: the other seat's
+        project starts from this one's DESCRIPTION — car, channel map, DSP, mic, amps — and none of
+        its measurements. Writing the same value again is a no-op, not an error: a front-end that
+        re-sends what it already sent is not making a claim.
+        """
+        value = str(value or "").strip()
+        if value not in PROJECT_TYPES:
+            raise ProjectError(
+                f"project type {value!r} is not one of {', '.join(PROJECT_TYPES)}")
+        data = self.load()
+        current = project_type(data)
+        if current and current != value:
+            raise ProjectError(
+                f"this project is tuned for {current!r} and cannot become {value!r}. The seat is "
+                "not a field that can be corrected: every raw curve, every delay and every level "
+                "in here was measured and set for that listening point, so changing it would not "
+                "fix a value — it would invalidate the whole base underneath. The other seat is "
+                "ANOTHER PROJECT: start it from this one's DESCRIPTION (car, channel map, DSP, "
+                "mic, amps) and none of its measurements. Presets are a different thing and stay "
+                "as they are — SQ and FULL live in one project on one measurement base, and FULL "
+                "is the rears and surround, not a seat.")
+        if current == value:
+            return value
+        data["project_type"] = value
+        self.save(data)
+        return value
 
     def mark_imported(self, path, from_project):
         """Say that one already-written fact was carried in from another project (S-024).
@@ -1205,6 +1270,11 @@ def rename_legacy_fields(data):
 _USAGE = """usage: project.py <project-dir> <command> [args]
 
   show                                         print project.json (or an empty skeleton)
+  project-type [<type>]                        what this project is tuned FOR, and a project is
+                                               exactly one: driver | passenger | both | all |
+                                               rear_left | rear_right. Written ONCE — another
+                                               seat is another project (S-032). With no argument
+                                               it prints what stands (exit 3 = unanswered)
   mark-imported <dotted.path> --from <project>  a fact carried in from another project: the value
                                                and the time it was measured THERE stand, only the
                                                origin changes (S-024). No re-measurement is owed
@@ -1424,6 +1494,15 @@ def _main(argv):
             code, kv = args[0], _parse_kv(args[1:], source=source)
             proj.set_channel(code, **kv)
             print(f"channel {code} updated")
+        elif cmd == "project-type":
+            if args:
+                got = proj.set_project_type(args[0])
+                print(f"this project is tuned for {got} — written once; another seat is another "
+                      f"project")
+            else:
+                got = project_type(proj.load())
+                print(got or "not recorded — one of " + ", ".join(PROJECT_TYPES))
+                return 0 if got else 3
         elif cmd == "mark-imported":
             got = proj.mark_imported(args[0], _flag(args, "--from"))
             print(f"{args[0]}: carried in from {got['inherited_from']} — value and the time it was "
@@ -2094,6 +2173,36 @@ def _selftest():
     except _intake.IntakeError:
         pass
 
+    # ── S-032: the seat is what the project IS, written once ───────────────────────────────────
+    # Fails on the old code at the first line: there was no `project_type` at all -- the seat was
+    # `goal.reference_seat`, a three-value enum inside a project, revisable like any answer.
+    pt_root = tempfile.mkdtemp(prefix="autosound_seat_")
+    pt = Project(pt_root)
+    assert project_type(pt.load()) is None and "project_type" in open_questions(_empty_project())
+    assert pt.set_project_type("rear_left") == "rear_left"
+    assert project_type(pt.load()) == "rear_left"
+    assert pt.set_project_type("rear_left") == "rear_left", "the same answer again is a no-op"
+    try:
+        pt.set_project_type("driver")
+        raise AssertionError("a project changed which seat it is tuned for")
+    except ProjectError as exc:
+        assert "ANOTHER PROJECT" in str(exc) and "one measurement base" in str(exc), exc
+    assert project_type(pt.load()) == "rear_left", "a refused write leaves no trace"
+    # The six, and nothing else -- on the writer and on `validate`, since a file can be edited.
+    assert PROJECT_TYPES == ("driver", "passenger", "both", "all", "rear_left", "rear_right")
+    for bad in ("driver_only", "all_seats", "", "Driver"):
+        try:
+            Project(tempfile.mkdtemp(prefix="autosound_seat2_")).set_project_type(bad)
+            raise AssertionError(f"accepted {bad!r}")
+        except ProjectError:
+            pass
+    try:
+        validate(dict(_empty_project(), project_type="passenger_front"))
+        raise AssertionError("validate accepted a type outside the six")
+    except ProjectError:
+        pass
+    validate(dict(_empty_project(), project_type="both"))
+
     # ── S-024: an imported fact says it is imported, and no second measurement is owed ─────────
     # Fails on the old code at the first line: `mark_imported` did not exist, and the seven
     # `channels[].fs_hz` facts that came across in the export carried `source: "measured"` with the
@@ -2132,7 +2241,7 @@ def _selftest():
     except ProjectError:
         pass
 
-    print(f"selftest OK — an imported fact says so without losing the value or the moment it was measured there, and no second measurement is owed (S-024); the REPLY language has a machine home, a front-end's report wins over it, and a project written before the field existed still reports the question (S-045); an unreadable project.json is refused rather than replaced (load AND write); two spare slots sharing slot 'F' stayed apart by tier and the profile's "
+    print(f"selftest OK — the seat is the PROJECT's type, one of six, written once and refused a second different value with the route out (S-032); an imported fact says so without losing the value or the moment it was measured there, and no second measurement is owed (S-024); the REPLY language has a machine home, a front-end's report wins over it, and a project written before the field existed still reports the question (S-045); an unreadable project.json is refused rather than replaced (load AND write); two spare slots sharing slot 'F' stayed apart by tier and the profile's "
           f"group id was refused as one (SCR-042), a tier-less project still validates; "
           f"channels[] round-tripped driver/fs_hz facts (SCR-001), duplicate code "
           f"refused, a rename kept the channel's id and resolved its old captures (SCR-039), "
