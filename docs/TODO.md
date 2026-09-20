@@ -1326,10 +1326,25 @@ is not a guarantee: the engine's presence belongs in `doctor`/`selftest`, named 
 project opens, and a fetch that fails during install has to be loud rather than left for Phase 1 to
 find.
 
-**Needed from him, two lines:** the skill version on that MacBook (`git -C ~/.claude/skills/…` or the
-installer's own banner), and whether the install printed anything about the engine. With those this
-splits into «an old install» (nothing to fix but the doctor) or «the fetch is broken on macOS arm64»
-(which S-020 shipped and S-021 is still waiting to verify end to end on a fresh system).
+**Answered at the machine, 2026-09-20.** `deployment.py` there: method `3.0.58` (`66f6bdf`), both copies
+in step. The engine is present NOW — `~/.local/share/autosound/engines/resonalyze/b0ce9fb/osx-arm64` —
+because the SESSION offered to install it mid-tune and he agreed, not because the installer did it.
+`dotnet --version`: absent. And the installer «не казав нічого» about the engine.
+
+That settles the root: `v3.0.58`'s installer speaks in EVERY branch of its engine step — «the .NET SDK is
+here», «~30 MB for <tag>, checked against the release's SHA256SUMS», or a warning — while `v3.0.57`'s has
+no engine step at all. Silence on a machine with no .NET means the install.sh that RAN was older than the
+feature: the `curl` URL pins the installer, so an old bookmark installs old logic while the skill itself
+updates to the newest tag. **The fetch is not broken.**
+
+**Two real defects remain, and they split across waves:**
+
+1. **The method never checks the engine itself** — `doctor`/`selftest` say nothing about it, so a machine
+   that installed before the feature stays quiet until Phase 1.3 asks for a crossover search. One line in
+   the doctor: present or absent, the pin, the platform, and how to get it. **Taken into W-1** (his
+   decision 2026-09-20) — it is the line that would have replaced this whole exchange.
+2. **The installer leaves no receipt** — nothing on the machine says which `install.sh` ran or what it did
+   about the engine, which is why answering this took four exchanges instead of one command. **W-2.**
 
 ---
 

@@ -117,6 +117,11 @@ loud, and `car/passat-b8-2026`'s imported `fs_hz` rows read as imported without 
    `car · dsp` kept as provenance, so the 24-hour duplicate guard stops comparing a constant.
 3. **#47 — `naming.py check`** stops reporting `ok` for a title it normalised: say the title on disk
    differs, and what it was read as.
+4. **S-049's first half — the doctor names the desk engine.** Present or absent, the pin
+   (`ENGINE_PIN`), the platform (`rid()`), and the one command that fetches it. Measured 2026-09-20: a
+   machine can run a whole intake and Phase 0 and only learn at 1.3 that there is no engine — and
+   answering «why» took four exchanges with the Arbiter because nothing on the machine says what the
+   installer did. The installer's receipt is the other half and waits for W-2.
 
 **Done when:** each has a selftest that fails on the old behaviour.
 
