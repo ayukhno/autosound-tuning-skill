@@ -71,10 +71,18 @@ only these files would have written the short version of the exhibit in S-046.
 
 S-045.
 
-`project.json` carries the language; `intake.save` writes it like any other confirmed answer; the
-pre-session reconcile reads it BEFORE the first reply, and a front-end's report still wins when present.
-Two fields if the Arbiter's S-037 point 2 stands (the AI's language and the person's can differ) — ask
-him in one line before writing the schema, because adding the second field later costs a migration.
+**Settled 2026-09-20, and his evidence decides it: THREE languages live in one session.** Testing on the
+Windows VM he had no Ukrainian keyboard, so he typed in English, the session answered in Ukrainian, and
+the interface was Ukrainian.
+
+- **The reply language** — what the session writes in. Stored in `project.json`, written by
+  `intake.save` like any other confirmed answer, read by the pre-session reconcile BEFORE the first
+  reply.
+- **The interface language** — what the front-end shows. The front-end reports it; the method never
+  invents it, and its report wins over the stored value when present.
+- **The input language** — whatever he happened to type, and it **NEVER switches the reply language**.
+  That rule is the actual fix: a session that takes its language from the last message flips the whole
+  tune to English the first time a missing keyboard layout forces one English sentence.
 
 **Done when:** a project with `language: "uk"` on disk gets a Ukrainian first reply in a session that
 knows nothing else, and the intake's `project.language` stops being «not machine-readable».
