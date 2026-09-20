@@ -101,6 +101,18 @@ the machine about himself. The input language is the other trap: on a Windows VM
 layout he typed English, and a session taking its language from the last message flips a whole tune
 on one sentence forced by a missing keyboard (S-045).
 
+## A fact whose origin is not written
+
+Three sightings of one defect, in one wave. Seven `fs_hz` facts came across in an export still
+saying `measured` with the source build's timestamp, and the session's opening report had to INFER
+what had been copied — then handed the Arbiter a contradiction as if it were his decision, when it
+was a consequence of the copy. A protective record written `OFF` on ten channels in one second —
+rears included, which were not in the series — was read by every later tool as ten of his answers,
+and the measurements themselves showed the 100 Hz filter the record denied. A nine-position series
+from a previous project was opened here as `_49`, writing another build's numbering into this
+project's record; the session had SAID it was foreign one message earlier. In all three the data was
+fine and the label was missing, which is worse than missing data: nobody goes looking.
+
 ## Absolute values, never relative
 
 "Remove the +3" once landed 3 dB off intent: the Arbiter and the model disagreed about what the

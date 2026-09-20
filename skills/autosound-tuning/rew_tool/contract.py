@@ -1152,6 +1152,17 @@ def _selftest():
     assert prov["sources_gone"] == ["/nowhere/old-car", "Z:/dev/autosound_projects/projects/resonalyze-passat"], prov
     shown = render_report(dict(report, **prov))
     assert "1 fact(s) carried in from another project" in shown and "channels.tw-L.fs_hz = 1000" in shown, shown
+    # S-024: it is REPORTED and it GATES NOTHING. The Arbiter's rule -- his word closes an imported
+    # Fs and a second impedance run is not owed -- is a property of this check, so it is asserted
+    # rather than left to whoever edits the gate next.
+    carried_root = tempfile.mkdtemp(prefix="autosound_carried_")
+    with open(os.path.join(carried_root, "project.json"), "w", encoding="utf-8") as _fh:
+        json.dump(carried, _fh, ensure_ascii=False)
+    gated = check_project(carried_root, skip_rew=True)
+    assert gated["inherited"], gated["inherited"]
+    assert gated["ok"] is True, "an inherited fact must not make a project 'wrong'"
+    assert not any("inherit" in str(issue).lower()
+                   for entry in gated["files"] for issue in (entry.get("issues") or [])), gated
     assert "source no longer exists: /nowhere/old-car" in shown, shown
     assert provenance({}) == {"inherited": [], "sources_gone": []}
     # skill #31: a distortion row written before `thd_pct` owes it -- reported, not gated, and
@@ -1398,7 +1409,7 @@ def _selftest():
           f"file and its repair rather than as a traceback, on one table line, and the repair it "
           f"names runs and clears it (TCC-007); `catch-up` fills the marked draft on a "
           f"project written before the field, is idempotent, leaves a `notch` row alone and "
-          f"still does NOT close the phase-0 gate; every skip is reported and one the round never expected is named as such (TCC-022); and the report names the REPLY language above "
+          f"still does NOT close the phase-0 gate; every skip is reported and one the round never expected is named as such (TCC-022); a fact carried in from another project is REPORTED and gates nothing (S-024); and the report names the REPLY language above "
           f"the file table, or says nobody has answered (S-045). root={root}")
     return 0
 

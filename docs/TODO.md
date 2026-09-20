@@ -644,7 +644,7 @@ the release's timing, not unfinished work.
 
 ## S-024 · An imported fact keeps saying `measured`, so the intake cannot tell a copy from a measurement
 
-**Status**: open 2026-09-19 · W-1 collection, found in the export package
+**Status**: done 2026-09-20 · W-1 package C · `python3 skills/autosound-tuning/rew_tool/project.py selftest` (mark-imported keeps the value and the time it was measured there) · `python3 skills/autosound-tuning/rew_tool/contract.py selftest` (reported, gates nothing) — the METHOD's half; TCC writes the import record under hub `#185`. Found 2026-09-19 in the export package
 `passat-b8-2026-car-2026-09-18.zip` (tcc 0.1.41, method 3.0.58): its seven `channels[].fs_hz` facts carry
 `"source": "measured"` with the source build's `at` (`2026-08-21T15:18:52`), and land that way in a project
 created on 18.09 on another machine. TCC's half rides as hub `#185`.
@@ -914,7 +914,7 @@ actually distinguishing. A guard keyed on a constant is not a guard.
 
 ## S-036 · A protective record cannot tell a considered OFF from a front-end's bulk default
 
-**Status**: open 2026-09-19 · W-1 collection · the session on the test machine refused to accept what
+**Status**: done 2026-09-20 · W-1 package C · `python3 skills/autosound-tuning/rew_tool/protective.py --selftest` (a bulk default is a question) · `python3 skills/autosound-tuning/rew_tool/state/process.py selftest` (sources, a channel outside the round refused, and the amendment path) — found 2026-09-19, the session on the test machine refused to accept what
 TCC wrote: «Під час імпорту TCC записав `протектив = OFF` на всі 10 каналів за одну секунду, включно з
 тилом поза раундом», while the Arbiter's words were the opposite — the filters were in the chain. It
 recorded the need for his word instead of writing the fact, which is the right call: a false `OFF`
@@ -1281,7 +1281,7 @@ hypotheses were written from a substitute.
 
 ## S-048 · Another project's series number walks into this one, and nothing says it is foreign
 
-**Status**: open 2026-09-19 · W-1 collection · the Arbiter, on the nine-position file the session was
+**Status**: done 2026-09-20 · W-1 package C · `python3 skills/autosound-tuning/rew_tool/state/process.py selftest` (a foreign series refused until its origin is on record) — found 2026-09-19, the Arbiter, on the nine-position file the session was
 about to take in: «а ще 49 сесія це ж з попереднього проекту — запиши що це треба правити».
 
 **Due when:** measurements are next brought into a project from outside it.

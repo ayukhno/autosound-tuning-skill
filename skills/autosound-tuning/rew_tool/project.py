@@ -840,6 +840,54 @@ class Project:
         return done
 
 
+    def mark_imported(self, path, from_project):
+        """Say that one already-written fact was carried in from another project (S-024).
+
+        The export writes the VALUE and the time it was measured, and both are right — what it
+        cannot write is that this build did not establish it. Seven `channels[].fs_hz` facts came
+        across in `passat-b8-2026-car-2026-09-18.zip` carrying `"source": "measured"` and the
+        source build's own `at`, and landed in a project created on another machine days later
+        looking exactly like measurements taken there.
+
+        This flips the ORIGIN and nothing else: the value stands, `at` keeps the moment it was
+        measured THERE, `source` keeps saying `measured` — because it was — and `origin` becomes
+        `inherited` with `inherited_from` naming where from. The Arbiter's rule, 2026-09-19:
+        «імпеданс складна штука і міряти його другий раз це подвиг» — his word closes it, a second
+        impedance run is not owed, and a protective high-pass may be derived from the number. It
+        stays marked, and every report that uses it names where it came from.
+
+        `path` is dotted, as `facts()` prints it: `channels.tw-L.fs_hz`, `amps.0.gain_db`.
+        """
+        data = self.load()
+        known = dict(facts(data))
+        if path not in known:
+            raise ProjectError(
+                f"{path!r} is not a provenanced fact in this project. The ones that are: "
+                + (", ".join(sorted(known)) or "none")
+                + ". Only a `fact()` wrapper carries an origin — a bare value is, by construction, "
+                  "something this project wrote.")
+        from_project = str(from_project or "").strip()
+        if not from_project:
+            raise ProjectError(
+                f"{path}: an imported fact needs the project it came FROM. 'Imported' with no "
+                "source is the same unanswered question as an unmarked fact, and the report that "
+                "names the origin would have nothing to name")
+        node, key = data, None
+        parts = path.split(".")
+        for part in parts[:-1]:
+            if isinstance(node, list):
+                match = next((r for r in node if isinstance(r, dict) and r.get("code") == part), None)
+                node = match if match is not None else node[int(part)]
+            else:
+                node = node[part]
+        key = parts[-1]
+        wrapper = dict(node[key])
+        wrapper["origin"] = "inherited"
+        wrapper["inherited_from"] = from_project
+        node[key] = wrapper
+        self.save(data)
+        return wrapper
+
     def set_channel(self, code, **fields):
         """Add or update one `channels[]` row by `code` (SCR-001) — `slot`/`descr`/`role`/`order`/
         `tier`/`driver`/`fs_hz`/`impedance_ohm`/`hidden`, whatever the caller has; wrap
@@ -1157,6 +1205,9 @@ def rename_legacy_fields(data):
 _USAGE = """usage: project.py <project-dir> <command> [args]
 
   show                                         print project.json (or an empty skeleton)
+  mark-imported <dotted.path> --from <project>  a fact carried in from another project: the value
+                                               and the time it was measured THERE stand, only the
+                                               origin changes (S-024). No re-measurement is owed
   open-questions                               list unresolved facts (dotted paths)
   language [--front-end <code>]                which language to WRITE the reply in, and where
                                                that came from (exit 3 = nobody has answered).
@@ -1373,6 +1424,11 @@ def _main(argv):
             code, kv = args[0], _parse_kv(args[1:], source=source)
             proj.set_channel(code, **kv)
             print(f"channel {code} updated")
+        elif cmd == "mark-imported":
+            got = proj.mark_imported(args[0], _flag(args, "--from"))
+            print(f"{args[0]}: carried in from {got['inherited_from']} — value and the time it was "
+                  f"measured there are unchanged; it now reads as inherited, and no second "
+                  f"measurement is owed")
         elif cmd == "rename-channel":
             old, new = args[0], args[1]
             # The name it goes by BEFORE the call, so a no-op doesn't report a rename that never
@@ -2038,6 +2094,35 @@ def _selftest():
     except _intake.IntakeError:
         pass
 
+    # ── S-024: an imported fact says it is imported, and no second measurement is owed ─────────
+    # Fails on the old code at the first line: `mark_imported` did not exist, and the seven
+    # `channels[].fs_hz` facts that came across in the export carried `source: "measured"` with the
+    # SOURCE build's `at` -- indistinguishable, in the project they landed in, from measurements
+    # taken there.
+    imp_root = tempfile.mkdtemp(prefix="autosound_imported_")
+    ip = Project(imp_root)
+    ip.set_channel("tw-L", fs_hz=fact(1000, source="measured", at="2026-08-21T15:18:52"))
+    before = ip.load()["channels"][0]["fs_hz"]
+    assert fact_origin(before) == DEFAULT_FACT_ORIGIN, before
+    got = ip.mark_imported("channels.tw-L.fs_hz", "/Users/x/dev/autosound/car/passat-b8-2026")
+    assert fact_origin(got) == "inherited" and got["inherited_from"].endswith("passat-b8-2026"), got
+    # The VALUE and the moment it was measured THERE are untouched: his word closes it, and a
+    # second impedance run is not owed («міряти його другий раз це подвиг», 2026-09-19).
+    assert got["value"] == 1000 and got["at"] == "2026-08-21T15:18:52", got
+    assert got["source"] == "measured", "it WAS measured -- just not here"
+    after = ip.load()["channels"][0]["fs_hz"]
+    assert fact_origin(after) == "inherited", after
+    assert [p for p, _ in inherited_facts(ip.load())] == ["channels.tw-L.fs_hz"], inherited_facts(ip.load())
+    # A fact nobody wrote, and an origin with no source project, are both refused -- and neither
+    # writes anything.
+    for bad_args in (("channels.tw-L.nosuch", "/x"), ("channels.tw-L.fs_hz", "")):
+        try:
+            ip.mark_imported(*bad_args)
+            raise AssertionError(f"accepted {bad_args!r}")
+        except ProjectError:
+            pass
+    assert ip.load()["channels"][0]["fs_hz"]["inherited_from"].endswith("passat-b8-2026")
+
     # unsupported schema_version is a deterministic refusal.
     bad = proj.load()
     bad["schema_version"] = 99
@@ -2047,7 +2132,7 @@ def _selftest():
     except ProjectError:
         pass
 
-    print(f"selftest OK — the REPLY language has a machine home, a front-end's report wins over it, and a project written before the field existed still reports the question (S-045); an unreadable project.json is refused rather than replaced (load AND write); two spare slots sharing slot 'F' stayed apart by tier and the profile's "
+    print(f"selftest OK — an imported fact says so without losing the value or the moment it was measured there, and no second measurement is owed (S-024); the REPLY language has a machine home, a front-end's report wins over it, and a project written before the field existed still reports the question (S-045); an unreadable project.json is refused rather than replaced (load AND write); two spare slots sharing slot 'F' stayed apart by tier and the profile's "
           f"group id was refused as one (SCR-042), a tier-less project still validates; "
           f"channels[] round-tripped driver/fs_hz facts (SCR-001), duplicate code "
           f"refused, a rename kept the channel's id and resolved its old captures (SCR-039), "

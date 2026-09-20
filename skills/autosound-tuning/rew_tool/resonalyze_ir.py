@@ -663,6 +663,7 @@ def main(argv=None):
         import naming
         proc = Process(args.process)
     prot_state = {}
+    _bulk_warned = set()           # one warning per ROUND: 54 copies of it is noise (skill #48)
     for spec in args.title:
         title, _, name = spec.partition("=")
         mid = rew_api.find_measurement_id(title)
@@ -696,9 +697,24 @@ def main(argv=None):
                          f"{from_round} for {title!r}; one fact, one source -- fix the round")
             if name not in hpf and state == "raw":
                 hpf[name] = from_round
+            # skill #48: WHOSE word this is, on the one line a tuner would catch it on. `bare`
+            # said the same thing for a recorded OFF and a bulk import default, and the two have
+            # very different standing -- a default read as "measured with nothing in the chain"
+            # leaves the protective filter's phase inside a junction nobody can see.
+            import protective as _prot
+            who = _prot.source_of(record, parsed["code"]) if parsed and record else None
             print(f"{name:8} protective from round: {state}"
                   + (f" {from_round['hz']:g}:{from_round['family']}:{from_round['slopeDbPerOct']}"
-                     if from_round else ""), file=sys.stderr)
+                     if from_round else "")
+                  + (f"  [{who}]" if who else "")
+                  + ("  <- nobody decided this per channel; it is a QUESTION, not an answer"
+                     if who == "default" else ""), file=sys.stderr)
+            round_id = (record or {}).get("id") or (record or {}).get("series")
+            if record is not None and round_id not in _bulk_warned:
+                _bulk_warned.add(round_id)
+                signature = _prot.bulk_default(record, expected=(record.get("expected") or ()))
+                if signature:
+                    print(f"⚠️  {signature}", file=sys.stderr)
         jobs.append((mid, name))
     for spec in args.id:
         mid, _, name = spec.partition("=")

@@ -124,6 +124,44 @@ def legs_of(record, channel):
     return {"hp": entry.get("hp", "OFF"), "lp": entry.get("lp", "OFF")}
 
 
+def source_of(record, channel):
+    """WHO answered for this channel — `"user"`, `"front_end"`, `"default"`, or None (S-036).
+
+    A record written before the field existed has no source and reads as None, which callers treat
+    as they always did. `"default"` is the one that changes a verdict: it means a bulk write that
+    decided nothing per channel, and ten channels marked OFF within one second — rears included
+    that were not in the series at all — is that, not ten of the Arbiter's answers.
+    """
+    return ((record or {}).get("sources") or {}).get(channel)
+
+
+def bulk_default(record, expected=()):
+    """The signature of an import writing an answer it does not have, or None (skill `#48`).
+
+    Three things at once, and it is the combination that makes it a signature rather than a habit:
+    every channel `OFF`, none of them a person's word, and channels in the record that the round
+    never asked for. Both occurrences on the live project looked exactly like this. It REPORTS —
+    the record may still be right, and only the person who was in the car can say.
+    """
+    channels = (record or {}).get("channels") or {}
+    if not channels or not all(legs in ("OFF", "none", None) for legs in channels.values()):
+        return None
+    sources = (record or {}).get("sources") or {}
+    if any(sources.get(ch) == "user" for ch in channels):
+        return None
+    codes = {str(t).split("_")[0].split(" ")[0] for t in (expected or [])}
+    outside = sorted(ch for ch in channels if codes and ch not in codes)
+    return (
+        f"round {record.get('id') or record.get('series')}: all {len(channels)} channels recorded "
+        f"OFF and not one of them by a person"
+        + (f", including {', '.join(outside)}, which the round never asked for" if outside else "")
+        + ". That is the shape of an import writing a default, not of ten answers — and `OFF` is "
+          "read downstream as 'measured with nothing in the chain', so a filtered sweep becomes a "
+          "bare one and its phase stays in a junction nobody can see. Confirm with whoever was in "
+          "the car; correct it with `capture-protective --amend <cap_id> <ch> …`."
+    )
+
+
 def should_de_embed(record, channel, *, baseline=None):
     """Decide what to do with one channel's capture. `(action, detail)`.
 
@@ -153,6 +191,17 @@ def should_de_embed(record, channel, *, baseline=None):
     if legs is not None and any(_live(legs.get(k)) for k in ("hp", "lp")):
         return "yes", legs
     if legs is not None:
+        # S-036: a bulk DEFAULT is not an answer. `user` is a person's word and `front_end` is an
+        # app writing what it captured -- both are answers. `default` decided nothing per channel,
+        # and reading it as "measured unfiltered" is how a filtered sweep comes to be treated as
+        # bare, with the protective filter's phase left inside a junction nobody can see.
+        if source_of(record, channel) == "default":
+            return "check", (
+                f"{channel!r} is recorded OFF, but the record says that came from a bulk DEFAULT — "
+                f"nobody decided it per channel. `OFF` means 'swept with nothing in the chain', "
+                f"which is a fact about the car, and a default is not in a position to state one. "
+                f"Ask whoever was in the car, then record it (`capture-protective`) or amend the "
+                f"round (`capture-protective --amend <cap_id> {channel} …`).")
         return "no", ("marked raw, and the record says nothing was in the chain — measured "
                       "unfiltered, so there is nothing to remove")
     if baseline:
@@ -351,7 +400,9 @@ def _selftest():
           f"{at_160:.1f} deg at 160 Hz (same ratio, so low-passes count too); round trip recovers "
           f"the driver to {err_db.max():.4f} dB / {err_deg.max():.4f} deg above the cap; the "
           f"{MAX_BOOST_DB:g} dB cap binds and is reported; unrecorded refuses, explicit OFF is a "
-          f"fact")
+          f"fact; and WHO answered decides -- a person's OFF and a front-end's are answers, a bulk "
+          f"default is a question, and the import signature (every channel OFF, nobody's word, "
+          f"channels outside the round) is named (S-036, #48)")
 
 
 if __name__ == "__main__":

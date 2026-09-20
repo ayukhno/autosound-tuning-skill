@@ -228,6 +228,72 @@ def _positions_asked(project_dir):
     return False
 
 
+#: WHO wrote a protective record. `user` is a person's word; `front_end` is an app writing what it
+#: captured; `default` is a bulk write that decided nothing per channel. The distinction exists
+#: because ten channels marked OFF within one second, rears included that were not in the series at
+#: all, is a default being read downstream as ten answers (S-036, skill `#48`).
+PROTECTIVE_SOURCES = ("user", "front_end", "default")
+
+
+def _clean_origin(origin):
+    """`{"project": ..., "series": ...}` for measurements taken in ANOTHER project, or None.
+
+    Both halves are required when either is given: "from somewhere else" with no name is the same
+    unanswered question as no origin at all, and the series it was THERE is what a later reader
+    needs to go back and look.
+    """
+    if not origin:
+        return None
+    if isinstance(origin, str):
+        name, _, series = origin.partition(":")
+        origin = {"project": name, "series": series}
+    if not isinstance(origin, dict):
+        raise ProcessError(f"origin must be <project>:<their _N> or {{project, series}}, got {origin!r}")
+    project = str(origin.get("project") or "").strip()
+    series = str(origin.get("series") or "").strip().lstrip("_")
+    if not project or not series:
+        raise ProcessError(
+            f"an origin needs BOTH the project these measurements were taken in and the series "
+            f"they were `_N` of there, got {origin!r}. 'From somewhere else' with no name is the "
+            "same unanswered question as no origin at all")
+    return {"project": project, "series": series}
+
+
+def _protective_source(source):
+    source = str(source or "").strip().lower()
+    if source not in PROTECTIVE_SOURCES:
+        raise ProcessError(
+            f"protective source {source!r} is not one of {', '.join(PROTECTIVE_SOURCES)}. "
+            "It says WHO answered: a person, the front-end for a channel it captured, or a bulk "
+            "default that decided nothing — and a default is read as a question, not an answer")
+    return source
+
+
+def _refuse_channel_outside_round(round_, channel):
+    """A round cannot record protection for a channel it never captured (S-036).
+
+    `set_protective` checked that a round was open and not that the channel was in it, so a bulk
+    import wrote the rears — which were not in the series — alongside the channels that were. A
+    round with no explicit `expected` asked for nothing in particular and is left alone.
+    """
+    expected = [str(t) for t in (round_.get("expected") or [])]
+    if not expected:
+        return
+    if any(str(channel) == str(t).split("_")[0].split(" ")[0] or f"{channel}_" in str(t)
+           or str(t).startswith(f"{channel} ") for t in expected):
+        return
+    if channel in (round_.get("taken") or {}) or any(
+            str(t).startswith(f"{channel}_") or str(t).startswith(f"{channel} ")
+            for t in (round_.get("taken") or {})):
+        return
+    raise ProcessError(
+        f"round {round_.get('id')} never asked for {channel!r} and did not take it — it expected "
+        + ", ".join(sorted({str(t).split("_")[0].split(" ")[0] for t in expected}))
+        + ". A protective record for a channel outside the round is a fact about a pass that did "
+          "not happen, and every reader downstream takes it as one. Record it on the round that "
+          "captured that channel, or amend that round (`capture-protective --amend <cap_id> …`)")
+
+
 def _require_flaw_map(phase, previous, project_dir):
     """Refuse to move past phase 0 while the flaw map is empty (SCR-044)."""
     try:
@@ -943,7 +1009,7 @@ class Process:
         return state["reviewer"]
 
     # -- capture rounds (SCR-034) --
-    def start_capture(self, version, expected=(), phase=None, note=None, step=None):
+    def start_capture(self, version, expected=(), phase=None, note=None, step=None, origin=None):
         """Open a capture round: what was asked for, at which `_N`, in which phase.
 
         `version` is the series number the titles carry (`_N`); a round opened with a ledger version
@@ -967,6 +1033,9 @@ class Process:
         closes the first -- a round nobody closed is a round that ended when the next one began.
         """
         kind = version_kind(version)
+        origin = _clean_origin(origin)
+        if kind == "series" and not origin:
+            self._refuse_foreign_series(version)
         if kind == "ledger":
             banked = _ledger_versions(self.project_dir)
             match = _LEDGER_RE.fullmatch(str(version).strip())
@@ -1003,6 +1072,10 @@ class Process:
             # WHICH counter that string is (TCC-022). `series` is explicitly NOT ledger-bound --
             # the round says so rather than leaving a reader to infer it from the spelling.
             "version_kind": kind,
+            # Where these measurements were taken, when it was NOT this project (S-048). `_N` is
+            # scoped to one project: two projects both have a `_49` and they mean different DSP
+            # states on different days.
+            "origin": origin,
             "issued": _now(),
             "closed": None,
             "expected": expected,
@@ -1018,11 +1091,48 @@ class Process:
             phase=round_["phase"],
             version=round_["version"],
             version_kind=kind,
+            origin=origin,
             expected=expected,
             step=step,
             note=note,
         )
         return round_
+
+    def _refuse_foreign_series(self, version):
+        """A series number that is not this project's own is refused until its ORIGIN is on record.
+
+        `_N` is project-scoped in fact and, until S-048, nowhere in writing. The session saw it and
+        said it — «це серія `_49` зі старого проєкту, не червнева `_1`, на якій стоїть карта» — and
+        then opened the round AS series 49, writing another project's numbering into this project's
+        record as if it were its own. Joining a foreign `_49` to a flaw map built on this project's
+        `_1` is the same class as an imported `fs_hz` that still says `measured`: data from another
+        build arriving with nothing on it that says so.
+
+        What counts as this project's own: a number it has already used, or the next one after its
+        highest. A project with no rounds yet has no sequence to be outside of, and the first round
+        is accepted whatever it is numbered.
+        """
+        seen = set()
+        for round_ in self.capture_rounds():
+            for value in [round_.get("version")] + list(round_.get("title_versions") or []):
+                text = str(value).strip().lstrip("_")
+                if text.isdigit():
+                    seen.add(int(text))
+        if not seen:
+            return
+        n = int(str(version).strip().lstrip("_"))
+        if n in seen or n == max(seen) + 1:
+            return
+        raise ProcessError(
+            f"series _{n} is not this project's: it has used "
+            + ", ".join(f"_{v}" for v in sorted(seen))
+            + f", so its own next one is _{max(seen) + 1}. `_N` numbers the series of ONE project "
+              "— two projects both have a `_49` and they mean different DSP states on different "
+              "days, and a foreign number joined to this project's flaw map is another build's "
+              "data wearing this build's label. Either open the round at this project's own "
+              f"number (`capture-start {max(seen) + 1} …`), or, if these measurements really were "
+              "taken elsewhere, record where: `capture-start <N> --origin <project>:<their _N> …`."
+        )
 
     def record_capture(self, title, at=None):
         """A measurement was taken. Unplanned ones are recorded too, flagged as such.
@@ -1048,7 +1158,7 @@ class Process:
         )
         return round_
 
-    def set_protective(self, channel, legs):
+    def set_protective(self, channel, legs, source="user"):
         """Declare what was in the chain for one channel of the OPEN round, and that it was RAW.
 
         Working-by-default is the rule (`protective.py`): a round nobody marks measured the system
@@ -1092,11 +1202,48 @@ class Process:
                 if missing:
                     raise ProcessError(f"{channel}.{kind}: a protective leg needs {missing} — "
                                        f"without them the filter cannot be taken back out")
+        source = _protective_source(source)
+        _refuse_channel_outside_round(round_, channel)
         round_.setdefault("protective", {})[channel] = legs
+        round_.setdefault("protective_source", {})[channel] = source
         self._write(state)
         self._append(EV_CAPTURE_PROTECTIVE, capture=round_["id"], channel=channel, legs=legs,
-                     phase=round_["phase"], version=round_["version"])
+                     source=source, phase=round_["phase"], version=round_["version"])
         return round_
+
+    def amend_protective(self, capture_id, channel, legs, reason, source="user"):
+        """Correct a CLOSED round's protective record, visibly as a correction (skill `#48`).
+
+        `set_protective` requires an OPEN round, and the round most likely to need a correction is
+        exactly the one an exporter has already read. On a live project a nine-position series was
+        captured with 100 Hz LR24 on the mids and 1 kHz LR24 on the tweeters, and the round said
+        `OFF` for all ten channels — the measurements themselves show the roll-off, matching a
+        tripod set of the same install to within a decibel. There was no way to say so: the
+        workaround was to open a NEW round on the same version and close it with a reason saying
+        nothing was measured in it, which makes "capture round" mean two different things and
+        misleads the next reader in a second way.
+
+        No state is written — a closed round is not in the slice. The correction is a
+        `capture_protective` event carrying the round's id, so `protective_record_for`, which
+        replays those events in order, picks it up as the last word on that channel; and it carries
+        `amends` plus the required `reason`, so a reader sees a correction rather than a record
+        that was always this way.
+        """
+        reason = str(reason or "").strip()
+        if not reason:
+            raise ProcessError(
+                "an amendment needs a reason — it is a correction of something already read by "
+                "somebody, and a correction with no why is indistinguishable from a second opinion")
+        capture_id = str(capture_id).strip()
+        known = {r["id"] for r in self.capture_rounds()}
+        if capture_id not in known:
+            raise ProcessError(
+                f"no capture round {capture_id!r} in this project's journal"
+                + (f" (rounds: {', '.join(sorted(known))})" if known else " (no rounds at all)"))
+        source = _protective_source(source)
+        self._append(EV_CAPTURE_PROTECTIVE, capture=capture_id, channel=str(channel).strip(),
+                     legs=legs, source=source, amends=capture_id, reason=reason)
+        return {"capture": capture_id, "channel": channel, "legs": legs, "reason": reason}
 
     def set_knobs(self, controls):
         """The hardware controls as they stood for THIS round: `{name: position}`.
@@ -1164,9 +1311,13 @@ class Process:
         round_ = (state or self.load()).get("capture")
         if not round_:
             return None
-        return {"series": round_["id"], "phase": round_.get("phase"),
+        return {"series": round_["id"], "id": round_["id"], "phase": round_.get("phase"),
                 "version": round_.get("version"),
-                "channels": dict(round_.get("protective") or {})}
+                "channels": dict(round_.get("protective") or {}),
+                # WHO answered, per channel (S-036). A reader that wants only the legs ignores it;
+                # `protective.should_de_embed` does not, because a bulk `default` is a question.
+                "sources": dict(round_.get("protective_source") or {}),
+                "amended": {}}
 
     @staticmethod
     def _version_key(v):
@@ -1238,11 +1389,18 @@ class Process:
             if cid not in matches:
                 continue
             if event.get("type") == EV_CAPTURE_ISSUED:
-                rounds[cid] = {"series": cid, "phase": event.get("phase"),
-                               "version": str(event.get("version")), "channels": {}}
+                rounds[cid] = {"series": cid, "id": cid, "phase": event.get("phase"),
+                               "version": str(event.get("version")), "channels": {},
+                               "sources": {}, "amended": {}}
                 order.append(cid)
             elif cid in rounds and event.get("channel"):
-                rounds[cid]["channels"][event["channel"]] = event.get("legs")
+                channel = event["channel"]
+                rounds[cid]["channels"][channel] = event.get("legs")
+                rounds[cid]["sources"][channel] = event.get("source") or "user"
+                # An amendment is the last word on that channel AND says so: a correction read as
+                # if the record had always said this is a second way to mislead the next reader.
+                if event.get("amends"):
+                    rounds[cid]["amended"][channel] = event.get("reason") or ""
         if not order:
             live = self.protective_record()
             return live if live and key(live.get("version")) == version else None
@@ -1749,7 +1907,8 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
                                               Exits non-zero while anything is open, so "we
                                               stopped" cannot be said over an open round
   decision <question> <answer> [step] [--invalidates X]   what the Arbiter ruled, as itself
-  capture-start <version> [title ...] [--step ID]   open a capture round; titles = what was
+  capture-start <version> [title ...] [--step ID] [--origin <project>:<their _N>]
+                                        open a capture round; titles = what was
                                          asked for, --step binds it to the plan step it satisfies
   capture-check [title ...] [--session]  run the verdict over the round and record it (SCR-040);
                                          --session adds the whole-session probe (levels side by
@@ -1759,9 +1918,15 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
                                         (SubRC=4/4 RealCenter=ON): a fact about the SERIES, so two
                                         series taken at different positions can be told apart
                                         instead of the difference landing in a calibration offset
-  capture-protective <ch> OFF           this round was RAW for that channel: what was in the
+  capture-protective <ch> OFF [--source user|front_end|default]
+                                        this round was RAW for that channel: what was in the
   capture-protective <ch> --hp 100 LR 24    chain and is NOT part of the tune, so it can be taken
       [--lp 4000 BW 36]                 back out before a phase decision. OFF = leave it alone,
+  capture-protective --amend <cap_id> --reason "..." <ch> OFF|--hp ...
+                                        correct a CLOSED round's record, visibly as a correction
+                                        (skill #48); the reason is required. --source says WHO
+                                        answered: a bulk `default` is read as a QUESTION, not as
+                                        an answer (S-036)
                                         which is an ANSWER and the default; not running this at
                                         all means the round measured the system as configured --
                                         and since 2026-09-06 the front-end always writes one of
@@ -1953,7 +2118,10 @@ def _selftest():
     # differing by channel inside it. And the round already carries `phase` and `version`, which
     # is what a reader needs to know whether de-embedding is appropriate at all.
     pr = proc                       # the fixture that already passed the phase -1 intake gate
-    pr.start_capture("0", expected=["m-L_0 (sw)"], phase="0")
+    # The round asks for the channels this block records protection FOR -- which is the real
+    # shape: protection is recorded for what was swept, and S-036's refusal below depends on it.
+    pr.start_capture("0", expected=["m-L_0 (sw)", "w-L_0 (sw)", "tw-L_0 (sw)", "c_0 (sw)",
+                                    "m-R_0 (sw)"], phase="0")
     pr.set_protective("m-L", {"hp": {"f": 100, "type": "LR", "slope": 24}})
     pr.set_protective("w-L", "OFF")
     rec = pr.protective_record()
@@ -1983,6 +2151,45 @@ def _selftest():
         else:
             raise AssertionError(f"protective legs {bad!r} must be refused")
     assert "m-R" not in pr.protective_record()["channels"], "a refused write leaves no trace"
+
+    # -- S-036 / skill #48: WHO answered, and a channel the round never captured ----------------
+    # Fails on the old code at the first assertion: the record carried the legs and nothing about
+    # their author, so ten channels written OFF in one second -- rears included, which were not in
+    # the series at all -- were read downstream as ten of the Arbiter's answers.
+    assert pr.protective_record()["sources"] == {"m-L": "user", "w-L": "user"}, pr.protective_record()
+    assert pr.protective_record_for("0")["sources"]["m-L"] == "user"
+    refuses("a protective record for a channel the round never captured",
+            lambda: pr.set_protective("r-L", "OFF"))
+    assert "r-L" not in pr.protective_record()["channels"], "a refused write leaves no trace"
+    refuses("a source that is not one of the three", lambda: pr.set_protective("m-L", "OFF", source="tcc"))
+    pr.set_protective("w-L", "OFF", source="default")
+    assert pr.protective_record()["sources"]["w-L"] == "default", pr.protective_record()
+    assert pr.protective_record_for("0")["sources"]["w-L"] == "default"
+
+    pr.set_protective("w-L", "OFF", source="user")   # the fixture's own round stays as it was
+
+    # The amendment path a CLOSED round needs (skill #48), on a project of its own so the fixture
+    # above keeps its open round: no state write, a required reason, and `protective_record_for`
+    # reads the correction as the last word on that channel.
+    am = Process(os.path.join(tempfile.mkdtemp(prefix="autosound_amend_"), "process"))
+    am.start_capture("49", expected=["m-L_49 (sw)"], phase="0")
+    am.set_protective("m-L", "OFF", source="front_end")
+    cap_id = am.protective_record()["id"]
+    am.close_capture("the pass is over")
+    refuses("a protective write on a CLOSED round", lambda: am.set_protective("m-L", "OFF"))
+    refuses("an amendment with no reason", lambda: am.amend_protective(cap_id, "m-L", "OFF", ""))
+    refuses("an amendment to a round that does not exist",
+            lambda: am.amend_protective("cap_999", "m-L", "OFF", "typo"))
+    am.amend_protective(cap_id, "m-L",
+                        {"hp": {"f": 100, "type": "LR", "slope": 24}},
+                        "the import wrote OFF for every channel in one second; the mids measurably "
+                        "carry a 100 Hz LR24", source="user")
+    fixed = am.protective_record_for("49")
+    assert fixed["channels"]["m-L"]["hp"]["f"] == 100, fixed
+    assert fixed["sources"]["m-L"] == "user", fixed
+    assert fixed["amended"]["m-L"].startswith("the import wrote OFF"), fixed
+    # ...and the amendment left the CLOSED round's own slice alone -- it is history, not state.
+    assert am.load()["capture"]["protective"]["m-L"] == "OFF", am.load()["capture"]
 
     # The CLI verb, because autosound-tcc cannot reach a Python method here: it routes every
     # process WRITE through this command line under an exclusive lock, so a verb that only exists
@@ -2158,6 +2365,38 @@ def _selftest():
     sp.start_attempt("0.1")
     assert [s["attempt"] for s in sp.open_work()["steps_in_progress"]] == [2], sp.open_work()
 
+    # ── S-048: another project's series number does not walk in unannounced ──────────────────
+    # Fails on the old code at the refusal: `start_capture` took any number, and a session that
+    # had ALREADY SAID the set was «серія _49 зі старого проєкту» opened the round as series 49,
+    # writing another build's numbering into this project's record as its own.
+    fs = Process(os.path.join(tempfile.mkdtemp(prefix="autosound_series_"), "process"))
+    fs.start_capture("1", ["m-L_1 (sw)"])          # a first round has no sequence to be outside of
+    fs.close_capture("done")
+    fs.start_capture("2", ["m-L_2 (sw)"])          # the next number is this project's own
+    fs.close_capture("done")
+    try:
+        fs.start_capture("49", ["m-L p1_49 (sw)"])
+        raise AssertionError("another project's series walked in")
+    except ProcessError as exc:
+        assert "_49 is not this project's" in str(exc) and "--origin" in str(exc), str(exc)
+        assert "capture-start 3" in str(exc), "the refusal names this project's own next number"
+    # With the origin on record it opens, and the round CARRIES where the measurements came from.
+    foreign = fs.start_capture("49", ["m-L p1_49 (sw)"], origin="passat-b8-2026:49")
+    assert foreign["origin"] == {"project": "passat-b8-2026", "series": "49"}, foreign
+    issued = [e for e in fs.events() if e["type"] == EV_CAPTURE_ISSUED][-1]
+    assert issued["origin"]["project"] == "passat-b8-2026", issued
+    # Half an origin is no origin: "from somewhere else" with no name answers nothing.
+    for half in ("passat-b8-2026", {"project": "x"}, {"series": "49"}, ":49"):
+        try:
+            Process(os.path.join(tempfile.mkdtemp(prefix="autosound_half_"), "process")).start_capture(
+                "1", ["m-L_1 (sw)"], origin=half)
+            raise AssertionError(f"accepted half an origin: {half!r}")
+        except ProcessError:
+            pass
+    # A number this project has already used is its own, and needs nothing.
+    fs.close_capture("done")
+    fs.start_capture("2", ["m-L_2 (rta)"])
+
     # ── TCC-022: the two counters are told apart, and a ledger version is CHECKED ────────────
     # Fails on the old code at the first refusal: `start_capture` wrote the string and checked
     # nothing, so four rounds were opened at a `v_001` that had never been banked.
@@ -2259,7 +2498,7 @@ def _selftest():
         "the journal headed itself with the writing checkout and re-headed only when it changed; "
         "and STOPPING is an event: `open_work` names the open round and every step left in "
         "progress, drops a round once it is closed, and owes a step again when it is picked "
-        "back up; an RTA the check does not apply to is kept as such and holds no step (#29); a step CARRIES what it covers and its name names the first three and counts the rest (S-031); a round records WHICH counter its version is, refuses a `v_NNN` nobody banked with both ways on, and marks a skip planned or not (TCC-022); and a phase does not close over a flaw row that stands on an UNASKED question -- the refusal carries the titles that would settle it, and a round opened or a ruling recorded closes it (S-047). "
+        "back up; an RTA the check does not apply to is kept as such and holds no step (#29); a step CARRIES what it covers and its name names the first three and counts the rest (S-031); a series number that is not this project's is refused until its ORIGIN is on record (S-048); a round records WHICH counter its version is, refuses a `v_NNN` nobody banked with both ways on, and marks a skip planned or not (TCC-022); and a phase does not close over a flaw row that stands on an UNASKED question -- the refusal carries the titles that would settle it, and a round opened or a ruling recorded closes it (S-047). "
         f"root={root}"
     )
     return 0
@@ -2397,14 +2636,22 @@ def _main(argv):
         elif cmd == "capture-start":
             step = None
             rest = list(args)
+            origin = None
+            if "--origin" in rest:
+                i = rest.index("--origin")
+                origin = rest[i + 1] if len(rest) > i + 1 else None
+                rest = rest[:i] + rest[i + 2:]
             if "--step" in rest:
                 i = rest.index("--step")
                 step = rest[i + 1] if len(rest) > i + 1 else None
                 rest = rest[:i] + rest[i + 2:]
-            round_ = p.start_capture(rest[0], expected=rest[1:], step=step)
+            round_ = p.start_capture(rest[0], expected=rest[1:], step=step, origin=origin)
             print(
                 f"{round_['id']} open at {round_['version']}, "
                 f"{len(round_['expected'])} capture(s) expected"
+                + (f" — taken in {round_['origin']['project']} as _{round_['origin']['series']}, "
+                   "not this project's own series"
+                   if round_.get("origin") else "")
             )
         elif cmd == "capture-check":
             session = "--session" in args
@@ -2457,7 +2704,24 @@ def _main(argv):
             # write. One implementation of "record a move" beats an in-process copy that drifts.
             if not args:
                 raise ProcessError("capture-protective needs a channel")
-            channel, rest = args[0], args[1:]
+            rest = list(args)
+            source, amend, reason = "user", None, None
+            for flag, into in (("--source", "source"), ("--amend", "amend"), ("--reason", "reason")):
+                if flag in rest:
+                    i = rest.index(flag)
+                    value = rest[i + 1] if len(rest) > i + 1 else None
+                    if value is None:
+                        raise ProcessError(f"{flag} needs a value")
+                    rest = rest[:i] + rest[i + 2:]
+                    if into == "source":
+                        source = value
+                    elif into == "amend":
+                        amend = value
+                    else:
+                        reason = value
+            if not rest:
+                raise ProcessError("capture-protective needs a channel")
+            channel, rest = rest[0], rest[1:]
             if rest and rest[0].upper() == "OFF":
                 legs = "OFF"
             else:
@@ -2479,7 +2743,13 @@ def _main(argv):
                         "give --hp/--lp, or the bare word OFF to say this channel was swept with "
                         "nothing in the chain. Saying nothing at all is a different thing and is "
                         "recorded by NOT running this command")
-            round_ = p.set_protective(channel, legs)
+            if amend:
+                done = p.amend_protective(amend, channel, legs, reason or "", source=source)
+                shown_legs = "OFF" if legs == "OFF" else ", ".join(
+                    f"{k.upper()} {v['f']:g} {v['type']}{v['slope']}" for k, v in sorted(legs.items()))
+                print(f"{amend} {channel}: corrected to {shown_legs} ({source}) — {done['reason']}")
+                return 0
+            round_ = p.set_protective(channel, legs, source=source)
             shown = "OFF" if legs == "OFF" else ", ".join(
                 f"{k.upper()} {v['f']:g} {v['type']}{v['slope']}" for k, v in sorted(legs.items()))
             print(f"{round_['id']} {channel}: protective {shown} — this round is RAW for that "
