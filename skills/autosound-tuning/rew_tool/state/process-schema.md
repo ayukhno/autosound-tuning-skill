@@ -47,6 +47,7 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
   "capture": {                                      // SCR-034: the OPEN capture round, or null.
     "id": "cap_002", "n": 2,                        //   Every round that ever happened is in the
     "phase": "0", "version": "v_003",               //   journal; only the live one is here, the
+    "version_kind": "ledger",                       //   ledger | series | null — WHICH counter
     "issued": "…", "closed": null,                  //   same way only the active phase is.
     "expected": ["tw-L_1 (sw)", "tw-L_1 (rta)"],    // what `naming.expected_groups` asked for
     "step": "0.1",                                  // SCR-040: the plan step this round satisfies
@@ -54,7 +55,8 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
       "verified": {"ok": true, "exists": true,      // SCR-040: what the arithmetic said
                    "uuid": "9ff4deb9-…",            //   REW's own id — the title is NOT identity
                    "at": "…", "issues": []}}},
-    "skipped": {"c_1 (sw)": {"at": "…", "reason": "centre not wired yet"}}
+    "skipped": {"c_1 (sw)": {"at": "…", "reason": "centre not wired yet",
+                             "planned": true}}     // planned=false: never on the list
   }
 }
 ```
@@ -111,7 +113,22 @@ for that checkout — see `rew_tool/provenance.py` for why it is the sha and not
   dsp_profile.json (5)` in the Arbiter's window: thirteen facts, named nowhere he could see, in
   the one artefact he acts on. `covers_summary()` is the single renderer; a window expands the
   full list and a session ticks it off.
-- **A skipped capture needs a reason** (SCR-034). Skipped and not-yet-taken looked identical
+- **A round says WHICH counter its version is, and a ledger version must exist** (TCC-022). The two
+  are different counters and neither is derived from the other: a **series** `_N` numbers a set of
+  measurements, a **ledger version** `v_NNN` is the configuration they were taken under. So the
+  ledger is a precondition of a LEDGER-BOUND round, not of the capture flow — a Phase-0 baseline is
+  measured before anything is banked, opens at `_1`, and records `version_kind: "series"`, which is
+  the round saying it is not ledger-bound. Naming a `v_NNN` with no snapshot on disk is refused, and
+  the refusal carries both ways on: bank the state (`apply.propose`), or open the round at its
+  series number. Bought on a project made by TCC's Copy car — which carries `project.json` and the
+  profile and deliberately no `state/`: four rounds opened in a row at a `v_001` that did not exist,
+  while the flow's other half, `apply.propose`, failed silently on the same fact and never said
+  what was missing.
+- **A skipped capture needs a reason** (SCR-034), and carries `planned` the way a taken one does —
+  `expected[]` is not a closed set, so a reader cannot assume everything in `skipped` was ever asked
+  for. `contract.py`'s `round_verdict` reports every skip and names the unplanned ones
+  (`skipped_unplanned`); it used to intersect them with `missing`, so a skip outside the list
+  vanished from the report entirely (TCC-022). Skipped and not-yet-taken looked identical
   before, so a tuner who decided a capture was unnecessary had no way to say so and the next
   session proposed it again. `skip_capture` raises without one.
 - **Captures belong to a ROUND, not to a version.** The ledger version names the config a

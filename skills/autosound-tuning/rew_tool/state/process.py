@@ -402,6 +402,26 @@ def _state_root(project_dir):
     return env if env else os.path.join(project_dir, "state")
 
 
+_SERIES_RE = re.compile(r"_?(\d{1,4})$")
+
+
+def version_kind(version):
+    """Which of the TWO counters a round's `version` names — `"ledger"`, `"series"` or `None`.
+
+    They are different counters and neither is derived from the other (`naming-and-structure.md`
+    §1a/§5): a **series** `_N` numbers a set of measurements, a **ledger version** `v_NNN` is the
+    DSP configuration they were taken under. `capture-start` takes either, and until TCC-022 the
+    round recorded the string and left every later reader to guess from its spelling — which is
+    also why nothing could check it.
+    """
+    text = str(version if version is not None else "").strip()
+    if _LEDGER_RE.fullmatch(text):
+        return "ledger"
+    if _SERIES_RE.fullmatch(text):
+        return "series"
+    return None
+
+
 def _ledger_versions(project_dir):
     """Every snapshot on disk as a bare number ("7" for `v_007.json`)."""
     out = set()
@@ -863,12 +883,44 @@ class Process:
 
         `version` is the series number the titles carry (`_N`); a round opened with a ledger version
         (`v_001`) is still found, since `protective_record_for` matches either -- but the two are
-        different counters (`naming-and-structure.md §5`), and neither is derived from the other.
+        different counters (`naming-and-structure.md §1a/§5), and neither is derived from the other.
+        Which one this round means is now RECORDED (`version_kind`) instead of left to a reader's
+        guess, and a ledger version is CHECKED against the snapshots on disk.
+
+        **The ledger is a precondition of a ledger-bound round, not of the capture flow** (TCC-022,
+        the Arbiter's stopper 2026-09-20). A Phase-0 baseline is measured before anything is banked
+        and opens at `_1` with no ledger at all -- that is correct and stays correct. Naming a
+        `v_NNN` says the opposite: that these measurements were taken under a CONFIGURATION, and a
+        round pointing at a version nobody banked cannot answer which one, while still looking
+        complete. Four such rounds were opened in a row on a project made by TCC's Copy car -- which
+        carries `project.json` and the profile and deliberately no `state/` -- and the flow's other
+        half failed silently on the same fact: `apply.propose` could not produce a settings sheet
+        and never said why. One half was lenient, the other mute; now both name the ledger.
 
         A ROUND, not a version: two rounds on the same DSP state are two passes, and what the
         Arbiter asks about is "this session's task". Opening a second round while one is open
         closes the first -- a round nobody closed is a round that ended when the next one began.
         """
+        kind = version_kind(version)
+        if kind == "ledger":
+            banked = _ledger_versions(self.project_dir)
+            match = _LEDGER_RE.fullmatch(str(version).strip())
+            if str(int(match.group(1))) not in banked:
+                raise ProcessError(
+                    f"capture round at {version!r}: no such ledger version on disk"
+                    + (f" (banked: {', '.join('v_%03d' % int(v) for v in sorted(banked, key=int))})"
+                       if banked else " -- this project has no ledger at all, which is what TCC's "
+                                      "Copy car produces by design")
+                    + ". A `v_NNN` round says these measurements were taken under that "
+                      "CONFIGURATION, so the snapshot has to exist first. Two ways on, and they "
+                      "are different questions:\n"
+                      "  - the measurements are of a banked state -> bank it first "
+                      "(`apply.propose`; phase -1's first ledger snapshot for a new project), then "
+                      "open the round at the version it wrote;\n"
+                      "  - the measurements are a baseline, taken before anything is banked -> "
+                      f"open the round at its SERIES number instead (`capture-start 1 ...`), which "
+                      "is what Phase 0 does and needs no ledger."
+                )
         state = self.load()
         previous = state.get("capture")
         if previous and not previous.get("closed"):
@@ -883,6 +935,9 @@ class Process:
             # measurement; with it, it is visibly attempt N of the step that asked for it.
             "step": step,
             "version": str(version),
+            # WHICH counter that string is (TCC-022). `series` is explicitly NOT ledger-bound --
+            # the round says so rather than leaving a reader to infer it from the spelling.
+            "version_kind": kind,
             "issued": _now(),
             "closed": None,
             "expected": expected,
@@ -897,6 +952,7 @@ class Process:
             capture=round_["id"],
             phase=round_["phase"],
             version=round_["version"],
+            version_kind=kind,
             expected=expected,
             step=step,
             note=note,
@@ -1222,9 +1278,16 @@ class Process:
         title, reason = str(title).strip(), str(reason or "").strip()
         if not reason:
             raise ProcessError(f"skipping {title!r} needs a reason -- it is a decision, not a gap")
-        round_["skipped"][title] = {"at": _now(), "reason": reason}
+        # `planned` for the same reason `record_capture` carries it (TCC-022): `expected[]` is not
+        # a closed set, so a reader of a round cannot assume everything in `skipped` was ever asked
+        # for. Four rear titles were skipped into rounds that never expected them, and a skip of a
+        # title that was never expected used to vanish from `contract.py`'s report entirely --
+        # neither taken, nor missing, nor listed as skipped.
+        planned = title in round_["expected"]
+        round_["skipped"][title] = {"at": _now(), "reason": reason, "planned": planned}
         self._write(state)
-        self._append(EV_CAPTURE_SKIPPED, capture=round_["id"], title=title, reason=reason)
+        self._append(EV_CAPTURE_SKIPPED, capture=round_["id"], title=title, reason=reason,
+                     planned=planned)
         return round_
 
     def _load_verifier(self):
@@ -1989,6 +2052,42 @@ def _selftest():
     sp.start_attempt("0.1")
     assert [s["attempt"] for s in sp.open_work()["steps_in_progress"]] == [2], sp.open_work()
 
+    # ── TCC-022: the two counters are told apart, and a ledger version is CHECKED ────────────
+    # Fails on the old code at the first refusal: `start_capture` wrote the string and checked
+    # nothing, so four rounds were opened at a `v_001` that had never been banked.
+    assert (version_kind("v_001"), version_kind("1"), version_kind("_17")) == \
+        ("ledger", "series", "series"), "the two counters"
+    assert version_kind("ir-v7_49") is None and version_kind(None) is None
+    cap = Process(os.path.join(tempfile.mkdtemp(prefix="autosound_cap_"), "process"))
+    try:
+        cap.start_capture("v_001", ["w-L_1 (sw)"])
+        raise AssertionError("a round was opened at a ledger version nobody had banked")
+    except ProcessError as exc:
+        # The refusal has to carry BOTH ways on, because they are different questions -- bank the
+        # state, or open the round at its series number because nothing is banked yet on purpose.
+        assert "no ledger at all" in str(exc) and "capture-start 1" in str(exc), str(exc)
+        assert "apply.propose" in str(exc), str(exc)
+    # A baseline round needs no ledger and says so: `series` is explicitly not ledger-bound.
+    baseline = cap.start_capture("1", ["w-L_1 (sw)"])
+    assert baseline["version_kind"] == "series", baseline
+    issued = [e for e in cap.events() if e["type"] == EV_CAPTURE_ISSUED][-1]
+    assert issued["version_kind"] == "series", issued
+    # An unplanned SKIP is marked the way an unplanned arrival is -- on the round and on the event.
+    cap.skip_capture("r-L_1 (sw)", "rears not wired in this pass")
+    cap.skip_capture("w-L_1 (sw)", "driver buzzing, retake next session")
+    assert cap.load()["capture"]["skipped"]["r-L_1 (sw)"]["planned"] is False, cap.load()["capture"]
+    assert cap.load()["capture"]["skipped"]["w-L_1 (sw)"]["planned"] is True, cap.load()["capture"]
+    skips = {e["title"]: e for e in cap.events() if e["type"] == EV_CAPTURE_SKIPPED}
+    assert skips["r-L_1 (sw)"]["planned"] is False and skips["w-L_1 (sw)"]["planned"] is True, skips
+    # Once the snapshot EXISTS, the same ledger round opens -- the check is about the fact on disk,
+    # not about the spelling.
+    banked_dir = os.path.join(_state_root(cap.project_dir), "SQ")
+    os.makedirs(banked_dir, exist_ok=True)
+    with open(os.path.join(banked_dir, "v_001.json"), "w", encoding="utf-8") as fh:
+        fh.write("{}")
+    bound = cap.start_capture("v_001", ["w-L_2 (sw)"])
+    assert bound["version_kind"] == "ledger", bound
+
     # ── S-031: a step carries WHAT it covers, and its name names it ──────────────────────────
     # The old behaviour: `add_step("0.4", "Закрити відкриті поля: project.json (8)")` and the
     # eight fields live nowhere a reader can reach. Fails on the old code at the first line --
@@ -2054,7 +2153,7 @@ def _selftest():
         "the journal headed itself with the writing checkout and re-headed only when it changed; "
         "and STOPPING is an event: `open_work` names the open round and every step left in "
         "progress, drops a round once it is closed, and owes a step again when it is picked "
-        "back up; an RTA the check does not apply to is kept as such and holds no step (#29); a step CARRIES what it covers and its name names the first three and counts the rest (S-031). "
+        "back up; an RTA the check does not apply to is kept as such and holds no step (#29); a step CARRIES what it covers and its name names the first three and counts the rest (S-031); a round records WHICH counter its version is, refuses a `v_NNN` nobody banked with both ways on, and marks a skip planned or not (TCC-022). "
         f"root={root}"
     )
     return 0

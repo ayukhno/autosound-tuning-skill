@@ -365,11 +365,19 @@ def round_verdict(titles, round_, glossary=None):
     MISSING sent a reader looking for work that was settled, and dropped the reason on the way.
     `skipped` maps each such title to its reason; `missing` is what is neither taken nor skipped,
     and `complete` means nothing is.
+
+    **Every skip is reported, including one of a title that was never expected** (TCC-022). This
+    used to intersect `skipped` with `missing`, and `missing` is derived from `expected` — so a
+    skip outside the list vanished from the report altogether: neither taken, nor missing, nor
+    skipped. Four rear titles went that way on a live project. `skipped_unplanned` names them,
+    because a skip of something nobody asked for is a different fact from a skip of something that
+    was on the list.
     """
     expected = [str(x) for x in (round_.get("expected") or []) if str(x).strip()]
     verdict = naming.validate_series(titles, expected, glossary)
     decided = {str(t): (entry or {}).get("reason") for t, entry in (round_.get("skipped") or {}).items()}
-    verdict["skipped"] = {t: decided[t] for t in verdict["missing"] if t in decided}
+    verdict["skipped"] = dict(decided)
+    verdict["skipped_unplanned"] = sorted(t for t in decided if t not in expected)
     verdict["missing"] = [t for t in verdict["missing"] if t not in decided]
     verdict["complete"] = not verdict["missing"]
     return verdict
@@ -857,8 +865,11 @@ def render_report(report):
                          f"{round_label(rew['version'])}): {len(rew['found'])}/{len(rew['expected'])} captured"
                          + (f", {len(skipped)} skipped" if skipped else "")
                          + ("" if rew["complete"] else f" — MISSING {rew['missing']}"))
+            unplanned = set(rew.get("skipped_unplanned") or [])
             for title, reason in skipped.items():
-                lines.append(f"    skipped: {title} — {reason or 'no reason on record'}")
+                lines.append(
+                    f"    skipped: {title} — {reason or 'no reason on record'}"
+                    + ("  (never expected by this round)" if title in unplanned else ""))
     else:
         lines.append(f"- REW: {rew.get('note', 'not reachable')}")
     for gap in report.get("row_gaps") or []:
@@ -1103,6 +1114,16 @@ def _selftest():
         "reachable": True, "round": "cap_001", "phase": "0", "version": "v_001", **rv})))
     assert "(round cap_001, phase 0, v_001): 1/3 captured, 1 skipped — MISSING ['r-R_01 (sw)']" in shown, shown
     assert "skipped: r-L_01 (sw) — rears muted for this pass" in shown and "vv_" not in shown, shown
+
+    # TCC-022: a skip of a title the round never expected used to vanish from this report -- not
+    # taken, not missing, not skipped. Now it is reported AND told apart from a planned skip.
+    round_un = {"id": "cap_002", "phase": "0", "version": "_1", "expected": ["w-L_01 (sw)"],
+                "taken": {"w-L_01 (sw)": {"at": "t", "planned": True}},
+                "skipped": {"r-L_01 (sw)": {"at": "t", "reason": "rears not wired", "planned": False}}}
+    rv_un = round_verdict(["w-L_01 (sw)"], round_un)
+    assert rv_un["skipped"] == {"r-L_01 (sw)": "rears not wired"}, rv_un
+    assert rv_un["skipped_unplanned"] == ["r-L_01 (sw)"], rv_un
+    assert rv_un["missing"] == [] and rv_un["complete"] is True, rv_un
     assert round_label("17") == "_17" and round_label("v_001") == "v_001"
     done = round_verdict(["w-L_01 (sw)", "r-R_01 (sw)"], round_)
     assert done["complete"] and done["missing"] == [], done
@@ -1368,7 +1389,7 @@ def _selftest():
           f"file and its repair rather than as a traceback, on one table line, and the repair it "
           f"names runs and clears it (TCC-007); `catch-up` fills the marked draft on a "
           f"project written before the field, is idempotent, leaves a `notch` row alone and "
-          f"still does NOT close the phase-0 gate; and the report names the REPLY language above "
+          f"still does NOT close the phase-0 gate; every skip is reported and one the round never expected is named as such (TCC-022); and the report names the REPLY language above "
           f"the file table, or says nobody has answered (S-045). root={root}")
     return 0
 
