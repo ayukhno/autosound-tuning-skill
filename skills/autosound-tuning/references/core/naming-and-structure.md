@@ -14,6 +14,32 @@ PROJECT  = one car + one install (drivers, DSP, amps, wiring). Lives for years.
 
 The **path defines the process** — the ordered steps the user described, refined by experience (`process-phases.md`). Keep it; that ordering (delays → phase → EQ; raw-sweep refs; MMM-for-magnitude / sweep-for-phase) is hard-won.
 
+## 1a. The words a report uses — one home, no synonyms
+
+Settled with the Arbiter 2026-09-20. The method's own English is **not** the reader's, and a
+session that renders it on the fly produces a metaphor he does not share: `seed` came out as «сію»
+and cost a stop in the middle of a wave to unpack (S-040). So the mapping is written once, here,
+and spoken everywhere — **the middle column is what goes in the report, and it has no synonyms.**
+
+| the method's word | in the report (uk) | what it is |
+|---|---|---|
+| project | **проєкт** | the car plus its install. Everything else belongs to it. |
+| whole configuration (Phase 1) | **варіант** | what the desk PROPOSES in Phase 1 — 2–3 of them with their trade-offs. Not in the DSP yet. Never «конфігурація»: that word is taken by the row below. |
+| ledger version `v_NNN` | **конфігурація** = **версія `v_NNN`** | the full set standing in the processor right now: crossovers, delays, levels, EQ, polarity. Every agreed change is a new one. The two words are synonyms — he says «конфігурація», the files say `v_NNN`. |
+| preset / slot | **пресет** | the DSP slot a version is FIXED in (`01` before the competition, `02` the test one). A slot holds one version; several versions pass through it while testing. |
+| measurement series `_N` | **серія `_N`** | a set of measurements (§3). NOT a version: one DSP state can be measured in several series. |
+| phase | **фаза** | a step of the work plan (−1…5) — unchanged. |
+
+- **Nothing is written INTO the processor by the method.** The person types the settings in PC-Tool
+  and the ledger records what stands there, so the phrase is «записую, що зараз у ДСП: конфігурація
+  `v_001`» — not «застосовую» and not «сію». The first time a project's report mentions the ledger it
+  says in one clause what it is: the full DSP state banked as an immutable version, not the
+  measurement `_N`. **Once per project, not once per message.**
+- **A version is named with its slot — `SQ v_007`.** Versions are still numbered inside a preset on
+  disk (`state/<preset>/v_NNN.json`), so two slots can each hold a `v_001` and the bare number is
+  ambiguous. (The Arbiter's own model numbers a version once per PROJECT and treats the preset as the
+  slot it is fixed in; the files disagree, and reconciling them is a migration, not a wording fix.)
+
 ## 2. What triggers work — and whether raw data survives
 
 A "new project run" isn't always from scratch. Classify it first; it decides how much you re-measure:
@@ -41,7 +67,7 @@ Measurement name = **`<channel|pair|combo|joint>[ <modifier>]_<N> (<method>)[ <c
 - **Positions and controls (2026-08-26, the virtual-first capture session):** a **position** — `p1`…`p9` on the ellipsoid around the head, `x0` the tripod point — sits between the code and the version, `m-L p1_49 (sw)` (a title typed as `w-L_49 (sw) x0` reads the same). It is part of the measurement's identity and **not** of the channel's code: nine positions of one driver are one channel. A **control** is the reference measurement repeated to read drift — of a sweep series and of the ellipsoid alike: `m-L-ctl1_49 (sw)` opens the tripod block and `m-L-ctl3_49 (sw)` closes it (the sheet's form); `m-L_49ctl (sw)` / `m-L_49rep (sw)` as typed in the car mean the same. `capture-check --session` pairs them for the drift record.
 - **Transient experiment tags** — while A/B-testing a candidate change, tag the variant in the name (`i`/`INV` = inverted polarity, `+Δτ` = an added delay trial, etc.) so the two readings don't get confused. The tag is **temporary**: once the change is **baked into the base** it drops from the name (the next series is just `_N+1`, on the new DSP state). **the ledger HEAD (`state/<preset>/v_NNN.json`) is the source of truth for what's in the base** — `dsp-state-current` is its generated view — the name tags only the experiment in flight, not the committed state.
 - **Renaming a code** (an `m-L` the install correction turns out to be a woofer, a "rear" pair that is really a centre): `python3 rew_tool/project.py <project> rename-channel <old> <new>`, never a hand-edit of the files. The channel keeps its identity, so **the captures it already has stay valid under their old titles** — a REW title cannot be rewritten afterwards, and the tools resolve the old name back to the channel (SCR-039). **Do not re-measure and do not bump `_N`**: nothing about the sound changed, only the label. Titles generated from here on use the new code.
-- **`_N` = the number of the measurement series.** Every capture of one series shares it — `m-L_04 (sw)` and, in the same series, `m-L_04 (rta)`. **The relation runs one way: a DSP state has several series** — changing the DSP before the next measurement starts a new series (three changes measured one after another are `_06`, `_07`, `_08`), and one state can be measured in more than one series. **A measurement need not be tied to the DSP at all:** an impedance sweep `(imp)` has no `_N` (the user, 2026-09-17). **Saving is a separate event** — to a DSP slot or a backup file, at any `N` or none — and neither moves `_N` nor defines it (hub TCC-016). This is what lets the changelog line up "before vs after a change" (`ALL_17` vs `ALL_18` shows what an EQ import moved). A sweep or an RTA with no `_N` is refused. **`_N` is not the ledger's `v_NNN`** — see §5: the two are different counters, and a ledger version given for `_N` is refused rather than turned into titles no REW list will ever hold (skill #37).
+- **`_N` = the number of the measurement series** (the word for it in a report: «серія», §1a). Every capture of one series shares it — `m-L_04 (sw)` and, in the same series, `m-L_04 (rta)`. **The relation runs one way: a DSP state has several series** — changing the DSP before the next measurement starts a new series (three changes measured one after another are `_06`, `_07`, `_08`), and one state can be measured in more than one series. **A measurement need not be tied to the DSP at all:** an impedance sweep `(imp)` has no `_N` (the user, 2026-09-17). **Saving is a separate event** — to a DSP slot or a backup file, at any `N` or none — and neither moves `_N` nor defines it (hub TCC-016). This is what lets the changelog line up "before vs after a change" (`ALL_17` vs `ALL_18` shows what an EQ import moved). A sweep or an RTA with no `_N` is refused. **`_N` is not the ledger's `v_NNN`** — see §5: the two are different counters, and a ledger version given for `_N` is refused rather than turned into titles no REW list will ever hold (skill #37).
 
 ### Capture plan per phase — `sw` vs `rta` (take BOTH in one solo pass)
 
@@ -132,7 +158,7 @@ a user's live Windows project).
 
 ## 5. DSP configuration naming
 
-- Ledger version = **`v_NNN`**, monotonic: every agreed change is banked as one (`apply.propose`), and the full state lives in the snapshot `state/<preset>/v_NNN.json` — gains, crossovers, TA, EQ, polarity. **It is not the measurement `_N`** (§3), and one is never derived from the other: the ledger also moves for changes that are not the DSP's (naming a virtual-channel tier took a project `v_001 → v_002` with nothing re-measured), and a project that came with history starts them apart (`v_001` measured as `_49`). A capture round is what ties them: `capture-start <N>` with the titles it asks for, and a lookup finds the round by `_N` or by the version it was opened with. `dsp-state-current` is the sheet GENERATED from it (`state.py --root <project>/state registry render`) and is never hand-edited.
+- Ledger version = **`v_NNN`** (the word for it in a report: «конфігурація», §1a — and a report names it with its slot, `SQ v_007`), monotonic: every agreed change is banked as one (`apply.propose`), and the full state lives in the snapshot `state/<preset>/v_NNN.json` — gains, crossovers, TA, EQ, polarity. **It is not the measurement `_N`** (§3), and one is never derived from the other: the ledger also moves for changes that are not the DSP's (naming a virtual-channel tier took a project `v_001 → v_002` with nothing re-measured), and a project that came with history starts them apart (`v_001` measured as `_49`). A capture round is what ties them: `capture-start <N>` with the titles it asks for, and a lookup finds the round by `_N` or by the version it was opened with. `dsp-state-current` is the sheet GENERATED from it (`state.py --root <project>/state registry render`) and is never hand-edited.
 - **The DSP tool's own file-version (e.g. Helix PC-Tool `SQ_Jazzi v1.30.pct6`) is a SEPARATE numbering from our `vN`** — don't conflate. The `dsp-config/README.md` map bridges the two (which `.pct6` = which `dsp-state vN` + date). Helix saves config as `.pct6` (binary/encrypted, Audiotec-Fischer); it can't be parsed for analysis, so it's a backup/restore artifact only.
 - **Base + voicing** (`preset-strategy.md`): the OUTPUT base is shared; name voicing presets by intent — `voicing:EMMA` (competition), `voicing:Accurate` (enjoyment), `voicing:off` (neutral base). A config is then "base vN + voicing:X". Switching curves swaps the voicing, not the base. Which presets are worth building (SQ / FULL / SQL / surround / source-input / per-ruleset competition) → `preset-strategy.md`.
 - **Multiple active slots → one machine-checked pointer.** When the DSP holds several presets in physical slots (Helix Slot 1/2/3), which one is *loaded right now* is not a prose note — it's `rew_tool/state/registry.json` (`state.py --root <project>/state registry set-active <preset>`). `state.py --root <project>/state registry render` generates the multi-slot `dsp-state-current` view (a loud active-slot banner + one isolated row per slot), and the apply gate refuses a change aimed at any non-active slot. This kills the cross-slot anchoring trap (computing filters off a neighbour slot's gains — issue #5).

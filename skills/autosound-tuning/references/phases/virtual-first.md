@@ -117,7 +117,10 @@ tripod block; every channel both `(sw)` and `(rta)`.
   IR peak above the pre-ringing ("broken impulse"), not a flat curve (loopback or a dead input), not
   in the noise; the whole session in one table (levels side by side, loudest/quietest); ctl1/ctl3 →
   the drift record, in capture samples, written on the round. Re-take whatever failed now, while the
-  tripod stands.
+  tripod stands. **What goes to the Arbiter is what the CHECK said** — usable, flagged, unchecked
+  and why, the drift record — and then the step reply's one line about what is next. The arrivals
+  are in the round and Phase 1 reads them (1.3); a prose reading here has none of that step's
+  guards, and it is a habit of the text rather than one session's slip (SKILL.md `✍️ Output Style`).
 - **0.7** mark the protectives on the round (`capture-protective`); the `.mdat` into the project;
   finish the passport (temperature by eye, optional). **Tripod untouched** → the desk.
 - **0.8** **at the desk, before Phase 1 will open** — the two things `enter-phase 1` refuses without:

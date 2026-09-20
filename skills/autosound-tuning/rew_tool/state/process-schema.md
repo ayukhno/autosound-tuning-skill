@@ -36,7 +36,8 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
      "attempt": 2,                              // >1 = this step was redone
      "skip": false,                             // superseded, kept visible
      "phase": "2",
-     "evidence": ["m-L_10 (sw)", "v_007"]}      // REQUIRED once status is done
+     "evidence": ["m-L_10 (sw)", "v_007"],      // REQUIRED once status is done
+     "covers": ["project.json:amps.front.gain_db"]}   // WHAT the step closes; the name names it
   ],
   "reviewer": {"vendor": "Gemini", "model": "Gemini 3.1 Pro (High)",
                "at": "…", "phase": "2", "step": "2.3", "outcome": "apply",
@@ -103,6 +104,13 @@ for that checkout — see `rew_tool/provenance.py` for why it is the sha and not
   a verdict pins REW's `uuid`, because re-taking a measurement keeps its title and changes its
   data — a verdict keyed by title would outlive the graph it judged. A capture the tuner decided
   against is skipped, and a recorded decision is not re-litigated by the gate.
+- **A step's content is a LIST, not a count** (S-031). `covers` holds the facts the step closes —
+  dotted paths, exactly as `project.py open-questions` / `dsp_profile.py open-questions` print
+  them — and `add_step` composes the NAME from them: the first three plus `+N`. Generated, not
+  typed, because the failure was a plan that read `Закрити відкриті поля: project.json (8) і
+  dsp_profile.json (5)` in the Arbiter's window: thirteen facts, named nowhere he could see, in
+  the one artefact he acts on. `covers_summary()` is the single renderer; a window expands the
+  full list and a session ticks it off.
 - **A skipped capture needs a reason** (SCR-034). Skipped and not-yet-taken looked identical
   before, so a tuner who decided a capture was unnecessary had no way to say so and the next
   session proposed it again. `skip_capture` raises without one.
@@ -124,6 +132,8 @@ from state.process import Process
 p = Process(f"{project}/process")
 p.enter_phase("2")
 p.add_step("2.3", "target-match (SQ-Comp-Ref)")
+p.add_step("-1.2", "Закрити відкриті поля",         # name gets ": a, b, c +N" composed from covers
+           covers=["project.json:sources.sweep_input", "project.json:amps.front.gain_db"])
 p.start_attempt("2.3")
 p.finish_step("2.3", ["m-L_10 (sw)", "v_007"])     # raises without evidence
 p.record_reviewer("Gemini", "Gemini 3.1 Pro (High)", step="2.3")

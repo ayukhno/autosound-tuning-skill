@@ -62,6 +62,31 @@ is work it will reconcile against nothing. Test states left in hardware are the 
 ledger/hardware forks, which is why the exit checklist covers what THIS session touched rather than
 the whole car.
 
+## A passed check costs one word
+
+The Arbiter handed over a whole session reply — the first message after a clean start — as «ось
+приклад зайвої інформації». What he owed the reader was three lines: he is at step 0.6, it is desk
+work, it needs no new measurements. What arrived was the version match, the clean project file, the
+only saved DSP state, REW being open with all eight solos, the four still-open steps, why Phase 1
+would not open, 44 proposed flaw rows with per-channel counts and three caveats about them, a prose
+reading of the midbass arrivals, a four-row table of protective minima for a sweep that was blocked
+anyway, two «small things in the files» — and then the question. His correction is the rule: a check
+that PASSED costs one word, because a session that says nothing about its checks is
+indistinguishable from one that skipped them, and a session that spends a paragraph on each buries
+the one line that was for him (S-046, 2026-09-19).
+
+## A verdict re-derived in prose
+
+`capture-check --session` answered: 8 sweeps usable, 8 RTA unchecked, levels, arrivals, and no
+`ctl1`/`ctl3` so the drift is unknown. The session then read the arrivals on top of that — right-side
+mids ~1.2 ms later, converted to ~41 cm, called plausible for a left-hand-drive seat, with a
+confidence disclaimer about the broad impulse peak and a note that it was «a candidate for
+cross-check in Phase 1». That last line is the tell: it is a candidate for Phase 1 because Phase 1
+is where the reading belongs, where `predict --align` and `arrival_triangulate` do it through a
+window with the trust gate, the alias rules and the ILL-POSED verdict said out loud. The same
+reading came back in a FRESH session after the chat was cleared, which is what makes it structural
+rather than one session's whim (S-038).
+
 ## Absolute values, never relative
 
 "Remove the +3" once landed 3 dB off intent: the Arbiter and the model disagreed about what the

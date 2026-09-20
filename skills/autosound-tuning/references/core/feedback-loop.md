@@ -10,6 +10,8 @@ When the tune is ready at this stage (after the listening work — Phase 4/5, or
 
 > **INTERACTIVELY, not a wall of text.** Ask **closed questions with ready options** (choice buttons in Claude Code/claude.ai). **The ability to write freely is ALWAYS present as an OPTION** (in AskUserQuestion that's the "Other" field) — because free feedback is the basis of openness, and the author **reads it**. But **never mandatory**: open questions are treacherous (they force phrasing, deter people, give vague answers) → offer the channel, don't oblige filling it. At most 3–4 questions per stream; **for A+B combined — ~5–6 "taps", no more** (fatigue kills answer quality — better fewer but on point).
 
+> **A question that did not reach him is NOTHING AT ALL — and its outcome is never attributed to him.** `AskUserQuestion` is a mechanism, and like any mechanism its failure is not retold: if the call does not arrive, the questions go into the TEXT and the session carries on, with no claim about why. It does not say "you closed the question window", "you skipped it", or anything else that makes the user the cause of what the machine did — he had never seen a window, and had to correct a report about himself (S-029, 2026-09-19). This holds for every question in the method, not only the ones below: the rule lives here because this is where the method says HOW to ask.
+
 **A. Feedback on the PROJECT (for the installer/client).** Whether the tune's goal was met + the car's backlog:
 - **Did the preset meet the goal?** → `Yes, fully` / `Mostly` / `Partly` / `Not yet`
 - **Overall impression?** → `🙂 great` / `😐 ok` / `🙁 not there yet`

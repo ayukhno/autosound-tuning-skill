@@ -738,7 +738,7 @@ starts by rediscovering it.
 
 ## S-029 · A session said the user closed the question window; no window had appeared
 
-**Status**: open 2026-09-19 · W-1 collection · the user, on the reply he got in `EPY-Sep2026` after the
+**Status**: done 2026-09-20 · W-1 package A · `grep -n "did not reach him is NOTHING AT ALL" skills/autosound-tuning/references/core/feedback-loop.md` — found 2026-09-19, the user, on the reply he got in `EPY-Sep2026` after the
 cleanup: «в відповіді побачив ось таку фразу "Вікно питань ви закрили — лишаю їх текстом, відповісте як
 зручно." — а вікна не було».
 
@@ -777,7 +777,7 @@ is the MEASUREMENT input. A series captured after it reverted is a series throug
 
 ## S-031 · A plan step carries a COUNT, and has nowhere to carry what it covers
 
-**Status**: open 2026-09-19 · W-1 collection · the user, on the plan rendered in TCC's window: «ось такий
+**Status**: done 2026-09-20 · W-1 package A · `python3 skills/autosound-tuning/rew_tool/state/process.py selftest` (the `covers` block) · `add-step <id> <name> --covers a,b,c` — found 2026-09-19, the user, on the plan rendered in TCC's window: «ось такий
 пункт в плані зовсім не зрозумілий» — the step reads `Закрити відкриті поля: project.json (8) і
 dsp_profile.json (5)` and nothing else. Thirteen fields, named nowhere he can see.
 
@@ -981,7 +981,7 @@ reads as "one person". It is `the four parts are one identity` — «чотир�
 
 ## S-038 · After the raw capture the session ANALYSED the arrivals, and Phase 1 exists to do exactly that
 
-**Status**: open 2026-09-19 · W-1 collection · the Arbiter, reading the dialogue that followed the raw
+**Status**: done 2026-09-20 · W-1 package A · `grep -rn "what the CHECK said" skills/autosound-tuning/references/phases/` — found 2026-09-19, the Arbiter, reading the dialogue that followed the raw
 sweeps: «щось забагато розмови! навіщо аналіз затримок, як там ціла математика на наступних кроках, а
 базу перевірили функціями».
 
@@ -1034,7 +1034,7 @@ round nobody can audit.
 
 ## S-040 · The report says «сію v_001», and the Arbiter had to ask what that means
 
-**Status**: open 2026-09-19 · W-1 collection · his question, mid-wave: «а що означає "сію" ось тут
+**Status**: done 2026-09-20 · W-1 package A · `grep -n "1a. The words a report uses" skills/autosound-tuning/references/core/naming-and-structure.md` — found 2026-09-19, his question, mid-wave: «а що означає "сію" ось тут
 "Записую ручки на раунд і рішення, потім сію `v_001`"? і що таке v_ серія?».
 
 **Due when:** the reports are next read for language.
@@ -1061,7 +1061,7 @@ message.
 
 ## S-041 · Phase −1 walked end to end is hard work, and the dialogue is most of the weight
 
-**Status**: open 2026-09-19 · W-1 collection · the Arbiter, having gone through the whole of Phase −1
+**Status**: done 2026-09-20 · W-1 package A · closes with the four it covers — `grep -n "A step reply is THREE things" skills/autosound-tuning/SKILL.md` — found 2026-09-19, the Arbiter, having gone through the whole of Phase −1
 himself: «я пройшов фазу −1 і це, я тобі скажу, ГЕМОР!!! дуже складно». Two things settled by him in
 the same breath — the intake gets simplified, that part is not a question; and the DIALOGUE gets cut,
 because the explanations in it are not the user's business. The session transcript follows and becomes
@@ -1210,7 +1210,7 @@ S-037 point 2 stands: the AI's language and the person's can differ.
 
 ## S-046 · The reply reports everything the session checked, and the reader has to find the one line that is for him
 
-**Status**: open 2026-09-19 · W-1 collection · the Arbiter, handing over a whole session reply: «ось
+**Status**: done 2026-09-20 · W-1 package A · `grep -n "A step reply is THREE things" skills/autosound-tuning/SKILL.md` — found 2026-09-19, the Arbiter, handing over a whole session reply: «ось
 приклад зайвої інформації». It is the first message after a clean start, and the exhibit is kept below
 because the item is about proportion, which a paraphrase destroys.
 

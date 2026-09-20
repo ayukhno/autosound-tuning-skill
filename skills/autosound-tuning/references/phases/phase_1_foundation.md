@@ -12,6 +12,8 @@ This phase establishes the physical foundation of the tune: the tuner's wishes c
 >
 > ⛔ **And the DSP's own numbers must be on record:** `enter-phase 1` refuses while the profile has no `dsp_processing_rate_hz` (the DSP's PROCESSING rate; the legacy name `sample_rate_hz` is still read — and it is NOT the capture rate: a UMIK-1 capturing at 48k under a 96k DSP is legitimate, said once, never refused), no `delay` step, or no `crossover_filters` for a tier whose `fields` declare `hp`/`lp`. Every delay in samples is computed from that rate — a rate nobody wrote down is a rate the next session assumes. Record with `dsp_profile.py set-field`, then `finalize`; `dsp_profile.py open-questions <project>/dsp_profile.json` lists everything still open.
 
+> **The word in the report is «варіант»** — one of the 2–3 candidate sets the desk proposes here, not yet in the DSP. Never «конфігурація»: that word belongs to the ledger version standing in the processor (`naming-and-structure.md` §1a).
+
 **Purpose:** establish the physical foundation — the tuner's wishes checked, crossovers as variants, per-band targets, the coarse per-driver EQ, raw driver timing (arrival TA), the levels — so Phase 2's EQ works on a correctly-aligned system whose delays already carry the coarse EQ's phase.
 
 **Questions this phase answers:**

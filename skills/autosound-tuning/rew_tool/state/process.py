@@ -548,6 +548,34 @@ def validate(state):
     return state
 
 
+COVERS_IN_NAME = 3
+
+
+def _clean_covers(covers):
+    """The covered facts as a list: blanks dropped, order kept, no duplicate."""
+    if isinstance(covers, str):
+        covers = [covers]
+    out = []
+    for item in covers or []:
+        text = str(item).strip()
+        if text and text not in out:
+            out.append(text)
+    return out
+
+
+def covers_summary(covers, keep=COVERS_IN_NAME):
+    """`a, b, c +5` — what a step's name says about what it covers.
+
+    A number alone is not a subject (the Arbiter's standing rule, and S-031's whole finding), so
+    the first few are NAMED and only the tail is counted. The full list stays on the step, for a
+    window to expand and a session to tick off.
+    """
+    covers = _clean_covers(covers)
+    shown = covers[:keep]
+    rest = len(covers) - len(shown)
+    return ", ".join(shown) + (f" +{rest}" if rest else "")
+
+
 class Process:
     """Read and advance one project's process state.
 
@@ -651,9 +679,26 @@ class Process:
         self._append(EV_PHASE_ENTERED, phase=phase, previous=previous, note=note)
         return state
 
-    def add_step(self, step_id, name, source=SOURCE_SKILL, phase=None):
+    def add_step(self, step_id, name, source=SOURCE_SKILL, phase=None, covers=None):
         """Add a plan step. Instantiated from the phase template (`skill`) or situational
-        (`project`) — the distinction is what lets the UI show which steps this car needed."""
+        (`project`) — the distinction is what lets the UI show which steps this car needed.
+
+        `covers` names WHAT the step closes — the facts themselves, as `project.py open-questions`
+        and `dsp_profile.py open-questions` print them (dotted paths). It exists because a step had
+        nowhere to carry its content and so carried a COUNT: the Arbiter read `Закрити відкриті
+        поля: project.json (8) і dsp_profile.json (5)` in his window and answered «зовсім не
+        зрозумілий» — thirteen facts, named nowhere he could see, in the one artefact he acts on
+        (S-031). The names existed the whole time; the plan dropped them.
+
+        The step's NAME is then composed here, not typed: the first `COVERS_IN_NAME` covered facts
+        and `+N` for the rest. Generated, because a caller free to write the summary by hand is a
+        caller free to write the count again.
+        """
+        covers = _clean_covers(covers)
+        if covers:
+            summary = covers_summary(covers)
+            if summary not in name:
+                name = f"{name}: {summary}"
         state = self.load()
         if self.step(state, step_id):
             raise ProcessError(f"step {step_id!r} already exists; steps are never re-added")
@@ -676,10 +721,11 @@ class Process:
             "skip": False,
             "phase": phase_key,
             "evidence": [],
+            "covers": covers,
         }
         state["plan"].append(entry)
         self._write(state)
-        self._append(EV_STEP_ADDED, step=step_id, name=name, source=source)
+        self._append(EV_STEP_ADDED, step=step_id, name=name, source=source, covers=covers)
         return entry
 
     def start_attempt(self, step_id):
@@ -1432,6 +1478,7 @@ class Process:
             out["steps_in_progress"].append({
                 "id": entry.get("id"), "name": entry.get("name"),
                 "attempt": entry.get("attempt", 1),
+                "covers": entry.get("covers", []),
             })
         return out
 
@@ -1548,7 +1595,12 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
   show                                  print the current state as JSON
   plan [phase]                          print the plan (default: active phase)
   enter-phase <phase>                   make a phase current (-1..5)
-  add-step <id> <name> [--project]      add a plan step (--project = situational insert)
+  add-step <id> <name> [--project] [--covers a.b,c.d]
+                                        add a plan step (--project = situational insert).
+                                         --covers names the facts it closes (dotted paths, as
+                                         `open-questions` prints them); the name then carries the
+                                         first three and `+N` — generated, because a count is not
+                                         a subject (S-031)
   start <id>                            begin/re-begin a step (a re-begin is attempt N+1)
   done <id> <evidence> [evidence ...]    mark done; evidence is REQUIRED and must RESOLVE
                                          (a capture name `c_1 (rta)`, a ledger `v_003` that
@@ -1937,6 +1989,37 @@ def _selftest():
     sp.start_attempt("0.1")
     assert [s["attempt"] for s in sp.open_work()["steps_in_progress"]] == [2], sp.open_work()
 
+    # ── S-031: a step carries WHAT it covers, and its name names it ──────────────────────────
+    # The old behaviour: `add_step("0.4", "Закрити відкриті поля: project.json (8)")` and the
+    # eight fields live nowhere a reader can reach. Fails on the old code at the first line --
+    # `covers` was not a parameter.
+    cv = Process(os.path.join(tempfile.mkdtemp(prefix="autosound_covers_"), "process"))
+    facts = ["project.json:sources.sweep_input", "project.json:amps.front.gain_db",
+             "project.json:channels.r-L.driver", "project.json:channels.r-R.driver",
+             "dsp_profile.json:eq.bands_total"]
+    entry = cv.add_step("0.4", "Закрити відкриті поля", phase="0", covers=facts)
+    assert entry["covers"] == facts, entry
+    assert entry["name"] == (
+        "Закрити відкриті поля: project.json:sources.sweep_input, "
+        "project.json:amps.front.gain_db, project.json:channels.r-L.driver +2"), entry["name"]
+    # The name is GENERATED: passing it back composed a second time changes nothing, so a
+    # front-end that re-reads and re-adds cannot stutter the summary into the title.
+    again = Process(cv.dir).add_step("0.5", entry["name"], phase="0", covers=facts)
+    assert again["name"] == entry["name"], again["name"]
+    assert again["name"].count("+2") == 1, again["name"]
+    # Blanks and duplicates are not facts; order is the caller's.
+    assert cv.add_step("0.6", "x", phase="0", covers=["a", "", "a", " b "])["covers"] == ["a", "b"]
+    # A step with nothing to cover is unchanged -- the field exists, the name is what was typed.
+    plain = cv.add_step("0.7", "Raw baseline sweeps", phase="0")
+    assert plain["covers"] == [] and plain["name"] == "Raw baseline sweeps", plain
+    # The printers show it: `open_work` carries the full list, `plan`/`show` are raw JSON.
+    cv.start_attempt("0.4")
+    assert cv.open_work()["steps_in_progress"][0]["covers"] == facts, cv.open_work()
+    assert covers_summary([]) == "" and covers_summary(["one"]) == "one"
+    # The journal carries it too, so a plan rebuilt from events is not poorer than the state file.
+    added = [e for e in cv.events() if e["type"] == EV_STEP_ADDED and e["step"] == "0.4"]
+    assert added and added[0]["covers"] == facts, added
+
     # -- skill #29: phase 0 asks for (sw) AND (rta). The verdict marks an RTA `applicable: False`
     #    ("nothing here was checked"); the round must KEEP that and the step must not read it as
     #    bad. Round-trip, the way a producer's field is owed: verdict -> disk -> gate.
@@ -1971,7 +2054,7 @@ def _selftest():
         "the journal headed itself with the writing checkout and re-headed only when it changed; "
         "and STOPPING is an event: `open_work` names the open round and every step left in "
         "progress, drops a round once it is closed, and owes a step again when it is picked "
-        "back up; an RTA the check does not apply to is kept as such and holds no step (#29). "
+        "back up; an RTA the check does not apply to is kept as such and holds no step (#29); a step CARRIES what it covers and its name names the first three and counts the rest (S-031). "
         f"root={root}"
     )
     return 0
@@ -1996,9 +2079,19 @@ def _main(argv):
             print(f"phase {args[0]} is current")
         elif cmd == "add-step":
             source = SOURCE_PROJECT if "--project" in args else SOURCE_SKILL
-            positional = [a for a in args if a != "--project"]
-            p.add_step(positional[0], positional[1], source=source)
-            print(f"added {positional[0]}")
+            rest, covers = [], []
+            i = 0
+            while i < len(args):
+                if args[i] == "--project":
+                    i += 1
+                elif args[i] == "--covers":
+                    covers += (args[i + 1] if i + 1 < len(args) else "").split(",")
+                    i += 2
+                else:
+                    rest.append(args[i])
+                    i += 1
+            entry = p.add_step(rest[0], rest[1], source=source, covers=covers)
+            print(f"added {rest[0]} {entry['name']}")
         elif cmd == "start":
             entry = p.start_attempt(args[0])
             print(f"{args[0]} in progress (attempt {entry['attempt']})")
@@ -2076,8 +2169,9 @@ def _main(argv):
                 lines.append(
                     f"STEP IN PROGRESS {entry['id']} {entry.get('name') or ''} "
                     f"(attempt {entry['attempt']})"
-                    "\n    close it: done <id> <evidence that RESOLVES>, or block <id> <reason>, "
-                    "or skip <id> <reason>")
+                    + (f"\n    covers: {', '.join(entry['covers'])}" if entry.get("covers") else "")
+                    + "\n    close it: done <id> <evidence that RESOLVES>, or block <id> <reason>, "
+                      "or skip <id> <reason>")
             print("\n".join(lines) if lines else
                   "nothing open in the process record — round closed, no step left in progress")
             # Two carriers this module does not own, named rather than checked: saying "also do X"

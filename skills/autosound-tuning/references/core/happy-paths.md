@@ -22,12 +22,12 @@ Skim these once to see the *shape* of a session end-to-end. They are deliberatel
 
 > User: *"continue my tune / what's my current state"* → the skill fires on the resume triggers.
 
-1. **Reconcile state (do NOT trust memory) — MACHINE FILES FIRST.** `contract.py check <project>` for the whole picture, then `process.py <project>/process show` (active phase + plan), the ledger HEAD (`state.py --root <project>/state registry render` — multi-slot: the active-slot banner first, and work only against that slot) and `project.py <project> show`. Read `audit-trail.md` and the ▶️ CONTINUE block of `tuning-changelog` alongside as the human-readable **cross-check**, never as the source; where prose and the machine files disagree, **the machine files win**. → SKILL.md Pre-Session step 2.
+1. **Reconcile state (do NOT trust memory) — MACHINE FILES FIRST.** `contract.py check <project>` for the whole picture, then `process.py <project>/process show` (active phase + plan), the ledger HEAD (`state.py --root <project>/state registry render` — multi-slot: the active-slot banner first, and work only against that slot) and `project.py <project> show`. Read `audit-trail.md` and the ▶️ CONTINUE block of `tuning-changelog` alongside as the human-readable **cross-check**, never as the source; where prose and the machine files disagree, **the machine files win**. → SKILL.md Pre-Session step 2. **All of it is reported in ONE word** — *checks: done* — and only a check that FAILED gets sentences (SKILL.md `✍️ Output Style`).
 2. **Check banked decisions.** Look for 🟡 pending items agreed last time but not yet applied; prompt the Arbiter to apply them.
 3. **Ask what changed.** Anything moved manually since the pause (mic, DSP, cabin)? Is REW reachable?
 4. **Load only the active phase** (+ the next) per the sliding-window rule, then continue from the ▶️ NEXT STEPS list.
 
-**What "good" looks like:** you restated the current crossovers/TA/gains from disk, not from the chat history, and surfaced any 🟡 banked item before proposing anything new.
+**What "good" looks like:** you restated the current crossovers/TA/gains from disk, not from the chat history, and surfaced any 🟡 banked item before proposing anything new — in a reply of **three lines**: where we are (the checks folded in as one word), what is next and what it needs, and the one question that needs the Arbiter. The inventory that produced those lines stays in the files it came from, available on request.
 
 ---
 
