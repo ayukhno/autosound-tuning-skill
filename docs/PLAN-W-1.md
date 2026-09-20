@@ -38,10 +38,26 @@ The one change that touches every session on every car, and the cheapest in the 
    repeats the inventory habit (the sweep is a subagent's job).
 2. **A verdict is not re-derived in prose** (S-038): after `capture-check`, the session says what the
    check said and stops; arrivals are read in Phase 1, by the tools built for it.
-3. **Name the thing, not the metaphor** (S-040): «записую, що зараз у ДСП: конфігурація `v_001`», and the
-   one-clause explanation of the ledger once per project. ⚠️ Settle the collision first — «конфігурація»
-   is Phase 1's word for a whole candidate set (skill #38); if `v_NNN` takes it, Phase 1 says «варіант».
-   The Arbiter's call, and it is one line to ask.
+3. **Name the thing, not the metaphor** (S-040). **The vocabulary is settled, 2026-09-20** — write it
+   once, in `naming-and-structure.md`, and speak it everywhere:
+
+   | word | what it is |
+   |---|---|
+   | проєкт | the car plus its install; everything else belongs to it |
+   | варіант | what the desk proposes in Phase 1 (2–3 with their trade-offs). Not in the DSP yet — the method's English `whole configuration` is THIS, and in Ukrainian it is «варіант», never «конфігурація» |
+   | конфігурація = версія `v_NNN` | the full set now in the processor: crossovers, delays, levels, EQ, polarity. Every agreed change is a new one. The two words are synonyms — he uses «конфігурація», the files say `v_NNN` |
+   | пресет | the DSP slot a version is FIXED in (`01` before the competition, `02` the test one). A slot holds one version, and several versions pass through it while testing |
+   | серія `_N` | a set of measurements. Not a version: one DSP state can be measured in several series |
+   | фаза | a step of the work plan (−1…5) — unchanged |
+
+   Until the registry is rebuilt (W-2, below), **a report names the version with its slot — `SQ v_007`** —
+   because versions are still numbered inside a preset on disk and two slots both hold a `v_001`.
+
+   **W-2, not this wave:** the Arbiter's model numbers versions once per PROJECT and treats the preset as
+   the slot a version is fixed in. The files disagree — `state/<preset>/v_NNN.json` is a separate line per
+   slot, there is no «put this version in that slot» move, and the passat's own registry note says the
+   relationship in prose it cannot verify («FULL — копія SQ … синхронізація після v11.0 не підтверджена»).
+   Rebuilding that is a migration; the words above do not wait for it.
 4. **The question mechanism is never retold** (S-029): a question that did not reach him is nothing at
    all — the questions go into the text, with no claim about why.
 5. **A plan step names what it covers** (S-031): `process.add_step` gains `covers` (the dotted paths, as
