@@ -1364,5 +1364,5 @@ session, and `#38` untouched.
 6. **S-049 needs two lines from him first** (the version on that MacBook, what the installer said);
    until then it cannot be split into «an old install» and «the fetch is broken».
 
-**Not for this wave unless he says so:** the branch `w1-intake-form` carries the form prototype and the
+**Not for this wave unless he says so:** the branch `w1` carries the form prototype and the
 whole pool. It has no PR: what ships in W-1 is the review's call, not the branch's.

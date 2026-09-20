@@ -12,7 +12,7 @@ fact came from.
 
 ## How the work is run
 
-- **One branch for the wave**: `w1-intake-form` already exists and carries the collection plus the
+- **One branch for the wave**: `w1` already exists and carries the collection plus the
   intake-form prototype. The prototype is NOT in this wave (S-033/S-037 are deferred) — it stays on the
   branch, unreleased, because pulling it out would cost more than leaving it; the CHANGELOG entry says
   what it is. Every package below commits onto that branch.
@@ -127,6 +127,24 @@ session reports), then D, then C (it touches the schema and deserves the most ca
 bump, the CHANGELOG entry naming `v3.0.59`, the full suite, the PR, `--ff-only`, the tag.
 
 Exit criteria are the milestone's fifth line, and they are hub `WAVES.md` §3.1 — not repeated here.
+
+## Testing the wave without a release
+
+The hub tests the BRANCH, not a tag (`install.sh --skill-ref` takes a branch or a sha the same way it
+takes a tag), so the wave is not split into releases for testing. One line:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/w1/install.sh | bash -s -- --skill-ref w1
+```
+
+**This wave does not move the desk engine's pin** — `ENGINE_PIN = b0ce9fb`, and `git diff main...w1 --
+vendor engines` is empty. One trap belongs to branch testing itself: `fetch-binary` takes a TAG whose
+release carries the archive, and a branch has no release, so after installing from `w1` the engine comes
+from the last tag — the same archive, the pin unchanged:
+
+```bash
+python3 ~/.claude/skills/autosound-tuning/rew_tool/resonalyze_engine.py fetch-binary --tag v3.0.58
+```
 
 ## Starting a package
 
