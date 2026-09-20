@@ -1021,7 +1021,7 @@ re-derived in prose.
 
 ## S-039 · A capture recorded under a mistyped title cannot be removed from the round
 
-**Status**: open 2026-09-19 · W-1 collection · from the same report: a ghost `r-R_1 (se)` — a typo
+**Status**: done 2026-09-20 · `python3 skills/autosound-tuning/rew_tool/state/process.py selftest` (the S-039 block: the wrong row stays, stops counting, and the corrected title is recorded) · `capture-supersede <wrong> <right> [reason]` — found 2026-09-19, from the same report: a ghost `r-R_1 (se)` — a typo
 that was fixed in REW, while the round kept the original.
 
 **Due when:** the next round takes a capture whose title is wrong.
@@ -1156,7 +1156,7 @@ against; and `naming-and-structure.md` §3's Phase-3 row now names `ALL+C_final 
 
 ## S-044 · A phase boundary has no cleanup procedure, and the session cannot clear itself
 
-**Status**: open 2026-09-19 · W-1 collection · the Arbiter asked the session what to do about clearing
+**Status**: done 2026-09-20 · `python3 skills/autosound-tuning/rew_tool/state/process.py selftest` (the S-044 block: it refuses over an open round and a todo step, then prints the resume line) · `process.py <project>/process handoff` — found 2026-09-19, the Arbiter asked the session what to do about clearing
 after Phase −1 and there is no such procedure — «раніше ми обговорювали, що добре кожну фазу починати з
 чистої сесії — що можемо зробити?».
 

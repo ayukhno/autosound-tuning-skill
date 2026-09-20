@@ -93,6 +93,10 @@ EV_CAPTURE_PROTECTIVE = "capture_protective"
 #: because the sub's knob stood at −4, and no reader could have known (hub RES-007).
 EV_CAPTURE_KNOBS = "capture_knobs"
 EV_CAPTURE_SKIPPED = "capture_skipped"
+#: S-039: a capture recorded under a title that turned out to be wrong. The row STAYS, dimmed and
+#: naming what it was corrected to -- the same move the plan's steps have had since SCR-004, and
+#: for the same reason: a round that quietly loses a row is a round nobody can audit.
+EV_CAPTURE_SUPERSEDED = "capture_superseded"
 EV_CAPTURE_CLOSED = "capture_round_closed"
 # What the arithmetic said about the curves themselves (SCR-040). A separate event from
 # `capture_taken`: one says a measurement came back, the other says it is usable.
@@ -553,6 +557,23 @@ def version_kind(version):
     return None
 
 
+def _continue_block(project_dir):
+    """Does `tuning-changelog` carry its ▶️ CONTINUE block? None when there is no such file.
+
+    None means "no opinion", the same answer `_flaw_map_entries` gives for an unreadable project:
+    a project that keeps no prose changelog is not failing a check it never opted into.
+    """
+    for name in ("tuning-changelog.md", "tuning-changelog"):
+        path = os.path.join(project_dir, name)
+        if os.path.isfile(path):
+            try:
+                with open(path, encoding="utf-8") as fh:
+                    return "CONTINUE" in fh.read()
+            except OSError:
+                return None
+    return None
+
+
 def _ledger_versions(project_dir):
     """Every snapshot on disk as a bare number ("7" for `v_007.json`)."""
     out = set()
@@ -608,8 +629,14 @@ def _outstanding(round_):
     return [
         title
         for title in round_.get("expected", [])
-        if title not in round_.get("taken", {}) and title not in round_.get("skipped", {})
+        if not _is_taken(round_, title) and title not in round_.get("skipped", {})
     ]
+
+
+def _is_taken(round_, title):
+    """Taken AND still standing: a superseded row is evidence of a typo, not of a measurement."""
+    entry = (round_.get("taken") or {}).get(title)
+    return isinstance(entry, dict) and not entry.get("superseded_by")
 
 
 def _now():
@@ -1489,6 +1516,48 @@ class Process:
                 lines.append(line)
         return lines
 
+    def supersede_capture(self, title, corrected_to, reason=None):
+        """A capture was recorded under the wrong title; the right one replaces it (S-039).
+
+        A ghost `r-R_1 (se)` sat in a round after the typo had been fixed in REW, and there was no
+        move that could say so: `record_capture` and `skip_capture` are all a round has, so the only
+        states were «taken» and «never mentioned», and a typo became permanent evidence of a
+        measurement that does not exist.
+
+        The plan's steps solved this and solved it well — `skip_step` keeps the step in the plan,
+        dimmed, never removed (SCR-004) — so this is the same move: the mistyped row STAYS, marked
+        `superseded_by` with the title it was corrected to, and the correct title is recorded in the
+        same breath. Nothing is deleted, because a round that quietly loses a row is a round nobody
+        can audit; and `_outstanding` stops counting the ghost as a capture that exists.
+        """
+        state, round_ = self._require_capture()
+        title = str(title).strip()
+        corrected_to = str(corrected_to).strip()
+        if not title or not corrected_to:
+            raise ProcessError("superseding a capture needs the wrong title AND the right one")
+        if title == corrected_to:
+            raise ProcessError(
+                f"{title!r} is corrected to itself — nothing to supersede. If the title is right and "
+                "the measurement is not, re-take it: a second `capture-taken` under the same title "
+                "updates the row.")
+        taken = round_.get("taken") or {}
+        if title not in taken:
+            raise ProcessError(
+                f"round {round_.get('id')} never took {title!r}"
+                + (f" (it took: {', '.join(sorted(taken))})" if taken else " (it has taken nothing)")
+                + ". Superseding is for a row that EXISTS and is wrong; a title nobody recorded is "
+                  "recorded, not corrected.")
+        entry = dict(taken[title])
+        entry["superseded_by"] = corrected_to
+        if reason:
+            entry["reason"] = str(reason).strip()
+        round_["taken"][title] = entry
+        self._write(state)
+        self._append(EV_CAPTURE_SUPERSEDED, capture=round_["id"], title=title,
+                     corrected_to=corrected_to, reason=reason, version=round_["version"])
+        # The corrected title is a capture like any other -- same event, same `planned` test.
+        return self.record_capture(corrected_to)
+
     def skip_capture(self, title, reason):
         """A capture deliberately NOT taken, and why.
 
@@ -1768,6 +1837,72 @@ class Process:
             })
         return out
 
+    def handoff(self):
+        """Is everything the NEXT session needs on disk — and the line to say when it is (S-044).
+
+        The Arbiter asked what to do about clearing the chat at a phase boundary («раніше ми
+        обговорювали, що добре кожну фазу починати з чистої сесії — що можемо зробити?») and there
+        was no procedure. A session can neither restart itself nor `/clear`, and the half that makes
+        clearing SAFE was missing entirely: nothing checked that what the next session needs is
+        written before the chat holding the only copy is thrown away.
+
+        So this REFUSES, naming what is missing, and the session keeps working instead. When it
+        passes it prints the resume line — what he says next, and what must stay open — so the
+        instruction is not improvised a second time.
+
+        `{"ok", "missing": [...], "phase", "resume"}`. It checks and writes nothing: which evidence
+        closes a step is a decision, the same split `session-close` already has.
+        """
+        state = self.load()
+        missing = []
+        phase = state.get("active_phase")
+        if not phase:
+            missing.append("no phase is recorded — `enter-phase <N>` is the entry condition, and a "
+                           "session that never opened one leaves the next with nothing to resume")
+        round_ = state.get("capture") or {}
+        if round_ and not round_.get("closed"):
+            miss = _outstanding(round_)
+            missing.append(
+                f"capture round {round_.get('id')} is OPEN at {round_.get('version')}"
+                + (f", {len(miss)} still expected ({', '.join(miss)})" if miss else "")
+                + " — an open round's status lives in REW's measurement list and goes when REW does: "
+                  "`capture-skip <title> <reason>` for each one not coming, then `capture-close`")
+        unfinished = [e for e in self.plan_for(phase, state)
+                      if e.get("status") in (STEP_TODO, STEP_IN_PROGRESS)]
+        if unfinished:
+            missing.append(
+                "plan steps of phase " + str(phase) + " are neither closed nor decided against: "
+                + ", ".join(f"{e['id']} {e.get('name') or ''} [{e['status']}]" for e in unfinished)
+                + " — `done <id> <evidence that RESOLVES>`, `skip <id> <reason>`, or `block <id> "
+                  "<reason>`. A step left `todo` across a clear is a step the next session cannot "
+                  "tell from one nobody ever thought of")
+        unbacked = self.unbacked_done_steps(state)
+        if unbacked:
+            missing.append(
+                "done steps whose evidence resolves to nothing on disk: "
+                + ", ".join(str(e.get("id")) for e in unbacked)
+                + " — the chat is about to go, and prose that pointed at it goes with it")
+        if not _ledger_versions(self.project_dir):
+            missing.append(
+                "no ledger snapshot on disk (`state/<preset>/v_NNN.json`) — the next session reads "
+                "the DSP state from there, and from nowhere else. `apply.propose` banks one")
+        changelog = _continue_block(self.project_dir)
+        if changelog is not None and not changelog:
+            missing.append(
+                "`tuning-changelog` has no ▶️ CONTINUE block — it is the human-readable cross-check "
+                "the next session reads beside the machine files, and the one a person opens first")
+        resume = None
+        if not missing:
+            keep = ""
+            last = state.get("capture") or {}
+            if last.get("taken"):
+                keep = (" Keep the REW session with this round's captures open — the titles are the "
+                        "only identity they have.")
+            resume = (f"State is on disk: phase {phase}, "
+                      f"{len(self.plan_for(phase, state))} step(s) in its plan, ledger HEAD present. "
+                      f"Clear the chat and say «продовжуй» in the new one.{keep}")
+        return {"ok": not missing, "missing": missing, "phase": phase, "resume": resume}
+
     def set_target(self, preset, curve):
         """The active target curve for a preset — a pointer, the curve itself lives elsewhere."""
         state = self.load()
@@ -1938,6 +2073,13 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
   listening-verdicts [--track ID] [--characteristic cNN] [--ledger-version vN] [--bank]
                                         look back: the verdicts, filtered; --bank prints the lines a
                                         snapshot banks at the lock (derived, additive)
+  capture-supersede <wrong> <right> [reason]
+                                        the capture was recorded under the wrong title: the row
+                                        STAYS, dimmed, naming what it was corrected to, and the
+                                        right title is recorded (S-039). Never deletion
+  handoff                               is everything the NEXT session needs on disk? Prints the
+                                        resume line when it is, names what is missing when it is
+                                        not (exit 1), and writes nothing either way (S-044)
   capture-skip <title> <reason>         deliberately NOT taken, and why
   capture-close [reason]                close the round; what is outstanding is named
   check                                 done steps with no evidence, and done steps whose
@@ -2365,6 +2507,57 @@ def _selftest():
     sp.start_attempt("0.1")
     assert [s["attempt"] for s in sp.open_work()["steps_in_progress"]] == [2], sp.open_work()
 
+    # ── S-039: a capture under the wrong title is SUPERSEDED, never deleted ──────────────────
+    # Fails on the old code at the call: a round had `record_capture` and `skip_capture` and nothing
+    # else, so a ghost `r-R_1 (se)` -- a typo already fixed in REW -- stayed as permanent evidence of
+    # a measurement that does not exist.
+    ty_root = tempfile.mkdtemp(prefix="autosound_typo_")
+    ty = Process(os.path.join(ty_root, "process"))
+    _seed_intake(ty_root)
+    ty.enter_phase("-1")
+    ty.enter_phase("0")
+    ty.start_capture("1", ["r-R_1 (sw)", "r-L_1 (sw)"], phase="0")
+    ty.record_capture("r-R_1 (se)")                     # the typo, as REW had it at the time
+    assert _outstanding(ty.load()["capture"]) == ["r-R_1 (sw)", "r-L_1 (sw)"], "the typo is not one of them"
+    ty.supersede_capture("r-R_1 (se)", "r-R_1 (sw)", "typed (se) for (sw); fixed in REW")
+    round_now = ty.load()["capture"]
+    # The wrong row STAYS -- dimmed, naming what it was corrected to. A round that loses a row is a
+    # round nobody can audit.
+    assert "r-R_1 (se)" in round_now["taken"], round_now["taken"]
+    assert round_now["taken"]["r-R_1 (se)"]["superseded_by"] == "r-R_1 (sw)", round_now["taken"]
+    assert round_now["taken"]["r-R_1 (sw)"]["planned"] is True, round_now["taken"]
+    # ...and it stops counting as a capture that exists.
+    assert _outstanding(round_now) == ["r-L_1 (sw)"], _outstanding(round_now)
+    sup = [e for e in ty.events() if e["type"] == EV_CAPTURE_SUPERSEDED]
+    assert sup and sup[0]["corrected_to"] == "r-R_1 (sw)" and sup[0]["reason"], sup
+    refuses("superseding a title the round never took",
+            lambda: ty.supersede_capture("nosuch_1 (sw)", "r-L_1 (sw)"))
+    refuses("a correction to itself", lambda: ty.supersede_capture("r-R_1 (se)", "r-R_1 (se)"))
+
+    # ── S-044: the handoff REFUSES, so a chat is not cleared over work that is only in it ─────
+    # Fails on the old code at the call: `handoff` did not exist, and nothing checked that what the
+    # next session needs was written before the chat holding the only copy was thrown away.
+    ho = ty.handoff()
+    assert ho["ok"] is False, ho
+    assert any("is OPEN" in m for m in ho["missing"]), ho["missing"]
+    assert ho["resume"] is None, ho
+    ty.skip_capture("r-L_1 (sw)", "rears not wired in this pass")
+    ty.close_capture("done")
+    # A step left `todo` across a clear is a step the next session cannot tell from one nobody
+    # ever thought of, so it is named too.
+    ty.add_step("0.9", "read the arrivals", phase="0")
+    assert any("neither closed nor decided against" in m for m in ty.handoff()["missing"]), \
+        ty.handoff()["missing"]
+    ty.skip_step("0.9", reason="Phase 1 does this with the tools built for it")
+    ho = ty.handoff()
+    assert ho["ok"] is True, ho["missing"]
+    # The line it prints is what he SAYS next, plus what must stay open -- so the instruction is not
+    # improvised a second time.
+    assert "продовжуй" in ho["resume"] and "REW session" in ho["resume"], ho["resume"]
+    assert "phase 0" in ho["resume"], ho["resume"]
+    # It writes nothing: which evidence closes a step is a decision, the same split session-close has.
+    assert ty.handoff() == ho, "handoff must be pure"
+
     # ── S-048: another project's series number does not walk in unannounced ──────────────────
     # Fails on the old code at the refusal: `start_capture` took any number, and a session that
     # had ALREADY SAID the set was «серія _49 зі старого проєкту» opened the round as series 49,
@@ -2498,7 +2691,7 @@ def _selftest():
         "the journal headed itself with the writing checkout and re-headed only when it changed; "
         "and STOPPING is an event: `open_work` names the open round and every step left in "
         "progress, drops a round once it is closed, and owes a step again when it is picked "
-        "back up; an RTA the check does not apply to is kept as such and holds no step (#29); a step CARRIES what it covers and its name names the first three and counts the rest (S-031); a series number that is not this project's is refused until its ORIGIN is on record (S-048); a round records WHICH counter its version is, refuses a `v_NNN` nobody banked with both ways on, and marks a skip planned or not (TCC-022); and a phase does not close over a flaw row that stands on an UNASKED question -- the refusal carries the titles that would settle it, and a round opened or a ruling recorded closes it (S-047). "
+        "back up; an RTA the check does not apply to is kept as such and holds no step (#29); a step CARRIES what it covers and its name names the first three and counts the rest (S-031); a capture under the wrong title is SUPERSEDED and stops counting, never deleted (S-039); the handoff REFUSES while anything the next session needs is only in the chat, and prints the resume line when it is not (S-044); a series number that is not this project's is refused until its ORIGIN is on record (S-048); a round records WHICH counter its version is, refuses a `v_NNN` nobody banked with both ways on, and marks a skip planned or not (TCC-022); and a phase does not close over a flaw row that stands on an UNASKED question -- the refusal carries the titles that would settle it, and a round opened or a ruling recorded closes it (S-047). "
         f"root={root}"
     )
     return 0
@@ -2801,6 +2994,23 @@ def _main(argv):
                     pairs = ", ".join(f"{x['track']} {x['characteristic']} {x['verdict']}" for x in e.get("pairs") or [])
                     print(f"{e.get('at')} [{e.get('ledger_version') or '?'}] {pairs or '(text only)'}"
                           + (f" -- {e['text']}" if e.get("text") else ""))
+        elif cmd == "capture-supersede":
+            if len(args) < 2:
+                raise ProcessError("capture-supersede needs the WRONG title and the right one")
+            p.supersede_capture(args[0], args[1], " ".join(args[2:]) or None)
+            print(f"{args[0]!r} superseded by {args[1]!r} — the wrong row stays, dimmed, and the "
+                  f"corrected title is recorded")
+        elif cmd == "handoff":
+            got = p.handoff()
+            if got["ok"]:
+                print(got["resume"])
+                return 0
+            print("NOT ready to clear the chat — what the next session would not find:")
+            for item in got["missing"]:
+                print(f"  - {item}")
+            print("\nNothing was written: which evidence closes a step is a decision, not this "
+                  "command's. Fix what is named and run it again.")
+            return 1
         elif cmd == "capture-skip":
             p.skip_capture(args[0], " ".join(args[1:]))
             print(f"{args[0]} skipped: {' '.join(args[1:])}")

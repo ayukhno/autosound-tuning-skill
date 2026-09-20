@@ -52,6 +52,9 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
     "expected": ["tw-L_1 (sw)", "tw-L_1 (rta)"],    // what `naming.expected_groups` asked for
     "step": "0.1",                                  // SCR-040: the plan step this round satisfies
     "taken": {"tw-L_1 (sw)": {"at": "…", "planned": true,     // planned=false: not on the list
+      "superseded_by": null,                        // S-039: a row recorded under a WRONG title
+                                                    //   stays, dimmed, naming what it was
+                                                    //   corrected to. Never deleted
       "verified": {"ok": true, "exists": true,      // SCR-040: what the arithmetic said
                    "uuid": "9ff4deb9-…",            //   REW's own id — the title is NOT identity
                    "at": "…", "issues": []}}},
@@ -113,6 +116,18 @@ for that checkout — see `rew_tool/provenance.py` for why it is the sha and not
   dsp_profile.json (5)` in the Arbiter's window: thirteen facts, named nowhere he could see, in
   the one artefact he acts on. `covers_summary()` is the single renderer; a window expands the
   full list and a session ticks it off.
+- **A capture under the wrong title is SUPERSEDED, not deleted** (S-039) — the same move the plan's
+  steps have had since SCR-004. A ghost `r-R_1 (se)` stayed in a round after the typo was fixed in
+  REW, because the only states were «taken» and «never mentioned». The row keeps its place with
+  `superseded_by`, the corrected title is recorded in the same breath, and `_outstanding` stops
+  counting the ghost as a capture that exists. A round that quietly loses a row is a round nobody
+  can audit.
+- **Nothing is cleared over work that is only in the chat** (S-044). `handoff` answers one question
+  — is everything the NEXT session needs on disk — and REFUSES while it is not: no phase recorded,
+  an open capture round, a plan step left `todo`/`in_progress`, a done step whose evidence resolves
+  to nothing, no ledger snapshot, a `tuning-changelog` with no ▶️ CONTINUE block. It writes nothing
+  either way (which evidence closes a step is a decision), and when it passes it prints the resume
+  line: what to say next, and what must stay open.
 - **A round says WHICH counter its version is, and a ledger version must exist** (TCC-022). The two
   are different counters and neither is derived from the other: a **series** `_N` numbers a set of
   measurements, a **ledger version** `v_NNN` is the configuration they were taken under. So the
