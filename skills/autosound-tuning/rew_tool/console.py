@@ -79,6 +79,7 @@ GLYPHS = {
     "⛔": "STOP", "▶": ">", "⚖": "",
     "\U0001f7e2": "[+]", "\U0001f7e1": "[~]", "\U0001f534": "[-]",
     "➕": "+", "➖": "-", "\U0001f4cf": "", "\U0001f4cc": "",
+    "\U0001f50e": "",   # 🔎 — the form's "probed, not asked" marker; nothing on a bare console
 }
 
 # Ukrainian romanisation (the KMU 2010 table, character by character), extended with the four

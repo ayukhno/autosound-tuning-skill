@@ -689,8 +689,8 @@ def _selftest():
     assert post_comment("#39", named, runner=comment_ok)["argv"][3] == "39"
     # a comment that landed on ANOTHER issue is refused, even though gh succeeded.
     elsewhere = lambda argv: (0, f"https://github.com/{FEEDBACK_REPO}/issues/7#issuecomment-2\n", "")
-    for bad_runner, why in ((elsewhere, "another issue"), (wrong_repo_comment := (
-            lambda argv: (0, "https://github.com/someone/else/issues/39\n", "")), "another repo")):
+    another_repo = lambda argv: (0, "https://github.com/someone/else/issues/39\n", "")  # noqa: E731
+    for bad_runner, why in ((elsewhere, "another issue"), (another_repo, "another repo")):
         try:
             post_comment("39", named, runner=bad_runner)
             raise AssertionError(f"accepted a comment on {why}")

@@ -1052,7 +1052,7 @@ class Process:
                       "(`apply.propose`; phase -1's first ledger snapshot for a new project), then "
                       "open the round at the version it wrote;\n"
                       "  - the measurements are a baseline, taken before anything is banked -> "
-                      f"open the round at its SERIES number instead (`capture-start 1 ...`), which "
+                      "open the round at its SERIES number instead (`capture-start 1 ...`), which "
                       "is what Phase 0 does and needs no ledger."
                 )
         state = self.load()
