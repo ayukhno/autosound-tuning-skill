@@ -1350,7 +1350,7 @@ updates to the newest tag. **The fetch is not broken.**
 
 ## S-050 · W-1: collection is closed — what the review has to decide
 
-**Status**: open 2026-09-19 · the Arbiter closed the wave's first step with «на сьогодні все, збір
+**Status**: done 2026-09-20 · the review happened, the scope was settled at four packages, and the wave shipped — `git show v3.0.59 --stat`. The eleven items it did NOT take stay open in this file and are W-2's collection (the Arbiter, 2026-09-20: he will not test until they land, and the intake form S-033/S-037 is the one thing that may wait beyond them, as its own session). Found 2026-09-19 · the Arbiter closed the wave's first step with «на сьогодні все, збір
 закінчено». Written as the to-do for later, and nothing was started after his word.
 
 **Due when:** he opens the review (WAVES.md §1 step 2).
