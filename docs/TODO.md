@@ -803,7 +803,7 @@ subject. When `covers` exists, TCC's window renders it — that half rides on a 
 
 ## S-032 · A different reference seat is a different PROJECT, not an option inside one
 
-**Status**: open 2026-09-19 · W-1 collection · the user, from the test: tuning the stage for the PASSENGER
+**Status**: open 2026-09-20 · **CONFIRMED by the Arbiter**, and he widened it: «проект може бути тільки одного типу: водій, пасажир, обидва, всі, задній пасажир ліворуч, задній пасажир праворуч. робимо». So the seat is not an enum with three values inside a project — it is WHAT THE PROJECT IS, with six of them, and «all seats» is one of the six rather than the exception he had guessed at. Taken into the next wave. Found 2026-09-19 · W-1 collection · the user, from the test: tuning the stage for the PASSENGER
 means taking every raw curve again and walking the whole process, so it belongs in its own project rather
 than as a setting in an existing one. He adds, as a guess and not a decision: the «for ALL seats»
 configuration is probably the same — and it is **not** to be confused with the FULL preset, which is about
@@ -818,7 +818,13 @@ passenger» five minutes later and a recorded decision had to be voided. The cou
 finding says the fix was too small. A seat is not a field that can be corrected — changing it invalidates
 the measurement base, which is what the voided decision was really telling us.
 
-**What it changes, if the Arbiter confirms it:** the seat stops being a revisable answer and becomes part of
+**The six types, settled 2026-09-20** (his words, verbatim): `водій` · `пасажир` · `обидва` ·
+`всі` · `задній пасажир ліворуч` · `задній пасажир праворуч`. **A project is of exactly one of
+them.** Two things follow that the earlier text left open: «for all seats» is NOT the exception —
+it is one type among six, so the guess in the first paragraph is answered; and the rear seats are
+named individually, left and right, because on an asymmetric install they are not one place.
+
+**What it changes, now that he has confirmed it:** the seat stops being a revisable answer and becomes part of
 what a project IS; presets stay what they are (SQ/FULL live in one project on one measurement base — FULL is
 rears and surround, not a seat); and the car package from hub `#185` gets its clearest use — starting the
 passenger's project from the driver's DESCRIPTION (car, channel map, DSP, mic, amps) with none of its
