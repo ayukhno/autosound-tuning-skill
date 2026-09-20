@@ -1177,7 +1177,7 @@ session-per-phase key it needs; it rides as a ticket once the command exists.
 
 ## S-045 · After `/clear` the session came back in English: the language has no machine home
 
-**Status**: open 2026-09-19 · W-1 collection · the Arbiter, right after clearing by hand at the phase
+**Status**: done 2026-09-20 · W-1 package B · `python3 rew_tool/project.py <project> language` (exit 3 = unanswered) · `python3 rew_tool/contract.py check <project>` prints it above the file table · selftests in `project.py` and `contract.py` — found 2026-09-19, the Arbiter, right after clearing by hand at the phase
 boundary: «після очистки мова переключилась на англійську».
 
 **Due when:** immediately after S-044's handoff — clearing is the moment this bites, and the two are

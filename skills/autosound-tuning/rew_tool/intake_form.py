@@ -609,7 +609,7 @@ def _selftest():
             assert f"f-{fid}" in page or fid in page, f"{fid} is not on the page"
         external = re.findall(r"""(?:src|href)=["']https?://""", page)
         assert not external, f"the page reaches the network: {external[:3]}"
-        assert "Якою мовою працюємо" in page, "the Ukrainian labels did not reach the page"
+        assert "Якою мовою відповідати" in page, "the Ukrainian labels did not reach the page"
         assert m["couplings"]["seat"]["fields"] == ["car.drive_side", "goal.reference_seat"], \
             m["couplings"]["seat"]
 

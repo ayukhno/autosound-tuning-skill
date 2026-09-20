@@ -87,6 +87,20 @@ window with the trust gate, the alias rules and the ILL-POSED verdict said out l
 reading came back in a FRESH session after the chat was cleared, which is what makes it structural
 rather than one session's whim (S-038).
 
+## The reply language is read, not inferred
+
+He cleared the chat at a phase boundary and the session came back in English: «після очистки мова
+переключилась на англійську». There was nowhere to read it — the conversation that settled it was
+gone, `project.json` had no `language` key, and the recorded decision was free text nothing in the
+start sequence went looking for. The next session moved the root: it DID read the front-end's record,
+NAMED the mismatch («TCC's record says Ukrainian»), answered in English anyway, and advised him to go
+fix it in the app. Storage was half the fault; the other half is that nothing made a session act on
+what it had just read about the person it was talking to. The damage is out of proportion to the fix,
+because the first reply is already wrong and the person's first act after a clean start is to correct
+the machine about himself. The input language is the other trap: on a Windows VM with no Ukrainian
+layout he typed English, and a session taking its language from the last message flips a whole tune
+on one sentence forced by a missing keyboard (S-045).
+
 ## Absolute values, never relative
 
 "Remove the +3" once landed 3 dB off intent: the Arbiter and the model disagreed about what the

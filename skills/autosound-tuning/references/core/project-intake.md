@@ -58,7 +58,30 @@ numbers did not change, so a `project-intake.md §3` or `§4` pointer still land
 > is not done: block that step with the reason (`block -1.2 "clipboard-only until ..."`), because
 > a channel that cannot be called is a channel the method does not have.
 
-> 🌍 **First of all — the local project's language.** Ask the user: *"English, or your native language? (supported: **EN · UK · DE · PL**)"*. From then on, **the whole dialogue AND all generated project files** (`autosound_context`, `tuning-changelog`, `dsp-state-current`, `audit-trail`, `skill-inbox`) — **in the chosen language**. The skill body is English (it's just the method skeleton) — the conversation and artifacts follow the user's language; Claude will manage other languages too, but EN/UK/DE/PL are the officially checked ones.
+> 🌍 **First of all — the project's REPLY language, and it is READ before it is asked.** Three
+> languages live in one session (S-045, his evidence 2026-09-20) and only the first is the method's:
+>
+> | | what it is | who owns it |
+> |---|---|---|
+> | **reply** | what the session writes in — the dialogue AND every generated project file (`autosound_context`, `tuning-changelog`, `dsp-state-current`, `audit-trail`, `skill-inbox`) | the method: `project.json` `language.reply`, written by `intake.save(<project>, "project.language", "<code>")` |
+> | **interface** | what a front-end shows | the front-end. The method never invents it and never stores it as its own |
+> | **input** | whatever the person happened to type | nobody — and it changes NEITHER of the other two |
+>
+> **Order:** a front-end's report (`get_tcc_state.language`) wins, because the app is where he set
+> it; else the stored `language.reply` (`python3 rew_tool/project.py <project> language`, and
+> `contract.py check` prints it above everything else); else ASK — *"English, or your native
+> language? (supported: **EN · UK · DE · PL**)"* — and record the answer, so the next clean session
+> reads it instead of asking again.
+>
+> **The input language is the trap.** On a Windows VM with no Ukrainian keyboard he typed English
+> while the interface and the reply were Ukrainian; a session that takes its language from the last
+> message flips the whole tune on one sentence forced by a missing layout. And reading the value
+> without acting on it is the same failure as not reading it — one session named the mismatch out
+> loud, answered in English anyway, and advised him to go fix it in the app. A read value that
+> changes nothing is not a setting, it is trivia.
+>
+> The skill body stays English — it is the method skeleton. Claude will manage other languages too;
+> EN/UK/DE/PL are the officially checked ones.
 
 - **REW** with the API server enabled (Preferences → API; check: `localhost:4735` responds). A measurement mic **with calibration files** + a way to position it stably at the listening point (LP).
 - **Your DSP's software** and a way to load EQ into it (ideally a file import; we'll find out in §4).

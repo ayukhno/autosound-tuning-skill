@@ -171,6 +171,10 @@ def _empty_project():
         "paths": {}, "presets": [],
         "channels": [], "hardware": {"controls": {}},
         "glossary": {}, "channel_summary": {},
+        # S-045: the REPLY language, and it is a slot rather than a default -- a project with no
+        # answer here must ask, not fall back to the language of the last message. The interface
+        # language is a front-end's and is not stored here; the input language is stored nowhere.
+        "language": {"reply": None},
         # SCR-015: the phase-0 Acoustic Flaw Map as data. What this cabin and this install do to
         # the sound -- and, per entry, what may and may not be done about it.
         "acoustics": {"flaws": []},
@@ -559,6 +563,43 @@ def validate_flaw(entry):
             "behind it is a rumour, and the map is consumed as fact"
         )
     return entry
+
+
+#: The languages this method speaks. `intake.py` re-exports it as its own enum, so the question and
+#: the stored answer cannot drift apart.
+LANGUAGES = ("en", "uk", "de", "pl")
+
+
+def reply_language(data, front_end=None):
+    """Which language this session WRITES in, and where that came from.
+
+    THREE languages live in one session and only this one is the method's (S-045, the Arbiter's
+    evidence 2026-09-20, measured on the Windows VM):
+
+    * the **reply** language — what the session writes in. It is a stored fact, here.
+    * the **interface** language — what a front-end shows. The front-end owns it; the method never
+      invents it and never stores it as its own.
+    * the **input** language — whatever the person happened to type. It changes NEITHER of the
+      other two. On the VM he had no Ukrainian keyboard, typed English, and the session that took
+      its language from the last message would have flipped the whole tune to English on one
+      sentence forced by a missing layout.
+
+    `front_end` is the language a front-end REPORTS for this session, and it wins: the app is where
+    the person actually set it. With neither, the answer is `None` — which means ASK, not guess.
+    Returns `{"lang": <code or None>, "source": "front_end" | "project.json" | None}`.
+
+    Reading it and doing nothing is the failure this exists for: one session named the mismatch out
+    loud («TCC's record says Ukrainian»), answered in English anyway, and advised the person to go
+    fix it in the app. A read value that changes nothing is not a setting, it is trivia.
+    """
+    if front_end:
+        return {"lang": str(front_end).strip().lower(), "source": "front_end"}
+    stored = ((data or {}).get("language") or {}).get("reply")
+    if isinstance(stored, dict):  # a fact() wrapper
+        stored = stored.get("value")
+    if stored:
+        return {"lang": str(stored).strip().lower(), "source": "project.json"}
+    return {"lang": None, "source": None}
 
 
 def open_questions(data):
@@ -1117,6 +1158,10 @@ _USAGE = """usage: project.py <project-dir> <command> [args]
 
   show                                         print project.json (or an empty skeleton)
   open-questions                               list unresolved facts (dotted paths)
+  language [--front-end <code>]                which language to WRITE the reply in, and where
+                                               that came from (exit 3 = nobody has answered).
+                                               A front-end's report wins over the stored value;
+                                               the language the person TYPES wins over nothing
   catch-up [--dry-run]                         bring THIS project up to the current schema —
                                                legacy names, `tier` off the ledger, and a DRAFT
                                                symptom on every owner-facing flaw row that has
@@ -1264,6 +1309,19 @@ def _main(argv):
         elif cmd == "open-questions":
             for q in open_questions(proj.load()):
                 print(q)
+        elif cmd == "language":
+            fe = args[args.index("--front-end") + 1] if "--front-end" in args else None
+            got = reply_language(proj.load(), front_end=fe)
+            if got["lang"]:
+                print(f"reply: {got['lang']} (from {got['source']}) — write in it from the FIRST "
+                      "line, before anything else is said")
+            else:
+                print("reply: not recorded — ASK which language to write in "
+                      "(`intake.save(<project>, 'project.language', '<code>')`); "
+                      f"choices: {', '.join(LANGUAGES)}")
+            print("the interface language is the front-end's, not the method's; "
+                  "the language the person TYPES changes neither")
+            return 0 if got["lang"] else 3
         elif cmd == "catch-up":
             dry = "--dry-run" in args
             done = proj.catch_up(write=not dry)
@@ -1945,6 +2003,41 @@ def _selftest():
     except ProjectError as exc:
         assert "origin must be one of here, inherited" in str(exc), exc
 
+    # ── S-045: the reply language has a machine home, and a read value CHANGES something ──────
+    # Fails on the old code at the first line: `reply_language` did not exist, `_empty_project`
+    # had no `language` key, and `project.language` carried `writes: None`.
+    assert "language.reply" in open_questions(_empty_project()), _empty_project()
+    assert reply_language({}) == {"lang": None, "source": None}
+    assert reply_language({"language": {"reply": "uk"}}) == {"lang": "uk", "source": "project.json"}
+    # A front-end's report WINS over the stored value: the app is where the person set it.
+    assert reply_language({"language": {"reply": "uk"}}, front_end="de")["source"] == "front_end"
+    # A fact() wrapper round-trips like any other stored fact.
+    assert reply_language({"language": {"reply": fact("uk", source="user")}})["lang"] == "uk"
+    # A project WRITTEN before the field existed reports the question anyway -- no migration, and
+    # that is `load()`'s skeleton merge doing it, not a backfill. Asserted because the whole of
+    # S-045's storage half rests on it: the file on the Arbiter's disk has no `language` key.
+    lang_root = tempfile.mkdtemp(prefix="autosound_lang_")
+    old_style = Project(lang_root)
+    old_style.save(_empty_project())
+    on_disk = json.loads(open(old_style.path, encoding="utf-8").read())
+    del on_disk["language"]
+    with open(old_style.path, "w", encoding="utf-8") as fh:
+        json.dump(on_disk, fh, ensure_ascii=False, indent=2)
+    assert "language" not in json.loads(open(old_style.path, encoding="utf-8").read())
+    assert "language.reply" in open_questions(old_style.load()), old_style.load()
+    assert reply_language(old_style.load()) == {"lang": None, "source": None}
+    # The intake writes it like any other confirmed answer, and the question then closes.
+    import intake as _intake
+    assert _intake.field("project.language")["writes"] == "project:language.reply"
+    _intake.save(lang_root, "project.language", "uk")
+    assert reply_language(old_style.load()) == {"lang": "uk", "source": "project.json"}
+    assert "language.reply" not in open_questions(old_style.load())
+    try:
+        _intake.save(lang_root, "project.language", "ua")   # a plausible typo for `uk`
+        raise AssertionError("a language outside the enumeration was accepted")
+    except _intake.IntakeError:
+        pass
+
     # unsupported schema_version is a deterministic refusal.
     bad = proj.load()
     bad["schema_version"] = 99
@@ -1954,7 +2047,7 @@ def _selftest():
     except ProjectError:
         pass
 
-    print(f"selftest OK — an unreadable project.json is refused rather than replaced (load AND write); two spare slots sharing slot 'F' stayed apart by tier and the profile's "
+    print(f"selftest OK — the REPLY language has a machine home, a front-end's report wins over it, and a project written before the field existed still reports the question (S-045); an unreadable project.json is refused rather than replaced (load AND write); two spare slots sharing slot 'F' stayed apart by tier and the profile's "
           f"group id was refused as one (SCR-042), a tier-less project still validates; "
           f"channels[] round-tripped driver/fs_hz facts (SCR-001), duplicate code "
           f"refused, a rename kept the channel's id and resolved its old captures (SCR-039), "

@@ -120,7 +120,7 @@ TONE = ("warm", "neutral", "bright")
 BASS = ("bass_heavy", "neutral")
 PRESENTATION = ("forward", "neutral", "laid_back")
 CHARACTER = ("accuracy", "balanced", "fun")
-LANGUAGES = ("en", "uk", "de", "pl")
+LANGUAGES = project.LANGUAGES  # one list, so the question and the stored answer cannot drift
 #: Provenance and rates come from the modules that own them — referenced, never retyped.
 FACT_SOURCES = project.FACT_SOURCES
 PLAUSIBLE_RATES_HZ = dsp_profile.PLAUSIBLE_RATES_HZ
@@ -180,10 +180,14 @@ def _f(id, group, ask, *, required=False, enum=None, multi=False, writes=None, l
 
 FIELDS = (
     # ── project: the front-end's own half (`project-intake.md` §0) ────────────────────────────
-    _f("project.language", "project", "Which language — EN / UK / DE / PL?", required=True,
-       enum=LANGUAGES, settled_by="front_end", lands="a recorded decision (-1.1) + every project file",
-       note="If the front-end reports it, it is ANSWERED, not suggested — and the step is closed "
-            "with what it said, or the next session asks again."),
+    _f("project.language", "project", "Which language should the session WRITE in — EN / UK / DE / PL?",
+       required=True, enum=LANGUAGES, settled_by="front_end", writes="project:language.reply",
+       lands="`project.json` `language.reply` + a recorded decision (-1.1)",
+       note="This is the REPLY language and only that. The INTERFACE language is a front-end's own "
+            "and is never stored here; the language the person TYPES changes neither — he had no "
+            "Ukrainian layout on the Windows VM, typed English, and the reply stayed Ukrainian "
+            "(S-045). If the front-end reports it, it is ANSWERED, not suggested — and it WINS over "
+            "the stored value, because the app is where he set it."),
     _f("project.reviewer_channel", "project", "Which reviewer channel, and does it answer?",
        required=True, settled_by="front_end",
        lands="`rew_analitic/reviewer-check.md` (a live doctor run) + a recorded decision (-1.2)",

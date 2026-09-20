@@ -551,7 +551,13 @@ def check_project(project_dir, skip_rew=False):
     # exists precisely so a consumer would not have to parse our prose (TCC-007, 2026-09-07).
     damaged = [os.path.relpath(e["path"], project_dir).replace(os.sep, "/")
                for e in _load_vendored("state").encoding_survey(project_text_files(project_dir))]
+    # S-045: WHICH LANGUAGE TO WRITE IN, in the one report a session reads before it speaks. It is
+    # a field of its own rather than a line of prose for the same reason `encoding_damaged` is: a
+    # front-end reads it, and the session has to ACT on it before the first reply — reading it and
+    # answering in another language is the exact failure this carries.
+    lang = project.reply_language(project_data)
     return {"project_dir": project_dir, "ok": ok, "complete": complete, "missing": missing,
+            "reply_language": lang["lang"], "reply_language_source": lang["source"],
             "map_ready": map_ready, "row_gaps": row_gaps, "to_confirm": to_confirm,
             "inherited": carried["inherited"], "sources_gone": carried["sources_gone"],
             "encoding_damaged": damaged,
@@ -757,6 +763,20 @@ def _migration_command(project_dir):
 
 def render_report(report):
     lines = [f"# Project contract check — {report['project_dir']}", ""]
+    # FIRST, before the files: it decides the language of the very sentence that reports the rest.
+    if report.get("reply_language"):
+        lines.append(
+            f"**Reply language: `{report['reply_language']}`** "
+            f"(from {report.get('reply_language_source')}) — write in it from the FIRST line. "
+            "A front-end's report wins over this; the language the person TYPES wins over nothing "
+            "(S-045).")
+    else:
+        lines.append(
+            "**Reply language: not recorded** — ASK which language to write in before the first "
+            "reply (`intake.save(<project>, 'project.language', '<code>')`), and do NOT infer it "
+            "from the language of the last message: he typed English on a VM with no Ukrainian "
+            "layout while the reply stayed Ukrainian (S-045).")
+    lines.append("")
     if report.get("prose"):
         # Before the file table and before any mention of intake. A tune already exists here; the
         # only thing missing is a machine-readable form of it.
@@ -1116,6 +1136,16 @@ def _selftest():
     shown = render_report(dict(report, row_gaps=[thd_gap], map_ready=True))
     assert "1 of 2 thd_spike row(s) carry no percentage" in shown and "catch-up" not in shown, shown
 
+    # S-045: the report a session reads BEFORE it speaks says which language to speak in, and says
+    # so above the file table -- the one line whose placement is part of the fix.
+    report_lang = check_project(root, skip_rew=True)
+    assert report_lang["reply_language"] is None, report_lang["reply_language"]
+    assert "**Reply language: not recorded**" in shown.split("| File |")[0], shown
+    project.Project(root).save(dict(project.Project(root).load(), language={"reply": "uk"}))
+    spoken = render_report(check_project(root, skip_rew=True))
+    assert "**Reply language: `uk`**" in spoken.split("| File |")[0], spoken
+    assert check_project(root, skip_rew=True)["reply_language_source"] == "project.json"
+
     # render_report doesn't crash on either shape and mentions the cross-check findings.
     text = render_report(report2)
     assert "virtual_channels" in text, text
@@ -1338,7 +1368,8 @@ def _selftest():
           f"file and its repair rather than as a traceback, on one table line, and the repair it "
           f"names runs and clears it (TCC-007); `catch-up` fills the marked draft on a "
           f"project written before the field, is idempotent, leaves a `notch` row alone and "
-          f"still does NOT close the phase-0 gate. root={root}")
+          f"still does NOT close the phase-0 gate; and the report names the REPLY language above "
+          f"the file table, or says nobody has answered (S-045). root={root}")
     return 0
 
 

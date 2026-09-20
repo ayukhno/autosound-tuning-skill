@@ -91,6 +91,12 @@ machine-readable to render for its Project/System/Car-audio-analysis panels eith
     }
   },
 
+  "language": {                                              // S-045: the REPLY language, and only it
+    "reply": "uk"                                            //   en | uk | de | pl; null = ASK, never guess
+  },                                                         //   the INTERFACE language is a front-end's
+                                                             //   own; the language the person TYPES is
+                                                             //   stored nowhere and changes neither
+
   "glossary": {                                              // SCR-008 -- naming.Glossary.for_project
     "channels": [{"code": "w-L", "active": true}, {"code": "c", "active": false}],
     "pairs": {}, "combos": {}, "joints": {}, "sides": {}

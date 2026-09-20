@@ -60,6 +60,18 @@ Tone: equal colleagues. Accept a correct critique fully; argue disagreements in 
 
 ## 🔄 Pre-Session & Resume (every start)
 
+**Before the first reply — WHICH LANGUAGE.** Three languages live in one session and only one of
+them is a setting (S-045). The **reply** language is what you write in: a front-end's report of it
+wins, else `project.json`'s `language.reply` — `python3 rew_tool/project.py <project> language` says
+which and where from, and `contract.py check` prints it above everything else. Nothing recorded
+either place → **ask**, and record the answer (`intake.save(<project>, 'project.language', '<code>')`).
+The **interface** language is the front-end's own and you never invent it. The **input** language —
+whatever the person happened to type — changes NEITHER: on a Windows VM with no Ukrainian layout he
+typed English while the tune stayed Ukrainian, and a session that takes its language from the last
+message flips the whole project on one sentence forced by a missing keyboard. Reading the value and
+answering in another language is the same failure as not reading it: one session named the mismatch
+out loud, replied in English anyway, and advised him to go fix it in the app.
+
 0. **Which method is this:** `python3 rew_tool/deployment.py <project>` — state the version you are running. A refusal (exit 3/4) is named to the user before step 1, not worked around; see `📍 Resolving paths` above.
 1. **Hardware:** mic connected, REW API on :4735, cabin closed, active DSP input matches the task.
 2. **Reconcile state from disk — MACHINE FILES FIRST, prose second.** One call for the whole picture: `python3 rew_tool/contract.py check <project>`. **If that report says the project predates a schema field, run `python3 rew_tool/project.py <project> catch-up` there and then — do not ask, and do not carry it as a to-do.** It is additive and idempotent: legacy names, `tier` read off the ledger, and a marked `DRAFT:` symptom on owner-facing flaw rows that have none. It invents no fact and it does NOT close the phase-0 gate — the owner's own sentence is still owed. Concretely: `process/process-state.json` for the active phase + plan (`python3 rew_tool/state/process.py <project>/process show`) is where the phase/plan actually live now — **not** `tuning-changelog`'s ▶️ CONTINUE block, which is a human-readable cross-check, not the source. Then the ledger HEAD (multi-slot DSP → the active-slot banner first, `python3 rew_tool/state/state.py --root <project>/state registry render`) and `project.json` (car/equipment/glossary/hardware facts, `python3 rew_tool/project.py <project> show`). Read `audit-trail.md`/`tuning-changelog` alongside for the human narrative, but if prose and the machine files disagree, **the machine files win** — that divergence is itself worth flagging to the user. Ask what the user changed manually. **Reporting all of this costs one word** — *checks: done* — and only a check that FAILED is spoken in sentences (`✍️ Output Style`).
