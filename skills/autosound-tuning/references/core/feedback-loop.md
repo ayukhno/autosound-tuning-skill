@@ -56,6 +56,10 @@ Presents it as **a list where EACH item is already PRE-SELECTED (☑)**. The use
 
 1. **Building and recording (locally).** The skill collects data from `skill-inbox.md` + the changelog (`Lesson:` lines) + the profile and writes **`feedback-YYYY-MM-DD.md`** in the project per the template. The user reads it, edits, says "OK" → the file is **recorded in the project**. At this stage **nothing has been sent anywhere** — but there's value already: the recorded packages sit nearby and can be handed over together/later.
 2. **Delivery to the author (optional, a separate explicit decision).** The user sends the file themselves via one of the channels below — or asks Claude to do it for them, and then Claude **shows the final text and waits for explicit confirmation** before sending. The "OK" from stage 1 ≠ consent to send. ⚠️ **When Claude posts it, go through the side-effect gate — never let the model resolve the repo.** Use `rew_tool/gates/side_effect.py` → `post_feedback(body_file, car, dsp, channel=…)`: it runs the EXACT `gh issue create --repo <hardcoded repo of that channel> …` and **verifies the returned URL is on that repo, FAIL LOUD otherwise**. This exists because a weak generator once confabulated a stranger's repo + a fake "posted successfully" (issue #23); prose is not a rail, a gate that refuses is.
+>
+> **Adding a finding to an issue that already exists goes through the SAME door** — `post_comment(<issue url or number>, body_file, channel=…)` (S-034). The gate could only create, so «add this to #39» had no guarded path and the way round it was a raw `gh` call with the target chosen by whoever was typing — the exact shape the gate refuses. Same `CHANNELS`, same verification, plus the issue number: a comment that landed on another thread is refused even when `gh` succeeded.
+>
+> **The title says what the finding is ABOUT** (skill `#49`). It used to be built as `Feedback: <car> · <DSP>` and took no argument, so every finding from one car arrived under one name — and the 24-hour duplicate guard, which keys on the title, then silently skipped the SECOND genuine finding of a session. Pass `title=`, or let the body's first heading be it; `<car> · <DSP>` stays as the suffix, so the provenance survives and the guard compares something distinguishing.
    **Two channels, by whose finding it is** — the caller names the channel, never the repo:
    - `channel="skill"` (default) → `ayukhno/autosound-tuning-skill`: the method, its scripts (`rew_tool/`, `scripts/`), its documents, the reviewer channel.
    - `channel="tcc"` → `ayukhno/autosound-tcc`: the front-end window itself — what TCC shows, its buttons, its own calls.
@@ -94,7 +98,7 @@ crossover sets · techniques · successful symptom→fix · track markers
 > (EN/UK/DE/PL, `phase_-1_intake.md §0.5` step 1), but a feedback package becomes a **public GitHub issue** read
 > by the maintainer and the whole community — so the issue **title and body are always English**,
 > regardless of the session language. If the tune was run in UK/DE/PL, translate the package on the way
-> out. (The title is already English — `post_feedback` builds `Feedback: <car> · <DSP>`; keep the body English too.)
+> out. (The title is already English — `post_feedback` takes `title=` from the caller, or reads the body's first heading, and keeps `<car> · <DSP>` as the suffix; keep the body English too.)
 > The Arbiter's form is the exception: it reaches only him, so the message stays in the person's language.
 
 ### Sending channels (by increasing formality)

@@ -472,6 +472,23 @@ def validate_series(titles, expected, glossary=None):
     weren't asked for (an experiment tag, another version), while `foreign` collects titles that
     aren't in the grammar at all. Flagging both as errors is what makes a checker annoying enough
     to be ignored.
+
+    **A match whose TITLE differs is its own outcome, not a plain `ok`** (skill `#47`). The
+    comparison runs on `name_key`, so `sw_01 (sw)` and `sw_1 (sw)` are the same measurement —
+    arithmetically right, and the normalisation is wanted. The silence was the bug: `found`
+    returned the EXPECTED name, and a front-end that has to FIND the measurement by its literal
+    REW title then answered `0 usable, 16 missing` over the same session this check had just
+    called `ok` on all 16. A wrong statement reached the tuner as fact and sixteen good
+    measurements were registered as unusable.
+
+    So the verdict now also carries:
+
+    * `matched` — `{expected name: the title REW actually holds}`, for every found measurement;
+    * `renames` — `{title on disk: canonical title}` for the subset where the two differ. The
+      canonical form is whatever `generate_name` emits (one digit: `sw_1 (sw)`), and the fix is a
+      RENAME, never a re-measurement: REW's `uuid` survives a rename, one measurement carried
+      three titles in a session and kept the same id. This is the "new name" column a front-end's
+      read-from-REW step fills in.
     """
     present = {}
     foreign = []
@@ -486,9 +503,13 @@ def validate_series(titles, expected, glossary=None):
     wanted = {name_key(parse_name(name, glossary)): name for name in expected}
     missing = [name for key, name in wanted.items() if key not in present]
     extra = [p["title"] for key, p in present.items() if key not in wanted]
+    matched = {name: present[key]["title"] for key, name in wanted.items() if key in present}
+    renames = {actual: name for name, actual in matched.items() if actual != name}
     return {
         "expected": expected,
         "found": [name for key, name in wanted.items() if key in present],
+        "matched": matched,
+        "renames": renames,
         "missing": missing,
         "extra": sorted(extra),
         "foreign": foreign,
@@ -599,6 +620,26 @@ def _selftest():
                               ["w-L_2 (sw)", "tw-L_2 (sw)"], g)
     assert verdict["missing"] == [], verdict
     assert verdict["complete"], verdict
+    # A rename IS a title that differs, so it is reported as one: the check says what REW holds.
+    assert verdict["renames"] == {"m-L_2 (sw)": "w-L_2 (sw)"}, verdict
+
+    # -- skill #47: a match the comparison NORMALISED is its own outcome. On a live session REW
+    #    held `sw_01 (sw)` while the plan asked for `sw_1 (sw)`; `check` said `ok` on all 16 and
+    #    the front-end, which finds a measurement by its literal title, said `0 usable, 16
+    #    missing`. Both were right; the silence was the defect. Fails on the old code here --
+    #    `matched` and `renames` did not exist and `found` returned the EXPECTED name.
+    padded = validate_series(["sw_01 (sw)", "w-L_1 (sw)"],
+                             ["sw_1 (sw)", "w-L_1 (sw)", "tw-L_1 (sw)"])
+    assert padded["found"] == ["sw_1 (sw)", "w-L_1 (sw)"], padded
+    assert padded["matched"]["sw_1 (sw)"] == "sw_01 (sw)", padded
+    assert padded["renames"] == {"sw_01 (sw)": "sw_1 (sw)"}, padded
+    assert padded["missing"] == ["tw-L_1 (sw)"], padded
+    # A title that matches exactly is NOT a rename -- the outcome has to stay distinguishable.
+    assert "w-L_1 (sw)" not in padded["renames"], padded
+    # The canonical target is what `generate_name` emits, so the rename column is generated, not
+    # typed (the tuner's own spec on #47).
+    assert generate_name("sw", 1, "sw") == "sw_1 (sw)", generate_name("sw", 1, "sw")
+
     # and a plan is never generated under a retired name.
     assert "m-L" not in expected_series("0", g, 2)[0], expected_series("0", g, 2)
 
@@ -688,7 +729,7 @@ def _selftest():
           "channel's old captures resolve to it (SCR-039); positions p1..p9/x0 and controls "
           "ctl1/ctl3/ctl/rep parse in both forms and are identity, not code; a clarification "
           "after the method is another measurement in the same series (#34), (imp) without `_N` (#33), refusals "
-          "with a reason, and no ledger version for `_N` (#37)")
+          "with a reason, and no ledger version for `_N` (#37); a match the comparison NORMALISED says the title on disk differs and names the canonical one to rename it to (#47)")
     return 0
 
 
@@ -724,7 +765,12 @@ def _main(argv):
             titles = [m.get("title", "") for m in rew_api.get_measurements().values()]
             verdict = validate_series(titles, expected_series(args[0], g, args[1]), g)
             for name in verdict["found"]:
-                print(f"  ok      {name}")
+                actual = verdict["matched"].get(name, name)
+                # #47: a normalised match says so. `ok` alone is what let 16 measurements be
+                # reported as present under titles REW does not hold.
+                print(f"  ok      {name}" if actual == name else
+                      f"  ok*     {name}  -- REW holds '{actual}'; rename it to the canonical "
+                      f"title before a front-end looks for it by name")
             for name in verdict["missing"]:
                 print(f"  MISSING {name}")
             for name in verdict["extra"]:
@@ -734,7 +780,14 @@ def _main(argv):
                 # isn't in the convention at all, so no analysis will ever find it by name -- and
                 # what in it could not be placed, so the fix is one rename rather than a hunt.
                 print(f"  ?name   {name}  -- {explain_name(name, g)[1]}")
-            print(f"{len(verdict['found'])}/{len(verdict['expected'])} captured")
+            print(f"{len(verdict['found'])}/{len(verdict['expected'])} captured"
+                  + (f", {len(verdict['renames'])} under another title (ok*)"
+                     if verdict["renames"] else ""))
+            if verdict["renames"]:
+                print("  the renames, as `rew_api.rename_measurement(uuid, new)` would take them "
+                      "(a rename keeps REW's uuid):")
+                for actual, canonical in sorted(verdict["renames"].items()):
+                    print(f"    {actual!r} -> {canonical!r}")
             return 0 if verdict["complete"] else 1
         else:
             print(_USAGE, file=sys.stderr)

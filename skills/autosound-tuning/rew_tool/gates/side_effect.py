@@ -380,12 +380,106 @@ def gh_ready(runner=_subprocess_runner):
     return rc == 0
 
 
+_TITLE_SUBJECT_MAX = 120
+
+
+def feedback_title(body_file, car, dsp, title=None):
+    """`<what it is about> — <car> · <dsp>`, and the first half is never a constant (skill `#49`).
+
+    The old title was `f"Feedback: {car} · {dsp}"` and took no argument, so every finding from one
+    car arrived under the same name — the issue list stopped carrying information at exactly the
+    place a maintainer triages from. Worse, `_recent_duplicate` keys on the title: with the title
+    constant, the SECOND genuine finding of a session was skipped as a duplicate of the first. A
+    guard keyed on a constant is not a guard. On 19.09 it did not bite only because the session
+    renamed each issue by hand right after creating it.
+
+    Order of sources, so a caller that passes nothing still gets a distinguishing title:
+
+    1. `title`, as given;
+    2. the body's first markdown heading — the obvious source, and what the method's own feedback
+       files always carry;
+    3. `Feedback`, the old wording minus the provenance, which is then the whole of the suffix.
+
+    `car · dsp` stays in every case: the provenance is what made the old title worth keeping, and
+    losing it would trade one defect for another.
+    """
+    subject = str(title or "").strip()
+    if not subject:
+        try:
+            with open(body_file, encoding="utf-8") as fh:
+                for line in fh:
+                    if line.lstrip().startswith("#"):
+                        subject = line.lstrip("# ").strip()
+                        break
+        except OSError:
+            subject = ""
+    subject = subject or "Feedback"
+    if len(subject) > _TITLE_SUBJECT_MAX:
+        subject = subject[:_TITLE_SUBJECT_MAX - 1].rstrip() + "…"
+    provenance = " · ".join(part for part in (str(car or "").strip(), str(dsp or "").strip()) if part)
+    return f"{subject} — {provenance}" if provenance else subject
+
+
+def _verify_comment_on(repo, issue_url_or_number):
+    """Post-verify a comment: on `repo`, and on the issue the caller named — not another thread.
+
+    `gh issue comment` resolves its target and prints the comment's URL; a call that silently
+    landed elsewhere would otherwise pass the repo check. Same shape as the DSP-profile update's
+    verifier, which is where it was first needed.
+    """
+    wanted = _issue_number(str(issue_url_or_number)) or str(issue_url_or_number).strip().lstrip("#")
+
+    def _verify(rc, out, err):
+        ok, detail = _verify_issue_on(repo)(rc, out, err)
+        if not ok:
+            return ok, detail
+        url = _extract_url(out) or _extract_url(err)
+        got = _issue_number(url)
+        if wanted and got and got != wanted:
+            return False, f"comment landed on issue #{got}, expected #{wanted} — refusing"
+        return True, detail
+
+    return _verify
+
+
+def post_comment(issue_url_or_number, body_file, runner=_subprocess_runner, dry_run=False,
+                 channel="skill"):
+    """Add a finding to an issue that ALREADY EXISTS, through the same rail as creating one (S-034).
+
+    The gate could only create, so «add this to #39» had no guarded path at all — and the way round
+    it was a raw `gh` call with the target chosen by whoever was typing, which is the exact shape
+    this module refuses. (It exists because a model once invented a plausible repository and
+    reported a fabricated issue URL, skill `#23`.) A session on the test machine did the careful
+    thing by hand — took the repo out of `CHANNELS` and checked every returned URL against it —
+    and the carefulness is the point: a documented door nobody can use is a door that stops being
+    used at all.
+
+    Same closed `CHANNELS`, same `guarded_run`, same returned-URL verification — plus the issue
+    number, because a comment's URL carries it. `--repo` never comes from the caller.
+    """
+    import os
+    repo = channel_repo(channel)
+    if not os.path.isfile(body_file):
+        raise ValueError(f"body-file not found: {body_file!r} (write the comment file first)")
+    target = str(issue_url_or_number).strip()
+    number = _issue_number(target) or target.lstrip("#")
+    if not number.isdigit():
+        raise ValueError(
+            f"{issue_url_or_number!r} is neither an issue URL nor a number. The issue is named by "
+            "its number or its full URL; the REPO is not the caller's to name — it comes from the "
+            f"channel ({sorted(CHANNELS)}).")
+    argv = ["gh", "issue", "comment", number, "--repo", repo, "--body-file", body_file]
+    return guarded_run(argv, _verify_comment_on(repo, number), runner=runner, dry_run=dry_run)
+
+
 def post_feedback(body_file, car, dsp, runner=_subprocess_runner, dry_run=False, channel="skill", via="auto",
                   sender=None, kind="feedback", impact="", lang="en", consented=False, post=_form_post,
-                  gh_is_ready=None):
+                  gh_is_ready=None, title=None):
     """Post the de-identified feedback issue with the repo HARDCODED + returned-URL verified.
 
-    Never let a model fill in the repo — that's the whole point. `car`/`dsp` only shape the title.
+    Never let a model fill in the repo — that's the whole point. `car`/`dsp` are the finding's
+    PROVENANCE and are kept as a suffix; what the issue is ABOUT comes from `title`, or from the
+    body's first heading when the caller gives none (skill `#49` / S-035).
     `channel` picks WHOSE finding it is — "skill" (the method, its scripts, its documents) or "tcc"
     (the front-end window) — and the repo comes from `CHANNELS`, never from the argument itself.
     Dedup guard: if an identical-title open issue exists newer than 24 h, SKIP loudly instead of
@@ -418,7 +512,7 @@ def post_feedback(body_file, car, dsp, runner=_subprocess_runner, dry_run=False,
             message = fh.read()
         return post_form(sender, kind, message, lang=lang, channel=channel, impact=impact, consented=consented,
                          post=post, dry_run=dry_run)
-    title = f"Feedback: {car} · {dsp}"
+    title = feedback_title(body_file, car, dsp, title=title)
     if not dry_run:
         dup = _recent_duplicate(title, runner, repo=repo)
         if dup:
@@ -534,7 +628,7 @@ def _selftest():
     def _lister(created_at, then=good):
         def run(argv):
             if argv[1:3] == ["issue", "list"]:
-                return (0, _json.dumps([{"title": "Feedback: car · dsp",
+                return (0, _json.dumps([{"title": "Feedback — car · dsp",
                                          "url": f"https://github.com/{FEEDBACK_REPO}/issues/3",
                                          "createdAt": created_at}]), "")
             return then(argv)
@@ -550,6 +644,71 @@ def _selftest():
         return (1, "", "boom") if argv[1:3] == ["issue", "list"] else good(argv)
     d3 = post_feedback(body, "car", "dsp", runner=_list_broken)
     assert not d3.get("skipped") and d3["detail"].startswith("verified on"), d3
+
+    # -- skill #49 / S-035: the title is what the finding is ABOUT, and `car · dsp` is provenance.
+    #    Fails on the old code at the first assertion: the title was built as a constant from
+    #    car+dsp and took no argument, so every finding from one car arrived under one name -- and
+    #    the dedup guard above, which keys on the title, then ate the SECOND real finding of a
+    #    session as a duplicate of the first.
+    named = os.path.join(os.path.dirname(body), "finding.md")
+    with open(named, "w", encoding="utf-8") as f:
+        f.write("# naming.py check hides a title that differs\n\nbody\n")
+    r49 = post_feedback(named, "VW Passat B8", "Helix DSP Ultra S", runner=good)
+    assert r49["argv"][6] == ("naming.py check hides a title that differs — "
+                              "VW Passat B8 · Helix DSP Ultra S"), r49["argv"]
+    # the caller's own title wins over the heading, and the provenance survives either way.
+    r49b = post_feedback(named, "VW Passat B8", "Helix DSP Ultra S", runner=good,
+                         title="The protective record cannot be corrected")
+    assert r49b["argv"][6] == ("The protective record cannot be corrected — "
+                               "VW Passat B8 · Helix DSP Ultra S"), r49b["argv"]
+    # TWO findings from one car, minutes apart, are two DIFFERENT titles -- which is the whole
+    # point: the guard now compares something distinguishing.
+    assert r49["argv"][6] != r49b["argv"][6]
+    # a body with no heading still gets the provenance, and says only that it is feedback.
+    plain_body = os.path.join(os.path.dirname(body), "plain.md")
+    with open(plain_body, "w", encoding="utf-8") as f:
+        f.write("no heading at all\n")
+    assert feedback_title(plain_body, "car", "dsp") == "Feedback — car · dsp"
+    # a very long heading is cut, not sent whole: GitHub's title is not a body.
+    long_body = os.path.join(os.path.dirname(body), "long.md")
+    with open(long_body, "w", encoding="utf-8") as f:
+        f.write("# " + "x" * 400 + "\n")
+    assert len(feedback_title(long_body, "car", "dsp").split(" — ")[0]) <= _TITLE_SUBJECT_MAX
+
+    # -- S-034: a finding added to an issue that ALREADY EXISTS goes through the SAME rail.
+    #    Fails on the old code at the call: `post_comment` did not exist, so the only route was a
+    #    raw `gh` call with the target chosen by whoever was typing -- the #23 shape.
+    comment_ok = lambda argv: (0, f"https://github.com/{FEEDBACK_REPO}/issues/39#issuecomment-1\n", "")
+    c = post_comment("39", named, runner=comment_ok)
+    assert c["argv"][:5] == ["gh", "issue", "comment", "39", "--repo"], c["argv"]
+    assert c["argv"][5] == FEEDBACK_REPO, c["argv"]
+    assert c["detail"].startswith("verified on"), c
+    # the full URL names the same issue, and so does `#39`.
+    assert post_comment(f"https://github.com/{FEEDBACK_REPO}/issues/39", named,
+                        runner=comment_ok)["argv"][3] == "39"
+    assert post_comment("#39", named, runner=comment_ok)["argv"][3] == "39"
+    # a comment that landed on ANOTHER issue is refused, even though gh succeeded.
+    elsewhere = lambda argv: (0, f"https://github.com/{FEEDBACK_REPO}/issues/7#issuecomment-2\n", "")
+    for bad_runner, why in ((elsewhere, "another issue"), (wrong_repo_comment := (
+            lambda argv: (0, "https://github.com/someone/else/issues/39\n", "")), "another repo")):
+        try:
+            post_comment("39", named, runner=bad_runner)
+            raise AssertionError(f"accepted a comment on {why}")
+        except SideEffectRefused:
+            pass
+    # the repo is never the caller's to name, on this door as on the others.
+    for bad_channel in ("ayukhno/autosound-tuning-skill", "nope"):
+        try:
+            post_comment("39", named, runner=comment_ok, channel=bad_channel)
+            raise AssertionError("accepted a caller-spelled repo")
+        except ValueError:
+            pass
+    # neither a URL nor a number is a caller error, named as one.
+    try:
+        post_comment("the issue about naming", named, runner=comment_ok)
+        raise AssertionError("accepted a target that is not an issue")
+    except ValueError:
+        pass
 
     # wrong repo (the #23 confabulation) → FAIL LOUD, even though gh "succeeded".
     wrong = lambda argv: (0, "https://github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant/issues/21\n", "")
@@ -785,7 +944,12 @@ def _selftest():
           "Upload: refused without consent, repo+branch hardcoded, name reduced to a basename, "
           "loud on wrong repo / look-alike host / non-raw host / gh failure, verified URL "
           "returned under ['url']. Form: the surface autosound-tcc reads is pinned by name, "
-          "question id and choice key; a send counts only as the form confirms it.")
+          "question id and choice key; a send counts only as the form confirms it. "
+          "Title: what the finding is ABOUT, from the caller or the body's heading, with car · dsp "
+          "kept as provenance and cut to length -- two findings from one car are two titles, so "
+          "the dedup guard compares something distinguishing (#49). Comment: a finding lands on an "
+          "issue that already exists through the SAME rail -- repo from CHANNELS, URL verified, "
+          "and a comment that went to another issue or another repo refused (S-034).")
     return 0
 
 

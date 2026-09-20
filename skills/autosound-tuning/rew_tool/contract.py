@@ -864,7 +864,16 @@ def render_report(report):
             lines.append(f"- REW (round {rew['round']}, phase {rew['phase']}, "
                          f"{round_label(rew['version'])}): {len(rew['found'])}/{len(rew['expected'])} captured"
                          + (f", {len(skipped)} skipped" if skipped else "")
+                         + (f", {len(rew['renames'])} under another title"
+                            if rew.get("renames") else "")
                          + ("" if rew["complete"] else f" — MISSING {rew['missing']}"))
+            # skill #47: "captured" counted a measurement REW holds under a DIFFERENT title, and
+            # said nothing. The count is right -- the comparison normalises `_01` to `_1`, and
+            # they are the same number -- but a front-end that finds a measurement by its literal
+            # title then reported 16 of them missing over the same session.
+            for actual, canonical in sorted((rew.get("renames") or {}).items()):
+                lines.append(f"    title differs: REW holds `{actual}` for `{canonical}` — "
+                             f"rename it (REW's uuid survives a rename)")
             unplanned = set(rew.get("skipped_unplanned") or [])
             for title, reason in skipped.items():
                 lines.append(

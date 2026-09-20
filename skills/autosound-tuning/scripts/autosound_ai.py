@@ -1201,8 +1201,34 @@ def run_doctor(smoke=True):
         print("▶ Режим роботи: РУЧНИЙ БУФЕР ОБМІНУ (Clipboard mode / Безкоштовний)")
         print("  Скрипт згенерує повний промпт і скопіює його у буфер для вставки в будь-який браузер.")
 
+    # 5. The DESK ENGINE — asked here, before a project opens, and not at step 1.3 of a live tune
+    #    (S-049). The Arbiter reached the crossover search on his MacBook and only there learned
+    #    there was no engine; `install.sh`'s own comment says the reason it fetches one is that a
+    #    person «would otherwise discover that in the middle of a tune». This is the line that
+    #    would have replaced that whole exchange. It never builds — `engine_status` only looks.
+    for line in _engine_lines():
+        print(line)
+
     print(f"================== {'УСПІШНО ✓' if ok else 'ПОТРЕБУЄ ВИПРАВЛЕННЯ ✗'} ==================")
     return ok
+
+
+def _engine_lines():
+    """The desk engine's one line, or the two that say how to get it. Never raises: a doctor that
+    dies on an optional component reports nothing about the components that matter."""
+    try:
+        sys.path.insert(0, os.path.join(SKILL_DIR, "rew_tool"))
+        import resonalyze_engine as _engine
+        st = _engine.engine_status()
+    except Exception as exc:  # noqa: BLE001
+        return [f"· Рушій столу (Resonalyze): перевірити не вдалося — {exc}"]
+    if st["present"]:
+        return [f"✓ Рушій столу (Resonalyze): є — {st['how']} · пін {st['pin']} · {st['rid']}"]
+    return [
+        f"· Рушій столу (Resonalyze): НЕМАЄ — {st['how']}",
+        f"  Фаза 1.3 (пошук кросоверів) без нього не піде. Пін {st['pin']}, платформа "
+        f"{st['rid']}; забрати: {st['fetch']}",
+    ]
 
 #: This script's own repository. A review is a PROJECT's record and must never land here, however
 #: the script was launched — and the skill folder is the likeliest place to launch it from by hand,

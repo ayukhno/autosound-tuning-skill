@@ -183,6 +183,51 @@ def _flaw_map_entries(project_dir):
     return list(((profile.get("acoustics") or {}).get("flaws")) or [])
 
 
+#: `flaw_map.classify` writes this on a peak row it could not check, and this gate reads it back.
+#: Imported by VALUE rather than by module, for the same reason `_flaw_map_entries` reads raw JSON:
+#: a gate that cannot run because an import failed is a gate that silently stops gating. The two
+#: copies are held together by `flaw_map`'s own selftest.
+_ASSUMED_NOTE = "no positions measured -- staying is ASSUMED, not shown"
+#: `p1`…`p9` as the grammar writes it -- `m-L p3_49 (sw)`. NOT `\bp[1-9]\b`: `_` is a word
+#: character, so that pattern never matches a real title, and the gate would have passed every
+#: round ever opened. Caught by the selftest, not by reading.
+_POSITION_IN_TITLE = re.compile(r"(?<![\w-])p[1-9](?=[_\s])")
+
+
+def _positions_asked(project_dir):
+    """Has the request for the positions been MADE — the round opened, or the answer recorded?
+
+    Two records count, and both are ones that already exist (S-047):
+
+    * a capture round was opened asking for a position title (`<ch> p3_49 (sw)`) — the offer taken;
+    * a ruling was recorded whose words name the ellipsoid or the positions — the offer declined,
+      which is an answer and closes the question as firmly as taking it.
+
+    Anything else is the question never having been put, which is exactly the state this gate is
+    about: 43 rows written on an assumption while the set that would settle them sat on the disk.
+    """
+    root = os.path.join(project_dir, "process", "journal.jsonl")
+    try:
+        with open(root, encoding="utf-8") as fh:
+            lines = fh.readlines()
+    except OSError:
+        return False
+    for line in lines:
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue                      # a torn last line is skipped, not fatal (the file's rule)
+        kind = event.get("type")
+        if kind == EV_CAPTURE_ISSUED:
+            if any(_POSITION_IN_TITLE.search(str(t)) for t in (event.get("expected") or [])):
+                return True
+        elif kind == EV_USER_DECISION:
+            words = f"{event.get('question', '')} {event.get('answer', '')}".lower()
+            if "ellipsoid" in words or "p1..p9" in words or "position" in words:
+                return True
+    return False
+
+
 def _require_flaw_map(phase, previous, project_dir):
     """Refuse to move past phase 0 while the flaw map is empty (SCR-044)."""
     try:
@@ -193,7 +238,27 @@ def _require_flaw_map(phase, previous, project_dir):
         return  # re-entry and going back are always allowed, same rule as the target gate
     if _flaw_map_entries(project_dir) is None:
         return  # no readable project.json at all is contract.py's complaint, not this one
-    if _flaw_map_entries(project_dir):
+    entries = _flaw_map_entries(project_dir)
+    if entries:
+        # S-047: the map exists, and some of its rows stand on an assumption nobody tested. The
+        # tool computed that and carried it nowhere; the phase does not close over it in silence.
+        assumed = [e for e in entries if _ASSUMED_NOTE in str((e or {}).get("why") or "")]
+        if assumed and not _positions_asked(project_dir):
+            codes = sorted({c for e in assumed for c in ((e or {}).get("channels") or [])})
+            raise ProcessError(
+                f"phase {phase}: {len(assumed)} flaw row(s) on {len(codes)} channel(s) say a peak "
+                f"STAYS because nobody moved the microphone — "
+                + (", ".join(codes) if codes else "no channel named")
+                + ". `flaw_map` writes that on every peak it could not check ('"
+                + _ASSUMED_NOTE + "'), and phase 2 equalises against those rows. ASK for the "
+                "measurement that settles them before the phase closes:\n"
+                + "".join(f"    {c} p1..p9_<N> (sw)\n" for c in codes)
+                + "    (`flaw_map.py --project <dir> --rew <N>` prints the exact "
+                  "`capture-start` line, titles and all)\n"
+                "Or record the Arbiter's answer if he decides against it — `decision \"the "
+                "ellipsoid for <channels>\" \"<his words>\"` — because a decision is an answer "
+                "and closes the question; an unasked question is not."
+            )
         return
     raise ProcessError(
         f"phase {phase} needs the acoustic flaw map: `acoustics.flaws[]` in project.json is empty. "
@@ -1800,6 +1865,47 @@ def _selftest():
     proc.enter_phase("1")
     assert proc.load()["active_phase"] == "1"
 
+    # -- S-047: the phase does not close over a row that STANDS on an unasked question -----------
+    # `flaw_map` writes `_ASSUMED_NOTE` on every peak it could not check -- it computed that 43
+    # times on a live project and carried it nowhere, while the nine-position set that would have
+    # settled it sat on the Arbiter's disk. Fails on the old code at the first refusal: the gate
+    # asked only whether the map had ANY row.
+    assumed_root = tempfile.mkdtemp(prefix="autosound_assumed_")
+    ap = Process(os.path.join(assumed_root, "process"))
+    _seed_intake(assumed_root)
+    ap.enter_phase("-1"); ap.enter_phase("0"); ap.set_target("SQ", "Jazzi")
+    _load_sibling("project.py").Project(assumed_root).add_flaw(
+        f_hz=1000, level_db=6, kind="driver_resonance", action="notch", channels=["m-L"],
+        why="a peak of +6.0 dB, 0.30 oct wide (Q~3.0), " + _ASSUMED_NOTE,
+        evidence=["m-L_01 (sw)"],
+    )
+    try:
+        ap.enter_phase("1")
+        raise AssertionError("phase 1 opened over a peak nobody checked")
+    except ProcessError as exc:
+        # The refusal has to carry the REQUEST, not just the complaint -- that is the whole item.
+        assert "m-L p1..p9_<N> (sw)" in str(exc), str(exc)
+        assert "m-L" in str(exc) and "decision" in str(exc), str(exc)
+    # Asking IS the answer: a round opened for the positions closes the question.
+    ap.start_capture("49", [f"m-L p{i}_49 (sw)" for i in range(1, 10)], phase="0")
+    ap.enter_phase("1")
+    assert ap.load()["active_phase"] == "1"
+    # ...and so does the Arbiter deciding against it, on a project where no round was ever opened.
+    declined_root = tempfile.mkdtemp(prefix="autosound_declined_")
+    dp = Process(os.path.join(declined_root, "process"))
+    _seed_intake(declined_root)
+    dp.enter_phase("-1"); dp.enter_phase("0"); dp.set_target("SQ", "Jazzi")
+    _load_sibling("project.py").Project(declined_root).add_flaw(
+        f_hz=1000, level_db=6, kind="driver_resonance", action="notch", channels=["m-L"],
+        why="a peak, " + _ASSUMED_NOTE, evidence=["m-L_01 (sw)"])
+    refuses("phase 1 over an unasked ellipsoid", lambda: dp.enter_phase("1"))
+    dp.record_decision("the ellipsoid for m-L", "not this session -- the tripod is packed")
+    dp.enter_phase("1")
+    assert dp.load()["active_phase"] == "1"
+    # A map with no assumed row asks for nothing: the gate is about the unasked question, not
+    # about ellipsoids in general.
+    assert _positions_asked(root) is False and _flaw_map_entries(root), "the earlier project"
+
     # -- the phase -1 gate is a gate, not a paragraph (2026-08-12) ------------------------------
     # An empty folder used to walk to phase 1 with no project.json, no profile, no glossary and no
     # ledger: `enter-phase -1`, `enter-phase 0`, `set-target`, `enter-phase 1`, all OK. The quality
@@ -2153,7 +2259,7 @@ def _selftest():
         "the journal headed itself with the writing checkout and re-headed only when it changed; "
         "and STOPPING is an event: `open_work` names the open round and every step left in "
         "progress, drops a round once it is closed, and owes a step again when it is picked "
-        "back up; an RTA the check does not apply to is kept as such and holds no step (#29); a step CARRIES what it covers and its name names the first three and counts the rest (S-031); a round records WHICH counter its version is, refuses a `v_NNN` nobody banked with both ways on, and marks a skip planned or not (TCC-022). "
+        "back up; an RTA the check does not apply to is kept as such and holds no step (#29); a step CARRIES what it covers and its name names the first three and counts the rest (S-031); a round records WHICH counter its version is, refuses a `v_NNN` nobody banked with both ways on, and marks a skip planned or not (TCC-022); and a phase does not close over a flaw row that stands on an UNASKED question -- the refusal carries the titles that would settle it, and a round opened or a ruling recorded closes it (S-047). "
         f"root={root}"
     )
     return 0

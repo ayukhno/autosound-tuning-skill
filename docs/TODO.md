@@ -872,7 +872,7 @@ live in four languages under `scripts/i18n-check.py`.
 
 ## S-034 · The feedback rail can only CREATE an issue, so commenting goes around it
 
-**Status**: open 2026-09-19 · W-1 collection · the session on the test machine, after sending five
+**Status**: done 2026-09-20 · W-1 package D · `python3 skills/autosound-tuning/rew_tool/gates/side_effect.py --selftest` (post_comment: repo from CHANNELS, the issue number verified) — found 2026-09-19, the session on the test machine, after sending five
 findings: the gateway does not comment, only create, so it sent the four comments with raw `gh`,
 taking the repository out of `side_effect.CHANNELS` rather than из its own head and checking every
 returned URL against it.
@@ -893,7 +893,7 @@ repo and the issue number, so it verifies the same way). `--repo` never comes fr
 
 ## S-035 · Every feedback issue from one car gets the same title, and the 24-hour dedup guard eats the second one
 
-**Status**: open 2026-09-19 · W-1 collection · the session on the test machine: «Заголовок шлюз складає
+**Status**: done 2026-09-20 · W-1 package D · `python3 skills/autosound-tuning/rew_tool/gates/side_effect.py --selftest` (two findings from one car are two titles) — found 2026-09-19, the session on the test machine: «Заголовок шлюз складає
 з авто+DSP, ігноруючи назву в тілі» — both new issues arrived as `Feedback: VW Passat B8 · Helix DSP
 Ultra S` and were renamed by hand right after creation.
 
@@ -1252,7 +1252,7 @@ not retold: here it is the mechanism's SUCCESS that is not retold.
 
 ## S-047 · The flaw map writes «the question was not asked» on every row, and has no way to ask it
 
-**Status**: open 2026-09-19 · W-1 collection · the Arbiter: «чому скіл сам не запитав про такий
+**Status**: done 2026-09-20 · W-1 package D · `python3 skills/autosound-tuning/rew_tool/flaw_map.py --selftest` (the request) · `python3 skills/autosound-tuning/rew_tool/state/process.py selftest` (the phase gate) — found 2026-09-19, the Arbiter: «чому скіл сам не запитав про такий
 замір?» — after offering, unprompted, the nine-position sweep set he already had on disk
 (`9points-mes.mdat`, 63 sweeps `<ch> p1…p9_49 (sw)`).
 
@@ -1307,7 +1307,7 @@ dates — stays a question for the Arbiter; this one is mechanical and should ne
 
 ## S-049 · No desk engine on the test MacBook, and nothing said so until Phase 1.3
 
-**Status**: open 2026-09-19 · W-1 collection · the Arbiter: «ось що бачу на MacBook Pro — немає
+**Status**: open 2026-09-20 · W-1 package D · `python3 skills/autosound-tuning/rew_tool/resonalyze_engine.py --selftest` (engine_status builds nothing) — FIRST HALF only; the installer receipt stays W-2, and this item stays open for it — found 2026-09-19, the Arbiter: «ось що бачу на MacBook Pro — немає
 рушия!». The session had to stop at step 1.3 (crossover variants) and ask him to install one, mid-tune.
 
 **Due when:** the version installed there is known — that is the one fact this item is missing.

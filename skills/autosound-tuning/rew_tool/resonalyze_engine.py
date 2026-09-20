@@ -159,6 +159,48 @@ def _exe_name():
     return "ResonalyzeEngine.exe" if sys.platform.startswith("win") else "ResonalyzeEngine"
 
 
+def engine_status():
+    """What this machine has for the desk engine — and it BUILDS NOTHING (S-049).
+
+    `engine_command` builds on demand when the SDK is present, which is right for a run and wrong
+    for a check: a doctor that builds is a doctor that changes the machine it is reporting on. So
+    this one only looks.
+
+    Why it exists at all: the Arbiter reached step 1.3 of a live tune — crossover variants — and
+    only THERE learned his MacBook had no engine («ось що бачу на MacBook Pro — немає рушия!»).
+    `install.sh`'s own comment gives the reason it fetches one: a person «would otherwise discover
+    that in the middle of a tune». He discovered it in the middle of a tune, because the install
+    that ran was older than the feature and nothing on the machine or in the method ever asked.
+    A guarantee whose failure is only visible at the moment it was meant to prevent is not a
+    guarantee — so the question is asked BEFORE a project opens, by the doctor.
+
+    Returns `{"present", "how", "pin", "rid", "installed_dir", "fetch"}`; `how` says which of the
+    three routes answered, or what is missing.
+    """
+    named = os.environ.get(ENGINE_ENV)
+    prebuilt = os.path.join(installed_dir(), _exe_name())
+    out = {"present": False, "how": None, "pin": ENGINE_PIN, "rid": rid(),
+           "installed_dir": installed_dir(),
+           "fetch": "python3 rew_tool/resonalyze_engine.py fetch-binary --tag <newest skill tag>"}
+    if named:
+        if os.path.isfile(named) and os.access(named, os.X_OK):
+            out.update(present=True, how=f"{ENGINE_ENV}={named}")
+        else:
+            out["how"] = f"{ENGINE_ENV} names {named}, which is not an executable file"
+        return out
+    if os.path.isfile(prebuilt) and os.access(prebuilt, os.X_OK):
+        return dict(out, present=True, how=f"prebuilt for this pin and platform: {prebuilt}")
+    if os.path.isfile(DLL):
+        return dict(out, present=True, how=f"the wrapper built in this checkout: {DLL}")
+    dotnet = find_dotnet()
+    if dotnet:
+        return dict(out, present=True,
+                    how=f"the .NET SDK ({dotnet}) — the wrapper is built on first use, not now")
+    out["how"] = (f"absent: no prebuilt engine in {out['installed_dir']}, and no .NET SDK to build "
+                  "one (dotnet on PATH or ~/.dotnet/dotnet)")
+    return out
+
+
 def engine_command(dotnet=None):
     """How to start the engine: `(argv prefix, how)`, or `(None, what is missing)`.
 
@@ -1519,6 +1561,22 @@ def _selftest():
         os.environ[ENGINE_ENV] = os.path.join(tempfile.gettempdir(), "no-such-engine")
         command, how = engine_command()
         assert command is None and "not an executable" in how, how
+        # S-049: the DOCTOR's question, and it answers WITHOUT building. Fails on the old code at
+        # this line -- `engine_status` did not exist, so the only way to ask was `engine_command`,
+        # which builds when the SDK is there. A doctor that builds changes the machine it reports
+        # on, and nothing asked the question at all until step 1.3 of a live tune.
+        st = engine_status()
+        assert st["present"] is False and "not an executable file" in st["how"], st
+        assert st["pin"] == ENGINE_PIN and st["rid"] == rid(), st
+        assert "fetch-binary" in st["fetch"], st
+        # A named executable that IS one answers present, by that route and no other.
+        named = os.path.join(tempfile.mkdtemp(prefix="autosound_engine_"), _exe_name())
+        with open(named, "w", encoding="utf-8") as fh:
+            fh.write("#!/bin/sh\n")
+        os.chmod(named, 0o755)
+        os.environ[ENGINE_ENV] = named
+        st = engine_status()
+        assert st["present"] is True and named in st["how"], st
     finally:
         if saved is None:
             os.environ.pop(ENGINE_ENV, None)
@@ -1904,7 +1962,8 @@ def _selftest():
           "engine fetched by its computed name with the digest checked -- a mismatch refused with nothing installed, "
           "a release that carries none answered rather than failed; and a wish's whole-configuration variant: the "
           "settings that stand given rather than searched, the wish's edges at its own junction and nowhere else, "
-          "every junction read as it stands, and the answer taken against the best -- delays, polarity and all")
+          "every junction read as it stands, and the answer taken against the best -- delays, polarity and all; and "
+          "`engine_status` answers the doctor's question without building anything (S-049)")
     return 0
 
 

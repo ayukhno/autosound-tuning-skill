@@ -68,6 +68,47 @@ def q_of_width(width_oct):
     return (2 ** (w / 2)) / (2 ** w - 1)
 
 
+#: What a PEAK row says when nobody measured the positions. One string, in one place, because the
+#: phase-0 gate reads rows back and has to recognise it (S-047) -- two spellings of it would mean a
+#: gate that silently stops firing the next time this sentence is edited.
+ASSUMED_NOTE = "no positions measured -- staying is ASSUMED, not shown"
+
+
+def settling_request(rows, version=None):
+    """What would settle the ASSUMED rows — the channels, the titles, and the one command (S-047).
+
+    The tool already KNOWS the question was not asked: `classify` writes `ASSUMED_NOTE` on every
+    peak row it could not check, and `status: hypothesis` on all of them. On a live project that
+    was computed 43 times and carried nowhere, while the reader for the data (`ellipsoid.py`) and
+    the way to ask for it both existed — the Arbiter had the nine-position set on disk the whole
+    time and asked «чому скіл сам не запитав про такий замір?». A rule that lives only in prose
+    does not fire; a run that produced assumed rows now ends with the REQUEST.
+
+    **What settles WHICH row, and it is not all of them.** Only a peak's verdict depends on the
+    positions: `modal_peak` and `driver_resonance` say "stays" on an assumption, and the ellipsoid
+    of that channel — `<ch> p1…p9_<N> (sw)` — is what shows it. A `cabin_null` (a dip below
+    Schroeder) and a `non_min_phase` row do not turn on the microphone moving, so they ask for
+    nothing here and are not counted.
+
+    Returns None when nothing is assumed.
+    """
+    channels = sorted({r["channels"][0] for r in rows
+                       if ASSUMED_NOTE in (r.get("why") or "") and r.get("channels")})
+    if not channels:
+        return None
+    n = version if version is not None else "<N>"
+    titles = [f"{code} p{i}_{n} (sw)" for code in channels for i in range(1, 10)]
+    return {
+        "channels": channels,
+        "rows": sum(1 for r in rows if ASSUMED_NOTE in (r.get("why") or "")),
+        "version": n,
+        "pattern": [f"{code} p1..p9_{n} (sw)" for code in channels],
+        "titles": titles,
+        "capture_start": "python3 rew_tool/state/process.py <project>/process capture-start "
+                         + f"{n} " + " ".join(f'"{t}"' for t in titles),
+    }
+
+
 def classify(feature, gate=None, ellipsoid_feature=None):
     """One feature -> a flaw row (dict) or (None, reason). Pure: every rule is testable alone.
 
@@ -102,8 +143,7 @@ def classify(feature, gate=None, ellipsoid_feature=None):
     if ellipsoid_feature is not None and not ellipsoid_feature.get("stays"):
         return None, (f"the ellipsoid says it MOVES ({ellipsoid_feature.get('present_in')} positions): "
                       f"that spot, not the system")
-    stays_note = ("stays across the positions" if ellipsoid_feature is not None
-                  else "no positions measured -- staying is ASSUMED, not shown")
+    stays_note = "stays across the positions" if ellipsoid_feature is not None else ASSUMED_NOTE
     if fc < SCHROEDER_HZ:
         return {"kind": "modal_peak", "action": "notch", "f_hz": round(fc, 1),
                 "level_db": round(level, 1), "width_oct": round(w, 3),
@@ -261,6 +301,7 @@ def run(project_dir, solos_dir=None, ellipsoid_dir=None, write=False, rew_ver=No
                               raw_db=20 * np.log10(np.abs(raw_H) + 1e-12))
         result["rows"] += rows
         result["left_out"] += left
+    result["settle"] = settling_request(result["rows"], rew_ver)
     if write and result["rows"]:
         pj = _project.Project(project_dir)
         for row in result["rows"]:
@@ -294,6 +335,21 @@ def render(result):
         for l in result["left_out"]:
             out.append(f"  {l['channel']:8} {l['f_hz']:7.0f} {l['level_db']:+6.1f}  {l['reason']}")
     out.append(f"\n{'written ' + str(result['written']) + ' row(s) as hypothesis' if 'written' in result else 'dry run -- --write to record them as hypotheses'}")
+    ask = result.get("settle")
+    if ask:
+        # The run ENDS with the request, not with the rows (S-047). The rows are the answer to a
+        # question nobody asked; this is the question.
+        out.append(f"\nASK FOR THE MEASUREMENT THAT SETTLES THESE — {ask['rows']} row(s) on "
+                   f"{len(ask['channels'])} channel(s) say a peak STAYS because nobody moved the "
+                   f"microphone. Only a peak's verdict turns on that; the dips and the "
+                   f"non-minimum-phase rows ask for nothing here.")
+        for pattern in ask["pattern"]:
+            out.append(f"  {pattern}")
+        out.append(f"  {len(ask['titles'])} titles. Offer to open the round:")
+        out.append(f"  {ask['capture_start']}")
+        if ask["version"] == "<N>":
+            out.append("  (the series number is <N> because this run read files, not REW — put "
+                       "the series the positions will be taken in)")
     return "\n".join(out)
 
 
@@ -399,11 +455,39 @@ def _selftest():
         assert not via_rew["refused"], via_rew["refused"]
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+    # -- S-047: a run that produced ASSUMED rows ends with the REQUEST ---------------------------
+    # Fails on the old code at the first line: `settling_request` did not exist, and the 43 rows
+    # `classify` stamped as assumed were computed and carried nowhere.
+    ask = settling_request([
+        {"channels": ["m-L"], "kind": "driver_resonance", "why": "a peak of +6 dB, " + ASSUMED_NOTE},
+        {"channels": ["tw-R"], "kind": "modal_peak", "why": "x " + ASSUMED_NOTE},
+        {"channels": ["w-L"], "kind": "cabin_null", "why": "a dip below Schroeder: not the mic"},
+    ], 49)
+    assert ask["channels"] == ["m-L", "tw-R"], ask          # only a PEAK's verdict turns on it
+    assert ask["rows"] == 2 and len(ask["titles"]) == 18, ask
+    assert ask["pattern"] == ["m-L p1..p9_49 (sw)", "tw-R p1..p9_49 (sw)"], ask
+    assert '"m-L p1_49 (sw)"' in ask["capture_start"] and "capture-start 49" in ask["capture_start"]
+    # A map with nothing assumed asks for nothing -- the request is not a habit.
+    assert settling_request([{"channels": ["w-L"], "why": "a dip below Schroeder"}]) is None
+    # Without a series number the titles say so rather than inventing one.
+    assert settling_request([{"channels": ["m-L"], "why": ASSUMED_NOTE}])["version"] == "<N>"
+    # The phase gate reads this exact sentence back out of the WRITTEN rows, so the two copies of
+    # it are held together here: a silent drift would stop the gate firing.
+    import importlib.util as _ilu
+    _spec = _ilu.spec_from_file_location(
+        "_flawmap_process",
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "state", "process.py"))
+    _mod = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)
+    assert _mod._ASSUMED_NOTE == ASSUMED_NOTE, (_mod._ASSUMED_NOTE, ASSUMED_NOTE)
+
     print("selftest OK -- every classifier rule on definitions (stays/moves, narrow, tone, Schroeder, "
           "gate BLOCK/WARN/ALLOW); the planted 1 kHz resonance is written for m-L alone as a "
           "hypothesis with evidence, and a second run replaces rather than duplicates it; the same set "
           "read from REW (--rew) with the round's protective record gives the same rows, and with no "
-          "round on record it refuses")
+          "round on record it refuses; a run with ASSUMED rows ends with the REQUEST -- the peak "
+          "channels, `<ch> p1..p9_<N> (sw)` and the capture-start line -- and the phase gate reads "
+          "the same sentence back (S-047)")
     return 0
 
 
