@@ -124,7 +124,7 @@ def load_env_file():
             _refuse_if_git_would_take(path)
         try:
             with open(path, "r", encoding="utf-8") as f:
-                for line in f:
+                for lineno, line in enumerate(f, 1):
                     line = line.strip()
                     if not line or line.startswith("#"):
                         continue
@@ -147,6 +147,7 @@ def load_env_file():
                     v = v.strip().strip("'\"")
                     os.environ[k] = v
                     ENV_ORIGIN[k] = path
+                    ENV_LINE[k] = lineno
             used.append(path)
         except Exception as e:
             print(f"Помилка зчитування .critic-env {path}: {e}", file=sys.stderr)
@@ -159,6 +160,11 @@ def load_env_file():
 #: reviewer's own settings for an afternoon, with `doctor` unable to say where they lived (S-015).
 ENV_ORIGIN = {}
 _ENV_BEFORE = frozenset(os.environ)
+#: The inherited VALUES, kept so a key a config file blanks on purpose can still be told apart from a
+#: key that does not exist (#55), and used when a run asks for it by name (`--via api`).
+_ENV_VALUES_BEFORE = dict(os.environ)
+#: `var -> line number` in the file that set it, so a message can point at the line.
+ENV_LINE = {}
 
 
 def env_origin(var):
@@ -332,6 +338,78 @@ def api_key_for(provider):
         if key:
             return key
     return None
+
+
+def suppressed_key(provider):
+    """`(var, inherited value, file, line)` when a config file BLANKS a key the environment has,
+    or None (#55).
+
+    `critic-env`'s variant A writes `GEMINI_API_KEY=` on purpose, so the channel goes through `agy`
+    and its login. `doctor` then said "no API key", about a key that was one line away, and a
+    session inside an agent (where the CLI used to be refused) had no automatic route while a
+    working key sat in the environment. The blank stays the machine's choice; this only lets a
+    message say what is really there, and lets one run ask for the key by name (`--via api`).
+    """
+    for var in _PROVIDERS.get(provider, {}).get("env", ()):
+        if os.environ.get(var) == "" and _ENV_VALUES_BEFORE.get(var) and var in ENV_ORIGIN:
+            return var, _ENV_VALUES_BEFORE[var], ENV_ORIGIN[var], ENV_LINE.get(var)
+    return None
+
+
+#: agy publishes each effort tier as its own model: `gemini-3.8-flash-high`. The API knows the
+#: model WITHOUT the tier, so an id with one of these endings is a CLI slug, and sending it to the
+#: API was the 404 of TCC-024 (hub #187).
+_CLI_LEVELS = ("-high", "-medium", "-low", "-minimal")
+
+
+def cli_only_model(model):
+    """Is this an agy slug (a model id with an effort tier), which only the CLI can serve?"""
+    return bool(model) and str(model).lower().endswith(_CLI_LEVELS)
+
+
+def api_model_id(model):
+    """The API's id for a model named by its agy slug: the tier dropped."""
+    name = str(model or "")
+    for level in _CLI_LEVELS:
+        if name.lower().endswith(level):
+            return name[: -len(level)]
+    return name
+
+
+def child_env():
+    """The environment a reviewer CLI is started with: ours, minus the agent session's markers.
+
+    A CLI started inside an agent session used to be refused outright, on the strength of
+    field sessions that hung (hub TCC-014). Measured 2026-09-22 from inside a Claude Code session:
+    `agy` answered with the markers stripped (4 s) and with them kept (27 s, 48 s), and TCC-024
+    (hub #187) saw the same by hand. What hung was a wait with no end and no word, so the call now
+    runs with the markers removed and a bounded timeout, and it says so before it waits.
+    """
+    return {k: v for k, v in os.environ.items() if not k.startswith(_NESTED_MARKERS)}
+
+
+def raw_exchange_dir():
+    """`AUTOSOUND_REVIEW_RAW_DIR`, or None: where a run keeps what it sent and what came back
+    (hub #187 ask 3). Off by default, because a package carries the project."""
+    d = os.environ.get("AUTOSOUND_REVIEW_RAW_DIR", "").strip()
+    return os.path.expanduser(d) if d else None
+
+
+def keep_raw(route, sent, received):
+    """Write `<stamp>-<route>-sent.txt` and `-received.txt` into the raw folder, if one is named."""
+    folder = raw_exchange_dir()
+    if not folder:
+        return None
+    try:
+        os.makedirs(folder, exist_ok=True)
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        for part, body in (("sent", sent), ("received", received)):
+            with open(os.path.join(folder, f"{stamp}-{route}-{part}.txt"), "w", encoding="utf-8") as fh:
+                fh.write(body if isinstance(body, str) else json.dumps(body, ensure_ascii=False, indent=2))
+        return folder
+    except OSError as exc:
+        print(f"· сирий обмін не збережено в {folder}: {exc}", file=sys.stderr)
+        return None
 
 
 # Спроба прямого виклику Gemini API через стандартну бібліотеку
@@ -664,14 +742,16 @@ FAILURE_ADVICE = {
                    "Не вмикай `toolPermission: always-proceed`: рецензентові інструменти не потрібні",
     "quota": "квоту або ємність вичерпано — сходинка 0: зачекай і повтори; вищий рівень тієї ж моделі "
              "— лише сказавши це вголос (setup-critic-channel.md §7)",
-    "timeout": "CLI не відповів вчасно (AUTOSOUND_CLI_TIMEOUT) — повтори з окремого термінала",
+    "timeout": "CLI не відповів вчасно (AUTOSOUND_CLI_TIMEOUT) — повтори, або бери буфер обміну",
     "other": "",
 }
 
 
-#: Marks of running INSIDE an agent session. A reviewer CLI started from inside one deadlocks
-#: often (~15 of 20 field sessions), and a warning followed by a silent wait read as "the reviewer
-#: is thinking" (hub TCC-014 ask 3) -- so the CLI is not started at all.
+#: Marks of running INSIDE an agent session. A reviewer CLI started from inside one hung often in
+#: the field (~15 of 20 sessions), and a warning followed by a silent wait read as "the reviewer is
+#: thinking" (hub TCC-014 ask 3), so the CLI used to be refused there outright. It is now run with
+#: these stripped from its environment (`child_env`), with a bounded wait that is announced first
+#: (W-2, hub #187 ask 2, skill #54).
 _NESTED_MARKERS = ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "ANTIGRAVITY", "AGY_", "GEMINI_SESSION")
 
 
@@ -695,12 +775,15 @@ def call_cli(provider, cli_bin, model, prompt, timeout=None):
             tf.write(prompt)
         try:
             # На Windows потрібен shell=True, щоб запускати .cmd обгортки типу agy.cmd від npm/scoop
+            stdin = cli_stdin(provider, cli_bin, prompt)
             proc = subprocess.run(cli_command(provider, cli_bin, model, prompt_path, prompt),
-                                  input=cli_stdin(provider, cli_bin, prompt), capture_output=True,
+                                  input=stdin, capture_output=True,
                                   text=True, encoding="utf-8", timeout=timeout,
-                                  shell=(sys.platform == "win32"))
+                                  shell=(sys.platform == "win32"), env=child_env())
         except subprocess.TimeoutExpired:
+            keep_raw("cli", stdin or prompt, f"(no answer in {timeout} s)")
             return None, "timeout", f"no answer in {timeout} s"
+        keep_raw("cli", stdin or prompt, f"exit {proc.returncode}\n--- stdout\n{proc.stdout}\n--- stderr\n{proc.stderr}")
         text, error = cli_reply(provider, cli_bin, proc.returncode, proc.stdout, proc.stderr)
         if text:
             return text, None, None
@@ -917,7 +1000,7 @@ def _selftest():
 
         try:
             globals()["copy_to_clipboard"] = lambda text: False
-            subprocess.run = lambda cmd, **kw: (runs.append((cmd, kw.get("input"))),
+            subprocess.run = lambda cmd, **kw: (runs.append((cmd, kw.get("input"), kw.get("env") or {})),
                                                 subprocess.CompletedProcess(cmd, 1, bad_out, ""))[1]
             code, out, err = run_main("ask", pkg)
             filed = sorted(os.listdir(reviews))
@@ -925,21 +1008,62 @@ def _selftest():
             assert len(filed) == 1 and filed[0].endswith("-ask-package.md"), filed
             assert "Запиши посилання" not in err and "REVIEW_FILE" not in err, err
             assert json.loads(runs[-1][1])["message"]["content"].endswith("Translate: stage"), runs[-1]
+            # Inside an agent session the CLI RUNS now, without the session's markers, and the
+            # wait is announced first (hub #187 ask 2, skill #54) -- it used to be refused.
             os.environ["CLAUDECODE"] = "1"
             before = len(runs)
             code, out, err = run_main("ask", pkg)
-            assert code == 4 and len(runs) == before and "агент-сесії" in err, (code, err)
+            assert code == 4 and len(runs) == before + 1 and "без маркерів сесії" in err, (code, err)
+            assert "CLAUDECODE" not in runs[-1][2] and runs[-1][2], "the CLI inherited the session's marker"
+            assert "AUTOSOUND_ALLOW_NESTED_CLI" not in err, err
             del os.environ["CLAUDECODE"]
+            before = len(runs)
             code, out, err = run_main("ask", pkg, "--mode", "clipboard")
             assert code == 0 and len(runs) == before and "РЕЦЕНЗІЇ НЕ ОТРИМАНО" not in err, (code, err)
+            code, out, err = run_main("ask", pkg, "--via", "clipboard")
+            assert code == 0 and len(runs) == before, (code, err)
             subprocess.run = lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, ok_out, "")
+            raw = os.path.join(project, "raw")
+            os.environ["AUTOSOUND_REVIEW_RAW_DIR"] = raw
             code, out, err = run_main("ask", pkg)
-            assert code == 0 and "pong" in out and "REVIEW_FILE: " in err, (code, err)
+            del os.environ["AUTOSOUND_REVIEW_RAW_DIR"]
+            assert code == 0 and "pong" in out and "REVIEW_FILE: " in err and "REVIEW_ROUTE: cli" in err, (code, err)
+            kept = sorted(os.listdir(raw))
+            assert len(kept) == 2 and kept[0].endswith("-cli-received.txt") and kept[1].endswith("-cli-sent.txt"), kept
+            # The transport follows the model (hub #187): an agy slug with a key present goes to
+            # the CLI, not to the API that 404s on it.
+            os.environ["GEMINI_API_KEY"] = "AQ." + "x" * 50
+            real_api = globals()["call_gemini_api"]
+            globals()["call_gemini_api"] = lambda *a, **k: (_ for _ in ()).throw(AssertionError("API called"))
+            code, out, err = run_main("ask", pkg)
+            assert code == 0 and "шлях — CLI" in err and "REVIEW_ROUTE: cli" in err, (code, err)
+            # ...and `--via api` asks the API by the model's API id, the tier dropped.
+            asked = []
+            globals()["call_gemini_api"] = lambda key, model, prompt, var=None: (asked.append(model), ("api-pong", model))[1]
+            code, out, err = run_main("ask", pkg, "--via", "api")
+            assert code == 0 and asked == ["gemini-3.8-flash"] and "REVIEW_ROUTE: api" in err, (code, asked, err)
+            # A 404 on a name the CLI serves goes to the CLI, and says which path it took; a name
+            # neither knows stays the Arbiter's choice (exit 3).
+            os.environ["AUTOSOUND_CRITIC_MODEL"] = "gemini-cli-only"
+            real_list = globals()["list_cli_models"]
+            globals()["list_cli_models"] = lambda: ["gemini-cli-only"]
+            globals()["call_gemini_api"] = lambda *a, **k: (_ for _ in ()).throw(
+                ModelChoiceNeeded("404", ["gemini-api-one"], "AUTOSOUND_CRITIC_MODEL"))
+            code, out, err = run_main("ask", pkg)
+            assert code == 0 and "(404), а CLI" in err and "REVIEW_ROUTE: cli" in err, (code, err)
+            globals()["list_cli_models"] = lambda: []
+            code, out, err = run_main("ask", pkg)
+            assert code == 3, (code, err)
+            globals()["list_cli_models"] = real_list
+            os.environ["AUTOSOUND_CRITIC_MODEL"] = "gemini-3.8-flash-low"
+            globals()["call_gemini_api"] = real_api
+            del os.environ["GEMINI_API_KEY"]
             assert [n for n in os.listdir(reviews) if n.endswith("-ask.md")], os.listdir(reviews)
         finally:
             subprocess.run, sys.argv = real_run, real_argv
             globals()["copy_to_clipboard"] = real_copy
-            for k in ("AUTOSOUND_PROJECT_DIR", "AUTOSOUND_CRITIC_MODEL", "AUTOSOUND_CRITIC_BIN", "CLAUDECODE"):
+            for k in ("AUTOSOUND_PROJECT_DIR", "AUTOSOUND_CRITIC_MODEL", "AUTOSOUND_CRITIC_BIN", "CLAUDECODE",
+                      "GEMINI_API_KEY", "AUTOSOUND_REVIEW_RAW_DIR"):
                 os.environ.pop(k, None)
             os.environ.update(markers)
 
@@ -961,6 +1085,21 @@ def _selftest():
         assert env_origin("X_FROM_FILE").startswith("з файлу /tmp/critic-env"), env_origin("X_FROM_FILE")
         assert "змінної середовища" in env_origin("X_NOWHERE"), env_origin("X_NOWHERE")
         del ENV_ORIGIN["X_FROM_FILE"]
+        # #55: a key a config file blanks on purpose is not "no key" -- it is named with its line.
+        was = (os.environ.get("GEMINI_API_KEY"), _ENV_VALUES_BEFORE.get("GEMINI_API_KEY"))
+        os.environ["GEMINI_API_KEY"] = ""
+        _ENV_VALUES_BEFORE["GEMINI_API_KEY"] = "AQ." + "k" * 50
+        ENV_ORIGIN["GEMINI_API_KEY"], ENV_LINE["GEMINI_API_KEY"] = "/tmp/critic-env", 7
+        assert suppressed_key("google") == ("GEMINI_API_KEY", "AQ." + "k" * 50, "/tmp/critic-env", 7)
+        assert suppressed_key("openai") is None and api_key_for("google") is None
+        del ENV_ORIGIN["GEMINI_API_KEY"], ENV_LINE["GEMINI_API_KEY"]
+        for store, value in ((os.environ, was[0]), (_ENV_VALUES_BEFORE, was[1])):
+            if value is None:
+                store.pop("GEMINI_API_KEY", None)
+            else:
+                store["GEMINI_API_KEY"] = value
+        assert cli_only_model("gemini-3.8-flash-high") and not cli_only_model("gemini-3.1-pro")
+        assert api_model_id("gemini-3.8-flash-high") == "gemini-3.8-flash"
 
         os.environ.update({"GEMINI_BIN": "gemini", "AUTOSOUND_CRITIC_MODEL": "gemini-3.1-pro-high"})
         shutil.which = lambda name, *a, **k: {"agy": "/opt/fake/agy", "claude": "/opt/fake/claude"}.get(name)
@@ -975,7 +1114,8 @@ def _selftest():
         del os.environ["GEMINI_BIN"]
 
         os.environ["GEMINI_API_KEY"] = "AQ." + "x" * 50
-        globals()["list_gemini_models"] = lambda key: ["gemini-3.1-pro-high"]
+        os.environ["AUTOSOUND_CRITIC_MODEL"] = "gemini-3.1-pro"       # an API id: the API is asked first
+        globals()["list_gemini_models"] = lambda key: ["gemini-3.1-pro"]
 
         def _api_down(*a, **k):
             raise RuntimeError("Помилка запиту до Gemini API: <urlopen error timed out>")
@@ -994,12 +1134,19 @@ def _selftest():
                                     ["gemini-3.1-pro-high"])
         globals()["call_gemini_api"] = _no_such_model
         globals()["call_cli"] = lambda *a, **k: (cli_calls.append(a), ("channel works", None, None))[1]
-        os.environ["AUTOSOUND_CRITIC_MODEL"] = "gemini-3.8-flash-low"
+        os.environ["AUTOSOUND_CRITIC_MODEL"] = "gemini-9-gone"
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             run_doctor(smoke=True)
         out = buf.getvalue()
         assert not cli_calls and "не автоматичний" in out and "прибери ключ" in out, out
+        # An agy slug with a key present: the check goes the round's way, through the CLI (#187).
+        os.environ["AUTOSOUND_CRITIC_MODEL"] = "gemini-3.8-flash-low"
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            run_doctor(smoke=True)
+        out = buf.getvalue()
+        assert cli_calls and "назва agy з рівнем" in out and "відповів CLI agy" in out, out
     finally:
         shutil.which = real_which
         globals().update(real)
@@ -1014,8 +1161,10 @@ def _selftest():
           "the CLI's list renders in the picker's shape; one prompt file, memory only when present; "
           "critic/advisor differ only in the TASK block; ask carries the interaction contract and "
           "the question only, no tuning layer; agy takes the prompt on stdin (no file to read); a failed "
-          "call exits 4 and files no review, the package goes into the project; a session marker "
-          "starts no CLI; --mode clipboard is a rung, not a failure; doctor names where a key and a forced "
+          "call exits 4 and files no review, the package goes into the project; inside an agent session "
+          "the CLI runs without the session's markers and the wait is named first; the transport follows "
+          "the model (an agy slug goes to the CLI, a 404 on a name the CLI serves falls to it, --via api "
+          "sends the API id); the raw exchange is kept on request; --mode clipboard is a rung, not a failure; doctor names where a key and a forced "
           "CLI came from and this platform's config path, and its live call walks the round's ladder")
     return 0
 
@@ -1058,7 +1207,18 @@ def run_doctor(smoke=True):
     api_provider = provider if api_key_for(provider) else None
     cli_bin = detect_cli(provider)
     nested = nested_session_marker() if cli_bin else None
-    if not api_provider:
+    hidden = suppressed_key(provider)
+    if api_provider and model and cli_only_model(model) and cli_bin:
+        # The round goes the way the model can be served (hub #187): an agy slug through the CLI.
+        print(f"· `{model}` — назва agy з рівнем: раунд іде через CLI {cli_bin}; API знає цю модель "
+              f"як `{api_model_id(model)}` (для одного запуску — `--via api`)")
+        api_provider = None
+    elif not api_provider and hidden:
+        # Not "no key" (#55): the key is there, and a line of a config file blanks it on purpose.
+        print(f"· Ключ {hidden[0]} Є в середовищі, але {hidden[2]}"
+              f"{f' (рядок {hidden[3]})' if hidden[3] else ''} гасить його порожнім значенням — "
+              f"канал іде через CLI. Для одного запуску ключ бере `--via api`, конфігурацію це не змінює")
+    elif not api_provider:
         print(f"· Ключа API для рецензента ({provider}) немає — буде CLI або ручне копіювання")
     elif provider == "google":
         # The key's own list, not a table: the one check that catches a retired id BEFORE a
@@ -1120,10 +1280,16 @@ def run_doctor(smoke=True):
     if os.environ.get("GEMINI_API_KEY"):
         print(f"· GEMINI_API_KEY: {gemini_key_shape(os.environ['GEMINI_API_KEY'])}")
     if cli_bin and nested:
-        print(f"· Ми всередині агент-сесії ({nested}): CLI рецензента тут не запускається — "
-              "перевір канал з окремого термінала")
+        print(f"· Ми всередині агент-сесії ({nested}): CLI рецензента запускається без маркерів сесії, "
+              f"з обмеженим очікуванням (AUTOSOUND_CLI_TIMEOUT)")
     if model:
-        print(f"▶ Рецензент: {model} → провайдер {provider}")
+        var = next(v for v in REVIEWER_MODEL_VARS if os.environ.get(v))
+        where = env_origin(var)
+        if var == "GEMINI_CRITIC_MODEL" and var not in ENV_ORIGIN:
+            # skill #54's correction: TCC passes the Arbiter's pick to the session it starts, and
+            # to nothing else -- so a shell outside TCC sees no model while TCC's session does.
+            where += "; TCC ставить її сесії, яку запускає, — поза TCC цієї змінної нема"
+        print(f"▶ Рецензент: {model} → провайдер {provider} ({var}, {where})")
     else:
         # No default to fall back on, on purpose -- so the doctor says so and puts the choice up,
         # the same list a real call would stop on. With nothing to ask (no key, no CLI) the
@@ -1161,12 +1327,12 @@ def run_doctor(smoke=True):
                 kind, error = "model_choice", str(choice.why) if hasattr(choice, "why") else str(choice)
             except Exception as e:  # noqa: BLE001
                 kind, error = classify_failure(str(e)), str(e)
-                if cli_bin and not nested:
+                if cli_bin:
                     # ...while any other API failure hands the call to the CLI, as `main` does.
                     print(f"· API не відповів ({str(e).strip()[:120]}) -- як і раунд, пробую CLI {cli_bin}")
                     via = f"CLI {cli_bin}"
                     text, kind, error = call_cli(provider, cli_bin, model, prompt, timeout=120)
-        elif cli_bin and not nested:
+        elif cli_bin:
             via = f"CLI {cli_bin}"
             text, kind, error = call_cli(provider, cli_bin, model, prompt, timeout=120)
         if text is not None or error is not None:
@@ -1354,6 +1520,8 @@ _SCRIPTS = os.path.dirname(os.path.abspath(__file__))
 REVIEWER_CONTRACT = os.path.join(os.path.dirname(_SCRIPTS), "assets", "interaction-contract.md")
 REVIEWER_TUNING = os.path.join(_SCRIPTS, "reviewer-tuning.txt")
 REVIEW_TASKS = ("critic", "advisor", "ask")
+#: The routes one run may ask for by name (`--via`).
+VIA_ROUTES = ("api", "cli", "clipboard")
 TUNING_TASKS = ("critic", "advisor")
 
 
@@ -1408,16 +1576,22 @@ def main():
         sys.exit(1)
         
     argv = list(sys.argv)
-    # `--mode clipboard` — the ladder's clipboard rung, asked for by name (setup-critic-channel.md §7).
-    # The docs named this flag while nothing read it.
-    mode = None
-    if "--mode" in argv:
-        i = argv.index("--mode")
-        mode = (argv[i + 1] if i + 1 < len(argv) else "").lower()
-        del argv[i:i + 2]
-        if mode != "clipboard":
-            print(f"Невідомий режим {mode!r}: є лише --mode clipboard", file=sys.stderr)
-            sys.exit(1)
+    # `--via api|cli|clipboard` -- the route for THIS run (#55 ask 3, hub #187). The choice between
+    # a key and a CLI login used to be one machine-wide switch (critic-env's variant A or B), while
+    # the right answer depends on where the run happens. `--mode clipboard` is the older spelling of
+    # the last rung and stays (setup-critic-channel.md §7).
+    via = None
+    for flag in ("--via", "--mode"):
+        if flag in argv:
+            i = argv.index(flag)
+            value = (argv[i + 1] if i + 1 < len(argv) else "").lower()
+            del argv[i:i + 2]
+            allowed = VIA_ROUTES if flag == "--via" else ("clipboard",)
+            if value not in allowed:
+                print(f"Невідомий шлях {value!r} для {flag}: {', '.join(allowed)}", file=sys.stderr)
+                sys.exit(1)
+            via = value
+    mode = "clipboard" if via == "clipboard" else None
     sys.argv = argv
     role = sys.argv[1].lower()
     
@@ -1512,6 +1686,29 @@ def main():
               f"Для автоматичного: {role_var}=<модель> у {config_hint()}.", file=sys.stderr)
     provider = provider_for(model)
     api_key = api_key_for(provider) if model else None
+    api_model = model
+    failures = []
+    if via == "api" and model:
+        # Asked for by name: the key from the environment even where a config file blanks it for
+        # every other run (#55) -- and the API's own id for a model named by its agy slug.
+        hidden = suppressed_key(provider)
+        if not api_key and hidden:
+            api_key = hidden[1]
+            print(f">> --via api: ключ {hidden[0]} із середовища; {hidden[2]}"
+                  f"{f' (рядок {hidden[3]})' if hidden[3] else ''} гасить його для інших запусків",
+                  file=sys.stderr)
+        api_model = api_model_id(model)
+        if api_model != model:
+            print(f">> --via api: `{model}` — назва agy з рівнем; API кличу як `{api_model}`", file=sys.stderr)
+        if not api_key:
+            failures.append(f"--via api: ключа для {provider} нема ні в середовищі, ні в конфігурації")
+    elif via in ("cli", "clipboard"):
+        api_key = None
+    elif api_key and cli_only_model(model) and detect_cli(provider):
+        # The transport follows the MODEL, not an exported key (hub #187 ask 1): an agy slug is
+        # served by the CLI only, and the API answered it with a 404.
+        print(f">> `{model}` — назва agy з рівнем, API її не обслуговує: шлях — CLI", file=sys.stderr)
+        api_key = None
     if api_key and _looks_like_a_display_label(model):
         # 2.x's OWN `.critic-env.example` shipped `GEMINI_CRITIC_MODEL="Gemini 3.5 Flash (Medium)"`
         # — a picker's display label, which an alias table used to translate. That table is gone
@@ -1526,11 +1723,8 @@ def main():
             f"рецензент мовчки перейде на CLI або буфер обміну.",
             file=sys.stderr,
         )
-    failures = []
-    if mode == "clipboard":
-        api_key = None
     if api_key:
-        print(f">> Підключення до API ({provider}, {model})...", file=sys.stderr)
+        print(f">> Підключення до API ({provider}, {api_model})...", file=sys.stderr)
         try:
             caller = {
                 "google": call_gemini_api,
@@ -1538,49 +1732,60 @@ def main():
                 "openai": call_openai_api,
             }[provider]
             if provider == "google":
-                response_text, api_model = caller(api_key, model, compiled_prompt, role_var)
+                response_text, got_model = caller(api_key, api_model, compiled_prompt, role_var)
             else:
-                response_text, api_model = caller(api_key, model, compiled_prompt)
+                response_text, got_model = caller(api_key, api_model, compiled_prompt)
+            keep_raw("api", compiled_prompt, response_text)
             print(response_text)
-            print(f"\n— [{role}: {api_model}]")
-            _persist_review(role, response_text, api_model, "api")
+            print(f"\n— [{role}: {got_model}]")
+            print(">> REVIEW_ROUTE: api", file=sys.stderr)
+            _persist_review(role, response_text, got_model, "api")
             
             # Логування в аудит
             try:
                 with open(AUDIT_TRAIL, "a", encoding="utf-8") as f:
-                    f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M')} | {role}={api_model} | package={os.path.basename(pkg_file)}\n")
+                    f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M')} | {role}={got_model} | package={os.path.basename(pkg_file)}\n")
             except Exception:
                 pass
             return
         except KeyError:
             print(f">> Невідомий провайдер {provider!r} — у режим CLI/буфера.", file=sys.stderr)
         except ModelChoiceNeeded as choice:
-            # Not a fall-through: a CLI or the clipboard with the same retired name would only
-            # hide the question. The list is on stderr, the exit code says "choose".
-            print(choice.render(), file=sys.stderr)
-            sys.exit(3)
+            # A 404 on the model: a choice for the Arbiter -- unless the CLI serves that very
+            # name (an agy slug), in which case the API was the wrong door, not the model the
+            # wrong model (hub #187). `--via api` asked for the API and gets the answer as is.
+            cli_here = detect_cli(provider) if via != "api" else None
+            if cli_here and (cli_only_model(model) or model in list_cli_models()):
+                print(f">> API не знає `{api_model}` (404), а CLI {cli_here} її знає: шлях — CLI",
+                      file=sys.stderr)
+            else:
+                print(choice.render(), file=sys.stderr)
+                sys.exit(3)
         except Exception as e:
             print(f">> Помилка виклику API ({e}). Спроба локального CLI...", file=sys.stderr)
             failures.append(f"API {provider}: {e}")
 
     # 2. Локальний CLI (per-vendor: agy/gemini · claude · codex)
-    cli_bin = detect_cli(provider) if (model and mode != "clipboard") else None
+    cli_bin = detect_cli(provider) if (model and via not in ("api", "clipboard")) else None
     nested = nested_session_marker() if cli_bin else None
-    if cli_bin and nested:
-        # Not started at all: a CLI inside an agent session deadlocks often, and a warning followed
-        # by a silent wait was read as the reviewer thinking (hub TCC-014 ask 3).
-        failures.append(f"CLI '{cli_bin}' не запущено: ми всередині агент-сесії (маркер {nested}), де "
-                        "виклик CLI часто зависає. Запусти рецензента з окремого термінала, або дай "
-                        "ключ API, або бери буфер обміну (AUTOSOUND_ALLOW_NESTED_CLI=1 — якщо свідомо)")
-    elif cli_bin:
-        print(f">> Виклик локального CLI '{cli_bin}' ({provider})...", file=sys.stderr)
+    if cli_bin:
+        wait = int(os.environ.get("AUTOSOUND_CLI_TIMEOUT", "300"))
+        if nested:
+            # Not a refusal any more (hub #187 ask 2, skill #54): the CLI runs without the
+            # session's markers, and the wait is named before it starts, so it is not read as the
+            # reviewer thinking.
+            print(f">> Всередині агент-сесії (маркер {nested}): CLI '{cli_bin}' запускаю без маркерів "
+                  f"сесії, чекаю до {wait} с", file=sys.stderr)
+        else:
+            print(f">> Виклик локального CLI '{cli_bin}' ({provider})...", file=sys.stderr)
         try:
-            text, kind, error = call_cli(provider, cli_bin, model, compiled_prompt)
+            text, kind, error = call_cli(provider, cli_bin, model, compiled_prompt, timeout=wait)
         except Exception as e:  # noqa: BLE001
             text, kind, error = None, "other", f"не виконано: {e}"
         if text:
             print(text)
             print(f"\n— [{role}: {model}]")
+            print(">> REVIEW_ROUTE: cli", file=sys.stderr)
             _persist_review(role, text, model, "cli")
             try:
                 with open(AUDIT_TRAIL, "a", encoding="utf-8") as f:
@@ -1594,6 +1799,9 @@ def main():
                                     list_cli_models(), role_var, source="cli").render(), file=sys.stderr)
             sys.exit(3)
         advice = FAILURE_ADVICE.get(kind, "")
+        if kind == "timeout" and (api_key_for(provider) or suppressed_key(provider)):
+            advice = ("CLI не відповів вчасно. У середовищі є ключ API — повтори з `--via api` "
+                      "(для цього запуску; конфігурацію не змінює)")
         failures.append(f"CLI '{cli_bin}': {error.strip()[:400]}" + (f"\n     → {advice}" if advice else ""))
 
     # 3. Буфер обміну — сходинка драбини, а не «рецензія».
@@ -1605,7 +1813,8 @@ def main():
         print("⛔ РЕЦЕНЗІЇ НЕ ОТРИМАНО — нічого не збережено як рецензію:", file=sys.stderr)
         for line in failures:
             print(f"   · {line}", file=sys.stderr)
-        print("   Наступна сходинка — буфер обміну (нижче) або окремий термінал (setup-critic-channel.md §7).",
+        print("   Наступна сходинка — буфер обміну (нижче); з ключем API — `--via api` для цього запуску "
+              "(setup-critic-channel.md §7).",
               file=sys.stderr)
     else:
         print("▶ РУЧНИЙ РЕЖИМ: БУФЕР ОБМІНУ (CLIPBOARD MODE)", file=sys.stderr)

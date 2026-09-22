@@ -391,7 +391,9 @@ agy_status() {  # prints the account, or "set up", when the reviewer is already 
   #      post-onboarding screens that were walked.
   #   4. `config/projects/` — agy writes a project file once one has been chosen, which is a
   #      thing that only happens after signing in.
-  #   5. An API key in the environment: a way the reviewer runs just as well as a login.
+  #   (An exported API key is NOT a sign of this. It used to be the fifth signal, and on a machine
+  #   that never signed in it made this report the reviewer as set up and skip the sign-in, while
+  #   agy, which signs in with the account, never reads the key -- hub #187, 2026-09-19.)
   #
   # Only the ACCOUNT is ever read. No credential file is opened for its contents — the `[ -s ]`
   # tests ask whether a file exists and is not empty, and nothing more.
@@ -414,10 +416,6 @@ agy_status() {  # prints the account, or "set up", when the reviewer is already 
   fi
   if [ -n "$(find "$HOME/.gemini/config/projects" -name '*.json' 2>/dev/null | head -1)" ]; then
     printf 'set up'
-    return 0
-  fi
-  if [ -n "${GEMINI_API_KEY:-}${GOOGLE_API_KEY:-}" ]; then
-    printf 'an API key in your environment'
     return 0
   fi
   return 1
@@ -1311,6 +1309,13 @@ else
     esac
     n=$((n + 1))
   elif [ -n "$AGY_BIN" ]; then
+    if [ -n "${GEMINI_API_KEY:-}${GOOGLE_API_KEY:-}" ]; then
+      # hub #187: a key in the shell profile is not the reviewer's sign-in, and it sends every
+      # review to the API, where agy's model names (…-high) do not exist.
+      say "  $n. A Gemini API key is exported in your shell. agy does not use it; it signs in with your"
+      say "     Google account (below). To keep the key for the reviewer, put it in"
+      say "     ~/.config/autosound/critic-env and take it out of your shell profile."
+    fi
     say "  $n. Gemini reviewer — optional, once. Have a Google account ready. What happens:"
     say "       agy opens; press Enter through its two setup screens; your browser asks you to sign"
     say "       in with Google. If it then asks for a Project ID, copy it from"

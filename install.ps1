@@ -433,7 +433,8 @@ function Get-AgyStatus {  # the account, or "set up", when the reviewer is alrea
     #      (user, Windows 11, 2026-08-19: ~\.gemini held exactly antigravity-cli and config).
     #   4. config\projects\*.json -- written once a project has been chosen, which happens after
     #      signing in.
-    #   5. An API key in the environment: a way the reviewer runs just as well as a login.
+    #   (An exported API key is NOT a sign of this: it used to be the fifth signal, and on a machine
+    #   that never signed in it skipped the sign-in while agy never reads the key -- hub #187.)
     # Only the ACCOUNT is ever read -- no credential file is opened for its contents.
     $creds = Join-Path $HOME ".gemini\oauth_creds.json"
     if ((Test-Path $creds) -and ((Get-Item $creds).Length -gt 0)) {
@@ -460,7 +461,6 @@ function Get-AgyStatus {  # the account, or "set up", when the reviewer is alrea
             return "set up"
         }
     }
-    if ($env:GEMINI_API_KEY -or $env:GOOGLE_API_KEY) { return "an API key in your environment" }
     return $null
 }
 function Get-ClaudeStatus {  # "email (plan)" when signed in, else $null
@@ -1344,6 +1344,13 @@ if ($DryRun) {
         $n++
     }
     elseif ($AgyBin) {
+        if ($env:GEMINI_API_KEY -or $env:GOOGLE_API_KEY) {
+            # hub #187: a key in the environment is not the reviewer's sign-in, and it sends every
+            # review to the API, where agy's model names (...-high) do not exist.
+            Say "$n. A Gemini API key is set in your environment. agy does not use it; it signs in with"
+            Say "   your Google account (below). To keep the key for the reviewer, put it in"
+            Say "   %APPDATA%\autosound\critic-env and remove the environment variable."
+        }
         Say "$n. Gemini reviewer -- optional, once. Have a Google account ready. What happens:"
         Say "     agy opens; press Enter through its two setup screens; your browser asks you to sign"
         Say "     in with Google. If it then asks for a Project ID, copy it from"

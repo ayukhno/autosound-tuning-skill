@@ -189,10 +189,22 @@ Check it took: `python3 scripts/autosound_ai.py doctor` names the key it found, 
   PACKAGE points at a file — put the data into the package. Do not set `toolPermission:
   always-proceed` for this: a reviewer reads text and needs no tools.
 - **`AUTOSOUND_CRITIC_CLI_ARGS`** passes per-run flags to the CLI (e.g. `--sandbox`).
-- **Inside an agent session the CLI is not started** (`CLAUDECODE` and similar markers): it
-  deadlocks there often, and a silent wait reads as the reviewer thinking. The call is refused
-  (exit 4) with the next rung; run it from a separate terminal, give a key, or take the clipboard.
-  `AUTOSOUND_ALLOW_NESTED_CLI=1` is the deliberate way past it.
+- **Inside an agent session the CLI runs without the session's markers** (`CLAUDECODE` and
+  similar), with a bounded wait (`AUTOSOUND_CLI_TIMEOUT`, 300 s), and the wait is announced before
+  it starts. It used to be refused outright after field sessions hung. On 2026-09-22 `agy` answered
+  from inside a Claude Code session in 4 s with the markers stripped and in 27–48 s with them kept,
+  and TCC-024 (hub #187) saw the same by hand. So a TCC-launched session, which has no separate
+  terminal, reaches the reviewer too (skill #54). `AUTOSOUND_ALLOW_NESTED_CLI` is no longer needed.
+- **The transport follows the model, not an exported key** (hub #187). A model named by its agy
+  slug (`gemini-3.8-flash-high`: an effort tier at the end) goes to the CLI even with a key present,
+  because the API does not know the tier and answered 404. A 404 on a name the CLI serves falls
+  through to the CLI. `>> REVIEW_ROUTE: api|cli` on stderr says which path answered.
+- **`--via api|cli|clipboard` chooses the route for ONE run** (#55). `--via api` uses the key from
+  the environment even where `critic-env` blanks it for every other run, and calls the API by the
+  model's API id (the tier dropped). `--mode clipboard` is the older spelling of the last rung.
+- **`AUTOSOUND_REVIEW_RAW_DIR=<folder>`** keeps what was sent and what came back
+  (`<stamp>-<route>-sent.txt` / `-received.txt`), for diagnosing the channel (hub #187 ask 3). Off by
+  default, because a package carries the project.
 - **A failed call is a refusal** (exit 4): every reason listed, nothing filed as a review.
 
 ### Any vendor, not only Gemini (SCR-033)
@@ -283,7 +295,8 @@ keeping a list of its own — three lists that disagreed is what this section re
 1. **ANOTHER vendor than the one driving** — `python3 scripts/autosound_ai.py critic|advisor|ask`,
    through that vendor's key (§3) or its CLI. This is the recommended default: Generator one vendor,
    reviewer the other, which is what cross-vendor anti-anchoring means. Verify with `doctor`. From
-   inside an agent session only the key works — the CLI is refused there (§3).
+   inside an agent session (TCC's included) the CLI runs without the session's markers (§3); a key
+   the config blanks is still reachable for one run with `--via api`.
 2. **Clipboard mode — a desktop or web chat of any vendor** *(field-proven; the go-to when the CLI
    chokes)*. `cat package.md | pbcopy`, paste into a **Gemini / Claude / ChatGPT** chat where you have
    a subscription, paste the reply back. No CLI, no quota juggling, no agentic stalls — and the best
