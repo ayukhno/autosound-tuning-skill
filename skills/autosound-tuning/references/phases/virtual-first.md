@@ -205,6 +205,17 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
   (Resonalyze's gain balance, "levels only" — `resonalyze_engine.py run --gains`; the Passat's is 2 / 4 / 4 dB on
   midbass / mid / tweeter). No choice is asked in Phase 1: the second preset — the same pull by time — is built
   from this base in Phase 2, after each side is whole, and the ear decides there (2.1; `scene_presets.py`).
+  **Three reads once the levels exist** (skill #50, #51):
+  - **Re-read each junction's LEVEL STEP** (the engine report prints it: own-band level plus gain, lower minus
+    upper). The sum loss and the dip are level-normalised, so they do not move with the levels and cannot
+    say whether the junction now sums flat.
+  - **A level fitted over a band that holds cabin gain or the driver's own humps** (a sub over 30–55 Hz)
+    moves once coarse EQ (1.4 / `eq_propose --part 1`) removes them. Re-read it after the EQ, because the
+    GAIN moves and not the crossover.
+  - **A cut-only spread wider than 3 dB is a gain-structure finding**, not a level decision.
+    `level_offsets.py` does the arithmetic: raising the quiet channel's amplifier by N gives the same balance
+    and keeps N dB of system headroom. Both costs are named (that channel's headroom, against the whole
+    system's maximum SPL and SNR), and the tuner chooses.
 - **1.7** **predict the sums, describe the variants, and the tuner chooses** (`predict`): L, R, ALL; the
   sum loss per joint; L−R per band; a graph — for each variant on the table, with its per-term numbers
   **and in words**: what changes and how it will sound, written by the generator and reviewed by the

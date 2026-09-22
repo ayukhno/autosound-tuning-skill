@@ -131,6 +131,38 @@ def measured_offsets(levels: dict) -> dict:
     return {name: round(floor - lvl, 1) for name, lvl in levels.items()}
 
 
+#: A cut-only spread wider than this is not a level decision (skill #51). 3 dB is the issue's number; the Arbiter may
+#: move it.
+GAIN_STRUCTURE_DB = 3.0
+
+
+def gain_structure_finding(offsets: dict, threshold: float = GAIN_STRUCTURE_DB):
+    """`None`, or the sentence that says a wide cut-only spread belongs at the AMPLIFIER (skill #51).
+
+    Cut-only normalisation puts the quietest driver at 0 and cuts the rest to meet it. With a house curve that
+    wants a +10 dB bass shelf, that cut the whole front by 6-9 dB and threw away that much of the system's maximum
+    output, while the table looked arithmetically right. Raising the quiet channel's amplifier by N (the smallest
+    cut among the others, so nothing turns into a boost) gives the same balance, and every other offset moves by +N.
+    Both costs are named, because the tuner chooses: the method sets no headroom policy.
+    """
+    if not offsets:
+        return None
+    spread = -min(offsets.values())
+    if spread <= threshold:
+        return None
+    quiet = sorted(c for c, o in offsets.items() if o == 0)
+    others = [o for o in offsets.values() if o < 0]
+    n = round(-max(others), 1) if others else 0.0
+    trims = round(spread - n, 1)
+    return (f"gain structure: the cut-only spread is {spread:.1f} dB, which is more than {threshold:g} dB: this is a "
+            f"gain-structure finding, not a level decision (#51). Raising {', '.join(quiet)}'s AMPLIFIER by "
+            f"{n:.1f} dB gives the same balance, keeps {n:.1f} dB of system headroom, and leaves DSP trims within "
+            f"{trims:.1f} dB (every other offset moves by {n:+.1f}). The trade, for the tuner to choose: raising an "
+            f"amplifier spends that channel's own headroom and brings its distortion and excursion ceiling closer; "
+            f"cutting in the DSP spends the whole system's maximum SPL and the signal-to-noise of every cut channel. "
+            f"Amp gains were set at intake before this curve existed (project-intake.md §3).")
+
+
 def _selftest() -> None:
     assert abs(bessj1(0.0)) < 1e-9, "J1(0)=0"
     assert abs(bessj1(1.0) - 0.4400505857) < 1e-6, f"J1(1)={bessj1(1.0)}"
@@ -176,6 +208,13 @@ def _selftest() -> None:
         pass
     else:
         raise AssertionError("a band with no points in the grid must be refused")
+
+    # #51: the Passat's table -- the sub quiet, the front cut 4.8-8.6 dB -- is a gain-structure finding, and the
+    # arithmetic is done for the tuner; a spread inside 3 dB says nothing.
+    passat = {"sw": 0.0, "w-L": -5.9, "w-R": -6.5, "m-L": -7.8, "m-R": -4.8, "tw-L": -8.6, "tw-R": -7.0}
+    said = gain_structure_finding(passat)
+    assert said and "sw's AMPLIFIER by 4.8 dB" in said and "within 3.8 dB" in said and "+4.8" in said, said
+    assert gain_structure_finding({"a": 0.0, "b": -2.5}) is None
 
     print("selftest OK —",
           f"J1(1)={bessj1(1.0):.6f}; D(10k,45°,5cm)={directivity(10000,45,0.05):.3f}; offsets={off}; "
@@ -279,6 +318,9 @@ def _main(argv=None):
         d = "" if g is None else f"{off[code] - g:+.1f}"
         print(f"{code:10} {band[0]:7.0f}–{band[1]:<8.0f} {lvl:12.1f} {off[code]:10.1f} "
               f"{'—' if g is None else f'{g:12.1f}'} {d:>7}")
+    said = gain_structure_finding(off)
+    if said:
+        print("\n" + said)
     print("\nSecond estimate only. Where it disagrees with the geometry estimate by more than a "
           "couple of dB, the disagreement is the finding — read the install, do not just type the "
           "number in.")

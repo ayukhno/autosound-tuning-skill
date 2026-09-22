@@ -1124,6 +1124,7 @@ def variants_from(layout, channels, xo, wishes=None, notes=(), problems=(), dotn
     out["costs"] = wish_costs(result_b, second, channels, xo)
     out["chain"] = chain
     out["best_junctions"] = {f"{lo} ↔ {up}": t for (lo, up), t in junction_table(result_b).items()}
+    out["level_steps"] = level_steps(result_a, result_b, chain)
     # Each wish as a WHOLE configuration -- one engine run per wish, and only when the best itself came out clean:
     # a variant read against delays that were never computed would be a number with nothing behind it.
     if items and rc == 0:
@@ -1131,6 +1132,30 @@ def variants_from(layout, channels, xo, wishes=None, notes=(), problems=(), dotn
     final_delay = result_b.get("autoDelayAfterRepairs") or result_b.get("autoDelay")
     out["notes"] += notes_on({"autoCrossover": result_a.get("autoCrossover"), "autoDelay": final_delay})
     out["notes"] += split_notes(final_delay, second)
+    return out
+
+
+#: What the junction numbers ARE (skill #50). `lossDb`/`dipDb` are level-NORMALISED: they answer "do the two
+#: members agree in phase?", and twenty decibels of imbalance moved them by 0.05 dB on the Passat. `rippleDb` and
+#: the composite `scoreDb` are not normalised, and they move with the levels as one would expect.
+JUNCTION_LEGEND = ("sum loss and dip are level-normalised (phase agreement only; a 6 dB step between the members "
+                   "does not move them); ripple and the score are not -- read the level step beside them (#50)")
+
+
+def level_steps(result_a, result_b, chain):
+    """`{"lower ↔ upper": dB}`: each block's own-band level plus its gain, lower minus upper (skill #50).
+
+    The sum loss says whether the members agree in phase and is blind to their levels, so a junction with a 6 dB step
+    in it still reads -0.16 dB. This is the one subtraction that says what the ear meets: `bandLevelDb` is the
+    engine's measured level over the block's own band, and the gain is the one this configuration ends with. After
+    Phase 1.6 sets the levels, this is the number that moves, while the loss stays where it was."""
+    levels = {c["block"]: c.get("bandLevelDb") for c in ((result_a or {}).get("autoCrossover") or {}).get("channels") or []}
+    gains = {p_["block"]: p_.get("gainDb") for p_ in final_proposals(result_b or {})}
+    out = {}
+    for lo, up in chain or []:
+        if None in (levels.get(lo), levels.get(up), gains.get(lo), gains.get(up)):
+            continue
+        out[f"{lo} ↔ {up}"] = round((levels[lo] + gains[lo]) - (levels[up] + gains[up]), 2)
     return out
 
 
@@ -1167,6 +1192,9 @@ def render_variants(v):
                      f"({r.get('purpose')}); the score {delta:+.2f} dB")
     for block, edges in (v.get("fixes") or {}).items():
         lines.append(f"  set {block}: " + ", ".join(f"{k} {_edge_short(e)}" for k, e in edges.items()) + " (the nearest allowed)")
+    if v.get("level_steps"):
+        lines.append("  level step at each junction (own-band level + gain, lower minus upper): "
+                     + ", ".join(f"{j} {s:+.1f} dB" for j, s in v["level_steps"].items()))
     flagged = [c for c in v.get("checks_final") or [] if c["verdict"] not in ("OK",)]
     if flagged:
         lines.append("  still to settle:")
@@ -1203,7 +1231,8 @@ def render_variants(v):
         lines.append(f"  E = the engine's leader (what this run continues with) · X = the experimental leader · ! = over the "
                      f"threshold · c = the below-500 Hz clamp. {rr['note'].split('. ', 1)[0]}.")
     if v.get("costs") or v.get("wishes_skipped"):
-        lines += ["", "  THE WISHES, against the best (dB of the junction score; lower is better)"]
+        lines += ["", "  THE WISHES, against the best (dB of the junction score; lower is better)",
+                  f"  ({JUNCTION_LEGEND})"]
     for c in v.get("costs") or []:
         head = f"  {c['purpose']} -- {c['lower']} ↔ {c['upper']}"
         if c.get("error"):
@@ -1228,7 +1257,8 @@ def render_variants(v):
     if v.get("full_variants"):
         lines += ["", "  EACH WISH AS A WHOLE CONFIGURATION -- its edges written in, Auto delay run again over the "
                       "chain, every junction then read as it stands. The probe above holds the rest of the "
-                      "configuration still; here every delay is free to move, which is what the tuner hears."]
+                      "configuration still; here every delay is free to move, which is what the tuner hears.",
+                  f"  ({JUNCTION_LEGEND})"]
     for fv in v.get("full_variants") or []:
         head = f"  {fv['purpose']} -- {fv['lower']} ↔ {fv['upper']}"
         if fv.get("not_built"):
@@ -1952,6 +1982,15 @@ def _selftest():
         assert np.max(np.abs(ours - resonalyze_db(kind, 400.0, gain, q, f))) < 0.05, (kind, gain, q)
     assert set(PEQ_TYPE) >= {"PK", "LSH", "HSH"}
 
+    # #50: the level step is one subtraction per junction, own-band level + gain, and a junction with a missing side
+    # is left out rather than read as zero.
+    ra = {"autoCrossover": {"channels": [{"block": "A Sub", "bandLevelDb": 80.0}, {"block": "B Woofer", "bandLevelDb": 86.0},
+                                         {"block": "C Mid", "bandLevelDb": 84.0}]}}
+    rb = {"settingsFinal": [{"block": "A Sub", "left": {"gainDb": 0.0}}, {"block": "B Woofer", "left": {"gainDb": -6.2}},
+                            {"block": "C Mid", "left": {"gainDb": None}}]}
+    steps = level_steps(ra, rb, [("A Sub", "B Woofer"), ("B Woofer", "C Mid")])
+    assert steps == {"A Sub ↔ B Woofer": 0.2}, steps
+    assert "level-normalised" in JUNCTION_LEGEND
     print("selftest[resonalyze_engine] OK -- blocks from the channel map (the sub mono, the pairs by -L/-R, the "
           "hidden rear left out and taken when asked), types from the roles (a woofer beside a sub is a midbass, a "
           "centre a midrange), the protective filters from the set's manifest, the device's delay range or a refusal; "
