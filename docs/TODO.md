@@ -1407,13 +1407,14 @@ two questions, where and aim, and not before.
 
 ## S-052 · Intake review of 2026-09-22: where it stopped
 
-**Status**: open 2026-09-22 · **W-2 package A** (`docs/PLAN-W-2.md`) · the W-2 review of the same day took items 2–4 into the wave and closed `#47`/`#49`; item 1, the Arbiter's yes/no, is what keeps this open · eight rounds with the Arbiter on the intake form, all on branch
+**Status**: open 2026-09-22 · **W-2 package A** (`docs/PLAN-W-2.md`) · the W-2 review of the same day took items 2–4 into the wave and closed `#47`/`#49`; item 1 answered the same day (below); what keeps this open is package A's prose for it · eight rounds with the Arbiter on the intake form, all on branch
 `wave-2026-09-20` (`b882676` … `1075c65`), decisions in `docs/DESIGN-2026-09-22-intake-simplified.md`.
 The branch has no PR; what ships is the next review's call.
 
 Left for later:
-1. **His yes/no is owed on one move from round 1:** choosing the target curve and the taste
-   questionnaire moved from Phase −1 to Phase 0, after the baseline (the code's gate is unchanged).
+1. **Answered at the W-2 review, 2026-09-22:** «ми в форму інтейка це вже додали. хай там і буде. але
+   якщо не задано, то так запитати». The curve and the goal/taste questions stay on the form, and Phase 0
+   asks, after the baseline, whatever is still empty (`docs/PLAN-W-2.md` A.2).
 2. **TCC's half:** hub `#194` (SKL-049, how to start and stop the form) and `#193` (SKL-048, the
    seat chosen in the copy dialog).
 3. **Sessions review:** skill `#58` (the Antigravity session vs the Opus one, a two-tier plan P1–P12).
@@ -1425,12 +1426,12 @@ Left for later:
 
 ## S-053 · Versions are numbered once per project, and a preset is the slot a version is fixed in
 
-**Status**: open 2026-09-22 · **W-2 package E** (`docs/PLAN-W-2.md`) · written down at the W-2 review:
+**Status**: open 2026-09-22 · **W-2 package R** (`docs/PLAN-W-2.md`) · hub `#195` (TCC-025) asks for the same thing, and tcc needs it in this wave; the reader contract goes on `#195` first · written down at the W-2 review:
 the item had no home in this file. It lived only in `docs/PLAN-W-1.md` §A.3 as "W-2, not this wave",
 and tcc left per-project version numbering out of its own W-2 because this migration does not exist
 (tcc `docs/PLAN-W-2.md`, *Not included*).
 
-**Due when:** W-2, package E. It goes with skill `#58` P2 (variants inside the ledger, no project-local
+**Due when:** W-2, package R. It goes with skill `#58` P2 (variants inside the ledger, no project-local
 switch scripts) and P1 (a banked version is immutable).
 
 **The model, the Arbiter's (settled 2026-09-20):** a version `v_NNN` is the full set in the processor,

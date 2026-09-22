@@ -29,8 +29,9 @@ Same as W-1 (`docs/PLAN-W-1.md`), with one change:
   branch when it lands (`WAVES.md` §2).
 - **Models:** Opus for judgment (what a rule says, what a refusal names, reviewing a diff). Sonnet
   subagents for sweeps and scaffolding, at most four at a time, and their output is always read.
-- **Order:** A and B first, because tcc's half waits for them (see *Blockers*). Then F, which is small.
-  E is the largest package and goes last.
+- **Order:** A, B and R's first step (the reader contract) come first, because tcc's half waits for
+  them (see *Blockers*). Then R's migration, then F, which is small. E is the largest package and goes
+  last.
 
 ## A — ship the intake form (built on the branch)
 
@@ -39,9 +40,11 @@ S-033 · S-037 · S-052 · the skill's half of hub `#193` / `#194` · S-025 · S
 1. **The form is built** (`docs/DESIGN-2026-09-22-intake-simplified.md`, rounds 1–8). What is owed:
    check S-037's eight points against the page one by one, then close S-033 and S-037 with the page's
    selftest as proof.
-2. **One decision is owed by the Arbiter (S-052 item 1).** Choosing the target curve and the taste
-   questions moved from Phase −1 to Phase 0, after the baseline. The code's gate did not change. Yes
-   keeps it; no reverts the one gate line in `phase_-1_intake.md`.
+2. **Decided by the Arbiter at this review (S-052 item 1):** «ми в форму інтейка це вже додали. хай
+   там і буде. але якщо не задано, то так запитати». The target curve and the goal/taste questions stay
+   on the intake form, where rounds 2–3 put them as optional. **Whatever the person left empty there,
+   Phase 0 asks after the baseline.** The work is prose: `phase_-1_intake.md` (the gate line and §2)
+   and `phase_0_baseline.md` §2 must say "on the form; asked in Phase 0 only if it is still empty".
 3. **S-025:** `hardware.controls` keeps the knobs (round 5) and refuses a key that is a processor
    feature (`RealCenter`, `VirtualX`) or unknown. The control module's logic is not modelled: the
    Arbiter's word is «просто OFF для налаштування».
@@ -105,7 +108,7 @@ can follow in tcc's next wave.
 
 ## E — the round is the one record (Phases 1–2)
 
-skill `#57` P0–P5 · `#56` items 1–10 · `#58` P1–P12 · S-026 · S-053 (the version registry).
+skill `#57` P0–P5 · `#56` items 1–10 · `#58` P1, P3–P12 · S-026.
 
 The three issues overlap. They are one package so that one design covers them, not three patches.
 The order below is the one `#58` proposes, merged with `#57`'s:
@@ -127,13 +130,29 @@ The order below is the one `#58` proposes, merged with `#57`'s:
    candidate is fast and has its sources named. A banked version needs evidence, plus one reviewer
    call for a structural change. The minimal verification set is computed from the diff between
    versions. A proposal shows "yours → mine, why".
-5. **Versions are numbered once per project, and a preset is the slot a version is fixed in**
-   (S-053). This is the migration `docs/PLAN-W-1.md` §A.3 left for W-2; tcc left per-project numbering
-   out of its W-2 because this migration did not exist yet. It goes together with `#58` P2 (variants
-   inside the ledger, no project-local switch scripts).
-6. **The rest:** `#57` P4 (the car checklist gets its series number from the project), `#57` P5
+5. **The rest:** `#57` P4 (the car checklist gets its series number from the project), `#57` P5
    (a verdict in 5 lines or fewer), `#58` P4 (`rew_api` labels or refuses another file's data),
    `#58` P9 (`rew_tool compare`), `#58` P10 (where each front-end keeps its transcripts).
+
+## R — versions numbered once per project, the preset is the slot
+
+S-053 · hub `#195` (TCC-025) · `#58` P2. **tcc needs this in the same wave** (the Arbiter, 2026-09-22):
+its W-2 left its half out only because the method had no ticket for it.
+
+1. **The reader contract first, before any file moves** (`#195` ask 2). Decide the layout and post
+   it on `#195` in one sentence of shape: where a version lives, how its slot is recorded, and what
+   `HEAD` is. tcc reads the ledger directly (`config.state_root()` / `available_presets()`,
+   `dsp_state`, `plan_audit`, the `<preset>/HEAD` watcher), and it builds its half against this
+   sentence while the method builds the migration.
+2. **The migration** (`#195` ask 1): one version line per project. A preset records which version it
+   holds and since when. Each preset's old `v_NNN` stays findable, because journals, rounds and
+   reports cite them.
+3. **One-way and refusing** (`#195` ask 3): a half-migrated project is refused with the command that
+   finishes it.
+4. **Variants live inside the ledger** (`#58` P2): `state.py variant new/show/switch`, and no
+   project-local switch scripts.
+
+This is the migration `docs/PLAN-W-1.md` §A.3 left for W-2.
 
 ## F — the Phase-1 numbers
 
@@ -173,10 +192,11 @@ will not come on its own.
 
 ## Blockers
 
+- **tcc builds its half of R against the reader contract** (R.1), so that sentence is due early in
+  the wave, not at the tag.
 - **The wave is shared, and the skill tags first.** tcc's `#193`, `#194`, S-044 and its half of the
   reviewer channel need a published skill tag. A and B go first for that reason. If tcc is ready
   before E is, whether to cut earlier is the Arbiter's decision.
-- **One decision from the Arbiter:** the Phase-0 move (A.2).
 - **S-020 needs the Arbiter at the Windows VM.**
 
 ## Exit
