@@ -55,7 +55,11 @@ S-033 · S-037 · S-052 · the skill's half of hub `#193` / `#194` · S-025 · S
    glossary and `previous_names`. A check reports an `id` that is not the code or one of its
    `previous_names`. The Arbiter, at this review: «для мене правильна назва через "-" давай кругом
    зробимо так». The hyphen is the notation everywhere, and the check says the fix (set the id to its
-   code). The Passat's six ids and its other live names are the car role's tree: hub `#196`
+   code). **When a session meets such a project, it asks and offers to fix it right there** (the
+   Arbiter: «якщо така ситуація трапляється то можна запитати користувача і запропонувати привести
+   все до ладу прямо в сесії»). It shows the list (`w_L → w-L`, …), and on his OK one command writes
+   it through the project's own writer: `project.py <project> fix-ids`, which prints what it would
+   change unless it is given `--apply`. Nothing changes without the OK. The Passat's six ids and its other live names are the car role's tree: hub `#196`
    (SKL-050).
 
 ## B — the reviewer is reachable from any launch
