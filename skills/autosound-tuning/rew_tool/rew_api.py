@@ -279,7 +279,12 @@ def find_measurement_id(name, measurements=None, exact=True):
             matches.append(mid)
     if not matches:
         titles = [(m or {}).get("title", "") for m in ms.values()]
-        raise KeyError(f"No measurement titled {name!r} (have: {titles})")
+        # #57 P5: the whole title list, printed once per missing channel, was most of a run's output. The
+        # count and the three nearest titles say the same thing in one line.
+        import difflib
+        near = difflib.get_close_matches(name, titles, n=3, cutoff=0.5)
+        raise KeyError(f"No measurement titled {name!r} (REW holds {len(titles)}"
+                       + (f"; nearest: {', '.join(repr(x) for x in near)}" if near else "") + ")")
     if len(matches) > 1:
         raise KeyError(f"Ambiguous: {len(matches)} measurements titled {name!r} "
                        f"→ {matches}; rename so titles are unique")

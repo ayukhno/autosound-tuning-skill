@@ -1760,7 +1760,29 @@ def to_json(result, decimate=1, window_spec=None):
     return out
 
 
-def render(result):
+#: #57 P5: a run's notes, shown at most this many; the rest behind --verbose and always in --out's JSON.
+NOTES_SHOWN = 5
+
+
+def compact_notes(notes, verbose=False, limit=NOTES_SHOWN):
+    """The notes a person reads: one line per distinct note, the channels it applies to joined (eight
+    `<ch>: solo used as recorded (…)` lines are one), at most `limit` unless `verbose`."""
+    grouped, order = {}, []
+    for n in notes or []:
+        head, sep, rest = str(n).partition(": ")
+        key = rest if sep and head and " " not in head and len(head) <= 12 else str(n)
+        if key not in grouped:
+            grouped[key] = []
+            order.append(key)
+        if key == rest:
+            grouped[key].append(head)
+    lines = [(", ".join(grouped[k]) + ": " + k) if grouped[k] else k for k in order]
+    if verbose or len(lines) <= limit:
+        return lines
+    return lines[:limit] + [f"(+{len(lines) - limit} more -- --verbose, and all of them are in --out's JSON)"]
+
+
+def render(result, verbose=False):
     lines = ["  Prediction: solos x ledger chains -> what the mic would hear"
              + (f"   (junctions read {result['window']})" if result.get("window") else ""), ""]
     for c, chain in result["chains"].items():
@@ -1801,7 +1823,7 @@ def render(result):
                          for v in (100, 250, 500, 800, 1250, 2000, 4000) if fq[0] <= v <= fq[-1]))
     lines.append("  L-R level difference (dB, + = left louder): " + "  ".join(
         f"{b['band'][0]:.0f}-{b['band'][1]:.0f}:{b['delta_db']:+.1f}" for b in result["lr_delta"]))
-    for n in result["notes"]:
+    for n in compact_notes(result["notes"], verbose=verbose):
         lines.append(f"  note: {n}")
     return "\n".join(lines)
 
@@ -1864,6 +1886,8 @@ def main(argv=None):
     ap.add_argument("--baseline", action="store_true",
                     help="the solos are a baseline capture: an unmarked REW channel is REFUSED, not "
                          "read as configured")
+    ap.add_argument("--verbose", action="store_true",
+                    help="every note, not the first few (#57 P5); --out's JSON always has them all")
     ap.add_argument("--allow-foreign", action="store_true",
                     help="read REW solos that come from another .mdat than the project's own (#58 P4)")
     ap.add_argument("--from-state", metavar="VER",
@@ -2224,7 +2248,7 @@ def main(argv=None):
                 js[key] = val
         print(json.dumps(js, indent=1))
     else:
-        print(render(result))
+        print(render(result, verbose=getattr(args, "verbose", False)))
     if args.out:
         os.makedirs(args.out, exist_ok=True)
         with open(os.path.join(args.out, "predicted.json"), "w", encoding="utf-8") as fh:
@@ -2906,6 +2930,13 @@ def _selftest():
     tight = arrival_sweep(loaded_pair, "m-L", "m-R", (350.0, 2000.0), gates=(0.2,))
     assert tight["rows"][0]["ms"] is None and "gate longer than" in tight["rows"][0]["refused"]
 
+    # #57 P5: eight identical notes are one line naming the channels, and a run shows five unless --verbose.
+    many = [f"{c}: solo used as recorded (not marked raw)" for c in ("sw", "w-L", "w-R", "m-L", "m-R", "tw-L", "tw-R", "c")]
+    many += [f"extra note {i_}" for i_ in range(6)]
+    short = compact_notes(many)
+    assert short[0].startswith("sw, w-L, w-R, m-L, m-R, tw-L, tw-R, c: solo used as recorded"), short[0]
+    assert len(short) == NOTES_SHOWN + 1 and "--verbose" in short[-1], short
+    assert len(compact_notes(many, verbose=True)) == 7
     print("selftest[predict] OK -- chain arithmetic (gain/pol/delay/LR corner/PK), ledger row == anchors "
           "entry, a phase angle is realized at the row's configured reference (LPF on a sub, HPF "
           "otherwise; slope OFF keeps it), delivered AT the reference, capped by name, refused without "
