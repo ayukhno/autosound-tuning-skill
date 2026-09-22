@@ -30,8 +30,8 @@ Same as W-1 (`docs/PLAN-W-1.md`), with one change:
 - **Models:** Opus for judgment (what a rule says, what a refusal names, reviewing a diff). Sonnet
   subagents for sweeps and scaffolding, at most four at a time, and their output is always read.
 - **Order:** A, B and R's first step (the reader contract) come first, because tcc's half waits for
-  them (see *Blockers*). Then R's migration, then F, which is small. E is the largest package and goes
-  last.
+  them (see *Blockers*). Then R's migration, then F, which is small, then V, which reads F's level step.
+  E is the largest package and goes last.
 
 ## A — ship the intake form (built on the branch)
 
@@ -168,6 +168,35 @@ W-1 left these out because they needed the Arbiter's decisions. Read again, they
 - `#50` is a label on the metric, a level-step column beside the loss, and a runbook line (a re-read
   after 1.6, or why none is needed).
 
+## V — Phase 1 variants as a feature
+
+skill `#38` · S-021. Deferred at first, then taken in by the Arbiter at the same review, 2026-09-22:
+«давай це включемо в версію, щоб воно було реалізовано як фітча. а такий підхід потрібен не тільки на
+іншій машині але і на новому налаштуванні … ми можемо запустити налаштування для пасажира — ось тобі і
+нова "машина" і аналіз».
+
+**What exists** (`docs/DESIGN-2026-09-17-phase1-variants.md` §6): the engine's best configuration, and a
+whole variant per wish (the wish's edges, Auto delay again over the chain, every junction re-read, the
+delays that moved and the polarity flips named). That answers "what does my wish cost". It does not
+answer `#38`'s own question: which configurations win when the goals pull against each other.
+
+**What V builds, from `#38`:**
+
+1. **Every variant gets the same breakdown, per term:** tonal distance from the target curve, L−R
+   balance per band (the Passat's +7.9 dB at 250–500 Hz is the case that no junction metric sees),
+   junction sum loss with the level step beside it (F, `#50`), and ripple.
+2. **Without wishes, 2–3 variants are chosen by different weightings of those terms**, as a trade-off
+   front: each one is labelled by what it buys and what it spends. The tool does not pick a winner
+   (`ladder_report`'s rule: a table sorted by the score is a proposal dressed up as a table).
+3. **Each output says what the objective cannot see:** a junction the tool calls limited by
+   multipath (for example the Passat's m/tw pair, 1.30 rotations), and imaging, depth and fatigue,
+   which is why Phases 4–5 exist.
+4. **The test is a new tuning, not a new car:** a passenger-seat project on the Passat, copied with
+   its seat chosen at the copy (S-032, hub `#193`), run from the intake through Phase 0 to the choice
+   in Phase 1. It is a fresh project with fresh captures. The only thing it does not exercise is a
+   driver or processor the method has not seen. It is the Arbiter's test after the release, so S-021
+   goes to `waiting` at the tag, naming this run.
+
 ## G — bookkeeping
 
 - skill `#47`, `#49`: fixed in `7e648f7`, which `v3.0.59` contains. Closed with their selftests.
@@ -180,7 +209,6 @@ W-1 left these out because they needed the Arbiter's decisions. Read again, they
 
 | item | why | comes back when |
 |---|---|---|
-| `#38` · S-021 (Phase 1 variants on a fresh system) | the software is built (`docs/DESIGN-2026-09-17-phase1-variants.md` §6). What is left is a RUN on a car and system the method has not seen, which is a test, not work | such a car is at hand |
 | S-051 (a driver's mount and aim) | an idea. Nothing in the method computes from mount or aim, and the Arbiter's rule is not to ask what we cannot compute | a tool starts using mount or aim |
 | S-019 (`gh release delete` needs the user's keystroke) | the fix is a harness permission or a line in hub `RELEASE-CHANNEL.md`, which is process, and process waits for the review between waves (`WAVES.md` §4). No release has needed a draft cleared since 17.09 | a release needs a draft cleared |
 | S-042's data half | the six `snake_case` ids in `car/passat-b8-2026` are that project's data, and the Arbiter's to correct. The check that finds them is in A | the Arbiter says to correct them |

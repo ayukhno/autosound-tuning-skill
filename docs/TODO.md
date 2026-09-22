@@ -548,7 +548,7 @@ the person's, and `installer-consistency.py` holds the three installers to the s
 
 ## S-021 · Phase 1's variants run end to end on a fresh system, and what a wish really costs
 
-**Status**: deferred 2026-09-22 · W-2 review, the Arbiter: «що не включемо — то зрозуміти причину і відкласти» · the software is built; what is left is a run on a car and system the method has not seen — a test, not work; comes back when such a car is at hand (with skill `#38`) · was: waiting 2026-09-18 · issue #38's remaining piece. The second one is no longer a question
+**Status**: open 2026-09-22 · **W-2 package V** (`docs/PLAN-W-2.md`) · deferred and taken back at the same review, the Arbiter: «щоб воно було реалізовано як фітча … ми можемо запустити налаштування для пасажира — ось тобі і нова "машина" і аналіз» — the run is a passenger-seat project on the Passat · was: waiting 2026-09-18 · issue #38's remaining piece. The second one is no longer a question
 for the test to answer: the user asked for the full variant to be built without waiting for a car, and
 it is (`wish_variants`, on `wave-2026-09-18`) — so what waits is the run itself, on **`v3.0.58`** (tagged
 2026-09-18); the software side is in place
