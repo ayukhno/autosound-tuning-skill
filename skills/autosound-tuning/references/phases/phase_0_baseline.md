@@ -34,6 +34,11 @@ Before any measurements are taken, establish the channel abbreviations (`sw / w-
 Give the user copy-paste-ready specifics containing the exact save PATH, short comma-separated measurement names, and a brief explanation of the immediate goal. Follow the history hygiene details in [naming-and-structure.md](references/core/naming-and-structure.md).
 
 ### 2. Import Target Curve
+**Which curve.** The one on the intake form (`project.json` `goal.target_curve`), if the person picked
+one: that choice stands. **If it is empty, ask after the baseline (§3)**, with the measured reality in
+hand. Use the walk in `phase_-1_intake.md` §2 #6, never a default, and ask it together with whatever else of the
+goal the form left empty (purpose, music, wishes) (the Arbiter, 2026-09-22).
+
 Load the chosen house curve into REW, **then write down which one it is**:
 
 ```

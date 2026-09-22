@@ -1407,7 +1407,7 @@ two questions, where and aim, and not before.
 
 ## S-052 · Intake review of 2026-09-22: where it stopped
 
-**Status**: open 2026-09-22 · **W-2 package A** (`docs/PLAN-W-2.md`) · the W-2 review of the same day took items 2–4 into the wave and closed `#47`/`#49`; item 1 answered the same day (below); what keeps this open is package A's prose for it · eight rounds with the Arbiter on the intake form, all on branch
+**Status**: done 2026-09-22 · W-2 package A · item 1 answered and written: `grep -n "Whatever is still empty is asked in Phase 0" skills/autosound-tuning/references/phases/phase_-1_intake.md` and `grep -n "If it is empty, ask after the baseline" skills/autosound-tuning/references/phases/phase_0_baseline.md`; items 2–5 went into the W-2 composition (`docs/PLAN-W-2.md`) · was: open 2026-09-22 · **W-2 package A** (`docs/PLAN-W-2.md`) · the W-2 review of the same day took items 2–4 into the wave and closed `#47`/`#49`; item 1 answered the same day (below); what keeps this open is package A's prose for it · eight rounds with the Arbiter on the intake form, all on branch
 `wave-2026-09-20` (`b882676` … `1075c65`), decisions in `docs/DESIGN-2026-09-22-intake-simplified.md`.
 The branch has no PR; what ships is the next review's call.
 
