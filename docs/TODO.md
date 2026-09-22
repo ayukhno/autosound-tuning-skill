@@ -669,7 +669,7 @@ EPY its opposite) as a decision for him — when it was not his choice at all, b
 
 ## S-025 · `hardware.controls` mixes the control module's knobs with the processor's features, and accepts any key
 
-**Status**: open 2026-09-19 · **W-2 package A** (`docs/PLAN-W-2.md`) · · W-1 collection · the user, on the six entries the export carries: «не лізь
+**Status**: done 2026-09-22 · W-2 package A · `python3 skills/autosound-tuning/rew_tool/project.py . selftest` (the S-025 block: `realcenter` refused as a processor feature, `VirtualX` refused without the person's word, `SubRC` / `RemoteToneControl` / a user's own `HU bass` accepted); the rule is written in `project-schema.md` and `naming-and-structure.md` · was: open 2026-09-19 · **W-2 package A** (`docs/PLAN-W-2.md`) · · W-1 collection · the user, on the six entries the export carries: «не лізь
 туди, там ще складніша логіка роботи — просто OFF для налаштування».
 
 **Due when:** the intake touches `hardware.controls` again. The rule to carry is ONE line — during tuning

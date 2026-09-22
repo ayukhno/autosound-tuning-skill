@@ -97,7 +97,7 @@ machine-readable to render for its Project/System/Car-audio-analysis panels eith
                                                              //   the equipment in the owner's words
     "controls": {
       "RearRC": {"value": "3/4", "source": "user", "at": "…"},
-      "RealCenter": {"value": "ON", "source": "user", "at": "…"}
+      "SubRC": {"value": "7/12", "source": "user", "at": "…"}  // remote knobs only (S-025)
     },
     "control_mapping": {                                     // RES-007: what a knob DOES
       "SubRC": {"step_db": {"value": 2.0, "source": "user", "at": "…"},
@@ -384,12 +384,20 @@ what makes two series comparable — or says they are not.
 
 ## Hardware controls vs. the ledger (SCR-017)
 
-A DSP hardware control (Helix's RearRC/SubRC remote-knob position, RealCenter on/off) is a fact
+A DSP hardware control (Helix's RearRC/SubRC remote-knob position) is a fact
 about the **device**, constant across every preset loaded on it — it does not belong in
 `state/v_NNN.json` (which is per-preset). Recording it once in `project.json.hardware.controls`
 (via `set_hardware_control`) is what stops the two copies drifting, which is exactly what happened
 by hand during the M7 pass this schema replaces. **Optional and profile-declared** — a MUSWAY or
 other vendor with no such remote simply has no `hardware.controls` entries; nothing assumes them.
+
+**A knob, not a feature (S-025, 2026-09-22).** A processor feature switched in the software
+(`RealCenter`, `DynamicBass`, `SubXpander`) is not a control: its ON/OFF belongs to the preset, and
+during tuning every such feature is OFF. `set_hardware_control` refuses a name the project's
+`dsp_profile.json` lists as a feature unless it is a remote (`…RC`, `Remote…`). It accepts a name the
+profile does not know only on the person's word (`--source user`: a head unit's bass knob). The control
+module's own logic (modes, what a step means) is not modelled. The Arbiter: «просто OFF для
+налаштування».
 
 ## config_change events (SCR-014)
 
