@@ -548,7 +548,7 @@ the person's, and `installer-consistency.py` holds the three installers to the s
 
 ## S-021 · Phase 1's variants run end to end on a fresh system, and what a wish really costs
 
-**Status**: open 2026-09-22 · **W-2 package V** (`docs/PLAN-W-2.md`) · deferred and taken back at the same review, the Arbiter: «щоб воно було реалізовано як фітча … ми можемо запустити налаштування для пасажира — ось тобі і нова "машина" і аналіз» — the run is a passenger-seat project on the Passat · was: waiting 2026-09-18 · issue #38's remaining piece. The second one is no longer a question
+**Status**: open 2026-09-23 · **W-2 package V** (`docs/PLAN-W-2.md`) · the feature half is built: `python3 skills/autosound-tuning/rew_tool/resonalyze_engine.py smoke` (the engine's alternatives built as whole variants, the best + the wish + the alternatives on a trade-off front) and `python3 skills/autosound-tuning/rew_tool/variant_front.py --selftest`; at the tag it goes `waiting`, naming the passenger-seat run on the Passat · deferred and taken back at the same review, the Arbiter: «щоб воно було реалізовано як фітча … ми можемо запустити налаштування для пасажира — ось тобі і нова "машина" і аналіз» — the run is a passenger-seat project on the Passat · was: waiting 2026-09-18 · issue #38's remaining piece. The second one is no longer a question
 for the test to answer: the user asked for the full variant to be built without waiting for a car, and
 it is (`wish_variants`, on `wave-2026-09-18`) — so what waits is the run itself, on **`v3.0.58`** (tagged
 2026-09-18); the software side is in place

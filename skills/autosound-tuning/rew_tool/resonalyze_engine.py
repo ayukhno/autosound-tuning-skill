@@ -974,6 +974,7 @@ def wish_variants(second, result_b, items, chain, channels=None, xo=None, dotnet
             if was is not None and ms is not None and abs(ms - was) >= 0.01:
                 moved[ch] = {"was": was, "now": ms, "deltaMs": round(ms - was, 2)}
         entry["delays_moved"] = moved
+        entry["delays"] = now
         entry["polarity_flipped"] = [ch for ch, (_, inv) in now.items()
                                      if ch in best_delays and bool(inv) != bool(best_delays[ch][1])]
         entry["checks"] = check_result({"autoCrossover": {"result": final_proposals(result_c)}}, layout, channels, xo) \
@@ -1044,16 +1045,195 @@ def wish_costs(result, layout=None, channels=None, xo=None):
     return out
 
 
+def variant_front_from(set_dir, layout, result_b, full_variants, target=None, target_note=None):
+    """`(front, notes)`: the best and every whole-configuration variant that fits, broken down by the same four terms
+    and picked by different weightings (`variant_front`). A variant over the device's range or breaking a limit is
+    not on offer and is left out, named."""
+    import variant_front as _vf
+    notes = []
+    if target is None and target_note:
+        notes.append(f"trade-off front: the tonal term is not scored -- {target_note}")
+    cands = []
+    try:
+        cands.append({"name": "the best", "terms": candidate_terms(set_dir, layout, final_proposals(result_b),
+                                                                   delay_map(result_b), target)})
+        for fv in full_variants:
+            refused = [c for c in fv.get("checks") or [] if c.get("verdict") == "REFUSED"]
+            if fv.get("not_built") or fv.get("over_range") or refused or not fv.get("settings"):
+                notes.append(f"trade-off front: {fv['purpose']} left out -- "
+                             + (fv.get("not_built") or ("over the device's delay range" if fv.get("over_range")
+                                                        else "breaks a limit" if refused else "no settings")))
+                continue
+            label = fv["purpose"] + (f" ({_junction_short(fv['edges'])})" if fv.get("edges") else "")
+            cands.append({"name": label, "terms": candidate_terms(set_dir, layout, fv["settings"], fv.get("delays"),
+                                                                  target)})
+    except Exception as exc:  # noqa: BLE001 -- the front is a reading; a failed one is said, the run stands
+        return None, notes + [f"trade-off front not computed: {exc}"]
+    if len(cands) < 2:
+        return None, notes + ["trade-off front: fewer than two candidates -- nothing to trade"]
+    return _vf.front(cands), notes
+
+
+def alternative_layout(second, result_b, proposals, chain):
+    """One of the engine's ranked alternatives as a WHOLE configuration: every block's crossover from that candidate
+    (its gains too), nothing searched again, Auto delay over the whole chain (issue #38, W-2 V)."""
+    third = json.loads(json.dumps(second))
+    third["repairs"] = []
+    props = {p_["block"]: p_ for p_ in proposals}
+    settings = {p_["block"]: p_ for p_ in final_proposals(result_b)}
+    for b in third["blocks"]:
+        p_ = props.get(b["name"]) or settings.get(b["name"])
+        if not p_:
+            continue
+        b["crossover"] = {"kind": p_.get("kind"), "highPass": p_.get("highPass"), "lowPass": p_.get("lowPass")}
+        if p_.get("gainDb") is not None:
+            b["gainDb"] = p_["gainDb"]
+    third["junctions"] = baseline_junctions(chain)
+    return third
+
+
+def alternative_variants(second, result_b, rerank, chain, count, channels=None, xo=None, dotnet=None, out_dir=None,
+                         run=None):
+    """The engine's ranked pool (ranks 2..count+1) run as whole configurations -- the candidates a trade-off front
+    is picked from when the tuner named no wish (issue #38). Same entry shape as `wish_variants`."""
+    run = run or (lambda layout, path: run_engine(layout, path, dotnet))
+    best = junction_table(result_b)
+    best_delays = delay_map(result_b)
+    out = []
+    for row in ((rerank or {}).get("rows") or [])[1:count + 1]:
+        entry = {"purpose": f"the engine's #{row['rank_engine']}", "lower": None, "upper": None,
+                 "edges": None, "rank_engine": row["rank_engine"]}
+        # An edge the pool proposes under a limit goes to the nearest allowed setting, as the best's repairs do, and
+        # says so: the pool is ranked on sound alone, and a tweeter under its floor is not an alternative.
+        proposals = json.loads(json.dumps(row.get("proposals") or []))
+        fixes = {}
+        if channels is not None:
+            by_block = {p_["block"]: p_ for p_ in proposals}
+            for c in check_result({"autoCrossover": {"result": proposals}}, second, channels, xo):
+                allowed = c.get("allowed") or {}
+                if c["verdict"] != "REFUSED" or not allowed.get("f_hz") or c["block"] not in by_block:
+                    continue
+                key = "highPass" if c["edge"] == "high-pass" else "lowPass"
+                edge = {"family": ENGINE_FAMILY.get(allowed["family"], allowed["family"]),
+                        "frequencyHz": float(allowed["f_hz"]), "slopeDbPerOctave": int(allowed["order_db"])}
+                by_block[c["block"]][key] = edge
+                fixes.setdefault(c["block"], {})[key] = edge
+        entry["fixes"] = fixes
+        layout = alternative_layout(second, result_b, proposals, chain)
+        rc, result_c, err = run(layout, os.path.join(out_dir or tempfile.mkdtemp(prefix="resonalyze-alt-"),
+                                                     f"4-alternative-{row['rank_engine']}"))
+        entry["rc"] = rc
+        if result_c is None:
+            entry["not_built"] = f"the run wrote nothing (exit {rc}): {err.strip()[-200:]}"
+            out.append(entry)
+            continue
+        delay = result_c.get("autoDelayAfterRepairs") or result_c.get("autoDelay") or {}
+        if delay.get("overRange"):
+            entry["over_range"] = delay["overRange"]
+        table = junction_table(result_c)
+        entry["junctions"] = [{
+            "lower": lo, "upper": up, "cornerHz": (table.get((lo, up)) or {}).get("cornerHz"),
+            "afterDelayLossDb": (table.get((lo, up)) or {}).get("afterDelay") or {},
+            "deltaDb": {side: round(loss - (best.get((lo, up), {}).get("afterDelay") or {})[side], 2)
+                        for side, loss in ((table.get((lo, up)) or {}).get("afterDelay") or {}).items()
+                        if side in (best.get((lo, up), {}).get("afterDelay") or {})},
+            "wish": False} for lo, up in chain]
+        now = delay_map(result_c)
+        entry["delays"] = now
+        entry["delays_moved"] = {ch: {"was": best_delays[ch][0], "now": ms, "deltaMs": round(ms - best_delays[ch][0], 2)}
+                                 for ch, (ms, _) in now.items()
+                                 if ch in best_delays and ms is not None and best_delays[ch][0] is not None
+                                 and abs(ms - best_delays[ch][0]) >= 0.01}
+        entry["polarity_flipped"] = [ch for ch, (_, inv) in now.items()
+                                     if ch in best_delays and bool(inv) != bool(best_delays[ch][1])]
+        entry["checks"] = check_result({"autoCrossover": {"result": final_proposals(result_c)}}, layout, channels, xo) \
+            if channels is not None else []
+        entry["settings"] = final_proposals(result_c)
+        out.append(entry)
+    return out
+
+
+def chains_from_engine(layout, settings, delays):
+    """A configuration the engine settled -> `predict`'s chains per channel code: each block's edges and gain, each
+    channel's delay and polarity (the engine names a channel `<block> L|R`, a mono block by its own name)."""
+    import predict as _pr
+    by_block = {p_["block"]: p_ for p_ in settings or []}
+
+    def leg(edge):
+        if not edge:
+            return None
+        return {"f": float(edge["frequencyHz"]), "type": FAMILY_CODE.get(edge["family"], edge["family"]),
+                "slope": int(edge["slopeDbPerOctave"])}
+    out = {}
+    for b in layout.get("blocks") or []:
+        p_ = by_block.get(b["name"]) or {}
+        for side, code in (b.get("channels") or {}).items():
+            tag = f"{b['name']} {'L' if side == 'left' else 'R'}"
+            ms, inv = (delays or {}).get(tag) or (delays or {}).get(b["name"]) or (0.0, False)
+            out[_pr.canon(code)] = {"muted": False, "gain_db": float(p_.get("gainDb") or 0.0),
+                                    "polarity": "INV" if inv else "NORM", "ta_ms": float(ms or 0.0),
+                                    "hp": leg(p_.get("highPass")), "lp": leg(p_.get("lowPass")), "eq": [], "phase": None}
+    return out
+
+
+def candidate_terms(set_dir, layout, settings, delays, target=None):
+    """The four trade-off terms of one configuration, predicted from the set's solos (`variant_front.terms`).
+
+    The solos are read as recorded: a protective filter captured in them is not divided out here, so the absolute
+    numbers carry it. Every candidate carries the same solos, so the COMPARISON between them does not."""
+    import predict as _pr
+    import variant_front as _vf
+    freqs = _pr.grid()
+    solos = {c: h for c, (h, _info) in _pr.load_solos_dir(set_dir, freqs).items()}
+    chains = {c: ch for c, ch in chains_from_engine(layout, settings, delays).items() if c in solos}
+    result = _pr.predict(freqs, {c: solos[c] for c in chains}, chains)
+    return _vf.terms(_pr.to_json(result), target)
+
+
+def target_points(project_dir, target_file=None):
+    """`([(hz, db)], where)` for the tonal term: `--target FILE`, else the project's recorded curve found as a file
+    (the project's `rew_analitic/target-curves/<name>/`, then the skill's bundled curves), else `(None, why)`."""
+    import glob
+    import variant_front as _vf
+    if target_file:
+        return _vf.read_target(target_file), target_file
+    try:
+        import sys as _sys
+        _here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state")
+        if _here not in _sys.path:
+            _sys.path.insert(0, _here)
+        import state as _st
+        root = os.path.join(project_dir, "state")
+        name = _st.current_target(project_dir, _st.Registry(root).get_active()) if os.path.isdir(root) else None
+    except Exception:  # noqa: BLE001 -- a target nobody recorded is a missing term, said so below
+        name = None
+    if not name:
+        return None, "no target curve recorded for the active slot (`process.py … target`); pass --target FILE"
+    skill_curves = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                "references", "patterns", "target-curves", "curves")
+    for pattern in (os.path.join(project_dir, "rew_analitic", "target-curves", name, "*.txt"),
+                    os.path.join(skill_curves, f"{name}*.txt")):
+        found = sorted(glob.glob(pattern))
+        if found:
+            return _vf.read_target(found[0]), found[0]
+    return None, f"the recorded target {name!r} has no curve file here; pass --target FILE"
+
+
 def variants(project_dir, set_dir, wishes=None, dotnet=None, out_dir=None, **kw):
     """Phase 1's crossover step at the desk: the engine's best, held to the limits and repaired inside them, with its
     delays; then each wish read against it. Two runs of the wrapper: Auto crossover alone (fast), then the repairs,
     Auto delay and the wishes on the crossovers it proposed. Returns a dict for `render_variants` and the JSON."""
+    target_file = kw.pop("target_file", None)
+    alternatives = kw.pop("alternatives", None)
     layout, notes, problems, channels, xo = build_layout(project_dir, set_dir, **kw)
+    target, where = target_points(project_dir, target_file)
     return variants_from(layout, channels, xo, wishes, notes, problems, dotnet, out_dir,
-                         fill_given=kw.get("rear_fill_ms") is not None)
+                         fill_given=kw.get("rear_fill_ms") is not None, set_dir=set_dir, target=target,
+                         target_note=where, alternatives=alternatives)
 
 
-def variants_from(layout, channels, xo, wishes=None, notes=(), problems=(), dotnet=None, out_dir=None, fill_given=False):
+def variants_from(layout, channels, xo, wishes=None, notes=(), problems=(), dotnet=None, out_dir=None, fill_given=False,
+                  set_dir=None, target=None, target_note=None, alternatives=None):
     """`variants` on a layout already built -- the project's facts passed in rather than read from a folder.
 
     When Auto delay cannot fit the device and the rear fill is the default rather than the tuner's, the run is repeated
@@ -1129,6 +1309,15 @@ def variants_from(layout, channels, xo, wishes=None, notes=(), problems=(), dotn
     # a variant read against delays that were never computed would be a number with nothing behind it.
     if items and rc == 0:
         out["full_variants"] = wish_variants(second, result_b, items, chain, channels, xo, dotnet, out_dir)
+    # With no wish, the engine's own ranked alternatives are the candidates (issue #38): 3 unless told otherwise.
+    count = (0 if items else 3) if alternatives is None else int(alternatives)
+    if count and rc == 0:
+        out.setdefault("full_variants", []).extend(
+            alternative_variants(second, result_b, out.get("rerank"), chain, count, channels, xo, dotnet, out_dir))
+    if set_dir and rc == 0:
+        out["front"], front_notes = variant_front_from(set_dir, second, result_b, out.get("full_variants") or [],
+                                                       target, target_note)
+        out["notes"] += front_notes
     final_delay = result_b.get("autoDelayAfterRepairs") or result_b.get("autoDelay")
     out["notes"] += notes_on({"autoCrossover": result_a.get("autoCrossover"), "autoDelay": final_delay})
     out["notes"] += split_notes(final_delay, second)
@@ -1170,6 +1359,14 @@ def _junction_short(candidate):
 
 
 def render_variants(v):
+    text = _render_variants(v)
+    if v.get("front"):
+        import variant_front as _vf
+        text += "\n\n" + _vf.render(v["front"])
+    return text
+
+
+def _render_variants(v):
     lines = []
     if v.get("problems"):
         return "\n".join(f"  ✗ {p}" for p in v["problems"])
@@ -1260,11 +1457,20 @@ def render_variants(v):
                       "configuration still; here every delay is free to move, which is what the tuner hears.",
                   f"  ({JUNCTION_LEGEND})"]
     for fv in v.get("full_variants") or []:
-        head = f"  {fv['purpose']} -- {fv['lower']} ↔ {fv['upper']}"
+        head = (f"  {fv['purpose']}" if fv.get("rank_engine")
+                else f"  {fv['purpose']} -- {fv['lower']} ↔ {fv['upper']}")
         if fv.get("not_built"):
             lines.append(f"{head}: no variant built ({fv['not_built']})")
             continue
-        lines.append(f"{head}: {_junction_short(fv['edges'])}")
+        if fv.get("rank_engine"):
+            lines.append(f"{head}, as a whole configuration: " + "; ".join(
+                f"{s['block']} {_edge_short(s.get('highPass'))} | {_edge_short(s.get('lowPass'))}"
+                for s in fv.get("settings") or []))
+            for block, edges in (fv.get("fixes") or {}).items():
+                lines.append(f"    set {block}: " + ", ".join(f"{k} {_edge_short(e)}" for k, e in edges.items())
+                             + " (under a limit in the engine's pool -- the nearest allowed)")
+        else:
+            lines.append(f"{head}: {_junction_short(fv['edges'])}")
         if fv.get("over_range"):
             o = fv["over_range"]
             lines.append(f"    Auto delay did not fit the device ({o.get('limitMs')} ms) -- this wish is not on offer "
@@ -1545,7 +1751,8 @@ def smoke(dotnet=None, echo=print):
                                           {"delay": {"max_ms": 20.0}}, solos, rew, set_dir)
         assert not problems and not more, (problems, more)
         v = variants_from(layout, channels, xo, wishes="BE4 між мідом і твітером на 2400", notes=notes,
-                          dotnet=dotnet, out_dir=os.path.join(tmp, "out"))
+                          dotnet=dotnet, out_dir=os.path.join(tmp, "out"), set_dir=set_dir,
+                          target=[(20.0, 6.0), (200.0, 2.0), (2000.0, 0.0), (20000.0, -3.0)], alternatives=2)
         assert not v["problems"], v["problems"]
         b = v["delays"]
         assert v["rc_delays"] == 0 and b["contract"] == RESULT_CONTRACT, (v["rc_delays"], json.dumps(b)[:600])
@@ -1562,7 +1769,7 @@ def smoke(dotnet=None, echo=print):
         assert probes and set(probes[0]["scoreDeltaDb"]) == {"left", "right"}, v["costs"]
         # The wish as a WHOLE configuration (issue #38): the third pass runs, reads every junction of the chain,
         # marks the wish's own, and -- the reason the pass exists -- the delays it reports are its own, not the best's.
-        full = v["full_variants"]
+        full = [fv for fv in v["full_variants"] if not fv.get("rank_engine")]   # the wish's; alternatives follow
         assert len(full) == 1 and not full[0].get("not_built"), full
         assert [(j["lower"], j["upper"]) for j in full[0]["junctions"]] == v["chain"], (full[0]["junctions"], v["chain"])
         assert sum(1 for j in full[0]["junctions"] if j["wish"]) == 1, full[0]["junctions"]
@@ -1570,12 +1777,23 @@ def smoke(dotnet=None, echo=print):
         for ch, m in full[0]["delays_moved"].items():
             assert abs(m["now"] - m["was"] - m["deltaMs"]) < 0.005, (ch, m)
         assert set(v["best_junctions"]) == {f"{lo} ↔ {up}" for lo, up in v["chain"]}, v["best_junctions"]
+        # issue #38 as a feature: the engine's ranked alternatives built as whole variants, and the best, the wish
+        # and the alternatives broken down by the same four terms and picked by different weightings.
+        alts = [fv for fv in v["full_variants"] if fv.get("rank_engine")]
+        assert alts and all(fv.get("settings") or fv.get("not_built") for fv in alts), alts
+        fr = v.get("front")
+        assert fr and fr["picks"] and "tonal" not in fr["missing"], (fr, v["notes"])
+        assert {"the best"} <= set(fr["candidates"]) and len(fr["candidates"]) >= 3, \
+            (fr["candidates"], [n for n in v["notes"] if "front" in n], [(a.get("not_built"), a.get("over_range"),
+             [c for c in a.get("checks") or [] if c.get("verdict") != "OK"]) for a in alts])
         echo(render_variants(v))
         echo(f"  repairs planned: {len(v['repairs_planned'])}, fixes: {len(v['fixes'])}")
     echo("smoke[resonalyze_engine] OK -- a synthetic sub + three-way front through all three passes: a proposal per "
          "block, every repair applied and nothing left under a floor, seven delays inside the range with the early "
          "tweeter held back, the wish read on both sides against the best, and the same wish run as a whole "
-         "configuration -- every junction read after its own Auto delay, and the delays it moved named")
+         "configuration -- every junction read after its own Auto delay, and the delays it moved named; the "
+         "engine's ranked alternatives built as whole variants too, and the lot put on a trade-off front by four "
+         "terms (issue #38)")
     return 0
 
 
@@ -2044,6 +2262,11 @@ def main(argv=None):
         p.add_argument("--near-side-cut", type=float, metavar="DB")
         p.add_argument("--gains", action="store_true", help="balance the channel gains after the delays")
         p.add_argument("--wishes", metavar="TEXT", help="run: the tuner's crossover wishes in free words (xover_wishes)")
+        p.add_argument("--target", metavar="FILE", help="run: the target curve for the trade-off front's tonal term "
+                                                       "(default: the project's recorded curve)")
+        p.add_argument("--alternatives", type=int, metavar="N", help="run: how many of the engine's ranked "
+                                                                   "alternatives to build as whole variants "
+                                                                   "(default 3 with no wish, 0 with one)")
         p.add_argument("--json", action="store_true")
     p = sub.add_parser("acceptance")
     p.add_argument("--set")
@@ -2091,7 +2314,8 @@ def main(argv=None):
     v = variants(a.project, a.set, wishes=a.wishes, out_dir=a.out, pick=_pairs(a.file, "--file"),
                  include_hidden=a.include_hidden, window_defaults=a.window_defaults, types=_pairs(a.type, "--type"),
                  scene_offset_ms=a.scene_offset, rear_fill_ms=a.rear_fill, adjust_gains=a.gains,
-                 near_side_cut_db=a.near_side_cut)
+                 near_side_cut_db=a.near_side_cut, target_file=getattr(a, "target", None),
+                 alternatives=getattr(a, "alternatives", None))
     if v.get("out_dir"):
         with open(os.path.join(v["out_dir"], "variants.json"), "w", encoding="utf-8") as fh:
             json.dump({k: v[k] for k in v if k not in ("crossover", "delays")}, fh, indent=1, ensure_ascii=False)
