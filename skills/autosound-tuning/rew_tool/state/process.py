@@ -574,6 +574,21 @@ def _continue_block(project_dir):
     return None
 
 
+def _active_head(project_dir):
+    """The active slot's current version, or None (no ledger, no active slot, a half-moved line)."""
+    import importlib.util
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state.py")
+    try:
+        spec = importlib.util.spec_from_file_location("_process_state_mod", path)
+        st = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(st)
+        root = _state_root(project_dir)
+        preset = st.Registry(root).get_active()
+        return st.PresetHistory(root, preset, project_dir=project_dir).head() if preset else None
+    except Exception:  # noqa: BLE001 -- no binding is said as "not given", never guessed
+        return None
+
+
 def _ledger_versions(project_dir):
     """Every snapshot on disk as a bare number ("7" for `v_007.json`)."""
     out = set()
@@ -1036,7 +1051,8 @@ class Process:
         return state["reviewer"]
 
     # -- capture rounds (SCR-034) --
-    def start_capture(self, version, expected=(), phase=None, note=None, step=None, origin=None):
+    def start_capture(self, version, expected=(), phase=None, note=None, step=None, origin=None, under=None,
+                      level=None, level_read_as=None):
         """Open a capture round: what was asked for, at which `_N`, in which phase.
 
         `version` is the series number the titles carry (`_N`); a round opened with a ledger version
@@ -1082,6 +1098,32 @@ class Process:
                       "open the round at its SERIES number instead (`capture-start 1 ...`), which "
                       "is what Phase 0 does and needs no ledger."
                 )
+        # The ledger version these measurements were taken UNDER (#57 P0). A series names the measurements; the
+        # configuration in the processor while they were taken is a second fact, and the tools that divide it
+        # back out (`predict --from-state`) were typed it by hand -- one omitted flag applied the chain twice
+        # and proposed +9.8 ms. Given, it is checked against the ledger; not given, a series round on a
+        # project with a ledger is bound to the ACTIVE slot's version, and says so.
+        under_note = None
+        if under is None and kind == "series" and not origin:
+            under = _active_head(self.project_dir)
+            if under:
+                under_note = "the active slot's current version (not given)"
+        if under is not None:
+            banked = _ledger_versions(self.project_dir)
+            match = _LEDGER_RE.fullmatch(str(under).strip())
+            if not match or str(int(match.group(1))) not in banked:
+                raise ProcessError(f"--under {under!r}: not a banked ledger version"
+                                   + (f" (banked: {', '.join('v_%03d' % int(v) for v in sorted(banked, key=int))})"
+                                      if banked else " -- this project has no ledger yet"))
+        # S-026: the level a series was measured at is a condition of the SERIES, as a quantity. It sat in the
+        # taste profile as «7 лампочок майстра», unreadable as dB and gone the moment the file stayed behind.
+        level_rec = None
+        if level is not None or level_read_as is not None:
+            if level is not None and not re.search(r"-?\d+(\.\d+)?\s*dB", str(level)):
+                raise ProcessError(f"--level {level!r}: a level is a quantity in dB (\"-25 dB rel. max\"); "
+                                   "how it is read off the device goes in --level-read-as")
+            level_rec = {"value": None if level is None else str(level).strip(),
+                         "read_as": None if level_read_as is None else str(level_read_as).strip()}
         state = self.load()
         previous = state.get("capture")
         if previous and not previous.get("closed"):
@@ -1103,6 +1145,9 @@ class Process:
             # scoped to one project: two projects both have a `_49` and they mean different DSP
             # states on different days.
             "origin": origin,
+            "under": None if under is None else str(under).strip(),
+            "under_note": under_note,
+            "level": level_rec,
             "issued": _now(),
             "closed": None,
             "expected": expected,
@@ -1119,6 +1164,8 @@ class Process:
             version=round_["version"],
             version_kind=kind,
             origin=origin,
+            under=round_["under"],
+            level=level_rec,
             expected=expected,
             step=step,
             note=note,
@@ -1296,6 +1343,41 @@ class Process:
         self._append(EV_CAPTURE_KNOBS, capture=round_["id"], knobs=clean,
                      phase=round_["phase"], version=round_["version"])
         return round_
+
+    def amend_knobs(self, capture_id, controls, reason):
+        """Record the knobs for a CLOSED round, visibly as a correction (#56 item 9).
+
+        `capture-close` warns that no knobs were recorded, and by then the round is closed: the sub remote's 7/12
+        on `_50` was known and on record in a decision, and `verify_prediction` still refused the series,
+        because the one field it reads could not be written. Same shape as `amend_protective`: an event on the
+        round's id, carrying `amends` and the required reason; `knobs_for` replays it."""
+        reason = str(reason or "").strip()
+        if not reason:
+            raise ProcessError("an amendment needs a reason -- it corrects a round somebody may already have read")
+        if not isinstance(controls, dict) or not controls:
+            raise ProcessError("a knob record needs {name: position}")
+        capture_id = str(capture_id).strip()
+        known = {r["id"] for r in self.capture_rounds()}
+        if capture_id not in known:
+            raise ProcessError(f"no capture round {capture_id!r} in this project's journal"
+                               + (f" (rounds: {', '.join(sorted(known))})" if known else " (no rounds at all)"))
+        clean = {str(k).strip(): (v if isinstance(v, (int, float)) else str(v).strip())
+                 for k, v in controls.items() if str(k).strip()}
+        self._append(EV_CAPTURE_KNOBS, capture=capture_id, knobs=clean, amends=capture_id, reason=reason)
+        return {"capture": capture_id, "knobs": clean, "reason": reason}
+
+    def under_for(self, version):
+        """The ledger version series `_<version>` was taken under (#57 P0), or None when no round says."""
+        key = self._version_key
+        version = key(version)
+        found = None
+        for r in self.capture_rounds():
+            if key(r["version"]) == version or any(key(v) == version for v in r.get("title_versions") or []):
+                found = r.get("under") or found
+        live = self.load().get("capture") or {}
+        if key(live.get("version")) == version and live.get("under"):
+            found = live["under"]
+        return found
 
     def knobs_for(self, version):
         """The knob positions recorded for the round the `_<version>` titles were taken in, or None.
@@ -2043,12 +2125,17 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
                                               stopped" cannot be said over an open round
   decision <question> <answer> [step] [--invalidates X]   what the Arbiter ruled, as itself
   capture-start <version> [title ...] [--step ID] [--origin <project>:<their _N>]
+      [--under v_NNN] [--level "-25 dB rel. max"] [--level-read-as "7 lamps"]
+                                        --under: the ledger version the series is taken under (#57 P0;
+                                        default the active slot's); --level: the level as a quantity (S-026)
                                         open a capture round; titles = what was
                                          asked for, --step binds it to the plan step it satisfies
   capture-check [title ...] [--session]  run the verdict over the round and record it (SCR-040);
                                          --session adds the whole-session probe (levels side by
                                          side, loudest/quietest, ctl1->ctl3 drift) and records it
   capture-taken <title>                 a measurement came back (unplanned ones are flagged)
+  capture-knobs --amend <cap_id> --reason "..." <NAME>=<POS> [...]
+                                        the knobs of a CLOSED round, as a correction (#56 item 9)
   capture-knobs <NAME>=<POS> [...]      the hardware controls as they stood for THIS round
                                         (SubRC=4/4 RealCenter=ON): a fact about the SERIES, so two
                                         series taken at different positions can be told apart
@@ -2351,6 +2438,32 @@ def _selftest():
     assert proc.knobs_for("0")["knobs"]["SubRC"] == "3/4"
     assert proc.knobs_for("999") is None, "a version with no round has no knobs, not empty ones"
     assert _cli("capture-knobs").returncode != 0 and _cli("capture-knobs", "SubRC").returncode != 0
+    # #56 item 9: a CLOSED round's knobs can be written, as a correction with a reason, and are then read.
+    amend_p = Process(os.path.join(root, "process-amend"))
+    amend_p.enter_phase("0")
+    closed_id = amend_p.start_capture("5", expected=["m-L_5 (sw)"], phase="0")["id"]
+    amend_p.close_capture(reason="done")
+
+    def _amend_cli(*argv):
+        return subprocess.run([sys.executable, _mod, amend_p.dir, *argv], capture_output=True, text=True,
+                              encoding="utf-8", errors="replace", env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+    assert _amend_cli("capture-knobs", "--amend", closed_id, "SubRC=7/12").returncode != 0, "no reason"
+    assert _amend_cli("capture-knobs", "--amend", closed_id, "--reason", "known in the car, on record",
+                      "SubRC=7/12").returncode == 0
+    assert amend_p.knobs_for("5")["knobs"]["SubRC"] == "7/12", amend_p.knobs_for("5")
+    # #57 P0 / S-026: a round records the ledger version it was taken under and the level as a quantity; a
+    # level with no dB in it, or an under that is not banked, is refused.
+    lvl = Process(os.path.join(root, "process-level"))
+    lvl.enter_phase("0")
+    r_ = lvl.start_capture("3", expected=["m-L_3 (sw)"], phase="0", level="-25 dB rel. max",
+                           level_read_as="7 lamps on the Conductor")
+    assert r_["level"] == {"value": "-25 dB rel. max", "read_as": "7 lamps on the Conductor"}, r_
+    for bad in ({"level": "7 lamps"}, {"under": "v_404"}):
+        try:
+            lvl.start_capture("4", expected=["m-L_4 (sw)"], phase="0", **bad)
+            raise AssertionError(f"start_capture took {bad}")
+        except ProcessError:
+            pass
     # A round that closes with no knobs recorded says so, at the one moment the answer is still in
     # the room -- and closes anyway, because refusing would strand a session mid-car.
     bare = Process(os.path.join(root, "process-bare"))
@@ -2838,10 +2951,21 @@ def _main(argv):
                 i = rest.index("--step")
                 step = rest[i + 1] if len(rest) > i + 1 else None
                 rest = rest[:i] + rest[i + 2:]
-            round_ = p.start_capture(rest[0], expected=rest[1:], step=step, origin=origin)
+            flags = {}
+            for flag in ("--under", "--level", "--level-read-as"):
+                if flag in rest:
+                    i = rest.index(flag)
+                    flags[flag] = rest[i + 1] if len(rest) > i + 1 else None
+                    rest = rest[:i] + rest[i + 2:]
+            round_ = p.start_capture(rest[0], expected=rest[1:], step=step, origin=origin,
+                                     under=flags.get("--under"), level=flags.get("--level"),
+                                     level_read_as=flags.get("--level-read-as"))
             print(
                 f"{round_['id']} open at {round_['version']}, "
                 f"{len(round_['expected'])} capture(s) expected"
+                + (f", under {round_['under']}" + (f" ({round_['under_note']})" if round_.get("under_note") else "")
+                   if round_.get("under") else "")
+                + (f", level {round_['level']['value'] or '?'}" if round_.get("level") else "")
                 + (f" — taken in {round_['origin']['project']} as _{round_['origin']['series']}, "
                    "not this project's own series"
                    if round_.get("origin") else "")
@@ -2881,6 +3005,16 @@ def _main(argv):
                 + ("" if entry["planned"] else " (unplanned -- not on this round's list)")
             )
         elif cmd == "capture-knobs":
+            rest, amend, reason = list(args), None, None
+            if "--amend" in rest:
+                i = rest.index("--amend")
+                amend = rest[i + 1] if len(rest) > i + 1 else None
+                rest = rest[:i] + rest[i + 2:]
+            if "--reason" in rest:
+                i = rest.index("--reason")
+                reason = rest[i + 1] if len(rest) > i + 1 else None
+                rest = rest[:i] + rest[i + 2:]
+            args = rest
             if not args:
                 raise ProcessError("capture-knobs needs at least one NAME=POSITION")
             knobs = {}
@@ -2889,6 +3023,10 @@ def _main(argv):
                     raise ProcessError(f"expected NAME=POSITION, got {item!r}")
                 name, _, pos = item.partition("=")
                 knobs[name] = pos
+            if amend:
+                p.amend_knobs(amend, knobs, reason)
+                print(f"{amend}: knobs amended -- " + ", ".join(f"{k}={v}" for k, v in sorted(knobs.items())))
+                return 0
             p.set_knobs(knobs)
             print("knobs recorded: " + ", ".join(f"{k}={v}" for k, v in sorted(knobs.items())))
         elif cmd == "capture-protective":

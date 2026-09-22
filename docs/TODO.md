@@ -692,7 +692,7 @@ are not positions but decision history, dates and measurement numbers.
 
 ## S-026 · The level a series was measured at lives in the taste profile, and is unreadable as a quantity
 
-**Status**: open 2026-09-19 · **W-2 package E** (`docs/PLAN-W-2.md`) · · W-1 collection · `preference-profile.md` line 28 of the exported
+**Status**: done 2026-09-23 · W-2 package E · `python3 skills/autosound-tuning/rew_tool/state/process.py selftest` (`capture-start … --level "-25 dB rel. max" --level-read-as "7 lamps"` recorded on the round; a level with no dB refused); `process-schema.md` documents it · was: open 2026-09-19 · **W-2 package E** (`docs/PLAN-W-2.md`) · · W-1 collection · `preference-profile.md` line 28 of the exported
 `passat-b8-2026`: «Суддівський рівень: 7 лампочок майстра, ГП USB → Douk U2 → оптика», while the scale sits
 in the prose of a different field — `hardware.controls.SubRC`: «майстер: 60 дБ кроками 1 дБ, лампочка = 5
 дБ, у лампочці 5 кроків яскравості».

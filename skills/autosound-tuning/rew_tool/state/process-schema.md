@@ -48,6 +48,11 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
     "id": "cap_002", "n": 2,                        //   Every round that ever happened is in the
     "phase": "0", "version": "v_003",               //   journal; only the live one is here, the
     "version_kind": "ledger",                       //   ledger | series | null — WHICH counter
+    "under": "v_010", "under_note": null,           // #57 P0: the ledger version the series was taken
+                                                    //   UNDER; a series round defaults to the active
+                                                    //   slot's and says so in `under_note`
+    "level": {"value": "-25 dB rel. max",           // S-026: the level as a QUANTITY, and how it is
+              "read_as": "7 lamps on the Conductor"},  //   read off the device; null when not given
     "issued": "…", "closed": null,                  //   same way only the active phase is.
     "expected": ["tw-L_1 (sw)", "tw-L_1 (rta)"],    // what `naming.expected_groups` asked for
     "step": "0.1",                                  // SCR-040: the plan step this round satisfies
