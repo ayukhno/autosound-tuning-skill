@@ -489,7 +489,7 @@ at the price of asking for a pair measurement on every large first-time move). R
 
 ## S-019 · The release role cannot run `gh release delete` itself: the harness refuses it
 
-**Status**: open — noted 2026-09-17 on #173, where the user ran the command by hand.
+**Status**: deferred 2026-09-22 · W-2 review, the Arbiter: «що не включемо — то зрозуміти причину і відкласти» · the fix is a harness permission or a line in hub `RELEASE-CHANNEL.md` — process, which waits for the review between waves (`WAVES.md` §4); comes back when a release needs a draft cleared · was: open — noted 2026-09-17 on #173, where the user ran the command by hand.
 
 Clearing the v3.0.56 draft needed `gh release delete v3.0.56 --repo ayukhno/autosound-tuning-skill
 --yes`. Two walls, and only the second is ours to think about:
@@ -511,7 +511,7 @@ says "the delete will come back to you".
 is the user's by design.
 
 ## S-020 · The installers can fetch the engine archive now that a release carries it
-**Status**: doing 2026-09-18 · built on `wave-2026-09-18`, the three decisions taken with the user: fetch only where there is no .NET SDK, `--engine` / `--no-engine` to override, a missing archive said out loud. `python3 skills/autosound-tuning/rew_tool/resonalyze_engine.py fetch-binary --tag v3.0.57` → installed, sha256 checked; `… resonalyze_engine.py smoke` then ran the whole synthetic set on the FETCHED engine; `bash install.sh --dry-run --terminal --engine` and `--no-engine` print the two branches; `python3 scripts/installer-consistency.py` (check 5c) holds the three installers to one decision. **Left, and it is what the Done-when asks for:** the installer's own step on a machine with no SDK — the Windows VM, on **`v3.0.58`** (tagged 2026-09-18; its release carries `resonalyze-engine-b0ce9fb-{win-x64,win-arm64,osx-arm64}.zip` and `SHA256SUMS`). What to run there: the README one-liner at that tag on a VM with no .NET SDK — the step should say it fetched ~30 MB and checked it — then `python3 rew_tool/resonalyze_engine.py smoke`, which should run with nothing built; and `-NoEngine` on a second run, which should refuse the fetch and say how to do it later
+**Status**: doing 2026-09-18 · **W-2 package C** (`docs/PLAN-W-2.md`) · · built on `wave-2026-09-18`, the three decisions taken with the user: fetch only where there is no .NET SDK, `--engine` / `--no-engine` to override, a missing archive said out loud. `python3 skills/autosound-tuning/rew_tool/resonalyze_engine.py fetch-binary --tag v3.0.57` → installed, sha256 checked; `… resonalyze_engine.py smoke` then ran the whole synthetic set on the FETCHED engine; `bash install.sh --dry-run --terminal --engine` and `--no-engine` print the two branches; `python3 scripts/installer-consistency.py` (check 5c) holds the three installers to one decision. **Left, and it is what the Done-when asks for:** the installer's own step on a machine with no SDK — the Windows VM, on **`v3.0.58`** (tagged 2026-09-18; its release carries `resonalyze-engine-b0ce9fb-{win-x64,win-arm64,osx-arm64}.zip` and `SHA256SUMS`). What to run there: the README one-liner at that tag on a VM with no .NET SDK — the step should say it fetched ~30 MB and checked it — then `python3 rew_tool/resonalyze_engine.py smoke`, which should run with nothing built; and `-NoEngine` on a second run, which should refuse the fetch and say how to do it later
 
 **Due when:** someone installs the method on a machine without the .NET SDK and wants Phase 1's desk
 step. Not before — a person with the SDK loses nothing today.
@@ -548,7 +548,7 @@ the person's, and `installer-consistency.py` holds the three installers to the s
 
 ## S-021 · Phase 1's variants run end to end on a fresh system, and what a wish really costs
 
-**Status**: waiting 2026-09-18 · issue #38's remaining piece. The second one is no longer a question
+**Status**: deferred 2026-09-22 · W-2 review, the Arbiter: «що не включемо — то зрозуміти причину і відкласти» · the software is built; what is left is a run on a car and system the method has not seen — a test, not work; comes back when such a car is at hand (with skill `#38`) · was: waiting 2026-09-18 · issue #38's remaining piece. The second one is no longer a question
 for the test to answer: the user asked for the full variant to be built without waiting for a car, and
 it is (`wish_variants`, on `wave-2026-09-18`) — so what waits is the run itself, on **`v3.0.58`** (tagged
 2026-09-18); the software side is in place
@@ -599,7 +599,7 @@ offline selftest hold the pass instead. Worth building when a second car needs t
 
 ## S-022 · A prebuilt engine is found by the FORK's pin, so a changed wrapper runs the old binary
 
-**Status**: open 2026-09-18 · met while building #38's full variant: the wrapper changed, and the run
+**Status**: open 2026-09-18 · **W-2 package C** (`docs/PLAN-W-2.md`) · · met while building #38's full variant: the wrapper changed, and the run
 kept using the engine fetched from `v3.0.57` until it was deleted by hand.
 
 **Due when:** a second person develops the wrapper, or a user updates the method by hand (a `git pull`
@@ -620,7 +620,7 @@ which it is running when the two disagree. Not the fork pin alone.
 
 ## S-023 · SCR-059 is done in `main` and has no tag: close the ticket, or wait for one?
 
-**Status**: waiting 2026-09-19 · the work is in `9de1085` (`rew_tool/intake.py` — the intake's fields,
+**Status**: done 2026-09-22 · `git merge-base --is-ancestor 9de1085 v3.0.59 && echo in` → in; hub `#178` closed with that line at the W-2 review (W-1 said it would close with that tag) · was: waiting 2026-09-19 · the work is in `9de1085` (`rew_tool/intake.py` — the intake's fields,
 enumerations and couples as data, the gate's list read off `contract.GATE_REQUIRED`, and the writer for
 the car / channel map / measurement chain), the whole suite green (78/78), the CHANGELOG entry under
 `## [Unreleased]`. Hub `#178` is still `accepted` — the question was put to the Arbiter and the session
@@ -669,7 +669,7 @@ EPY its opposite) as a decision for him — when it was not his choice at all, b
 
 ## S-025 · `hardware.controls` mixes the control module's knobs with the processor's features, and accepts any key
 
-**Status**: open 2026-09-19 · W-1 collection · the user, on the six entries the export carries: «не лізь
+**Status**: open 2026-09-19 · **W-2 package A** (`docs/PLAN-W-2.md`) · · W-1 collection · the user, on the six entries the export carries: «не лізь
 туди, там ще складніша логіка роботи — просто OFF для налаштування».
 
 **Due when:** the intake touches `hardware.controls` again. The rule to carry is ONE line — during tuning
@@ -692,7 +692,7 @@ are not positions but decision history, dates and measurement numbers.
 
 ## S-026 · The level a series was measured at lives in the taste profile, and is unreadable as a quantity
 
-**Status**: open 2026-09-19 · W-1 collection · `preference-profile.md` line 28 of the exported
+**Status**: open 2026-09-19 · **W-2 package E** (`docs/PLAN-W-2.md`) · · W-1 collection · `preference-profile.md` line 28 of the exported
 `passat-b8-2026`: «Суддівський рівень: 7 лампочок майстра, ГП USB → Douk U2 → оптика», while the scale sits
 in the prose of a different field — `hardware.controls.SubRC`: «майстер: 60 дБ кроками 1 дБ, лампочка = 5
 дБ, у лампочці 5 кроків яскравості».
@@ -713,7 +713,7 @@ as how it is read off the Conductor, not as the number itself.
 
 ## S-027 · A prose source line is read as a path, and the intake reports the file as gone
 
-**Status**: open 2026-09-19 · W-1 collection · `project.json.sources` holds
+**Status**: open 2026-09-19 · **W-2 package A** (`docs/PLAN-W-2.md`) · · W-1 collection · `project.json.sources` holds
 `autosound-measurements/.../2026-08-20_front-set-02/{README.md,manifest.json,dsp-state.json} (стан DSP та
 стенда під час baseline)` — a brace list of three files inside a prose citation. The skill's opening report
 in `EPY-Sep2026` named it as `.../{README.md` and said it «more does not exist».
@@ -726,7 +726,7 @@ three of the six lines in that file are not paths to begin with (`REW-сесія
 
 ## S-028 · The session's `python3` dies on `xcrun` in an x86_64 shell, and the doctor does not name it
 
-**Status**: open 2026-09-19 · W-1 collection · the skill session working on `EPY-Sep2026` had to run every
+**Status**: open 2026-09-19 · **W-2 package C** (`docs/PLAN-W-2.md`) · · W-1 collection · the skill session working on `EPY-Sep2026` had to run every
 command as `arch -arm64 /usr/bin/python3` and told the user so as a footnote: its shell was running as
 x86_64, where `python3` falls over on `xcrun`.
 
@@ -756,7 +756,7 @@ himself.
 
 ## S-030 · The input that does not stick is AUX, and the trigger named in the knowledge row is the wrong one
 
-**Status**: open 2026-09-19 · W-1 collection · the user, correcting the row this session's reply quoted to
+**Status**: open 2026-09-19 · **W-2 package A** (`docs/PLAN-W-2.md`) · · W-1 collection · the user, correcting the row this session's reply quoted to
 him: switching the input from BT to AUX does not hold — at the next configuration write or DSP reconnection
 the input stands at BT again. So it hits exactly ONE input: AUX, which is where the Scarlett feeds the
 measurement signal. «запиши це собі як задачку виправити потім».
@@ -834,7 +834,7 @@ measurements, which is exactly the class split that ticket asks for.
 
 ## S-033 · The intake as a form the skill itself serves — Ukrainian prototype first
 
-**Status**: open 2026-09-19 · W-1 collection · the Arbiter's decisions, taken in conversation 19.09. The
+**Status**: open 2026-09-19 · **W-2 package A** (`docs/PLAN-W-2.md`) · · W-1 collection · the Arbiter's decisions, taken in conversation 19.09. The
 intake is 71 fields, 38 of them required (`rew_tool/intake.py`, SCR-059), and today they are asked in chat:
 a front-end cannot render them, and the car half has twice arrived as free text AFTER the gate refused.
 
@@ -945,7 +945,7 @@ as S-024: a fact whose origin is not written reads as everybody's word.
 
 ## S-037 · The Arbiter's read of the form prototype — eight points, and two of them are not about the form
 
-**Status**: open 2026-09-19 · W-1 collection · his review of `intake_form.py`'s first page 19.09,
+**Status**: open 2026-09-19 · **W-2 package A** (`docs/PLAN-W-2.md`) · · W-1 collection · his review of `intake_form.py`'s first page 19.09,
 deferred by his own word to a session of its own: «давай це в окрему сесію відкладемо — тут
 потенціал». Nothing below is implemented; this item is what that session starts from.
 
@@ -1087,7 +1087,7 @@ interview, its reasoning — while the only thing he owes it is the facts about 
 
 ## S-042 · Channel ids were minted in a notation the method does not have, and the parser does not refuse it
 
-**Status**: open 2026-09-19 · W-1 collection · the Arbiter, after the gate refused on his machine:
+**Status**: open 2026-09-19 · **W-2 package A** (`docs/PLAN-W-2.md`) · · W-1 collection · the Arbiter, after the gate refused on his machine:
 «подивись нотацію і пропонуй назви в нотації (здається так і було) і перевір розбор назв, щоб там була
 та сама нотація». The session that hit it described two resolvers reading identity from different
 places; measured here, it is narrower and worse.
@@ -1313,7 +1313,7 @@ dates — stays a question for the Arbiter; this one is mechanical and should ne
 
 ## S-049 · No desk engine on the test MacBook, and nothing said so until Phase 1.3
 
-**Status**: open 2026-09-20 · W-1 package D · `python3 skills/autosound-tuning/rew_tool/resonalyze_engine.py --selftest` (engine_status builds nothing) — FIRST HALF only; the installer receipt stays W-2, and this item stays open for it — found 2026-09-19, the Arbiter: «ось що бачу на MacBook Pro — немає
+**Status**: open 2026-09-20 · **W-2 package C** (`docs/PLAN-W-2.md`) · · W-1 package D · `python3 skills/autosound-tuning/rew_tool/resonalyze_engine.py --selftest` (engine_status builds nothing) — FIRST HALF only; the installer receipt stays W-2, and this item stays open for it — found 2026-09-19, the Arbiter: «ось що бачу на MacBook Pro — немає
 рушия!». The session had to stop at step 1.3 (crossover variants) and ask him to install one, mid-tune.
 
 **Due when:** the version installed there is known — that is the one fact this item is missing.
@@ -1390,7 +1390,7 @@ whole pool. It has no PR: what ships in W-1 is the review's call, not the branch
 
 ## S-051 · A driver's mount and aim, as the method's own model — an idea, not a question yet
 
-**Status**: idea 2026-09-22 · the Arbiter, reviewing the intake form: «що таке "Підніжка"?», and a list
+**Status**: deferred 2026-09-22 · W-2 review, the Arbiter: «що не включемо — то зрозуміти причину і відкласти» · an idea — nothing computes from mount or aim; comes back when a tool starts using them · was: idea 2026-09-22 · the Arbiter, reviewing the intake form: «що таке "Підніжка"?», and a list
 of what real installs have. Not on the form: nothing in the method computes from a mount or an aim
 today, and his rule is not to ask what we cannot compute («все це в інше, як ідея»). The intake keeps
 `channel_map.position` and `channel_map.enclosure` in its data (`place="memo"`); the person describes
@@ -1407,7 +1407,7 @@ two questions, where and aim, and not before.
 
 ## S-052 · Intake review of 2026-09-22: where it stopped
 
-**Status**: open 2026-09-22 · eight rounds with the Arbiter on the intake form, all on branch
+**Status**: open 2026-09-22 · **W-2 package A** (`docs/PLAN-W-2.md`) · the W-2 review of the same day took items 2–4 into the wave and closed `#47`/`#49`; item 1, the Arbiter's yes/no, is what keeps this open · eight rounds with the Arbiter on the intake form, all on branch
 `wave-2026-09-20` (`b882676` … `1075c65`), decisions in `docs/DESIGN-2026-09-22-intake-simplified.md`.
 The branch has no PR; what ships is the next review's call.
 
@@ -1422,3 +1422,29 @@ Left for later:
 5. **Reviewer channel on this Mac:** the Gemini API key is invalid (HTTP 400), so the advisor ran through
    `agy` with `AUTOSOUND_ALLOW_NESTED_CLI=1`. A valid key, or a pinned
    `AUTOSOUND_CRITIC_MODEL`, removes that detour.
+
+## S-053 · Versions are numbered once per project, and a preset is the slot a version is fixed in
+
+**Status**: open 2026-09-22 · **W-2 package E** (`docs/PLAN-W-2.md`) · written down at the W-2 review:
+the item had no home in this file. It lived only in `docs/PLAN-W-1.md` §A.3 as "W-2, not this wave",
+and tcc left per-project version numbering out of its own W-2 because this migration does not exist
+(tcc `docs/PLAN-W-2.md`, *Not included*).
+
+**Due when:** W-2, package E. It goes with skill `#58` P2 (variants inside the ledger, no project-local
+switch scripts) and P1 (a banked version is immutable).
+
+**The model, the Arbiter's (settled 2026-09-20):** a version `v_NNN` is the full set in the processor,
+numbered once per PROJECT. A preset is the DSP slot a version is FIXED in (`01` before the competition,
+`02` the test one). A slot holds one version at a time, and several versions pass through it while
+testing.
+
+**What the files do instead:** `state/<preset>/v_NNN.json` is a separate line per slot, so two slots
+both hold a `v_001`, and there is no «put this version in that slot» move. The passat's own registry
+note says the relationship in prose it cannot verify («FULL — копія SQ … синхронізація після v11.0
+не підтверджена»). Until this lands a report names the version with its slot (`SQ v_007`,
+`docs/PLAN-W-1.md` §A.3).
+
+**Done when:** a project has one version line, a preset records which version it holds and since when,
+an existing project migrates with nothing lost (the old per-slot files kept as history), and
+`contract.py check` reads the new shape.
+
