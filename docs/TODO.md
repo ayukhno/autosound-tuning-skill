@@ -1404,3 +1404,21 @@ windshield, into the cabin, towards the trunk lid, into the trunk, other.
 **Due when:** a tool starts using mount or aim, e.g. to predict path length and reflections from the
 geometry, or to weight a driver's off-axis response in the junction verdict. Then the two lists become
 two questions, where and aim, and not before.
+
+## S-052 · Intake review of 2026-09-22: where it stopped
+
+**Status**: open 2026-09-22 · eight rounds with the Arbiter on the intake form, all on branch
+`wave-2026-09-20` (`b882676` … `1075c65`), decisions in `docs/DESIGN-2026-09-22-intake-simplified.md`.
+The branch has no PR; what ships is the next review's call.
+
+Left for later:
+1. **His yes/no is owed on one move from round 1:** choosing the target curve and the taste
+   questionnaire moved from Phase −1 to Phase 0, after the baseline (the code's gate is unchanged).
+2. **TCC's half:** hub `#194` (SKL-049, how to start and stop the form) and `#193` (SKL-048, the
+   seat chosen in the copy dialog).
+3. **Sessions review:** skill `#58` (the Antigravity session vs the Opus one, a two-tier plan P1–P12).
+4. **Pool:** `#47` and `#49` are unpinned from the closed W-1 milestone and wait for the next wave's
+   composition. `#48` is closed with evidence (v3.0.59).
+5. **Reviewer channel on this Mac:** the Gemini API key is invalid (HTTP 400), so the advisor ran through
+   `agy` with `AUTOSOUND_ALLOW_NESTED_CLI=1`. A valid key, or a pinned
+   `AUTOSOUND_CRITIC_MODEL`, removes that detour.
