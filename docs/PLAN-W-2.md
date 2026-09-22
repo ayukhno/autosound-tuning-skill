@@ -67,9 +67,9 @@ S-033 · S-037 · S-052 · the skill's half of hub `#193` / `#194` · S-025 · S
    `hardware.description`, but no phase text tells the session to read them yet. So each place where
    a mount or an aim changes the reading gets one line saying to read them there and name what
    matters: Phase 1 delays and levels, Phase 2 tweeter EQ, Phase 4 imaging, and a copied seat. A
-   tweeter aimed at the driver's ear is off-axis at the passenger seat, which is V's test. S-051, a
-   structured mount-and-aim model, stays deferred: the text covers the session, and no tool computes
-   from it.
+   tweeter aimed at the driver's ear is off-axis at the passenger seat, which is V's test. S-051, the
+   list form of mount and aim, is dropped (the Arbiter: «варіанти списком скасували»): the text is
+   the model.
 
 ## B — the reviewer is reachable from any launch
 
@@ -224,7 +224,6 @@ answer `#38`'s own question: which configurations win when the goals pull agains
 
 | item | why | comes back when |
 |---|---|---|
-| S-051 (a driver's mount and aim) | an idea. Nothing in the method computes from mount or aim, and the Arbiter's rule is not to ask what we cannot compute | a tool starts using mount or aim |
 | already deferred, untouched: S-001, S-017, `#24`, `#26`, hub `#82`, `#113` | the user's earlier word | as each one's line says |
 
 **Named once:** `#24`, `#26`, hub `#82` and `#113` wait for "tag `skill-v3.1.0`". On 2026-09-18 the

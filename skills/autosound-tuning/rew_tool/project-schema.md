@@ -79,8 +79,8 @@ machine-readable to render for its Project/System/Car-audio-analysis panels eith
      "amp": "GZPA 4SQ, ch 3",                                // free text: amplifier and its channel
      "install": "kick panel, aimed at the far side",         // free text: how it is installed
      "position": "door", "enclosure": "free_air",            // SCR-059, enumerated (`intake.POSITIONS`,
-     "condition": "broken_in"},                              //   ...); off the form until a tool uses
-                                                             //   them (S-051) -- `install` carries it
+     "condition": "broken_in"},                              //   ...); off the form: the list form was
+                                                             //   dropped (S-051) -- `install` carries it
     {"code": "vrf", "slot": "F", "hidden": true,             // SCR-003: no physical driver assigned
      "role": "unused", "tier": "virtual_channels"}           // SCR-042: which tier it is spare OF.
                                                              //   Slot letters REPEAT across tiers (this

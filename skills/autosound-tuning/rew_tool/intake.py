@@ -1043,15 +1043,15 @@ FIELDS = (
     _f("channel_map.install", "channel_map", "How it is installed", per="channel",
        writes="project:channels[].install",
        note="Free text, in the person's words (\"kick panel, aimed at the far side\", \"stock door, "
-            "sealed pod\"). The Arbiter, 2026-09-22: kept as ONE text column while no tool computes "
-            "from a mount or an aim -- the structured model is the idea in docs/TODO.md S-051.",
+            "sealed pod\"). The Arbiter, 2026-09-22: ONE text column, and the list form of mount "
+            "and aim is dropped (docs/TODO.md S-051); the session reads this text where an aim matters.",
        when="install", place="equipment"),
     _f("channel_map.position", "channel_map", "Where it sits and where it points", per="channel",
        enum=POSITIONS, writes="project:channels[].position",
        note="Take it from the person or from a measurement — never from a car/DSP profile: "
             "placement varies on the same body. NOT on the form (the Arbiter, 2026-09-22): nothing "
             "in the method computes from it yet, so a person describes it in «Інше обладнання»'s "
-            "free text; a real mount/aim model is the idea in docs/TODO.md S-051.",
+            "free text; the list form of mount and aim is dropped (docs/TODO.md S-051).",
        when="1", place="memo"),
     _f("channel_map.enclosure", "channel_map", "How it is loaded", per="channel", enum=ENCLOSURES,
        writes="project:channels[].enclosure",
