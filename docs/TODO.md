@@ -713,7 +713,7 @@ as how it is read off the Conductor, not as the number itself.
 
 ## S-027 · A prose source line is read as a path, and the intake reports the file as gone
 
-**Status**: open 2026-09-19 · **W-2 package A** (`docs/PLAN-W-2.md`) · · W-1 collection · `project.json.sources` holds
+**Status**: done 2026-09-22 · W-2 package A · `python3 skills/autosound-tuning/rew_tool/contract.py selftest` (the `sources` block now carries `autosound-measurements/.../{README.md,manifest.json} (…)` and `/data/…/irs_48/*.json`, and `sources_gone` still holds only the two literal paths) · was: open 2026-09-19 · **W-2 package A** (`docs/PLAN-W-2.md`) · · W-1 collection · `project.json.sources` holds
 `autosound-measurements/.../2026-08-20_front-set-02/{README.md,manifest.json,dsp-state.json} (стан DSP та
 стенда під час baseline)` — a brace list of three files inside a prose citation. The skill's opening report
 in `EPY-Sep2026` named it as `.../{README.md` and said it «more does not exist».

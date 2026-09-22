@@ -462,6 +462,9 @@ def _row_label(entry):
 #: A path written into free text, as a token: starts at a drive, a home or the root, and has at
 #: least two separators -- so `L/R` and `1/6-oct` are prose, and `Z:/dev/projects/old-car` is not.
 _PATH_TOKEN = re.compile(r"(?<![\w/:])((?:[A-Za-z]:[\\/]|~[\\/]|/)[^\s,;'\"()]*[\\/][^\s,;'\"()]+)")
+#: ...and a token carrying an ellipsis, a brace list or a wildcard is a CITATION in prose, not a
+#: literal path (S-027).
+_NOT_LITERAL = re.compile(r"\.\.\.|…|[{}*?]")
 
 
 def provenance(project_data):
@@ -484,7 +487,9 @@ def provenance(project_data):
                  for path, wrapper in project.inherited_facts(data)]
     named = [(data.get("seeded_from") or {}).get("path")] + [row["from"] for row in inherited]
     for line in data.get("sources") or []:
-        named += _PATH_TOKEN.findall(str(line))
+        # S-027: a token that is elided (`...`, `…`) or a pattern (`{a,b}`, `*`) is how a person
+        # CITES files in prose, not a path -- checking it reported `.../{README.md` as gone.
+        named += [tok for tok in _PATH_TOKEN.findall(str(line)) if not _NOT_LITERAL.search(tok)]
     gone = []
     for path in named:
         if path and not exists(path) and path not in gone:
@@ -1143,7 +1148,9 @@ def _selftest():
     carried = {"schema_version": 3, "project_rev": 1,
                "seeded_from": {"path": "/nowhere/old-car", "at": "2026-08-23", "keys": ["channels"]},
                "sources": [f"measured in {alive}, L/R at 1/6-oct, https://example.com/a/b",
-                           "hand-copied from Z:/dev/autosound_projects/projects/resonalyze-passat"],
+                           "hand-copied from Z:/dev/autosound_projects/projects/resonalyze-passat",
+                           "autosound-measurements/.../2026-08-20_front-set-02/{README.md,manifest.json} (стан DSP)",
+                           "/data/…/irs_48/*.json"],
                "channels": [{"code": "tw-L", "fs_hz": {"value": 1000, "source": "measured", "at": None,
                                                       "origin": "inherited", "inherited_from": "/nowhere/old-car"}},
                             {"code": "m-L", "fs_hz": {"value": 220, "source": "measured", "at": "t"}}]}

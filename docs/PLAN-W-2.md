@@ -60,7 +60,8 @@ S-033 · S-037 · S-052 · the skill's half of hub `#193` / `#194` · S-025 · S
 3. **S-025:** `hardware.controls` keeps the knobs (round 5) and refuses a key that is a processor
    feature (`RealCenter`, `VirtualX`) or unknown. The control module's logic is not modelled: the
    Arbiter's word is «просто OFF для налаштування».
-4. **S-027:** a `sources` line is prose and is never checked as a path.
+4. **S-027:** a `sources` line is prose. Only a literal path inside it is checked, never an elided
+   or patterned citation (`.../{a,b}`, `…`, `*`), because the check reported those as gone. Decision 5.
 5. **S-030:** the knowledge row says it is AUX that does not hold across a configuration write or a
    reconnect, and the check moves to "after every write, every reconnect, and before every series".
 6. **S-042:** `naming.py parse` refuses a code with `_` in it and resolves the code against the
