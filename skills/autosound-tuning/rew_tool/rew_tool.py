@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 import rew_api as api
 import analysis as an
 import joint_analysis as ja
+import naming
 from target_curves import explain_target_curve, find_target_curve, interpolate_target
 
 DEFAULT_CURVES_DIR = os.path.expanduser(
@@ -393,6 +394,108 @@ def _parse_joint(spec):
     return lo, hi, fc, pair
 
 
+# The methods a joint's pair is looked up under, in this order, and the first is the one a refusal
+# names for capture (#56 item 1). A sweep first: the solos are point sweeps read through a window, and
+# a pair swept from the same point goes through that same window -- like against like, which is what
+# `phase_trust_gate` asks. An MMM `(rta)` pair is taken too, but it has no impulse, so it turns the
+# whole junction steady (`_read_joint_rew`), and an average over the head cannot show the point nulls
+# the solos' model carries. On the Passat the verdicts that stood were read against `R m+tw_50 (sw)`.
+PAIR_METHODS = (naming.METHOD_SWEEP, naming.METHOD_RTA)
+
+
+def _glossary_channels(code, glossary, _seen=()):
+    """The output channels a glossary code stands for. A channel is itself, by the name it goes by
+    today (SCR-039); a pair / side / combo / joint is the union of its members, expanded again --
+    `SWs+Ws` lists the pairs `SWs` and `Ws`, the Passat's `SW+Ws` lists `sw, w-L, w-R` -- and a
+    code the glossary never heard of is itself, unchanged (`resolve_code`'s rule)."""
+    if code in _seen:
+        return set()
+    if code in glossary.channel_codes() or code in glossary.former_codes():
+        return {glossary.resolve_code(code)}
+    for table in (glossary.pairs, glossary.sides, glossary.combos, glossary.joints):
+        if code in table:
+            out = set()
+            for member in table[code] or []:
+                out |= _glossary_channels(member, glossary, _seen + (code,))
+            return out
+    return {code}
+
+
+def _pair_for_joint(lo, hi, fc, ver, glossary, held):
+    """The measured pair that verifies the junction lo↔hi of series `ver`: found in REW, or named.
+
+    #56 item 1, #57 P1. The pair used to be an optional fourth part of `--joint`, and a joint typed
+    without it came back `—(nopair)` with `pol INV … apply UNVERIFIED` -- a row that looks like a
+    verdict. On the Passat a polarity flip was banked on that reading; with the pairs attached the
+    same junctions read `trust 0.95 ✓` on the left and `trust 0.47 BLOCK` on the right, and the
+    banked change was reverted. The pair is a fact of the series, so it is looked up rather than
+    typed, and a joint without one gets no verdict at all.
+
+    Returns `{"title", "code", "measure", "why"}`. `title` is the REW title to attach, exactly as REW
+    holds it; when it is None, `why` is the line the row prints instead of a verdict and `measure`
+    names the title to capture, built by the grammar (`naming.generate_name`), whenever the glossary
+    can name one. `held` is a callable returning `{name_key: [titles]}` of what REW holds -- called
+    only when there is something to look for, so a run without a glossary asks REW nothing more.
+
+    Only a pair of EXACTLY the junction's channels is attached. A wider one -- the sub junction's
+    `SW+Ws` carries the other side's woofer too -- is named, never attached: the trust gate compares
+    the pair against the sum of TWO solos, and a pair with a third driver in it is not that sum. The
+    method still measures `SW+Ws` for the sub junction, so the row says how to attach it by hand.
+    """
+    want = _glossary_channels(lo, glossary) | _glossary_channels(hi, glossary)
+    groups, seen = [], set()
+    for table in (glossary.joints, glossary.sides, glossary.pairs, glossary.combos):
+        for code in table:
+            if code not in seen:
+                seen.add(code)
+                groups.append((code, _glossary_channels(code, glossary)))
+    by_hand = f"--joint \"{lo},{hi},{fc:g},PAIR\""
+    if not groups:
+        return {"title": None, "code": None, "measure": None,
+                "why": ("pair missing — no project glossary to name it by: give --project DIR (or "
+                        f"$AUTOSOUND_PROJECT_DIR), or attach one by hand, {by_hand}")}
+    exact = [code for code, chans in groups if chans == want]
+    wider = sorted(((code, chans) for code, chans in groups if chans > want), key=lambda g: len(g[1]))
+
+    def in_rew(code):
+        for method in PAIR_METHODS:
+            key = naming.name_key(naming.parse_name(naming.generate_name(code, ver, method), glossary))
+            hit = held().get(key)
+            if hit:
+                return hit
+        return []
+    for code in exact:
+        found = in_rew(code)
+        if len(found) > 1:
+            # `R m+tw_50 (sw)` and `R m+tw_050 (sw)` are one measurement to the grammar and two to
+            # REW; picking one would be the guess this function exists to stop making.
+            return {"title": None, "code": code, "measure": None,
+                    "why": "pair ambiguous — " + " and ".join(f"`{t}`" for t in found)
+                           + " are one measurement by name: rename or delete one"}
+        if found:
+            return {"title": found[0], "code": code, "measure": None, "why": None}
+    if exact:
+        measure = naming.generate_name(exact[0], ver, PAIR_METHODS[0])
+        return {"title": None, "code": exact[0], "measure": measure,
+                "why": f"pair missing — measure `{measure}`"}
+    if wider:
+        code, chans = wider[0]
+        extra = ", ".join(sorted(chans - want))
+        found = in_rew(code)
+        if found:
+            return {"title": None, "code": code, "measure": None,
+                    "why": (f"pair not attached — none of exactly {lo} + {hi}; `{found[0]}` "
+                            f"carries {extra} too: attach it by hand if it is this junction's "
+                            f"pair, --joint \"{lo},{hi},{fc:g},{found[0]}\"")}
+        measure = naming.generate_name(code, ver, PAIR_METHODS[0])
+        return {"title": None, "code": code, "measure": measure,
+                "why": (f"pair missing — measure `{measure}` and attach it by hand: it carries "
+                        f"{extra} too")}
+    return {"title": None, "code": None, "measure": None,
+            "why": (f"pair missing — the glossary has no joint of {lo} + {hi}: add one to its "
+                    f"`joints`, or attach a pair by hand, {by_hand}")}
+
+
 def _parse_apf(spec):
     """'ch,APF1,f0' | 'ch,APF2,f0,Q' → (ch, kind, f0, q_or_None).
 
@@ -524,7 +627,8 @@ def _joints_from_state(state_root, preset=None, ver_state=None, with_rows=False)
     hand-fed `lo,hi,fc`. Works against the ACTIVE slot by default (the multi-
     slot guardrail: never a neighbour slot). The measured `pair` for the phase-
     trust gate is a measurement-naming convention, not in state, so state-derived
-    joints carry no pair (→ UNVERIFIED) until the user attaches one via --joint.
+    joints carry no pair here: `analyze_joints` looks it up in REW by the project's
+    glossary, and a joint whose pair is not there gets no verdict (#56 item 1).
 
     Returns (preset, version, [(lo, hi, fc, None), …]) sorted low→high per side -- and, with
     `with_rows=True`, the snapshot's channel rows as a fourth element, for what else a joint's two
@@ -656,7 +760,8 @@ def _read_joint_rew(lo, hi, lo_title, hi_title, pair_title, fc, window):
 
 
 def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
-                   protective_record=None, baseline=None, window=None, gd_by_joint=None):
+                   protective_record=None, baseline=None, window=None, gd_by_joint=None,
+                   glossary=None, no_pair=False):
     """Batch joint/group analysis: walk every adjacent joint in ONE pass and
     render one consolidated table (polarity + drift-immune delay + residual +
     APF suggestion per joint), reusing joint_analysis.py unchanged.
@@ -676,8 +781,18 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
       • pair given + phase UNreliable → BLOCK the computed delay/APF; fall back
         to the magnitude power-sum verdict (`joint_summation_check`) and tell the
         user to flip polarity + re-measure.
-      • no pair given → still compute the alignment but flag it UNVERIFIED —
-        confirm by summation before entering it.
+      • no pair given → the pair of exactly lo + hi in series `ver` is looked up
+        in REW by `glossary` (`_pair_for_joint`); found → attached, and the row
+        names the title it used, then as above.
+      • no pair given or found, or a given one REW does not hold → NO verdict: no
+        polarity, no delay, `verdict: None` with the `reason`, and the title to
+        capture in `measure` (#56 item 1, #57 P1). The old default read the joint
+        anyway and flagged it UNVERIFIED; on the Passat a polarity flip was
+        banked on that row and reverted once the pairs were attached.
+      • `no_pair=True` (`--no-pair`) → that pair-less reading, when asked for:
+        computed, UNVERIFIED and marked NOT BANKABLE (`bankable: False`). A pair
+        found in REW is still attached -- asking for the reading without a pair
+        is not asking to throw one away.
 
     `protective_record` is the capture round's record of what protected each driver during the
     sweep (`process.py protective_record_for(ver)`), in the shape `protective.legs_of` reads.
@@ -700,8 +815,11 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
     print_header(f"BATCH-АНАЛІЗ СТИКІВ  ({len(joint_specs)} стик(ів) · solo = _{ver} (sw))")
     print("  align_by_summation = дрейф-імунна полярність+затримка з сумування; "
           "trust = чи комплексні solo відтворюють виміряну пару.")
-    print("  ⚠️ Без пари (nopair) або BLOCK → НЕ вводь обчислену затримку/APF: "
-          "перекинь полярність і переміряй сумування.")
+    print(f"  Пара стику: задана (lo,hi,fc,PAIR) або знайдена в REW за глосарієм — рівно lo+hi, _{ver} "
+          f"{' / '.join(f'({m})' for m in PAIR_METHODS)}; нема → вердикту нема, рядок каже, що зміряти"
+          + (" (--no-pair: читається без пари, NOT BANKABLE)." if no_pair else "."))
+    print("  ⚠️ BLOCK або NOT BANKABLE → НЕ вводь обчислену затримку/APF: BLOCK — перекинь "
+          "полярність і переміряй сумування; NOT BANKABLE — спершу зміряй пару.")
     print(f"  Solo — з імпульсу, не з АЧХ REW: вікно {P._gate_label(window)}; стик, якого вікно не "
           f"тримає, читається steady і каже чому.")
     candidates = dict(candidates or {})
@@ -740,6 +858,34 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
 
     rows = []
     touched = set()
+    glossary = glossary or naming.Glossary()
+    rew_held = {}
+
+    def held():
+        # What REW holds, keyed by the grammar's identity (`name_key`, both sides built by it), read
+        # once per run and only when a joint has a glossary pair to look for.
+        if "by_key" not in rew_held:
+            rew_held["by_key"] = {}
+            for m in (api.get_measurements() or {}).values():
+                title = (m or {}).get("title", "")
+                key = naming.name_key(naming.parse_name(title, glossary))
+                if key:
+                    rew_held["by_key"].setdefault(key, []).append(title)
+        return rew_held["by_key"]
+
+    def refuse(jl, fc, band_s, lo, hi, why, measure):
+        # No verdict: no polarity, no delay, nothing in a column a reader could copy into the DSP.
+        print(f"  {jl:<15}{fc:>6.0f}{band_s:>12}{'NO PAIR':>12}"
+              f"{'—':>5}{'—':>9}{'—':>7}{'—':>10}  {why}")
+        rows.append({"joint": jl, "fc": fc, "trust": None, "polarity": None, "delay_ms": None,
+                     "verdict": None, "reason": why, "measure": measure, "pair": None,
+                     "bankable": False, "window": None})
+        for ch in (lo, hi):
+            if ch in candidates:
+                touched.add(ch)
+                print(f"  {'':<15}  ↳ {_apf_label(*candidates[ch])} on {ch}: not checked -- the "
+                      f"joint has no verdict to check it under")
+
     for lo, hi, fc, pair_name in joint_specs:
         # An octave either side of the declared corner. Investigated 2026-08-23 and deliberately
         # LEFT ALONE — the note is here because this is where the next person will have the idea.
@@ -761,6 +907,15 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
         band = (fc / (2 ** band_oct), fc * (2 ** band_oct))
         band_s = f"{band[0]:.0f}-{band[1]:.0f}"
         jl = f"{lo}↔{hi}"
+        # The pair first, before anything is read (#56 item 1): typed → used as typed; not typed →
+        # looked up; nowhere → no verdict, unless the pair-less reading was asked for by name.
+        found = None
+        if not pair_name:
+            found = _pair_for_joint(lo, hi, fc, ver, glossary, held)
+            pair_name = found["title"]
+            if pair_name is None and not no_pair:
+                refuse(jl, fc, band_s, lo, hi, found["why"], found["measure"])
+                continue
         try:
             read = _read_joint_rew(lo, hi, f"{lo}_{ver} (sw)", f"{hi}_{ver} (sw)", pair_name, fc, window)
         except KeyError as e:
@@ -768,6 +923,13 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
             continue
         except P.PredictError as e:           # off the loopback base, or an RTA where a solo belongs
             print(f"  {jl:<15}{fc:>6.0f}  — {e}")
+            continue
+        if read["pair_missing"]:
+            # A pair named by hand that REW does not hold: until now the row went on as `pair?` with
+            # an UNVERIFIED verdict -- the same degrade as no pair at all, one typo away.
+            refuse(jl, fc, band_s, lo, hi,
+                   f"pair missing — `{pair_name}` is not in REW: measure it, or correct the title",
+                   pair_name)
             continue
         fA = read["f"]
         (mA, pA), (mB, pB) = read["a"], read["b"]
@@ -781,6 +943,12 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
         # the sweep -- an LR4 @100 still leaves ~52 deg at 320 Hz, and a real junction read -49 deg
         # with it in and +3 deg with it out. Marked raw -> take it out; unmarked baseline -> ask.
         refused, notes = None, [window_note]
+        if found and found["title"]:
+            # Said on the row, because a pair the tool chose is a pair the reader did not type.
+            notes.append(f"pair: `{found['title']}` -- found in REW for _{ver} (glossary "
+                         f"`{found['code']}`), attached")
+        elif found:
+            notes.append(f"read WITHOUT a pair (--no-pair): {found['why']}")
         for ch, side in ((lo, "lo"), (hi, "hi")):
             action, detail = _protective_verdict(protective_record, ch, baseline)
             if action == "check":
@@ -809,17 +977,15 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
             print(f"  {'':<15}  ↳ {note}")
         mB2, pB2 = mB, pB                    # one grid: both solos were read onto `fA`
 
+        # No pair here means `no_pair` was asked for: a missing one was refused above.
         trusted, trust_lbl, js_call = None, "—(nopair)", ""
         if pair_name:
-            if read["pair_missing"]:
-                trust_lbl = "pair?"
-            else:
-                mP2 = read["pair"]                # through the same window as the solos
-                tg = ja.phase_trust_gate(fA, mA, pA, mB2, pB2, mP2, band=band)
-                js = ja.joint_summation_check(fA, mA, mB2, mP2, band=band)
-                trusted = tg["phase_reliable"]
-                trust_lbl = f"{tg['agreement']:.2f}" + ("✓" if trusted else " BLOCK")
-                js_call = js["call"]
+            mP2 = read["pair"]                # through the same window as the solos
+            tg = ja.phase_trust_gate(fA, mA, pA, mB2, pB2, mP2, band=band)
+            js = ja.joint_summation_check(fA, mA, mB2, mP2, band=band)
+            trusted = tg["phase_reliable"]
+            trust_lbl = f"{tg['agreement']:.2f}" + ("✓" if trusted else " BLOCK")
+            js_call = js["call"]
 
         if trusted is False:
             # Phase not trustworthy → do NOT compute/emit a delay. Magnitude only.
@@ -828,7 +994,7 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
                   f"phase unreliable → power-sum: {js_call}; flip polarity + remeasure")
             rows.append({"joint": jl, "fc": fc, "trust": trusted,
                          "polarity": None, "delay_ms": None, "verdict": "blocked",
-                         "window": read["window"]})
+                         "pair": pair_name, "bankable": False, "window": read["window"]})
             continue
 
         al = ja.align_by_summation(fA, mA, pA, mB2, pB2, band=band)
@@ -840,7 +1006,7 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
             if ap["improved"]:
                 apf = f"{ap['f0_hz']:.0f}/{ap['q']}"
         verdict = ("apply (phase-verified)" if trusted is True
-                   else "apply UNVERIFIED — confirm by summation")
+                   else "UNVERIFIED (--no-pair) — NOT BANKABLE, confirm by summation")
         print(f"  {jl:<15}{fc:>6.0f}{band_s:>12}{trust_lbl:>12}"
               f"{pol:>5}{al['delay_ms']:>+9.2f}{al['residual_null_db']:>+7.1f}"
               f"{apf:>10}  {verdict}")
@@ -848,7 +1014,8 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
                      "polarity": al["polarity"], "delay_ms": al["delay_ms"],
                      "residual_null_db": al["residual_null_db"],
                      "needs_allpass": al["needs_allpass"], "verdict": verdict,
-                     "window": read["window"]})
+                     "pair": pair_name, "pair_found": bool(found and found["title"]),
+                     "bankable": trusted is True, "window": read["window"]})
         gd = (gd_by_joint or {}).get((lo, hi))
         if _gd_line(gd):
             print(f"  {'':<15}  ↳ {_gd_line(gd)}")
@@ -860,7 +1027,7 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
             touched.update(ch for ch in (lo, hi) if ch in candidates)
             cand = _check_candidate(fA, mA, pA, mB2, pB2, band, lo, hi, candidates)
             trust_word = ("phase-verified" if trusted is True
-                          else "UNVERIFIED (nopair) — confirm by summation")
+                          else "UNVERIFIED (--no-pair) — NOT BANKABLE")
             where_now = f" @ {cand['now_null_hz']:.0f} Hz" if cand["now_null_hz"] else ""
             where_with = f" @ {cand['with_null_hz']:.0f} Hz" if cand["with_null_hz"] else ""
             print(f"  {'':<15}  ↳ {'; '.join(cand['applied'])}: null now "
@@ -977,6 +1144,7 @@ def _selftest_joint_impulse():
            "m-L_7 (sw)": ir((0.0032, -1.0), (0.0152, -0.9)),
            "tw-L_7 (sw)": ir((0.0070, 1.0)),               # 4 ms after w-L: a 3 ms window at 2 kHz cannot hold both
            "L_7 (sw)": ir((0.0030, 1.0), (0.0032, -1.0))}
+    irs["L w+m_7 (sw)"] = irs["L_7 (sw)"]                  # the same sum, under the joint's own code
     rta = {"L_7 (rta)": ([20.0 * 2 ** (k / 48) for k in range(481)], [80.0] * 481, None)}
     offset = {"r-L_7 (sw)": 0.0077}
     irs["r-L_7 (sw)"] = ir((0.0030, 1.0))
@@ -987,6 +1155,7 @@ def _selftest_joint_impulse():
         raise KeyError(title)
     fake = types.SimpleNamespace(
         FINEST_SMOOTHING="1/48", find_measurement_id=find,
+        get_measurements=lambda: {t: {"title": t} for t in list(irs) + list(rta)},
         get_timing=lambda mid: {"has_ir": mid in irs, "reference": "Loopback",
                                 "offset_s": offset.get(mid, 0.0)},
         get_impulse_response=lambda mid, normalised=False: ([t0 + i / fs for i in range(n)], irs[mid]),
@@ -1017,18 +1186,31 @@ def _selftest_joint_impulse():
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             rows = analyze_joints([("r-L", "m-L", 2000.0, None), ("w-L", "m-L", 2000.0, None)], ver="7",
-                                  baseline=False)
+                                  baseline=False, no_pair=True)
         out = buf.getvalue()
         assert "loopback" in out and len(rows) == 1, out                # r-L refused, w-L computed
         assert rows[0]["window"] == "gate" and rows[0]["polarity"] == -1, rows
         assert "window: 6 cycles at each frequency" in out, out
+        # #56 item 1, end to end through the real reader: the pair the glossary finds is read through
+        # the same window as the solos and verifies the junction; the one it cannot find is named.
+        gl = naming.Glossary({"channels": [{"code": c} for c in ("w-L", "m-L", "tw-L")],
+                              "joints": {"L w+m": ["w-L", "m-L"], "L m+tw": ["m-L", "tw-L"]}})
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            got = analyze_joints([("w-L", "m-L", 2000.0, None), ("m-L", "tw-L", 2000.0, None)],
+                                 ver="7", baseline=False, glossary=gl)
+        out = buf.getvalue()
+        assert got[0]["pair"] == "L w+m_7 (sw)" and got[0]["window"] == "gate", got
+        assert got[0]["trust"] is True and got[0]["bankable"] is True, got
+        assert "pair: `L w+m_7 (sw)` -- found in REW for _7" in out, out
+        assert got[1]["verdict"] is None and got[1]["measure"] == "L m+tw_7 (sw)", got
     finally:
         api = real
     print(f"selftest[joints:impulse] OK — solos read from the impulse through {JOINT_WINDOW['cycles']:g} "
           f"cycles: INV and {al['delay_ms']:+.3f} ms, residual {al['residual_null_db']:+.1f} dB where the "
           f"steady read carries a reflection as {al_s['residual_null_db']:+.1f} dB; a 1 ms "
           f"gate, arrivals 4 ms apart and an RTA pair read steady with the reason; a solo off the "
-          f"loopback base refused.")
+          f"loopback base refused; a pair found by the glossary read through the same window.")
 
 
 def _selftest():
@@ -1136,10 +1318,11 @@ def _selftest():
     orig_reader = globals()["_read_joint_rew"]
     globals()["_read_joint_rew"] = _trace_reader
     try:
-        rows = analyze_joints([("w-L", "m-L", 400.0, None)], ver="2")
+        rows = analyze_joints([("w-L", "m-L", 400.0, None)], ver="2", no_pair=True)
         assert rows and rows[0]["polarity"] == -1, rows          # INV recovered
         assert abs(rows[0]["delay_ms"] + tau) < 0.05, rows       # −tau recovered
         assert rows[0]["trust"] is None, rows                    # no pair → UNVERIFIED
+        assert rows[0]["bankable"] is False and "NOT BANKABLE" in rows[0]["verdict"], rows
 
         # BLOCK path (guardrail): a measured pair that does NOT reproduce the
         # near-cancelling complex model → phase_trust_gate unreliable → the
@@ -1151,7 +1334,76 @@ def _selftest():
         assert rows_b[0]["delay_ms"] is None, rows_b             # NO computed delay
         assert rows_b[0]["verdict"] == "blocked", rows_b
         print(f"selftest[joints] OK — recovered pol=INV, delay={rows[0]['delay_ms']}ms "
-              f"(≈−{tau}); nopair→UNVERIFIED; bad-pair→BLOCK (no delay emitted).")
+              f"(≈−{tau}); --no-pair→UNVERIFIED, NOT BANKABLE; bad-pair→BLOCK (no delay emitted).")
+
+        # ── #56 item 1, #57 P1: the pair is a fact of the series, looked up by the glossary. On the
+        #    Passat a joint typed without one read `—(nopair) pol INV … apply UNVERIFIED`, a flip was
+        #    banked on it and reverted once the pairs were attached. Found → attached and NAMED;
+        #    absent → no verdict and the title to capture; `--no-pair` → the old reading, marked. ──
+        gl = naming.Glossary({"channels": [{"code": c} for c in ("sw", "w-L", "m-L", "w-R", "m-R")],
+                              "joints": {"L w+m": ["w-L", "m-L"], "SW+Ws": ["sw", "w-L", "w-R"]}})
+        jmeas["13"] = {"title": "L w+m_2 (sw)"}                  # the true sum of the two solos
+        jfr[13] = (hz, [20 * math.log10(max(abs(1 + cmath.exp(1j * math.radians(p))), 1e-12))
+                        for p in phB], None)
+        asked_rew = []
+        orig_gm = api.get_measurements
+        api.get_measurements = lambda: (asked_rew.append(1), jmeas)[1]
+
+        def joints(specs, **kw):
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                got = analyze_joints(specs, ver="2", **kw)
+            return got, buf.getvalue()
+        try:
+            got, out = joints([("w-L", "m-L", 400.0, None)], glossary=gl)
+            assert got[0]["pair"] == "L w+m_2 (sw)" and got[0]["pair_found"] is True, got
+            assert got[0]["trust"] is True and got[0]["bankable"] is True, got
+            assert got[0]["verdict"] == "apply (phase-verified)" and got[0]["polarity"] == -1, got
+            assert "pair: `L w+m_2 (sw)` -- found in REW for _2 (glossary `L w+m`), attached" in out, out
+            # Two titles that are one measurement to the grammar: neither is picked.
+            jmeas["16"] = {"title": "L w+m_02 (sw)"}
+            got, _ = joints([("w-L", "m-L", 400.0, None)], glossary=gl)
+            assert got[0]["verdict"] is None and "ambiguous" in got[0]["reason"], got
+            del jmeas["16"], jmeas["13"]
+            # Absent: no verdict, no number in any column, and the title to capture by the grammar.
+            got, out = joints([("w-L", "m-L", 400.0, None)], glossary=gl,
+                              candidates={"w-L": ("APF2", 400.0, 1.0)})
+            assert got[0]["verdict"] is None and got[0]["measure"] == "L w+m_2 (sw)", got
+            assert got[0]["polarity"] is None and got[0]["delay_ms"] is None, got
+            assert got[0]["bankable"] is False and "candidate" not in got[0], got
+            line = next(ln for ln in out.splitlines() if "w-L↔m-L" in ln)
+            assert "NO PAIR" in line and "pair missing — measure `L w+m_2 (sw)`" in line, line
+            assert "INV" not in line and "NORM" not in line and "apply" not in line, line
+            assert "not checked" in out and "жоден стик" not in out, out
+            # Asked for by name: the old pair-less reading, computed and marked -- with the reason.
+            got, out = joints([("w-L", "m-L", 400.0, None)], glossary=gl, no_pair=True)
+            assert got[0]["polarity"] == -1 and abs(got[0]["delay_ms"] + tau) < 0.05, got
+            assert got[0]["trust"] is None and got[0]["bankable"] is False, got
+            assert "NOT BANKABLE" in got[0]["verdict"] and "pair missing" in out, (got, out)
+            # The sub junction: only `SW+Ws` covers it, and it carries w-R too -- named, not attached.
+            jmeas["14"] = {"title": "SW+Ws_2 (rta)"}
+            got, _ = joints([("sw", "w-L", 60.0, None)], glossary=gl)
+            assert got[0]["verdict"] is None and got[0]["pair"] is None, got
+            assert "carries w-R too" in got[0]["reason"], got
+            assert '--joint "sw,w-L,60,SW+Ws_2 (rta)"' in got[0]["reason"], got
+            del jmeas["14"]
+            got, _ = joints([("sw", "w-L", 60.0, None)], glossary=gl)
+            assert got[0]["measure"] == "SW+Ws_2 (sw)" and "w-R" in got[0]["reason"], got
+            # A pair typed by hand that REW does not hold is refused too, even with --no-pair.
+            for kw in ({}, {"no_pair": True}):
+                got, _ = joints([("w-L", "m-L", 400.0, "L w+m_2 (sw)")], glossary=gl, **kw)
+                assert got[0]["verdict"] is None and "is not in REW" in got[0]["reason"], (kw, got)
+            # No glossary: refused, told where one comes from, and REW is asked nothing more.
+            asked_rew.clear()
+            got, _ = joints([("w-L", "m-L", 400.0, None)])
+            assert got[0]["verdict"] is None and "--project" in got[0]["reason"], got
+            assert not asked_rew, "no glossary, nothing to look up"
+        finally:
+            api.get_measurements = orig_gm
+        print("selftest[joints:pair] OK — a pair of exactly the joint's channels found in REW is "
+              "attached and named; two titles of one measurement, a missing pair, a wider one "
+              "(SW+Ws for sw↔w-L) and a typed title REW lacks give no verdict and name what to "
+              "measure; --no-pair gives the old reading marked NOT BANKABLE.")
 
         # ── a hand-dialled all-pass, VERIFIED not proposed (SCR-050 item 2). hi = lo rotated by
         #    an APF2 at 400 Hz: the joint nulls at 400 in phase. The candidate is the SAME APF2
@@ -1164,7 +1416,7 @@ def _selftest():
         jfr[10] = (hz, magA, phA)
         jfr[11] = (hz, magA, phB_rot)
         del jmeas["12"]
-        rows_c = analyze_joints([("w-L", "m-L", 400.0, None)], ver="2",
+        rows_c = analyze_joints([("w-L", "m-L", 400.0, None)], ver="2", no_pair=True,
                                 candidates={"w-L": ("APF2", 400.0, 1.0)})
         cand = rows_c[0]["candidate"]
         # −39.5 dB and not −inf: the grid's nearest point to 400 Hz is 402 Hz, where the
@@ -1173,7 +1425,7 @@ def _selftest():
         assert cand["with_null_db"] > -0.5, ("the same rotation on lo closes the null", cand)
         assert cand["helps"] is True and cand["applied"] == ["APF2 400 Hz Q 1 on w-L"], cand
         assert rows_c[0]["trust"] is None, "no pair → the candidate is UNVERIFIED like its row"
-        rows_w = analyze_joints([("w-L", "m-L", 400.0, None)], ver="2",
+        rows_w = analyze_joints([("w-L", "m-L", 400.0, None)], ver="2", no_pair=True,
                                 candidates={"m-L": ("APF2", 400.0, 1.0)})
         wrong = rows_w[0]["candidate"]
         assert wrong["with_null_db"] < -30.0 and wrong["helps"] is False, wrong
@@ -1181,7 +1433,7 @@ def _selftest():
         # APF2 − APF1 leaves 0° far below f0, −90° at f0 (−3 dB there) and a full −180° far
         # above, so the band's worst point walks up to the top edge — the exact "does it fix the
         # joint or move the problem" that a candidate line exists to show.
-        rows_1 = analyze_joints([("w-L", "m-L", 400.0, None)], ver="2",
+        rows_1 = analyze_joints([("w-L", "m-L", 400.0, None)], ver="2", no_pair=True,
                                 candidates={"w-L": ("APF1", 400.0, None)})
         # RES-014: from the ledger rows alone, the crossover pair's group-delay swing rides under the
         # joint's row -- a steep pair at 200 Hz is over the (clamped) threshold and says so, a matched
@@ -1193,7 +1445,7 @@ def _selftest():
         gd_map = joint_gd_from_rows([("w-L", "m-L", 200.0, None), ("m-L", "tw-L", 2500.0, None)], rows_gd)
         assert set(gd_map) == {("w-L", "m-L")} and gd_map[("w-L", "m-L")]["over_ms"] > 1.0, gd_map
         assert gd_map[("w-L", "m-L")]["clamped"] and "OVER" in _gd_line(gd_map[("w-L", "m-L")])
-        rows_g = analyze_joints([("w-L", "m-L", 400.0, None)], ver="2",
+        rows_g = analyze_joints([("w-L", "m-L", 400.0, None)], ver="2", no_pair=True,
                                 gd_by_joint={("w-L", "m-L"): gd_map[("w-L", "m-L")]})
         assert rows_g[0]["gd"]["over_ms"] > 1.0 and rows_g[0]["gd"]["threshold_ms"] == 3.2, rows_g[0]
         assert "gd" not in rows_1[0], "no map, no line"
@@ -1229,22 +1481,26 @@ def _selftest():
         jfr[10], jfr[11] = (hz, magA, phA), (hz, magB_p, phB_p)
         rec_raw = {"series": "cap_001", "phase": "0", "version": "1",
                    "channels": {"m-L": legs, "w-L": "OFF"}}
-        rows_p = analyze_joints([("w-L", "m-L", 400.0, None)], ver="1", protective_record=rec_raw)
+        rows_p = analyze_joints([("w-L", "m-L", 400.0, None)], ver="1", protective_record=rec_raw,
+                                no_pair=True)
         assert rows_p[0]["polarity"] == -1 and abs(rows_p[0]["delay_ms"] + tau) < 0.05, rows_p
         # The same data with the record saying the chain was BARE: nothing is removed and the
         # protective phase is read as the driver's -- the answer moves by a measurable amount,
         # which is what makes the previous assertion mean something.
         rec_off = dict(rec_raw, channels={"m-L": "OFF", "w-L": "OFF"})
-        rows_o = analyze_joints([("w-L", "m-L", 400.0, None)], ver="1", protective_record=rec_off)
+        rows_o = analyze_joints([("w-L", "m-L", 400.0, None)], ver="1", protective_record=rec_off,
+                                no_pair=True)
         bias = abs(rows_o[0]["delay_ms"] - rows_p[0]["delay_ms"])
         assert bias > 0.05, ("de-embedding must change the read, else the test proves nothing", bias)
         # An unmarked BASELINE solo is a question, not a number...
-        rows_c = analyze_joints([("w-L", "m-L", 400.0, None)], ver="1", protective_record=None)
+        rows_c = analyze_joints([("w-L", "m-L", 400.0, None)], ver="1", protective_record=None,
+                                no_pair=True)
         assert rows_c[0]["verdict"] == "check protective" and rows_c[0]["delay_ms"] is None, rows_c
         assert rows_c[0]["channel"] == "w-L", "the first unmarked channel is the one asked about"
         # ...and an unmarked NON-baseline solo is a working capture: left alone, computed.
         jmeas["10"], jmeas["11"] = {"title": "w-L_2 (sw)"}, {"title": "m-L_2 (sw)"}
-        rows_w = analyze_joints([("w-L", "m-L", 400.0, None)], ver="2", protective_record=None)
+        rows_w = analyze_joints([("w-L", "m-L", 400.0, None)], ver="2", protective_record=None,
+                                no_pair=True)
         assert rows_w[0]["delay_ms"] is not None and rows_w[0]["verdict"] != "check protective"
         print(f"selftest[joints:protective] OK — LR4@100 de-embedded → delay {rows_p[0]['delay_ms']:+.3f} "
               f"(≈−{tau}); left in → off by {bias:.2f} ms; unmarked baseline → CHECK; "
@@ -1321,7 +1577,17 @@ def main():
     pj = sub.add_parser("analyze-joints",
                         help="Масовий аналіз усіх стиків → одна таблиця (полярність/затримка/APF)")
     pj.add_argument("--joint", action="append", default=[], metavar="lo,hi,fc[,pair]",
-                    help="Стик: 'w-L,m-L,400' або з парою 'sw,w-L,60,SW+Ws_2 (rta)'. Повторюваний.")
+                    help="Стик: 'w-L,m-L,400' або з парою 'sw,w-L,60,SW+Ws_2 (rta)'. Повторюваний. "
+                         "Без пари вона шукається в REW за глосарієм (--project); не знайдена → "
+                         "вердикту нема, рядок називає, що зміряти")
+    pj.add_argument("--no-pair", action="store_true",
+                    help="read a joint whose pair is neither given nor found in REW WITHOUT one: "
+                         "computed, UNVERIFIED and marked NOT BANKABLE on its row. Without it such "
+                         "a joint gets no verdict and its row names the pair to measure (#56 item 1)")
+    pj.add_argument("--project", default=None, metavar="DIR",
+                    help="the project whose glossary names each joint's pair, to find it in REW or "
+                         "to name it for capture (default: $AUTOSOUND_PROJECT_DIR, else the "
+                         "directory above --process)")
     pj.add_argument("--from-state", action="store_true",
                     help="Автодеривація стиків із кросоверів активного слота (state/); "
                          "--joint тоді доповнює/уточнює (напр. чіпляє виміряну пару)")
@@ -1421,10 +1687,15 @@ def main():
                         "щоб свідомо читати соло як є.")
             window = ({"gate_ms": args.gate} if args.gate else
                       {"cycles": args.fdw} if args.fdw else None)
+            # The glossary names each joint's pair (#56 item 1). No project anywhere is not an error:
+            # the joints typed with a pair still run, and the others say where a glossary comes from.
+            project_dir = args.project or os.environ.get("AUTOSOUND_PROJECT_DIR") or (
+                os.path.dirname(os.path.abspath(args.process)) if args.process else None)
+            glossary = naming.Glossary.for_project(project_dir) if project_dir else None
             analyze_joints(specs, ver=args.ver, band_oct=args.band_oct,
                            candidates=candidates, protective_record=record,
                            baseline=True if args.baseline else None, window=window,
-                           gd_by_joint=gd_by_joint)
+                           gd_by_joint=gd_by_joint, glossary=glossary, no_pair=args.no_pair)
         except ValueError as e:
             print(f"Помилка: {e}")
             sys.exit(1)
