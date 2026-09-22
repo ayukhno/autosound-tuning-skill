@@ -33,6 +33,18 @@ Same as W-1 (`docs/PLAN-W-1.md`), with one change:
   them (see *Blockers*). Then R's migration, then F, which is small, then V, which reads F's level step.
   E is the largest package and goes last.
 
+### Run without the Arbiter (his answers, 2026-09-22, before he left the session to work)
+
+- **The session goes as far as a green PR** with the full CI, and stops there. The merge and the tag
+  happen on his word.
+- **Forks during the work are decided, not waited on.** Each decision follows the plan and his
+  recorded decisions, and goes into its commit and into `docs/W-2-DECISIONS.md` for him to read
+  afterwards. The session stops only on what cannot be undone.
+- **The reader contract for tcc goes on hub `#195` as soon as it is decided**, without waiting for
+  him.
+- **The Windows VMs may be suspended by the session** (`prlctl suspend`, never stop) before the full
+  suite.
+
 ## A — ship the intake form (built on the branch)
 
 S-033 · S-037 · S-052 · the skill's half of hub `#193` / `#194` · S-025 · S-027 · S-030 · S-042.
