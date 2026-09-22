@@ -8,8 +8,11 @@ that carries its own copy of them drifts from the method the first time a field 
 the failure the car package already cost us (hub `#185`), and a terminal session has no window at
 all — so `serve` gives it one.
 
-**What the page is, and is not.** It shows every field, coloured by what is still owed, and writes
-the ones that have a machine home. It does NOT decide the gate: that is `contract.py check --gate`,
+**What the page is, and is not.** It puts up front only what starting to measure needs
+(`intake.WHEN` = `now`), each as a choice where one exists and with the default pre-selected; what a
+tool answers and what a later phase asks are folded under a line naming that step — on the page,
+not in the way (2026-09-22, `docs/DESIGN-2026-09-22-intake-simplified.md`). It writes the fields
+that have a machine home. It does NOT decide the gate: that is `contract.py check --gate`,
 and the page prints its verdict. It does not ask what the tool can answer itself — `rew.api_reachable`,
 `rew.input_clip_checked` and `dsp.readable` are probes, and a form that asks them asks the person to
 do the tool's job (S-030's AUX input is the same class: a check, not a question).
@@ -85,6 +88,17 @@ def _options(lab, field):
     return [(str(v), row.get(str(v)) or str(v)) for v in (field["enum"] or ())]
 
 
+def _suggestions(lab, field):
+    """`(value, label)` pairs for an OPEN set — offered, never enforced (`intake._f`'s `suggest`)."""
+    row = (lab["fields"].get(field["id"]) or {}).get("suggest") or {}
+    return [(str(v), row.get(str(v)) or str(v)) for v in (field["suggest"] or ())]
+
+
+def _derive(lab, field):
+    row = lab["fields"].get(field["id"]) or {}
+    return row.get("derive") or field["derive"]
+
+
 def _ui(lab, key, fallback=""):
     return lab["ui"].get(key) or fallback
 
@@ -121,12 +135,23 @@ def model(project_dir, lang=DEFAULT_LANG):
 
     fields = []
     for f in intake.FIELDS:
+        st = state.get(f["id"], PROSE)
+        auto = f["id"] in PROBES or f["derive"] is not None
+        # Red means "the next step cannot start without YOU". A default the form pre-selects, a
+        # tool's answer, or a step that comes later is owed, but not by the person, and not now.
+        if st == GATE and (auto or f["default"] is not None or f["when"] != "now"):
+            st = NICE
+        default = f["default"]
+        if f["id"] == "project.language" and lab.get("lang") in intake.LANGUAGES:
+            default = lab["lang"]              # the page's own language is the obvious answer
         fields.append({
             "id": f["id"], "group": f["group"], "ask": _ask(lab, f), "ask_en": f["ask"],
             "required": f["required"], "multi": f["multi"], "per": f["per"],
             "couple": f["ask_with"], "writes": f["writes"], "lands": f["lands"],
-            "options": _options(lab, f), "state": state.get(f["id"], PROSE),
-            "value": _value_of(f, data, project_dir), "probe": f["id"] in PROBES,
+            "options": _options(lab, f), "state": st,
+            "value": _value_of(f, data, project_dir), "probe": auto,
+            "when": f["when"], "default": default, "suggest": _suggestions(lab, f),
+            "derive": _derive(lab, f) if auto else None,
         })
 
     gate = intake.gate_requirements(project_dir)
@@ -140,8 +165,13 @@ def model(project_dir, lang=DEFAULT_LANG):
             "nice": sum(1 for r in rows if r["state"] == NICE),
             "have": sum(1 for r in rows if r["state"] == HAVE),
         })
+    whens = [{"id": w, "what": what, "title": (lab.get("when") or {}).get(w) or what,
+              "count": sum(1 for f in fields if f["when"] == w)}
+             for w, what in intake.WHEN]
+    asked_now = [f for f in fields if f["when"] == "now" and not f["probe"]]
     return {
         "project_dir": project_dir, "lang": lab.get("lang", lang), "ui": lab["ui"],
+        "when": whens,
         "couplings": {c["id"]: {"fields": c["fields"], "why": c["why"],
                                 "title": lab["couplings"].get(c["id"]) or c["id"]}
                       for c in intake.couplings()},
@@ -154,7 +184,13 @@ def model(project_dir, lang=DEFAULT_LANG):
                    "nice": sum(1 for f in fields if f["state"] == NICE),
                    "have": sum(1 for f in fields if f["state"] == HAVE),
                    "prose": sum(1 for f in fields if f["state"] == PROSE),
-                   "all": len(fields)},
+                   "all": len(fields),
+                   # What the page puts in front of the person now, and how much of it is a choice.
+                   "now": len(asked_now),
+                   "now_open": sum(1 for f in asked_now if f["state"] != HAVE),
+                   "now_choice": sum(1 for f in asked_now if f["options"] or f["suggest"]),
+                   "auto": sum(1 for f in fields if f["when"] == "now" and f["probe"]),
+                   "later": sum(1 for f in fields if f["when"] != "now")},
     }
 
 
@@ -176,14 +212,17 @@ h1 { margin:0 0 4px; font-size:19px; }
 .d-have{background:var(--have)} .d-gate{background:var(--gate)} .d-nice{background:var(--nice)}
 .d-prose{background:var(--prose)}
 .gate-ok { color:var(--have); font-weight:600; } .gate-shut { color:var(--gate); font-weight:600; }
-nav { display:flex; gap:4px; flex-wrap:wrap; padding:10px 24px; background:#fff;
-      border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5; }
-nav button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:6px 11px;
-             font:inherit; font-size:13px; cursor:pointer; }
-nav button.on { background:#111; color:#fff; border-color:#111; }
-nav .n { font-size:11px; opacity:.75; margin-left:5px; }
 main { padding:18px 24px 60px; max-width:1100px; }
-section { display:none; } section.on { display:block; }
+h2 { font-size:17px; margin:4px 0 4px; }
+h3 { font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:#475569; margin:18px 0 8px; }
+details { background:#fff; border:1px solid var(--line); border-radius:10px; padding:8px 14px;
+          margin:12px 0 0; }
+details > summary { cursor:pointer; color:#374151; font-size:14px; padding:4px 0; }
+details[open] > summary { margin-bottom:6px; }
+.n { font-size:11px; color:#6b7280; margin-left:5px; border:1px solid var(--line); border-radius:999px;
+     padding:0 7px; }
+label.opt { display:inline-flex; align-items:center; gap:5px; margin:2px 14px 2px 0; cursor:pointer; }
+.hint { color:#1f5fa8; }
 .why { color:#555; font-size:13px; margin:0 0 14px; }
 .f { background:#fff; border:1px solid var(--line); border-left-width:4px; border-radius:8px;
      padding:11px 13px; margin:0 0 9px; }
@@ -207,7 +246,7 @@ button.save[disabled] { background:#eee; color:#888; border-color:var(--line); c
 table { border-collapse:collapse; width:100%; background:#fff; font-size:13px; }
 th, td { border:1px solid var(--line); padding:5px 7px; text-align:left; vertical-align:top; }
 th { background:#f6f6f6; font-weight:600; font-size:12px; }
-td input { min-width:90px; width:100%; }
+td input, td select { min-width:90px; width:100%; }
 .note { background:#fff; border:1px dashed var(--line); border-radius:8px; padding:9px 12px;
         color:#555; font-size:13px; margin:0 0 10px; }
 .ok { color:var(--have); font-size:12px; }
@@ -215,11 +254,6 @@ td input { min-width:90px; width:100%; }
 """
 
 _JS = """
-function show(id, btn) {
-  document.querySelectorAll('section').forEach(s => s.classList.toggle('on', s.id === id));
-  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b === btn));
-  history.replaceState(null, '', '#' + id);
-}
 async function send(payload, el) {
   const box = el.closest('.f, .couple, tr') || document.body;
   const err = box.querySelector('.err');
@@ -240,6 +274,8 @@ async function send(payload, el) {
 function valueOf(box) {
   const multi = box.querySelectorAll('input[type=checkbox]');
   if (multi.length) return [...multi].filter(c => c.checked).map(c => c.value);
+  const radios = box.querySelectorAll('input[type=radio]');
+  if (radios.length) { const on = [...radios].find(r => r.checked); return on ? on.value : null; }
   const one = box.querySelector('select, input[type=text]');
   return one ? one.value : null;
 }
@@ -251,14 +287,9 @@ function saveGroupOf(sel, kind, el) {
 }
 function saveRow(kind, tr, el) {
   const out = {};
-  tr.querySelectorAll('input').forEach(i => { if (i.value !== '') out[i.dataset.k] = i.value; });
+  tr.querySelectorAll('input, select').forEach(i => { if (i.dataset.k && i.value !== '') out[i.dataset.k] = i.value; });
   send({[kind]: out}, el);
 }
-window.addEventListener('DOMContentLoaded', () => {
-  const id = location.hash.slice(1);
-  const btn = [...document.querySelectorAll('nav button')].find(b => b.dataset.t === id);
-  if (btn) btn.click();
-});
 """
 
 
@@ -266,10 +297,58 @@ def _esc(text):
     return html.escape("" if text is None else str(text), quote=True)
 
 
+#: Up to this many choices are shown as radio buttons — all of them visible at once; more is a list.
+RADIO_MAX = 6
+
+
+def _choice(f, value, ui, cls="", key=""):
+    """The control for one answer: radios, a list, checkboxes, or a text box with suggestions.
+
+    A default is PRE-SELECTED when nothing is on disk yet, and says so — the person changes it only
+    if theirs differs. It is not written until he presses the button: a shown default is a question
+    already answered for him, a silently stored one would be an answer he never gave.
+    """
+    data = f' data-k="{_esc(key)}"' if key else ""
+    klass = f' class="{cls}"' if cls else ""
+    current = value if value not in (None, "") else ("" if f["default"] is None else str(f["default"]))
+    if f["options"] and f["multi"]:
+        chosen = value.split(",") if value else []
+        return "<div>" + "".join(
+            f'<label class="opt"><input type="checkbox" value="{_esc(v)}"'
+            f'{" checked" if v in chosen else ""}> {_esc(t)}</label>' for v, t in f["options"]) + "</div>"
+    if f["options"] and len(f["options"]) <= RADIO_MAX and not key:
+        name = f'r-{f["id"]}'
+        return "<div>" + "".join(
+            f'<label class="opt"><input type="radio" name="{_esc(name)}" value="{_esc(v)}"{klass}{data}'
+            f'{" checked" if current == v else ""}> {_esc(t)}</label>' for v, t in f["options"]) + "</div>"
+    if f["options"]:
+        opts = "".join(f'<option value="{_esc(v)}"{" selected" if current == v else ""}>{_esc(t)}</option>'
+                       for v, t in f["options"])
+        return f'<select{klass}{data}><option value="">—</option>{opts}</select>'
+    listed = ""
+    if f["suggest"]:
+        dl = f'dl-{f["id"]}'
+        listed = (f' list="{_esc(dl)}" placeholder="{_esc(ui.get("pick_or_type", "pick or type"))}"'
+                  f'><datalist id="{_esc(dl)}">'
+                  + "".join(f'<option value="{_esc(v)}">{_esc(t)}</option>' if t != v
+                            else f'<option value="{_esc(v)}">' for v, t in f["suggest"])
+                  + "</datalist")
+    return f'<input type="text"{klass}{data} value="{_esc(value or "")}"{listed}>'
+
+
+def _default_hint(f, ui):
+    if f["default"] is None or f["value"] not in (None, ""):
+        return ""
+    shown = dict(f["options"]).get(str(f["default"]), str(f["default"]))
+    return (f'<div class="meta hint">{_esc(ui.get("default_hint", "pre-selected"))}: '
+            f'<b>{_esc(shown)}</b></div>')
+
+
 def _control(f, ui):
     """The input for one field — or the honest note that this form does not write it."""
     if f["probe"]:
-        return f'<div class="meta">🔎 {_esc(ui.get("probe", "probed, not asked"))}</div>'
+        return (f'<div class="meta">🔎 {_esc(ui.get("probe", "probed, not asked"))}'
+                + (f' — {_esc(f["derive"])}' if f["derive"] else "") + "</div>")
     writes = f["writes"] or ""
     if writes.startswith("dsp_profile.draft:"):
         return (f'<div class="meta">{_esc(ui.get("dsp_profile_note", ""))} — '
@@ -280,30 +359,22 @@ def _control(f, ui):
         key = "per_" + f["per"]
         return f'<div class="meta">↳ {_esc(ui.get(key, f["per"]))}</div>'
     if not writes:
-        return (f'<div class="meta">{_esc(ui.get("prose_note", ""))} '
-                f'<span class="en">{_esc(f["lands"] or "")}</span></div>')
-
+        # Prose: the session asks it. The choices it will offer are shown, so the question is
+        # never a blank box — and the page still does not pretend to store the answer.
+        choices = f["options"] or f["suggest"]
+        return ((f'<div class="meta">{_esc(ui.get("choices", "choices"))}: '
+                 + ", ".join(_esc(t) for _v, t in choices) + "</div>" if choices else "")
+                + _default_hint(f, ui)
+                + f'<div class="meta">{_esc(ui.get("prose_note", ""))}</div>')
     value = "" if f["value"] is None else str(f["value"])
-    if f["options"] and f["multi"]:
-        chosen = value.split(",") if value else []
-        boxes = "".join(
-            f'<label style="margin-right:12px"><input type="checkbox" value="{_esc(v)}"'
-            f'{" checked" if v in chosen else ""}> {_esc(t)}</label>'
-            for v, t in f["options"])
-        control = f'<div>{boxes}</div>'
-    elif f["options"]:
-        opts = "".join(f'<option value="{_esc(v)}"{" selected" if str(value) == v else ""}>'
-                       f'{_esc(t)}</option>' for v, t in f["options"])
-        control = f'<select><option value="">—</option>{opts}</select>'
-    else:
-        control = f'<input type="text" value="{_esc(value)}">'
-    return (f'<div class="row">{control}'
+    return (f'<div class="row">{_choice(f, value, ui)}'
             f'<button class="save" onclick="saveField(\'{_esc(f["id"])}\', this)">'
-            f'{_esc(ui.get("save", "Save"))}</button></div><div class="err"></div>')
+            f'{_esc(ui.get("save", "Save"))}</button></div>{_default_hint(f, ui)}<div class="err"></div>')
 
 
 def _field_html(f, ui):
-    mark = f' <span class="meta">({_esc(ui.get("required", "required"))})</span>' if f["required"] else ""
+    mark = (f' <span class="meta">({_esc(ui.get("required", "required"))})</span>'
+            if f["required"] and f["when"] == "now" and not f["probe"] else "")
     return (f'<div class="f s-{f["state"]}" id="f-{_esc(f["id"])}">'
             f'<div class="q"><span class="dot d-{f["state"]}"></span>{_esc(f["ask"])}{mark}</div>'
             f'<div class="meta"><code>{_esc(f["id"])}</code> · '
@@ -311,45 +382,52 @@ def _field_html(f, ui):
             f'{_control(f, ui)}</div>')
 
 
+CAR_PARTS = (("make", "car.make"), ("model", "car.model"), ("generation", "car.generation"),
+             ("body", "car.body"), ("year", "car.year"))
+
+
 def _car_block(m, fields):
     """`car_identity` is the one couple with a writer of its own: four parts or nothing."""
     ui = m["ui"]
-    parts = [("make", "car.make"), ("model", "car.model"),
-             ("generation", "car.generation"), ("body", "car.body"), ("year", "car.year")]
     inputs = []
-    for key, fid in parts:
+    for key, fid in CAR_PARTS:
         f = next((x for x in fields if x["id"] == fid), None)
         if not f:
             continue
         value = "" if f["value"] is None else str(f["value"])
-        if f["options"]:
-            opts = "".join(f'<option value="{_esc(v)}"{" selected" if value == v else ""}>'
-                           f'{_esc(t)}</option>' for v, t in f["options"])
-            control = f'<select class="car-part" data-k="{key}"><option value="">—</option>{opts}</select>'
-        else:
-            control = f'<input type="text" class="car-part" data-k="{key}" value="{_esc(value)}">'
-        inputs.append(f'<div class="f s-{f["state"]}"><div class="q">'
+        inputs.append(f'<div class="f s-{f["state"]}" id="f-{_esc(fid)}"><div class="q">'
                       f'<span class="dot d-{f["state"]}"></span>{_esc(f["ask"])}</div>'
-                      f'<div class="meta"><code>{_esc(f["id"])}</code></div>'
-                      f'<div class="row">{control}</div></div>')
+                      f'<div class="row">{_choice(f, value, ui, cls="car-part", key=key)}</div></div>')
     couple = m["couplings"].get("car_identity", {})
     return (f'<div class="couple"><div class="t">{_esc(couple.get("title", "car"))}</div>'
             + "".join(inputs)
             + f'<div class="row"><button class="save" '
               f'onclick="saveGroupOf(\'.car-part\', \'car\', this)">'
-              f'{_esc(ui.get("save", "Save"))}</button></div><div class="err"></div>'
-              f'<div class="meta">{_esc(couple.get("why", ""))}</div></div>')
+              f'{_esc(ui.get("save", "Save"))}</button></div><div class="err"></div></div>')
 
 
-def _table(m, per, rows, kind, key_field):
-    """The per-entity half: 12 questions per channel are a table, never 12 × N controls."""
+def _cell(c, raw, ui):
+    """One table cell: a list for a closed set, a text box with suggestions for an open one."""
+    leaf = c["id"].split(".", 1)[1]
+    value = "" if raw is None else str(raw)
+    if isinstance(raw, bool):
+        value = "yes" if raw else "no"
+    return f'<td>{_choice(c, value, ui, key=leaf)}</td>'
+
+
+def _table(m, per, rows, kind, key_field, cols, add=True):
+    """The per-entity half: questions per channel are a table, never 12 × N controls.
+
+    `cols` are the columns THIS section asks; a later section shows the same rows with its own
+    columns and carries the key in a hidden input, so a row is always saved against its code.
+    """
     ui = m["ui"]
-    cols = [f for f in m["fields"] if f["per"] == per]
-    head = "".join(f'<th title="{_esc(c["ask_en"])}">{_esc(c["ask"])}<br>'
+    head = "".join(f'<th title="{_esc(c["ask_en"])}" id="f-{_esc(c["id"])}">{_esc(c["ask"])}<br>'
                    f'<code style="font-size:10px">{_esc(c["id"].split(".", 1)[1])}</code></th>'
                    for c in cols)
+    keyed = any(c["id"].split(".", 1)[1] == key_field for c in cols)
     body = []
-    for row in rows + [{}]:
+    for row in rows + ([{}] if add else []):
         cells = []
         for c in cols:
             leaf = c["id"].split(".", 1)[1]
@@ -358,28 +436,97 @@ def _table(m, per, rows, kind, key_field):
                 raw = project.fact_value(raw) if project.is_fact(raw) else ""
             if leaf in ("driver_make", "driver_model"):
                 raw = ((row.get("driver") or {}) or {}).get(leaf.split("_", 1)[1], "")
-            cells.append(f'<td><input type="text" data-k="{_esc(leaf)}" '
-                         f'value="{_esc("" if raw is None else raw)}"></td>')
+            cells.append(_cell(c, raw, ui))
+        hidden = ("" if keyed or not row.get(key_field) else
+                  f'<input type="hidden" data-k="{_esc(key_field)}" value="{_esc(row.get(key_field))}">')
         label = _esc(row.get(key_field) or ui.get("add_row", "+"))
-        body.append(f'<tr><th>{label}</th>{"".join(cells)}'
+        body.append(f'<tr><th>{label}{hidden}</th>{"".join(cells)}'
                     f'<td><button class="save" onclick="saveRow(\'{kind}\', this.closest(\'tr\'), this)">'
                     f'{_esc(ui.get("save", "Save"))}</button><div class="err"></div></td></tr>')
+    if not body:
+        # No rows yet: say which questions will be asked of each one, rather than an empty grid.
+        return (f'<div class="note">{_esc(ui.get("rows_first", "fill in the channels first"))}<ul>'
+                + "".join(f'<li id="f-{_esc(c["id"])}">{_esc(c["ask"])}'
+                          + (f' — {_esc(", ".join(t for _v, t in (c["options"] or c["suggest"])))}'
+                             if c["options"] or c["suggest"] else "") + "</li>" for c in cols)
+                + "</ul></div>")
     return (f'<div style="overflow-x:auto"><table><tr><th></th>{head}<th></th></tr>'
             + "".join(body) + "</table></div>")
 
 
+def _section(m, rows, ui, add_rows):
+    """One step's questions, in the table's group order — couples kept whole, tables for rows.
+
+    A couple is rendered where its FIRST member falls, with every member this step asks, even
+    across groups: the seat and the drive side are one control although they live in two groups.
+    Two fields that write the SAME key are one question and are shown once.
+    """
+    out, done, seen_writes, heading = [], set(), {}, None
+    by_group = {gid: [f for f in rows if f["group"] == gid] for gid, _ in intake.GROUPS}
+    titles = {g["id"]: g["title"] for g in m["groups"]}
+    for gid, _why in intake.GROUPS:
+        for f in by_group[gid]:
+            if f["id"] in done:
+                continue
+            if heading != gid:
+                out.append(f'<h3>{_esc(titles.get(gid, gid))}</h3>')
+                heading = gid
+            if f["id"] in dict(CAR_PARTS).values():
+                out.append(_car_block(m, rows))
+                done |= set(dict(CAR_PARTS).values())
+                continue
+            if f["per"] in ("channel", "amp"):
+                cols = [c for c in rows if c["per"] == f["per"]]
+                data = m["rows"]["channels" if f["per"] == "channel" else "amps"]
+                key = "code" if f["per"] == "channel" else "model"
+                out.append(_table(m, f["per"], data, f["per"], key, cols,
+                                  add=add_rows or f["per"] == "amp"))
+                done |= {c["id"] for c in cols}
+                continue
+            writes = f["writes"]
+            if writes and writes in seen_writes:
+                out.append(f'<div class="meta" id="f-{_esc(f["id"])}">↳ <code>{_esc(f["id"])}</code> = '
+                           f'<code>{_esc(seen_writes[writes])}</code></div>')
+                done.add(f["id"])
+                continue
+            mates, twins = [], []
+            for x in rows:
+                if not f["couple"] or x["couple"] != f["couple"] or x["id"] in done or x["per"]:
+                    continue
+                first = next((y for y in mates if x["writes"] and y["writes"] == x["writes"]), None)
+                (twins if first else mates).append(x)
+            if len(mates) >= 2:
+                couple = m["couplings"].get(f["couple"], {})
+                out.append(f'<div class="couple"><div class="t">{_esc(couple.get("title", ""))}</div>'
+                           + "".join(_field_html(x, ui) for x in mates)
+                           + "".join(f'<div class="meta" id="f-{_esc(x["id"])}">↳ <code>{_esc(x["id"])}'
+                                     f'</code> = <code>{_esc(next(y["id"] for y in mates if y["writes"] == x["writes"]))}'
+                                     f'</code></div>' for x in twins)
+                           + "</div>")
+                done |= {x["id"] for x in mates + twins}
+                seen_writes.update({x["writes"]: x["id"] for x in mates if x["writes"]})
+                continue
+            out.append(_field_html(f, ui))
+            done.add(f["id"])
+            if writes:
+                seen_writes[writes] = f["id"]
+    return "".join(out)
+
+
 def render(m):
-    """One self-contained page: no CDN, no font, no network — it must open on a car's laptop."""
+    """One self-contained page: no CDN, no font, no network — it must open on a car's laptop.
+
+    What starting to measure needs is open on the page; what a tool answers, and what a later
+    step asks, is folded under a line that names that step — there to read, not in the way.
+    """
     ui = m["ui"]
     t = m["totals"]
     chips = (f'<span class="chip"><span class="dot d-gate"></span>'
-             f'{_esc(ui.get("legend_red", "required, missing"))} <b>{t["gate"]}</b></span>'
-             f'<span class="chip"><span class="dot d-nice"></span>'
-             f'{_esc(ui.get("legend_yellow", "optional, missing"))} <b>{t["nice"]}</b></span>'
+             f'{_esc(ui.get("legend_now", "to answer now"))} <b>{t["now_open"]}</b> / {t["now"]}</span>'
              f'<span class="chip"><span class="dot d-have"></span>'
              f'{_esc(ui.get("legend_green", "answered"))} <b>{t["have"]}</b></span>'
              f'<span class="chip"><span class="dot d-prose"></span>'
-             f'{_esc(ui.get("legend_prose", "asked by the session"))} <b>{t["prose"]}</b></span>')
+             f'{_esc(ui.get("legend_later", "asked later"))} <b>{t["later"]}</b></span>')
     gate = m["gate"]
     verdict = (f'<span class="gate-ok">{_esc(ui.get("gate_open", "gate open"))}</span>'
                if gate["open"] else
@@ -387,43 +534,23 @@ def render(m):
                + (f' — {_esc(ui.get("gate_missing", "missing"))}: '
                   f'{_esc(", ".join(gate["missing_files"]))}' if gate["missing_files"] else ""))
 
-    tabs, sections = [], []
-    for g in m["groups"]:
-        counts = (f'<span class="n">{g["gate"]}/{g["nice"]}/{g["have"]}</span>')
-        tabs.append(f'<button data-t="g-{g["id"]}" onclick="show(\'g-{g["id"]}\', this)">'
-                    f'{_esc(g["title"])}{counts}</button>')
-        rows = [f for f in m["fields"] if f["group"] == g["id"]]
-        body = [f'<p class="why">{_esc(g["why"])}</p>']
-        done = set()
-        if g["id"] == "car":
-            body.append(_car_block(m, rows))
-            done |= {"car.make", "car.model", "car.generation", "car.body", "car.year"}
-        for couple_id, couple in m["couplings"].items():
-            mine = [f for f in rows if f["couple"] == couple_id and f["id"] not in done]
-            if len(mine) < 2:
-                continue
-            body.append(f'<div class="couple"><div class="t">{_esc(couple["title"])}</div>'
-                        + "".join(_field_html(f, ui) for f in mine)
-                        + f'<div class="meta">{_esc(couple["why"])}</div></div>')
-            done |= {f["id"] for f in mine}
-        singles = [f for f in rows if f["id"] not in done and not f["per"]]
-        body += [_field_html(f, ui) for f in singles]
-        if g["id"] == "channel_map":
-            body.append(_table(m, "channel", m["rows"]["channels"], "channel", "code"))
-        if g["id"] == "measurement_chain":
-            body.append(_table(m, "amp", m["rows"]["amps"], "amp", "model"))
-        left = [f for f in rows if f["per"] and f["per"] not in ("channel", "amp")]
-        body += [_field_html(f, ui) for f in left]
-        if g["id"] in ("channel_map", "measurement_chain"):
-            body += [_field_html(f, ui) for f in rows
-                     if f["per"] in ("channel", "amp") and f["state"] == GATE][:0]
-        sections.append(f'<section id="g-{g["id"]}">' + "".join(body) + "</section>")
-
-    tabs.append(f'<button data-t="g-all" onclick="show(\'g-all\', this)">'
-                f'{_esc(ui.get("tab_all", "the whole form"))}'
-                f'<span class="n">{t["all"]}</span></button>')
-    sections.append('<section id="g-all">'
-                    + "".join(_field_html(f, ui) for f in m["fields"]) + "</section>")
+    fields = m["fields"]
+    now = [f for f in fields if f["when"] == "now" and not f["probe"]]
+    auto = [f for f in fields if f["when"] == "now" and f["probe"]]
+    parts = [f'<section class="now"><h2>{_esc(ui.get("now_title", "Now"))}</h2>'
+             f'<p class="why">{_esc(ui.get("now_why", ""))}</p>'
+             + _section(m, now, ui, add_rows=True) + "</section>"]
+    parts.append(f'<details><summary>{_esc(ui.get("auto_title", "the tool answers these"))}'
+                 f' <span class="n">{len(auto)}</span></summary>'
+                 + "".join(_field_html(f, ui) for f in auto) + "</details>")
+    for w in m["when"]:
+        if w["id"] == "now" or not w["count"]:
+            continue
+        rows = [f for f in fields if f["when"] == w["id"]]
+        parts.append(f'<details id="w-{_esc(w["id"])}"><summary>'
+                     f'{_esc(ui.get("later_prefix", "asked later"))} — {_esc(w["title"])}'
+                     f' <span class="n">{len(rows)}</span></summary>'
+                     + _section(m, rows, ui, add_rows=False) + "</details>")
 
     return (
         "<!doctype html><html lang=\"" + _esc(m["lang"]) + "\"><head><meta charset=\"utf-8\">"
@@ -434,7 +561,7 @@ def render(m):
         f"<div class=\"dir\">{_esc(m['project_dir'])}</div>"
         f"<div class=\"chips\">{chips}<span class=\"chip\">{verdict}</span>"
         f"<span class=\"chip\"><code>{_esc(gate['command'])}</code></span></div></header>"
-        f"<nav>{''.join(tabs)}</nav><main>{''.join(sections)}</main>"
+        f"<main>{''.join(parts)}</main>"
         f"<script>{_JS}</script></body></html>"
     )
 
@@ -612,6 +739,27 @@ def _selftest():
         assert "Якою мовою відповідати" in page, "the Ukrainian labels did not reach the page"
         assert m["couplings"]["seat"]["fields"] == ["car.drive_side", "goal.reference_seat"], \
             m["couplings"]["seat"]
+
+        # ── short up front: only what measuring needs is open; the rest is folded, not gone ──
+        assert 0 < t["now"] < t["all"] // 2, t
+        now_html = page.split("</section>", 1)[0]
+        for fid in ("rew.mic_model", "goal.reference_seat", "car.drive_side", "channel_map.code"):
+            assert f"f-{fid}" in now_html, f"{fid} is needed to start measuring and is not up front"
+        for fid in ("target_curve.tone", "channel_map.position", "amps.make", "rew.api_reachable"):
+            assert f"f-{fid}" not in now_html and f"f-{fid}" in page, f"{fid} is up front, or gone"
+        # The seat and the drive side are ONE control although they live in two groups.
+        couple = now_html.split('id="f-car.drive_side"', 1)[1].split('<div class="couple">', 1)[0]
+        assert 'id="f-goal.reference_seat"' in couple, "the seat couple was split"
+        # A default is pre-selected, not written: the radio is checked, the project is untouched.
+        assert 'name="r-car.drive_side" value="LHD" checked' in page, "the default is not pre-selected"
+        assert by_id["car.drive_side"]["state"] != GATE, "a pre-selected default is not a red gap"
+        assert "drive_side" not in (project.Project(root).load().get("car") or {}), \
+            "a default was stored behind the person's back"
+        assert 'name="r-project.language" value="uk" checked' in page, "the page language is the default"
+        # One key written by two fields is ONE question on the page, not two.
+        assert sum(f'class="meta" id="f-{x}"' in page
+                   for x in ("dsp.measurement_input", "source.measurement_input")) == 1, \
+            "a key written by two fields rendered as two questions"
 
         # ── writing back goes through the method's writers, refusals included ────────────────
         apply_save(root, {"field": "rew.loopback", "value": "physical"})

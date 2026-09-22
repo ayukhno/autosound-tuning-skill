@@ -12,7 +12,7 @@ This phase bootstraps a brand-new tuning project or a fresh system installation.
 
 **Required evidence:** the user interview (no guessing); driver `Fs` (datasheet/ask); routing · electrical polarity · gain · noise checks.
 
-**✅ Quality gate → Phase 0:** language set; `autosound_context.md` (Engineering Profile) + `preference-profile.md` created; **the machine files exist and validate** — `project.json`, `dsp_profile.json`, the glossary, and a first ledger snapshot with every profile-declared tier populated (`python3 rew_tool/contract.py check <project> --gate` exits 0 — **`--gate`, not plain `check`**: plain `check` answers "is anything here wrong", which an EMPTY project satisfies, and this gate is asking whether everything it needs exists) — a prose-only intake is not a complete one, since a consumer front-end has nothing to render without them; install verified + protective HPFs set for fragile drivers; a candidate target curve **seeded** (no default).
+**✅ Quality gate → Phase 0:** language set; `autosound_context.md` (Engineering Profile) created — `preference-profile.md` may start as a stub, since taste is asked in Phase 0 after the baseline and applied in Phase 5; **the machine files exist and validate** — `project.json`, `dsp_profile.json`, the glossary, and a first ledger snapshot with every profile-declared tier populated (`python3 rew_tool/contract.py check <project> --gate` exits 0 — **`--gate`, not plain `check`**: plain `check` answers "is anything here wrong", which an EMPTY project satisfies, and this gate is asking whether everything it needs exists) — a prose-only intake is not a complete one, since a consumer front-end has nothing to render without them; install verified + protective HPFs set for fragile drivers. The target curve is **not** a Phase −1 item any more (2026-09-22, `docs/DESIGN-2026-09-22-intake-simplified.md`): nothing in the baseline capture reads it, it is chosen in Phase 0 with the baseline in hand (never defaulted), and `enter-phase 1` refuses without it.
 
 **⚠️ Failure modes:** skipping install verification (costs a session) · filing reference seat / competition format as a "preference" (they're engineering) · enforcing a default curve.
 
@@ -39,7 +39,7 @@ A new project's first contact has a fixed order, but the detail is spread across
 0. **Read the front-end** (`project-intake.md` §0) — `get_tcc_state` if a `tcc` server is connected. What it reports is settled; steps 1 and 2 are then a note, not a question.
 1. **Language** (`project-intake.md` §0) — the REPLY language, and it is **read before it is asked**: the front-end's report wins (`get_tcc_state.language`), else `project.json`'s `language.reply` (`python3 rew_tool/project.py <project> language`), else ask EN/UK/DE/PL. The dialogue AND every project file follow it. **Write the answer** — `intake.save(<project>, "project.language", "<code>")` — so a session after a `/clear` reads it instead of coming back in English (S-045); the step is then **closed with `project.json` as its evidence**, an answered question left open being a question asked again next session. The INTERFACE language is the front-end's, and the language the person TYPES changes neither.
 2. **Reviewer channel** (`project-intake.md` §0) — offer it and set it up NOW (the method's core, not an afterthought; `setup-critic-channel.md`). **If the front-end reports one, it is chosen** — record it and check `reviewer.reachable`; only an unreachable one is worth raising, and then as "this reviewer is clipboard-only", not as "which reviewer?".
-3. **Interview** (§1–§2) — equipment (§1) + goals (§2: competition vs for-yourself vs both · **the reference seat — driver / passenger / all** · music & taste) + the curve seed → write `autosound_context.md`.
+3. **Interview — only what the first measurement needs** (`python3 rew_tool/intake.py fields --now`): the car (four parts + LHD/RHD), **the reference seat** (it decides where the mic stands), the DSP's vendor and model (the bundled profile answers its checklist on an exact match), whether each output can be soloed, the channel codes, the mic → write `autosound_context.md`. **The rest of §1–§2 is asked by the step that needs it**, not up front: drivers, amps and Fs at install verification (step 6); the source chain and inputs at Phase 0's pre-session checklist; purpose, genres and the curve seed in Phase 0 after the baseline; positions, enclosures, routing and constraints in Phase 1; stage priorities and test tracks in Phase 4; the taste axes in Phase 5. Each field names its step (`intake.WHEN`); ask it then, and do not re-ask what a tool or the bundled profile answers. A pre-selected default (LHD, 48 kHz, no loopback, a new tune) is confirmed, not asked; the seat has none, because it is written once.
 4. **REW rig ready** — the mic + its cal files loaded; the sample rate = the DSP's native rate where possible; a **physical loopback** wired (without it, phase/timing reads are unreliable → lean on summation/ear); the right input/output devices selected; the measurement input **doesn't clip** (`project-intake.md` §3.8); the API answers at `localhost:4735`.
 5. **Naming + glossary — AGREE BEFORE ANY MEASUREMENT.** ⛔ **Gate:** don't measure until the channel codes (`sw / w-L/R / m-L/R / tw-L/R / c / r`; two subwoofers → `sw-f` + `sw-r`, pair `SWs`, joint `SWs+Ws` — `naming-and-structure.md`) AND the title grammar are set with the user (`naming-and-structure.md §3`). The recurring slip is running off to measure with un-agreed names → an unusable history. **Write it, don't just agree it** — `glossary.json`/`project.json` (§5), the machine copy `naming.py` and a measurement checklist actually read.
 6. **Install verification** (`project-intake.md` §3) — routing · electrical polarity · protective crossovers (fragile drivers only, above each Fs) · gain staging · noise · break-in of new drivers · a safe sweep level. ⛔ **Gate:** don't tune before this.
@@ -67,11 +67,14 @@ own machine, where the car half was not asked by any window and arrived in free 
 Phase-0 gate refused, with the project already open.
 
 **And the skill serves a form of its own** (`intake_form.py`, S-033), so "a window" is not only
-TCC's: `python3 rew_tool/intake_form.py serve <project>` puts all 71 fields on one local page —
-groups as tabs, each couple as ONE control, the channel and amplifier halves as tables, and every
-field coloured by what is owed (red required-and-missing, yellow optional-and-missing, green
-answered, grey lands in prose). A terminal session hands a person that URL instead of asking 71
-questions in chat; a front-end opens the same page rather than writing the questions a second time.
+TCC's: `python3 rew_tool/intake_form.py serve <project>` puts on one local page only what starting
+to measure needs — about twenty answers, most of them a choice with the usual answer pre-selected —
+and folds the rest under a line naming the step that asks it ("asked later — Phase 1 …"), so
+nothing is hidden and nothing is in the way. Each couple is ONE control, the channel and amplifier
+halves are tables, and every field is coloured by what is owed (red: needed now and missing; yellow:
+optional, defaulted, or later; green: answered; grey: lands in prose). A terminal session hands a
+person that URL instead of asking the questions in chat; a front-end opens the same page rather
+than writing the questions a second time.
 The page decides nothing — it writes through the same writers below and prints the gate's own
 verdict. Labels are data (`intake_i18n/<lang>.json`); Ukrainian is the one that exists today.
 
@@ -98,7 +101,7 @@ measurement chain and the rig; `dsp_profile.py set-field` for the processor's ha
 
 ### 1. Interview: equipment and system → the project profile
 
-Ask in blocks, record the answers right away in `autosound_context.md` (structure — §5 below). Don't assume — ask; "I don't know" is also an answer (then we measure / look in the DSP software).
+Ask in blocks, record the answers right away in `autosound_context.md` (structure — §5 below). **Before the first measurement ask only what `intake.py fields --now` lists** (the car, the DSP identity, the channel codes, the mic); the other items below are asked by the step that first needs them (§0.5 step 3). Don't assume — ask; "I don't know" is also an answer (then we measure / look in the DSP software).
 
 > ⚠️ **Take install/gear specifics ONLY from here (from the user) or from measurement — NOT from a `knowledge/cars`|`dsp` profile.** Driver placement/orientation/coplanarity, the gain-staging level (e.g. Output −6 dB), crossover numbers, anomaly frequencies — all of these depend on the SPECIFIC install/amps and **vary even on the same body/DSP**. A profile = a checklist to "verify", not facts to cite. Never "your X = Y" without the user's words or a measurement.
 
@@ -114,7 +117,10 @@ Ask in blocks, record the answers right away in `autosound_context.md` (structur
 
 ### 2. Interview: goals and taste → the curve seed and Phase 5
 
-Ask it the way the user thinks of it — a few **branching** questions, in this order:
+Ask it the way the user thinks of it — a few **branching** questions, in this order. **Only #2 (the
+reference seat) is asked before the first measurement**; the rest is asked in Phase 0 after the
+baseline (purpose, music, the curve) and later (stage priorities and test tracks in Phase 4, taste
+in Phase 5) — each field's `when` in `intake.py` names the step:
 
 > 📂 **Route each answer into the right layer** (see [`preference-profile.md`](references/core/preference-profile.md)): answers that **shape the engineering** → **Engineering Profile** (`autosound_context.md`): purpose/competition format (#1), reference seat (#2), stage priorities & physical ceilings (#4), hard constraints (#7). **Pure taste** → **Preference Profile** (`preference-profile.md`), applied only in Phase 5: music & loudness (#3), taste axes (#5), curve character (#6).
 

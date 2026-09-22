@@ -20,7 +20,7 @@ numbers did not change, so a `project-intake.md §3` or `§4` pointer still land
 >
 > **And it may have asked more than those two.** The intake's fields, their enumerations and
 > the couples that must be asked as ONE control are data since SCR-059 (`rew_tool/intake.py`),
-> so a window may collect §1–§2 on a form and hand the answers over. What that changes and what
+> so a window may collect §1–§2 on a form and hand the answers over — up front only the fields whose `when` is `now`; each other field names the later step that asks it (2026-09-22). What that changes and what
 > it does NOT — the phase still opened first, the rulings still recorded, the gates unmoved —
 > is `phases/phase_-1_intake.md` §0.6.
 >
