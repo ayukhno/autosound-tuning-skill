@@ -340,6 +340,14 @@ def explain_name(title, glossary=None):
             return None, f"two controls on one measurement: `-{cm.group('ctl')}` and `{control}`"
         body, control = cm.group("code").strip(), cm.group("ctl")
 
+    head = body.split()[0] if body.split() else body
+    if "_" in head:
+        # S-042: `w_L_1 (sw)` split on the LAST underscore and handed back `w_L` as a channel no
+        # glossary has. The notation is one (the Arbiter, 2026-09-22: «правильна назва через "-"»):
+        # a hyphen carries the side or the variant, and `_` appears only before the series.
+        return None, (f"`{head}` is not a code: a code carries its side or variant with `-` "
+                      f"(`{head.replace('_', '-')}`), and `_` only begins the series number "
+                      f"(naming-and-structure.md §3)")
     code, modifier = body, None
     if glossary:
         for candidate in glossary.all_codes():
@@ -725,6 +733,11 @@ def _selftest():
         raise AssertionError("expected_groups built titles from a ledger version")
     assert expected_groups("0", plain, "01")[0]["names"] == ["w-L_01 (sw)"]
 
+    # S-042: one notation. A code with `_` is refused with the hyphen form named; a modifier after
+    # a real code may still carry one, since `_` there is not the code's.
+    got, why = explain_name("w_L_1 (sw)")
+    assert got is None and "`w-L`" in why, why
+    assert parse_name("w-L low_cut_49 (sw)", Glossary({"channels": [{"code": "w-L"}]}))["modifier"] == "low_cut"
     print("selftest OK — grammar round-trips, padding-insensitive version match, and a renamed "
           "channel's old captures resolve to it (SCR-039); positions p1..p9/x0 and controls "
           "ctl1/ctl3/ctl/rep parse in both forms and are identity, not code; a clarification "

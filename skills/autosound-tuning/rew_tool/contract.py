@@ -574,6 +574,9 @@ def check_project(project_dir, skip_rew=False):
             "map_ready": map_ready, "row_gaps": row_gaps, "to_confirm": to_confirm,
             "inherited": carried["inherited"], "sources_gone": carried["sources_gone"],
             "encoding_damaged": damaged,
+            # S-042: ids in another notation, with the fix the session offers (not a gate item).
+            "id_fix": (project.fix_ids(project_dir) if project.id_mismatches(project_data or {})
+                       else {"would_change": [], "held": []}),
             "legacy": looks_like_2x(project_dir, files), "prose": prose,
             "files": files, "cross_checks": cross}
 
@@ -853,6 +856,20 @@ def render_report(report):
         lines.append("")
         lines.append(f"    python3 {os.path.abspath(__file__)} repair-encoding "
                      f"{report['project_dir']}")
+        lines.append("")
+    id_fix = report.get("id_fix") or {}
+    if id_fix.get("would_change") or id_fix.get("held"):
+        change = ", ".join(f"`{m['id']}` → `{m['to']}`" for m in id_fix.get("would_change") or [])
+        lines.append(f"**Channel ids outside the notation** — {change or 'none fixable'}. "
+                     "An id is the code at birth, written with `-`, and moves only through a rename "
+                     "(S-042). ASK the "
+                     "user and offer to put it right now: the list above is what changes, and on "
+                     "his OK:")
+        lines.append("")
+        lines.append(f"    python3 {os.path.join(os.path.dirname(os.path.abspath(__file__)), 'project.py')} "
+                     f"{report['project_dir']} fix-ids --apply")
+        for m in id_fix.get("held") or []:
+            lines.append(f"- kept `{m['id']}` ({m['code']}): {m['why']}")
         lines.append("")
     cross = report["cross_checks"]
     lines.append("**Cross-file checks:**")

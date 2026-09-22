@@ -155,6 +155,78 @@ def channel_id(row):
     return str(row.get("id") or row.get("code") or "")
 
 
+def id_mismatches(data):
+    """Rows whose `id` is not in the notation or not the channel's name (S-042).
+
+    An id is born equal to the code and moves only through a rename. The Passat's `w_L` against the
+    code `w-L` broke that: the ledger, keyed by the code, stopped resolving (the Phase-0 gate refused
+    on the Arbiter's machine, 2026-09-19). An id in the other notation is flagged even when a rename
+    stands behind it (the Passat's `w_L` is also in `previous_names`): the notation is one (the
+    Arbiter, 2026-09-22: «правильна назва через "-" давай кругом зробимо так»). `to` is what the id
+    becomes: the hyphen form of an underscore id, otherwise the code.
+    """
+    out = []
+    for row in (data or {}).get("channels") or []:
+        rid, code = str(row.get("id") or ""), str(row.get("code") or "")
+        if not rid or not code or rid == code:
+            continue
+        if "_" in rid:
+            to = rid.replace("_", "-")
+        elif rid in previous_names(row):
+            continue                                   # a rename, in the notation: as designed
+        else:
+            to = code
+        if to != rid:
+            out.append({"code": code, "id": rid, "to": to})
+    return out
+
+
+def _ledger_row_keys(project_dir):
+    """Every row key any ledger snapshot of this project uses, in any tier and either layout."""
+    keys = set()
+    root = os.path.join(project_dir, "state")
+    for base, _dirs, files in os.walk(root):
+        for fn in files:
+            if not (fn.startswith("v_") and fn.endswith(".json")):
+                continue
+            try:
+                with open(os.path.join(base, fn), encoding="utf-8") as fh:
+                    snap = json.load(fh)
+            except (OSError, ValueError):
+                continue
+            for value in (snap.values() if isinstance(snap, dict) else ()):
+                if isinstance(value, dict) and all(isinstance(v, dict) for v in value.values()):
+                    keys.update(value)
+    return keys
+
+
+def fix_ids(project_dir, apply=False):
+    """Bring every mismatched `id` into the notation (S-042); a plan unless `apply`.
+
+    The Arbiter, 2026-09-22: when a session meets this, it asks and offers to put it right in the
+    session: the list first, then this with `apply=True` on his OK. One id is NOT changed: an id
+    the ledger keys rows by while the code keys none, because those rows would be orphaned. That
+    one is named with the reason and left for a person.
+    """
+    handle = Project(project_dir)
+    data = handle.load()
+    keys = _ledger_row_keys(project_dir)
+    plan, held = [], []
+    for miss in id_mismatches(data):
+        if miss["id"] in keys and miss["to"] not in keys:
+            held.append(dict(miss, why=f"the ledger keys this channel's rows by {miss['id']!r} and "
+                                       f"none by {miss['to']!r}; changing the id would orphan them"))
+        else:
+            plan.append(miss)
+    if apply and plan:
+        for row in data.get("channels") or []:
+            for miss in plan:
+                if row.get("code") == miss["code"] and str(row.get("id") or "") == miss["id"]:
+                    row["id"] = miss["to"]
+        handle.save(data)
+    return {"changed" if apply else "would_change": plan, "held": held}
+
+
 def previous_names(row):
     """Every name this channel has been called before (SCR-039), oldest first.
 
@@ -1355,7 +1427,10 @@ _USAGE = """usage: project.py <project-dir> <command> [args]
   rename-channel <old> <new>                   rename a channel, keeping its identity and its
                                                captures (SCR-039). <old> may be a name it used
                                                to have; snapshots are not rewritten
-  set-hardware <name> <value> [--source S]     set a DSP-hardware control (RearRC/SubRC/...)
+  fix-ids [--apply]                            every channel id that is neither its code nor a
+                                               previous name goes back to the code (S-042); a
+                                               plan without --apply, run on the user's OK
+  set-hardware <name> <value> [--source S]     set a DSP-hardware control (a remote knob: RearRC/SubRC/...)
   set-route <VIRTUAL> <out,out,...> [--source S]
                                                which outputs a VIRTUAL channel feeds -- the DSP's
                                                routing matrix as a fact, so `predict` stops being
@@ -1557,6 +1632,17 @@ def _main(argv):
             print(f"{args[0]}: carried in from {got['inherited_from']} — value and the time it was "
                   f"measured there are unchanged; it now reads as inherited, and no second "
                   f"measurement is owed")
+        elif cmd == "fix-ids":
+            got = fix_ids(proj.dir, apply="--apply" in args)
+            rows = got.get("changed") or got.get("would_change") or []
+            if not rows and not got["held"]:
+                print("every channel id is its code or one of its previous names — nothing to fix")
+            for m in rows:
+                print(f"  {m['code']}: id {m['id']} → {m['to']}" + ("" if "--apply" in args else "  (would change)"))
+            for m in got["held"]:
+                print(f"  {m['id']} kept: {m['why']}")
+            if rows and "--apply" not in args:
+                print("nothing written — show this to the user, and run again with --apply on his OK")
         elif cmd == "rename-channel":
             old, new = args[0], args[1]
             # The name it goes by BEFORE the call, so a no-op doesn't report a rename that never
@@ -2073,6 +2159,28 @@ def _selftest():
         raise AssertionError("validate accepted a duplicate channel id")
     except ProjectError:
         pass
+
+    # S-042: an id in another notation is found and put back to the code on --apply, and one the
+    # ledger keys rows by is held rather than orphaning them.
+    ids_dir = tempfile.mkdtemp(prefix="autosound_ids_")
+    ids = Project(ids_dir)
+    ids.save({"schema_version": SCHEMA_VERSION, "channels": [
+        {"code": "w-L", "id": "w_L", "previous_names": ["w_L"]}, {"code": "m-L", "id": "m_L"},
+        {"code": "tw-L", "id": "tw-L-old", "previous_names": ["tw-L-old"]},
+        {"code": "c", "id": "centre"}, {"code": "sw"}]})
+    os.makedirs(os.path.join(ids_dir, "state", "SQ"))
+    with open(os.path.join(ids_dir, "state", "SQ", "v_001.json"), "w", encoding="utf-8") as fh:
+        json.dump({"preset": "SQ", "channels": {"w-L": {}, "m_L": {}, "sw": {}}}, fh)
+    assert id_mismatches(ids.load()) == [{"code": "w-L", "id": "w_L", "to": "w-L"},
+                                         {"code": "m-L", "id": "m_L", "to": "m-L"},
+                                         {"code": "c", "id": "centre", "to": "c"}], id_mismatches(ids.load())
+    plan = fix_ids(ids_dir)
+    assert plan["would_change"] == [{"code": "w-L", "id": "w_L", "to": "w-L"},
+                                    {"code": "c", "id": "centre", "to": "c"}], plan
+    assert [h["id"] for h in plan["held"]] == ["m_L"] and "orphan" in plan["held"][0]["why"], plan
+    assert ids.load()["channels"][0]["id"] == "w_L", "a plan wrote"
+    fix_ids(ids_dir, apply=True)
+    assert [c.get("id") for c in ids.load()["channels"]] == ["w-L", "m_L", "tw-L-old", "c", None]
 
     # set_hardware_control: SCR-017 -- a DSP-level knob position, recorded ONCE, not per-preset.
     proj.set_hardware_control("RearRC", "3/4", source="user")
