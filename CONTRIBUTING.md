@@ -187,7 +187,7 @@ baseline** — before any crossover existed. Nothing else in the method refuses 
 | command | when it can fire | what the caller gets instead of a number |
 |---|---|---|
 | `predict …` | only with `--baseline` | the channel is out of the prediction and out of any joint that uses it; `<code>: refused -- see notes` on stderr |
-| `eq_propose --solos …` | always — baseline is passed unconditionally | no EQ package for that channel; `<code>: refused at de-embed …` on stderr in **both** modes (since 2026-09-01; before that it was invisible under `--json`, and the channel simply vanished from the proposal) |
+| `eq_propose --solos … / --rew …` | `--part 1` / `all` when the round's phase is 0/−1 or unknown; **never** `--part 2`, which reads a series measured as configured (until 2026-09-23 baseline was passed unconditionally — skill `#56` item 8) | no EQ package for that channel; `<code>: refused at de-embed …` on stderr in **both** modes (since 2026-09-01; before that it was invisible under `--json`, and the channel simply vanished from the proposal) |
 | `flaw_map --solos …` | always | no flaw rows for it; `refused at de-embed (no recorded protective state): <codes>` in the report |
 
 Every other channel proceeds, no exit code changes, and nothing is guessed on the refused one.

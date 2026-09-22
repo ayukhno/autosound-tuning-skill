@@ -545,6 +545,38 @@ def load_solo_rew(title, freqs, api=None, keep_ir=False):
     return _spectrum_on_grid(ir, fs, times[0], freqs), info
 
 
+def load_rta_rew(title, freqs, api=None):
+    """`<ch>_N (rta)` from a live REW -> `(mag_db on freqs, info)`: the moving-mic MAGNITUDE.
+
+    The other half of a series, and not a solo: an RTA has no impulse, so it has no arrival and no
+    phase and can never enter a summation here. What it has is the level the ear gets over a head's
+    worth of space, which is exactly what `phase_2_eq.md` 2a EQs against ("its `(rta)` for the
+    magnitude, its `(sw)` excess phase to decide what is EQ-able"). `eq_propose --part 2` read the
+    `(sw)` for both, and a single point's magnitude put an EQ band in a tweeter's stopband and a
+    +12.3 dB pair offset on two woofers 0.55 dB apart (skill #56 item 7).
+
+    Read at `FINEST_SMOOTHING` (1/48 -- `None` comes back linear, and the reader smooths for itself)
+    and interpolated onto the grid in log-frequency; the ends are held. A title that turns out to
+    carry an impulse is REFUSED rather than read: a sweep filed under `(rta)` is a naming slip, and
+    reading it as the MMM is the very substitution this reader exists to end. A missing title
+    raises `KeyError` from `find_measurement_id`, for the caller to name."""
+    if api is None:
+        import rew_api as api  # noqa: F811
+    mid = api.find_measurement_id(title)
+    if api.get_timing(mid).get("has_ir", False):
+        raise PredictError(f"{title!r} carries an impulse response -- a sweep under an (rta) title; "
+                           f"the moving-mic magnitude cannot be taken from it (naming.py)")
+    fr, mag, _phase = api.get_fr(mid, smoothing=api.FINEST_SMOOTHING)
+    fr, mag = np.asarray(fr, float), np.asarray(mag, float)
+    ok = fr > 0.0                             # a linear RTA axis starts at 0 Hz, which has no log
+    if ok.sum() < 2:
+        raise PredictError(f"{title!r}: no frequency response to read")
+    f = np.asarray(freqs, dtype=float)
+    info = {"source": "rew-rta", "title": title, "id": str(mid),
+            "smoothing": api.FINEST_SMOOTHING, "span_hz": (float(fr[ok][0]), float(fr[ok][-1]))}
+    return np.interp(np.log(f), np.log(fr[ok]), mag[ok]), info
+
+
 def load_solos_dir(directory, freqs, drift=None, keep_ir=False):
     """Every `<name>.json` in DIR that is a v7 file -> {canonical code: (H, info)}."""
     out = {}
