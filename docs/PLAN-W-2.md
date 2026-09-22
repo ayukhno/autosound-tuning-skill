@@ -61,6 +61,15 @@ S-033 · S-037 · S-052 · the skill's half of hub `#193` / `#194` · S-025 · S
    it through the project's own writer: `project.py <project> fix-ids`, which prints what it would
    change unless it is given `--apply`. Nothing changes without the OK. The Passat's six ids and its other live names are the car role's tree: hub `#196`
    (SKL-050).
+7. **The session reads how each driver is installed** (the Arbiter, at this review: the intake's
+   free text «буде доступно сесії ШІ, і якщо там буде щось важливе, вона його обробить — наприклад,
+   як у мене є "направлено на водія в вухо"»). The form writes `channels[].install` and
+   `hardware.description`, but no phase text tells the session to read them yet. So each place where
+   a mount or an aim changes the reading gets one line saying to read them there and name what
+   matters: Phase 1 delays and levels, Phase 2 tweeter EQ, Phase 4 imaging, and a copied seat. A
+   tweeter aimed at the driver's ear is off-axis at the passenger seat, which is V's test. S-051, a
+   structured mount-and-aim model, stays deferred: the text covers the session, and no tool computes
+   from it.
 
 ## B — the reviewer is reachable from any launch
 
