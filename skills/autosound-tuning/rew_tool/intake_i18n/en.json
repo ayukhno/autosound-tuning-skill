@@ -150,7 +150,7 @@
     "target_curve": "Target Curve"
   },
   "couplings": {
-    "car_identity": "Car — single identity",
+    "car_identity": "Car: four parts of one name",
     "seat": "Seat and drive side",
     "purpose": "Purpose",
     "dsp_identity": "DSP",
@@ -257,10 +257,10 @@
       "ask": "Make"
     },
     "car.model": {
-      "ask": "Model (badge name — Passat)"
+      "ask": "Model"
     },
     "car.generation": {
-      "ask": "Generation (production series — B8)"
+      "ask": "Generation"
     },
     "car.body": {
       "ask": "Body style",

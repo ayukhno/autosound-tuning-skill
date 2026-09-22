@@ -150,7 +150,7 @@
     "target_curve": "Target curve"
   },
   "couplings": {
-    "car_identity": "Samochód — pojedynczy profil",
+    "car_identity": "Samochód: cztery części jednej nazwy",
     "seat": "Miejsce odsłuchu i kierownica",
     "purpose": "Przeznaczenie",
     "dsp_identity": "DSP",
@@ -257,10 +257,10 @@
       "ask": "Marka"
     },
     "car.model": {
-      "ask": "Model (nazwa na emblemacie — Passat)"
+      "ask": "Model"
     },
     "car.generation": {
-      "ask": "Generacja (seria modelu — B8)"
+      "ask": "Generacja"
     },
     "car.body": {
       "ask": "Nadwozie",

@@ -150,7 +150,7 @@
     "target_curve": "Zielkurve"
   },
   "couplings": {
-    "car_identity": "Fahrzeugidentität",
+    "car_identity": "Fahrzeug: vier Teile eines Namens",
     "seat": "Hörplatz und Lenkseite",
     "purpose": "Einsatzzweck",
     "dsp_identity": "DSP",
@@ -257,10 +257,10 @@
       "ask": "Marke"
     },
     "car.model": {
-      "ask": "Modell (Bezeichnung am Heck – Passat)"
+      "ask": "Modell"
     },
     "car.generation": {
-      "ask": "Generation (Baureihe – B8)"
+      "ask": "Generation"
     },
     "car.body": {
       "ask": "Karosserieform",

@@ -834,7 +834,7 @@ measurements, which is exactly the class split that ticket asks for.
 
 ## S-033 · The intake as a form the skill itself serves — Ukrainian prototype first
 
-**Status**: open 2026-09-19 · **W-2 package A** (`docs/PLAN-W-2.md`) · · W-1 collection · the Arbiter's decisions, taken in conversation 19.09. The
+**Status**: done 2026-09-22 · W-2 package A · the form the skill serves: `python3 skills/autosound-tuning/rew_tool/intake_form.py selftest` → `selftest OK (intake_form) — 75 fields in one table …`; built in eight rounds with the Arbiter (`docs/DESIGN-2026-09-22-intake-simplified.md`) · was: open 2026-09-19 · **W-2 package A** (`docs/PLAN-W-2.md`) · · W-1 collection · the Arbiter's decisions, taken in conversation 19.09. The
 intake is 71 fields, 38 of them required (`rew_tool/intake.py`, SCR-059), and today they are asked in chat:
 a front-end cannot render them, and the car half has twice arrived as free text AFTER the gate refused.
 
@@ -945,7 +945,7 @@ as S-024: a fact whose origin is not written reads as everybody's word.
 
 ## S-037 · The Arbiter's read of the form prototype — eight points, and two of them are not about the form
 
-**Status**: open 2026-09-19 · **W-2 package A** (`docs/PLAN-W-2.md`) · · W-1 collection · his review of `intake_form.py`'s first page 19.09,
+**Status**: done 2026-09-22 · W-2 package A · his eight points, each against the page rendered by `intake_form.py render <empty project> --lang uk`: 1 there are no tabs, one page opens · 2 the AI's language is the interface's (round 5, his decision) · 3 and 4 the reviewer channel and the directory are derived, not asked · 5 the examples are gone from the car labels (`Модель`, `Покоління`, in uk/en/de/pl) · 6 the drive side sits in the second block, with the car and the seat · 7 the DSP is picked from the bundled library · 8 the capability block is asked only for a processor the library lacks (`/new-dsp`). The `car_identity` label reads «Машина: чотири частини однієї назви» · was: open 2026-09-19 · **W-2 package A** (`docs/PLAN-W-2.md`) · · W-1 collection · his review of `intake_form.py`'s first page 19.09,
 deferred by his own word to a session of its own: «давай це в окрему сесію відкладемо — тут
 потенціал». Nothing below is implemented; this item is what that session starts from.
 

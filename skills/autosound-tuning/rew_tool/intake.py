@@ -907,9 +907,9 @@ FIELDS = (
 
     # ── car: the cabin (§1.1) ─────────────────────────────────────────────────────────────────
     _f("car.make", "car", "Make", required=True, writes="project:car.make", ask_with="car_identity"),
-    _f("car.model", "car", "Model (the nameplate — Passat)", required=True,
+    _f("car.model", "car", "Model", required=True,
        writes="project:car.model", ask_with="car_identity"),
-    _f("car.generation", "car", "Generation (the model run — B8)", required=True,
+    _f("car.generation", "car", "Generation", required=True,
        writes="project:car.generation", ask_with="car_identity",
        note="The generation IS the span of years over which the acoustics count as the same, which "
             "is why the year classifies nothing."),
