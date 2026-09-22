@@ -349,7 +349,12 @@ Two granularities, deliberately not one:
   "<path of the project it came from>"` on a fact carried in from another build; absent means
   `here`. Enforced by `validate` (`FACT_ORIGINS`), the same two-state discipline as a flaw row's
   `status`. `project_seed.py` marks every fact it copies (a bare channel `fs_hz` is wrapped first)
-  and writes `"seeded_from": {"path", "at", "keys"}`. `contract.py check` lists inherited facts and
+  and writes the IMPORT RECORD `"seeded_from": {"path", "project", "at", "keys", "skipped": [{what, why}],
+  "chosen": {findings, fs, same_processor, seat}, "history": {controls, protective, paths}}` (hub #185/#186,
+  W-2). Never carried, whatever is ticked: `preference-profile.md` (the tune's purpose) and
+  `hardware.controls` (the control module's state). The source's knob positions, protective filters and
+  machine paths arrive only as `history`. The drivers' Fs travel unless `--no-fs`. `sources` holds one line,
+  not the source's own, and an absolute path of the source machine never travels. `contract.py check` lists inherited facts and
   every source path that no longer exists — reported, never gated — and the pre-sweep gate refuses
   a fragile driver's Fs passed as an inherited fact. Confirming one is setting it again here:
   `project.py <dir> set-channel <code> fs_hz=<Hz> --source user` (the Arbiter vouches) or

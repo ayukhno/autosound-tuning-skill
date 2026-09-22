@@ -96,7 +96,15 @@ PATHS_THAT_TRAVEL = ("measurements_repo",)
 
 #: Prose. Copied whole because it IS the description the person would otherwise retype, and marked
 #: at the top because a reader must not mistake an inherited profile for one written here.
-PROSE_FILES = ("autosound_context.md", "preference-profile.md")
+PROSE_FILES = ("autosound_context.md",)
+
+#: What NEVER travels, and gets no checkbox (the Arbiter, 2026-09-19, hub #185): the tune's PURPOSE
+#: (`preference-profile.md`: taste, competition configuration, judging set-up, target curve -- the
+#: Passat's file opened by saying the seed described the opposite tune) and the control module's STATE
+#: (`hardware.controls`: knob positions and modes, assembled again on the new car; «не лізь туди …
+#: просто OFF для налаштування»). Both are recorded in the import record as history, not as settings.
+NEVER_TRAVELS = {"preference-profile.md": "the tune's purpose belongs to the project, not to the car",
+                 "hardware.controls": "the control module's state is assembled on the new car"}
 
 #: The DSP's capabilities. Hardware, so it travels verbatim -- and the new project needs it before
 #: anything can check whether a filter is even enterable (`resonalyze_vc.py`).
@@ -280,6 +288,27 @@ def write_gitignore(target):
     return True
 
 
+def _absolute(path):
+    """A path of the source MACHINE: `/…`, `\\\\…`, or a drive (`Z:\\…`). `~/…` is the person's home on any machine and
+    travels."""
+    return path.startswith(("/", "\\")) or (len(path) > 2 and path[1] == ":")
+
+
+def _protective_history(source):
+    """The protective filters of the source's last capture round, as it recorded them -- history for the import
+    record (hub #185: «протектив там був m/c/r 100 LR24, tw 1000 LR24»), or None."""
+    state_dir = os.path.join(_HERE, "state")
+    if state_dir not in sys.path:
+        sys.path.insert(0, state_dir)
+    try:
+        import process as _process
+        record = _process.Process(os.path.join(source, "process")).protective_record()
+    except Exception:  # noqa: BLE001 -- a source without a process record has no protective history
+        return None
+    legs = (record or {}).get("legs") if isinstance(record, dict) else None
+    return legs or None
+
+
 def _mark_inherited(obj, source):
     """Mark every `fact()` under `obj` as carried in from `source`, in place (skill #36).
 
@@ -304,7 +333,7 @@ def _mark_inherited(obj, source):
 
 
 def seed(source, target, *, include_findings=False, copy_profile=True, note=DEFAULT_NOTE,
-         today=None, seat=None):
+         today=None, seat=None, include_fs=True):
     """Copy `source`'s system parameters into `target`. Never writes into `source`.
 
     Refuses rather than merges when `target` already has a `project.json`: seeding is the first
@@ -349,29 +378,64 @@ def seed(source, target, *, include_findings=False, copy_profile=True, note=DEFA
     seeded = {"project_rev": 0}
     for key in (SYSTEM_KEYS if copy_profile else CAR_KEYS):
         if key in data:
-            seeded[key] = data[key]
+            seeded[key] = json.loads(json.dumps(data[key]))
+    skipped = [{"what": w, "why": why} for w, why in NEVER_TRAVELS.items()]
+    history = {}
+    controls = ((data.get("hardware") or {}).get("controls")) if isinstance(data.get("hardware"), dict) else None
+    if isinstance(seeded.get("hardware"), dict):
+        seeded["hardware"].pop("controls", None)
+    if controls:
+        history["controls"] = controls
+    # The drivers' Fs travel behind their own switch, on by default (the Arbiter: «імпеданс складна штука і
+    # міряти його другий раз це подвиг»); off, they are left for this build to measure, and the record says so.
+    if not include_fs:
+        for row in seeded.get("channels") or []:
+            if isinstance(row, dict) and row.get("fs_hz") is not None:
+                row["fs_hz"] = None
+        skipped.append({"what": "channels[].fs_hz", "why": "left out by the person's choice at the copy"})
+    if copy_profile is False:
+        skipped.append({"what": ", ".join(DSP_KEYS) + ", dsp_profile.json",
+                        "why": "the new build has a different processor"})
     if include_findings:
         for key in FINDING_KEYS:
             if key in data:
                 seeded[key] = data[key]
         if "acoustics" in seeded:
             seeded["acoustics"] = _carried_as_hypotheses(seeded["acoustics"])
+    else:
+        skipped.append({"what": ", ".join(FINDING_KEYS), "why": "the findings box was left off at the copy"})
     paths = data.get("paths")
     if isinstance(paths, dict):
-        travelling = {k: paths[k] for k in PATHS_THAT_TRAVEL if k in paths}
+        # An ABSOLUTE path is the source machine's and never travels (hub #186): the package was imported on
+        # another MacBook, where it resolves to nothing, and a path to nothing reads as a place to look.
+        travelling = {k: paths[k] for k in PATHS_THAT_TRAVEL
+                      if k in paths and isinstance(paths[k], str) and not _absolute(paths[k])}
         if travelling:
             seeded["paths"] = travelling
-    sources = data.get("sources")
-    seeded["sources"] = (list(sources) if isinstance(sources, list) else []) + [
-        f"system parameters seeded from project '{name}' on {when} — "
-        "inherited, not re-measured here"
-    ]
+        stayed = {k: v for k, v in paths.items() if k not in travelling}
+        if stayed:
+            history["paths"] = stayed
+    protective = _protective_history(source)
+    if protective:
+        history["protective"] = protective
+    # ONE honest line instead of the source's own provenance lines (hub #186): copied forward, the note of
+    # one import became a permanent part of the data, and a third generation would carry two of them with
+    # no way to tell which import each describes. What came with the source is in `seeded_from`.
+    seeded["sources"] = [f"system parameters seeded from project '{name}' on {when} — "
+                         "inherited, not re-measured here (the import record is `seeded_from`)"]
     # The sentence above is for a person; these two are for the checks (skill #36). Every fact
     # that came across says so itself, and the project says where from, as a path a check can
     # resolve -- a source deleted two weeks later went unnoticed through four `contract.py check`s.
     _mark_inherited(seeded, source)
-    seeded["seeded_from"] = {"path": source, "at": when,
-                             "keys": sorted(k for k in seeded if k not in ("project_rev", "sources"))}
+    # The IMPORT RECORD (hub #185): where from, when, what was taken, what was left and why, the choices made
+    # at the copy, and the source's protective filters, knob positions and paths as HISTORY, never as
+    # settings. Without it «no cabin flaws» could not be told from «flaws deliberately not carried».
+    seeded["seeded_from"] = {"path": source, "project": name, "at": when,
+                             "keys": sorted(k for k in seeded if k not in ("project_rev", "sources")),
+                             "skipped": skipped,
+                             "chosen": {"findings": bool(include_findings), "fs": bool(include_fs),
+                                        "same_processor": bool(copy_profile), "seat": seat},
+                             "history": history}
     if seat is not None:
         seeded["project_type"] = seat
 
@@ -436,6 +500,9 @@ def main(argv=None):
     parser.add_argument("--note", default=DEFAULT_NOTE,
                         help="marker put at the top of each inherited prose file; "
                              "{source} and {when} are substituted")
+    parser.add_argument("--no-fs", action="store_true",
+                        help="leave the drivers' Fs behind: this build measures its own (they travel by "
+                             "default, each marked as carried in; hub #185)")
     parser.add_argument("--seat", default=None,
                         help="the new project's seat (project_type: driver, passenger, both, all, "
                              "rear_left, rear_right). The seat never travels; without this the "
@@ -459,7 +526,8 @@ def main(argv=None):
         parser.error("a target directory is required unless --describe is given")
 
     result = seed(args.source, args.target, include_findings=args.findings,
-                  copy_profile=not args.no_profile, note=args.note, seat=args.seat)
+                  copy_profile=not args.no_profile, note=args.note, seat=args.seat,
+                  include_fs=not args.no_fs)
     if args.json:
         print(json.dumps(vars(result), indent=2, ensure_ascii=False))
     elif not result.ok:
@@ -566,7 +634,37 @@ def _selftest():
         assert not os.path.exists(os.path.join(tmp, "bad-seat", "project.json")), "a refused copy wrote"
         # The file says what happened to it.
         assert any("seeded from project 'old-car' on 2026-08-23" in s for s in got["sources"]), got
-        assert "measured 2026-07-01" in got["sources"], got
+        # ...in ONE line: the source's own provenance lines do not pile up from copy to copy (hub #186).
+        assert len(got["sources"]) == 1 and "measured 2026-07-01" not in got["sources"], got["sources"]
+        # hub #185: the purpose and the control module's state never travel; the import record says what was
+        # taken, what was left and why, and keeps the knob positions as HISTORY.
+        assert not os.path.exists(os.path.join(dst, "preference-profile.md")), "the tune's purpose travelled"
+        assert "controls" not in (got.get("hardware") or {}), got.get("hardware")
+        rec = got["seeded_from"]
+        assert {s["what"] for s in rec["skipped"]} >= {"preference-profile.md", "hardware.controls"}, rec
+        assert rec["chosen"] == {"findings": False, "fs": True, "same_processor": True, "seat": None}, rec["chosen"]
+        nofs = seed(src, os.path.join(tmp, "no-fs"), include_fs=False)
+        assert nofs.ok, nofs.problem
+        with open(os.path.join(tmp, "no-fs", "project.json"), encoding="utf-8") as f:
+            nf = json.load(f)
+        assert all(r.get("fs_hz") is None for r in nf["channels"]), nf["channels"]
+        assert any(s["what"] == "channels[].fs_hz" for s in nf["seeded_from"]["skipped"]), nf["seeded_from"]
+        # hub #186: an absolute path of the source machine never travels, and the knob positions come only
+        # as history in the import record.
+        with open(os.path.join(src, "project.json"), encoding="utf-8") as f:
+            src_data = json.load(f)
+        src_data.setdefault("hardware", {})["controls"] = {"SubRC": {"value": "7/12", "source": "user", "at": None}}
+        src_data.setdefault("paths", {})["measurements_repo"] = "/Users/someone/cars/passat"
+        with open(os.path.join(src, "project.json"), "w", encoding="utf-8") as f:
+            json.dump(src_data, f)
+        hx = seed(src, os.path.join(tmp, "history"))
+        assert hx.ok, hx.problem
+        with open(os.path.join(tmp, "history", "project.json"), encoding="utf-8") as f:
+            hd = json.load(f)
+        assert "paths" not in hd or "measurements_repo" not in hd["paths"], hd.get("paths")
+        hist = hd["seeded_from"]["history"]
+        assert hist["paths"]["measurements_repo"] == "/Users/someone/cars/passat", hist
+        assert hist["controls"]["SubRC"]["value"] == "7/12" and "controls" not in (hd.get("hardware") or {}), hd
         # ...and so does every fact that came across, as a field a check reads (skill #36): the
         # project names its source as a path, and a bare Fs is wrapped so it can say it too.
         assert got["seeded_from"]["path"] == os.path.abspath(src) and got["seeded_from"]["at"] == "2026-08-23"
