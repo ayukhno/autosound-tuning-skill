@@ -204,6 +204,19 @@ def check_process(project_dir):
     return entry, journal_entry, state
 
 
+def _unsealed(project_dir):
+    """True when the ledger has versions and no seals at all (banked before #58 P1) -- the session offers
+    `state.py seal`, which records them as they stand now."""
+    root = os.path.join(project_dir, "state")
+    state_mod = _load_vendored("state")
+    if os.path.isfile(os.path.join(root, state_mod.SEALS_FILE)):
+        return False
+    try:
+        return bool(state_mod._all_version_paths(root)) if os.path.isdir(root) else False
+    except state_mod.SnapshotError:
+        return False
+
+
 def _line_layout(project_dir):
     """`"preset"`, `"project"`, or None (no ledger, or one caught half-way: `check_ledgers` names it)."""
     root = os.path.join(project_dir, "state")
@@ -276,6 +289,14 @@ def check_ledgers(project_dir):
         entry["slot"] = preset          # the file alone does not say it on the per-project line
         entries.append(entry)
         snapshots[preset] = snap
+    # #58 P1: a banked version is immutable, and this is the check that says when one is not.
+    try:
+        broken = state_mod.verify_seals(root)
+    except state_mod.SnapshotError as exc:
+        broken = [{"version": "state/", "why": str(exc)}]
+    if broken:
+        entries.append(_entry(f"state/{state_mod.SEALS_FILE}", True, None, False,
+                              [f"{b['version']}: {b['why']}" for b in broken]))
     return entries, snapshots
 
 
@@ -605,6 +626,7 @@ def check_project(project_dir, skip_rew=False):
             "encoding_damaged": damaged,
             # W-2 R: a ledger numbered per preset, with the move the session offers (not a gate item).
             "line_layout": _line_layout(project_dir),
+            "unsealed": _unsealed(project_dir),
             # S-042: ids in another notation, with the fix the session offers (not a gate item).
             "id_fix": (project.fix_ids(project_dir) if project.id_mismatches(project_data or {})
                        else {"would_change": [], "held": []}),
@@ -890,6 +912,12 @@ def render_report(report):
         lines.append("")
         lines.append(f"    python3 {os.path.abspath(__file__)} repair-encoding "
                      f"{report['project_dir']}")
+        lines.append("")
+    if report.get("unsealed"):
+        state_py = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state", "state.py")
+        lines.append("**The banked versions here are not sealed** — nothing would notice one being overwritten "
+                     f"(#58 P1). Seal them as they stand: `python3 {state_py} --root "
+                     f"{os.path.join(report['project_dir'], 'state')} seal` (it changes no version).")
         lines.append("")
     if report.get("line_layout") == "preset":
         state_py = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state", "state.py")

@@ -488,6 +488,7 @@ LEGACY_DIR = "legacy"
 LEGACY_MAP = "legacy-map.json"
 LAYOUT_TAG = "project-numbered"
 PROPOSALS_DIR = "proposals"
+SEALS_FILE = "seals.json"
 _LEDGER_SPECIAL = {VERSIONS_DIR, LEGACY_DIR, PROPOSALS_DIR}
 
 
@@ -567,6 +568,86 @@ def project_versions(root):
         return []
     names = [fn[:-5] for fn in os.listdir(d) if fn.endswith(".json") and _VER_RE.match(fn[:-5])]
     return sorted(names, key=lambda v: int(_VER_RE.match(v).group(1)))
+
+
+# ── seals: a banked version is immutable, and a check says when one is not (#58 P1) ──────────────
+# A fast session overwrote a banked `v_011` three times in one sitting: a project-local script copied a
+# variant's JSON over it, and nothing noticed, because "immutable" was a word in this file's docstring
+# and not a thing any tool checked. A seal is the digest of the version's CONTENT (canonical JSON, not
+# bytes), written when it is banked; `verify_seals` names every version whose content no longer matches.
+# Content rather than bytes, so the encoding repair (TCC-007) and a line-ending change are not mutations.
+
+def _seal_key(root, version, preset):
+    return version if ledger_layout(root) == "project" else f"{preset}/{version}"
+
+
+def content_digest(snapshot):
+    import hashlib
+    return hashlib.sha256(json.dumps(snapshot, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def _read_seals(root):
+    try:
+        with open(os.path.join(root, SEALS_FILE), encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return {}
+
+
+def _write_seals(root, seals):
+    tmp = os.path.join(root, SEALS_FILE + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(seals, fh, indent=1, sort_keys=True)
+    os.replace(tmp, os.path.join(root, SEALS_FILE))
+
+
+def _all_version_paths(root):
+    """`[(seal key, path)]` for every banked version under `root`, in either layout."""
+    if ledger_layout(root) == "project":
+        return [(v, os.path.join(root, VERSIONS_DIR, v + ".json")) for v in project_versions(root)]
+    out = []
+    for preset in _old_preset_dirs(root):
+        for fn in sorted(os.listdir(os.path.join(root, preset))):
+            if fn.endswith(".json") and _VER_RE.match(fn[:-5]):
+                out.append((f"{preset}/{fn[:-5]}", os.path.join(root, preset, fn)))
+    return out
+
+
+def seal_all(root):
+    """Seal every version not sealed yet -- for a ledger banked before seals existed. Returns the keys sealed.
+    A version already sealed is never re-sealed: that would bless a mutation."""
+    seals = _read_seals(root)
+    added = []
+    for key, path in _all_version_paths(root):
+        if key not in seals:
+            seals[key] = content_digest(_read_snapshot_json(path))
+            added.append(key)
+    if added:
+        _write_seals(root, seals)
+    return added
+
+
+def verify_seals(root):
+    """`[{"version", "why"}]` -- every sealed version whose content changed, or whose file is gone."""
+    seals = _read_seals(root)
+    if not seals:
+        return []
+    paths = dict(_all_version_paths(root))
+    out = []
+    for key, digest in sorted(seals.items()):
+        path = paths.get(key)
+        if path is None:
+            out.append({"version": key, "why": "sealed, and its file is gone"})
+            continue
+        try:
+            got = content_digest(_read_snapshot_json(path))
+        except SnapshotError as exc:
+            out.append({"version": key, "why": f"sealed, and now unreadable: {exc}"})
+            continue
+        if got != digest:
+            out.append({"version": key, "why": "its content changed after it was banked -- a banked version is "
+                                               "immutable (#58 P1); a change is a NEW version"})
+    return out
 
 
 def migrate_line(root, apply=False):
@@ -664,6 +745,11 @@ def migrate_line(root, apply=False):
         entry.update({"version": heads[name], "since": created.get(heads[name]), "history": history[:cut]})
         slots["slots"][name] = entry
     _write_slots(root, slots)                   # last: until it exists, the move has not happened
+    # The moved versions are sealed on the new line, fresh: their keys changed with the layout.
+    old_seals = os.path.join(root, SEALS_FILE)
+    if os.path.isfile(old_seals):
+        os.replace(old_seals, os.path.join(legacy_root, SEALS_FILE))
+    seal_all(root)
     plan["done"] = True
     return plan
 
@@ -812,6 +898,9 @@ class PresetHistory:
         os.makedirs(os.path.join(self.root, VERSIONS_DIR) if project_line else self.dir, exist_ok=True)
         with open(self._path(version), "w", encoding="utf-8") as f:
             json.dump(state, f, indent=2, sort_keys=True, ensure_ascii=False)
+        seals = _read_seals(self.root)
+        seals[_seal_key(self.root, version, self.preset)] = content_digest(state)
+        _write_seals(self.root, seals)
         if place:
             self._set_head(version)
         return version
@@ -1362,6 +1451,8 @@ def _main(argv=None):
     vp.add_argument("--from", dest="base", default=None, help="new: the version it starts from (default: the slot's)")
     vp.add_argument("--delta", default=None, help="new: a JSON file with the change, apply.py's delta shape")
     vp.add_argument("--note", default=None)
+    sub.add_parser("seal", help="seal every banked version not sealed yet (#58 P1); a seal is never renewed")
+    sub.add_parser("verify", help="name every sealed version whose content changed (#58 P1); exit 3 if any")
     mp = sub.add_parser("migrate-line",
                         help="move a per-preset ledger onto one version line per project "
                              "(W-2, hub #195): the plan by default, --apply on the user's OK")
@@ -1379,6 +1470,16 @@ def _main(argv=None):
     except SnapshotError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
+    if args.cmd == "seal":
+        added = seal_all(args.root)
+        print(f"sealed {len(added)} version(s)" + (": " + ", ".join(added) if added else " -- all were sealed"))
+        return 0
+    if args.cmd == "verify":
+        broken = verify_seals(args.root)
+        for b in broken:
+            print(f"✗ {b['version']}: {b['why']}")
+        print("every sealed version is as it was banked" if not broken else "")
+        return 3 if broken else 0
     if args.cmd == "migrate-line":
         try:
             got = migrate_line(args.root, apply=args.apply)
@@ -1905,6 +2006,19 @@ def _selftest():
             os.environ.pop(k, None)
             if v is not None:
                 os.environ[k] = v
+
+    # -- #58 P1: a banked version is sealed; overwriting it is named, and the encoding repair is not a mutation.
+    seal_root = tempfile.mkdtemp(prefix="autosound_seal_")
+    sh = PresetHistory(seal_root, "SQ")
+    sv = sh.snapshot(_sample_state(), note="banked")
+    assert verify_seals(seal_root) == []
+    over = sh.load(sv)
+    over["channels"]["w-L"]["gain_db"] = -1.0            # a script copying a variant over a banked version
+    with open(sh._path(sv), "w", encoding="utf-8") as fh:
+        json.dump(over, fh)
+    broken = verify_seals(seal_root)
+    assert [b["version"] for b in broken] == [sv] and "immutable" in broken[0]["why"], broken
+    assert seal_all(seal_root) == [], "a seal must never be renewed over a mutation"
 
     # -- W-2 R (hub #195): the old per-preset layout is still read, the move is a plan until
     #    --apply, the active slot keeps its numbers, and a half-moved line is refused with the way out.
