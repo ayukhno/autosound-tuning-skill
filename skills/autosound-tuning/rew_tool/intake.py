@@ -222,8 +222,19 @@ def known_dsps():
             tiers = dsp_profile.tier_keys(dsp_profile.load_profile(path))
         except (OSError, ValueError):
             tiers = []
-        out.append({"vendor": vendor, "model": model, "tiers": tiers})
+        try:
+            groups = _groups_of(dsp_profile.load_profile(path))
+        except (OSError, ValueError):
+            groups = []
+        out.append({"vendor": vendor, "model": model, "tiers": tiers, "groups": groups})
     return out
+
+
+def _same_dsp(profile, vendor, model):
+    """Does this profile describe THIS processor? Case-insensitive, exact -- `find_bundled`'s rule."""
+    p = dsp_profile._unwrap(profile)
+    return (str(p.get("vendor") or "").strip().lower() == vendor.strip().lower()
+            and str(p.get("name") or "").strip().lower() == model.strip().lower())
 
 
 def _groups_of(profile):
@@ -232,9 +243,11 @@ def _groups_of(profile):
     for g in dsp_profile._unwrap(profile).get("groups") or []:
         if not isinstance(g, dict) or not g.get("id"):
             continue
-        out.append({"tier": dsp_profile.ledger_tier(g["id"]), "label": g.get("label") or g["id"],
-                    "max_count": g.get("max_count"), "letters": g.get("row_id_style") == "letter",
-                    "in_scope": g.get("in_scope", True) is not False})
+        row = {"tier": dsp_profile.ledger_tier(g["id"]), "label": g.get("label") or g["id"],
+               "max_count": g.get("max_count"), "letters": g.get("row_id_style") == "letter",
+               "in_scope": g.get("in_scope", True) is not False}
+        row["slots"] = slot_names(row)
+        out.append(row)
     return out
 
 
@@ -273,11 +286,15 @@ def dsp_state(project_dir):
         if new is not None:
             out["new"] = new
 
+    # A profile on disk counts only when it describes the processor project.json names: after a
+    # processor change the old one is not this project's any more (round 4, `change_dsp`).
     own = dsp_profile.profile_path(project_dir)
     if os.path.isfile(own):
         try:
-            take(dsp_profile.load_profile(own), "project", False)
-            return out
+            prof = dsp_profile.load_profile(own)
+            if not (vendor and model) or _same_dsp(prof, vendor, model):
+                take(prof, "project", False)
+                return out
         except (OSError, ValueError):
             pass
     if vendor and model:
@@ -286,11 +303,257 @@ def dsp_state(project_dir):
             take(bundled, "bundled", False)
             return out
         out["new"] = True
-    if os.path.isfile(dsp_profile.draft_path(project_dir)):
+    draft = dsp_profile.draft_path(project_dir)
+    if os.path.isfile(draft):
         try:
-            take(dsp_profile.load_profile(dsp_profile.draft_path(project_dir)), "draft", None)
+            prof = dsp_profile.load_profile(draft)
+            if not (vendor and model) or _same_dsp(prof, vendor, model):
+                take(prof, "draft", None)
         except (OSError, ValueError):
             pass
+    return out
+
+
+def _set_aside(path, vendor, model):
+    """Move a file that describes ANOTHER processor out of the way, never delete it."""
+    import car_profile
+
+    slug = car_profile.body_slug(vendor or "unknown", model or "dsp") or "previous"
+    stem, ext = os.path.splitext(path)
+    target, n = f"{stem}.replaced-{slug}{ext}", 1
+    while os.path.exists(target):
+        n += 1
+        target = f"{stem}.replaced-{slug}-{n}{ext}"
+    os.replace(path, target)
+    return target
+
+
+def change_dsp(project_dir, vendor, model, replace_map=False):
+    """Record the project's processor -- and say what happens to the old one's channel map.
+
+    The rule (the Arbiter, round 4): slots are a PROCESSOR's, so a new processor gets a new map and
+    nothing is merged across processors. When the processor changes and the old one's map has
+    slots, this refuses unless `replace_map` -- and with it:
+
+    * the old map is kept as a RECORD, `dsp.previous_maps[]` ({vendor, model, slots}), not deleted;
+    * spare rows (`off-…`, never measured, no history) are removed; live channels keep their code,
+      driver and history, and lose `slot`/`tier`/`hidden`: they are the car's speakers, and they
+      are placed again on the new processor's slots;
+    * `dsp.tiers_used` is cleared (it named the old processor's tiers);
+    * a `dsp_profile.json` or draft that describes the OLD processor is moved aside
+      (`…replaced-<vendor>-<model>.json`), so the Phase-0 gate cannot pass on another unit's profile.
+
+    Returns `{"vendor", "model", "replaced": <slots moved to the record>, "set_aside": [paths]}`.
+    """
+    vendor, model = str(vendor or "").strip(), str(model or "").strip()
+    if not (vendor and model):
+        raise IntakeError("the DSP is a vendor AND a model — nothing was written")
+    handle = project.Project(project_dir)
+    data = handle.load()
+    dsp = dict(data.get("dsp") or {})
+    old_v, old_m = dsp.get("vendor") or "", dsp.get("model") or ""
+    same = old_v.lower() == vendor.lower() and old_m.lower() == model.lower()
+    rows = [c for c in data.get("channels") or [] if isinstance(c, dict)]
+    slotted = [c for c in rows if c.get("slot") and c.get("tier")]
+    out = {"vendor": vendor, "model": model, "replaced": 0, "set_aside": []}
+    if same:
+        return out
+    if slotted and (old_v or old_m) and not replace_map:
+        raise IntakeError(
+            f"the processor changes from {old_v} {old_m} to {vendor} {model}, and the old one's "
+            f"channel map has {len(slotted)} slot(s). Slots are a processor's: the map is REPLACED "
+            "(the old one kept as a record in dsp.previous_maps). Confirm to go on — nothing was written")
+    if slotted:
+        dsp.setdefault("previous_maps", []).append({
+            "vendor": old_v, "model": old_m,
+            "slots": [{k: c.get(k) for k in ("code", "tier", "slot", "hidden") if k in c}
+                      for c in slotted]})
+        kept = []
+        for c in rows:
+            spare = (c.get("role") == "unused" and str(c.get("code", "")).startswith("off-")
+                     and not c.get("id") and not c.get("previous_names"))
+            if spare:
+                continue
+            if c in slotted:
+                c = {k: v for k, v in c.items() if k not in ("slot", "tier", "hidden")}
+            kept.append(c)
+        data["channels"] = kept
+        out["replaced"] = len(slotted)
+    dsp.pop("tiers_used", None)
+    dsp.update(vendor=vendor, model=model)
+    data["dsp"] = dsp
+    handle.save(data)
+    for path in (dsp_profile.profile_path(project_dir), dsp_profile.draft_path(project_dir)):
+        if os.path.isfile(path):
+            try:
+                mine = _same_dsp(dsp_profile.load_profile(path), vendor, model)
+            except (OSError, ValueError):
+                mine = False
+            if not mine:
+                out["set_aside"].append(_set_aside(path, old_v, old_m))
+    return out
+
+
+#: The new-processor form's closed choices -- read off what the bundled profiles already record,
+#: not invented: the Helix's band types, the crossover families the maths can model, and the slope
+#: menu a Musway offers (every order a family is recorded at in the library).
+EQ_BAND_TYPES = ("PK", "LSH", "HSH", "APF1", "APF2")
+XO_FAMILIES = ("LR", "BW", "BE")
+XO_SLOPES = (6, 12, 18, 24, 30, 36, 42, 48)
+TIER_LABELS = {"channels": "Output channels", "virtual_channels": "Virtual channels", "inputs": "Inputs"}
+
+
+def _group_id(tier):
+    return "physical_outputs" if tier == "channels" else tier
+
+
+def _pos_int(value, what):
+    if value in (None, ""):
+        return None
+    try:
+        n = int(str(value).strip())
+    except ValueError:
+        raise IntakeError(f"{what} is a whole number, not {value!r} — nothing was written") from None
+    if n < 1:
+        raise IntakeError(f"{what} must be at least 1, not {n} — nothing was written")
+    return n
+
+
+def _pos_float(value, what):
+    if value in (None, ""):
+        return None
+    try:
+        x = float(str(value).strip().replace(",", "."))
+    except ValueError:
+        raise IntakeError(f"{what} is a number, not {value!r} — nothing was written") from None
+    if x <= 0:
+        raise IntakeError(f"{what} must be above zero — nothing was written")
+    return x
+
+
+def save_new_dsp(project_dir, answers):
+    """The NEW processor's base, from its own form, into the interview draft -- once.
+
+    Only for a processor the skill has no profile of (`dsp_state()["new"]`). Everything goes into
+    `dsp_profile.draft.json` through the profile's own writer (`dsp_profile.set_field`), under the
+    keys `dsp_profile.missing_facts` expects: per tier `max_count`, `row_id_style`, `fields`, `eq`,
+    `crossover_filters`; at the top `parametric_eq`, `delay`, `polarity`, `phase_control`,
+    `presets`, the processing rate and `groups_enumerated`. The session finalises the draft
+    (`dsp_profile.py finalize`); this writes what the person answered and nothing it did not.
+
+    `answers`: {"tiers": {tier: {"count", "letters", "fields"}}, "eq": {"bands", "types",
+    "file_import"}, "crossover": {"types", "slopes", "independent"}, "delay": {"step_ms", "max_ms"},
+    "presets": {"count", "input_switches"}, "rate"}.
+    """
+    st = dsp_state(project_dir)
+    if not st["new"]:
+        raise IntakeError("the base is asked only for a processor the skill has no profile of; this "
+                          "one is read off its profile — nothing was written")
+    tiers = answers.get("tiers") or {}
+    if not tiers:
+        raise IntakeError("a processor has at least one tier — nothing was written")
+    for tier, row in tiers.items():
+        bad = [f for f in row.get("fields") or [] if f not in dsp_profile.FIELD_VOCABULARY]
+        if bad:
+            raise IntakeError(f"{tier}: unknown control(s) {bad} — nothing was written")
+    rate = answers.get("rate")
+    if rate not in (None, ""):
+        rate = int(rate)
+        if rate not in PLAUSIBLE_RATES_HZ:
+            raise IntakeError(f"{rate} is not a processing rate a DSP runs at — nothing was written")
+    eq = answers.get("eq") or {}
+    xo = answers.get("crossover") or {}
+    eq_block = {k: v for k, v in (("bands_per_channel", _pos_int(eq.get("bands"), "EQ bands")),
+                                   ("band_types", [t for t in eq.get("types") or [] if t in EQ_BAND_TYPES] or None),
+                                   ("file_import", eq.get("file_import"))) if v is not None}
+    slopes = sorted({int(x) for x in xo.get("slopes") or [] if int(x) in XO_SLOPES})
+    xo_block = {}
+    if xo.get("types"):
+        xo_block["types"] = {t: ({"orders_db_per_oct": slopes} if slopes else {})
+                             for t in xo["types"] if t in XO_FAMILIES}
+    if xo.get("independent") is not None:
+        xo_block["independent_hp_lp"] = bool(xo["independent"])
+    delay = {k: v for k, v in (("step_ms", _pos_float((answers.get("delay") or {}).get("step_ms"), "delay step")),
+                                ("max_ms", _pos_float((answers.get("delay") or {}).get("max_ms"), "delay maximum")))
+             if v is not None}
+    counts = {t: _pos_int(row.get("count"), f"{t} slot count") for t, row in tiers.items()}
+    presets = answers.get("presets") or {}
+    preset_count = _pos_int(presets.get("count"), "preset count")
+
+    # A draft or profile left by ANOTHER processor would seed this one's draft (`load_draft` falls
+    # back to the finished profile): moved aside first, as `change_dsp` does.
+    for path in (dsp_profile.draft_path(project_dir), dsp_profile.profile_path(project_dir)):
+        if os.path.isfile(path):
+            try:
+                mine = _same_dsp(dsp_profile.load_profile(path), st["vendor"], st["model"])
+            except (OSError, ValueError):
+                mine = False
+            if not mine:
+                _set_aside(path, "other", "dsp")
+    data = dsp_profile.start_draft(project_dir, st["vendor"], st["model"])
+    have = {g.get("id"): g for g in dsp_profile._unwrap(data).get("groups") or [] if isinstance(g, dict)}
+    groups, declared = [], set()
+    for tier, row in tiers.items():
+        gid = _group_id(tier)
+        g = dict(have.get(gid) or {"id": gid, "label": TIER_LABELS.get(tier, tier)})
+        fields = [f for f in dsp_profile.FIELD_VOCABULARY if f in (row.get("fields") or [])]
+        g["fields"] = fields or None
+        g["max_count"] = counts[tier]
+        g["row_id_style"] = "letter" if row.get("letters", True) else "number"
+        if "eq" in fields and eq_block:
+            g["eq"] = dict(eq_block)
+        if ({"hp", "lp"} & set(fields)) and xo_block:
+            g["crossover_filters"] = dict(xo_block)
+        declared |= set(fields)
+        groups.append(g)
+    dsp_profile.set_field(project_dir, "groups", groups)
+    dsp_profile.set_field(project_dir, "groups_enumerated", True)
+    if eq_block and "eq" in declared:
+        dsp_profile.set_field(project_dir, "parametric_eq", eq_block)
+    if delay and "ta_ms" in declared:
+        dsp_profile.set_field(project_dir, "delay", dict(delay, min_ms=0))
+    if "polarity" in declared:
+        dsp_profile.set_field(project_dir, "polarity", {"values": ["NORM", "INV"]})
+    if "phase_deg" in declared:
+        dsp_profile.set_field(project_dir, "phase_control", {"continuous": True})
+    if preset_count is not None or presets.get("input_switches") is not None:
+        block = {}
+        if preset_count is not None:
+            block["count"] = preset_count
+        if presets.get("input_switches") is not None:
+            block["input_selection_switches_with_preset"] = bool(presets["input_switches"])
+        dsp_profile.set_field(project_dir, "presets", block)
+    if rate not in (None, ""):
+        dsp_profile.set_field(project_dir, dsp_profile.PROCESSING_RATE_KEY, rate)
+    return dsp_state(project_dir)
+
+
+def new_dsp_answers(project_dir):
+    """What the new-processor form already recorded, in the shape it posts -- for pre-filling."""
+    st = dsp_state(project_dir)
+    out = {"tiers": {}, "eq": {}, "crossover": {}, "delay": {}, "presets": {}, "rate": None}
+    if st["source"] != "draft":
+        return out
+    p = dsp_profile._unwrap(dsp_profile.load_profile(dsp_profile.draft_path(project_dir)))
+    for g in p.get("groups") or []:
+        if not isinstance(g, dict):
+            continue
+        out["tiers"][dsp_profile.ledger_tier(g["id"])] = {
+            "count": g.get("max_count"), "letters": g.get("row_id_style", "letter") == "letter",
+            "fields": list(g.get("fields") or [])}
+        xo = g.get("crossover_filters") or {}
+        if xo and not out["crossover"]:
+            types = xo.get("types") or {}
+            out["crossover"] = {"types": list(types),
+                                "slopes": sorted({s for t in types.values() for s in (t or {}).get("orders_db_per_oct") or []}),
+                                "independent": xo.get("independent_hp_lp")}
+    eq = p.get("parametric_eq") or {}
+    out["eq"] = {"bands": eq.get("bands_per_channel"), "types": eq.get("band_types") or [],
+                 "file_import": eq.get("file_import")}
+    out["delay"] = {k: (p.get("delay") or {}).get(k) for k in ("step_ms", "max_ms")}
+    pr = p.get("presets") or {}
+    out["presets"] = {"count": pr.get("count"), "input_switches": pr.get("input_selection_switches_with_preset")}
+    out["rate"] = dsp_profile.processing_rate_hz(p)
     return out
 
 
@@ -677,6 +940,12 @@ FIELDS = (
        note="Never inferable from names — `VFL` looking like 'virtual front left' is a convention, "
             "not a wiring diagram (RES-007). Required where the DSP has a virtual tier.",
        when="1", derive="read off the processor's routing matrix when its state is imported"),
+    # The Arbiter, round 4: the equipment is described in the person's OWN words first; the
+    # structured driver rows stay, optional, for whoever has them written down.
+    _f("hardware.description", "channel_map",
+       "Describe the rest of the equipment in your own words (speakers, amplifiers, anything)",
+       writes="project:hardware.description", when="install", place="equipment",
+       lands="`project.json` `hardware.description` -> `autosound_context.md` §1"),
     _f("channel_map.hardware_controls", "channel_map",
        "Remote knobs and switches outside the DSP (SubRC / RearRC / a bass control), and where they stand",
        per="control", writes="project:hardware.controls",
@@ -1592,6 +1861,44 @@ def _selftest():
                 assert "Nothing was written" in str(exc) or "nothing was written" in str(exc), exc
         save(slots, "dsp.tiers_used", ["channels"])
         assert [g["tier"] for g in channel_map(slots)] == ["channels"], "tiers in use do not narrow the map"
+        # ── round 4: a processor change replaces the map (confirmed), a new one gets its base ──
+        try:
+            change_dsp(slots, "Acme", "X8")
+            raise AssertionError("a saved map was replaced without confirmation")
+        except IntakeError as exc:
+            assert "REPLACED" in str(exc) and "nothing was written" in str(exc), exc
+        prof = os.path.join(slots, "dsp_profile.json")
+        with open(prof, "w", encoding="utf-8") as fh:        # the OLD processor's profile on disk
+            json.dump({"dsp_profile": {"name": "Helix DSP Ultra S", "vendor": "Audiotec-Fischer",
+                                       "groups": [{"id": "physical_outputs", "label": "Outputs",
+                                                   "fields": None, "max_count": 12}]}}, fh)
+        done = change_dsp(slots, "Acme", "X8", replace_map=True)
+        assert done["replaced"] == 1 and len(done["set_aside"]) == 1, done
+        assert not os.path.isfile(prof), "the old processor's profile could still pass the gate"
+        d = project.Project(slots).load()
+        assert d["dsp"]["previous_maps"][0]["slots"][0]["slot"] == "A", d["dsp"]
+        assert "tiers_used" not in d["dsp"] and not [c for c in d["channels"] if c.get("slot")], d
+        assert dsp_state(slots)["new"] is True and channel_map(slots) == [], "a map before the base"
+        st = save_new_dsp(slots, {"tiers": {"channels": {"count": "4", "letters": True,
+                                                         "fields": ["hp", "lp", "ta_ms"]}},
+                                  "delay": {"step_ms": "0.02", "max_ms": "10"}, "rate": 48000})
+        assert st["groups"][0]["slots"] == ["A", "B", "C", "D"], st
+        assert [g["total"] for g in channel_map(slots)] == [4]
+        assert new_dsp_answers(slots)["delay"] == {"step_ms": 0.02, "max_ms": 10.0}
+        for bad in ({"tiers": {}}, {"tiers": {"channels": {"count": "0"}}},
+                    {"tiers": {"channels": {"count": 2, "fields": ["delay"]}}}, {"tiers": {"channels": {}}, "rate": 97000}):
+            try:
+                save_new_dsp(slots, bad)
+                raise AssertionError(f"a bad base went in: {bad}")
+            except IntakeError as exc:
+                assert "nothing was written" in str(exc), exc
+        change_dsp(slots, "Audiotec-Fischer", "Helix DSP Ultra S")
+        try:
+            save_new_dsp(slots, {"tiers": {"channels": {"count": 2}}})
+            raise AssertionError("a known processor's base was asked")
+        except IntakeError as exc:
+            assert "profile" in str(exc), exc
+
         # The curve list: NTT's sixteen as NTT spells them, and ours, which is actually bundled.
         assert len(NTT_CURVE_PRESETS) == 16 and "ResoNix 2026" in NTT_CURVE_PRESETS
         assert os.path.isfile(BUNDLED_CURVE_FILE), BUNDLED_CURVE_FILE

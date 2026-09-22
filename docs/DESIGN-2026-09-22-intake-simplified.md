@@ -230,3 +230,81 @@ offline.
 
 **Gate:** unchanged. The map writes `channels[]` rows with `tier` and `slot` through the same
 writers. The glossary the gate needs is still written by the session (`channel_map.glossary_agreed`).
+
+## Round 4: the map follows the processor, a new processor has its own form, one Save (same day)
+
+He made five corrections: three, then two more.
+
+**1. Changing the processor redraws the channel map, live.** The page carries every bundled
+profile's tiers and slot labels (`intake.known_dsps()[*].groups[*].slots`, computed by
+`intake.slot_names`) plus the saved processor's map. Its JS draws the map from that data, so
+picking another vendor or model redraws the tiers-in-use choices and the map straight away, with
+the new processor's tiers, counts and letters or numbers, before anything is saved.
+- **Slots are never merged across processors.** A different processor starts with an empty map.
+- If the old map had saved slots, the page says so under the map («… буде замінена»), and Save
+  asks for confirmation.
+- `intake.change_dsp(..., replace_map=True)` then **replaces** the map:
+  - the old slots are kept as a record in `project.json` `dsp.previous_maps[]`;
+  - spare `off-…` rows with no history are removed;
+  - live channels keep their code, driver and history but lose `slot`/`tier`/`hidden`, because
+    they are the car's speakers and get placed again on the new processor's slots;
+  - `dsp.tiers_used` is cleared.
+- Without `replace_map` the change is refused and nothing is written.
+- A `dsp_profile.json` or draft that describes the old processor is moved aside
+  (`…replaced-<vendor>-<model>.json`). This keeps the Phase-0 gate from passing on another unit's
+  profile. It changes no gate rule; it stops a stale file from satisfying one.
+- `dsp_state` now uses a profile or draft only when it names the project's processor.
+- A slot posted for a processor that is not the saved one is refused ("save the processor first").
+
+**2. A new processor gets its own form** at `intake_form.py serve` → `/new-dsp`, the same server
+under another route, stdlib only.
+- It asks, once:
+  - which tiers exist;
+  - for each tier, its **slot count** (this answers round 3's open question), its slot labels
+    (A, B, … or 1, 2, …) and its controls (`dsp_profile.FIELD_VOCABULARY`);
+  - the processing rate;
+  - EQ: bands, types, file import;
+  - crossovers: families, slopes, independent HP/LP;
+  - delays: step, max;
+  - presets: count, whether the input switches with the preset.
+- `intake.save_new_dsp` writes this into `dsp_profile.draft.json` through
+  `dsp_profile.set_field`, under the keys `dsp_profile.missing_facts` expects. A complete answer
+  leaves it with nothing missing. The session still runs `dsp_profile.py finalize`.
+- The main page shows «Новий процесор — заповнити окремо» when the saved processor is new, and
+  draws the map once that base exists.
+- The choices come from what the library records: band types from the Helix profile, families from
+  `dsp_math.MODELLABLE_FAMILIES`, slopes from the Musway menu.
+
+**3. One «Зберегти».** No button per question: one sticky Save per page.
+- It collects what **changed** (each control carries the value it started with) and sends one
+  batch through `/save`, in dependency order: car → fields → processor → tiers in use → slots →
+  goal → curve → driver rows.
+- Each item goes through its existing writer. A refused item is reported and does not stop the
+  others. Each writer is atomic, so what was written is whole and what was refused is untouched.
+- **Defaults: a confirm tick.** A pre-selected default the person never touched is not saved. The
+  alternative, "Save confirms the visible defaults", was rejected: with one Save for the whole page
+  it would write every default on every Save, which is the silent answer the rule exists to prevent.
+- The optional driver table pre-selects nothing, so an untouched cell is never sent.
+- **The seat:** if it changed, Save asks for explicit confirmation («записується ОДИН раз …»).
+  Cancelling cancels the whole save. The server-side write-once refusal (S-032) stays as it was.
+- **A processor change that replaces a saved map** asks the same way.
+- Checked in headless Chrome on the rendered page:
+  - an untouched page sends nothing;
+  - a ticked default is sent;
+  - the seat asks;
+  - switching Helix → Musway redraws «Вихідні 0/8», slots 1…8, only Musway's models, with the
+    replacement notice.
+
+**4. «Інше обладнання»** starts with ONE free-text field, `hardware.description` (added to
+`project-schema.md` next to `hardware.controls`). The structured driver table stays optional and
+appears only when channel rows exist.
+
+**5. The memo is not rendered.** `place="memo"` fields stay in `intake.FIELDS` for the session and
+the docs. The self-test now asserts that none of them is on the page.
+
+**Gate:** `contract.GATE_REQUIRED` is unchanged. The only related change is the one in point 1:
+a stale profile of another processor no longer counts.
+
+**Where the pages are:** from this round the session's role may write only inside the skill tree
+and `hub/scratch/skill/`, so the regenerated pages are in `hub/scratch/skill/intake/`, not the old
+scratchpad.

@@ -8,6 +8,12 @@ that carries its own copy of them drifts from the method the first time a field 
 the failure the car package already cost us (hub `#185`), and a terminal session has no window at
 all — so `serve` gives it one.
 
+**Round 4 (2026-09-22):** ONE «Зберегти» per page, sending only what changed as one batch; a
+pre-selected default is saved only once its tick confirms it; the seat and a processor change that
+replaces a saved channel map ask first; the channel map is drawn by the page's JS from the data it
+carries, so it follows a processor change before anything is saved; a NEW processor's base is its
+own page (`/new-dsp`); the memo is not rendered.
+
 **What the page is, and is not.** It puts up front only what starting to measure needs
 (`intake.WHEN` = `now`), each as a choice where one exists and with the default pre-selected; what a
 tool answers and what a later phase asks are folded under a line naming that step — on the page,
@@ -28,7 +34,8 @@ English in `FIELDS` for anything a translation has not reached yet. The Arbiter'
 
 Usage:
   python3 rew_tool/intake_form.py serve  <project-dir> [--port N] [--lang uk] [--open]
-  python3 rew_tool/intake_form.py render <project-dir> [--lang uk] [--out page.html]
+                                        (routes: / the intake, /new-dsp a new processor's base)
+  python3 rew_tool/intake_form.py render <project-dir> [--lang uk] [--page new-dsp] [--out page.html]
   python3 rew_tool/intake_form.py state  <project-dir> [--lang uk] [--json]
   python3 rew_tool/intake_form.py --selftest
 """
@@ -186,6 +193,8 @@ def model(project_dir, lang=DEFAULT_LANG):
         "project_dir": project_dir, "lang": lab.get("lang", lang), "ui": lab["ui"],
         "when": whens, "dsp": dsp, "dsps": intake.known_dsps(),
         "map": intake.channel_map(project_dir),
+        "tiers_used": [t for t in ((data or {}).get("dsp") or {}).get("tiers_used") or []],
+        "new_dsp": intake.new_dsp_answers(project_dir),
         "cars": intake.known_cars(project_dir),
         "couplings": {c["id"]: {"fields": c["fields"], "why": c["why"],
                                 "title": lab["couplings"].get(c["id"]) or c["id"]}
@@ -284,40 +293,51 @@ button.tog { font:inherit; font-size:12px; font-weight:600; text-transform:upper
 .tog-on { color:var(--have); border:1px solid var(--have); } .tog-off { color:#9ca3af; border:1px solid #d1d5db; }
 .curve-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:2px 10px; margin:6px 0; }
 .curve-ours { margin:6px 0; font-weight:500; }
+textarea { font:inherit; width:100%; max-width:760px; padding:7px 9px; border:1px solid var(--line); border-radius:6px; }
+input.num { min-width:70px; width:80px; }
+.tier-row { border-top:1px solid #f1f1f1; padding:8px 0; }
+.savebar { position:sticky; bottom:0; background:#fff; border-top:1px solid var(--line); padding:10px 24px;
+           display:flex; gap:14px; align-items:center; z-index:5; }
+button.save.big { font-size:15px; padding:8px 22px; }
+.status { font-size:13px; color:#555; white-space:pre-wrap; } .status.err { color:var(--gate); }
+section.equipment { border-top:1px solid var(--line); padding-top:14px; }
 """
 
-_JS = """
-async function send(payload, el) {
-  const box = el.closest('.f, .couple, tr') || document.body;
-  const err = box.querySelector('.err');
-  if (err) err.textContent = '';
-  el.disabled = true;
-  try {
-    const r = await fetch('/save', {method:'POST', headers:{'Content-Type':'application/json'},
-                                    body: JSON.stringify(payload)});
-    const out = await r.json();
-    if (!r.ok) throw new Error(out.error || r.statusText);
-    location.reload();
-  } catch (e) {
-    el.disabled = false;
-    if (err) err.textContent = String(e.message || e);
-    else alert(e.message || e);
-  }
+#: One JS for both pages. Round 4 (the Arbiter, 2026-09-22): ONE «Зберегти» per page instead of a
+#: button on every question. It sends only what CHANGED, in dependency order (the processor before
+#: the tiers it offers, the tiers before the slots), through `/save` as one batch; a pre-selected
+#: default counts as changed only once its tick says «підтверджую»; the seat and a processor change
+#: that would replace a saved channel map each ask first. The channel map is drawn HERE, from data
+#: the page carries, so it follows a processor change live, before anything is saved.
+_JS = r"""
+const D = JSON.parse(document.getElementById('intake-data').textContent);
+const T = D.t || {};
+function norm(v) {
+  if (Array.isArray(v)) return v.length ? v.slice().sort() : null;
+  return v === undefined || v === null || String(v).trim() === '' ? null : String(v).trim();
 }
+function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
 function valueOf(box) {
-  const multi = box.querySelectorAll('input[type=checkbox]');
+  const multi = box.querySelectorAll('input[type=checkbox]:not(.default-ok)');
   if (multi.length) return [...multi].filter(c => c.checked).map(c => c.value);
   const radios = box.querySelectorAll('input[type=radio]');
   if (radios.length) { const on = [...radios].find(r => r.checked); return on ? on.value : null; }
-  const one = box.querySelector('select, input[type=text]');
+  const one = box.querySelector('select, input[type=text], textarea');
   return one ? one.value : null;
 }
-function saveField(id, el) { send({field:id, value: valueOf(el.closest('.f'))}, el); }
-function saveGroupOf(sel, kind, el) {
-  const out = {};
-  document.querySelectorAll(sel).forEach(i => { if (i.value !== '') out[i.dataset.k] = i.value; });
-  send({[kind]: out}, el);
+function confirmedDefault(unit) {
+  const tick = unit.querySelector('input.default-ok');
+  return !!(tick && tick.checked);
 }
+function dirty(unit, now) {
+  return !same(now, JSON.parse(unit.dataset.orig || 'null')) || confirmedDefault(unit);
+}
+function esc(s) {
+  return String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g,
+    c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ── the car picker ──────────────────────────────────────────────────────────
 let pickedCar = null;
 function pickCar(sel) {
   const o = sel.selectedOptions[0];
@@ -330,16 +350,17 @@ function pickCar(sel) {
 function carEdited() {
   const hint = document.getElementById('car-new');
   if (!hint) return;
-  const differs = pickedCar && [...document.querySelectorAll('.car-part')].some(
-    i => i.dataset.k in pickedCar && i.value !== pickedCar[i.dataset.k]);
-  hint.hidden = !differs;
+  hint.hidden = !(pickedCar && [...document.querySelectorAll('.car-part')].some(
+    i => i.dataset.k in pickedCar && i.value !== pickedCar[i.dataset.k]));
 }
-function showNewDsp(on) {
-  const sec = document.getElementById('new-dsp'); if (sec && on) sec.hidden = false;
-  const h = document.getElementById('dsp-new-hint'); if (h) h.hidden = !on;
+function carValue() {
+  const out = {};
+  document.querySelectorAll('.car-part').forEach(i => { out[i.dataset.k] = norm(i.value); });
+  return out;
 }
-// The models are REMOVED and re-added rather than hidden: Safari ignores `hidden` on an <option>,
-// and the page has to behave the same in the system browser on macOS and on Windows.
+
+// ── the processor: vendor, then only that vendor's models ───────────────────
+// Models are REMOVED and re-added, never hidden: Safari ignores `hidden` on an <option>.
 let allModels = null;
 function filterModels(vendor) {
   const model = document.getElementById('dsp-model');
@@ -351,6 +372,13 @@ function filterModels(vendor) {
   allModels.filter(o => o.dataset.vendor === vendor).forEach(o => model.insertBefore(o, other));
   model.value = [...model.options].some(o => o.value === keep) ? keep : '';
 }
+function dspIdentity() {
+  const v = document.getElementById('dsp-vendor'), m = document.getElementById('dsp-model');
+  if (!v || !m) return {vendor: D.saved.vendor || '', model: D.saved.model || ''};
+  const vendor = v.value === '__other__' ? document.getElementById('dsp-vendor-free').value : v.value;
+  const model = m.value === '__other__' ? document.getElementById('dsp-model-free').value : m.value;
+  return {vendor: (vendor || '').trim(), model: (model || '').trim()};
+}
 function pickVendor(sel) {
   const other = sel.value === '__other__';
   document.getElementById('dsp-vendor-free').hidden = !other;
@@ -359,50 +387,233 @@ function pickVendor(sel) {
   model.value = other ? '__other__' : '';
   pickModel(model);
 }
-window.addEventListener('DOMContentLoaded', () => {
-  const v = document.getElementById('dsp-vendor'); if (v) filterModels(v.value);
-});
 function pickModel(sel) {
-  const other = sel.value === '__other__';
-  document.getElementById('dsp-model-free').hidden = !other;
-  showNewDsp(other);
+  document.getElementById('dsp-model-free').hidden = sel.value !== '__other__';
+  redraw();
 }
-function saveDsp(el) {
-  const v = document.getElementById('dsp-vendor'), m = document.getElementById('dsp-model');
-  const vendor = v.value === '__other__' ? document.getElementById('dsp-vendor-free').value : v.value;
-  const model = m.value === '__other__' ? document.getElementById('dsp-model-free').value : m.value;
-  send({dsp: {vendor, model}}, el);
+function sameDsp(a, b) {
+  return a.vendor.toLowerCase() === (b.vendor || '').toLowerCase()
+      && a.model.toLowerCase() === (b.model || '').toLowerCase();
 }
-function saveGoal(el) {
-  const choices = [...document.querySelectorAll('.goal-pick')].filter(c => c.checked).map(c => c.value);
-  send({goal: {choices, text: document.getElementById('goal-text').value}}, el);
+// What the map is drawn from: the SAVED processor's tiers and rows, or -- once another one is
+// picked -- THAT processor's tiers and no rows. Slots are never carried across processors.
+function mapSource() {
+  const id = dspIdentity();
+  if (!id.vendor || !id.model) return {state: 'none'};
+  if (sameDsp(id, D.saved)) {
+    if (D.saved.groups.length) return {state: 'ok', groups: D.saved.groups, chans: D.saved.channels, same: true};
+    return {state: D.saved.new ? 'new' : 'none'};
+  }
+  const e = D.dsps.find(d => sameDsp(id, d));
+  if (e) return {state: 'ok', groups: e.groups, chans: [], same: false};
+  return {state: 'new-unsaved'};
 }
-function saveSlot(tier, slot, on, el) {
-  const row = el.closest('.slot');
-  const code = row.querySelector('input.code').value.trim();
-  const name = row.querySelector('input.slotname');
-  send({slot: {tier, slot: slot === null && name ? name.value.trim() : slot, code, on}}, el);
+
+// ── tiers in use, redrawn for the processor on the page ─────────────────────
+let lastKey = null;
+function redrawTiers(src) {
+  const unit = document.getElementById('tiers-unit');
+  if (!unit) return;
+  const key = JSON.stringify(dspIdentity());
+  if (key === lastKey) return;
+  const first = lastKey === null;
+  lastKey = key;
+  edits = {};
+  if (first) return;                       // the server drew the saved processor's tiers
+  const groups = src.state === 'ok' ? src.groups : [];
+  const keep = src.same ? D.saved.tiers_used : [];
+  unit.querySelector('.choices').innerHTML = groups.map(g =>
+      '<label class="opt"><input type="checkbox" value="' + esc(g.tier) + '"'
+      + (keep.includes(g.tier) ? ' checked' : '') + ' onchange="redrawMap()"> '
+      + esc((T.tier_names || {})[g.tier] || g.label) + '</label>').join('');
 }
-function saveCurve(el) {
-  const on = [...document.querySelectorAll('input[name=curve]')].find(r => r.checked);
-  const own = document.getElementById('curve-own').value.trim();
-  const value = !on ? '' : on.value === '__own__' ? own : on.value;
-  send({field: 'target_curve.candidate', value}, el);
+
+// ── the channel map (TCC's table): one fold per tier, used/total, a row per slot ──
+let edits = {};
+function offCode(tier, slot) { return (D.off_prefix[tier] || ('off-' + tier)) + '-' + slot; }
+function tiersChecked() {
+  const unit = document.getElementById('tiers-unit');
+  return unit ? [...unit.querySelectorAll('.choices input[type=checkbox]')].filter(c => c.checked).map(c => c.value) : [];
+}
+function redrawMap() {
+  const body = document.getElementById('chanmap-body');
+  if (!body) return;
+  const src = mapSource();
+  const note = document.getElementById('chanmap-note');
+  const link = document.getElementById('newdsp-link');
+  if (link) link.hidden = !((src.state === 'new' || src.state === 'ok') && src.same !== false && D.saved.new);
+  const pending = document.getElementById('newdsp-pending');
+  if (pending) pending.hidden = src.state !== 'new-unsaved';
+  if (src.state !== 'ok') {
+    body.innerHTML = '';
+    note.textContent = src.state === 'new' ? T.map_new : src.state === 'new-unsaved' ? T.map_new_unsaved : T.map_first;
+    note.hidden = false;
+    return;
+  }
+  const replacing = !src.same && D.saved.slotted > 0;
+  note.hidden = !replacing;
+  if (replacing) note.textContent = T.map_replaced.replace('{old}', D.saved.vendor + ' ' + D.saved.model)
+                                                  .replace('{n}', D.saved.slotted);
+  const used = tiersChecked();
+  const groups = src.groups.filter(g => used.length ? used.includes(g.tier) : g.in_scope);
+  body.innerHTML = groups.map(g => {
+    const mine = src.chans.filter(c => c.tier === g.tier);
+    const slots = g.slots.length ? g.slots : mine.map(c => c.slot);
+    const rows = slots.map(slot => {
+      const c = mine.find(x => String(x.slot) === String(slot)) || {};
+      const origOn = !!c.code && !c.hidden && c.role !== 'unused';
+      const e = edits[g.tier + '|' + slot] || {};
+      const on = 'on' in e ? e.on : origOn;
+      const code = 'code' in e ? e.code : (origOn ? c.code : '');
+      return '<div class="slot' + (on ? '' : ' slot-off') + '" data-tier="' + esc(g.tier) + '" data-slot="' + esc(slot)
+        + '" data-orig-on="' + (origOn ? 1 : 0) + '" data-orig-code="' + esc(origOn ? c.code : '') + '" data-on="' + (on ? 1 : 0) + '">'
+        + '<span class="sl">' + esc(slot) + ' ·</span><span class="sc">' + esc(on ? code : (c.code || offCode(g.tier, slot))) + '</span>'
+        + '<input type="text" class="code" list="codes-' + esc(g.tier) + '" value="' + esc(code)
+        + '" placeholder="' + esc(T.code_pick) + '" oninput="codeEdited(this)">'
+        + '<button type="button" class="tog ' + (on ? 'tog-off' : 'tog-on') + '" onclick="toggleSlot(this)">'
+        + esc(on ? T.chan_off : T.chan_on) + '</button></div>';
+    }).join('');
+    return '<details class="tier" open><summary>' + esc((T.tier_names || {})[g.tier] || g.label)
+      + ' <b class="usedtotal"></b></summary>' + rows + '</details>';
+  }).join('');
+  recount();
+}
+function recount() {
+  document.querySelectorAll('#chanmap-body details.tier').forEach(d => {
+    const rows = [...d.querySelectorAll('.slot')];
+    d.querySelector('.usedtotal').textContent = rows.filter(r => r.dataset.on === '1').length + '/' + rows.length;
+  });
+}
+function codeEdited(input) {
+  const row = input.closest('.slot');
+  const key = row.dataset.tier + '|' + row.dataset.slot;
+  edits[key] = Object.assign(edits[key] || {}, {code: input.value.trim()});
+  if (row.dataset.on === '1') row.querySelector('.sc').textContent = input.value.trim();
+}
+function toggleSlot(btn) {
+  const row = btn.closest('.slot');
+  const input = row.querySelector('input.code');
+  const on = row.dataset.on !== '1';
+  if (on && !input.value.trim()) { input.focus(); input.placeholder = T.code_needed; return; }
+  const key = row.dataset.tier + '|' + row.dataset.slot;
+  edits[key] = Object.assign(edits[key] || {}, {on, code: input.value.trim()});
+  row.dataset.on = on ? '1' : '0';
+  row.classList.toggle('slot-off', !on);
+  row.querySelector('.sc').textContent = on ? input.value.trim() : offCode(row.dataset.tier, row.dataset.slot);
+  btn.textContent = on ? T.chan_off : T.chan_on;
+  btn.className = 'tog ' + (on ? 'tog-off' : 'tog-on');
+  recount();
+}
+function redraw() { const src = mapSource(); redrawTiers(src); redrawMap(); }
+
+// ── one Save: collect what changed, in the order the writers need it ────────
+function collect() {
+  const out = [], asks = [], late = [];
+  const car = document.querySelector('.unit[data-kind=car]');
+  if (car && dirty(car, carValue()) && Object.values(carValue()).some(v => v)) out.push({car: carValue()});
+  document.querySelectorAll('.unit[data-kind=field]').forEach(u => {
+    const v = norm(valueOf(u));
+    if (v === null || !dirty(u, v)) return;
+    if (u.dataset.id === 'goal.reference_seat') {
+      const on = u.querySelector('input[type=radio]:checked');
+      asks.push({kind: 'seat', label: on ? on.parentNode.textContent.trim() : v});
+    }
+    (u.dataset.id === 'dsp.tiers_used' ? late : out).push({field: u.dataset.id, value: v});
+  });
+  const id = dspIdentity();
+  if (document.querySelector('.unit[data-kind=dsp]') && id.vendor && id.model && !sameDsp(id, D.saved)) {
+    const replace = D.saved.slotted > 0 && !!(D.saved.vendor || D.saved.model);
+    if (replace) asks.push({kind: 'dsp', from: D.saved.vendor + ' ' + D.saved.model, to: id.vendor + ' ' + id.model});
+    out.push({dsp: {vendor: id.vendor, model: id.model, replace_map: replace}});
+  }
+  out.push(...late);
+  document.querySelectorAll('#chanmap-body .slot').forEach(r => {
+    const on = r.dataset.on === '1', code = r.querySelector('input.code').value.trim();
+    if (on === (r.dataset.origOn === '1') && (!on || code === r.dataset.origCode)) return;
+    out.push({slot: {tier: r.dataset.tier, slot: r.dataset.slot, code, on, dsp: [id.vendor, id.model]}});
+  });
+  const goal = document.querySelector('.unit[data-kind=goal]');
+  if (goal) {
+    const v = {choices: [...goal.querySelectorAll('.goal-pick')].filter(c => c.checked).map(c => c.value).sort(),
+               text: norm(document.getElementById('goal-text').value)};
+    if (dirty(goal, v)) out.push({goal: v});
+  }
+  const curve = document.querySelector('.unit[data-kind=curve]');
+  if (curve) {
+    const on = [...curve.querySelectorAll('input[name=curve]')].find(r => r.checked);
+    const own = document.getElementById('curve-own').value.trim();
+    const v = norm(!on ? '' : on.value === '__own__' ? own : on.value);
+    if (v !== null && dirty(curve, v)) out.push({field: 'target_curve.candidate', value: v});
+  }
+  document.querySelectorAll('tr.unit[data-kind=chanrow]').forEach(tr => {
+    const v = {};
+    tr.querySelectorAll('input, select').forEach(i => { if (i.dataset.k) v[i.dataset.k] = norm(i.value); });
+    if (!dirty(tr, v)) return;
+    const row = {};
+    Object.entries(v).forEach(([k, x]) => { if (x !== null) row[k] = x; });
+    out.push({channel: row});
+  });
+  const nd = document.getElementById('newdsp-form');
+  if (nd) out.push({new_dsp: newDspValue(nd)});
+  return {out, asks};
+}
+function newDspValue(form) {
+  const num = n => { const i = form.querySelector('[name="' + n + '"]'); return i ? norm(i.value) : null; };
+  const ticks = n => [...form.querySelectorAll('input[name="' + n + '"]:checked')].map(c => c.value);
+  const pick = n => { const r = form.querySelector('input[name="' + n + '"]:checked'); return r ? r.value : null; };
+  const yn = n => { const v = pick(n); return v === 'yes' ? true : v === 'no' ? false : null; };
+  const tiers = {};
+  form.querySelectorAll('.tier-row').forEach(r => {
+    const t = r.dataset.tier;
+    if (!r.querySelector('input.has').checked) return;
+    tiers[t] = {count: num('count-' + t), letters: pick('style-' + t) !== 'number', fields: ticks('fields-' + t)};
+  });
+  return {tiers, rate: num('rate'),
+          eq: {bands: num('eq-bands'), types: ticks('eq-types'), file_import: yn('eq-file')},
+          crossover: {types: ticks('xo-types'), slopes: ticks('xo-slopes').map(Number), independent: yn('xo-indep')},
+          delay: {step_ms: num('delay-step'), max_ms: num('delay-max')},
+          presets: {count: num('presets-count'), input_switches: yn('presets-input')}};
+}
+async function saveAll(btn) {
+  const status = document.getElementById('save-status');
+  status.className = 'status'; status.textContent = '';
+  const {out, asks} = collect();
+  if (!out.length) { status.textContent = T.nothing_changed; return; }
+  for (const a of asks) {
+    const text = a.kind === 'seat' ? T.seat_confirm.replace('{seat}', a.label)
+                                   : T.dsp_confirm.replace('{old}', a.from).replace('{new}', a.to)
+                                                  .replace('{n}', D.saved.slotted);
+    if (!confirm(text)) { status.textContent = T.save_cancelled; return; }
+  }
+  btn.disabled = true;
+  try {
+    const r = await fetch('save', {method: 'POST', headers: {'Content-Type': 'application/json'},
+                                   body: JSON.stringify({batch: out})});
+    const res = await r.json();
+    if (!r.ok) throw new Error(res.error || r.statusText);
+    if (res.errors && res.errors.length) {
+      status.className = 'status err';
+      status.textContent = res.errors.map(e => e.error).join('\n');
+      btn.disabled = false;
+      return;
+    }
+    if (btn.dataset.after) location.href = btn.dataset.after; else location.reload();
+  } catch (e) {
+    status.className = 'status err';
+    status.textContent = String(e.message || e);
+    btn.disabled = false;
+  }
 }
 window.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.car-part').forEach(i => i.addEventListener('input', carEdited));
   const own = document.getElementById('curve-own');
   if (own) own.addEventListener('input', () => {
     const r = document.querySelector('input[name=curve][value=__own__]'); if (r) r.checked = true; });
+  const v = document.getElementById('dsp-vendor'); if (v) filterModels(v.value);
+  const tiers = document.getElementById('tiers-unit');
+  if (tiers) tiers.querySelectorAll('.choices input[type=checkbox]').forEach(c => c.addEventListener('change', redrawMap));
+  redraw();
 });
-function saveTiers(el) { send({dsp_tiers: valueOf(el.closest('.f'))}, el); }
-window.addEventListener('DOMContentLoaded', () => {
-  document.querySelectorAll('.car-part').forEach(i => i.addEventListener('input', carEdited));
-});
-function saveRow(kind, tr, el) {
-  const out = {};
-  tr.querySelectorAll('input, select').forEach(i => { if (i.dataset.k && i.value !== '') out[i.dataset.k] = i.value; });
-  send({[kind]: out}, el);
-}
 """
 
 
@@ -414,13 +625,18 @@ def _esc(text):
 RADIO_MAX = 6
 
 
-def _choice(f, value, ui, cls="", key=""):
-    """The control for one answer: radios, a list, checkboxes, or a text box with suggestions.
+def _orig(value):
+    """The value a unit started with, in the shape the page's `norm()` produces — so "changed" is
+    a comparison of like with like (a list sorted, a blank as null, a number as text)."""
+    if isinstance(value, (list, tuple)):
+        return json.dumps(sorted(str(v) for v in value) or None)
+    if value is None or str(value).strip() == "":
+        return "null"
+    return json.dumps(str(value).strip())
 
-    A default is PRE-SELECTED when nothing is on disk yet, and says so — the person changes it only
-    if theirs differs. It is not written until he presses the button: a shown default is a question
-    already answered for him, a silently stored one would be an answer he never gave.
-    """
+
+def _choice(f, value, ui, cls="", key=""):
+    """The control for one answer: radios, a list, checkboxes, a text box with suggestions."""
     data = f' data-k="{_esc(key)}"' if key else ""
     klass = f' class="{cls}"' if cls else ""
     if isinstance(value, (list, tuple)):
@@ -430,7 +646,7 @@ def _choice(f, value, ui, cls="", key=""):
         chosen = str(value).split(",") if value not in (None, "") else []
     current = value if value not in (None, "") else ("" if f["default"] is None else str(f["default"]))
     if f["options"] and f["multi"]:
-        return "<div>" + "".join(
+        return '<div class="choices">' + "".join(
             f'<label class="opt"><input type="checkbox" value="{_esc(v)}"'
             f'{" checked" if v in chosen else ""}> {_esc(t)}</label>' for v, t in f["options"]) + "</div>"
     if f["options"] and len(f["options"]) <= RADIO_MAX and not key:
@@ -442,6 +658,9 @@ def _choice(f, value, ui, cls="", key=""):
         opts = "".join(f'<option value="{_esc(v)}"{" selected" if current == v else ""}>{_esc(t)}</option>'
                        for v, t in f["options"])
         return f'<select{klass}{data}><option value="">—</option>{opts}</select>'
+    if f["id"] == "hardware.description":
+        return (f'<textarea rows="5"{klass}{data} placeholder="{_esc(ui.get("equipment_ph", ""))}">'
+                f'{_esc(value or "")}</textarea>')
     listed = ""
     if f["suggest"]:
         dl = f'dl-{f["id"]}'
@@ -453,54 +672,32 @@ def _choice(f, value, ui, cls="", key=""):
     return f'<input type="text"{klass}{data} value="{_esc(value or "")}"{listed}>'
 
 
-def _default_hint(f, ui):
+def _default_tick(f, ui):
+    """A pre-selected default is shown with a tick; only a ticked (or changed) one is saved."""
     if f["default"] is None or f["value"] not in (None, ""):
         return ""
     shown = dict(f["options"]).get(str(f["default"]), str(f["default"]))
-    return (f'<div class="meta hint">{_esc(ui.get("default_hint", "pre-selected"))}: '
-            f'<b>{_esc(shown)}</b></div>')
-
-
-def _control(f, ui):
-    """The input for one field — or the honest note that this form does not write it."""
-    if f["id"] == "dsp.tiers":            # the one profile question the page writes (new DSP only)
-        return (f'<div class="row">{_choice(f, _draft_tiers(f), ui)}'
-                f'<button class="save" onclick="saveTiers(this)">{_esc(ui.get("save", "Save"))}</button>'
-                f'</div><div class="err"></div>')
-    if f["probe"]:
-        return (f'<div class="meta">🔎 {_esc(ui.get("probe", "probed, not asked"))}'
-                + (f' — {_esc(f["derive"])}' if f["derive"] else "") + "</div>")
-    writes = f["writes"] or ""
-    if writes.startswith("dsp_profile.draft:"):
-        return (f'<div class="meta">{_esc(ui.get("dsp_profile_note", ""))} — '
-                f'<code>{_esc(writes.split(":", 1)[1])}</code></div>')
-    if writes.startswith("glossary:"):
-        return f'<div class="meta">{_esc(ui.get("glossary_note", ""))}</div>'
-    if f["per"]:
-        key = "per_" + f["per"]
-        return f'<div class="meta">↳ {_esc(ui.get(key, f["per"]))}</div>'
-    if not writes:
-        choices = f["options"] or f["suggest"]
-        return ((f'<div class="meta">{_esc(ui.get("choices", "choices"))}: '
-                 + ", ".join(_esc(t) for _v, t in choices) + "</div>" if choices else "")
-                + f'<div class="meta">{_esc(ui.get("prose_note", ""))}</div>')
-    return (f'<div class="row">{_choice(f, f["value"], ui)}'
-            f'<button class="save" onclick="saveField(\'{_esc(f["id"])}\', this)">'
-            f'{_esc(ui.get("save", "Save"))}</button></div>{_default_hint(f, ui)}<div class="err"></div>')
-
-
-def _draft_tiers(f):
-    return f.get("draft_tiers") or []
+    return (f'<label class="meta hint"><input type="checkbox" class="default-ok"> '
+            f'{_esc(ui.get("default_confirm", "pre-selected — tick to confirm"))}: <b>{_esc(shown)}</b></label>')
 
 
 def _field_html(f, ui):
+    """One question as a UNIT the page's single Save reads: its control, and what it started as."""
     mark = (f' <span class="meta">({_esc(ui.get("required", "required"))})</span>'
             if f["required"] and f["place"] == "now" else "")
-    return (f'<div class="f s-{f["state"]}" id="f-{_esc(f["id"])}">'
+    writes = f["writes"] or ""
+    if writes.startswith("glossary:") or writes.startswith("dsp_profile.draft:") or f["per"] or not writes:
+        note = ui.get("glossary_note", "") if writes.startswith("glossary:") else ""
+        return (f'<div class="f s-{f["state"]}" id="f-{_esc(f["id"])}">'
+                f'<div class="q"><span class="dot d-{f["state"]}"></span>{_esc(f["ask"])}{mark}</div>'
+                f'<div class="meta">{_esc(note)}</div></div>')
+    shown = f["value"] if f["value"] not in (None, "", []) else f["default"]
+    unit_id = ' id="tiers-unit"' if f["id"] == "dsp.tiers_used" else ""
+    return (f'<div class="f unit s-{f["state"]}" data-kind="field" data-id="{_esc(f["id"])}" '
+            f"data-orig='{_esc(_orig(shown))}'{unit_id}>"
+            f'<span id="f-{_esc(f["id"])}"></span>'
             f'<div class="q"><span class="dot d-{f["state"]}"></span>{_esc(f["ask"])}{mark}</div>'
-            f'<div class="meta"><code>{_esc(f["id"])}</code> · '
-            f'<span class="en">{_esc(f["ask_en"])}</span></div>'
-            f'{_control(f, ui)}</div>')
+            f'<div class="row">{_choice(f, f["value"], ui)}</div>{_default_tick(f, ui)}</div>')
 
 
 CAR_PARTS = (("make", "car.make"), ("model", "car.model"), ("generation", "car.generation"),
@@ -528,29 +725,27 @@ def _car_block(m, fields):
                 f'<option value="">{_esc(ui.get("car_pick_none", "— type it below —"))}</option>{opts}</select></div>'
                 f'<div class="meta">{_esc(ui.get("car_pick_src", ""))}</div>'
                 f'<div class="meta hint" id="car-new" hidden>{_esc(ui.get("car_edited", "edited: this is a new car"))}</div></div>')
-    inputs = []
+    inputs, orig = [], {}
     for key, fid in CAR_PARTS:
         f = next((x for x in fields if x["id"] == fid), None)
         if not f:
             continue
         value = "" if f["value"] is None else str(f["value"])
+        orig[key] = value.strip() or None
         inputs.append(f'<div class="f s-{f["state"]}" id="f-{_esc(fid)}"><div class="q">'
                       f'<span class="dot d-{f["state"]}"></span>{_esc(f["ask"])}</div>'
                       f'<div class="row">{_choice(f, value, ui, cls="car-part", key=key)}</div></div>')
     couple = m["couplings"].get("car_identity", {})
-    return (f'<div class="couple"><div class="t">{_esc(couple.get("title", "car"))}</div>{pick}'
-            + "".join(inputs)
-            + f'<div class="row"><button class="save" '
-              f'onclick="saveGroupOf(\'.car-part\', \'car\', this)">'
-              f'{_esc(ui.get("save", "Save"))}</button></div><div class="err"></div></div>')
+    return (f"<div class=\"couple unit\" data-kind=\"car\" data-orig='{_esc(json.dumps(orig))}'>"
+            f'<div class="t">{_esc(couple.get("title", "car"))}</div>{pick}' + "".join(inputs) + "</div>")
 
 
 def _dsp_block(m, fields):
-    """Vendor, then model — the models offered are ONLY that vendor's (the Arbiter, 2026-09-22).
+    """Vendor, then model — the models offered are ONLY that vendor's (round 2).
 
-    The list is the skill's own DSP library (`intake.known_dsps`). "Another" opens two text boxes,
-    and a processor the library does not describe is a NEW processor: its base questions are asked
-    once, in their own step, and only then.
+    Picking another processor redraws the channel map below at once, from that processor's own
+    tiers and slot counts (round 4). A processor the library does not describe is NEW: its base is
+    asked on its own page (`/new-dsp`), and the map appears once that base exists.
     """
     ui = m["ui"]
     dsp = m["dsp"]
@@ -563,35 +758,33 @@ def _dsp_block(m, fields):
                      for v in vendors)
     m_opts = "".join(f'<option value="{_esc(d["model"])}" data-vendor="{_esc(d["vendor"])}"'
                      f'{" selected" if d["model"] == m_sel and d["vendor"] == v_sel else ""}'
-                     f'>{_esc(d["model"])}</option>'
-                     for d in m["dsps"])
+                     f'>{_esc(d["model"])}</option>' for d in m["dsps"])
     free_v = "" if v_sel != other else dsp["vendor"]
     free_m = "" if m_sel != other else dsp["model"]
     ids = "".join(f'<span id="f-{fid}"></span>' for fid in ("dsp.vendor", "dsp.model"))
     state = "have" if dsp["vendor"] and dsp["model"] else "gate"
-    return (f'<div class="couple" id="dsp-box">{ids}<div class="t">{_esc(m["couplings"]["dsp_identity"]["title"])}</div>'
+    ask = {f["id"]: f["ask"] for f in fields}
+    return (f'<div class="couple unit" data-kind="dsp" id="dsp-box">{ids}'
+            f'<div class="t">{_esc(m["couplings"]["dsp_identity"]["title"])}</div>'
             f'<div class="f s-{state}"><div class="q"><span class="dot d-{state}"></span>'
-            f'{_esc(next(f["ask"] for f in fields if f["id"] == "dsp.vendor"))} '
-            f'<span class="meta">({_esc(ui.get("required", "required"))})</span></div>'
+            f'{_esc(ask["dsp.vendor"])} <span class="meta">({_esc(ui.get("required", "required"))})</span></div>'
             f'<div class="row"><select id="dsp-vendor" onchange="pickVendor(this)"><option value="">—</option>{v_opts}'
             f'<option value="{other}"{" selected" if v_sel == other else ""}>{_esc(ui.get("dsp_other_vendor", "another vendor"))}</option></select>'
-            f'<input type="text" id="dsp-vendor-free" value="{_esc(free_v)}"{"" if v_sel == other else " hidden"}></div></div>'
-            f'<div class="f s-{state}"><div class="q"><span class="dot d-{state}"></span>'
-            f'{_esc(next(f["ask"] for f in fields if f["id"] == "dsp.model"))}</div>'
+            f'<input type="text" id="dsp-vendor-free" value="{_esc(free_v)}" oninput="redraw()"{"" if v_sel == other else " hidden"}></div></div>'
+            f'<div class="f s-{state}"><div class="q"><span class="dot d-{state}"></span>{_esc(ask["dsp.model"])}</div>'
             f'<div class="row"><select id="dsp-model" onchange="pickModel(this)"><option value="">—</option>{m_opts}'
             f'<option value="{other}"{" selected" if m_sel == other else ""}>{_esc(ui.get("dsp_other_model", "another model"))}</option></select>'
-            f'<input type="text" id="dsp-model-free" value="{_esc(free_m)}"{"" if m_sel == other else " hidden"}></div></div>'
-            f'<div class="meta hint" id="dsp-new-hint"{"" if dsp["new"] else " hidden"}>{_esc(ui.get("dsp_new_hint", "a new processor"))}</div>'
-            f'<div class="row"><button class="save" onclick="saveDsp(this)">{_esc(ui.get("save", "Save"))}</button></div>'
-            f'<div class="err"></div></div>')
+            f'<input type="text" id="dsp-model-free" value="{_esc(free_m)}" oninput="redraw()"{"" if m_sel == other else " hidden"}></div></div>'
+            f'<div class="note" id="newdsp-link"{"" if dsp["new"] else " hidden"}>{_esc(ui.get("dsp_new_hint", ""))} '
+            f'<a href="new-dsp">{_esc(ui.get("new_dsp_link", "New processor — fill in separately"))}</a></div>'
+            f'<div class="note" id="newdsp-pending" hidden>{_esc(ui.get("dsp_new_unsaved", ""))}</div></div>')
 
 
 def _goal_block(m, fields):
     """What the tune is for — ONE optional control: EMMA / AYA / for yourself / other + words.
 
-    The Arbiter's shape (2026-09-22). The ticks map onto the method's keys on the way in:
-    EMMA/AYA are `goal.formats`, a format means competition, "for yourself" is enjoyment, both is
-    both; the words go to `goal.wishes`.
+    The ticks map onto the method's keys on the way in: EMMA/AYA are `goal.formats`, a format means
+    competition, "for yourself" is enjoyment, both is both; the words go to `goal.wishes`.
     """
     ui = m["ui"]
     by = {f["id"]: f for f in fields}
@@ -606,73 +799,33 @@ def _goal_block(m, fields):
                     f'{" checked" if v in ticked else ""}> {_esc(t)}</label>' for v, t in choices)
     state = "have" if (formats or purpose or wishes) else "nice"
     ids = "".join(f'<span id="f-{fid}"></span>' for fid in ("goal.purpose", "goal.formats", "goal.wishes"))
-    return (f'<div class="f s-{state}" id="goal-box">{ids}<div class="q"><span class="dot d-{state}"></span>'
-            f'{_esc(ui.get("goal_ask", "What is the tune for?"))}</div>'
+    orig = {"choices": sorted(ticked), "text": wishes.strip() or None}
+    return (f"<div class=\"f unit s-{state}\" data-kind=\"goal\" data-orig='{_esc(json.dumps(orig))}' id=\"goal-box\">"
+            f'{ids}<div class="q"><span class="dot d-{state}"></span>{_esc(ui.get("goal_ask", "What is the tune for?"))}</div>'
             f'<div>{boxes}</div><div class="row"><input type="text" id="goal-text" value="{_esc(wishes)}" '
-            f'placeholder="{_esc(ui.get("goal_text", "in your own words"))}"></div>'
-            f'<div class="row"><button class="save" onclick="saveGoal(this)">{_esc(ui.get("save", "Save"))}</button></div>'
-            f'<div class="err"></div></div>')
+            f'placeholder="{_esc(ui.get("goal_text", "in your own words"))}"></div></div>')
 
 
 def _channel_map_block(m, ui):
-    """The processor's channel map as TCC draws it (the Arbiter, 2026-09-22): one fold per tier in
-    use, headed `used/total`, one row per slot — `slot · code` and an ON/OFF action.
-
-    The code is PICKED from the standard codes for that tier or typed (a code of one's own), and an
-    unused slot reads `off-out-A` / `off-virt-F`. Writes go through `intake.save_slot`.
-    """
+    """The processor's channel map as TCC draws it — one fold per tier, `used/total`, a row per
+    slot with ON/OFF — drawn by the page's JS from the data it carries, so it is redrawn for a
+    newly picked processor before anything is saved (round 4). Writes: `intake.save_slot`."""
+    codes = {"virtual_channels": intake.SUGGESTED_VIRTUAL_CODES}
+    tiers = dict.fromkeys(list(intake.SUGGESTED_TIERS) + [g["tier"] for d in m["dsps"] for g in d["groups"]]
+                          + list(m["dsp"]["tiers"]))
+    lists = "".join(f'<datalist id="codes-{_esc(t)}">'
+                    + "".join(f'<option value="{_esc(c)}">' for c in codes.get(t, intake.SUGGESTED_CHANNEL_CODES))
+                    + "</datalist>" for t in tiers)
     ids = "".join(f'<span id="f-{fid}"></span>' for fid in
                   ("channel_map.code", "channel_map.slot", "channel_map.tier", "channel_map.hidden"))
-    if not m["map"]:
-        return (f'<div class="note" id="map-empty">{ids}'
-                f'{_esc(ui.get("map_first", "choose the processor first"))}</div>')
-    codes = {"virtual_channels": intake.SUGGESTED_VIRTUAL_CODES}
-    lists, out = [], []
-    for tier in dict.fromkeys(g["tier"] for g in m["map"]):
-        dl = f"codes-{tier}"
-        lists.append(f'<datalist id="{_esc(dl)}">' + "".join(
-            f'<option value="{_esc(c)}">' for c in codes.get(tier, intake.SUGGESTED_CHANNEL_CODES))
-            + "</datalist>")
-    for g in m["map"]:
-        rows = []
-        for r in g["rows"]:
-            shown = r["code"] if r["code"] else intake.off_code(g["tier"], r["slot"])
-            value = r["code"] if r["on"] else ""
-            action = (f'<button class="tog tog-off" onclick="saveSlot(\'{_esc(g["tier"])}\', \'{_esc(r["slot"])}\', false, this)">'
-                      f'{_esc(ui.get("chan_off", "switch off"))}</button>' if r["on"] else
-                      f'<button class="tog tog-on" onclick="saveSlot(\'{_esc(g["tier"])}\', \'{_esc(r["slot"])}\', true, this)">'
-                      f'{_esc(ui.get("chan_on", "switch on"))}</button>')
-            save = (f'<button class="save" onclick="saveSlot(\'{_esc(g["tier"])}\', \'{_esc(r["slot"])}\', true, this)">'
-                    f'{_esc(ui.get("save", "Save"))}</button>' if r["on"] else "")
-            rows.append(f'<div class="slot{"" if r["on"] else " slot-off"}">'
-                        f'<span class="sl">{_esc(r["slot"])} ·</span>'
-                        f'<span class="sc">{_esc(shown)}</span>'
-                        f'<input type="text" class="code" list="codes-{_esc(g["tier"])}" value="{_esc(value)}" '
-                        f'placeholder="{_esc(ui.get("code_pick", "code"))}">{save}{action}'
-                        f'<div class="err"></div></div>')
-        if not g["sized"]:
-            rows.append(f'<div class="slot"><input type="text" class="slotname" '
-                        f'placeholder="{_esc(ui.get("slot_new", "slot"))}">'
-                        f'<input type="text" class="code" list="codes-{_esc(g["tier"])}" '
-                        f'placeholder="{_esc(ui.get("code_pick", "code"))}">'
-                        f'<button class="tog tog-on" onclick="saveSlot(\'{_esc(g["tier"])}\', null, true, this)">'
-                        f'{_esc(ui.get("chan_on", "switch on"))}</button><div class="err"></div></div>')
-        tier_label = (ui.get("tier_names") or {}).get(g["tier"]) if isinstance(ui.get("tier_names"), dict) else None
-        out.append(f'<details class="tier" open><summary>{_esc(tier_label or g["label"])} '
-                   f'<b>{g["used"]}/{g["total"]}</b></summary>{"".join(rows)}</details>')
-    return (f'<div class="f chanmap" id="chanmap">{ids}<div class="q">'
-            f'{_esc(ui.get("map_title", "Channel map"))}</div>'
-            f'<div class="meta">{_esc(ui.get("map_why", ""))}</div>'
-            + "".join(lists) + "".join(out) + "</div>")
+    return (f'<div class="f chanmap" id="chanmap">{ids}<div class="q">{_esc(ui.get("map_title", "Channel map"))}</div>'
+            f'<div class="meta">{_esc(ui.get("map_why", ""))}</div>{lists}'
+            f'<div class="note" id="chanmap-note">{_esc(ui.get("map_first", ""))}</div>'
+            f'<div id="chanmap-body"></div></div>')
 
 
 def _curve_block(m, fields):
-    """The target curve: ONE choice (the Arbiter, 2026-09-22) — ours, NTT's presets, or one's own.
-
-    SQ-Comp-Ref ships with the skill; the sixteen presets are listed as NTT lists them and their
-    files are downloaded at nonotuningtool.com (their authors', not bundled); "own / other" is a
-    file the person brings, named in words.
-    """
+    """The target curve: ONE choice (round 3) — ours, NTT's presets, or one's own."""
     ui = m["ui"]
     f = next(x for x in fields if x["id"] == "target_curve.candidate")
     value = f["value"] or ""
@@ -684,7 +837,8 @@ def _curve_block(m, fields):
                 f'{" checked" if value == v or (v == "__own__" and own) else ""}> {_esc(label)}</label>')
 
     state = "have" if value else "nice"
-    return (f'<div class="f s-{state}" id="f-target_curve.candidate"><div class="q">'
+    return (f"<div class=\"f unit s-{state}\" data-kind=\"curve\" data-orig='{_esc(_orig(value))}' "
+            f'id="f-target_curve.candidate"><div class="q">'
             f'<span class="dot d-{state}"></span>{_esc(f["ask"])}</div>'
             f'<div class="curve-ours">{radio(intake.BUNDLED_CURVE, ui.get("curve_ours", "SQ-Comp-Ref — ours"))}</div>'
             f'<div class="meta">{_esc(ui.get("curve_ntt", "Nono Tuning Tool presets"))} — '
@@ -693,61 +847,41 @@ def _curve_block(m, fields):
             f'<div class="curve-grid">' + "".join(radio(c, c) for c in intake.NTT_CURVE_PRESETS) + "</div>"
             f'<div>{radio("__own__", ui.get("curve_own", "own / other"))}'
             f'<input type="text" id="curve-own" value="{_esc(own)}" '
-            f'placeholder="{_esc(ui.get("curve_own_hint", "its name or file"))}"></div>'
-            f'<div class="row"><button class="save" onclick="saveCurve(this)">{_esc(ui.get("save", "Save"))}</button></div>'
-            f'<div class="err"></div></div>')
+            f'placeholder="{_esc(ui.get("curve_own_hint", "its name or file"))}"></div></div>')
 
 
-def _cell(c, raw, ui):
-    """One table cell: a list for a closed set, a text box with suggestions for an open one."""
-    leaf = c["id"].split(".", 1)[1]
-    value = "" if raw is None else str(raw)
-    if isinstance(raw, bool):
-        value = "yes" if raw else "no"
-    return f'<td>{_choice(c, value, ui, key=leaf)}</td>'
-
-
-def _table(m, per, rows, kind, key_field, cols, add=True):
-    """The per-entity half: questions per channel are a table, never 12 × N controls.
-
-    `cols` are the columns THIS section asks; a later section shows the same rows with its own
-    columns and carries the key in a hidden input, so a row is always saved against its code.
-    """
-    ui = m["ui"]
-    head = "".join(f'<th title="{_esc(c["ask_en"])}" id="f-{_esc(c["id"])}">{_esc(c["ask"])}<br>'
-                   f'<code style="font-size:10px">{_esc(c["id"].split(".", 1)[1])}</code></th>'
-                   for c in cols)
-    keyed = any(c["id"].split(".", 1)[1] == key_field for c in cols)
+def _driver_table(m, cols, ui):
+    """The optional structured half of «Інше обладнання»: one row per live channel. None → nothing."""
+    rows = [r for r in m["rows"]["channels"] if not r.get("hidden") and r.get("role") != "unused"]
+    if not rows:
+        return ""
+    head = "".join(f'<th id="f-{_esc(c["id"])}">{_esc(c["ask"])}</th>' for c in cols)
     body = []
-    for row in rows + ([{}] if add else []):
-        cells = []
+    for row in rows:
+        cells, orig = [], {"code": row.get("code")}
         for c in cols:
             leaf = c["id"].split(".", 1)[1]
             raw = row.get(leaf)
-            if isinstance(raw, dict) and "make" not in leaf:
-                raw = project.fact_value(raw) if project.is_fact(raw) else ""
             if leaf in ("driver_make", "driver_model"):
-                raw = ((row.get("driver") or {}) or {}).get(leaf.split("_", 1)[1], "")
-            cells.append(_cell(c, raw, ui))
-        hidden = ("" if keyed or not row.get(key_field) else
-                  f'<input type="hidden" data-k="{_esc(key_field)}" value="{_esc(row.get(key_field))}">')
-        label = _esc(row.get(key_field) or ui.get("add_row", "+"))
-        body.append(f'<tr><th>{label}{hidden}</th>{"".join(cells)}'
-                    f'<td><button class="save" onclick="saveRow(\'{kind}\', this.closest(\'tr\'), this)">'
-                    f'{_esc(ui.get("save", "Save"))}</button><div class="err"></div></td></tr>')
-    if not body:
-        return (f'<div class="note">{_esc(ui.get("rows_first", "fill in the channels first"))}<ul>'
-                + "".join(f'<li id="f-{_esc(c["id"])}">{_esc(c["ask"])}</li>' for c in cols)
-                + "</ul></div>")
-    return (f'<div style="overflow-x:auto"><table><tr><th></th>{head}<th></th></tr>'
-            + "".join(body) + "</table></div>")
+                raw = (row.get("driver") or {}).get(leaf.split("_", 1)[1], "")
+            elif project.is_fact(raw):
+                raw = project.fact_value(raw)
+            value = "" if raw is None else str(raw)
+            orig[leaf] = value.strip() or None
+            # No pre-selected default in this optional table: a cell the person did not touch is
+            # not an answer, and there is no tick here to confirm one.
+            cells.append(f'<td>{_choice(dict(c, default=None), value, ui, key=leaf)}</td>')
+        body.append(f"<tr class=\"unit\" data-kind=\"chanrow\" data-orig='{_esc(json.dumps(orig))}'>"
+                    f'<th>{_esc(row.get("code"))}<input type="hidden" data-k="code" value="{_esc(row.get("code"))}"></th>'
+                    + "".join(cells) + "</tr>")
+    return (f'<div class="meta">{_esc(ui.get("drivers_title", ""))}</div>'
+            f'<div style="overflow-x:auto"><table><tr><th></th>{head}</tr>' + "".join(body) + "</table></div>")
 
 
-def _section(m, rows, ui, add_rows):
-    """One place's questions, in the table's group order — couples kept whole, tables for rows."""
+def _section(m, rows, ui):
+    """One place's questions, in the table's group order — couples kept whole."""
     out, done, heading = [], set(), None
     titles = {g["id"]: g["title"] for g in m["groups"]}
-    specials = {"car": _car_block, "dsp_identity": _dsp_block, "purpose": _goal_block}
     for gid, _why in intake.GROUPS:
         for f in [x for x in rows if x["group"] == gid]:
             if f["id"] in done:
@@ -759,10 +893,13 @@ def _section(m, rows, ui, add_rows):
                 out.append(_car_block(m, rows))
                 done |= set(dict(CAR_PARTS).values())
                 continue
-            if f["couple"] in ("dsp_identity", "purpose"):
-                out.append(specials[f["couple"]](m, m["fields"]))
-                done |= {x["id"] for x in rows if x["couple"] == f["couple"]} | (
-                    {"goal.wishes"} if f["couple"] == "purpose" else set())
+            if f["couple"] == "dsp_identity":
+                out.append(_dsp_block(m, m["fields"]))
+                done |= {x["id"] for x in rows if x["couple"] == "dsp_identity"}
+                continue
+            if f["couple"] == "purpose":
+                out.append(_goal_block(m, m["fields"]))
+                done |= {x["id"] for x in rows if x["couple"] == "purpose"} | {"goal.wishes"}
                 continue
             if f["per"] == "channel" and f["place"] == "now":
                 out.append(_channel_map_block(m, ui))
@@ -771,13 +908,6 @@ def _section(m, rows, ui, add_rows):
             if f["id"] == "target_curve.candidate":
                 out.append(_curve_block(m, m["fields"]))
                 done.add(f["id"])
-                continue
-            if f["per"] in ("channel", "amp"):
-                cols = [c for c in rows if c["per"] == f["per"]]
-                data = m["rows"]["channels" if f["per"] == "channel" else "amps"]
-                key = "code" if f["per"] == "channel" else "model"
-                out.append(_table(m, f["per"], data, f["per"], key, cols, add=add_rows))
-                done |= {c["id"] for c in cols}
                 continue
             mates = [x for x in rows if f["couple"] and x["couple"] == f["couple"]
                      and x["id"] not in done and not x["per"]]
@@ -792,84 +922,162 @@ def _section(m, rows, ui, add_rows):
     return "".join(out)
 
 
-def _memo(m, rows, ui):
-    """What the page does NOT ask — a cheat-sheet, grouped by who answers it and when."""
-    whens = {w["id"]: w["title"] for w in m["when"]}
-    auto = [f for f in rows if f["probe"]]
-    later = [f for f in rows if not f["probe"]]
-    out = [f'<h3>{_esc(ui.get("memo_auto", "a tool or the profile answers these"))}</h3><ul>']
-    out += [f'<li id="f-{_esc(f["id"])}">{_esc(f["ask"])} — <span class="meta">{_esc(f["derive"])}</span></li>'
-            for f in auto]
-    out.append(f'</ul><h3>{_esc(ui.get("memo_later", "the session asks when the step comes"))}</h3><ul>')
-    out += [f'<li id="f-{_esc(f["id"])}">{_esc(f["ask"])} — <span class="meta">{_esc(whens.get(f["when"], f["when"]))}</span></li>'
-            for f in later]
-    return "".join(out) + "</ul>"
+def _page_data(m):
+    """What the page's JS draws the channel map from — embedded, so it works before any save."""
+    chans = [{"tier": c.get("tier"), "slot": str(c.get("slot")), "code": c.get("code"),
+              "hidden": bool(c.get("hidden")), "role": c.get("role")}
+             for c in m["rows"]["channels"] if c.get("tier") and c.get("slot")]
+    ui = m["ui"]
+    t = {k: ui.get(k, "") for k in ("chan_on", "chan_off", "code_pick", "code_needed", "map_first",
+                                    "map_new", "map_new_unsaved", "map_replaced", "seat_confirm",
+                                    "dsp_confirm", "nothing_changed", "save_cancelled")}
+    t["tier_names"] = ui.get("tier_names") if isinstance(ui.get("tier_names"), dict) else {}
+    data = {"dsps": [{"vendor": d["vendor"], "model": d["model"], "groups": d["groups"]} for d in m["dsps"]],
+            "saved": {"vendor": m["dsp"]["vendor"], "model": m["dsp"]["model"], "new": bool(m["dsp"]["new"]),
+                      "groups": m["dsp"]["groups"], "channels": chans, "slotted": len(chans),
+                      "tiers_used": m["tiers_used"]},
+            "off_prefix": intake.OFF_PREFIX, "t": t}
+    return json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
+
+
+def _shell(m, title, parts, button_after=""):
+    ui = m["ui"]
+    after = f' data-after="{_esc(button_after)}"' if button_after else ""
+    return (
+        "<!doctype html><html lang=\"" + _esc(m["lang"]) + "\"><head><meta charset=\"utf-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+        f"<title>{_esc(title)}</title><style>{_CSS}</style></head><body>"
+        f"<header><h1>{_esc(title)}</h1>" + parts[0] + "</header>"
+        f"<main>{''.join(parts[1:])}</main>"
+        f'<div class="savebar"><button type="button" class="save big" onclick="saveAll(this)"{after}>'
+        f'{_esc(ui.get("save", "Save"))}</button><div id="save-status" class="status"></div></div>'
+        f'<script type="application/json" id="intake-data">{_page_data(m)}</script>'
+        f"<script>{_JS}</script></body></html>"
+    )
 
 
 def render(m):
-    """One self-contained page: no CDN, no font, no network — it must open on a car's laptop.
+    """The intake page: one self-contained file, no CDN, no font — it must open on a car's laptop.
 
-    Open on the page: what starting to measure needs, and the optional goal. A new processor's base
-    questions appear only for a new processor; the drivers and other hardware are an optional fold;
-    everything else is a memo, not a question.
+    Open: what starting to measure needs, then the optional goal and the optional «Інше
+    обладнання» (a free-text description first). Not rendered at all: the memo (round 4) — those
+    fields stay in `intake.FIELDS` for the session. A new processor's base is its OWN page.
     """
     ui = m["ui"]
     t = m["totals"]
     fields = m["fields"]
-    for f in fields:
-        if f["id"] == "dsp.tiers" and m["dsp"]["source"] == "draft":
-            f["draft_tiers"] = m["dsp"]["tiers"]
     chips = (f'<span class="chip"><span class="dot d-gate"></span>'
              f'{_esc(ui.get("legend_now", "to answer now"))} <b>{t["now_open"]}</b> / {t["now"]}</span>'
              f'<span class="chip"><span class="dot d-have"></span>'
-             f'{_esc(ui.get("legend_green", "answered"))} <b>{t["have"]}</b></span>'
-             f'<span class="chip"><span class="dot d-prose"></span>'
-             f'{_esc(ui.get("legend_memo", "not asked"))} <b>{t["memo"]}</b></span>')
+             f'{_esc(ui.get("legend_green", "answered"))} <b>{t["have"]}</b></span>')
     gate = m["gate"]
     verdict = (f'<span class="gate-ok">{_esc(ui.get("gate_open", "gate open"))}</span>'
                if gate["open"] else
                f'<span class="gate-shut">{_esc(ui.get("gate_shut", "gate shut"))}</span>'
                + (f' — {_esc(ui.get("gate_missing", "missing"))}: '
                   f'{_esc(", ".join(gate["missing_files"]))}' if gate["missing_files"] else ""))
+    head = (f"<div class=\"sub\">{_esc(ui.get('subtitle', ''))}</div>"
+            f"<div class=\"dir\">{_esc(m['project_dir'])}</div>"
+            f"<div class=\"chips\">{chips}<span class=\"chip\">{verdict}</span>"
+            f"<span class=\"chip\"><code>{_esc(gate['command'])}</code></span></div>")
 
     def place(p):
         return [f for f in fields if f["place"] == p]
 
-    parts = [f'<section class="now"><h2>{_esc(ui.get("now_title", "Now"))}</h2>'
-             f'<p class="why">{_esc(ui.get("now_why", ""))}</p>'
-             + _section(m, place("now"), ui, add_rows=True) + "</section>"]
-    parts.append(f'<section class="goal"><h2>{_esc(ui.get("goal_title", "Goal and music"))}</h2>'
-                 f'<p class="why">{_esc(ui.get("goal_why", ""))}</p>'
-                 + _section(m, place("goal"), ui, add_rows=False) + "</section>")
-    parts.append(f'<section class="new-dsp" id="new-dsp"{"" if m["dsp"]["new"] else " hidden"}>'
-                 f'<h2>{_esc(ui.get("new_dsp_title", "New processor"))}</h2>'
-                 f'<p class="why">{_esc(ui.get("new_dsp_why", ""))}</p>'
-                 # Here nothing is derived: the library has no profile of THIS processor, so the
-                 # base questions are put to the person, once.
-                 + "".join(_field_html(dict(f, probe=False), ui) for f in place("new_dsp"))
-                 + "</section>")
+    parts = [head,
+             f'<section class="now"><h2>{_esc(ui.get("now_title", "Now"))}</h2>'
+             f'<p class="why">{_esc(ui.get("now_why", ""))}</p>' + _section(m, place("now"), ui) + "</section>",
+             f'<section class="goal"><h2>{_esc(ui.get("goal_title", "Goal and music"))}</h2>'
+             f'<p class="why">{_esc(ui.get("goal_why", ""))}</p>' + _section(m, place("goal"), ui) + "</section>"]
     equipment = place("equipment")
-    table_cols = [f for f in equipment if f["per"] == "channel"]
-    body = (_table(m, "channel", m["rows"]["channels"], "channel", "code", table_cols, add=False)
-            + "".join(_field_html(f, ui) for f in equipment if f["per"] != "channel"))
-    parts.append(f'<details id="equipment"><summary>{_esc(ui.get("equipment_title", "Other equipment"))}'
-                 f' <span class="n">{len(equipment)}</span></summary>'
-                 f'<p class="why">{_esc(ui.get("equipment_why", ""))}</p>{body}</details>')
-    parts.append(f'<details id="memo"><summary>{_esc(ui.get("memo_title", "Memo"))}'
-                 f' <span class="n">{t["memo"]}</span></summary>{_memo(m, place("memo"), ui)}</details>')
+    desc = [f for f in equipment if f["id"] == "hardware.description"]
+    cols = [f for f in equipment if f["per"] == "channel"]
+    table = _driver_table(m, cols, ui)
+    ids = "" if table else "".join(f'<span id="f-{_esc(f["id"])}"></span>' for f in cols)
+    rest = [f for f in equipment if f["per"] != "channel" and f["id"] != "hardware.description"]
+    parts.append(f'<section class="equipment" id="equipment"><h2>{_esc(ui.get("equipment_title", "Other equipment"))}</h2>'
+                 f'<p class="why">{_esc(ui.get("equipment_why", ""))}</p>'
+                 + "".join(_field_html(f, ui) for f in desc) + table + ids
+                 + "".join(_field_html(f, ui) for f in rest) + "</section>")
+    return _shell(m, ui.get("title", "Intake"), parts)
 
-    return (
-        "<!doctype html><html lang=\"" + _esc(m["lang"]) + "\"><head><meta charset=\"utf-8\">"
-        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-        f"<title>{_esc(ui.get('title', 'Intake'))}</title><style>{_CSS}</style></head><body>"
-        f"<header><h1>{_esc(ui.get('title', 'Intake'))}</h1>"
-        f"<div class=\"sub\">{_esc(ui.get('subtitle', ''))}</div>"
-        f"<div class=\"dir\">{_esc(m['project_dir'])}</div>"
-        f"<div class=\"chips\">{chips}<span class=\"chip\">{verdict}</span>"
-        f"<span class=\"chip\"><code>{_esc(gate['command'])}</code></span></div></header>"
-        f"<main>{''.join(parts)}</main>"
-        f"<script>{_JS}</script></body></html>"
-    )
+
+def render_new_dsp(m):
+    """The NEW processor's own form (round 4): its tiers, how many slots each has and how they are
+    labelled, its controls, and the capability answers — written once, into the interview draft
+    (`intake.save_new_dsp`). The main page's channel map is built from what this records."""
+    ui = m["ui"]
+    dsp = m["dsp"]
+    title = " — ".join(x for x in (ui.get("new_dsp_title", "New processor"),
+                                    f'{dsp["vendor"]} {dsp["model"]}'.strip()) if x)
+    back = f'<div class="sub"><a href="./">{_esc(ui.get("back_to_intake", "back to the intake"))}</a></div>'
+    if not dsp["new"]:
+        return _shell(m, title, [back, f'<div class="note">{_esc(ui.get("new_dsp_not_new", ""))}</div>'])
+    a = m["new_dsp"]
+    fields = {f["id"]: f for f in m["fields"]}
+    controls = ui.get("controls") if isinstance(ui.get("controls"), dict) else {}
+    tier_names = ui.get("tier_names") if isinstance(ui.get("tier_names"), dict) else {}
+
+    def checks(name, values, chosen, labels=None):
+        chosen = [str(c) for c in chosen or []]
+        return "".join(f'<label class="opt"><input type="checkbox" name="{_esc(name)}" value="{_esc(v)}"'
+                       f'{" checked" if str(v) in chosen else ""}> {_esc((labels or {}).get(v, v))}</label>'
+                       for v in values)
+
+    def yesno(name, value):
+        opts = (("yes", ui.get("yes", "yes")), ("no", ui.get("no", "no")), ("", ui.get("dont_know", "don't know")))
+        cur = "yes" if value is True else "no" if value is False else ""
+        return "".join(f'<label class="opt"><input type="radio" name="{_esc(name)}" value="{v}"'
+                       f'{" checked" if v == cur else ""}> {_esc(t)}</label>' for v, t in opts)
+
+    def num(name, value):
+        return (f'<input type="text" inputmode="decimal" class="num" name="{_esc(name)}" '
+                f'value="{_esc("" if value is None else value)}">')
+
+    rows = []
+    for tier in intake.SUGGESTED_TIERS:
+        have = a["tiers"].get(tier)
+        row = have or {"count": None, "letters": True, "fields": []}
+        rows.append(
+            f'<div class="tier-row" data-tier="{_esc(tier)}"><label class="opt"><input type="checkbox" class="has"'
+            f'{" checked" if have else ""}> <b>{_esc(tier_names.get(tier, tier))}</b></label>'
+            f'<div class="row">{_esc(ui.get("slots_count", "slots"))} {num("count-" + tier, row["count"])} '
+            f'<label class="opt"><input type="radio" name="style-{_esc(tier)}" value="letter"'
+            f'{" checked" if row["letters"] else ""}> A, B, C…</label>'
+            f'<label class="opt"><input type="radio" name="style-{_esc(tier)}" value="number"'
+            f'{"" if row["letters"] else " checked"}> 1, 2, 3…</label></div>'
+            f'<div class="row">{_esc(ui.get("tier_controls", "controls"))}: '
+            f'{checks("fields-" + tier, list(dsp_profile.FIELD_VOCABULARY), row["fields"], controls)}</div></div>')
+
+    def q(fid):
+        return _esc(fields[fid]["ask"])
+
+    rate_opts = "".join(f'<option value="{r}"{" selected" if a["rate"] == r else ""}>{r}</option>'
+                        for r in intake.PLAUSIBLE_RATES_HZ)
+    body = (
+        f'<form id="newdsp-form" onsubmit="return false">'
+        f'<p class="why">{_esc(ui.get("new_dsp_why", ""))}</p>'
+        f'<div class="f" id="f-dsp.tiers"><div class="q">{q("dsp.tiers")}</div>'
+        f'<span id="f-dsp.max_count"></span><div class="meta">{q("dsp.max_count")}</div>{"".join(rows)}</div>'
+        f'<div class="f" id="f-dsp.processing_rate_hz"><div class="q">{q("dsp.processing_rate_hz")}</div>'
+        f'<div class="row"><select name="rate"><option value="">—</option>{rate_opts}</select></div></div>'
+        f'<div class="f" id="f-dsp.eq"><div class="q">{q("dsp.eq")}</div>'
+        f'<div class="row">{_esc(ui.get("eq_bands", "bands per channel"))} {num("eq-bands", a["eq"].get("bands"))}</div>'
+        f'<div class="row">{checks("eq-types", intake.EQ_BAND_TYPES, a["eq"].get("types"))}</div>'
+        f'<div class="row">{_esc(ui.get("eq_file", "EQ file import"))}: {yesno("eq-file", a["eq"].get("file_import"))}</div></div>'
+        f'<div class="f" id="f-dsp.crossovers"><div class="q">{q("dsp.crossovers")}</div>'
+        f'<div class="row">{checks("xo-types", intake.XO_FAMILIES, a["crossover"].get("types"))}</div>'
+        f'<div class="row">{_esc(ui.get("xo_slopes", "slopes, dB/oct"))}: '
+        f'{checks("xo-slopes", intake.XO_SLOPES, a["crossover"].get("slopes"))}</div>'
+        f'<div class="row">{_esc(ui.get("xo_indep", "independent HP and LP"))}: {yesno("xo-indep", a["crossover"].get("independent"))}</div></div>'
+        f'<div class="f" id="f-dsp.delays"><div class="q">{q("dsp.delays")}</div>'
+        f'<div class="row">{_esc(ui.get("delay_step", "step, ms"))} {num("delay-step", a["delay"].get("step_ms"))} '
+        f'{_esc(ui.get("delay_max", "maximum, ms"))} {num("delay-max", a["delay"].get("max_ms"))}</div></div>'
+        f'<div class="f" id="f-dsp.presets"><div class="q">{q("dsp.presets")}</div>'
+        f'<div class="row">{_esc(ui.get("presets_count", "how many"))} {num("presets-count", a["presets"].get("count"))}</div>'
+        f'<div class="row">{_esc(ui.get("presets_input", "the input switches with the preset"))}: '
+        f'{yesno("presets-input", a["presets"].get("input_switches"))}</div></div></form>')
+    return _shell(m, title, [back, body], button_after="./")
 
 
 # ── writing back ──────────────────────────────────────────────────────────────
@@ -893,6 +1101,19 @@ def apply_save(project_dir, payload):
     Every refusal comes from `intake`/`project` and is handed back verbatim: the page must say the
     method's words ("a slot needs its tier in the same breath"), not a paraphrase of them.
     """
+    if "batch" in payload:
+        # ONE Save sends every changed answer at once (round 4). Each goes through its own writer,
+        # in the order the page sent them (the processor before its tiers, the tiers before the
+        # slots); a refusal is reported for that answer and does not stop the ones after it —
+        # every writer is atomic, so what was written is whole and what was refused is untouched.
+        results, errors = [], []
+        for i, item in enumerate(payload["batch"] or []):
+            try:
+                results.append(apply_save(project_dir, item))
+            except (intake.IntakeError, project.ProjectError, ValueError) as exc:
+                errors.append({"index": i, "error": str(exc)})
+        return {"results": results, "errors": errors}
+
     if "field" in payload:
         value = payload.get("value")
         if isinstance(value, list):
@@ -905,18 +1126,26 @@ def apply_save(project_dir, payload):
 
     if "slot" in payload:
         row = payload["slot"]
+        # A slot belongs to the processor the map was drawn for; if that processor was not saved
+        # (a refused change, a cancelled one), the slot is refused rather than filed on another unit.
+        drawn = row.get("dsp")
+        if drawn:
+            saved = intake.dsp_state(project_dir)
+            if [str(x).strip().lower() for x in drawn] != [saved["vendor"].lower(), saved["model"].lower()]:
+                raise intake.IntakeError(f"slot {row.get('slot')}: the map was drawn for {' '.join(drawn)}, "
+                                         f"and the project's processor is {saved['vendor']} {saved['model']} "
+                                         "— save the processor first. Nothing was written")
         return {"slot": intake.save_slot(project_dir, row.get("tier"), row.get("slot"),
                                          code=row.get("code"), on=bool(row.get("on")))}
 
     if "dsp" in payload:
         # Vendor and model are ONE identity: both or nothing, written together.
         row = payload["dsp"]
-        vendor, model_ = (row.get("vendor") or "").strip(), (row.get("model") or "").strip()
-        if not (vendor and model_):
-            raise intake.IntakeError("the DSP is a vendor AND a model — nothing was written")
-        intake.save(project_dir, "dsp.vendor", vendor)
-        intake.save(project_dir, "dsp.model", model_)
-        return {"dsp": intake.dsp_state(project_dir)}
+        return {"dsp": intake.change_dsp(project_dir, row.get("vendor"), row.get("model"),
+                                         replace_map=bool(row.get("replace_map")))}
+
+    if "new_dsp" in payload:
+        return {"new_dsp": intake.save_new_dsp(project_dir, payload["new_dsp"] or {})}
 
     if "goal" in payload:
         # EMMA / AYA / for yourself / other -> the method's own keys (`_goal_block`).
@@ -933,27 +1162,6 @@ def apply_save(project_dir, payload):
         if text:
             written["wishes"] = intake.save(project_dir, "goal.wishes", text)
         return {"goal": written}
-
-    if "dsp_tiers" in payload:
-        # A NEW processor's tiers go into the interview draft through the profile's own writer;
-        # a group the draft already has keeps what was answered about it.
-        chosen = [t for t in (payload["dsp_tiers"] or []) if t]
-        if not chosen:
-            raise intake.IntakeError("nothing chosen — nothing was written")
-        dsp = intake.dsp_state(project_dir)
-        if not dsp["new"]:
-            raise intake.IntakeError("the tiers are read off the processor's profile; they are asked "
-                                     "only for a new processor — nothing was written")
-        data = dsp_profile.start_draft(project_dir, dsp["vendor"], dsp["model"])
-        have = {g.get("id"): g for g in dsp_profile._unwrap(data).get("groups") or []}
-        names = {"channels": "Output channels", "virtual_channels": "Virtual channels", "inputs": "Inputs"}
-        groups = []
-        for t in chosen:
-            gid = "physical_outputs" if t == "channels" else t
-            groups.append(have.get(gid) or {"id": gid, "label": names.get(t, t), "fields": None,
-                                            "max_count": None})
-        dsp_profile.set_field(project_dir, "groups", groups)
-        return {"dsp_tiers": chosen}
 
     if "car" in payload:
         row = payload["car"]
@@ -1000,6 +1208,9 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/":
             page = render(model(self.project_dir, self.lang))
             return self._send(200, page, "text/html; charset=utf-8")
+        if path == "/new-dsp":
+            page = render_new_dsp(model(self.project_dir, self.lang))
+            return self._send(200, page, "text/html; charset=utf-8")
         if path == "/state":
             return self._send(200, json.dumps(model(self.project_dir, self.lang),
                                               ensure_ascii=False, indent=2))
@@ -1014,6 +1225,10 @@ class _Handler(BaseHTTPRequestHandler):
             written = apply_save(self.project_dir, payload)
         except (intake.IntakeError, project.ProjectError, ValueError) as exc:
             return self._send(400, json.dumps({"error": str(exc)}, ensure_ascii=False))
+        if "batch" in payload:
+            # The page reads `errors` at the top: one Save, one report of what was refused.
+            return self._send(200, json.dumps(dict(written, ok=not written["errors"]),
+                                              ensure_ascii=False, default=str))
         self._send(200, json.dumps({"ok": True, "written": written}, ensure_ascii=False,
                                    default=str))
 
@@ -1088,10 +1303,16 @@ def _selftest():
         for pid in PROBES:
             assert by_id[pid]["probe"], pid
 
-        # ── the page: every field on it, no network, and the couples kept whole ──────────────
+        # ── the page: what it shows, and — round 4 — what it does NOT ─────────────────────────
         page = render(m)
-        for fid in ids:
-            assert f"f-{fid}" in page or fid in page, f"{fid} is not on the page"
+        for f in intake.FIELDS:
+            if f["place"] in ("now", "goal", "equipment"):
+                assert f'f-{f["id"]}' in page, f"{f['id']} is not on the page"
+            if f["place"] in ("memo", "new_dsp"):
+                # The memo stays in the data for the session and is not rendered; the new
+                # processor's base is its OWN page.
+                assert f'id="f-{f["id"]}"' not in page, f"{f['id']} ({f['place']}) is on the main page"
+        assert 'id="memo"' not in page and 'id="new-dsp"' not in page
         # Nothing is LOADED from the network (no CDN, no font): it must open on a car's laptop. One
         # thing may point out, and only as a link the person clicks: NTT, where the curve files are
         # downloaded (round 3, 2026-09-22). Any other outbound reference still fails here.
@@ -1102,94 +1323,119 @@ def _selftest():
         assert not re.findall(r"""src=["']https?://|<link[^>]+href=["']https?://""", page), \
             "the page loads something from the network"
         assert "Якою мовою відповідати" in page, "the Ukrainian labels did not reach the page"
-        assert m["couplings"]["seat"]["fields"] == ["car.drive_side", "goal.reference_seat"], \
-            m["couplings"]["seat"]
+        # ONE «Зберегти» for the page, not a button on every question.
+        assert len(re.findall(r'<button[^>]*class="save', page)) == 1 and ">Зберегти<" in page \
+            and "Записати" not in page, "more than one Save, or the old label"
+        assert m["couplings"]["seat"]["fields"] == ["car.drive_side", "goal.reference_seat"]
 
-        # ── the Arbiter's review, 2026-09-22 ─────────────────────────────────────────────────
         now_html = page.split("</section>", 1)[0]
         for fid in ("goal.reference_seat", "car.drive_side", "channel_map.code", "rew.loopback",
                     "dsp.vendor", "dsp.tiers_used"):
             assert f"f-{fid}" in now_html, f"{fid} is needed to start measuring and is not up front"
-        # Not asked at all: the solo question, the mic, the signal chain, the clip check.
-        memo = page.split('id="memo"', 1)[1]
-        for fid in ("dsp.per_channel_measurable", "rew.mic_model", "rew.mic_cal_0", "source.kind",
-                    "source.listening_input", "dsp.measurement_input", "rew.input_clip_checked",
-                    "amps.make", "target_curve.tone"):
-            assert f"f-{fid}" not in now_html and f'<li id="f-{fid}"' in memo, f"{fid} is asked"
-        # The seat and the drive side are ONE control although they live in two groups.
         couple = now_html.split('id="f-car.drive_side"', 1)[1].split('<div class="couple">', 1)[0]
         assert 'id="f-goal.reference_seat"' in couple, "the seat couple was split"
-        # A default is pre-selected, not written.
-        assert 'name="r-car.drive_side" value="LHD" checked' in page, "the default is not pre-selected"
+        # A default is pre-selected AND carries a tick; untouched and unticked it is not saved (the
+        # page's collect() compares against data-orig and the tick) — and nothing is stored here.
+        side = now_html.split('data-id="car.drive_side"', 1)[1].split('data-kind=', 1)[0]
+        assert 'value="LHD" checked' in side and 'class="default-ok"' in side, "no confirm tick"
         assert "drive_side" not in (project.Project(root).load().get("car") or {}), \
             "a default was stored behind the person's back"
-        # The car list is what the skill has seen, and a known car fills the four parts.
+        seat = now_html.split('data-id="goal.reference_seat"', 1)[1].split("</div></div>", 1)[0]
+        assert " checked" not in seat and "default-ok" not in seat, "the write-once seat is pre-selected"
         assert 'data-make="VW" data-model="Passat" data-generation="B8" data-body="sedan"' in page
-        # The DSP: a model is offered under ITS vendor only, so Musway + Helix cannot be picked.
         for d in intake.known_dsps():
             assert f'value="{_esc(d["model"])}" data-vendor="{_esc(d["vendor"])}"' in page, d
-        # No processor chosen: the new-processor step exists but is not shown.
-        assert '<section class="new-dsp" id="new-dsp" hidden>' in page
-        # The goal is one optional control; the curve question is the Arbiter's words.
+        # The map is drawn by the page from the data it CARRIES — every bundled processor's tiers
+        # and slots — so another processor's map appears the moment it is picked (round 4).
+        def carried(html_):
+            raw = re.search(r'<script type="application/json" id="intake-data">(.*?)</script>',
+                            html_, re.S).group(1)
+            return json.loads(raw.replace("<\\/", "</"))
+        data = carried(page)
+        helix = next(d for d in data["dsps"] if d["model"] == "Helix DSP Ultra S")
+        assert [(g["tier"], len(g["slots"]), g["slots"][0]) for g in helix["groups"][:2]] == \
+            [("virtual_channels", 8, "A"), ("channels", 12, "A")], helix["groups"]
+        musway = next(d for d in data["dsps"] if d["vendor"] == "Musway")
+        assert musway["groups"][0]["slots"] == [str(i) for i in range(1, 9)], musway
+        assert data["saved"]["slotted"] == 0 and 'id="chanmap-body"' in page
         assert 'class="goal-pick" value="EMMA"' in page and "Яка цільова крива?" in page
         assert 'value="chesky"' in page and 'value="jazz"' in page, "libraries/genres are not checkboxes"
-
-        apply_save(root, {"dsp": {"vendor": "Audiotec-Fischer", "model": "Helix DSP Ultra S"}})
-        m2 = model(root, "uk")
-        tiers = next(f for f in m2["fields"] if f["id"] == "channel_map.tier")["options"]
-        assert [v for v, _ in tiers] == ["virtual_channels", "channels", "inputs"], tiers
-        assert '<section class="new-dsp" id="new-dsp" hidden>' in render(m2), "a known DSP is not new"
-        # ── round 3: the channel map as TCC draws it — a fold per tier, used/total, a row per slot
-        page2 = render(m2)
-        assert "Віртуальні <b>0/8</b>" in page2 and "Вихідні <b>0/12</b>" in page2, "tier headers"
-        assert [g["tier"] for g in m2["map"]] == ["virtual_channels", "channels"], \
-            "an out-of-scope tier (Helix inputs) is offered before the person chose it"
-        assert "off-virt-H" in page2 and "off-out-L" in page2, "a spare slot does not read off-…"
-        assert '<datalist id="codes-virtual_channels"><option value="VFL">' in page2
-        apply_save(root, {"slot": {"tier": "virtual_channels", "slot": "A", "code": "VFL", "on": True}})
-        apply_save(root, {"slot": {"tier": "virtual_channels", "slot": "F", "on": False}})
-        chans = {c["code"]: c for c in project.Project(root).load()["channels"]}
-        assert chans["VFL"]["slot"] == "A" and chans["VFL"]["hidden"] is False, chans
-        assert chans["off-virt-F"]["hidden"] is True and chans["off-virt-F"]["role"] == "unused", chans
-        try:
-            apply_save(root, {"slot": {"tier": "virtual_channels", "slot": "B", "code": "VFL", "on": True}})
-            raise AssertionError("one code went to two slots")
-        except intake.IntakeError as exc:
-            assert "one code, one channel" in str(exc), exc
-        assert "Віртуальні <b>1/8</b>" in render(model(root, "uk")), "used/total did not move"
-        # ── round 3: the target curve is ONE choice — ours, NTT's sixteen, or one's own ──────
-        assert 'value="SQ-Comp-Ref"' in page2 and "завантажувати не треба" in page2
+        assert 'value="SQ-Comp-Ref"' in page and "завантажувати не треба" in page
         for name in intake.NTT_CURVE_PRESETS:
-            assert f'name="curve" value="{_esc(name)}"' in page2, name
-        assert f'href="{intake.NTT_URL}"' in page2, "no link to where the curve files are"
-        apply_save(root, {"field": "target_curve.candidate", "value": "my_house_v3.txt"})
-        page3 = render(model(root, "uk"))
-        assert 'value="__own__" checked' in page3 and 'value="my_house_v3.txt"' in page3, \
-            "one's own curve does not come back as 'own / other' with its name"
-        apply_save(root, {"field": "dsp.tiers_used", "value": ["channels"]})
-        tiers = next(f for f in model(root, "uk")["fields"] if f["id"] == "channel_map.tier")["options"]
-        assert [v for v, _ in tiers] == ["channels"], "the tiers in use do not narrow the row's choice"
-        try:
-            apply_save(root, {"dsp_tiers": ["channels"]})
-            raise AssertionError("a known processor's tiers were overwritten from the form")
-        except intake.IntakeError as exc:
-            assert "new processor" in str(exc), exc
+            assert f'name="curve" value="{_esc(name)}"' in page, name
+        # «Інше обладнання»: the free-text description is the way in; no channels, no table.
+        equip = page.split('id="equipment"', 1)[1]
+        assert "<textarea" in equip and 'data-id="hardware.description"' in equip and "<table" not in equip
+
+        # ── one Save = one batch, in order: the processor, its tiers, its slots ───────────────
+        helix_id = ["Audiotec-Fischer", "Helix DSP Ultra S"]
+        res = apply_save(root, {"batch": [
+            {"dsp": {"vendor": helix_id[0], "model": helix_id[1]}},
+            {"field": "dsp.tiers_used", "value": ["virtual_channels", "channels"]},
+            {"slot": {"tier": "virtual_channels", "slot": "A", "code": "VFL", "on": True, "dsp": helix_id}},
+            {"slot": {"tier": "virtual_channels", "slot": "F", "code": "", "on": False, "dsp": helix_id}},
+            {"slot": {"tier": "channels", "slot": "A", "code": "w-L", "on": True, "dsp": ["Musway", "M6V4 (no 512K)"]}},
+            {"slot": {"tier": "virtual_channels", "slot": "B", "code": "VFL", "on": True, "dsp": helix_id}},
+            {"field": "rew.loopback", "value": "acoustic"},
+            {"field": "hardware.description", "value": "Audison AV 6.5, JL 12W3"}]})
+        assert [e["index"] for e in res["errors"]] == [4, 5], res["errors"]
+        assert "save the processor first" in res["errors"][0]["error"], res["errors"]
+        assert "one code, one channel" in res["errors"][1]["error"], res["errors"]
+        loaded = project.Project(root).load()
+        assert loaded["hardware"]["description"] == "Audison AV 6.5, JL 12W3", loaded["hardware"]
+        assert loaded["measurement"]["loopback"] == "acoustic", "a refusal stopped the rest of the batch"
+        m2 = model(root, "uk")
+        assert [(g["tier"], g["used"], g["total"]) for g in m2["map"]] == \
+            [("virtual_channels", 1, 8), ("channels", 0, 12)], m2["map"]
+        assert carried(render(m2))["saved"]["slotted"] == 2, "the saved map is not carried"
+
+        # ── a processor change: the saved map is REPLACED, never merged — and only when confirmed
+        res = apply_save(root, {"batch": [{"dsp": {"vendor": "Musway", "model": "M6V4 (no 512K)"}}]})
+        assert res["errors"] and "REPLACED" in res["errors"][0]["error"], res
+        assert project.Project(root).load()["dsp"]["model"] == "Helix DSP Ultra S", "written unconfirmed"
+        res = apply_save(root, {"batch": [{"dsp": {"vendor": "Musway", "model": "M6V4 (no 512K)",
+                                                   "replace_map": True}}]})
+        assert not res["errors"], res
+        loaded = project.Project(root).load()
+        assert loaded["dsp"]["previous_maps"][0]["model"] == "Helix DSP Ultra S", loaded["dsp"]
+        assert not [c for c in loaded["channels"] if c.get("slot")], "a slot crossed processors"
+        assert [c["code"] for c in loaded["channels"]] == ["VFL"], "the car's channel was lost"
+        m2 = model(root, "uk")
+        assert [(g["tier"], g["used"], g["total"]) for g in m2["map"]] == [("channels", 0, 8)], m2["map"]
+
+        # ── a NEW processor: its own page, and the map from what that page records ───────────
         apply_save(root, {"dsp": {"vendor": "Acme", "model": "X8"}})
         m3 = model(root, "uk")
-        assert m3["dsp"]["new"] is True and '<section class="new-dsp" id="new-dsp">' in render(m3)
-        apply_save(root, {"dsp_tiers": ["channels", "virtual_channels"]})
-        assert intake.dsp_state(root)["tiers"] == ["channels", "virtual_channels"], intake.dsp_state(root)
-        tiers = next(f for f in model(root, "uk")["fields"] if f["id"] == "channel_map.tier")["options"]
-        assert [v for v, _ in tiers] == ["channels"], tiers   # still narrowed by what is in use
-        # The goal ticks map onto the method's keys.
+        page3 = render(m3)
+        assert m3["dsp"]["new"] is True and '<div class="note" id="newdsp-link">' in page3
+        assert 'href="new-dsp"' in page3 and not m3["map"], "a new processor has a map before its base"
+        nd = render_new_dsp(m3)
+        for f in intake.FIELDS:
+            if f["place"] == "new_dsp":
+                assert f'f-{f["id"]}' in nd, f"{f['id']} is not on the new-processor page"
+        assert 'id="newdsp-form"' in nd and len(re.findall(r'<button[^>]*class="save', nd)) == 1
+        res = apply_save(root, {"batch": [{"new_dsp": {
+            "tiers": {"channels": {"count": "6", "letters": False,
+                                   "fields": ["hp", "lp", "gain_db", "ta_ms", "polarity", "eq"]}},
+            "rate": "48000", "eq": {"bands": "10", "types": ["PK"], "file_import": False},
+            "crossover": {"types": ["LR"], "slopes": [24], "independent": True},
+            "delay": {"step_ms": "0.02", "max_ms": "15"}, "presets": {"count": "4", "input_switches": True}}}]})
+        assert not res["errors"], res
+        m3 = model(root, "uk")
+        assert [(g["tier"], g["total"], g["rows"][0]["slot"]) for g in m3["map"]] == [("channels", 6, "1")], m3["map"]
+        assert 'name="count-channels" value="6"' in render_new_dsp(m3), "the form does not come back filled"
+        apply_save(root, {"dsp": {"vendor": helix_id[0], "model": helix_id[1]}})
+        assert 'id="newdsp-form"' not in render_new_dsp(model(root, "uk")), "a known DSP got the base form"
+
+        apply_save(root, {"field": "target_curve.candidate", "value": "my_house_v3.txt"})
+        page4 = render(model(root, "uk"))
+        assert 'value="__own__" checked' in page4 and 'value="my_house_v3.txt"' in page4
         apply_save(root, {"goal": {"choices": ["EMMA", "enjoyment", "other"], "text": "clear nav"}})
         goal = project.Project(root).load()["goal"]
         assert goal == {"formats": ["EMMA"], "purpose": "both", "wishes": "clear nav",
                         "target_curve": "my_house_v3.txt"}, goal
 
         # ── writing back goes through the method's writers, refusals included ────────────────
-        apply_save(root, {"field": "rew.loopback", "value": "acoustic"})
-        assert project.Project(root).load()["measurement"]["loopback"] == "acoustic"
         # An enumerated rate posted as TEXT must land as the number the table holds.
         apply_save(root, {"field": "rew.capture_rate_hz", "value": "96000"})
         assert project.Project(root).load()["measurement"]["sample_rate_hz"] == 96000
@@ -1212,13 +1458,35 @@ def _selftest():
                                   "channels": "m-L/m-R"}})
         assert project.Project(root).load()["amps"][0]["model"] == "GZPA 4SQ"
 
+        # ── the served page: both routes, and ONE Save's report where the page reads it ──────
+        import threading
+        import urllib.request
+        handler = type("_Bound", (_Handler,), {"project_dir": root, "lang": "uk"})
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        try:
+            base = f"http://127.0.0.1:{httpd.server_address[1]}/"
+            assert "intake-data" in urllib.request.urlopen(base).read().decode()
+            assert urllib.request.urlopen(base + "new-dsp").status == 200
+            req = urllib.request.Request(base + "save", headers={"Content-Type": "application/json"},
+                                         data=json.dumps({"batch": [{"field": "car.body", "value": "saloon"},
+                                                                    {"field": "rew.loopback", "value": "physical"}]}).encode())
+            out = json.loads(urllib.request.urlopen(req).read())
+            assert out["ok"] is False and [e["index"] for e in out["errors"]] == [0], out
+            assert project.Project(root).load()["measurement"]["loopback"] == "physical"
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+
         # ── a missing translation is a fallback, never a crash ──────────────────────────────
         page_en = render(model(root, "xx"))
         assert intake.FIELDS[0]["ask"] in page_en, "the English fallback did not render"
 
-    print(f"selftest OK (intake_form) — {len(ids)} fields render from one table, uk.json covers "
-          f"every one of them, the page loads nothing from the network (one link out: NTT), and every write goes through "
-          f"intake's own writers")
+    print(f"selftest OK (intake_form) — {len(ids)} fields in one table and uk.json covers every one; "
+          "the page shows the now/goal/equipment ones and NOT the memo, has ONE Save, a pre-selected "
+          "default carries its confirm tick, a processor change REPLACES a saved map only when "
+          "confirmed, a new processor gets its own page and its map from it, the page loads nothing "
+          "from the network (one link out: NTT), and every write goes through intake's own writers")
     return 0
 
 
@@ -1242,7 +1510,8 @@ def _main(argv):
               open_browser="--open" in rest)
         return 0
     if cmd == "render":
-        page = render(model(project_dir, lang))
+        m = model(project_dir, lang)
+        page = render_new_dsp(m) if intake._flag(rest, "--page") == "new-dsp" else render(m)
         out = intake._flag(rest, "--out")
         if out:
             with open(out, "w", encoding="utf-8") as fh:

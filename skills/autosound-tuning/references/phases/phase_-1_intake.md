@@ -69,10 +69,12 @@ Phase-0 gate refused, with the project already open.
 **And the skill serves a form of its own** (`intake_form.py`, S-033), so "a window" is not only
 TCC's: `python3 rew_tool/intake_form.py serve <project>` puts on one local page only what starting
 to measure needs, about seventeen answers and most of them choices, followed by an optional goal
-block. A "New processor" step appears only for a processor the skill has no profile of. The drivers
-and other hardware sit in an optional fold, and everything else goes into a memo rather than a
-question (`intake.PLACES`). Each couple is ONE control, the channel and amplifier
-halves are tables, and every field is coloured by what is owed (red: needed now and missing; yellow:
+block and an optional «Інше обладнання» (a free-text description first). A processor the skill has
+no profile of gets its OWN page (`/new-dsp`) for its base: tiers, slot counts, controls,
+capabilities. The channel map is drawn from the chosen processor and redrawn live when another one
+is picked. The page has ONE «Зберегти», which sends what changed. A pre-selected default is saved
+only when ticked, the write-once seat and a processor change that replaces a saved map ask first,
+and the fields no one is asked (`place="memo"`) are not shown at all. Each couple is ONE control, and every field is coloured by what is owed (red: needed now and missing; yellow:
 optional, defaulted, or later; green: answered; grey: lands in prose). A terminal session hands a
 person that URL instead of asking the questions in chat; a front-end opens the same page rather
 than writing the questions a second time.

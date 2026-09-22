@@ -40,8 +40,13 @@ machine-readable to render for its Project/System/Car-audio-analysis panels eith
              "listening_input": "Optical 1",                 //   one question, two answers --
              "measurement_input": "Coax 2"},                 //   Pre-session checklist #4 reads them
   "dsp": {"vendor": "Audiotec-Fischer", "model": "Helix DSP Ultra S",   // links dsp_profile.json
-          "tiers_used": ["channels", "virtual_channels"]},   // the intake page: which of the
+          "tiers_used": ["channels", "virtual_channels"],    // the intake page: which of the
                                                              //   processor's tiers this car uses
+          "previous_maps": [{"vendor": "Musway", "model": "M6V4 (no 512K)",  // round 4: a processor
+                             "slots": [{"code": "w-L", "tier": "channels", "slot": "1"}]}]},
+                                                             //   change REPLACES the channel map; the
+                                                             //   old one is kept here as a record,
+                                                             //   never merged (`intake.change_dsp`)
   "amps": [{"role": "front", "make": "Helix", "model": "P Six DSP",
             "gain_db": {"value": -6.0, "source": "measured", "at": "2026-07-20T12:00:00+00:00"}}],
   "mic": {"model": "UMIK-1", "calibration_file": "umik1_cal.txt",
@@ -84,6 +89,8 @@ machine-readable to render for its Project/System/Car-audio-analysis panels eith
   ],
 
   "hardware": {                                              // SCR-017: DSP-level, NOT per-preset
+    "description": "Audison AV 6.5 in the doors, JL 12W3 …",  // the intake page's «Інше обладнання»:
+                                                             //   the equipment in the owner's words
     "controls": {
       "RearRC": {"value": "3/4", "source": "user", "at": "…"},
       "RealCenter": {"value": "ON", "source": "user", "at": "…"}
