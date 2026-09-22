@@ -131,3 +131,43 @@ DEFER(x) = asked at step x. Nothing is DROPPED: every field has a reader (code o
   `core/project-intake.md`, `core/capabilities.md`.
 - **TCC** vendors `intake.py` and will pick this up on its next vendoring. The change only adds to
   the output (new keys on every field row, one new key in `missing()`), so the existing reads keep working.
+
+---
+
+## Round 2: the Arbiter's review of the page (same day)
+
+He went through the regenerated page and made 12 corrections. They are applied here. Where they
+conflict with a row in the table above, **this section wins**. It adds a `place` attribute next to
+`when` (`intake.PLACES`). `when` still says which step needs the answer. `place` says whether the
+page asks a person at all: `now` · `goal` (optional) · `new_dsp` (only for a processor with no
+profile) · `equipment` (optional fold) · `memo` (not asked: a list the person can read).
+
+| # | his point | what changed |
+|---|---|---|
+| 1 | pick the car from a list, still editable, and an edited car is a new car | `intake.known_cars(project_dir)`: the cabin library (`knowledge/cars/`, today one body: VW Passat B8 sedan) plus the sibling projects next to this one that record all four parts. **No other car catalogue exists in the skill, and none was invented.** The hub `#185` car package is TCC's import and ships no list. A pick fills the four fields, and the page flags an edit as a new car |
+| 2 | vendor and model are linked | `intake.known_dsps()` from the bundled profiles. The model list shows only the chosen vendor's models, "another…" opens free text, and both are saved together (`{"dsp": …}`) |
+| 3 | drop "can each output be soloed" | `dsp.per_channel_measurable` is derived ("always yes") and sits in the memo |
+| 4 | a slot's tier comes only from this processor's tiers, and the page first asks which tiers exist and which are used | `intake.dsp_state()` reads the tiers from the project profile, the bundled match or the draft. New field `dsp.tiers_used` (`project.json` `dsp.tiers_used`) is asked before the channel rows, and the row's tier list is narrowed to it. For a new processor, "which tiers exist" is `dsp.tiers`, written into the draft profile (`{"dsp_tiers": …}` → `dsp_profile.set_field`) |
+| 5 | mic type and cal file do not matter; the question is physical vs acoustic loopback | `LOOPBACKS` = physical / acoustic / none (`none` kept for a rig with neither). Mic model, cal files and capture rate lost `required` and moved to the memo |
+| 6 | the hardware channel map is optional; «Карта каналів» means the DSP layout; the hardware section is «Інше обладнання»; the DSP is always required | the drivers (make/model/Fs/condition/position/enclosure) and the remote controls are `equipment`, an optional fold whose table shows only once channel rows exist. The channel section is «Карта каналів процесора». The DSP stays required |
+| 7 | do not ask: the clip check, the measurement input and routing, the listening input, the signal chain, REW and mic | all of these are in the memo and no longer `required` (`source.*`, `dsp.measurement_input`, amps, mic, capture rate, REW API) |
+| 8 | goal = EMMA / AYA / for myself / other + free text, not required | one optional control. The form maps the ticks onto `goal.formats` / `goal.purpose` and the text onto `goal.wishes`, now stored in `project.json` `goal` |
+| 9 | «Яка цільова крива?» | reworded (EN: "Which target curve?") and stored in `goal.target_curve` |
+| 10 | genres as checkboxes, several allowed | `GENRES` is a multi-select enum with `other` |
+| 11 | everything from Phase 1 on: read it from the processor, or ask it once for a NEW processor | the capability checklist (processing rate, tiers, slot counts, EQ, crossovers, delays, presets) is `new_dsp`, shown only when `dsp_state()["new"]` (or live, when "another…" is picked). Routing is read off the processor, and design path and mode are derived. Positions and enclosures went to equipment, the rest to the memo |
+| 12 | choose the test-track libraries (checkboxes) from what the skill describes | `TRACK_LIBRARIES` is read off the `library` column of `references/patterns/test-tracks.md` (CarMus, Chesky, mono, EMMA, AYA, own) plus `streaming`, as a multi-select |
+
+**Counts after round 2** (empty project, `--lang uk`; the table has 72 fields with `dsp.tiers_used`):
+17 fields asked now, 11 of them choices (the car picker fills make/model/generation as well). 6
+optional goal fields in 4 controls. 7 new-processor fields, hidden unless the processor is new. 7
+optional equipment fields. 35 memo items that are not asked. Before any of this there were 68
+questions on the page.
+
+**The gate:** `contract.GATE_REQUIRED` is unchanged, and nothing in round 2 needed it weakened.
+Two things to know:
+- `dsp_profile.json` must still exist before Phase 0. For a known processor the session copies the
+  bundled profile. For a new one the page writes only the draft's tiers, and the session finishes
+  the draft (`dsp_profile.py finalize`). That is the same as before, now started from the page.
+- Moving the input questions out of the intake does not remove Phase 0's pre-session checklist #4
+  (the preset switch that resets the input). That check still runs at the car, in Phase 0. The
+  intake no longer asks it in advance.

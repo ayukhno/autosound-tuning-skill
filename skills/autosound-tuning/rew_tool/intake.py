@@ -103,9 +103,11 @@ POSITIONS = ("door", "a_pillar", "kick", "dash", "deck", "rear_shelf", "under_se
 ENCLOSURES = ("sealed", "ported", "free_air", "pod", "infinite_baffle")
 #: New drivers get a break-in before a precise alignment (`project-intake.md` §3.6).
 CONDITIONS = ("new", "broken_in")
-#: A physical loopback or none. An acoustic "loopback" through a USB mic does NOT qualify
-#: (`virtual-first.md`), so it is not a third choice here.
-LOOPBACKS = ("physical", "none")
+#: THE rig question (the Arbiter, 2026-09-22: mic type and calibration file do not matter, the
+#: loopback does). `acoustic` is REW's acoustic timing reference through the mic: it gives timing,
+#: but it does NOT qualify for virtual-first (`virtual-first.md`) -- which is why it is its own key
+#: and not a kind of `physical`. `none` stays for a rig with neither.
+LOOPBACKS = ("physical", "acoustic", "none")
 PURPOSES = ("competition", "enjoyment", "both")
 #: Formats judge differently and some techniques are mutually exclusive, so several = several
 #: presets, not one tune (`competition.md`). Multi-select.
@@ -120,8 +122,34 @@ REFERENCE_SEATS = project.PROJECT_TYPES
 STAGE_PRIORITIES = ("width", "depth", "height", "center_focus", "envelopment", "front_only")
 LOVES = ("bass", "vocals", "winds_strings", "acoustic", "electronica")
 LOUDNESS = ("loud", "moderate")
-#: What the person can actually PLAY — Phase 4 proposes only from this (`test-tracks.md`).
-TRACK_LIBRARIES = ("carmus", "chesky", "emma_aya", "streaming", "none")
+#: What the person can actually PLAY — Phase 4 proposes only from this (`test-tracks.md`). Read off
+#: the `library` column of that file's track table, so a library described there becomes a choice
+#: without an edit here; `streaming` is the one way to play them that is not a disc of its own.
+TRACK_LIBRARIES_DOC = os.path.join(_HERE, "..", "references", "patterns", "test-tracks.md")
+
+
+def _track_libraries(path=TRACK_LIBRARIES_DOC):
+    found = []
+    try:
+        with open(path, encoding="utf-8") as fh:
+            in_table = False
+            for line in fh:
+                cells = [c.strip() for c in line.strip().strip("|").split("|")]
+                if line.startswith("| id | library"):
+                    in_table = True
+                    continue
+                if in_table and not line.startswith("|"):
+                    break
+                if in_table and len(cells) > 1 and cells[1] and not cells[1].startswith("-"):
+                    key = cells[1].lower()
+                    if key not in found:
+                        found.append(key)
+    except OSError:
+        pass
+    return tuple(found or ("carmus", "chesky", "emma", "aya", "mono", "own")) + ("streaming",)
+
+
+TRACK_LIBRARIES = _track_libraries()
 TONE = ("warm", "neutral", "bright")
 BASS = ("bass_heavy", "neutral")
 PRESENTATION = ("forward", "neutral", "laid_back")
@@ -142,7 +170,8 @@ SUGGESTED_ROLES = ("sub", "woofer", "midbass", "midrange", "tweeter", "fullrange
 #: Common measurement mics. An open set -- the form offers these and takes what it is told.
 SUGGESTED_MICS = ("miniDSP UMIK-1", "miniDSP UMIK-2", "Dayton Audio EMM-6", "Dayton Audio iMM-6")
 SUGGESTED_CONSTRAINTS = ("no_door_work", "no_trim_changes", "budget", "time")
-SUGGESTED_GENRES = ("rock", "pop", "jazz", "classical", "electronic", "hip_hop", "acoustic", "metal")
+#: A closed list with an escape (`other`), so a form can offer checkboxes -- several may apply.
+GENRES = ("rock", "pop", "jazz", "classical", "electronic", "hip_hop", "acoustic", "metal", "other")
 #: Third-party curves the method names (`voicing-by-ear.md`); none is bundled and none is a default.
 SUGGESTED_CURVES = ("harman", "resonix", "jazzi", "audiofrog", "own")
 
@@ -164,6 +193,102 @@ def _bundled_dsps():
 BUNDLED_DSP_VENDORS, BUNDLED_DSP_MODELS = _bundled_dsps()
 
 
+def known_dsps():
+    """`[{"vendor", "model", "tiers"}]` -- every processor the skill ships a profile for.
+
+    A form offers the vendor first and then only THAT vendor's models, so a Musway vendor with a
+    Helix model cannot be picked: the pair is one identity (`COUPLINGS["dsp_identity"]`).
+    """
+    out = []
+    for vendor, model, path in dsp_profile.list_bundled():
+        try:
+            tiers = dsp_profile.tier_keys(dsp_profile.load_profile(path))
+        except (OSError, ValueError):
+            tiers = []
+        out.append({"vendor": vendor, "model": model, "tiers": tiers})
+    return out
+
+
+def dsp_state(project_dir):
+    """What the project's processor is, and whether the skill knows it -- `{"vendor", "model",
+    "source", "tiers", "new"}`.
+
+    `source` is where the tier list came from: the project's own `dsp_profile.json`, the bundled
+    library on an exact vendor+model match, or the interview draft. `new` is True only when a
+    vendor and model are recorded and nothing describes them -- that is when the processor's base
+    questions are asked, once (`place="new_dsp"`). None means "not chosen yet".
+    """
+    data = _read_project(project_dir) or {}
+    dsp = data.get("dsp") or {}
+    vendor, model = dsp.get("vendor") or "", dsp.get("model") or ""
+    out = {"vendor": vendor, "model": model, "source": None, "tiers": [], "new": None}
+    own = dsp_profile.profile_path(project_dir)
+    if os.path.isfile(own):
+        try:
+            out.update(source="project", tiers=dsp_profile.tier_keys(dsp_profile.load_profile(own)),
+                       new=False)
+            return out
+        except (OSError, ValueError):
+            pass
+    if vendor and model:
+        bundled = dsp_profile.find_bundled(vendor, model)
+        if bundled is not None:
+            out.update(source="bundled", tiers=dsp_profile.tier_keys(bundled), new=False)
+            return out
+        out["new"] = True
+    if os.path.isfile(dsp_profile.draft_path(project_dir)):
+        try:
+            out.update(source="draft",
+                       tiers=dsp_profile.tier_keys(dsp_profile.load_profile(dsp_profile.draft_path(project_dir))))
+        except (OSError, ValueError):
+            pass
+    return out
+
+
+def known_cars(project_dir=None):
+    """`[{"make", "model", "generation", "body", "label", "source"}]` -- cars the skill has seen.
+
+    Two sources, and nothing invented: the cabin library (`knowledge/cars/`, one file per body,
+    its own heading read by `car_profile`) and the other projects next to this one (a sibling
+    directory whose `project.json` records all four parts). There is no car catalogue beyond these;
+    a picked car fills the four fields, and an EDITED one is a new car, not a variant of the entry.
+    """
+    import car_profile
+
+    out, seen = [], set()
+
+    def add(make, model, generation, body, source):
+        parts = [str(x or "").strip() for x in (make, model, generation, body)]
+        if not all(parts):
+            return
+        slug = car_profile.body_slug(*parts)
+        if slug in seen:
+            return
+        seen.add(slug)
+        out.append({"make": parts[0], "model": parts[1], "generation": parts[2], "body": parts[3],
+                    "label": " ".join(parts), "source": source})
+
+    if project_dir:
+        here = os.path.abspath(project_dir)
+        parent = os.path.dirname(here)
+        try:
+            siblings = sorted(os.listdir(parent))
+        except OSError:
+            siblings = []
+        for name in siblings:
+            d = os.path.join(parent, name)
+            if d == here or not os.path.isfile(os.path.join(d, "project.json")):
+                continue
+            car = (_read_project(d) or {}).get("car") or {}
+            add(car.get("make"), car.get("model"), car.get("generation"), car.get("body"),
+                f"project:{name}")
+    for _slug, _path, title in car_profile.list_bundled():
+        words = title.split(" — ", 1)[0].split()
+        if len(words) == 4 and words[3] in BODIES:
+            add(*words, source="library")
+    return out
+
+
 # ── WHEN a field is asked ─────────────────────────────────────────────────────
 #: The intake used to front-load every field. The fast sessions did not: they asked what the next
 #: step needed and picked up the rest when it mattered (`docs/REVIEW-2026-09-22-antigravity-session.md`,
@@ -178,6 +303,15 @@ WHEN = (
     ("2", "Phase 2 -- EQ"),
     ("4", "Phase 4 -- listening"),
     ("5", "Phase 5 -- variations and taste"),
+)
+#: WHERE a form shows a field (the Arbiter's review of the page, 2026-09-22). `when` says which
+#: step needs the answer; `place` says whether a person is asked for it on the intake page at all.
+PLACES = (
+    ("now", "asked on the page: what starting to measure needs"),
+    ("goal", "asked on the page, optional: what the tune is for and what is played"),
+    ("new_dsp", "asked only for a processor the skill has no profile of -- the base, once"),
+    ("equipment", "optional: the drivers and the hardware outside the DSP, if the person has them written down"),
+    ("memo", "not asked: a tool reads it, or the session asks when the step comes -- listed in a memo"),
 )
 
 
@@ -216,7 +350,7 @@ COUPLINGS = {
 # ── the field table ───────────────────────────────────────────────────────────
 def _f(id, group, ask, *, required=False, enum=None, multi=False, writes=None, lands=None,
        ask_with=None, per=None, settled_by=None, checklist=None, note=None,
-       when="now", default=None, suggest=None, derive=None):
+       when="now", default=None, suggest=None, derive=None, place=None):
     """One row of the table. `writes` is the MACHINE destination and it is the load-bearing field:
 
     * `project:<dotted path>`       -> `project.json`, through this module's `save()`
@@ -234,12 +368,16 @@ def _f(id, group, ask, *, required=False, enum=None, multi=False, writes=None, l
     * `suggest` -- choices for an OPEN set (a datalist, not an enumeration): the form offers them
                    and takes any other answer. `enum` stays the closed set that `check_value` enforces.
     * `derive`  -- how a tool or the bundled profile answers it instead of the person.
+    * `place`   -- where a form shows it (`PLACES`). Defaults to `now` for a `now` field nobody
+                   derives, else to the memo.
     """
+    if place is None:
+        place = "now" if when == "now" and derive is None else "memo"
     return {"id": id, "group": group, "ask": ask, "required": bool(required),
             "enum": tuple(enum) if enum else None, "multi": bool(multi), "writes": writes,
             "lands": lands, "ask_with": ask_with, "per": per, "settled_by": settled_by,
             "checklist": checklist, "note": note, "when": when, "default": default,
-            "suggest": tuple(suggest) if suggest else None, "derive": derive}
+            "suggest": tuple(suggest) if suggest else None, "derive": derive, "place": place}
 
 
 FIELDS = (
@@ -290,6 +428,12 @@ FIELDS = (
        note="Before asking anything below: `dsp_profile.py find-bundled <vendor> <model>` and "
             "`knowledge/dsp/<vendor>-<model>.md` may already answer the whole checklist.",
        suggest=BUNDLED_DSP_MODELS),
+    _f("dsp.tiers_used", "dsp", "Which of the processor's tiers will this car use?", enum=SUGGESTED_TIERS,
+       multi=True, writes="project:dsp.tiers_used",
+       note="Asked BEFORE the channel rows, so a row's tier is picked from the tiers in use rather "
+            "than typed: a Helix declares virtual channels, outputs and inputs, and the inputs "
+            "tier is outside the method's scope. A processor the skill knows offers its own tiers; "
+            "a new one offers all of them."),
     _f("dsp.readable", "dsp", "Is the DSP's state readable (a dump, a screen-read, a file export)?",
        required=True, enum=("yes", "no"), ask_with="capability",
        lands="the capability level in `autosound_context.md` + a recorded decision",
@@ -299,7 +443,8 @@ FIELDS = (
        lands="the capability level in `autosound_context.md` + a recorded decision",
        note="This is the hinge, not readability: no per-channel access is Level 3, where joint and "
             "phase surgery is impossible and the ceiling is recorded honestly.",
-       default="yes"),
+       derive="always yes on a DSP: any output can be soloed by muting the rest (the Arbiter, "
+              "2026-09-22) -- asked only if a session finds it cannot"),
     _f("dsp.capability_level", "dsp", "Which level does that make it — 1 full / 2 black-box / 3 sum only?",
        required=True, enum=CAPABILITY_LEVELS, ask_with="capability",
        lands="`autosound_context.md` + a recorded decision",
@@ -309,37 +454,40 @@ FIELDS = (
        writes="project:dsp.dsp_processing_rate_hz",
        note="The processing rate, not the capture rate — two rates, one name each. The capture "
             "rate is `rew.capture_rate_hz`.",
-       when="1", derive="the bundled profile on an exact vendor+model match"),
+       when="1", derive="the bundled profile on an exact vendor+model match", place="new_dsp"),
     _f("dsp.tiers", "dsp", dsp_profile.CAPABILITY_CHECKLIST[0], required=True, checklist=0,
        writes="dsp_profile.draft:groups",
        note="No virtual layer -> voicing is linked L=R on the output EQ, and voicing presets cost "
             "more (`diagnostic-techniques.md §6`).",
-       derive="the bundled profile on an exact vendor+model match; asked only when none matches"),
+       multi=True, suggest=SUGGESTED_TIERS,
+       derive="the bundled profile on an exact vendor+model match; asked only when none matches",
+       place="new_dsp"),
     _f("dsp.max_count", "dsp", dsp_profile.CAPABILITY_CHECKLIST[1], required=True, checklist=1,
        per="tier", writes="dsp_profile.draft:groups.<i>.max_count",
        note="Left null, a 12-output processor with ten in use reads 10/10 and its spare slots are "
             "invisible.",
-       derive="the bundled profile on an exact vendor+model match; asked only when none matches"),
+       derive="the bundled profile on an exact vendor+model match; asked only when none matches",
+       place="new_dsp"),
     _f("dsp.eq", "dsp", dsp_profile.CAPABILITY_CHECKLIST[2], required=True, checklist=2,
        per="tier", writes="dsp_profile.draft:groups.<i>.eq",
        note="The band vocabulary is the profile's own (`dsp_profile.FIELD_VOCABULARY`); file "
             "import + format decides whether the REW->DSP path is a file or the copy-paste assistant.",
-       when="2", derive="the bundled profile on an exact vendor+model match"),
+       when="2", derive="the bundled profile on an exact vendor+model match", place="new_dsp"),
     _f("dsp.crossovers", "dsp", dsp_profile.CAPABILITY_CHECKLIST[3], required=True, checklist=3,
        per="tier", writes="dsp_profile.draft:groups.<i>.crossover_filters",
        note="Families are `dsp_math.MODELLABLE_FAMILIES` (LR/BW/BE) — enterable on the device is "
             "what is being asked, modellable here is what the profile then marks.",
-       when="1", derive="the bundled profile on an exact vendor+model match"),
+       when="1", derive="the bundled profile on an exact vendor+model match", place="new_dsp"),
     _f("dsp.delays", "dsp", dsp_profile.CAPABILITY_CHECKLIST[4], required=True, checklist=4,
        per="tier", writes="dsp_profile.draft:groups.<i>.fields",
        note="Step and limits decide TA accuracy; an all-pass decides the phase method.",
-       when="1", derive="the bundled profile on an exact vendor+model match"),
+       when="1", derive="the bundled profile on an exact vendor+model match", place="new_dsp"),
     _f("dsp.presets", "dsp", dsp_profile.CAPABILITY_CHECKLIST[5], required=True, checklist=5,
        writes="dsp_profile.draft:presets",
        note="What resets on a switch — the INPUT above all: a preset silently resetting it is "
             "Pre-session checklist #4's whole reason for existing.",
-       when="0", derive="the bundled profile on an exact vendor+model match"),
-    _f("dsp.measurement_input", "dsp", dsp_profile.CAPABILITY_CHECKLIST[6], required=True, checklist=6,
+       when="0", derive="the bundled profile on an exact vendor+model match", place="new_dsp"),
+    _f("dsp.measurement_input", "dsp", dsp_profile.CAPABILITY_CHECKLIST[6], checklist=6,
        writes="project:source.measurement_input", ask_with="inputs",
        when="0"),
 
@@ -371,30 +519,30 @@ FIELDS = (
        when="0", derive="read off the DSP software when its current state is imported"),
     _f("channel_map.driver_make", "channel_map", "Driver make", per="channel",
        writes="project:channels[].driver.make",
-       when="install"),
+       when="install", place="equipment"),
     _f("channel_map.driver_model", "channel_map", "Driver model", per="channel",
        writes="project:channels[].driver.model",
-       when="install"),
+       when="install", place="equipment"),
     _f("channel_map.fs_hz", "channel_map", "The driver's Fs", per="channel",
        writes="project:channels[].fs_hz",
        note="Carries provenance: a datasheet number is `source=datasheet` and a later impedance "
             f"sweep upgrades it to `measured` (sources: {', '.join(FACT_SOURCES)}). The protective "
             "HPF is bound to it (>= 1.1 x Fs, >= 24 dB/oct), so an Fs carried in from another "
             "project is not this build's until it is confirmed here (skill #36).",
-       when="install", derive="the driver's datasheet, from its make and model"),
+       when="install", derive="the driver's datasheet, from its make and model", place="equipment"),
     _f("channel_map.position", "channel_map", "Where it sits and where it points", per="channel",
        enum=POSITIONS, writes="project:channels[].position",
        note="Take it from the person or from a measurement — never from a car/DSP profile: "
             "placement varies on the same body.",
-       when="1"),
+       when="1", place="equipment"),
     _f("channel_map.enclosure", "channel_map", "How it is loaded", per="channel", enum=ENCLOSURES,
        writes="project:channels[].enclosure",
-       when="1"),
+       when="1", place="equipment"),
     _f("channel_map.condition", "channel_map", "New, or broken in?", per="channel", enum=CONDITIONS,
        writes="project:channels[].condition",
        note="New drivers get a rough tune, a break-in and only then a precise one "
             "(`project-intake.md` §3.6).",
-       when="install", default="broken_in"),
+       when="install", default="broken_in", place="equipment"),
     _f("channel_map.hidden", "channel_map", "Is the slot empty (nothing wired to it)?", per="channel",
        enum=("yes", "no"), writes="project:channels[].hidden",
        default="no"),
@@ -402,27 +550,27 @@ FIELDS = (
        per="virtual_channel", writes="project:hardware.virtual_routing",
        note="Never inferable from names — `VFL` looking like 'virtual front left' is a convention, "
             "not a wiring diagram (RES-007). Required where the DSP has a virtual tier.",
-       when="1"),
+       when="1", derive="read off the processor's routing matrix when its state is imported"),
     _f("channel_map.hardware_controls", "channel_map",
        "Remote knobs and switches outside the DSP (SubRC / RearRC / a bass control), and where they stand",
        per="control", writes="project:hardware.controls",
        note="Two facts, not one: the POSITION is read off the device, what a step is WORTH is "
             "somebody's opinion (`set-control-mapping`). Without the mapping, a comparison across "
             "positions is refused rather than folded into an offset (RES-007).",
-       when="0"),
+       when="0", place="equipment"),
 
     # ── measurement_chain: how the signal gets in (§1.2, §1.4) ────────────────────────────────
     _f("source.kind", "measurement_chain", "What plays the music (head unit / streamer / phone / ...)",
-       required=True, enum=SOURCE_KINDS, writes="project:source.kind",
+       enum=SOURCE_KINDS, writes="project:source.kind",
        when="0"),
-    _f("source.connection", "measurement_chain", "How the signal enters the DSP", required=True,
+    _f("source.connection", "measurement_chain", "How the signal enters the DSP",
        enum=CONNECTIONS, writes="project:source.connection",
        when="0"),
-    _f("source.listening_input", "measurement_chain", "Which input is for listening", required=True,
+    _f("source.listening_input", "measurement_chain", "Which input is for listening",
        writes="project:source.listening_input", ask_with="inputs",
        when="0", suggest=CONNECTIONS),
     _f("source.measurement_input", "measurement_chain",
-       "Which input carries the measurement signal", required=True,
+       "Which input carries the measurement signal",
        writes="project:source.measurement_input", ask_with="inputs",
        when="0", suggest=CONNECTIONS),
     _f("amps.make", "measurement_chain", "Amplifier make", per="amp", writes="project:amps[].make",
@@ -439,42 +587,48 @@ FIELDS = (
        when="install"),
 
     # ── rew: the rig (§0.5 step 4, §1.8) ──────────────────────────────────────────────────────
-    _f("rew.mic_model", "rew", "Measurement mic", required=True, writes="project:mic.model",
-       suggest=SUGGESTED_MICS),
-    _f("rew.mic_cal_0", "rew", "Its 0° calibration file", required=True,
-       writes="project:mic.calibration_file"),
+    # The Arbiter, 2026-09-22: the mic's type and its calibration file do not change the tune --
+    # REW holds the file, and the loopback below is the rig question. Kept, never asked.
+    _f("rew.mic_model", "rew", "Measurement mic", writes="project:mic.model",
+       suggest=SUGGESTED_MICS, when="0", place="memo"),
+    _f("rew.mic_cal_0", "rew", "Its 0° calibration file",
+       writes="project:mic.calibration_file", when="0", place="memo"),
     _f("rew.mic_cal_90", "rew", "Its 90° calibration file", writes="project:mic.calibration_file_90",
        when="0"),
     _f("rew.interface", "rew", "Audio interface", writes="project:measurement.interface",
        when="0"),
-    _f("rew.loopback", "rew", "Is a PHYSICAL loopback wired?", required=True, enum=LOOPBACKS,
-       writes="project:measurement.loopback",
-       note="Without one, phase and timing reads are unreliable — lean on summation and the ear. "
-            "An acoustic loopback through a USB mic does not qualify, so virtual-first is out.",
-       default="none"),
-    _f("rew.capture_rate_hz", "rew", "The capture sample rate", required=True, enum=PLAUSIBLE_RATES_HZ,
+    _f("rew.loopback", "rew", "The timing reference: a PHYSICAL loopback, or an acoustic one?",
+       required=True, enum=LOOPBACKS, writes="project:measurement.loopback",
+       note="Without a physical one, phase and timing reads lean on summation and the ear. An "
+            "acoustic reference through a USB mic gives timing but does not qualify for "
+            "virtual-first."),
+    _f("rew.capture_rate_hz", "rew", "The capture sample rate", enum=PLAUSIBLE_RATES_HZ,
        writes="project:measurement.sample_rate_hz",
        note="The DSP's native rate where possible. This is the CAPTURE rate and keeps its own name; "
             "the processing rate is `dsp.processing_rate_hz`.",
-       default=48000),
+       default=48000, when="0", place="memo"),
     _f("rew.api_reachable", "rew", "Does REW's API answer at localhost:4735?", required=True,
        enum=("yes", "no"), lands="the Pre-session checklist (a live check, not a setting)",
        note="Reading is free; FIRING a sweep needs a Pro licence, so a human runs the session "
             "either way.",
-       derive="probed: a GET on localhost:4735"),
+       when="0", derive="probed: a GET on localhost:4735"),
     _f("rew.input_clip_checked", "rew", "Has the measurement input been checked for clipping?",
        required=True, enum=("yes", "no"), lands="the Pre-session checklist (`project-intake.md` §3.8)",
        when="install", derive="probed at the capture set-up (`project-intake.md` §3.8)"),
 
     # ── goal: what the tune is FOR (§2.1–§2.4, §2.7) ──────────────────────────────────────────
-    _f("goal.purpose", "goal", "Competition, for yourself, or both?", required=True, enum=PURPOSES,
-       ask_with="purpose", lands="`autosound_context.md` (Engineering Profile) + a recorded decision",
-       when="0", default="enjoyment"),
+    # The Arbiter, 2026-09-22: one optional control -- EMMA / AYA / for yourself / other + words.
+    # The form maps the ticks onto these two keys (and "other" onto `goal.wishes`).
+    _f("goal.purpose", "goal", "Competition, for yourself, or both?", enum=PURPOSES,
+       ask_with="purpose", writes="project:goal.purpose",
+       lands="`project.json` `goal` -> `autosound_context.md` (Engineering Profile) + a recorded decision",
+       when="0", place="goal"),
     _f("goal.formats", "goal", "Which format(s) — EMMA / AYA / CARMusic?", enum=FORMATS, multi=True,
-       ask_with="purpose", lands="`autosound_context.md` + a recorded decision",
+       ask_with="purpose", writes="project:goal.formats",
+       lands="`project.json` `goal` -> `autosound_context.md` + a recorded decision",
        note="Required once `goal.purpose` includes competition. Several formats = separate presets, "
             "not one tune: crossfeed stabilises an EMMA stage and is never used for AYA.",
-       when="0"),
+       when="0", place="goal"),
     _f("goal.reference_seat", "goal",
        "Who is the tune for — driver / passenger / both / all / rear left / rear right?",
        required=True, enum=REFERENCE_SEATS, ask_with="seat",
@@ -490,7 +644,7 @@ FIELDS = (
        required=True, enum=MODES, lands="`autosound_context.md` + a recorded decision",
        note="An INTENT, orthogonal to the capability level. Both modes read the current DSP state "
             "into the ledger first.",
-       default="new_tune"),
+       default="new_tune", derive="the method has one way in -- a tune from scratch (`phase_-1_intake.md`)"),
     _f("goal.design_path", "goal", "Virtual-first at the desk, or iterative?", enum=DESIGN_PATHS,
        lands="`autosound_context.md` + a recorded decision",
        note="Virtual-first needs all three: level 1, a loopback on one clock, a hardware-verified "
@@ -506,22 +660,23 @@ FIELDS = (
        lands="`autosound_context.md` (Engineering Profile) as a hard constraint",
        when="1", suggest=SUGGESTED_CONSTRAINTS),
     _f("goal.wishes", "goal", "Anything else you want from this system — in your own words?",
-       lands="`autosound_context.md` as an explicit project goal",
+       writes="project:goal.wishes", lands="`project.json` `goal` -> `autosound_context.md` as an explicit project goal",
        note="⚠️ The branches above are the COMMON ones, not a closed list. A free-form wish is "
             "captured in the person's words and then MAPPED to where it lands in the tune; one "
             "that fits no box is recorded as a goal on its own terms (§2.7).",
-       when="4"),
+       when="0", place="goal"),
 
     # ── target_curve: the seed and the taste (§2.3, §2.5, §2.6) ───────────────────────────────
-    _f("target_curve.candidate", "target_curve", "Which target curve do we start from?", required=True,
-       lands="`rew_analitic/target-curves/<name>/` + `autosound_context.md` §4",
+    _f("target_curve.candidate", "target_curve", "Which target curve?", required=True,
+       writes="project:goal.target_curve",
+       lands="`project.json` `goal` -> `rew_analitic/target-curves/<name>/` + `autosound_context.md` §4",
        note="⛔ Chosen TOGETHER with the person — there is no default. Narrow by genres and taste to "
             "2–3 candidates (`voicing-by-ear.md`). It is SEEDED here and finalised after the Phase-0 "
             "baseline: a curve is a start and a shape, not a finish and not a level.",
-       when="0", suggest=SUGGESTED_CURVES),
-    _f("target_curve.genres", "target_curve", "What do you listen to?",
-       lands="`preference-profile.md` (applied in Phase 5)",
-       when="0", suggest=SUGGESTED_GENRES),
+       when="0", suggest=SUGGESTED_CURVES, place="goal"),
+    _f("target_curve.genres", "target_curve", "What do you listen to?", enum=GENRES, multi=True,
+       writes="project:goal.genres", lands="`project.json` `goal` -> `preference-profile.md` (applied in Phase 5)",
+       when="0", place="goal"),
     _f("target_curve.loves_most", "target_curve", "What do you love most in the sound?", enum=LOVES,
        multi=True, lands="`preference-profile.md`",
        when="0"),
@@ -532,10 +687,12 @@ FIELDS = (
     _f("target_curve.reference_tracks", "target_curve", "3–5 reference tracks you know well",
        lands="`preference-profile.md`",
        when="4"),
-    _f("target_curve.track_library", "target_curve", "Which test-track library do you have?",
-       enum=TRACK_LIBRARIES, lands="`preference-profile.md`",
-       note="Phase 4 proposes only from what you can actually play (`test-tracks.md`).",
-       when="4"),
+    _f("target_curve.track_library", "target_curve", "Which test-track libraries do you have?",
+       enum=TRACK_LIBRARIES, multi=True, writes="project:goal.track_libraries",
+       lands="`project.json` `goal` -> `preference-profile.md`",
+       note="Phase 4 proposes only from what you can actually play (`test-tracks.md`); the choices "
+            "are the libraries that file describes.",
+       when="4", place="goal"),
     _f("target_curve.tone", "target_curve", "Warm or bright?", enum=TONE, lands="`preference-profile.md`",
        when="5", default="neutral", ask_with="taste"),
     _f("target_curve.bass", "target_curve", "Bass-heavy or neutral?", enum=BASS,
@@ -1061,7 +1218,10 @@ def _selftest():
         # will ever read back -- the kind of typo a table of strings makes easy and silent.
         if (f["writes"] or "").startswith("project:"):
             top = f["writes"].split(":", 1)[1].split("[")[0].split(".")[0]
-            assert top in skeleton or top == "measurement", f"{f['id']} writes to unknown key {top!r}"
+            # `measurement` (SCR-059) and `goal` (the page's optional goal block, 2026-09-22) are
+            # written by this module and documented in `project-schema.md`, not seeded empty.
+            assert top in skeleton or top in ("measurement", "goal"), \
+                f"{f['id']} writes to unknown key {top!r}"
         # Every field with no machine home says where the answer DOES go. "Nowhere" is not an
         # answer a form can act on, and prose that nobody names is prose nobody writes.
         if f["writes"] is None:
@@ -1088,6 +1248,21 @@ def _selftest():
     assert field("goal.reference_seat")["when"] == "now"
     now = fields(when="now")
     assert 0 < len(now) < len(FIELDS) // 2, f"{len(now)} of {len(FIELDS)} fields asked up front"
+    # WHERE a form shows each field: a known place, and nothing a tool answers is put to a person.
+    place_ids = [pl for pl, _ in PLACES]
+    for f in FIELDS:
+        assert f["place"] in place_ids, f"{f['id']}: unknown place {f['place']!r}"
+        if f["place"] == "now":
+            assert f["when"] == "now" and f["derive"] is None, f"{f['id']} is asked up front and is not a now question"
+    # The processor's base questions are asked only for a NEW processor, and every capability
+    # checklist question except the input routing (a memo, the Arbiter 2026-09-22) is among them.
+    assert {f["checklist"] for f in FIELDS if f["place"] == "new_dsp" and f["checklist"] is not None} \
+        == set(range(len(dsp_profile.CAPABILITY_CHECKLIST) - 1))
+    # The choices are read off what the skill ships -- the DSP library and the test-track file.
+    dsps = known_dsps()
+    assert dsps and all(d["vendor"] and d["model"] for d in dsps), dsps
+    assert {"carmus", "chesky", "emma", "aya", "streaming"} <= set(TRACK_LIBRARIES), TRACK_LIBRARIES
+    assert any(c["source"] == "library" for c in known_cars()), "the cabin library offers no car"
 
     # ── the DSP half stays the profile's: every checklist question is CLAIMED by a field ──────
     # Not copied -- the questions come off `dsp_profile.CAPABILITY_CHECKLIST` at import. This
@@ -1154,14 +1329,15 @@ def _selftest():
         save(root, "source.connection", "optical")
         save(root, "source.listening_input", "Optical 1")
         save(root, "source.measurement_input", "Coax 2")
+        save(root, "rew.loopback", "acoustic")      # the Arbiter's second choice is a real one now
         save(root, "rew.loopback", "physical")
         save(root, "rew.capture_rate_hz", 48000)
         data = project.Project(root).load()
         assert data["source"]["measurement_input"] == "Coax 2", data["source"]
         assert data["measurement"]["loopback"] == "physical", data["measurement"]
         try:
-            save(root, "rew.loopback", "acoustic")
-            raise AssertionError("an acoustic loopback passed as a physical one")
+            save(root, "rew.loopback", "usb")
+            raise AssertionError("an invented loopback passed")
         except IntakeError as exc:
             assert "physical" in str(exc), exc
 
@@ -1230,21 +1406,40 @@ def _selftest():
         # ── `missing` moves when an answer lands, and never calls prose a gap ────────────────
         before = missing(root)
         assert "car.make" in [r["id"] for r in before["answered"]], before["answered"]
-        assert "rew.mic_model" in before["required_missing"], before["required_missing"]
+        assert "dsp.vendor" in before["required_missing"], before["required_missing"]
         # S-032: it used to be the example of a field with no machine home. It has one now, and it
         # is ANSWERED above -- so the example moves to a field that still lands only in prose.
         assert "goal.reference_seat" in [r["id"] for r in before["answered"]], before["answered"]
         assert before["not_machine_readable"], "some fields still land in prose, and say so"
         # What to ask now is a subset of what is required, and never a tool's job or a later step's.
         assert set(before["required_missing_now"]) <= set(before["required_missing"])
-        assert "rew.mic_model" in before["required_missing_now"]
+        assert "dsp.vendor" in before["required_missing_now"]
+        assert "rew.mic_model" not in before["required_missing"], "the mic is not asked (2026-09-22)"
         assert "target_curve.candidate" not in before["required_missing_now"], "the curve waits for Phase 0"
         assert "rew.api_reachable" not in before["required_missing_now"], "a probe is not a question"
-        save(root, "rew.mic_model", "UMIK-1")
+        save(root, "dsp.vendor", "Musway")
         after = missing(root)
-        assert "rew.mic_model" not in after["required_missing"]
+        assert "dsp.vendor" not in after["required_missing"]
         assert len(after["required_missing"]) == len(before["required_missing"]) - 1, (
             before["required_missing"], after["required_missing"])
+
+        # ── the processor: known on an exact match, NEW otherwise; the goal block is writable ──
+        assert dsp_state(root)["new"] is None, "a vendor with no model is not a processor yet"
+        save(root, "dsp.model", "M6V4 (no 512K)")
+        st = dsp_state(root)
+        assert st["new"] is False and st["source"] == "bundled" and st["tiers"] == ["channels"], st
+        save(root, "dsp.model", "Some Unknown 8")
+        assert dsp_state(root)["new"] is True, "an unknown processor is not flagged as new"
+        save(root, "goal.formats", ["EMMA"])
+        save(root, "target_curve.genres", ["jazz", "rock"])
+        save(root, "target_curve.track_library", ["chesky", "streaming"])
+        assert project.Project(root).load()["goal"]["genres"] == ["jazz", "rock"]
+        # A sibling project's car is offered to the next project; this one's own is not.
+        sib = os.path.join(root, "sibling")
+        save_car(sib, "Skoda", "Octavia", "A7", "wagon")
+        labels = [c["label"] for c in known_cars(os.path.join(root, "third"))]
+        assert "Skoda Octavia A7 wagon" in labels, labels
+        assert "Skoda Octavia A7 wagon" not in [c["label"] for c in known_cars(sib)]
 
         # ── the gate, on a real project: the glossary and the profile are what is missing ────
         g = gate_requirements(root)

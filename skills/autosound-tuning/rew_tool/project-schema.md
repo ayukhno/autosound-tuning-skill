@@ -39,12 +39,18 @@ machine-readable to render for its Project/System/Car-audio-analysis panels eith
              "connection": "optical",                        //   how the signal ENTERS the DSP
              "listening_input": "Optical 1",                 //   one question, two answers --
              "measurement_input": "Coax 2"},                 //   Pre-session checklist #4 reads them
-  "dsp": {"vendor": "Audiotec-Fischer", "model": "Helix DSP Ultra S"},   // links dsp_profile.json
+  "dsp": {"vendor": "Audiotec-Fischer", "model": "Helix DSP Ultra S",   // links dsp_profile.json
+          "tiers_used": ["channels", "virtual_channels"]},   // the intake page: which of the
+                                                             //   processor's tiers this car uses
   "amps": [{"role": "front", "make": "Helix", "model": "P Six DSP",
             "gain_db": {"value": -6.0, "source": "measured", "at": "2026-07-20T12:00:00+00:00"}}],
   "mic": {"model": "UMIK-1", "calibration_file": "umik1_cal.txt",
           "calibration_file_90": "umik1_cal_90.txt"},
+  "goal": {"purpose": "both", "formats": ["EMMA"],          // the intake page's optional goal
+           "wishes": "clear nav prompts", "target_curve": "harman",  //   block (2026-09-22); the
+           "genres": ["jazz"], "track_libraries": ["chesky"]},       //   session carries it into prose
   "measurement": {"loopback": "physical",                    // SCR-059: the RIG, not the DSP.
+                                                             //   physical | acoustic | none
                   "sample_rate_hz": 48000,                   //   the CAPTURE rate -- it keeps its
                   "interface": "UMIK-1 USB"},                //   own name (dsp.* is the processing rate)
   "paths": {"rew_project": null},                          // SCR-018 -- filled once intake records it

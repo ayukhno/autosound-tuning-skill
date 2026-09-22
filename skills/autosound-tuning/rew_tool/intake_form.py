@@ -45,6 +45,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
+import dsp_profile  # noqa: E402
 import intake  # noqa: E402  -- the question list itself, never a copy of it
 import project  # noqa: E402
 
@@ -117,6 +118,11 @@ def _value_of(field, data, project_dir):
     return project.fact_value(node) if project.is_fact(node) else node
 
 
+def _tier_options(lab, tiers):
+    labels_ = (lab["fields"].get("channel_map.tier") or {}).get("suggest") or {}
+    return [(t, labels_.get(t) or t) for t in tiers]
+
+
 def model(project_dir, lang=DEFAULT_LANG):
     """Everything the page renders: fields with their state and current value, tables, the gate."""
     lab = labels(lang)
@@ -133,6 +139,13 @@ def model(project_dir, lang=DEFAULT_LANG):
     except (project.ProjectError, OSError):
         data = None
 
+    # The processor decides which tiers a channel row may name (the Arbiter, 2026-09-22): the
+    # tiers it has, narrowed to the ones this car uses once that is answered; every tier for a
+    # processor nobody has described yet.
+    dsp = intake.dsp_state(project_dir)
+    has = dsp["tiers"] or list(intake.SUGGESTED_TIERS)
+    used = [t for t in ((data or {}).get("dsp") or {}).get("tiers_used") or [] if t in has]
+
     fields = []
     for f in intake.FIELDS:
         st = state.get(f["id"], PROSE)
@@ -144,34 +157,35 @@ def model(project_dir, lang=DEFAULT_LANG):
         default = f["default"]
         if f["id"] == "project.language" and lab.get("lang") in intake.LANGUAGES:
             default = lab["lang"]              # the page's own language is the obvious answer
+        options, suggest = _options(lab, f), _suggestions(lab, f)
+        if f["id"] == "dsp.tiers_used":
+            options = _tier_options(lab, has)
+        if f["id"] == "channel_map.tier":
+            options, suggest = _tier_options(lab, used or has), []
+            default = "channels" if "channels" in (used or has) else None
+        if f["id"] == "dsp.tiers":
+            options, suggest = _tier_options(lab, intake.SUGGESTED_TIERS), []
         fields.append({
             "id": f["id"], "group": f["group"], "ask": _ask(lab, f), "ask_en": f["ask"],
             "required": f["required"], "multi": f["multi"], "per": f["per"],
             "couple": f["ask_with"], "writes": f["writes"], "lands": f["lands"],
-            "options": _options(lab, f), "state": st,
+            "options": options, "state": st,
             "value": _value_of(f, data, project_dir), "probe": auto,
-            "when": f["when"], "default": default, "suggest": _suggestions(lab, f),
+            "when": f["when"], "place": f["place"], "default": default, "suggest": suggest,
             "derive": _derive(lab, f) if auto else None,
         })
 
     gate = intake.gate_requirements(project_dir)
-    groups = []
-    for gid, why in intake.GROUPS:
-        rows = [f for f in fields if f["group"] == gid]
-        groups.append({
-            "id": gid, "title": lab["groups"].get(gid) or gid, "why": why,
-            "count": len(rows),
-            "gate": sum(1 for r in rows if r["state"] == GATE),
-            "nice": sum(1 for r in rows if r["state"] == NICE),
-            "have": sum(1 for r in rows if r["state"] == HAVE),
-        })
-    whens = [{"id": w, "what": what, "title": (lab.get("when") or {}).get(w) or what,
-              "count": sum(1 for f in fields if f["when"] == w)}
+    groups = [{"id": gid, "title": lab["groups"].get(gid) or gid, "why": why}
+              for gid, why in intake.GROUPS]
+    whens = [{"id": w, "what": what, "title": (lab.get("when") or {}).get(w) or what}
              for w, what in intake.WHEN]
-    asked_now = [f for f in fields if f["when"] == "now" and not f["probe"]]
+    asked = [f for f in fields if f["place"] in ("now", "goal")]
+    now = [f for f in fields if f["place"] == "now"]
     return {
         "project_dir": project_dir, "lang": lab.get("lang", lang), "ui": lab["ui"],
-        "when": whens,
+        "when": whens, "dsp": dsp, "dsps": intake.known_dsps(),
+        "cars": intake.known_cars(project_dir),
         "couplings": {c["id"]: {"fields": c["fields"], "why": c["why"],
                                 "title": lab["couplings"].get(c["id"]) or c["id"]}
                       for c in intake.couplings()},
@@ -185,12 +199,15 @@ def model(project_dir, lang=DEFAULT_LANG):
                    "have": sum(1 for f in fields if f["state"] == HAVE),
                    "prose": sum(1 for f in fields if f["state"] == PROSE),
                    "all": len(fields),
-                   # What the page puts in front of the person now, and how much of it is a choice.
-                   "now": len(asked_now),
-                   "now_open": sum(1 for f in asked_now if f["state"] != HAVE),
-                   "now_choice": sum(1 for f in asked_now if f["options"] or f["suggest"]),
-                   "auto": sum(1 for f in fields if f["when"] == "now" and f["probe"]),
-                   "later": sum(1 for f in fields if f["when"] != "now")},
+                   # What the page puts in front of the person, and how much of it is a choice.
+                   "now": len(now),
+                   "now_open": sum(1 for f in now if f["state"] != HAVE),
+                   "goal": sum(1 for f in fields if f["place"] == "goal"),
+                   "asked": len(asked),
+                   "asked_choice": sum(1 for f in asked if f["options"] or f["suggest"]),
+                   "new_dsp": sum(1 for f in fields if f["place"] == "new_dsp"),
+                   "equipment": sum(1 for f in fields if f["place"] == "equipment"),
+                   "memo": sum(1 for f in fields if f["place"] == "memo")},
     }
 
 
@@ -251,6 +268,10 @@ td input, td select { min-width:90px; width:100%; }
         color:#555; font-size:13px; margin:0 0 10px; }
 .ok { color:var(--have); font-size:12px; }
 .err { color:var(--gate); font-size:12.5px; white-space:pre-wrap; }
+[hidden] { display:none !important; }
+section { margin:0 0 22px; }
+section.goal, section.new-dsp { border-top:1px solid var(--line); padding-top:14px; }
+li { margin:3px 0; font-size:13.5px; }
 """
 
 _JS = """
@@ -285,6 +306,53 @@ function saveGroupOf(sel, kind, el) {
   document.querySelectorAll(sel).forEach(i => { if (i.value !== '') out[i.dataset.k] = i.value; });
   send({[kind]: out}, el);
 }
+let pickedCar = null;
+function pickCar(sel) {
+  const o = sel.selectedOptions[0];
+  pickedCar = o && o.value !== '' ? {make:o.dataset.make, model:o.dataset.model,
+                                      generation:o.dataset.generation, body:o.dataset.body} : null;
+  if (pickedCar) document.querySelectorAll('.car-part').forEach(i => {
+    if (i.dataset.k in pickedCar) i.value = pickedCar[i.dataset.k]; });
+  carEdited();
+}
+function carEdited() {
+  const hint = document.getElementById('car-new');
+  if (!hint) return;
+  const differs = pickedCar && [...document.querySelectorAll('.car-part')].some(
+    i => i.dataset.k in pickedCar && i.value !== pickedCar[i.dataset.k]);
+  hint.hidden = !differs;
+}
+function showNewDsp(on) {
+  const sec = document.getElementById('new-dsp'); if (sec && on) sec.hidden = false;
+  const h = document.getElementById('dsp-new-hint'); if (h) h.hidden = !on;
+}
+function pickVendor(sel) {
+  const other = sel.value === '__other__';
+  document.getElementById('dsp-vendor-free').hidden = !other;
+  const model = document.getElementById('dsp-model');
+  [...model.options].forEach(o => { if (o.dataset.vendor) o.hidden = o.dataset.vendor !== sel.value; });
+  model.value = other ? '__other__' : '';
+  pickModel(model);
+}
+function pickModel(sel) {
+  const other = sel.value === '__other__';
+  document.getElementById('dsp-model-free').hidden = !other;
+  showNewDsp(other);
+}
+function saveDsp(el) {
+  const v = document.getElementById('dsp-vendor'), m = document.getElementById('dsp-model');
+  const vendor = v.value === '__other__' ? document.getElementById('dsp-vendor-free').value : v.value;
+  const model = m.value === '__other__' ? document.getElementById('dsp-model-free').value : m.value;
+  send({dsp: {vendor, model}}, el);
+}
+function saveGoal(el) {
+  const choices = [...document.querySelectorAll('.goal-pick')].filter(c => c.checked).map(c => c.value);
+  send({goal: {choices, text: document.getElementById('goal-text').value}}, el);
+}
+function saveTiers(el) { send({dsp_tiers: valueOf(el.closest('.f'))}, el); }
+window.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.car-part').forEach(i => i.addEventListener('input', carEdited));
+});
 function saveRow(kind, tr, el) {
   const out = {};
   tr.querySelectorAll('input, select').forEach(i => { if (i.dataset.k && i.value !== '') out[i.dataset.k] = i.value; });
@@ -310,9 +378,13 @@ def _choice(f, value, ui, cls="", key=""):
     """
     data = f' data-k="{_esc(key)}"' if key else ""
     klass = f' class="{cls}"' if cls else ""
+    if isinstance(value, (list, tuple)):
+        chosen = [str(v) for v in value]
+        value = ",".join(chosen)
+    else:
+        chosen = str(value).split(",") if value not in (None, "") else []
     current = value if value not in (None, "") else ("" if f["default"] is None else str(f["default"]))
     if f["options"] and f["multi"]:
-        chosen = value.split(",") if value else []
         return "<div>" + "".join(
             f'<label class="opt"><input type="checkbox" value="{_esc(v)}"'
             f'{" checked" if v in chosen else ""}> {_esc(t)}</label>' for v, t in f["options"]) + "</div>"
@@ -346,6 +418,10 @@ def _default_hint(f, ui):
 
 def _control(f, ui):
     """The input for one field — or the honest note that this form does not write it."""
+    if f["id"] == "dsp.tiers":            # the one profile question the page writes (new DSP only)
+        return (f'<div class="row">{_choice(f, _draft_tiers(f), ui)}'
+                f'<button class="save" onclick="saveTiers(this)">{_esc(ui.get("save", "Save"))}</button>'
+                f'</div><div class="err"></div>')
     if f["probe"]:
         return (f'<div class="meta">🔎 {_esc(ui.get("probe", "probed, not asked"))}'
                 + (f' — {_esc(f["derive"])}' if f["derive"] else "") + "</div>")
@@ -359,22 +435,22 @@ def _control(f, ui):
         key = "per_" + f["per"]
         return f'<div class="meta">↳ {_esc(ui.get(key, f["per"]))}</div>'
     if not writes:
-        # Prose: the session asks it. The choices it will offer are shown, so the question is
-        # never a blank box — and the page still does not pretend to store the answer.
         choices = f["options"] or f["suggest"]
         return ((f'<div class="meta">{_esc(ui.get("choices", "choices"))}: '
                  + ", ".join(_esc(t) for _v, t in choices) + "</div>" if choices else "")
-                + _default_hint(f, ui)
                 + f'<div class="meta">{_esc(ui.get("prose_note", ""))}</div>')
-    value = "" if f["value"] is None else str(f["value"])
-    return (f'<div class="row">{_choice(f, value, ui)}'
+    return (f'<div class="row">{_choice(f, f["value"], ui)}'
             f'<button class="save" onclick="saveField(\'{_esc(f["id"])}\', this)">'
             f'{_esc(ui.get("save", "Save"))}</button></div>{_default_hint(f, ui)}<div class="err"></div>')
 
 
+def _draft_tiers(f):
+    return f.get("draft_tiers") or []
+
+
 def _field_html(f, ui):
     mark = (f' <span class="meta">({_esc(ui.get("required", "required"))})</span>'
-            if f["required"] and f["when"] == "now" and not f["probe"] else "")
+            if f["required"] and f["place"] == "now" else "")
     return (f'<div class="f s-{f["state"]}" id="f-{_esc(f["id"])}">'
             f'<div class="q"><span class="dot d-{f["state"]}"></span>{_esc(f["ask"])}{mark}</div>'
             f'<div class="meta"><code>{_esc(f["id"])}</code> · '
@@ -387,8 +463,26 @@ CAR_PARTS = (("make", "car.make"), ("model", "car.model"), ("generation", "car.g
 
 
 def _car_block(m, fields):
-    """`car_identity` is the one couple with a writer of its own: four parts or nothing."""
+    """The car: pick a known one to fill the four parts, or type them. Four parts or nothing.
+
+    The list is what the skill has SEEN — its cabin library and the projects next to this one
+    (`intake.known_cars`); there is no catalogue beyond that and none is invented. A picked car can
+    still be edited, and an edited car is a NEW car: the page says so the moment a part differs.
+    """
     ui = m["ui"]
+    src_label = {"library": ui.get("car_src_library", "skill library")}
+    pick = ""
+    if m["cars"]:
+        opts = "".join(
+            f'<option value="{i}" data-make="{_esc(c["make"])}" data-model="{_esc(c["model"])}" '
+            f'data-generation="{_esc(c["generation"])}" data-body="{_esc(c["body"])}">'
+            f'{_esc(c["label"])} · {_esc(src_label.get(c["source"]) or c["source"].replace("project:", ui.get("car_src_project", "project") + " "))}'
+            f'</option>' for i, c in enumerate(m["cars"]))
+        pick = (f'<div class="f" id="car-pick-box"><div class="q">{_esc(ui.get("car_pick", "Pick a known car"))}</div>'
+                f'<div class="row"><select id="car-pick" onchange="pickCar(this)">'
+                f'<option value="">{_esc(ui.get("car_pick_none", "— type it below —"))}</option>{opts}</select></div>'
+                f'<div class="meta">{_esc(ui.get("car_pick_src", ""))}</div>'
+                f'<div class="meta hint" id="car-new" hidden>{_esc(ui.get("car_edited", "edited: this is a new car"))}</div></div>')
     inputs = []
     for key, fid in CAR_PARTS:
         f = next((x for x in fields if x["id"] == fid), None)
@@ -399,11 +493,80 @@ def _car_block(m, fields):
                       f'<span class="dot d-{f["state"]}"></span>{_esc(f["ask"])}</div>'
                       f'<div class="row">{_choice(f, value, ui, cls="car-part", key=key)}</div></div>')
     couple = m["couplings"].get("car_identity", {})
-    return (f'<div class="couple"><div class="t">{_esc(couple.get("title", "car"))}</div>'
+    return (f'<div class="couple"><div class="t">{_esc(couple.get("title", "car"))}</div>{pick}'
             + "".join(inputs)
             + f'<div class="row"><button class="save" '
               f'onclick="saveGroupOf(\'.car-part\', \'car\', this)">'
               f'{_esc(ui.get("save", "Save"))}</button></div><div class="err"></div></div>')
+
+
+def _dsp_block(m, fields):
+    """Vendor, then model — the models offered are ONLY that vendor's (the Arbiter, 2026-09-22).
+
+    The list is the skill's own DSP library (`intake.known_dsps`). "Another" opens two text boxes,
+    and a processor the library does not describe is a NEW processor: its base questions are asked
+    once, in their own step, and only then.
+    """
+    ui = m["ui"]
+    dsp = m["dsp"]
+    vendors = sorted({d["vendor"] for d in m["dsps"]})
+    other = "__other__"
+    known_pair = any(d["vendor"] == dsp["vendor"] and d["model"] == dsp["model"] for d in m["dsps"])
+    v_sel = dsp["vendor"] if dsp["vendor"] in vendors else (other if dsp["vendor"] else "")
+    m_sel = dsp["model"] if known_pair else (other if dsp["model"] else "")
+    v_opts = "".join(f'<option value="{_esc(v)}"{" selected" if v == v_sel else ""}>{_esc(v)}</option>'
+                     for v in vendors)
+    m_opts = "".join(f'<option value="{_esc(d["model"])}" data-vendor="{_esc(d["vendor"])}"'
+                     f'{" selected" if d["model"] == m_sel and d["vendor"] == v_sel else ""}'
+                     f'{"" if d["vendor"] == v_sel else " hidden"}>{_esc(d["model"])}</option>'
+                     for d in m["dsps"])
+    free_v = "" if v_sel != other else dsp["vendor"]
+    free_m = "" if m_sel != other else dsp["model"]
+    ids = "".join(f'<span id="f-{fid}"></span>' for fid in ("dsp.vendor", "dsp.model"))
+    state = "have" if dsp["vendor"] and dsp["model"] else "gate"
+    return (f'<div class="couple" id="dsp-box">{ids}<div class="t">{_esc(m["couplings"]["dsp_identity"]["title"])}</div>'
+            f'<div class="f s-{state}"><div class="q"><span class="dot d-{state}"></span>'
+            f'{_esc(next(f["ask"] for f in fields if f["id"] == "dsp.vendor"))} '
+            f'<span class="meta">({_esc(ui.get("required", "required"))})</span></div>'
+            f'<div class="row"><select id="dsp-vendor" onchange="pickVendor(this)"><option value="">—</option>{v_opts}'
+            f'<option value="{other}"{" selected" if v_sel == other else ""}>{_esc(ui.get("dsp_other_vendor", "another vendor"))}</option></select>'
+            f'<input type="text" id="dsp-vendor-free" value="{_esc(free_v)}"{"" if v_sel == other else " hidden"}></div></div>'
+            f'<div class="f s-{state}"><div class="q"><span class="dot d-{state}"></span>'
+            f'{_esc(next(f["ask"] for f in fields if f["id"] == "dsp.model"))}</div>'
+            f'<div class="row"><select id="dsp-model" onchange="pickModel(this)"><option value="">—</option>{m_opts}'
+            f'<option value="{other}"{" selected" if m_sel == other else ""}>{_esc(ui.get("dsp_other_model", "another model"))}</option></select>'
+            f'<input type="text" id="dsp-model-free" value="{_esc(free_m)}"{"" if m_sel == other else " hidden"}></div></div>'
+            f'<div class="meta hint" id="dsp-new-hint"{"" if dsp["new"] else " hidden"}>{_esc(ui.get("dsp_new_hint", "a new processor"))}</div>'
+            f'<div class="row"><button class="save" onclick="saveDsp(this)">{_esc(ui.get("save", "Save"))}</button></div>'
+            f'<div class="err"></div></div>')
+
+
+def _goal_block(m, fields):
+    """What the tune is for — ONE optional control: EMMA / AYA / for yourself / other + words.
+
+    The Arbiter's shape (2026-09-22). The ticks map onto the method's keys on the way in:
+    EMMA/AYA are `goal.formats`, a format means competition, "for yourself" is enjoyment, both is
+    both; the words go to `goal.wishes`.
+    """
+    ui = m["ui"]
+    by = {f["id"]: f for f in fields}
+    formats = by["goal.formats"]["value"] or []
+    purpose = by["goal.purpose"]["value"] or ""
+    wishes = by["goal.wishes"]["value"] or ""
+    ticked = set(formats) | ({"enjoyment"} if purpose in ("enjoyment", "both") else set()) \
+        | ({"other"} if wishes else set())
+    choices = [("EMMA", "EMMA"), ("AYA", "AYA"),
+               ("enjoyment", ui.get("goal_enjoyment", "for yourself")), ("other", ui.get("goal_other", "other"))]
+    boxes = "".join(f'<label class="opt"><input type="checkbox" class="goal-pick" value="{v}"'
+                    f'{" checked" if v in ticked else ""}> {_esc(t)}</label>' for v, t in choices)
+    state = "have" if (formats or purpose or wishes) else "nice"
+    ids = "".join(f'<span id="f-{fid}"></span>' for fid in ("goal.purpose", "goal.formats", "goal.wishes"))
+    return (f'<div class="f s-{state}" id="goal-box">{ids}<div class="q"><span class="dot d-{state}"></span>'
+            f'{_esc(ui.get("goal_ask", "What is the tune for?"))}</div>'
+            f'<div>{boxes}</div><div class="row"><input type="text" id="goal-text" value="{_esc(wishes)}" '
+            f'placeholder="{_esc(ui.get("goal_text", "in your own words"))}"></div>'
+            f'<div class="row"><button class="save" onclick="saveGoal(this)">{_esc(ui.get("save", "Save"))}</button></div>'
+            f'<div class="err"></div></div>')
 
 
 def _cell(c, raw, ui):
@@ -444,28 +607,20 @@ def _table(m, per, rows, kind, key_field, cols, add=True):
                     f'<td><button class="save" onclick="saveRow(\'{kind}\', this.closest(\'tr\'), this)">'
                     f'{_esc(ui.get("save", "Save"))}</button><div class="err"></div></td></tr>')
     if not body:
-        # No rows yet: say which questions will be asked of each one, rather than an empty grid.
         return (f'<div class="note">{_esc(ui.get("rows_first", "fill in the channels first"))}<ul>'
-                + "".join(f'<li id="f-{_esc(c["id"])}">{_esc(c["ask"])}'
-                          + (f' — {_esc(", ".join(t for _v, t in (c["options"] or c["suggest"])))}'
-                             if c["options"] or c["suggest"] else "") + "</li>" for c in cols)
+                + "".join(f'<li id="f-{_esc(c["id"])}">{_esc(c["ask"])}</li>' for c in cols)
                 + "</ul></div>")
     return (f'<div style="overflow-x:auto"><table><tr><th></th>{head}<th></th></tr>'
             + "".join(body) + "</table></div>")
 
 
 def _section(m, rows, ui, add_rows):
-    """One step's questions, in the table's group order — couples kept whole, tables for rows.
-
-    A couple is rendered where its FIRST member falls, with every member this step asks, even
-    across groups: the seat and the drive side are one control although they live in two groups.
-    Two fields that write the SAME key are one question and are shown once.
-    """
-    out, done, seen_writes, heading = [], set(), {}, None
-    by_group = {gid: [f for f in rows if f["group"] == gid] for gid, _ in intake.GROUPS}
+    """One place's questions, in the table's group order — couples kept whole, tables for rows."""
+    out, done, heading = [], set(), None
     titles = {g["id"]: g["title"] for g in m["groups"]}
+    specials = {"car": _car_block, "dsp_identity": _dsp_block, "purpose": _goal_block}
     for gid, _why in intake.GROUPS:
-        for f in by_group[gid]:
+        for f in [x for x in rows if x["group"] == gid]:
             if f["id"] in done:
                 continue
             if heading != gid:
@@ -475,58 +630,64 @@ def _section(m, rows, ui, add_rows):
                 out.append(_car_block(m, rows))
                 done |= set(dict(CAR_PARTS).values())
                 continue
+            if f["couple"] in ("dsp_identity", "purpose"):
+                out.append(specials[f["couple"]](m, m["fields"]))
+                done |= {x["id"] for x in rows if x["couple"] == f["couple"]} | (
+                    {"goal.wishes"} if f["couple"] == "purpose" else set())
+                continue
             if f["per"] in ("channel", "amp"):
                 cols = [c for c in rows if c["per"] == f["per"]]
                 data = m["rows"]["channels" if f["per"] == "channel" else "amps"]
                 key = "code" if f["per"] == "channel" else "model"
-                out.append(_table(m, f["per"], data, f["per"], key, cols,
-                                  add=add_rows or f["per"] == "amp"))
+                out.append(_table(m, f["per"], data, f["per"], key, cols, add=add_rows))
                 done |= {c["id"] for c in cols}
                 continue
-            writes = f["writes"]
-            if writes and writes in seen_writes:
-                out.append(f'<div class="meta" id="f-{_esc(f["id"])}">↳ <code>{_esc(f["id"])}</code> = '
-                           f'<code>{_esc(seen_writes[writes])}</code></div>')
-                done.add(f["id"])
-                continue
-            mates, twins = [], []
-            for x in rows:
-                if not f["couple"] or x["couple"] != f["couple"] or x["id"] in done or x["per"]:
-                    continue
-                first = next((y for y in mates if x["writes"] and y["writes"] == x["writes"]), None)
-                (twins if first else mates).append(x)
+            mates = [x for x in rows if f["couple"] and x["couple"] == f["couple"]
+                     and x["id"] not in done and not x["per"]]
             if len(mates) >= 2:
                 couple = m["couplings"].get(f["couple"], {})
                 out.append(f'<div class="couple"><div class="t">{_esc(couple.get("title", ""))}</div>'
-                           + "".join(_field_html(x, ui) for x in mates)
-                           + "".join(f'<div class="meta" id="f-{_esc(x["id"])}">↳ <code>{_esc(x["id"])}'
-                                     f'</code> = <code>{_esc(next(y["id"] for y in mates if y["writes"] == x["writes"]))}'
-                                     f'</code></div>' for x in twins)
-                           + "</div>")
-                done |= {x["id"] for x in mates + twins}
-                seen_writes.update({x["writes"]: x["id"] for x in mates if x["writes"]})
+                           + "".join(_field_html(x, ui) for x in mates) + "</div>")
+                done |= {x["id"] for x in mates}
                 continue
             out.append(_field_html(f, ui))
             done.add(f["id"])
-            if writes:
-                seen_writes[writes] = f["id"]
     return "".join(out)
+
+
+def _memo(m, rows, ui):
+    """What the page does NOT ask — a cheat-sheet, grouped by who answers it and when."""
+    whens = {w["id"]: w["title"] for w in m["when"]}
+    auto = [f for f in rows if f["probe"]]
+    later = [f for f in rows if not f["probe"]]
+    out = [f'<h3>{_esc(ui.get("memo_auto", "a tool or the profile answers these"))}</h3><ul>']
+    out += [f'<li id="f-{_esc(f["id"])}">{_esc(f["ask"])} — <span class="meta">{_esc(f["derive"])}</span></li>'
+            for f in auto]
+    out.append(f'</ul><h3>{_esc(ui.get("memo_later", "the session asks when the step comes"))}</h3><ul>')
+    out += [f'<li id="f-{_esc(f["id"])}">{_esc(f["ask"])} — <span class="meta">{_esc(whens.get(f["when"], f["when"]))}</span></li>'
+            for f in later]
+    return "".join(out) + "</ul>"
 
 
 def render(m):
     """One self-contained page: no CDN, no font, no network — it must open on a car's laptop.
 
-    What starting to measure needs is open on the page; what a tool answers, and what a later
-    step asks, is folded under a line that names that step — there to read, not in the way.
+    Open on the page: what starting to measure needs, and the optional goal. A new processor's base
+    questions appear only for a new processor; the drivers and other hardware are an optional fold;
+    everything else is a memo, not a question.
     """
     ui = m["ui"]
     t = m["totals"]
+    fields = m["fields"]
+    for f in fields:
+        if f["id"] == "dsp.tiers" and m["dsp"]["source"] == "draft":
+            f["draft_tiers"] = m["dsp"]["tiers"]
     chips = (f'<span class="chip"><span class="dot d-gate"></span>'
              f'{_esc(ui.get("legend_now", "to answer now"))} <b>{t["now_open"]}</b> / {t["now"]}</span>'
              f'<span class="chip"><span class="dot d-have"></span>'
              f'{_esc(ui.get("legend_green", "answered"))} <b>{t["have"]}</b></span>'
              f'<span class="chip"><span class="dot d-prose"></span>'
-             f'{_esc(ui.get("legend_later", "asked later"))} <b>{t["later"]}</b></span>')
+             f'{_esc(ui.get("legend_memo", "not asked"))} <b>{t["memo"]}</b></span>')
     gate = m["gate"]
     verdict = (f'<span class="gate-ok">{_esc(ui.get("gate_open", "gate open"))}</span>'
                if gate["open"] else
@@ -534,23 +695,31 @@ def render(m):
                + (f' — {_esc(ui.get("gate_missing", "missing"))}: '
                   f'{_esc(", ".join(gate["missing_files"]))}' if gate["missing_files"] else ""))
 
-    fields = m["fields"]
-    now = [f for f in fields if f["when"] == "now" and not f["probe"]]
-    auto = [f for f in fields if f["when"] == "now" and f["probe"]]
+    def place(p):
+        return [f for f in fields if f["place"] == p]
+
     parts = [f'<section class="now"><h2>{_esc(ui.get("now_title", "Now"))}</h2>'
              f'<p class="why">{_esc(ui.get("now_why", ""))}</p>'
-             + _section(m, now, ui, add_rows=True) + "</section>"]
-    parts.append(f'<details><summary>{_esc(ui.get("auto_title", "the tool answers these"))}'
-                 f' <span class="n">{len(auto)}</span></summary>'
-                 + "".join(_field_html(f, ui) for f in auto) + "</details>")
-    for w in m["when"]:
-        if w["id"] == "now" or not w["count"]:
-            continue
-        rows = [f for f in fields if f["when"] == w["id"]]
-        parts.append(f'<details id="w-{_esc(w["id"])}"><summary>'
-                     f'{_esc(ui.get("later_prefix", "asked later"))} — {_esc(w["title"])}'
-                     f' <span class="n">{len(rows)}</span></summary>'
-                     + _section(m, rows, ui, add_rows=False) + "</details>")
+             + _section(m, place("now"), ui, add_rows=True) + "</section>"]
+    parts.append(f'<section class="goal"><h2>{_esc(ui.get("goal_title", "Goal and music"))}</h2>'
+                 f'<p class="why">{_esc(ui.get("goal_why", ""))}</p>'
+                 + _section(m, place("goal"), ui, add_rows=False) + "</section>")
+    parts.append(f'<section class="new-dsp" id="new-dsp"{"" if m["dsp"]["new"] else " hidden"}>'
+                 f'<h2>{_esc(ui.get("new_dsp_title", "New processor"))}</h2>'
+                 f'<p class="why">{_esc(ui.get("new_dsp_why", ""))}</p>'
+                 # Here nothing is derived: the library has no profile of THIS processor, so the
+                 # base questions are put to the person, once.
+                 + "".join(_field_html(dict(f, probe=False), ui) for f in place("new_dsp"))
+                 + "</section>")
+    equipment = place("equipment")
+    table_cols = [f for f in equipment if f["per"] == "channel"]
+    body = (_table(m, "channel", m["rows"]["channels"], "channel", "code", table_cols, add=False)
+            + "".join(_field_html(f, ui) for f in equipment if f["per"] != "channel"))
+    parts.append(f'<details id="equipment"><summary>{_esc(ui.get("equipment_title", "Other equipment"))}'
+                 f' <span class="n">{len(equipment)}</span></summary>'
+                 f'<p class="why">{_esc(ui.get("equipment_why", ""))}</p>{body}</details>')
+    parts.append(f'<details id="memo"><summary>{_esc(ui.get("memo_title", "Memo"))}'
+                 f' <span class="n">{t["memo"]}</span></summary>{_memo(m, place("memo"), ui)}</details>')
 
     return (
         "<!doctype html><html lang=\"" + _esc(m["lang"]) + "\"><head><meta charset=\"utf-8\">"
@@ -596,6 +765,53 @@ def apply_save(project_dir, payload):
             raise intake.IntakeError("порожнє значення — нічого не записано")
         return {"field": payload["field"],
                 "value": intake.save(project_dir, payload["field"], _coerce(payload["field"], value))}
+
+    if "dsp" in payload:
+        # Vendor and model are ONE identity: both or nothing, written together.
+        row = payload["dsp"]
+        vendor, model_ = (row.get("vendor") or "").strip(), (row.get("model") or "").strip()
+        if not (vendor and model_):
+            raise intake.IntakeError("the DSP is a vendor AND a model — nothing was written")
+        intake.save(project_dir, "dsp.vendor", vendor)
+        intake.save(project_dir, "dsp.model", model_)
+        return {"dsp": intake.dsp_state(project_dir)}
+
+    if "goal" in payload:
+        # EMMA / AYA / for yourself / other -> the method's own keys (`_goal_block`).
+        row = payload["goal"]
+        choices = set(row.get("choices") or [])
+        formats = [f for f in intake.FORMATS if f in choices]
+        enjoy = "enjoyment" in choices
+        purpose = ("both" if formats and enjoy else "competition" if formats
+                   else "enjoyment" if enjoy else None)
+        written = {"formats": intake.save(project_dir, "goal.formats", formats)}
+        if purpose:
+            written["purpose"] = intake.save(project_dir, "goal.purpose", purpose)
+        text = (row.get("text") or "").strip()
+        if text:
+            written["wishes"] = intake.save(project_dir, "goal.wishes", text)
+        return {"goal": written}
+
+    if "dsp_tiers" in payload:
+        # A NEW processor's tiers go into the interview draft through the profile's own writer;
+        # a group the draft already has keeps what was answered about it.
+        chosen = [t for t in (payload["dsp_tiers"] or []) if t]
+        if not chosen:
+            raise intake.IntakeError("nothing chosen — nothing was written")
+        dsp = intake.dsp_state(project_dir)
+        if not dsp["new"]:
+            raise intake.IntakeError("the tiers are read off the processor's profile; they are asked "
+                                     "only for a new processor — nothing was written")
+        data = dsp_profile.start_draft(project_dir, dsp["vendor"], dsp["model"])
+        have = {g.get("id"): g for g in dsp_profile._unwrap(data).get("groups") or []}
+        names = {"channels": "Output channels", "virtual_channels": "Virtual channels", "inputs": "Inputs"}
+        groups = []
+        for t in chosen:
+            gid = "physical_outputs" if t == "channels" else t
+            groups.append(have.get(gid) or {"id": gid, "label": names.get(t, t), "fields": None,
+                                            "max_count": None})
+        dsp_profile.set_field(project_dir, "groups", groups)
+        return {"dsp_tiers": chosen}
 
     if "car" in payload:
         row = payload["car"]
@@ -723,9 +939,9 @@ def _selftest():
         assert by_id["car.body"]["state"] == HAVE, by_id["car.body"]
         assert by_id["car.body"]["value"] == "sedan", by_id["car.body"]
         assert by_id["source.connection"]["state"] == HAVE
-        assert by_id["rew.mic_model"]["state"] == GATE, "a required, missing field is not red"
+        assert by_id["dsp.vendor"]["state"] == GATE, "a required, missing field is not red"
         assert by_id["car.year"]["state"] == NICE, "an optional, missing field is not yellow"
-        assert by_id["goal.wishes"]["state"] == PROSE, "prose is not reported as prose"
+        assert by_id["target_curve.loves_most"]["state"] == PROSE, "prose is not reported as prose"
         # The probes are marked, so the page does not ask a person to do the tool's job.
         for pid in PROBES:
             assert by_id[pid]["probe"], pid
@@ -740,30 +956,63 @@ def _selftest():
         assert m["couplings"]["seat"]["fields"] == ["car.drive_side", "goal.reference_seat"], \
             m["couplings"]["seat"]
 
-        # ── short up front: only what measuring needs is open; the rest is folded, not gone ──
-        assert 0 < t["now"] < t["all"] // 2, t
+        # ── the Arbiter's review, 2026-09-22 ─────────────────────────────────────────────────
         now_html = page.split("</section>", 1)[0]
-        for fid in ("rew.mic_model", "goal.reference_seat", "car.drive_side", "channel_map.code"):
+        for fid in ("goal.reference_seat", "car.drive_side", "channel_map.code", "rew.loopback",
+                    "dsp.vendor", "dsp.tiers_used"):
             assert f"f-{fid}" in now_html, f"{fid} is needed to start measuring and is not up front"
-        for fid in ("target_curve.tone", "channel_map.position", "amps.make", "rew.api_reachable"):
-            assert f"f-{fid}" not in now_html and f"f-{fid}" in page, f"{fid} is up front, or gone"
+        # Not asked at all: the solo question, the mic, the signal chain, the clip check.
+        memo = page.split('id="memo"', 1)[1]
+        for fid in ("dsp.per_channel_measurable", "rew.mic_model", "rew.mic_cal_0", "source.kind",
+                    "source.listening_input", "dsp.measurement_input", "rew.input_clip_checked",
+                    "amps.make", "target_curve.tone"):
+            assert f"f-{fid}" not in now_html and f'<li id="f-{fid}"' in memo, f"{fid} is asked"
         # The seat and the drive side are ONE control although they live in two groups.
         couple = now_html.split('id="f-car.drive_side"', 1)[1].split('<div class="couple">', 1)[0]
         assert 'id="f-goal.reference_seat"' in couple, "the seat couple was split"
-        # A default is pre-selected, not written: the radio is checked, the project is untouched.
+        # A default is pre-selected, not written.
         assert 'name="r-car.drive_side" value="LHD" checked' in page, "the default is not pre-selected"
-        assert by_id["car.drive_side"]["state"] != GATE, "a pre-selected default is not a red gap"
         assert "drive_side" not in (project.Project(root).load().get("car") or {}), \
             "a default was stored behind the person's back"
-        assert 'name="r-project.language" value="uk" checked' in page, "the page language is the default"
-        # One key written by two fields is ONE question on the page, not two.
-        assert sum(f'class="meta" id="f-{x}"' in page
-                   for x in ("dsp.measurement_input", "source.measurement_input")) == 1, \
-            "a key written by two fields rendered as two questions"
+        # The car list is what the skill has seen, and a known car fills the four parts.
+        assert 'data-make="VW" data-model="Passat" data-generation="B8" data-body="sedan"' in page
+        # The DSP: a model is offered under ITS vendor only, so Musway + Helix cannot be picked.
+        for d in intake.known_dsps():
+            assert f'value="{_esc(d["model"])}" data-vendor="{_esc(d["vendor"])}"' in page, d
+        # No processor chosen: the new-processor step exists but is not shown.
+        assert '<section class="new-dsp" id="new-dsp" hidden>' in page
+        # The goal is one optional control; the curve question is the Arbiter's words.
+        assert 'class="goal-pick" value="EMMA"' in page and "Яка цільова крива?" in page
+        assert 'value="chesky"' in page and 'value="jazz"' in page, "libraries/genres are not checkboxes"
+
+        apply_save(root, {"dsp": {"vendor": "Audiotec-Fischer", "model": "Helix DSP Ultra S"}})
+        m2 = model(root, "uk")
+        tiers = next(f for f in m2["fields"] if f["id"] == "channel_map.tier")["options"]
+        assert [v for v, _ in tiers] == ["virtual_channels", "channels", "inputs"], tiers
+        assert '<section class="new-dsp" id="new-dsp" hidden>' in render(m2), "a known DSP is not new"
+        apply_save(root, {"field": "dsp.tiers_used", "value": ["channels"]})
+        tiers = next(f for f in model(root, "uk")["fields"] if f["id"] == "channel_map.tier")["options"]
+        assert [v for v, _ in tiers] == ["channels"], "the tiers in use do not narrow the row's choice"
+        try:
+            apply_save(root, {"dsp_tiers": ["channels"]})
+            raise AssertionError("a known processor's tiers were overwritten from the form")
+        except intake.IntakeError as exc:
+            assert "new processor" in str(exc), exc
+        apply_save(root, {"dsp": {"vendor": "Acme", "model": "X8"}})
+        m3 = model(root, "uk")
+        assert m3["dsp"]["new"] is True and '<section class="new-dsp" id="new-dsp">' in render(m3)
+        apply_save(root, {"dsp_tiers": ["channels", "virtual_channels"]})
+        assert intake.dsp_state(root)["tiers"] == ["channels", "virtual_channels"], intake.dsp_state(root)
+        tiers = next(f for f in model(root, "uk")["fields"] if f["id"] == "channel_map.tier")["options"]
+        assert [v for v, _ in tiers] == ["channels"], tiers   # still narrowed by what is in use
+        # The goal ticks map onto the method's keys.
+        apply_save(root, {"goal": {"choices": ["EMMA", "enjoyment", "other"], "text": "clear nav"}})
+        goal = project.Project(root).load()["goal"]
+        assert goal == {"formats": ["EMMA"], "purpose": "both", "wishes": "clear nav"}, goal
 
         # ── writing back goes through the method's writers, refusals included ────────────────
-        apply_save(root, {"field": "rew.loopback", "value": "physical"})
-        assert project.Project(root).load()["measurement"]["loopback"] == "physical"
+        apply_save(root, {"field": "rew.loopback", "value": "acoustic"})
+        assert project.Project(root).load()["measurement"]["loopback"] == "acoustic"
         # An enumerated rate posted as TEXT must land as the number the table holds.
         apply_save(root, {"field": "rew.capture_rate_hz", "value": "96000"})
         assert project.Project(root).load()["measurement"]["sample_rate_hz"] == 96000
