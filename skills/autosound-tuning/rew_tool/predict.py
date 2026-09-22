@@ -1864,10 +1864,14 @@ def main(argv=None):
     ap.add_argument("--baseline", action="store_true",
                     help="the solos are a baseline capture: an unmarked REW channel is REFUSED, not "
                          "read as configured")
+    ap.add_argument("--allow-foreign", action="store_true",
+                    help="read REW solos that come from another .mdat than the project's own (#58 P4)")
     ap.add_argument("--from-state", metavar="VER",
                     help="the solos were measured UNDER this ledger version: divide that state out "
                          "first, so the prediction is H_meas x C_new/C_old (hub RES-006). Needs "
-                         "--project; the desk's own series is exactly this case")
+                         "--project; the desk's own series is exactly this case. With --rew and a "
+                         "capture round that records what it was taken --under, THAT is the default "
+                         "(#57 P0); `none` reads the solos as they are")
     ap.add_argument("--no-de-embed", action="store_true",
                     help="leave protective filters IN the solos (to see what the doctrine changes; "
                          "not for a tune)")
@@ -1996,6 +2000,22 @@ def main(argv=None):
         loaded = load_solos_dir(args.solos, f, drift, keep_ir=keep_ir)
     else:
         codes = [c.strip() for c in args.channels.split(",")] if args.channels else list(chains)
+        # #58 P4: a solo from ANOTHER build's .mdat is refused here, before it is read as this car's. The same
+        # titles and the same `_N` in a neighbouring project's file were analysed as this one's.
+        if args.project and not args.allow_foreign:
+            try:
+                import rew_api as _rew
+                with open(os.path.join(args.project, "project.json"), encoding="utf-8") as _fh:
+                    _own = ((json.load(_fh).get("paths") or {}).get("rew_project"))
+                _foreign = _rew.foreign_measurements(_rew.get_measurements().values(), _own)
+                _mine = {f"{c}_{args.ver} (sw)" for c in codes}
+                _hit = {t_: f_ for t_, f_ in _foreign.items() if t_ in _mine}
+            except Exception:                            # noqa: BLE001 -- no answer is not a refusal
+                _hit = {}
+            if _hit:
+                raise PredictError("solos from another file than this project's own: "
+                                   + ", ".join(f"{t_} ({f_})" for t_, f_ in sorted(_hit.items()))
+                                   + " -- another build's data. `--allow-foreign` reads them on purpose.")
         loaded = {}
         for code in codes:
             title = f"{code}_{args.ver} (sw)"
@@ -2037,6 +2057,15 @@ def main(argv=None):
                 from process import Process
                 proc = Process(proc_dir)
                 record = proc.protective_record_for(args.ver)
+                # #57 P0 (and #56's third comment): the round says which ledger version the series was taken
+                # UNDER, so --from-state is the round's unless the caller said otherwise. Without it the chain
+                # was applied a second time and a +9 ms "alignment" came out of a correct 2.5 ms.
+                if args.from_state is None and args.project:
+                    under = proc.under_for(args.ver)
+                    if under:
+                        args.from_state = under
+                        print(f"  --from-state {under}: the round for _{args.ver} was taken under it "
+                              f"(`--from-state none` reads the solos as they are)", file=sys.stderr)
                 if record is None:
                     # The caller said a round exists; not finding it is a lookup failure, and reading
                     # the solos "as configured" on top of it is how a protective filter stays in a
@@ -2067,6 +2096,8 @@ def main(argv=None):
                                               baseline=True if args.baseline else None)
         prot_notes = list(prot_notes) + gate_notes
 
+    if args.from_state and str(args.from_state).lower() == "none":
+        args.from_state = None
     if args.from_state:
         if not args.project:
             ap.error("--from-state names a LEDGER version, so it needs --project")
