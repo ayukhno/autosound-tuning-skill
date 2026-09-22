@@ -1087,7 +1087,7 @@ interview, its reasoning — while the only thing he owes it is the facts about 
 
 ## S-042 · Channel ids were minted in a notation the method does not have, and the parser does not refuse it
 
-**Status**: open 2026-09-19 · **W-2 package A** (`docs/PLAN-W-2.md`) · · W-1 collection · the Arbiter, after the gate refused on his machine:
+**Status**: open 2026-09-19 · **W-2 package A** (`docs/PLAN-W-2.md`) · the Arbiter at the W-2 review: «для мене правильна назва через "-" давай кругом зробимо так» — the hyphen is the notation everywhere; the Passat's six ids and its other live names go to the car role as hub `#196` (SKL-050) · · W-1 collection · the Arbiter, after the gate refused on his machine:
 «подивись нотацію і пропонуй назви в нотації (здається так і було) і перевір розбор назв, щоб там була
 та сама нотація». The session that hit it described two resolvers reading identity from different
 places; measured here, it is narrower and worse.

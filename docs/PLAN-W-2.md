@@ -53,8 +53,10 @@ S-033 · S-037 · S-052 · the skill's half of hub `#193` / `#194` · S-025 · S
    reconnect, and the check moves to "after every write, every reconnect, and before every series".
 6. **S-042:** `naming.py parse` refuses a code with `_` in it and resolves the code against the
    glossary and `previous_names`. A check reports an `id` that is not the code or one of its
-   `previous_names`. The six ids already on disk in `car/passat-b8-2026` are data and the Arbiter's
-   to correct (*Not included*).
+   `previous_names`. The Arbiter, at this review: «для мене правильна назва через "-" давай кругом
+   зробимо так». The hyphen is the notation everywhere, and the check says the fix (set the id to its
+   code). The Passat's six ids and its other live names are the car role's tree: hub `#196`
+   (SKL-050).
 
 ## B — the reviewer is reachable from any launch
 
@@ -210,7 +212,6 @@ answer `#38`'s own question: which configurations win when the goals pull agains
 | item | why | comes back when |
 |---|---|---|
 | S-051 (a driver's mount and aim) | an idea. Nothing in the method computes from mount or aim, and the Arbiter's rule is not to ask what we cannot compute | a tool starts using mount or aim |
-| S-042's data half | the six `snake_case` ids in `car/passat-b8-2026` are that project's data, and the Arbiter's to correct. The check that finds them is in A | the Arbiter says to correct them |
 | already deferred, untouched: S-001, S-017, `#24`, `#26`, hub `#82`, `#113` | the user's earlier word | as each one's line says |
 
 **Named once:** `#24`, `#26`, hub `#82` and `#113` wait for "tag `skill-v3.1.0`". On 2026-09-18 the
