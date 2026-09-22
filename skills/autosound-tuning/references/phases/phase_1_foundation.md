@@ -87,14 +87,18 @@ Format a Generator proposal package (per the data contract §3) and send it to t
 ### 5. Generate Band-Specific Targets (Step 5b)
 Once crossovers + levels are set, generate the per-driver targets **locally** with
 [`rew_tool/target_bands.py`](rew_tool/target_bands.py) — feed it the
-project's house curve + the per-channel config (crossovers/types + the gains from `level_offsets.py`).
+project's house curve + the per-channel config (crossovers with their types as the DSP writes them —
+`BE12`, `LR24`, `BW18` — + the gains from `level_offsets.py`). A type it cannot model is refused by
+name, never drawn as an LR24: a Bessel's knee is not an LR's (#56).
 It bakes in the crossover roll-off, the two-speaker **summation offset** (~6 dB LF → ~3 dB HF), and the
 **asymmetric compensation** (so an asymmetric L/R sum still reconstructs the house curve).
 * **The payoff:** change a crossover or a level → **regenerate in one shot**, no manual web round-trip.
 * **Sanity check:** `_SUM` (L+R pair) targets sit ~+3…6 dB above a single side; the mono sub has no summation offset. **Two subs** (`sw-f`/`sw-r`) are a pair: give each `is_stereo: true` so the `SWs` target carries the summation offset.
 * ⚠️ **Never generate from `target_bands.py`'s built-in `_DEMO_CFG` (or leave `gain` unset/0) for a real project.** A real incident: per-band targets were committed with the demo's placeholder crossovers/gains (tw HPF ~3500 Hz instead of the project's actual 1000 Hz, gains left at the demo's −1.5/−2.0/0.0 instead of `level_offsets.py`'s real numbers) — L/R came out looking flat/symmetric and the tweeter target's roll-off knee didn't match the DSP at all, silently. **The config passed to `generate()` must be THIS project's just-applied `v1` crossovers/types + the actual `level_offsets.py` gains — never the module's demo/example values.** `target_bands.py` warns (`UserWarning`) if a channel's config exactly matches `_DEMO_CFG`, but that's a last-resort net, not a substitute for feeding it the real config.
 * **Regenerate whenever a crossover or gain changes** — a per-band target file is a *derived* artifact of the current `v1`/`vN` hard-params, not a one-time output; a stale target after a crossover move silently misguides Phase 2a hygiene EQ.
-* Save into `rew_analitic/target-curves/<name>/`, load into REW, and use them for Phase 2a hygiene EQ.
+* `write_targets` saves one `<code>_target.txt` per channel into `rew_analitic/target-curves/<name>/` — the
+  name `rew_tool.py analyze-batch --curves-dir <that dir> --project <project>` looks up. Load them into REW
+  and use them for Phase 2a hygiene EQ.
 * *(Alternative — manual:* [nonotuningtool.com](https://nonotuningtool.com) does the same in a web UI with a "Stereo" config — mention it to the user as an option.)
 
 ### 5.5 Coarse EQ per driver — before the delays

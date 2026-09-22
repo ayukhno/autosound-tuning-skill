@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 import rew_api as api
 import analysis as an
 import joint_analysis as ja
-from target_curves import find_target_curve, interpolate_target
+from target_curves import explain_target_curve, find_target_curve, interpolate_target
 
 DEFAULT_CURVES_DIR = os.path.expanduser(
     "~/Documents/home/EMMA_2026-05/7. HelixDSP v4 ResoNix_ACС/ResoNix_Accurate_50db_REW 2"
@@ -261,9 +261,15 @@ def _band_mean_dev(freqs, dev, f_lo, f_hi):
     return sum(zone) / len(zone)
 
 
-def analyze_batch(pattern, curves_dir, vs_targets=True):
+def analyze_batch(pattern, curves_dir, vs_targets=True, glossary=None):
     """Mass analysis: ONE consolidated deviation matrix for every measurement
     whose title contains `pattern` (e.g. "_2 (rta)").
+
+    Each title finds its per-band target through `target_curves.explain_target_curve`: the
+    grammar and the project `glossary` name its code, and the file is `<code>_target.txt`, the
+    name `target_bands.write_targets` gives it. A title with no target says WHY under the table
+    -- on #56 all 19 of a series read "no target" and nothing said the reader was looking for
+    files in another spelling (#56 items 4, 5).
 
     Speed vs the interactive REPL: one `get_measurements()` for the whole batch,
     then exactly ONE FR-only `get_fr` per driver (not the 5-endpoint per-measure
@@ -287,6 +293,9 @@ def analyze_batch(pattern, curves_dir, vs_targets=True):
     band_names = [b[0] for b in BANDS]
     if vs_targets:
         print(f"  Цілі з: {curves_dir}")
+        print("  Codes: " + ("the project glossary" if glossary and glossary.all_codes() else
+                             "as typed -- no project glossary (--project / AUTOSOUND_PROJECT_DIR), "
+                             "so a code is not checked against the project's"))
         print("  Клітинка = середнє відхилення (замір − ціль) у смузі, dB.")
         print("  anchor = офсет 300–3000 Гц (відніми від смуг → чиста форма); "
               "ripple = розкид смуг після anchor (нерівність форми).\n")
@@ -303,9 +312,9 @@ def analyze_batch(pattern, curves_dir, vs_targets=True):
         freqs, mag, phase = api.get_fr(mid, smoothing=TONE_SMOOTHING)   # ONE GET per driver (FR-only)
         row = f"  {title:<20}"
         if vs_targets:
-            tfile, tdata = find_target_curve(title, curves_dir)
+            tfile, tdata, why = explain_target_curve(title, curves_dir, glossary)
             if not tdata:
-                no_target.append(title)
+                no_target.append((title, why))
                 print(row + "".join(f"{'—':>8}" for _ in band_names) +
                       f"{'—':>8}{'—':>8}   (немає цілі)")
                 continue
@@ -328,8 +337,9 @@ def analyze_batch(pattern, curves_dir, vs_targets=True):
         print(row)
 
     if no_target:
-        print(f"\n  ⚠️ Без відповідної per-band цілі: {', '.join(no_target)} "
-              f"(перевір --curves-dir / іменування).")
+        print(f"\n  ⚠️ Без відповідної per-band цілі ({len(no_target)}):")
+        for title, why in no_target:
+            print(f"    {title}: {why}")
     print("\n  Деталі по одному драйверу → інтерактивний режим (без аргументів).")
     print(f"{SEP}\n")
     return matches
@@ -1031,32 +1041,50 @@ def _selftest():
         "1": {"title": "m-L_2 (rta)"},
         "2": {"title": "m-R_2 (rta)"},
         "3": {"title": "sw_1 (sw)"},          # excluded by pattern "_2 (rta)"
+        "4": {"title": "L m+tw_2 (rta)"},     # a joint: no target was written for it (#56 item 5)
     }
     fr = {
         1: ([100, 500, 1000, 5000], [82, 84, 83, 80], None),
         2: ([100, 500, 1000, 5000], [80, 81, 80, 79], None),
+        4: ([100, 500, 1000, 5000], [81, 83, 82, 80], None),
     }
     tgt = ([100, 500, 1000, 5000], [80, 80, 80, 80])   # flat target
 
+    # The targets are written by the REAL writer and found by the real reader: the seam that
+    # failed on #56 item 4 is the one exercised here, not replaced by a stand-in.
+    import contextlib
+    import io
+    import tempfile
+    import naming
+    import target_bands
+    gloss = naming.Glossary({"channels": [{"code": c} for c in ("m-L", "m-R", "tw-L")],
+                             "joints": {"L m+tw": ["m-L", "tw-L"]}})
     orig_gm, orig_fr = api.get_measurements, api.get_fr
-    import target_curves as tc
-    orig_find = tc.find_target_curve
-    globals()["find_target_curve"] = lambda title, cd: ("flat.txt", tgt)
     api.get_measurements = lambda: fake
     asked = []
     api.get_fr = lambda mid, smoothing=None: (asked.append(smoothing), fr[int(mid)])[1]
     try:
-        matches = analyze_batch("_2 (rta)", "/nonexistent", vs_targets=True)
-        assert [t for _, t in matches] == ["m-L_2 (rta)", "m-R_2 (rta)"], matches
+        with tempfile.TemporaryDirectory() as cdir:
+            target_bands.write_targets({c: list(zip(*tgt)) for c in ("m-L", "m-R")}, cdir)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                matches = analyze_batch("_2 (rta)", cdir, vs_targets=True, glossary=gloss)
+        shown = out.getvalue()
+        assert [t for _, t in matches] == ["m-L_2 (rta)", "m-R_2 (rta)", "L m+tw_2 (rta)"], matches
         # sw_1 (sw) must be filtered out by the pattern
         assert all("(sw)" not in t for _, t in matches), matches
         # S-013: every read names the tone smoothing, so the table does not follow the view.
-        assert asked == [TONE_SMOOTHING, TONE_SMOOTHING], asked
-        print("selftest[batch] OK — filtered to 2 rta measurements, "
-              "one get_measurements + one get_fr each, matrix rendered.")
+        assert asked == [TONE_SMOOTHING] * 3, asked
+        # Both channels found the file the writer made; the joint found none, and says why.
+        rows = {line.split()[0]: line for line in shown.splitlines() if line.startswith("  m-")}
+        assert rows and all("немає цілі" not in r for r in rows.values()), shown
+        assert "L m+tw_2 (rta): no `L m+tw_target.txt`" in shown, shown
+        assert "Codes: the project glossary" in shown, shown
+        print("selftest[batch] OK — filtered to 3 rta measurements, one get_measurements + one "
+              "get_fr each; the channels found target_bands' own files, the joint none, with "
+              "the reason printed.")
     finally:
         api.get_measurements, api.get_fr = orig_gm, orig_fr
-        globals()["find_target_curve"] = orig_find
 
     # ── the distortion table: the shape `get_distortion` ACTUALLY returns ───────────────
     #    Written after HUB-036. `print_distortion` was reading the raw JSON dict, which no
@@ -1285,6 +1313,9 @@ def main():
                         help="Масовий аналіз усіх замірів за патерном → одна таблиця")
     pb.add_argument("pattern", help="Підрядок у назві заміру, напр. '_2 (rta)'")
     pb.add_argument("--curves-dir", default=DEFAULT_CURVES_DIR)
+    pb.add_argument("--project", default=os.environ.get("AUTOSOUND_PROJECT_DIR"), metavar="DIR",
+                    help="the project whose glossary names each title's code, and so its "
+                         "<code>_target.txt (default: $AUTOSOUND_PROJECT_DIR)")
     pb.add_argument("--no-targets", action="store_true",
                     help="Лише середні рівні у смугах, без порівняння з ціллю")
     pj = sub.add_parser("analyze-joints",
@@ -1329,9 +1360,11 @@ def main():
         _selftest()
         return
     if args.cmd == "analyze-batch":
+        import naming                    # the grammar's one reader, and the project's codes
+        glossary = naming.Glossary.for_project(args.project) if args.project else None
         try:
             analyze_batch(args.pattern, args.curves_dir,
-                          vs_targets=not args.no_targets)
+                          vs_targets=not args.no_targets, glossary=glossary)
         except Exception as e:
             print(f"Помилка підключення до REW API: {e}")
             print("Переконайся що REW запущений з -api і API сервер увімкнений.")
