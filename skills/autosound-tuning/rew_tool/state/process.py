@@ -1246,6 +1246,53 @@ class Process:
         )
         return round_
 
+    def capture_import(self, series, titles, binds, knobs, late=None):
+        """Register measurements REW already holds as rounds of THIS project, one round per DSP state (#58 P3).
+
+        A fast session registered 21 titles in 5 seconds as one round covering TWO DSP states (variants B and C),
+        ignored the knobs warning three times, and got past a foreign-series refusal by inventing a round. The
+        honest form of all three: the series is this project's (`_refuse_foreign_series` applies); each title's
+        MODIFIER is bound to the ledger version it was measured under (`binds`, `{"": "v_012", "C": "v_013"}` --
+        "" is the plain title), and a title whose modifier is not bound refuses the whole import rather than land
+        in the wrong round; the knobs are required, not warned about; and a registration after the fact says so,
+        with its reason (`late`), instead of looking like it happened in the car. Returns the rounds opened."""
+        _naming = _load_naming()
+        if _naming is None:
+            raise ProcessError("the title grammar (naming.py) cannot be loaded -- nothing was imported")
+        if not isinstance(knobs, dict) or not knobs:
+            raise ProcessError("capture-import needs the knobs as they stood (NAME=POS): two series cannot be "
+                               "compared on the assumption that nobody touched anything")
+        glossary = _naming.Glossary.for_project(self.project_dir)
+        groups, stray = {}, []
+        for title in titles:
+            parts = _naming.parse_name(title, glossary)
+            if not parts or str(parts.get("version_n")) != str(int(str(series).lstrip("_"))):
+                stray.append(title)
+                continue
+            modifier = parts.get("modifier")
+            if modifier is None and " " in str(parts.get("code") or ""):
+                # No glossary to split on: everything after the code's first word is the modifier, so two DSP
+                # states cannot fall into one round just because the glossary is missing.
+                modifier = str(parts["code"]).split(" ", 1)[1]
+            groups.setdefault(modifier or "", []).append(title)
+        if stray:
+            raise ProcessError(f"not series _{series} in the grammar: {', '.join(stray)} -- nothing was imported")
+        unbound = sorted(m for m in groups if m not in (binds or {}))
+        if unbound:
+            raise ProcessError("titles with no DSP state bound: " + ", ".join(repr(m or "(plain)") for m in unbound)
+                               + " -- bind each to the ledger version it was measured under (--bind "
+                               "MODIFIER=v_NNN; the plain title is --bind =v_NNN). One round is one DSP state.")
+        opened = []
+        for modifier, group in sorted(groups.items()):
+            note = "registered after the fact" + (f": {late}" if late else "")
+            round_ = self.start_capture(str(series), expected=group, under=binds[modifier], note=note)
+            for title in group:
+                self.record_capture(title)
+            self.set_knobs(knobs)
+            self.close_capture(reason="imported" + (f" late: {late}" if late else ""))
+            opened.append(round_["id"])
+        return opened
+
     def set_protective(self, channel, legs, source="user"):
         """Declare what was in the chain for one channel of the OPEN round, and that it was RAW.
 
@@ -2148,6 +2195,9 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
                                          --session adds the whole-session probe (levels side by
                                          side, loudest/quietest, ctl1->ctl3 drift) and records it
   capture-taken <title>                 a measurement came back (unplanned ones are flagged)
+  capture-import <N> [title ...] --bind MOD=v_NNN [--bind =v_NNN] --knob NAME=POS [...] [--late "why"]
+                                        register what REW holds as this project's rounds, one per DSP
+                                        state; unbound modifiers and missing knobs refuse (#58 P3)
   capture-knobs --amend <cap_id> --reason "..." <NAME>=<POS> [...]
                                         the knobs of a CLOSED round, as a correction (#56 item 9)
   capture-knobs <NAME>=<POS> [...]      the hardware controls as they stood for THIS round
@@ -2465,6 +2515,27 @@ def _selftest():
     assert _amend_cli("capture-knobs", "--amend", closed_id, "--reason", "known in the car, on record",
                       "SubRC=7/12").returncode == 0
     assert amend_p.knobs_for("5")["knobs"]["SubRC"] == "7/12", amend_p.knobs_for("5")
+    # #58 P3: REW titles registered after the fact -- one round per DSP state, knobs required, lateness said.
+    imp = Process(os.path.join(root, "process-import"))
+    imp.enter_phase("0")
+    for bad_binds, bad_knobs in (({"": "v_404"}, {"SubRC": "4/4"}), ({}, {"SubRC": "4/4"}),
+                                 ({"": None, "C": None}, {})):
+        try:
+            imp.capture_import("9", ["m-L_9 (sw)", "m-L C_9 (sw)"], bad_binds, bad_knobs)
+            raise AssertionError(f"capture_import took binds={bad_binds} knobs={bad_knobs}")
+        except ProcessError:
+            pass
+    try:
+        imp.capture_import("9", ["m-L_8 (sw)"], {"": None}, {"SubRC": "4/4"})
+        raise AssertionError("a title of another series was imported")
+    except ProcessError:
+        pass
+    ids = imp.capture_import("9", ["m-L_9 (sw)", "m-L C_9 (sw)", "m-R C_9 (sw)"], {"": None, "C": None},
+                             {"SubRC": "4/4"}, late="registered at the desk the next day")
+    assert len(ids) == 2, ids                                   # two DSP states, two rounds
+    notes = {e.get("capture"): e.get("note") for e in imp.events(kinds=(EV_CAPTURE_ISSUED,))}
+    assert all("after the fact" in (notes.get(i) or "") for i in ids), notes
+    assert imp.knobs_for("9")["knobs"] == {"SubRC": "4/4"}
     # #57 P0 / S-026: a round records the ledger version it was taken under and the level as a quantity; a
     # level with no dB in it, or an under that is not banked, is refused.
     lvl = Process(os.path.join(root, "process-level"))
@@ -3018,6 +3089,34 @@ def _main(argv):
                 f"{args[0]} recorded"
                 + ("" if entry["planned"] else " (unplanned -- not on this round's list)")
             )
+        elif cmd == "capture-import":
+            rest, binds, knobs, late = list(args), {}, {}, None
+            while "--bind" in rest:
+                i = rest.index("--bind")
+                mod, _, ver = (rest[i + 1] if len(rest) > i + 1 else "").partition("=")
+                binds[mod.strip()] = ver.strip()
+                rest = rest[:i] + rest[i + 2:]
+            if "--late" in rest:
+                i = rest.index("--late")
+                late = rest[i + 1] if len(rest) > i + 1 else None
+                rest = rest[:i] + rest[i + 2:]
+            while "--knob" in rest:
+                i = rest.index("--knob")
+                name, _, pos = (rest[i + 1] if len(rest) > i + 1 else "").partition("=")
+                knobs[name.strip()] = pos.strip()
+                rest = rest[:i] + rest[i + 2:]
+            if not rest:
+                raise ProcessError("capture-import <N> [title ...]: the series, then the titles (default: every "
+                                   "title of that series REW holds)")
+            series, titles = rest[0], rest[1:]
+            if not titles:
+                import rew_api as _rew_api
+                _naming = _load_naming()
+                titles = [m.get("title", "") for m in _rew_api.get_measurements().values()
+                          if (_naming.parse_name(m.get("title", "")) or {}).get("version_n") == int(series.lstrip("_"))]
+            ids = p.capture_import(series, titles, binds, knobs, late=late)
+            print(f"imported {len(titles)} title(s) of _{series} as {', '.join(ids)}"
+                  + (f" -- late: {late}" if late else ""))
         elif cmd == "capture-knobs":
             rest, amend, reason = list(args), None, None
             if "--amend" in rest:
