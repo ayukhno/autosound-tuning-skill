@@ -756,7 +756,7 @@ himself.
 
 ## S-030 · The input that does not stick is AUX, and the trigger named in the knowledge row is the wrong one
 
-**Status**: open 2026-09-19 · **W-2 package A** (`docs/PLAN-W-2.md`) · · W-1 collection · the user, correcting the row this session's reply quoted to
+**Status**: done 2026-09-22 · W-2 package A · `grep -n "The measurement input does not hold" skills/autosound-tuning/knowledge/dsp/helix-dsp-ultra-s.md` and `grep -n "re-check it after every configuration write" skills/autosound-tuning/SKILL.md` · was: open 2026-09-19 · **W-2 package A** (`docs/PLAN-W-2.md`) · · W-1 collection · the user, correcting the row this session's reply quoted to
 him: switching the input from BT to AUX does not hold — at the next configuration write or DSP reconnection
 the input stands at BT again. So it hits exactly ONE input: AUX, which is where the Scarlett feeds the
 measurement signal. «запиши це собі як задачку виправити потім».
