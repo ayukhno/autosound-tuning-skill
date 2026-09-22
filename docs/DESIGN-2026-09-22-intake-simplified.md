@@ -171,3 +171,12 @@ Two things to know:
 - Moving the input questions out of the intake does not remove Phase 0's pre-session checklist #4
   (the preset switch that resets the input). That check still runs at the car, in Phase 0. The
   intake no longer asks it in advance.
+
+## Decision 2026-09-22: one form for every front-end
+
+The user's decision: **one page, the skill's own** (`intake_form.py serve`, stdlib only). A terminal
+session on macOS or Windows opens it in the browser; TCC opens the same served page in the system
+browser from a button. TCC does not embed it, because TCC ships PySide6-Essentials without
+WebEngine on purpose, and it does not draw a second native form. The questions exist once, and there
+is one form to test. This supersedes the "TCC renders its own form from `intake.py` data" reading
+of SCR-059 (hub #178).
