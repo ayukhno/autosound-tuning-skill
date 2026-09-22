@@ -1099,6 +1099,27 @@ def _selftest():
             else:
                 store["GEMINI_API_KEY"] = value
         assert cli_only_model("gemini-3.8-flash-high") and not cli_only_model("gemini-3.1-pro")
+        # S-049: the installer's receipt is read back in one line, and its absence is said, not guessed at.
+        rdir = tempfile.mkdtemp(prefix="autosound_receipt_")
+        rpath = os.path.join(rdir, "install-receipt.json")
+        assert "Квитанції інсталятора нема" in receipt_line(rpath)
+        with open(rpath, "w", encoding="utf-8") as fh:
+            json.dump({"installer": "install.sh", "installer_sha256": "ab" * 32, "method_ref": "v3.0.60",
+                       "at": "2026-09-23T00:00:00Z", "platform": "Darwin-arm64",
+                       "engine": "fetched for v3.0.60 and checked against SHA256SUMS"}, fh)
+        said = receipt_line(rpath)
+        assert "install.sh" in said and "v3.0.60" in said and "fetched" in said, said
+        # S-028 / hub #192: Rosetta and a git that does not run are named, with the way out.
+        fake = {("sysctl", "-n", "sysctl.proc_translated"): subprocess.CompletedProcess([], 0, "1\n", ""),
+                ("git", "--version"): subprocess.CompletedProcess([], 1, "", "xcrun: error: unable to load libxcrun")}
+        real_which_ = shutil.which
+        shutil.which = lambda name, *a, **k: "git" if name == "git" else real_which_(name, *a, **k)
+        try:
+            said = machine_lines(run=lambda argv: fake.get(tuple(argv), subprocess.CompletedProcess(argv, 0, "", "")))
+        finally:
+            shutil.which = real_which_
+        text = "\n".join(line for _, line in said)
+        assert (("Rosetta" in text) == (sys.platform == "darwin")) and "brew install git" in text, said
         assert api_model_id("gemini-3.8-flash-high") == "gemini-3.8-flash"
 
         os.environ.update({"GEMINI_BIN": "gemini", "AUTOSOUND_CRITIC_MODEL": "gemini-3.1-pro-high"})
@@ -1169,9 +1190,42 @@ def _selftest():
     return 0
 
 
+def machine_lines(run=None):
+    """`[(ok, line)]` about the machine under the method, before anything else is read (S-028, hub #192).
+
+    A session ran every command as `arch -arm64 /usr/bin/python3` and said so in a footnote: its shell was x86_64
+    under Rosetta, where Apple's python3 dies on `xcrun`. And on the Arbiter's Mac the only git died the same way
+    while Apple reported the tools installed. Both were found by hand; both are one line here."""
+    run = run or (lambda argv: subprocess.run(argv, capture_output=True, text=True, timeout=10))
+    out = []
+    if sys.platform == "darwin":
+        try:
+            translated = (run(["sysctl", "-n", "sysctl.proc_translated"]).stdout or "").strip()
+        except Exception:  # noqa: BLE001 -- an old macOS has no such key: not translated
+            translated = ""
+        if translated == "1":
+            out.append((False, "✗ Ця оболонка працює як x86_64 під Rosetta: /usr/bin/python3 і git тут падають на "
+                               "`xcrun`. Відкрий arm64-оболонку (`arch -arm64 /bin/zsh`) або запускай "
+                               "`arch -arm64 /usr/bin/python3 …` (S-028)"))
+    git = shutil.which("git")
+    if git:
+        try:
+            done = run([git, "--version"])
+            if done.returncode != 0:
+                said = ((done.stderr or done.stdout or "").strip().splitlines() or ["?"])[0][:160]
+                out.append((False, f"✗ git є ({git}), але не запускається: {said}. Робочий: `brew install git`; "
+                                   f"без git не працюють оновлення й резервна копія проєкту (hub #192)"))
+        except Exception as e:  # noqa: BLE001
+            out.append((False, f"✗ git не запускається: {e}"))
+    return out
+
+
 def run_doctor(smoke=True):
     print("=== ДІАГНОСТИКА СЕРЕДОВИЩА (DOCTOR MODE) ===")
     ok = True
+    for good, line in machine_lines():
+        print(line)
+        ok = ok and good
     
     # 1. Перевірка .critic-env
     if ENV_FILES_USED:
@@ -1379,9 +1433,34 @@ def run_doctor(smoke=True):
     return ok
 
 
+def receipt_path():
+    """Where the installers leave their receipt (S-049): %LOCALAPPDATA% on Windows, the XDG data dir elsewhere."""
+    if os.name == "nt" and os.environ.get("LOCALAPPDATA"):
+        return os.path.join(os.environ["LOCALAPPDATA"], "autosound", "install-receipt.json")
+    base = os.environ.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"), ".local", "share")
+    return os.path.join(base, "autosound", "install-receipt.json")
+
+
+def receipt_line(path=None):
+    """What the last installer run said it did, in one line, or that none left a receipt (S-049)."""
+    path = path or receipt_path()
+    try:
+        with open(path, encoding="utf-8-sig") as fh:
+            r = json.load(fh)
+    except FileNotFoundError:
+        return ("· Квитанції інсталятора нема: метод ставили до v3.0.60 або не інсталятором, тож що той "
+                "зробив із рушієм, машина не каже")
+    except (OSError, ValueError) as exc:
+        return f"· Квитанція інсталятора не читається ({path}): {exc}"
+    sha = (r.get("installer_sha256") or "")[:12]
+    return (f"· Інсталятор: {r.get('installer')}{f' (sha256 {sha}…)' if sha else ''} для {r.get('method_ref')}, "
+            f"{r.get('at')}, {r.get('platform')}; рушій: {r.get('engine')}")
+
+
 def _engine_lines():
     """The desk engine's one line, or the two that say how to get it. Never raises: a doctor that
     dies on an optional component reports nothing about the components that matter."""
+    receipt = receipt_line()
     try:
         sys.path.insert(0, os.path.join(SKILL_DIR, "rew_tool"))
         import resonalyze_engine as _engine
@@ -1389,11 +1468,12 @@ def _engine_lines():
     except Exception as exc:  # noqa: BLE001
         return [f"· Рушій столу (Resonalyze): перевірити не вдалося — {exc}"]
     if st["present"]:
-        return [f"✓ Рушій столу (Resonalyze): є — {st['how']} · пін {st['pin']} · {st['rid']}"]
+        return [f"✓ Рушій столу (Resonalyze): є — {st['how']} · пін {st['pin']} · {st['rid']}", receipt]
     return [
         f"· Рушій столу (Resonalyze): НЕМАЄ — {st['how']}",
         f"  Фаза 1.3 (пошук кросоверів) без нього не піде. Пін {st['pin']}, платформа "
         f"{st['rid']}; забрати: {st['fetch']}",
+        receipt,
     ]
 
 #: This script's own repository. A review is a PROJECT's record and must never land here, however

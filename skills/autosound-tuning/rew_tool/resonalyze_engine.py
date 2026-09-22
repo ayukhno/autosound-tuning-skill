@@ -189,7 +189,9 @@ def engine_status():
             out["how"] = f"{ENGINE_ENV} names {named}, which is not an executable file"
         return out
     if os.path.isfile(prebuilt) and os.access(prebuilt, os.X_OK):
-        return dict(out, present=True, how=f"prebuilt for this pin and platform: {prebuilt}")
+        stale = prebuilt_mismatch()
+        return dict(out, present=True, how=f"prebuilt for this pin and platform: {prebuilt}"
+                    + (f" -- NOT this checkout's wrapper ({stale})" if stale else ""))
     if os.path.isfile(DLL):
         return dict(out, present=True, how=f"the wrapper built in this checkout: {DLL}")
     dotnet = find_dotnet()
@@ -199,6 +201,45 @@ def engine_status():
     out["how"] = (f"absent: no prebuilt engine in {out['installed_dir']}, and no .NET SDK to build "
                   "one (dotnet on PATH or ~/.dotnet/dotnet)")
     return out
+
+
+WRAPPER_MARK = "WRAPPER.json"
+
+
+def wrapper_digest():
+    """sha256 over this checkout's wrapper sources (`engines/resonalyze/*.cs`, `*.csproj`), or None without them.
+
+    The prebuilt engine was found by the FORK's pin alone, and the wrapper is ours and changes on its own: two skill
+    tags can carry one fork pin and two different wrappers, and a machine holding a prebuilt engine ran the OLD
+    wrapper and said nothing (S-022, met while building #38's full variant)."""
+    if not os.path.isdir(ENGINE_DIR):
+        return None
+    h = hashlib.sha256()
+    names = sorted(n for n in os.listdir(ENGINE_DIR) if n.endswith((".cs", ".csproj")))
+    if not names:
+        return None
+    for n in names:
+        with open(os.path.join(ENGINE_DIR, n), "rb") as fh:
+            h.update(n.encode() + b"\0" + fh.read().replace(b"\r\n", b"\n"))
+    return h.hexdigest()
+
+
+def _prebuilt_mark():
+    try:
+        with open(os.path.join(installed_dir(), WRAPPER_MARK), encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return None
+
+
+def prebuilt_mismatch():
+    """None when the prebuilt engine belongs to this checkout's wrapper (or cannot be told), else a sentence saying
+    which it is and which this checkout has. A mark without a digest (a zip installed by hand) cannot be told."""
+    mark, here = _prebuilt_mark(), wrapper_digest()
+    if not mark or not here or not mark.get("wrapper_sha256") or mark["wrapper_sha256"] == here:
+        return None
+    return (f"the prebuilt engine was installed for {mark.get('tag') or mark.get('from') or 'another checkout'} with "
+            f"wrapper {mark['wrapper_sha256'][:12]}, and this checkout's wrapper is {here[:12]}")
 
 
 def engine_command(dotnet=None):
@@ -214,11 +255,19 @@ def engine_command(dotnet=None):
             return [named], f"{ENGINE_ENV}={named}"
         return None, f"{ENGINE_ENV} names {named}, which is not an executable file"
     prebuilt = os.path.join(installed_dir(), _exe_name())
+    stale = prebuilt_mismatch()
     if os.path.isfile(prebuilt) and os.access(prebuilt, os.X_OK):
-        return [prebuilt], f"the prebuilt engine {prebuilt}"
+        if not stale:
+            return [prebuilt], f"the prebuilt engine {prebuilt}"
+        dotnet = dotnet or find_dotnet()
+        if not dotnet:
+            # No SDK to build this checkout's wrapper: the old one runs, and says so (S-022).
+            return [prebuilt], (f"the prebuilt engine {prebuilt} -- NOT this checkout's wrapper: {stale}; its results "
+                                f"come from that wrapper. `fetch-binary --tag <this checkout's tag>` or the .NET SDK "
+                                f"gives this one")
     dotnet = dotnet or find_dotnet()
     if dotnet:
-        if not os.path.isfile(DLL):
+        if not os.path.isfile(DLL) or stale:
             ok, msg = build(dotnet=dotnet)
             if not ok:
                 return None, msg
@@ -244,7 +293,26 @@ def install_binary(source):
     if not os.path.isfile(exe):
         raise SystemExit(f"{source}: holds no {_exe_name()} -- a build for another platform? this machine is {rid()}")
     os.chmod(exe, 0o755)
+    _write_mark({"from": os.path.basename(str(source)), "wrapper_sha256": None})
     return exe
+
+
+def _write_mark(mark):
+    try:
+        with open(os.path.join(installed_dir(), WRAPPER_MARK), "w", encoding="utf-8") as fh:
+            json.dump(mark, fh, indent=1)
+    except OSError:
+        pass
+
+
+def _checkout_tag():
+    """The tag this checkout sits on exactly, or None (a branch, a dirty tree, no git)."""
+    try:
+        r = subprocess.run(["git", "-C", REPO, "describe", "--tags", "--exact-match"], capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=10)
+    except Exception:  # noqa: BLE001
+        return None
+    return r.stdout.strip() or None if r.returncode == 0 else None
 
 
 def archive_name(engine_pin=None, runtime_id=None):
@@ -320,6 +388,11 @@ def fetch_binary(tag, get=_http_get):
         with open(zip_path, "wb") as fh:
             fh.write(blob)
         exe = install_binary(zip_path)
+    # Which wrapper this binary is: the installer fetches the tag it has just installed, so this checkout's wrapper
+    # IS the archive's; a fetch by hand for another tag records the tag and no digest, and is then not judged.
+    here_tag = _checkout_tag()
+    _write_mark({"tag": tag, "wrapper_sha256": wrapper_digest() if here_tag == tag else None,
+                 "checkout_tag": here_tag})
     return {"status": "installed", "name": name, "tag": tag, "sha256": got, "exe": exe,
             "detail": f"{name} from {tag}, sha256 checked, in {installed_dir()}"}
 
@@ -2209,6 +2282,23 @@ def _selftest():
     steps = level_steps(ra, rb, [("A Sub", "B Woofer"), ("B Woofer", "C Mid")])
     assert steps == {"A Sub ↔ B Woofer": 0.2}, steps
     assert "level-normalised" in JUNCTION_LEGEND
+    # S-022: a prebuilt engine says which wrapper it is, and one from another wrapper is named, not run in silence.
+    real_dir = globals()["installed_dir"]
+    mark_dir = tempfile.mkdtemp(prefix="resonalyze-mark-")
+    globals()["installed_dir"] = lambda: mark_dir
+    try:
+        here = wrapper_digest()
+        assert here and len(here) == 64, here
+        assert prebuilt_mismatch() is None                                  # no mark: cannot be told
+        _write_mark({"tag": "v3.0.57", "wrapper_sha256": "0" * 64})
+        said = prebuilt_mismatch()
+        assert said and "v3.0.57" in said and here[:12] in said, said
+        _write_mark({"tag": "v3.0.60", "wrapper_sha256": here})
+        assert prebuilt_mismatch() is None
+        _write_mark({"from": "engine.zip", "wrapper_sha256": None})
+        assert prebuilt_mismatch() is None                                  # installed by hand: not judged
+    finally:
+        globals()["installed_dir"] = real_dir
     print("selftest[resonalyze_engine] OK -- blocks from the channel map (the sub mono, the pairs by -L/-R, the "
           "hidden rear left out and taken when asked), types from the roles (a woofer beside a sub is a midbass, a "
           "centre a midrange), the protective filters from the set's manifest, the device's delay range or a refusal; "

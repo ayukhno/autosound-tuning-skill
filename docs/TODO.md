@@ -599,7 +599,7 @@ offline selftest hold the pass instead. Worth building when a second car needs t
 
 ## S-022 · A prebuilt engine is found by the FORK's pin, so a changed wrapper runs the old binary
 
-**Status**: open 2026-09-18 · **W-2 package C** (`docs/PLAN-W-2.md`) · · met while building #38's full variant: the wrapper changed, and the run
+**Status**: done 2026-09-23 · W-2 package C · `python3 skills/autosound-tuning/rew_tool/resonalyze_engine.py --selftest` (the S-022 block): a fetched engine carries `WRAPPER.json` with the tag and this checkout's wrapper digest; `engine_command` builds this checkout's wrapper when the SDK is there, and otherwise runs the old one and SAYS so; `doctor` names it · was: open 2026-09-18 · **W-2 package C** (`docs/PLAN-W-2.md`) · · met while building #38's full variant: the wrapper changed, and the run
 kept using the engine fetched from `v3.0.57` until it was deleted by hand.
 
 **Due when:** a second person develops the wrapper, or a user updates the method by hand (a `git pull`
@@ -726,7 +726,7 @@ three of the six lines in that file are not paths to begin with (`REW-сесія
 
 ## S-028 · The session's `python3` dies on `xcrun` in an x86_64 shell, and the doctor does not name it
 
-**Status**: open 2026-09-19 · **W-2 package C** (`docs/PLAN-W-2.md`) · · W-1 collection · the skill session working on `EPY-Sep2026` had to run every
+**Status**: done 2026-09-23 · W-2 package C · `python3 skills/autosound-tuning/scripts/autosound_ai.py selftest` (`machine_lines`: a shell under Rosetta and a git that does not run are named, with `arch -arm64` and `brew install git`); `doctor` prints them first · was: open 2026-09-19 · **W-2 package C** (`docs/PLAN-W-2.md`) · · W-1 collection · the skill session working on `EPY-Sep2026` had to run every
 command as `arch -arm64 /usr/bin/python3` and told the user so as a footnote: its shell was running as
 x86_64, where `python3` falls over on `xcrun`.
 
@@ -1313,7 +1313,7 @@ dates — stays a question for the Arbiter; this one is mechanical and should ne
 
 ## S-049 · No desk engine on the test MacBook, and nothing said so until Phase 1.3
 
-**Status**: open 2026-09-20 · **W-2 package C** (`docs/PLAN-W-2.md`) · · W-1 package D · `python3 skills/autosound-tuning/rew_tool/resonalyze_engine.py --selftest` (engine_status builds nothing) — FIRST HALF only; the installer receipt stays W-2, and this item stays open for it — found 2026-09-19, the Arbiter: «ось що бачу на MacBook Pro — немає
+**Status**: done 2026-09-23 · W-2 package C · the second half: `install.sh` and `install.ps1` write `install-receipt.json` (which installer, its sha256, the method tag, the time, the platform, what it did about the engine), and `doctor` reads it back in one line or says there is none (`autosound_ai.py selftest`, the S-049 block) · was: open 2026-09-20 · **W-2 package C** (`docs/PLAN-W-2.md`) · · W-1 package D · `python3 skills/autosound-tuning/rew_tool/resonalyze_engine.py --selftest` (engine_status builds nothing) — FIRST HALF only; the installer receipt stays W-2, and this item stays open for it — found 2026-09-19, the Arbiter: «ось що бачу на MacBook Pro — немає
 рушия!». The session had to stop at step 1.3 (crossover variants) and ask him to install one, mid-tune.
 
 **Due when:** the version installed there is known — that is the one fact this item is missing.

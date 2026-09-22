@@ -304,8 +304,21 @@ offer() {  # offer "<prompt>"; 0 = do it now
 usable() {
   have "$1" || return 1
   if on_mac; then
-    case "$1" in git|python3) xcode-select -p >/dev/null 2>&1 ;; *) return 0 ;; esac
+    case "$1" in git|python3) xcode-select -p >/dev/null 2>&1 && runs_ok "$1" ;; *) return 0 ;; esac
   fi
+}
+# Presence is not working (hub #192). On the Arbiter's Mac `xcode-select -p` answered and Apple said
+# the tools were installed, while /usr/bin/git died on `xcrun: unable to load libxcrun` -- the only
+# git on the machine. Once xcode-select answers, the tools are there and running one cannot open
+# Apple's dialog, so it is run once and a failure is kept with what it printed.
+RUNS_OK_SAID=""
+runs_ok() {  # runs_ok <tool>; 0 = it ran
+  _ro="$("$1" --version 2>&1)" && return 0
+  RUNS_OK_SAID="$(printf '%s' "$_ro" | head -2)"
+  return 1
+}
+broken_tool() {  # broken_tool <tool>: present, the tools installed, and it does not run
+  on_mac && have "$1" && xcode-select -p >/dev/null 2>&1 && ! runs_ok "$1"
 }
 clt_present() { if on_mac; then xcode-select -p >/dev/null 2>&1; else return 0; fi; }
 
@@ -591,7 +604,13 @@ REW_API=0;     rew_api_on && REW_API=1
 
 say "  Already on this machine:"
 if on_mac; then
-  if [ "$HAVE_CLT" = 1 ]; then say "    ✓ Apple's Command Line Tools (git)"; else say "    – Apple's Command Line Tools (git)   will install"; fi
+  if [ "$HAVE_CLT" = 1 ] && broken_tool git; then
+    step "Apple's Command Line Tools are installed, but git does not run"
+    say "  it said: $RUNS_OK_SAID"
+    say "  A macOS update can leave the tools like this. A working git:  brew install git"
+    say "  (this installer and the app pick /opt/homebrew/bin first), then run this again."
+    exit 1
+  elif [ "$HAVE_CLT" = 1 ]; then say "    ✓ Apple's Command Line Tools (git)"; else say "    – Apple's Command Line Tools (git)   will install"; fi
 elif ! usable git; then
   step "git is required and is not installed"
   say "  Install git with your package manager, then run this again."
@@ -891,6 +910,10 @@ elif [ "$DRY_RUN" = 1 ] && on_mac && [ "$HAVE_CLT" = 0 ]; then
   # In a dry run on a Mac with no Command Line Tools there is no python3 to name yet — the tools
   # above would have brought Apple's. Describe the plan rather than the machine.
   say "  would run: python3 -m pip install --user -r requirements.txt  (Apple's python3, once the tools above are in)"
+elif broken_tool python3; then
+  warn "python3 is here and the Command Line Tools are installed, but it does not run:"
+  warn "  $RUNS_OK_SAID"
+  warn "  brew install python gives a working one; the method's tools cannot run until then"
 elif ! usable python3; then
   warn "no python3 — the method's tools cannot run at all until there is one"
 else
@@ -920,17 +943,22 @@ fi
 step "Phase 1's desk engine"
 ENGINE_PY="${SKILL_REAL:-$SKILL_HOME}/rew_tool/resonalyze_engine.py"
 have_dotnet() { find_bin dotnet >/dev/null 2>&1 || [ -x "$HOME/.dotnet/dotnet" ]; }
+ENGINE_DID=""
 if [ "$WANT_ENGINE" = 0 ]; then
+  ENGINE_DID="not fetched: --no-engine"
   say "  --no-engine: not fetched. It builds from the .NET SDK on first use, or later with"
   say "    python3 $(pretty "$ENGINE_PY") fetch-binary --tag $SKILL_REF"
 elif [ "$WANT_ENGINE" = "auto" ] && have_dotnet; then
+  ENGINE_DID="not fetched: the .NET SDK is here and builds it on first use"
   say "  the .NET SDK is here — the engine builds from the method's own checkout on first use"
   say "  (--engine fetches the prebuilt one instead: no build, no SDK needed)"
 elif ! usable python3; then
+  ENGINE_DID="not fetched: no working python3"
   warn "no python3 — the engine cannot be fetched; the method's tools cannot run either (above)"
 elif [ "$DRY_RUN" = 1 ]; then
   say "  would run: python3 $(pretty "$ENGINE_PY") fetch-binary --tag $SKILL_REF"
 elif [ ! -f "$ENGINE_PY" ]; then
+  ENGINE_DID="not fetched: the method's checkout was not where this script expected it"
   warn "no $(pretty "$ENGINE_PY") — the method's checkout is not where this script expects it;"
   warn "the engine was not fetched, and Phase 1's desk step will ask for one when it is reached"
 else
@@ -938,9 +966,11 @@ else
   ENGINE_RC=0
   python3 "$ENGINE_PY" fetch-binary --tag "$SKILL_REF" || ENGINE_RC=$?
   case "$ENGINE_RC" in
-    0) ;;   # the method printed the file, the tag and where it landed
-    4) say "  so the engine builds from the .NET SDK when there is one; nothing else is affected" ;;
-    *) warn "the engine was not fetched (code $ENGINE_RC) — the method is installed and works;"
+    0) ENGINE_DID="fetched for $SKILL_REF and checked against SHA256SUMS" ;;
+    4) ENGINE_DID="not fetched: $SKILL_REF carries no engine for this machine"
+       say "  so the engine builds from the .NET SDK when there is one; nothing else is affected" ;;
+    *) ENGINE_DID="not fetched: fetch-binary failed (code $ENGINE_RC)"
+       warn "the engine was not fetched (code $ENGINE_RC) — the method is installed and works;"
        warn "Phase 1's desk step is the part that waits for an engine" ;;
   esac
 fi
@@ -1418,6 +1448,20 @@ say "  • Update everything: run this same install line again."
 # Last thing on screen: where this came from and where to say something about it. Somebody who
 # has just installed two programs from a URL they were told to trust should not have to search for
 # the projects they now have on their disk (user, after a clean install, 2026-08-13).
+# The installer's RECEIPT (S-049): which install.sh ran, for which method tag, and what it did about the
+# engine. Answering "why is there no engine on this MacBook" took four exchanges, because nothing on the
+# machine said which installer had run -- an old bookmarked URL installs old logic while the method
+# itself updates to the newest tag. `doctor` reads this file back.
+if [ "$DRY_RUN" != 1 ]; then
+  _rd="${XDG_DATA_HOME:-$HOME/.local/share}/autosound"
+  if mkdir -p "$_rd" 2>/dev/null; then
+    printf '{"installer": "install.sh", "installer_sha256": "%s", "method_ref": "%s", "mode": "%s", "at": "%s", "platform": "%s", "engine": "%s"}\n' \
+      "$( (shasum -a 256 "$0" 2>/dev/null || sha256sum "$0" 2>/dev/null) | awk '{print $1}')" \
+      "$SKILL_REF" "$MODE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(uname -s)-$(uname -m)" "${ENGINE_DID:-not reached}" \
+      > "$_rd/install-receipt.json" 2>/dev/null || true
+  fi
+fi
+
 step "Where this lives"
 say "  the tuning method   $SKILL_REPO_URL"
 say "  the desktop app     $TCC_REPO"

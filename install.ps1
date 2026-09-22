@@ -989,17 +989,22 @@ if ($DryRun -and -not (Test-Path $reqs)) {
 Step "Phase 1's desk engine"
 $EnginePy = Join-Path $SkillHome "rew_tool\resonalyze_engine.py"
 $HaveDotnet = (Have dotnet) -or (Test-Path (Join-Path $HOME ".dotnet\dotnet.exe"))
+$EngineDid = "not reached"
 if ($WantEngine -eq "0") {
+    $EngineDid = "not fetched: -NoEngine"
     Say "-NoEngine: not fetched. It builds from the .NET SDK on first use, or later with"
     Say "  `"$Py3`" `"$EnginePy`" fetch-binary --tag $SkillRef"
 } elseif ($WantEngine -eq "auto" -and $HaveDotnet) {
+    $EngineDid = "not fetched: the .NET SDK is here and builds it on first use"
     Say "the .NET SDK is here -- the engine builds from the method's own checkout on first use"
     Say "(-Engine fetches the prebuilt one instead: no build, no SDK needed)"
 } elseif (-not (Test-Path $Py3)) {
+    $EngineDid = "not fetched: no working python3"
     Warn "no python3 -- the engine cannot be fetched; the method's tools cannot run either (above)"
 } elseif ($DryRun) {
     Say "would run: python3 $(Pretty $EnginePy) fetch-binary --tag $SkillRef"
 } elseif (-not (Test-Path $EnginePy)) {
+    $EngineDid = "not fetched: the method's checkout was not where this script expected it"
     Warn "no $(Pretty $EnginePy) -- the method's checkout is not where this script expects it;"
     Warn "the engine was not fetched, and Phase 1's desk step will ask for one when it is reached"
 } else {
@@ -1009,9 +1014,12 @@ if ($WantEngine -eq "0") {
     $engineRc = $LASTEXITCODE
     # 0 installed (the method printed where it landed) · 4 this release carries none for this
     # machine · anything else, something went wrong and the install carries on regardless.
+    if ($engineRc -eq 0) { $EngineDid = "fetched for $SkillRef and checked against SHA256SUMS" }
     if ($engineRc -eq 4) {
+        $EngineDid = "not fetched: $SkillRef carries no engine for this machine"
         Say "so the engine builds from the .NET SDK when there is one; nothing else is affected"
     } elseif ($engineRc -ne 0) {
+        $EngineDid = "not fetched: fetch-binary failed (code $engineRc)"
         Warn "the engine was not fetched (code $engineRc) -- the method is installed and works;"
         Warn "Phase 1's desk step is the part that waits for an engine"
     }
@@ -1445,6 +1453,21 @@ if ($RewApi -and $RewExe -and $RewExe -ne "found") {
     Say "  does not stay on by itself between launches, and that shortcut starts REW with it on."
 }
 Say "* Update everything: run this same install line again."
+
+# The installer's RECEIPT (S-049): which install.ps1 ran, for which method tag, and what it did about the
+# engine -- `doctor` reads it back. Same file and shape as install.sh's, under %LOCALAPPDATA%.
+if (-not $DryRun) {
+    try {
+        $rd = Join-Path $env:LOCALAPPDATA "autosound"
+        New-Item -ItemType Directory -Force -Path $rd | Out-Null
+        $sha = ""
+        if ($PSCommandPath) { $sha = (Get-FileHash -Algorithm SHA256 $PSCommandPath).Hash.ToLower() }
+        $receipt = [ordered]@{ installer = "install.ps1"; installer_sha256 = $sha; method_ref = "$SkillRef";
+                               mode = "$Mode"; at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ");
+                               platform = "Windows-$env:PROCESSOR_ARCHITECTURE"; engine = $EngineDid }
+        $receipt | ConvertTo-Json -Compress | Set-Content -Encoding UTF8 (Join-Path $rd "install-receipt.json")
+    } catch { }
+}
 
 Step "Where this lives"
 Say "the tuning method   $SkillRepoUrl"
