@@ -535,7 +535,7 @@ function codeEdited(input) {
   const code = input.value.trim();
   edits[key] = Object.assign(edits[key] || {}, {code});
   // A code typed into a switched-off slot means the slot is used: switch it on. Without this a
-  // typed code stayed off, Save found nothing changed, and "Зберегти" looked broken (22.09).
+  // typed code stayed off, Save found nothing changed, and the Save button looked broken (22.09).
   if (code && row.dataset.on !== '1') { toggleSlot(row.querySelector('button.tog')); return; }
   if (row.dataset.on === '1') row.querySelector('.sc').textContent = code;
 }
@@ -624,6 +624,12 @@ function collect() {
   document.querySelectorAll('.unit[data-kind=field]').forEach(u => {
     const v = norm(valueOf(u));
     if (v === null || !dirty(u, v)) return;
+    if (u.dataset.id === 'goal.reference_seat') {
+      // Written once (S-032): the Save that writes it says so first (the Arbiter, 2026-09-22 --
+      // with "how to make another seat" written beside the field, the question makes sense).
+      const on = u.querySelector('input[type=radio]:checked');
+      asks.push({kind: 'seat', label: on ? on.parentNode.textContent.trim() : v});
+    }
     (u.dataset.id === 'dsp.tiers_used' ? late : out).push(at({field: u.dataset.id, value: v}, u));
   });
   const id = dspIdentity();
@@ -753,7 +759,8 @@ async function saveAll(btn) {
     return;
   }
   for (const a of asks) {
-    const text = T.dsp_confirm.replace('{old}', a.from).replace('{new}', a.to).replace('{n}', D.saved.slotted);
+    const text = a.kind === 'seat' ? T.seat_confirm.replace('{seat}', a.label)
+      : T.dsp_confirm.replace('{old}', a.from).replace('{new}', a.to).replace('{n}', D.saved.slotted);
     if (!confirm(text)) { status.textContent = T.save_cancelled; return; }
   }
   btn.disabled = true;
@@ -886,7 +893,8 @@ def _field_html(f, ui):
         return (f'<div class="f s-have locked" id="f-{_esc(f["id"])}">'
                 f'<div class="q"><span class="dot d-have"></span>{_esc(f["ask"])}</div>'
                 f'<div class="row"><b>{_esc(label)}</b> <span class="lock">· {_esc(ui.get("fixed", "fixed"))}</span></div>'
-                f'<div class="meta">{_esc(ui.get(LOCKED_ONCE_SET[f["id"]], ""))}</div></div>')
+                f'<div class="meta">{_esc(ui.get(LOCKED_ONCE_SET[f["id"]], ""))}</div>'
+                f'<div class="meta howto">{_esc(ui.get("seat_howto", ""))}</div></div>')
     # `data-orig` is what is ON DISK, not what is shown: a pre-filled value that is not stored yet
     # is a change like any other, and Save writes it (round 5 -- no confirm ticks).
     unit_id = ' id="tiers-unit"' if f["id"] == "dsp.tiers_used" else ""
@@ -898,7 +906,8 @@ def _field_html(f, ui):
                    f'<b></b> · <a href="#" onclick="askDrive(); return false">{_esc(ui.get("change", "change"))}</a></div>')
     req = ' data-required="1"' if mark else ""
     if f["id"] in LOCKED_ONCE_SET:
-        control += f'<div class="meta">{_esc(ui.get("seat_once", ""))}</div>'
+        control += (f'<div class="meta">{_esc(ui.get("seat_once", ""))}</div>'
+                    f'<div class="meta howto">{_esc(ui.get("seat_howto", ""))}</div>')
     return (f'<div class="f unit s-{f["state"]}" data-kind="field" data-id="{_esc(f["id"])}"{req} '
             f"data-orig='{_esc(_orig(f['value']))}'{unit_id}>"
             f'<span id="f-{_esc(f["id"])}"></span>'
@@ -1188,7 +1197,7 @@ def _page_data(m):
              for c in m["rows"]["channels"] if c.get("tier") and c.get("slot")]
     ui = m["ui"]
     t = {k: ui.get(k, "") for k in ("chan_on", "chan_off", "code_pick", "code_needed", "map_first",
-                                    "map_new", "map_new_unsaved", "map_replaced",
+                                    "map_new", "map_new_unsaved", "map_replaced", "seat_confirm",
                                     "dsp_confirm", "nothing_changed", "save_cancelled",
                                     "knob_pos", "knob_name")}
     # Round 6: what is wrong is said AT the field. English fallbacks for a language without them.
@@ -1525,6 +1534,9 @@ def serve(project_dir, port=0, lang=DEFAULT_LANG, open_browser=False):
     url = f"http://127.0.0.1:{httpd.server_address[1]}/"
     print(f"  інтейк-форма: {url}\n  проєкт: {os.path.abspath(project_dir)}\n"
           f"  мова: {lang} · Ctrl-C щоб зупинити")
+    # The machine twin of the line above, for a front-end that started us (TCC, hub SKL-049): it
+    # should not have to parse a translated sentence to learn the port the OS picked.
+    print(f"INTAKE_URL: {url}", flush=True)
     if open_browser:
         webbrowser.open(url)
     try:
@@ -1629,7 +1641,8 @@ def _selftest():
         assert 'class="drive-auto' in side, "the drive side cannot fold into the car"
         seat = now_html.split('data-id="goal.reference_seat"', 1)[1].split("</div></div>", 1)[0]
         assert " checked" not in seat, "the write-once seat is pre-selected"
-        assert "seat_confirm" not in page and "asks.push({kind: 'seat'" not in page, "the seat asks again"
+        assert "asks.push({kind: 'seat'" in page, "the first Save of the seat does not say it is final"
+        assert labels("uk")["ui"]["seat_howto"] in page, "the unset seat does not say how to make another"
         # Round 6: once written, the seat is FIXED on the page -- no control, and the reason given.
         locked = tempfile.mkdtemp(prefix="intake_form_seat_")
         intake.save(locked, "goal.reference_seat", "passenger")
@@ -1637,6 +1650,7 @@ def _selftest():
         lseat = lpage.split('id="f-goal.reference_seat"', 1)[0].rsplit("<div", 1)[1]
         assert "locked" in lseat and 'data-id="goal.reference_seat"' not in lpage, "a fixed seat is editable"
         assert labels("uk")["ui"]["seat_locked"] in lpage, "a fixed seat does not say why"
+        assert labels("uk")["ui"]["seat_howto"] in lpage, "a fixed seat does not say how to make another"
         # The drive side comes with a car that says it: the library's Passat names LHD.
         assert 'data-body="sedan" data-drive="LHD"' in page, "the picked car carries no drive side"
         assert 'data-make="VW" data-model="Passat" data-generation="B8" data-body="sedan"' in page
@@ -1803,7 +1817,7 @@ def _selftest():
 
     print(f"selftest OK (intake_form) — {len(ids)} fields in one table and uk.json covers every one; "
           "the page shows the now/goal/equipment ones and NOT the memo, has ONE Save, a pre-filled "
-          "value is an ordinary one (no ticks), a written seat is shown fixed with why, the reply language is the "
+          "value is an ordinary one (no ticks), the seat's first Save asks and a written seat is shown fixed with why and how to make another, the reply language is the "
           "interface's and never asked, knobs are rows the processor pre-seeds, a processor change REPLACES a saved map only when "
           "confirmed, a new processor gets its own page and its map from it, the page loads nothing "
           "from the network (one link out: NTT), and every write goes through intake's own writers")

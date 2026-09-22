@@ -1,0 +1,637 @@
+{
+  "lang": "en",
+  "source": "rew_tool/intake.py (FIELDS, COUPLINGS) — English is the source; this file only translates",
+  "ui": {
+    "title": "Intake — Phase −1",
+    "subtitle": "First — only what is needed to start measurements. We'll ask for the rest when needed, or read it from the DSP.",
+    "legend": "Colors",
+    "legend_red": "needed for gate, missing",
+    "legend_yellow": "nice to have, missing",
+    "legend_green": "saved",
+    "legend_prose": "asked in session — form doesn't record",
+    "tab_all": "All fields",
+    "gate_open": "Gate open",
+    "gate_shut": "Gate closed",
+    "gate_missing": "Missing files",
+    "required": "required",
+    "per_channel": "per channel",
+    "per_amp": "per amp",
+    "per_tier": "per tier",
+    "per_virtual_channel": "per virtual channel",
+    "per_control": "per control",
+    "couple": "asked in a single control together with",
+    "save": "Save",
+    "saved": "Saved",
+    "probe": "checked by the tool, not you",
+    "prose_note": "The answer lives in prose and in the recorded decision — the form does not write it.",
+    "dsp_profile_note": "The session will record the answer in the DSP profile together with you",
+    "glossary_note": "Written to glossary: glossary.json or project.json.glossary",
+    "empty_table": "No rows yet",
+    "add_row": "Add row",
+    "english": "in English",
+    "legend_now": "answer now",
+    "legend_later": "we'll ask later",
+    "now_title": "Now — to start measurements",
+    "now_why": "Car, DSP, its channels, loopback, and who we are tuning for. Pick from options where available. Pre-filled values will be kept as is; change them if yours are different.",
+    "auto_title": "The tool will determine this — we won't ask you",
+    "later_prefix": "We'll ask later",
+    "pick_or_type": "pick or type your own",
+    "choices": "Options",
+    "rows_first": "First fill in channels above — rows will appear here.",
+    "car_pick": "Select a car from the list — fields will fill automatically",
+    "car_pick_none": "— not in list, will enter below —",
+    "car_pick_src": "List is from the skill cabin library and adjacent projects. There is no other car catalog in the skill.",
+    "car_edited": "You changed the selected car — this will be a NEW car, not the one from the list.",
+    "car_src_library": "skill library",
+    "car_src_project": "project",
+    "dsp_other_vendor": "other manufacturer…",
+    "dsp_other_model": "other model…",
+    "dsp_new_hint": "This DSP is not in the skill profiles — this is a new DSP.",
+    "goal_title": "Goal and music — optional",
+    "goal_why": "Can be skipped: this will be needed when choosing a target curve and listening tracks.",
+    "goal_ask": "What are we tuning for?",
+    "goal_enjoyment": "for enjoyment",
+    "goal_other": "other",
+    "goal_text": "in your own words — what else you want from the system",
+    "new_dsp_title": "New DSP",
+    "new_dsp_why": "DSP baseline — once: which tiers it has, how many slots in each and how they are labeled, what controls, EQ, crossovers, delays, presets. The channel map on the main page is built from this.",
+    "equipment_title": "Other equipment — optional",
+    "equipment_why": "Mainly a description in your own words. The speaker table below is only if you have it documented.",
+    "memo_title": "Memo — not asked",
+    "memo_auto": "Determined by tool or DSP profile",
+    "memo_later": "Session will ask or verify on its own when it reaches the step",
+    "legend_memo": "not asked",
+    "map_title": "DSP channel map",
+    "map_why": "One slot per row, like in TCC. Pick a standard code or type your own — the slot switches on by itself; an unused slot is called off-out-A / off-virt-F.",
+    "map_first": "First select DSP and tiers above — its slots will appear here.",
+    "chan_on": "Enable",
+    "chan_off": "Disable",
+    "code_pick": "code",
+    "slot_new": "slot",
+    "tier_names": {
+      "virtual_channels": "Virtual",
+      "channels": "Outputs",
+      "inputs": "Inputs"
+    },
+    "curve_ours": "SQ-Comp-Ref — ours, already in skill, no upload needed",
+    "curve_ntt": "Nono Tuning Tool presets",
+    "curve_ntt_note": "Curve file is downloaded there: curves belong to their authors and are not included in the skill.",
+    "curve_own": "custom / other",
+    "curve_own_hint": "name or file of your curve",
+    "nothing_changed": "Nothing changed — nothing to save.",
+    "save_cancelled": "Save cancelled — nothing recorded.",
+    "dsp_confirm": "DSP is changing: {old} → {new}. The old DSP channel map ({n} slots) will be REPLACED with the new one; the old one will remain recorded in the project (dsp.previous_maps), slots are not transferred between DSPs. Save?",
+    "map_replaced": "These are slots of the new DSP. The saved map of {old} ({n} slots) will be replaced after saving; it will remain recorded in the project, slots are not transferred.",
+    "map_new": "This is a new DSP: first fill in its baseline separately (link above) — then the map will appear here.",
+    "map_new_unsaved": "This DSP is not in the skill profiles. Save it — then the separate \"New DSP\" form will open.",
+    "code_needed": "code first",
+    "dsp_new_unsaved": "New DSP: click \"Save\", then fill in its baseline in the separate form.",
+    "new_dsp_link": "New DSP — fill in separately",
+    "new_dsp_not_new": "This DSP has a profile in the skill — its baseline does not need to be asked.",
+    "back_to_intake": "← back to intake",
+    "slots_count": "slots:",
+    "tier_controls": "controls",
+    "controls": {
+      "hp": "HPF",
+      "lp": "LPF",
+      "gain_db": "level",
+      "ta_ms": "delay",
+      "polarity": "polarity",
+      "phase_deg": "phase (all-pass)",
+      "mute": "mute",
+      "eq_bypass": "EQ bypass",
+      "eq": "EQ"
+    },
+    "eq_bands": "bands per channel:",
+    "eq_file": "import EQ from file",
+    "xo_slopes": "slopes, dB/oct",
+    "xo_indep": "HPF and LPF are independent",
+    "delay_step": "step, ms:",
+    "delay_max": "max, ms:",
+    "presets_count": "how many:",
+    "presets_input": "input switches with preset",
+    "yes": "yes",
+    "no": "no",
+    "dont_know": "don't know",
+    "equipment_ph": "Speakers, amplifiers, what goes where — as you prefer",
+    "drivers_title": "Speakers by channel (optional):",
+    "drive_from_car": "Drive side — from selected car",
+    "change": "change",
+    "knobs_why": "Why: a knob in a different position makes two measurement series incomparable. Optional.",
+    "knob_add": "add custom",
+    "knob_pos": "position, e.g. 4/4 or 7",
+    "knob_name": "name, e.g. head unit bass knob",
+    "user_lang_other": "other…",
+    "user_lang_other_ph": "which one",
+    "err_no_code": "enabled slot without a code — enter a code",
+    "err_dup_code": "code {code} is already on slot {slot} — one code, one channel",
+    "err_required": "required — please fill in",
+    "err_fix_first": "Nothing saved: fix fields marked in red.",
+    "err_still_missing": "Nothing new to save. Still missing: {n} — marked in red.",
+    "err_refused": "Not saved:",
+    "err_some_refused": "Saved, except {n} — marked in red.",
+    "saved_ok": "Saved.",
+    "saved_missing": "Saved. Still missing: {n} — marked in red.",
+    "seat_once": "Selected once: cannot be changed after saving.",
+    "seat_locked": "Cannot be changed: every measurement, delay, and level in this project is made for this seat.",
+    "fixed": "locked",
+    "hz": "Hz",
+    "seat_confirm": "Target listening position: \"{seat}\". Cannot be changed after saving — a different seat is done as a copy of the project. Save?",
+    "seat_howto": "A different seat requires a new project copied from this one (car, DSP, channel map; without measurements). In TCC: \"New project\" → \"from existing\" → select seat. Without TCC: tell the skill session \"make a copy of the project for passenger\" (or another seat)."
+  },
+  "groups": {
+    "project": "Project",
+    "goal": "Goal",
+    "car": "Car",
+    "measurement_chain": "Measurement Chain",
+    "rew": "Measurement",
+    "dsp": "DSP",
+    "channel_map": "DSP Channel Map",
+    "target_curve": "Target Curve"
+  },
+  "couplings": {
+    "car_identity": "Car — single identity",
+    "seat": "Seat and drive side",
+    "purpose": "Purpose",
+    "dsp_identity": "DSP",
+    "capability": "DSP capabilities",
+    "channel_slot": "Slot and tier",
+    "inputs": "Inputs",
+    "taste": "Taste — four axes"
+  },
+  "fields": {
+    "project.language": {
+      "ask": "Which language to respond in — EN / UK / DE / PL?",
+      "enum": {
+        "en": "English",
+        "uk": "Ukrainian",
+        "de": "German",
+        "pl": "Polish"
+      }
+    },
+    "project.user_language": {
+      "ask": "User language — if different (optional)",
+      "suggest": {
+        "en": "English",
+        "uk": "Ukrainian",
+        "de": "German",
+        "pl": "Polish"
+      }
+    },
+    "project.reviewer_channel": {
+      "ask": "What is the reviewer channel, and is it responding?",
+      "derive": "live reviewer test (autosound_ai.py doctor) — response, not setting"
+    },
+    "project.dir": {
+      "ask": "Where does this project live?",
+      "derive": "folder the form is opened for"
+    },
+    "goal.purpose": {
+      "ask": "Competition, daily enjoyment, or both?",
+      "enum": {
+        "competition": "Competition",
+        "enjoyment": "Daily enjoyment",
+        "both": "Both"
+      }
+    },
+    "goal.formats": {
+      "ask": "Which formats — EMMA / AYA / CARMusic?",
+      "enum": {
+        "EMMA": "EMMA",
+        "AYA": "AYA",
+        "CARMusic": "CARMusic"
+      }
+    },
+    "goal.reference_seat": {
+      "ask": "Who is this project for — driver / passenger / both / all / rear left / rear right?",
+      "enum": {
+        "driver": "Driver",
+        "passenger": "Front passenger",
+        "both": "Driver and passenger",
+        "all": "All seats",
+        "rear_left": "Rear left passenger",
+        "rear_right": "Rear right passenger"
+      }
+    },
+    "goal.mode": {
+      "ask": "Tune from scratch, improve existing, or light touch?",
+      "enum": {
+        "new_tune": "From scratch",
+        "improve_existing": "Improve existing",
+        "light_touch": "Light touch"
+      },
+      "derive": "method has only one path — tune from scratch"
+    },
+    "goal.design_path": {
+      "ask": "Virtual-first at the desk, or iterative?",
+      "enum": {
+        "virtual_first": "Virtual-first (desk)",
+        "iterative": "Iterative"
+      },
+      "derive": "virtual-first if level 1 + loopback on matching clocks + verified filter model; otherwise iterative"
+    },
+    "goal.stage_priorities": {
+      "ask": "What soundstage are we building (can't maximize everything)?",
+      "enum": {
+        "width": "Width",
+        "depth": "Depth",
+        "height": "Height",
+        "center_focus": "Center focus",
+        "envelopment": "Envelopment",
+        "front_only": "Front only"
+      }
+    },
+    "goal.constraints": {
+      "ask": "What cannot be touched (doors, trim, budget, time)?",
+      "suggest": {
+        "no_door_work": "don't disassemble doors",
+        "no_trim_changes": "don't touch trim",
+        "budget": "limited budget",
+        "time": "limited time"
+      }
+    },
+    "goal.wishes": {
+      "ask": "What else do you want from this system — in your own words?"
+    },
+    "car.make": {
+      "ask": "Make"
+    },
+    "car.model": {
+      "ask": "Model (badge name — Passat)"
+    },
+    "car.generation": {
+      "ask": "Generation (production series — B8)"
+    },
+    "car.body": {
+      "ask": "Body style",
+      "enum": {
+        "sedan": "Sedan",
+        "hatchback": "Hatchback",
+        "wagon": "Wagon",
+        "coupe": "Coupe",
+        "suv": "SUV",
+        "van": "Van",
+        "pickup": "Pickup",
+        "other": "Other"
+      }
+    },
+    "car.drive_side": {
+      "ask": "Left- or right-hand drive?",
+      "enum": {
+        "LHD": "Left-hand drive (LHD)",
+        "RHD": "Right-hand drive (RHD)"
+      }
+    },
+    "car.year": {
+      "ask": "Year (optional — describes this specific car and does not classify anything)"
+    },
+    "source.kind": {
+      "ask": "What plays music (head unit / streamer / phone / …)",
+      "enum": {
+        "head_unit": "Head unit",
+        "streamer": "Streamer",
+        "phone": "Phone",
+        "laptop": "Laptop",
+        "other": "Other"
+      }
+    },
+    "source.connection": {
+      "ask": "How signal enters the DSP",
+      "enum": {
+        "optical": "Optical",
+        "coax": "Coaxial",
+        "rca": "RCA",
+        "bt": "Bluetooth",
+        "usb": "USB",
+        "aux": "AUX"
+      }
+    },
+    "source.listening_input": {
+      "ask": "Which input for listening",
+      "suggest": {
+        "optical": "optical",
+        "coax": "coaxial",
+        "rca": "RCA",
+        "bt": "Bluetooth",
+        "usb": "USB",
+        "aux": "AUX"
+      }
+    },
+    "source.measurement_input": {
+      "ask": "Which input carries the measurement signal",
+      "suggest": {
+        "optical": "optical",
+        "coax": "coaxial",
+        "rca": "RCA",
+        "bt": "Bluetooth",
+        "usb": "USB",
+        "aux": "AUX"
+      }
+    },
+    "amps.make": {
+      "ask": "Amplifier make"
+    },
+    "amps.model": {
+      "ask": "Amplifier model"
+    },
+    "amps.channels": {
+      "ask": "Which channels it powers"
+    },
+    "amps.gain_db": {
+      "ask": "Input sensitivity / gain setting"
+    },
+    "rew.mic_model": {
+      "ask": "Measurement microphone"
+    },
+    "rew.mic_cal_0": {
+      "ask": "Its 0° calibration file"
+    },
+    "rew.mic_cal_90": {
+      "ask": "Its 90° calibration file"
+    },
+    "rew.interface": {
+      "ask": "Audio interface"
+    },
+    "rew.loopback": {
+      "ask": "Timing reference: physical loopback or acoustic?",
+      "enum": {
+        "physical": "Physical loopback",
+        "acoustic": "Acoustic (via microphone)",
+        "none": "None"
+      }
+    },
+    "rew.capture_rate_hz": {
+      "ask": "Capture sample rate"
+    },
+    "rew.api_reachable": {
+      "ask": "Does REW API respond on localhost:4735?",
+      "enum": {
+        "yes": "Yes",
+        "no": "No"
+      },
+      "derive": "verified: request to localhost:4735"
+    },
+    "rew.input_clip_checked": {
+      "ask": "Was measurement input checked for clipping?",
+      "enum": {
+        "yes": "Yes",
+        "no": "No"
+      },
+      "derive": "verified during measurement setup"
+    },
+    "dsp.vendor": {
+      "ask": "DSP manufacturer"
+    },
+    "dsp.model": {
+      "ask": "DSP model"
+    },
+    "dsp.readable": {
+      "ask": "Can DSP state be read (dump, screenshot, file export)?",
+      "enum": {
+        "yes": "Yes",
+        "no": "No"
+      },
+      "derive": "verified: dump, screen capture, or file export — either works or doesn't"
+    },
+    "dsp.per_channel_measurable": {
+      "ask": "Can each output be measured individually (solo)?",
+      "enum": {
+        "yes": "Yes",
+        "no": "No"
+      },
+      "derive": "always yes: any DSP output can be soloed by muting the rest"
+    },
+    "dsp.capability_level": {
+      "ask": "Which level is this — 1 full / 2 black box / 3 sum only?",
+      "enum": {
+        "1": "1 — full",
+        "2": "2 — black box",
+        "3": "3 — sum only"
+      },
+      "derive": "derived from the two answers above"
+    },
+    "dsp.processing_rate_hz": {
+      "ask": "DSP internal processing rate",
+      "derive": "from built-in DSP profile if model matches exactly"
+    },
+    "dsp.tiers": {
+      "ask": "Which tiers does the DSP have (physical outputs, virtual channels, inputs)?",
+      "derive": "from built-in DSP profile if model matches exactly; otherwise session will ask"
+    },
+    "dsp.max_count": {
+      "ask": "How many slots does EACH tier have physically? Count the outputs, virtual channels, and inputs of the DSP hardware itself, not just what this car uses — spares are the point of this question",
+      "derive": "from built-in DSP profile if model matches exactly; otherwise session will ask"
+    },
+    "dsp.eq": {
+      "ask": "EQ: bands per channel, types (PK / shelves / all-pass), file import and format",
+      "derive": "from built-in DSP profile if model matches exactly"
+    },
+    "dsp.crossovers": {
+      "ask": "Crossovers: types (LR / BW / BE), orders, independent HPF and LPF",
+      "derive": "from built-in DSP profile if model matches exactly"
+    },
+    "dsp.delays": {
+      "ask": "Delays: step and limits; per-channel polarity; phase control (all-pass)",
+      "derive": "from built-in DSP profile if model matches exactly"
+    },
+    "dsp.presets": {
+      "ask": "Presets: how many; what gets reset on preset switch (input!)",
+      "derive": "from built-in DSP profile if model matches exactly"
+    },
+    "dsp.measurement_input": {
+      "ask": "Input routing: is there a dedicated input for the measurement signal?"
+    },
+    "channel_map.glossary_agreed": {
+      "ask": "Channel codes and naming grammar agreed AND recorded?"
+    },
+    "channel_map.code": {
+      "ask": "Channel code"
+    },
+    "channel_map.slot": {
+      "ask": "Which slot on the DSP"
+    },
+    "channel_map.tier": {
+      "ask": "Which tier does this slot belong to",
+      "suggest": {
+        "channels": "physical outputs",
+        "virtual_channels": "virtual channels",
+        "inputs": "inputs"
+      }
+    },
+    "channel_map.role": {
+      "ask": "What it powers (woofer / mid / tweeter / sub / …)",
+      "derive": "from channel code (w- woofer, m- mid, tw- tweeter, sw sub)",
+      "suggest": {
+        "sub": "sub",
+        "woofer": "woofer",
+        "midbass": "midbass",
+        "midrange": "midrange",
+        "tweeter": "tweeter",
+        "fullrange": "full-range",
+        "unused": "unused"
+      }
+    },
+    "channel_map.descr": {
+      "ask": "How this channel is labeled in the DSP software",
+      "derive": "read from DSP software when importing its current state"
+    },
+    "channel_map.driver": {
+      "ask": "Driver — make and model"
+    },
+    "channel_map.amp": {
+      "ask": "Amplifier and channel"
+    },
+    "channel_map.fs_hz": {
+      "ask": "Driver Fs",
+      "derive": "from driver datasheet — by make and model"
+    },
+    "channel_map.position": {
+      "ask": "Location and aiming",
+      "enum": {
+        "door": "Door",
+        "a_pillar": "A-pillar",
+        "kick": "Kick panel",
+        "dash": "Dash",
+        "deck": "Rear deck",
+        "rear_shelf": "Rear shelf",
+        "under_seat": "Under seat",
+        "trunk": "Trunk",
+        "other": "Other"
+      }
+    },
+    "channel_map.enclosure": {
+      "ask": "Enclosure type",
+      "enum": {
+        "sealed": "Sealed",
+        "ported": "Ported",
+        "free_air": "Free air",
+        "pod": "Pod",
+        "infinite_baffle": "Infinite baffle"
+      }
+    },
+    "channel_map.condition": {
+      "ask": "New or broken in?",
+      "enum": {
+        "new": "New",
+        "broken_in": "Broken in"
+      }
+    },
+    "channel_map.hidden": {
+      "ask": "Is slot empty (nothing connected)?",
+      "enum": {
+        "yes": "Yes",
+        "no": "No"
+      }
+    },
+    "channel_map.routing": {
+      "ask": "Which outputs does each VIRTUAL channel feed?",
+      "derive": "read from DSP routing matrix"
+    },
+    "channel_map.hardware_controls": {
+      "ask": "Remote knobs and switches outside DSP (SubRC / RearRC / bass knob) and where they are set"
+    },
+    "target_curve.candidate": {
+      "ask": "Which target curve?"
+    },
+    "target_curve.genres": {
+      "ask": "What do you listen to? (select multiple)",
+      "enum": {
+        "rock": "rock",
+        "pop": "pop",
+        "jazz": "jazz",
+        "classical": "classical",
+        "electronic": "electronic",
+        "hip_hop": "hip-hop",
+        "acoustic": "acoustic",
+        "metal": "metal",
+        "other": "other"
+      }
+    },
+    "target_curve.loves_most": {
+      "ask": "What do you love most in sound?",
+      "enum": {
+        "bass": "Bass",
+        "vocals": "Vocals",
+        "winds_strings": "Winds and strings",
+        "acoustic": "Acoustic",
+        "electronica": "Electronic"
+      }
+    },
+    "target_curve.loudness": {
+      "ask": "How loud do you usually listen?",
+      "enum": {
+        "loud": "Loud",
+        "moderate": "Moderate"
+      }
+    },
+    "target_curve.reference_tracks": {
+      "ask": "3–5 reference tracks you know well"
+    },
+    "target_curve.track_library": {
+      "ask": "Which test track libraries do you have? (select multiple)",
+      "enum": {
+        "carmus": "CarMus Test&Demo 2026",
+        "chesky": "Chesky Ultimate Demo Disc",
+        "mono": "Mono recordings (Helen Merrill, The Byrds)",
+        "emma": "EMMA disc",
+        "aya": "AYA disc",
+        "own": "Personal favorite tracks",
+        "streaming": "Streaming (Tidal / Spotify / Apple Music)"
+      }
+    },
+    "target_curve.tone": {
+      "ask": "Warm or bright?",
+      "enum": {
+        "warm": "Warm",
+        "neutral": "Neutral",
+        "bright": "Bright"
+      }
+    },
+    "target_curve.bass": {
+      "ask": "Bass-heavy or neutral?",
+      "enum": {
+        "bass_heavy": "Bass-heavy",
+        "neutral": "Neutral"
+      }
+    },
+    "target_curve.presentation": {
+      "ask": "Forward or laid-back presentation?",
+      "enum": {
+        "forward": "Forward",
+        "neutral": "Neutral",
+        "laid_back": "Laid-back"
+      }
+    },
+    "target_curve.character": {
+      "ask": "Accuracy or fun?",
+      "enum": {
+        "accuracy": "Accuracy",
+        "balanced": "Balanced",
+        "fun": "Fun"
+      }
+    },
+    "dsp.tiers_used": {
+      "ask": "Which DSP tiers will be used?",
+      "enum": {
+        "channels": "physical outputs",
+        "virtual_channels": "virtual channels",
+        "inputs": "inputs"
+      }
+    },
+    "hardware.description": {
+      "ask": "Describe other equipment in your own words (speakers, amplifiers, anything)"
+    },
+    "channel_map.install": {
+      "ask": "How it is installed"
+    }
+  },
+  "when": {
+    "now": "now — before first measurement",
+    "install": "before first sweep, during install check (phase −1, step 6)",
+    "0": "in phase 0 — during measurement session and after baseline measurement, when choosing target curve",
+    "1": "in phase 1 — crossovers, levels, delays",
+    "2": "in phase 2 — EQ",
+    "4": "in phase 4 — listening",
+    "5": "in phase 5 — variations and taste"
+  }
+}

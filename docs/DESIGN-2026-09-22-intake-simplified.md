@@ -405,3 +405,20 @@ a project, the seat is exactly what I want to change".
   page (`LOCKED_ONCE_SET`). The writer's refusal can no longer be reached from the form.
 - **The seat is chosen at the copy**: `project_seed.seed(..., seat=)` and `--seat`. The seat
   never travels; without it the copy starts with it open. TCC's copy dialog: hub `#193` (SKL-048).
+
+## Round 8 (2026-09-22): how to make another seat, the confirm back, four languages, TCC's half
+
+- **The seat asks on its first Save again**, now that the field itself says how to make another seat
+  (the user: "with that written next to the field, the confirmation makes sense"). The how-to line
+  (TCC: New project → from existing → pick the seat; without TCC: ask the skill session for a copy)
+  stands under the unset seat and under the fixed one. The form creates no project itself.
+- **Languages: uk, en, de, pl.** en/de/pl were translated from uk.json by the reviewer channel's
+  `ask` task (Gemini 3.8 Flash through `agy`: the API key on this machine is invalid, so the CLI was
+  used deliberately from inside the session, with `AUTOSOUND_ALLOW_NESTED_CLI=1` and a timeout).
+  They were then checked here: same keys in the same order, every `{placeholder}` kept, no Cyrillic
+  left, every page renders. One line, the channel-map hint, was translated from an older uk text and
+  was fixed by hand in all three.
+- **`serve` prints `INTAKE_URL: <url>`**, a machine line for a front-end that started it with
+  `--port 0`.
+- **TCC's half**: how to start the form, pass the language, stop it and reload after it, in hub
+  SKL-049 (and the copy dialog's seat, SKL-048 / #193).
