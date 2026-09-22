@@ -25,6 +25,7 @@ answer **empties the value** rather than merely labelling it.
 | Tool | Field | Abstains when | What governs instead |
 |---|---|---|---|
 | `eq_gate.ExcessPhaseGate.check` | `verdict` | `f0` outside the calibrated band (`trust`) | the flaw map's `no_boost` zones; §13 mic-shift |
+| `eq_gate.min_phase_verdict` | `verdict` | the data does not reach both edges of the window, or < 8 points in it | a narrower window, said so; the gate's `check` |
 | `analysis.arrival_triangulate` | `verdict` | the four estimators disagree by > `spread_ok_ms` | summation at the joint (§9, §10) |
 | `analysis.relative_delay_xcorr` | `basis` | both inputs peak at the same index | fix the export first — nothing downstream is valid |
 | `contract.check_glossary` | `valid` | two glossary sources disagree | reconcile them; no name check is trustworthy meanwhile |

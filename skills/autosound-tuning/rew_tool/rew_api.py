@@ -6,6 +6,7 @@ import re
 import base64
 import os
 import struct
+import time
 
 # REW's own API port. `REW_API_URL` overrides it -- for a REW on another host, and for
 # `rew_tool/rew_stub.py`, which serves the same four endpoints from files so the commands that talk
@@ -521,25 +522,105 @@ def measurement_command(mid, command, parameters=None):
     return _post(f"/measurements/{mid}/command", body)
 
 
+# How long a command that makes a NEW measurement gets to show it, and how often the list is asked.
+# REW answers the POST at once -- 202, "in progress" -- and builds the measurement afterwards, so
+# the answer says only that the request was read. 20 s is the envelope that has worked on a real
+# REW: the reference car's own `ensure_ep` (car repo, `excess_gate.py`) polled that long for the
+# `-EP` it had asked for. Too short is not harmless -- a caller that retries on the raise makes a
+# second `-EP` with the same title (the duplicate `duplicate_titles` exists for).
+_COMMAND_WAIT_S = 20.0
+_COMMAND_POLL_S = 0.25
+
+
+def _identity(mid, m):
+    """What stays put about a measurement while its ordinal id does not: REW's `uuid` (the 5.40
+    listing carries one -- the field list above `measurement_kind`), or (id, title) without it."""
+    return (m or {}).get("uuid") or (str(mid), (m or {}).get("title"))
+
+
+def _create_version(mid, command, parameters, wait_s):
+    """Run a command that should ADD a measurement, and return only once it has.
+
+    Why (#56 item 2): `excess_phase_version` was reported to "return, create nothing, raise
+    nothing" on REW 5.40 beta 135 (API 0.9.6). Whatever REW did with that request, the wrapper
+    could not have told: it handed back REW's first answer, and that answer is a 202 "in
+    progress" whether or not anything is ever built. A tool that returns as if it worked when it
+    did not is the expensive failure (#56 section A) -- the next step reads an `-EP` that is not
+    there, or an older one with the same title.
+
+    So: the measurement list before; the command (a 4xx raises right here, carrying REW's own
+    explanation -- `_open`); then the list again until something new is in it or `wait_s` runs
+    out. New is judged by `_identity`, never by ordinal id: ids reshuffle on any delete. Nothing
+    new raises RuntimeError with what REW answered. Two new at once (a capture landing at the same
+    moment) are narrowed to the one titled after the source; if that does not settle it, raise --
+    which of them is ours is not knowable from the list.
+
+    Returns REW's answer (a dict) with `created_id` and `created_title` added.
+    """
+    before = get_measurements()
+    seen = {_identity(k, m) for k, m in before.items()}
+    source = (before.get(str(mid)) or {}).get("title")
+    said = measurement_command(mid, command, parameters)
+    deadline = time.monotonic() + wait_s
+    while True:
+        new = {k: m for k, m in get_measurements().items() if _identity(k, m) not in seen}
+        if new or time.monotonic() >= deadline:
+            break
+        time.sleep(_COMMAND_POLL_S)
+    if not new:
+        raise RuntimeError(
+            f"REW accepted {command!r} on measurement {mid} ({source!r}) and created nothing: no "
+            f"new measurement in the list after {wait_s:g} s. REW said: {said!r}")
+    if len(new) > 1 and source:
+        mine = {k: m for k, m in new.items() if str((m or {}).get("title", "")).startswith(source)}
+        new = mine or new
+    if len(new) > 1:
+        titles = sorted(str((m or {}).get("title")) for m in new.values())
+        raise RuntimeError(
+            f"{command!r} on measurement {mid} ({source!r}): {len(new)} new measurements appeared "
+            f"at once {titles}; which one it made is not knowable from the list -- resolve it by "
+            f"title (find_measurement_id)")
+    (cid, cm), = new.items()
+    out = dict(said) if isinstance(said, dict) else {"message": said}
+    out.update(created_id=cid, created_title=(cm or {}).get("title"))
+    return out
+
+
+#: The four keys REW 5.40 (API 0.9.6) requires on the minimum- and excess-phase commands, exactly
+#: as its 400 spells them: all lower case, all four. #56 item 2 reported the wrapper as sending
+#: "append LF tail" / "append HF tail" and no "replicate data"; no version of this file did (the
+#: capitalised spelling is not in its history) -- the 400 quoted there came from a direct call. The
+#: selftest pins the set, so a spelling drift is caught offline rather than by REW.
+_VERSION_KEYS = ("append lf tail", "append hf tail", "include cal", "replicate data")
+
+
 def minimum_phase_version(mid, append_lf_tail=False, append_hf_tail=False,
-                          include_cal=False, replicate_data=False):
+                          include_cal=False, replicate_data=False, wait_s=_COMMAND_WAIT_S):
     """Create the **minimum-phase** version of a sweep (new measurement `<name>-MP`).
     Tails off by default (turning a tail on also needs its start/slope params —
-    pass a raw dict via `measurement_command` for that). Returns 202 in-progress."""
-    return measurement_command(mid, "Minimum phase version", {
-        "append lf tail": append_lf_tail, "append hf tail": append_hf_tail,
-        "include cal": include_cal, "replicate data": replicate_data})
+    pass a raw dict via `measurement_command` for that).
+
+    Returns once the new measurement is in REW's list -- REW's answer plus `created_id` /
+    `created_title` -- and raises when it does not appear (`_create_version`, #56 item 2)."""
+    return _create_version(mid, "Minimum phase version", dict(zip(_VERSION_KEYS, (
+        append_lf_tail, append_hf_tail, include_cal, replicate_data))), wait_s)
 
 
 def excess_phase_version(mid, append_lf_tail=False, append_hf_tail=False,
-                         include_cal=False, replicate_data=False):
+                         include_cal=False, replicate_data=False, wait_s=_COMMAND_WAIT_S):
     """Create the **excess-phase** version of a sweep (new measurement `<name>-EP`).
     REW's own Hilbert-based excess phase = measured − minimum phase; read it back
     with `get_fr` (its phase channel IS the excess phase) to decide min- vs
-    non-min-phase at a joint — the authoritative path, not a home-brew scan."""
-    return measurement_command(mid, "Excess phase version", {
-        "append lf tail": append_lf_tail, "append hf tail": append_hf_tail,
-        "include cal": include_cal, "replicate data": replicate_data})
+    non-min-phase at a joint — the authoritative path, not a home-brew scan.
+    The verdict itself is `eq_gate.min_phase_verdict`: read raw, the bulk delay's ramp looks
+    like "not minimum-phase" at every frequency (#56 item 3).
+
+    Returns once the new measurement is in REW's list -- REW's answer plus `created_id` /
+    `created_title`, so the caller reads THAT id rather than guessing it -- and raises when it
+    does not appear, with what REW said (`_create_version`, #56 item 2). Never returns as if it
+    worked."""
+    return _create_version(mid, "Excess phase version", dict(zip(_VERSION_KEYS, (
+        append_lf_tail, append_hf_tail, include_cal, replicate_data))), wait_s)
 
 
 def get_distortion(mid):
@@ -678,21 +759,70 @@ def _selftest():
     finally:
         _get = _orig_get
 
-    # command wrappers post the right path/body (mock _post — no live REW)
-    global _post
-    _origp = _post
-    sent = {}
+    # command wrappers post the right path/body, and return only once REW's list has the result
+    # (#56 item 2) -- a fake REW behind _get/_post, no live one.
+    global _post, _COMMAND_POLL_S
+    _origp, _orig_get, _orig_poll = _post, _get, _COMMAND_POLL_S
+    sent, rew = {}, {}
+
+    def fake_rew(builds, after_polls=0, answer=None):
+        """`builds` = the title REW makes, or None for a command that makes nothing."""
+        rew.clear()
+        rew.update(listing={"6": {"title": "m-R_50 (sw)", "uuid": "u6"},
+                            "7": {"title": "m-L_50 (sw)", "uuid": "u7"}}, polls=0)
+
+        def post(path, data):
+            sent.update(path=path, data=data)
+            return answer if answer is not None else {"message": data["command"] + " in progress"}
+
+        def get(path):
+            assert path == "/measurements", path
+            if sent and builds and rew["polls"] >= after_polls and "8" not in rew["listing"]:
+                rew["listing"]["8"] = {"title": builds, "uuid": "u8"}
+            rew["polls"] += 1 if sent else 0
+            return {k: dict(m) for k, m in rew["listing"].items()}
+        return post, get
+
     try:
-        _post = lambda path, data: (sent.update(path=path, data=data),
-                                    {"message": "ok"})[1]
-        excess_phase_version(7)
+        _COMMAND_POLL_S = 0.0
+        # REW's own spelling, all four keys, lower case -- the whole set, not one of them.
+        sent.clear()
+        _post, _get = fake_rew("m-L_50 (sw)-EP")
+        got = excess_phase_version(7)
         assert sent["path"] == "/measurements/7/command", sent
         assert sent["data"]["command"] == "Excess phase version", sent
-        assert sent["data"]["parameters"]["replicate data"] is False, sent
-        minimum_phase_version(7)
+        assert tuple(sent["data"]["parameters"]) == _VERSION_KEYS, sent
+        assert _VERSION_KEYS == ("append lf tail", "append hf tail", "include cal",
+                                 "replicate data"), "REW's 400 spells them so (#56 item 2)"
+        assert all(v is False for v in sent["data"]["parameters"].values()), sent
+        assert got["created_id"] == "8" and got["created_title"] == "m-L_50 (sw)-EP", got
+        assert "in progress" in got["message"], "REW's own answer is kept"
+
+        # REW builds it a moment later (the 202 path): still found, by polling.
+        sent.clear()
+        _post, _get = fake_rew("m-L_50 (sw)-EP", after_polls=3)
+        assert excess_phase_version(7)["created_id"] == "8"
+
+        # REW accepts and builds NOTHING -- the #56 case. Must raise, naming the source and what
+        # REW said, never return as if it worked.
+        sent.clear()
+        _post, _get = fake_rew(None, answer={"message": "Excess phase version in progress"})
+        try:
+            excess_phase_version(7, wait_s=0.0)
+        except RuntimeError as e:
+            assert "created nothing" in str(e) and "m-L_50 (sw)" in str(e), e
+            assert "in progress" in str(e), f"REW's answer must be in the error: {e}"
+        else:
+            raise AssertionError("a command that made nothing returned as if it worked (#56)")
+
+        sent.clear()
+        _post, _get = fake_rew("m-L_50 (sw)-MP")
+        got = minimum_phase_version(7)
         assert sent["data"]["command"] == "Minimum phase version", sent
+        assert tuple(sent["data"]["parameters"]) == _VERSION_KEYS, sent
+        assert got["created_title"] == "m-L_50 (sw)-MP", got
     finally:
-        _post = _origp
+        _post, _get, _COMMAND_POLL_S = _origp, _orig_get, _orig_poll
 
     # duplicate_titles: the invariant everything else rests on (inbox 3.5)
     ms = {"1": {"title": "m-L_0 (sw)"}, "7": {"title": "m-L_0 (sw)-EP"},
@@ -734,7 +864,7 @@ def _selftest():
         urllib.request.urlopen = _orig_open
 
     print("rew_api selftest OK — get_fr handles sweep/RTA phase branch; "
-          "excess/min-phase + smooth command wrappers post correct bodies; "
+          "excess/min-phase wrappers post REW's four keys and raise when nothing appears; "
           "duplicate titles are found; an HTTP error carries REW's own explanation")
 
 
