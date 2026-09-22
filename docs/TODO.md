@@ -1426,7 +1426,7 @@ Left for later:
 
 ## S-053 · Versions are numbered once per project, and a preset is the slot a version is fixed in
 
-**Status**: open 2026-09-22 · **W-2 package R** (`docs/PLAN-W-2.md`) · hub `#195` (TCC-025) asks for the same thing, and tcc needs it in this wave; the reader contract goes on `#195` first · written down at the W-2 review:
+**Status**: done 2026-09-22 · W-2 package R · `python3 skills/autosound-tuning/rew_tool/state/state.py selftest` (the per-project line, `migrate-line` plan → a stopped move resumed → `--apply`, the active slot keeping its numbers, a half-moved root refused both ways, `variant new/switch` copying nothing); tried on a copy of the Passat's `state/` (SQ `v_001…v_063` kept, FULL → `v_064…v_070`, content identical); the reader contract and the build are on hub `#195` · was: open 2026-09-22 · **W-2 package R** (`docs/PLAN-W-2.md`) · hub `#195` (TCC-025) asks for the same thing, and tcc needs it in this wave; the reader contract goes on `#195` first · written down at the W-2 review:
 the item had no home in this file. It lived only in `docs/PLAN-W-1.md` §A.3 as "W-2, not this wave",
 and tcc left per-project version numbering out of its own W-2 because this migration does not exist
 (tcc `docs/PLAN-W-2.md`, *Not included*).
