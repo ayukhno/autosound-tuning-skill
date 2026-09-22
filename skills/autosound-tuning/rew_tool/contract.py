@@ -359,13 +359,14 @@ def cross_check_tiers_vs_profile(profile_data, snapshots, project_data=None):
     return issues
 
 
-def cross_check_rew(process_state, glossary, snapshots):
+def cross_check_rew(process_state, glossary, snapshots, project_data=None):
     """Best-effort: REW not running/reachable is reported, not a crash (`contract.py` runs as a
     static project audit; requiring a live REW connection would make it useless offline)."""
     try:
         import rew_api
 
-        titles = [m.get("title", "") for m in rew_api.get_measurements().values()]
+        records = list(rew_api.get_measurements().values())
+        titles = [m.get("title", "") for m in records]
     except Exception as exc:  # noqa: BLE001 -- deliberately broad: any REW-unreachable reason
         return {"reachable": False, "note": f"REW not reachable ({exc}) -- skipped"}
 
@@ -382,6 +383,11 @@ def cross_check_rew(process_state, glossary, snapshots):
     dups = {t: n for t, n in dups.items() if n > 1}
     if dups:
         out["duplicate_titles"] = dups
+    # #58 P4: a measurement from ANOTHER build's `.mdat` is labelled here, before anything trusts it.
+    own = ((project_data or {}).get("paths") or {}).get("rew_project") if isinstance(project_data, dict) else None
+    foreign = rew_api.foreign_measurements(records, own) if hasattr(rew_api, "foreign_measurements") else {}
+    if foreign:
+        out["foreign"] = foreign
 
     # WHAT IS EXPECTED COMES FROM THE OPEN CAPTURE ROUND, NOT FROM LEDGER HEAD (inbox 3.11).
     # Deriving it from HEAD's version number asks "does REW hold the series for v_008?" of a
@@ -565,7 +571,7 @@ def check_project(project_dir, skip_rew=False):
         "glossary_vs_ledgers": cross_check_glossary_vs_ledgers(glossary, snapshots),
         "tiers_vs_profile": cross_check_tiers_vs_profile(profile_data, snapshots, project_data),
         "rew": ({"reachable": False, "note": "skipped (--no-rew)"} if skip_rew
-                else cross_check_rew(process_state, glossary, snapshots)),
+                else cross_check_rew(process_state, glossary, snapshots, project_data)),
     }
     ok = all(f["valid"] is not False for f in files) and not cross["glossary_vs_ledgers"] and \
         not cross["tiers_vs_profile"]
@@ -950,6 +956,11 @@ def render_report(report):
         lines.append(f"- ⚠️ {note}")
     rew = cross["rew"]
     if rew.get("reachable"):
+        if rew.get("foreign"):
+            files = sorted(set(rew["foreign"].values()))
+            lines.append(f"- ⚠️ REW: {len(rew['foreign'])} measurement(s) come from another file "
+                         f"({', '.join(files)}), not this project's own -- another build's data; read them "
+                         f"only as that, and never into this project's rounds (#58 P4)")
         for title, n in sorted(rew.get("duplicate_titles", {}).items()):
             lines.append(f"- ⚠️ REW holds {n} measurements titled `{title}` — a title is supposed "
                          f"to be one measurement's identity; resolve before capturing further")

@@ -230,6 +230,38 @@ def is_swept(record):
     return measurement_kind(record) not in (RTA, IMPEDANCE)
 
 
+#: Where REW names the `.mdat` a measurement came from. NOT verified against a live REW with measurements loaded:
+#: the review of 2026-09-22 (#58 P4) names `containingFileName`; the others are the spellings to try, and a record
+#: with none of them answers None -- "REW did not say", never "it is ours".
+FILE_KEYS = ("containingFileName", "fileName", "file")
+
+
+def measurement_file(record):
+    """The file a measurement came from, as a basename, or None when REW does not say (#58 P4)."""
+    for key in FILE_KEYS:
+        value = (record or {}).get(key)
+        if value:
+            return os.path.basename(str(value).replace("\\", "/"))
+    return None
+
+
+def foreign_measurements(records, own_file):
+    """`{title: file}` for every measurement whose file REW names and which is not `own_file` (#58 P4).
+
+    A session analysed another build's `.mdat` -- the same `_2`/`_3` numbers, the same titles -- through plain reads,
+    which the foreign-series guard never sees because it checks rounds, not reads. With the project's own file
+    unknown (`project.json` `paths.rew_project`), nothing can be judged, and nothing is: `{}`."""
+    if not own_file:
+        return {}
+    own = os.path.basename(str(own_file).replace("\\", "/")).lower()
+    out = {}
+    for rec in records or []:
+        name = measurement_file(rec)
+        if name and name.lower() != own:
+            out[rec.get("title", "?")] = name
+    return out
+
+
 def find_measurement_id(name, measurements=None, exact=True):
     """Resolve a measurement's CURRENT ordinal id by its title (name).
 
@@ -863,6 +895,12 @@ def _selftest():
     finally:
         urllib.request.urlopen = _orig_open
 
+    # #58 P4: a measurement from another .mdat is named; one whose file REW does not name is not judged, and
+    # with the project's own file unknown nothing is.
+    recs = [{"title": "a", "containingFileName": "/x/passat.mdat"}, {"title": "b", "containingFileName": "C:\\y\\old.mdat"},
+            {"title": "c"}]
+    assert foreign_measurements(recs, "Passat.mdat") == {"b": "old.mdat"}, foreign_measurements(recs, "Passat.mdat")
+    assert foreign_measurements(recs, None) == {} and measurement_file(recs[2]) is None
     print("rew_api selftest OK — get_fr handles sweep/RTA phase branch; "
           "excess/min-phase wrappers post REW's four keys and raise when nothing appears; "
           "duplicate titles are found; an HTTP error carries REW's own explanation")
