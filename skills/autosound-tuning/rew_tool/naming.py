@@ -570,6 +570,7 @@ _USAGE = """usage: naming.py <project-dir> <command> [args]
   name <code> <version> [method] build one title
   parse <title>                  split a title into code/modifier/version/method, or say why not
   expect <phase> <version>       the capture series a phase expects
+  next-series                    this project's next series number, from its own rounds (#56 item 10)
   check <phase> <version>        compare that series against what REW currently holds
   selftest                       run this module's own checks (no project needed)
 """
@@ -772,6 +773,13 @@ def _main(argv):
         elif cmd == "expect":
             for name in expected_series(args[0], g, args[1]):
                 print(name)
+        elif cmd == "next-series":
+            # #56 item 10: the number a new sheet's titles carry, from THIS project's rounds -- never an example's.
+            here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state")
+            if here not in sys.path:
+                sys.path.insert(0, here)
+            import process as _process
+            print(_process.Process(os.path.join(project, "process")).next_series())
         elif cmd == "check":
             import rew_api
 

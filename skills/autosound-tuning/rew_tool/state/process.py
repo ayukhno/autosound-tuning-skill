@@ -1172,6 +1172,25 @@ class Process:
         )
         return round_
 
+    def series_used(self):
+        """Every series number this project's rounds have used, as ints."""
+        seen = set()
+        for round_ in self.capture_rounds():
+            for value in [round_.get("version")] + list(round_.get("title_versions") or []):
+                text = str(value).strip().lstrip("_")
+                if text.isdigit():
+                    seen.add(int(text))
+        return seen
+
+    def next_series(self):
+        """This project's next series number: one past its highest, or 1 for a project with none (#56 item 10).
+
+        The car checklist once said `_2` -- the number the documentation's examples use -- while the project's
+        counter stood at `_49`; 47 measurements came back under `_2`/`_3` and were renamed twice. The refusal
+        already knew the answer (`_refuse_foreign_series`); it arrived after the measurements existed."""
+        seen = self.series_used()
+        return max(seen) + 1 if seen else 1
+
     def _refuse_foreign_series(self, version):
         """A series number that is not this project's own is refused until its ORIGIN is on record.
 
@@ -1186,12 +1205,7 @@ class Process:
         highest. A project with no rounds yet has no sequence to be outside of, and the first round
         is accepted whatever it is numbered.
         """
-        seen = set()
-        for round_ in self.capture_rounds():
-            for value in [round_.get("version")] + list(round_.get("title_versions") or []):
-                text = str(value).strip().lstrip("_")
-                if text.isdigit():
-                    seen.add(int(text))
+        seen = self.series_used()
         if not seen:
             return
         n = int(str(version).strip().lstrip("_"))

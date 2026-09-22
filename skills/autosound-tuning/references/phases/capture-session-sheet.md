@@ -32,10 +32,19 @@ Order of channels is the user's in TCC; the sheet only fixes the blocks and the 
 over the project's glossary — `sw` (or `sw-f`, `sw-r`), `w-L/R`, `m-L/R`, `tw-L/R`, and `c`, `r-L/R`
 where they exist.
 
+**The series number is the PROJECT's, never an example's** (#56 item 10, #57 P4): `naming.py <project>
+next-series` prints it (`1` for a new project, the number after its highest for any other). A sheet that
+said `_2` from these examples, on a project at `_49`, brought 47 measurements back under the wrong number.
+The tripod block and the MMM block of one visit are ONE series unless the DSP changes between them, and
+the day runs all sweeps, then all MMM. The questions the tools will ask later go on the page and are
+answered in the car: the level as a quantity (`capture-start … --level "-25 dB rel. max"`), the knobs
+(`capture-knobs`), and what protective filter was in the chain (`capture-protective`).
+
 ```
 BLOCK 0 · OPEN THE ROUND (laptop, ~1 min)                      [0.0]
-  naming.py <project> expect 0 1        → the titles this session owes
-  process.py <project>/process capture-start 1 "<title>" ...
+  naming.py <project> next-series       → N, this project's own (1 on a new one)
+  naming.py <project> expect 0 <N>      → the titles this session owes
+  process.py <project>/process capture-start <N> "<title>" ... [--level "<dB rel. max>"]
   without it blocks E and F have nothing to write on: capture-taken,
     -protective, -knobs and -check all refuse while no round is open
 
