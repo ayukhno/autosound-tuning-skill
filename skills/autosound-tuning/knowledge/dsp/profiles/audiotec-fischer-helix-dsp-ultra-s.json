@@ -7,7 +7,7 @@
       "Phase control step on mid/high channels: 5.625 deg is measured on a SUBWOOFER channel; the mid/high block captured only 180 deg, which sits on a 5.625 grid and an 11.25 one alike, and older PC-Tool generations are reported to step mid/high by 11.25. One capture of one step on a mid/high channel at a reference below 1 kHz decides it (bench series 3, 2026-09-02)"
     ],
     "channel_gain": {
-      "note": "the same range on both tiers (user, PC-Tool, 2026-08-23). Deliberately NOT the EQ band's -30..+12: they are different controls and the asymmetry is the proof. Step 1.0 dB (user, PC-Tool on his own unit, 2026-08-23) — note it is COARSER than the EQ band's 0.1 dB, another reason the two must not stand in for each other.",
+      "note": "the same range on both tiers (user, PC-Tool, 2026-08-23). Deliberately NOT the EQ band's -30..+12: they are different controls, and the RANGE is the proof. The STEP is not a property of the device (skill #52, 2026-09-20): PC-Tool's settings panel sets it, 'Channel Gain Resolution' = 1.00 / 0.50 / 0.25 / 0.10 dB, and the owner's machine read 0.10 where the 2026-08-23 note had recorded 1.0 as a constant. So the bundled profile carries the OPTIONS and no step; a project records its machine's setting (`step_db`), asked at Phase 1 before a trim with decimals is typed.",
       "range_db": [
         -30.0,
         5.0
@@ -16,7 +16,8 @@
         "per driver output",
         "per virtual channel"
       ],
-      "step_db": 1.0
+      "step_options_db": [1.0, 0.5, 0.25, 0.1],
+      "step_setting": "PC-Tool settings panel: Channel Gain Resolution"
     },
     "delay": {
       "max_ms": 20.82,
@@ -200,12 +201,13 @@
         40000.0
       ],
       "freq_step_hz": 0.01,
-      "gain_note": "the EQ BAND's gain. Step 0.1 dB, corroborated on the same 2026-08-23 panel (Gain 0.1 dB). The channel trim is `channel_gain` below, and the two are now measured as different in all three of range (-30..+12 against -30..+5), step (0.1 against 1.0) and resolution — from his own screen, so 'they must never stand in for each other' is a measurement rather than a caution.",
+      "gain_note": "the EQ BAND's gain. Its step is a PC-Tool SETTING too (skill #52): 'EQ Gain Resolution' = 1.00 / 0.50 / 0.25 / 0.10 dB, the owner's at 0.10. The same panel carries 'EQ Link Mode' (absolute / relative), which changes what a typed EQ value means, plus 'EQ Band AutoSort' and 'EQ View Mode'. The channel trim is `channel_gain`, a different control with a different RANGE (-30..+12 against -30..+5); the resolutions are two switches on one panel, not a difference between the controls.",
       "gain_range_db": [
         -30.0,
         12.0
       ],
-      "gain_step_db": 0.1,
+      "gain_step_options_db": [1.0, 0.5, 0.25, 0.1],
+      "gain_step_setting": "PC-Tool settings panel: EQ Gain Resolution (and EQ Link Mode: absolute / relative)",
       "mode_note": "OBSERVED, not derived, 2026-08-23. The PC-Tool panel whose selector reads 'Parametric EQ' was photographed in ONE state with every field visible at once: Freq 26.01 Hz, Gain 0.1 dB, Q 50. So the frequency field ACCEPTS two decimals (not merely displays them — that was the open reservation) and Q reaches 50 in that same panel. The pair recorded here therefore co-occurs in a single mode, and the union stops being an inference. Fine EQ pairs a 1 Hz step with Q 0.5-15; this panel is the other one. PROVENANCE: this supersedes the DERIVED label required while the pair was unobserved — that requirement was SATISFIED, not dropped, and the distinction matters because a requirement quietly abandoned looks identical afterwards to one that was met. What the panel does NOT establish, so it does not travel with this: the BOTTOM of the Q range (0.5 is recorded from elsewhere; nothing here shows it), and whether some third mode has different limits again — which no longer matters, since the question was only whether this pair exists in one mode.",
       "q_convention": "Rbj",
       "q_note": "What the METHOD should use is narrower still than what the hardware takes, and that is not a hardware question -- see the spatial-validity Q ceiling in the method's diagnostic reference.",

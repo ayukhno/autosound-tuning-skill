@@ -212,6 +212,11 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
   - **A level fitted over a band that holds cabin gain or the driver's own humps** (a sub over 30–55 Hz)
     moves once coarse EQ (1.4 / `eq_propose --part 1`) removes them. Re-read it after the EQ, because the
     GAIN moves and not the crossover.
+  - **Before the first trim with decimals, ask what the machine is set to**: the gain step is a switch on
+    the vendor software's settings panel, not a property of the device (Helix: *Channel Gain Resolution*
+    1.00 / 0.50 / 0.25 / 0.10 dB). Record it with `dsp_profile.py set-setting <project> channel_gain.step_db
+    <value>`, and do the same before EQ for `parametric_eq.gain_step_db` and `parametric_eq.link_mode`.
+    `apply.propose` names a trim off the recorded step, or asks when none is recorded (#52).
   - **A cut-only spread wider than 3 dB is a gain-structure finding**, not a level decision.
     `level_offsets.py` does the arithmetic: raising the quiet channel's amplifier by N gives the same balance
     and keeps N dB of system headroom. Both costs are named (that channel's headroom, against the whole

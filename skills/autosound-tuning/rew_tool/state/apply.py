@@ -152,6 +152,48 @@ def advisories(current, proposed):
     return out
 
 
+def gain_grid_advisories(project_dir, current, proposed):
+    """What a proposed channel trim meets on THIS machine's gain grid (skill #52), as advisories.
+
+    The step is a PC-Tool setting (Channel Gain Resolution: 1.00 / 0.50 / 0.25 / 0.10 dB), not the device's. A sheet
+    was once rounded to whole dB on a step recorded as a constant, and the mirror error is not caught anywhere: a sheet
+    at 0.1 dB handed to a machine set to 1.00 is rounded by whoever types it, and what they typed is never recorded.
+    With the project's `channel_gain.step_db` known, a trim off it is named; with it unknown, a trim with decimals
+    is named with the question to ask. Advice, not a refusal: the number is right, the machine may simply be set
+    coarser, and that is the tuner's switch."""
+    path = os.path.join(project_dir or "", "dsp_profile.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            prof = json.load(fh)
+    except (OSError, ValueError):
+        return []
+    prof = prof.get("dsp_profile", prof) if isinstance(prof, dict) else {}
+    gain = prof.get("channel_gain") or {}
+    step = gain.get("step_db")
+    moved = []
+    for tier in _state.tier_names(proposed):
+        for ch, row in (proposed.get(tier) or {}).items():
+            g = (row or {}).get("gain_db")
+            was = ((current.get(tier) or {}).get(ch) or {}).get("gain_db")
+            if isinstance(g, (int, float)) and g != was:
+                moved.append((ch, float(g)))
+    if not moved:
+        return []
+    if step:
+        off = [(ch, g) for ch, g in moved if abs(g / step - round(g / step)) > 1e-6]
+        if off:
+            return [f"this machine is set to {step:g} dB gain steps (PC-Tool: Channel Gain Resolution): "
+                    + ", ".join(f"{ch} {g:+g}" for ch, g in off) + " will be rounded when typed (#52)"]
+        return []
+    fine = [(ch, g) for ch, g in moved if abs(g - round(g)) > 1e-6]
+    if fine:
+        options = "/".join(f"{o:g}" for o in gain.get("step_options_db") or []) or "1/0.5/0.25/0.1"
+        return ["the machine's gain step is not recorded; it is a PC-Tool setting (Channel Gain Resolution: "
+                f"{options} dB). Ask it before " + ", ".join(f"{ch} {g:+g}" for ch, g in fine)
+                + " is typed, and record it as `channel_gain.step_db` (#52)"]
+    return []
+
+
 def _fmt_val(field, val, rate):
     if field == "ta_ms" and isinstance(val, (int, float)):
         return f"{val:g} ms ({_state.samples_for(val, rate)} smp)"
@@ -318,7 +360,8 @@ def propose(history, delta, note=None, provenance=None, registry=None, allow_non
     if provenance is not None:
         proposed["provenance"] = provenance
     d = _state.diff_states(current, proposed)        # note current has no version yet in-memory
-    adv = advisories(current, proposed)
+    adv = advisories(current, proposed) + gain_grid_advisories(
+        getattr(history, "project_dir", None), current, proposed)
     version = history.snapshot(proposed, note=note or "proposed change")   # validates again + versions
     rate = proposed["sample_rate"]
     sheet = settings_sheet({**d, "to": version}, rate, history.preset, version, slot_note=slot_note)
@@ -472,6 +515,19 @@ def _selftest():
     r_new = propose(h3, {"tw-L": full}, note="a real new channel")
     assert set(h3.load(r_new["version"])["channels"]) == {"m-L", "tw-L"}
 
+    # #52: the gain step is the machine's setting. Known: a trim off it is named; unknown: a trim with decimals asks.
+    gproj = tempfile.mkdtemp(prefix="autosound_gaingrid_")
+    base = {"channels": {"w-L": {"gain_db": -7.0}}}
+    with open(os.path.join(gproj, "dsp_profile.json"), "w", encoding="utf-8") as fh:
+        json.dump({"dsp_profile": {"channel_gain": {"step_options_db": [1.0, 0.5, 0.25, 0.1]}}}, fh)
+    said = gain_grid_advisories(gproj, base, {"channels": {"w-L": {"gain_db": -1.2}}})
+    assert said and "not recorded" in said[0] and "w-L -1.2" in said[0], said
+    assert gain_grid_advisories(gproj, base, {"channels": {"w-L": {"gain_db": -2.0}}}) == []
+    with open(os.path.join(gproj, "dsp_profile.json"), "w", encoding="utf-8") as fh:
+        json.dump({"dsp_profile": {"channel_gain": {"step_db": 1.0}}}, fh)
+    said = gain_grid_advisories(gproj, base, {"channels": {"w-L": {"gain_db": -1.2}}})
+    assert said and "set to 1 dB" in said[0] and "rounded" in said[0], said
+    assert gain_grid_advisories(os.path.join(gproj, "nowhere"), base, {"channels": {"w-L": {"gain_db": -1.2}}}) == []
     print(f"selftest OK — propose banked 🟡 + settings-sheet (old→new, 5.45 ms=523 smp@96k), "
           f"advisory on polarity flip, attest flipped 🟡→🟢 (w-L,sub); tier-keyed delta proposed+"
           f"attested a VIRTUAL-tier row (schema v2 — impossible before this), structured EQ bands "

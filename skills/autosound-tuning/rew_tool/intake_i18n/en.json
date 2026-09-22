@@ -438,6 +438,31 @@
       "ask": "Presets: how many; what gets reset on preset switch (input!)",
       "derive": "from built-in DSP profile if model matches exactly"
     },
+    "dsp.channel_gain_step": {
+      "ask": "Channel gain step on this machine (settings: Channel Gain Resolution)",
+      "enum": {
+        "1.0": "1.0 dB",
+        "0.5": "0.5 dB",
+        "0.25": "0.25 dB",
+        "0.1": "0.1 dB"
+      }
+    },
+    "dsp.eq_gain_step": {
+      "ask": "EQ gain step on this machine (settings: EQ Gain Resolution)",
+      "enum": {
+        "1.0": "1.0 dB",
+        "0.5": "0.5 dB",
+        "0.25": "0.25 dB",
+        "0.1": "0.1 dB"
+      }
+    },
+    "dsp.eq_link_mode": {
+      "ask": "EQ Link Mode on this machine (settings)",
+      "enum": {
+        "absolute": "Absolute",
+        "relative": "Relative"
+      }
+    },
     "dsp.measurement_input": {
       "ask": "Input routing: is there a dedicated input for the measurement signal?"
     },

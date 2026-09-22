@@ -992,6 +992,18 @@ FIELDS = (
        note="What resets on a switch — the INPUT above all: a preset silently resetting it is "
             "Pre-session checklist #4's whole reason for existing.",
        when="0", derive="the bundled profile on an exact vendor+model match", place="new_dsp"),
+    # skill #52: three switches on the vendor software's settings panel -- what THIS machine is set to, asked when
+    # the step that needs it comes, and written to the finalised profile by `dsp_profile.set_setting`.
+    _f("dsp.channel_gain_step", "dsp", "Channel gain step on this machine (settings panel: Channel Gain Resolution)",
+       enum=("1.0", "0.5", "0.25", "0.1"), writes="dsp_profile:channel_gain.step_db",
+       note="A setting, not a property of the device: a sheet at 0.1 dB typed on a machine set to 1.00 is rounded "
+            "by whoever types it. Asked before the first trim with decimals.", when="1", place="memo"),
+    _f("dsp.eq_gain_step", "dsp", "EQ gain step on this machine (settings panel: EQ Gain Resolution)",
+       enum=("1.0", "0.5", "0.25", "0.1"), writes="dsp_profile:parametric_eq.gain_step_db",
+       note="The EQ band's own switch, beside the channel gain's.", when="2", place="memo"),
+    _f("dsp.eq_link_mode", "dsp", "EQ Link Mode on this machine (settings panel)", enum=("absolute", "relative"),
+       writes="dsp_profile:parametric_eq.link_mode",
+       note="Changes what a typed EQ value MEANS, so it is asked before an EQ band is typed.", when="2", place="memo"),
     _f("dsp.measurement_input", "dsp", dsp_profile.CAPABILITY_CHECKLIST[6], checklist=6,
        writes="project:source.measurement_input", ask_with="inputs",
        when="0"),
@@ -1478,6 +1490,9 @@ def save(project_dir, field_id, value):
     if writes.startswith("dsp_profile.draft:"):
         raise IntakeError(f"{field_id} belongs to the DSP profile; its writer is "
                           f"dsp_profile.set_field(<project>, '<path>', value)")
+    if writes.startswith("dsp_profile:"):
+        raise IntakeError(f"{field_id} is what this machine is set to; its writer is "
+                          f"dsp_profile.set_setting(<project>, '{writes.split(':', 1)[1]}', value)")
     if writes.startswith("glossary:"):
         raise IntakeError(f"{field_id} is the agreed glossary; write it to glossary.json or "
                           f"project.json.glossary (naming.py <project> codes reads it back)")

@@ -438,6 +438,31 @@
       "ask": "Presety: ile ich jest; co jest resetowane przy przełączaniu (wejście!)",
       "derive": "z wbudowanego profilu DSP, jeśli model jest dokładnie dopasowany"
     },
+    "dsp.channel_gain_step": {
+      "ask": "Krok wzmocnienia kanału na tym urządzeniu (ustawienia: Channel Gain Resolution)",
+      "enum": {
+        "1.0": "1,0 dB",
+        "0.5": "0,5 dB",
+        "0.25": "0,25 dB",
+        "0.1": "0,1 dB"
+      }
+    },
+    "dsp.eq_gain_step": {
+      "ask": "Krok wzmocnienia EQ na tym urządzeniu (ustawienia: EQ Gain Resolution)",
+      "enum": {
+        "1.0": "1,0 dB",
+        "0.5": "0,5 dB",
+        "0.25": "0,25 dB",
+        "0.1": "0,1 dB"
+      }
+    },
+    "dsp.eq_link_mode": {
+      "ask": "EQ Link Mode na tym urządzeniu (ustawienia)",
+      "enum": {
+        "absolute": "Bezwzględny",
+        "relative": "Względny"
+      }
+    },
     "dsp.measurement_input": {
       "ask": "Routing wejść: czy jest dedykowane wejście dla sygnału pomiarowego?"
     },

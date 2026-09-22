@@ -742,6 +742,51 @@ def _strip_stray_prefix(path):
     return PROCESSING_RATE_KEY if path == LEGACY_RATE_KEY else path
 
 
+#: What a MACHINE is set to rather than what the device can do (skill #52): each is a switch in the vendor's software
+#: that the tuner may flip between sessions, so it is recorded per project and asked, never bundled as a fact.
+#: `path -> (the options key beside it, or None; the values allowed when there are no options)`.
+MACHINE_SETTINGS = {
+    "channel_gain.step_db": ("channel_gain.step_options_db", None),
+    "parametric_eq.gain_step_db": ("parametric_eq.gain_step_options_db", None),
+    "parametric_eq.link_mode": (None, ("absolute", "relative")),
+}
+
+
+def set_setting(project_dir, path, value):
+    """Record what THIS machine is set to in the project's finalised `dsp_profile.json` (skill #52).
+
+    `set_field` writes the draft, which is the interview of what a device CAN do. A resolution switch on the
+    settings panel is not that: it is the machine's state, true for this project, and it is set after the profile
+    is final. Only the paths in `MACHINE_SETTINGS` are taken, and a value must be one the profile lists as an
+    option, so a guess cannot be written as a setting."""
+    if path not in MACHINE_SETTINGS:
+        raise ValueError(f"{path}: not a machine setting ({', '.join(MACHINE_SETTINGS)})")
+    target = os.path.join(project_dir, "dsp_profile.json")
+    with open(target, encoding="utf-8") as fh:
+        data = json.load(fh)
+    inner = data.setdefault("dsp_profile", {}) if "dsp_profile" in data else data
+    options_path, allowed = MACHINE_SETTINGS[path]
+    value = maybe_decode_json(value)
+    if options_path:
+        node = inner
+        for part in options_path.split("."):
+            node = (node or {}).get(part) if isinstance(node, dict) else None
+        allowed = tuple(node or ())
+        if isinstance(value, str):
+            try:
+                value = float(value)
+            except ValueError:
+                raise ValueError(f"{path}: {value!r} is not a number of dB") from None
+    if allowed and value not in allowed:
+        raise ValueError(f"{path}: {value!r} is not one of this processor's options {list(allowed)}")
+    section, key = path.split(".")
+    inner.setdefault(section, {})[key] = value
+    validate_profile(data)
+    with open(target, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2, ensure_ascii=False)
+    return value
+
+
 def set_field(project_dir, path, value):
     """Set one confirmed field in the draft by dotted path (`groups.0.fields`), and save.
 
@@ -1074,6 +1119,12 @@ def _main(argv=None):
     sf.add_argument("path")
     sf.add_argument("value")
 
+    ss = sub.add_parser("set-setting", help="record what THIS machine is set to (#52): "
+                                            + ", ".join(MACHINE_SETTINGS))
+    ss.add_argument("project_dir")
+    ss.add_argument("path")
+    ss.add_argument("value")
+
     rf = sub.add_parser("reset-field", help="drop a field so it can be re-answered")
     rf.add_argument("project_dir")
     rf.add_argument("path")
@@ -1166,6 +1217,14 @@ def _main(argv=None):
         return 0
     if args.cmd == "set-field":
         value = set_field(args.project_dir, args.path, args.value)
+        print(json.dumps({"set": args.path, "value": value}, ensure_ascii=False))
+        return 0
+    if args.cmd == "set-setting":
+        try:
+            value = set_setting(args.project_dir, args.path, args.value)
+        except (OSError, ValueError) as exc:
+            print(f"refused: {exc}", file=sys.stderr)
+            return 2
         print(json.dumps({"set": args.path, "value": value}, ensure_ascii=False))
         return 0
     if args.cmd == "reset-field":
@@ -1662,6 +1721,22 @@ def _selftest():
     _un["dsp_profile"]["groups"][0]["crossover_filters"]["types"]["LR"]["ripple_db"] = None
     assert modellable_families(annotate_modellable(_un)) == {"LR": False}, _un
 
+    # #52: a machine setting goes into the finalised profile, only from the processor's own options.
+    import tempfile as _tf
+    sdir = _tf.mkdtemp(prefix="autosound_setting_")
+    with open(os.path.join(sdir, "dsp_profile.json"), "w", encoding="utf-8") as fh:
+        json.dump({"schema_version": SCHEMA_VERSION, "dsp_profile": {
+            "name": "x", "vendor": "v", "groups": [{"id": "physical_outputs", "label": "out", "fields": None}],
+            "channel_gain": {"range_db": [-30.0, 5.0], "step_options_db": [1.0, 0.5, 0.25, 0.1]}}}, fh)
+    assert set_setting(sdir, "channel_gain.step_db", "0.1") == 0.1
+    with open(os.path.join(sdir, "dsp_profile.json"), encoding="utf-8") as fh:
+        assert json.load(fh)["dsp_profile"]["channel_gain"]["step_db"] == 0.1
+    for path_, bad in (("channel_gain.step_db", "0.3"), ("parametric_eq.link_mode", "sideways"), ("delay.max_ms", "20")):
+        try:
+            set_setting(sdir, path_, bad)
+            raise AssertionError(f"set_setting took {path_}={bad}")
+        except ValueError:
+            pass
     print(f"selftest OK — max_count validated as a physical slot count (null = still open, 0/float/"
           f"bool/str refused) and physical_outputs mapped to the ledger's `channels` key (SCR-042); "
           f"validate rejects malformed groups, MUSWAY's missing virtual_channels "

@@ -438,6 +438,31 @@
       "ask": "Presets: wie viele; was wird beim Umschalten zurückgesetzt (Eingang!)",
       "derive": "aus dem integrierten DSP-Profil, falls Modell exakt übereinstimmt"
     },
+    "dsp.channel_gain_step": {
+      "ask": "Kanalpegel-Schrittweite an diesem Gerät (Einstellungen: Channel Gain Resolution)",
+      "enum": {
+        "1.0": "1,0 dB",
+        "0.5": "0,5 dB",
+        "0.25": "0,25 dB",
+        "0.1": "0,1 dB"
+      }
+    },
+    "dsp.eq_gain_step": {
+      "ask": "EQ-Pegel-Schrittweite an diesem Gerät (Einstellungen: EQ Gain Resolution)",
+      "enum": {
+        "1.0": "1,0 dB",
+        "0.5": "0,5 dB",
+        "0.25": "0,25 dB",
+        "0.1": "0,1 dB"
+      }
+    },
+    "dsp.eq_link_mode": {
+      "ask": "EQ Link Mode an diesem Gerät (Einstellungen)",
+      "enum": {
+        "absolute": "Absolut",
+        "relative": "Relativ"
+      }
+    },
     "dsp.measurement_input": {
       "ask": "Eingangs-Routing: Gibt es einen separaten Eingang für das Messsignal?"
     },
