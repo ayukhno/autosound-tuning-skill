@@ -574,21 +574,6 @@ def _continue_block(project_dir):
     return None
 
 
-def _active_head(project_dir):
-    """The active slot's current version, or None (no ledger, no active slot, a half-moved line)."""
-    import importlib.util
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state.py")
-    try:
-        spec = importlib.util.spec_from_file_location("_process_state_mod", path)
-        st = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(st)
-        root = _state_root(project_dir)
-        preset = st.Registry(root).get_active()
-        return st.PresetHistory(root, preset, project_dir=project_dir).head() if preset else None
-    except Exception:  # noqa: BLE001 -- no binding is said as "not given", never guessed
-        return None
-
-
 def _ledger_versions(project_dir):
     """Every snapshot on disk as a bare number ("7" for `v_007.json`)."""
     out = set()
@@ -1101,13 +1086,12 @@ class Process:
         # The ledger version these measurements were taken UNDER (#57 P0). A series names the measurements; the
         # configuration in the processor while they were taken is a second fact, and the tools that divide it
         # back out (`predict --from-state`) were typed it by hand -- one omitted flag applied the chain twice
-        # and proposed +9.8 ms. Given, it is checked against the ledger; not given, a series round on a
-        # project with a ledger is bound to the ACTIVE slot's version, and says so.
+        # and proposed +9.8 ms. Given, it is checked against the ledger and recorded. NOT given, nothing is
+        # recorded: an early version of this bound every series round to the active slot's head, and a
+        # baseline taken on the bare `v0` preset was then divided by a chain it was never measured through
+        # (path_check: -240 dB where the file read -31 dB). A guess about the processor is the one thing this
+        # field exists to replace.
         under_note = None
-        if under is None and kind == "series" and not origin:
-            under = _active_head(self.project_dir)
-            if under:
-                under_note = "the active slot's current version (not given)"
         if under is not None:
             banked = _ledger_versions(self.project_dir)
             match = _LEDGER_RE.fullmatch(str(under).strip())
@@ -2188,7 +2172,7 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
   capture-start <version> [title ...] [--step ID] [--origin <project>:<their _N>]
       [--under v_NNN] [--level "-25 dB rel. max"] [--level-read-as "7 lamps"]
                                         --under: the ledger version the series is taken under (#57 P0;
-                                        default the active slot's); --level: the level as a quantity (S-026)
+                                        recorded only when given); --level: the level as a quantity (S-026)
                                         open a capture round; titles = what was
                                          asked for, --step binds it to the plan step it satisfies
   capture-check [title ...] [--session]  run the verdict over the round and record it (SCR-040);
