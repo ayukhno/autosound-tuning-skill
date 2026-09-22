@@ -210,7 +210,6 @@ answer `#38`'s own question: which configurations win when the goals pull agains
 | item | why | comes back when |
 |---|---|---|
 | S-051 (a driver's mount and aim) | an idea. Nothing in the method computes from mount or aim, and the Arbiter's rule is not to ask what we cannot compute | a tool starts using mount or aim |
-| S-019 (`gh release delete` needs the user's keystroke) | the fix is a harness permission or a line in hub `RELEASE-CHANNEL.md`, which is process, and process waits for the review between waves (`WAVES.md` §4). No release has needed a draft cleared since 17.09 | a release needs a draft cleared |
 | S-042's data half | the six `snake_case` ids in `car/passat-b8-2026` are that project's data, and the Arbiter's to correct. The check that finds them is in A | the Arbiter says to correct them |
 | already deferred, untouched: S-001, S-017, `#24`, `#26`, hub `#82`, `#113` | the user's earlier word | as each one's line says |
 

@@ -489,7 +489,7 @@ at the price of asking for a pair measurement on every large first-time move). R
 
 ## S-019 · The release role cannot run `gh release delete` itself: the harness refuses it
 
-**Status**: deferred 2026-09-22 · W-2 review, the Arbiter: «що не включемо — то зрозуміти причину і відкласти» · the fix is a harness permission or a line in hub `RELEASE-CHANNEL.md` — process, which waits for the review between waves (`WAVES.md` §4); comes back when a release needs a draft cleared · was: open — noted 2026-09-17 on #173, where the user ran the command by hand.
+**Status**: dropped 2026-09-22 · not the product's: the Arbiter, «це не проблема Продукту, це задача для моєї роботи. поки не проблема прибрати руками в кінці вехі» — a draft is cleared by hand at the end of a wave, and nothing in the method changes · was: deferred 2026-09-22 · W-2 review, the Arbiter: «що не включемо — то зрозуміти причину і відкласти» · the fix is a harness permission or a line in hub `RELEASE-CHANNEL.md` — process, which waits for the review between waves (`WAVES.md` §4); comes back when a release needs a draft cleared · was: open — noted 2026-09-17 on #173, where the user ran the command by hand.
 
 Clearing the v3.0.56 draft needed `gh release delete v3.0.56 --repo ayukhno/autosound-tuning-skill
 --yes`. Two walls, and only the second is ours to think about:
