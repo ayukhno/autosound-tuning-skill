@@ -256,7 +256,8 @@ def delta_rows(diff, rate):
 
 
 def write_delta(history, diff, rate, version, note=None, advisories=()):
-    """Bank the change beside the snapshot: `<preset>/proposals/<v_NNN>.json` (SCR-026).
+    """Bank the change beside the snapshot: `proposals/<v_NNN>.json` (SCR-026), under the preset
+    on the old layout and under `state/` on the per-project line (W-2 R).
 
     The ledger stores the state AFTER a change; the Arbiter's sheet is about the change itself, and
     the skill computed it, printed it and threw it away. Retyping numbers into chat is a
@@ -277,7 +278,8 @@ def write_delta(history, diff, rate, version, note=None, advisories=()):
         "settings": delta_rows(diff, rate),
         "advisories": list(advisories or ()),
     }
-    path = os.path.join(history.dir, "proposals", f"{version}.json")
+    path = os.path.join(getattr(history, "proposals_dir", os.path.join(history.dir, "proposals")),
+                        f"{version}.json")
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:

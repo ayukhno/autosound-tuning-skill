@@ -91,7 +91,7 @@ TOP_REQUIRED = ("preset", "sample_rate", "channels")
 _NON_TIER_KEYS = {
     "preset", "version", "created", "schema_version", "sample_rate", "target", "roles",
     "provenance", "banked_ear_verdicts", "virtual_eq_ptr", "note", "features", "slot_label",
-    "save",
+    "save", "parent", "migrated_from", "variant",
 }
 _VER_RE = re.compile(r"^v_(\d{3,})$")
 _EQ_GAIN_RE = re.compile(r"^[+-][\d.]+$")
@@ -467,6 +467,207 @@ def _read_snapshot_json(path):
         raise SnapshotError(f"{path}: cannot be read -- {exc}") from exc
 
 
+# ── the version line: one per project, the preset is the slot (W-2 R, hub #195) ─────────────
+# The Arbiter's model (2026-09-20): a version `v_NNN` is the full set in the processor, numbered
+# ONCE per project; a preset is the DSP slot a version is fixed in. The per-preset layout numbered
+# each slot on its own, so the Passat's SQ and FULL both had a `v_001` and a report had to say
+# `SQ v_007`. The reader contract went to TCC first (hub #195, 2026-09-22):
+#
+#     state/versions/v_NNN.json   every version, once per project, immutable; `preset` = the slot it
+#                                 was banked FOR, `parent` = the version it was made from
+#     state/slots.json            {"active", "slots": {preset: {version, since, label, note,
+#                                 history: [{version, since}]}}, "layout": "project-numbered"}
+#     state/legacy/<preset>/      the old per-preset tree, moved as it was
+#     state/legacy-map.json       {"<preset>/v_NNN": "v_MMM"}: every old citation resolves
+#
+# BOTH layouts are read; the move is offered, never automatic (`migrate-line`). A project caught
+# between the two is refused with the command that finishes it (#195 ask 3).
+SLOTS_FILE = "slots.json"
+VERSIONS_DIR = "versions"
+LEGACY_DIR = "legacy"
+LEGACY_MAP = "legacy-map.json"
+LAYOUT_TAG = "project-numbered"
+PROPOSALS_DIR = "proposals"
+_LEDGER_SPECIAL = {VERSIONS_DIR, LEGACY_DIR, PROPOSALS_DIR}
+
+
+def _old_preset_dirs(root):
+    """Directories under `root` laid out per preset (holding `v_NNN.json`), oldest layout."""
+    out = []
+    if not os.path.isdir(root):
+        return out
+    for name in sorted(os.listdir(root)):
+        d = os.path.join(root, name)
+        if name.startswith(".") or name in _LEDGER_SPECIAL or not os.path.isdir(d):
+            continue
+        if any(fn.endswith(".json") and _VER_RE.match(fn[:-5]) for fn in os.listdir(d)):
+            out.append(name)
+    return out
+
+
+def migrate_line_command(root):
+    return f"python3 {os.path.abspath(__file__)} --root {root} migrate-line --apply"
+
+
+def ledger_layout(root):
+    """`"project"` (one version line, `slots.json`) or `"preset"` (a line per preset, the old
+    layout). An empty root is `"project"`: a new project starts in the new layout.
+
+    Raises `SnapshotError` for a project between the two: `slots.json` beside per-preset
+    directories, or `versions/` with no `slots.json` (a move that stopped half-way). Both sides
+    (the method and TCC) would misread that, so it is refused with the command that finishes it."""
+    has_slots = os.path.isfile(os.path.join(root, SLOTS_FILE))
+    old = _old_preset_dirs(root)
+    has_versions = os.path.isdir(os.path.join(root, VERSIONS_DIR))
+    if has_slots and old:
+        raise SnapshotError(
+            f"{root}: the per-project version line is in place (`{SLOTS_FILE}`) and per-preset "
+            f"directories sit beside it ({', '.join(old)}) -- nothing can read both. The line already "
+            f"carries what they held (`{LEGACY_MAP}`); move them into `{LEGACY_DIR}/` by hand. "
+            f"Nothing is rebuilt automatically: which side is newer is not a thing to guess.")
+    if has_versions and not has_slots:
+        raise SnapshotError(
+            f"{root}: the version line is half-moved (`{VERSIONS_DIR}/` with no `{SLOTS_FILE}`) -- "
+            f"neither layout can be read as it stands. Finish the move: `{migrate_line_command(root)}` "
+            f"(it resumes from where it stopped).")
+    if has_slots:
+        return "project"
+    return "preset" if old else "project"
+
+
+def _read_slots(root):
+    path = os.path.join(root, SLOTS_FILE)
+    if not os.path.isfile(path):
+        return {"active": None, "slots": {}, "layout": LAYOUT_TAG}
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError) as exc:
+        raise SnapshotError(f"{path}: cannot be read -- {exc}") from exc
+    data.setdefault("slots", {})
+    data.setdefault("active", None)
+    return data
+
+
+def _write_slots(root, data):
+    data = dict(data)
+    data["layout"] = LAYOUT_TAG
+    data["updated"] = datetime.datetime.now().isoformat(timespec="seconds")
+    os.makedirs(root, exist_ok=True)
+    tmp = os.path.join(root, SLOTS_FILE + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2, sort_keys=True, ensure_ascii=False)
+    os.replace(tmp, os.path.join(root, SLOTS_FILE))
+
+
+def project_versions(root):
+    """Every version on the project's line, in number order (new layout)."""
+    d = os.path.join(root, VERSIONS_DIR)
+    if not os.path.isdir(d):
+        return []
+    names = [fn[:-5] for fn in os.listdir(d) if fn.endswith(".json") and _VER_RE.match(fn[:-5])]
+    return sorted(names, key=lambda v: int(_VER_RE.match(v).group(1)))
+
+
+def migrate_line(root, apply=False):
+    """Move a per-preset ledger onto the per-project line (W-2 R, hub #195). A plan unless `apply`.
+
+    One-way, offered, never automatic: the session shows the plan and runs `--apply` on the user's
+    OK. The ACTIVE preset keeps its numbers, because journals, rounds and reports cite `v_0NN` with no
+    preset and almost always mean the one being tuned. The other presets are numbered after it, each
+    in its own order, and `legacy-map.json` records every move, the kept ones too. Content is copied
+    unchanged, except `version`, `parent` (the previous version of the same preset) and
+    `migrated_from`. The old tree goes into `legacy/` as it was.
+
+    Resumes a stopped run: `versions/` is derived, so a run that stopped before `slots.json` rebuilds
+    it from the per-preset directories, wherever they are now (at the root or already in `legacy/`).
+    `slots.json` goes last, so until it exists the move has not happened.
+    """
+    import shutil
+    legacy_root = os.path.join(root, LEGACY_DIR)
+    slots_path = os.path.join(root, SLOTS_FILE)
+    old_here = _old_preset_dirs(root)
+    if os.path.isfile(slots_path):
+        if old_here:
+            ledger_layout(root)                                   # raises with the way out
+        return {"done": True, "note": "already on the per-project line -- nothing to move"}
+    old_moved = [p_ for p_ in _old_preset_dirs(legacy_root) if p_ not in old_here]
+    presets = sorted(set(old_here) | set(old_moved))
+    if not presets:
+        return {"done": True, "note": "no per-preset ledger here -- nothing to move"}
+
+    def pdir(name):
+        return os.path.join(root if name in old_here else legacy_root, name)
+
+    reg_path = next((c for c in (os.path.join(root, "registry.json"),
+                                 os.path.join(legacy_root, "registry.json")) if os.path.isfile(c)), None)
+    reg = {}
+    if reg_path:
+        with open(reg_path, encoding="utf-8") as fh:
+            reg = json.load(fh)
+    per = {}
+    for name in presets:
+        per[name] = sorted((fn[:-5] for fn in os.listdir(pdir(name))
+                            if fn.endswith(".json") and _VER_RE.match(fn[:-5])),
+                           key=lambda v: int(_VER_RE.match(v).group(1)))
+    active = reg.get("active")
+    keeper = active if active in per else sorted(presets, key=lambda n: (-len(per[n]), n))[0]
+    order = [keeper] + [n for n in presets if n != keeper]
+    mapping, top = {}, 0
+    for v in per[keeper]:
+        mapping[f"{keeper}/{v}"] = v
+        top = max(top, int(_VER_RE.match(v).group(1)))
+    for name in order[1:]:
+        for v in per[name]:
+            top += 1
+            mapping[f"{name}/{v}"] = f"v_{top:03d}"
+    heads = {}
+    for name in presets:
+        head = None
+        hp = os.path.join(pdir(name), "HEAD")
+        if os.path.isfile(hp):
+            with open(hp, encoding="utf-8") as fh:
+                head = fh.read().strip() or None
+        heads[name] = mapping[f"{name}/{head if head in per[name] else per[name][-1]}"]
+    plan = {"keeper": keeper, "active": active, "map": mapping, "slots": heads, "done": False}
+    if not apply:
+        return plan
+    vdir = os.path.join(root, VERSIONS_DIR)
+    if os.path.isdir(vdir):
+        shutil.rmtree(vdir)                     # derived: a stopped run's part is rebuilt whole
+    os.makedirs(vdir)
+    created = {}
+    for name in order:
+        prev = None
+        for v in per[name]:
+            snap = _read_snapshot_json(os.path.join(pdir(name), v + ".json"))
+            new = mapping[f"{name}/{v}"]
+            snap.update({"version": new, "preset": snap.get("preset") or name, "parent": prev,
+                         "migrated_from": f"{name}/{v}"})
+            with open(os.path.join(vdir, new + ".json"), "w", encoding="utf-8") as fh:
+                json.dump(snap, fh, indent=2, sort_keys=True, ensure_ascii=False)
+            created[new] = snap.get("created")
+            prev = new
+    with open(os.path.join(root, LEGACY_MAP), "w", encoding="utf-8") as fh:
+        json.dump(mapping, fh, indent=2, sort_keys=True, ensure_ascii=False)
+    os.makedirs(legacy_root, exist_ok=True)
+    for name in old_here:
+        os.replace(os.path.join(root, name), os.path.join(legacy_root, name))
+    if reg_path and os.path.dirname(reg_path) == root:
+        os.replace(reg_path, os.path.join(legacy_root, "registry.json"))
+    slots = {"active": active if active in per else None, "slots": {}}
+    for name in order:
+        entry = dict((reg.get("slots") or {}).get(name) or {})
+        history = [{"version": mapping[f"{name}/{v}"], "since": created.get(mapping[f"{name}/{v}"])}
+                   for v in per[name]]
+        cut = next(i for i, h in enumerate(history) if h["version"] == heads[name]) + 1
+        entry.update({"version": heads[name], "since": created.get(heads[name]), "history": history[:cut]})
+        slots["slots"][name] = entry
+    _write_slots(root, slots)                   # last: until it exists, the move has not happened
+    plan["done"] = True
+    return plan
+
+
 class PresetHistory:
     """Versioned snapshot history for one preset under a project-local root.
 
@@ -481,6 +682,7 @@ class PresetHistory:
         # created a directory in the developer's real project data, which is how this was found.
         # `snapshot()` creates the directory when there is finally something to write into it.
         self.preset = preset
+        self.root = root
         self.dir = os.path.join(root, preset)
         # Where `project.json` lives, for the two things the ledger no longer holds itself:
         # `project_rev` to stamp (SCR-024) and channel identity to render (SCR-001). Defaults to
@@ -491,7 +693,15 @@ class PresetHistory:
         )
 
     # -- versions --
+    def _project(self):
+        """True on the per-project line (W-2 R); raises on a half-moved one."""
+        return ledger_layout(self.root) == "project"
+
     def versions(self):
+        """This slot's versions, oldest first: on the per-project line, those banked FOR it."""
+        if self._project():
+            return [v for v in project_versions(self.root)
+                    if _read_snapshot_json(self._path(v)).get("preset") == self.preset]
         if not os.path.isdir(self.dir):
             return []  # never snapshotted -- "no versions", not a crash
         out = []
@@ -502,17 +712,23 @@ class PresetHistory:
         return sorted(out, key=lambda v: int(_VER_RE.match(v).group(1)))
 
     def _next_version(self):
-        vs = self.versions()
+        vs = project_versions(self.root) if self._project() else self.versions()
         n = (int(_VER_RE.match(vs[-1]).group(1)) + 1) if vs else 1
         return f"v_{n:03d}"
 
     def _path(self, version):
+        if ledger_layout(self.root) == "project":
+            return os.path.join(self.root, VERSIONS_DIR, version + ".json")
         return os.path.join(self.dir, version + ".json")
 
     def _head_path(self):
         return os.path.join(self.dir, "HEAD")
 
     def head(self):
+        if self._project():
+            # What the slot holds now -- the new layout's HEAD (hub #195).
+            v = ((_read_slots(self.root).get("slots") or {}).get(self.preset) or {}).get("version")
+            return v if v and os.path.isfile(self._path(v)) else None
         hp = self._head_path()
         if os.path.exists(hp):
             try:
@@ -529,6 +745,14 @@ class PresetHistory:
         return vs[-1] if vs else None
 
     def _set_head(self, version):
+        if self._project():
+            slots = _read_slots(self.root)
+            entry = slots["slots"].setdefault(self.preset, {})
+            now = datetime.datetime.now().isoformat(timespec="seconds")
+            entry["version"], entry["since"] = version, now
+            entry.setdefault("history", []).append({"version": version, "since": now})
+            _write_slots(self.root, slots)
+            return
         with open(self._head_path(), "w", encoding="utf-8") as f:
             f.write(version + "\n")
 
@@ -539,7 +763,23 @@ class PresetHistory:
             raise FileNotFoundError(f"no snapshots yet for preset {self.preset!r}")
         return _read_snapshot_json(self._path(version))
 
-    def snapshot(self, state, note=None, project_rev=None, project_dir=None):
+    @property
+    def proposals_dir(self):
+        """Where `apply.write_delta` banks the change sheet beside the snapshot (SCR-026)."""
+        return os.path.join(self.root if self._project() else self.dir, PROPOSALS_DIR)
+
+    def place(self, version):
+        """Put an existing version into this slot: the pointer moves, nothing is copied (#58 P2).
+
+        Switching a variant used to be a project-local script copying `variants/variant_X.json`
+        over a banked `v_011`, three times in one session. A banked version is never rewritten;
+        what a slot holds is a pointer, and moving it is recorded in the slot's history."""
+        if not os.path.isfile(self._path(version)):
+            raise FileNotFoundError(f"no version {version!r} on this ledger")
+        self._set_head(version)
+        return version
+
+    def snapshot(self, state, note=None, project_rev=None, project_dir=None, place=True, parent=None):
         """Validate, assign the next version, write it, advance HEAD. Returns the version name.
 
         `project_rev` (SCR-024) is the revision of `project.json` in force when these values were
@@ -558,13 +798,22 @@ class PresetHistory:
         if note is not None:
             state["note"] = note
         validate(state)
+        project_line = self._project()
+        if project_line:
+            # The version it was made from: a line of numbers is a tree of edits (hub #195).
+            state["parent"] = parent or self.head()
         version = self._next_version()
         state["version"] = version
         state["created"] = datetime.datetime.now().isoformat(timespec="seconds")
-        os.makedirs(self.dir, exist_ok=True)  # first snapshot is what creates the preset dir
+        # The first snapshot is what creates the directory. On the per-project line `slots.json`
+        # goes down FIRST, so a stop between the two cannot leave `versions/` without it.
+        if project_line and not os.path.isfile(os.path.join(self.root, SLOTS_FILE)):
+            _write_slots(self.root, {"active": None, "slots": {}})
+        os.makedirs(os.path.join(self.root, VERSIONS_DIR) if project_line else self.dir, exist_ok=True)
         with open(self._path(version), "w", encoding="utf-8") as f:
             json.dump(state, f, indent=2, sort_keys=True, ensure_ascii=False)
-        self._set_head(version)
+        if place:
+            self._set_head(version)
         return version
 
     def revert(self, version, note=None):
@@ -572,6 +821,7 @@ class PresetHistory:
         old = self.load(version)
         old.pop("version", None)
         old.pop("created", None)
+        old.pop("parent", None)
         note = note or f"revert to {version}"
         return self.snapshot(old, note=note)
 
@@ -804,11 +1054,18 @@ class Registry:
         # with no `state/` yet answers "none", it doesn't materialise the tree.
         self.root = root
 
+    def _project(self):
+        return ledger_layout(self.root) == "project"
+
     def _path(self):
-        return os.path.join(self.root, "registry.json")
+        return os.path.join(self.root, SLOTS_FILE if self._project() else "registry.json")
 
     def list_presets(self):
-        """Preset names that actually have a snapshot history under root (dirs holding v_NNN.json)."""
+        """Preset names that actually have a snapshot history under root (dirs holding v_NNN.json;
+        on the per-project line, the slots that hold a version)."""
+        if self._project():
+            return sorted(p for p, e in (_read_slots(self.root).get("slots") or {}).items()
+                          if (e or {}).get("version"))
         out = []
         if os.path.isdir(self.root):
             for name in sorted(os.listdir(self.root)):
@@ -819,6 +1076,8 @@ class Registry:
         return out
 
     def load(self):
+        if self._project():
+            return _read_slots(self.root)
         p = self._path()
         if os.path.exists(p):
             with open(p, encoding="utf-8") as f:
@@ -826,6 +1085,9 @@ class Registry:
         return {"active": None, "slots": {}}
 
     def _write(self, reg):
+        if self._project():
+            _write_slots(self.root, reg)
+            return
         reg["updated"] = datetime.datetime.now().isoformat(timespec="seconds")
         os.makedirs(self.root, exist_ok=True)
         with open(self._path(), "w", encoding="utf-8") as f:
@@ -905,10 +1167,14 @@ LEGACY_PAGES = ("cp1251", "cp1252", "cp1250")
 
 
 def ledger_files(root):
-    """Every file the ledger writes, oldest preset first: snapshots and their HEAD."""
+    """Every file the ledger writes, oldest preset first: snapshots and their HEAD (on the
+    per-project line, the versions and `slots.json`; `legacy/` is history and is not rewritten)."""
     out = []
     if not os.path.isdir(root):
         return out
+    if os.path.isfile(os.path.join(root, SLOTS_FILE)):
+        out.extend(os.path.join(root, VERSIONS_DIR, v + ".json") for v in project_versions(root))
+        return out + [os.path.join(root, SLOTS_FILE)]
     for preset in sorted(n for n in os.listdir(root)
                          if not n.startswith(".") and os.path.isdir(os.path.join(root, n))):
         d = os.path.join(root, preset)
@@ -1088,6 +1354,18 @@ def _main(argv=None):
                     help="decode as this code page and rewrite as UTF-8. Without it nothing is "
                          "written: the survey shows what each candidate page makes the text say, "
                          "and choosing is the reader's, because a wrong page does not fail")
+    vp = sub.add_parser("variant", help="candidate versions inside the ledger (#58 P2): new, list, switch")
+    vp.add_argument("action", choices=["new", "list", "switch"])
+    vp.add_argument("preset")
+    vp.add_argument("arg", nargs="?", default=None,
+                    help="new: the variant's name · switch: the version to put in the slot")
+    vp.add_argument("--from", dest="base", default=None, help="new: the version it starts from (default: the slot's)")
+    vp.add_argument("--delta", default=None, help="new: a JSON file with the change, apply.py's delta shape")
+    vp.add_argument("--note", default=None)
+    mp = sub.add_parser("migrate-line",
+                        help="move a per-preset ledger onto one version line per project "
+                             "(W-2, hub #195): the plan by default, --apply on the user's OK")
+    mp.add_argument("--apply", action="store_true")
     sub.add_parser("selftest")
     args = p.parse_args(argv)
 
@@ -1101,6 +1379,25 @@ def _main(argv=None):
     except SnapshotError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
+    if args.cmd == "migrate-line":
+        try:
+            got = migrate_line(args.root, apply=args.apply)
+        except SnapshotError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        if got.get("note"):
+            print(got["note"])
+            return 0
+        print(f"the active slot keeps its numbers: {got['keeper']}")
+        for old, new in sorted(got["map"].items(), key=lambda kv: int(kv[1][2:])):
+            if old.split("/")[1] != new:
+                print(f"  {old} → {new}")
+        print("each slot then holds: " + ", ".join(f"{k} {v}" for k, v in sorted(got["slots"].items())))
+        if not args.apply:
+            print("nothing written — show this to the user, and run again with --apply on his OK")
+        else:
+            print(f"moved: versions/ + {SLOTS_FILE} + {LEGACY_MAP}; the old tree is in {LEGACY_DIR}/")
+        return 0
     if args.cmd == "repair-encoding":
         presets = set(args.preset or [])
         paths = [p_ for p_ in ledger_files(args.root)
@@ -1150,6 +1447,8 @@ def _main(argv=None):
             print(json.dumps(reg.load(), indent=2, ensure_ascii=False))
         return 0
     h = PresetHistory(args.root, args.preset)
+    if args.cmd == "variant":
+        return _variant_cli(h, args)
     if args.cmd == "log":
         for v in h.versions():
             s = h.load(v)
@@ -1161,6 +1460,43 @@ def _main(argv=None):
         print(render_diff(h.diff(args.va, args.vb)))
     elif args.cmd == "revert":
         print("wrote", h.revert(args.version))
+
+
+def _variant_cli(h, args):
+    """`variant new|list|switch` -- the moves a session used to script by hand (#58 P2)."""
+    if args.action == "list":
+        head = h.head()
+        for v in h.versions():
+            s = h.load(v)
+            if s.get("variant") or v == head:
+                mark = "  ← in the slot" if v == head else ""
+                print(f"{v}  {s.get('variant') or '(banked)'}  from {s.get('parent') or '—'}  "
+                      f"{s.get('note') or ''}{mark}")
+        return 0
+    if not args.arg:
+        print(f"variant {args.action} needs "
+              + ("a name" if args.action == "new" else "the version to put in the slot"), file=sys.stderr)
+        return 2
+    if args.action == "switch":
+        was = h.head()
+        h.place(args.arg)
+        print(f"{h.preset} now holds {args.arg} (was {was}); nothing was copied")
+        if was and was != args.arg:
+            print(render_diff(h.diff(was, args.arg)))
+        return 0
+    base = args.base or h.head()
+    state = h.load(base)
+    for key in ("version", "created", "parent", "migrated_from"):
+        state.pop(key, None)
+    if args.delta:
+        import apply as _apply                      # same folder; apply imports this module
+        with open(args.delta, encoding="utf-8") as fh:
+            state = _apply.apply_delta(state, json.load(fh), project_channels(h.project_dir))
+    state["variant"] = args.arg
+    v = h.snapshot(state, note=args.note or f"variant {args.arg} from {base}", place=False, parent=base)
+    print(f"{v}: variant {args.arg} from {base}, not in the slot -- `variant switch {h.preset} {v}` "
+          f"puts it there")
+    return 0
 
 
 # ── self-test ─────────────────────────────────────────────────────────────────
@@ -1464,14 +1800,16 @@ def _selftest():
                 except SystemExit as exc:
                     assert exc.code == 2, exc.code
             assert "registry describe" in said.getvalue(), said.getvalue()
-    assert reg.load().get("slots", {}) == {}, "a refused flag must not have written a slot"
+    # On the per-project line a slot entry also carries its version; the flags wrote nothing.
+    assert not any({"label", "note"} & set(e) for e in reg.load().get("slots", {}).values()), \
+        "a refused flag must not have written a slot"
     # ...and the one that CAN act on them still does, which is what makes the refusal a signpost
     # rather than a wall: the flags work, they were simply typed on the wrong action.
     with contextlib.redirect_stdout(io.StringIO()):
         _main(["--root", root, "registry", "describe", "SQ_Jazzi", "--label", "Slot 1",
                "--note", "competition set"])
-    assert reg.load()["slots"]["SQ_Jazzi"] == {"label": "Slot 1", "note": "competition set"}, \
-        reg.load()["slots"]
+    got = reg.load()["slots"]["SQ_Jazzi"]
+    assert (got["label"], got["note"]) == ("Slot 1", "competition set"), reg.load()["slots"]
 
     # -- one stray value must not hide a whole tier (2026-08-12) --------------------------------
     # `tier_names` required a dict OF DICTS, so a single non-dict value demoted the key to unknown
@@ -1567,6 +1905,80 @@ def _selftest():
             os.environ.pop(k, None)
             if v is not None:
                 os.environ[k] = v
+
+    # -- W-2 R (hub #195): the old per-preset layout is still read, the move is a plan until
+    #    --apply, the active slot keeps its numbers, and a half-moved line is refused with the way out.
+    old_root = tempfile.mkdtemp(prefix="autosound_line_")
+    def _old(preset, n, head=None):
+        d = os.path.join(old_root, preset)
+        os.makedirs(d, exist_ok=True)
+        for i_ in range(1, n + 1):
+            s = _sample_state()
+            s.update({"preset": preset, "version": f"v_{i_:03d}", "created": f"2026-08-0{i_}T00:00:00",
+                      "schema_version": SCHEMA_VERSION, "project_rev": 1})
+            with open(os.path.join(d, f"v_{i_:03d}.json"), "w", encoding="utf-8") as fh:
+                json.dump(s, fh)
+        with open(os.path.join(d, "HEAD"), "w", encoding="utf-8") as fh:
+            fh.write((head or f"v_{n:03d}") + "\n")
+    _old("SQ", 2)
+    _old("FULL", 2, head="v_001")
+    with open(os.path.join(old_root, "registry.json"), "w", encoding="utf-8") as fh:
+        json.dump({"active": "SQ", "slots": {"FULL": {"label": "Slot 1"}}}, fh)
+    assert ledger_layout(old_root) == "preset"
+    assert PresetHistory(old_root, "FULL").head() == "v_001" and Registry(old_root).get_active() == "SQ"
+    plan = migrate_line(old_root)
+    assert plan["keeper"] == "SQ" and plan["map"]["FULL/v_002"] == "v_004", plan
+    assert plan["slots"] == {"SQ": "v_002", "FULL": "v_003"}, plan["slots"]
+    assert ledger_layout(old_root) == "preset", "a plan moved something"
+    # a stop half-way (versions/ and no slots.json) is refused, and --apply resumes it
+    os.makedirs(os.path.join(old_root, VERSIONS_DIR))
+    try:
+        ledger_layout(old_root)
+        raise AssertionError("a half-moved line was read")
+    except SnapshotError as exc:
+        assert "migrate-line --apply" in str(exc), exc
+    migrate_line(old_root, apply=True)
+    assert ledger_layout(old_root) == "project"
+    full = PresetHistory(old_root, "FULL")
+    assert full.head() == "v_003" and full.versions() == ["v_003", "v_004"], full.versions()
+    assert full.load("v_004")["parent"] == "v_003" and full.load("v_004")["migrated_from"] == "FULL/v_002"
+    assert PresetHistory(old_root, "SQ").versions() == ["v_001", "v_002"]
+    assert Registry(old_root).get_active() == "SQ" and Registry(old_root).load()["slots"]["FULL"]["label"] == "Slot 1"
+    with open(os.path.join(old_root, LEGACY_MAP), encoding="utf-8") as fh:
+        assert json.load(fh)["SQ/v_002"] == "v_002"
+    assert sorted(os.listdir(os.path.join(old_root, LEGACY_DIR))) == ["FULL", "SQ", "registry.json"]
+    nxt = full.snapshot(full.load(), note="after the move")
+    assert nxt == "v_005" and full.head() == "v_005" and full.load()["parent"] == "v_003", nxt
+    assert migrate_line(old_root)["done"], "a second move must be a no-op"
+    # #58 P2: a variant is a version on the line, not a file copied over a banked one.
+    import contextlib
+    import io
+    delta_path = os.path.join(old_root, "delta.json")
+    with open(delta_path, "w", encoding="utf-8") as fh:
+        json.dump({"channels": {"w-L": {"gain_db": -3.0}}}, fh)
+    with open(full._path("v_005"), "rb") as fh:
+        banked = fh.read()
+    with contextlib.redirect_stdout(io.StringIO()) as said:
+        assert _main(["--root", old_root, "variant", "new", "FULL", "B", "--delta", delta_path]) == 0
+    assert "v_006: variant B from v_005" in said.getvalue(), said.getvalue()
+    assert full.head() == "v_005" and full.load("v_006")["variant"] == "B", full.head()
+    assert full.load("v_006")["parent"] == "v_005" and full.load("v_006")["channels"]["w-L"]["gain_db"] == -3.0
+    with contextlib.redirect_stdout(io.StringIO()) as said:
+        assert _main(["--root", old_root, "variant", "switch", "FULL", "v_006"]) == 0
+    assert full.head() == "v_006" and "nothing was copied" in said.getvalue(), said.getvalue()
+    with open(full._path("v_005"), "rb") as fh:
+        assert fh.read() == banked, "switching rewrote a banked version"
+    assert [h_["version"] for h_ in Registry(old_root).load()["slots"]["FULL"]["history"]][-2:] == ["v_005", "v_006"]
+    # per-preset directories reappearing beside slots.json: refused, never rebuilt over
+    os.makedirs(os.path.join(old_root, "SQ"))
+    with open(os.path.join(old_root, "SQ", "v_001.json"), "w", encoding="utf-8") as fh:
+        json.dump(_sample_state(), fh)
+    for probe in (lambda: ledger_layout(old_root), lambda: migrate_line(old_root, apply=True)):
+        try:
+            probe()
+            raise AssertionError("slots.json beside per-preset directories was accepted")
+        except SnapshotError as exc:
+            assert "by hand" in str(exc), exc
 
     print(f"selftest OK — 3 snapshots, diff caught the channels+virtual_channels changes (schema "
           f"v2 tier-aware), 5.38 ms → 516 smp @96k (258 @48k), revert forward-only (v_001→v_003), "

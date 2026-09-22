@@ -43,10 +43,11 @@ and spoken everywhere — **the middle column is what goes in the report, and it
   `v_001`» — not «застосовую» and not «сію». The first time a project's report mentions the ledger it
   says in one clause what it is: the full DSP state banked as an immutable version, not the
   measurement `_N`. **Once per project, not once per message.**
-- **A version is named with its slot — `SQ v_007`.** Versions are still numbered inside a preset on
-  disk (`state/<preset>/v_NNN.json`), so two slots can each hold a `v_001` and the bare number is
-  ambiguous. (The Arbiter's own model numbers a version once per PROJECT and treats the preset as the
-  slot it is fixed in; the files disagree, and reconciling them is a migration, not a wording fix.)
+- **A version is numbered once per PROJECT, and a preset is the slot it is fixed in** (the Arbiter's
+  model; W-2, hub #195). On that line (`state/versions/v_NNN.json` + `state/slots.json`) the bare
+  number names one version. A project still numbered per preset (`state/<preset>/v_NNN.json`) is read
+  as it is. There two slots can each hold a `v_001`, so a report names the version with its slot
+  (`SQ v_007`), and `contract.py check` offers the move (`state.py … migrate-line`, on the user's OK).
 
 ## 2. What triggers work — and whether raw data survives
 
@@ -123,8 +124,10 @@ A tune is worth months of work; its artifacts must survive a disk loss. Standard
 │   ├── process-state.json    current phase + plan slice
 │   └── journal.jsonl          append-only process history
 ├── state/
-│   ├── registry.json          active-slot pointer (multi-preset DSPs)
-│   └── <preset>/v_NNN.json + HEAD    the hard-params ledger
+│   ├── versions/v_NNN.json    the hard-params ledger: one version line per project
+│   ├── slots.json             what each slot (preset) holds, and which one is active
+│   └── legacy/ + legacy-map.json   a moved per-preset ledger, as it was (older projects keep
+│                                  `<preset>/v_NNN.json + HEAD` and `registry.json` until moved)
 └── rew_analitic/          measurements, exports, target curves — detailed below
 ```
 
@@ -170,10 +173,10 @@ a user's live Windows project).
 
 ## 5. DSP configuration naming
 
-- Ledger version = **`v_NNN`** (the word for it in a report: «конфігурація», §1a — and a report names it with its slot, `SQ v_007`), monotonic: every agreed change is banked as one (`apply.propose`), and the full state lives in the snapshot `state/<preset>/v_NNN.json` — gains, crossovers, TA, EQ, polarity. **It is not the measurement `_N`** (§3), and one is never derived from the other: the ledger also moves for changes that are not the DSP's (naming a virtual-channel tier took a project `v_001 → v_002` with nothing re-measured), and a project that came with history starts them apart (`v_001` measured as `_49`). A capture round is what ties them: `capture-start <N>` with the titles it asks for, and a lookup finds the round by `_N` or by the version it was opened with. **The round records which of the two it was opened at, and a `v_NNN` that was never banked is refused** (TCC-022): a ledger round says these measurements were taken under that configuration, so the snapshot has to exist. A baseline measured before anything is banked opens at its SERIES number and needs no ledger — that is Phase 0, and it stays that way. `dsp-state-current` is the sheet GENERATED from it (`state.py --root <project>/state registry render`) and is never hand-edited.
+- Ledger version = **`v_NNN`** (the word for it in a report: «конфігурація», §1a — and a report names it with its slot, `SQ v_007`), monotonic: every agreed change is banked as one (`apply.propose`), and the full state lives in the snapshot `state/versions/v_NNN.json` (`state/<preset>/v_NNN.json` on a project still numbered per preset) — gains, crossovers, TA, EQ, polarity. **It is not the measurement `_N`** (§3), and one is never derived from the other: the ledger also moves for changes that are not the DSP's (naming a virtual-channel tier took a project `v_001 → v_002` with nothing re-measured), and a project that came with history starts them apart (`v_001` measured as `_49`). A capture round is what ties them: `capture-start <N>` with the titles it asks for, and a lookup finds the round by `_N` or by the version it was opened with. **The round records which of the two it was opened at, and a `v_NNN` that was never banked is refused** (TCC-022): a ledger round says these measurements were taken under that configuration, so the snapshot has to exist. A baseline measured before anything is banked opens at its SERIES number and needs no ledger — that is Phase 0, and it stays that way. `dsp-state-current` is the sheet GENERATED from it (`state.py --root <project>/state registry render`) and is never hand-edited.
 - **The DSP tool's own file-version (e.g. Helix PC-Tool `SQ_Jazzi v1.30.pct6`) is a SEPARATE numbering from our `vN`** — don't conflate. The `dsp-config/README.md` map bridges the two (which `.pct6` = which `dsp-state vN` + date). Helix saves config as `.pct6` (binary/encrypted, Audiotec-Fischer); it can't be parsed for analysis, so it's a backup/restore artifact only.
 - **Base + voicing** (`preset-strategy.md`): the OUTPUT base is shared; name voicing presets by intent — `voicing:EMMA` (competition), `voicing:Accurate` (enjoyment), `voicing:off` (neutral base). A config is then "base vN + voicing:X". Switching curves swaps the voicing, not the base. Which presets are worth building (SQ / FULL / SQL / surround / source-input / per-ruleset competition) → `preset-strategy.md`.
-- **Multiple active slots → one machine-checked pointer.** When the DSP holds several presets in physical slots (Helix Slot 1/2/3), which one is *loaded right now* is not a prose note — it's `rew_tool/state/registry.json` (`state.py --root <project>/state registry set-active <preset>`). `state.py --root <project>/state registry render` generates the multi-slot `dsp-state-current` view (a loud active-slot banner + one isolated row per slot), and the apply gate refuses a change aimed at any non-active slot. This kills the cross-slot anchoring trap (computing filters off a neighbour slot's gains — issue #5).
+- **Multiple active slots → one machine-checked pointer.** When the DSP holds several presets in physical slots (Helix Slot 1/2/3), which one is *loaded right now* is not a prose note — it's the `active` of `state/slots.json` (`registry.json` on a project still numbered per preset), set by `state.py --root <project>/state registry set-active <preset>`. What a slot holds is a pointer too: `state.py … variant switch <preset> <v_NNN>` moves it and copies nothing, and `variant new` banks a candidate without putting it in the slot (#58 P2). `state.py --root <project>/state registry render` generates the multi-slot `dsp-state-current` view (a loud active-slot banner + one isolated row per slot), and the apply gate refuses a change aimed at any non-active slot. This kills the cross-slot anchoring trap (computing filters off a neighbour slot's gains — issue #5).
 - **A DSP hardware-level control (Helix's RearRC/SubRC remote-knob position) is NOT per-preset state.** A processor feature switched in the software (RealCenter, DynamicBass) is not a control at all: its ON/OFF is the preset's, it is OFF while tuning, and `set-hardware` refuses it (S-025). It's a fact about the device, constant across every preset loaded on it — record it ONCE in `project.json`'s `hardware.controls` (`project.py set-hardware <name> <value>`), never copy it into each preset's ledger by hand. Doing that by hand is exactly how it drifted out of sync between two presets in the field. Optional and profile-declared — a DSP with no such remote (MUSWAY, etc.) simply has none.
 - **The ledger is tier-aware, not `channels`-only** (schema v2): a Helix project's snapshot has BOTH a `channels` (physical outputs) and a `virtual_channels` tier, and `apply.propose`/`diff`/`render` cover both — a delta like `{"virtual_channels": {"VFL": {"gain_db": -1.0}}}` banks the same way a `channels` edit does. `eq` bands are structured objects (`{"type": "PK", "f": 1000, "gain_db": -9, "q": 2}`), not the old inline strings — `state.eq_str(bands)` renders them for chat/the settings sheet. Detail → `rew_tool/state/schema.md`.
 

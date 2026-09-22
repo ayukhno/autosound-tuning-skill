@@ -432,7 +432,7 @@ A single folder on your disk contains complete documentation and configuration o
 | File / Folder | Contents | Purpose |
 | :--- | :--- | :--- |
 | **`project.json`** | System specifications | Speaker channels, DSP outputs, DSP profile, microphone specs, and the active target curve. |
-| **`registry.json`** | Tuning version registry | Complete, chronological history of all crossovers, delays, volume levels, and EQ bands. |
+| **`state/versions/` + `slots.json`** | Tuning version registry | Complete, chronological history of all crossovers, delays, volume levels, and EQ bands. |
 | **`process-state.json`** | Current technical status | Information on the active phase of the process and successfully verified measurements. |
 | **`autosound_context.md`** | Vehicle context and notes | Custom car audio dictionary, install features, and your listening notes. |
 | **`*.txt` / `*.json`** | Target curves and DSP exports | Configuration files for import into your DSP and target curve files for REW. |

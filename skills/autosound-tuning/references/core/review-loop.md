@@ -11,7 +11,7 @@ Two wings of one discipline: **check yourself through someone else's eyes, and k
 ### Where the truth lives
 
 One line, and it is settled in code rather than in this file: **the machine files are the
-truth** — the ledger `state/<preset>/v_NNN.json`, `process/process-state.json` +
+truth** — the ledger `state/versions/v_NNN.json` (`state/<preset>/…` on a project still numbered per preset), `process/process-state.json` +
 `journal.jsonl`, `project.json` — and the prose beside them (`audit-trail.md`,
 `tuning-changelog`, `dsp-state-current`) is a human-readable view. Where they disagree, the
 machine files win and the divergence is worth naming out loud (`SKILL.md`, pre-session step 2).

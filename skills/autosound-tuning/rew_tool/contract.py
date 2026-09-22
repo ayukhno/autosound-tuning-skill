@@ -204,6 +204,24 @@ def check_process(project_dir):
     return entry, journal_entry, state
 
 
+def _line_layout(project_dir):
+    """`"preset"`, `"project"`, or None (no ledger, or one caught half-way: `check_ledgers` names it)."""
+    root = os.path.join(project_dir, "state")
+    state_mod = _load_vendored("state")
+    if not os.path.isdir(root) or not state_mod._old_preset_dirs(root) and not os.path.isfile(
+            os.path.join(root, state_mod.SLOTS_FILE)):
+        return None
+    try:
+        return state_mod.ledger_layout(root)
+    except state_mod.SnapshotError:
+        return None
+
+
+def _ledger_file(project_line, preset, head):
+    """How a slot's current snapshot is named in the report, in either layout."""
+    return f"state/versions/{head}.json" if project_line else f"state/{preset}/{head}.json"
+
+
 def check_ledgers(project_dir):
     """One entry per preset directory under `state/` (D1's canonical layout).
 
@@ -217,10 +235,18 @@ def check_ledgers(project_dir):
     entries, snapshots = [], {}
     if not os.path.isdir(root):
         return entries, snapshots
-    for preset in sorted(
-        n for n in os.listdir(root)
-        if not n.startswith(".") and os.path.isdir(os.path.join(root, n))
-    ):
+    # W-2 R (hub #195): on the per-project line a slot's current version lives in `versions/`, and
+    # the slots are `slots.json`'s -- not directories. A line caught half-way is one row saying so.
+    try:
+        project_line = state_mod.ledger_layout(root) == "project"
+    except state_mod.SnapshotError as exc:
+        return [_entry("state/", True, None, False, [str(exc)])], snapshots
+    if project_line:
+        presets = state_mod.Registry(root).list_presets()
+    else:
+        presets = sorted(n for n in os.listdir(root)
+                         if not n.startswith(".") and os.path.isdir(os.path.join(root, n)))
+    for preset in presets:
         h = state_mod.PresetHistory(root, preset)
         head = h.head()
         if head is None:
@@ -236,15 +262,18 @@ def check_ledgers(project_dir):
             # Windows machine before v3.0.45 -- one `§` as a single cp1251 byte -- handed the user
             # a `UnicodeDecodeError` traceback from three frames down instead of a verdict. A
             # checker that dies on the worst project is the checker that is absent for it.
-            entries.append(_entry(f"state/{preset}/{head}.json", True, None, False, [str(exc)]))
+            bad = _entry(_ledger_file(project_line, preset, head), True, None, False, [str(exc)])
+            bad["slot"] = preset
+            entries.append(bad)
             snapshots[preset] = None
             continue
         try:
             state_mod.validate(snap)
-            entry = _entry(f"state/{preset}/{head}.json", True, snap.get("schema_version"), True)
+            entry = _entry(_ledger_file(project_line, preset, head), True, snap.get("schema_version"), True)
         except ValueError as exc:
-            entry = _entry(f"state/{preset}/{head}.json", True, snap.get("schema_version"), False,
+            entry = _entry(_ledger_file(project_line, preset, head), True, snap.get("schema_version"), False,
                             [str(exc)])
+        entry["slot"] = preset          # the file alone does not say it on the per-project line
         entries.append(entry)
         snapshots[preset] = snap
     return entries, snapshots
@@ -574,6 +603,8 @@ def check_project(project_dir, skip_rew=False):
             "map_ready": map_ready, "row_gaps": row_gaps, "to_confirm": to_confirm,
             "inherited": carried["inherited"], "sources_gone": carried["sources_gone"],
             "encoding_damaged": damaged,
+            # W-2 R: a ledger numbered per preset, with the move the session offers (not a gate item).
+            "line_layout": _line_layout(project_dir),
             # S-042: ids in another notation, with the fix the session offers (not a gate item).
             "id_fix": (project.fix_ids(project_dir) if project.id_mismatches(project_data or {})
                        else {"would_change": [], "held": []}),
@@ -767,6 +798,8 @@ def project_text_files(project_dir):
             head = os.path.join(root, preset, "HEAD")
             if os.path.isfile(head):
                 out.append(head)
+        if os.path.isfile(os.path.join(root, "slots.json")):
+            out.append(os.path.join(root, "slots.json"))
     return out
 
 
@@ -842,7 +875,8 @@ def render_report(report):
         # issue is folded to one line HERE rather than every raiser being trusted to remember that
         # its text lands in a table. `|` would split the row into columns for the same reason.
         issues = "; ".join(" ".join(str(i).split()).replace("|", "/") for i in f["issues"]) or "—"
-        lines.append(f"| {f['file']} | {exists} | {sv} | {valid} | {issues} |")
+        name = f["file"] + (f" ({f['slot']})" if f.get("slot") and f"/{f['slot']}/" not in f["file"] else "")
+        lines.append(f"| {name} | {exists} | {sv} | {valid} | {issues} |")
         if f.get("open_questions"):
             lines.append(f"|  |  |  |  | 🟡 open: {', '.join(f['open_questions'])} |")
     lines.append("")
@@ -856,6 +890,17 @@ def render_report(report):
         lines.append("")
         lines.append(f"    python3 {os.path.abspath(__file__)} repair-encoding "
                      f"{report['project_dir']}")
+        lines.append("")
+    if report.get("line_layout") == "preset":
+        state_py = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state", "state.py")
+        lines.append("**Versions here are numbered per preset** — the method now numbers them once per "
+                     "project, and a preset is the slot a version is fixed in (the Arbiter's model; "
+                     "hub #195). ASK the user and offer the move: the plan shows what gets which "
+                     "number, the active slot keeps its own, and the old tree goes into `legacy/` as "
+                     "it was. On his OK:")
+        lines.append("")
+        lines.append(f"    python3 {state_py} --root {os.path.join(report['project_dir'], 'state')} "
+                     f"migrate-line          # the plan; add --apply on his OK")
         lines.append("")
     id_fix = report.get("id_fix") or {}
     if id_fix.get("would_change") or id_fix.get("held"):
@@ -1091,7 +1136,7 @@ def _selftest():
     assert not any(f["file"].startswith("state/.tcc") for f in report["files"]), report["files"]
     project_f = next(f for f in report["files"] if f["file"] == "project.json")
     assert project_f["exists"] and project_f["valid"] is True, project_f
-    ledger_f = next(f for f in report["files"] if f["file"].startswith("state/SQ_Jazzi/"))
+    ledger_f = next(f for f in report["files"] if f.get("slot") == "SQ_Jazzi")
     assert ledger_f["valid"] is True and ledger_f["schema_version"] == state_mod.SCHEMA_VERSION, ledger_f
 
     # cross-check: glossary says "w-L" active but ledger also has "sub"/"tw-R" -- those are
@@ -1393,10 +1438,11 @@ def _selftest():
         fh.write(utf8_text.encode("cp1251"))
 
     enc_report = check_project(enc_root, skip_rew=True)     # must RETURN, not raise
-    enc_entry = [f for f in enc_report["files"] if f["file"] == "state/FULL/v_001.json"]
+    # A new project is on the per-project line (W-2 R): the slot's snapshot is `versions/v_001`.
+    enc_entry = [f for f in enc_report["files"] if f["file"] == "state/versions/v_001.json"]
     assert enc_entry and enc_entry[0]["valid"] is False, enc_report["files"]
     assert "not UTF-8" in enc_entry[0]["issues"][0], enc_entry
-    assert enc_report["encoding_damaged"] == ["state/FULL/v_001.json"], enc_report["encoding_damaged"]
+    assert enc_report["encoding_damaged"] == ["state/versions/v_001.json"], enc_report["encoding_damaged"]
     # The literal above is a `/` string, which on Windows is a claim about the SEPARATOR and not
     # only about the file. So say the thing that actually matters, in a form no platform can make
     # accidentally true: the field and the table spell the same file the same way. Before the fix
@@ -1409,13 +1455,13 @@ def _selftest():
     # One line per file: an issue carrying a newline would end the row and the rest of the table
     # would read as prose.
     assert sum(1 for ln in rendered_enc.splitlines()
-               if ln.startswith("| state/FULL/v_001.json |")) == 1, rendered_enc
+               if ln.startswith("| state/versions/v_001.json (FULL) |")) == 1, rendered_enc
     assert "repair-encoding" in rendered_enc, rendered_enc
 
     # And the repair the report names actually runs, from here, on this project.
     fixed = state_mod.repair_encoding(project_text_files(enc_root), "cp1251")
     assert [os.path.relpath(f["path"], enc_root) for f in fixed] == \
-        [os.path.join("state", "FULL", "v_001.json")], fixed
+        [os.path.join("state", "versions", "v_001.json")], fixed
     assert check_project(enc_root, skip_rew=True)["encoding_damaged"] == [], "repair did not take"
 
     empty_dir = os.path.join(root, "no-project-here")

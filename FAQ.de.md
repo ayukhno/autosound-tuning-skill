@@ -426,7 +426,7 @@ Ein einziger Ordner auf Ihrer Festplatte enthält die vollständige Dokumentatio
 | Datei / Verzeichnis | Inhalt | Zweck |
 | :--- | :--- | :--- |
 | **`project.json`** | Technische Basisdaten | Lautsprecherkanäle, DSP-Ausgänge, DSP-Profil, Mikrofon-Spezifikationen und aktive Zielkurve. |
-| **`registry.json`** | Abstimmungsregister | Lückenlose, chronologische Historie aller Trennfrequenzen, Pegel, Polaritäten und EQ-Bänder. |
+| **`state/versions/` + `slots.json`** | Abstimmungsregister | Lückenlose, chronologische Historie aller Trennfrequenzen, Pegel, Polaritäten und EQ-Bänder. |
 | **`process-state.json`** | Aktueller technischer Status | Information über die aktive Phase des Prozesses und die erfolgreich geprüften Messungen. |
 | **`autosound_context.md`** | Fahrzeugkontext und Notizen | Einzigartiger Car-Audio-Wortschatz Ihres Fahrzeugs, Besonderheiten des Einbaus und Höreindrücke. |
 | **`*.txt` / `*.json`** | Zielkurven und DSP-Exporte | Konfigurationsdateien für den Import in Ihren DSP und Zielkurven-Kurvendaten für REW. |

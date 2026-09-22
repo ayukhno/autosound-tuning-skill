@@ -426,7 +426,7 @@ Jeden folder na Twoim dysku zawiera kompletną dokumentację i konfigurację Two
 | Plik / Folder | Zawartość | Po co jest potrzebny |
 | :--- | :--- | :--- |
 | **`project.json`** | Dane techniczne systemu | Kanały głośników, wyjścia DSP, profil procesora, specyfikacja mikrofonu i aktywna krzywa docelowa. |
-| **`registry.json`** | Rejestr wersji strojenia | Pełna, chronologiczna historia wszystkich filtrów zwrotnicy, opóźnień, poziomów głośności i pasm korektora. |
+| **`state/versions/` + `slots.json`** | Rejestr wersji strojenia | Pełna, chronologiczna historia wszystkich filtrów zwrotnicy, opóźnień, poziomów głośności i pasm korektora. |
 | **`process-state.json`** | Bieżący stan techniczny | Informacja o aktywnej fazie procesu oraz pomyślnie zweryfikowanych pomiarach. |
 | **`autosound_context.md`** | Kontekst auta i notatki | Indywidualny słownik car audio Twojego auta, cechy instalacji i Twoje oceny odsłuchowe. |
 | **`*.txt` / `*.json`** | Krzywe docelowe i eksporty DSP | Pliki konfiguracyjne do importu do Twojego DSP oraz pliki krzywych dla programu REW. |

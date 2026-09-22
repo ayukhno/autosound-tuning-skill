@@ -39,9 +39,22 @@ ledger became **tier-aware**, EQ bands became **structured objects**, and every 
 
 ## Layout (data is PROJECT-local; code is in the skill)
 ```
-<root>/<preset>/v_001.json …   immutable snapshots     # <root> = e.g. project rew_analitic/state/
-<root>/<preset>/HEAD           current version name     #         (env AUTOSOUND_STATE_ROOT)
+<root>/versions/v_001.json …   immutable snapshots, numbered once per PROJECT   # <root> = <project>/state
+<root>/slots.json              {"active", "slots": {preset: {version, since, label, note,
+                               history: [{version, since}]}}, "layout": "project-numbered"}
+<root>/proposals/v_NNN.json    the change sheet beside each proposal (SCR-026)
+<root>/legacy/<preset>/…       a per-preset ledger after `migrate-line`, as it was
+<root>/legacy-map.json         {"<preset>/v_NNN": "v_MMM"} — every old citation resolves
 ```
+A version carries `preset` (the slot it was banked FOR) and `parent` (the version it was made from);
+a variant also carries `variant` (its name) and is banked without moving the slot (`place=False`).
+
+**The older layout is still read** (W-2, hub #195): `<root>/<preset>/v_NNN.json` + `<root>/<preset>/HEAD`
++ `<root>/registry.json`, one number line per preset. `state.py --root <root> migrate-line` shows the
+move and `--apply` makes it; the active slot keeps its numbers, and the others are numbered after it.
+It is one-way and offered, never automatic. A root holding both layouts, or `versions/` without
+`slots.json` (a move that stopped), is refused with the command that finishes it (`ledger_layout`).
+An empty root starts on the per-project line.
 
 ## Snapshot JSON
 ```jsonc
@@ -188,7 +201,8 @@ showed Slot 2 (ResoNix) numbers, so proposed HF filters were computed off a base
 a different slot. Each preset's snapshots are **already** physically isolated under `<root>/<preset>/`;
 the registry adds the one missing thing — an explicit, machine-checked pointer to the **live** slot.
 ```
-<root>/registry.json      # {"active": "<preset>", "slots": {"<preset>": {"label": "Slot 3", "note": "…"}}, "updated": "…"}
+<root>/slots.json         # per-project line: {"active": "<preset>", "slots": {"<preset>": {"version": "v_063", "label": "Slot 3", …}}}
+<root>/registry.json      # per-preset layout: {"active": "<preset>", "slots": {"<preset>": {"label": "Slot 3", "note": "…"}}, "updated": "…"}
 ```
 - **`set_active(preset)`** — deterministic guard: the preset must already have a snapshot history.
 - **`render()`** — the generated multi-slot `dsp-state-current` view: a **LOUD active-slot banner**
@@ -209,4 +223,8 @@ apply.propose(h, delta, registry=reg)         # refuses if h.preset != active sl
 python3 state.py --root <dir> registry show|render
 python3 state.py --root <dir> registry set-active <preset>
 python3 state.py --root <dir> registry describe <preset> --label "Slot 3" --note "SQ-Comp-Ref"
+python3 state.py --root <dir> variant new <preset> <name> [--from v_NNN] [--delta change.json]
+python3 state.py --root <dir> variant list <preset>
+python3 state.py --root <dir> variant switch <preset> <v_NNN>   # the slot's pointer moves; nothing is copied
+python3 state.py --root <dir> migrate-line [--apply]             # per-preset → per-project line
 ```

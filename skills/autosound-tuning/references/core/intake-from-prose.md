@@ -1,7 +1,7 @@
 # Intake from prose — bringing a pre-ledger project into 3.x
 
 > For a project whose state lives in `autosound_context.md`, `audit-trail.md` and a
-> `tuning-changelog`, with no `state/<preset>/v_NNN.json` anywhere. `contract.py check` says so
+> `tuning-changelog`, with no `state/versions/v_NNN.json` (or `state/<preset>/v_NNN.json`) anywhere. `contract.py check` says so
 > outright, and `migrate.py` refuses and points here.
 
 ## Why this is a reading job and not a script

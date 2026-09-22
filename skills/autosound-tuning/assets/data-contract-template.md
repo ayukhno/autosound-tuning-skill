@@ -30,7 +30,7 @@ Loaded as a system prompt into **both** chats at the session start, together wit
 ## 1. Single source of truth + dynamic state
 
 - **The machine files are the truth; the prose is a view of it.** The system's actual state lives in
-  the ledger `state/<preset>/v_NNN.json` (the hard parameters), `process/process-state.json` +
+  the ledger `state/versions/v_NNN.json` (`state/<preset>/…` on a project still numbered per preset) (the hard parameters), `process/process-state.json` +
   `process/journal.jsonl` (phase and plan) and `project.json` (car, glossary, hardware controls).
   `autosound_context.md` stays the readable narrative for the human and for you — it is not a second
   source that may drift. Where the two disagree, the Generator trusts the machine files and SAYS the
