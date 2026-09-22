@@ -106,6 +106,49 @@ and pays for it in time. Gemini takes a short path that goes around the method a
 in the record. The compromise is to make the method's path the shortest one, and to guard only
 what breaks the record.
 
+### 4.1 The same day, the opposite end: the Opus session (EPY-Sep2026, 13:15–16:56)
+
+The same car, the same phase, the same afternoon.
+
+| | Opus (Claude Code, TCC) | Gemini Flash (Antigravity) |
+|---|---|---|
+| wall time | 3 h 40 min | about 2 h of work |
+| tool calls · model messages | 248 · 82 | about 130 · 11 |
+| what the user can enter at the end | **one PK filter** (`w-L` 186 Hz) plus a centre *candidate* | a whole variant (D) with rear, ready to type in, and a 5-curve plan |
+| retractions | 5 (renames, polarity banked and reverted, centre respecified, a misread excess phase, a wrong claim in #54) | 1 by the user (RearFX), several more unnoticed (§3) |
+| record | intact; one false `OFF` traced to a tool default | a banked version overwritten, a past round invented |
+| user stops | "why re-measure for one filter?!", twice for verbosity, "an epic fail" | none for pace |
+
+Where the Opus time went: **proving before proposing.** Every candidate was chased to a verdict
+(ellipsoid, excess phase, a joint verdict, a predict run) before the user saw it. The tools also
+wanted flags the round already knew (#57 P0), which cost two false alarms (`--from-state`, `nopair`).
+On top of that, the session fixed the method while it tuned: #54, #56 and the `critic-env` changes
+were all mid-session work.
+
+Where Antigravity saved time: **proposing before proving.** It answered with what the curves
+already showed, gave a whole configuration to try on slot 2, and let the ear and the next five
+curves decide. That is the right order for a *candidate*. It is the wrong order for a *banked*
+version, and Antigravity never made the difference between the two.
+
+### 4.2 The compromise: two tiers, one line between them
+
+| | **candidate** (fast by default) | **banked** (strict) |
+|---|---|---|
+| what it is | a variant on a spare slot, to hear and to measure | a ledger version the next session builds on |
+| evidence | whatever is on disk, with each number's source named; assumptions allowed but marked | a measurement or a non-`UNVERIFIED` verdict for polarity, delay and junctions (#57 P2) |
+| reviewer | not needed | one call per banked structural change (P7) |
+| user sees it | at once: a typed-in table plus the curves that will decide it | after the check, as "enter this" |
+| can be wrong | yes, and that is cheap: the next curves decide it | no, a mistake here costs the next session |
+
+Three working rules follow from the table:
+1. **Each reply ends with something to enter or to measure.** If proving it would take more than
+   one step, give it as a candidate and name the curves that decide it.
+2. **A defect in the method gets one line in the pool, not a mid-session investigation.** The hub
+   already works this way ("named once, then keep working"), and Opus spent an hour of the tuning
+   session on #54 and #56.
+3. **The minimal verification set comes from the diff** (#57 P3). "What do we measure after one
+   filter?" is then answered by the tool: one curve, `w-L_52 (rta)`, not a series.
+
 ## 5. Plan — what to change
 
 Principle: **hard refusals only where the record can be damaged; everything else stays light.**
@@ -121,6 +164,8 @@ Principle: **hard refusals only where the record can be damaged; everything else
 | P7 | **Reviewer by risk, not by turn.** Required before *banking* a structural change (crossover topology, a new channel group, delays, polarity). Not required for analysis, measurement plans or replies. This is the one gate, and it sits at banking. | C11 | one call per banked change |
 | P8 | **Output contract for fast models:** REW titles, not ids; the named quantity next to every number; a ready-to-type table; no emoji or praise; one screen, then "details?". | C12, C13 | faster to read |
 | P9 | **One analysis helper:** `rew_tool compare --titles … --target <file> --at 40,100,…` prints the table these sessions keep rebuilding with `python -c`. | D16 | saves time |
+| P11 | **Two tiers in the method's words (§4.2).** A *candidate* goes to a spare slot fast, with sources named; a *banked* version needs evidence plus a reviewer for structural changes. Every reply ends with "enter this" or "measure these N curves". | both sessions | faster for Opus, safer for Gemini |
+| P12 | **Method defects mid-session: one line in the pool, then back to tuning.** | Opus's lost hour | saves time |
 | P10 | **Where the logs are is an answer, not a build.** The skill names the transcript paths for each front-end, and a feature request goes to the product's tracker in English. | D14, D15 | none |
 
 **Overlap with filed issues:** P3 is #57 P0 (the round drives every tool) plus #48 (an amend path
