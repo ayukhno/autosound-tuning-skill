@@ -641,6 +641,45 @@ def save_slot(project_dir, tier, slot, code=None, on=True):
     return handle.resolve_channel(target)
 
 
+def move_slot(project_dir, tier, code, to_slot):
+    """Move a live channel to another slot of the same tier -- the wire moved, the channel did not.
+
+    Switching the old slot off and the new one on under the same code cannot do this: the off step
+    renames the row to `off-…`, the code lands in its `previous_names`, and the on step then finds
+    the code taken by that very row and refuses. So a move is one write: the channel's row keeps its
+    code, id and history and gets the new slot; the slot it left gets a spare row (the record that
+    the slot exists, SCR-042). The target slot's own row, if any, must be a spare without history --
+    a switched-off channel with history there is a channel of its own and is not overwritten.
+    """
+    tier, to_slot, code = (str(x or "").strip() for x in (tier, to_slot, code))
+    if not tier or not to_slot or not code:
+        raise IntakeError("a move needs the tier, the code and the new slot — nothing was written")
+    handle = project.Project(project_dir)
+    data = handle.load()
+    row = next((c for c in data.get("channels") or []
+                if isinstance(c, dict) and c.get("code") == code and c.get("tier") == tier), None)
+    if row is None:
+        raise IntakeError(f"no channel {code!r} in {tier} to move — nothing was written")
+    from_slot = str(row.get("slot") or "")
+    if from_slot == to_slot:
+        return row
+    there = next((c for c in data["channels"] if isinstance(c, dict) and c is not row
+                  and c.get("tier") == tier and str(c.get("slot")) == to_slot), None)
+    if there is not None:
+        spare = (there.get("role") == "unused" and str(there.get("code", "")).startswith("off-")
+                 and not there.get("id") and not there.get("previous_names"))
+        if not spare:
+            raise IntakeError(f"slot {to_slot} of {tier} holds {there.get('code')!r}, a channel with "
+                              "its own history — switch it off or rename it first. Nothing was written")
+        data["channels"] = [c for c in data["channels"] if c is not there]
+    row["slot"] = to_slot
+    handle.save(data)
+    if from_slot:
+        handle.set_channel(off_code(tier, from_slot), slot=from_slot, tier=tier, hidden=True,
+                           role="unused")
+    return handle.resolve_channel(code)
+
+
 def known_cars(project_dir=None):
     """`[{"make", "model", "generation", "body", "drive_side", "label", "source"}]` -- cars the
     skill has seen.
@@ -1937,6 +1976,24 @@ def _selftest():
                 raise AssertionError(f"a slot went on with {bad}")
             except IntakeError as exc:
                 assert "Nothing was written" in str(exc) or "nothing was written" in str(exc), exc
+        # ── round 6: a code MOVES to another slot in one write, identity kept, old slot a spare ──
+        moves = os.path.join(root, "moves")
+        save(moves, "dsp.vendor", "Audiotec-Fischer")
+        save(moves, "dsp.model", "Helix DSP Ultra S")
+        save_slot(moves, "channels", "A", "w-L")
+        save_slot(moves, "channels", "A", on=False)         # A: off-out-A carrying w-L's history
+        save_slot(moves, "channels", "K", "sw")
+        save_slot(moves, "channels", "C", on=False)          # C becomes a spare
+        move_slot(moves, "channels", "sw", "C")              # the spare on C is replaced
+        rows = {c["code"]: c for c in project.Project(moves).load()["channels"]}
+        assert rows["sw"]["slot"] == "C" and "previous_names" not in rows["sw"], rows["sw"]
+        assert rows["off-out-K"]["hidden"] and rows["off-out-K"]["role"] == "unused", rows
+        assert "off-out-C" not in rows, "the spare the channel moved onto is still there"
+        try:
+            move_slot(moves, "channels", "sw", "A")          # A holds off-out-A with w-L's history
+            raise AssertionError("a move overwrote a switched-off channel with history")
+        except IntakeError as exc:
+            assert "own history" in str(exc), exc
         save(slots, "dsp.tiers_used", ["channels"])
         assert [g["tier"] for g in channel_map(slots)] == ["channels"], "tiers in use do not narrow the map"
         # ── round 4: a processor change replaces the map (confirmed), a new one gets its base ──

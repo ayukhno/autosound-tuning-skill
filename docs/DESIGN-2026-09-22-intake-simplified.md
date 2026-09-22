@@ -365,3 +365,25 @@ SubRC, RearRC; Musway: none).
 **The live server at :7411** was started before this round and still runs the round-4 code in
 memory: a reload does not load changed Python. It was left running as asked; a restart shows
 round 5. The static pages in `hub/scratch/skill/intake/` are regenerated.
+
+## Round 6 (2026-09-22): Save that says what is wrong, where
+
+The user: "Save does not work", then an English refusal under the button ("the code 'sw' is
+already slot 7 of channels…"), and "when something is not filled in on Save, mark it red and
+scroll to it".
+
+- **A code typed into a switched-off slot switches it on.** Before, the typed code stayed off,
+  Save found nothing changed and said so, which looked like a broken button.
+- **Checked before sending:** a switched-on slot with no code, and one code on two slots. Both
+  rows go red with the reason in the page's language, the page scrolls to the first one, and
+  nothing is sent.
+- **A code MOVED between slots is one write** (`intake.move_slot`): the channel keeps its code, id
+  and history and gets the new slot, and the slot it left becomes a spare. The old off-then-on
+  pair could not do it: the off step put the code into the row's `previous_names`, and the on step
+  then found it taken. The page sends a move when one Save switches a code off in one slot and on
+  in another of the same tier.
+- **A refusal from the writers is shown at its own field** (each batch item carries its element),
+  with a line under the button saying how many were refused.
+- **Required fields still empty** are marked red after Save (and on a Save with nothing new),
+  and the page scrolls to the first. They do not block saving what is filled, so the intake
+  can be done in several sittings.

@@ -317,6 +317,8 @@ section.equipment { border-top:1px solid var(--line); padding-top:14px; }
 button.add { font:inherit; font-size:13px; margin-top:6px; padding:3px 10px; border:1px dashed #9ca3af;
              border-radius:6px; background:#fff; cursor:pointer; }
 .drive-auto a { color:#1f5fa8; }
+.bad { outline:2px solid var(--gate); outline-offset:2px; border-radius:6px; background:#fff5f5; }
+.badmsg { color:var(--gate); font-size:12.5px; margin-top:4px; width:100%; }
 """
 
 #: One JS for both pages. Round 4 (the Arbiter, 2026-09-22): ONE «Зберегти» per page instead of a
@@ -526,8 +528,12 @@ function recount() {
 function codeEdited(input) {
   const row = input.closest('.slot');
   const key = row.dataset.tier + '|' + row.dataset.slot;
-  edits[key] = Object.assign(edits[key] || {}, {code: input.value.trim()});
-  if (row.dataset.on === '1') row.querySelector('.sc').textContent = input.value.trim();
+  const code = input.value.trim();
+  edits[key] = Object.assign(edits[key] || {}, {code});
+  // A code typed into a switched-off slot means the slot is used: switch it on. Without this a
+  // typed code stayed off, Save found nothing changed, and "Зберегти" looked broken (22.09).
+  if (code && row.dataset.on !== '1') { toggleSlot(row.querySelector('button.tog')); return; }
+  if (row.dataset.on === '1') row.querySelector('.sc').textContent = code;
 }
 function toggleSlot(btn) {
   const row = btn.closest('.slot');
@@ -574,19 +580,43 @@ function addKnob() {
 function redraw() { const src = mapSource(); redrawTiers(src); redrawMap(); redrawKnobs(); }
 
 // ── one Save: collect what changed, in the order the writers need it ────────
+// Each item remembers the element it came from (non-enumerable, so it is not sent): a refusal is
+// shown AT that element, not in a line under the button.
+function at(item, el) { Object.defineProperty(item, '_el', {value: el || null}); return item; }
+function slotItems(dspId) {
+  // Offs first (they free codes), then MOVES (the same code off in one slot and on in another: the
+  // wire moved, one write keeps the channel's history), then the rest.
+  const offs = [], ons = [];
+  document.querySelectorAll('#chanmap-body .slot').forEach(r => {
+    const on = r.dataset.on === '1', code = r.querySelector('input.code').value.trim();
+    if (on === (r.dataset.origOn === '1') && (!on || code === r.dataset.origCode)) return;
+    const item = at({slot: {tier: r.dataset.tier, slot: r.dataset.slot, code, on, dsp: dspId}}, r);
+    (on ? ons : offs).push(item);
+  });
+  const moves = [];
+  ons.slice().forEach(o => {
+    const s = o.slot;
+    const k = offs.findIndex(f => f.slot.tier === s.tier && f._el.dataset.origCode === s.code);
+    if (k < 0) return;
+    const [left] = offs.splice(k, 1);
+    ons.splice(ons.indexOf(o), 1);
+    moves.push(at({slot: Object.assign({}, s, {move_from: left.slot.slot})}, o._el));
+  });
+  return [...offs, ...moves, ...ons];
+}
 function collect() {
   const out = [], asks = [], late = [];
   // The AI's language IS the interface language (the Arbiter, 2026-09-22): the page's own
   // `--lang`, written on Save from either page, never asked.
-  if (D.lang && D.lang !== D.lang_saved) out.push({field: 'project.language', value: D.lang});
+  if (D.lang && D.lang !== D.lang_saved) out.push(at({field: 'project.language', value: D.lang}));
   const ul = document.querySelector('.unit[data-kind=userlang]');
   if (ul) {
     const sel = ul.querySelector('select').value;
     const v = norm(sel === '__other__' ? ul.querySelector('input').value : sel);
-    if (v !== null && dirty(ul, v)) out.push({field: 'project.user_language', value: v});
+    if (v !== null && dirty(ul, v)) out.push(at({field: 'project.user_language', value: v}, ul));
   }
   const car = document.querySelector('.unit[data-kind=car]');
-  if (car && dirty(car, carValue()) && Object.values(carValue()).some(v => v)) out.push({car: carValue()});
+  if (car && dirty(car, carValue()) && Object.values(carValue()).some(v => v)) out.push(at({car: carValue()}, car));
   document.querySelectorAll('.unit[data-kind=field]').forEach(u => {
     const v = norm(valueOf(u));
     if (v === null || !dirty(u, v)) return;
@@ -594,32 +624,29 @@ function collect() {
       const on = u.querySelector('input[type=radio]:checked');
       asks.push({kind: 'seat', label: on ? on.parentNode.textContent.trim() : v});
     }
-    (u.dataset.id === 'dsp.tiers_used' ? late : out).push({field: u.dataset.id, value: v});
+    (u.dataset.id === 'dsp.tiers_used' ? late : out).push(at({field: u.dataset.id, value: v}, u));
   });
   const id = dspIdentity();
-  if (document.querySelector('.unit[data-kind=dsp]') && id.vendor && id.model && !sameDsp(id, D.saved)) {
+  const dspBox = document.querySelector('.unit[data-kind=dsp]');
+  if (dspBox && id.vendor && id.model && !sameDsp(id, D.saved)) {
     const replace = D.saved.slotted > 0 && !!(D.saved.vendor || D.saved.model);
     if (replace) asks.push({kind: 'dsp', from: D.saved.vendor + ' ' + D.saved.model, to: id.vendor + ' ' + id.model});
-    out.push({dsp: {vendor: id.vendor, model: id.model, replace_map: replace}});
+    out.push(at({dsp: {vendor: id.vendor, model: id.model, replace_map: replace}}, dspBox));
   }
   out.push(...late);
-  document.querySelectorAll('#chanmap-body .slot').forEach(r => {
-    const on = r.dataset.on === '1', code = r.querySelector('input.code').value.trim();
-    if (on === (r.dataset.origOn === '1') && (!on || code === r.dataset.origCode)) return;
-    out.push({slot: {tier: r.dataset.tier, slot: r.dataset.slot, code, on, dsp: [id.vendor, id.model]}});
-  });
+  out.push(...slotItems([id.vendor, id.model]));
   const goal = document.querySelector('.unit[data-kind=goal]');
   if (goal) {
     const v = {choices: [...goal.querySelectorAll('.goal-pick')].filter(c => c.checked).map(c => c.value).sort(),
                text: norm(document.getElementById('goal-text').value)};
-    if (dirty(goal, v)) out.push({goal: v});
+    if (dirty(goal, v)) out.push(at({goal: v}, goal));
   }
   const curve = document.querySelector('.unit[data-kind=curve]');
   if (curve) {
     const on = [...curve.querySelectorAll('input[name=curve]')].find(r => r.checked);
     const own = document.getElementById('curve-own').value.trim();
     const v = norm(!on ? '' : on.value === '__own__' ? own : on.value);
-    if (v !== null && dirty(curve, v)) out.push({field: 'target_curve.candidate', value: v});
+    if (v !== null && dirty(curve, v)) out.push(at({field: 'target_curve.candidate', value: v}, curve));
   }
   document.querySelectorAll('tr.unit[data-kind=chanrow]').forEach(tr => {
     const v = {};
@@ -627,7 +654,7 @@ function collect() {
     if (!dirty(tr, v)) return;
     const row = {};
     Object.entries(v).forEach(([k, x]) => { if (x !== null) row[k] = x; });
-    out.push({channel: row});
+    out.push(at({channel: row}, tr));
   });
   const knobs = {};
   document.querySelectorAll('#knobs .knob').forEach(r => {
@@ -636,10 +663,59 @@ function collect() {
     const pos = r.querySelector('input.kpos').value.trim();
     if (name && pos && pos !== (r.dataset.orig || '')) knobs[name] = pos;
   });
-  if (Object.keys(knobs).length) out.push({controls: knobs});
+  if (Object.keys(knobs).length) out.push(at({controls: knobs}, document.getElementById('knobs')));
   const nd = document.getElementById('newdsp-form');
-  if (nd) out.push({new_dsp: newDspValue(nd)});
+  if (nd) out.push(at({new_dsp: newDspValue(nd)}, nd));
   return {out, asks};
+}
+
+// ── what is wrong is shown AT the field, in red, and the page scrolls to the first one ─────────
+function clearBad() {
+  document.querySelectorAll('.bad').forEach(e => e.classList.remove('bad'));
+  document.querySelectorAll('.badmsg').forEach(e => e.remove());
+}
+function markBad(el, text) {
+  if (!el) return null;
+  el.classList.add('bad');
+  if (text) {
+    const m = document.createElement('div');
+    m.className = 'badmsg';
+    m.textContent = text;
+    el.appendChild(m);
+  }
+  return el;
+}
+function showFirst(els) {
+  const first = els.find(Boolean);
+  if (!first) return;
+  const d = first.closest('details');
+  if (d) d.open = true;
+  first.scrollIntoView({behavior: 'smooth', block: 'center'});
+  const f = first.querySelector('input:not([type=hidden]), select, textarea');
+  if (f) setTimeout(() => f.focus({preventScroll: true}), 350);
+}
+function invalid() {
+  // Values the writers would refuse, caught before anything is sent: a switched-on slot with no
+  // code, and one code on two slots ("one code, one channel").
+  const bad = [], seen = {};
+  document.querySelectorAll('#chanmap-body .slot').forEach(r => {
+    if (r.dataset.on !== '1') return;
+    const code = r.querySelector('input.code').value.trim();
+    if (!code) { bad.push(markBad(r, T.err_no_code)); return; }
+    if (seen[code]) {
+      bad.push(markBad(r, T.err_dup_code.replace('{code}', code).replace('{slot}', seen[code].dataset.slot)));
+      if (!seen[code].classList.contains('bad')) markBad(seen[code]);
+    } else seen[code] = r;
+  });
+  return bad;
+}
+function missingRequired() {
+  const out = [];
+  document.querySelectorAll('.unit[data-required="1"]').forEach(u => {
+    const v = u.dataset.kind === 'dsp' ? (dspIdentity().vendor && dspIdentity().model ? 'x' : null) : norm(valueOf(u));
+    if (v === null) out.push(markBad(u, T.err_required));
+  });
+  return out;
 }
 function newDspValue(form) {
   const num = n => { const i = form.querySelector('[name="' + n + '"]'); return i ? norm(i.value) : null; };
@@ -661,8 +737,21 @@ function newDspValue(form) {
 async function saveAll(btn) {
   const status = document.getElementById('save-status');
   status.className = 'status'; status.textContent = '';
+  clearBad();
+  const wrong = invalid();
+  if (wrong.length) {
+    status.className = 'status err';
+    status.textContent = T.err_fix_first;
+    showFirst(wrong);
+    return;
+  }
   const {out, asks} = collect();
-  if (!out.length) { status.textContent = T.nothing_changed; return; }
+  if (!out.length) {
+    const gaps = missingRequired();
+    status.textContent = gaps.length ? T.err_still_missing.replace('{n}', gaps.length) : T.nothing_changed;
+    showFirst(gaps);
+    return;
+  }
   for (const a of asks) {
     const text = a.kind === 'seat' ? T.seat_confirm.replace('{seat}', a.label)
                                    : T.dsp_confirm.replace('{old}', a.from).replace('{new}', a.to)
@@ -676,12 +765,19 @@ async function saveAll(btn) {
     const res = await r.json();
     if (!r.ok) throw new Error(res.error || r.statusText);
     if (res.errors && res.errors.length) {
+      // What was refused is shown at its own field; what went through is on disk already.
+      const els = res.errors.map(e => markBad((out[e.index] || {})._el, T.err_refused + ' ' + e.error));
+      const loose = res.errors.filter((e, i) => !els[i]).map(e => e.error);
       status.className = 'status err';
-      status.textContent = res.errors.map(e => e.error).join('\n');
+      status.textContent = T.err_some_refused.replace('{n}', res.errors.length)
+        + (loose.length ? '\n' + loose.join('\n') : '');
       btn.disabled = false;
+      showFirst(els);
       return;
     }
-    if (btn.dataset.after) location.href = btn.dataset.after; else location.reload();
+    // Reload to show what is on disk; `#saved` asks the reloaded page to point at what is still owed.
+    if (btn.dataset.after) location.href = btn.dataset.after;
+    else { location.hash = 'saved'; location.reload(); }
   } catch (e) {
     status.className = 'status err';
     status.textContent = String(e.message || e);
@@ -698,6 +794,18 @@ window.addEventListener('DOMContentLoaded', () => {
   if (tiers) tiers.querySelectorAll('.choices input[type=checkbox]').forEach(c => c.addEventListener('change', redrawMap));
   redraw();
   syncDrive();
+  // A field fixed by hand stops being red at once.
+  document.addEventListener('input', e => {
+    const b = e.target.closest('.bad');
+    if (b) { b.classList.remove('bad'); b.querySelectorAll('.badmsg').forEach(m => m.remove()); }
+  });
+  if (location.hash === '#saved') {
+    history.replaceState(null, '', location.pathname + location.search);
+    const status = document.getElementById('save-status');
+    const gaps = missingRequired();
+    if (status) status.textContent = gaps.length ? T.saved_missing.replace('{n}', gaps.length) : T.saved_ok;
+    showFirst(gaps);
+  }
 });
 """
 
@@ -776,11 +884,26 @@ def _field_html(f, ui):
         control = (f'<div class="drive-q">{control}</div>'
                    f'<div class="drive-auto meta hint" hidden>{_esc(ui.get("drive_from_car", "from the car"))}: '
                    f'<b></b> · <a href="#" onclick="askDrive(); return false">{_esc(ui.get("change", "change"))}</a></div>')
-    return (f'<div class="f unit s-{f["state"]}" data-kind="field" data-id="{_esc(f["id"])}" '
+    req = ' data-required="1"' if mark else ""
+    return (f'<div class="f unit s-{f["state"]}" data-kind="field" data-id="{_esc(f["id"])}"{req} '
             f"data-orig='{_esc(_orig(f['value']))}'{unit_id}>"
             f'<span id="f-{_esc(f["id"])}"></span>'
             f'<div class="q"><span class="dot d-{f["state"]}"></span>{_esc(f["ask"])}{mark}</div>'
             f'{control}</div>')
+
+
+#: The page's own refusals (round 6), in English for a language whose file lacks them.
+_ERR_EN = {
+    "err_no_code": "a switched-on slot needs its code",
+    "err_dup_code": "the code {code} is already on slot {slot} — one code, one channel",
+    "err_required": "required",
+    "err_fix_first": "Nothing was saved: fix what is marked red.",
+    "err_still_missing": "Nothing new to save. Still to fill in: {n} — marked red.",
+    "err_refused": "Not saved:",
+    "err_some_refused": "Saved, except {n} — marked red.",
+    "saved_ok": "Saved.",
+    "saved_missing": "Saved. Still to fill in: {n} — marked red.",
+}
 
 
 CAR_PARTS = (("make", "car.make"), ("model", "car.model"), ("generation", "car.generation"),
@@ -848,7 +971,7 @@ def _dsp_block(m, fields):
     ids = "".join(f'<span id="f-{fid}"></span>' for fid in ("dsp.vendor", "dsp.model"))
     state = "have" if dsp["vendor"] and dsp["model"] else "gate"
     ask = {f["id"]: f["ask"] for f in fields}
-    return (f'<div class="couple unit" data-kind="dsp" id="dsp-box">{ids}'
+    return (f'<div class="couple unit" data-kind="dsp" data-required="1" id="dsp-box">{ids}'
             f'<div class="t">{_esc(m["couplings"]["dsp_identity"]["title"])}</div>'
             f'<div class="f s-{state}"><div class="q"><span class="dot d-{state}"></span>'
             f'{_esc(ask["dsp.vendor"])} <span class="meta">({_esc(ui.get("required", "required"))})</span></div>'
@@ -1048,6 +1171,8 @@ def _page_data(m):
                                     "map_new", "map_new_unsaved", "map_replaced", "seat_confirm",
                                     "dsp_confirm", "nothing_changed", "save_cancelled",
                                     "knob_pos", "knob_name")}
+    # Round 6: what is wrong is said AT the field. English fallbacks for a language without them.
+    t.update({k: ui.get(k) or en for k, en in _ERR_EN.items()})
     t["tier_names"] = ui.get("tier_names") if isinstance(ui.get("tier_names"), dict) else {}
     data = {"dsps": [{"vendor": d["vendor"], "model": d["model"], "groups": d["groups"],
                       "knobs": d.get("knobs") or []} for d in m["dsps"]],
@@ -1257,6 +1382,10 @@ def apply_save(project_dir, payload):
                 raise intake.IntakeError(f"slot {row.get('slot')}: the map was drawn for {' '.join(drawn)}, "
                                          f"and the project's processor is {saved['vendor']} {saved['model']} "
                                          "— save the processor first. Nothing was written")
+        if row.get("move_from"):
+            # The same code switched off in one slot and on in another in one Save: the wire moved.
+            return {"slot": intake.move_slot(project_dir, row.get("tier"), row.get("code"),
+                                             row.get("slot"))}
         return {"slot": intake.save_slot(project_dir, row.get("tier"), row.get("slot"),
                                          code=row.get("code"), on=bool(row.get("on")))}
 
