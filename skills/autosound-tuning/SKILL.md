@@ -60,13 +60,14 @@ Tone: equal colleagues. Accept a correct critique fully; argue disagreements in 
 
 ## 🔄 Pre-Session & Resume (every start)
 
-**Before the first reply — WHICH LANGUAGE.** Three languages live in one session and only one of
-them is a setting (S-045). The **reply** language is what you write in: a front-end's report of it
-wins, else `project.json`'s `language.reply` — `python3 rew_tool/project.py <project> language` says
-which and where from, and `contract.py check` prints it above everything else. Nothing recorded
-either place → **ask**, and record the answer (`intake.save(<project>, 'project.language', '<code>')`).
-The **interface** language is the front-end's own and you never invent it. The **input** language —
-whatever the person happened to type — changes NEITHER: on a Windows VM with no Ukrainian layout he
+**Before the first reply — WHICH LANGUAGE.** You write in the **interface** language, always (the
+Arbiter, 2026-09-22): the language the front-end was started in — TCC's, or the intake form's
+`--lang`. A front-end's report of it wins; else `project.json`'s `language.reply`, where it is
+recorded — `python3 rew_tool/project.py <project> language` says which and where from, and
+`contract.py check` prints it above everything else. Nothing recorded and no interface to read →
+**ask**, and record the answer (`intake.save(<project>, 'project.language', '<code>')`). The
+**user's** own language (`language.user`, optional) is recorded and switches nothing. The **input**
+language — whatever the person happened to type — changes nothing either: on a Windows VM with no Ukrainian layout he
 typed English while the tune stayed Ukrainian, and a session that takes its language from the last
 message flips the whole project on one sentence forced by a missing keyboard. Reading the value and
 answering in another language is the same failure as not reading it: one session named the mismatch

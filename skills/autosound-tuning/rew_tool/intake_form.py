@@ -35,6 +35,11 @@ English in `FIELDS` for anything a translation has not reached yet. The Arbiter'
 Usage:
   python3 rew_tool/intake_form.py serve  <project-dir> [--port N] [--lang uk] [--open]
                                         (routes: / the intake, /new-dsp a new processor's base)
+
+`--lang` is the INTERFACE language, an input: TCC or the skill passes it at start, and both routes
+show it. It is also the AI's language, always -- Save writes it to `project.json` `language.reply`,
+and the page never asks it (the Arbiter, 2026-09-22). The USER's own language is a separate,
+optional field (`language.user`) that switches nothing.
   python3 rew_tool/intake_form.py render <project-dir> [--lang uk] [--page new-dsp] [--out page.html]
   python3 rew_tool/intake_form.py state  <project-dir> [--lang uk] [--json]
   python3 rew_tool/intake_form.py --selftest
@@ -194,6 +199,12 @@ def model(project_dir, lang=DEFAULT_LANG):
         "when": whens, "dsp": dsp, "dsps": intake.known_dsps(),
         "map": intake.channel_map(project_dir),
         "tiers_used": [t for t in ((data or {}).get("dsp") or {}).get("tiers_used") or []],
+        "controls": {k: str(project.fact_value(v)) for k, v in
+                     (((data or {}).get("hardware") or {}).get("controls") or {}).items()},
+        "car": {**{k: str(v) for k, v in ((data or {}).get("car") or {}).items()
+                   if k in ("make", "model", "generation", "body") and v},
+                "drive": ((data or {}).get("car") or {}).get("drive_side")},
+        "lang_saved": (((data or {}).get("language") or {}).get("reply")),
         "new_dsp": intake.new_dsp_answers(project_dir),
         "cars": intake.known_cars(project_dir),
         "couplings": {c["id"]: {"fields": c["fields"], "why": c["why"],
@@ -301,13 +312,19 @@ input.num { min-width:70px; width:80px; }
 button.save.big { font-size:15px; padding:8px 22px; }
 .status { font-size:13px; color:#555; white-space:pre-wrap; } .status.err { color:var(--gate); }
 section.equipment { border-top:1px solid var(--line); padding-top:14px; }
+.knob { display:flex; align-items:center; gap:8px; padding:3px 0; }
+.knob .kn { min-width:90px; font-weight:500; } .knob input { min-width:120px; width:160px; }
+button.add { font:inherit; font-size:13px; margin-top:6px; padding:3px 10px; border:1px dashed #9ca3af;
+             border-radius:6px; background:#fff; cursor:pointer; }
+.drive-auto a { color:#1f5fa8; }
 """
 
 #: One JS for both pages. Round 4 (the Arbiter, 2026-09-22): ONE «Зберегти» per page instead of a
 #: button on every question. It sends only what CHANGED, in dependency order (the processor before
-#: the tiers it offers, the tiers before the slots), through `/save` as one batch; a pre-selected
-#: default counts as changed only once its tick says «підтверджую»; the seat and a processor change
-#: that would replace a saved channel map each ask first. The channel map is drawn HERE, from data
+#: the tiers it offers, the tiers before the slots), through `/save` as one batch. Round 5: a
+#: pre-filled value is an ordinary value -- what is on the page is what Save writes -- with ONE
+#: exception, the write-once seat, which asks first (as does a processor change that would replace
+#: a saved channel map). The reply language is not asked: the page's language is written on Save. The channel map is drawn HERE, from data
 #: the page carries, so it follows a processor change live, before anything is saved.
 _JS = r"""
 const D = JSON.parse(document.getElementById('intake-data').textContent);
@@ -318,19 +335,15 @@ function norm(v) {
 }
 function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
 function valueOf(box) {
-  const multi = box.querySelectorAll('input[type=checkbox]:not(.default-ok)');
+  const multi = box.querySelectorAll('input[type=checkbox]');
   if (multi.length) return [...multi].filter(c => c.checked).map(c => c.value);
   const radios = box.querySelectorAll('input[type=radio]');
   if (radios.length) { const on = [...radios].find(r => r.checked); return on ? on.value : null; }
   const one = box.querySelector('select, input[type=text], textarea');
   return one ? one.value : null;
 }
-function confirmedDefault(unit) {
-  const tick = unit.querySelector('input.default-ok');
-  return !!(tick && tick.checked);
-}
 function dirty(unit, now) {
-  return !same(now, JSON.parse(unit.dataset.orig || 'null')) || confirmedDefault(unit);
+  return !same(now, JSON.parse(unit.dataset.orig || 'null'));
 }
 function esc(s) {
   return String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g,
@@ -342,16 +355,42 @@ let pickedCar = null;
 function pickCar(sel) {
   const o = sel.selectedOptions[0];
   pickedCar = o && o.value !== '' ? {make:o.dataset.make, model:o.dataset.model,
-                                      generation:o.dataset.generation, body:o.dataset.body} : null;
+                                      generation:o.dataset.generation, body:o.dataset.body,
+                                      drive: o.dataset.drive || null} : null;
   if (pickedCar) document.querySelectorAll('.car-part').forEach(i => {
     if (i.dataset.k in pickedCar) i.value = pickedCar[i.dataset.k]; });
   carEdited();
 }
+function partsMatch(car) {
+  return !!car && [...document.querySelectorAll('.car-part')].every(
+    i => !(i.dataset.k in car) || i.dataset.k === 'drive' || (i.value || '').trim() === (car[i.dataset.k] || ''));
+}
 function carEdited() {
   const hint = document.getElementById('car-new');
-  if (!hint) return;
-  hint.hidden = !(pickedCar && [...document.querySelectorAll('.car-part')].some(
-    i => i.dataset.k in pickedCar && i.value !== pickedCar[i.dataset.k]));
+  if (hint) hint.hidden = !(pickedCar && !partsMatch(pickedCar));
+  syncDrive();
+}
+// The drive side comes WITH the car (round 5): a picked car that says which side, or the saved car
+// the project already records, fills it and the question folds into one line. A new or edited car
+// is asked -- with LHD pre-filled, as before.
+function syncDrive() {
+  const unit = document.querySelector('.unit[data-id="car.drive_side"]');
+  if (!unit) return;
+  const known = pickedCar && pickedCar.drive && partsMatch(pickedCar) ? pickedCar.drive
+              : D.car && D.car.drive && partsMatch(D.car) ? D.car.drive : null;
+  const q = unit.querySelector('.drive-q'), auto = unit.querySelector('.drive-auto');
+  if (known) {
+    const r = unit.querySelector('input[type=radio][value="' + known + '"]');
+    if (r) r.checked = true;
+    auto.querySelector('b').textContent = r ? r.parentNode.textContent.trim() : known;
+  }
+  q.hidden = !!known;
+  auto.hidden = !known;
+}
+function askDrive() {
+  const unit = document.querySelector('.unit[data-id="car.drive_side"]');
+  unit.querySelector('.drive-q').hidden = false;
+  unit.querySelector('.drive-auto').hidden = true;
 }
 function carValue() {
   const out = {};
@@ -504,11 +543,48 @@ function toggleSlot(btn) {
   btn.className = 'tog ' + (on ? 'tog-off' : 'tog-on');
   recount();
 }
-function redraw() { const src = mapSource(); redrawTiers(src); redrawMap(); }
+// ── knobs outside the DSP: the chosen processor's own remote knobs, plus any added by name ──
+function redrawKnobs() {
+  const box = document.getElementById('knob-rows');
+  if (!box) return;
+  const id = dspIdentity();
+  const entry = sameDsp(id, D.saved) ? {knobs: D.saved.knobs} : (D.dsps.find(d => sameDsp(id, d)) || {knobs: []});
+  // A processor's own knobs follow the processor; a row the person ADDED (a head unit's bass
+  // knob) is not the processor's, so it survives the change, typed values and all.
+  const typed = {}, custom = [...box.querySelectorAll('.knob')].filter(r => r.querySelector('input.kname'));
+  [...box.querySelectorAll('.knob')].filter(r => !r.querySelector('input.kname')).forEach(r => {
+    typed[r.dataset.name] = r.querySelector('input.kpos').value; });
+  const names = [...new Set([...(entry.knobs || []), ...Object.keys(D.controls)])];
+  box.innerHTML = names.map(n => knobRow(n, n in typed ? typed[n] : (D.controls[n] || ''), D.controls[n] || '')).join('');
+  custom.forEach(r => box.appendChild(r));
+}
+function knobRow(name, pos, orig) {
+  return '<div class="knob" data-name="' + esc(name) + '" data-orig="' + esc(orig) + '"><span class="kn">' + esc(name)
+    + '</span> — <input type="text" class="kpos" value="' + esc(pos) + '" placeholder="' + esc(T.knob_pos) + '"></div>';
+}
+function addKnob() {
+  const box = document.getElementById('knob-rows');
+  const row = document.createElement('div');
+  row.className = 'knob';
+  row.innerHTML = '<input type="text" class="kname" placeholder="' + esc(T.knob_name) + '"> — '
+    + '<input type="text" class="kpos" placeholder="' + esc(T.knob_pos) + '">';
+  box.appendChild(row);
+  row.querySelector('input.kname').focus();
+}
+function redraw() { const src = mapSource(); redrawTiers(src); redrawMap(); redrawKnobs(); }
 
 // ── one Save: collect what changed, in the order the writers need it ────────
 function collect() {
   const out = [], asks = [], late = [];
+  // The AI's language IS the interface language (the Arbiter, 2026-09-22): the page's own
+  // `--lang`, written on Save from either page, never asked.
+  if (D.lang && D.lang !== D.lang_saved) out.push({field: 'project.language', value: D.lang});
+  const ul = document.querySelector('.unit[data-kind=userlang]');
+  if (ul) {
+    const sel = ul.querySelector('select').value;
+    const v = norm(sel === '__other__' ? ul.querySelector('input').value : sel);
+    if (v !== null && dirty(ul, v)) out.push({field: 'project.user_language', value: v});
+  }
   const car = document.querySelector('.unit[data-kind=car]');
   if (car && dirty(car, carValue()) && Object.values(carValue()).some(v => v)) out.push({car: carValue()});
   document.querySelectorAll('.unit[data-kind=field]').forEach(u => {
@@ -553,6 +629,14 @@ function collect() {
     Object.entries(v).forEach(([k, x]) => { if (x !== null) row[k] = x; });
     out.push({channel: row});
   });
+  const knobs = {};
+  document.querySelectorAll('#knobs .knob').forEach(r => {
+    const nameIn = r.querySelector('input.kname');
+    const name = nameIn ? nameIn.value.trim() : r.dataset.name;
+    const pos = r.querySelector('input.kpos').value.trim();
+    if (name && pos && pos !== (r.dataset.orig || '')) knobs[name] = pos;
+  });
+  if (Object.keys(knobs).length) out.push({controls: knobs});
   const nd = document.getElementById('newdsp-form');
   if (nd) out.push({new_dsp: newDspValue(nd)});
   return {out, asks};
@@ -613,6 +697,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const tiers = document.getElementById('tiers-unit');
   if (tiers) tiers.querySelectorAll('.choices input[type=checkbox]').forEach(c => c.addEventListener('change', redrawMap));
   redraw();
+  syncDrive();
 });
 """
 
@@ -672,15 +757,6 @@ def _choice(f, value, ui, cls="", key=""):
     return f'<input type="text"{klass}{data} value="{_esc(value or "")}"{listed}>'
 
 
-def _default_tick(f, ui):
-    """A pre-selected default is shown with a tick; only a ticked (or changed) one is saved."""
-    if f["default"] is None or f["value"] not in (None, ""):
-        return ""
-    shown = dict(f["options"]).get(str(f["default"]), str(f["default"]))
-    return (f'<label class="meta hint"><input type="checkbox" class="default-ok"> '
-            f'{_esc(ui.get("default_confirm", "pre-selected — tick to confirm"))}: <b>{_esc(shown)}</b></label>')
-
-
 def _field_html(f, ui):
     """One question as a UNIT the page's single Save reads: its control, and what it started as."""
     mark = (f' <span class="meta">({_esc(ui.get("required", "required"))})</span>'
@@ -691,13 +767,20 @@ def _field_html(f, ui):
         return (f'<div class="f s-{f["state"]}" id="f-{_esc(f["id"])}">'
                 f'<div class="q"><span class="dot d-{f["state"]}"></span>{_esc(f["ask"])}{mark}</div>'
                 f'<div class="meta">{_esc(note)}</div></div>')
-    shown = f["value"] if f["value"] not in (None, "", []) else f["default"]
+    # `data-orig` is what is ON DISK, not what is shown: a pre-filled value that is not stored yet
+    # is a change like any other, and Save writes it (round 5 -- no confirm ticks).
     unit_id = ' id="tiers-unit"' if f["id"] == "dsp.tiers_used" else ""
+    control = f'<div class="row">{_choice(f, f["value"], ui)}</div>'
+    if f["id"] == "car.drive_side":
+        # Filled from the car when the car says it; asked only for a new or edited car.
+        control = (f'<div class="drive-q">{control}</div>'
+                   f'<div class="drive-auto meta hint" hidden>{_esc(ui.get("drive_from_car", "from the car"))}: '
+                   f'<b></b> · <a href="#" onclick="askDrive(); return false">{_esc(ui.get("change", "change"))}</a></div>')
     return (f'<div class="f unit s-{f["state"]}" data-kind="field" data-id="{_esc(f["id"])}" '
-            f"data-orig='{_esc(_orig(shown))}'{unit_id}>"
+            f"data-orig='{_esc(_orig(f['value']))}'{unit_id}>"
             f'<span id="f-{_esc(f["id"])}"></span>'
             f'<div class="q"><span class="dot d-{f["state"]}"></span>{_esc(f["ask"])}{mark}</div>'
-            f'<div class="row">{_choice(f, f["value"], ui)}</div>{_default_tick(f, ui)}</div>')
+            f'{control}</div>')
 
 
 CAR_PARTS = (("make", "car.make"), ("model", "car.model"), ("generation", "car.generation"),
@@ -717,7 +800,8 @@ def _car_block(m, fields):
     if m["cars"]:
         opts = "".join(
             f'<option value="{i}" data-make="{_esc(c["make"])}" data-model="{_esc(c["model"])}" '
-            f'data-generation="{_esc(c["generation"])}" data-body="{_esc(c["body"])}">'
+            f'data-generation="{_esc(c["generation"])}" data-body="{_esc(c["body"])}" '
+            f'data-drive="{_esc(c.get("drive_side") or "")}">'
             f'{_esc(c["label"])} · {_esc(src_label.get(c["source"]) or c["source"].replace("project:", ui.get("car_src_project", "project") + " "))}'
             f'</option>' for i, c in enumerate(m["cars"]))
         pick = (f'<div class="f" id="car-pick-box"><div class="q">{_esc(ui.get("car_pick", "Pick a known car"))}</div>'
@@ -909,6 +993,10 @@ def _section(m, rows, ui):
                 out.append(_curve_block(m, m["fields"]))
                 done.add(f["id"])
                 continue
+            if f["id"] == "project.user_language":
+                out.append(_user_lang_block(f, ui))
+                done.add(f["id"])
+                continue
             mates = [x for x in rows if f["couple"] and x["couple"] == f["couple"]
                      and x["id"] not in done and not x["per"]]
             if len(mates) >= 2:
@@ -922,6 +1010,34 @@ def _section(m, rows, ui):
     return "".join(out)
 
 
+def _user_lang_block(f, ui):
+    """The USER's own language — optional, empty by default, and it switches nothing: the AI's
+    language is the interface language, always (the Arbiter, 2026-09-22)."""
+    value = f["value"] or ""
+    codes = [v for v, _t in f["suggest"]]
+    other = bool(value) and value not in codes
+    opts = "".join(f'<option value="{_esc(v)}"{" selected" if value == v else ""}>{_esc(t)}</option>'
+                   for v, t in f["suggest"])
+    return (f"<div class=\"f unit s-{f['state']}\" data-kind=\"userlang\" data-orig='{_esc(_orig(value))}'>"
+            f'<span id="f-{_esc(f["id"])}"></span><div class="q"><span class="dot d-{f["state"]}"></span>'
+            f'{_esc(f["ask"])}</div><div class="row"><select onchange="this.nextElementSibling.hidden = '
+            f'this.value !== \'__other__\'"><option value="">—</option>{opts}'
+            f'<option value="__other__"{" selected" if other else ""}>{_esc(ui.get("user_lang_other", "other"))}</option>'
+            f'</select><input type="text" value="{_esc(value if other else "")}" '
+            f'placeholder="{_esc(ui.get("user_lang_other_ph", ""))}"{"" if other else " hidden"}></div></div>')
+
+
+def _knobs_block(f, ui):
+    """Knobs outside the DSP as a LIST of `name — position` rows (round 5): the processor's own
+    remote knobs pre-seeded (`intake.dsp_knobs`), any other added by name. The rows are drawn by the
+    page's JS so they follow a processor change. Writes: `intake.save_controls` -> `hardware.controls`."""
+    return (f'<div class="f" id="f-{_esc(f["id"])}"><div class="q">{_esc(f["ask"])}</div>'
+            f'<div class="meta">{_esc(ui.get("knobs_why", ""))}</div>'
+            f'<div id="knobs"><div id="knob-rows"></div>'
+            f'<button type="button" class="add" onclick="addKnob()">+ {_esc(ui.get("knob_add", "add your own"))}</button>'
+            f'</div></div>')
+
+
 def _page_data(m):
     """What the page's JS draws the channel map from — embedded, so it works before any save."""
     chans = [{"tier": c.get("tier"), "slot": str(c.get("slot")), "code": c.get("code"),
@@ -930,12 +1046,16 @@ def _page_data(m):
     ui = m["ui"]
     t = {k: ui.get(k, "") for k in ("chan_on", "chan_off", "code_pick", "code_needed", "map_first",
                                     "map_new", "map_new_unsaved", "map_replaced", "seat_confirm",
-                                    "dsp_confirm", "nothing_changed", "save_cancelled")}
+                                    "dsp_confirm", "nothing_changed", "save_cancelled",
+                                    "knob_pos", "knob_name")}
     t["tier_names"] = ui.get("tier_names") if isinstance(ui.get("tier_names"), dict) else {}
-    data = {"dsps": [{"vendor": d["vendor"], "model": d["model"], "groups": d["groups"]} for d in m["dsps"]],
+    data = {"dsps": [{"vendor": d["vendor"], "model": d["model"], "groups": d["groups"],
+                      "knobs": d.get("knobs") or []} for d in m["dsps"]],
             "saved": {"vendor": m["dsp"]["vendor"], "model": m["dsp"]["model"], "new": bool(m["dsp"]["new"]),
                       "groups": m["dsp"]["groups"], "channels": chans, "slotted": len(chans),
-                      "tiers_used": m["tiers_used"]},
+                      "tiers_used": m["tiers_used"], "knobs": m["dsp"].get("knobs") or []},
+            "controls": m["controls"], "car": m["car"],
+            "lang": m["lang"] if m["lang"] in intake.LANGUAGES else None, "lang_saved": m["lang_saved"],
             "off_prefix": intake.OFF_PREFIX, "t": t}
     return json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
 
@@ -994,10 +1114,12 @@ def render(m):
     cols = [f for f in equipment if f["per"] == "channel"]
     table = _driver_table(m, cols, ui)
     ids = "" if table else "".join(f'<span id="f-{_esc(f["id"])}"></span>' for f in cols)
-    rest = [f for f in equipment if f["per"] != "channel" and f["id"] != "hardware.description"]
+    knobs = next(f for f in equipment if f["id"] == "channel_map.hardware_controls")
+    rest = [f for f in equipment if f["per"] != "channel"
+            and f["id"] not in ("hardware.description", "channel_map.hardware_controls")]
     parts.append(f'<section class="equipment" id="equipment"><h2>{_esc(ui.get("equipment_title", "Other equipment"))}</h2>'
                  f'<p class="why">{_esc(ui.get("equipment_why", ""))}</p>'
-                 + "".join(_field_html(f, ui) for f in desc) + table + ids
+                 + "".join(_field_html(f, ui) for f in desc) + _knobs_block(knobs, ui) + table + ids
                  + "".join(_field_html(f, ui) for f in rest) + "</section>")
     return _shell(m, ui.get("title", "Intake"), parts)
 
@@ -1143,6 +1265,9 @@ def apply_save(project_dir, payload):
         row = payload["dsp"]
         return {"dsp": intake.change_dsp(project_dir, row.get("vendor"), row.get("model"),
                                          replace_map=bool(row.get("replace_map")))}
+
+    if "controls" in payload:
+        return {"controls": intake.save_controls(project_dir, payload["controls"] or {})}
 
     if "new_dsp" in payload:
         return {"new_dsp": intake.save_new_dsp(project_dir, payload["new_dsp"] or {})}
@@ -1305,6 +1430,12 @@ def _selftest():
 
         # ── the page: what it shows, and — round 4 — what it does NOT ─────────────────────────
         page = render(m)
+
+        def carried_lang(html_):
+            raw = re.search(r'<script type="application/json" id="intake-data">(.*?)</script>',
+                            html_, re.S).group(1)
+            d = json.loads(raw.replace("<\\/", "</"))
+            return d["lang"], d["lang_saved"]
         for f in intake.FIELDS:
             if f["place"] in ("now", "goal", "equipment"):
                 assert f'f-{f["id"]}' in page, f"{f['id']} is not on the page"
@@ -1322,7 +1453,14 @@ def _selftest():
             f"the page reaches the network: {external[:3]} / links {links}"
         assert not re.findall(r"""src=["']https?://|<link[^>]+href=["']https?://""", page), \
             "the page loads something from the network"
-        assert "Якою мовою відповідати" in page, "the Ukrainian labels did not reach the page"
+        assert "Для кого цей проєкт" in page, "the Ukrainian labels did not reach the page"
+        # Round 5: the reply language is NOT a question -- the page's own language rides along and
+        # is written on Save.
+        assert 'data-id="project.language"' not in page and "Якою мовою відповідати" not in page
+        # The USER's language is optional, empty, pre-fills nothing, and is stored apart.
+        ul = page.split('data-kind="userlang"', 1)[1].split("</div></div>", 1)[0]
+        assert "data-orig='null'" in page.split('data-kind="userlang"', 1)[1][:30] and " selected" not in ul
+        assert carried_lang(page) == ("uk", None), carried_lang(page)
         # ONE «Зберегти» for the page, not a button on every question.
         assert len(re.findall(r'<button[^>]*class="save', page)) == 1 and ">Зберегти<" in page \
             and "Записати" not in page, "more than one Save, or the old label"
@@ -1334,14 +1472,17 @@ def _selftest():
             assert f"f-{fid}" in now_html, f"{fid} is needed to start measuring and is not up front"
         couple = now_html.split('id="f-car.drive_side"', 1)[1].split('<div class="couple">', 1)[0]
         assert 'id="f-goal.reference_seat"' in couple, "the seat couple was split"
-        # A default is pre-selected AND carries a tick; untouched and unticked it is not saved (the
-        # page's collect() compares against data-orig and the tick) — and nothing is stored here.
+        # Round 5: no confirm ticks. A pre-filled value is an ordinary one -- its unit starts from
+        # what is ON DISK (null here), so Save writes what the page shows. The seat alone asks.
+        assert "default-ok" not in page, "a confirm tick is back"
         side = now_html.split('data-id="car.drive_side"', 1)[1].split('data-kind=', 1)[0]
-        assert 'value="LHD" checked' in side and 'class="default-ok"' in side, "no confirm tick"
-        assert "drive_side" not in (project.Project(root).load().get("car") or {}), \
-            "a default was stored behind the person's back"
+        assert 'value="LHD" checked' in side and "data-orig='null'" in now_html.split(
+            'data-id="car.drive_side"', 1)[1][:40], "the pre-filled drive side is not a change"
+        assert 'class="drive-auto' in side, "the drive side cannot fold into the car"
         seat = now_html.split('data-id="goal.reference_seat"', 1)[1].split("</div></div>", 1)[0]
-        assert " checked" not in seat and "default-ok" not in seat, "the write-once seat is pre-selected"
+        assert " checked" not in seat, "the write-once seat is pre-selected"
+        # The drive side comes with a car that says it: the library's Passat names LHD.
+        assert 'data-body="sedan" data-drive="LHD"' in page, "the picked car carries no drive side"
         assert 'data-make="VW" data-model="Passat" data-generation="B8" data-body="sedan"' in page
         for d in intake.known_dsps():
             assert f'value="{_esc(d["model"])}" data-vendor="{_esc(d["vendor"])}"' in page, d
@@ -1387,6 +1528,28 @@ def _selftest():
         m2 = model(root, "uk")
         assert [(g["tier"], g["used"], g["total"]) for g in m2["map"]] == \
             [("virtual_channels", 1, 8), ("channels", 0, 12)], m2["map"]
+        # ── round 5: knobs outside the DSP -- the processor's own pre-seeded, others by name ─
+        d2 = carried(render(m2))
+        assert d2["saved"]["knobs"] == ["SubRC", "RearRC"], d2["saved"]["knobs"]
+        assert next(d for d in d2["dsps"] if d["vendor"] == "Musway")["knobs"] == []
+        assert 'id="knob-rows"' in render(m2) and "непорівнянними" in render(m2)
+        res = apply_save(root, {"batch": [{"controls": {"SubRC": "4/4", "бас на магнітолі": "7",
+                                                        "RearRC": ""}}]})
+        assert not res["errors"], res
+        hw = project.Project(root).load()["hardware"]["controls"]
+        assert project.fact_value(hw["SubRC"]) == "4/4" and hw["SubRC"]["source"] == "user", hw
+        assert project.fact_value(hw["бас на магнітолі"]) == "7" and "RearRC" not in hw, hw
+        assert carried(render(model(root, "uk")))["controls"]["SubRC"] == "4/4"
+        # The language is written on Save when it differs from what is stored, and then rides as saved.
+        apply_save(root, {"field": "project.language", "value": "uk"})
+        assert carried_lang(render(model(root, "uk"))) == ("uk", "uk")
+        apply_save(root, {"field": "project.user_language", "value": "ru"})
+        lang = project.Project(root).load()["language"]
+        assert lang == {"reply": "uk", "user": "ru"}, lang
+        assert project.reply_language(project.Project(root).load())["lang"] == "uk", \
+            "the user's language switched the AI's"
+        # Both routes honour the interface language they are started with.
+        assert carried_lang(render_new_dsp(model(root, "uk")))[0] == "uk"
         assert carried(render(m2))["saved"]["slotted"] == 2, "the saved map is not carried"
 
         # ── a processor change: the saved map is REPLACED, never merged — and only when confirmed
@@ -1480,11 +1643,12 @@ def _selftest():
 
         # ── a missing translation is a fallback, never a crash ──────────────────────────────
         page_en = render(model(root, "xx"))
-        assert intake.FIELDS[0]["ask"] in page_en, "the English fallback did not render"
+        assert intake.field("goal.reference_seat")["ask"] in page_en, "the English fallback did not render"
 
     print(f"selftest OK (intake_form) — {len(ids)} fields in one table and uk.json covers every one; "
-          "the page shows the now/goal/equipment ones and NOT the memo, has ONE Save, a pre-selected "
-          "default carries its confirm tick, a processor change REPLACES a saved map only when "
+          "the page shows the now/goal/equipment ones and NOT the memo, has ONE Save, a pre-filled "
+          "value is an ordinary one (no ticks; the seat alone asks), the reply language is the "
+          "interface's and never asked, knobs are rows the processor pre-seeds, a processor change REPLACES a saved map only when "
           "confirmed, a new processor gets its own page and its map from it, the page loads nothing "
           "from the network (one link out: NTT), and every write goes through intake's own writers")
     return 0

@@ -58,17 +58,16 @@ numbers did not change, so a `project-intake.md §3` or `§4` pointer still land
 > is not done: block that step with the reason (`block -1.2 "clipboard-only until ..."`), because
 > a channel that cannot be called is a channel the method does not have.
 
-> 🌍 **First of all — the project's REPLY language, and it is READ before it is asked.** Three
-> languages live in one session (S-045, his evidence 2026-09-20) and only the first is the method's:
+> 🌍 **First of all — the project's language, and it is READ before it is asked.** The AI writes
+> in the INTERFACE language, always (the Arbiter, 2026-09-22; S-045 before it):
 >
 > | | what it is | who owns it |
 > |---|---|---|
-> | **reply** | what the session writes in — the dialogue AND every generated project file (`autosound_context`, `tuning-changelog`, `dsp-state-current`, `audit-trail`, `skill-inbox`) | the method: `project.json` `language.reply`, written by `intake.save(<project>, "project.language", "<code>")` |
-> | **interface** | what a front-end shows | the front-end. The method never invents it and never stores it as its own |
-> | **input** | whatever the person happened to type | nobody — and it changes NEITHER of the other two |
+> | **interface = reply** | what the front-end shows AND what the session writes in — the dialogue and every generated project file (`autosound_context`, `tuning-changelog`, `dsp-state-current`, `audit-trail`, `skill-inbox`) | the front-end sets it at start (TCC, or the intake form's `--lang`); the method RECORDS it in `project.json` `language.reply` (`intake.save(<project>, "project.language", "<code>")`; the form writes it on Save and never asks it) |
+> | **user** | the person's own language, if it differs | optional, `project.json` `language.user`; recorded, switches nothing |
+> | **input** | whatever the person happened to type | nobody — and it changes nothing |
 >
-> **Order:** a front-end's report (`get_tcc_state.language`) wins, because the app is where he set
-> it; else the stored `language.reply` (`python3 rew_tool/project.py <project> language`, and
+> **Order:** a front-end's report (`get_tcc_state.language`) wins, because it IS the interface; else the stored `language.reply` (`python3 rew_tool/project.py <project> language`, and
 > `contract.py check` prints it above everything else); else ASK — *"English, or your native
 > language? (supported: **EN · UK · DE · PL**)"* — and record the answer, so the next clean session
 > reads it instead of asking again.

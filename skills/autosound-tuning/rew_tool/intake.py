@@ -226,7 +226,12 @@ def known_dsps():
             groups = _groups_of(dsp_profile.load_profile(path))
         except (OSError, ValueError):
             groups = []
-        out.append({"vendor": vendor, "model": model, "tiers": tiers, "groups": groups})
+        try:
+            knobs = dsp_knobs(dsp_profile.load_profile(path))
+        except (OSError, ValueError):
+            knobs = []
+        out.append({"vendor": vendor, "model": model, "tiers": tiers, "groups": groups,
+                    "knobs": knobs})
     return out
 
 
@@ -279,10 +284,12 @@ def dsp_state(project_dir):
     data = _read_project(project_dir) or {}
     dsp = data.get("dsp") or {}
     vendor, model = dsp.get("vendor") or "", dsp.get("model") or ""
-    out = {"vendor": vendor, "model": model, "source": None, "tiers": [], "groups": [], "new": None}
+    out = {"vendor": vendor, "model": model, "source": None, "tiers": [], "groups": [], "knobs": [],
+           "new": None}
 
     def take(profile, source, new):
-        out.update(source=source, tiers=dsp_profile.tier_keys(profile), groups=_groups_of(profile))
+        out.update(source=source, tiers=dsp_profile.tier_keys(profile), groups=_groups_of(profile),
+                   knobs=dsp_knobs(profile))
         if new is not None:
             out["new"] = new
 
@@ -635,26 +642,38 @@ def save_slot(project_dir, tier, slot, code=None, on=True):
 
 
 def known_cars(project_dir=None):
-    """`[{"make", "model", "generation", "body", "label", "source"}]` -- cars the skill has seen.
+    """`[{"make", "model", "generation", "body", "drive_side", "label", "source"}]` -- cars the
+    skill has seen.
 
     Two sources, and nothing invented: the cabin library (`knowledge/cars/`, one file per body,
     its own heading read by `car_profile`) and the other projects next to this one (a sibling
     directory whose `project.json` records all four parts). There is no car catalogue beyond these;
     a picked car fills the four fields, and an EDITED one is a new car, not a variant of the entry.
+
+    `drive_side` comes with the car when its source records it (round 5): a sibling project's
+    `car.drive_side`, or the ONE drive side a library entry's build line names (the Passat file's
+    "…; LHD, 2026"). None when the source does not say -- then the form asks, as for a new car.
     """
     import car_profile
 
     out, seen = [], set()
 
-    def add(make, model, generation, body, source):
+    def add(make, model, generation, body, source, drive_side=None):
         parts = [str(x or "").strip() for x in (make, model, generation, body)]
         if not all(parts):
             return
         slug = car_profile.body_slug(*parts)
         if slug in seen:
+            # The same car from a second source may know what the first did not (a neighbour
+            # project without a drive side, the library entry with one).
+            entry = next(c for c in out if car_profile.body_slug(c["make"], c["model"],
+                                                                 c["generation"], c["body"]) == slug)
+            if entry["drive_side"] is None and drive_side in DRIVE_SIDES:
+                entry["drive_side"] = drive_side
             return
         seen.add(slug)
         out.append({"make": parts[0], "model": parts[1], "generation": parts[2], "body": parts[3],
+                    "drive_side": drive_side if drive_side in DRIVE_SIDES else None,
                     "label": " ".join(parts), "source": source})
 
     if project_dir:
@@ -670,12 +689,59 @@ def known_cars(project_dir=None):
                 continue
             car = (_read_project(d) or {}).get("car") or {}
             add(car.get("make"), car.get("model"), car.get("generation"), car.get("body"),
-                f"project:{name}")
-    for _slug, _path, title in car_profile.list_bundled():
+                f"project:{name}", car.get("drive_side"))
+    for _slug, path, title in car_profile.list_bundled():
         words = title.split(" — ", 1)[0].split()
         if len(words) == 4 and words[3] in BODIES:
-            add(*words, source="library")
+            add(*words, source="library", drive_side=_library_drive_side(path))
     return out
+
+
+def _library_drive_side(path):
+    """The drive side a library entry's opening lines name, if they name exactly one."""
+    import re
+
+    try:
+        with open(path, encoding="utf-8") as fh:
+            head = "".join(fh.readline() for _ in range(6))
+    except OSError:
+        return None
+    found = set(re.findall(r"\b(LHD|RHD)\b", head))
+    return found.pop() if len(found) == 1 else None
+
+
+def dsp_knobs(profile):
+    """The remote knobs a processor's profile names -- the rows the form pre-seeds (round 5).
+
+    Read off the profile's own `effects_and_dynamics` / `features`: the entries named `…RC`, the
+    remote controls (a Helix: SubRC, RearRC). The rest of that list are effects switched in the
+    software, not knobs a person turns in the car. Anything else -- a head unit's bass knob -- is
+    added on the form by name.
+    """
+    p = dsp_profile._unwrap(profile or {})
+    names = list(p.get(dsp_profile.EFFECTS_KEY) or [])
+    names += [f.get("key") for f in p.get("features") or [] if isinstance(f, dict)]
+    return [n for n in dict.fromkeys(str(x) for x in names if x) if n.endswith("RC")]
+
+
+def save_controls(project_dir, positions, source="user"):
+    """Where the knobs outside the DSP stand -- `hardware.controls`, through `Project`'s own writer.
+
+    `{name: position}`; a position is free text ("4/4", "7", "ON"). A blank one is skipped, not
+    written as blank. What a step is WORTH is a separate fact (`set-control-mapping`), and where a
+    knob stood FOR A CAPTURE belongs to the round (`process.py capture-knobs`) -- RES-007.
+    """
+    handle = project.Project(project_dir)
+    written = {}
+    for name, pos in (positions or {}).items():
+        name, pos = str(name or "").strip(), str(pos if pos is not None else "").strip()
+        if not name:
+            raise IntakeError("a knob needs its name — nothing was written for it")
+        if not pos:
+            continue
+        handle.set_hardware_control(name, pos, source=source)
+        written[name] = pos
+    return written
 
 
 # ── WHEN a field is asked ─────────────────────────────────────────────────────
@@ -774,11 +840,22 @@ FIELDS = (
     _f("project.language", "project", "Which language should the session WRITE in — EN / UK / DE / PL?",
        required=True, enum=LANGUAGES, settled_by="front_end", writes="project:language.reply",
        lands="`project.json` `language.reply` + a recorded decision (-1.1)",
-       note="This is the REPLY language and only that. The INTERFACE language is a front-end's own "
-            "and is never stored here; the language the person TYPES changes neither — he had no "
-            "Ukrainian layout on the Windows VM, typed English, and the reply stayed Ukrainian "
-            "(S-045). If the front-end reports it, it is ANSWERED, not suggested — and it WINS over "
-            "the stored value, because the app is where he set it."),
+       note="The AI's language IS the interface language, always (the Arbiter, 2026-09-22): the "
+            "language the front-end was started in -- TCC's, or the skill's own form's `--lang`. "
+            "It is written here so a session after a `/clear` reads it (S-045), and it is never "
+            "offered as a question. The USER's own language, when it differs, is `project.user_"
+            "language` and switches nothing; the language the person TYPES changes nothing either "
+            "-- he had no Ukrainian layout on the Windows VM, typed English, and the reply stayed "
+            "Ukrainian.",
+       derive="the interface language (`--lang` of the form, or the front-end's), written on "
+              "Save -- never asked"),
+    _f("project.user_language", "project",
+       "The user's own language — if it differs from the interface (optional)",
+       suggest=LANGUAGES, writes="project:language.user",
+       lands="`project.json` `language.user` -- recorded, and never used to switch the AI's language",
+       note="The person's own language, for the record: a Polish speaker running an English "
+            "interface. It does NOT change what the session writes in -- that is the interface "
+            "language, always (the Arbiter, 2026-09-22). Empty by default, nothing pre-filled."),
     _f("project.reviewer_channel", "project", "Which reviewer channel, and does it answer?",
        required=True, settled_by="front_end",
        lands="`rew_analitic/reviewer-check.md` (a live doctor run) + a recorded decision (-1.2)",
@@ -951,7 +1028,8 @@ FIELDS = (
        per="control", writes="project:hardware.controls",
        note="Two facts, not one: the POSITION is read off the device, what a step is WORTH is "
             "somebody's opinion (`set-control-mapping`). Without the mapping, a comparison across "
-            "positions is refused rather than folded into an offset (RES-007).",
+            "positions is refused rather than folded into an offset (RES-007). The form offers "
+            "the processor's own remote knobs (`dsp_knobs`) as rows, plus any other by name.",
        when="0", place="equipment"),
 
     # ── measurement_chain: how the signal gets in (§1.2, §1.4) ────────────────────────────────

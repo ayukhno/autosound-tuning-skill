@@ -776,12 +776,13 @@ def render_report(report):
         lines.append(
             f"**Reply language: `{report['reply_language']}`** "
             f"(from {report.get('reply_language_source')}) — write in it from the FIRST line. "
-            "A front-end's report wins over this; the language the person TYPES wins over nothing "
-            "(S-045).")
+            "It is the interface language: a front-end's report wins over this; the user's own "
+            "language and the language the person TYPES win over nothing (S-045, 2026-09-22).")
     else:
         lines.append(
-            "**Reply language: not recorded** — ASK which language to write in before the first "
-            "reply (`intake.save(<project>, 'project.language', '<code>')`), and do NOT infer it "
+            "**Reply language: not recorded** — write in the INTERFACE language (the front-end's, "
+            "or the intake form's `--lang`) and record it (`intake.save(<project>, "
+            "'project.language', '<code>')`); with no interface to read, ASK. Do NOT infer it "
             "from the language of the last message: he typed English on a VM with no Ukrainian "
             "layout while the reply stayed Ukrainian (S-045).")
     lines.append("")

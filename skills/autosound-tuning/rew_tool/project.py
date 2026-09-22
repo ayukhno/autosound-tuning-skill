@@ -599,14 +599,13 @@ def project_type(data):
 def reply_language(data, front_end=None):
     """Which language this session WRITES in, and where that came from.
 
-    THREE languages live in one session and only this one is the method's (S-045, the Arbiter's
-    evidence 2026-09-20, measured on the Windows VM):
+    The AI's language IS the interface language, always (the Arbiter, 2026-09-22): the language a
+    front-end was started in -- TCC's, or the skill's own form's `--lang`. `language.reply` is where
+    it is RECORDED, so a session after a `/clear` reads it (S-045). Two other languages change it
+    never:
 
-    * the **reply** language — what the session writes in. It is a stored fact, here.
-    * the **interface** language — what a front-end shows. The front-end owns it; the method never
-      invents it and never stores it as its own.
-    * the **input** language — whatever the person happened to type. It changes NEITHER of the
-      other two. On the VM he had no Ukrainian keyboard, typed English, and the session that took
+    * the **user's** own language (`language.user`) -- recorded for the record, switches nothing;
+    * the **input** language -- whatever the person happened to type. It changes nothing. On the VM he had no Ukrainian keyboard, typed English, and the session that took
       its language from the last message would have flipped the whole tune to English on one
       sentence forced by a missing layout.
 
@@ -1440,8 +1439,8 @@ def _main(argv):
                 print("reply: not recorded — ASK which language to write in "
                       "(`intake.save(<project>, 'project.language', '<code>')`); "
                       f"choices: {', '.join(LANGUAGES)}")
-            print("the interface language is the front-end's, not the method's; "
-                  "the language the person TYPES changes neither")
+            print("the reply language IS the interface language (the front-end's, or the form's "
+                  "--lang); the user's own language and the language the person TYPES change nothing")
             return 0 if got["lang"] else 3
         elif cmd == "catch-up":
             dry = "--dry-run" in args

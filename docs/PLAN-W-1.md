@@ -71,6 +71,11 @@ only these files would have written the short version of the exhibit in S-046.
 
 S-045.
 
+> **Superseded 2026-09-22 (the Arbiter):** the AI's language IS the interface language, always —
+> there is no separately chosen reply language. `language.reply` records the interface language;
+> the user's own language is an optional `language.user` that switches nothing; the input language
+> still changes nothing. `docs/DESIGN-2026-09-22-intake-simplified.md`, Round 5.
+
 **Settled 2026-09-20, and his evidence decides it: THREE languages live in one session.** Testing on the
 Windows VM he had no Ukrainian keyboard, so he typed in English, the session answered in Ukrainian, and
 the interface was Ukrainian.

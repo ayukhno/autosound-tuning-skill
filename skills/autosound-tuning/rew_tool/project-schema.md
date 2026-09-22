@@ -114,11 +114,13 @@ machine-readable to render for its Project/System/Car-audio-analysis panels eith
                                                              //   presets — SQ and FULL are one
                                                              //   project on one measurement base
 
-  "language": {                                              // S-045: the REPLY language, and only it
-    "reply": "uk"                                            //   en | uk | de | pl; null = ASK, never guess
-  },                                                         //   the INTERFACE language is a front-end's
-                                                             //   own; the language the person TYPES is
-                                                             //   stored nowhere and changes neither
+  "language": {                                              // S-045 + the Arbiter 2026-09-22:
+    "reply": "uk",                                           //   the AI's language = the INTERFACE
+                                                             //   language, recorded here (the form's
+                                                             //   --lang, written on Save); null = ASK
+    "user": "pl"                                             //   optional: the person's own language;
+  },                                                         //   recorded, switches NOTHING. What the
+                                                             //   person TYPES is stored nowhere
 
   "glossary": {                                              // SCR-008 -- naming.Glossary.for_project
     "channels": [{"code": "w-L", "active": true}, {"code": "c", "active": false}],

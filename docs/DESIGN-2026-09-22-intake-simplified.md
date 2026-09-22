@@ -308,3 +308,60 @@ a stale profile of another processor no longer counts.
 **Where the pages are:** from this round the session's role may write only inside the skill tree
 and `hub/scratch/skill/`, so the regenerated pages are in `hub/scratch/skill/intake/`, not the old
 scratchpad.
+
+## Round 5: no confirm ticks, languages, the drive side from the car, knobs as rows (same day)
+
+**1. The confirm ticks are gone.** "Defaults are written only on confirmation" was the
+coordinator's caution, not the Arbiter's rule. A pre-filled value is now an ordinary value: a
+control starts from what is on DISK (`data-orig`), so a value the page shows and the disk does not
+yet hold is a change, and Save writes it. **One exception stays:** the write-once seat asks for
+explicit confirmation before it is written or changed. A processor change that replaces a saved
+map also still asks. The optional driver table pre-fills nothing.
+
+**2. Languages: the Arbiter's decision, 2026-09-22.**
+- **Interface language:** an INPUT of the form, `--lang` on `serve` and `render`. TCC or the skill
+  passes it at start, and both routes (`/` and `/new-dsp`) show it. It is never asked on the page.
+- **AI / reply language = the interface language, always.** Save writes `project.language`
+  (`language.reply`) from `--lang` whenever the disk differs. There is no separately chosen reply
+  language any more.
+  - Changed wording: `intake.py`'s field note, `SKILL.md`'s pre-session paragraph,
+    `project-intake.md` §0 (the table is now interface = reply / user / input), `phase_-1_intake.md`
+    step 1 and §0.6 (where `--lang` is documented), `project-schema.md`, `project.py`'s docstring
+    and its `language` report, and `contract.py`'s "not recorded" line.
+  - `project.py <project> language` works as before.
+  - `docs/PLAN-W-1.md` carries a "superseded" note. The v3.0.59 CHANGELOG entry is history and
+    was left alone; the release note for this wave should say it.
+- **User's language:** a new optional field, `project.user_language` → `project.json`
+  `language.user`. It offers uk/en/de/pl and "інша…" with free text, is empty by default with
+  nothing pre-filled, and switches nothing.
+- **Input language** (whatever the person types) still changes nothing.
+
+**3. The drive side comes with the car.** `known_cars()` carries `drive_side` when its source
+records it:
+- a neighbouring project's `car.drive_side`;
+- the single LHD/RHD a library entry's opening lines name (the Passat: "…; LHD, 2026");
+- when two sources know the same car, a known side fills an unknown one.
+
+Picking such a car, or keeping the project's saved car, folds the question into one line
+(«Кермо — з вибраної машини: Ліве (LHD) · змінити»). It is asked only for a new or edited car,
+with LHD pre-filled. Checked headless: pick the Passat → folded; change B8 → B9 → asked, and the
+car is flagged as new.
+
+**4. The remote knobs are a list of `name — position` rows**, pre-seeded from the processor's
+profile (`intake.dsp_knobs`: the `…RC` entries of `effects_and_dynamics` / `features`; Helix:
+SubRC, RearRC; Musway: none).
+- «+ додати свій» adds any other knob by name (e.g. the head unit's bass). The position is free
+  text ("4/4", "7").
+- The rows follow a processor change. The processor's own knobs follow it; rows the person added
+  survive it.
+- They are written to the method's existing home, `hardware.controls`, through
+  `Project.set_hardware_control` (`intake.save_controls`, `source=user`). Where a knob stood for a
+  capture stays the round's (`process.py capture-knobs`), and what a step is worth stays
+  `set-control-mapping` (RES-007).
+- One line of help text says why: a knob in another position makes two series incomparable.
+
+**Gate:** unchanged.
+
+**The live server at :7411** was started before this round and still runs the round-4 code in
+memory: a reload does not load changed Python. It was left running as asked; a restart shows
+round 5. The static pages in `hub/scratch/skill/intake/` are regenerated.
