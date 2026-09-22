@@ -19,6 +19,7 @@ This is the penultimate phase. Measurements verify technical correctness — a f
 ---
 
 ## Core Guidelines
+* **An image that leans may be the aim, not the tune:** before reading a pull toward one side as a delay or level fault, read `channels[].install` (how each driver is installed, in the person's own words) and `hardware.description`. A driver aimed at the driver's ear pulls the image differently at another seat (W-2 A.7).
 * **On-Demand Ear Checks:** Listening checks are not restricted to this phase — during crossover selection, time-alignment and joint phasing they can *raise* a question. They do not *settle* one: a thing heard is answered by a measurement (a capture, a prediction, a verify), never the other way round (skill #22).
 * **Curated Diagnostic Tracks:** Always refer to the index in [test-tracks.md](references/patterns/test-tracks.md) to pick the exact track tailored to expose specific acoustic traits (e.g., soundstage depth, lateral focus, midbass punch, or vocal sibilance).
 * **Hypothesis-Driven Instruction:** Do **not** dump a long, overwhelming list of songs on the user. Propose **one track at a time**, instructing the user exactly:

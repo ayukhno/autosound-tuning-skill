@@ -51,6 +51,7 @@ Equalize the physical flight times of sound from each driver to the microphone.
   * **How to manually inspect/verify:** Open the Impulse Response (IR) graph in the REW GUI. Locate the true geometric beginning of the impulse (**onset** — the very first deviation of the leading edge from the zero-amplitude line).
   * **Accounting for DSP offsets:** Always check if any time delays or phase adjustments were active in the DSP during measurement. If the DSP had active delays (e.g., from a prior tune), the acoustic arrival will be measured on top of those existing delays. We must manually subtract/account for those pre-existing delays to find the true physical acoustic paths.
 * Use the **IR FIRST FRONT** (leading edge, NOT the global peak) of each solo channel.
+* **Where the drivers are and where they point** is in `channels[].install` (how each driver is installed, in the person's own words) and `hardware.description`. Read them before trusting an arrival: a driver aimed away from the seat, or firing off a surface, can put a reflection ahead of the weak direct sound, which is the lock-on this section warns about.
 * **Reference Selection:** The latest-arriving driver gets `0.00 ms` added delay, and every earlier driver is delayed to match it. Find "who is latest" from the measurements — do **not** assume it is the midbass.
 * *Note:* Absolute IR time is crossover-independent and should be set early. Joint phase alignment is a separate, second step done in Phase 2.
 
@@ -69,6 +70,7 @@ Equalize the physical flight times of sound from each driver to the microphone.
 ### 3.5 Preliminary Level Balance (computed from geometry — a starting hypothesis)
 Set an initial **cut-only** per-channel level from physics, then verify by RTA/ear (a start, not a verdict). The nearer / more on-axis driver is louder at the reference seat → cut it.
 * **Method** ([`rew_tool/level_offsets.py`](rew_tool/level_offsets.py)): per driver, off-axis loss = band-averaged far-field piston directivity `D(f,θ)=2·J1(ka·sinθ)/(ka·sinθ)`, plus distance loss `10·n·log10(d)`; offsets normalized cut-only (loudest driver cut most). This is why the mid can differ from the tweeter/woofer — the directivity integral depends on the driver's radius, band, and angle.
+* **Read what the intake already holds first:** `channels[].install` (how each driver is installed, in the person's own words) and `hardware.description`. «Направлено на водія в вухо» IS the aiming angle for that driver. Ask only what those notes leave out, and name what they said that the numbers below use (W-2 A.7).
 * **Inputs are PROJECT data — ASK the user** (store in `autosound_context.md`, Engineering Profile): per-driver **distance** to the reference ear, **off-axis aiming angle** (pods/pillars: on-axis / cross-fired / to centre), **effective piston radius** (≈ cone/dome size; the **enclosure** sets the LF band edge), cabin **distance exponent `n`** (2 = free field; lower if reverberant).
 * The computed gains are the **start**; the summed RTA (§5 / Phase 2c) and the ear confirm/trim them. Never treat the number as final.
 
