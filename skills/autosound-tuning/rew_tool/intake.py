@@ -1028,11 +1028,6 @@ FIELDS = (
             "model are one column. A row written before keeps `driver.make`/`driver.model` and is read "
             "as \"make model\".",
        when="install", place="equipment"),
-    _f("channel_map.amp", "channel_map", "Amplifier and its channel", per="channel",
-       writes="project:channels[].amp",
-       note="Free text (\"GZPA 4SQ, ch 3\"): which amplifier drives this output, and on which of its "
-            "channels. Asked beside the driver, 2026-09-22.",
-       when="install", place="equipment"),
     _f("channel_map.fs_hz", "channel_map", "The driver's Fs", per="channel",
        writes="project:channels[].fs_hz",
        note="Carries provenance: a datasheet number is `source=datasheet` and a later impedance "
@@ -1040,6 +1035,17 @@ FIELDS = (
             "HPF is bound to it (>= 1.1 x Fs, >= 24 dB/oct), so an Fs carried in from another "
             "project is not this build's until it is confirmed here (skill #36).",
        when="install", derive="the driver's datasheet, from its make and model", place="equipment"),
+    _f("channel_map.amp", "channel_map", "Amplifier and its channel", per="channel",
+       writes="project:channels[].amp",
+       note="Free text (\"GZPA 4SQ, ch 3\"): which amplifier drives this output, and on which of its "
+            "channels. Asked beside the driver, 2026-09-22.",
+       when="install", place="equipment"),
+    _f("channel_map.install", "channel_map", "How it is installed", per="channel",
+       writes="project:channels[].install",
+       note="Free text, in the person's words (\"kick panel, aimed at the far side\", \"stock door, "
+            "sealed pod\"). The Arbiter, 2026-09-22: kept as ONE text column while no tool computes "
+            "from a mount or an aim -- the structured model is the idea in docs/TODO.md S-051.",
+       when="install", place="equipment"),
     _f("channel_map.position", "channel_map", "Where it sits and where it points", per="channel",
        enum=POSITIONS, writes="project:channels[].position",
        note="Take it from the person or from a measurement — never from a car/DSP profile: "

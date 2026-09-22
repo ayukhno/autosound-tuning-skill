@@ -286,7 +286,8 @@ th, td { border:1px solid var(--line); padding:5px 7px; text-align:left; vertica
 th { background:#f6f6f6; font-weight:600; font-size:12px; }
 td input, td select { min-width:90px; width:100%; }
 table.drivers th { white-space:normal; min-width:110px; } table.drivers td select { min-width:130px; }
-table.drivers td input.wide { min-width:180px; }
+table.drivers td input.wide { min-width:180px; } table.drivers td.nowrap { white-space:nowrap; }
+table.drivers td input.num { width:80px; min-width:70px; }
 .note { background:#fff; border:1px dashed var(--line); border-radius:8px; padding:9px 12px;
         color:#555; font-size:13px; margin:0 0 10px; }
 .ok { color:var(--have); font-size:12px; }
@@ -1091,6 +1092,11 @@ def _driver_table(m, cols, ui):
             orig[leaf] = value.strip() or None
             # No pre-selected default in this optional table: a cell the person did not touch is
             # not an answer, and there is no tick here to confirm one.
+            if leaf == "fs_hz":
+                # A number, and the unit written after it (the Arbiter, 2026-09-22).
+                cells.append(f'<td class="nowrap"><input type="number" class="num" step="0.1" min="1" '
+                             f'data-k="fs_hz" value="{_esc(value)}"> {_esc(ui.get("hz", "Hz"))}</td>')
+                continue
             cells.append(f'<td>{_choice(dict(c, default=None), value, ui, key=leaf)}</td>')
         body.append(f"<tr class=\"unit\" data-kind=\"chanrow\" data-orig='{_esc(json.dumps(orig))}'>"
                     f'<th>{_esc(row.get("code"))}<input type="hidden" data-k="code" value="{_esc(row.get("code"))}"></th>'

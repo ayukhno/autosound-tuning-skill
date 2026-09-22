@@ -72,11 +72,15 @@ machine-readable to render for its Project/System/Car-audio-analysis panels eith
      "id": "m-L", "previous_names": ["m-L"],                 // SCR-039: written only by a rename.
                                                              //   Absent = id is the code, which is
                                                              //   every project that never renamed
-     "driver": {"make": "Audiofrog", "model": "GB25"},
+     "driver": {"name": "Audiofrog GB25"},                   // 2026-09-22: one line as written; a
+                                                             //   row from before keeps make/model
      "fs_hz": {"value": 62, "source": "datasheet", "at": "…"},
      "impedance_ohm": 4, "hidden": false,
-     "position": "door", "enclosure": "free_air",            // SCR-059: asked of every channel and
-     "condition": "broken_in"},                              //   enumerated (`intake.POSITIONS`, ...)
+     "amp": "GZPA 4SQ, ch 3",                                // free text: amplifier and its channel
+     "install": "kick panel, aimed at the far side",         // free text: how it is installed
+     "position": "door", "enclosure": "free_air",            // SCR-059, enumerated (`intake.POSITIONS`,
+     "condition": "broken_in"},                              //   ...); off the form until a tool uses
+                                                             //   them (S-051) -- `install` carries it
     {"code": "vrf", "slot": "F", "hidden": true,             // SCR-003: no physical driver assigned
      "role": "unused", "tier": "virtual_channels"}           // SCR-042: which tier it is spare OF.
                                                              //   Slot letters REPEAT across tiers (this
