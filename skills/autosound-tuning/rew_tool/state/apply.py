@@ -212,6 +212,13 @@ def advisories(current, proposed):
                     if lo and hi / lo >= _XOVER_FACTOR:
                         out.append(f"{label}: {leg.upper()} {fa['f']:g}→{fb['f']:g} Hz — large "
                                    f"crossover move; re-check the joint phase/summation.")
+                # #58 P6: a value that DEPENDS on a changed one is flagged when it was carried over. Delays were
+                # carried across 2800 BE24 → 3500 LR24 without a word: the delay at a junction was set for its
+                # old edge, and a new edge (a new corner or a new family) moves where the members sum.
+                if (fa != fb and isinstance(fb, dict) and fb.get("f") and "ta_ms" in b
+                        and a.get("ta_ms") == b.get("ta_ms")):
+                    out.append(f"{label}: {leg.upper()} changed and its delay {b.get('ta_ms'):g} ms did not — "
+                               f"the delay was set for the old edge; re-read the junction before trusting it.")
     return out
 
 
@@ -634,6 +641,10 @@ def _selftest():
     said = gain_grid_advisories(gproj, base, {"channels": {"w-L": {"gain_db": -1.2}}})
     assert said and "set to 1 dB" in said[0] and "rounded" in said[0], said
     assert gain_grid_advisories(os.path.join(gproj, "nowhere"), base, {"channels": {"w-L": {"gain_db": -1.2}}}) == []
+    # #58 P6: an edge that moved while its delay stayed is named -- the delay was set for the old edge.
+    cur_ = {"channels": {"tw-L": {"hp": {"f": 2800, "type": "BE", "slope": 24}, "ta_ms": 2.6}}}
+    new_ = {"channels": {"tw-L": {"hp": {"f": 3500, "type": "LR", "slope": 24}, "ta_ms": 2.6}}}
+    assert any("set for the old edge" in a for a in advisories(cur_, new_)), advisories(cur_, new_)
     print(f"selftest OK — propose banked 🟡 + settings-sheet (old→new, 5.45 ms=523 smp@96k), "
           f"advisory on polarity flip, attest flipped 🟡→🟢 (w-L,sub); tier-keyed delta proposed+"
           f"attested a VIRTUAL-tier row (schema v2 — impossible before this), structured EQ bands "
