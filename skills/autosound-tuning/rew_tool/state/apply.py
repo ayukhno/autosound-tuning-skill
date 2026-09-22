@@ -37,6 +37,69 @@ import os
 
 import state as _state
 
+# ── evidence-gated banking (#57 P2, #58 P7/P11) ─────────────────────────────────────────────────
+# `finish_step` refused prose-only evidence while `propose` accepted anything: it banked a polarity flip
+# whose only support was a single-point sweep the tool itself had marked UNVERIFIED, and a centre
+# crossover derived from a filtered measurement -- both reverted the next day. So a STRUCTURAL move
+# (polarity, a delay, a crossover edge, a gain step at or above the threshold) banks as a PROPOSAL only
+# with evidence that resolves and one reviewer call behind it; without them it banks as a 🟠 CANDIDATE:
+# a version on the line, visible, never placed in the slot and never attested (#58 P11: a candidate is
+# fast, a banked version is proven). EQ inside a channel's own band stays as it was -- never the problem.
+#: A polarity and a crossover edge always count. A delay counts from half a millisecond (a junction's alignment,
+#: not a desk's fine trim) and a gain from the advisory threshold below (#57 P2: "above an advisory threshold").
+STRUCTURAL_GAIN_DB = 6.0
+STRUCTURAL_TA_MS = 0.5
+_REFUSED_VERDICTS = ("UNVERIFIED", "BLOCK", "BLOCKED", "REFUSED")
+
+
+def structural_moves(current, proposed):
+    """`["w-L polarity", "tw-L hp", ...]` -- the moves that need evidence to bank as a proposal."""
+    out = []
+    for tier in _state.tier_names(proposed):
+        for ch, row in (proposed.get(tier) or {}).items():
+            was = (current.get(tier) or {}).get(ch) or {}
+            if (row or {}).get("polarity") != was.get("polarity") and "polarity" in (row or {}):
+                out.append(f"{ch} polarity")
+            for leg in ("hp", "lp"):
+                if leg in (row or {}) and row.get(leg) != was.get(leg):
+                    out.append(f"{ch} {leg}")
+            ta, ta0 = (row or {}).get("ta_ms"), was.get("ta_ms")
+            if isinstance(ta, (int, float)) and (not isinstance(ta0, (int, float)) or abs(ta - ta0) >= STRUCTURAL_TA_MS):
+                if ta != ta0:
+                    out.append(f"{ch} delay")
+            g, g0 = (row or {}).get("gain_db"), was.get("gain_db")
+            if isinstance(g, (int, float)) and isinstance(g0, (int, float)) and abs(g - g0) >= STRUCTURAL_GAIN_DB:
+                out.append(f"{ch} gain")
+    return out
+
+
+def evidence_problems(evidence, project_dir):
+    """`[]` when every item resolves, else what does not: a measurement title in the grammar, or a file (a tool's
+    verdict) that exists and does not say UNVERIFIED/BLOCK. Prose resolves to nothing, as in `finish_step`."""
+    items = [evidence] if isinstance(evidence, str) else list(evidence or [])
+    if not items:
+        return ["no evidence given"]
+    import naming as _naming
+    bad = []
+    for item in items:
+        text = str(item).strip()
+        path = text if os.path.isabs(text) else os.path.join(project_dir or "", text)
+        if os.path.isfile(path):
+            try:
+                with open(path, encoding="utf-8") as fh:
+                    doc = json.load(fh)
+            except (OSError, ValueError):
+                doc = None
+            said = str((doc or {}).get("verdict") or (doc or {}).get("status") or "").upper() if isinstance(doc, dict) else ""
+            if any(s in said for s in _REFUSED_VERDICTS):
+                bad.append(f"{text}: the tool itself says {said} -- that is not evidence to bank on")
+            continue
+        if _naming.parse_name(text):
+            continue
+        bad.append(f"{text!r}: neither a measurement title in the grammar nor a file")
+    return bad
+
+
 # advisory thresholds — voice, not veto
 _GAIN_JUMP_DB = 6.0
 _TA_JUMP_MS = 2.0
@@ -331,7 +394,8 @@ def write_delta(history, diff, rate, version, note=None, advisories=()):
     return path
 
 
-def propose(history, delta, note=None, provenance=None, registry=None, allow_nonactive=False):
+def propose(history, delta, note=None, provenance=None, registry=None, allow_nonactive=False,
+            evidence=None, reviewed=None):
     """Gate: validate the delta against current HEAD, bank a 🟡 proposed snapshot, return the sheet.
 
     Returns {version, sheet, full_render, diff, advisories}. Raises ValueError on a deterministic
@@ -360,18 +424,44 @@ def propose(history, delta, note=None, provenance=None, registry=None, allow_non
     if provenance is not None:
         proposed["provenance"] = provenance
     d = _state.diff_states(current, proposed)        # note current has no version yet in-memory
-    adv = advisories(current, proposed) + gain_grid_advisories(
-        getattr(history, "project_dir", None), current, proposed)
-    version = history.snapshot(proposed, note=note or "proposed change")   # validates again + versions
+    project_dir = getattr(history, "project_dir", None)
+    adv = advisories(current, proposed) + gain_grid_advisories(project_dir, current, proposed)
+    # #57 P2 / #58 P7: a structural move banks as a proposal only on evidence that resolves and one review. An
+    # import of what the device already holds (`provenance`) is its own evidence and needs no review.
+    moves = structural_moves(current, proposed)
+    held = []
+    if moves and provenance is None:
+        held = evidence_problems(evidence, project_dir)
+        if not reviewed:
+            held.append("no reviewer call behind it -- a structural change banks after one "
+                        "(`scripts/autosound_ai.py critic <package>`, then `reviewed=<the review file>`)")
+        elif not os.path.isfile(reviewed if os.path.isabs(str(reviewed))
+                                else os.path.join(project_dir or "", str(reviewed))):
+            held.append(f"reviewed={reviewed!r}: no such review file")
+    candidate = bool(held)
+    if candidate:
+        for tier in _state.tier_names(proposed):
+            for ch, row in (proposed.get(tier) or {}).items():
+                if (row or {}).get("status") == "proposed" and row != ((current.get(tier) or {}).get(ch)):
+                    row["status"] = "candidate"
+        proposed["variant"] = "candidate"
+    version = history.snapshot(proposed, note=note or ("candidate" if candidate else "proposed change"),
+                               place=not candidate)   # validates again + versions
     rate = proposed["sample_rate"]
     sheet = settings_sheet({**d, "to": version}, rate, history.preset, version, slot_note=slot_note)
     write_delta(history, {**d, "to": version}, rate, version, note=note, advisories=adv)
     if adv:
         sheet += "\n\n⚠️ **Advisories (double-check, not blocking):**\n" + "\n".join("- " + a for a in adv)
-    sheet += (f"\n\nAfter entering these in Helix, run `attest {version}` to bank it 🟢 applied, "
-              f"then take a control measurement (→ 📏 measured).")
+    if candidate:
+        sheet = (f"🟠 CANDIDATE {version} -- banked on the line, NOT in the slot, not to be entered yet. "
+                 f"Structural: {', '.join(moves)}. What it waits for: " + "; ".join(held)
+                 + ". Propose it again with `evidence=` and `reviewed=` to bank it as the slot's version.\n\n"
+                 + sheet)
+    else:
+        sheet += (f"\n\nAfter entering these in Helix, run `attest {version}` to bank it 🟢 applied, "
+                  f"then take a control measurement (→ 📏 measured).")
     return {"version": version, "sheet": sheet, "full_render": history.render(version),
-            "diff": d, "advisories": adv}
+            "diff": d, "advisories": adv, "candidate": candidate, "waits_for": held, "structural": moves}
 
 
 def attest(history, version=None, note=None):
@@ -401,9 +491,25 @@ def _selftest():
     h.snapshot(_state._sample_state(), note="baseline")   # seed HEAD (all applied)
 
     # propose a delta: w-L gain + TA, sub polarity flip.
-    r = propose(h, {"w-L": {"gain_db": -7.5, "ta_ms": 5.45}, "sub": {"polarity": "INV"}},
-                note="sub INV test + w-L trim")
-    assert r["version"] == "v_002", r["version"]
+    delta = {"w-L": {"gain_db": -7.5, "ta_ms": 5.45}, "sub": {"polarity": "INV"}}
+    # #57 P2: a polarity flip is structural. With no evidence and no review it banks as a 🟠 CANDIDATE -- on the
+    # line, not in the slot, never to be entered -- and says what it waits for.
+    cand = propose(h, delta, note="sub INV test + w-L trim")
+    assert cand["candidate"] and cand["version"] == "v_002" and h.head() == "v_001", cand
+    assert cand["structural"] == ["sub polarity"] and "🟠 CANDIDATE" in cand["sheet"], cand
+    assert h.load("v_002")["channels"]["sub"]["status"] == "candidate"
+    assert any("reviewer" in w for w in cand["waits_for"]) and any("no evidence" in w for w in cand["waits_for"])
+    # A verdict the tool marked UNVERIFIED is not evidence (the reverted polarity flip of #57 P2).
+    unv = os.path.join(h.project_dir, "joint-verdict.json")
+    with open(unv, "w", encoding="utf-8") as fh:
+        json.dump({"verdict": "apply UNVERIFIED"}, fh)
+    assert evidence_problems(["joint-verdict.json"], h.project_dir), "an UNVERIFIED verdict passed as evidence"
+    assert evidence_problems(["sub+w-L_2 (sw)"], h.project_dir) == [], "a measurement title is evidence"
+    review = os.path.join(h.project_dir, "review-sub-inv.md")
+    with open(review, "w", encoding="utf-8") as fh:
+        fh.write("reviewed")
+    r = propose(h, delta, note="sub INV test + w-L trim", evidence=["sub+w-L_2 (sw)"], reviewed=review)
+    assert not r["candidate"] and r["version"] == "v_003" and h.head() == "v_003", r
     # settings sheet carries old→new with derived samples and the polarity flip.
     assert "5.38 ms (516 smp) → 5.45 ms (523 smp)" in r["sheet"], r["sheet"]
     assert "-7.8 dB → -7.5 dB" in r["sheet"]
@@ -411,15 +517,15 @@ def _selftest():
     # polarity flip raised a (non-blocking) advisory.
     assert any("polarity" in a for a in r["advisories"]), r["advisories"]
     # the banked snapshot marks exactly the touched channels proposed; others stay applied.
-    s2 = h.load("v_002")
+    s2 = h.load("v_003")
     assert s2["channels"]["w-L"]["status"] == "proposed"
     assert s2["channels"]["sub"]["status"] == "proposed"
     assert s2["channels"]["tw-R"]["status"] == "applied", "untouched channel must stay applied"
 
     # attest → flips proposed→applied in a new snapshot.
-    a = attest(h, "v_002")
-    assert a["version"] == "v_003" and set(a["applied_channels"]) == {"w-L", "sub"}, a
-    s3 = h.load("v_003")
+    a = attest(h, "v_003")
+    assert a["version"] == "v_004" and set(a["applied_channels"]) == {"w-L", "sub"}, a
+    s3 = h.load("v_004")
     assert all(s3["channels"][c]["status"] == "applied" for c in ("w-L", "sub", "tw-R"))
 
     # ── virtual tier (schema v2): a TIER-KEYED delta addresses a tier other than `channels` ──
@@ -452,7 +558,7 @@ def _selftest():
     full_c = {"c": {"hp": {"f": 400, "type": "LR", "slope": 24},
                     "lp": {"f": 1200, "type": "LR", "slope": 24}, "gain_db": -9.0,
                     "ta_ms": 6.0, "polarity": "NORM", "eq_ptr": {}}}
-    rc = propose(h, full_c, note="enable center")
+    rc = propose(h, full_c, note="enable center", evidence=["c_2 (sw)"], reviewed=review)   # new edges: structural
     assert h.load(rc["version"])["channels"]["c"]["status"] == "proposed"
     assert "NEW row" in rc["sheet"]
 

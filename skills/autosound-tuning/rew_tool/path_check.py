@@ -404,7 +404,13 @@ def _selftest():
     assert got["sw"] == 0.0 and all(v > 4.0 for c, v in got.items() if c != "sw"), got
 
     # ---- 2 · bank the proposal, add an EQ band, export it; the aligned prediction sums clean ----
-    res = _apply.propose(hist, delta, note="aligned at the desk", registry=_state.Registry(state_root))
+    # Delays of 4+ ms are structural (#57 P2): the desk's alignment banks as the slot's version on the evidence of
+    # the sums it was read from and one review, as a session in the car would give it.
+    review = os.path.join(proj, "review-aligned.md")
+    with open(review, "w", encoding="utf-8") as fh:
+        fh.write("the aligned proposal, reviewed")
+    res = _apply.propose(hist, delta, note="aligned at the desk", registry=_state.Registry(state_root),
+                         evidence=["sw+w-L_1 (sw)"], reviewed=review)
     assert res["version"] == "v_002" and "smp" in res["sheet"], res["sheet"][:400]
     res3 = _apply.propose(hist, {"channels": {"tw-L": {"eq": [{"type": "PK", "f": 5000, "gain_db": -3.0, "q": 2.0}]}}},
                           note="one hygiene band", registry=_state.Registry(state_root))

@@ -61,7 +61,7 @@ import sys
 # One number across every machine file (see `project.py`'s own note). 3 is the format break.
 SCHEMA_VERSION = 3
 POLARITIES = ("NORM", "INV")
-STATUSES = ("proposed", "applied", "measured")
+STATUSES = ("candidate", "proposed", "applied", "measured")
 EQ_TYPES = ("PK", "LSH", "HSH", "APF1", "APF2")
 CHANNEL_FIELDS = (
     "tag", "mute", "off",
@@ -650,6 +650,76 @@ def verify_seals(root):
     return out
 
 
+def _side(code):
+    return code[-1] if len(code) > 2 and code[-2] == "-" and code[-1] in "LR" else None
+
+
+def _partners(state, code, leg):
+    """The channels meeting `code` at its `leg` edge: same side (or a sideless sub/centre), the facing edge
+    within 15 % of this one's frequency."""
+    rows = state.get("channels") or {}
+    mine = (rows.get(code) or {}).get(leg)
+    if not isinstance(mine, dict) or not mine.get("f"):
+        return []
+    facing = "lp" if leg == "hp" else "hp"
+    out = []
+    for other, row in rows.items():
+        if other == code:
+            continue
+        edge = (row or {}).get(facing)
+        if not isinstance(edge, dict) or not edge.get("f"):
+            continue
+        same_side = _side(other) is None or _side(code) is None or _side(other) == _side(code)
+        if same_side and abs(float(edge["f"]) - float(mine["f"])) <= 0.15 * float(mine["f"]):
+            out.append(other)
+    return sorted(out)
+
+
+def verification_set(state_a, state_b, series):
+    """The exact titles to capture next to verify what moved from A to B (#57 P3) -- a derivation, not a reflex.
+
+    "We changed something, so re-measure the series" cost a whole exchange ("what am I re-measuring for one
+    filter?!"). What moved decides what to measure: an EQ band or a gain on one channel -> that channel's solo
+    `(rta)`; a delay or a crossover edge -> the junction's pair, summed, as a sweep, plus the channel's solo; a
+    polarity -> the pair as MMM, normal and with the flipped member inverted. Returns `[(title, why)]`, deduped,
+    in the order a person captures them."""
+    out, seen = [], set()
+
+    def add(title, why):
+        if title not in seen:
+            seen.add(title)
+            out.append((title, why))
+    diff = diff_states(state_a, state_b)
+    for tier, rows in diff.items():
+        if tier == "preset" or not isinstance(rows, dict):
+            continue
+        for code, fields in rows.items():
+            if not isinstance(fields, dict):
+                continue
+            moved = set(fields)
+            if tier != "channels":
+                add(f"ALL_{series} (rta)", f"{tier}.{code} moved ({', '.join(sorted(moved))}): the virtual tier "
+                                             "feeds several outputs, so the whole-system sum shows it")
+                continue
+            if moved & {"eq", "gain_db"}:
+                add(f"{code}_{series} (rta)", f"{code}: {', '.join(sorted(moved & {'eq', 'gain_db'}))} changed")
+            for leg in ("hp", "lp"):
+                if leg in moved or "ta_ms" in moved:
+                    for other in _partners(state_b, code, leg):
+                        pair = "+".join(sorted((code, other)))
+                        add(f"{pair}_{series} (sw)", f"{code}{' ' + leg if leg in moved else ' delay'} moved: the "
+                                                     f"junction with {other}, summed")
+            if moved & {"hp", "lp"}:
+                add(f"{code}_{series} (rta)", f"{code}: its crossover moved, so its own band did")
+            if "polarity" in moved:
+                for leg in ("hp", "lp"):
+                    for other in _partners(state_b, code, leg):
+                        pair = "+".join(sorted((code, other)))
+                        add(f"{pair}_{series} (rta)", f"{code} polarity: the pair as MMM, normal")
+                        add(f"{pair} i_{series} (rta)", f"{code} polarity: the pair as MMM, {code} inverted")
+    return out
+
+
 def migrate_line(root, apply=False):
     """Move a per-preset ledger onto the per-project line (W-2 R, hub #195). A plan unless `apply`.
 
@@ -978,7 +1048,7 @@ def _fmt_filter(f):
     return f"{f['f']:g} {f.get('type', '?')} {f.get('slope', '?')}"
 
 
-_STATUS_ICON = {"proposed": "🟡", "applied": "🟢", "measured": "📏"}
+_STATUS_ICON = {"candidate": "🟠", "proposed": "🟡", "applied": "🟢", "measured": "📏"}
 
 
 def _fmt_opt(v, spec="g"):
@@ -1451,6 +1521,12 @@ def _main(argv=None):
     vp.add_argument("--from", dest="base", default=None, help="new: the version it starts from (default: the slot's)")
     vp.add_argument("--delta", default=None, help="new: a JSON file with the change, apply.py's delta shape")
     vp.add_argument("--note", default=None)
+    vs = sub.add_parser("verification-set", help="the exact titles to capture to verify what moved from one "
+                                                 "version to another (#57 P3)")
+    vs.add_argument("preset")
+    vs.add_argument("va")
+    vs.add_argument("vb")
+    vs.add_argument("--series", required=True, help="the series number the next captures carry (_N)")
     sub.add_parser("seal", help="seal every banked version not sealed yet (#58 P1); a seal is never renewed")
     sub.add_parser("verify", help="name every sealed version whose content changed (#58 P1); exit 3 if any")
     mp = sub.add_parser("migrate-line",
@@ -1470,6 +1546,14 @@ def _main(argv=None):
     except SnapshotError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
+    if args.cmd == "verification-set":
+        h_ = PresetHistory(args.root, args.preset)
+        todo = verification_set(h_.load(args.va), h_.load(args.vb), args.series)
+        if not todo:
+            print(f"nothing a measurement can see moved from {args.va} to {args.vb}")
+        for title, why in todo:
+            print(f"  {title:32} {why}")
+        return 0
     if args.cmd == "seal":
         added = seal_all(args.root)
         print(f"sealed {len(added)} version(s)" + (": " + ", ".join(added) if added else " -- all were sealed"))
@@ -2019,6 +2103,21 @@ def _selftest():
     broken = verify_seals(seal_root)
     assert [b["version"] for b in broken] == [sv] and "immutable" in broken[0]["why"], broken
     assert seal_all(seal_root) == [], "a seal must never be renewed over a mutation"
+
+    # -- #57 P3: the next capture is derived from what moved, not from the reflex to re-measure the series.
+    va = _sample_state()
+    va["channels"]["w-L"]["hp"] = {"f": 45, "type": "BW", "slope": 12}      # meets the sub's 45 Hz low-pass
+    vb = copy.deepcopy(va)
+    vb["channels"]["tw-R"]["eq"] = [{"type": "PK", "f": 6000, "gain_db": -2.0, "q": 3.0, "bypass": False}]
+    todo = verification_set(va, vb, 52)
+    assert [t_ for t_, _ in todo] == ["tw-R_52 (rta)"], todo
+    vc = copy.deepcopy(va)
+    vc["channels"]["w-L"]["polarity"] = "INV"
+    titles = [t_ for t_, _ in verification_set(va, vc, 52)]
+    assert titles == ["sub+w-L_52 (rta)", "sub+w-L i_52 (rta)"], titles
+    vd = copy.deepcopy(va)
+    vd["channels"]["w-L"]["ta_ms"] = 6.2
+    assert [t_ for t_, _ in verification_set(va, vd, 52)] == ["sub+w-L_52 (sw)"], verification_set(va, vd, 52)
 
     # -- W-2 R (hub #195): the old per-preset layout is still read, the move is a plan until
     #    --apply, the active slot keeps its numbers, and a half-moved line is refused with the way out.
