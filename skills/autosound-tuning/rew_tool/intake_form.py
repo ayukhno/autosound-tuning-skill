@@ -185,6 +185,7 @@ def model(project_dir, lang=DEFAULT_LANG):
     return {
         "project_dir": project_dir, "lang": lab.get("lang", lang), "ui": lab["ui"],
         "when": whens, "dsp": dsp, "dsps": intake.known_dsps(),
+        "map": intake.channel_map(project_dir),
         "cars": intake.known_cars(project_dir),
         "couplings": {c["id"]: {"fields": c["fields"], "why": c["why"],
                                 "title": lab["couplings"].get(c["id"]) or c["id"]}
@@ -272,6 +273,17 @@ td input, td select { min-width:90px; width:100%; }
 section { margin:0 0 22px; }
 section.goal, section.new-dsp { border-top:1px solid var(--line); padding-top:14px; }
 li { margin:3px 0; font-size:13.5px; }
+.chanmap details.tier { margin:8px 0 0; padding:4px 10px; }
+.chanmap details.tier > summary { text-transform:uppercase; letter-spacing:.05em; color:#475569; font-size:13px; }
+.slot { display:flex; align-items:center; gap:8px; padding:4px 0; border-bottom:1px solid #f1f1f1; flex-wrap:wrap; }
+.slot .sl { width:26px; color:#555; } .slot .sc { min-width:90px; }
+.slot-off .sc { color:#9ca3af; }
+.slot input.code, .slot input.slotname { min-width:120px; width:140px; }
+button.tog { font:inherit; font-size:12px; font-weight:600; text-transform:uppercase; padding:3px 10px;
+             border-radius:6px; background:#fff; cursor:pointer; margin-left:auto; }
+.tog-on { color:var(--have); border:1px solid var(--have); } .tog-off { color:#9ca3af; border:1px solid #d1d5db; }
+.curve-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:2px 10px; margin:6px 0; }
+.curve-ours { margin:6px 0; font-weight:500; }
 """
 
 _JS = """
@@ -326,14 +338,30 @@ function showNewDsp(on) {
   const sec = document.getElementById('new-dsp'); if (sec && on) sec.hidden = false;
   const h = document.getElementById('dsp-new-hint'); if (h) h.hidden = !on;
 }
+// The models are REMOVED and re-added rather than hidden: Safari ignores `hidden` on an <option>,
+// and the page has to behave the same in the system browser on macOS and on Windows.
+let allModels = null;
+function filterModels(vendor) {
+  const model = document.getElementById('dsp-model');
+  if (!model) return;
+  if (allModels === null) allModels = [...model.querySelectorAll('option[data-vendor]')];
+  const keep = model.value;
+  allModels.forEach(o => o.remove());
+  const other = model.querySelector('option[value=__other__]');
+  allModels.filter(o => o.dataset.vendor === vendor).forEach(o => model.insertBefore(o, other));
+  model.value = [...model.options].some(o => o.value === keep) ? keep : '';
+}
 function pickVendor(sel) {
   const other = sel.value === '__other__';
   document.getElementById('dsp-vendor-free').hidden = !other;
+  filterModels(sel.value);
   const model = document.getElementById('dsp-model');
-  [...model.options].forEach(o => { if (o.dataset.vendor) o.hidden = o.dataset.vendor !== sel.value; });
   model.value = other ? '__other__' : '';
   pickModel(model);
 }
+window.addEventListener('DOMContentLoaded', () => {
+  const v = document.getElementById('dsp-vendor'); if (v) filterModels(v.value);
+});
 function pickModel(sel) {
   const other = sel.value === '__other__';
   document.getElementById('dsp-model-free').hidden = !other;
@@ -349,6 +377,23 @@ function saveGoal(el) {
   const choices = [...document.querySelectorAll('.goal-pick')].filter(c => c.checked).map(c => c.value);
   send({goal: {choices, text: document.getElementById('goal-text').value}}, el);
 }
+function saveSlot(tier, slot, on, el) {
+  const row = el.closest('.slot');
+  const code = row.querySelector('input.code').value.trim();
+  const name = row.querySelector('input.slotname');
+  send({slot: {tier, slot: slot === null && name ? name.value.trim() : slot, code, on}}, el);
+}
+function saveCurve(el) {
+  const on = [...document.querySelectorAll('input[name=curve]')].find(r => r.checked);
+  const own = document.getElementById('curve-own').value.trim();
+  const value = !on ? '' : on.value === '__own__' ? own : on.value;
+  send({field: 'target_curve.candidate', value}, el);
+}
+window.addEventListener('DOMContentLoaded', () => {
+  const own = document.getElementById('curve-own');
+  if (own) own.addEventListener('input', () => {
+    const r = document.querySelector('input[name=curve][value=__own__]'); if (r) r.checked = true; });
+});
 function saveTiers(el) { send({dsp_tiers: valueOf(el.closest('.f'))}, el); }
 window.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.car-part').forEach(i => i.addEventListener('input', carEdited));
@@ -518,7 +563,7 @@ def _dsp_block(m, fields):
                      for v in vendors)
     m_opts = "".join(f'<option value="{_esc(d["model"])}" data-vendor="{_esc(d["vendor"])}"'
                      f'{" selected" if d["model"] == m_sel and d["vendor"] == v_sel else ""}'
-                     f'{"" if d["vendor"] == v_sel else " hidden"}>{_esc(d["model"])}</option>'
+                     f'>{_esc(d["model"])}</option>'
                      for d in m["dsps"])
     free_v = "" if v_sel != other else dsp["vendor"]
     free_m = "" if m_sel != other else dsp["model"]
@@ -566,6 +611,90 @@ def _goal_block(m, fields):
             f'<div>{boxes}</div><div class="row"><input type="text" id="goal-text" value="{_esc(wishes)}" '
             f'placeholder="{_esc(ui.get("goal_text", "in your own words"))}"></div>'
             f'<div class="row"><button class="save" onclick="saveGoal(this)">{_esc(ui.get("save", "Save"))}</button></div>'
+            f'<div class="err"></div></div>')
+
+
+def _channel_map_block(m, ui):
+    """The processor's channel map as TCC draws it (the Arbiter, 2026-09-22): one fold per tier in
+    use, headed `used/total`, one row per slot — `slot · code` and an ON/OFF action.
+
+    The code is PICKED from the standard codes for that tier or typed (a code of one's own), and an
+    unused slot reads `off-out-A` / `off-virt-F`. Writes go through `intake.save_slot`.
+    """
+    ids = "".join(f'<span id="f-{fid}"></span>' for fid in
+                  ("channel_map.code", "channel_map.slot", "channel_map.tier", "channel_map.hidden"))
+    if not m["map"]:
+        return (f'<div class="note" id="map-empty">{ids}'
+                f'{_esc(ui.get("map_first", "choose the processor first"))}</div>')
+    codes = {"virtual_channels": intake.SUGGESTED_VIRTUAL_CODES}
+    lists, out = [], []
+    for tier in dict.fromkeys(g["tier"] for g in m["map"]):
+        dl = f"codes-{tier}"
+        lists.append(f'<datalist id="{_esc(dl)}">' + "".join(
+            f'<option value="{_esc(c)}">' for c in codes.get(tier, intake.SUGGESTED_CHANNEL_CODES))
+            + "</datalist>")
+    for g in m["map"]:
+        rows = []
+        for r in g["rows"]:
+            shown = r["code"] if r["code"] else intake.off_code(g["tier"], r["slot"])
+            value = r["code"] if r["on"] else ""
+            action = (f'<button class="tog tog-off" onclick="saveSlot(\'{_esc(g["tier"])}\', \'{_esc(r["slot"])}\', false, this)">'
+                      f'{_esc(ui.get("chan_off", "switch off"))}</button>' if r["on"] else
+                      f'<button class="tog tog-on" onclick="saveSlot(\'{_esc(g["tier"])}\', \'{_esc(r["slot"])}\', true, this)">'
+                      f'{_esc(ui.get("chan_on", "switch on"))}</button>')
+            save = (f'<button class="save" onclick="saveSlot(\'{_esc(g["tier"])}\', \'{_esc(r["slot"])}\', true, this)">'
+                    f'{_esc(ui.get("save", "Save"))}</button>' if r["on"] else "")
+            rows.append(f'<div class="slot{"" if r["on"] else " slot-off"}">'
+                        f'<span class="sl">{_esc(r["slot"])} ·</span>'
+                        f'<span class="sc">{_esc(shown)}</span>'
+                        f'<input type="text" class="code" list="codes-{_esc(g["tier"])}" value="{_esc(value)}" '
+                        f'placeholder="{_esc(ui.get("code_pick", "code"))}">{save}{action}'
+                        f'<div class="err"></div></div>')
+        if not g["sized"]:
+            rows.append(f'<div class="slot"><input type="text" class="slotname" '
+                        f'placeholder="{_esc(ui.get("slot_new", "slot"))}">'
+                        f'<input type="text" class="code" list="codes-{_esc(g["tier"])}" '
+                        f'placeholder="{_esc(ui.get("code_pick", "code"))}">'
+                        f'<button class="tog tog-on" onclick="saveSlot(\'{_esc(g["tier"])}\', null, true, this)">'
+                        f'{_esc(ui.get("chan_on", "switch on"))}</button><div class="err"></div></div>')
+        tier_label = (ui.get("tier_names") or {}).get(g["tier"]) if isinstance(ui.get("tier_names"), dict) else None
+        out.append(f'<details class="tier" open><summary>{_esc(tier_label or g["label"])} '
+                   f'<b>{g["used"]}/{g["total"]}</b></summary>{"".join(rows)}</details>')
+    return (f'<div class="f chanmap" id="chanmap">{ids}<div class="q">'
+            f'{_esc(ui.get("map_title", "Channel map"))}</div>'
+            f'<div class="meta">{_esc(ui.get("map_why", ""))}</div>'
+            + "".join(lists) + "".join(out) + "</div>")
+
+
+def _curve_block(m, fields):
+    """The target curve: ONE choice (the Arbiter, 2026-09-22) — ours, NTT's presets, or one's own.
+
+    SQ-Comp-Ref ships with the skill; the sixteen presets are listed as NTT lists them and their
+    files are downloaded at nonotuningtool.com (their authors', not bundled); "own / other" is a
+    file the person brings, named in words.
+    """
+    ui = m["ui"]
+    f = next(x for x in fields if x["id"] == "target_curve.candidate")
+    value = f["value"] or ""
+    known = (intake.BUNDLED_CURVE,) + intake.NTT_CURVE_PRESETS
+    own = value if value and value not in known else ""
+
+    def radio(v, label):
+        return (f'<label class="opt"><input type="radio" name="curve" value="{_esc(v)}"'
+                f'{" checked" if value == v or (v == "__own__" and own) else ""}> {_esc(label)}</label>')
+
+    state = "have" if value else "nice"
+    return (f'<div class="f s-{state}" id="f-target_curve.candidate"><div class="q">'
+            f'<span class="dot d-{state}"></span>{_esc(f["ask"])}</div>'
+            f'<div class="curve-ours">{radio(intake.BUNDLED_CURVE, ui.get("curve_ours", "SQ-Comp-Ref — ours"))}</div>'
+            f'<div class="meta">{_esc(ui.get("curve_ntt", "Nono Tuning Tool presets"))} — '
+            f'<a href="{_esc(intake.NTT_URL)}" target="_blank" rel="noopener">nonotuningtool.com</a>. '
+            f'{_esc(ui.get("curve_ntt_note", ""))}</div>'
+            f'<div class="curve-grid">' + "".join(radio(c, c) for c in intake.NTT_CURVE_PRESETS) + "</div>"
+            f'<div>{radio("__own__", ui.get("curve_own", "own / other"))}'
+            f'<input type="text" id="curve-own" value="{_esc(own)}" '
+            f'placeholder="{_esc(ui.get("curve_own_hint", "its name or file"))}"></div>'
+            f'<div class="row"><button class="save" onclick="saveCurve(this)">{_esc(ui.get("save", "Save"))}</button></div>'
             f'<div class="err"></div></div>')
 
 
@@ -634,6 +763,14 @@ def _section(m, rows, ui, add_rows):
                 out.append(specials[f["couple"]](m, m["fields"]))
                 done |= {x["id"] for x in rows if x["couple"] == f["couple"]} | (
                     {"goal.wishes"} if f["couple"] == "purpose" else set())
+                continue
+            if f["per"] == "channel" and f["place"] == "now":
+                out.append(_channel_map_block(m, ui))
+                done |= {c["id"] for c in rows if c["per"] == "channel"}
+                continue
+            if f["id"] == "target_curve.candidate":
+                out.append(_curve_block(m, m["fields"]))
+                done.add(f["id"])
                 continue
             if f["per"] in ("channel", "amp"):
                 cols = [c for c in rows if c["per"] == f["per"]]
@@ -765,6 +902,11 @@ def apply_save(project_dir, payload):
             raise intake.IntakeError("порожнє значення — нічого не записано")
         return {"field": payload["field"],
                 "value": intake.save(project_dir, payload["field"], _coerce(payload["field"], value))}
+
+    if "slot" in payload:
+        row = payload["slot"]
+        return {"slot": intake.save_slot(project_dir, row.get("tier"), row.get("slot"),
+                                         code=row.get("code"), on=bool(row.get("on")))}
 
     if "dsp" in payload:
         # Vendor and model are ONE identity: both or nothing, written together.
@@ -950,8 +1092,15 @@ def _selftest():
         page = render(m)
         for fid in ids:
             assert f"f-{fid}" in page or fid in page, f"{fid} is not on the page"
+        # Nothing is LOADED from the network (no CDN, no font): it must open on a car's laptop. One
+        # thing may point out, and only as a link the person clicks: NTT, where the curve files are
+        # downloaded (round 3, 2026-09-22). Any other outbound reference still fails here.
         external = re.findall(r"""(?:src|href)=["']https?://""", page)
-        assert not external, f"the page reaches the network: {external[:3]}"
+        links = re.findall(r"""<a href=["'](https?://[^"']+)""", page)
+        assert len(external) == len(links) and set(links) <= {intake.NTT_URL}, \
+            f"the page reaches the network: {external[:3]} / links {links}"
+        assert not re.findall(r"""src=["']https?://|<link[^>]+href=["']https?://""", page), \
+            "the page loads something from the network"
         assert "Якою мовою відповідати" in page, "the Ukrainian labels did not reach the page"
         assert m["couplings"]["seat"]["fields"] == ["car.drive_side", "goal.reference_seat"], \
             m["couplings"]["seat"]
@@ -990,6 +1139,33 @@ def _selftest():
         tiers = next(f for f in m2["fields"] if f["id"] == "channel_map.tier")["options"]
         assert [v for v, _ in tiers] == ["virtual_channels", "channels", "inputs"], tiers
         assert '<section class="new-dsp" id="new-dsp" hidden>' in render(m2), "a known DSP is not new"
+        # ── round 3: the channel map as TCC draws it — a fold per tier, used/total, a row per slot
+        page2 = render(m2)
+        assert "Віртуальні <b>0/8</b>" in page2 and "Вихідні <b>0/12</b>" in page2, "tier headers"
+        assert [g["tier"] for g in m2["map"]] == ["virtual_channels", "channels"], \
+            "an out-of-scope tier (Helix inputs) is offered before the person chose it"
+        assert "off-virt-H" in page2 and "off-out-L" in page2, "a spare slot does not read off-…"
+        assert '<datalist id="codes-virtual_channels"><option value="VFL">' in page2
+        apply_save(root, {"slot": {"tier": "virtual_channels", "slot": "A", "code": "VFL", "on": True}})
+        apply_save(root, {"slot": {"tier": "virtual_channels", "slot": "F", "on": False}})
+        chans = {c["code"]: c for c in project.Project(root).load()["channels"]}
+        assert chans["VFL"]["slot"] == "A" and chans["VFL"]["hidden"] is False, chans
+        assert chans["off-virt-F"]["hidden"] is True and chans["off-virt-F"]["role"] == "unused", chans
+        try:
+            apply_save(root, {"slot": {"tier": "virtual_channels", "slot": "B", "code": "VFL", "on": True}})
+            raise AssertionError("one code went to two slots")
+        except intake.IntakeError as exc:
+            assert "one code, one channel" in str(exc), exc
+        assert "Віртуальні <b>1/8</b>" in render(model(root, "uk")), "used/total did not move"
+        # ── round 3: the target curve is ONE choice — ours, NTT's sixteen, or one's own ──────
+        assert 'value="SQ-Comp-Ref"' in page2 and "завантажувати не треба" in page2
+        for name in intake.NTT_CURVE_PRESETS:
+            assert f'name="curve" value="{_esc(name)}"' in page2, name
+        assert f'href="{intake.NTT_URL}"' in page2, "no link to where the curve files are"
+        apply_save(root, {"field": "target_curve.candidate", "value": "my_house_v3.txt"})
+        page3 = render(model(root, "uk"))
+        assert 'value="__own__" checked' in page3 and 'value="my_house_v3.txt"' in page3, \
+            "one's own curve does not come back as 'own / other' with its name"
         apply_save(root, {"field": "dsp.tiers_used", "value": ["channels"]})
         tiers = next(f for f in model(root, "uk")["fields"] if f["id"] == "channel_map.tier")["options"]
         assert [v for v, _ in tiers] == ["channels"], "the tiers in use do not narrow the row's choice"
@@ -1008,7 +1184,8 @@ def _selftest():
         # The goal ticks map onto the method's keys.
         apply_save(root, {"goal": {"choices": ["EMMA", "enjoyment", "other"], "text": "clear nav"}})
         goal = project.Project(root).load()["goal"]
-        assert goal == {"formats": ["EMMA"], "purpose": "both", "wishes": "clear nav"}, goal
+        assert goal == {"formats": ["EMMA"], "purpose": "both", "wishes": "clear nav",
+                        "target_curve": "my_house_v3.txt"}, goal
 
         # ── writing back goes through the method's writers, refusals included ────────────────
         apply_save(root, {"field": "rew.loopback", "value": "acoustic"})
@@ -1040,7 +1217,7 @@ def _selftest():
         assert intake.FIELDS[0]["ask"] in page_en, "the English fallback did not render"
 
     print(f"selftest OK (intake_form) — {len(ids)} fields render from one table, uk.json covers "
-          f"every one of them, the page carries no network reference, and every write goes through "
+          f"every one of them, the page loads nothing from the network (one link out: NTT), and every write goes through "
           f"intake's own writers")
     return 0
 

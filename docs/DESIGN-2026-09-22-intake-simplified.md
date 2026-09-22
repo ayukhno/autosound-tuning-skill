@@ -180,3 +180,53 @@ browser from a button. TCC does not embed it, because TCC ships PySide6-Essentia
 WebEngine on purpose, and it does not draw a second native form. The questions exist once, and there
 is one form to test. This supersedes the "TCC renders its own form from `intake.py` data" reading
 of SCR-059 (hub #178).
+
+## Round 3: the channel map as TCC draws it, and the curve as NTT lists it (same day)
+
+He made two corrections after the one-form decision, and one follow-up on the curve. The page
+is still stdlib-only HTML/JS. It was checked for macOS Safari and Windows Chrome/Edge: `datalist`,
+`details`, and no reliance on `hidden` on an `<option>`, which Safari ignores. The DSP model list
+is now filtered by removing and re-adding options.
+
+**1. «Карта каналів процесора» as a table, like TCC's** (`tcc/.../state/dsp_state.py`,
+`main_window._add_channel_switches`, read-only). `intake.channel_map(project_dir)` returns one fold
+per tier. The tiers are the ones in use (`dsp.tiers_used`), or else every in-scope tier the
+processor has; Helix's input stage is out of scope and not offered unless chosen. Each fold is
+headed `used/total` («ВІРТУАЛЬНІ 0/8», «ВИХІДНІ 0/12»). A tier of known size lists every slot,
+`A…` for a letter-style profile (`row_id_style`) and `1…` otherwise. Each row reads `slot · code`
+and has an УВІМКНУТИ/ВИМКНУТИ action. The code is picked from the tier's standard codes or typed:
+- Outputs: `SUGGESTED_CHANNEL_CODES` = sw, sw-f, sw-r, w-L/R, m-L/R, tw-L/R, c, r-L/R, from
+  `naming-and-structure.md`. The old bare `r` became `r-L`/`r-R`.
+- Virtual tier: `SUGGESTED_VIRTUAL_CODES` = VFL, VFR, VRL, VRR, VC, VSW. The method itself names
+  only `VFL`; the rest is the Arbiter's own set from his Helix build, recorded as that.
+
+The writer is `intake.save_slot(project_dir, tier, slot, code, on)`, on top of `Project`'s writers:
+- **Off:** the slot's row is renamed to `off-out-A` / `off-virt-F` (`rename_channel`, history kept),
+  hidden, `role: unused`. That is the naming `project.py` already uses for spare slots (SCR-042).
+- **On:** a live row is renamed. A spare row with no history (never measured, no id) is replaced
+  instead, so the new channel does not carry `off-virt-F` as its permanent id (SCR-039).
+- A code already used by another slot is refused. A new processor whose slot count is not known
+  yet lists only its existing rows plus an "add a slot" row. Its slot counts are still the
+  session's question.
+
+**2. The target curve is ONE choice** (`_curve_block`):
+- **SQ-Comp-Ref**, "ours": the skill's bundled curve (`references/patterns/target-curves/curves/
+  SQ-Comp-Ref_0db_REW.txt`), nothing to download. The Arbiter corrected the first reading of
+  "ours": it is this bundled curve, not a curve the method builds.
+- **The 16 NTT presets**, spelled as NTT lists them (`intake.NTT_CURVE_PRESETS`), with a link to
+  nonotuningtool.com and the note that the file is downloaded there, because the curves are
+  their authors' and are not bundled.
+- **«своя / інша»** with free text, for a file the person brings.
+
+It is stored in `project.json` `goal.target_curve`. The curve-library line in
+`naming-and-structure.md` now says that the intake list follows NTT's presets, and keeps the
+REW/project-specific names (`Flat`, `RAW-Cat (uni)`, `ATF`, `ATF EQ (Helix)`, `Arkadij`,
+`Arkadij v2`) as valid session targets that an intake records as «own / other».
+
+**One self-test invariant narrowed, on purpose:** "the page carries no network reference" became
+"the page LOADS nothing from the network (no `src=`, no `<link href>`) and links out only to NTT".
+The NTT link is a link the person clicks, not a resource the page loads, so the page still opens
+offline.
+
+**Gate:** unchanged. The map writes `channels[]` rows with `tier` and `slot` through the same
+writers. The glossary the gate needs is still written by the session (`channel_map.glossary_agreed`).

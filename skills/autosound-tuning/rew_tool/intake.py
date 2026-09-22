@@ -162,7 +162,14 @@ PLAUSIBLE_RATES_HZ = dsp_profile.PLAUSIBLE_RATES_HZ
 #: The codes the method SUGGESTS (`naming-and-structure.md`). Not an enumeration: the glossary is
 #: agreed with the person and written down (§0.5 step 5), and a car with two subs or no centre
 #: names its own set. A form offers these and takes what it is told.
-SUGGESTED_CHANNEL_CODES = ("sw", "sw-f", "sw-r", "w-L", "w-R", "m-L", "m-R", "tw-L", "tw-R", "c", "r")
+SUGGESTED_CHANNEL_CODES = ("sw", "sw-f", "sw-r", "w-L", "w-R", "m-L", "m-R", "tw-L", "tw-R", "c",
+                           "r-L", "r-R")
+#: The VIRTUAL tier's codes. The method names only `VFL` (the routing examples); the rest of the set
+#: is the Arbiter's own, as his Helix build names it (2026-09-22) -- offered, never enforced.
+SUGGESTED_VIRTUAL_CODES = ("VFL", "VFR", "VRL", "VRR", "VC", "VSW")
+#: What an UNUSED slot is called: `off-<tier>-<slot>`, hidden, role `unused` -- the naming
+#: `project.py` already uses for spare slots (SCR-042) and TCC shows as `off-virt-F` / `off-out-A`.
+OFF_PREFIX = {"channels": "off-out", "virtual_channels": "off-virt"}
 #: The ledger tiers a channel row names most often (`dsp_profile.ledger_tier`). Suggested, not
 #: enumerated: a profile may declare a tier of its own.
 SUGGESTED_TIERS = ("channels", "virtual_channels", "inputs")
@@ -172,8 +179,18 @@ SUGGESTED_MICS = ("miniDSP UMIK-1", "miniDSP UMIK-2", "Dayton Audio EMM-6", "Day
 SUGGESTED_CONSTRAINTS = ("no_door_work", "no_trim_changes", "budget", "time")
 #: A closed list with an escape (`other`), so a form can offer checkboxes -- several may apply.
 GENRES = ("rock", "pop", "jazz", "classical", "electronic", "hip_hop", "acoustic", "metal", "other")
-#: Third-party curves the method names (`voicing-by-ear.md`); none is bundled and none is a default.
-SUGGESTED_CURVES = ("harman", "resonix", "jazzi", "audiofrog", "own")
+#: The target curves as the Nono Tuning Tool offers its presets (the Arbiter, 2026-09-22), spelled
+#: as NTT spells them. They are their authors' and are NOT bundled: the file is downloaded at
+#: nonotuningtool.com (SKILL.md, `target_curves_guide.md`).
+NTT_CURVE_PRESETS = ("Audiofrog", "Whitledge", "Half Whitledge", "Harman", "JBL", "JL Audio", "Jazzi",
+                     "Jazzi v2", "RAW-Cat", "ResoNix Accurate", "ResoNix Laid-Back", "ResoNix 2026",
+                     "ATF Daily", "ATF SQ", "EPY", "Hanatsu")
+NTT_URL = "https://nonotuningtool.com"
+#: The one curve that SHIPS with the skill -- "ours", always there, nothing to download.
+BUNDLED_CURVE = "SQ-Comp-Ref"
+BUNDLED_CURVE_FILE = os.path.join(_HERE, "..", "references", "patterns", "target-curves", "curves",
+                                  "SQ-Comp-Ref_0db_REW.txt")
+SUGGESTED_CURVES = (BUNDLED_CURVE,) + NTT_CURVE_PRESETS
 
 
 def _bundled_dsps():
@@ -209,9 +226,37 @@ def known_dsps():
     return out
 
 
+def _groups_of(profile):
+    """The tiers a profile declares, as a form needs them: key, label, slot count, slot style."""
+    out = []
+    for g in dsp_profile._unwrap(profile).get("groups") or []:
+        if not isinstance(g, dict) or not g.get("id"):
+            continue
+        out.append({"tier": dsp_profile.ledger_tier(g["id"]), "label": g.get("label") or g["id"],
+                    "max_count": g.get("max_count"), "letters": g.get("row_id_style") == "letter",
+                    "in_scope": g.get("in_scope", True) is not False})
+    return out
+
+
+def slot_names(group):
+    """The slot labels of one tier: `A, B, ...` on a letter-style processor, `1, 2, ...` otherwise;
+    none when the tier's size is not known (a new processor before its slot count is answered)."""
+    n = group.get("max_count")
+    if not isinstance(n, int) or n <= 0:
+        return []
+    if group.get("letters"):
+        return [chr(ord("A") + i) if i < 26 else f"A{chr(ord('A') + i - 26)}" for i in range(n)]
+    return [str(i + 1) for i in range(n)]
+
+
+def off_code(tier, slot):
+    """`off-out-A`, `off-virt-F`: the name of a slot nothing is wired to."""
+    return f"{OFF_PREFIX.get(tier, 'off-' + str(tier))}-{slot}"
+
+
 def dsp_state(project_dir):
     """What the project's processor is, and whether the skill knows it -- `{"vendor", "model",
-    "source", "tiers", "new"}`.
+    "source", "tiers", "groups", "new"}`.
 
     `source` is where the tier list came from: the project's own `dsp_profile.json`, the bundled
     library on an exact vendor+model match, or the interview draft. `new` is True only when a
@@ -221,28 +266,109 @@ def dsp_state(project_dir):
     data = _read_project(project_dir) or {}
     dsp = data.get("dsp") or {}
     vendor, model = dsp.get("vendor") or "", dsp.get("model") or ""
-    out = {"vendor": vendor, "model": model, "source": None, "tiers": [], "new": None}
+    out = {"vendor": vendor, "model": model, "source": None, "tiers": [], "groups": [], "new": None}
+
+    def take(profile, source, new):
+        out.update(source=source, tiers=dsp_profile.tier_keys(profile), groups=_groups_of(profile))
+        if new is not None:
+            out["new"] = new
+
     own = dsp_profile.profile_path(project_dir)
     if os.path.isfile(own):
         try:
-            out.update(source="project", tiers=dsp_profile.tier_keys(dsp_profile.load_profile(own)),
-                       new=False)
+            take(dsp_profile.load_profile(own), "project", False)
             return out
         except (OSError, ValueError):
             pass
     if vendor and model:
         bundled = dsp_profile.find_bundled(vendor, model)
         if bundled is not None:
-            out.update(source="bundled", tiers=dsp_profile.tier_keys(bundled), new=False)
+            take(bundled, "bundled", False)
             return out
         out["new"] = True
     if os.path.isfile(dsp_profile.draft_path(project_dir)):
         try:
-            out.update(source="draft",
-                       tiers=dsp_profile.tier_keys(dsp_profile.load_profile(dsp_profile.draft_path(project_dir))))
+            take(dsp_profile.load_profile(dsp_profile.draft_path(project_dir)), "draft", None)
         except (OSError, ValueError):
             pass
     return out
+
+
+def channel_map(project_dir):
+    """The processor's channel map as TCC draws it: one entry per tier in use, one row per slot.
+
+    `[{"tier", "label", "total", "used", "rows": [{"slot", "code", "on"}]}]`. The tiers are the ones
+    the person said this car uses (`dsp.tiers_used`), else every in-scope tier the processor has.
+    A tier of known size lists EVERY slot -- a spare one is a row, not an absence; a tier whose
+    size is not known yet lists only the rows the project already has.
+    """
+    dsp = dsp_state(project_dir)
+    data = _read_project(project_dir) or {}
+    used = [t for t in ((data.get("dsp") or {}).get("tiers_used") or [])]
+    channels = [c for c in data.get("channels") or [] if isinstance(c, dict)]
+    out = []
+    for g in dsp["groups"]:
+        if (used and g["tier"] not in used) or (not used and not g["in_scope"]):
+            continue
+        mine = {str(c.get("slot")): c for c in channels if c.get("tier") == g["tier"] and c.get("slot")}
+        slots = slot_names(g) or sorted(mine)
+        rows = []
+        for slot in slots:
+            c = mine.get(slot) or {}
+            code = c.get("code") or ""
+            on = bool(code) and not c.get("hidden") and c.get("role") != "unused"
+            rows.append({"slot": slot, "code": code, "on": on})
+        out.append({"tier": g["tier"], "label": g["label"], "total": len(slots),
+                    "used": sum(1 for r in rows if r["on"]), "rows": rows,
+                    "sized": bool(slot_names(g))})
+    return out
+
+
+def save_slot(project_dir, tier, slot, code=None, on=True):
+    """Switch one slot on under `code`, or off -- through `Project`'s own writers.
+
+    On: the slot's existing row (if any) is RENAMED to `code` (`rename_channel`, so a spare that
+    becomes a channel keeps one identity), then given `tier`/`slot` and un-hidden. Off: the row is
+    renamed to `off-<tier>-<slot>`, hidden, `role: unused` -- the row stays, because it is the only
+    record that the slot exists (SCR-042). A code already used by ANOTHER slot is refused.
+    """
+    tier, slot = str(tier or "").strip(), str(slot or "").strip()
+    if not tier or not slot:
+        raise IntakeError("a slot needs its tier and its label — nothing was written")
+    handle = project.Project(project_dir)
+    data = handle.load()
+    here = next((c for c in data.get("channels") or []
+                 if isinstance(c, dict) and c.get("tier") == tier and str(c.get("slot")) == slot), None)
+    target = str(code or "").strip() if on else off_code(tier, slot)
+    if on and (not target or target.startswith("off-")):
+        raise IntakeError(f"slot {slot}: pick or type the channel's code to switch it on "
+                          "— nothing was written")
+    other = handle.resolve_channel(target, data)
+    if other is not None and other is not here:
+        raise IntakeError(f"the code {target!r} is already slot {other.get('slot')} of "
+                          f"{other.get('tier')} — one code, one channel. Nothing was written")
+    if here is not None and here.get("code") != target:
+        spare = (here.get("role") == "unused" and str(here.get("code", "")).startswith("off-")
+                 and not here.get("id") and not here.get("previous_names"))
+        if on and spare:
+            # A spare slot has no history -- no ledger row, no capture under its name -- so it is
+            # REPLACED rather than renamed: a rename would make `off-virt-F` the new channel's
+            # permanent id (SCR-039), and the first snapshot would key VRL under it.
+            data["channels"] = [c for c in data["channels"] if c is not here]
+            handle.save(data)
+        else:
+            handle.rename_channel(here["code"], target)
+    fields = {"slot": slot, "tier": tier, "hidden": not on}
+    if not on:
+        fields["role"] = "unused"
+    handle.set_channel(target, **fields)
+    if on:
+        data = handle.load()
+        row = handle.resolve_channel(target, data)
+        if row.get("role") == "unused":          # a spare switched back on is no longer unused
+            del row["role"]
+            handle.save(data)
+    return handle.resolve_channel(target)
 
 
 def known_cars(project_dir=None):
@@ -670,7 +796,10 @@ FIELDS = (
     _f("target_curve.candidate", "target_curve", "Which target curve?", required=True,
        writes="project:goal.target_curve",
        lands="`project.json` `goal` -> `rew_analitic/target-curves/<name>/` + `autosound_context.md` §4",
-       note="⛔ Chosen TOGETHER with the person — there is no default. Narrow by genres and taste to "
+       note="ONE choice (the Arbiter, 2026-09-22): SQ-Comp-Ref, the skill's own and bundled; one of "
+            "the Nono Tuning Tool presets, spelled as NTT lists them and downloaded there "
+            "(`NTT_CURVE_PRESETS`, `NTT_URL`); or one's own file, named in words. "
+            "⛔ Chosen TOGETHER with the person — there is no default. Narrow by genres and taste to "
             "2–3 candidates (`voicing-by-ear.md`). It is SEEDED here and finalised after the Phase-0 "
             "baseline: a curve is a start and a shape, not a finish and not a level.",
        when="0", suggest=SUGGESTED_CURVES, place="goal"),
@@ -1440,6 +1569,32 @@ def _selftest():
         labels = [c["label"] for c in known_cars(os.path.join(root, "third"))]
         assert "Skoda Octavia A7 wagon" in labels, labels
         assert "Skoda Octavia A7 wagon" not in [c["label"] for c in known_cars(sib)]
+
+        # ── round 3: a slot is switched on under a code, or off as `off-<tier>-<slot>` ──────
+        slots = os.path.join(root, "slots")
+        save(slots, "dsp.vendor", "Audiotec-Fischer")
+        save(slots, "dsp.model", "Helix DSP Ultra S")
+        cmap = channel_map(slots)
+        assert [(g["tier"], g["total"]) for g in cmap] == [("virtual_channels", 8), ("channels", 12)], cmap
+        assert cmap[1]["rows"][0] == {"slot": "A", "code": "", "on": False}, cmap[1]["rows"][0]
+        save_slot(slots, "channels", "A", on=False)
+        save_slot(slots, "channels", "A", "w-L")            # a spare with no history is REPLACED
+        row = project.Project(slots).load()["channels"]
+        assert row == [{"code": "w-L", "slot": "A", "tier": "channels", "hidden": False}], row
+        save_slot(slots, "channels", "A", on=False)         # a live channel is RENAMED, history kept
+        row = project.Project(slots).load()["channels"][0]
+        assert row["code"] == "off-out-A" and row["id"] == "w-L" and row["role"] == "unused", row
+        for bad in ({"code": ""}, {"code": "off-out-B"}):
+            try:
+                save_slot(slots, "channels", "B", on=True, **bad)
+                raise AssertionError(f"a slot went on with {bad}")
+            except IntakeError as exc:
+                assert "Nothing was written" in str(exc) or "nothing was written" in str(exc), exc
+        save(slots, "dsp.tiers_used", ["channels"])
+        assert [g["tier"] for g in channel_map(slots)] == ["channels"], "tiers in use do not narrow the map"
+        # The curve list: NTT's sixteen as NTT spells them, and ours, which is actually bundled.
+        assert len(NTT_CURVE_PRESETS) == 16 and "ResoNix 2026" in NTT_CURVE_PRESETS
+        assert os.path.isfile(BUNDLED_CURVE_FILE), BUNDLED_CURVE_FILE
 
         # ── the gate, on a real project: the glossary and the profile are what is missing ────
         g = gate_requirements(root)
