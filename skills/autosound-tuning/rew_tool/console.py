@@ -77,7 +77,7 @@ GLYPHS = {
     "✓": "OK", "✅": "OK", "✗": "X", "❌": "X",
     "⚠": "!", "️": "",   # ⚠ and the variation selector that follows an emoji
     "⛔": "STOP", "▶": ">", "⚖": "",
-    "\U0001f7e2": "[+]", "\U0001f7e1": "[~]", "\U0001f534": "[-]",
+    "\U0001f7e2": "[+]", "\U0001f7e1": "[~]", "\U0001f534": "[-]", "\U0001f7e0": "[?]",   # 🟠 a candidate
     "➕": "+", "➖": "-", "\U0001f4cf": "", "\U0001f4cc": "",
     "\U0001f50e": "",   # 🔎 — the form's "probed, not asked" marker; nothing on a bare console
 }
