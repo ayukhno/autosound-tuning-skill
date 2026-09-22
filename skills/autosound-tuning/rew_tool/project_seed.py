@@ -304,7 +304,7 @@ def _mark_inherited(obj, source):
 
 
 def seed(source, target, *, include_findings=False, copy_profile=True, note=DEFAULT_NOTE,
-         today=None):
+         today=None, seat=None):
     """Copy `source`'s system parameters into `target`. Never writes into `source`.
 
     Refuses rather than merges when `target` already has a `project.json`: seeding is the first
@@ -325,6 +325,11 @@ def seed(source, target, *, include_findings=False, copy_profile=True, note=DEFA
     thing -- `autosound-tcc`'s window computes it as `dsp_of(source) == (vendor, model)` -- so the
     behaviour was widened to the meaning rather than the name to the behaviour, which would have
     broken that caller for nothing.
+
+    `seat` is the new project's `project_type`, chosen AT the copy (the Arbiter, 2026-09-22: "when we
+    copy a project, the seat is exactly what I want to change"). The seat never travels -- another
+    seat is why a copy exists -- so without it the copy starts with the seat open and the intake
+    asks it; with it, the copy is born knowing what it is. An unknown seat refuses the copy.
     """
     source = os.path.abspath(os.path.expanduser(str(source)))
     target = os.path.abspath(os.path.expanduser(str(target)))
@@ -335,6 +340,9 @@ def seed(source, target, *, include_findings=False, copy_profile=True, note=DEFA
         return Seeded(False, problem=f"no readable project.json in {source}")
     if os.path.isfile(os.path.join(target, "project.json")):
         return Seeded(False, problem=f"{target} already has a project.json")
+    import project
+    if seat is not None and seat not in project.PROJECT_TYPES:
+        return Seeded(False, problem=f"seat {seat!r} is not one of {', '.join(project.PROJECT_TYPES)}")
 
     when = (today or date.today()).isoformat()
     name = os.path.basename(os.path.normpath(source))
@@ -364,10 +372,11 @@ def seed(source, target, *, include_findings=False, copy_profile=True, note=DEFA
     _mark_inherited(seeded, source)
     seeded["seeded_from"] = {"path": source, "at": when,
                              "keys": sorted(k for k in seeded if k not in ("project_rev", "sources"))}
+    if seat is not None:
+        seeded["project_type"] = seat
 
     result = Seeded(True)
     try:
-        import project
         project.Project(target).save(seeded)
     except Exception as exc:                # noqa: BLE001 -- the validator, or a disk that said no
         return Seeded(False, problem=f"{type(exc).__name__}: {exc}")
@@ -427,6 +436,10 @@ def main(argv=None):
     parser.add_argument("--note", default=DEFAULT_NOTE,
                         help="marker put at the top of each inherited prose file; "
                              "{source} and {when} are substituted")
+    parser.add_argument("--seat", default=None,
+                        help="the new project's seat (project_type: driver, passenger, both, all, "
+                             "rear_left, rear_right). The seat never travels; without this the "
+                             "copy starts with it open")
     parser.add_argument("--json", action="store_true", help="machine output")
     args = parser.parse_args(argv)
 
@@ -446,7 +459,7 @@ def main(argv=None):
         parser.error("a target directory is required unless --describe is given")
 
     result = seed(args.source, args.target, include_findings=args.findings,
-                  copy_profile=not args.no_profile, note=args.note)
+                  copy_profile=not args.no_profile, note=args.note, seat=args.seat)
     if args.json:
         print(json.dumps(vars(result), indent=2, ensure_ascii=False))
     elif not result.ok:
@@ -541,6 +554,16 @@ def _selftest():
         assert got["paths"] == {"measurements_repo": "~/corpus"}, got["paths"]
         # The write counter is this project's own, not the source's.
         assert got["project_rev"] == 1, got["project_rev"]
+        # The seat never travels: the copy starts with it open, or born with the one chosen AT the
+        # copy (2026-09-22) -- and an unknown seat refuses the whole copy.
+        assert "project_type" not in got or got["project_type"] is None, got.get("project_type")
+        sat = seed(src, os.path.join(tmp, "passenger-copy"), seat="passenger")
+        assert sat.ok, sat.problem
+        with open(os.path.join(tmp, "passenger-copy", "project.json"), encoding="utf-8") as f:
+            assert json.load(f)["project_type"] == "passenger"
+        bad = seed(src, os.path.join(tmp, "bad-seat"), seat="front_row")
+        assert not bad.ok and "front_row" in bad.problem, bad
+        assert not os.path.exists(os.path.join(tmp, "bad-seat", "project.json")), "a refused copy wrote"
         # The file says what happened to it.
         assert any("seeded from project 'old-car' on 2026-08-23" in s for s in got["sources"]), got
         assert "measured 2026-07-01" in got["sources"], got

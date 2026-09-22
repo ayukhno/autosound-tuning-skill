@@ -1022,11 +1022,16 @@ FIELDS = (
     _f("channel_map.descr", "channel_map", "How the DSP's own software labels it", per="channel",
        writes="project:channels[].descr",
        when="0", derive="read off the DSP software when its current state is imported"),
-    _f("channel_map.driver_make", "channel_map", "Driver make", per="channel",
-       writes="project:channels[].driver.make",
+    _f("channel_map.driver", "channel_map", "Driver — make and model", per="channel",
+       writes="project:channels[].driver.name",
+       note="One line as the person writes it (\"Audiofrog GB25\") -- the Arbiter, 2026-09-22: make and "
+            "model are one column. A row written before keeps `driver.make`/`driver.model` and is read "
+            "as \"make model\".",
        when="install", place="equipment"),
-    _f("channel_map.driver_model", "channel_map", "Driver model", per="channel",
-       writes="project:channels[].driver.model",
+    _f("channel_map.amp", "channel_map", "Amplifier and its channel", per="channel",
+       writes="project:channels[].amp",
+       note="Free text (\"GZPA 4SQ, ch 3\"): which amplifier drives this output, and on which of its "
+            "channels. Asked beside the driver, 2026-09-22.",
        when="install", place="equipment"),
     _f("channel_map.fs_hz", "channel_map", "The driver's Fs", per="channel",
        writes="project:channels[].fs_hz",

@@ -387,3 +387,21 @@ scroll to it".
 - **Required fields still empty** are marked red after Save (and on a Save with nothing new),
   and the page scrolls to the first. They do not block saving what is filled, so the intake
   can be done in several sittings.
+
+## Round 7 (2026-09-22): the driver table, and what cannot change is not offered
+
+The user: merge the driver's make and model into one column; add a column for the amplifier and
+its channel (text); the "New or broken in?" column was clipped; why does the seat ask again; "when
+something is fixed and cannot be changed, don't let the form change it, and say why"; "when we copy
+a project, the seat is exactly what I want to change".
+
+- **Driver: one column**, `channel_map.driver`, written as `channels[].driver.name` ("Audiofrog
+  GB25"). The old `driver_make`/`driver_model` fields are gone; a row written before still reads as
+  "make model". **Amplifier and its channel**: `channel_map.amp`, free text, `channels[].amp`.
+- The driver table's headers wrap, and its selects no longer squeeze below their text.
+- **The seat no longer asks on Save.** Before it is written, a line under the question says it is
+  chosen once and that another seat is a copy. **Once written it is shown FIXED**: the value, "fixed",
+  and why (every measurement, delay and level here was made for that seat), with no control on the
+  page (`LOCKED_ONCE_SET`). The writer's refusal can no longer be reached from the form.
+- **The seat is chosen at the copy**: `project_seed.seed(..., seat=)` and `--seat`. The seat
+  never travels; without it the copy starts with it open. TCC's copy dialog: hub `#193` (SKL-048).

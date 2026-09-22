@@ -9,8 +9,8 @@ the failure the car package already cost us (hub `#185`), and a terminal session
 all — so `serve` gives it one.
 
 **Round 4 (2026-09-22):** ONE «Зберегти» per page, sending only what changed as one batch; a
-pre-selected default is saved only once its tick confirms it; the seat and a processor change that
-replaces a saved channel map ask first; the channel map is drawn by the page's JS from the data it
+a processor change that replaces a saved channel map asks first (round 6: the seat no longer asks;
+once written it is shown FIXED, with why, and another seat is a copy of the project); the channel map is drawn by the page's JS from the data it
 carries, so it follows a processor change before anything is saved; a NEW processor's base is its
 own page (`/new-dsp`); the memo is not rendered.
 
@@ -285,6 +285,8 @@ table { border-collapse:collapse; width:100%; background:#fff; font-size:13px; }
 th, td { border:1px solid var(--line); padding:5px 7px; text-align:left; vertical-align:top; }
 th { background:#f6f6f6; font-weight:600; font-size:12px; }
 td input, td select { min-width:90px; width:100%; }
+table.drivers th { white-space:normal; min-width:110px; } table.drivers td select { min-width:130px; }
+table.drivers td input.wide { min-width:180px; }
 .note { background:#fff; border:1px dashed var(--line); border-radius:8px; padding:9px 12px;
         color:#555; font-size:13px; margin:0 0 10px; }
 .ok { color:var(--have); font-size:12px; }
@@ -317,6 +319,7 @@ section.equipment { border-top:1px solid var(--line); padding-top:14px; }
 button.add { font:inherit; font-size:13px; margin-top:6px; padding:3px 10px; border:1px dashed #9ca3af;
              border-radius:6px; background:#fff; cursor:pointer; }
 .drive-auto a { color:#1f5fa8; }
+.locked .lock { font-size:12px; color:#666; } .locked b { font-weight:600; }
 .bad { outline:2px solid var(--gate); outline-offset:2px; border-radius:6px; background:#fff5f5; }
 .badmsg { color:var(--gate); font-size:12.5px; margin-top:4px; width:100%; }
 """
@@ -324,9 +327,9 @@ button.add { font:inherit; font-size:13px; margin-top:6px; padding:3px 10px; bor
 #: One JS for both pages. Round 4 (the Arbiter, 2026-09-22): ONE «Зберегти» per page instead of a
 #: button on every question. It sends only what CHANGED, in dependency order (the processor before
 #: the tiers it offers, the tiers before the slots), through `/save` as one batch. Round 5: a
-#: pre-filled value is an ordinary value -- what is on the page is what Save writes -- with ONE
-#: exception, the write-once seat, which asks first (as does a processor change that would replace
-#: a saved channel map). The reply language is not asked: the page's language is written on Save. The channel map is drawn HERE, from data
+#: pre-filled value is an ordinary value -- what is on the page is what Save writes. Only a
+#: processor change that would replace a saved channel map asks; the write-once seat is shown fixed
+#: once written (round 6), so there is nothing to confirm. The reply language is not asked: the page's language is written on Save. The channel map is drawn HERE, from data
 #: the page carries, so it follows a processor change live, before anything is saved.
 _JS = r"""
 const D = JSON.parse(document.getElementById('intake-data').textContent);
@@ -620,10 +623,6 @@ function collect() {
   document.querySelectorAll('.unit[data-kind=field]').forEach(u => {
     const v = norm(valueOf(u));
     if (v === null || !dirty(u, v)) return;
-    if (u.dataset.id === 'goal.reference_seat') {
-      const on = u.querySelector('input[type=radio]:checked');
-      asks.push({kind: 'seat', label: on ? on.parentNode.textContent.trim() : v});
-    }
     (u.dataset.id === 'dsp.tiers_used' ? late : out).push(at({field: u.dataset.id, value: v}, u));
   });
   const id = dspIdentity();
@@ -753,9 +752,7 @@ async function saveAll(btn) {
     return;
   }
   for (const a of asks) {
-    const text = a.kind === 'seat' ? T.seat_confirm.replace('{seat}', a.label)
-                                   : T.dsp_confirm.replace('{old}', a.from).replace('{new}', a.to)
-                                                  .replace('{n}', D.saved.slotted);
+    const text = T.dsp_confirm.replace('{old}', a.from).replace('{new}', a.to).replace('{n}', D.saved.slotted);
     if (!confirm(text)) { status.textContent = T.save_cancelled; return; }
   }
   btn.disabled = true;
@@ -865,6 +862,12 @@ def _choice(f, value, ui, cls="", key=""):
     return f'<input type="text"{klass}{data} value="{_esc(value or "")}"{listed}>'
 
 
+#: Fields that are written ONCE and then fixed, each with the ui key that says why and what to do
+#: instead. The seat is what the project IS (S-032): another seat is a copy of the project, where
+#: the seat is chosen again (`project_seed.py --seat`).
+LOCKED_ONCE_SET = {"goal.reference_seat": "seat_locked"}
+
+
 def _field_html(f, ui):
     """One question as a UNIT the page's single Save reads: its control, and what it started as."""
     mark = (f' <span class="meta">({_esc(ui.get("required", "required"))})</span>'
@@ -875,6 +878,14 @@ def _field_html(f, ui):
         return (f'<div class="f s-{f["state"]}" id="f-{_esc(f["id"])}">'
                 f'<div class="q"><span class="dot d-{f["state"]}"></span>{_esc(f["ask"])}{mark}</div>'
                 f'<div class="meta">{_esc(note)}</div></div>')
+    if f["id"] in LOCKED_ONCE_SET and f["value"] not in (None, ""):
+        # Fixed once written (the Arbiter, 2026-09-22): not offered as a control at all, and the
+        # page says why and what to do instead -- rather than letting a Save be refused.
+        label = dict(f["options"] or []).get(f["value"], f["value"])
+        return (f'<div class="f s-have locked" id="f-{_esc(f["id"])}">'
+                f'<div class="q"><span class="dot d-have"></span>{_esc(f["ask"])}</div>'
+                f'<div class="row"><b>{_esc(label)}</b> <span class="lock">· {_esc(ui.get("fixed", "fixed"))}</span></div>'
+                f'<div class="meta">{_esc(ui.get(LOCKED_ONCE_SET[f["id"]], ""))}</div></div>')
     # `data-orig` is what is ON DISK, not what is shown: a pre-filled value that is not stored yet
     # is a change like any other, and Save writes it (round 5 -- no confirm ticks).
     unit_id = ' id="tiers-unit"' if f["id"] == "dsp.tiers_used" else ""
@@ -885,6 +896,8 @@ def _field_html(f, ui):
                    f'<div class="drive-auto meta hint" hidden>{_esc(ui.get("drive_from_car", "from the car"))}: '
                    f'<b></b> · <a href="#" onclick="askDrive(); return false">{_esc(ui.get("change", "change"))}</a></div>')
     req = ' data-required="1"' if mark else ""
+    if f["id"] in LOCKED_ONCE_SET:
+        control += f'<div class="meta">{_esc(ui.get("seat_once", ""))}</div>'
     return (f'<div class="f unit s-{f["state"]}" data-kind="field" data-id="{_esc(f["id"])}"{req} '
             f"data-orig='{_esc(_orig(f['value']))}'{unit_id}>"
             f'<span id="f-{_esc(f["id"])}"></span>'
@@ -1069,8 +1082,9 @@ def _driver_table(m, cols, ui):
         for c in cols:
             leaf = c["id"].split(".", 1)[1]
             raw = row.get(leaf)
-            if leaf in ("driver_make", "driver_model"):
-                raw = (row.get("driver") or {}).get(leaf.split("_", 1)[1], "")
+            if leaf == "driver":
+                drv = row.get("driver") or {}
+                raw = drv.get("name") or " ".join(x for x in (drv.get("make"), drv.get("model")) if x)
             elif project.is_fact(raw):
                 raw = project.fact_value(raw)
             value = "" if raw is None else str(raw)
@@ -1082,7 +1096,7 @@ def _driver_table(m, cols, ui):
                     f'<th>{_esc(row.get("code"))}<input type="hidden" data-k="code" value="{_esc(row.get("code"))}"></th>'
                     + "".join(cells) + "</tr>")
     return (f'<div class="meta">{_esc(ui.get("drivers_title", ""))}</div>'
-            f'<div style="overflow-x:auto"><table><tr><th></th>{head}</tr>' + "".join(body) + "</table></div>")
+            f'<div style="overflow-x:auto"><table class="drivers"><tr><th></th>{head}</tr>' + "".join(body) + "</table></div>")
 
 
 def _section(m, rows, ui):
@@ -1168,7 +1182,7 @@ def _page_data(m):
              for c in m["rows"]["channels"] if c.get("tier") and c.get("slot")]
     ui = m["ui"]
     t = {k: ui.get(k, "") for k in ("chan_on", "chan_off", "code_pick", "code_needed", "map_first",
-                                    "map_new", "map_new_unsaved", "map_replaced", "seat_confirm",
+                                    "map_new", "map_new_unsaved", "map_replaced",
                                     "dsp_confirm", "nothing_changed", "save_cancelled",
                                     "knob_pos", "knob_name")}
     # Round 6: what is wrong is said AT the field. English fallbacks for a language without them.
@@ -1428,9 +1442,8 @@ def apply_save(project_dir, payload):
         code = (row.pop("code", "") or "").strip()
         if not code:
             raise intake.IntakeError("a channel row needs its code — nothing was written")
-        driver = {k: row.pop(f"driver_{k}") for k in ("make", "model") if f"driver_{k}" in row}
-        if driver:
-            row["driver"] = driver
+        if "driver" in row:
+            row["driver"] = {"name": row.pop("driver")}
         if "fs_hz" in row:
             row["fs_hz"] = float(row["fs_hz"])
         return {"channel": intake.save_channel(project_dir, code, source="user", **row)}
@@ -1602,7 +1615,7 @@ def _selftest():
         couple = now_html.split('id="f-car.drive_side"', 1)[1].split('<div class="couple">', 1)[0]
         assert 'id="f-goal.reference_seat"' in couple, "the seat couple was split"
         # Round 5: no confirm ticks. A pre-filled value is an ordinary one -- its unit starts from
-        # what is ON DISK (null here), so Save writes what the page shows. The seat alone asks.
+        # what is ON DISK (null here), so Save writes what the page shows.
         assert "default-ok" not in page, "a confirm tick is back"
         side = now_html.split('data-id="car.drive_side"', 1)[1].split('data-kind=', 1)[0]
         assert 'value="LHD" checked' in side and "data-orig='null'" in now_html.split(
@@ -1610,6 +1623,14 @@ def _selftest():
         assert 'class="drive-auto' in side, "the drive side cannot fold into the car"
         seat = now_html.split('data-id="goal.reference_seat"', 1)[1].split("</div></div>", 1)[0]
         assert " checked" not in seat, "the write-once seat is pre-selected"
+        assert "seat_confirm" not in page and "asks.push({kind: 'seat'" not in page, "the seat asks again"
+        # Round 6: once written, the seat is FIXED on the page -- no control, and the reason given.
+        locked = tempfile.mkdtemp(prefix="intake_form_seat_")
+        intake.save(locked, "goal.reference_seat", "passenger")
+        lpage = render(model(locked, lang="uk"))
+        lseat = lpage.split('id="f-goal.reference_seat"', 1)[0].rsplit("<div", 1)[1]
+        assert "locked" in lseat and 'data-id="goal.reference_seat"' not in lpage, "a fixed seat is editable"
+        assert labels("uk")["ui"]["seat_locked"] in lpage, "a fixed seat does not say why"
         # The drive side comes with a car that says it: the library's Passat names LHD.
         assert 'data-body="sedan" data-drive="LHD"' in page, "the picked car carries no drive side"
         assert 'data-make="VW" data-model="Passat" data-generation="B8" data-body="sedan"' in page
@@ -1732,9 +1753,9 @@ def _selftest():
         apply_save(root, {"field": "rew.capture_rate_hz", "value": "96000"})
         assert project.Project(root).load()["measurement"]["sample_rate_hz"] == 96000
         apply_save(root, {"channel": {"code": "w-L", "slot": "C", "tier": "channels",
-                                      "driver_make": "GZ", "driver_model": "GZUW", "fs_hz": "52.4"}})
+                                      "driver": "GZ GZUW", "amp": "GZPA 4SQ, ch 3", "fs_hz": "52.4"}})
         row = next(c for c in project.Project(root).load()["channels"] if c["code"] == "w-L")
-        assert row["driver"] == {"make": "GZ", "model": "GZUW"}, row
+        assert row["driver"] == {"name": "GZ GZUW"} and row["amp"] == "GZPA 4SQ, ch 3", row
         assert project.fact_value(row["fs_hz"]) == 52.4 and row["fs_hz"]["source"] == "user", row
         try:
             apply_save(root, {"channel": {"code": "m-L", "slot": "D"}})
@@ -1776,7 +1797,7 @@ def _selftest():
 
     print(f"selftest OK (intake_form) — {len(ids)} fields in one table and uk.json covers every one; "
           "the page shows the now/goal/equipment ones and NOT the memo, has ONE Save, a pre-filled "
-          "value is an ordinary one (no ticks; the seat alone asks), the reply language is the "
+          "value is an ordinary one (no ticks), a written seat is shown fixed with why, the reply language is the "
           "interface's and never asked, knobs are rows the processor pre-seeds, a processor change REPLACES a saved map only when "
           "confirmed, a new processor gets its own page and its map from it, the page loads nothing "
           "from the network (one link out: NTT), and every write goes through intake's own writers")
