@@ -1387,3 +1387,20 @@ session, and `#38` untouched.
 
 **Not for this wave unless he says so:** the branch `w1` carries the form prototype and the
 whole pool. It has no PR: what ships in W-1 is the review's call, not the branch's.
+
+## S-051 · A driver's mount and aim, as the method's own model — an idea, not a question yet
+
+**Status**: idea 2026-09-22 · the Arbiter, reviewing the intake form: «що таке "Підніжка"?», and a list
+of what real installs have. Not on the form: nothing in the method computes from a mount or an aim
+today, and his rule is not to ask what we cannot compute («все це в інше, як ідея»). The intake keeps
+`channel_map.position` and `channel_map.enclosure` in its data (`place="memo"`); the person describes
+them in «Інше обладнання»'s free text.
+
+**His list, as he gave it.** Where: the kick zone (low, by the pedals), behind the pedals (seen on
+Mercedes), the C-pillar, and the ones the enum already has (door, A-pillar, dash, deck, rear shelf,
+under the seat, trunk). **Where it points, separately**: at the driver, the middle of the cabin, the
+windshield, into the cabin, towards the trunk lid, into the trunk, other.
+
+**Due when:** a tool starts using mount or aim, e.g. to predict path length and reflections from the
+geometry, or to weight a driver's off-axis response in the junction verdict. Then the two lists become
+two questions, where and aim, and not before.

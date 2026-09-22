@@ -1043,11 +1043,15 @@ FIELDS = (
     _f("channel_map.position", "channel_map", "Where it sits and where it points", per="channel",
        enum=POSITIONS, writes="project:channels[].position",
        note="Take it from the person or from a measurement — never from a car/DSP profile: "
-            "placement varies on the same body.",
-       when="1", place="equipment"),
+            "placement varies on the same body. NOT on the form (the Arbiter, 2026-09-22): nothing "
+            "in the method computes from it yet, so a person describes it in «Інше обладнання»'s "
+            "free text; a real mount/aim model is the idea in docs/TODO.md S-051.",
+       when="1", place="memo"),
     _f("channel_map.enclosure", "channel_map", "How it is loaded", per="channel", enum=ENCLOSURES,
        writes="project:channels[].enclosure",
-       when="1", place="equipment"),
+       note="NOT on the form, for the same reason as the position (2026-09-22): no tool computes "
+            "from it; the free-text description carries it.",
+       when="1", place="memo"),
     _f("channel_map.condition", "channel_map", "New, or broken in?", per="channel", enum=CONDITIONS,
        writes="project:channels[].condition",
        note="New drivers get a rough tune, a break-in and only then a precise one "
