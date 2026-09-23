@@ -742,7 +742,7 @@ FAILURE_ADVICE = {
                    "Не вмикай `toolPermission: always-proceed`: рецензентові інструменти не потрібні",
     "quota": "квоту або ємність вичерпано — сходинка 0: зачекай і повтори; вищий рівень тієї ж моделі "
              "— лише сказавши це вголос (setup-critic-channel.md §7)",
-    "timeout": "CLI не відповів вчасно (AUTOSOUND_CLI_TIMEOUT) — повтори, або бери буфер обміну",
+    "timeout": "CLI не відповів вчасно — повтори з довшим AUTOSOUND_CLI_TIMEOUT (секунди), або бери буфер обміну",
     "other": "",
 }
 
@@ -761,12 +761,28 @@ def nested_session_marker(env=None):
         return None
     return next((k for k in env if k.startswith(_NESTED_MARKERS)), None)
 
+# How long a CLI is waited for (the Arbiter, 2026-09-23: "300 s is too little -- yesterday the Polish
+# translation dropped"). The intake translations of 22.09 were 31 KB each, and the answer came in 170-370 s:
+# a job's time grows with its text, so the wait does too. A hung CLI still ends -- it is only waited for longer.
+CLI_WAIT_MIN_S = 600
+CLI_WAIT_PER_KB_S = 25          # 31 KB -> 776 s: twice the slowest of the three translations
+
+
+def cli_wait(prompt):
+    """Seconds to wait for a CLI answer: `AUTOSOUND_CLI_TIMEOUT` when set, else by the size of the job."""
+    set_by_env = os.environ.get("AUTOSOUND_CLI_TIMEOUT", "").strip()
+    if set_by_env:
+        return int(set_by_env)
+    kb = len(prompt.encode("utf-8")) / 1024
+    return int(max(CLI_WAIT_MIN_S, CLI_WAIT_PER_KB_S * kb))
+
+
 def call_cli(provider, cli_bin, model, prompt, timeout=None):
     """One reviewer call through a local CLI: `(text, None, None)` or `(None, kind, error)`.
 
     The one place a CLI is run, for a review and for the doctor's smoke alike -- the smoke is worth
     something only if it goes the way a round goes (skill#27: it used to run a model nobody chose)."""
-    timeout = timeout or int(os.environ.get("AUTOSOUND_CLI_TIMEOUT", "300"))
+    timeout = timeout or cli_wait(prompt)
     prompt_path = None
     try:
         with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", prefix="autosound_prompt_",
@@ -1175,7 +1191,21 @@ def _selftest():
             os.environ.pop(k, None)
         os.environ.update(saved_env)
 
-    print("selftest[autosound_ai] OK -- the key travels as a header, never in a URL; a retired model "
+    # The wait grows with the job (the Arbiter, 2026-09-23): a short review gets the floor, a 31 KB
+    # translation gets twice what the slowest one took on 22.09, and a set variable wins.
+    saved_wait = os.environ.pop("AUTOSOUND_CLI_TIMEOUT", None)
+    try:
+        assert cli_wait("x" * 2000) == CLI_WAIT_MIN_S
+        assert 700 <= cli_wait("x" * 31795) <= 800, cli_wait("x" * 31795)
+        os.environ["AUTOSOUND_CLI_TIMEOUT"] = "45"
+        assert cli_wait("x" * 31795) == 45
+    finally:
+        os.environ.pop("AUTOSOUND_CLI_TIMEOUT", None)
+        if saved_wait is not None:
+            os.environ["AUTOSOUND_CLI_TIMEOUT"] = saved_wait
+
+    print("selftest[autosound_ai] OK -- the CLI wait grows with the job (a 31 KB translation waits ~13 min); "
+          "the key travels as a header, never in a URL; a retired model "
           "(404) becomes a choice carrying the key's generateContent models, not a fall-through; "
           "the list is parsed from the API's own shape; one reviewer model read by every door, the "
           "advisor variables named and ignored, nothing named -> None (no literal, no first-listed id); "
@@ -1849,7 +1879,7 @@ def main():
     cli_bin = detect_cli(provider) if (model and via not in ("api", "clipboard")) else None
     nested = nested_session_marker() if cli_bin else None
     if cli_bin:
-        wait = int(os.environ.get("AUTOSOUND_CLI_TIMEOUT", "300"))
+        wait = cli_wait(compiled_prompt)
         if nested:
             # Not a refusal any more (hub #187 ask 2, skill #54): the CLI runs without the
             # session's markers, and the wait is named before it starts, so it is not read as the
@@ -1857,7 +1887,7 @@ def main():
             print(f">> Всередині агент-сесії (маркер {nested}): CLI '{cli_bin}' запускаю без маркерів "
                   f"сесії, чекаю до {wait} с", file=sys.stderr)
         else:
-            print(f">> Виклик локального CLI '{cli_bin}' ({provider})...", file=sys.stderr)
+            print(f">> Виклик локального CLI '{cli_bin}' ({provider}), чекаю до {wait} с...", file=sys.stderr)
         try:
             text, kind, error = call_cli(provider, cli_bin, model, compiled_prompt, timeout=wait)
         except Exception as e:  # noqa: BLE001

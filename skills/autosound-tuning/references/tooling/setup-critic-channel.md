@@ -190,8 +190,10 @@ Check it took: `python3 scripts/autosound_ai.py doctor` names the key it found, 
   always-proceed` for this: a reviewer reads text and needs no tools.
 - **`AUTOSOUND_CRITIC_CLI_ARGS`** passes per-run flags to the CLI (e.g. `--sandbox`).
 - **Inside an agent session the CLI runs without the session's markers** (`CLAUDECODE` and
-  similar), with a bounded wait (`AUTOSOUND_CLI_TIMEOUT`, 300 s), and the wait is announced before
-  it starts. It used to be refused outright after field sessions hung. On 2026-09-22 `agy` answered
+  similar), with a bounded wait, and the wait is announced before it starts. The wait grows with
+  the job: 600 s at least, and 25 s per KB of prompt above that (a 31 KB translation waits ~13 min;
+  on 2026-09-22 three of them took 170–370 s, and one was cut at the old fixed 300 s).
+  `AUTOSOUND_CLI_TIMEOUT` (seconds) overrides it for a run. It used to be refused outright after field sessions hung. On 2026-09-22 `agy` answered
   from inside a Claude Code session in 4 s with the markers stripped and in 27–48 s with them kept,
   and TCC-024 (hub #187) saw the same by hand. So a TCC-launched session, which has no separate
   terminal, reaches the reviewer too (skill #54). `AUTOSOUND_ALLOW_NESTED_CLI` is no longer needed.
