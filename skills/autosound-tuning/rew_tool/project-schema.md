@@ -396,13 +396,14 @@ about the **device**, constant across every preset loaded on it — it does not 
 by hand during the M7 pass this schema replaces. **Optional and profile-declared** — a MUSWAY or
 other vendor with no such remote simply has no `hardware.controls` entries; nothing assumes them.
 
-**A knob, not a feature (S-025, 2026-09-22).** A processor feature switched in the software
-(`RealCenter`, `DynamicBass`, `SubXpander`) is not a control: its ON/OFF belongs to the preset, and
-during tuning every such feature is OFF. `set_hardware_control` refuses a name the project's
-`dsp_profile.json` lists as a feature unless it is a remote (`…RC`, `Remote…`). It accepts a name the
-profile does not know only on the person's word (`--source user`: a head unit's bass knob). The control
-module's own logic (modes, what a step means) is not modelled. The Arbiter: «просто OFF для
-налаштування».
+**The list of controls is the person's (the Arbiter, 2026-09-23).** There are no universal controls:
+even the sub may be two. What is tracked is what the user named at intake: the form's rows, seeded
+from the profile's remotes, plus «+ додати свій». `set_hardware_control` adds a NEW name only on his
+word (`--source user`). A session that meets something new asks him whether to track it, and the
+refusal says so. A name already on his list is tracked, and its position is updated from any source.
+An import is not his word: the Passat's export filed `RealCenter` and `VirtualX` here (S-025), and
+that is refused the same way. The control module's own logic (modes, what a step means) is not
+modelled. The Arbiter: «просто OFF для налаштування».
 
 ## config_change events (SCR-014)
 

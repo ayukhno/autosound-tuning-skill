@@ -178,8 +178,9 @@ reason. Eight packages.
   marked as not bankable; the Phase-1 baseline docs use it.
 - **A channel code uses `-`, never `_`** (S-042): `naming.py parse` refuses `w_L_1 (sw)`, and
   `contract.py check` offers `project.py <project> fix-ids` for ids in the other notation.
-- **`hardware.controls` holds remote knobs only** (S-025). A processor feature (`RealCenter`) is refused,
-  and a name the profile does not know needs `--source user`.
+- **`hardware.controls` is the user's list** (S-025; the Arbiter, 2026-09-23). A new name goes in only on his
+  word (`--source user`, as the intake form writes). A session that meets something new asks him, and a
+  control on his list is tracked from any source. An import such as the Passat's `RealCenter` is not his word.
 - **A copied project no longer carries `preference-profile.md` or `hardware.controls`**, and its `sources`
   is one line (hub #185/#186). The import record is `seeded_from`.
 - **The reviewer's API key lives in the OS keystore** (the Arbiter, 2026-09-23; hub #197). `autosound_ai.py

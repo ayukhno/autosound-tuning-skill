@@ -541,16 +541,36 @@ def provenance(project_data):
     inherited = [{"path": path, "value": project.fact_value(wrapper), "from": wrapper.get("inherited_from"),
                   "from_exists": exists(wrapper.get("inherited_from"))}
                  for path, wrapper in project.inherited_facts(data)]
-    named = [(data.get("seeded_from") or {}).get("path")] + [row["from"] for row in inherited]
-    for line in data.get("sources") or []:
+    named = [((data.get("seeded_from") or {}).get("path"), "seeded_from.path")]
+    named += [(row["from"], f"{row['path']} (inherited_from)") for row in inherited]
+    for i, line in enumerate(data.get("sources") or []):
         # S-027: a token that is elided (`...`, `…`) or a pattern (`{a,b}`, `*`) is how a person
         # CITES files in prose, not a path -- checking it reported `.../{README.md` as gone.
-        named += [tok for tok in _PATH_TOKEN.findall(str(line)) if not _NOT_LITERAL.search(tok)]
-    gone = []
-    for path in named:
+        named += [(tok, f"sources[{i}]") for tok in _PATH_TOKEN.findall(str(line)) if not _NOT_LITERAL.search(tok)]
+    gone, where = [], {}
+    for path, named_in in named:
         if path and not exists(path) and path not in gone:
             gone.append(path)
-    return {"inherited": inherited, "sources_gone": gone}
+            where[path] = {"named_in": named_in, "look": where_to_look(path)}
+    return {"inherited": inherited, "sources_gone": gone, "sources_gone_where": where}
+
+
+def where_to_look(path):
+    """Where a path that does not resolve here most likely lives -- the Arbiter, 2026-09-23: with a path,
+    say where to look for it. Read off the path's own shape; nothing is searched."""
+    text = str(path)
+    last = re.split(r"[\\/]+", text.rstrip("\\/"))[-1] or text
+    if re.match(r"^[A-Za-z]:[\\/]", text) and os.name != "nt":
+        return (f"a Windows path (drive {text[0].upper()}:), written on another machine: look there, or for "
+                f"a folder or file named «{last}» on this one")
+    if text.startswith("/Volumes/"):
+        vol = text.split("/")[2] if len(text.split("/")) > 2 else ""
+        return f"on the volume «{vol}», which is not mounted here: connect it, or look for «{last}»"
+    home = os.path.expanduser("~")
+    m = re.match(r"^/(Users|home)/([^/]+)/", text)
+    if m and not text.startswith(home + "/"):
+        return f"in the home folder of «{m.group(2)}», another user or machine: look there, or for «{last}»"
+    return f"moved or deleted on this machine: look for «{last}» (the project's own copy may carry it)"
 
 
 def check_project(project_dir, skip_rew=False):
@@ -629,6 +649,7 @@ def check_project(project_dir, skip_rew=False):
             "reply_language": lang["lang"], "reply_language_source": lang["source"],
             "map_ready": map_ready, "row_gaps": row_gaps, "to_confirm": to_confirm,
             "inherited": carried["inherited"], "sources_gone": carried["sources_gone"],
+            "sources_gone_where": carried["sources_gone_where"],
             "encoding_damaged": damaged,
             # W-2 R: a ledger numbered per preset, with the move the session offers (not a gate item).
             "line_layout": _line_layout(project_dir),
@@ -1023,8 +1044,11 @@ def render_report(report):
                      + "; ".join(f"{row['path']} = {row['value']!r} (from {row['from'] or 'unrecorded'})"
                                  for row in report["inherited"]))
     for path in report.get("sources_gone") or []:
-        lines.append(f"- ⚠️ source no longer exists: {path} — what came from it stays valid, but can no "
-                     "longer be re-checked there")
+        w = (report.get("sources_gone_where") or {}).get(path) or {}
+        lines.append(f"- ⚠️ source not found here: {path}"
+                     + (f" (named in {w['named_in']})" if w.get("named_in") else "")
+                     + (f" — {w['look']}" if w.get("look") else "")
+                     + ". What came from it stays valid, but cannot be re-checked until it is found")
     if report.get("row_gaps") and report.get("map_ready"):
         lines.append("- flaw map: every row stands on a measurement.")
     lines.append("")
@@ -1259,6 +1283,11 @@ def _selftest():
     assert prov["inherited"] == [{"path": "channels.tw-L.fs_hz", "value": 1000, "from": "/nowhere/old-car",
                                   "from_exists": False}], prov
     assert prov["sources_gone"] == ["/nowhere/old-car", "Z:/dev/autosound_projects/projects/resonalyze-passat"], prov
+    # ...and each says where to look (the Arbiter, 2026-09-23): who named it, and what the path's shape tells.
+    zw = prov["sources_gone_where"]["Z:/dev/autosound_projects/projects/resonalyze-passat"]
+    assert zw["named_in"].startswith("sources[") and (os.name == "nt" or "Windows path (drive Z:)" in zw["look"]), zw
+    assert "«resonalyze-passat»" in zw["look"], zw
+    assert "on the volume «Car»" in where_to_look("/Volumes/Car/proj") and "«proj»" in where_to_look("/Volumes/Car/proj")
     shown = render_report(dict(report, **prov))
     assert "1 fact(s) carried in from another project" in shown and "channels.tw-L.fs_hz = 1000" in shown, shown
     # S-024: it is REPORTED and it GATES NOTHING. The Arbiter's rule -- his word closes an imported
@@ -1272,8 +1301,9 @@ def _selftest():
     assert gated["ok"] is True, "an inherited fact must not make a project 'wrong'"
     assert not any("inherit" in str(issue).lower()
                    for entry in gated["files"] for issue in (entry.get("issues") or [])), gated
-    assert "source no longer exists: /nowhere/old-car" in shown, shown
-    assert provenance({}) == {"inherited": [], "sources_gone": []}
+    assert "source not found here: /nowhere/old-car (named in seeded_from.path)" in shown, shown
+    assert "look for «old-car»" in shown, shown
+    assert provenance({}) == {"inherited": [], "sources_gone": [], "sources_gone_where": {}}
     # skill #31: a distortion row written before `thd_pct` owes it -- reported, not gated, and
     # not counted as a symptom DRAFT, which is another field's business.
     thd_rows = {"acoustics": {"flaws": [

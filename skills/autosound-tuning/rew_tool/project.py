@@ -68,13 +68,6 @@ def _now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _is_remote_control(name):
-    """A remote knob the person turns in the car (a Helix `SubRC`, `RearRC`, `RemoteToneControl`),
-    as opposed to a feature switched in the software (`RealCenter`, `DynamicBass`) -- S-025."""
-    name = str(name or "")
-    return name.endswith("RC") or name.startswith("Remote")
-
-
 def fact(value, source=None, at=None, origin=None, inherited_from=None):
     """Wrap one individually-provenanced fact (SCR-014) — amp gain, driver Fs, a hardware
     control's dialled position: the ones a `config_change` event will point back at later.
@@ -1182,56 +1175,34 @@ class Project:
         return list((data.get("acoustics") or {}).get("flaws") or [])
 
     def set_hardware_control(self, name, value, source=None):
-        """A DSP-hardware-level knob position (e.g. `RearRC`/`SubRC`/`RealCenter` — SCR-017),
-        constant across this DSP's presets, so it lives here ONCE — not copy-pasted into every
+        """A control's position the person tracks (a remote's `SubRC`, a head unit's bass -- SCR-017),
+        constant across this DSP's presets, so it lives here ONCE -- not copy-pasted into every
         preset ledger where it can drift out of sync (the pilot bug this closes).
 
-        **A knob, not a feature** (S-025, 2026-09-22). The Passat's export carried `RealCenter` and
-        `VirtualX` here next to `SubRC`: processor features switched in the software, filed as if a
-        person turned them in the car, and `VirtualX` was not even in the processor's profile. So:
-        a name the project's `dsp_profile.json` lists as a feature is accepted only if it is a
-        REMOTE control (`…RC`, `Remote…`); the rest are refused, naming where an ON/OFF belongs.
-        A name the profile does not know is accepted only when the person named it
-        (`source="user"`, the form's «+ додати свій»), never on a session's own reading. The
-        control module's logic is not modelled: the Arbiter, «просто OFF для налаштування».
+        **The list is the person's** (the Arbiter, 2026-09-23): there are no universal controls --
+        even the sub may be two -- so what is tracked is what the user named at intake (the form's
+        rows, seeded from the profile's remotes, and «+ додати свій»). A NEW name goes in only on
+        his word (`source="user"`); a session that meets something new asks him whether to track
+        it. A name already on his list is tracked: its position is updated from any source. The
+        Passat's export filed `RealCenter` and `VirtualX` here as if a person turned them (S-025):
+        an import is not his word, so it is refused the same way. The control module's own logic
+        is not modelled: the Arbiter, «просто OFF для налаштування».
         """
         name = str(name or "").strip()
-        features = self._profile_features()
-        if features is not None:
-            known = {f.lower(): f for f in features}
-            hit = known.get(name.lower())
-            if hit and not _is_remote_control(hit):
-                raise ProjectError(
-                    f"{name}: a processor feature switched in the software, not a knob in the car — "
-                    f"its ON/OFF is the preset's (the ledger's `features`), and during tuning every "
-                    f"such feature is OFF. hardware.controls holds the remote knobs only "
-                    f"({', '.join(f for f in features if _is_remote_control(f)) or 'none in this profile'}).")
-            if not hit and source != "user":
-                raise ProjectError(
-                    f"{name}: not a control this processor's profile names, and nobody said it "
-                    f"exists — a knob outside the profile (a head unit's bass) is recorded when the "
-                    f"PERSON names it: pass --source user (the form does)")
+        if not name:
+            raise ProjectError("a control needs its name")
         data = self.load()
         controls = data.setdefault("hardware", {}).setdefault("controls", {})
+        known = {k.lower(): k for k in controls}
+        if name.lower() in known:
+            name = known[name.lower()]
+        elif source != "user":
+            raise ProjectError(
+                f"{name}: not on the user's list of controls ({', '.join(controls) or 'none yet'}). "
+                f"The list is his: ask whether he wants «{name}» tracked, and on yes record it with "
+                f"--source user")
         controls[name] = fact(value, source=source)
         return self.save(data)
-
-    def _profile_features(self):
-        """The feature names this project's `dsp_profile.json` lists (`effects_and_dynamics` and
-        `features[].key`), or None when there is no readable profile -- then nothing is refused on
-        its account, because an absent profile is not a statement that a name is unknown."""
-        path = os.path.join(self.dir, "dsp_profile.json")
-        try:
-            with open(path, encoding="utf-8") as fh:
-                prof = json.load(fh)
-        except (OSError, ValueError):
-            return None
-        prof = prof.get("dsp_profile", prof) if isinstance(prof, dict) else {}
-        if not isinstance(prof, dict):
-            return None
-        names = list(prof.get("effects_and_dynamics") or [])
-        names += [f.get("key") for f in prof.get("features") or [] if isinstance(f, dict)]
-        return [str(n) for n in dict.fromkeys(names) if n]
 
     def set_virtual_route(self, name, outputs, source=None):
         """Which physical outputs one VIRTUAL channel feeds -- the DSP's routing matrix, as a fact.
@@ -2191,16 +2162,20 @@ def _selftest():
     with open(prof_path, "w", encoding="utf-8") as fh:
         json.dump({"dsp_profile": {"effects_and_dynamics": ["RealCenter", "DynamicBass", "SubRC",
                                                             "RemoteToneControl"]}}, fh)
-    proj.set_hardware_control("SubRC", "7/12")                    # a remote knob: any source
-    proj.set_hardware_control("RemoteToneControl", "OFF")
-    for bad, src, why in (("realcenter", "user", "a processor feature"),
-                          ("VirtualX", None, "nobody said it exists")):
+    # The Arbiter, 2026-09-23: the list is the person's. Nothing is added on a session's or an import's
+    # reading -- not even a remote the profile names -- and whatever he names goes in, a second sub knob
+    # included. A control on his list is tracked: its position moves from any source.
+    for bad, src in (("SubRC", None), ("VirtualX", None), ("SubRC", "front_end")):
         try:
             proj.set_hardware_control(bad, "ON", source=src)
-            raise AssertionError(f"set_hardware_control accepted {bad!r}")
+            raise AssertionError(f"set_hardware_control added {bad!r} with source {src!r}")
         except ProjectError as exc:
-            assert why in str(exc), exc
+            assert "ask whether he wants" in str(exc) and "--source user" in str(exc), exc
+    proj.set_hardware_control("SubRC", "4/4", source="user")
+    proj.set_hardware_control("SubRC-2", "4/4", source="user")    # two subs, two knobs
+    proj.set_hardware_control("subrc", "7/12")                    # on his list: tracked, any source
     proj.set_hardware_control("HU bass", "+2", source="user")     # the person's own knob
+    assert fact_value(proj.load()["hardware"]["controls"]["SubRC"]) == "7/12"
     os.remove(prof_path)
     # The DSP's routing matrix and what a knob does: two facts that used to be retyped or guessed
     # (hub RES-007). A route into a code the project does not have is refused -- it would apply the
