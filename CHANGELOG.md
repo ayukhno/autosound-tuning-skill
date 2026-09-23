@@ -230,7 +230,10 @@ reason. Eight packages.
     said;
   - `verification-set` derives the next capture from what moved;
   - the car sheet takes its series number from the project (`naming.py <project> next-series`);
-  - the -EP command proves it made something, and the min-phase verdict is one function;
+  - the -EP command proves it made something, and the min-phase verdict is one function, settled from the
+    sources: the feature's ±1/6 oct and the channel's delay, against max(10°, 3 × the repeat floor) from the
+    centre returns (2 of 3 agree, else UNSTABLE), decisive below 200 Hz
+    (`docs/RESEARCH-2026-09-23-min-phase-verdict.md`);
   - per-band targets use one file name, codes come from the glossary, and Bessel comes from `dsp_math`;
   - `eq_propose --part 2` reads magnitude from `(rta)` and excess phase from `(sw)`, holds every band to where its
     channel plays, and is never a baseline (#56 items 7, 8);

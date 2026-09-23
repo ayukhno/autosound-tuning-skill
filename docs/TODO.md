@@ -1450,6 +1450,25 @@ an existing project migrates with nothing lost (the old per-slot files kept as h
 `contract.py check` reads the new shape.
 
 
+## S-055 · The min-phase verdict meets real data, and decides the dips below Schroeder
+
+**Status**: open 2026-09-23 · waits for the next ellipsoid round on the Passat · from
+`docs/RESEARCH-2026-09-23-min-phase-verdict.md` §5 and decision 39 in `docs/W-2-DECISIONS.md`.
+
+The criterion is settled from the sources and built (`eq_gate.min_phase_verdict`, `min_phase_across`).
+Two things wait for measurements, and neither is a question for the Arbiter:
+
+1. **The check.** For w-L and m-R, the 9 sweeps of one ellipsoid round, an `-EP` of each read at
+   `smoothing=None`. Run the verdict at the w-L 90–127 Hz peak (expected MIN), the w-L ~150 Hz dip
+   (the car record says NON, a research note says EQ-able) and the m-R ~645–662 Hz SBIR (expected NON),
+   at ±1/6 and ±0.5 oct, with the channel delay. Record the residual per take, the floor and the verdict.
+   This shows whether the 10° floor ever binds, whether ±0.5 misreads the peak, and settles 150 Hz.
+2. **Then `flaw_map`'s dips below Schroeder.** `flaw_map.py` writes every one as `cabin_null / no_boost`.
+   `diagnostic-techniques.md` §13 and `phase_2_eq.md:55` say a dip there can be a legitimate target.
+   The verdict is the evidence that decides it: MIN on 2 of 3 returns is a boost candidate within the
+   +6 dB ceiling, and NON stays `cabin_null`. Wired after item 1, since that item is what shows the
+   verdict holds on this cabin.
+
 ## S-054 · W-2 · v3.0.60: a green PR, waiting for the Arbiter
 
 **Status**: waiting 2026-09-23 · PR #59 (`wave-2026-09-20` → `main`), CI green on `d0e986b`: `gh pr checks 59 --repo ayukhno/autosound-tuning-skill` (engine, selftests, installers-windows, gate); `scripts/run-selftests.sh` locally 81/81 with the VMs suspended. Run to this point without him, on his word of 2026-09-22 (`docs/PLAN-W-2.md`, *Run without the Arbiter*).

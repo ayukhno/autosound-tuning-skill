@@ -11,9 +11,10 @@ act on, and leaves every finding it cannot classify OUT, saying why.
 What it writes, and on what grounds (each rule is doctrine that already exists; see the pointers):
 
   kind                 action     grounds
-  driver_resonance     notch      a PEAK, 1/6-2/3 oct wide, that STAYS across positions and is
-                                  minimum-phase at the gate (`diagnostic-techniques.md` Q ceiling;
-                                  `phase_2_eq.md` 2a)
+  driver_resonance     notch      a PEAK, 1/6-2/3 oct wide, that STAYS across positions and the
+                                  gate does not object to (it judges dips; a peak's minimum phase
+                                  is `eq_gate.min_phase_verdict`'s question -- `diagnostic-techniques.md`
+                                  Q ceiling; `phase_2_eq.md` 2a)
   modal_peak           notch      a peak below Schroeder (~200 Hz) that stays: the cabin's mode
   cabin_null           no_boost   a DIP below Schroeder: interference, cannot be filled
   non_min_phase        no_boost   any feature the excess-phase gate BLOCKS (r > 1 reflection):
@@ -158,7 +159,8 @@ def classify(feature, gate=None, ellipsoid_feature=None):
     return {"kind": "driver_resonance", "action": "notch", "f_hz": round(fc, 1),
             "level_db": round(level, 1), "width_oct": round(w, 3),
             "why": f"a peak of +{level:.1f} dB, {w:.2f} oct wide (Q~{q:.1f}), {stays_note}"
-                   + (", minimum-phase at the gate" if verdict == "ALLOW" else
+                   + ("; the excess-phase gate does not object (it judges dips, not peaks: a peak's minimum phase "
+                      "is `eq_gate.min_phase_verdict`'s question)" if verdict == "ALLOW" else
                       "; the gate had no impulse to judge it (no IR)")}, None
 
 
@@ -387,7 +389,8 @@ def _selftest():
     row, why = classify(peak, gate=_Gate("WARN"))
     assert row and row["action"] == "leave", row
     row, why = classify(peak, gate=_Gate("ALLOW"))
-    assert row and row["action"] == "notch" and "minimum-phase" in row["why"], row
+    assert row and row["action"] == "notch" and "does not object" in row["why"], row
+    assert "minimum-phase at the gate" not in row["why"], "the gate never examined the peak (min-phase research)"
     assert abs(q_of_width(1 / 3) - 4.36) < 0.05, q_of_width(1 / 3)   # 1/3 oct ~ Q 4.4 (bandwidth identity)
 
     # --- end to end on path_check's synthetic set: a planted +5 dB Q4 resonance on m-L is found,

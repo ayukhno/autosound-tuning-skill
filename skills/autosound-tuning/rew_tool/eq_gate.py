@@ -198,22 +198,33 @@ class ExcessPhaseGate:
 
 
 # ── Is the excess phase at a feature ONLY a delay? (#56 item 3) ──────────────
-# The window the verdict is taken over: f0 * 2**(-0.5) .. f0 * 2**(+0.5), one octave wide. The
-# width the #56 session detrended over by hand, and wide enough that a line through it is a
-# statement about a delay rather than about the feature itself.
-MIN_PHASE_HALF_OCT = 0.5
-# PROVISIONAL, one car -- like Z_WARN above. The four features of #56 read 1.2 / 0.0 / 0.4 / 2.3
-# degrees after detrending; a reflection louder than its direct sound leaves more: on the 96-ppo
-# grid r = 1.05 reads ~19 degrees rms, r = 1.2 ... 3 read 25-75. 10 degrees rms sits between
-# with room on both sides; a second install decides it.
+# The criterion is sourced; its numbers come from the measurement (docs/RESEARCH-2026-09-23-min-phase-verdict.md,
+# the Arbiter 2026-09-23: "the skill exists to find these answers"). Sourced: a region is minimum-phase where the excess
+# group delay is FLAT once the delay is removed (REW help, Minimum Phase; Neely & Allen, JASA 1979); at one point that is
+# decisive only below the cabin's Schroeder frequency, and above it what a filter can hold is decided by stability across
+# positions (Toole, JAES 2015; Radlovic et al., IEEE TSAP 2000; Mulcahy). No source publishes a threshold in degrees or
+# milliseconds, so none is invented here: the threshold is the measurement's own repeat floor.
+#
+# The window: the feature's own, +-1/6 oct (1/3 oct wide -- the scale the method reads features on, `eq_propose`'s
+# RES_WIDTH, and matches them across positions by). +-0.5 oct charged a minimum-phase peak with a non-minimum-phase notch
+# 0.4 oct away (52 degrees rms where +-1/6 reads 0.6), and the Passat's w-L modal peak and door null sit 0.3-0.7 oct apart.
+MIN_PHASE_HALF_OCT = 1.0 / 6.0
+# A floor UNDER the floor, not a physical constant: below it, grid and unwrap artefacts on a 96-ppo read cannot be told
+# from signal (r = 1.01 reads 5 degrees rms, see below). The working threshold is max(this, 3 x the repeat floor).
 MIN_PHASE_RESID_DEG = 10.0
-# ...and the rms alone is blind to the reflection that is only JUST louder than the direct sound.
-# At r = 1.01 its -360 degree step is ~2 Hz wide, narrower than the grid, so nearly all of it
-# falls between two points and unwraps to nothing: 5 degrees rms, under the line above. What
-# survives is the one or two points ON the step, 34-44 degrees. So a residual concentrated in a
-# few points also counts. 3x the rms threshold is where Gaussian noise that passes the rms test
-# reaches on ~100 points; a spike past it is not noise of that kind.
-MIN_PHASE_MAX_DEG = 30.0
+# ...and the rms alone is blind to the reflection that is only JUST louder than the direct sound. At r = 1.01 its -360
+# degree step is ~2 Hz wide, narrower than the grid, so nearly all of it falls between two points and unwraps to
+# nothing. What survives is the one or two points ON the step, 34-44 degrees. So the largest point is held to 3x the rms
+# threshold: where Gaussian noise that passes the rms test reaches on ~100 points; a spike past it is not noise of that kind.
+MIN_PHASE_MAX_RATIO = 3.0
+MIN_PHASE_MAX_DEG = MIN_PHASE_RESID_DEG * MIN_PHASE_MAX_RATIO
+# Below this a single point is stable, and a single-point verdict is THE evidence; above it the verdict corroborates
+# and the ellipsoid decides whether the feature stays (a car's Schroeder frequency is ~150-200 Hz, DAGA 2010;
+# `eq_propose.SCHROEDER_HZ`, the same number).
+MIN_PHASE_SCHROEDER_HZ = 200.0
+# The only reads a phase verdict is taken on: REW smooths phase with magnitude, and 1/24 already erased a real
+# non-minimum-phase step (r = 1.05 read MIN_PHASE at 1/24, 1/12 and 1/6).
+MIN_PHASE_READS = (None, "None", "none", "1/48")
 # Fewer points than this in the window and a straight line through them says nothing.
 MIN_PHASE_MIN_POINTS = 8
 # The largest bulk delay the coarse search looks for. REW references a sweep's phase to its own
@@ -256,8 +267,26 @@ def _coarse_delay(f, ph_rad, max_delay_s=MAX_BULK_DELAY_S):
     return best_tau
 
 
+def channel_delay_ms(freqs, phase_deg, band):
+    """One bulk delay for a channel, from its excess phase over the band it plays: the coherence search, then a line.
+
+    A verdict fitted with a free line in every window absorbs a LOCAL group-delay offset as "delay" -- which is exactly
+    REW's "not flat". One propagation path has one delay, so it is found once and held fixed (#56: 7.3 ms on all four)."""
+    f = np.asarray(freqs, dtype=float)
+    p = np.deg2rad(np.asarray(phase_deg, dtype=float))
+    m = np.isfinite(f) & np.isfinite(p) & (f >= band[0]) & (f <= band[1])
+    fw, ph = f[m], p[m]
+    if fw.size < MIN_PHASE_MIN_POINTS:
+        raise ValueError(f"{fw.size} points in {band[0]:g}-{band[1]:g} Hz: too few to find a delay")
+    tau0 = _coarse_delay(fw, ph)
+    rot = np.unwrap(ph + 2 * np.pi * fw * tau0)
+    b = np.polyfit(fw - fw.mean(), rot, 1)[0]
+    return float((tau0 - b / (2 * np.pi)) * 1e3)
+
+
 def min_phase_verdict(freqs, phase_deg, f0, half_oct=MIN_PHASE_HALF_OCT,
-                      threshold_deg=MIN_PHASE_RESID_DEG, max_deg=MIN_PHASE_MAX_DEG):
+                      threshold_deg=MIN_PHASE_RESID_DEG, max_deg=None, floor_deg=None, delay_ms=None,
+                      smoothing=None):
     """Is the excess phase around `f0` a delay and nothing else? -> a verdict that NAMES its window.
 
     Why this exists (#56 item 3): a session read REW's excess phase at a candidate frequency, found
@@ -270,19 +299,26 @@ def min_phase_verdict(freqs, phase_deg, f0, half_oct=MIN_PHASE_HALF_OCT,
     consistent 7.3 ms removed. One function, because a number justified only by how somebody
     computed it that day gets computed differently the next (the `dsp_math._design` note).
 
-    The method: take the points in f0 * 2**(+-half_oct); take out the bulk delay (`_coarse_delay`,
-    so wrapped input is fine -- REW serves +-180); fit a straight line phase = a + b*f by least
-    squares on LINEAR frequency, because a delay is linear in f and not in log f; the slope is the
-    delay removed and what the line does not explain is the residual. MIN_PHASE needs BOTH its rms
-    (the sigma of the detrended phase -- the line takes the mean out) within `threshold_deg` AND its
-    largest point within `max_deg`: the rms catches a residual spread over the window, the max one
-    concentrated on a step (MIN_PHASE_MAX_DEG says which reflection that is).
+    The method (docs/RESEARCH-2026-09-23-min-phase-verdict.md): take the points in f0 * 2**(+-half_oct)
+    (+-1/6 oct, the feature's own); take out the delay -- the CHANNEL's, `delay_ms` from `channel_delay_ms`,
+    held fixed, and then only the mean; without it, a line fitted in the window, and the result says so --
+    (`_coarse_delay` first, so wrapped input is fine: REW serves +-180), on LINEAR frequency, because a delay
+    is linear in f. What is left is the residual. MIN_PHASE needs its rms within the threshold AND its
+    largest point within 3x that: the rms catches a residual spread over the window, the max one
+    concentrated on a step.
+
+    The threshold is the measurement's own: max(`threshold_deg`, 3 x `floor_deg`), where `floor_deg` is the
+    repeat floor of the same read at one position (`min_phase_across` measures it from the centre returns).
+    No source publishes a number; 10 degrees stays only as the floor under it. Without a floor the verdict is
+    PROVISIONAL, and says so.
 
     Reading it:
       * `MIN_PHASE` -- inside this window the excess phase is a delay; the feature's phase is its
-        magnitude's own, and EQ can undo what it sees. It is not a boost licence: whether a boost
-        may go HERE is `ExcessPhaseGate.check`'s question (dip, anomaly and delivered gain at
-        once), and a dip still needs its mic-shift (diagnostic §13).
+        magnitude's own, and EQ can undo it AT THIS POINT. Below Schroeder (`scope` "decisive") that is
+        the evidence; above it (`scope` "corroborating") whether it holds at the head is the
+        ellipsoid's question. It is not a boost licence: whether a boost may go HERE is
+        `ExcessPhaseGate.check`'s question (dip, anomaly and delivered gain at once), and a dip
+        still needs its mic-shift (diagnostic §13).
       * `NON_MIN_PHASE` -- something in the window is not a delay: a reflection louder than its
         direct sound, a cancellation. EQ cannot undo it. The verdict is the WINDOW's, so a
         non-minimum-phase neighbour inside it counts; `residual_at_f0_deg` says where it sits and
@@ -313,6 +349,9 @@ def min_phase_verdict(freqs, phase_deg, f0, half_oct=MIN_PHASE_HALF_OCT,
     if phase_deg is None:
         raise ValueError("no phase to judge: an RTA carries none -- read the excess phase of a "
                          "sweep (REW's -EP version, rew_api.excess_phase_version)")
+    if smoothing not in MIN_PHASE_READS:
+        raise ValueError(f"the -EP was read at {smoothing} smoothing: REW smooths phase with magnitude, and 1/24 "
+                         "already erases a non-minimum-phase step -- read it at None or 1/48")
     f = np.asarray(freqs, dtype=float)
     p = np.asarray(phase_deg, dtype=float)
     if f.shape != p.shape:
@@ -322,12 +361,21 @@ def min_phase_verdict(freqs, phase_deg, f0, half_oct=MIN_PHASE_HALF_OCT,
     f, p = f[keep][order], p[keep][order]
     f0 = float(f0)
     lo, hi = f0 * 2.0 ** -half_oct, f0 * 2.0 ** half_oct
-    window = f"±{half_oct:g} oct, {lo:.0f}–{hi:.0f} Hz"
-    thresholds = f"threshold {threshold_deg:g}° rms / {max_deg:g}° max"
+    window = f"±{_oct_name(half_oct)} oct, {lo:.0f}–{hi:.0f} Hz"
+    rms_limit = max(float(threshold_deg), 3.0 * float(floor_deg)) if floor_deg is not None else float(threshold_deg)
+    max_limit = float(max_deg) if max_deg is not None else MIN_PHASE_MAX_RATIO * rms_limit
+    floor_said = (f"max({threshold_deg:g}°, 3 x floor {floor_deg:.1f}°)" if floor_deg is not None
+                  else f"{threshold_deg:g}° (floor not measured -- PROVISIONAL)")
+    thresholds = f"threshold {rms_limit:g}° rms / {max_limit:g}° max = {floor_said}"
+    scope = "decisive" if f0 < MIN_PHASE_SCHROEDER_HZ else "corroborating"
+    scope_said = (f"below Schroeder ({MIN_PHASE_SCHROEDER_HZ:g} Hz): decisive" if scope == "decisive" else
+                  f"above Schroeder ({MIN_PHASE_SCHROEDER_HZ:g} Hz): corroborating -- whether it holds at the head "
+                  "is the ellipsoid's question")
     inside = (f >= lo) & (f <= hi)
     out = {"f0_hz": f0, "window": window, "window_hz": (lo, hi), "half_oct": float(half_oct),
-           "n_points": int(inside.sum()), "threshold_deg": float(threshold_deg),
-           "max_threshold_deg": float(max_deg),
+           "n_points": int(inside.sum()), "threshold_deg": rms_limit,
+           "max_threshold_deg": max_limit, "floor_deg": floor_deg, "provisional": floor_deg is None,
+           "scope": scope, "smoothing": smoothing, "delay_source": "channel" if delay_ms is not None else "window",
            "judged_on": ("residual_rms_deg <= threshold_deg and "
                          "residual_max_deg <= max_threshold_deg"),
            "delay_ms": None, "residual_rms_deg": None, "residual_max_deg": None,
@@ -343,28 +391,80 @@ def min_phase_verdict(freqs, phase_deg, f0, half_oct=MIN_PHASE_HALF_OCT,
         return out
 
     fw, ph = f[inside], np.deg2rad(p[inside])
-    tau0 = _coarse_delay(fw, ph)
-    rot = np.unwrap(ph + 2 * np.pi * fw * tau0)      # what is left of the ramp is small: safe
-    b, a = np.polyfit(fw - f0, rot, 1)               # centred on f0: a well-conditioned fit
-    resid = np.rad2deg(rot - (a + b * (fw - f0)))
+    resid, window_delay_ms = _residual(fw, ph, f0, delay_ms)
     rms = float(np.sqrt(np.mean(resid ** 2)))
     peak = float(np.max(np.abs(resid)))
     at_f0 = float(resid[int(np.argmin(np.abs(fw - f0)))])
-    delay_ms = float((tau0 - b / (2 * np.pi)) * 1e3)
     failed = []
-    if rms > threshold_deg:
-        failed.append(f"rms {rms:.1f}° > {threshold_deg:g}°")
-    if peak > max_deg:
-        failed.append(f"max {peak:.1f}° > {max_deg:g}° (a step on a few points)")
+    if rms > rms_limit:
+        failed.append(f"rms {rms:.1f}° > {rms_limit:g}°")
+    if peak > max_limit:
+        failed.append(f"max {peak:.1f}° > {max_limit:g}° (a step on a few points)")
     ok = not failed
     verdict = "MIN_PHASE" if ok else "NON_MIN_PHASE"
-    out.update(verdict=verdict, min_phase=ok, delay_ms=delay_ms, residual_rms_deg=rms,
-               residual_max_deg=peak, residual_at_f0_deg=at_f0,
+    removed = delay_ms if delay_ms is not None else window_delay_ms
+    out.update(verdict=verdict, min_phase=ok, delay_ms=removed, window_delay_ms=window_delay_ms,
+               residual_rms_deg=rms, residual_max_deg=peak, residual_at_f0_deg=at_f0,
                why="; ".join(failed) or "the excess phase in the window is the delay, nothing else")
+    delay_said = (f"after the channel delay {removed:.2f} ms (the window's own line: {window_delay_ms:.2f} ms)"
+                  if delay_ms is not None else f"after {removed:.2f} ms fitted in the window")
     out["line"] = (f"{verdict} at {f0:g} Hz: residual {rms:.1f}° rms, {peak:.1f}° max "
-                   f"({at_f0:+.1f}° at f0) over {window} after removing {delay_ms:.2f} ms; "
-                   f"{thresholds}")
+                   f"({at_f0:+.1f}° at f0) over {window} {delay_said}; {thresholds}; "
+                   f"read at {smoothing or 'unstated'} smoothing; {scope_said}")
     return out
+
+
+def _oct_name(half_oct):
+    for n in (2, 3, 4, 6, 8, 12):
+        if abs(half_oct - 1.0 / n) < 1e-9:
+            return f"1/{n}"
+    return f"{half_oct:g}"
+
+
+def _residual(fw, ph, f0, delay_ms=None):
+    """`(residual in degrees, the window's own line delay in ms)`. With `delay_ms` the channel's delay is taken out and
+    only the mean after it; without it the window's line is taken out."""
+    tau0 = _coarse_delay(fw, ph) if delay_ms is None else delay_ms * 1e-3
+    rot = np.unwrap(ph + 2 * np.pi * fw * tau0)      # what is left of the ramp is small: safe
+    b, a = np.polyfit(fw - f0, rot, 1)               # centred on f0: a well-conditioned fit
+    window_delay_ms = float((tau0 - b / (2 * np.pi)) * 1e3)
+    if delay_ms is None:
+        return np.rad2deg(rot - (a + b * (fw - f0))), window_delay_ms
+    return np.rad2deg(rot - rot.mean()), window_delay_ms
+
+
+def min_phase_across(takes, f0, delay_ms=None, **kw):
+    """The verdict over REPEAT takes at one position (the ellipsoid's centre returns): `(verdict, per_take, floor_deg)`.
+
+    The floor is the rms of the residual difference between two takes, over sqrt 2 -- what the read varies by when
+    nothing moved; each take is then judged against max(10°, 3 x floor). A verdict is the one at least 2 of every 3
+    takes agree on; otherwise `UNSTABLE`, a verdict of its own -- and `UNSTABLE` too when the floor itself is above
+    10°, since a threshold of 3 x that would pass a reflection louder than its direct sound. On shallow features this cabin's single-point excess
+    phase breathed by orders of magnitude between takes (w-L 155 Hz: S = 3.3 ... 589), so one take is a sample.
+    `takes` is `[(freqs, phase_deg)]` on one grid."""
+    half_oct = kw.get("half_oct", MIN_PHASE_HALF_OCT)
+    lo, hi = float(f0) * 2.0 ** -half_oct, float(f0) * 2.0 ** half_oct
+    resids = []
+    for freqs, phase in takes:
+        f = np.asarray(freqs, dtype=float)
+        m = (f >= lo) & (f <= hi) & np.isfinite(np.asarray(phase, dtype=float))
+        if m.sum() >= MIN_PHASE_MIN_POINTS:
+            resids.append(_residual(f[m], np.deg2rad(np.asarray(phase, dtype=float)[m]), float(f0), delay_ms)[0])
+    floor = None
+    if len(resids) >= 2 and len({r.size for r in resids}) == 1:
+        diffs = [float(np.sqrt(np.mean((a - a.mean() - (b - b.mean())) ** 2)) / np.sqrt(2.0))
+                 for i, a in enumerate(resids) for b in resids[i + 1:]]
+        floor = float(np.mean(diffs))
+    per_take = [min_phase_verdict(freqs, phase, f0, floor_deg=floor, delay_ms=delay_ms, **kw)
+                for freqs, phase in takes]
+    # A floor above the floor-under-it means the read moves between repeats by more than the test can separate: a
+    # threshold of 3 x that would pass a reflection louder than its direct sound (r = 1.05 reads ~20° rms). No verdict.
+    if floor is not None and floor > MIN_PHASE_RESID_DEG:
+        return "UNSTABLE", per_take, floor
+    judged = [v["verdict"] for v in per_take if v["verdict"] in ("MIN_PHASE", "NON_MIN_PHASE")]
+    need = int(np.ceil(2.0 * len(per_take) / 3.0))
+    verdict = next((v for v in ("MIN_PHASE", "NON_MIN_PHASE") if judged.count(v) >= need), "UNSTABLE")
+    return verdict, per_take, floor
 
 
 def _selftest_min_phase():
@@ -404,15 +504,16 @@ def _selftest_min_phase():
     assert v["verdict"] == "MIN_PHASE" and v["min_phase"] is True, v
     assert abs(v["delay_ms"] - 7.3) < 0.02, f"the delay is recovered: {v['delay_ms']:.3f} ms"
     assert v["residual_rms_deg"] < 1.5, v
-    assert "±0.5 oct" in v["line"] and "threshold 10° rms / 30° max" in v["line"], v["line"]
-    assert v["window"] == "±0.5 oct, 707–1414 Hz" and v["threshold_deg"] == 10.0, v
+    assert "±1/6 oct" in v["line"] and "threshold 10° rms / 30° max" in v["line"], v["line"]
+    assert v["window"] == "±1/6 oct, 891–1122 Hz" and v["threshold_deg"] == 10.0, v
+    assert v["provisional"] and "PROVISIONAL" in v["line"] and v["scope"] == "corroborating", v
 
     # 2. A minimum-phase DIP under a loopback-sized delay, high enough that np.unwrap alone aliases
     #    on this grid. Red first: the plain unwrap-and-line gets the delay wrong here, so this case
     #    really walks the coarse search.
     ep = served(pk(6000.0, -8.0, 5.0), 22.65e-3)
     v = min_phase_verdict(grid, ep, 6000.0)
-    m = (grid >= 6000 / 2 ** 0.5) & (grid <= 6000 * 2 ** 0.5)
+    m = (grid >= 6000 / 2 ** (1 / 6)) & (grid <= 6000 * 2 ** (1 / 6))
     naive = -np.polyfit(grid[m], np.unwrap(np.deg2rad(ep[m])), 1)[0] / (2 * np.pi) * 1e3
     assert abs(naive - 22.65) > 1.0, f"the naive unwrap should alias here ({naive:.2f} ms)"
     assert v["verdict"] == "MIN_PHASE" and abs(v["delay_ms"] - 22.65) < 0.02, v
@@ -429,7 +530,10 @@ def _selftest_min_phase():
     assert v_non["residual_rms_deg"] > MIN_PHASE_RESID_DEG, "r = 1.05 fails on the rms alone"
     # ...and r = 1.01, the step narrower than the grid: under the rms line, caught by the max. Red
     # first -- the rms assertion is what makes this case prove the max test is needed.
-    v_edge = min_phase_verdict(grid, served(1 + 1.01 * np.exp(-s * T), 3e-3), notch)
+    # The max test is exercised on the octave window, where the step's own points land; on the feature's +-1/6 the
+    # same step reads 22° max on this grid, under the line -- the grid's blind spot the docstring names, and why a
+    # deep narrow dip is judged on REW's linear read.
+    v_edge = min_phase_verdict(grid, served(1 + 1.01 * np.exp(-s * T), 3e-3), notch, half_oct=0.5)
     assert v_edge["residual_rms_deg"] <= MIN_PHASE_RESID_DEG, v_edge
     assert v_edge["verdict"] == "NON_MIN_PHASE" and "max" in v_edge["why"], v_edge
 
@@ -437,12 +541,49 @@ def _selftest_min_phase():
     v = min_phase_verdict(grid, served(pk(1000.0, 6.0, 4.0), 7.3e-3), 1000.0,
                           half_oct=1 / 3, threshold_deg=5.0, max_deg=15.0)
     assert (v["half_oct"], v["threshold_deg"], v["max_threshold_deg"]) == (1 / 3, 5.0, 15.0), v
-    assert "±0.333333 oct" in v["line"] and "threshold 5° rms / 15° max" in v["line"], v["line"]
+    assert "±1/3 oct" in v["line"] and "threshold 5° rms / 15° max" in v["line"], v["line"]
 
     # 5. Out of scope: a window the data does not reach gets no numbers, but still names itself.
-    v = min_phase_verdict(grid, ep, 25.0)
+    v = min_phase_verdict(grid, ep, 21.0)
     assert v["verdict"] == "OUT_OF_SCOPE" and v["min_phase"] is None, v
-    assert v["delay_ms"] is None and v["residual_rms_deg"] is None and "±0.5 oct" in v["line"], v
+    assert v["delay_ms"] is None and v["residual_rms_deg"] is None and "±1/6 oct" in v["line"], v
+
+    # 6. The research note's probes (docs/RESEARCH-2026-09-23-min-phase-verdict.md), each red under the old defaults.
+    #    a) A minimum-phase peak with a non-minimum-phase notch 0.4 oct away: the old +-0.5 oct charged the peak with
+    #       its neighbour; the feature's own window does not.
+    Tn = 1.0 / (2 * 1000.0 * 2 ** 0.4) * 5          # a comb whose notch lands 0.4 oct above 1 kHz
+    both = served(pk(1000.0, 6.0, 4.0) * (1 + 1.05 * np.exp(-s * Tn)), 3e-3)
+    assert min_phase_verdict(grid, both, 1000.0, half_oct=0.5)["verdict"] == "NON_MIN_PHASE"
+    assert min_phase_verdict(grid, both, 1000.0)["verdict"] == "MIN_PHASE"
+    #    b) The channel's delay, found once over its band and held fixed, reads the same peak MIN_PHASE and says so.
+    ep7 = served(pk(1000.0, 6.0, 4.0), 7.3e-3, noise_deg=0.3)
+    d = channel_delay_ms(grid, ep7, (300.0, 3000.0))
+    assert abs(d - 7.3) < 0.05, d
+    v = min_phase_verdict(grid, ep7, 1000.0, delay_ms=d, smoothing="None")
+    assert v["verdict"] == "MIN_PHASE" and v["delay_source"] == "channel" and "channel delay" in v["line"], v
+    #    c) A read smoothed coarser than 1/48 is refused: 1/24 already erased a real step.
+    try:
+        min_phase_verdict(grid, ep7, 1000.0, smoothing="1/24")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("a 1/24-smoothed -EP was judged")
+    #    d) The floor comes from the repeats: three takes of a true min-phase peak with 6° of read noise each agree on
+    #       MIN_PHASE against max(10°, 3 x floor), where one take against a fixed 10° could flip on the noise alone;
+    #       a reflection louder than its direct sound stays NON on every take; a verdict the takes split on is UNSTABLE.
+    takes = [(grid, served(pk(1000.0, 6.0, 4.0), 7.3e-3, noise_deg=6.0)) for _ in range(3)]
+    verdict, per_take, floor = min_phase_across(takes, 1000.0)
+    assert verdict == "MIN_PHASE" and floor is not None and 5.0 < floor < 8.0, (verdict, floor)
+    assert all("3 x floor" in t["line"] and not t["provisional"] for t in per_take), per_take[0]["line"]
+    non_takes = [(grid, served(1 + 1.2 * np.exp(-s * T), 3e-3, noise_deg=1.0)) for _ in range(3)]
+    assert min_phase_across(non_takes, notch)[0] == "NON_MIN_PHASE"
+    split = [(grid, served(pk(1000.0, 6.0, 4.0), 7.3e-3)), (grid, served(pk(1000.0, 6.0, 4.0), 7.3e-3)),
+             (grid, both), (grid, served(1 + 1.2 * np.exp(-s * T), 3e-3))]
+    assert min_phase_across(split, 1000.0, half_oct=0.5)[0] == "UNSTABLE"
+    #    e) Below Schroeder the verdict is decisive.
+    low = served(pk(110.0, 6.0, 4.0), 7.3e-3, noise_deg=0.3)
+    v = min_phase_verdict(grid, low, 110.0)
+    assert v["verdict"] == "MIN_PHASE" and v["scope"] == "decisive" and "decisive" in v["line"], v
     try:
         min_phase_verdict(grid, None, 1000.0)
     except ValueError:
@@ -450,7 +591,10 @@ def _selftest_min_phase():
     else:
         raise AssertionError("no phase (an RTA) must raise, not judge")
 
-    return (f"min_phase_verdict OK -- #56 peak: raw {raw:.0f}° reads MIN_PHASE after 7.30 ms; "
+    return (f"min_phase_verdict OK -- the feature's own ±1/6 oct window keeps a neighbour's notch out; the channel "
+            f"delay held fixed; a read coarser than 1/48 refused; the floor from repeat takes (6° of read noise -> "
+            f"floor {floor:.1f}°, MIN on all three), takes that disagree UNSTABLE; decisive below Schroeder; "
+            f"#56 peak: raw {raw:.0f}° reads MIN_PHASE after 7.30 ms; "
             f"22.65 ms dip at 6 kHz recovered where plain unwrap gives {naive:.2f} ms; "
             f"comb r=0.95 {v_min['residual_rms_deg']:.1f}° rms MIN_PHASE, "
             f"r=1.05 {v_non['residual_rms_deg']:.0f}° rms NON_MIN_PHASE, "
