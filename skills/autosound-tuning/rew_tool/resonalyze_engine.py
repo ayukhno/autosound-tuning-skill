@@ -1130,6 +1130,7 @@ def variant_front_from(set_dir, layout, result_b, full_variants, target=None, ta
     try:
         cands.append({"name": "the best", "terms": candidate_terms(set_dir, layout, final_proposals(result_b),
                                                                    delay_map(result_b), target)})
+        notes += [f"trade-off front: {n}" for n in cands[0]["terms"].get("notes") or []]
         for fv in full_variants:
             refused = [c for c in fv.get("checks") or [] if c.get("verdict") == "REFUSED"]
             if fv.get("not_built") or fv.get("over_range") or refused or not fv.get("settings"):
@@ -1347,15 +1348,22 @@ def chains_from_engine(layout, settings, delays):
 def candidate_terms(set_dir, layout, settings, delays, target=None):
     """The four trade-off terms of one configuration, predicted from the set's solos (`variant_front.terms`).
 
-    The solos are read as recorded: a protective filter captured in them is not divided out here, so the absolute
-    numbers carry it. Every candidate carries the same solos, so the COMPARISON between them does not."""
+    The protective filter each solo was captured through is divided out first (`predict.de_embed_solos`, from the
+    file's own `protectiveHighPass`), as the engine divides it out of the same files (`read_set` -> `protective`).
+    It used to stay in, with the note that the comparison did not suffer. The Arbiter, 2026-09-23: "if the mid's
+    protective filter is not accounted for, at the junction with the midbass we see the mid's phase wrong". It did
+    suffer: the filter's phase at a 250 Hz corner is not its phase at a 300 Hz one, so candidates with different
+    corners were read through different errors. A solo whose protection nobody recorded is left out and named in
+    `terms["notes"]`, not read through a guess."""
     import predict as _pr
     import variant_front as _vf
     freqs = _pr.grid()
-    solos = {c: h for c, (h, _info) in _pr.load_solos_dir(set_dir, freqs).items()}
+    solos, notes, refused = _pr.de_embed_solos(_pr.load_solos_dir(set_dir, freqs), freqs)
     chains = {c: ch for c, ch in chains_from_engine(layout, settings, delays).items() if c in solos}
     result = _pr.predict(freqs, {c: solos[c] for c in chains}, chains)
-    return _vf.terms(_pr.to_json(result), target)
+    out = _vf.terms(_pr.to_json(result), target)
+    out["notes"] = [n for n in notes if "taken out" in n or "REFUSED" in n]
+    return out
 
 
 def target_points(project_dir, target_file=None):
@@ -1889,6 +1897,59 @@ def render(layout, result, checks, notes):
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------- check: does the engine RUN here
+
+def check(dotnet=None, build_first=False, echo=print):
+    """`(ok, line)`: the engine on this machine runs one Auto crossover on a tiny synthetic set and answers in its
+    contract (the Arbiter, 2026-09-23: "ideally the engine is installed with the skill and checked; if it is built,
+    check that it works too"). `engine_status` only looks; this runs it. Seconds, numpy only, nothing kept.
+    `build_first` builds the wrapper from the SDK now instead of on first use -- what the installer does."""
+    import time
+    import numpy as np
+
+    import resonalyze_ir as _ri
+    t0 = time.time()
+    if build_first:
+        ok, how = build(dotnet=dotnet)
+        if not ok:
+            return False, f"the engine was not built: {how}"
+    fs, n, pre = 96000, 1 << 15, 1 << 13
+    drivers = {"sw": ("sub", 30.0, 5.0), "w-L": ("woofer", 45.0, 3.0), "w-R": ("woofer", 45.0, 3.4)}
+    rng = np.random.default_rng(1)
+    with tempfile.TemporaryDirectory() as tmp:
+        set_dir = os.path.join(tmp, "set")
+        os.makedirs(set_dir)
+        files = {}
+        for code, (_role, _fs, arrival) in drivers.items():
+            x = 1e-6 * rng.standard_normal(n)
+            x[pre + int(round(arrival * 1e-3 * fs))] += 0.3
+            doc, _ = _ri.build_v7(x, fs, -pre / fs, low_hz=20.0, high_hz=20000.0,
+                                  rew_source={"protectiveHighPass": None, "protectiveState": "bare"})
+            stem = code.replace("-", "_")
+            _ri.write_v7(doc, os.path.join(set_dir, stem + ".json"))
+            files[stem] = {"rewTitle": f"{code}_1 (sw)"}
+        with open(os.path.join(set_dir, "manifest.json"), "w", encoding="utf-8") as fh:
+            json.dump({"converter": "autosound-tuning-skill rew_tool/resonalyze_ir.py", "files": files}, fh)
+        rows = [{"code": c, "role": r, "fs_hz": {"value": f}} for c, (r, f, _a) in drivers.items()]
+        solos, rew, problems = read_set(set_dir)
+        layout, _notes, more = layout_from(rows, {"wheel": "LHD"}, {"dsp_processing_rate_hz": 96000},
+                                           {"delay": {"max_ms": 20.0}}, solos, rew, set_dir)
+        if problems or more:
+            return False, f"the check's own set did not load: {'; '.join(problems + more)}"
+        first = json.loads(json.dumps(layout))
+        first["autoDelay"]["run"] = False
+        rc, result, err = run_engine(first, os.path.join(tmp, "out"), dotnet)
+    took = time.time() - t0
+    if result is None:
+        return False, f"the engine did not answer (exit {rc}): {(err or '').strip()[-300:]}"
+    blocks = {p_["block"] for p_ in (result.get("autoCrossover") or {}).get("result") or []}
+    if rc != 0 or result.get("contract") != RESULT_CONTRACT or len(blocks) != 2:
+        return False, (f"the engine answered, but not as expected: exit {rc}, contract {result.get('contract')!r}, "
+                       f"{len(blocks)} block(s) proposed")
+    how = (result.get("pin") or {}).get("engine") or "the engine"
+    return True, f"the engine runs: Auto crossover on a 3-channel test set in {took:.1f} s ({how})"
+
+
 # ---------------------------------------------------------------- smoke: a synthetic set end to end
 
 def smoke(dotnet=None, echo=print):
@@ -1921,10 +1982,14 @@ def smoke(dotnet=None, echo=print):
             if lp:
                 x = signal.sosfilt(signal.butter(2, lp, "lowpass", fs=fs, output="sos"), x)
             x = x + 1e-6 * rng.standard_normal(n)
-            doc, _ = _ri.build_v7(x, fs, -pre / fs, low_hz=20.0, high_hz=20000.0)
+            # The mids' 250 Hz high-pass is marked PROTECTIVE, as a capture round records it: the engine divides it
+            # out, and so must the front's terms (the Arbiter, 2026-09-23 -- the mid's phase at the midbass junction).
+            prot = ({"hz": 250.0, "family": "BW", "slopeDbPerOct": 12} if code in ("m-L", "m-R") else None)
+            doc, _ = _ri.build_v7(x, fs, -pre / fs, low_hz=20.0, high_hz=20000.0,
+                                  rew_source={"protectiveHighPass": prot, "protectiveState": "raw" if prot else "bare"})
             stem = code.replace("-", "_")
             _ri.write_v7(doc, os.path.join(set_dir, stem + ".json"))
-            files[stem] = {"rewTitle": f"{code}_1 (sw)"}
+            files[stem] = {"rewTitle": f"{code}_1 (sw)", **({"protectiveHighPass": prot} if prot else {})}
         with open(os.path.join(set_dir, "manifest.json"), "w", encoding="utf-8") as fh:
             json.dump({"converter": "autosound-tuning-skill rew_tool/resonalyze_ir.py", "files": files}, fh)
         rows = [{"code": c, "role": r, "fs_hz": {"value": f}} for c, (r, f, *_rest) in drivers.items()]
@@ -1973,6 +2038,8 @@ def smoke(dotnet=None, echo=print):
              f"{sum(1 for fv in alts if fv.get('retuned'))} of {len(alts)}")
         fr = v.get("front")
         assert fr and fr["picks"] and "tonal" not in fr["missing"], (fr, v["notes"])
+        assert any("m-L: protective" in n_ and "taken out" in n_ for n_ in v["notes"]), \
+            [n_ for n_ in v["notes"] if "front" in n_]
         assert {"the best"} <= set(fr["candidates"]) and len(fr["candidates"]) >= 3, \
             (fr["candidates"], [n for n in v["notes"] if "front" in n], [(a.get("not_built"), a.get("over_range"),
              [c for c in a.get("checks") or [] if c.get("verdict") != "OK"]) for a in alts])
@@ -2493,6 +2560,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("build", help="fetch the submodule when needed and build the wrapper")
+    p = sub.add_parser("check", help="run the engine once on a tiny synthetic set: does it work on this machine")
+    p.add_argument("--build", action="store_true", help="build the wrapper from the .NET SDK first (the installer)")
     p = sub.add_parser("install-binary", help="install a prebuilt engine for this pin and platform")
     p.add_argument("--from", dest="source", required=True, metavar="ZIP|DIR")
     p = sub.add_parser("fetch-binary", help="fetch this pin and platform's prebuilt engine from a tag's release")
@@ -2527,6 +2596,10 @@ def main(argv=None):
     if a.cmd == "build":
         ok, msg = build()
         print(f"  {'built' if ok else 'not built'}: {msg}")
+        return 0 if ok else 1
+    if a.cmd == "check":
+        ok, msg = check(build_first=a.build)
+        print(f"  {'✓' if ok else '✗'} {msg}")
         return 0 if ok else 1
     if a.cmd == "install-binary":
         print(f"  installed: {install_binary(a.source)}")

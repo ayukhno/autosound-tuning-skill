@@ -217,6 +217,16 @@ def _unsealed(project_dir):
         return False
 
 
+def _repo_lines(project_dir):
+    """`project_repo.status_lines`: no git history (the init command), or no GitHub backup where gh is signed in
+    (the create command, for the user's yes). Empty when there is nothing to do, or git cannot be asked."""
+    try:
+        import project_repo
+        return project_repo.status_lines(project_dir)
+    except Exception:  # noqa: BLE001 -- a report line, never a reason for the check to fail
+        return []
+
+
 def _line_layout(project_dir):
     """`"preset"`, `"project"`, or None (no ledger, or one caught half-way: `check_ledgers` names it)."""
     root = os.path.join(project_dir, "state")
@@ -653,6 +663,8 @@ def check_project(project_dir, skip_rew=False):
             "encoding_damaged": damaged,
             # W-2 R: a ledger numbered per preset, with the move the session offers (not a gate item).
             "line_layout": _line_layout(project_dir),
+            # hub #199: history and backup, as one line each and never a gate item.
+            "repo": _repo_lines(project_dir),
             "unsealed": _unsealed(project_dir),
             # S-042: ids in another notation, with the fix the session offers (not a gate item).
             "id_fix": (project.fix_ids(project_dir) if project.id_mismatches(project_data or {})
@@ -946,6 +958,10 @@ def render_report(report):
                      f"(#58 P1). Seal them as they stand: `python3 {state_py} --root "
                      f"{os.path.join(report['project_dir'], 'state')} seal` (it changes no version).")
         lines.append("")
+    for line in report.get("repo") or []:
+        # hub #199: said at every start, so a project without history or backup is not a surprise at a dead disk.
+        lines.append(f"**History and backup:** {line}. A remote is made only on the user's yes.")
+        lines.append("")
     if report.get("line_layout") == "preset":
         state_py = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state", "state.py")
         lines.append("**Versions here are numbered per preset** — the method now numbers them once per "
@@ -1158,6 +1174,7 @@ def _main(argv):
 
 # ── self-test ─────────────────────────────────────────────────────────────────
 def _selftest():
+    os.environ["AUTOSOUND_NO_GH"] = "1"          # the history line is checked; GitHub is never reached from a test
     import tempfile
 
     root = tempfile.mkdtemp(prefix="autosound_contract_")

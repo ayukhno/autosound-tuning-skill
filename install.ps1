@@ -994,10 +994,23 @@ if ($WantEngine -eq "0") {
     $EngineDid = "not fetched: -NoEngine"
     Say "-NoEngine: not fetched. It builds from the .NET SDK on first use, or later with"
     Say "  `"$Py3`" `"$EnginePy`" fetch-binary --tag $SkillRef"
-} elseif ($WantEngine -eq "auto" -and $HaveDotnet) {
-    $EngineDid = "not fetched: the .NET SDK is here and builds it on first use"
-    Say "the .NET SDK is here -- the engine builds from the method's own checkout on first use"
+} elseif ($WantEngine -eq "auto" -and $HaveDotnet -and -not $DryRun -and (Test-Path $Py3) -and (Test-Path $EnginePy)) {
+    # The Arbiter, 2026-09-23: the engine is installed WITH the skill and checked -- built now, not on first use.
+    Say "the .NET SDK is here -- building the engine from the method's own checkout now, then running it once"
     Say "(-Engine fetches the prebuilt one instead: no build, no SDK needed)"
+    $global:LASTEXITCODE = 0
+    $engineSaid = (& $Py3 $EnginePy check --build 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -eq 0) {
+        $EngineDid = "built from the .NET SDK and checked: it runs"
+        Say $engineSaid
+    } else {
+        $EngineDid = "built or run failed: $(($engineSaid -split "`n")[-1])"
+        Warn "the engine did not build or run -- the method is installed and works; Phase 1's desk step waits for it:"
+        Warn $engineSaid
+    }
+} elseif ($WantEngine -eq "auto" -and $HaveDotnet) {
+    $EngineDid = "not built: the .NET SDK is here and builds it on first use"
+    Say "the .NET SDK is here -- the engine builds from the method's own checkout on first use"
 } elseif (-not (Test-Path $Py3)) {
     $EngineDid = "not fetched: no working python3"
     Warn "no python3 -- the engine cannot be fetched; the method's tools cannot run either (above)"
@@ -1014,7 +1027,20 @@ if ($WantEngine -eq "0") {
     $engineRc = $LASTEXITCODE
     # 0 installed (the method printed where it landed) · 4 this release carries none for this
     # machine · anything else, something went wrong and the install carries on regardless.
-    if ($engineRc -eq 0) { $EngineDid = "fetched for $SkillRef and checked against SHA256SUMS" }
+    if ($engineRc -eq 0) {
+        $EngineDid = "fetched for $SkillRef and checked against SHA256SUMS"
+        # ...and run once: a file that matches its checksum can still fail to start on this machine.
+        $global:LASTEXITCODE = 0
+        $engineSaid = (& $Py3 $EnginePy check 2>&1 | Out-String).Trim()
+        if ($LASTEXITCODE -eq 0) {
+            $EngineDid = "$EngineDid; it runs"
+            Say $engineSaid
+        } else {
+            $EngineDid = "$EngineDid; but it does not run: $(($engineSaid -split "`n")[-1])"
+            Warn "the engine was fetched but does not run here -- Phase 1's desk step waits for it:"
+            Warn $engineSaid
+        }
+    }
     if ($engineRc -eq 4) {
         $EngineDid = "not fetched: $SkillRef carries no engine for this machine"
         Say "so the engine builds from the .NET SDK when there is one; nothing else is affected"
@@ -1372,12 +1398,18 @@ if ($DryRun) {
         $n++
     }
     if ($GhBin) {
-        if (Test-Quiet { & $GhBin auth status }) { Say "$n. GitHub: OK   signed in" }
+        # The Arbiter, 2026-09-23 (hub #199): GitHub wanted means GitHub set up -- signed in AND git pushing
+        # through it. Each project's first commit and its private backup are the method's (rew_tool\project_repo.py).
+        if (Test-Quiet { & $GhBin auth status }) {
+            Test-Quiet { & $GhBin auth setup-git } | Out-Null
+            Say "$n. GitHub: OK   signed in, and git pushes through it"
+        }
         else {
             Say "$n. GitHub -- optional. Your browser opens with a one-time code: sign in, paste it, and answer"
             Say "   Yes when gh asks to authenticate Git with your GitHub credentials."
             if ($interactive -and (Offer "Enter = sign in now / s = later:")) {
                 & $GhBin auth login --hostname github.com --git-protocol https --web
+                if (Test-Quiet { & $GhBin auth status }) { Test-Quiet { & $GhBin auth setup-git } | Out-Null }
             } else { $GhSkipped = $true; Say "   Later, in a terminal:  gh auth login --web" }
         }
         $n++

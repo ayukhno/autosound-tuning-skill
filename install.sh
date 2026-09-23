@@ -948,10 +948,21 @@ if [ "$WANT_ENGINE" = 0 ]; then
   ENGINE_DID="not fetched: --no-engine"
   say "  --no-engine: not fetched. It builds from the .NET SDK on first use, or later with"
   say "    python3 $(pretty "$ENGINE_PY") fetch-binary --tag $SKILL_REF"
-elif [ "$WANT_ENGINE" = "auto" ] && have_dotnet; then
-  ENGINE_DID="not fetched: the .NET SDK is here and builds it on first use"
-  say "  the .NET SDK is here — the engine builds from the method's own checkout on first use"
+elif [ "$WANT_ENGINE" = "auto" ] && have_dotnet && [ "$DRY_RUN" = 0 ] && usable python3 && [ -f "$ENGINE_PY" ]; then
+  # The Arbiter, 2026-09-23: the engine is installed WITH the skill and checked -- built now, not on first use.
+  say "  the .NET SDK is here — building the engine from the method's own checkout now, then running it once"
   say "  (--engine fetches the prebuilt one instead: no build, no SDK needed)"
+  if ENGINE_SAID="$(python3 "$ENGINE_PY" check --build 2>&1)"; then
+    ENGINE_DID="built from the .NET SDK and checked: it runs"
+    say "$ENGINE_SAID"
+  else
+    ENGINE_DID="built or run failed: $(printf '%s' "$ENGINE_SAID" | tail -1)"
+    warn "the engine did not build or run — the method is installed and works; Phase 1's desk step waits for it:"
+    warn "$(printf '%s' "$ENGINE_SAID" | tail -3)"
+  fi
+elif [ "$WANT_ENGINE" = "auto" ] && have_dotnet; then
+  ENGINE_DID="not built: the .NET SDK is here and builds it on first use"
+  say "  the .NET SDK is here — the engine builds from the method's own checkout on first use"
 elif ! usable python3; then
   ENGINE_DID="not fetched: no working python3"
   warn "no python3 — the engine cannot be fetched; the method's tools cannot run either (above)"
@@ -966,7 +977,16 @@ else
   ENGINE_RC=0
   python3 "$ENGINE_PY" fetch-binary --tag "$SKILL_REF" || ENGINE_RC=$?
   case "$ENGINE_RC" in
-    0) ENGINE_DID="fetched for $SKILL_REF and checked against SHA256SUMS" ;;
+    0) ENGINE_DID="fetched for $SKILL_REF and checked against SHA256SUMS"
+       # ...and run once: a file that matches its checksum can still fail to start on this machine.
+       if ENGINE_SAID="$(python3 "$ENGINE_PY" check 2>&1)"; then
+         ENGINE_DID="$ENGINE_DID; it runs"
+         say "$ENGINE_SAID"
+       else
+         ENGINE_DID="$ENGINE_DID; but it does not run: $(printf '%s' "$ENGINE_SAID" | tail -1)"
+         warn "the engine was fetched but does not run here — Phase 1's desk step waits for it:"
+         warn "$(printf '%s' "$ENGINE_SAID" | tail -3)"
+       fi ;;
     4) ENGINE_DID="not fetched: $SKILL_REF carries no engine for this machine"
        say "  so the engine builds from the .NET SDK when there is one; nothing else is affected" ;;
     *) ENGINE_DID="not fetched: fetch-binary failed (code $ENGINE_RC)"
@@ -1363,12 +1383,17 @@ else
   fi
   # 3. GitHub — optional.
   if [ -n "$GH_BIN" ]; then
+    # The Arbiter, 2026-09-23 (hub #199): GitHub wanted means GitHub set up -- signed in AND git pushing through it.
+    # `gh auth setup-git` makes git use gh's sign-in for github.com; each project's first commit and the private
+    # backup's `gh repo create` are the method's, per project, on the user's yes (`rew_tool/project_repo.py`).
     if "$GH_BIN" auth status >/dev/null 2>&1; then
-      say "  $n. GitHub: ✓ signed in"
+      "$GH_BIN" auth setup-git >/dev/null 2>&1 || true
+      say "  $n. GitHub: ✓ signed in, and git pushes through it"
     else
       say "  $n. GitHub — optional. Your browser opens with a one-time code; sign in and paste it."
       if [ "$INTERACTIVE" = 1 ] && offer "Enter = sign in now · s = later:"; then
         "$GH_BIN" auth login --hostname github.com --git-protocol https --web < /dev/tty || true
+        "$GH_BIN" auth status >/dev/null 2>&1 && "$GH_BIN" auth setup-git >/dev/null 2>&1 || true
       else
         GH_SKIPPED=1
         say "     Later, in a terminal:  gh auth login --web"

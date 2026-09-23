@@ -210,6 +210,13 @@ reason. Eight packages.
   `AUTOSOUND_REVIEW_RAW_DIR` keeps the raw exchange. An exported key no longer tells the installer that the
   reviewer is set up; the installers point it to `key move-shell`. The key is entered once into the OS keystore
   (`key set`, above).
+- **A project is a git repository, in code** (hub #199, TCC-026): a seeded project gets `git init` and a first
+  commit (`rew_tool/project_repo.py`), any other project gets the same from `project_repo.py init <project>`, and
+  `contract.py check` names it until it is done. The private GitHub backup is printed for the user's yes, never
+  made. `--github` now also runs `gh auth setup-git`. The engine is installed with the skill and checked:
+  `resonalyze_engine.py check` runs it once after a fetch, and where an SDK is present the installers build it at
+  install. The front's terms divide each solo's protective filter out, as the engine does. A copied project carries
+  the user's controls, marked as carried in (the Arbiter, 2026-09-23).
 - **C — the machine and the installer** (hub #192, S-028, S-049, S-022): git and python3 are run once after
   `xcode-select` answers. `doctor` names a Rosetta shell and a git that does not run. Both installers leave an
   `install-receipt.json`, and `doctor` reads it back. A prebuilt engine knows its wrapper, and a stale one is

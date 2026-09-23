@@ -100,11 +100,13 @@ PROSE_FILES = ("autosound_context.md",)
 
 #: What NEVER travels, and gets no checkbox (the Arbiter, 2026-09-19, hub #185): the tune's PURPOSE
 #: (`preference-profile.md`: taste, competition configuration, judging set-up, target curve -- the
-#: Passat's file opened by saying the seed described the opposite tune) and the control module's STATE
-#: (`hardware.controls`: knob positions and modes, assembled again on the new car; «не лізь туди …
-#: просто OFF для налаштування»). Both are recorded in the import record as history, not as settings.
-NEVER_TRAVELS = {"preference-profile.md": "the tune's purpose belongs to the project, not to the car",
-                 "hardware.controls": "the control module's state is assembled on the new car"}
+#: Passat's file opened by saying the seed described the opposite tune).
+#:
+#: `hardware.controls` TRAVELS since 2026-09-23 (the Arbiter: «переносити, а там користувач сам підправить
+#: або скіл спитає»). The list of controls is the user's (`project.set_hardware_control`), and a copy for the
+#: passenger seat in the same car has the same knobs. Each comes marked as carried in from the source, like any
+#: inherited fact, so `contract.py check` puts it to him: confirm it here, or change it.
+NEVER_TRAVELS = {"preference-profile.md": "the tune's purpose belongs to the project, not to the car"}
 
 #: The DSP's capabilities. Hardware, so it travels verbatim -- and the new project needs it before
 #: anything can check whether a filter is even enterable (`resonalyze_vc.py`).
@@ -151,6 +153,8 @@ class Seeded:
     profile_open: int = 0
     #: One technical sentence when `ok` is False -- a path, or what the method's validator said.
     problem: Optional[str] = None
+    #: What `project_repo.init` said: the project is a git repository with a first commit, or why not (hub #199).
+    repo: Optional[str] = None
 
 
 def _read_project(source):
@@ -381,11 +385,13 @@ def seed(source, target, *, include_findings=False, copy_profile=True, note=DEFA
             seeded[key] = json.loads(json.dumps(data[key]))
     skipped = [{"what": w, "why": why} for w, why in NEVER_TRAVELS.items()]
     history = {}
-    controls = ((data.get("hardware") or {}).get("controls")) if isinstance(data.get("hardware"), dict) else None
-    if isinstance(seeded.get("hardware"), dict):
-        seeded["hardware"].pop("controls", None)
-    if controls:
-        history["controls"] = controls
+    # The user's controls travel, each wrapped as a fact so it can say it was carried in (a bare position from an
+    # older file has nowhere to say it); `_mark_inherited` below marks them.
+    controls = (seeded.get("hardware") or {}).get("controls") if isinstance(seeded.get("hardware"), dict) else None
+    if isinstance(controls, dict):
+        for name, pos in list(controls.items()):
+            if not (isinstance(pos, dict) and "value" in pos):
+                controls[name] = {"value": pos, "source": None, "at": None}
     # The drivers' Fs travel behind their own switch, on by default (the Arbiter: «імпеданс складна штука і
     # міряти його другий раз це подвиг»); off, they are left for this build to measure, and the record says so.
     if not include_fs:
@@ -477,6 +483,15 @@ def seed(source, target, *, include_findings=False, copy_profile=True, note=DEFA
     result.flaws = len(flaws) if isinstance(flaws, list) else 0
     questions = seeded.get("_open_questions") if include_findings else None
     result.questions = len(questions) if isinstance(questions, list) else 0
+    # hub #199 (TCC-026): the project is a repository in code, not by a line of prose. A git that is missing or
+    # fails is said and does not undo the seed: a project is usable without history.
+    try:
+        import project_repo
+        ok_repo, result.repo = project_repo.init(target)
+        if ok_repo:
+            result.written.append(".git")
+    except Exception as exc:  # noqa: BLE001 -- history is an addition, never a reason to fail the seed
+        result.repo = f"no repository made: {exc}"
     return result
 
 
@@ -535,6 +550,8 @@ def main(argv=None):
     else:
         print(f"seeded {args.target} from {args.source}")
         print(f"  wrote     {', '.join(result.written)}")
+        if result.repo:
+            print(f"  history   {result.repo}")
         print(f"  carried   {result.channels} channels · {result.amps} amps"
               + (f" · {result.flaws} flaws (as hypotheses) · {result.questions} open questions"
                  if args.findings else ""))
@@ -600,6 +617,7 @@ def _source_project(root):
 
 
 def _selftest():
+    os.environ["AUTOSOUND_NO_GH"] = "1"          # a seed makes a repository; the test never reaches GitHub
     import tempfile
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -639,9 +657,9 @@ def _selftest():
         # hub #185: the purpose and the control module's state never travel; the import record says what was
         # taken, what was left and why, and keeps the knob positions as HISTORY.
         assert not os.path.exists(os.path.join(dst, "preference-profile.md")), "the tune's purpose travelled"
-        assert "controls" not in (got.get("hardware") or {}), got.get("hardware")
         rec = got["seeded_from"]
-        assert {s["what"] for s in rec["skipped"]} >= {"preference-profile.md", "hardware.controls"}, rec
+        assert {s["what"] for s in rec["skipped"]} >= {"preference-profile.md"}, rec
+        assert "hardware.controls" not in {s["what"] for s in rec["skipped"]}, "controls travel since 2026-09-23"
         assert rec["chosen"] == {"findings": False, "fs": True, "same_processor": True, "seat": None}, rec["chosen"]
         nofs = seed(src, os.path.join(tmp, "no-fs"), include_fs=False)
         assert nofs.ok, nofs.problem
@@ -664,10 +682,18 @@ def _selftest():
         assert "paths" not in hd or "measurements_repo" not in hd["paths"], hd.get("paths")
         hist = hd["seeded_from"]["history"]
         assert hist["paths"]["measurements_repo"] == "/Users/someone/cars/passat", hist
-        assert hist["controls"]["SubRC"]["value"] == "7/12" and "controls" not in (hd.get("hardware") or {}), hd
+        # The Arbiter, 2026-09-23: the user's controls travel, marked as carried in, so the check asks him.
+        sub = hd["hardware"]["controls"]["SubRC"]
+        assert sub["value"] == "7/12" and sub["origin"] == "inherited" and sub["inherited_from"] == os.path.abspath(src), sub
+        assert "controls" not in hist, hist
         # ...and so does every fact that came across, as a field a check reads (skill #36): the
         # project names its source as a path, and a bare Fs is wrapped so it can say it too.
         assert got["seeded_from"]["path"] == os.path.abspath(src) and got["seeded_from"]["at"] == "2026-08-23"
+        # hub #199: the seeded project is a git repository with a first commit, the .gitignore in it.
+        import project_repo
+        if shutil.which("git"):
+            assert project_repo.is_repo(dst), "a seeded project must be a repository (TCC-026)"
+            assert ".gitignore" in project_repo._git(dst, "ls-files").stdout.split()
         assert "channels" in got["seeded_from"]["keys"], got["seeded_from"]
         import project as _project
         carried = dict(_project.inherited_facts(got))

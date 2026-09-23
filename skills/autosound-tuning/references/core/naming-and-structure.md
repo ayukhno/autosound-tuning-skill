@@ -112,6 +112,8 @@ Rule of thumb: **magnitude / tone / summation / target → `(rta)`**; **phase / 
 
 A tune is worth months of work; its artifacts must survive a disk loss. Standard layout (the skill tells the user this at project start, then keeps it fed).
 
+**The repository is made in code, not by this paragraph** (hub #199, TCC-026; the Arbiter, 2026-09-23). A seeded project is a git repository with a first commit (`project_seed.py` calls `rew_tool/project_repo.py init`). A project made any other way, or one made before this, gets the same from `python3 rew_tool/project_repo.py init <project>`, and `contract.py check` names that command at every start until it is run. With no git identity on the machine, one is set for that repository only, from the signed-in `gh` (its no-reply address) or the machine's login. **The private GitHub backup is offered, never made:** where `gh` is signed in and the repository has no remote, the check prints `gh repo create <name> --private --source <project> --push` for the user's yes. A user who chose no GitHub is not asked again, and the local history is kept all the same. The installer's `--github` signs `gh` in and runs `gh auth setup-git`, so the push works through that sign-in.
+
 **The project folder as a whole** (one project = one folder the user points at, a git repo; the machine files are the front-end's whole contract — `project-schema.md`, `state/schema.md`, `state/process-schema.md`):
 
 ```
