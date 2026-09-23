@@ -302,6 +302,10 @@ Expect a one-line reply + a `— [ask: <model>]` tag (every task answers with it
 when the channel you have stops answering mid-session. Every other file points here instead of
 keeping a list of its own — three lists that disagreed is what this section replaced (2026-09-09).
 
+**Under TCC: call the `call_critic` tool.** It runs the reviewer outside the session with the Arbiter's
+picked model and binary, so it needs no key and no terminal. The rungs below are for everywhere else, and
+for when that tool answers with a refusal.
+
 0. **Wait / retry — mid-session only.** An empty reply is usually an exhausted quota or lost auth,
    not a crash (§6); a minute or a model-group switch often costs less than changing channel.
 1. **ANOTHER vendor than the one driving** — `python3 scripts/autosound_ai.py critic|advisor|ask`,

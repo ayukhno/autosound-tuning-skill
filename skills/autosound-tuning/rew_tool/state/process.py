@@ -1643,6 +1643,27 @@ class Process:
             return live if live and key(live.get("version")) == version else None
         return rounds[order[-1]]
 
+    def protective_by_channel(self):
+        """`{channel: {"legs", "round", "version", "source"}}`: for EACH channel, the newest round in which a protective
+        filter was recorded in its chain (the Arbiter, 2026-09-23). The front may be taken raw in one round and the
+        centre raw in another, so "the last round" alone loses one of them; a record of OFF (nothing in the chain) is
+        not a protective filter and does not hide an older one. Within a round, an amendment is the last word."""
+        issued = [r["id"] for r in self.capture_rounds()]
+        per_round = {}
+        for event in self.events(kinds=(EV_CAPTURE_PROTECTIVE,)):
+            if event.get("channel"):
+                per_round.setdefault(event.get("capture"), {})[event["channel"]] = event
+        out = {}
+        for cid in reversed(issued):
+            for channel, event in (per_round.get(cid) or {}).items():
+                legs = event.get("legs")
+                if channel in out or not legs or str(legs).upper() == "OFF":
+                    continue
+                version = next((r["version"] for r in self.capture_rounds() if r["id"] == cid), None)
+                out[channel] = {"legs": legs, "round": cid, "version": version,
+                                "source": event.get("source") or "user"}
+        return out
+
     # -- listening verdicts (Phase 4) --
     def record_listening_verdict(self, pairs, text=None, route=None, ledger_version=None, note=None):
         """Bank what the Arbiter heard: `pairs` = [(track_id, characteristic_id, "ok"|"bad"), ...]
@@ -2630,6 +2651,21 @@ def _selftest():
             raise AssertionError(f"amp change {bad} was taken")
         except ProcessError:
             pass
+    # The Arbiter, 2026-09-23: protective history is gathered PER CHANNEL, from the newest round where the channel
+    # had one -- the front raw in one round and the centre raw in another are both kept, and an OFF hides nothing.
+    ph = Process(os.path.join(root, "process-prot-hist"))
+    ph.enter_phase("0")
+    ph.start_capture("40", expected=["m-L_40 (sw)", "tw-L_40 (sw)"], phase="0")
+    ph.set_protective("m-L", {"hp": {"f": 100.0, "type": "LR", "slope": 24}})
+    ph.set_protective("tw-L", {"hp": {"f": 1000.0, "type": "LR", "slope": 24}})
+    ph.close_capture(reason="front raw")
+    ph.start_capture("41", expected=["c_41 (sw)", "m-L_41 (sw)"], phase="0")
+    ph.set_protective("c", {"hp": {"f": 100.0, "type": "LR", "slope": 24}})
+    ph.set_protective("m-L", "OFF")
+    ph.close_capture(reason="centre raw")
+    got = ph.protective_by_channel()
+    assert set(got) == {"m-L", "tw-L", "c"}, got
+    assert got["m-L"]["version"] == "40" and got["c"]["version"] == "41" and got["tw-L"]["legs"]["hp"]["f"] == 1000.0, got
     # #57 P0 / S-026: a round records the ledger version it was taken under and the level as a quantity; a
     # level with no dB in it, or an under that is not banked, is refused.
     lvl = Process(os.path.join(root, "process-level"))

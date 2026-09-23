@@ -299,18 +299,20 @@ def _absolute(path):
 
 
 def _protective_history(source):
-    """The protective filters of the source's last capture round, as it recorded them -- history for the import
-    record (hub #185: «протектив там був m/c/r 100 LR24, tw 1000 LR24»), or None."""
+    """The source's protective filters as it recorded them, PER CHANNEL from the newest round where each had one --
+    history for the import record (hub #185: «протектив там був m/c/r 100 LR24, tw 1000 LR24»), or None.
+
+    Not "the last round": the front may be taken raw in one round and the centre raw in another (the Arbiter,
+    2026-09-23), and it used to read only a round still open, which a finished project never has."""
     state_dir = os.path.join(_HERE, "state")
     if state_dir not in sys.path:
         sys.path.insert(0, state_dir)
     try:
         import process as _process
-        record = _process.Process(os.path.join(source, "process")).protective_record()
+        record = _process.Process(os.path.join(source, "process")).protective_by_channel()
     except Exception:  # noqa: BLE001 -- a source without a process record has no protective history
         return None
-    legs = (record or {}).get("legs") if isinstance(record, dict) else None
-    return legs or None
+    return record or None
 
 
 def _mark_inherited(obj, source):
