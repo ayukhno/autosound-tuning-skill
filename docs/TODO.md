@@ -1455,7 +1455,7 @@ an existing project migrates with nothing lost (the old per-slot files kept as h
 **Status**: waiting 2026-09-23 · PR #59 (`wave-2026-09-20` → `main`), CI green on `d0e986b`: `gh pr checks 59 --repo ayukhno/autosound-tuning-skill` (engine, selftests, installers-windows, gate); `scripts/run-selftests.sh` locally 81/81 with the VMs suspended. Run to this point without him, on his word of 2026-09-22 (`docs/PLAN-W-2.md`, *Run without the Arbiter*).
 
 **Due when:** he is back. In this order:
-1. **The decisions log first** (his word: «завтра почнемо з принятих тобою рішень»): `docs/W-2-DECISIONS.md`, 45 rows. Row 33 is reverted already, and rows 34 (the structural gate), 41 (a pair as `(sw)` or `(rta)`) and 44 (predict's default) change what a session does.
+1. **The decisions log first** (his word: «завтра почнемо з принятих тобою рішень»): `docs/W-2-DECISIONS.md`. Row 33 is reverted. Rows 34 and 44 were answered 23.09 (row 46: a desk result is evidence, and the car verifies several changes at once). Row 41 was never a real question: the method already sets a junction's phase from sweeps and checks the sum with RTA (`docs/RESEARCH-2026-09-23-junction-alignment-measurement.md`).
 2. **The merge and the tag**, on his word: `git merge --ff-only` into `main`, push, `scripts/tag-check.sh v3.0.60`, the tag. Then close the milestone and the issues it names, and close hub #178/#185/#186/#187/#192/#195 with the tag as the proof line.
 3. **His two runs**: S-020 (the Windows VM, no .NET SDK: the README one-liner at v3.0.60, then `resonalyze_engine.py smoke`, then `-NoEngine`), and S-021 (a passenger-seat project on the Passat, Phase −1 → the trade-off front).
 4. **The car role's half**: hub #196 (the Passat's ids, its gain step `0.1`).
