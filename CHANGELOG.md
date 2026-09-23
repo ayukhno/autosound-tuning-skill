@@ -181,8 +181,17 @@ reason. Eight packages.
 - **`hardware.controls` is the user's list** (S-025; the Arbiter, 2026-09-23). A new name goes in only on his
   word (`--source user`, as the intake form writes). A session that meets something new asks him, and a
   control on his list is tracked from any source. An import such as the Passat's `RealCenter` is not his word.
-- **A copied project no longer carries `preference-profile.md` or `hardware.controls`**, and its `sources`
-  is one line (hub #185/#186). The import record is `seeded_from`.
+- **A copied project no longer carries `preference-profile.md`**, and its `sources` is one line (hub #185/#186).
+  The import record is `seeded_from`. The user's controls DO travel, each marked as carried in, so the check asks
+  him to confirm them. An absolute path travels only when it exists on the machine making the copy.
+- **A version saved into a DSP preset gets its name** (`state.py config save v_006 SQ-2 --dsp-preset 1`), and it
+  compares with the previous configuration up its `parent` line, not with the number before it. A front-end
+  reads `slots.json` `configs` (hub #198).
+- **A project is a git repository.** A seeded project gets a first commit. An existing one is named by
+  `contract.py check` with `rew_tool/project_repo.py init <project>` until that is run. The private GitHub backup
+  is only ever printed for the user's yes (hub #199).
+- **Where the .NET SDK is present, the installer builds the desk engine at install and runs it once**
+  (`resonalyze_engine.py check`), instead of on first use; a fetched engine is run once too.
 - **The reviewer's API key lives in the OS keystore** (the Arbiter, 2026-09-23; hub #197). `autosound_ai.py
   key set google` asks for it without echo (or takes one line on stdin, never argv) and keeps it in the macOS
   Keychain or, on Windows, a store only the user's login opens (DPAPI); elsewhere, the 600 machine file. A run
