@@ -398,6 +398,17 @@ def cross_check_rew(process_state, glossary, snapshots, project_data=None):
     foreign = rew_api.foreign_measurements(records, own) if hasattr(rew_api, "foreign_measurements") else {}
     if foreign:
         out["foreign"] = foreign
+    if not own:
+        # With no own file recorded nothing can be judged foreign -- so say which file(s) REW holds, with the full
+        # path REW gives (`containingFilePath`, checked on a live REW 2026-09-23), for the user to confirm as this
+        # project's.
+        held = {}
+        for rec in records or []:
+            name = rew_api.measurement_file(rec) if hasattr(rew_api, "measurement_file") else None
+            if name:
+                held.setdefault(name, rec.get("containingFilePath") or name)
+        if held:
+            out["files_unrecorded"] = held
 
     # WHAT IS EXPECTED COMES FROM THE OPEN CAPTURE ROUND, NOT FROM LEDGER HEAD (inbox 3.11).
     # Deriving it from HEAD's version number asks "does REW hold the series for v_008?" of a
@@ -998,6 +1009,10 @@ def render_report(report):
             lines.append(f"- ⚠️ REW: {len(rew['foreign'])} measurement(s) come from another file "
                          f"({', '.join(files)}), not this project's own -- another build's data; read them "
                          f"only as that, and never into this project's rounds (#58 P4)")
+        for name, path in sorted((rew.get("files_unrecorded") or {}).items()):
+            lines.append(f"- REW holds measurements from `{name}` ({path}), and this project records no REW file of "
+                         f"its own, so another build's data cannot be told apart. If it is this project's (ask): "
+                         f"`project.py {report['project_dir']} set-path rew_project \"{path}\"`")
         for title, n in sorted(rew.get("duplicate_titles", {}).items()):
             lines.append(f"- ⚠️ REW holds {n} measurements titled `{title}` — a title is supposed "
                          f"to be one measurement's identity; resolve before capturing further")

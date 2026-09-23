@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 
@@ -1204,6 +1205,20 @@ class Project:
         controls[name] = fact(value, source=source)
         return self.save(data)
 
+    def set_path(self, key, value):
+        """`paths.<key>` = `value`: where this project's files live (`rew_project`, the REW `.mdat` it measures into;
+        `measurements_repo`). A path is a pointer, not a fact with a source, so it is stored bare (skill #58 P4: the
+        foreign-file check judges nothing until `rew_project` names this project's own file)."""
+        key = str(key or "").strip()
+        if not re.match(r"^[a-z][a-z0-9_]*$", key):
+            raise ProjectError(f"{key!r} is not a paths key (lower case, letters, digits, _)")
+        value = str(value or "").strip()
+        if not value:
+            raise ProjectError(f"paths.{key} needs a path")
+        data = self.load()
+        data.setdefault("paths", {})[key] = value
+        return self.save(data)
+
     def set_virtual_route(self, name, outputs, source=None):
         """Which physical outputs one VIRTUAL channel feeds -- the DSP's routing matrix, as a fact.
 
@@ -1402,6 +1417,7 @@ _USAGE = """usage: project.py <project-dir> <command> [args]
                                                previous name goes back to the code (S-042); a
                                                plan without --apply, run on the user's OK
   set-hardware <name> <value> [--source S]     set a DSP-hardware control (a remote knob: RearRC/SubRC/...)
+  set-path <key> <path>                        where this project's files live (rew_project: its REW .mdat)
   set-route <VIRTUAL> <out,out,...> [--source S]
                                                which outputs a VIRTUAL channel feeds -- the DSP's
                                                routing matrix as a fact, so `predict` stops being
@@ -1630,6 +1646,9 @@ def _main(argv):
             name, value = args[0], args[1]
             proj.set_hardware_control(name, value, source=source)
             print(f"hardware.controls.{name} = {value!r}")
+        elif cmd == "set-path":
+            proj.set_path(args[0], args[1])
+            print(f"paths.{args[0]} = {args[1]!r}")
         elif cmd == "set-route":
             source = _flag(args, "--source")
             name, outs = args[0], [c.strip() for c in args[1].split(",") if c.strip()]
@@ -2175,6 +2194,14 @@ def _selftest():
     proj.set_hardware_control("SubRC-2", "4/4", source="user")    # two subs, two knobs
     proj.set_hardware_control("subrc", "7/12")                    # on his list: tracked, any source
     proj.set_hardware_control("HU bass", "+2", source="user")     # the person's own knob
+    proj.set_path("rew_project", "/Users/me/dev/EPY-Sep2026_v1.mdat")
+    assert proj.load()["paths"]["rew_project"].endswith("EPY-Sep2026_v1.mdat")
+    for bad_key in ("Rew Project", ""):
+        try:
+            proj.set_path(bad_key, "/x")
+            raise AssertionError(f"set_path took {bad_key!r}")
+        except ProjectError:
+            pass
     assert fact_value(proj.load()["hardware"]["controls"]["SubRC"]) == "7/12"
     os.remove(prof_path)
     # The DSP's routing matrix and what a knob does: two facts that used to be retyped or guessed

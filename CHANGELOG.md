@@ -266,7 +266,8 @@ reason. Eight packages.
   - `predict --rew` takes `--from-state` from the round's `under`, refuses another file's solos, and shows five
     notes, not forty (`--verbose` shows all of them);
   - `compare.py` compares curves side by side;
-  - REW measurements from another `.mdat` are labelled;
+  - REW measurements from another `.mdat` are labelled (checked on a live REW: `containingFileName`), and a
+    project that records no REW file of its own is told which one REW holds (`project.py set-path rew_project`);
   - replies name their numbers' sources and end with "enter this" or "measure these N".
 
 ## [v3.0.59] — 2026-09-20 · W-1: a step reply is three lines, the language survives a clear, and a fact says where it came from
