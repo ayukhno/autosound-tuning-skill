@@ -1490,6 +1490,18 @@ at most five show unless `--verbose`, and the missing-title error names the coun
 The rest is a shape for every tool: a verdict block of at most five lines first, then the detail on request.
 That is a redesign of every tool's output, not a patch.
 
+## S-060 · W-3 · v3.0.62 is collecting: pick up the collection with him
+
+**Status**: open 2026-09-23 · the session stopped on «добраніч» · the wave is COLLECTING, nothing is built (the
+Arbiter: «головне ми збираємо НЕ РОБИМО»)
+
+Where it stands: the milestone `W-3 · v3.0.62` holds #60, #61, #64 and #24, and S-056 and S-057 ride the wave
+(`docs/PLAN-W-3.md`). Decided at the review: `docs/` folders by kind (#61), the five-line verdict shape (S-057),
+translations through the Advisor (#24). A draft of #60 (Claude and Codex prompts on stdin, Codex's `-o` answer file)
+is parked as a local stash on the author's Mac, `W-3 draft for #60 …`; it is not pushed, and #60 records what it does.
+
+Next: ask him what else goes into the collection. Build only on his explicit word ("робимо", "до зеленого PR").
+
 ## S-059 · v3.0.61's TCC upgrade path, run on the Windows VM
 
 **Status**: waiting 2026-09-23 · two of three cases run by the Arbiter on the Windows VM at v3.0.61: running → "Autosound TCC is running … left as it is" and Checking "was here before and was not upgraded", the app still starting; closed → "OK installed", the app starting at 0.1.43. The third (a launcher TCC's own updater put there) waits for TCC's next in-app update · from skill #62, fixed in v3.0.61 (`git -C skill tag --contains c4fc023` → `v3.0.61`)
