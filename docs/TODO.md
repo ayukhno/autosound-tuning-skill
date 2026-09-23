@@ -1492,7 +1492,7 @@ That is a redesign of every tool's output, not a patch.
 
 ## S-058 · The reviewer key through TCC on the other MacBook
 
-**Status**: open 2026-09-23 · waits for TCC's W-2 (`v0.1.43`) with hub #197 built · his step.
+**Status**: open 2026-09-23 · ready: TCC `v0.1.43` is released with hub #197 (`git -C tcc tag --contains e5ab9fc` → `v0.1.43`; its receipt: `key status → google used=keystore`) · his step, on the other MacBook
 
 The Arbiter wants the key checked through TCC, since TCC is where "the key in ~/.zshrc is not seen" came from.
 On this MacBook the move is done and checked (`key status`: keystore, AQ., 53; `doctor`: the key is live).
