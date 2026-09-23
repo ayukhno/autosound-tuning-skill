@@ -414,10 +414,12 @@ def seed(source, target, *, include_findings=False, copy_profile=True, note=DEFA
         skipped.append({"what": ", ".join(FINDING_KEYS), "why": "the findings box was left off at the copy"})
     paths = data.get("paths")
     if isinstance(paths, dict):
-        # An ABSOLUTE path is the source machine's and never travels (hub #186): the package was imported on
-        # another MacBook, where it resolves to nothing, and a path to nothing reads as a place to look.
+        # An ABSOLUTE path travels only when it resolves on THIS machine (the Arbiter, 2026-09-23): a passenger copy
+        # on the same Mac keeps its measurements folder, while a package imported on another MacBook (hub #186),
+        # where the path resolves to nothing, keeps it as history -- a path to nothing reads as a place to look.
         travelling = {k: paths[k] for k in PATHS_THAT_TRAVEL
-                      if k in paths and isinstance(paths[k], str) and not _absolute(paths[k])}
+                      if k in paths and isinstance(paths[k], str)
+                      and (not _absolute(paths[k]) or os.path.exists(paths[k]))}
         if travelling:
             seeded["paths"] = travelling
         stayed = {k: v for k, v in paths.items() if k not in travelling}
@@ -684,6 +686,13 @@ def _selftest():
         assert "paths" not in hd or "measurements_repo" not in hd["paths"], hd.get("paths")
         hist = hd["seeded_from"]["history"]
         assert hist["paths"]["measurements_repo"] == "/Users/someone/cars/passat", hist
+        # ...while an absolute path that resolves HERE travels: a passenger copy on the same machine.
+        src_data["paths"]["measurements_repo"] = tmp
+        with open(os.path.join(src, "project.json"), "w", encoding="utf-8") as f:
+            json.dump(src_data, f)
+        assert seed(src, os.path.join(tmp, "same-machine")).ok
+        with open(os.path.join(tmp, "same-machine", "project.json"), encoding="utf-8") as f:
+            assert json.load(f)["paths"]["measurements_repo"] == tmp
         # The Arbiter, 2026-09-23: the user's controls travel, marked as carried in, so the check asks him.
         sub = hd["hardware"]["controls"]["SubRC"]
         assert sub["value"] == "7/12" and sub["origin"] == "inherited" and sub["inherited_from"] == os.path.abspath(src), sub

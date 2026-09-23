@@ -217,6 +217,9 @@ reason. Eight packages.
   `resonalyze_engine.py check` runs it once after a fetch, and where an SDK is present the installers build it at
   install. The front's terms divide each solo's protective filter out, as the engine does. A copied project carries
   the user's controls, marked as carried in (the Arbiter, 2026-09-23).
+- **Front-end contracts** (hub #200, #201): the reviewer's instructions describe the code (runs inside a session,
+  bounded; TCC's `call_critic`); `process.py handoff --json` for a front-end offering a clean session at the end of
+  a phase; `capture-supersede` documented with REW renamed first.
 - **C — the machine and the installer** (hub #192, S-028, S-049, S-022): git and python3 are run once after
   `xcode-select` answers. `doctor` names a Rosetta shell and a git that does not run. Both installers leave an
   `install-receipt.json`, and `doctor` reads it back. A prebuilt engine knows its wrapper, and a stale one is
@@ -250,7 +253,8 @@ reason. Eight packages.
   - a closed round's knobs can be amended;
   - `capture-import` registers what REW holds, one round per DSP state, with the knobs required and lateness
     said;
-  - `verification-set` derives the next capture from what moved;
+  - `verification-set` derives the next capture from what moved, and a junction is taken both as a sweep (the
+    phase) and as RTA (the sum);
   - the car sheet takes its series number from the project (`naming.py <project> next-series`);
   - the -EP command proves it made something, and the min-phase verdict is one function, settled from the
     sources: the feature's ±1/6 oct and the channel's delay, against max(10°, 3 × the repeat floor) from the

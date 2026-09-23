@@ -787,9 +787,10 @@ def verification_set(state_a, state_b, series):
 
     "We changed something, so re-measure the series" cost a whole exchange ("what am I re-measuring for one
     filter?!"). What moved decides what to measure: an EQ band or a gain on one channel -> that channel's solo
-    `(rta)`; a delay or a crossover edge -> the junction's pair, summed, as a sweep, plus the channel's solo; a
-    polarity -> the pair as MMM, normal and with the flipped member inverted. Returns `[(title, why)]`, deduped,
-    in the order a person captures them."""
+    `(rta)`; a delay or a crossover edge -> the junction's pair as a sweep (the phase) AND as RTA (the sum, the way
+    the Arbiter checks a junction: the Arbiter, 2026-09-23), plus the channel's solo; a polarity -> the pair as MMM,
+    normal and with the flipped member inverted. Returns `[(title, why)]`, deduped, in the order a person captures
+    them."""
     out, seen = [], set()
 
     def add(title, why):
@@ -814,8 +815,9 @@ def verification_set(state_a, state_b, series):
                 if leg in moved or "ta_ms" in moved:
                     for other in _partners(state_b, code, leg):
                         pair = "+".join(sorted((code, other)))
-                        add(f"{pair}_{series} (sw)", f"{code}{' ' + leg if leg in moved else ' delay'} moved: the "
-                                                     f"junction with {other}, summed")
+                        what = f"{code}{' ' + leg if leg in moved else ' delay'} moved"
+                        add(f"{pair}_{series} (sw)", f"{what}: the junction with {other}, its phase (sweep)")
+                        add(f"{pair}_{series} (rta)", f"{what}: the junction with {other}, its sum (RTA)")
             if moved & {"hp", "lp"}:
                 add(f"{code}_{series} (rta)", f"{code}: its crossover moved, so its own band did")
             if "polarity" in moved:
@@ -2283,7 +2285,8 @@ def _selftest():
     assert titles == ["sub+w-L_52 (rta)", "sub+w-L i_52 (rta)"], titles
     vd = copy.deepcopy(va)
     vd["channels"]["w-L"]["ta_ms"] = 6.2
-    assert [t_ for t_, _ in verification_set(va, vd, 52)] == ["sub+w-L_52 (sw)"], verification_set(va, vd, 52)
+    assert [t_ for t_, _ in verification_set(va, vd, 52)] == ["sub+w-L_52 (sw)", "sub+w-L_52 (rta)"], \
+        verification_set(va, vd, 52)
 
     # -- W-2 R (hub #195): the old per-preset layout is still read, the move is a plan until
     #    --apply, the active slot keeps its numbers, and a half-moved line is refused with the way out.

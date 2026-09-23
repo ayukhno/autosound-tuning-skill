@@ -187,3 +187,27 @@ p.unevidenced_done_steps()      # resume drift check
 - **TCC** reads both files and renders them (plan panel, advisor status), watching for changes.
 - `tuning-changelog` and `audit-trail.md` become **generated views** over the journal — the same
   move `state.py` made for `dsp-state-current`.
+
+## Front-end contract: the handoff and a corrected capture title (hub #201, TCC-028)
+
+**`handoff` (S-044): when a front-end offers it, and what it does with the answer.**
+- **The signal is the end of a phase, not its start.** Offer it when the ACTIVE phase's plan has no step left
+  `todo` or `in_progress`, that is, after the `step_done` / `step_skipped` / `step_blocked` event that closed the
+  last one. Right after `phase_entered` the new phase's steps are `todo` by definition, so `handoff` would refuse.
+- **The machine form:** `process.py <dir> handoff --json` prints `{ok, missing: [str], phase, resume,
+  next_message}`, with exit 0 when ready and 1 when not. `missing` is shown to the person as it is: each item
+  already names what to do. Nothing is written either way.
+- **The resume line:** a front-end that can start a session starts a NEW one in the project with
+  `next_message` («продовжуй») as its first message, and shows `resume` beside it (it names what must stay open,
+  e.g. the REW session). A terminal prints `resume` for the person to follow.
+
+**`capture-supersede` (S-039): a capture recorded under the wrong title.**
+- `process.py <dir> capture-supersede "<wrong title>" "<right title>" [reason words …]`. Exit 0: the wrong row
+  stays, marked `superseded_by`, and the right title is recorded as taken. Exit 1: refused, with the reason on
+  stderr (no open round; the round never took the wrong title; the same title twice). Exit 2: usage. The reason is
+  free text, and a front-end's own is fine (e.g. `renamed in REW by TCC`).
+- **It works on the OPEN round.** A round registered after the fact (`capture-import`) is written with the
+  titles REW holds at that moment, so a title is fixed in REW BEFORE the import.
+- **Order: REW first, then the round.** Rename in REW, read REW back to confirm the right title exists and the
+  wrong one does not, then run `capture-supersede`. If the rename fails, the round still says what REW holds.
+  The other order leaves a round naming a title REW does not have.

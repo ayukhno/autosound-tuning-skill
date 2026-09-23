@@ -2321,9 +2321,10 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
                                         the capture was recorded under the wrong title: the row
                                         STAYS, dimmed, naming what it was corrected to, and the
                                         right title is recorded (S-039). Never deletion
-  handoff                               is everything the NEXT session needs on disk? Prints the
+  handoff [--json]                      is everything the NEXT session needs on disk? Prints the
                                         resume line when it is, names what is missing when it is
-                                        not (exit 1), and writes nothing either way (S-044)
+                                        not (exit 1), and writes nothing either way (S-044).
+                                        --json: {ok, missing, phase, resume, next_message}
   capture-skip <title> <reason>         deliberately NOT taken, and why
   capture-close [reason]                close the round; what is outstanding is named
   check                                 done steps with no evidence, and done steps whose
@@ -2885,6 +2886,11 @@ def _selftest():
     assert "phase 0" in ho["resume"], ho["resume"]
     # It writes nothing: which evidence closes a step is a decision, the same split session-close has.
     assert ty.handoff() == ho, "handoff must be pure"
+    # hub #201 (TCC-028): the machine form a front-end reads, with the message the new session starts with.
+    hj = subprocess.run([sys.executable, _mod, ty.dir, "handoff", "--json"], capture_output=True, text=True,
+                        encoding="utf-8", env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+    got_j = json.loads(hj.stdout)
+    assert hj.returncode == 0 and got_j["ok"] and got_j["next_message"] == "продовжуй" and got_j["resume"], hj.stdout
 
     # ── S-048: another project's series number does not walk in unannounced ──────────────────
     # Fails on the old code at the refusal: `start_capture` took any number, and a session that
@@ -3421,6 +3427,11 @@ def _main(argv):
                   f"corrected title is recorded")
         elif cmd == "handoff":
             got = p.handoff()
+            if "--json" in args:
+                # hub #201 (TCC-028): the machine form a front-end reads. `next_message` is what the new
+                # session is started with; TCC starts it itself instead of asking the person to type it.
+                print(json.dumps(dict(got, next_message="продовжуй" if got["ok"] else None), ensure_ascii=False))
+                return 0 if got["ok"] else 1
             if got["ok"]:
                 print(got["resume"])
                 return 0
