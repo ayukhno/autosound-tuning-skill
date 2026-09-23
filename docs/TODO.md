@@ -1492,8 +1492,7 @@ That is a redesign of every tool's output, not a patch.
 
 ## S-059 · v3.0.61's TCC upgrade path, run on the Windows VM
 
-**Status**: open 2026-09-23 · his step · from skill #62, fixed in v3.0.61 (`git -C skill tag --contains c4fc023` →
-`v3.0.61`).
+**Status**: waiting 2026-09-23 · two of three cases run by the Arbiter on the Windows VM at v3.0.61: running → "Autosound TCC is running … left as it is" and Checking "was here before and was not upgraded", the app still starting; closed → "OK installed", the app starting at 0.1.43. The third (a launcher TCC's own updater put there) waits for TCC's next in-app update · from skill #62, fixed in v3.0.61 (`git -C skill tag --contains c4fc023` → `v3.0.61`)
 
 Two runs of the install line on the VM, the same one-liner at v3.0.61:
 1. **With TCC running.** Expected: "Autosound TCC is running, so its files are in use… left as it is", and in
