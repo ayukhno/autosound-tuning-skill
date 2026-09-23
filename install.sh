@@ -1052,7 +1052,16 @@ if [ "$MODE" = "tcc" ]; then
     TCC_SPEC="autosound-tcc[gui,claude] @ git+${TCC_REPO}"
     warn "could not read the app's releases -- installing from the default branch instead"
   fi
-  if run "$UV" tool install --quiet --python 3.12 --upgrade "$TCC_SPEC"; then
+  # skill #62: a launcher uv did not put there (TCC's own updater did) makes `uv tool install --upgrade` refuse
+  # ("Executable already exists"), and on the Windows VM the refusal left the old app unable to start. So the
+  # upgrade asks uv first: a tool it lists is upgraded, and a launcher it does not own is replaced, and said.
+  TCC_FORCE=""
+  if { [ -n "$(find_bin autosound-tcc 2>/dev/null || true)" ] || [ -e "${UV_TOOL_BIN_DIR:-$LOCAL_BIN}/autosound-tcc" ]; } \
+     && ! "$UV" tool list 2>/dev/null | grep -q '^autosound-tcc '; then
+    TCC_FORCE="--force"
+    say "  the app's launcher here was not put there by uv (TCC's own updater did) — replacing it"
+  fi
+  if run "$UV" tool install --quiet --python 3.12 --upgrade $TCC_FORCE "$TCC_SPEC"; then
     # Where uv actually put it, which is not always `~/.local/bin`.
     TCC_BIN="$(command -v autosound-tcc 2>/dev/null || true)"
     [ -z "$TCC_BIN" ] && [ -x "${UV_TOOL_BIN_DIR:-$LOCAL_BIN}/autosound-tcc" ] \

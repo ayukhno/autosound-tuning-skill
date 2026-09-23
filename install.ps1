@@ -1093,7 +1093,19 @@ if ($Mode -eq "tcc") {
             $TccSpec = "autosound-tcc[gui,claude] @ git+$TccRepo"
             Warn "could not read the app's releases -- installing from the default branch instead"
         }
-        if (Run { & $Uv tool install --quiet --python 3.12 --upgrade $TccSpec } "uv tool install autosound-tcc[gui,claude]") {
+        # skill #62: a launcher uv did not put there (TCC's own updater did) makes `uv tool install --upgrade` refuse
+        # ("Executable already exists"), and on the Windows VM that refusal left the old app unable to start. So uv
+        # is asked first: a tool it lists is upgraded, a launcher it does not own is replaced, and said. A RUNNING app
+        # holds its files on Windows, so it is left as it is, with the reason.
+        $tccForce = @()
+        if ($HaveTcc -and -not ((& $Uv tool list 2>$null | Out-String) -match '(?m)^autosound-tcc ')) {
+            $tccForce = @("--force")
+            Say "the app's launcher here was not put there by uv (TCC's own updater did) -- replacing it"
+        }
+        $tccRunning = @(Get-Process -Name "autosound-tcc*" -ErrorAction SilentlyContinue).Count -gt 0
+        if ($tccRunning -and -not $DryRun) {
+            Warn "Autosound TCC is running, so its files are in use. Close it and run this line again; the app was left as it is."
+        } elseif (Run { & $Uv tool install --quiet --python 3.12 --upgrade @tccForce $TccSpec } "uv tool install autosound-tcc[gui,claude]") {
             Sync-ProcessPath
             # The windowed launcher when the package has one (no console window behind the app),
             # the console one otherwise.
@@ -1311,6 +1323,7 @@ if ($Channel -eq "beta" -and -not $DryRun) {
 if ($Mode -eq "tcc" -and -not $DryRun) {
     if ($TccExe -and (Test-Path $DesktopLnk)) { Say "OK   Autosound TCC -- on your Desktop and in the Start Menu" }
     elseif ($TccExe) { Say "OK   Autosound TCC -- the command:  autosound-tcc" }
+    elseif ($HaveTcc) { Warn "Autosound TCC was here before and was not upgraded this time (above) -- it is left as it was"; $ok = $false }
     else { Warn "Autosound TCC is not installed"; $ok = $false }
 }
 $ClaudeBin = Find-Bin claude
