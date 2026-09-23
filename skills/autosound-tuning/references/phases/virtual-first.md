@@ -238,7 +238,13 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
   three weightings (tone / stage / junctions first) and shown in their own order, each with what it buys
   and what it spends. A spread smaller than a term's tie margin is called a tie, not a trade. A junction
   that no candidate repairs is named as the ceiling. The output always ends with what the objective
-  cannot see (imaging, depth, fatigue), and **no winner is chosen**.
+  cannot see (imaging, depth, fatigue). **It advises from the project's goal** (the Arbiter, 2026-09-23):
+  for competition, the pick that wins with the stage first, since positions are judged and a band hotter on
+  one side moves the instrument; for yourself, the tone-first pick; for both, one per preset. With no
+  `goal.purpose` recorded, it says to ask. The choice and the OK stay the tuner's. Candidates within the tie
+  margins on every term are named as close, worth taking both to the car to listen. An alternative whose
+  edge was moved to the nearest allowed has the junction beside it re-tuned inside the limits, in the same
+  family and slope, so its numbers are its own configuration's.
 - **1.7** **predict the sums, describe the variants, and the tuner chooses** (`predict`): L, R, ALL; the
   sum loss per joint; L−R per band; a graph — for each variant on the table, with its per-term numbers
   **and in words**: what changes and how it will sound, written by the generator and reviewed by the

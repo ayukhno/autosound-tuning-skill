@@ -15,7 +15,15 @@ is broken down by the SAME terms, and 2-3 are picked by DIFFERENT weightings of 
 **It never hands over an argmax** (`predict.ladder_report`'s rule: a table ordered by the metric is
 a proposal wearing a table's clothes). Each pick says which weighting it wins under, what it BUYS
 and what it SPENDS against the others, and every output ends with what the objective cannot see.
-The desk proposes; the tuner chooses (the Arbiter's В8).
+
+**It advises, from the project's goal** (the Arbiter, 2026-09-23, and his rule of 2026-09-17: "show,
+describe, ADVISE, discuss, and choose with the user's OK"). A competition tune is judged on
+positions, and a band hotter on one side moves the instrument sideways (`patterns/competition.md`,
+imaging diagnostics), so the advice is the pick that wins with the stage first. A tune for oneself
+is heard as spectral balance, so the advice is the one that wins with the tone first. "Both" means two
+presets, one of each. The advice names what it spends; the others stay on the table, and the choice
+and the OK are the tuner's. Candidates within the tie margins on EVERY term are called close, and
+worth taking both to the car to listen.
 """
 
 from __future__ import annotations
@@ -183,18 +191,56 @@ def front(candidates, weightings=None):
         # Every term ties: the weightings chose by index, which is no choice at all. One pick, said so.
         picks = picks[:1]
         picks[0]["wins_under"] = list(weightings)
+    # Close: another candidate within the tie margin on every scored term (the Arbiter, 2026-09-23: say so --
+    # the tuner may take both to listen). The numbers cannot tell them apart; the ear may.
+    for p in picks:
+        i = names.index(p["name"])
+        p["close"] = [names[k] for k in range(len(candidates)) if k != i and usable and all(
+            abs(_cost(t, candidates[k]["terms"][t]) - _cost(t, candidates[i]["terms"][t])) < TIE_DB[t] for t in usable)]
     return {"picks": picks, "limited": limited, "missing": missing, "ties": ties, "candidates": names}
+
+
+#: Which weighting the advice follows, by the project's `goal.purpose` (intake.PURPOSES).
+ADVICE_BY_PURPOSE = {"competition": ("stage first",), "enjoyment": ("tone first",),
+                     "both": ("stage first", "tone first")}
+_WHY = {"stage first": "a competition tune is judged on positions, and a band hotter on one side moves the instrument "
+                       "sideways (patterns/competition.md, imaging diagnostics)",
+        "tone first": "a tune for yourself is heard as spectral balance first"}
+
+
+def advice(result, purpose=None):
+    """The advice lines for a front, from the project's goal: `[str]`. Never a choice -- the tuner makes it."""
+    picks = result.get("picks") or []
+    if not picks:
+        return []
+    wanted = ADVICE_BY_PURPOSE.get(str(purpose or "").strip().lower())
+    if not wanted:
+        return ["no advice yet: the project's goal (`goal.purpose` -- competition, for yourself, or both) is not "
+                "recorded; ask it, and the front says which variant fits it"]
+    if len(picks) == 1:
+        return [f"advice: {picks[0]['name']} -- it wins under every weighting, so it fits the goal "
+                f"({purpose}) whatever comes first"]
+    out = []
+    for label in wanted:
+        pick = next((p for p in picks if label in p["wins_under"]), picks[0])
+        spends = f"; it spends the worst {', '.join(pick['spends'])}" if pick.get("spends") else ""
+        preset = (" for the competition preset" if label == "stage first" else " for the daily preset") \
+            if len(wanted) > 1 else ""
+        out.append(f"advice{preset}: {pick['name']} -- it wins with the {label.replace(' first', '')} first, "
+                   f"and {_WHY[label]}{spends}")
+    return out
 
 
 def _fmt(v, spec="+.2f"):
     return "--" if v is None else format(v, spec)
 
 
-def render(result):
-    """The front as a table and three kinds of sentence: what each buys and spends, what no candidate
-    repairs, and what the objective cannot see. In the candidates' own order, never sorted by a score."""
+def render(result, purpose=None):
+    """The front as a table and four kinds of sentence: what each buys and spends, what no candidate
+    repairs, the advice from the project's goal, and what the objective cannot see. In the candidates'
+    own order, never sorted by a score."""
     lines = ["  VARIANTS AS A TRADE-OFF FRONT -- the same four terms for each, picked by different "
-             "weightings (#38); no winner is chosen here",
+             "weightings (#38); the advice follows the project's goal, and the choice is the tuner's",
              f"  {'variant':22}{'tonal rms':>10}{'stage |L-R|':>13}{'junction loss':>15}{'ripple':>8}  wins under"]
     for p in result["picks"]:
         t = p["terms"]
@@ -221,6 +267,9 @@ def render(result):
         if steps:
             say.append("level steps " + ", ".join(steps) + " dB")
         lines.append(f"  {p['name']}: " + ("; ".join(say) if say else "in the middle on every term"))
+        if p.get("close"):
+            lines.append(f"    close to it: {', '.join(p['close'])} -- within the tie margins on every term; worth "
+                         "taking both to the car and listening, since the numbers cannot tell them apart")
     for j in result["limited"]:
         lines.append(f"  none of these repairs {j['lo']} ↔ {j['hi']}: its sum loss stays at or below "
                      f"{j['best_loss_db']:+.2f} dB in every candidate -- the junction is the ceiling, not the choice")
@@ -228,10 +277,12 @@ def render(result):
         lines.append("  a tie, not a trade, on " + ", ".join(result["ties"]) + ": the candidates differ by less than "
                      + ", ".join(f"{TIE_DB[t]:g} dB" for t in result["ties"]) + " there")
         if len(result["ties"]) == len([t for t in TERMS if t not in result["missing"]]):
-            lines.append("  on these terms one candidate is as good as another: the difference, if any, is for the ear")
+            lines.append("  on these terms one candidate is as good as another: take them to the car and listen -- "
+                         "the difference, if any, is for the ear")
     if result["missing"]:
         lines.append("  not scored: " + ", ".join(result["missing"])
                      + (" (no target curve given)" if "tonal" in result["missing"] else ""))
+    lines += [f"  {a}" for a in advice(result, purpose)]
     lines.append(f"  {CANNOT_SEE}")
     lines.append("  The tuner chooses; nothing is entered without the tuner's OK.")
     return "\n".join(lines)
@@ -277,12 +328,31 @@ def _selftest():
     assert res["limited"] == [{"lo": "m-L", "hi": "tw-L", "best_loss_db": -1.6}], res["limited"]
     shown = render(res)
     assert "none of these repairs m-L ↔ tw-L" in shown and CANNOT_SEE in shown and "level steps m-L↔tw-L +6.0" in shown
+    # The advice follows the goal (the Arbiter, 2026-09-23): competition -> the stage-first pick, for yourself ->
+    # the tone-first one, both -> one per preset; no goal -> no advice, and the question to ask.
+    stage_pick = next(p["name"] for p in res["picks"] if "stage first" in p["wins_under"])
+    tone_pick = next(p["name"] for p in res["picks"] if "tone first" in p["wins_under"])
+    assert f"advice: {stage_pick}" in render(res, "competition"), render(res, "competition")
+    assert f"advice: {tone_pick}" in render(res, "enjoyment")
+    both = render(res, "both")
+    assert f"for the competition preset: {stage_pick}" in both and f"for the daily preset: {tone_pick}" in both, both
+    assert "no advice yet" in render(res) and "goal.purpose" in render(res)
+    # Close: within the tie margins on every term -> named, and the car suggested for both.
+    twin = [{"name": "A", "terms": terms(pred(1.0, 2.0, -1.60), target)},
+            {"name": "A'", "terms": terms(pred(1.0, 2.05, -1.62), target)},
+            {"name": "Z", "terms": terms(pred(0.2, 7.0, -2.5), target)}]
+    tw = front(twin)
+    a_pick = next(p for p in tw["picks"] if p["name"] in ("A", "A'"))
+    assert a_pick["close"] and a_pick["close"][0] in ("A", "A'"), tw["picks"]
+    assert "taking both to the car" in render(tw), render(tw)
     no_target = front([{"name": c["name"], "terms": terms(pred(1.0, 2.0, -1.0), None)} for c in cands[:2]])
     assert no_target["missing"] == ["tonal"] and "no target curve given" in render(no_target), no_target
     print("selftest[variant_front] OK -- four terms per candidate (tonal against the target with the level removed, "
           "|L-R| per band, the level-normalised junction loss with each junction's level step, ripple); the front "
           "picks by three weightings in the candidates' own order, says what each buys and spends, names a junction "
-          "no candidate repairs, drops a term nobody has and says so, and always ends with what it cannot see")
+          "no candidate repairs, drops a term nobody has and says so, advises from the project's goal (competition: "
+          "stage first; for yourself: tone first; both: one per preset), names candidates too close to tell apart "
+          "for the ear, and always ends with what it cannot see")
     return 0
 
 

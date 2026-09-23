@@ -232,8 +232,11 @@ reason. Eight packages.
   engine's ranked alternatives (an edge under a limit moved to the nearest allowed). When no wish names a
   crossover type, an LR24 base joins them (every junction re-tuned in LR24; the Arbiter, 2026-09-23). Each is broken down by
   four terms (tonal RMS against the target, |L−R| per band, the junction loss with its level step, ripple),
-  and 2–3 are picked by three weightings, in their own order: no winner, ties called ties, and what the
-  objective cannot see always said (`variant_front.py`).
+  and 2–3 are picked by three weightings, in their own order. Ties are called ties, and what the objective cannot
+  see is always said (`variant_front.py`). The front advises from the project's goal: competition gets the
+  stage-first pick, for yourself the tone-first one, both one per preset, and the choice stays the tuner's. Close
+  candidates are named, worth taking both to listen. An alternative whose edge was moved to the nearest allowed has
+  the junction beside it re-tuned inside the limits (the Arbiter, 2026-09-23).
 - **E — the round is the one record** (#56, #57, #58):
   - a banked version is sealed (`state/seals.json`), and a changed one is named;
   - a round records the version it was taken `--under` and the `--level` as a quantity (S-026);

@@ -1177,9 +1177,10 @@ def alternative_variants(second, result_b, rerank, chain, count, channels=None, 
         # An edge the pool proposes under a limit goes to the nearest allowed setting, as the best's repairs do, and
         # says so: the pool is ranked on sound alone, and a tweeter under its floor is not an alternative.
         proposals = json.loads(json.dumps(row.get("proposals") or []))
-        fixes = {}
+        fixes, retune = {}, []
         if channels is not None:
             by_block = {p_["block"]: p_ for p_ in proposals}
+            blocks = {b["name"]: b for b in second.get("blocks") or []}
             for c in check_result({"autoCrossover": {"result": proposals}}, second, channels, xo):
                 allowed = c.get("allowed") or {}
                 if c["verdict"] != "REFUSED" or not allowed.get("f_hz") or c["block"] not in by_block:
@@ -1189,8 +1190,24 @@ def alternative_variants(second, result_b, rerank, chain, count, channels=None, 
                         "frequencyHz": float(allowed["f_hz"]), "slopeDbPerOctave": int(allowed["order_db"])}
                 by_block[c["block"]][key] = edge
                 fixes.setdefault(c["block"], {})[key] = edge
+                # The Arbiter, 2026-09-23: an edge moved to the nearest allowed is re-computed, not just moved --
+                # the junction beside it is re-tuned inside the limits, in the edge's own family and slope (so the
+                # alternative keeps its character), from the fragile driver's floor up, as the best's repairs are.
+                pair = next(((lo, up) for lo, up in chain
+                             if (key == "highPass" and up == c["block"]) or (key == "lowPass" and lo == c["block"])), None)
+                if pair and all((r["lower"], r["upper"]) != pair for r in retune) and edge["family"]:
+                    floor = floor_hz(((blocks.get(pair[1]) or {}).get("channels") or {}).values(), channels, xo)
+                    low = lattice(edge["frequencyHz"] / math.sqrt(2))
+                    low = max(low, floor) if floor else low
+                    retune.append({"lower": pair[0], "upper": pair[1],
+                                   "purpose": "re-tuned around the edge moved to the nearest allowed",
+                                   "tune": {"families": [edge["family"]], "slopes": [edge["slopeDbPerOctave"]],
+                                            "minHz": float(low),
+                                            "maxHz": float(max(lattice(edge["frequencyHz"] * math.sqrt(2)),
+                                                               lattice(low * math.sqrt(2))))}})
         entry["fixes"] = fixes
         layout = alternative_layout(second, result_b, proposals, chain)
+        layout["repairs"] = retune
         rc, result_c, err = run(layout, os.path.join(out_dir or tempfile.mkdtemp(prefix="resonalyze-alt-"),
                                                      f"4-alternative-{row['rank_engine']}"))
         entry["rc"] = rc
@@ -1198,6 +1215,10 @@ def alternative_variants(second, result_b, rerank, chain, count, channels=None, 
             entry["not_built"] = f"the run wrote nothing (exit {rc}): {err.strip()[-200:]}"
             out.append(entry)
             continue
+        applied = [f"{r.get('lower')} ↔ {r.get('upper')}" for r in result_c.get("repairs") or []
+                   if (r.get("tune") or {}).get("applied") and not r.get("error")]
+        if applied:
+            entry["retuned"] = applied
         out.append(_read_whole(entry, result_c, layout, result_b, chain, channels, xo))
     return out
 
@@ -1374,9 +1395,13 @@ def variants(project_dir, set_dir, wishes=None, dotnet=None, out_dir=None, **kw)
     alternatives = kw.pop("alternatives", None)
     layout, notes, problems, channels, xo = build_layout(project_dir, set_dir, **kw)
     target, where = target_points(project_dir, target_file)
-    return variants_from(layout, channels, xo, wishes, notes, problems, dotnet, out_dir,
-                         fill_given=kw.get("rear_fill_ms") is not None, set_dir=set_dir, target=target,
-                         target_note=where, alternatives=alternatives)
+    out = variants_from(layout, channels, xo, wishes, notes, problems, dotnet, out_dir,
+                        fill_given=kw.get("rear_fill_ms") is not None, set_dir=set_dir, target=target,
+                        target_note=where, alternatives=alternatives)
+    # The front advises from the project's goal (the Arbiter, 2026-09-23): competition, for yourself, or both.
+    goal = (_pj.Project(project_dir).load().get("goal") or {}).get("purpose")
+    out["goal_purpose"] = _pj.fact_value(goal) if isinstance(goal, dict) else goal
+    return out
 
 
 def variants_from(layout, channels, xo, wishes=None, notes=(), problems=(), dotnet=None, out_dir=None, fill_given=False,
@@ -1516,7 +1541,7 @@ def render_variants(v):
     text = _render_variants(v)
     if v.get("front"):
         import variant_front as _vf
-        text += "\n\n" + _vf.render(v["front"])
+        text += "\n\n" + _vf.render(v["front"], v.get("goal_purpose"))
     return text
 
 
@@ -1624,6 +1649,9 @@ def _render_variants(v):
             for block, edges in (fv.get("fixes") or {}).items():
                 lines.append(f"    set {block}: " + ", ".join(f"{k} {_edge_short(e)}" for k, e in edges.items())
                              + " (under a limit in the engine's pool -- the nearest allowed)")
+            if fv.get("retuned"):
+                lines.append("    re-tuned around it, inside the limits: " + ", ".join(fv["retuned"])
+                             + " -- the numbers below are this configuration's, not the pool's")
         else:
             lines.append(f"{head}: {_junction_short(fv['edges'])}")
         if fv.get("over_range"):
@@ -1936,6 +1964,13 @@ def smoke(dotnet=None, echo=print):
         # and the alternatives broken down by the same four terms and picked by different weightings.
         alts = [fv for fv in v["full_variants"] if fv.get("rank_engine")]
         assert alts and all(fv.get("settings") or fv.get("not_built") for fv in alts), alts
+        # An edge moved to the nearest allowed re-tunes the junction beside it (the Arbiter, 2026-09-23).
+        chain_blocks = {b for pair in v["chain"] for b in pair}
+        for fv in alts:
+            if not fv.get("not_built") and set(fv.get("fixes") or {}) & chain_blocks:
+                assert fv.get("retuned"), (fv["purpose"], fv.get("fixes"))
+        echo(f"  alternatives re-tuned around a moved edge: "
+             f"{sum(1 for fv in alts if fv.get('retuned'))} of {len(alts)}")
         fr = v.get("front")
         assert fr and fr["picks"] and "tonal" not in fr["missing"], (fr, v["notes"])
         assert {"the best"} <= set(fr["candidates"]) and len(fr["candidates"]) >= 3, \
