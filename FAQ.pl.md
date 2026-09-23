@@ -2,8 +2,6 @@
 
 🇬🇧 [English](FAQ.md) · 🇩🇪 [Deutsch](FAQ.de.md) · 🇵🇱 **Polski** · 🇺🇦 [Українська](FAQ.uk.md) · 📄 [README](README.pl.md) · <img src="assets/icons/roadmap.svg" width="14" height="14" valign="middle" alt="Roadmap" /> [Roadmap (EN, szkic)](ROADMAP.md)
 
-> ⏳ **Translation lags the English original:** wersja angielska została zaktualizowana 17.09.2026 — opcje instalacji, logowania na końcu, recenzent i jego klucz, nazwy pomiarów; to tłumaczenie jeszcze nie.
-
 Rzeczywiste pytania użytkowników dotyczące instalacji i konfiguracji systemu za pomocą tego narzędzia. [README](README.pl.md) to wersja skrócona; ta strona zawiera wszystkie szczegóły.
 
 ---
@@ -59,91 +57,92 @@ Rzeczywiste pytania użytkowników dotyczące instalacji i konfiguracji systemu 
 
 ### Cztery warianty użycia
 
-* 🖥️ **Wariant 1 · Wersja 3.x w oknie graficznym (Autosound TCC)**
+* 🖥️ **Wariant 1 · Wersja 3.x w oknie graficznym (Autosound TCC) — [Zalecany]**  
   Najbardziej zautomatyzowana i przejrzysta ścieżka. Instalator konfiguruje Claude Code, Pythona, rdzeń metody, interfejs graficzny oraz automatycznego krytyka AI.
-  * **Wymagania:** macOS lub Windows, płatny Claude Pro/Max, wersja beta REW z włączonym API, ~700 MB wolnego miejsca na dysku.
-  * **Zalety:** Widzisz strukturę systemu, wykresy pomiarów, plan krok po kroku i okno czatu w jednym wygodnym interfejsie. Stan jest zapisywany automatycznie, a każdą operację w rejestrze wersji można cofnąć jednym kliknięciem.
-  * **Wady:** Aplikacja graficzna jest stosunkowo nowym produktem i obecnie znajduje się w fazie testów beta.
+  * **Wymagania:** macOS lub Windows, płatny Claude Pro/Max, wersja beta REW z włączonym API; aplikacja dodaje około 700 MB do pobieranych danych.
+  * **Zalety:** Widzisz strukturę systemu, wykresy pomiarów, plan krok po kroku i okno czatu w jednym interfejsie. Stan jest zapisywany automatycznie na dysku, a działania w rejestrze wersji są śledzone.
+  * **Wady:** Aplikacja graficzna jest młodsza niż sama metoda strojenia i obecnie ma status wersji beta.
 
-* 💻 **Wariant 2 · Wersja 3.x w terminalu**
-  Ten sam nowoczesny rdzeń i poziom automatyzacji, ale interakcja odbywa się wyłącznie tekstowo w konsoli. Instalacja za pomocą instalatora z flagą `--terminal`.
-  * **Wymagania:** Te same subskrypcje i REW z API, ale bez potrzeby posiadania nakładki graficznej.
-  * **Zalety:** Maksymalna prędkość działania, minimalne zużycie zasobów systemowych. Projekty są w pełni kompatybilne z programem graficznym TCC (będziesz mógł otworzyć ten sam folder w interfejsie graficznym później).
+* 💻 **Wariant 2 · Wersja 3.x w terminalu (Claude Code lub wtyczka headless)**  
+  Dokładnie ten sam nowoczesny rdzeń, narzędzia obliczeniowe i poziom automatyzacji, ale interakcja odbywa się tekstowo w konsoli. Instalowany z flagą `--terminal` (lub przez wtyczkę Claude Code).
+  * **Wymagania:** Te same subskrypcje i wersja beta REW z włączonym API, ale bez interfejsu graficznego.
+  * **Zalety:** Maksymalna prędkość działania, zerowy narzut GUI, idealne dla miłośników konsoli. Projekty są w 100% kompatybilne z aplikacją graficzną TCC.
 
-* 🏆 **Wariant 3 · Linia 2.x (Sprawdzony mistrz)**
-  Stabilna wtyczka dla Claude Code, na stałe zablokowana na wersji `v2.8.3` (gałąź `2.x`). To właśnie ten algorytm strojenia doprowadził auta do czterech mistrzowskich pucharów EMMA i AYA w 2026 roku.
-  * **Wymagania:** Płatny Claude Pro, wersja beta REW z API, praca w terminalu.
-  * **Zalety:** Sprawdzony w czasie i na zawodach, absolutnie stabilny algorytm. Otrzymuje wyłącznie krytyczne poprawki błędów (bugfixy), nowe funkcje nie są tu celowo dodawane.
-  * **Wady:** Brak automatycznej kontroli stanów przez maszynę (wszystko prowadzone jest ręcznie w plikach tekstowych Markdown), brak podejścia „Najpierw przy biurku” oraz nowoczesnych narzędzi obliczeniowych.
+* 🏆 **Wariant 3 · Linia 2.x (Sprawdzony mistrz)**  
+  Klasyczna wtyczka dla Claude Code, zablokowana na wersji `v2.8.3` (gałąź `2.x`). Nastrojony tym algorytmem samochód autora zdobył w 2026 roku nagrody na mistrzostwach EMMA i AYA.
+  * **Wymagania:** Płatny Claude Pro, wersja beta REW z włączonym API, praca w terminalu.
+  * **Zalety:** Ustalony, sprawdzony na zawodach algorytm. Otrzymuje wyłącznie krytyczne poprawki błędów, bez dodawania nowych funkcji.
+  * **Wady:** Ręczne śledzenie stanu w tekstowych plikach Markdown (`dsp-state-current.md`), brak automatycznej prognozy wirtualnej „Najpierw przy biurku” i brak nowoczesnych narzędzi obliczeniowych.
 
-* 🌐 **Wariant 4 · Czat internetowy (Bez instalacji oprogramowania)**
-  W pełni ręczny, krok po kroku proces strojenia za pomocą gałęzi [manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step).
-  * **Wymagania:** Darmowa usługa Google AI Studio lub dowolny czat internetowy z AI według Twojego wyboru.
-  * **Zalety:** Całkowicie za darmo. Nie wymaga instalacji żadnego oprogramowania ani narzędzi programistycznych na Twoim komputerze. Idealne do zapoznania się z logiką metody.
-  * **Wady:** Każdy krok wykonuje się wyłącznie ręcznie (kopiowanie promptów, samodzielny eksport plików tekstowych z REW), brak integracji przez API oraz automatycznej weryfikacji obliczeń przez skrypty lokalne.
+* 🌐 **Wariant 4 · Czat internetowy (Bez instalacji oprogramowania)**  
+  W pełni ręczny, prowadzony krok po kroku proces strojenia za pośrednictwem [gałęzi manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step).
+  * **Wymagania:** Darmowe Google AI Studio lub dowolny czat internetowy z wybraną przez ciebie AI.
+  * **Zalety:** Całkowicie za darmo. Nie wymaga instalacji żadnego oprogramowania ani narzędzi programistycznych na twoim komputerze.
+  * **Wady:** Każdy krok wykonuje się ręcznie (kopiowanie promptów, samodzielny eksport plików tekstowych z REW), brak integracji przez API i brak weryfikacji obliczeń przez lokalne skrypty.
 
 ---
 
 ### Który wariant wybrać?
 
-* **Chcesz maksimum automatyzacji i grafiki:** Wybierz **Wariant 1 (TCC)**.
-* **Wolisz konsolę bez zbędnego oprogramowania:** Wybierz **Wariant 2 (3.x Terminal)**.
-* **Szukasz sprawdzonej mistrzowskiej stabilności:** Wybierz **Wariant 3 (2.8.3)**.
-* **Chcesz bezpłatnie przetestować logikę metody:** Wybierz **Wariant 4 (czat internetowy)**.
+* **Chcesz maksimum automatyzacji i informacji wizualnej:** Wybierz **Wariant 1 (TCC)**.
+* **Wolisz konsolę i maksymalną prędkość:** Wybierz **Wariant 2 (3.x Terminal)**.
+* **Chcesz klasycznej, sprawdzonej na zawodach wtyczki:** Wybierz **Wariant 3 (2.8.3)**.
+* **Chcesz przetestować logikę za darmo bez lokalnego oprogramowania:** Wybierz **Wariant 4 (Czat internetowy)**.
 
 > [!NOTE]
-> Nie jesteś zablokowany w jednym rozwiązaniu: projekty linii 3.x bez problemu otwierają się zarówno w konsoli, jak i w programie graficznym TCC, a przejście ze starszej wersji 2.x na 3.x jest całkowicie zautomatyzowane.
+> Nie jesteś zablokowany w jednym wyborze: projekty linii 3.x otwierają się bez problemu zarówno w konsoli, jak i w programie graficznym TCC.
 
 ---
 
 ### Jak sprawdzić zainstalowaną wersję?
 
-* **Po wpisanej komendzie:** Jeśli instalowałeś wtyczkę komendą `/plugin install autosound-tuning` wewnątrz Claude Code — masz wersję **2.x**. Jeśli uruchamiałeś skrypt instalacyjny w jednej linii (`curl … | bash` lub `irm … | iex`) — masz wersję **3.x**.
-* **Po zawartości folderu projektu:** Jeśli folder zawiera plik `dsp-state-current.md` — to projekt **2.x**. Jeśli folder zawiera maszynowe pliki `project.json` oraz `process-state.json` — to projekt **3.x**.
-* **Przez interfejs aplikacji:** W aplikacji TCC przejdź do menu *Diagnostics → Installation*.
+* **Po wpisanej komendzie:** Jeśli instalowałeś wtyczkę komendą `/plugin install autosound-tuning` wewnątrz Claude Code, używasz wersji **2.x**. Jeśli uruchamiałeś skrypt instalacyjny w jednej linii (`curl … | bash` lub `irm … | iex`), używasz wersji **3.x**.
+* **Po zawartości folderu projektu:** Jeśli folder zawiera plik `dsp-state-current.md`, to projekt **2.x**. Jeśli folder zawiera maszynowe pliki `project.json` oraz `process-state.json`, to projekt **3.x**.
+* **Przez interfejs aplikacji:** W aplikacji TCC przejdź do *Diagnostics → Installation*.
 
 ---
 
 ### Jak pozostać na stabilnej linii 2.x
 
-Zwykła automatyczna aktualizacja wtyczek nie przeniesie Cię na wersję 3.x bez Twojej zgody. Jednak jeśli chcesz całkowicie zamrozić wersję i lokalnie kontrolować proces otrzymywania poprawek dla gałęzi 2.x, sklonuj repozytorium samodzielnie:
+Standardowa automatyczna aktualizacja wtyczki nie przeniesie cię na wersję 3.x bez twojej zgody. Jednak jeśli chcesz całkowicie zamrozić wersję i lokalnie kontrolować aktualizacje na gałęzi 2.x, sklonuj repozytorium samodzielnie:
 
 ```bash
 git clone -b 2.x https://github.com/ayukhno/autosound-tuning-skill.git ~/autosound-2x
 ```
 
-Następnie wewnątrz Claude Code wykonaj poniższe dwie komendy:
+Następnie wykonaj te dwie komendy w terminalu:
 ```bash
-/plugin marketplace add ~/autosound-2x
-/plugin install autosound-tuning
+claude plugin marketplace add ~/autosound-2x
+claude plugin install autosound-tuning
 ```
-Teraz Twoja wtyczka odwołuje się do folderu lokalnego. Będziesz mógł ją aktualizować w razie potrzeby zwykłą komendą `git -C ~/autosound-2x pull`.
+Teraz twoja wtyczka wskazuje na twój lokalny folder. Możesz ją zaktualizować w dowolnym momencie za pomocą prostego `git -C ~/autosound-2x pull`.
 
 ---
 
 ### Przejście z 2.x na 3.x
 
-W systemie może być aktywna tylko jedna taka wtyczka jednocześnie. Przed instalacją nowej wersji 3.x koniecznie usuń starą wersję 2.x wewnątrz Claude Code:
+W systemie może być aktywna tylko jedna taka wtyczka jednocześnie. Przed instalacją wersji 3.x koniecznie usuń starą wersję 2.x (w terminalu):
 
 ```
-/plugin uninstall autosound-tuning
-/plugin marketplace remove autosound-tuning-skill
+claude plugin uninstall autosound-tuning
+claude plugin marketplace remove autosound-tuning-skill
 ```
 
-Po instalacji nowej wersji 3.x możesz zaimportować obecny stan samochodu (aktywne filtry zwrotnicy, opóźnienia, poziomy głośności, korektor i profil DSP) do nowego formatu za pomocą automatycznego migratora:
+Po zainstalowaniu wersji 3.x możesz przenieść istniejący projekt auta do nowego formatu maszynowego za pomocą automatycznego migratora:
 
 ```sh
-python3 ~/.claude/skills/.autosound-tuning-src/skills/autosound-tuning/rew_tool/state/migrate.py <ścieżka-do-starego-projektu> --into <ścieżka-do-nowego-projektu>
+python3 ~/.claude/skills/.autosound-tuning-src/skills/autosound-tuning/rew_tool/state/migrate.py <path-to-old-project> --into <path-to-new-project>
 ```
+*(Uwaga: zweryfikuj przypisanie kanałów i specyfikacje głośników po przeprowadzeniu migracji).*
 
 ---
 
 ### Główne zmiany w wersji 3.x
 
-* 📦 **Projekt jako struktura danych:** Wszystkie parametry systemu są zapisywane w plikach `project.json` oraz `process-state.json`. AI odczytuje dokładne fakty maszynowe, zamiast próbować przypomnieć je sobie z tekstowej historii dialogu.
-* 🛋️ **Podejście „Najpierw przy biurku”:** Zamiast wielu wyjazdów do auta — **jedna sesja na pełne pomiary** (faza 0) i **jedna krótka na weryfikację** (faza 3). Cała dalsza analiza, obliczanie częstotliwości odcięcia zwrotnic, zgrywanie faz i ustawianie korektora są wykonywane przy biurku na podstawie dokładnej prognozy wirtualnej.
-* 🧮 **Weryfikacja matematyczna:** Specjalne lokalne skrypty analizują wykresy pod kątem kryterium minimalnych strat fazowych, ograniczają dobroć (Q) korektora na podstawie rozrzutu punktów pomiarowych i automatycznie wykrywają przesunięcia czasowe mikrofonu.
-* 🛑 **Automatyczne odmowy:** Jeśli pomiary wejściowe są sprzeczne, mikrofon wykazuje zbyt duży błąd czasowy lub brakuje pomiaru niektórych kanałów — system zatrzyma obliczenia i odrzuci rundę pomiarową zamiast generować niedokładne lub niebezpieczne dla głośników rezultaty.
+* 📦 **Projekt jako struktura danych:** Wszystkie parametry systemu są zapisywane na dysku w `project.json` i `process/process-state.json`. AI odczytuje fakty maszynowe z dysku, zamiast polegać na pamięci czatu.
+* 🛋️ **Podejście „Najpierw przy biurku”:** Zamiast wielu wyjazdów do auta — **jedna zdyscyplinowana sesja na zdjęcie danych akustycznych** (Faza 0) i **jedna krótka wizyta weryfikacyjna** (Faza 3). Cała analiza, obliczenia zwrotnic, wyrównanie fazy i projektowanie EQ są wykonywane przy biurku.
+* 🧮 **Weryfikacja matematyczna:** Dedykowane lokalne skrypty Pythona analizują krzywe pod kątem minimalnych strat fazy, oceniają początek narastania impulsu i sprawdzają stabilność czasową mikrofonu.
+* 🛑 **Bramki strukturalne:** Jeśli pomiary wejściowe wykazują nadmierny dryft czasowy, brakujące kanały lub naruszone limity bezpieczeństwa, system zatrzymuje się i nazywa problem przed przejściem dalej.
 
 ---
 
@@ -153,73 +152,71 @@ python3 ~/.claude/skills/.autosound-tuning-src/skills/autosound-tuning/rew_tool/
 
 Tworzymy **inteligentny egzoszkielet** do strojenia dźwięku. Człowiek (Arbiter) zawsze pozostaje najważniejszym ogniwem — słucha systemu, ocenia głębokość, wysokość i stabilność sceny dźwiękowej i podejmuje ostateczne decyzje.
 
-AI przejmuje na siebie rutynowe obliczenia i fizykę kabiny: analizuje fazy, oblicza dokładne opóźnienia czasowe na łączeniach pasm i steruje programem REW przez jego API, zwalniając Twój czas na kreatywne słuchanie muzyki.
+AI przejmuje na siebie rutynowe obliczenia i akustykę kabiny: analizuje czasy przybycia impulsów, krzywe fazowe, oblicza opóźnienia na połączeniach pasm (stykach) i komunikuje się z REW przez API, uwalniając twój czas na twórczą część słuchania muzyki.
 
 ---
 
 ### Dlaczego to wyspecjalizowany skill, a nie zwykły czat?
 
-* **Eliminacja utraty pamięci (memory drift):** Każdy standardowy czat z AI po kilku godzinach rozmowy zaczyna zapominać początkowe wartości, mylić poziomy głośności czy częstotliwości odcięcia. Nasz system zapisuje obecny stan projektu w pliku `project.json` na Twoim dysku. AI odczytuje ten plik przy każdym nowym zapytaniu — jego pamięć nie jest „przypominana”, lecz bezpiecznie odczytywana z dysku.
-* **Wyspecjalizowana baza wiedzy:** Skill zawiera sztywne zasady bezpieczeństwa dla ochrony tweeterów, algorytmy zgrywania fazowego, gotowe krzywe docelowe oraz logikę analizy wnętrza pojazdu, o których ogólne modele AI nie mają zielonego pojęcia.
-* **Lokalne przetwarzanie przez REW API:** Surowe dane pomiarowe (tysiące punktów na jeden wykres) są przetwarzane przez lokalne skrypty Pythona w milisekundy. AI otrzymuje na czacie jedynie zwięzłe matematyczne podsumowanie, co wyklucza błędy ręcznego kopiowania liczb i oszczędza Twoje pieniądze.
+* **Stan zapisywany na dysku:** Standardowy czat AI zapomina początkowe wartości, myli poziomy głośności lub zmienia częstotliwości podziału zwrotnicy w trakcie długiej sesji. Nasz system zapisuje stan projektu na dysku. AI odczytuje ten plik na każdym kroku — jej kontekst jest oparty na stanie z dysku, a nie na pamięci bufora czatu.
+* **Specjalistyczna wiedza z dziedziny akustyki:** Skill zawiera ścisłe zasady bezpieczeństwa chroniące głośniki, logikę wyrównywania fazy, wstępnie skonfigurowane krzywe docelowe oraz heurystyki akustyki kabiny, których ogólne modele AI nie posiadają.
+* **Lokalne przetwarzanie przez REW API:** Surowe dane pomiarowe (tysiące punktów na krzywą) są przetwarzane lokalnie przez skrypty Pythona w milisekundy. AI otrzymuje na czacie jedynie zwięzłe podsumowania matematyczne, oszczędzając czas i budżet tokenów.
 
 ---
 
 ### Mapa strojenia: fazy −1…5 i podejście „Najpierw przy biurku”
 
-| Faza | Gdzie się odbywa | Co dokładnie jest wykonywane | Wynik etapu |
+| Faza | Gdzie się odbywa | Co jest wykonywane | Wynik etapu |
 | :--- | :--- | :--- | :--- |
-| **−1 Przygotowanie** | przy biurku | Wprowadzanie parametrów auta, głośników, możliwości DSP i wybór krzywej docelowej. | Utworzenie pliku `project.json` oraz konfiguracji. |
-| **0 Zdjęcie danych** | w aucie (1 raz) | Pomiar każdego głośnika z osobna z filtrami **ochronnymi** (HPF); pomiary sweep oraz RTA w ruchu. | Jedna wysokiej jakości i zweryfikowana runda pomiarowa. |
-| **1 Fundament** | przy biurku | Obliczanie częstotliwości odcięcia zwrotnic, poziomów głośności, opóźnień i polaryzacji na bazie prognozy fazy. | Podstawowa konfiguracja systemu w rejestrze wersji. |
-| **2 Korektor (EQ)** | przy biurku | EQ przychodzi **pakietami**: rezonanse przetwornika → wyrównanie lewa/prawa → ton do celu. Domyślnie tylko podcięcia, do 6 pasm na kanał. Każdy pakiet to jedna decyzja „tak/nie” i nowa wersja rejestru. | Gotowe pliki eksportu ustawień dla Twojego DSP. |
-| **3 Werdykt** | w aucie (krótko) | Wprowadzenie wartości do DSP. Kontrola wejściowa automatycznie sprawdza, czy rzeczywiste pomiary pokrywają się z prognozą. | W pełni zweryfikowane i zablokowane techniczne strojenie. |
-| **4 Słuchanie** | w aucie | Utwory testowe (płyty EMMA/AYA, CarMus, Chesky) i ściągawka „na co zwracać uwagę”. Jeśli coś dudni lub kłuje w uszy — skill tworzy listę podejrzanych i poprawia pasmo po paśmie w teście A/B (do 3 rund). | Żywe werdykty odsłuchowe powiązane z wersjami. |
-| **5 Wariacje** | przy biurku/w aucie | Konfiguracja dodatkowych presetów (pod różne gatunki muzyczne, kanał centralny itp.) bez zmian bazy technicznej. | Dodatkowe presety brzmienia w systemie. |
-
-> [!NOTE]
-> Jeśli rzeczywiste pomiary w samochodzie na Fazie 3 rozjadą się z prognozą matematyczną, system automatycznie cofnie krok wstecz i przejdzie do klasycznego, iteracyjnego algorytmu strojenia krok po kroku.
+| **−1 Przygotowanie** | przy biurku | Wprowadzanie konfiguracji bazowej (kanały głośników, wyjścia DSP, profil DSP, mikrofon, miejsce odniesienia). Około 17 odpowiedzi na wstępie; o resztę pyta ta faza, która tego potrzebuje. | Utworzone `project.json` i pliki konfiguracyjne. |
+| **0 Zdjęcie danych** | w aucie (1 raz) | Pomiar każdego głośnika z **włączonymi filtrami ochronnymi** (sweepy na statywie `(sw)` i mikrofon w ruchu `(rta)`). Finalizacja krzywej docelowej po zdjęciu danych. | Zweryfikowana bazowa runda pomiarowa i aktywna krzywa docelowa. |
+| **1 Fundament** | przy biurku | Opisujesz swoje życzenia dotyczące zwrotnicy własnymi słowami, a one są sprawdzane pod kątem sztywnych limitów. AI oferuje co najwyżej trzy warianty zwrotnicy — najlepszy, jaki znajdzie matematyka, oraz te zbudowane z twoich życzeń, każdy z jego kosztem — a ty wybierasz. Rezonanse przetworników i zgrubne EQ każdego głośnika są rozwiązywane tutaj; poziomy, polaryzacje i opóźnienia są odczytywane ręcznie z początku każdego impulsu; sumy są prognozowane i opisywane. | Bazowe strojenie systemu w rejestrze wersji. |
+| **2 Korektor** | przy biurku | Druga część EQ, w **pakietach** i w następującej kolejności: pary lewa/prawa na pasmo → połączenia pasm każdej strony → sub z midami → każda strona w całości → wszystko razem → głośnik centralny → tył. Domyślnie **tylko podcięcia**, maks. 6 pasm na kanał. Każdy pakiet to pojedyncza decyzja „tak/nie” i nowa wersja rejestru. | Gotowa do importu konfiguracja EQ dla DSP. |
+| **3 Werdykt** | w aucie (krótko) | Wgrywanie parametrów do DSP. Sweep weryfikacyjny automatycznie sprawdza, czy rzeczywiste pomiary pokrywają się z prognozami matematycznymi. Obowiązkowa ocena odsłuchowa. | W pełni zweryfikowane, zablokowane strojenie techniczne. |
+| **4 Słuchanie** | w aucie | Utwory testowe (płyty EMMA/AYA, CarMus, Chesky) i ściągawka „na co zwracać uwagę”. Jeśli coś dudni lub brzmi ostro, skill sporządza listę podejrzanych pasm i testuje je pojedynczo w teście A/B (trzech podejrzanych × trzy rundy, potem stop). | Werdykty odsłuchowe powiązane z wersjami. |
+| **5 Wariacje** | biurko / w aucie | Konfiguracja dodatkowych presetów (różne gatunki muzyczne, inny charakter brzmienia) na bazie fundamentu technicznego. | Dodatkowe presety brzmienia w DSP. |
 
 ---
 
 ### Czego ta metoda kategorycznie odmawia?
 
-* **Zapisywania ustawień bezpośrednio do Twojego DSP** — wprowadzanie parametrów w programie procesora zawsze pozostaje po Twojej stronie.
-* **Obliczania opóźnień na podstawie jednego pomiaru** — wymagane są minimum 4 niezależne oceny czasu przybycia dźwięku.
-* **Podbijania dźwięku w strefach dziur fazowych (akustycznych zer)** — takie dziury są wywoływane przez interferencję fal w kabinie, a nie przez sam głośnik. Wyrównanie ich poprzez podbicie pasma jest **zasadniczo niemożliwe**: w punkcie odsłuchu nic się nie zmieni, a głośnik i wzmacniacz będą skrajnie przeciążone. Dziurę, którą można bezpiecznie wyrównać, system odróżnia dzięki analizie fazy nadmiarowej (*Excess phase* w REW) — korygowane są wyłącznie obszary minimalnofazowe.
-* **Pracy z pomiarami niskiej jakości** — wykryte przesunięcie czasowe mikrofonu (dryft temperatury) lub brak filtrów ochronnych spowoduje natychmiastowe odrzucenie całej rundy pomiarowej.
+* **Wprowadzania parametrów bezpośrednio do twojego DSP** — wprowadzanie wartości do oprogramowania procesora zawsze pozostaje twoim działaniem.
+* **Obliczania opóźnień na podstawie narzędzi automatycznych (auto-delay) lub korelacji wzajemnej** — opóźnienia akustyczne są sprawdzane ręcznie na podstawie początkowego narastania odpowiedzi impulsowej ($t_0$). Narzędzia automatycznego szacowania opóźnień w REW są surowo zabronione.
+* **Podbijania częstotliwości w akustycznych zerach (strefach znoszenia fal)** — zapady wynikające ze znoszenia fal są powodowane przez odbicia od przegród, a nie przez sam głośnik. Wypełnianie ich za pomocą EQ jest bezcelowe: podbicie obciąża jedynie wzmacniacz i głośnik, nie zmieniając niczego w miejscu odsłuchu. Metoda ogranicza jakiekolwiek podbicie do +6 dB, a zapad, który wymagałby więcej, jest niemal na pewno znoszeniem fal. Zapady bezpieczne do skorygowania są identyfikowane za pomocą analizy *Excess phase* w REW.
+* **Kontynuowania pracy z wątpliwymi pomiarami** — wykryty dryft czasowy między kontrolnymi sweepami sesji lub brakujące filtry ochronne zostaną zasygnalizowane przed przejściem dalej.
 
 ---
 
 ### Które modele AI są oficjalnie wspierane?
 
-* 🧠 **Główny model (Generator):** Claude Opus (z ustawieniem wysiłku intelektualnego `xhigh`).
-* 👁️ **Krytyk AI (Recenzent):** Gemini Pro (High).
+* 🧠 **Główny model (Generator):** **Claude Opus** (skonfigurowany z poziomem wysiłku `xhigh`; `max` dla złożonego wyrównywania fazy).
+* 👁️ **Recenzent AI (Krytyk):** **Gemini Pro (High)** przez Google Antigravity (`agy`) lub bezpośredni klucz API.
+* 🛠️ **Inni recenzenci:** Selektor w TCC oferuje również model Codex (a z flagą `--with-omp` także inne modele) do roli recenzenta. Generatorem pozostaje Claude.
 
-*Stan na sierpień 2026.* Technologie AI rozwijają się błyskawicznie. Jeśli czytasz ten tekst znacznie później, zweryfikuj obecne rekomendacje dla równoważnych modeli.
+*Stan na wrzesień 2026.* Nazwy modeli szybko się zmieniają. Jeśli któryś z wymienionych tutaj zostanie odrzucony (na przykład `agy` odpowie, że model nie jest obsługiwany w twojej lokalizacji), wybierz inny z listy `agy models`.
 
 > [!IMPORTANT]
-> **Nie zmniejszaj poziomu wysiłku Claude poniżej `xhigh`.**
-> Słabsze modele lub niższe poziomy wysiłku nie zgłoszą błędu — po prostu po cichu zgodzą się z każdą Twoją akcją i wymyślą parametry technicznie nie do zrealizowania.
+> **Nie obniżaj poziomu wysiłku Claude poniżej `xhigh`.**  
+> Słabsze modele lub niższe poziomy wysiłku nie zgłoszą błędów — po cichu zgodzą się z niepoprawnymi danymi wejściowymi, zhalucynują niemożliwe parametry akustyczne lub przeoczą znoszenie fazowe.
 
 ---
 
 ### Warianty subskrypcji i budżet na AI
 
-* **Wariant 1 (Zalecany podstawowy): Claude Pro ($20/mies.) + darmowy Gemini jako Krytyk**
-  Najlepszy balans niezawodności i kosztów. Użyj darmowego klucza API Gemini wygenerowanego w Google AI Studio. Subskrypcję Claude Pro można anulować od razu po zakończeniu strojenia samochodu.
-* **Wariant 2 (Oszczędny kompromis): Tylko Gemini ($10 przedpłaty w Google Cloud)**
-  Maksymalnie tanio, ale wymaga od Ciebie samodzielnego sprawdzenia każdej cyfry i regularnego czyszczenia kontekstu rozmowy komendą `/clear` przed każdą nową fazą, ponieważ nie ma niezależnego krytyka AI do nadzoru.
-* **Wariant 3 (Profesjonalny): Claude Pro ($20) + płatne API Gemini Cloud**
-  Całkowity brak jakichkolwiek limitów prędkości zapytań i wyczerpania limitów. Optymalne do profesjonalnego i regularnego strojenia wielu samochodów.
+* **Wariant 1 (Zalecany): Claude Pro ($20/mies.) lub Max + darmowy Gemini przez Antigravity (`agy`)**  
+  Najlepszy balans niezawodności i kosztów. Recenzent działa przez CLI `agy` od Google po zalogowaniu się na konto Google. Stała subskrypcja pokrywa twoje sesje bez naliczania opłat za tokeny i można ją anulować zaraz po zakończeniu strojenia samochodu.
+* **Wariant 2 (API rozliczane według zużycia — Pay-as-you-go):**  
+  Przeprowadzenie pełnego cyklu strojenia wyłącznie przez tokeny API rozliczane według zużycia szybko generuje koszty. Pomiary samego autora: same Fazy 0–2, uruchomione przez płatne API Gemini, kosztowały około $20 — i to przed jakimikolwiek rundami odsłuchowymi. Stała miesięczna subskrypcja jest zauważalnie bardziej opłacalna.
+* **Wariant 3 (Bezpośredni klucz API Gemini):**  
+  Jeśli limity Antigravity CLI zostaną wyczerpane, jako wariant rezerwowy można wykorzystać darmowy lub płatny klucz API z Google AI Studio. Klucz trafia do magazynu kluczy systemu operacyjnego (zobacz [Wariant rezerwowy](#wariant-rezerwowy-bezpośredni-klucz-api-gemini)).
 
 ---
 
 ### Dlaczego rzeczywiste zużycie tokenów jest niższe, niż się wydaje?
 
-1. Lokalne skrypty Pythona kompresują tysiące punktów pomiarowych REW do krótkich raportów tekstowych. Surowe wykresy nie trafiają na czat.
-2. Cała historia projektu jest zapisywana na dysku, więc AI nie musi odczytywać całej ścieżki od samego początku przy każdym zapytaniu.
-3. Działa zasada ruchomego okna — ładowane są tylko dane dotyczące obecnej aktywnej fazy pracy. Płacisz za **decyzje**, a nie za przesyłanie danych.
+1. Lokalne skrypty Pythona kompresują tysiące punktów pomiarowych REW do zwięzłych podsumowań matematycznych. Surowe wykresy nigdy nie trafiają na czat.
+2. Stan projektu znajduje się na dysku, więc AI nie odczytuje na nowo całej historii rozmowy przy każdym zapytaniu.
+3. Stosowana jest zasada ruchomego okna — ładowane są tylko dane powiązane z aktualnie aktywną fazą.
 
 ---
 
@@ -227,7 +224,7 @@ AI przejmuje na siebie rutynowe obliczenia i fizykę kabiny: analizuje fazy, obl
 
 ### Automatyczna instalacja
 
-Będziesz potrzebować laptopa, mikrofonu pomiarowego, procesora DSP oraz płatnej subskrypcji **Claude Pro lub Max**.
+Będziesz potrzebować laptopa, mikrofonu pomiarowego, procesora DSP w aucie oraz płatnej subskrypcji **Claude Pro lub Max**.
 
 <details>
 <summary><b>Instrukcja dla macOS</b></summary>
@@ -237,19 +234,19 @@ Będziesz potrzebować laptopa, mikrofonu pomiarowego, procesora DSP oraz płatn
    ```bash
    curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.61/install.sh | bash
    ```
-3. Skrypt może poprosić o hasło do Twojego Maca w celu instalacji oficjalnego pakietu Apple Command Line Tools (git). Poczekaj 10–20 minut.
+3. Jeśli brakuje narzędzi Apple Command Line Tools, oficjalne okno instalatora Apple otworzy się jeden raz — kliknij Zainstaluj. Sam skrypt nigdy nie prosi o twoje hasło. Poczekaj 10–20 minut.
 
 </details>
 
 <details>
 <summary><b>Instrukcja dla Windows</b></summary>
 
-1. Otwórz program **Windows PowerShell** (naciśnij klawisz `Win` → wpisz `powershell` → naciśnij `Enter`).
+1. Otwórz program **Windows PowerShell** (naciśnij Start → wpisz `powershell` → naciśnij `Enter`).
 2. Wklej poniższą komendę i naciśnij `Enter`:
    ```powershell
    irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.61/install.ps1 | iex
    ```
-3. Jeśli w systemie nie ma programu Git, kliknij **Tak** w oknie zapytania o uprawnienia. Skrypt utworzy również wygodny skrót **REW (API on)** na Twoim Pulpicie.
+3. Jeśli brakuje programu Git, zezwól na jego instalację. Skrypt utworzy również skrót **REW (API on)** na twoim Pulpicie.
 
 </details>
 
@@ -257,30 +254,37 @@ Będziesz potrzebować laptopa, mikrofonu pomiarowego, procesora DSP oraz płatn
 
 ### Gdzie są instalowane komponenty?
 
-Wszystkie pliki są zapisywane wyłącznie w obrębie Twojego profilu użytkownika:
+Wszystkie pliki są zapisywane w obrębie twojego profilu użytkownika:
 
-| Komponent | Gdzie jest zapisywany | Po co jest potrzebny |
+| Komponent | Ścieżka instalacji | Przeznaczenie |
 | :--- | :--- | :--- |
-| **Claude Code** | Oficjalne środowisko Anthropic | Główny asystent AI prowadzący proces |
-| **Metoda strojenia** | `~/.claude/skills/.autosound-tuning-src` | Folder, w którym Claude Code szuka umiejętności i narzędzi |
+| **Claude Code** | Oficjalny katalog Anthropic | Główny asystent AI prowadzący proces |
+| **Metoda strojenia** | `~/.claude/skills/.autosound-tuning-src`, podlinkowany jako `~/.claude/skills/autosound-tuning` | Kopia robocza metody i nazwa, pod którą znajduje ją Claude Code |
+| **Python 3.12** | `~/.local/bin/python3` (przez `uv`) | Uruchamia lokalne narzędzia metody |
 | **Autosound TCC** | Folder użytkownika i skrót na Pulpicie | Aplikacja graficzna oraz izolowane środowisko Python 3.12 |
-| **Narzędzie `agy`** | Profil użytkownika | Narzędzie od Google do szybkiej komunikacji w tle z Krytykiem Gemini |
+| **Narzędzie `agy`** | Profil użytkownika | Narzędzie CLI od Google do szybkiej komunikacji z Krytykiem Gemini |
+| **Konfiguracja recenzenta** | `~/.config/autosound/critic-env` (`%APPDATA%\autosound\critic-env` w Windows) | Model recenzenta i opcjonalny klucz API — poza każdym projektem |
+| **`gh`, `omp`** | Profil użytkownika — tylko na żądanie (`--github`, `--with-omp`) | Pomocnik kopii zapasowej na GitHubie; alternatywne modele |
 
 ---
 
 ### Pierwsze uruchomienie i logowanie
 
-1. **Logowanie do Claude:** Pod koniec instalacji skrypt automatycznie uruchomi komendę `claude auth login`. Zaloguj się w przeglądarce na swoje płatne konto i kliknij przycisk **Authorize**.
-2. **Logowanie do Gemini:** Uruchom jeden raz w nowym oknie terminala komendę `agy` i zaloguj się na swoje konto Google.
-3. **Rozpoczęcie pracy:** Utwórz pusty folder na pliki samochodu (np. `MojeStrojenie`). Otwórz go w aplikacji **Autosound TCC** (przyciskiem *Browse…*) lub w nowym terminalu (`cd ścieżka` → wpisz `claude`) i napisz na czacie: **„skonfigurujmy nowe auto od zera”** (lub po angielsku: *"tune a new car from scratch"*).
+1. **Logowanie pod koniec instalacji:** Instalator loguje cię do Claude (zaloguj się swoim kontem w przeglądarce i autoryzuj), oferuje logowanie do Gemini przez `agy` (Enter loguje, `s` pomija) oraz GitHub, jeśli zainstalowano `gh`.
+2. **Włącz API w REW:**  
+   *Uwaga: REW musi być w wersji beta (obecne wydanie V5.31.3 i wcześniejsze nie mają API).*  
+   Przejdź do *Preferences → API*, zaznacz **Start the API when REW starts** i kliknij **Start server** (port `4735`). W systemie Windows uruchom REW ze skrótu **REW (API on)**.
+3. **Rozpoczęcie pracy:** Utwórz pusty folder na swój samochód (np. `MyCarTuning`). Otwórz go w **Autosound TCC** (wybierz Claude Opus i Gemini Pro) lub w terminalu (`cd MyCarTuning`, a następnie `claude`) i wpisz na czacie: **„skonfigurujmy nowe auto od zera”** (lub po angielsku: *"tune a new car from scratch"*).
 
 ---
 
 ### Aktualizacja, blokowanie wersji i usuwanie
 
-* **Aktualizacja:** Uruchom tę samą linię instalacyjną ponownie. Skrypt automatycznie pobierze najnowszy tag `v3.*` (jest to wersja przedpremierowa, a nie stabilna gałąź — stabilna to linia 2.8.x) i nie naruszy Twoich projektów.
-* **Blokowanie wersji:** Użyj flag `--skill-ref v3.0.33` oraz `--tcc-ref v0.1.22` — podawaj je jako **parę**: te dwie wersje zostały wydane i przetestowane razem, a mieszana para jest nieprzetestowana na macOS lub `-SkillRef` oraz `-TccRef` na Windows podczas instalacji.
-* **Usuwanie:** Uruchom instalator z flagą `--uninstall` (lub dodatkowo `--all` dla pełnego oczyszczenia środowisk). Foldery Twoich projektów nigdy nie zostaną usunięte.
+* **Aktualizacja skilla:** Możesz zaktualizować skilla bezpośrednio w TCC lub po prostu ponownie uruchomić polecenie instalacji w terminalu. Skrypt pobiera najnowszy tag `v3.*` (tagi `v3.0.*` są wersjami przedpremierowymi aż do 3.1.0; sprawdzona na zawodach stabilna linia to 2.8.x) i nie dotyka plików twojego projektu.
+* **Aktualizacja TCC:** Przycisk aktualizacji wewnątrz aplikacji TCC podaje polecenie aktualizacji do uruchomienia w terminalu (działająca aplikacja nie może nadpisać własnego pliku wykonywalnego).
+* **Opcje:** podaje się je po `bash -s --` na macOS oraz po formule `& ([scriptblock]::Create((irm …)))` w Windows (obie pokazane w [README](README.pl.md#jak-zainstalować-i-zacząć-wersja-3x--beta)): `--terminal` / `-Terminal` (bez aplikacji), `--github` / `-GitHub`, `--with-omp` / `-WithOmp`, `--no-reviewer` / `-NoReviewer`, `--dry-run` / `-DryRun`.
+* **Blokowanie wersji:** `--skill-ref` oraz `--tcc-ref` (`-SkillRef` i `-TccRef` w Windows) przypinają metodę i aplikację do wersji wydanych razem — podawaj obie jako **parę** albo wcale; para mieszana nie jest przetestowana.
+* **Deinstalacja:** Uruchom instalator z flagą `--uninstall` (`-Uninstall`); flaga `--all` usuwa dodatkowo uv, Claude Code i `~/.claude`, a także `agy`/`gh`/`omp`, jeśli zostały zainstalowane przez instalator — najpierw zapyta o zgodę. Foldery twoich projektów nigdy nie są usuwane.
 
 ---
 
@@ -288,63 +292,76 @@ Wszystkie pliki są zapisywane wyłącznie w obrębie Twojego profilu użytkowni
 
 ### Co to jest i czy jest mi potrzebne?
 
-Program [TCC](https://github.com/ayukhno/autosound-tcc) pozwala na wygodną pracę z metodą w oknie graficznym na macOS oraz Windows. Widzisz strukturę systemu, wykresy REW, plan krok po kroku oraz okno czatu z AI na jednym ekranie. Program nie jest obowiązkowy — możesz w pełni nastroić auto za pomocą interfejsu tekstowego Claude Code, ponieważ wszystkie dane projektu są zapisywane w zwykłych plikach maszynowych na dysku. Aplikacja jest młodsza niż sama metoda strojenia i obecnie ma status wersji beta.
+Aplikacja [TCC](https://github.com/ayukhno/autosound-tcc) pozwala pracować w oknie graficznym na macOS i Windows. Widzisz drzewo systemu, wykresy REW, plan krok po kroku i czat AI na jednym ekranie. Aplikacja jest opcjonalna — możesz nastroić samochód całkowicie przez terminal, ponieważ wszystkie dane projektu są zapisywane w standardowych plikach maszynowych na dysku.
+
+📘 [TCC in eight screens (EN)](https://github.com/ayukhno/autosound-tcc/blob/main/docs/guide/QUICK-GUIDE.md) · [The TCC window, panel by panel (EN)](https://github.com/ayukhno/autosound-tcc/blob/main/docs/guide/REFERENCE.md) · [The house curve in TCC (EN)](https://github.com/ayukhno/autosound-tcc/blob/main/docs/guide/HOUSE-CURVE.md)
 
 ### Praca na dwa okna (Terminal + Grafika)
 
-Program oraz terminal korzystają z tych samych plików projektu. Możesz swobodnie przełączać się między nimi: wszelkie kroki czy wersje ustawień utworzone w konsoli są natychmiast widoczne w interfejsie graficznym i na odwrót.
+Aplikacja i terminal uzyskują dostęp do dokładnie tych samych plików projektu. Możesz prowadzić interaktywną sesję w terminalu, trzymając jednocześnie otwarte TCC obok jako wizualny monitor w czasie rzeczywistym: wyświetla ono drzewo głośników, nakładanie się krzywych i zmiany w rejestrze wersji na bieżąco.
 
 ### Modele AI w aplikacji
 
-Aplikacja korzysta z Twojego płatnego taryfy Claude (przez oficjalne Anthropic SDK) oraz darmowego konta Google przez lokalne narzędzie `agy` do pracy krytyka AI. Alternatywne modele stają się dostępne tylko pod warunkiem aktywacji systemu `omp` (rozliczane osobno).
+Aplikacja korzysta z twojej subskrypcji Claude (przez Anthropic SDK) oraz twojego konta Google przez `agy` dla recenzenta AI. Wybór modeli w TCC odzwierciedla zalecane kombinacje. Alternatywne modele przez `omp` są dodawane tylko wtedy, gdy o to poprosisz (`--with-omp`).
 
 ### Aktualizacje i zgłaszanie błędów
 
-Program aktualizuje się automatycznie wraz z rdzeniem matematycznym. Sprawdzić obecne wersje można w zakładce *Diagnostics → Installation*. Błędy interfejsu zgłaszaj przez przycisk *Report a problem* na GitHubie programu TCC, a błędy logiki strojenia — w repozytorium samego skilla.
+TCC sprawdza aktualizacje skilla i aplikacji. Błędy interfejsu użytkownika zgłaszaj w [repozytorium TCC na GitHubie](https://github.com/ayukhno/autosound-tcc/issues), a problemy z matematyką strojenia w [repozytorium skilla](https://github.com/ayukhno/autosound-tuning-skill/issues).
 
 ---
 
 ## Autonomiczny Krytyk AI Gemini/Antigravity
 
-Podwójny cykl weryfikacji (Generator ↔ Krytyk Gemini) całkowicie wyklucza subiektywne błędy matematyczne modeli. Krytyk wychwytuje to, czego pierwsze AI nie zauważa we własnej pracy. Działa automatycznie w tle przez lokalny skrypt — nie trzeba niczego ręcznie przenosić ani kopiować. Jest to opcjonalne, ale właśnie stąd uzyskasz największe korzyści dla efektu końcowego.
+Podwójny cykl weryfikacji przez dwa AI (Generator ↔ Krytyk Gemini) wychwytuje błędy, które pojedynczy model popełnia i których sam nie widzi. Działa automatycznie w tle za pośrednictwem lokalnego skryptu — nie jest potrzebne żadne ręczne kopiowanie. To, co jest opcjonalne, to ten *automatyczny kanał*, a nie sama druga opinia: bez skonfigurowanego kanału wklejasz pakiet do czatu innego AI ręcznie. Całkowite pominięcie recenzji to największa pojedyncza strata jakości w tej metodzie.
 
 ### Instalacja dla macOS i Windows (Zalecana)
 
-Oficjalny klient **Antigravity CLI (`agy`)** od Google nie wymaga kluczy API i korzysta z darmowego logowania OAuth przez przeglądarkę.
+Oficjalne narzędzie **Antigravity CLI (`agy`)** nie wymaga klucza API — uwierzytelniasz się w przeglądarce za pomocą swojego konta Google.
 
-1. **Instalacja:** Instalator dodał już to narzędzie automatycznie. W celu ręcznej instalacji wykonaj:
+1. **Instalacja:** Instalator konfiguruje to automatycznie. W celu instalacji ręcznej uruchom:
    * *macOS:* `curl -fsSL https://antigravity.google/cli/install.sh | bash`
    * *Windows:* `irm https://antigravity.google/cli/install.ps1 | iex`
-2. **Logowanie:** Uruchom komendę `agy` w nowym terminalu, zaloguj się w przeglądarce na konto Google, które ma dostęp do Antigravity, po czym wróć do konsoli i wpisz `/quit`.
-3. **Test:** Sprawdź działanie komendą `agy -p "Hello, world!"`.
+2. **Logowanie:** Uruchom `agy` w nowym terminalu, zaloguj się w przeglądarce za pomocą konta Google, a następnie wróć do konsoli i wpisz `/quit`.
+3. **Wybierz model recenzenta** — nie ma domyślnego. Wpisz identyfikator z `agy models` (lewa kolumna; poziom Pro `-high`) do pliku konfiguracyjnego recenzenta, `~/.config/autosound/critic-env` (`%APPDATA%\autosound\critic-env` w Windows), jako linijkę taką jak:
+   ```env
+   AUTOSOUND_CRITIC_MODEL=gemini-3.1-pro-high
+   ```
+   Aplikacja ustawia go z poziomu własnego selektora. Jeśli `agy` odpowie, że dany model nie jest obsługiwany w twojej lokalizacji, wybierz inny identyfikator z listy.
+4. **Sprawdzenie:**
+   ```bash
+   python3 ~/.claude/skills/autosound-tuning/scripts/autosound_ai.py doctor
+   ```
+   Polecenie `doctor` podaje nazwę modelu, CLI i znaleziony klucz, wykonuje jedno krótkie wywołanie testowe na żywo i wyświetla rozwiązanie w razie jakichkolwiek problemów.
 
 ---
 
 ### Wariant rezerwowy: Bezpośredni klucz API Gemini
 
-Na systemie Linux lub przy wyczerpaniu limitów Antigravity możesz używać darmowych kluczy Gemini API bezpośrednio:
+Jeśli `agy` nie jest dla ciebie dostępne lub wyczerpiesz jego limity, możesz użyć bezpośrednio darmowego klucza Gemini API. W przypadku obecności klucza recenzent wywołuje API **w pierwszej kolejności**, a `agy` tylko wtedy, gdy to wywołanie się nie powiedzie.
 
-1. Pobierz darmowy klucz API na stronie **[aistudio.google.com/apikey](https://aistudio.google.com/apikey)**.
-2. Zapisz go raz poleceniem recenzenta: pyta o klucz, nie wyświetlając go, i przechowuje go w pęku kluczy macOS (w Windows — w magazynie, który otwiera tylko Twoje logowanie; gdzie indziej — w pliku konfiguracyjnym recenzenta z uprawnieniami 600). Nie w folderze projektu, nie w profilu powłoki i nie w zmiennej środowiskowej: tam może go odczytać każdy program, a aplikacja uruchomiona z Docka go nie widzi.
+1. Pobierz darmowy klucz API na stronie **[aistudio.google.com/apikey](https://aistudio.google.com/apikey)** — obecne klucze zaczynają się od `AQ.`.
+2. Zapisz go raz za pomocą dedykowanego polecenia recenzenta. Pyta ono o klucz bez wyświetlania go i przechowuje go w pęku kluczy macOS (w Windows w magazynie, który otwiera tylko twoje logowanie; gdzie indziej oraz gdy magazyn jest niedostępny — w pliku konfiguracyjnym recenzenta z uprawnieniami 600). Linijka klucza wpisana do `critic-env` ręcznie ma pierwszeństwo przed magazynem. Nigdy nie przechowuj go w folderze projektu, profilu powłoki ani zmiennej środowiskowej: każdy program może go tam odczytać, a aplikacja uruchomiona z Docka go nie widzi.
    ```bash
    python3 ~/.claude/skills/autosound-tuning/scripts/autosound_ai.py key set google
    # Windows: python3 "$HOME\.claude\skills\autosound-tuning\scripts\autosound_ai.py" key set google
    ```
-   Klucz już wpisany w `~/.zshrc` (lub w zmiennych użytkownika Windows) przenosi `… key move-shell`, które najpierw pyta o zgodę. `… key status` pokazuje, gdzie jest który klucz, bez samego klucza.
-3. Skrypty automatycznie wykryją klucz i przejdą na bezpośrednie zapytania HTTPS do Gemini API.
+   Klucz wyeksportowany już w `~/.zshrc` (lub w zmiennych środowiskowych użytkownika Windows) przenosi się za pomocą `… key move-shell`, które najpierw pyta o zgodę. Polecenie `… key status` pokazuje, gdzie znajduje się każdy klucz, nigdy nie wyświetlając samego klucza.
+3. Wskaż model, który ten klucz może wywołać: polecenie `doctor` wyświetla własną listę dla klucza (na przykład `gemini-pro-latest`). Jego identyfikatory różnią się od tych w `agy`.
+
+Lokalny dla projektu plik `.critic-env`, który zawiera klucz i który mógłby zostać przechwycony przez git, jest odrzucany. Polecenie `doctor` nigdy nie wyświetla klucza, a jedynie jego format (`current` / `OLD`) oraz skąd pochodzi.
 
 > [!TIP]
-> Jeśli klucz ani narzędzie `agy` nie zostaną znalezione, system automatycznie przejdzie w rezerwowy tryb pracy w tle (Autopilot self-loop) lub zaproponuje ręczne kopiowanie propozycji przez schowek (Clipboard Mode).
+> Jeśli żaden kanał nie odpowiada, recenzent zgłasza odmowę (kod wyjścia 4): wymienia powody, zapisuje pakiet w folderze `process/reviews/` projektu i kopiuje go do schowka — wklej go do czatu dowolnego AI.
 
 ---
 
 ### Czy można pracować tylko w Gemini, bez Claude?
 
-Tak, ale jako uruchomienie ręczne, a nie automatyczna instalacja. Daj sesji agencyjnej Gemini (z dostępem do plików i terminala) bezpośrednie polecenie:
+Tak, ale jako proces ręczny, a nie automatyczny potok. Wprowadź prompt w swojej sesji Gemini:
 
 > Clone `https://github.com/ayukhno/autosound-tuning-skill`, read `skills/autosound-tuning/SKILL.md`, and follow that method as your operating instructions for this session.
 
-Ponieważ nie ma tam mechanizmu ruchomego okna, przy długich sesjach Gemini może stopniowo tracić dokładność. Najbardziej stabilny darmowy wariant to **Wariant 4** (gotowe prompty dla [Google AI Studio](https://aistudio.google.com/) na gałęzi [manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step)).
+Ponieważ w standardowym czacie internetowym nie ma mechanizmu ruchomego okna, precyzja może spadać podczas długich sesji. Wspieraną opcją bezkosztową jest **Wariant 4** ([gałąź manual_step-by-step](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step)).
 
 ---
 
@@ -352,57 +369,66 @@ Ponieważ nie ma tam mechanizmu ruchomego okna, przy długich sesjach Gemini mo�
 
 ### Pomiar fazy: Mikrofony XLR kontra USB (UMIK-1/2)
 
-* **Mikrofony XLR (Behringer ECM8000, Beyerdynamic MM1 itp.):** Podłączane przez zewnętrzną kartę dźwiękową. Pozwalają na użycie **fizycznej pętli zwrotnej (loopback)** — kabla łączącego wyjście karty z jej wolnym wejściem. Daje to komputerowi sprzętowe, absolutnie stabilne odniesienie czasu startu pomiaru z dokładnością do jednej próbki (sample).
-* **Mikrofony USB (UMIK-1 / UMIK-2):** Podłączane bezpośrednio do portu USB. Nie posiadają wejścia analogowego, dlatego podłączenie fizycznego kabla loopback jest niemożliwe.
+* **Mikrofony XLR (Behringer ECM8000, Beyerdynamic MM1 itp.):** Podłączane przez zewnętrzną kartę dźwiękową z **fizyczną pętlą zwrotną (hardware loopback)** (wyjście połączone kablem bezpośrednio z wolnym wejściem). Daje to stabilne sprzętowo odniesienie czasu nadejścia z dokładnością do jednej próbki (jedna próbka ≈ 10 µs przy 96 kHz).
+* **Mikrofony USB (UMIK-1 / UMIK-2):** Podłączane bezpośrednio przez USB. Mają niezależny zegar cyfrowy od interfejsu audio i nie posiadają fizycznego loopbacku, co wymaga akustycznego odniesienia czasu.
+* **Połączenie audio:** Użyj fizycznego przewodu (AUX 3,5 mm, bezpośrednie audio USB lub kabel optyczny). **Unikaj Bluetooth do sweepów:** połączenia bezprzewodowe wprowadzają jitter pakietów i zmienną latencję, co pogarsza dokładność akustycznego odniesienia czasu.
 
 ---
 
 ### Czy można zmierzyć fazę na UMIK-1?
 
-**Tak.** W celu uzyskania dokładnych danych fazy użyj w REW funkcji **Acoustic Timing Reference (akustyczne odniesienie czasu)**. Przed rozpoczęciem każdego sygnału pomiarowego karta dźwiękowa odtwarza krótki sygnał o wysokiej częstotliwości („chirp”) przez jeden wybrany głośnik (zazwyczaj najbliższy mikrofonowi tweeter), który służy jako punkt zerowy odniesienia czasu dla mierzonego kanału.
+**Tak.** Użyj **Acoustic Timing Reference** w REW. Przed odtworzeniem sweepu pomiarowego REW odtwarza krótki sygnał o wysokiej częstotliwości („chirp”) przez wyjście wybrane przez ciebie jako odniesienie czasu, a ten chirp stanowi punkt zerowy dla mierzonego kanału.
 
 Szczegółową konfigurację REW dla mikrofonów USB znajdziesz w poradniku wideo: [Measuring Speaker Phase in REW](https://www.youtube.com/watch?v=El-kwZ5_nnU).
 
 > [!WARNING]
-> **Zdejmuj wszystkie pomiary bez przerwy za jednym razem i koniecznie zmierz pierwszy głośnik ponownie na końcu sesji!**
-> * **Dryft temperatury powietrza niszczy dokładność:** Prędkość dźwięku zależy od temperatury powietrza w kabinie. Zmiana temperatury o zaledwie kilka stopni przesuwa czas przybycia sygnału o ułamki milisekund. Jest to krytyczne dla zgrywania fazowego głośników średnio- i wysokotonowych na częstotliwościach podziału zwrotnicy.
-> * **Przesunięcie kumuluje się bezpośrednio od uruchomień pomiarów:** Jeden głośnik, mierzony 6 razy z rzędu w ciągu 18 minut, przesunął czas przybycia dźwięku o jedną próbkę (10 mikrosekund, co odpowiada przesunięciu mikrofonu o ~3.6 mm). Przesunięcie zależało od uruchomień pomiarów, a nie od samego czasu oczekiwania.
-> * **Koniecznie wykonaj pomiar kontrolny pierwszego głośnika na końcu sesji:** Kontrola wejściowa w wersji 3.x automatycznie porówna te dwa pomiary z dokładnością do ułamków próbek i po prostu odrzuci całą serię pomiarów, jeśli wykryje niebezpieczny dryft temperatury lub systemowe przesunięcie czasu.
+> **Wykonuj pomiary z mikrofonem na statywie i powtórz sweep kontrolny na końcu!**
+> * **Dryft temperatury powietrza w kabinie:** Prędkość dźwięku zmienia się wraz z temperaturą w kabinie. Zmiana o kilka stopni przesuwa czasy przybycia o dziesiątki mikrosekund.
+> * **Dryft kumuluje się z każdym sweepem:** jeden głośnik mierzony 6 razy z rzędu w ciągu 18 minut przesunął się o jedną próbkę (10 µs, czyli tyle samo, co przesunięcie mikrofonu o ~3,6 mm) — od samego wykonywania sweepów, a nie tylko od upływu czasu.
+> * **Ustawienie statywu:** Umieść mikrofon na wysokości uszu dla **miejsca odniesienia** (reference seat) zdefiniowanego w projekcie, z odniesieniem do fizycznych znaczników, i nie poruszaj nim, dopóki blok nie zostanie ukończony.
+> * **Sweep kontrolny:** Zmierzenie kanału otwierającego (`ctl1`) i powtórzenie go na końcu (`ctl3`) pozwala sprawdzianowi nazwać jakikolwiek dryft czasowy przed zamknięciem rundy; decyzja o ewentualnym powtórzeniu pomiaru należy do ciebie.
 
 ---
 
 ### Zasady nazewnictwa pomiarów w REW
 
-Narzędzia obliczeniowe szukają odpowiednich wykresów wyłącznie po ich nazwach w REW:
+Narzędzia obliczeniowe szukają pomiarów ściśle według ich nazw w REW:
 
-* `m-L_01 (sw)` — kanał `m-L` (lewy średniotonowy), runda pomiarowa `01`, pomiar sweep.
-* `m-L_01 (rta)` — pomiar w ruchu (RTA, moving-mic average) dla tego samego głośnika.
-* `sw_01 (sw)`, `w-R_01 (sw)`, `tw-L_01 (sw)` — subwoofer, prawy woofer (midbas), lewy tweeter odpowiednio.
-* `L_01 (rta)`, `ALL_01 (rta)` — sumaryczny pomiar RTA całej lewej strony lub całego systemu razem.
-* `m-L p5_01 (sw)` — pomiar głośnika w osobnym punkcie kontrolnym przestrzeni `p5` (dopuszczalna jest również nazwa `m-L_01 (sw) p5`).
-* `m-L-ctl1_01 (sw)` i `m-L-ctl3_01 (sw)` — kontrola czasu: pierwszy otwiera serię pomiarów głośnika, drugi ją zamyka (w aucie te same dwa pomiary można nazwać jako `m-L_01ctl` i `m-L_01rep`).
+* `m-L_1 (sw)` — kanał `m-L` (lewy średniotonowy), seria pomiarowa `1`, pomiar sweep. Stan DSP może mieć kilka serii; ten numer nie jest również numerem wersji rejestru.
+* `m-L_1 (rta)` — pomiar RTA mikrofonem w ruchu dla tego samego głośnika.
+* `tw-L_1 (sw)`, `w-R_1 (sw)`, `sw_1 (sw)` — lewy tweeter, prawy woofer (midbas), subwoofer.
+* `L_1 (rta)`, `ALL_1 (rta)` — sumaryczny pomiar RTA całej lewej strony lub całego systemu.
+* `m-L p5_1 (sw)` — głośnik w przestrzennym punkcie kontrolnym `p5` (odczytywane także jako `m-L_1 (sw) p5`).
+* `m-L-ctl1_1 (sw)` i `m-L-ctl3_1 (sw)` — kontrola czasu: pierwszy otwiera serię pomiarów głośnika, drugi ją zamyka; nie ma `ctl2` (wpisywane w aucie jako `m-L_1ctl` i `m-L_1rep`, oznaczają to samo).
 * `m-L_final (sw)` — pomiar weryfikacyjny po zapisaniu ostatecznych parametrów.
+* `w-L (imp)` — pomiar impedancji przetwornika; nie jest powiązany ze stanem DSP i nie posiada numeru serii.
+* Tekst po oznaczeniu metody sprawia, że jest to **inny pomiar tej samej serii**: `r-L_17 (sw) noXO` to nie to samo co `r-L_17 (sw)`.
 
-Pełny schemat przeprowadzania pomiarów oraz ich kolejność zostały opisane w dokumencie [`references/phases/capture-session-sheet.md`](skills/autosound-tuning/references/phases/capture-session-sheet.md).
+Tytuły są dopasowywane dokładnie tak, jak zostały wpisane. Tytuł, który nie pasuje do tego, czego oczekuje dany krok, to pytanie, które AI zadaje tobie — nigdy zgadywanie.
+
+Pełny przebieg pomiarów został opisany w [`references/phases/capture-session-sheet.md`](skills/autosound-tuning/references/phases/capture-session-sheet.md).
 
 ---
 
 ### Sesja pomiarowa (Capture): dlaczego tylko filtry ochronne?
 
 > [!IMPORTANT]
-> **REW musi być otwarty przez cały czas pracy:** skill odczytuje pomiary bezpośrednio z aktywnego okna programu przez API, a nie z plików wyeksportowanych na dysk.
+> **REW musi pozostać otwarty przez cały proces:** skill odczytuje krzywe bezpośrednio z aktywnego okna REW przez API, a nie z plików wyeksportowanych na dysk.
+>
+> **Filtry ochronne POZOSTAJĄ WŁĄCZONE podczas pomiarów:** Filtry górnoprzepustowe (HPF) na delikatnych tweeterach i głośnikach średniotonowych muszą pozostać aktywne w DSP, aby chronić je podczas sweepów pomiarowych.
 
-Sesja pomiarowa to pomiar każdego głośnika z osobna przy zastosowaniu w DSP **wyłącznie filtrów ochronnych** (High-Pass / HPF dla średniotonowych i tweeterów na bezpiecznej częstotliwości, aby nie uległy uszkodzeniu podczas głośnego pomiaru sweep). Żadnych roboczych zwrotnic, opóźnień ani korektora nie wolno włączać — potrzebujemy czystej fizycznej charakterystyki głośnika w kabinie samochodu. Skrypty matematyczne automatycznie „odejmą” wpływ filtra ochronnego przed obliczeniem filtracji roboczej, co gwarantuje idealną dokładność zgrywania fazowego.
-
-*Ważne:* Wycisz (Mute) wszystkie nieaktywne kanały bezpośrednio w programie procesora DSP. Utrzymuj stabilny poziom głośności karty dźwiękowej i radia przez cały czas trwania sesji pomiarowej.
+* **Zasada filtra ochronnego:** Ochronny HPF musi wynosić **$\ge 1.1 \times Fs$ (zalecane do $1.5 \times Fs$), ze spadkiem $\ge 24$ dB/okt.** (LR4 lub BW4). Jeśli $Fs$ nie jest znane, sprawdź wartość w karcie katalogowej producenta i podaj ją w projekcie.
+* **Filtry robocze wyłączone:** Robocze EQ (puste), opóźnienia (ustawione na 0) i polaryzacje (normalne) muszą być czyste. Zapisz każdy filtr ochronny w rundzie zdjęcia danych (aplikacja o to pyta; w terminalu rejestruje to sesja): narzędzia następnie odejmą go z tego pomiaru solo przed odczytem fazy wypadkowej na styku. Kanał zarejestrowany jako `OFF` jest odczytywany w postaci, w jakiej się znajduje.
+* **Poziomy w dBFS:** Ustaw głośność sweepu tak, aby szczyt najgłośniejszego przetwornika (subwoofera) wynosił $-5\dots-10$ dBFS, a najcichszy przetwornik znajdował się znacznie powyżej poziomu szumów tła w kabinie. Sprawdź poziom szumów przy wyłączonym i włączonym silniku. Wycisz (Mute) wszystkie nieaktywne kanały w oprogramowaniu DSP i zachowaj niezmienioną głośność karty dźwiękowej oraz jednostki głównej (radia) przez całą sesję.
+* **Dźwięk sweepu midbasu:** Midbas mierzony bez filtra LPF wyda szorstki, chrapliwy dźwięk na wysokich częstotliwościach podczas sweepu. Jest to normalny **breakup membrany** (cone breakup) na górnym skraju jego pasma; przetwornik nie jest uszkodzony.
 
 ---
 
 ### Po co są pozycje p1…p9 i kontrola czasu ctl?
 
-* **Określenie natury dziur i pików:** Rzeczywiste rezonanse własne głośnika pozostają stabilne na wykresie przy przesunięciu mikrofonu o kilka centymetrów (można je korygować korektorem). Akustyczne dziury wywołane odbiciami dźwięku od szyb czy foteli przesuwają się chaotycznie po częstotliwości przy ruchu mikrofonu — ich podbijanie korektorem jest bezcelowe i niebezpieczne, dlatego AI ignoruje takie obszary.
-* **Obliczanie dobroci (Q):** Rozrzut pomiarów w punktach `p1…p9` wokół głowy kierowcy pozwala na dokładne obliczenie bezpiecznej granicy dobroci filtrów korektora.
-* **Kontrola dryftu czasu:** Powtórne pomiary punktu centralnego `ctl` pozwalają systemowi na matematyczną kompensację fizycznego dryftu czasu karty dźwiękowej podczas sesji pomiarowej.
+* **Odróżnianie rezonansów głośnika i montażu od odbić w kabinie:** Rezonanse pozostają stabilne przy niewielkim przesunięciu pozycji mikrofonu (bezpieczne do korygowania EQ). Zera wynikające z odbić w kabinie gwałtownie zmieniają częstotliwość — podbijanie ich jest bezcelowe.
+* **Obliczanie limitów dobroci Q korektora:** Wariancja przestrzenna w punktach `p1…p9` wyznacza bezpieczne granice dobroci Q filtrów korektora.
+* **Monitorowanie dryftu czasowego:** Otwierający i zamykający sweep `ctl` wykrywają dryft zegara lub temperatury podczas sesji.
 
 ---
 
@@ -410,12 +436,14 @@ Sesja pomiarowa to pomiar każdego głośnika z osobna przy zastosowaniu w DSP *
 
 ### Jak stworzyć i skonfigurować własną krzywą docelową?
 
-Nie istnieje jedna „prawidłowa” krzywa docelowa — to Twoja wstępna hipoteza robocza, którą będziesz dopasowywać na słuch po uzyskaniu podstawowego strojenia technicznego.
+Krzywa docelowa to wstępna hipoteza tonalna, którą dopracowujesz na ucho po ustaleniu bazowego strojenia technicznego.
 
-1. **Zleć obliczenie AI:** Opisz swoje ulubione gatunki muzyczne, preferowany poziom głośności odsłuchu, życzenia dotyczące znanych krzywych docelowych (np.: *„weź za podstawę ResoNix Accurate, ale dodaj +2 dB najniższego basu na subwooferze i zrób wysokie tony nieco łagodniejszymi”*) lub skargi na dźwięk (*dudni, kłuje w uszy, brak przestrzeni*). Skrypt wygeneruje plik krzywej, zapisze go w folderze projektu i zbuduje indywidualne krzywe docelowe dla każdego przetwornika.
-2. **Narysuj ręcznie:** Wejdź na darmową stronę internetową **Nono Tuning Tool** ([nonotuningtool.com](https://nonotuningtool.com) → sekcja *Custom Target Curve*), narysuj myszką swoją krzywą, wyeksportuj plik `.txt` i wrzuć go do folderu swojego projektu.
-3. **Porównaj wykresy docelowe:** Skorzystaj z naszego interaktywnego wizualizatora online:
-   **[Otwórz wizualizator krzywych docelowych online](https://ayukhno.github.io/autosound-tuning-skill/_curve-visualizer.html?lang=pl)**. Tutaj możesz porównać swoją krzywą bezpośrednio ze standardami branżowymi SQ-Comp-Ref, ResoNix, Audiofrog, Harman, Jazzi czy Whitledge. Kliknięcie prawym przyciskiem myszy na dowolny punkt wykresu wyświetli wyjaśnienie dotyczące znaczenia brzmieniowego danego zakresu częstotliwości.
+1. **Wybierz spośród uznanych krzywych:** Wybierz spośród skalibrowanych celów — SQ-Comp-Ref (własna krzywa metody), ResoNix, Audiofrog, Harman, Jazzi i Whitledge — w zależności od tego, co lubisz słyszeć. Skrypt `target_bands.py` oblicza indywidualne kształty docelowe dla każdego przetwornika na podstawie wybranej krzywej i punktów podziału zwrotnicy.
+2. **Narysuj ręcznie:** Skorzystaj z bezpłatnego narzędzia [Nono Tuning Tool](https://nonotuningtool.com) (sekcja *Custom Target Curve*), aby ukształtować charakterystykę i wyeksportować plik docelowy `.txt`.
+3. **Porównaj online:** Wypróbuj nasz interaktywny wizualizator:  
+   👉 **[Otwórz wizualizator krzywych docelowych online](https://ayukhno.github.io/autosound-tuning-skill/_curve-visualizer.html?lang=pl)**. Kliknięcie prawym przyciskiem myszy na dowolny punkt wykresu wyjaśnia, jak dany zakres częstotliwości wpływa na dźwięk.
+
+📘 [The house curve in TCC (EN)](https://github.com/ayukhno/autosound-tcc/blob/main/docs/guide/HOUSE-CURVE.md)
 
 ---
 
@@ -423,41 +451,43 @@ Nie istnieje jedna „prawidłowa” krzywa docelowa — to Twoja wstępna hipot
 
 ### Struktura folderu projektu i kopia zapasowa
 
-Jeden folder na Twoim dysku zawiera kompletną dokumentację i konfigurację Twojego systemu:
+Katalog twojego projektu przechowuje pełną konfigurację oraz historię strojenia twojego pojazdu:
 
-| Plik / Folder | Zawartość | Po co jest potrzebny |
+| Plik / Folder | Zawartość | Przeznaczenie |
 | :--- | :--- | :--- |
-| **`project.json`** | Dane techniczne systemu | Kanały głośników, wyjścia DSP, profil procesora, specyfikacja mikrofonu i aktywna krzywa docelowa. |
-| **`state/versions/` + `slots.json`** | Rejestr wersji strojenia | Pełna, chronologiczna historia wszystkich filtrów zwrotnicy, opóźnień, poziomów głośności i pasm korektora. |
-| **`process-state.json`** | Bieżący stan techniczny | Informacja o aktywnej fazie procesu oraz pomyślnie zweryfikowanych pomiarach. |
-| **`autosound_context.md`** | Kontekst auta i notatki | Indywidualny słownik car audio Twojego auta, cechy instalacji i Twoje oceny odsłuchowe. |
-| **`*.txt` / `*.json`** | Krzywe docelowe i eksporty DSP | Pliki konfiguracyjne do importu do Twojego DSP oraz pliki krzywych dla programu REW. |
+| **`project.json`** | Konfiguracja systemu | Kanały głośników, wyjścia DSP, profil, specyfikacja mikrofonu, krzywa docelowa. |
+| **`state/versions/` + `slots.json`** | Rejestr wersji | Chronologiczna historia zwrotnic, opóźnień, poziomów i EQ. |
+| **`process/process-state.json`** | Status procesu | Śledzenie aktywnej fazy i logi weryfikacji. |
+| **`autosound_context.md`** | Kontekst pojazdu | Słownik auta, układ instalacji, notatki o kabinie. |
+| **`*.txt` / `*.json`** | Krzywe i eksporty DSP | Krzywe docelowe i wygenerowane pliki parametrów EQ. |
 
 > [!IMPORTANT]
-> **Dbaj o kopię zapasową tych małych plików tekstowych i JSON.**
-> Skrajnie duże pliki pomiarowe REW `.mdat` (od 16 do 112 MB na plik) nie muszą być koniecznie archiwizowane, ponieważ pomiary można wykonać ponownie w każdej chwili. Nasz instalator oferuje opcję automatycznego, bezpłatnego i prywatnego backupu folderu projektu na GitHubie.
+> **Zachowaj lokalne kopie `.mdat`:** Metoda wymaga zachowania lokalnej kopii plików `.mdat` z REW w momencie odbioru technicznego i zakończenia sesji. Duże pliki `.mdat` (po 16–112 MB każdy) pozostają poza gitem; twoje lokalne kopie muszą być zawsze zachowane. W celu bezpłatnego, prywatnego backupu folderu projektu na GitHubie zainstaluj z flagą `--github` (`-GitHub` w Windows) i poproś AI o utworzenie kopii zapasowej projektu: zaoferuje repozytorium, niczego nie utworzy bez twojej zgody i wie, co powinno pozostać poza kopią.
 
 ---
 
 ### Kompatybilność z procesorami i import filtrów do DSP
 
-Skill oblicza dokładne wartości filtrów i zapisuje je do pliku:
+> ⚠️ **Ważne:**  
+> Metoda oblicza filtry. Opóźnienia i wzmocnienia są zawsze wprowadzane **ręcznie** przez stroiciela, podobnie jak zwrotnice, chyba że narzędzie do wklejania pobierze je z poniższego eksportu Extended. Import pliku przenosi wyłącznie **EQ**.
 
-* **Audiotec Fischer (Helix / MATCH / BRAX):** Rodzina procesorów, na której bezpośrednio tworzono i optymalizowano tę metodę. Generowany jest gotowy plik Full EQ, który oficjalny program DSP PC-Tool importuje jednym kliknięciem dla wszystkich kanałów jednocześnie.
-* **Inne procesory DSP:** Tworzony jest standardowy plik eksportu w formacie REW Generic (do 20 pasm EQ) lub rozszerzony plik zwrotnicy. W celu wygodnego półautomatycznego wprowadzania wartości za pomocą makr klawiatury użyj darmowego narzędzia: [REW-EQ-CopyPaste-Assistant](https://github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant).
-* **Kontrola kompatybilności:** Skrypty automatycznie porównują każdy obliczony filtr z rzeczywistymi technicznymi ograniczeniami Twojego modelu procesora (dostępne pasma, częstotliwość próbkowania, typy filtrów) przed wygenerowaniem plików eksportu.
+* **Audiotec Fischer (Helix / MATCH / BRAX):** Generuje gotowy do zaimportowania plik Full EQ, który DSP PC-Tool wczytuje dla wszystkich kanałów w jednym kroku.
+* **Inne procesory DSP:** Eksportuje pliki REW Generic EQ (20 slotów) lub Generic/Extended ze zwrotnicami w treści pliku. Do szybkiego wprowadzania parametrów do innego oprogramowania DSP za pomocą makr klawiatury użyj darmowego narzędzia [REW-EQ-CopyPaste-Assistant](https://github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant).
+* **Kontrola kompatybilności:** Przed eksportem skrypty porównują każdy obliczony filtr z ograniczeniami twojego modelu DSP (dostępne pasma, częstotliwość próbkowania, typy filtrów) i sygnalizują wszelkie odchylenia.
+* **Fabryczne jednostki główne (OEM):** Zalecaną praktyką jest **ominięcie** (bypass) fabrycznych jednostek głównych przy użyciu czystego, bezpośredniego wejścia cyfrowego lub analogowego (DAP, USB, optyk) do DSP, zamiast prób de-equalizacji fabrycznych korekcji barwy i przetwarzania loudness.
 
 ---
 
 ### Praca ze zwrotnicami pasywnymi (tweeter + średniotonowy na jednym kanale)
 
-Para głośników na zwrotnicy pasywnej jest traktowana przez system jako **jeden wspólny kanał**: otrzymuje jeden wspólny pomiar, jedno opóźnienie, wspólny poziom głośności oraz jeden zestaw pasm korektora.
+Para przetworników podłączona przez zwrotnicę pasywną jest traktowana jako **jeden wspólny kanał DSP**: otrzymuje jeden pomiar, wspólne opóźnienie, wspólne wzmocnienie i jeden zestaw filtrów EQ.
 
-Wszystko inne działa jak zwykle, a wypadkowe pasmo przenoszenia zostanie odwzorowane fizycznie poprawnie — włączając w to ewentualne problemy fazowe w punkcie podziału zwrotnicy pasywnej. Tego jednak, czego żaden program na świecie nie zrobi z zewnątrz, to wyrównanie opóźnień lub fazy między tweeterem a średniotonowym **wewnątrz** tej pasywnej grupy. Do tego niezbędny jest system w pełni aktywny (poka-kanałowy).
+Wszystko inne działa jak zwykle, a łączna odpowiedź jest poprawna fizycznie — włączając w to wszelkie problemy fazowe na połączeniu pasywnym (styku). Czego żadne oprogramowanie nie jest w stanie zrobić z zewnątrz, to wyrównać czasu lub fazy między tweeterem a głośnikiem średniotonowym **wewnątrz** tej grupy pasywnej: do tego każdy przetwornik potrzebuje własnego kanału DSP.
 
 ---
 
 ### Gdzie znaleźć pełną listę możliwości metody?
 
-Szczegółowy przegląd wszystkich 68 możliwości i narzędzi systemu (z dokładnymi komendami tekstowymi, warunkami odmowy, etapem rozwoju i uzasadnieniem naukowym) znajduje się w interaktywnej tablicy Capabilities-board:
-[`references/core/capabilities.md`](skills/autosound-tuning/references/core/capabilities.md).
+Szczegółowy przegląd każdego narzędzia i polecenia znajduje się w tablicy możliwości (Capabilities board):
+[`references/core/capabilities.md`](skills/autosound-tuning/references/core/capabilities.md).  
+Filtruj polecenia za pomocą: `python3 ~/.claude/skills/autosound-tuning/rew_tool/capabilities.py find "phase"`.

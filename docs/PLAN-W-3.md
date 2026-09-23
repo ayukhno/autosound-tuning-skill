@@ -20,5 +20,7 @@ S-021 (after 3.1.x), hub #113 PAS-005, hub #82 HUB-031, #26 (a 3.2 candidate). *
 with English (`c17`, the two missing sections, the five new route steps); `test-tracks.de.md` and
 `.pl.md` carry all 98 cues and the descriptive titles; `listening.py coverage` reports 17/17 · 98/98 ·
 10/10 in de, pl and uk. `README.{uk,de,pl}.md` followed the same day at the Arbiter's word, the same way:
-level with English, the lag banners gone, `i18n-check` clean. **`FAQ` in uk/de/pl is left alone** —
-the Arbiter: «FAQ не трогай поки».
+level with English, the lag banners gone, `i18n-check` clean. `FAQ` followed in all four languages after a review round with
+the Arbiter: `FAQ.md` checked claim by claim against the method, `FAQ.uk.md` through the Advisor and a Gemini
+read, `FAQ.de.md` / `.pl.md` through the Advisor; no translation declares a lag any more. TCC's new guides
+(English only, hub #202 SKL-053) are linked from the FAQ and the READMEs' language bars.
