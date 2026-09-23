@@ -1469,6 +1469,17 @@ Two things wait for measurements, and neither is a question for the Arbiter:
    +6 dB ceiling, and NON stays `cabin_null`. Wired after item 1, since that item is what shows the
    verdict holds on this cabin.
 
+## S-056 · The junction level step read over the SHARED band
+
+**Status**: open 2026-09-23 · a candidate for the next wave · from decision 17 in `docs/W-2-DECISIONS.md`,
+accepted by the Arbiter with this as the follow-up.
+
+W-2 prints each junction's level step as the two blocks' OWN-band levels plus their gains, lower minus
+upper (`resonalyze_engine.level_steps`, from the engine's `bandLevelDb`). #50 asked for the difference
+over the band the two SHARE. On a sloped plateau the own-band number is an approximation. The shared-band
+reading needs a new engine field (the level of each member over the overlap, both sides) and new goldens,
+which is a rebuilt engine, not a patch.
+
 ## S-054 · W-2 · v3.0.60: a green PR, waiting for the Arbiter
 
 **Status**: waiting 2026-09-23 · PR #59 (`wave-2026-09-20` → `main`), CI green on `d0e986b`: `gh pr checks 59 --repo ayukhno/autosound-tuning-skill` (engine, selftests, installers-windows, gate); `scripts/run-selftests.sh` locally 81/81 with the VMs suspended. Run to this point without him, on his word of 2026-09-22 (`docs/PLAN-W-2.md`, *Run without the Arbiter*).
