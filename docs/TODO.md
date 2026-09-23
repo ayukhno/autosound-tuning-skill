@@ -1452,7 +1452,7 @@ an existing project migrates with nothing lost (the old per-slot files kept as h
 
 ## S-055 · The min-phase verdict meets real data, and decides the dips below Schroeder
 
-**Status**: open 2026-09-23 · waits for the next ellipsoid round on the Passat · from
+**Status**: deferred 2026-09-23 · returns with the next ellipsoid round in the car (w-L and m-R, 6 positions + 3 centre returns); the Arbiter at the W-3 review: defer, fewest trips before fine tuning · was: open 2026-09-23
 `docs/RESEARCH-2026-09-23-min-phase-verdict.md` §5 and decision 39 in `docs/W-2-DECISIONS.md`.
 
 The criterion is settled from the sources and built (`eq_gate.min_phase_verdict`, `min_phase_across`).
@@ -1471,7 +1471,7 @@ Two things wait for measurements, and neither is a question for the Arbiter:
 
 ## S-056 · The junction level step read over the SHARED band
 
-**Status**: open 2026-09-23 · a candidate for the next wave · from decision 17 in `docs/W-2-DECISIONS.md`,
+**Status**: open 2026-09-23 · **W-3 · v3.0.62** (composition agreed with the Arbiter, 2026-09-23)
 accepted by the Arbiter with this as the follow-up.
 
 W-2 prints each junction's level step as the two blocks' OWN-band levels plus their gains, lower minus
@@ -1482,7 +1482,7 @@ which is a rebuilt engine, not a patch.
 
 ## S-057 · A five-line verdict block for every tool's output
 
-**Status**: open 2026-09-23 · a candidate for the next wave · from decision 45 in `docs/W-2-DECISIONS.md`,
+**Status**: open 2026-09-23 · **W-3 · v3.0.62** (composition agreed with the Arbiter, 2026-09-23)
 accepted by the Arbiter with this as the follow-up.
 
 #57 P5 asked for compact output. W-2 made it where the issue measured it: `predict`'s notes collapse by text,
