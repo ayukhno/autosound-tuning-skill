@@ -548,7 +548,7 @@ the person's, and `installer-consistency.py` holds the three installers to the s
 
 ## S-021 · Phase 1's variants run end to end on a fresh system, and what a wish really costs
 
-**Status**: open 2026-09-23 · **W-2 package V** (`docs/PLAN-W-2.md`) · the feature half is built: `python3 skills/autosound-tuning/rew_tool/resonalyze_engine.py smoke` (the engine's alternatives built as whole variants, the best + the wish + the alternatives on a trade-off front) and `python3 skills/autosound-tuning/rew_tool/variant_front.py --selftest`; at the tag it goes `waiting`, naming the passenger-seat run on the Passat · deferred and taken back at the same review, the Arbiter: «щоб воно було реалізовано як фітча … ми можемо запустити налаштування для пасажира — ось тобі і нова "машина" і аналіз» — the run is a passenger-seat project on the Passat · was: waiting 2026-09-18 · issue #38's remaining piece. The second one is no longer a question
+**Status**: deferred 2026-09-23 · returns after the 3.1.x line is released (the Arbiter, 2026-09-23: «S-021 відкласти на після 3.1.х») · the feature half is in v3.0.60 (`resonalyze_engine.py smoke`, `variant_front.py --selftest`) · was: open 2026-09-23
 for the test to answer: the user asked for the full variant to be built without waiting for a car, and
 it is (`wish_variants`, on `wave-2026-09-18`) — so what waits is the run itself, on **`v3.0.58`** (tagged
 2026-09-18); the software side is in place
@@ -1492,7 +1492,7 @@ That is a redesign of every tool's output, not a patch.
 
 ## S-058 · The reviewer key through TCC on the other MacBook
 
-**Status**: open 2026-09-23 · ready: TCC `v0.1.43` is released with hub #197 (`git -C tcc tag --contains e5ab9fc` → `v0.1.43`; its receipt: `key status → google used=keystore`) · his step, on the other MacBook
+**Status**: done 2026-09-23 · the Arbiter moved the key through TCC's menu (v0.1.43, hub #197), and a critic call from TCC answered in 69 s, where on 19.09 the same call came back empty (his report, TCC's own session line) · was: ready 2026-09-23
 
 The Arbiter wants the key checked through TCC, since TCC is where "the key in ~/.zshrc is not seen" came from.
 On this MacBook the move is done and checked (`key status`: keystore, AQ., 53; `doctor`: the key is live).
