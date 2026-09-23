@@ -194,7 +194,8 @@ reason. Eight packages.
   prose (S-027), AUX that falls back to BT (S-030), one notation for channel names with a fix offered in the
   session (S-042), and the install notes read where an aim matters.
 - **B — the reviewer is reachable from any launch** (hub #187, #54, #55): inside an agent session (TCC's
-  included), the CLI runs with the session's markers stripped and a named, bounded wait. The route follows the
+  included), the CLI runs with the session's markers stripped and a named, bounded wait that grows with the job
+  (600 s at least, 25 s per KB of prompt: a 31 KB translation was cut at the old 300 s). The route follows the
   model: an agy slug goes to the CLI, and a 404 on a name the CLI serves falls through to it.
   `--via api|cli|clipboard` sets the route for one run, and `--via api` uses the environment's key even where
   `critic-env` blanks it. `doctor` tells a blanked key from a missing one and says where the model came from.
@@ -210,8 +211,10 @@ reason. Eight packages.
 - **R — one line of versions per project** (S-053, hub #195, #58 P2): above; plus variants inside the ledger
   (`state.py variant new|list|switch`: a switch moves a pointer and copies nothing).
 - **F — the Phase-1 numbers** (#50, #51, #52): the junction loss is labelled level-normalised, and the level step
-  is printed beside it. A cut-only spread over 3 dB is reported as a gain-structure finding, with the
-  amplifier arithmetic. The gain step is a machine SETTING (Channel/EQ Gain Resolution), recorded with
+  is printed beside it. Levels are always the DSP's (the Arbiter, 2026-09-23): over a 3 dB cut-only spread the
+  quiet channel is lifted in the DSP, within its channel gain range, and only what the range cannot reach is an
+  amplifier's, his call. An amp gain he turns is recorded (`process.py amp-gain sw=+3`) and taken out of a
+  comparison across it by `verify_prediction`. The gain step is a machine SETTING (Channel/EQ Gain Resolution), recorded with
   `dsp_profile.py set-setting`; `apply.propose` names a trim off it, or asks for it.
 - **V — Phase 1's variants as a feature** (#38): the best, each wish as a whole variant and, with no wish, the
   engine's ranked alternatives (an edge under a limit moved to the nearest allowed). Each is broken down by

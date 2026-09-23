@@ -190,9 +190,10 @@ W-1 left these out because they needed the Arbiter's decisions. Read again, they
 
 - `#52` answers "what is a gain step" itself: a PC-Tool setting with four values. The profile models
   it as a setting, the sheet is checked against it, and the intake asks it for a new processor.
-- `#51` asks the method to REPORT the trade, not to set a headroom policy. Above a 3 dB cut-only
-  spread the output says it is a gain-structure finding and does the arithmetic, and the tuner
-  chooses. The 3 dB is the issue's number, and the Arbiter can move it.
+- `#51`: above a 3 dB cut-only spread, the quiet channel is lifted IN THE DSP within its gain range
+  (the Arbiter, 2026-09-23: levels are always the DSP's). The part the range cannot reach is the one
+  case for an amp gain, his call, and an amp change he makes is recorded (`process.py amp-gain`) and
+  taken out of a comparison across it.
 - `#50` is a label on the metric, a level-step column beside the loss, and a runbook line (a re-read
   after 1.6, or why none is needed).
 

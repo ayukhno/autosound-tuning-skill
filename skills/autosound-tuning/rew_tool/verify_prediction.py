@@ -257,6 +257,26 @@ def _nearest_feature(chain, f_hz):
     return name if dist <= 1.0 else None
 
 
+def with_amp(knob, amp):
+    """The knob delta with the AMPLIFIER changes between the two series folded in (the Arbiter, 2026-09-23).
+
+    `amp` is `{channel: dB}` from the journal (`Process.amp_gain_between`): the user turned an amp gain because
+    the DSP's plus ran out, and said so. It is arithmetic like a mapped knob, so it goes on the same line; a knob
+    refusal stays a refusal, and the amp's share is still named beside it."""
+    if not amp:
+        return knob
+    out = dict(knob, per_channel=dict(knob.get("per_channel") or {}))
+    for code, db in amp.items():
+        out["per_channel"][code] = round(out["per_channel"].get(code, 0.0) + float(db), 2)
+    said = "amplifier gain turned between the two series: " + ", ".join(
+        f"{c} {v:+.2f} dB" for c, v in sorted(amp.items()))
+    if knob.get("state") == "same":
+        out.update(state="mapped", controls={}, why=said)
+    else:
+        out["why"] = f"{knob.get('why')}; {said}"
+    return out
+
+
 def knob_delta(predicted_knobs, measured_knobs, mapping):
     """What the hardware controls did BETWEEN the two series: `{state, controls, per_channel, why}`.
 
@@ -330,7 +350,7 @@ def _knob_steps(was, now):
 
 def verify(predicted, measured, *, pair_names=None, solo_names=None, all_name=None,
            all_plus_c_name=None, knobs=None, mapping=None, criterion_db=CRITERION_DB,
-           entry_criterion_db=ENTRY_CRITERION_DB, entry_only=False, entry_delay_ms=ENTRY_DELAY_MS):
+           entry_criterion_db=ENTRY_CRITERION_DB, entry_only=False, entry_delay_ms=ENTRY_DELAY_MS, amp=None):
     """`predicted`: the dict `predict.to_json` wrote. `measured`: {name: (freqs, mag_db, base)}.
 
     `pair_names`: {(lo, hi): measured name of the pair}; `solo_names`: {code: measured name of
@@ -357,7 +377,7 @@ def verify(predicted, measured, *, pair_names=None, solo_names=None, all_name=No
               if "gate_mag_db" in v}
     pair_names = pair_names or {}
     solo_names = solo_names or {}
-    knob = knob_delta(predicted.get("knobs"), knobs, mapping)
+    knob = with_amp(knob_delta(predicted.get("knobs"), knobs, mapping), amp)
     report = {"criterion_db": criterion_db, "junctions": [], "channels": [], "all": None,
               "all_plus_c": None, "knobs": knob,
               "verdict": None, "bases": sorted({rec[2] for rec in measured.values()}),
@@ -570,7 +590,7 @@ def render(report):
     if k.get("state") == "same":
         lines.append(f"  knobs: {k['why']}")
     elif k.get("state") == "mapped":
-        lines.append(f"  knobs MOVED between the two series -- {k['why']}; expected shift: "
+        lines.append(f"  MOVED between the two series -- {k['why']}; expected shift: "
                      + ", ".join(f"{c} {v:+.2f} dB" for c, v in sorted(k["per_channel"].items())))
     elif k.get("state"):
         lines.append(f"  ⚠ knobs: {k['why']}")
@@ -719,12 +739,16 @@ def main(argv=None):
                                      freqs=predicted["freqs_hz"], window=window)
     else:
         measured = measured_from_v7_dir(args.measured, freqs=predicted["freqs_hz"], window=window)
-    knobs_here, mapping = None, None
+    knobs_here, mapping, amp = None, None, None
     if args.project:
         sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "state"))
         try:
             from process import Process
-            knobs_here = Process(os.path.join(args.project, "process")).knobs_for(args.ver)
+            proc = Process(os.path.join(args.project, "process"))
+            knobs_here = proc.knobs_for(args.ver)
+            pred_ver = (predicted.get("knobs") or {}).get("version")
+            if pred_ver is not None:
+                amp = proc.amp_gain_between(pred_ver, args.ver)
         except Exception as exc:                        # noqa: BLE001
             print(f"  knobs not read: {exc}", file=sys.stderr)
         try:
@@ -735,7 +759,7 @@ def main(argv=None):
     report = verify(predicted, measured, pair_names=pairs, solo_names=solos, all_name=all_name,
                     all_plus_c_name=all_plus_c_name, knobs=knobs_here, mapping=mapping,
                     criterion_db=args.criterion, entry_criterion_db=args.entry_criterion,
-                    entry_only=args.entry, entry_delay_ms=args.entry_delay)
+                    entry_only=args.entry, entry_delay_ms=args.entry_delay, amp=amp)
     if args.json:
         print(json.dumps(report, indent=1))
     else:
@@ -866,9 +890,17 @@ def _selftest():
     assert abs(row["calibration_db"]) < 0.1, row
     assert rep_k["knobs"]["state"] == "mapped"
     text_k = render(rep_k)
-    assert "knobs MOVED" in text_k and "w-L -2.00 dB" in text_k, text_k
+    assert "MOVED between the two series" in text_k and "w-L -2.00 dB" in text_k, text_k
     assert "knobs: every recorded control" in render(
         verify(pred_k, meas(A, B), **names, knobs={"knobs": {"SubRC": "4/4"}}, mapping=mp_w))
+    # An amplifier gain he turned between the two series (the Arbiter, 2026-09-23): the measurement is 3 dB
+    # louder on w-L, the journal says the amp moved +3 there, and the calibration line comes out at zero.
+    rep_a = verify(pred_k, meas(A, B, gain_db=3.0), **names, knobs={"knobs": {"SubRC": "4/4"}}, mapping=mp_w,
+                   amp={"w-L": 3.0})
+    row_a = next(c for c in rep_a["channels"] if c["channel"] == "w-L")
+    assert rep_a["knobs"]["state"] == "mapped" and row_a["knob_db"] == 3.0, rep_a["knobs"]
+    assert abs(row_a["calibration_db"]) < 0.1, row_a
+    assert "amplifier gain turned" in render(rep_a)
 
     print("selftest[verify_prediction] OK -- exact car → TRUSTED with zero deltas; +7.3 dB → still "
           "TRUSTED and the offsets say 7.3; an extra 0.6 ms → NOT trusted at the named junction; "

@@ -93,6 +93,10 @@ EV_CAPTURE_PROTECTIVE = "capture_protective"
 #: because the sub's knob stood at −4, and no reader could have known (hub RES-007).
 EV_CAPTURE_KNOBS = "capture_knobs"
 EV_CAPTURE_SKIPPED = "capture_skipped"
+#: An AMPLIFIER gain the user turned (the Arbiter, 2026-09-23). Levels always live in the DSP; an amp gain moves
+#: only when the DSP's plus runs out, it is his decision, and he tells the session. Per channel, in dB, at its
+#: place in the journal: a level compared across it is corrected by it instead of being called calibration.
+EV_AMP_GAIN = "amp_gain_changed"
 #: S-039: a capture recorded under a title that turned out to be wrong. The row STAYS, dimmed and
 #: naming what it was corrected to -- the same move the plan's steps have had since SCR-004, and
 #: for the same reason: a round that quietly loses a row is a round nobody can audit.
@@ -1411,6 +1415,85 @@ class Process:
         self._append(EV_CAPTURE_KNOBS, capture=capture_id, knobs=clean, amends=capture_id, reason=reason)
         return {"capture": capture_id, "knobs": clean, "reason": reason}
 
+    AMP_READ_AS = ("said", "measured")
+
+    def record_amp_gain(self, changes, read_as="said", note=None, amends=None):
+        """The user turned an amplifier gain: `{channel: dB}`. Returns the record, with `open_round` when a round
+        was open (its titles before this are at the old gain, so the re-measure belongs to a new series).
+
+        `read_as` says where the number came from: `said` -- his estimate off the knob, which an amplifier does not
+        calibrate -- or `measured`, the channel's solo after against before, same DSP state and position. A
+        measured value for a said change is recorded with `amends=<id>` and replaces its dB."""
+        if read_as not in self.AMP_READ_AS:
+            raise ProcessError(f"read_as is one of {', '.join(self.AMP_READ_AS)}, not {read_as!r}")
+        clean = {}
+        for code, db in (changes or {}).items():
+            code = str(code).strip()
+            try:
+                db = float(str(db).replace("dB", "").strip())
+            except ValueError:
+                raise ProcessError(f"{code}: {db!r} is not a number of dB") from None
+            if not code or db == 0:
+                raise ProcessError(f"{code or '?'}: an amp change needs a channel and a non-zero dB")
+            clean[code] = round(db, 2)
+        if not clean:
+            raise ProcessError("an amp change needs at least one CHANNEL=dB (sw=+3)")
+        known = [e.get("id") for e in self.events(kinds=(EV_AMP_GAIN,))]
+        if amends and amends not in known:
+            raise ProcessError(f"no amp change {amends!r} on record" + (f" (on record: {', '.join(known)})" if known else ""))
+        change_id = f"amp-{len(known) + 1}"
+        live = self.load().get("capture") or {}
+        open_round = live.get("id") if live and not live.get("closed") else None
+        self._append(EV_AMP_GAIN, id=change_id, channels=clean, read_as=read_as, note=note, amends=amends,
+                     open_round=open_round)
+        return {"id": change_id, "channels": clean, "read_as": read_as, "amends": amends, "open_round": open_round}
+
+    def amp_changes(self):
+        """Every amp change on record, oldest first, with a later `amends` folded into the change it corrects."""
+        out, by_id = [], {}
+        for pos, e in enumerate(self.events()):
+            if e.get("type") != EV_AMP_GAIN:
+                continue
+            if e.get("amends") in by_id:
+                target = by_id[e["amends"]]
+                target.update(channels=dict(e.get("channels") or {}), read_as=e.get("read_as"),
+                              amended_by=e.get("id"))
+                continue
+            rec = {"id": e.get("id"), "at": e.get("at"), "pos": pos, "channels": dict(e.get("channels") or {}),
+                   "read_as": e.get("read_as"), "note": e.get("note")}
+            by_id[rec["id"]] = rec
+            out.append(rec)
+        return out
+
+    def amp_gain_between(self, version_a, version_b):
+        """`{channel: dB}` the amplifiers moved between series `_<a>` and `_<b>` (b later: positive is louder at b).
+
+        A series is placed in the journal by the round it was issued in; a version with no round cannot be
+        placed, and says so with None rather than with `{}`, which would read "nothing moved"."""
+        key = self._version_key
+        events = self.events()
+        issued = {}
+        for pos, e in enumerate(events):
+            if e.get("type") == EV_CAPTURE_ISSUED:
+                issued[e.get("capture")] = pos
+
+        def place(version):
+            v = key(version)
+            ids = [r["id"] for r in self.capture_rounds()
+                   if key(r["version"]) == v or any(key(t) == v for t in r.get("title_versions") or [])]
+            return max((issued[i] for i in ids if i in issued), default=None)
+
+        pa, pb = place(version_a), place(version_b)
+        if pa is None or pb is None:
+            return None
+        lo, hi, sign = (pa, pb, 1.0) if pa <= pb else (pb, pa, -1.0)
+        total = {}
+        for ch in self.amp_changes():
+            if lo < ch["pos"] < hi:
+                for code, db in ch["channels"].items():
+                    total[code] = round(total.get(code, 0.0) + sign * float(db), 2)
+        return total
+
     def under_for(self, version):
         """The ledger version series `_<version>` was taken under (#57 P0), or None when no round says."""
         key = self._version_key
@@ -2184,6 +2267,11 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
                                         state; unbound modifiers and missing knobs refuse (#58 P3)
   capture-knobs --amend <cap_id> --reason "..." <NAME>=<POS> [...]
                                         the knobs of a CLOSED round, as a correction (#56 item 9)
+  amp-gain <CH>=<dB> [...] [--measured] [--amends amp-N] [--note "..."]
+                                        the user turned an amplifier gain (sw=+3): levels live in the DSP,
+                                        an amp moves only when its plus runs out. Said by default;
+                                        --measured when read off the re-measured solo
+  amp-changes                           the amp changes on record, oldest first
   capture-knobs <NAME>=<POS> [...]      the hardware controls as they stood for THIS round
                                         (SubRC=4/4 RealCenter=ON): a fact about the SERIES, so two
                                         series taken at different positions can be told apart
@@ -2520,6 +2608,28 @@ def _selftest():
     notes = {e.get("capture"): e.get("note") for e in imp.events(kinds=(EV_CAPTURE_ISSUED,))}
     assert all("after the fact" in (notes.get(i) or "") for i in ids), notes
     assert imp.knobs_for("9")["knobs"] == {"SubRC": "4/4"}
+    # The Arbiter, 2026-09-23: an amp gain he turned is on record per channel, between the rounds either side
+    # of it, and a measured value replaces a said one. A series with no round cannot be placed (None, not {}).
+    amp = Process(os.path.join(root, "process-amp"))
+    amp.enter_phase("0")
+    amp.start_capture("50", expected=["sw_50 (sw)"], phase="0")
+    amp.close_capture(reason="done")
+    said_ = amp.record_amp_gain({"sw": "+3"}, note="sub amp a quarter turn up")
+    assert said_["id"] == "amp-1" and said_["open_round"] is None, said_
+    amp.start_capture("51", expected=["sw_51 (sw)"], phase="0")
+    assert amp.amp_gain_between("50", "51") == {"sw": 3.0}
+    assert amp.amp_gain_between("51", "50") == {"sw": -3.0}
+    assert amp.amp_gain_between("51", "51") == {}
+    assert amp.amp_gain_between("50", "97") is None
+    assert amp.record_amp_gain({"sw": 1})["open_round"], "a change with a round open says so"
+    amp.record_amp_gain({"sw": 2.6}, read_as="measured", amends="amp-1")
+    assert amp.amp_changes()[0]["channels"] == {"sw": 2.6} and amp.amp_changes()[0]["read_as"] == "measured"
+    for bad in ({"sw": "loud"}, {"sw": 0}, {}):
+        try:
+            amp.record_amp_gain(bad)
+            raise AssertionError(f"amp change {bad} was taken")
+        except ProcessError:
+            pass
     # #57 P0 / S-026: a round records the ledger version it was taken under and the level as a quantity; a
     # level with no dB in it, or an under that is not banked, is refused.
     lvl = Process(os.path.join(root, "process-level"))
@@ -3101,6 +3211,44 @@ def _main(argv):
             ids = p.capture_import(series, titles, binds, knobs, late=late)
             print(f"imported {len(titles)} title(s) of _{series} as {', '.join(ids)}"
                   + (f" -- late: {late}" if late else ""))
+        elif cmd == "amp-gain":
+            rest, read_as, amends, note = list(args), "said", None, None
+            if "--measured" in rest:
+                rest.remove("--measured")
+                read_as = "measured"
+            for flag in ("--amends", "--note"):
+                if flag in rest:
+                    i = rest.index(flag)
+                    val = rest[i + 1] if len(rest) > i + 1 else None
+                    rest = rest[:i] + rest[i + 2:]
+                    if flag == "--amends":
+                        amends = val
+                    else:
+                        note = val
+            changes = {}
+            for item in rest:
+                if "=" not in item:
+                    raise ProcessError(f"expected CHANNEL=dB, got {item!r}")
+                code, _, db = item.partition("=")
+                changes[code] = db
+            rec = p.record_amp_gain(changes, read_as=read_as, note=note, amends=amends)
+            print(f"{rec['id']}: amp gain " + ", ".join(f"{c} {v:+.2f} dB" for c, v in sorted(rec["channels"].items()))
+                  + f" ({read_as})" + (f", replaces {amends}" if amends else ""))
+            if rec["open_round"]:
+                print(f"  round {rec['open_round']} is open: its titles before this change are at the old gain. "
+                      f"Close it and take the re-measure as a new series.")
+            else:
+                print("  re-measure these channels as a new series: a level compared across this change is "
+                      "corrected by it (verify_prediction), and the re-measure gives the real dB (`--measured "
+                      f"--amends {rec['id']}`)")
+        elif cmd == "amp-changes":
+            changes = p.amp_changes()
+            if not changes:
+                print("no amp changes on record")
+            for ch in changes:
+                print(f"{ch['id']}  {ch['at']}  " + ", ".join(f"{c} {v:+.2f} dB" for c, v in sorted(ch["channels"].items()))
+                      + f"  ({ch['read_as']}{', amended by ' + ch['amended_by'] if ch.get('amended_by') else ''})"
+                      + (f"  -- {ch['note']}" if ch.get("note") else ""))
         elif cmd == "capture-knobs":
             rest, amend, reason = list(args), None, None
             if "--amend" in rest:

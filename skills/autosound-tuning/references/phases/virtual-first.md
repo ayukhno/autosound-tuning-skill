@@ -217,10 +217,14 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
     1.00 / 0.50 / 0.25 / 0.10 dB). Record it with `dsp_profile.py set-setting <project> channel_gain.step_db
     <value>`, and do the same before EQ for `parametric_eq.gain_step_db` and `parametric_eq.link_mode`.
     `apply.propose` names a trim off the recorded step, or asks when none is recorded (#52).
-  - **A cut-only spread wider than 3 dB is a gain-structure finding**, not a level decision.
-    `level_offsets.py` does the arithmetic: raising the quiet channel's amplifier by N gives the same balance
-    and keeps N dB of system headroom. Both costs are named (that channel's headroom, against the whole
-    system's maximum SPL and SNR), and the tuner chooses.
+  - **Levels are always DSP gains** (the Arbiter, 2026-09-23). Amp gains are set at intake and stay. A
+    cut-only spread wider than 3 dB spends that much of the system's maximum output, so `level_offsets.py`
+    lifts the quiet channel IN THE DSP by the smallest cut among the others (no other channel turns into a
+    boost), up to the top of the profile's `channel_gain.range_db`. Only the part that range cannot reach
+    is the amp's: that is the user's call, and when he turns a gain he says which channels and how much
+    (`process.py <dir> amp-gain sw=+3`). The channels are then re-measured as a new series; a comparison
+    across the change takes the recorded dB out (`verify_prediction`), and the re-measure's own difference
+    replaces the estimate (`amp-gain --measured --amends amp-N`).
 - **1.7** **The variants as a TRADE-OFF FRONT** (issue #38, W-2): `resonalyze_engine.py run` ends with it.
   The best, each wish as a whole configuration and, with no wish, the engine's own ranked alternatives
   (`--alternatives N`, 3 by default; an edge under a limit is moved to the nearest allowed and said) are

@@ -131,19 +131,22 @@ def measured_offsets(levels: dict) -> dict:
     return {name: round(floor - lvl, 1) for name, lvl in levels.items()}
 
 
-#: A cut-only spread wider than this is not a level decision (skill #51). 3 dB is the issue's number; the Arbiter may
-#: move it.
-GAIN_STRUCTURE_DB = 3.0
+#: A cut-only spread wider than this spends real output (skill #51): 3 dB is the issue's number.
+CUT_SPREAD_DB = 3.0
 
 
-def gain_structure_finding(offsets: dict, threshold: float = GAIN_STRUCTURE_DB):
-    """`None`, or the sentence that says a wide cut-only spread belongs at the AMPLIFIER (skill #51).
+def dsp_level_plan(offsets: dict, plus_db=None, threshold: float = CUT_SPREAD_DB):
+    """`None`, or how a wide cut-only spread is balanced IN THE DSP: `{gains, lift, short, text}`.
 
-    Cut-only normalisation puts the quietest driver at 0 and cuts the rest to meet it. With a house curve that
-    wants a +10 dB bass shelf, that cut the whole front by 6-9 dB and threw away that much of the system's maximum
-    output, while the table looked arithmetically right. Raising the quiet channel's amplifier by N (the smallest
-    cut among the others, so nothing turns into a boost) gives the same balance, and every other offset moves by +N.
-    Both costs are named, because the tuner chooses: the method sets no headroom policy.
+    Levels always live in the DSP (the Arbiter, 2026-09-23). Amplifier gains are set at intake, before the tune,
+    and move only when the DSP's plus runs out -- then it is his decision, and he tells the session what he turned.
+
+    Cut-only normalisation puts the quietest driver at 0 and cuts the rest to meet it: with a house curve that
+    wants a +10 dB bass shelf, that cut the whole front by 5-9 dB and threw that much of the system's maximum output
+    away (#51). The same balance, with the quiet channel lifted in the DSP by N (the smallest cut among the
+    others, so none of them turns into a boost), keeps N dB of output. `plus_db` is the top of the DSP's channel
+    gain range (`dsp_profile.json` `channel_gain.range_db[1]`): the lift stops there, and what it cannot reach
+    (`short`) is the one case for an amplifier gain.
     """
     if not offsets:
         return None
@@ -152,15 +155,23 @@ def gain_structure_finding(offsets: dict, threshold: float = GAIN_STRUCTURE_DB):
         return None
     quiet = sorted(c for c, o in offsets.items() if o == 0)
     others = [o for o in offsets.values() if o < 0]
-    n = round(-max(others), 1) if others else 0.0
-    trims = round(spread - n, 1)
-    return (f"gain structure: the cut-only spread is {spread:.1f} dB, which is more than {threshold:g} dB: this is a "
-            f"gain-structure finding, not a level decision (#51). Raising {', '.join(quiet)}'s AMPLIFIER by "
-            f"{n:.1f} dB gives the same balance, keeps {n:.1f} dB of system headroom, and leaves DSP trims within "
-            f"{trims:.1f} dB (every other offset moves by {n:+.1f}). The trade, for the tuner to choose: raising an "
-            f"amplifier spends that channel's own headroom and brings its distortion and excursion ceiling closer; "
-            f"cutting in the DSP spends the whole system's maximum SPL and the signal-to-noise of every cut channel. "
-            f"Amp gains were set at intake before this curve existed (project-intake.md §3).")
+    need = round(-max(others), 1) if others else 0.0
+    lift = need if plus_db is None else round(max(0.0, min(need, float(plus_db))), 1)
+    short = round(need - lift, 1)
+    gains = {c: round(o + lift, 1) for c, o in offsets.items()}
+    listed = ", ".join(f"{c} {g:+.1f}" for c, g in sorted(gains.items()))
+    range_said = ("the DSP's plus was not read (no dsp_profile.json channel_gain.range_db), so check the lift "
+                  "fits" if plus_db is None else f"inside the DSP's channel gain range, which goes to {float(plus_db):+g} dB")
+    text = (f"levels, in the DSP: the cut-only spread is {spread:.1f} dB, more than {threshold:g} dB, and cutting "
+            f"everything to the quietest would spend that much of the system's maximum output (#51). Lifting "
+            f"{', '.join(quiet)} by {lift:+.1f} dB in the DSP gives the same balance and keeps {lift:.1f} dB of "
+            f"output: {listed} ({range_said}). A DSP lift brings that channel's clip point down by as much.")
+    if short > 0:
+        text += (f" The same balance needs {need:+.1f} dB, and the DSP's plus is {short:.1f} dB short: this is "
+                 f"the one case an amplifier gain moves, and it is the tuner's call. If you turn it, tell the session "
+                 f"which channels and by how much (`process.py <dir> amp-gain {quiet[0] if quiet else '<ch>'}="
+                 f"+{short:.1f}`), and re-measure those channels as a new series.")
+    return {"gains": gains, "lift": lift, "short": short, "text": text}
 
 
 def _selftest() -> None:
@@ -209,12 +220,18 @@ def _selftest() -> None:
     else:
         raise AssertionError("a band with no points in the grid must be refused")
 
-    # #51: the Passat's table -- the sub quiet, the front cut 4.8-8.6 dB -- is a gain-structure finding, and the
-    # arithmetic is done for the tuner; a spread inside 3 dB says nothing.
+    # #51 and the Arbiter's ruling of 2026-09-23: the Passat's table -- the sub quiet, the front cut 4.8-8.6 dB --
+    # is balanced in the DSP. The sub is lifted by the smallest cut among the others (+4.8, inside the Helix's
+    # +5), nothing else turns into a boost, and the amplifier is not mentioned; a spread inside 3 dB says nothing.
     passat = {"sw": 0.0, "w-L": -5.9, "w-R": -6.5, "m-L": -7.8, "m-R": -4.8, "tw-L": -8.6, "tw-R": -7.0}
-    said = gain_structure_finding(passat)
-    assert said and "sw's AMPLIFIER by 4.8 dB" in said and "within 3.8 dB" in said and "+4.8" in said, said
-    assert gain_structure_finding({"a": 0.0, "b": -2.5}) is None
+    plan = dsp_level_plan(passat, plus_db=5.0)
+    assert plan["lift"] == 4.8 and plan["short"] == 0 and plan["gains"]["sw"] == 4.8, plan
+    assert plan["gains"]["m-R"] == 0.0 and max(v for c, v in plan["gains"].items() if c != "sw") == 0.0, plan
+    assert "in the DSP" in plan["text"] and "amplifier" not in plan["text"].lower(), plan["text"]
+    # A DSP whose plus ends at +3: the lift stops there, and the 1.8 dB it cannot reach is the amp's case, his call.
+    tight = dsp_level_plan(passat, plus_db=3.0)
+    assert tight["lift"] == 3.0 and tight["short"] == 1.8 and "amp-gain sw=+1.8" in tight["text"], tight
+    assert dsp_level_plan({"a": 0.0, "b": -2.5}) is None
 
     print("selftest OK —",
           f"J1(1)={bessj1(1.0):.6f}; D(10k,45°,5cm)={directivity(10000,45,0.05):.3f}; offsets={off}; "
@@ -318,9 +335,17 @@ def _main(argv=None):
         d = "" if g is None else f"{off[code] - g:+.1f}"
         print(f"{code:10} {band[0]:7.0f}–{band[1]:<8.0f} {lvl:12.1f} {off[code]:10.1f} "
               f"{'—' if g is None else f'{g:12.1f}'} {d:>7}")
-    said = gain_structure_finding(off)
-    if said:
-        print("\n" + said)
+    plus = None
+    if args.project:
+        try:
+            import dsp_profile as _dp
+            rng = (_dp._unwrap(_dp.load_profile(_dp.profile_path(args.project))).get("channel_gain") or {}).get("range_db")
+            plus = float(rng[1]) if rng else None
+        except (OSError, ValueError, TypeError, IndexError):
+            plus = None
+    plan = dsp_level_plan(off, plus_db=plus)
+    if plan:
+        print("\n" + plan["text"])
     print("\nSecond estimate only. Where it disagrees with the geometry estimate by more than a "
           "couple of dB, the disagreement is the finding — read the install, do not just type the "
           "number in.")
