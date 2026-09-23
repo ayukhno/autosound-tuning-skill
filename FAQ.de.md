@@ -325,10 +325,12 @@ Das offizielle Befehlszeilentool **Antigravity CLI (`agy`)** von Google benötig
 Unter Linux oder bei Erschöpfung des Antigravity-Budgets können Sie einen kostenlosen Gemini-API-Key direkt eintragen:
 
 1. Holen Sie sich einen kostenlosen API-Key auf **[aistudio.google.com/apikey](https://aistudio.google.com/apikey)**.
-2. Erstellen Sie eine Textdatei namens `.critic-env` im Ordner **Ihres Projekts** (entweder im Ordner `rew_analitic/` oder in dem Verzeichnis, aus dem Sie die Arbeit starten) und tragen Sie dort ein:
-   ```env
-   GEMINI_API_KEY=ihr_api_key_hier
+2. Speichern Sie ihn einmal mit dem Befehl des Reviewers: Er fragt den Schlüssel ab, ohne ihn anzuzeigen, und legt ihn im macOS-Schlüsselbund ab (unter Windows in einem Speicher, den nur Ihre Anmeldung öffnet; sonst in der Konfigurationsdatei des Reviewers mit Rechten 600). Nicht in einen Projektordner, nicht in ein Shell-Profil und nicht in eine Umgebungsvariable: Dort kann ihn jedes Programm lesen, und eine aus dem Dock gestartete App sieht ihn nicht.
+   ```bash
+   python3 ~/.claude/skills/autosound-tuning/scripts/autosound_ai.py key set google
+   # Windows: python3 "$HOME\.claude\skills\autosound-tuning\scripts\autosound_ai.py" key set google
    ```
+   Ein bereits in `~/.zshrc` (oder in den Windows-Benutzervariablen) gesetzter Schlüssel wird mit `… key move-shell` übertragen, das vorher nachfragt. `… key status` zeigt, wo welcher Schlüssel liegt, ohne den Schlüssel selbst.
 3. Die Skripte erkennen den Schlüssel automatisch und senden direkte HTTPS-Anfragen an das Gemini-API.
 
 > [!TIP]

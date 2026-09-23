@@ -325,10 +325,12 @@ python3 ~/.claude/skills/.autosound-tuning-src/skills/autosound-tuning/rew_tool/
 На Linux або при вичерпанні лімітів Antigravity ви можете використовувати безкоштовні ключі Gemini API напряму:
 
 1. Отримайте безкоштовний API-ключ на сайті **[aistudio.google.com/apikey](https://aistudio.google.com/apikey)**.
-2. Створіть текстовий файл `.critic-env` у папці **вашого проєкту** (всередині `rew_analitic/` або в теці, з якої ви запускаєте роботу) і запишіть туди:
-   ```env
-   GEMINI_API_KEY=ваш_ключ_тут
+2. Збережіть його один раз командою рецензента: вона питає ключ, не показуючи його, і кладе в Keychain macOS (на Windows — у сховище, яке відкриває лише ваш вхід; деінде — у файл налаштувань рецензента з правами 600). Не в теку проєкту, не в профіль оболонки і не в змінну середовища: там його читає кожна програма, а застосунок, запущений з Dock, його не бачить.
+   ```bash
+   python3 ~/.claude/skills/autosound-tuning/scripts/autosound_ai.py key set google
+   # Windows: python3 "$HOME\.claude\skills\autosound-tuning\scripts\autosound_ai.py" key set google
    ```
+   Ключ, уже прописаний у `~/.zshrc` (або в змінних користувача Windows), переносить `… key move-shell`, і спершу питає дозволу. `… key status` показує, де який ключ, без самого ключа.
 3. Скрипти автоматично виявлять ключ і перейдуть на прямі HTTPS-запити до Gemini API.
 
 > [!TIP]

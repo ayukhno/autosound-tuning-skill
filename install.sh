@@ -1343,8 +1343,9 @@ else
       # hub #187: a key in the shell profile is not the reviewer's sign-in, and it sends every
       # review to the API, where agy's model names (…-high) do not exist.
       say "  $n. A Gemini API key is exported in your shell. agy does not use it; it signs in with your"
-      say "     Google account (below). To keep the key for the reviewer, put it in"
-      say "     ~/.config/autosound/critic-env and take it out of your shell profile."
+      say "     Google account (below). A session TCC starts does not see a shell key, and every program"
+      say "     can read it there. To keep it for the reviewer, move it into the macOS Keychain (asks first):"
+      say "       python3 $(pretty "$SKILL_HOME")/scripts/autosound_ai.py key move-shell"
     fi
     say "  $n. Gemini reviewer — optional, once. Have a Google account ready. What happens:"
     say "       agy opens; press Enter through its two setup screens; your browser asks you to sign"

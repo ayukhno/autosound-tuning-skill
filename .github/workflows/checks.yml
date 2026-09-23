@@ -159,3 +159,29 @@ jobs:
           [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path install.ps1).Path, [ref]$null, [ref]$errors) | Out-Null
           if ($errors.Count) { $errors | ForEach-Object { Write-Host $_.ToString() }; exit 1 }
           Write-Host "install.ps1 parses: 0 errors"
+      # The reviewer's key on Windows lives in a file only this user's login can open (DPAPI, the Arbiter's
+      # decision of 2026-09-23, hub #197). The author's Mac cannot run it, so a real Windows does: a round trip,
+      # the value absent from the file, and a key in the user environment (the registry) moved into the store.
+      - name: reviewer key store (DPAPI) and the registry move
+        shell: python
+        env:
+          AUTOSOUND_KEYSTORE: dpapi
+        run: |
+          import os, sys, tempfile, winreg
+          home = tempfile.mkdtemp()
+          os.environ.update(APPDATA=home, USERPROFILE=home, HOME=home)
+          sys.path.insert(0, os.path.join("skills", "autosound-tuning", "scripts"))
+          import autosound_ai as a
+          v = "AQ." + "d" * 50
+          a._dpapi_put("AUTOSOUND_TEST_API_KEY", v)
+          assert a._dpapi_get("AUTOSOUND_TEST_API_KEY") == v
+          assert v not in open(a._dpapi_path(), encoding="utf-8").read(), "the file holds the value in clear"
+          assert a._dpapi_delete("AUTOSOUND_TEST_API_KEY")
+          with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment", 0, winreg.KEY_ALL_ACCESS) as k:
+              winreg.SetValueEx(k, "GEMINI_API_KEY", 0, winreg.REG_SZ, v)
+          assert [h["file"] for h in a.shell_exports()] == [r"HKCU\Environment"], a.shell_exports()
+          said = a.move_shell(ask=False)
+          assert said[0].startswith("✓"), said
+          a._KEYSTORE_CACHE.clear()
+          assert a.keystore_get("GEMINI_API_KEY") == v and a.shell_exports() == [], said
+          print("DPAPI round trip and the registry move: OK")

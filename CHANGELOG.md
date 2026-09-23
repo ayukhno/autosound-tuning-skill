@@ -182,6 +182,13 @@ reason. Eight packages.
   and a name the profile does not know needs `--source user`.
 - **A copied project no longer carries `preference-profile.md` or `hardware.controls`**, and its `sources`
   is one line (hub #185/#186). The import record is `seeded_from`.
+- **The reviewer's API key lives in the OS keystore** (the Arbiter, 2026-09-23; hub #197). `autosound_ai.py
+  key set google` asks for it without echo (or takes one line on stdin, never argv) and keeps it in the macOS
+  Keychain or, on Windows, a store only the user's login opens (DPAPI); elsewhere, the 600 machine file. A run
+  reads the machine file, then the keystore, then the environment, so a stale shell export loses to the stored
+  key. `key move-shell` moves a key out of `~/.zshrc` (or the Windows user environment), asking first; `doctor`
+  names any profile line that still exports one. `key status --json` is what a front-end reads; TCC stops
+  writing keys into `critic-env` (hub #197). The subscription route (a signed-in CLI) needs no key and is unchanged.
 - **The reply language IS the interface language** (the Arbiter, 2026-09-22; the intake redesign, round 5):
   `language.reply` records the interface's, and the user's own language is optional and switches nothing.
 
@@ -200,7 +207,8 @@ reason. Eight packages.
   `--via api|cli|clipboard` sets the route for one run, and `--via api` uses the environment's key even where
   `critic-env` blanks it. `doctor` tells a blanked key from a missing one and says where the model came from.
   `AUTOSOUND_REVIEW_RAW_DIR` keeps the raw exchange. An exported key no longer tells the installer that the
-  reviewer is set up.
+  reviewer is set up; the installers point it to `key move-shell`. The key is entered once into the OS keystore
+  (`key set`, above).
 - **C — the machine and the installer** (hub #192, S-028, S-049, S-022): git and python3 are run once after
   `xcode-select` answers. `doctor` names a Rosetta shell and a git that does not run. Both installers leave an
   `install-receipt.json`, and `doctor` reads it back. A prebuilt engine knows its wrapper, and a stale one is

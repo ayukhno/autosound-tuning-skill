@@ -326,12 +326,15 @@ The official **Antigravity CLI (`agy`)** from Google needs no API key: you sign 
 On Linux systems or if you exhaust your Antigravity quotas, you can use a free Gemini API key directly. With a key present the reviewer calls the API **first**, and `agy` only if that call fails.
 
 1. Get a free API key at **[aistudio.google.com/apikey](https://aistudio.google.com/apikey)** — current keys start with `AQ.`.
-2. Put it into the reviewer's config file — **outside every project**, never into a project folder, and not into environment variables or a shell profile, where every program you start inherits it:
-   * *macOS / Linux:* the line `GEMINI_API_KEY=AQ.…` in `~/.config/autosound/critic-env`, then `chmod 600 ~/.config/autosound/critic-env`
-   * *Windows:* the same line in `%APPDATA%\autosound\critic-env` — PowerShell: `New-Item -ItemType Directory -Force "$env:APPDATA\autosound"; notepad "$env:APPDATA\autosound\critic-env"`
+2. Store it once with the reviewer's own command. It asks for the key without showing it and keeps it in the macOS Keychain (on Windows, in a store only your login opens; elsewhere, in the reviewer's config file with mode 600). Not in a project folder, a shell profile or an environment variable: every program can read it there, and an app started from the Dock does not see it.
+   ```bash
+   python3 ~/.claude/skills/autosound-tuning/scripts/autosound_ai.py key set google
+   # Windows: python3 "$HOME\.claude\skills\autosound-tuning\scripts\autosound_ai.py" key set google
+   ```
+   A key already exported in `~/.zshrc` (or in the Windows user environment) moves with `… key move-shell`, which asks first. `… key status` shows where each key is, never the key.
 3. Name a model the key can call: `doctor` prints the key's own list (for example `gemini-pro-latest`). Its ids differ from `agy`'s.
 
-A project-local `.critic-env` that carries a key and that git would take is refused. `doctor` never prints the key, only its shape (`current` / `OLD`).
+A project-local `.critic-env` that carries a key and that git would take is refused. `doctor` never prints the key, only its shape (`current` / `OLD`) and where it comes from.
 
 > [!TIP]
 > If no channel answers, the reviewer refuses (exit code 4): it lists why, saves the package into the project's `process/reviews/`, and copies it to the clipboard — paste it into any AI chat.

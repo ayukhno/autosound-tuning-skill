@@ -93,36 +93,46 @@ GEMINI_CRITIC_MODEL=gemini-3.1-pro-high python3 scripts/autosound_ai.py critic p
 
 ## 3. Pin config once — the KEY outside the project, the rest in it
 
-**The API key does not go in the project folder.** That folder is the one the README suggests
-backing up to a private GitHub, so a key kept there is one `git push` from leaving. It lives
-per-machine instead, and `autosound_ai.py` reads it from there first:
+**The API key goes into the OS keystore, entered once** (the Arbiter, 2026-09-23; hub #197;
+`docs/RESEARCH-2026-09-23-reviewer-keys.md`):
 
 ```bash
-mkdir -p ~/.config/autosound                       # Windows: %APPDATA%\autosound\
-cp scripts/.critic-env.example ~/.config/autosound/critic-env
-chmod 600 ~/.config/autosound/critic-env
+python3 scripts/autosound_ai.py key set google    # asks for the key without echo; or one line on stdin
+python3 scripts/autosound_ai.py key status        # where each key is and which is used -- never a value
+python3 scripts/autosound_ai.py key move-shell    # a key exported in ~/.zshrc (Windows: the user environment) -> the store, asks first
 ```
 
-**And do not `export GEMINI_API_KEY` from your shell profile.** A file is read by whoever knows
-its path; an exported variable is handed to **every** process you start — every npm package, every
-agent, every `env` and `ps e`. `autosound_ai.py` reads the file into its own process for the length
-of its run, which is as long as it needs to exist. If you call `gemini`/`agy` by hand, export it in that one
-shell rather than in `~/.zshrc`.
+- **Where it lands:** the macOS Keychain (item `autosound-reviewer`, account `GEMINI_API_KEY`), written
+  through `security -i` so the key is never an argv element; on Windows a file only this user's login
+  opens (DPAPI, `%APPDATA%\autosound\reviewer-keys.dpapi`). Elsewhere, or when the store refuses (a
+  locked Keychain over SSH), the machine file `~/.config/autosound/critic-env` with mode 600, and
+  `key set` says which. The subscription route (a CLI signed in with `agy`, `claude`, `codex`) needs no
+  key at all and stays the first choice.
+- **The order a run reads:** the machine file (the machine's explicit choice, a blank line included),
+  then the keystore, then the inherited environment. A stale shell export therefore loses to the key you
+  stored, and `key set` replaces a key line in the machine file with a comment so the file does not
+  shadow it.
+- **Never:** a key as a command-line argument (`ps` and the shell history show it), in a project folder
+  (one `git push` from leaving; a project-local config with a key that git would take is refused), in a
+  chat, or in a shell profile. **Why not `~/.zshrc`:** an exported variable is handed to every process
+  the shell starts, and an app started from the Dock or Finder (TCC) gets no shell environment at all,
+  so the session it starts does not see the key. A session's environment is also a snapshot: a key
+  changed in the profile later is not what a running session holds.
 
 **Check the key itself, not only its presence** — the doctor does, and by hand it is one free call:
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' "https://generativelanguage.googleapis.com/v1beta/models?key=$GEMINI_API_KEY"
-# 200 → live · 400 with API_KEY_INVALID in the body → not this key
+python3 scripts/autosound_ai.py doctor       # lists the key's own models: live, or the error the API gave
 ```
+(The key goes in a header, never in a URL: a URL lands in logs and proxies.)
 Two facts cost a session its time on 2026-09-08, and both are about the KEY, not the channel:
 - **AI Studio issues keys in a new shape — `AQ.` + 53 characters.** The old shape, `AIza` + 39
   characters, is what every earlier note here showed. An old-shape key answers `API_KEY_INVALID`
   once a new one has been issued for the project; the doctor prints which shape it sees.
 - **A session's environment does not follow `~/.zshrc`.** A key changed in the profile after the
   session started is not what that session holds: the old export stays in `env`, and a key that is
-  perfectly valid in the profile reads as invalid from inside the session. Which is one more reason the key belongs in
-  the file (§3 above) and not in an export: the file is read fresh on every call. The doctor says
-  when the key it sees came from the shell rather than from a file.
+  perfectly valid in the profile reads as invalid from inside the session. The keystore is read fresh
+  on every call, and `doctor` says where the key it uses came from and names any profile line that
+  still exports one.
 
 Everything non-secret — models, `GEMINI_BIN`, `PROJECT_MIRROR` — can still sit in the project,
 where it belongs with the car it describes:

@@ -15,6 +15,9 @@ autosound_ai.py — Універсальний кросплатформний і
   python3 scripts/autosound_ai.py critic <package_file.md> [trace.csv]
   python3 scripts/autosound_ai.py advisor <package_file.md> [trace.csv]
   python3 scripts/autosound_ai.py doctor
+  python3 scripts/autosound_ai.py key set google      # ключ -- на прихований запит, у сховище ключів ОС
+  python3 scripts/autosound_ai.py key status [--json] # де який ключ і який використовується, без значень
+  python3 scripts/autosound_ai.py key move-shell      # ключ із ~/.zshrc -- у сховище, з дозволу
 """
 
 import sys
@@ -332,11 +335,171 @@ def provider_for(model):
     return "google"  # the historical default; keeps an unset model behaving as before
 
 
+# ── The OS keystore (the Arbiter, 2026-09-23; docs/RESEARCH-2026-09-23-reviewer-keys.md) ──────────────────
+# A key exported in ~/.zshrc is not seen by a session TCC starts (macOS gives GUI apps no shell environment),
+# and there every program the shell starts can read it. The key is entered once with `key set` (hidden prompt,
+# or one line on stdin -- never argv) and kept by the OS: the macOS Keychain, or on Windows a file encrypted
+# with the user's login (DPAPI). Both need nothing installed. Elsewhere, or when the store refuses, the machine
+# file (mode 600) holds it, as before. Read order: the machine file (the machine's explicit choice, a blank line
+# included), then the keystore, then the inherited environment -- so a stale shell export loses to the key the
+# user stored, and a file TCC writes still wins (hub #197).
+KEY_SERVICE = "autosound-reviewer"
+#: Characters a provider's key is made of (AQ.…, AIza…, sk-ant-…, sk-proj-…). Anything else is refused rather
+#: than quoted: a key is never a string that needs escaping.
+_KEY_CHARS = re.compile(r"^[A-Za-z0-9._~+/=-]{20,300}$")
+_KEYSTORE_CACHE = {}
+
+
+def key_var(provider):
+    return _PROVIDERS[provider]["env"][0]
+
+
+def keystore_kind():
+    """"keychain", "dpapi", or None (the machine file). `AUTOSOUND_KEYSTORE=off` forces the file."""
+    forced = os.environ.get("AUTOSOUND_KEYSTORE", "").strip().lower()
+    if forced in ("off", "none", "file"):
+        return None
+    if forced in _KEYSTORE_BACKENDS:
+        return forced
+    if sys.platform == "darwin" and shutil.which("security"):
+        return "keychain"
+    if os.name == "nt":
+        return "dpapi"
+    return None
+
+
+def keystore_name(kind=None):
+    kind = kind if kind is not None else keystore_kind()
+    return {"keychain": f"Keychain macOS (елемент {KEY_SERVICE})",
+            "dpapi": "сховище Windows, зашифроване вашим входом (DPAPI)"}.get(kind, kind or "немає")
+
+
+def _keychain_get(var):
+    r = subprocess.run(["security", "find-generic-password", "-s", KEY_SERVICE, "-a", var, "-w"],
+                       capture_output=True, text=True, timeout=15)
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def _keychain_put(var, value):
+    # `security -i` reads its command from STDIN: the key never becomes an argv element that `ps` shows.
+    r = subprocess.run(["security", "-i"], input=f'add-generic-password -U -s "{KEY_SERVICE}" -a "{var}" -w "{value}"\n',
+                       capture_output=True, text=True, timeout=15)
+    if r.returncode != 0 or r.stderr.strip():
+        raise OSError(f"Keychain відмовив: {(r.stderr or r.stdout).strip()[:200]}")
+
+
+def _keychain_delete(var):
+    r = subprocess.run(["security", "delete-generic-password", "-s", KEY_SERVICE, "-a", var],
+                       capture_output=True, text=True, timeout=15)
+    return r.returncode == 0
+
+
+def _dpapi_path():
+    return os.path.join(os.path.dirname(machine_config_path()), "reviewer-keys.dpapi")
+
+
+def _dpapi(data, protect):
+    """CryptProtectData / CryptUnprotectData through ctypes: the blob opens only for this Windows user."""
+    import ctypes
+    from ctypes import wintypes
+
+    class _Blob(ctypes.Structure):
+        _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_char))]
+    buf = ctypes.create_string_buffer(data, len(data))
+    blob_in, blob_out = _Blob(len(data), ctypes.cast(buf, ctypes.POINTER(ctypes.c_char))), _Blob()
+    crypt32 = ctypes.windll.crypt32
+    if protect:
+        ok = crypt32.CryptProtectData(ctypes.byref(blob_in), KEY_SERVICE, None, None, None, 0x1, ctypes.byref(blob_out))
+    else:
+        ok = crypt32.CryptUnprotectData(ctypes.byref(blob_in), None, None, None, None, 0x1, ctypes.byref(blob_out))
+    if not ok:
+        raise OSError(f"DPAPI відмовив (помилка {ctypes.GetLastError()})")
+    try:
+        return ctypes.string_at(blob_out.pbData, blob_out.cbData)
+    finally:
+        ctypes.windll.kernel32.LocalFree(blob_out.pbData)
+
+
+def _dpapi_all():
+    try:
+        with open(_dpapi_path(), encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return {}
+
+
+def _dpapi_get(var):
+    import base64
+    blob = _dpapi_all().get(var)
+    return _dpapi(base64.b64decode(blob), False).decode("utf-8") if blob else None
+
+
+def _dpapi_write(store):
+    path = _dpapi_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(store, fh)
+    os.replace(tmp, path)
+
+
+def _dpapi_put(var, value):
+    import base64
+    store = _dpapi_all()
+    store[var] = base64.b64encode(_dpapi(value.encode("utf-8"), True)).decode("ascii")
+    _dpapi_write(store)
+
+
+def _dpapi_delete(var):
+    store = _dpapi_all()
+    if var not in store:
+        return False
+    del store[var]
+    _dpapi_write(store)
+    return True
+
+
+_KEYSTORE_BACKENDS = {"keychain": (_keychain_get, _keychain_put, _keychain_delete),
+                      "dpapi": (_dpapi_get, _dpapi_put, _dpapi_delete)}
+
+
+def keystore_get(var):
+    """The key the OS keystore holds under `var`, or None -- read once per run, never printed."""
+    if var not in _KEYSTORE_CACHE:
+        kind, value = keystore_kind(), None
+        if kind:
+            try:
+                value = _KEYSTORE_BACKENDS[kind][0](var) or None
+            except Exception:  # noqa: BLE001 -- a locked or absent store is "no key there", said by `key status`
+                value = None
+        _KEYSTORE_CACHE[var] = value
+    return _KEYSTORE_CACHE[var]
+
+
+def key_source(var):
+    """"file" / "keystore" / "env" / None: where the key `api_key_for` uses comes from, in its order."""
+    if var in ENV_ORIGIN:
+        return "file" if os.environ.get(var) else None
+    if keystore_get(var):
+        return "keystore"
+    return "env" if os.environ.get(var) else None
+
+
+def key_origin(var):
+    """Where the key comes from, in words a person can act on."""
+    src = key_source(var)
+    if src == "keystore":
+        return f"зі сховища ключів: {keystore_name()}"
+    return env_origin(var)
+
+
 def api_key_for(provider):
     for var in _PROVIDERS.get(provider, {}).get("env", ()):
-        key = os.environ.get(var)
-        if key:
-            return key
+        src = key_source(var)
+        if src == "keystore":
+            return keystore_get(var)
+        if src:
+            return os.environ.get(var)
     return None
 
 
@@ -376,8 +539,11 @@ def api_model_id(model):
     return name
 
 
-def child_env():
+def child_env(cli_bin=None):
     """The environment a reviewer CLI is started with: ours, minus the agent session's markers.
+
+    The `gemini` CLI reads GEMINI_API_KEY from its environment; a key kept in the OS keystore is added for
+    that one child and no other (`agy` signs in with the subscription and gets nothing added).
 
     A CLI started inside an agent session used to be refused outright, on the strength of
     field sessions that hung (hub TCC-014). Measured 2026-09-22 from inside a Claude Code session:
@@ -385,7 +551,11 @@ def child_env():
     (hub #187) saw the same by hand. What hung was a wait with no end and no word, so the call now
     runs with the markers removed and a bounded timeout, and it says so before it waits.
     """
-    return {k: v for k, v in os.environ.items() if not k.startswith(_NESTED_MARKERS)}
+    env = {k: v for k, v in os.environ.items() if not k.startswith(_NESTED_MARKERS)}
+    if cli_bin and cli_flavor(cli_bin) == "gemini" and not os.path.basename(cli_bin).lower().startswith("agy") \
+            and key_source("GEMINI_API_KEY") == "keystore":
+        env["GEMINI_API_KEY"] = keystore_get("GEMINI_API_KEY")
+    return env
 
 
 def raw_exchange_dir():
@@ -795,7 +965,7 @@ def call_cli(provider, cli_bin, model, prompt, timeout=None):
             proc = subprocess.run(cli_command(provider, cli_bin, model, prompt_path, prompt),
                                   input=stdin, capture_output=True,
                                   text=True, encoding="utf-8", timeout=timeout,
-                                  shell=(sys.platform == "win32"), env=child_env())
+                                  shell=(sys.platform == "win32"), env=child_env(cli_bin))
         except subprocess.TimeoutExpired:
             keep_raw("cli", stdin or prompt, f"(no answer in {timeout} s)")
             return None, "timeout", f"no answer in {timeout} s"
@@ -827,6 +997,10 @@ def _selftest():
     the list is parsed from the API's shape, and a run with a key and no model stops on the list."""
     import io
     import urllib.error
+    # Every check below runs away from this machine's real keystore: a key the user stored must not decide a test.
+    saved_keystore = os.environ.get("AUTOSOUND_KEYSTORE")
+    os.environ["AUTOSOUND_KEYSTORE"] = "off"
+    _KEYSTORE_CACHE.clear()
     canned = {"models": [
         {"name": "models/gemini-3.6-flash", "supportedGenerationMethods": ["generateContent"]},
         {"name": "models/gemini-pro-latest", "supportedGenerationMethods": ["generateContent"]},
@@ -1191,6 +1365,85 @@ def _selftest():
             os.environ.pop(k, None)
         os.environ.update(saved_env)
 
+    # The key in the OS keystore (the Arbiter, 2026-09-23; hub #197), on an in-memory backend in a throwaway
+    # home: stored from one line, never argv; the machine file's key line replaced by a comment; the read order
+    # file > keystore > environment; a refusing store falls back to the 600 file; a ~/.zshrc export moved with
+    # the value gone from the profile and from its backup; the status names sources and never a value.
+    mem = {}
+    _KEYSTORE_BACKENDS["memory"] = (lambda v: mem.get(v), lambda v, val: mem.__setitem__(v, val),
+                                    lambda v: mem.pop(v, None) is not None)
+    keep = {k: os.environ.get(k) for k in ("AUTOSOUND_KEYSTORE", "HOME", "USERPROFILE", "XDG_CONFIG_HOME",
+                                           "APPDATA", "GEMINI_API_KEY")}
+    keep_origin = (ENV_ORIGIN.pop("GEMINI_API_KEY", None), ENV_LINE.pop("GEMINI_API_KEY", None),
+                   _ENV_VALUES_BEFORE.pop("GEMINI_API_KEY", None))
+    good, stale = "AQ." + "s" * 50, "AIza" + "o" * 35
+    try:
+        with tempfile.TemporaryDirectory() as home:
+            os.environ.pop("APPDATA", None)
+            os.environ.update(HOME=home, USERPROFILE=home, XDG_CONFIG_HOME=os.path.join(home, ".config"),
+                              AUTOSOUND_KEYSTORE="memory", GEMINI_API_KEY=stale)
+            _KEYSTORE_CACHE.clear()
+            cfg = machine_config_path()
+            os.makedirs(os.path.dirname(cfg))
+            with open(cfg, "w") as fh:
+                fh.write(f"AUTOSOUND_CRITIC_MODEL=gemini-3.8-flash-high\nGEMINI_API_KEY={good[:-1]}x\n")
+            assert key_set("google", "has space in it " + "x" * 20)[0] == 2 and key_set("google", "")[0] == 2
+            assert key_set("google", "$(rm -rf ~)" + "x" * 20)[0] == 2, "a value that runs something is not a key"
+            code, msg = key_set("google", good)
+            assert code == 0 and mem["GEMINI_API_KEY"] == good and "коментарем" in msg, (code, msg)
+            text = open(cfg).read()
+            assert good[:-1] not in text and "AUTOSOUND_CRITIC_MODEL" in text and "# GEMINI_API_KEY:" in text, text
+            # the stale shell export loses to the stored key; a key the machine file sets wins over both
+            assert key_source("GEMINI_API_KEY") == "keystore" and api_key_for("google") == good
+            ENV_ORIGIN["GEMINI_API_KEY"] = cfg
+            os.environ["GEMINI_API_KEY"] = "AQ." + "f" * 50
+            assert key_source("GEMINI_API_KEY") == "file" and api_key_for("google") == "AQ." + "f" * 50
+            os.environ["GEMINI_API_KEY"] = ""                          # a blank line: the machine's choice, no key
+            assert api_key_for("google") is None
+            ENV_ORIGIN.pop("GEMINI_API_KEY")
+            os.environ["GEMINI_API_KEY"] = stale
+            # the gemini CLI gets the stored key in its own environment; agy gets nothing added
+            assert child_env("/usr/local/bin/gemini")["GEMINI_API_KEY"] == good
+            assert child_env("agy")["GEMINI_API_KEY"] == stale
+            # the status: sources, never a value
+            st = json.dumps(key_status())
+            assert good not in st and stale not in st and '"used": "keystore"' in st, st
+            # a store that refuses: the key goes to the 600 file, and the message says why
+            _KEYSTORE_BACKENDS["memory"] = (lambda v: None, lambda v, val: (_ for _ in ()).throw(OSError("locked")),
+                                            lambda v: False)
+            _KEYSTORE_CACHE.clear()
+            code, msg = key_set("anthropic", "sk-ant-" + "a" * 40)
+            assert code == 0 and "файлі" in msg and "locked" in msg, msg
+            assert "ANTHROPIC_API_KEY=sk-ant-" in open(cfg).read()
+            if os.name != "nt":
+                assert os.stat(cfg).st_mode & 0o777 == 0o600
+            _KEYSTORE_BACKENDS["memory"] = (lambda v: mem.get(v), lambda v, val: mem.__setitem__(v, val),
+                                            lambda v: mem.pop(v, None) is not None)
+            # ~/.zshrc: found, moved with the OK, and gone from the profile and from its backup
+            mem.clear()
+            _KEYSTORE_CACHE.clear()
+            rc = os.path.join(home, ".zshrc")
+            with open(rc, "w") as fh:
+                fh.write(f'alias ll="ls -l"\nexport GEMINI_API_KEY="{good}"\n# export OPENAI_API_KEY=old\n')
+            hits = shell_exports()
+            assert [(h["var"], h["line"]) for h in hits] == [("GEMINI_API_KEY", 2)], hits
+            said = move_shell(ask=False)
+            assert mem.get("GEMINI_API_KEY") == good and said[0].startswith("✓"), said
+            body, bak = open(rc).read(), open(rc + ".autosound-bak").read()
+            assert good not in body and good not in bak and 'alias ll="ls -l"' in body and "moved to the OS keystore" in body
+            assert shell_exports() == [] and "не знайдено" in move_shell(ask=False)[0]
+    finally:
+        _KEYSTORE_BACKENDS.pop("memory", None)
+        for k, v in keep.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        for d, v in zip((ENV_ORIGIN, ENV_LINE, _ENV_VALUES_BEFORE), keep_origin):
+            if v is not None:
+                d["GEMINI_API_KEY"] = v
+        _KEYSTORE_CACHE.clear()
+
     # The wait grows with the job (the Arbiter, 2026-09-23): a short review gets the floor, a 31 KB
     # translation gets twice what the slowest one took on 22.09, and a set variable wins.
     saved_wait = os.environ.pop("AUTOSOUND_CLI_TIMEOUT", None)
@@ -1204,7 +1457,15 @@ def _selftest():
         if saved_wait is not None:
             os.environ["AUTOSOUND_CLI_TIMEOUT"] = saved_wait
 
-    print("selftest[autosound_ai] OK -- the CLI wait grows with the job (a 31 KB translation waits ~13 min); "
+    if saved_keystore is None:
+        os.environ.pop("AUTOSOUND_KEYSTORE", None)
+    else:
+        os.environ["AUTOSOUND_KEYSTORE"] = saved_keystore
+    _KEYSTORE_CACHE.clear()
+    print("selftest[autosound_ai] OK -- the key in the OS keystore: set from one line, never argv, the file's key "
+          "line replaced; file > keystore > environment, so a stale shell export loses; a refusing store falls back "
+          "to the 600 file; a ~/.zshrc export moved and gone from the profile and its backup; the status names "
+          "sources, never a value; the CLI wait grows with the job (a 31 KB translation waits ~13 min); "
           "the key travels as a header, never in a URL; a retired model "
           "(404) becomes a choice carrying the key's generateContent models, not a fall-through; "
           "the list is parsed from the API's own shape; one reviewer model read by every door, the "
@@ -1250,6 +1511,257 @@ def machine_lines(run=None):
     return out
 
 
+# ── `key set | status | rm | move-shell` (the Arbiter, 2026-09-23; hub #197) ─────────────────────────────────
+
+_PROFILE_FILES = (".zshrc", ".zprofile", ".zshenv", ".bashrc", ".bash_profile", ".profile")
+_KEY_VARS = tuple(spec["env"][0] for spec in _PROVIDERS.values())
+_EXPORT_LINE = re.compile(r"^\s*(?:export\s+)?(" + "|".join(_KEY_VARS) + r")\s*=\s*(.*)$")
+
+
+def key_problem(value):
+    """Why `value` is not a key, or None."""
+    if not value:
+        return "порожньо"
+    if not _KEY_CHARS.match(value):
+        return f"не схоже на ключ ({len(value)} символів; дозволені літери, цифри і . _ ~ + / = -)"
+    return None
+
+
+def _profile_paths():
+    home = os.path.expanduser("~")
+    return [os.path.join(home, n) for n in _PROFILE_FILES]
+
+
+def shell_exports():
+    """Every uncommented line of a shell profile that sets a reviewer key, and on Windows the user's
+    environment in the registry: `[{"var", "file", "line"}]`. The value is never read out here."""
+    found = []
+    for path in _profile_paths():
+        try:
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                for n, line in enumerate(fh, 1):
+                    m = _EXPORT_LINE.match(line)
+                    if m and m.group(2).strip().strip("'\"") and not line.lstrip().startswith("#"):
+                        found.append({"var": m.group(1), "file": path, "line": n})
+        except OSError:
+            continue
+    if os.name == "nt":
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as k:
+                for var in _KEY_VARS:
+                    try:
+                        if winreg.QueryValueEx(k, var)[0]:
+                            found.append({"var": var, "file": r"HKCU\Environment", "line": None})
+                    except OSError:
+                        pass
+        except OSError:
+            pass
+    return found
+
+
+def _file_lines(path):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return fh.read().splitlines()
+    except OSError:
+        return []
+
+
+def _write_private(path, lines):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines) + "\n")
+    if os.name != "nt":
+        os.chmod(tmp, 0o600)
+    os.replace(tmp, path)
+
+
+def _machine_file_drop(var, why):
+    """Replace `var`'s line in the machine file with a comment that holds no key. True when one was there."""
+    path = machine_config_path()
+    lines, hit = _file_lines(path), False
+    for i, line in enumerate(lines):
+        body = line.strip()
+        body = body[len("export "):].strip() if body.startswith("export ") else body
+        if not line.lstrip().startswith("#") and body.split("=", 1)[0].strip() == var and "=" in body:
+            lines[i], hit = f"# {var}: {why} ({datetime.now():%Y-%m-%d})", True
+    if hit:
+        _write_private(path, lines)
+    return hit
+
+
+def _machine_file_set(var, value):
+    path = machine_config_path()
+    lines = [ln for ln in _file_lines(path)
+             if ln.strip().split("=", 1)[0].replace("export ", "").strip() != var or ln.lstrip().startswith("#")]
+    _write_private(path, lines + [f"{var}={value}"])
+
+
+def key_set(provider, value):
+    """Store `value` as the reviewer key of `provider`: `(exit code, message)`. 0 stored, 2 refused."""
+    if provider not in _PROVIDERS:
+        return 2, f"невідомий провайдер {provider!r}: {', '.join(_PROVIDERS)}"
+    problem = key_problem(value)
+    if problem:
+        return 2, f"ключ не збережено: {problem}"
+    var, kind, note = key_var(provider), keystore_kind(), ""
+    if kind:
+        try:
+            _KEYSTORE_BACKENDS[kind][1](var, value)
+        except Exception as e:  # noqa: BLE001 -- the store refused: the file holds it, and the message says so
+            kind, note = None, f" ({e}; тому файл)"
+    _KEYSTORE_CACHE.pop(var, None)
+    if kind:
+        dropped = _machine_file_drop(var, "у сховищі ключів ОС (autosound_ai.py key set)")
+        return 0, (f"{var} збережено: {keystore_name(kind)}"
+                   + (f"; рядок із ключем у {config_hint()} замінено коментарем" if dropped else ""))
+    _machine_file_set(var, value)
+    return 0, f"{var} збережено у файлі {config_hint()} (права 600){note}"
+
+
+def key_rm(provider):
+    var, kind = key_var(provider), keystore_kind()
+    gone = bool(kind) and bool(_KEYSTORE_BACKENDS[kind][2](var))
+    _KEYSTORE_CACHE.pop(var, None)
+    left = [w for w, on in ((f"файл {config_hint()}", var in ENV_ORIGIN and os.environ.get(var)),
+                            ("змінна середовища", _ENV_VALUES_BEFORE.get(var))) if on]
+    return (f"{var}: " + ("прибрано зі сховища ключів" if gone else "у сховищі ключів його не було")
+            + (f"; лишився: {', '.join(left)}" if left else ""))
+
+
+def key_status():
+    """What `key status --json` prints (hub #197): where each key is and which one is used. Never a value."""
+    kind = keystore_kind()
+    out = {"keystore": kind or "none", "providers": {}, "shell_exports": shell_exports()}
+    for provider in _PROVIDERS:
+        var = key_var(provider)
+        file_ = None
+        if var in ENV_ORIGIN:
+            file_ = {"path": ENV_ORIGIN[var], "line": ENV_LINE.get(var), "blank": not os.environ.get(var)}
+        used, key = key_source(var), api_key_for(provider)
+        shape = None
+        if key:
+            shape = gemini_key_shape(key) if provider == "google" else f"{len(key)} chars"
+        out["providers"][provider] = {"var": var, "used": used or "none", "file": file_,
+                                      "keystore": bool(keystore_get(var)), "env": bool(_ENV_VALUES_BEFORE.get(var)),
+                                      "shape": shape}
+    return out
+
+
+def _read_key_from_user(var):
+    """The key from a hidden prompt, or one line of stdin when a program (TCC) pipes it -- never argv."""
+    if sys.stdin is not None and sys.stdin.isatty():
+        import getpass
+        return getpass.getpass(f"Ключ {var} (не відображається, Enter — готово): ").strip()
+    return (sys.stdin.readline() if sys.stdin else "").strip()
+
+
+def _parse_profile_value(raw):
+    raw = raw.split(" #", 1)[0].strip()
+    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in "'\"":
+        raw = raw[1:-1]
+    return raw if _KEY_CHARS.match(raw) else None
+
+
+def _broadcast_env_change():
+    try:
+        import ctypes
+        ctypes.windll.user32.SendMessageTimeoutW(0xFFFF, 0x1A, 0, "Environment", 0x2, 5000, None)
+    except Exception:  # noqa: BLE001 -- a new window still reads the registry
+        pass
+
+
+def move_shell(ask=True):
+    """Move each key a shell profile (or the Windows user environment) exports into the keystore, one by one,
+    with the user's OK. The profile line becomes a comment with no key in it; a backup of the profile is kept
+    with the key blanked out. Returns the lines to print."""
+    said = []
+    for hit in shell_exports():
+        var = hit["var"]
+        provider = next(p for p in _PROVIDERS if key_var(p) == var)
+        where = hit["file"] + (f":{hit['line']}" if hit["line"] else "")
+        if hit["line"] is None:                                   # the Windows registry
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment", 0, winreg.KEY_ALL_ACCESS) as k:
+                value = str(winreg.QueryValueEx(k, var)[0]).strip()
+        else:
+            m = _EXPORT_LINE.match(_file_lines(hit["file"])[hit["line"] - 1])
+            value = _parse_profile_value(m.group(2)) if m else None
+        if not value:
+            said.append(f"· {where}: {var} задано виразом, а не значенням -- `key set {provider}`, а рядок прибери сам")
+            continue
+        if ask:
+            reply = input(f"Перенести {var} з {where} у {keystore_name()} і прибрати звідти? [y/N] ").strip().lower()
+            if reply not in ("y", "yes", "т", "так"):
+                said.append(f"· {where}: {var} лишено, як було")
+                continue
+        code, msg = key_set(provider, value)
+        if code:
+            said.append(f"✗ {where}: {msg}")
+            continue
+        if hit["line"] is None:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment", 0, winreg.KEY_ALL_ACCESS) as k:
+                winreg.DeleteValue(k, var)
+            _broadcast_env_change()
+        else:
+            lines = _file_lines(hit["file"])
+            original = lines[hit["line"] - 1]
+            backup = list(lines)
+            backup[hit["line"] - 1] = original.replace(value, "<moved-to-keystore>")
+            _write_private(hit["file"] + ".autosound-bak", backup)
+            lines[hit["line"] - 1] = f"# {var}: moved to the OS keystore by autosound_ai.py key move-shell ({datetime.now():%Y-%m-%d})"
+            mode = os.stat(hit["file"]).st_mode & 0o777
+            _write_private(hit["file"], lines)
+            os.chmod(hit["file"], mode)
+        said.append(f"✓ {where}: {msg}. У вже відкритих терміналах змінна ще жива -- відкрий новий"
+                    + ("" if os.name == "nt" else f" або `unset {var}`"))
+    return said or ["· ключів у профілях оболонки не знайдено"]
+
+
+def key_command(args):
+    """`key set <provider> | status [--json] | rm <provider> | move-shell [--yes]`."""
+    sub = args[0] if args else "status"
+    if sub == "set":
+        if len(args) != 2:
+            print("key set <google|anthropic|openai> -- сам ключ введи на запит (або одним рядком у stdin), "
+                  "не аргументом: аргумент видно в `ps` та в історії оболонки", file=sys.stderr)
+            return 2
+        provider = args[1]
+        if provider not in _PROVIDERS:
+            print(f"невідомий провайдер {provider!r}: {', '.join(_PROVIDERS)}", file=sys.stderr)
+            return 2
+        code, msg = key_set(provider, _read_key_from_user(key_var(provider)))
+        print(msg, file=sys.stderr if code else sys.stdout)
+        return code
+    if sub == "rm" and len(args) == 2 and args[1] in _PROVIDERS:
+        print(key_rm(args[1]))
+        return 0
+    if sub == "move-shell":
+        for line in move_shell(ask="--yes" not in args):
+            print(line)
+        return 0
+    if sub == "status":
+        st = key_status()
+        if "--json" in args:
+            print(json.dumps(st, ensure_ascii=False))
+            return 0
+        print(f"Сховище ключів: {keystore_name()}")
+        for provider, row in st["providers"].items():
+            print(f"  {provider:9} {row['var']:18} використовується: {row['used']}"
+                  + (f" ({row['shape']})" if row["shape"] else "")
+                  + ("; у сховищі: так" if row["keystore"] else "")
+                  + (f"; у файлі: {'порожній рядок' if row['file']['blank'] else 'ключ'}" if row["file"] else "")
+                  + ("; у середовищі: так" if row["env"] else ""))
+        for hit in st["shell_exports"]:
+            print(f"  ⚠ {hit['var']} у {hit['file']}" + (f" (рядок {hit['line']})" if hit["line"] else "")
+                  + " -- перенеси: autosound_ai.py key move-shell")
+        return 0
+    print("key set <provider> | key status [--json] | key rm <provider> | key move-shell [--yes]", file=sys.stderr)
+    return 2
+
+
 def run_doctor(smoke=True):
     print("=== ДІАГНОСТИКА СЕРЕДОВИЩА (DOCTOR MODE) ===")
     ok = True
@@ -1284,10 +1796,17 @@ def run_doctor(smoke=True):
         print(line)
     model = resolve_model()
     provider = provider_for(model)
+    print(f"· Сховище ключів: {keystore_name()} (`autosound_ai.py key status`)")
     for vendor, spec in _PROVIDERS.items():
         for var in spec["env"]:
-            if os.environ.get(var):
-                print(f"✓ Знайдено ключ API: {var} ({vendor}) -- {env_origin(var)}")
+            if key_source(var):
+                print(f"✓ Знайдено ключ API: {var} ({vendor}) -- {key_origin(var)}")
+    for hit in shell_exports():
+        # The Arbiter, 2026-09-23: a key in a shell profile is not seen by a session TCC starts, and every
+        # program the shell starts can read it. Named here, moved only with his OK.
+        print(f"⚠ {hit['var']} у {hit['file']}" + (f" (рядок {hit['line']})" if hit["line"] else "")
+              + ": його не бачать сесії з TCC, і його читає кожна програма -- перенеси у сховище ключів: "
+                "`autosound_ai.py key move-shell` (спитає дозволу)")
     api_provider = provider if api_key_for(provider) else None
     cli_bin = detect_cli(provider)
     nested = nested_session_marker() if cli_bin else None
@@ -1361,8 +1880,8 @@ def run_doctor(smoke=True):
                 ["xattr", "-p", "com.apple.quarantine", where], capture_output=True).returncode == 0:
             print(f"✗ {where} у карантині Gatekeeper. Виправлення: xattr -dr com.apple.quarantine \"{where}\"")
             ok = False
-    if os.environ.get("GEMINI_API_KEY"):
-        print(f"· GEMINI_API_KEY: {gemini_key_shape(os.environ['GEMINI_API_KEY'])}")
+    if api_key_for("google"):
+        print(f"· GEMINI_API_KEY: {gemini_key_shape(api_key_for('google'))}")
     if cli_bin and nested:
         print(f"· Ми всередині агент-сесії ({nested}): CLI рецензента запускається без маркерів сесії, "
               f"з обмеженим очікуванням (AUTOSOUND_CLI_TIMEOUT)")
@@ -1710,6 +2229,8 @@ def main():
     if role == "doctor":
         success = run_doctor(smoke="--no-smoke" not in sys.argv)
         sys.exit(0 if success else 1)
+    if role == "key":
+        sys.exit(key_command(sys.argv[2:]))
         
     if role not in REVIEW_TASKS:
         print(f"Невідома задача: {role}. Підтримуються: critic, advisor, ask, doctor")

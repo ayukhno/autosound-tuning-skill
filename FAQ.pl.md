@@ -325,10 +325,12 @@ Oficjalny klient **Antigravity CLI (`agy`)** od Google nie wymaga kluczy API i k
 Na systemie Linux lub przy wyczerpaniu limitów Antigravity możesz używać darmowych kluczy Gemini API bezpośrednio:
 
 1. Pobierz darmowy klucz API na stronie **[aistudio.google.com/apikey](https://aistudio.google.com/apikey)**.
-2. Utwórz plik tekstowy `.critic-env` w folderze **Twojego projektu** (wewnątrz `rew_analitic/` lub w katalogu, z którego uruchamiasz pracę) i zapisz tam:
-   ```env
-   GEMINI_API_KEY=twoj_klucz_tutaj
+2. Zapisz go raz poleceniem recenzenta: pyta o klucz, nie wyświetlając go, i przechowuje go w pęku kluczy macOS (w Windows — w magazynie, który otwiera tylko Twoje logowanie; gdzie indziej — w pliku konfiguracyjnym recenzenta z uprawnieniami 600). Nie w folderze projektu, nie w profilu powłoki i nie w zmiennej środowiskowej: tam może go odczytać każdy program, a aplikacja uruchomiona z Docka go nie widzi.
+   ```bash
+   python3 ~/.claude/skills/autosound-tuning/scripts/autosound_ai.py key set google
+   # Windows: python3 "$HOME\.claude\skills\autosound-tuning\scripts\autosound_ai.py" key set google
    ```
+   Klucz już wpisany w `~/.zshrc` (lub w zmiennych użytkownika Windows) przenosi `… key move-shell`, które najpierw pyta o zgodę. `… key status` pokazuje, gdzie jest który klucz, bez samego klucza.
 3. Skrypty automatycznie wykryją klucz i przejdą na bezpośrednie zapytania HTTPS do Gemini API.
 
 > [!TIP]

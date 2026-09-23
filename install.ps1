@@ -1356,8 +1356,9 @@ if ($DryRun) {
             # hub #187: a key in the environment is not the reviewer's sign-in, and it sends every
             # review to the API, where agy's model names (...-high) do not exist.
             Say "$n. A Gemini API key is set in your environment. agy does not use it; it signs in with"
-            Say "   your Google account (below). To keep the key for the reviewer, put it in"
-            Say "   %APPDATA%\autosound\critic-env and remove the environment variable."
+            Say "   your Google account (below). A session TCC starts may not see it, and every program"
+            Say "   can read it there. To keep it for the reviewer, move it into the Windows store (asks first):"
+            Say "      python3 `"$HOME\.claude\skills\autosound-tuning\scripts\autosound_ai.py`" key move-shell"
         }
         Say "$n. Gemini reviewer -- optional, once. Have a Google account ready. What happens:"
         Say "     agy opens; press Enter through its two setup screens; your browser asks you to sign"
