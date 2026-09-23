@@ -561,6 +561,113 @@ def _write_slots(root, data):
     os.replace(tmp, os.path.join(root, SLOTS_FILE))
 
 
+# ── configurations: a version SAVED into a DSP preset under a name (the Arbiter, 2026-09-23) ──
+# `v_NNN` is a full DSP state proposed at the desk, and it may never be kept. What the tuner saves
+# into a preset of the device, he saves under a name -- `SQ-1`, `FULL-v1`, `SQ-2`, any name and any
+# purpose -- and that name is what he compares. His example: v_003 saved into preset 1 as SQ-1;
+# FULL-1 into preset 2 as v_004, the rear changed on it into v_005; back to SQ-1, refined into SQ-2 =
+# v_006 in preset 1. SQ-2's previous is SQ-1 (v_003), NOT v_005, the number before it. So the
+# previous configuration is found by ANCESTRY: the nearest version up the `parent` chain that was
+# ever saved under a name. It is stored at save time, so a reader (TCC) does not walk the chain.
+#
+#     slots.json  "configs": {code: {version, slot, purpose, saved, previous: {code, version} | null,
+#                                    history: [{version, saved}]}}
+#                 "slots": {slot: {..., "dsp_preset": <the preset's number in the device>}}
+#
+# A name saved again (the device's preset kept its name, its content changed) keeps its history.
+
+
+def configs(root):
+    """Every saved configuration: `{code: record}` (empty on the old layout or a new project)."""
+    if not os.path.isfile(os.path.join(root, SLOTS_FILE)):
+        return {}
+    return _read_slots(root).get("configs") or {}
+
+
+def _saved_at(root):
+    """`{version: (code, saved)}`: under which name each version was last saved."""
+    out = {}
+    for code, rec in configs(root).items():
+        for h in rec.get("history") or []:
+            if h.get("version") and (h["version"] not in out or (h.get("saved") or "") >= out[h["version"]][1]):
+                out[h["version"]] = (code, h.get("saved") or "")
+    return out
+
+
+def previous_config(root, version):
+    """`{"code", "version"}` of the nearest ancestor of `version` that was saved under a name, or None.
+
+    Walks `parent`, never the numbers: v_006 made from v_003 finds SQ-1 (v_003) even with v_004 and
+    v_005 banked in between for another preset."""
+    saved = _saved_at(root)
+    seen, v = {version}, _read_snapshot_json(os.path.join(root, VERSIONS_DIR, version + ".json")).get("parent")
+    while v and v not in seen:
+        if v in saved:
+            return {"code": saved[v][0], "version": v}
+        seen.add(v)
+        path = os.path.join(root, VERSIONS_DIR, v + ".json")
+        if not os.path.isfile(path):
+            return None
+        v = _read_snapshot_json(path).get("parent")
+    return None
+
+
+def save_config(root, version, code, slot=None, dsp_preset=None, purpose=None, previous=None):
+    """Record that `version` was saved into a DSP preset under `code`, and put it in the slot. Returns the record."""
+    if ledger_layout(root) != "project":
+        raise SnapshotError(f"{root}: configurations live on the per-project version line; move to it first: "
+                            f"`{migrate_line_command(root)}`")
+    code = str(code or "").strip()
+    if not code:
+        raise SnapshotError("a configuration needs the name it was saved under in the DSP (SQ-2, FULL-v1)")
+    if not os.path.isfile(os.path.join(root, VERSIONS_DIR, version + ".json")):
+        raise SnapshotError(f"no version {version!r} on this line")
+    slots = _read_slots(root)
+    slot = slot or slots.get("active")
+    if not slot:
+        raise SnapshotError("which slot (preset) was it saved into? `--slot`, or set the active one first")
+    known = configs(root)
+    if previous is not None:
+        if previous not in known:
+            raise SnapshotError(f"no configuration {previous!r} to continue (saved: {', '.join(known) or 'none'})")
+        prev = {"code": previous, "version": known[previous]["version"]}
+    else:
+        prev = previous_config(root, version)
+    PresetHistory(root, slot).place(version)
+    slots = _read_slots(root)
+    now = datetime.datetime.now().isoformat(timespec="seconds")
+    rec = dict(known.get(code) or {})
+    rec.update(version=version, slot=slot, saved=now, previous=prev)
+    if purpose is not None:
+        rec["purpose"] = purpose
+    rec["history"] = list(rec.get("history") or []) + [{"version": version, "saved": now}]
+    slots.setdefault("configs", {})[code] = rec
+    if dsp_preset is not None:
+        slots["slots"].setdefault(slot, {})["dsp_preset"] = dsp_preset
+    _write_slots(root, slots)
+    return {"code": code, **rec}
+
+
+def compare_config(root, code, against=None):
+    """`(title, diff)`: configuration `code` against its previous one, or against `against` (a code or a version)."""
+    known = configs(root)
+    if code not in known:
+        raise SnapshotError(f"no configuration {code!r} (saved: {', '.join(known) or 'none'})")
+    rec = known[code]
+    if against is None:
+        prev = rec.get("previous")
+        if not prev:
+            raise SnapshotError(f"{code} ({rec['version']}) has no earlier saved configuration up its line; "
+                                "name one: `--with <code or version>`")
+        other, label = prev["version"], f"{prev['code']} ({prev['version']})"
+    elif against in known:
+        other, label = known[against]["version"], f"{against} ({known[against]['version']})"
+    else:
+        other, label = against, against
+    read = lambda v: _read_snapshot_json(os.path.join(root, VERSIONS_DIR, v + ".json"))  # noqa: E731
+    return f"{code} ({rec['version']}) against {label}", diff_states(read(other), read(rec["version"]))
+
+
 def project_versions(root):
     """Every version on the project's line, in number order (new layout)."""
     d = os.path.join(root, VERSIONS_DIR)
@@ -1315,6 +1422,17 @@ def render_registry(root, reg, presets):
         tgt = current_target(h.project_dir, preset) or s.get("target") or "—"
         lines.append(f"| {name} | {mark} | {head or '—'} | {tgt} | {gains} |")
     lines.append("")
+    saved = reg.get("configs") or {}
+    if saved:
+        lines += ["## Saved configurations (what each DSP preset was saved as)", "",
+                  "| Name | Version | Slot | Previous | Purpose |", "|---|---|---|---|---|"]
+        for code, rec in sorted(saved.items(), key=lambda kv: kv[1].get("saved") or ""):
+            prev = rec.get("previous")
+            dsp = (slots.get(rec.get("slot")) or {}).get("dsp_preset")
+            lines.append(f"| {code} | {rec.get('version')} | {rec.get('slot')}" + (f" (preset {dsp})" if dsp else "")
+                         + f" | {(prev['code'] + ' (' + prev['version'] + ')') if prev else '—'} | "
+                         + f"{rec.get('purpose') or ''} |")
+        lines.append("")
     return "\n".join(lines)
 
 
@@ -1527,6 +1645,15 @@ def _main(argv=None):
     vs.add_argument("va")
     vs.add_argument("vb")
     vs.add_argument("--series", required=True, help="the series number the next captures carry (_N)")
+    cp = sub.add_parser("config", help="a version saved into a DSP preset under a name (SQ-2): save, list, "
+                                       "compare with the previous saved configuration up its line")
+    cp.add_argument("action", choices=["save", "list", "compare"])
+    cp.add_argument("arg", nargs="*", help="save: <version> <name> · compare: <name>")
+    cp.add_argument("--slot", default=None, help="save: the slot (preset) it went into (default: the active one)")
+    cp.add_argument("--dsp-preset", default=None, help="save: the preset's number in the device (1, 2 ...)")
+    cp.add_argument("--purpose", default=None, help="save: what it is for, in words")
+    cp.add_argument("--previous", default=None, help="save: the configuration it continues, when not its ancestor")
+    cp.add_argument("--with", dest="against", default=None, help="compare: another name or a version")
     sub.add_parser("seal", help="seal every banked version not sealed yet (#58 P1); a seal is never renewed")
     sub.add_parser("verify", help="name every sealed version whose content changed (#58 P1); exit 3 if any")
     mp = sub.add_parser("migrate-line",
@@ -1607,6 +1734,8 @@ def _main(argv=None):
             print(f"{d['path']} — rewritten as UTF-8 (was {d['codec']}); "
                   f"original bytes kept at {os.path.basename(d['backup'])}")
         return 0
+    if args.cmd == "config":
+        return _config_cli(args)
     if args.cmd == "registry":
         # `--label`/`--note` are declared once for the whole `registry` verb, because `action` is a
         # positional choice rather than four subparsers -- so argparse accepts them on all four and
@@ -1645,6 +1774,43 @@ def _main(argv=None):
         print(render_diff(h.diff(args.va, args.vb)))
     elif args.cmd == "revert":
         print("wrote", h.revert(args.version))
+
+
+def _config_cli(args):
+    """`config save <version> <name> | list | compare <name> [--with ...]` (the Arbiter, 2026-09-23)."""
+    try:
+        if args.action == "save":
+            if len(args.arg) != 2:
+                print("config save <version> <name>", file=sys.stderr)
+                return 2
+            rec = save_config(args.root, args.arg[0], args.arg[1], slot=args.slot, dsp_preset=args.dsp_preset,
+                              purpose=args.purpose, previous=args.previous)
+            prev = rec.get("previous")
+            print(f"{rec['code']} = {rec['version']} in slot {rec['slot']}"
+                  + (f" (DSP preset {args.dsp_preset})" if args.dsp_preset else "")
+                  + (f"; previous: {prev['code']} ({prev['version']})" if prev else "; the first saved on its line")
+                  + (f"; saved {len(rec['history'])} times under this name" if len(rec["history"]) > 1 else ""))
+            return 0
+        if args.action == "list":
+            slots = _read_slots(args.root).get("slots") or {}
+            for code, rec in sorted(configs(args.root).items(), key=lambda kv: kv[1].get("saved") or ""):
+                prev = rec.get("previous")
+                dsp = (slots.get(rec.get("slot")) or {}).get("dsp_preset")
+                print(f"{code:12} {rec['version']}  slot {rec.get('slot')}" + (f" (preset {dsp})" if dsp else "")
+                      + f"  {rec.get('saved', '')[:16]}  previous: "
+                      + (f"{prev['code']} ({prev['version']})" if prev else "—")
+                      + (f"  -- {rec['purpose']}" if rec.get("purpose") else ""))
+            return 0
+        if len(args.arg) != 1:
+            print("config compare <name> [--with <name or version>]", file=sys.stderr)
+            return 2
+        title, d = compare_config(args.root, args.arg[0], args.against)
+        print(title)
+        print(render_diff(d))
+        return 0
+    except SnapshotError as exc:
+        print(f"refusing: {exc}", file=sys.stderr)
+        return 3
 
 
 def _variant_cli(h, args):
@@ -2182,6 +2348,43 @@ def _selftest():
     with open(full._path("v_005"), "rb") as fh:
         assert fh.read() == banked, "switching rewrote a banked version"
     assert [h_["version"] for h_ in Registry(old_root).load()["slots"]["FULL"]["history"]][-2:] == ["v_005", "v_006"]
+    # The Arbiter's example (2026-09-23): SQ-1 = v_003 in preset 1; FULL-1 = v_004 in preset 2, its rear changed
+    # into v_005 and saved again under the same name; back to SQ, refined into SQ-2 = v_006. SQ-2's previous is
+    # SQ-1 (v_003) -- found up the parent chain -- and never v_005, the number before it.
+    with tempfile.TemporaryDirectory() as cfg_root:
+        sq = PresetHistory(cfg_root, "SQ")
+        for _ in range(3):
+            sq.snapshot(_sample_state())
+        Registry(cfg_root).set_active("SQ")
+        one = save_config(cfg_root, "v_003", "SQ-1", dsp_preset="1", purpose="judged SQ")
+        assert one["previous"] is None and one["slot"] == "SQ"
+        fl = PresetHistory(cfg_root, "FULL")
+        assert fl.snapshot(_sample_state(), parent="v_003") == "v_004"
+        save_config(cfg_root, "v_004", "FULL-1", slot="FULL", dsp_preset="2", purpose="daily, with the rear")
+        assert fl.snapshot(fl.load()) == "v_005" and fl.load("v_005")["parent"] == "v_004"
+        full_again = save_config(cfg_root, "v_005", "FULL-1", slot="FULL")
+        assert full_again["previous"] == {"code": "FULL-1", "version": "v_004"} and len(full_again["history"]) == 2
+        assert sq.head() == "v_003"
+        state6 = sq.load()
+        state6["channels"]["w-L"]["gain_db"] = -2.5
+        assert sq.snapshot(state6, note="SQ refined after the competition") == "v_006"
+        two = save_config(cfg_root, "v_006", "SQ-2")
+        assert two["previous"] == {"code": "SQ-1", "version": "v_003"}, two["previous"]
+        title, d = compare_config(cfg_root, "SQ-2")
+        assert title == "SQ-2 (v_006) against SQ-1 (v_003)" and "w-L" in (d.get("channels") or {}), (title, d)
+        assert compare_config(cfg_root, "SQ-2", "v_005")[0] == "SQ-2 (v_006) against v_005"
+        slots_now = _read_slots(cfg_root)
+        assert slots_now["slots"]["SQ"]["version"] == "v_006" and slots_now["slots"]["SQ"]["dsp_preset"] == "1"
+        for bad in (lambda: save_config(cfg_root, "v_404", "X"), lambda: save_config(cfg_root, "v_006", " "),
+                    lambda: save_config(cfg_root, "v_006", "SQ-3", previous="nope")):
+            try:
+                bad()
+                raise AssertionError("a bad configuration save was taken")
+            except SnapshotError:
+                pass
+        with contextlib.redirect_stdout(io.StringIO()) as said:
+            assert _main(["--root", cfg_root, "config", "compare", "SQ-2"]) == 0
+        assert "against SQ-1 (v_003)" in said.getvalue(), said.getvalue()
     # per-preset directories reappearing beside slots.json: refused, never rebuilt over
     os.makedirs(os.path.join(old_root, "SQ"))
     with open(os.path.join(old_root, "SQ", "v_001.json"), "w", encoding="utf-8") as fh:
@@ -2193,6 +2396,8 @@ def _selftest():
         except SnapshotError as exc:
             assert "by hand" in str(exc), exc
 
+    print("selftest[configurations] OK -- SQ-2 (v_006) compares with SQ-1 (v_003) up its parent line, not v_005; "
+          "a name saved again keeps its history; the DSP preset number rides on the slot")
     print(f"selftest OK — 3 snapshots, diff caught the channels+virtual_channels changes (schema "
           f"v2 tier-aware), 5.38 ms → 516 smp @96k (258 @48k), revert forward-only (v_001→v_003), "
           f"validation rejected bad polarity + an unknown EQ type, structured EQ round-tripped "

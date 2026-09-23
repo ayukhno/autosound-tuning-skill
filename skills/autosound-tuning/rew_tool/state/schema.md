@@ -40,14 +40,27 @@ ledger became **tier-aware**, EQ bands became **structured objects**, and every 
 ## Layout (data is PROJECT-local; code is in the skill)
 ```
 <root>/versions/v_001.json …   immutable snapshots, numbered once per PROJECT   # <root> = <project>/state
-<root>/slots.json              {"active", "slots": {preset: {version, since, label, note,
-                               history: [{version, since}]}}, "layout": "project-numbered"}
+<root>/slots.json              {"active", "slots": {preset: {version, since, label, note, dsp_preset,
+                               history: [{version, since}]}}, "configs": {name: {version, slot,
+                               purpose, saved, previous: {code, version} | null,
+                               history: [{version, saved}]}}, "layout": "project-numbered"}
 <root>/proposals/v_NNN.json    the change sheet beside each proposal (SCR-026)
 <root>/legacy/<preset>/…       a per-preset ledger after `migrate-line`, as it was
 <root>/legacy-map.json         {"<preset>/v_NNN": "v_MMM"} — every old citation resolves
 ```
 A version carries `preset` (the slot it was banked FOR) and `parent` (the version it was made from);
 a variant also carries `variant` (its name) and is banked without moving the slot (`place=False`).
+
+**A configuration is a version SAVED into a DSP preset under a name** (the Arbiter, 2026-09-23). A
+`v_NNN` is a full DSP state proposed at the desk and may never be kept; what the tuner saves into the
+device he saves under a name of his own (`SQ-1`, `FULL-v1`, `SQ-2`, any name, any purpose).
+`state.py config save <version> <name> [--slot S] [--dsp-preset N] [--purpose "…"]` records it in
+`slots.json` `configs` and puts the version in the slot. Its `previous` is the nearest ancestor up the
+`parent` chain that was saved under a name, found at save time: SQ-2 (v_006, made from v_003) has SQ-1
+(v_003) as its previous, never v_005 banked in between for another preset. `--previous NAME` states it
+when the ancestry does not. A name saved again keeps its `history`. `config compare <name>` diffs
+against the previous configuration (`--with` another name or a version); `config list` lists them.
+A front-end compares against `previous`, not against the number before.
 
 **The older layout is still read** (W-2, hub #195): `<root>/<preset>/v_NNN.json` + `<root>/<preset>/HEAD`
 + `<root>/registry.json`, one number line per preset. `state.py --root <root> migrate-line` shows the
@@ -161,6 +174,8 @@ h.revert("v_001")             # -> new snapshot == v_001 content
 ```
 ```
 python3 state.py --root <dir> log|render|diff|revert <preset> [args]
+python3 state.py --root <dir> config save <version> <name> [--slot S] [--dsp-preset N] [--purpose "…"]
+python3 state.py --root <dir> config list | config compare <name> [--with <name or version>]
 python3 state.py selftest
 python3 state/migrate.py <project-dir> [--dry-run]   # one-shot 2.x -> 3.0, whole project
 ```

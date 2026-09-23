@@ -217,7 +217,10 @@ reason. Eight packages.
   travel. The drivers' Fs travel behind their own switch (`--no-fs`). `seeded_from` is the import record, with
   the source's knobs, protective filters and machine paths as history. An absolute path never travels.
 - **R — one line of versions per project** (S-053, hub #195, #58 P2): above; plus variants inside the ledger
-  (`state.py variant new|list|switch`: a switch moves a pointer and copies nothing).
+  (`state.py variant new|list|switch`: a switch moves a pointer and copies nothing). A version saved into a DSP
+  preset gets the tuner's own name (`state.py config save v_006 SQ-2 --dsp-preset 1`; the Arbiter, 2026-09-23). Its
+  previous configuration is found up the `parent` line, so SQ-2 is compared with SQ-1 (v_003) and not with v_005
+  banked in between for another preset (`config compare SQ-2`). TCC reads `configs` from `slots.json` (hub #198).
 - **F — the Phase-1 numbers** (#50, #51, #52): the junction loss is labelled level-normalised, and the level step
   is printed beside it. Levels are always the DSP's (the Arbiter, 2026-09-23): over a 3 dB cut-only spread the
   quiet channel is lifted in the DSP, within its channel gain range, and only what the range cannot reach is an
