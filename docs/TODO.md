@@ -1490,6 +1490,24 @@ at most five show unless `--verbose`, and the missing-title error names the coun
 The rest is a shape for every tool: a verdict block of at most five lines first, then the detail on request.
 That is a redesign of every tool's output, not a patch.
 
+## S-061 · #24 built on the wave: translations level in every language; what is left for W-3
+
+**Status**: open 2026-09-23 · the session stopped on «добраніч» · #24 built with the Arbiter's OK (label `ok`), waits for the W-3 release · `git -C skill log --oneline a1574b1^..f94ad14` on `wave-2026-09-23`
+
+Done: the de/pl listening references and `listening.py coverage` (a1574b1); README uk/de/pl (bc24729); FAQ in all
+four languages after a review round with him (1b50122, 6291ca7, f94ad14). `i18n-check` has no declared lag left.
+All translations went through the Advisor (`ask`, `gemini-3.8-flash-high`).
+
+Open ends:
+- TCC's English guides are linked from the FAQ and the READMEs at `autosound-tcc/blob/main/docs/guide/…`; they
+  resolve once TCC's `wave-0.1.44` reaches main. The guide's placement is hub #202 (SKL-053, to:tcc).
+- Findings for the pool, not built: `gemini-3.1-pro-high` is refused by `agy` in this region ("not supported in
+  the selected location"), while README and FAQ name Gemini Pro (High) as TCC's reviewer pick; and
+  `tcc/README.md` links `FAQ.md#subscription-options-quotas--budgets-as-of-july-2026`, a heading that no longer exists.
+- #60, #61, #64 on the milestone are still without the assessment (class · model · risk · complexity).
+
+Next: the W-3 collection with him (S-060); #24 closes with the release.
+
 ## S-060 · W-3 · v3.0.62 is collecting: pick up the collection with him
 
 **Status**: open 2026-09-23 · the session stopped on «добраніч» · the wave is COLLECTING, nothing is built (the
