@@ -124,3 +124,4 @@
 | AYA/giorgio | Giorgio by Moroder — серія FOKUS, по одному на позицію (C · ЛЦ · ПЦ · Л · П) |
 | EMMA/T8 | глибина й тіло — рояль за співачкою і нижче (`competition.md`) |
 | EMMA/T11 | рівні сцени — малий барабан проти тамбурина, розділення бек-вокалів (`competition.md`) |
+| EMMA/T9 | Hungry Bird |

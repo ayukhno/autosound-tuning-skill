@@ -32,6 +32,7 @@ Which languages are behind, and by how much, is a backlog item and not a gate.
     links(lang=None)           -> [{track, characteristic, timecode, cue, translated}]
     routes()                   -> {route: [{n, track, characteristic}]}
     check(lang=None)           -> [problems]   (empty = consistent, on the REAL files)
+    coverage(lang)             -> {table: {done, of, missing}}   (how far a translation lags; a report)
 
 stdlib only, py3.9+.
 """
@@ -298,6 +299,23 @@ def check(lang=None, root=None):
     return problems
 
 
+def coverage(lang, root=None):
+    """How far one translation is behind English -- a REPORT, never a gate: English is mandatory and
+    a translation may lag (the ruling above), so this names the lag instead of failing on it.
+
+    {"characteristics" | "cues" | "titles": {"done": n, "of": m, "missing": [ids]}}. `titles` counts
+    only the descriptive (artist-less) rows, the ones a translation is expected to carry."""
+    ch = characteristics(lang, root)
+    ln = links(lang, root)
+    desc = [t for t in tracks(lang, root).values() if t["artist"] is None]
+    def part(items, key):
+        return {"done": sum(1 for x in items if x["translated"]), "of": len(items),
+                "missing": [key(x) for x in items if not x["translated"]]}
+    return {"characteristics": part(list(ch.values()), lambda c: c["id"]),
+            "cues": part(ln, lambda l: f"{l['track']} x {l['characteristic']}"),
+            "titles": part(desc, lambda t: t["id"])}
+
+
 def languages(root=None):
     """The translation languages present on disk (files `listening-cheat-sheet.<lang>.md`)."""
     root = root or PATTERNS
@@ -336,6 +354,7 @@ def _selftest():
         assert not problems, f"[{lang}]\n" + "\n".join(problems)
         chl = characteristics(lang)
         assert all(chl[c]["good"] for c in chl), lang
+        assert all(p["done"] + len(p["missing"]) == p["of"] for p in coverage(lang).values()), lang
     # No "sounds right / wrong" phrase may live in a link cue: the cheat sheet is the ONE home.
     bank = {ch[c]["good"].lower() for c in ch} | {ch[c]["bad"].lower() for c in ch}
     for l in ln:
@@ -384,6 +403,14 @@ def _selftest():
             raise AssertionError("a descriptive title for a non-track was accepted")
         except ListeningError:
             pass
+        # the lag is a report: one of two in each table, and the missing one named
+        write("test-tracks.uk.md",
+              "| track | characteristic | timecode | cue |\n|---|---|---|---|\n| T1 | c01 | — | твоя точка |\n\n"
+              "| id | title |\n|---|---|\n| T1 | грай свій улюблений |\n")
+        cov = coverage("uk", root=d)
+        assert cov["characteristics"] == {"done": 1, "of": 2, "missing": ["c02"]}, cov
+        assert cov["cues"] == {"done": 1, "of": 2, "missing": ["T2 x c02"]}, cov
+        assert cov["titles"] == {"done": 1, "of": 2, "missing": ["T2"]}, cov
         os.remove(os.path.join(d, "test-tracks.uk.md"))
         write("test-tracks.md", tt)
         assert check("uk", root=d) == []
@@ -432,7 +459,7 @@ def _selftest():
 def main(argv=None):
     import argparse
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("what", nargs="?", choices=["characteristics", "tracks", "links", "routes", "check"],
+    ap.add_argument("what", nargs="?", choices=["characteristics", "tracks", "links", "routes", "check", "coverage"],
                     default="check")
     ap.add_argument("--lang", default=None, help="translation to read (en = the source)")
     ap.add_argument("--json", action="store_true")
@@ -446,6 +473,18 @@ def main(argv=None):
             print("  " + p)
         print("consistent" if not problems else f"{len(problems)} problem(s)")
         return 1 if problems else 0
+    if args.what == "coverage":
+        report = {lang: coverage(lang) for lang in ([args.lang] if args.lang else languages())}
+        if args.json:
+            print(json.dumps(report, ensure_ascii=False, indent=1))
+            return 0
+        for lang, parts in report.items():
+            print(f"{lang}: " + " · ".join(f"{name} {p['done']}/{p['of']}" for name, p in parts.items()))
+            for name, p in parts.items():
+                if p["missing"]:
+                    shown = ", ".join(p["missing"][:8]) + (f" … +{len(p['missing']) - 8}" if len(p["missing"]) > 8 else "")
+                    print(f"    {name} not translated: {shown}")
+        return 0
     data = {"characteristics": lambda: characteristics(args.lang), "tracks": lambda: tracks(args.lang),
             "links": lambda: links(args.lang), "routes": routes}[args.what]()
     if args.json:

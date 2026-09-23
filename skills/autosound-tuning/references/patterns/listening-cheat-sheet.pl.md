@@ -59,10 +59,26 @@ jest na pierwsze przejście.
 | c13 | długi odsłuch | Długi odsłuch — album, 15–20 min, na luzie | pozostaje lekki i zapraszający | męczy: grubo, jasno lub ciemno (nachylenie), albo martwo, sucho, klinicznie (przekorygowanie) | nachylenie → szerokie nachylenie po MMM, nigdy wąskie wycięcia; martwo → zdejmij EQ, nie dodawaj (3.3) |
 | c14 | tekstura basu | Tekstura niskich częstotliwości — kontrabas | sprężyście, z ciałem i detalem | nadęty, dudniący albo przesuszony i cienki | poziomy i szew sub↔midbas (1.3 / 1.4); szerokie nachylenie (3.3) |
 | c15 | wysokość / szerokość | Wysokość i szerokość sceny — wyższa liga | scena na wysokości deski rozdzielczej i sięga za słupki A z czystymi krawędziami | opada na podłogę na niektórych nutach, albo krawędzie postrzępione i scena się sypie | styk średniotonowy↔wysokotonowy (1.3); poziomy L/R (1.4) — druga wizyta w fazie 4 |
+| c17 | +6 dB | To samo, o dwa lub trzy kroki głośności głośniej | balans, punch i głosy trzymają to, co trzymały na poziomie roboczym | coś, co było równe, zaczyna naciskać, albo pojawia się ostrość, której nie było | to, na co wskazuje cichsze przejście — ale werdykt GŁOŚNIEJ to ten, który słyszy sędzia (EMMA Judge Book 2024 §4.5, „Overall Spectral Balance at higher volume”) |
 | c16 | dynamika | Dynamika przy głośności — zapas | od cicho do głośno bez wysiłku, szczyty czyste | szczyty się spłaszczają lub zniekształcają, dźwięk dusi się przy głośności | struktura wzmocnienia i granice głośników — nie EQ; filtry ochronne (1.2) |
 
 Kolejność ma znaczenie: **najpierw c01 – c03.** Jeśli środek albo pozycje nie przechodzą, reszty za
 wcześnie oceniać.
+
+## Która korekta wskazuje na którą cechę
+
+Narzędzia EQ podają cechę przy każdej propozycji, więc ucho sprawdza to samo, co poruszył pomiar
+(`eq_propose`, `ear_suspects`):
+
+| korekta | cecha |
+|---|---|
+| kształt L/R pary (`lr:*`) | c01 środek mono, c02 pozycje |
+| rezonans suba / midbasu albo to, co *dudni* (`res:low`, `boom`, `boxy`) | c14 tekstura basu, c05 punch / szew, c06 sub < 40 |
+| rezonans średnicy, to, co *nosowe* lub *kłuje* w średnicy (`res:mid`, `nasal`, `harsh`) | c08 kłucie w głosie |
+| rezonans tweetera, to, co *kłuje* lub jest *syczące* (`res:high`, `harsh`, `sibilant`) | c07 góra / sybilanty |
+| barwa pary względem celu (`tone:*`) | c04 balans tonalny |
+
+Jedna reguła dla nich wszystkich: pasmo, którego A/B nie słyszy, to pasmo, którego strojenie nie potrzebuje.
 
 ## Trasy — uporządkowane pary utwór × cecha
 
@@ -95,9 +111,34 @@ jako osobną przejażdżką.
 | full | 13 | CarMus#17 | c12 |
 | full | 14 | CarMus#11 | c14 |
 | full | 15 | own/album | c13 |
+| full | 16 | CarMus#02 | c17 |
+| full | 17 | CarMus#26 | c17 |
+| full | 18 | CarMus#08 | c17 |
 | league | 1 | Ch.23 | c15 |
 | league | 2 | Ch.05 | c09 |
 | league | 3 | Ch.29 | c16 |
+| league | 4 | CarMus#26 | c17 |
+| league | 5 | CarMus#08 | c17 |
+
+## Cztery nawyki, dzięki którym werdykty z różnych dni są porównywalne
+
+Wyniesione z praktyki i nic nie kosztują (hub `PAS-003`):
+
+1. **Jeden utwór, jedna wada, trzy odpowiedzi.** Zapytaj o JEDNĄ rzecz i przyjmij jedną z opcji: *trzyma ·
+   wróciło / inne / lepiej · tak samo · gorzej*. Werdykt sformułowany w ten sposób można zestawić z
+   werdyktem z innego dnia; „brzmi dobrze” — nie. **Zapisz przy tym pozycje pokręteł** — werdykt przy
+   innej pozycji to werdykt o innym systemie (`process.py … capture-knobs`, `phase_0_baseline.md` §3).
+2. **Para utworów na jeden krok.** Jeden pokazuje wadę, drugi pokazuje cenę: lekarstwo wymierzone w
+   nosowy nalot w jednym wokalu nie może odebrać osadzenia w piersi innemu (`CarMus#05 ↔ #08`), a góra
+   podbita dla jednego utworu musi wciąż przejść ten, który mówi „więcej góry nie trzeba”
+   (`AYA/glockenspiel`).
+3. **Przejście przy +6 dB** dla wszystkiego, o czym decydujesz (`c17`). Sędziowie tak słuchają (EMMA Judge
+   Book 2024 §4.5), a pewnego wieczoru kandydat był „w porządku” na poziomie roboczym i „na krawędzi”
+   głośniej — mając tylko ciche przejście, ten werdykt zostałby błędnie odnotowany.
+4. **Liczba i ucho obok siebie, żadne nie tłumaczy drugiego na siłę.** W jednej z sesji pomiar mówił:
+   „góra jest 2 dB poniżej celu”, a ucho: „więcej góry nie trzeba” — odnotowano oba, a cel określono
+   jako NASZ, a nie sędziego. Pomiar, który stoi w sprzeczności z uważnym uchem, to spostrzeżenie, a nie
+   błąd do przegadania.
 
 ## Dwa presety dla środka — poziomem albo czasem (faza 2c)
 

@@ -14,3 +14,10 @@ that is not deferred and can be done at the desk. The branch is `wave-2026-09-23
 
 **Deferred at the review:** S-055 (needs an ellipsoid round in the car). **Still deferred:** S-001, S-017,
 S-021 (after 3.1.x), hub #113 PAS-005, hub #82 HUB-031, #26 (a 3.2 candidate). **Waiting on his run:** S-059.
+
+**Built (with the Arbiter's OK, label `ok`):** #24, 2026-09-23 — through the Advisor (`ask`,
+`gemini-3.8-flash-high`; `gemini-3.1-pro-high` is refused in this region). Both cheat sheets are level
+with English (`c17`, the two missing sections, the five new route steps); `test-tracks.de.md` and
+`.pl.md` carry all 98 cues and the descriptive titles; `listening.py coverage` reports 17/17 · 98/98 ·
+10/10 in de, pl and uk. Not in this item: `README`/`FAQ` in uk/de/pl, which the issue's second
+comment adds — the plan scoped #24 to the listening references.
