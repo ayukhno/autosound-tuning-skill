@@ -1,6 +1,6 @@
 # ШІ-помічник з налаштування автозвуку (Autosound Tuning Skill)
 
-🇬🇧 [English](README.md) · 🇩🇪 [Deutsch](README.de.md) · 🇵🇱 [Polski](README.pl.md) · 🇺🇦 **Українська** · ❓ [FAQ](FAQ.uk.md) · <img src="assets/icons/roadmap.svg" width="14" height="14" valign="middle" alt="Roadmap" /> [Roadmap (EN)](ROADMAP.md)
+🇬🇧 [English](README.md) · 🇩🇪 [Deutsch](README.de.md) · 🇵🇱 [Polski](README.pl.md) · 🇺🇦 **Українська** · ❓ [FAQ](FAQ.uk.md) · 📘 [TCC guide (EN)](https://github.com/ayukhno/autosound-tcc/blob/main/docs/guide/QUICK-GUIDE.md) · <img src="assets/icons/roadmap.svg" width="14" height="14" valign="middle" alt="Roadmap" /> [Roadmap (EN)](ROADMAP.md)
 
 **Простою мовою:** Це твій персональний ШІ-майстер з налаштування автозвуку. Ти хочеш ідеальну сцену і рівний тональний баланс, але графіки, фази та затримки здаються занадто складними? Цей помічник візьме найскладніше на себе. Він читає твої заміри з мікрофона і крок за кроком веде тебе до ідеального звуку.
 

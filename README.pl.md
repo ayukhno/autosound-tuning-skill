@@ -1,6 +1,6 @@
 # Asystent AI do strojenia car audio (Autosound Tuning Skill)
 
-🇬🇧 [English](README.md) · 🇩🇪 [Deutsch](README.de.md) · 🇵🇱 **Polski** · 🇺🇦 [Українська](README.uk.md) · ❓ [FAQ](FAQ.pl.md) · <img src="assets/icons/roadmap.svg" width="14" height="14" valign="middle" alt="Roadmap" /> [Roadmap (EN)](ROADMAP.md)
+🇬🇧 [English](README.md) · 🇩🇪 [Deutsch](README.de.md) · 🇵🇱 **Polski** · 🇺🇦 [Українська](README.uk.md) · ❓ [FAQ](FAQ.pl.md) · 📘 [TCC guide (EN)](https://github.com/ayukhno/autosound-tcc/blob/main/docs/guide/QUICK-GUIDE.md) · <img src="assets/icons/roadmap.svg" width="14" height="14" valign="middle" alt="Roadmap" /> [Roadmap (EN)](ROADMAP.md)
 
 **Prostymi słowami:** To twój osobisty mistrz AI do strojenia car audio. Chcesz idealnej sceny i równego balansu tonalnego, ale wykresy, fazy i opóźnienia wydają ci się zbyt skomplikowane? Ten asystent weźmie najtrudniejsze na siebie. Czyta twoje pomiary z mikrofonu i krok po kroku prowadzi cię do idealnego dźwięku.
 

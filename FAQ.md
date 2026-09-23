@@ -55,40 +55,40 @@ Real user questions about installing and tuning your system with this tool. [REA
 
 ### Four Paths of Usage
 
-* 🖥️ **Option 1 · Version 3.x in Graphical Window (Autosound TCC)**
+* 🖥️ **Option 1 · Version 3.x in Graphical Window (Autosound TCC) — [Recommended]**  
   The most automated and visual path. The installer sets up Claude Code, Python, the core method, the graphical UI, and the automatic AI reviewer.
-  * **Requirements:** macOS or Windows, paid Claude Pro/Max, REW beta with API enabled, about 800 MB to download.
-  * **Pros:** You see the system tree, measurement curves, step-by-step plan, and chat window in a single interface. The state is saved automatically, and any action in the version registry can be undone with a single click.
-  * **Cons:** The graphical app is still young and currently in beta testing.
+  * **Requirements:** macOS or Windows, paid Claude Pro/Max, REW beta with API enabled; the app adds about 700 MB to the download.
+  * **Pros:** You see the system tree, measurement curves, step-by-step plan, and chat window in a single interface. The state is saved automatically on disk, and actions in the version registry are tracked.
+  * **Cons:** The graphical app is younger than the underlying tuning method and is currently in beta status.
 
-* 💻 **Option 2 · Version 3.x in Terminal**
-  The exact same modern core and level of automation, but the interaction is entirely text-based in the console. Set up via the installer with the `--terminal` flag.
-  * **Requirements:** The same subscriptions and REW with API, but without the graphical UI.
-  * **Pros:** Maximum execution speed, minimal system resource consumption. Projects are fully compatible with the graphical TCC app (you can open the same folder in the GUI later).
+* 💻 **Option 2 · Version 3.x in Terminal (Claude Code or Headless Plugin)**  
+  The exact same modern core, calculation tools, and level of automation, but the interaction is text-based in the console. Installed with the `--terminal` flag (or via the Claude Code plugin).
+  * **Requirements:** The same subscriptions and REW beta with API enabled, but without the graphical UI.
+  * **Pros:** Maximum execution speed, zero GUI overhead, ideal for console lovers. Projects are 100% compatible with the graphical TCC app.
 
-* 🏆 **Option 3 · The 2.x Line (The Proven Champion)**
-  The stable plugin for Claude Code, permanently locked on version `v2.8.3` (branch `2.x`). Tuned with this exact algorithm, the author's own car took four EMMA and AYA awards in 2026.
+* 🏆 **Option 3 · The 2.x Line (The Proven Champion)**  
+  The classic plugin for Claude Code, locked on version `v2.8.3` (branch `2.x`). Tuned with this algorithm, the author's car took awards in 2026 at EMMA and AYA championships.
   * **Requirements:** Paid Claude Pro, REW beta with API enabled, working in the terminal.
-  * **Pros:** A time-tested, competition-proven, absolutely stable algorithm. It receives only critical bug fixes, with no new features added by design.
-  * **Cons:** No automatic state tracking by the machine (everything is managed manually in text Markdown files), no "Desk-First" approach, and no modern calculation tools.
+  * **Pros:** A fixed, competition-proven algorithm. Receives only critical bug fixes, with no new features added.
+  * **Cons:** Manual state tracking in text Markdown files (`dsp-state-current.md`), no "Desk-First" automated virtual prediction, and no modern calculation tools.
 
-* 🌐 **Option 4 · Web Chat (No Software Installation)**
+* 🌐 **Option 4 · Web Chat (No Software Installation)**  
   A fully manual, step-by-step tuning workflow via the [manual_step-by-step branch](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step).
   * **Requirements:** Free Google AI Studio or any web chat with an AI of your choice.
-  * **Pros:** Entirely free. Requires no software or developer tool installations on your computer. Perfect for getting acquainted with the logic of the method.
-  * **Cons:** Every step is executed manually (copying prompts, exporting text files from REW yourself), no API integration, and no automatic verification of calculations by local scripts.
+  * **Pros:** Entirely free. Requires no software or developer tool installations on your computer.
+  * **Cons:** Every step is executed manually (copying prompts, exporting text files from REW yourself), no API integration, and no verification of calculations by local scripts.
 
 ---
 
 ### Which option should I choose?
 
-* **You want maximum automation and graphics:** Choose **Option 1 (TCC)**.
-* **You prefer the console without extra software:** Choose **Option 2 (3.x Terminal)**.
-* **You want proven championship stability:** Choose **Option 3 (2.8.3)**.
-* **You want to test the logic for free:** Choose **Option 4 (Web Chat)**.
+* **You want maximum automation and visual feedback:** Choose **Option 1 (TCC)**.
+* **You prefer the console and maximum speed:** Choose **Option 2 (3.x Terminal)**.
+* **You want the legacy competition-proven plugin:** Choose **Option 3 (2.8.3)**.
+* **You want to test the logic for free without local software:** Choose **Option 4 (Web Chat)**.
 
 > [!NOTE]
-> You are not locked into a single choice: projects of the 3.x line open seamlessly in both the console and the graphical TCC program, and the transition from version 2.x to 3.x is fully automated.
+> You are not locked into a single choice: projects of the 3.x line open seamlessly in both the console and the graphical TCC program.
 
 ---
 
@@ -108,10 +108,10 @@ The standard automatic plugin update will not transition you to version 3.x with
 git clone -b 2.x https://github.com/ayukhno/autosound-tuning-skill.git ~/autosound-2x
 ```
 
-Then, run these two commands inside Claude Code:
+Then run these two commands in a terminal:
 ```bash
-/plugin marketplace add ~/autosound-2x
-/plugin install autosound-tuning
+claude plugin marketplace add ~/autosound-2x
+claude plugin install autosound-tuning
 ```
 Now your plugin points to your local folder. You can update it whenever needed with a simple `git -C ~/autosound-2x pull`.
 
@@ -119,27 +119,28 @@ Now your plugin points to your local folder. You can update it whenever needed w
 
 ### Switching from 2.x to 3.x
 
-Only one such plugin can be active in the system at a time. Before installing version 3.x, make sure to uninstall the old 2.x version in Claude Code:
+Only one such plugin can be active in the system at a time. Before installing version 3.x, make sure to uninstall the old 2.x version (in a terminal):
 
 ```
-/plugin uninstall autosound-tuning
-/plugin marketplace remove autosound-tuning-skill
+claude plugin uninstall autosound-tuning
+claude plugin marketplace remove autosound-tuning-skill
 ```
 
-After installing the new version 3.x, you can migrate the current state of the car (active crossover filters, delays, levels, EQ, and DSP profile) into the new format using the automatic migrator:
+After installing version 3.x, you can migrate an existing car project into the new machine format using the automatic migrator:
 
 ```sh
 python3 ~/.claude/skills/.autosound-tuning-src/skills/autosound-tuning/rew_tool/state/migrate.py <path-to-old-project> --into <path-to-new-project>
 ```
+*(Note: verify channel mappings and speaker specs after running the migration).*
 
 ---
 
 ### Main changes in 3.x
 
-* 📦 **Project as a Data Structure:** All system parameters are saved in `project.json` and `process-state.json`. The AI reads precise machine facts instead of trying to recall them from the chat history.
-* 🛋️ **The "Desk-First" Approach:** Instead of many trips to the car — **one session for the full acoustic capture** (Phase 0) and **one short one to verify** (Phase 3). All further analysis, crossover frequency calculations, phase alignment, and equalizer setup are performed at your desk based on a highly accurate virtual prediction.
-* 🧮 **Mathematical Verification:** Special local scripts analyze curves against the minimal phase loss criterion, limit equalizer Q-factor based on spatial measurement variance, and automatically detect microphone timing errors.
-* 🛑 **Automatic Refusal:** If input measurements are contradictory, the microphone shows too high a timing error, or channels are missing, the system halts calculations and rejects the measurement round to prevent inaccurate or speaker-damaging results.
+* 📦 **Project as a Data Structure:** All system parameters are saved on disk in `project.json` and `process/process-state.json`. The AI reads machine facts from disk rather than relying on chat memory.
+* 🛋️ **The "Desk-First" Approach:** Instead of many trips to the car — **one disciplined session for the acoustic capture** (Phase 0) and **one short verification visit** (Phase 3). All analysis, crossover calculations, phase alignment, and EQ design are performed at your desk.
+* 🧮 **Mathematical Verification:** Dedicated local Python scripts analyze curves against minimal phase loss, evaluate impulse arrival start, and check microphone timing stability.
+* 🛑 **Structured Gateways:** If input measurements show excessive timing drift, missing channels, or violated safety limits, the system stops and names the problem before proceeding.
 
 ---
 
@@ -149,15 +150,15 @@ python3 ~/.claude/skills/.autosound-tuning-src/skills/autosound-tuning/rew_tool/
 
 We are building an **intellectual exoskeleton** for sound tuning. The human (Arbiter) always remains the key link — listening to the system, judging soundstage depth, height, and stability, and making the final decisions.
 
-The AI handles the routine calculations and cabin physics: it analyzes phases, computes precise time delays at the crossover joins, and controls REW via the API, freeing up your time for the creative part of listening to music.
+The AI handles routine calculations and cabin acoustics: it analyzes impulse arrivals, phase curves, computes time delays at crossover joins, and interacts with REW via the API, freeing up your time for the creative part of listening to music.
 
 ---
 
 ### Why is this a specialized skill and not a regular chat?
 
-* **Eliminating Memory Drift:** Any standard AI chat begins to forget initial values, mix up volume levels, or confuse crossover frequencies after a few hours of conversation. Our system saves the current project state on your disk in `project.json`. The AI reads this file with every new query — its memory is not "recalled," but securely loaded from disk.
-* **Specialized Domain Knowledge:** The skill embeds strict safety rules for tweeter protection, phase alignment algorithms, preconfigured target curves, and cabin acoustics analysis logic that general AI models know nothing about.
-* **Local Processing via REW API:** Raw measurement data (thousands of points per curve) are processed by local Python scripts in milliseconds. The AI receives only a concise mathematical summary in the chat, which eliminates manual copy-paste errors and saves your token budget.
+* **State Saved on Disk:** A standard AI chat forgets initial values, confuses volume levels, or alters crossover frequencies over a long session. Our system writes project state to disk. The AI reads this file on every step — its context is grounded in disk state, not chat buffer memory.
+* **Specialized Acoustic Domain Knowledge:** The skill embeds strict safety rules for speaker protection, phase alignment logic, preconfigured target curves, and cabin acoustics heuristics that general AI models do not possess.
+* **Local Processing via REW API:** Raw measurement data (thousands of points per curve) are processed locally by Python scripts in milliseconds. The AI receives only concise mathematical summaries in the chat, saving time and token budget.
 
 ---
 
@@ -165,57 +166,55 @@ The AI handles the routine calculations and cabin physics: it analyzes phases, c
 
 | Phase | Where it takes place | What is being done | Stage Output |
 | :--- | :--- | :--- | :--- |
-| **−1 Preparation** | at the desk | Entering car parameters, speaker details, DSP capabilities, and selecting a target curve. | `project.json` and configuration files created. |
-| **0 Capture** | in the car (1 time) | Measuring each speaker individually with **protective filters only** (HPF); sweeps and moving-mic RTA. | A single, fully verified, high-quality measurement round. |
-| **1 Fundament** | at the desk | Your crossover wishes in your own words, checked against the hard limits; the crossovers as at most three variants — the best the maths finds and the ones built from your wishes, each with its cost; a coarse per-driver EQ; levels, delays and polarities computed with it; the sums predicted and described — you choose. | Base system tuning set up in the version registry. |
-| **2 Equalizer** | at the desk | The second part of EQ, in **packages** and in this order: left/right pairs per band → the junctions of each side → sub with mids → each side whole → everything together → the centre → the rear. Default is cuts only, max 6 bands per channel. Each package is a single "yes/no" decision and a new registry version. | Ready-to-import configuration files for your DSP. |
-| **3 Verdict** | in the car (short) | Uploading parameters to DSP. Verification check automatically verifies if real measurements match the mathematical prediction. | A fully verified and locked technical tune. |
-| **4 Listening** | in the car | Test tracks (EMMA/AYA discs, CarMus, Chesky) and a "what to listen for" cheat sheet. If something booms or sounds harsh, the skill lists suspects and fixes band by band in A/B tests (max 3 rounds). | Live listening verdicts linked to versions. |
-| **5 Variations** | desk / in the car | Setting up additional presets (for different music genres, center channel, etc.) without altering the technical base. | Additional sound presets in the system. |
-
-> [!NOTE]
-> If real measurements in Phase 3 deviate from the mathematical prediction, the system automatically rolls back a step and switches to the classic, iterative step-by-step tuning algorithm.
+| **−1 Preparation** | at the desk | Entering baseline setup (speaker channels, DSP outputs, DSP profile, mic, reference seat). About 17 answers up front; the rest is asked by the phase that needs it. | `project.json` and configuration files created. |
+| **0 Capture** | in the car (1 time) | Measuring each speaker with **protective filters enabled** (sweeps on tripod `(sw)` and moving-mic `(rta)`). Finalizing target curve after capture. | Verified baseline measurement round and active target curve. |
+| **1 Fundament** | at the desk | You describe your crossover wishes in your own words, and they are checked against the hard limits. The AI offers at most three crossover variants — the best the maths finds and the ones built from your wishes, each with its cost — and you choose. Driver resonances and a coarse per-driver EQ are handled here; levels, polarities and delays are read by hand from the start of each impulse; the sums are predicted and described. | Base system tuning in version registry. |
+| **2 Equalizer** | at the desk | The second part of EQ, in **packages** and in this order: left/right pairs per band → the junctions of each side → sub with mids → each side whole → everything together → the centre → the rear. Default is **cuts only**, max 6 bands per channel. Each package is a single "yes/no" decision and a new registry version. | Ready-to-import EQ configuration for DSP. |
+| **3 Verdict** | in the car (short) | Uploading parameters to DSP. Verification sweep automatically verifies if real measurements match mathematical predictions. Mandatory listening assessment. | A fully verified, locked technical tune. |
+| **4 Listening** | in the car | Test tracks (EMMA/AYA discs, CarMus, Chesky) and a "what to listen for" cheat sheet. If something booms or sounds harsh, the skill lists suspect bands and tests them one at a time in A/B (three suspects × three rounds, then stop). | Listening verdicts linked to versions. |
+| **5 Variations** | desk / in the car | Setting up additional presets (different music genres, alternate tuning flavor) on top of the technical base. | Additional sound presets in DSP. |
 
 ---
 
 ### What does the method categorically refuse to do?
 
-* **Writing parameters directly to your DSP** — entering values into the processor software always remains on your side.
-* **Calculating delays based on a single measurement** — a minimum of 4 independent arrival-time evaluations is required.
-* **Boosting frequencies in acoustic nulls (cancellation zones)** — these dips are caused by cabin wave interference, not the speaker itself. Smoothing them with EQ boosts is **physically impossible**: nothing changes at the listening position, while the speaker and amplifier get heavily overloaded. Dips that are safe to boost are distinguished by the system using *Excess phase* analysis in REW — only minimal-phase regions are corrected.
-* **Working with low-quality measurements** — a detected microphone timing drift (temperature drift) or missing protective filters leads to immediate rejection of the entire measurement round.
+* **Writing parameters directly into your DSP** — entering values into the processor software always remains your action.
+* **Calculating delays based on auto-delay tools or cross-correlation** — acoustic delays are inspected manually from the initial rise of the impulse response ($t_0$). Auto-delay estimation tools in REW are strictly forbidden.
+* **Boosting frequencies in acoustic nulls (cancellation zones)** — cancellation dips are caused by boundary reflections, not the speaker itself. Filling them with EQ is futile: a boost only loads the amplifier and speaker and changes nothing at the listening position. The method caps any boost at +6 dB, and a dip that would need more is almost certainly a cancellation. Dips that are safe to correct are identified using *Excess phase* analysis in REW.
+* **Proceeding with compromised measurements** — detected timing drift between session control sweeps or missing protective filters will be flagged before proceeding.
 
 ---
 
 ### Which AI models are officially supported?
 
-* 🧠 **Primary Model (Generator):** Claude Opus (configured with `xhigh` effort level for maximum reasoning).
-* 👁️ **AI Reviewer (Critic):** Gemini Pro (High).
+* 🧠 **Primary Model (Generator):** **Claude Opus** (configured with `xhigh` effort level; `max` for complex phase alignment).
+* 👁️ **AI Reviewer (Critic):** **Gemini Pro (High)** via Google Antigravity (`agy`) or direct API key.
+* 🛠️ **Other reviewers:** TCC's picker also offers Codex (and, with `--with-omp`, other models) for the reviewer's role. The Generator stays Claude.
 
-*As of August 2026.* AI technologies are evolving rapidly. If you are reading this much later, verify current recommendations for equivalent models.
+*As of September 2026.* Model names change fast. If one named here is refused (for example, `agy` answers that the model is not supported in your location), pick another from `agy models`.
 
 > [!IMPORTANT]
-> **Do not lower Claude's effort level below `xhigh`.**
-> Weaker models or lower effort levels won't report errors — they will just silently agree with whatever you do and invent technically impossible parameters.
+> **Do not lower Claude's effort level below `xhigh`.**  
+> Weaker models or lower effort levels will not report errors — they quietly agree with incorrect inputs, hallucinate impossible acoustic parameters, or miss phase cancellation.
 
 ---
 
 ### Subscription Options and AI Budget
 
-* **Option 1 (Recommended Basic): Claude Pro ($20/mo) + free Gemini as Critic**
-  The best balance of reliability and cost. The critic runs through Google's `agy` with your Google account, or through a free API key from Google AI Studio. The Claude Pro subscription can be cancelled as soon as you finish tuning your car.
-* **Option 2 (Budget Compromise): Gemini Only ($10 prepay on Google Cloud)**
-  Extremely inexpensive, but requires you to manually verify every single digit and regularly clear chat history with the `/clear` command before each new phase, as there is no independent critic to supervise.
-* **Option 3 (Professional): Claude Pro ($20) + paid Gemini Cloud API**
-  Completely free of any rate limit constraints or quota exhaustion. Optimal for professional, high-volume tuning of multiple vehicles.
+* **Option 1 (Recommended): Claude Pro ($20/mo) or Max + free Gemini via Antigravity (`agy`)**  
+  The best balance of reliability and cost. The reviewer runs via Google's `agy` CLI signed in with your Google account. A flat subscription covers your sessions without a per-token meter, and it can be cancelled as soon as you finish tuning your car.
+* **Option 2 (Pay-as-you-go API):**  
+  Running the full tuning cycle solely through pay-as-you-go API tokens adds up quickly. The author's own measurement: Phases 0–2 alone, run through the pay-as-you-go Gemini API, cost about $20 — before any listening rounds. A fixed monthly subscription is noticeably more cost-effective.
+* **Option 3 (Direct Gemini API Key):**  
+  If Antigravity CLI quotas are exhausted, a free or paid API key from Google AI Studio can be used as a fallback. The key goes into the OS keystore (see [Fallback Option](#fallback-option-direct-gemini-api-key)).
 
 ---
 
 ### Why are actual token costs lower than expected?
 
-1. Local Python scripts compress thousands of REW measurement points into short text summaries. Raw graphs are never sent to the chat.
-2. The entire project history is saved on disk, so the AI does not need to read the entire chat from scratch for every query.
-3. The sliding window principle is used — only data related to the currently active phase is loaded. You pay for **decisions**, not data transfer.
+1. Local Python scripts compress thousands of REW measurement points into concise mathematical summaries. Raw graphs are never dumped into chat.
+2. The project state lives on disk, so the AI does not re-read entire conversational history on every query.
+3. The sliding window principle is used — only data related to the currently active phase is loaded.
 
 ---
 
@@ -223,7 +222,7 @@ The AI handles the routine calculations and cabin physics: it analyzes phases, c
 
 ### Automatic Installation
 
-You will need a laptop, a measurement microphone, a DSP processor, and a paid **Claude Pro or Max** subscription.
+You will need a laptop, a measurement microphone, a DSP processor in the car, and a paid **Claude Pro or Max** subscription.
 
 <details>
 <summary><b>Instructions for macOS</b></summary>
@@ -233,19 +232,19 @@ You will need a laptop, a measurement microphone, a DSP processor, and a paid **
    ```bash
    curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.61/install.sh | bash
    ```
-3. On macOS, if Apple's Command Line Tools (git) are missing, **Apple's own installer window** opens once — one click there, and the script waits for it. **The script itself never asks for your password** and contains no `sudo`; anything a password is needed for, macOS asks for in its own dialog. Wait 10–20 minutes.
+3. If Apple's Command Line Tools are missing, Apple's official installer window opens once — click Install. The script itself never asks for your password. Wait 10–20 minutes.
 
 </details>
 
 <details>
 <summary><b>Instructions for Windows</b></summary>
 
-1. Open **Windows PowerShell** (press the `Windows key` → type `powershell` → press `Enter`).
+1. Open **Windows PowerShell** (press Start → type `powershell` → press `Enter`).
 2. Paste the following command and press `Enter`:
    ```powershell
    irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.61/install.ps1 | iex
    ```
-3. If Git is missing, click **Yes** to allow installation. The script will also create a convenient **REW (API on)** shortcut on your Desktop.
+3. If Git is missing, allow its installation. The script will also create a **REW (API on)** shortcut on your Desktop.
 
 </details>
 
@@ -253,31 +252,34 @@ You will need a laptop, a measurement microphone, a DSP processor, and a paid **
 
 ### Where are the components installed?
 
-All files are stored strictly within your user profile:
+All files are stored within your user profile:
 
 | Component | Installation Path | Purpose |
 | :--- | :--- | :--- |
 | **Claude Code** | Official Anthropic directory | The main AI assistant guiding the process |
 | **Tuning Method** | `~/.claude/skills/.autosound-tuning-src`, linked as `~/.claude/skills/autosound-tuning` | The method's checkout, and the name Claude Code finds it under |
-| **Python 3.12** | `~/.local/bin/python3` (through `uv`) | Runs the method's tools |
+| **Python 3.12** | `~/.local/bin/python3` (through `uv`) | Runs the method's local tools |
 | **Autosound TCC** | User folder & Desktop shortcut | The graphical app and an isolated Python 3.12 environment |
-| **`agy` tool** | User profile | Google CLI tool for fast background communication with the Gemini Critic |
-| **Reviewer config** | `~/.config/autosound/critic-env` (`%APPDATA%\autosound\critic-env` on Windows) | The reviewer's model and, if you use one, the API key — outside every project |
-| **`gh`, `omp`** | User profile — only when asked (`--github`, `--with-omp`) | Project backup to GitHub; models other than Claude in the app |
+| **`agy` tool** | User profile | Google CLI tool for fast communication with the Gemini Critic |
+| **Reviewer config** | `~/.config/autosound/critic-env` (`%APPDATA%\autosound\critic-env` on Windows) | The reviewer's model and optional API key — outside every project |
+| **`gh`, `omp`** | User profile — only when asked (`--github`, `--with-omp`) | GitHub backup helper; alternative models |
 
 ---
 
 ### First Launch and Account Login
 
-1. **Sign-ins at the end of the install:** the installer signs you in to Claude (log in with your paid account in the browser and click **Authorize**), then offers the Gemini reviewer's own sign-in through `agy` (Enter signs in, `s` skips — `agy` in a new terminal does it later), and GitHub when `gh` is installed.
-2. **Turn on REW's API:** *Preferences → API*, tick **Start the API when REW starts** and press **Start server** — or on Windows start REW from the **REW (API on)** shortcut on your Desktop.
-3. **Start Working:** Create an empty folder for your car files (e.g., `MyCarTuning`). Open it in **Autosound TCC** (via the *Browse…* button; AI main: Claude Opus (SDK), AI critic: Gemini Pro (High)) or in a new terminal (`cd path` → type `claude`) and write in the chat: **"tune a new car from scratch"**. The AI will start asking questions and lead you by the hand.
+1. **Sign-ins at the end of install:** The installer signs you in to Claude (log in with your account in the browser and authorize), offers Gemini sign-in through `agy` (Enter signs in, `s` skips), and GitHub if `gh` is installed.
+2. **Turn on REW's API:**  
+   *Note: REW must be the beta version (current release V5.31.3 and earlier have no API).*  
+   Go to *Preferences → API*, tick **Start the API when REW starts**, and click **Start server** (port `4735`). On Windows, start REW from the **REW (API on)** shortcut.
+3. **Start Working:** Create an empty folder for your car (e.g., `MyCarTuning`). Open it in **Autosound TCC** (select Claude Opus and Gemini Pro) or in a terminal (`cd MyCarTuning`, then `claude`), and type in the chat: **"tune a new car from scratch"**.
 
 ---
 
 ### Updating, Locking Version, and Uninstallation
 
-* **Updating:** Simply run the installation command again. The script will automatically download the latest tag `v3.*` (this is a pre-release, not a stable line — stable is 2.8.x) and won't affect your project files.
+* **Updating the skill:** You can update the skill directly inside TCC, or simply re-run the installation command in a terminal. The script downloads the newest `v3.*` tag (the `v3.0.*` tags are pre-releases until 3.1.0; the competition-proven stable line is 2.8.x) and does not touch your project files.
+* **Updating TCC:** TCC's in-app update button provides the update command to run in terminal (a running application cannot overwrite its own executable).
 * **Options:** they go after `bash -s --` on macOS and after the `& ([scriptblock]::Create((irm …)))` form on Windows (both shown in the [README](README.md#how-to-install-and-start-version-3x--beta)): `--terminal` / `-Terminal` (no app), `--github` / `-GitHub`, `--with-omp` / `-WithOmp`, `--no-reviewer` / `-NoReviewer`, `--dry-run` / `-DryRun`.
 * **Locking Version:** `--skill-ref` and `--tcc-ref` (`-SkillRef` and `-TccRef` on Windows) pin the method and the app to the versions released together — quote the two as a **pair** or not at all; a mixed pair is untested.
 * **Uninstallation:** Run the installer with `--uninstall` (`-Uninstall`); `--all` also removes uv, Claude Code and `~/.claude`, and `agy`/`gh`/`omp` when the installer put them there — it asks first. Your project folders are never deleted.
@@ -288,45 +290,55 @@ All files are stored strictly within your user profile:
 
 ### What is it and do I need it?
 
-The [TCC](https://github.com/ayukhno/autosound-tcc) app lets you work comfortably in a graphical window on macOS and Windows. You see the system tree, REW graphs, the step-by-step plan, and the AI chat on a single screen. The program is optional — you can fully tune a car via the Claude Code terminal, as all project data is saved in standard machine files on your disk. The app is younger than the tuning method itself and is currently in beta status.
+The [TCC](https://github.com/ayukhno/autosound-tcc) app lets you work in a graphical window on macOS and Windows. You see the system tree, REW graphs, step-by-step plan, and AI chat on a single screen. The app is optional — you can tune a car entirely via terminal, as all project data is saved in standard machine files on disk.
+
+📘 [TCC in eight screens (EN)](https://github.com/ayukhno/autosound-tcc/blob/main/docs/guide/QUICK-GUIDE.md) · [The TCC window, panel by panel (EN)](https://github.com/ayukhno/autosound-tcc/blob/main/docs/guide/REFERENCE.md) · [The house curve in TCC (EN)](https://github.com/ayukhno/autosound-tcc/blob/main/docs/guide/HOUSE-CURVE.md)
 
 ### Working with Two Windows (Terminal + Graphics)
 
-The app and the terminal access the exact same project files. You can switch freely between them: any steps or version configurations created in the console are immediately visible in the graphical UI and vice versa.
+The app and the terminal access the exact same project files. You can run your interactive session in terminal while keeping TCC open alongside as a real-time visual monitor: it displays the speaker tree, curve overlays, and version registry changes as they happen.
 
 ### AI Models in the App
 
-The app uses your paid Claude subscription (via the official Anthropic SDK) and your free Google account via the local `agy` tool for the AI reviewer. Models other than Claude come through **`omp`**, which the installer adds **only when asked** (`--with-omp` / `-WithOmp`; the terminal-only install never brings it). It is billed per use, and nothing goes through it unless you pick such a model.
+The app uses your Claude subscription (via Anthropic SDK) and your Google account via `agy` for the AI reviewer. Model choices in TCC reflect recommended combinations. Alternative models via `omp` are only added if requested (`--with-omp`).
 
 ### Updates and Bug Reporting
 
-The app updates automatically along with the mathematical core. You can check current versions in *Diagnostics → Installation*. Please report UI bugs using the *Report a problem* button on TCC's GitHub page, and tuning logic bugs on the skill's repository.
+TCC checks for skill and app updates. Report UI bugs on the [TCC GitHub repository](https://github.com/ayukhno/autosound-tcc/issues), and tuning math issues on the [skill repository](https://github.com/ayukhno/autosound-tuning-skill/issues).
 
 ---
 
 ## Standalone AI Reviewer Gemini/Antigravity
 
-The double-verification cycle (Generator ↔ Gemini Critic) catches errors a single model makes and does not see. The critic catches things the primary AI misses. It runs automatically in the background via a local script — no manual copying is needed. What is optional is this *automatic channel*, not the second opinion itself: with no channel set up you paste the package into another AI's chat by hand. Skipping the review entirely is the single biggest quality loss in the method.
+The two-AI review cycle (Generator ↔ Gemini Critic) catches mistakes a single model makes and does not see. It runs automatically in the background via a local script — no manual copying is needed. What is optional is this *automatic channel*, not the second opinion itself: with no channel set up you paste the package into another AI's chat by hand. Skipping the review entirely is the single biggest quality loss in the method.
 
 ### Installation for macOS and Windows (Recommended)
 
-The official **Antigravity CLI (`agy`)** from Google needs no API key: you sign in with your Google account in the browser.
+The official **Antigravity CLI (`agy`)** needs no API key — you authenticate in the browser with your Google account.
 
 1. **Installation:** The installer sets this up automatically. For manual installation, run:
    * *macOS:* `curl -fsSL https://antigravity.google/cli/install.sh | bash`
    * *Windows:* `irm https://antigravity.google/cli/install.ps1 | iex`
-2. **Login:** Run the `agy` command in a new terminal, log in in the browser with your Google account, then return to the console and type `/quit`.
-3. **Pick the reviewer's model** — there is no default. Put an id from `agy models` (the left column; a Pro `-high` tier) into the reviewer's config file, `~/.config/autosound/critic-env` (`%APPDATA%\autosound\critic-env` on Windows), as the line `AUTOSOUND_CRITIC_MODEL=gemini-3.1-pro-high`. The app sets it from its own picker.
-4. **Check:** `python3 ~/.claude/skills/autosound-tuning/scripts/autosound_ai.py doctor` names the model, the CLI and the key it found, makes one short live call, and prints the fix for anything wrong.
+2. **Login:** Run `agy` in a new terminal, log in in the browser with your Google account, then return to the console and type `/quit`.
+3. **Pick the reviewer's model** — there is no default. Put an id from `agy models` (the left column; a Pro `-high` tier) into the reviewer's config file, `~/.config/autosound/critic-env` (`%APPDATA%\autosound\critic-env` on Windows), as a line such as:
+   ```env
+   AUTOSOUND_CRITIC_MODEL=gemini-3.1-pro-high
+   ```
+   The app sets it from its own picker. If `agy` answers that the model is not supported in your location, pick another id from the list.
+4. **Check:**
+   ```bash
+   python3 ~/.claude/skills/autosound-tuning/scripts/autosound_ai.py doctor
+   ```
+   `doctor` names the model, the CLI and the key it found, makes one short live call, and prints the fix for anything wrong.
 
 ---
 
 ### Fallback Option: Direct Gemini API Key
 
-On Linux systems or if you exhaust your Antigravity quotas, you can use a free Gemini API key directly. With a key present the reviewer calls the API **first**, and `agy` only if that call fails.
+If `agy` is not available to you, or you exhaust its quotas, you can use a free Gemini API key directly. With a key present the reviewer calls the API **first**, and `agy` only if that call fails.
 
 1. Get a free API key at **[aistudio.google.com/apikey](https://aistudio.google.com/apikey)** — current keys start with `AQ.`.
-2. Store it once with the reviewer's own command. It asks for the key without showing it and keeps it in the macOS Keychain (on Windows, in a store only your login opens; elsewhere, in the reviewer's config file with mode 600). Not in a project folder, a shell profile or an environment variable: every program can read it there, and an app started from the Dock does not see it.
+2. Store it once with the reviewer's own command. It asks for the key without showing it and keeps it in the macOS Keychain (on Windows, in a store only your login opens; elsewhere, and whenever the store is unavailable, in the reviewer's config file with mode 600). A key line you write into `critic-env` by hand wins over the store. Never in a project folder, a shell profile or an environment variable: every program can read it there, and an app started from the Dock does not see it.
    ```bash
    python3 ~/.claude/skills/autosound-tuning/scripts/autosound_ai.py key set google
    # Windows: python3 "$HOME\.claude\skills\autosound-tuning\scripts\autosound_ai.py" key set google
@@ -343,11 +355,11 @@ A project-local `.critic-env` that carries a key and that git would take is refu
 
 ### Can I run the method entirely in Gemini?
 
-Yes, but as a manual run, not an automated installation. Tell your Gemini session (with file and terminal access):
+Yes, but as a manual run rather than an automated pipeline. Prompt your Gemini session:
 
 > Clone `https://github.com/ayukhno/autosound-tuning-skill`, read `skills/autosound-tuning/SKILL.md`, and follow that method as your operating instructions for this session.
 
-Because there is no sliding window mechanism there, Gemini may gradually lose precision during long sessions. The most stable free option is **Option 4** (ready-made step-by-step prompts for [Google AI Studio](https://aistudio.google.com/) on the [manual_step-by-step branch](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step)).
+Because there is no sliding window mechanism in standard web chat, precision can degrade over long sessions. The supported zero-cost option is **Option 4** ([manual_step-by-step branch](https://github.com/ayukhno/autosound-tuning-skill/tree/manual_step-by-step)).
 
 ---
 
@@ -355,35 +367,37 @@ Because there is no sliding window mechanism there, Gemini may gradually lose pr
 
 ### Phase Measurement: XLR Microphones vs. USB (UMIK-1/2)
 
-* **XLR Microphones (Behringer ECM8000, Beyerdynamic MM1, etc.):** Connected via an external sound card. They allow the use of a **physical loopback** — a cable connecting a card output back into a free input. This gives the PC a hardware-stable, sample-accurate time-of-arrival reference.
-* **USB Microphones (UMIK-1 / UMIK-2):** Connected directly to a USB port. They have no analog input, making a physical loopback cable impossible.
+* **XLR Microphones (Behringer ECM8000, Beyerdynamic MM1, etc.):** Connected via an external audio interface with a **hardware loopback cable** (an output patched straight back into a free input). This gives a hardware-stable, sample-accurate time-of-arrival reference (one sample ≈ 10 µs at 96 kHz).
+* **USB Microphones (UMIK-1 / UMIK-2):** Connected directly via USB. They have separate digital clocks from the audio interface and lack physical loopback, requiring an acoustic timing reference.
+* **Audio Connection:** Use a physical wire (AUX 3.5 mm, direct USB audio, or optical). **Avoid Bluetooth for sweeps:** wireless connections introduce packet jitter and variable latency that degrade acoustic timing reference accuracy.
 
 ---
 
 ### Can I measure phase with a UMIK-1?
 
-**Yes.** To get accurate phase data, use the **Acoustic Timing Reference** feature in REW. Before playing the sweep signal, the sound card plays a brief, high-frequency "chirp" through a selected speaker (usually the tweeter closest to the microphone), which serves as a temporal zero reference for the measured channel.
+**Yes.** Use the **Acoustic Timing Reference** in REW. Before playing the measurement sweep, REW plays a short, high-frequency "chirp" through the output you choose as the timing reference, and that chirp is the zero point for the measured channel.
 
 For detailed REW configuration for USB microphones, refer to the video guide: [Measuring Speaker Phase in REW](https://www.youtube.com/watch?v=El-kwZ5_nnU).
 
 > [!WARNING]
-> **Take all measurements in a single quick run and measure the first channel again at the end of the session!**
-> * **Temperature drift destroys accuracy:** The speed of sound depends directly on the cabin air temperature. A shift of just a few degrees offsets the sound's arrival time by fractions of a millisecond. This is highly critical for phase-aligning midrange and tweeter drivers at crossover points.
-> * **Drift accumulates with each measurement sweep:** A single speaker measured 6 times in a row over 18 minutes showed a delay shift of one sample (10 microseconds, corresponding to moving the mic by ~3.6 mm). The shift occurred due to executing sweeps, not just elapsed time.
-> * **Always make a control measurement of the first speaker at the end:** The input check in version 3.x compares these two runs and rejects the entire measurement session if it detects unsafe temperature drift or a system timing offset.
+> **Take measurements with mic on a tripod, and repeat the control sweep at the end!**
+> * **Cabin air temperature drift:** Sound speed shifts with cabin temperature. A few degrees change shifts arrival times by tens of microseconds.
+> * **Drift accumulates with each sweep:** one speaker measured 6 times in a row over 18 minutes shifted by one sample (10 µs, the same as moving the mic ~3.6 mm) — from running sweeps, not just from time passing.
+> * **Tripod placement:** Place the mic at ear height for the **reference seat** defined in the project, indexed to physical marks, and do not move it until the block is done.
+> * **Control sweep:** Measuring the opening channel (`ctl1`) and repeating it at the end (`ctl3`) lets the check name any timing drift before the round is closed; whether to retake is your call.
 
 ---
 
 ### Rules for Naming Measurements in REW
 
-Calculation tools look for correct charts strictly by their names in REW:
+Calculation tools find measurements strictly by their names in REW:
 
-* `m-L_01 (sw)` — channel `m-L` (left midrange), measurement series `01`, sweep measurement. A DSP state can have several series; the number is not the registry's version number either.
-* `m-L_01 (rta)` — moving-mic RTA measurement for the same speaker.
-* `sw_01 (sw)`, `w-R_01 (sw)`, `tw-L_01 (sw)` — subwoofer, right woofer (midbass), left tweeter respectively.
-* `L_01 (rta)`, `ALL_01 (rta)` — sum RTA measurement of the complete left side or the entire system.
-* `m-L p5_01 (sw)` — speaker measured at a spatial checkpoint `p5` (alternatively named `m-L_01 (sw) p5`).
-* `m-L-ctl1_01 (sw)` and `m-L-ctl3_01 (sw)` — timing control: the first opens the speaker series, the second closes it (can be named `m-L_01ctl` and `m-L_01rep` in the car).
+* `m-L_1 (sw)` — channel `m-L` (left midrange), measurement series `1`, sweep measurement. A DSP state can have several series; the number is not the registry's version number either.
+* `m-L_1 (rta)` — moving-mic RTA measurement for the same speaker.
+* `tw-L_1 (sw)`, `w-R_1 (sw)`, `sw_1 (sw)` — left tweeter, right woofer (midbass), subwoofer.
+* `L_1 (rta)`, `ALL_1 (rta)` — sum RTA of the complete left side or the entire system.
+* `m-L p5_1 (sw)` — the speaker at spatial checkpoint `p5` (also read as `m-L_1 (sw) p5`).
+* `m-L-ctl1_1 (sw)` and `m-L-ctl3_1 (sw)` — timing control: the first opens the speaker series, the second closes it; there is no `ctl2` (typed in the car as `m-L_1ctl` and `m-L_1rep`, they mean the same).
 * `m-L_final (sw)` — verification measurement after saving final parameters.
 * `w-L (imp)` — impedance measurement of a driver; it is not tied to a DSP state and carries no series number.
 * Text after the method makes it **another measurement of the same series**: `r-L_17 (sw) noXO` is not `r-L_17 (sw)`.
@@ -398,18 +412,21 @@ The complete measurement flow is described in [`references/phases/capture-sessio
 
 > [!IMPORTANT]
 > **REW must remain open during the entire process:** the skill reads curves directly from the active REW window via the API, not from files exported to disk.
+>
+> **Protective filters STAY ON during capture:** High-pass filters (HPF) on fragile tweeters and midranges must remain active in the DSP to protect them during measurement sweeps.
 
-A capture session is a measurement of each individual speaker using **protective filters only** in the DSP (a High-Pass / HPF at a safe frequency for midranges and tweeters to prevent damage during loud sweeps). No active crossovers, delays, or EQ should be turned on — we need the pure physical response of the driver in the car's cabin. Calculation scripts automatically "subtract" the influence of the protective filter before calculating the target crossover, ensuring perfect phase prediction accuracy.
-
-*Important:* Mute all inactive channels directly in your DSP software. Keep the sound card and radio volume absolutely stable throughout the session.
+* **Protective Filter Rule:** The protective HPF must be **$\ge 1.1 \times Fs$ (recommended up to $1.5 \times Fs$), with a slope of $\ge 24$ dB/oct** (LR4 or BW4). If $Fs$ is unknown, look up the manufacturer datasheet value and state it in the project.
+* **Active filters disabled:** Operating EQ (empty), delays (set to 0), and polarities (normal) must be clean. Record each protective filter on the capture round (the app asks; in a terminal the session records it): the tools then take it back out of that solo before reading joint phase. A channel recorded as `OFF` is read as it is.
+* **Levels in dBFS:** Set sweep volume so the peak of the loudest driver (subwoofer) is $-5\dots-10$ dBFS, and the quietest driver is well above the ambient cabin noise floor. Check noise levels with engine off and with engine running. Mute all inactive channels in your DSP software, and keep the sound card and head-unit volume unchanged for the whole session.
+* **Midbass sweep sound:** A midbass measured without an LPF will produce a harsh, raspy sound at high frequencies during the sweep. This is normal **cone breakup** at the top of its range; the driver is not damaged.
 
 ---
 
 ### What are positions p1…p9 and control measurement ctl for?
 
-* **Determining the nature of dips and peaks:** Real speaker cabinet resonances remain stable on the graph when moving the microphone by a few centimeters (they are safe to fix with EQ). Acoustic nulls caused by cabin reflections shift wildly on the frequency axis — boosting them with EQ is useless and dangerous, so the AI ignores such regions.
-* **Calculating EQ Q-factor:** The spread of measurements at positions `p1…p9` around the driver's head allows precise calculation of the safe equalizer Q-factor limit.
-* **Compensating for timing drift:** Repeated measurements of the central `ctl` position allow the system to mathematically compensate for physical sound card timing drift during the session.
+* **Telling driver and mounting resonances from cabin reflections:** Resonances remain stable when shifting mic position slightly (safe to EQ). Cabin reflection nulls shift frequency wildly — boosting them is futile.
+* **Calculating EQ Q-factor limits:** Spatial variance across `p1…p9` determines safe equalizer Q-factor bounds.
+* **Monitoring timing drift:** The opening and closing `ctl` sweeps detect clock or temperature drift during the session.
 
 ---
 
@@ -417,12 +434,14 @@ A capture session is a measurement of each individual speaker using **protective
 
 ### How do I create and configure my own target curve?
 
-There is no single "correct" target curve — it is your initial working hypothesis, which you will adjust by ear after getting the baseline technical tune.
+A target curve is an initial tonal hypothesis that you refine by ear after establishing the baseline technical tune.
 
-1. **Let the AI calculate it:** Describe your favorite music genres, preferred listening volume, and requests regarding famous target curves (e.g., *“take ResoNix Accurate as a base, but add +2 dB sub-bass and soften high frequencies”*) or sound complaints (*boomy, harsh, lack of space*). The script will generate the curve file, save it to the project folder, and compute individual target curves for each driver.
-2. **Draw it manually:** Go to the free **Nono Tuning Tool** website ([nonotuningtool.com](https://nonotuningtool.com) → *Custom Target Curve* section), draw your curve with a mouse, export the `.txt` file, and save it to your project folder.
-3. **Compare target graphs:** Use our interactive online visualizer:
-   **[Open Target Curve Visualizer online](https://ayukhno.github.io/autosound-tuning-skill/_curve-visualizer.html?lang=en)**. Here you can compare your curve directly with SQ-Comp-Ref, ResoNix, Audiofrog, Harman, Jazzi, or Whitledge standards. Right-clicking any point on the chart displays an explanation of that frequency range's sonic impact.
+1. **Select from established curves:** Choose from calibrated targets — SQ-Comp-Ref (the method's own), ResoNix, Audiofrog, Harman, Jazzi and Whitledge — by what you like to hear. The script `target_bands.py` calculates per-driver target shapes from your chosen curve and crossover points.
+2. **Draw manually:** Use the free [Nono Tuning Tool](https://nonotuningtool.com) (*Custom Target Curve* section) to shape a response and export a `.txt` target file.
+3. **Compare online:** Explore our interactive visualizer:  
+   👉 **[Open Target Curve Visualizer online](https://ayukhno.github.io/autosound-tuning-skill/_curve-visualizer.html?lang=en)**. Right-clicking any point on the chart explains what that frequency range does to the sound.
+
+📘 [The house curve in TCC (EN)](https://github.com/ayukhno/autosound-tcc/blob/main/docs/guide/HOUSE-CURVE.md)
 
 ---
 
@@ -430,41 +449,43 @@ There is no single "correct" target curve — it is your initial working hypothe
 
 ### Project Folder Structure and Backup
 
-A single folder on your disk contains complete documentation and configuration of your system:
+Your project directory stores the full configuration and tuning history of your vehicle:
 
 | File / Folder | Contents | Purpose |
 | :--- | :--- | :--- |
-| **`project.json`** | System specifications | Speaker channels, DSP outputs, DSP profile, microphone specs, and the active target curve. |
-| **`state/versions/` + `slots.json`** | Tuning version registry | Complete, chronological history of all crossovers, delays, volume levels, and EQ bands. |
-| **`process-state.json`** | Current technical status | Information on the active phase of the process and successfully verified measurements. |
-| **`autosound_context.md`** | Vehicle context and notes | Custom car audio dictionary, install features, and your listening notes. |
-| **`*.txt` / `*.json`** | Target curves and DSP exports | Configuration files for import into your DSP and target curve files for REW. |
+| **`project.json`** | System configuration | Speaker channels, DSP outputs, profile, mic specs, target curve. |
+| **`state/versions/` + `slots.json`** | Version registry | Chronological history of crossovers, delays, levels, and EQ. |
+| **`process/process-state.json`** | Process status | Active phase tracking and verification logs. |
+| **`autosound_context.md`** | Vehicle context | Car dictionary, install layout, cabin notes. |
+| **`*.txt` / `*.json`** | Curves & DSP exports | Target curves and generated EQ parameter files. |
 
 > [!IMPORTANT]
-> **Take care to back up these small text and JSON files.**
-> Extremely large REW `.mdat` measurement files (from 16 to 112 MB per file) do not need to be archived, as measurements can be redone at any time. For a free, private backup of the project folder to GitHub, install with `--github` (`-GitHub` on Windows) and ask the AI to back the project up — it knows what stays out (the sweeps).
+> **Preserve local `.mdat` copies:** The method requires keeping a local copy of REW `.mdat` files at technical sign-off and session completion. Large `.mdat` files (16–112 MB each) stay out of git; your local copies must always be preserved. For a free private backup of the project folder to GitHub, install with `--github` (`-GitHub` on Windows) and ask the AI to back the project up: it offers the repository, creates nothing without your yes, and knows what stays out.
 
 ---
 
 ### Compatibility with Processors and Filter Import to DSP
 
-The skill computes precise filter parameters and saves them to a file:
+> ⚠️ **Important:**  
+> The method calculates the filters. Delays and gains are always entered **manually** by the tuner, and so are crossovers, unless a paste tool takes them from the Extended export below. A file import carries only the **EQ**.
 
-* **Audiotec Fischer (Helix / MATCH / BRAX):** The processor family on which this method was designed and optimized. A ready-to-use Full EQ file is generated, which the official DSP PC-Tool imports with a single click for all channels simultaneously.
-* **Other DSP processors:** A standard export file in REW Generic format (up to 20 EQ bands) or an extended crossover file is created. For convenient semi-automatic entry of parameters using keyboard macros, use the free tool: [REW-EQ-CopyPaste-Assistant](https://github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant).
-* **Compatibility Check:** Before exporting, scripts automatically compare every computed filter against the real technical limits of your DSP model (available bands, sampling rate, filter types) and flag any deviations.
+* **Audiotec Fischer (Helix / MATCH / BRAX):** Generates a ready-to-import Full EQ file that DSP PC-Tool loads for all channels in one step.
+* **Other DSP Processors:** Exports REW Generic EQ files (20 slots), or Generic/Extended with the crossovers inline. For fast parameter entry into other DSP software via keyboard macros, use the free [REW-EQ-CopyPaste-Assistant](https://github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant).
+* **Compatibility Check:** Before exporting, scripts compare every computed filter against the limits of your DSP model (available bands, sampling rate, filter types) and flag any deviations.
+* **OEM Head Units:** The recommended practice is to **bypass** factory head units using a clean direct digital or analog input (DAP, USB, optical) into the DSP, rather than attempting to de-equalize factory tone and loudness processing.
 
 ---
 
 ### Working with Passive Crossovers (Tweeter + Midrange on one channel)
 
-A pair of speakers on a passive crossover is treated by the system as **a single shared channel**: it gets a single measurement, a shared delay, a shared volume level, and a single set of EQ bands.
+A pair of drivers sharing a passive crossover is treated as **a single shared DSP channel**: it receives one measurement, a shared delay, a shared gain, and one set of EQ filters.
 
-Everything else works as usual, and the combined frequency response is physically correct — including any phase issues at the passive crossover junction. What no software can do from the outside, however, is align time delays or phase between the tweeter and midrange **inside** that passive group. For that, a fully active (channel-by-channel) system is absolutely required.
+Everything else works as usual, and the combined response is physically correct — including any phase issues at the passive junction. What no software can do from the outside is align time or phase between the tweeter and midrange **inside** that passive group: for that, each driver needs its own DSP channel.
 
 ---
 
 ### Where can I find the full list of capabilities?
 
-A detailed overview of every capability and tool (with exact commands, abort conditions, development status, and scientific background) is located in the interactive Capabilities board:
-[`references/core/capabilities.md`](skills/autosound-tuning/references/core/capabilities.md). To get only the rows you need: `python3 ~/.claude/skills/autosound-tuning/rew_tool/capabilities.py find "phase"`.
+A detailed overview of every tool and command is located in the Capabilities board:
+[`references/core/capabilities.md`](skills/autosound-tuning/references/core/capabilities.md).  
+Filter commands with: `python3 ~/.claude/skills/autosound-tuning/rew_tool/capabilities.py find "phase"`.
