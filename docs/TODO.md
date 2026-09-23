@@ -1490,6 +1490,18 @@ at most five show unless `--verbose`, and the missing-title error names the coun
 The rest is a shape for every tool: a verdict block of at most five lines first, then the detail on request.
 That is a redesign of every tool's output, not a patch.
 
+## S-058 · The reviewer key through TCC on the other MacBook
+
+**Status**: open 2026-09-23 · waits for TCC's W-2 (`v0.1.43`) with hub #197 built · his step.
+
+The Arbiter wants the key checked through TCC, since TCC is where "the key in ~/.zshrc is not seen" came from.
+On this MacBook the move is done and checked (`key status`: keystore, AQ., 53; `doctor`: the key is live).
+On the other one, after TCC's release: update the skill to `v3.0.60` or later, then in a NEW Terminal tab run
+`autosound_ai.py key status`, then `key move-shell` (or `key set google`). Close any editor holding `~/.zshrc` first:
+nano saving an older buffer put the key back here once. Then open TCC from the Dock and check that its reviewer
+indicator reads the keystore (#197). Run one review. Until TCC's release, its own vendored skill reads the key only
+from `critic-env`, so the key stays there for that TCC.
+
 ## S-054 · W-2 · v3.0.60: released
 
 **Status**: done 2026-09-23 · `git -C skill tag --contains 03ba97c` → `v3.0.60`; PR #59 merged `--ff-only`, `scripts/tag-check.sh v3.0.60` → all 4 checks passed (the channel 14/14); milestone `W-2 · v3.0.60` closed with its 9 issues; hub #185 #186 #187 #192 #195 #199 #200 #201 closed with their proof lines · **left, his steps:** S-020 (the Windows VM run at v3.0.60), S-021 (the passenger-seat project on the Passat), the car role's hub #196; TCC's halves ride hub #197 #198 · was: waiting 2026-09-23
