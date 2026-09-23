@@ -217,7 +217,8 @@ reason. Eight packages.
   comparison across it by `verify_prediction`. The gain step is a machine SETTING (Channel/EQ Gain Resolution), recorded with
   `dsp_profile.py set-setting`; `apply.propose` names a trim off it, or asks for it.
 - **V — Phase 1's variants as a feature** (#38): the best, each wish as a whole variant and, with no wish, the
-  engine's ranked alternatives (an edge under a limit moved to the nearest allowed). Each is broken down by
+  engine's ranked alternatives (an edge under a limit moved to the nearest allowed). When no wish names a
+  crossover type, an LR24 base joins them (every junction re-tuned in LR24; the Arbiter, 2026-09-23). Each is broken down by
   four terms (tonal RMS against the target, |L−R| per band, the junction loss with its level step, ripple),
   and 2–3 are picked by three weightings, in their own order: no winner, ties called ties, and what the
   objective cannot see always said (`variant_front.py`).

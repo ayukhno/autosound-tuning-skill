@@ -228,7 +228,11 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
 - **1.7** **The variants as a TRADE-OFF FRONT** (issue #38, W-2): `resonalyze_engine.py run` ends with it.
   The best, each wish as a whole configuration and, with no wish, the engine's own ranked alternatives
   (`--alternatives N`, 3 by default; an edge under a limit is moved to the nearest allowed and said) are
-  each predicted from the set's solos. Each gets the same four terms from `variant_front.py`: tonal RMS
+  each predicted from the set's solos. **When no wish names a crossover type, an LR24 base is built too**
+  (the Arbiter, 2026-09-23: LR24 is always a good base, and the alternatives still need a look): every
+  junction re-tuned in LR24 alone around the best's corner, Auto delay over the whole chain. The engine
+  searches every family the device has, so the best may be a BE18 or a BW30, and the base is what it is
+  read against. A best that is LR24 everywhere already is the base, and the run says so. Each gets the same four terms from `variant_front.py`: tonal RMS
   against the target with the level removed (`--target FILE`, else the recorded curve), |L−R| per band,
   the level-normalised junction loss with each junction's level step, and ripple. Then 2–3 are picked by
   three weightings (tone / stage / junctions first) and shown in their own order, each with what it buys

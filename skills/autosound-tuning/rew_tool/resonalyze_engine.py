@@ -1170,8 +1170,6 @@ def alternative_variants(second, result_b, rerank, chain, count, channels=None, 
     """The engine's ranked pool (ranks 2..count+1) run as whole configurations -- the candidates a trade-off front
     is picked from when the tuner named no wish (issue #38). Same entry shape as `wish_variants`."""
     run = run or (lambda layout, path: run_engine(layout, path, dotnet))
-    best = junction_table(result_b)
-    best_delays = delay_map(result_b)
     out = []
     for row in ((rerank or {}).get("rows") or [])[1:count + 1]:
         entry = {"purpose": f"the engine's #{row['rank_engine']}", "lower": None, "upper": None,
@@ -1200,30 +1198,106 @@ def alternative_variants(second, result_b, rerank, chain, count, channels=None, 
             entry["not_built"] = f"the run wrote nothing (exit {rc}): {err.strip()[-200:]}"
             out.append(entry)
             continue
-        delay = result_c.get("autoDelayAfterRepairs") or result_c.get("autoDelay") or {}
-        if delay.get("overRange"):
-            entry["over_range"] = delay["overRange"]
-        table = junction_table(result_c)
-        entry["junctions"] = [{
-            "lower": lo, "upper": up, "cornerHz": (table.get((lo, up)) or {}).get("cornerHz"),
-            "afterDelayLossDb": (table.get((lo, up)) or {}).get("afterDelay") or {},
-            "deltaDb": {side: round(loss - (best.get((lo, up), {}).get("afterDelay") or {})[side], 2)
-                        for side, loss in ((table.get((lo, up)) or {}).get("afterDelay") or {}).items()
-                        if side in (best.get((lo, up), {}).get("afterDelay") or {})},
-            "wish": False} for lo, up in chain]
-        now = delay_map(result_c)
-        entry["delays"] = now
-        entry["delays_moved"] = {ch: {"was": best_delays[ch][0], "now": ms, "deltaMs": round(ms - best_delays[ch][0], 2)}
-                                 for ch, (ms, _) in now.items()
-                                 if ch in best_delays and ms is not None and best_delays[ch][0] is not None
-                                 and abs(ms - best_delays[ch][0]) >= 0.01}
-        entry["polarity_flipped"] = [ch for ch, (_, inv) in now.items()
-                                     if ch in best_delays and bool(inv) != bool(best_delays[ch][1])]
-        entry["checks"] = check_result({"autoCrossover": {"result": final_proposals(result_c)}}, layout, channels, xo) \
-            if channels is not None else []
-        entry["settings"] = final_proposals(result_c)
-        out.append(entry)
+        out.append(_read_whole(entry, result_c, layout, result_b, chain, channels, xo))
     return out
+
+
+#: The reference crossover type (the Arbiter, 2026-09-23): "LR24 as a base is always good, but the alternatives need a
+#: look (if the user did not set it)". The engine searches every family the device has, so its best may be a BE18 or a
+#: BW30; when no wish names a type, an LR24 configuration is built beside it and read by the same four terms.
+BASE_TYPE = ("LinkwitzRiley", 24)
+
+
+def type_was_set(rows):
+    """Whether the tuner named a crossover type: a wish with a family or a slope in it (a corner alone does not)."""
+    return any((r.get("wish") or {}).get("family") or (r.get("wish") or {}).get("order_db") for r in rows or [])
+
+
+def _is_base(edge):
+    return bool(edge) and edge.get("family") == BASE_TYPE[0] and int(edge.get("slopeDbPerOctave") or 0) == BASE_TYPE[1]
+
+
+def base_type_layout(second, result_b, chain, channels=None, xo=None):
+    """The LR24 base as a WHOLE configuration, or `(None, why)`.
+
+    The best's crossovers are the start, and every junction of the front chain is re-tuned in LR24 alone -- the corner
+    searched half an octave either side of the best's, from the fragile driver's floor up, as a repair is -- then Auto
+    delay runs over the whole chain. A device without LR24, or a best that is LR24 at every junction already, has no
+    base to add, and says so."""
+    fam, slope = BASE_TYPE
+    if xo is not None and slope not in (((xo.get("types") or {}).get("LR") or {}).get("orders_db_per_oct") or []):
+        return None, f"the device has no LR{slope}, so there is no LR{slope} base to read the best against"
+    settings = final_proposals(result_b)
+    by = {p_["block"]: p_ for p_ in settings}
+    if all(_is_base((by.get(up) or {}).get("highPass")) and _is_base((by.get(lo) or {}).get("lowPass"))
+           for lo, up in chain):
+        return None, f"the best is LR{slope} at every junction already: the base and the best are one configuration"
+    third = alternative_layout(second, result_b, settings, chain)
+    blocks = {b["name"]: b for b in third.get("blocks") or []}
+    repairs = []
+    for lo, up in chain:
+        current = _corner(by.get(lo), by.get(up))
+        floor = floor_hz(((blocks.get(up) or {}).get("channels") or {}).values(), channels or {}, xo) if channels else None
+        low = lattice(current / math.sqrt(2))
+        low = max(low, floor) if floor else low
+        high = max(lattice(current * math.sqrt(2)), lattice(low * math.sqrt(2)))
+        repairs.append({"lower": lo, "upper": up, "purpose": f"LR{slope} base",
+                        "tune": {"families": [fam], "slopes": [slope], "minHz": float(low), "maxHz": float(high)}})
+    third["repairs"] = repairs
+    return third, None
+
+
+def base_type_variant(second, result_b, chain, channels=None, xo=None, dotnet=None, out_dir=None, run=None):
+    """The LR24 base run as a whole configuration and read against the best: an entry in `alternative_variants`' shape
+    with `"base": True`, or one that says why none was built."""
+    run = run or (lambda layout, path: run_engine(layout, path, dotnet))
+    entry = {"purpose": f"LR{BASE_TYPE[1]} base (no type was set)", "lower": None, "upper": None, "edges": None,
+             "base": True}
+    layout, why = base_type_layout(second, result_b, chain, channels, xo)
+    if layout is None:
+        entry["not_built"] = why
+        return entry
+    rc, result_c, err = run(layout, os.path.join(out_dir or tempfile.mkdtemp(prefix="resonalyze-base-"), "4-base"))
+    entry["rc"] = rc
+    if result_c is None:
+        entry["not_built"] = f"the run wrote nothing (exit {rc}): {err.strip()[-200:]}"
+        return entry
+    failed = [r for r in result_c.get("repairs") or [] if r.get("error") or not (r.get("tune") or {}).get("applied")]
+    if failed:
+        entry["not_built"] = ("LR" + str(BASE_TYPE[1]) + " found no setting at " + ", ".join(
+            f"{r.get('lower')} ↔ {r.get('upper')}" for r in failed) + " inside the window")
+        return entry
+    return _read_whole(entry, result_c, layout, result_b, chain, channels, xo)
+
+
+def _read_whole(entry, result_c, layout, result_b, chain, channels=None, xo=None):
+    """A whole configuration's run, read against the best: its junctions and what each gained or lost, the delays that
+    moved, the polarity that flipped, the limits, and its settings."""
+    best = junction_table(result_b)
+    best_delays = delay_map(result_b)
+    delay = result_c.get("autoDelayAfterRepairs") or result_c.get("autoDelay") or {}
+    if delay.get("overRange"):
+        entry["over_range"] = delay["overRange"]
+    table = junction_table(result_c)
+    entry["junctions"] = [{
+        "lower": lo, "upper": up, "cornerHz": (table.get((lo, up)) or {}).get("cornerHz"),
+        "afterDelayLossDb": (table.get((lo, up)) or {}).get("afterDelay") or {},
+        "deltaDb": {side: round(loss - (best.get((lo, up), {}).get("afterDelay") or {})[side], 2)
+                    for side, loss in ((table.get((lo, up)) or {}).get("afterDelay") or {}).items()
+                    if side in (best.get((lo, up), {}).get("afterDelay") or {})},
+        "wish": False} for lo, up in chain]
+    now = delay_map(result_c)
+    entry["delays"] = now
+    entry["delays_moved"] = {ch: {"was": best_delays[ch][0], "now": ms, "deltaMs": round(ms - best_delays[ch][0], 2)}
+                             for ch, (ms, _) in now.items()
+                             if ch in best_delays and ms is not None and best_delays[ch][0] is not None
+                             and abs(ms - best_delays[ch][0]) >= 0.01}
+    entry["polarity_flipped"] = [ch for ch, (_, inv) in now.items()
+                                 if ch in best_delays and bool(inv) != bool(best_delays[ch][1])]
+    entry["checks"] = check_result({"autoCrossover": {"result": final_proposals(result_c)}}, layout, channels, xo) \
+        if channels is not None else []
+    entry["settings"] = final_proposals(result_c)
+    return entry
 
 
 def chains_from_engine(layout, settings, delays):
@@ -1382,6 +1456,13 @@ def variants_from(layout, channels, xo, wishes=None, notes=(), problems=(), dotn
     # a variant read against delays that were never computed would be a number with nothing behind it.
     if items and rc == 0:
         out["full_variants"] = wish_variants(second, result_b, items, chain, channels, xo, dotnet, out_dir)
+    # No type named by any wish: the LR24 base goes on the front beside the best (the Arbiter, 2026-09-23).
+    if rc == 0 and not type_was_set(rows):
+        base = base_type_variant(second, result_b, chain, channels, xo, dotnet, out_dir)
+        if base.get("not_built") and "already" in base["not_built"]:
+            out["notes"].append(f"LR{BASE_TYPE[1]} base: {base['not_built']}")
+        else:
+            out.setdefault("full_variants", []).append(base)
     # With no wish, the engine's own ranked alternatives are the candidates (issue #38): 3 unless told otherwise.
     count = (0 if items else 3) if alternatives is None else int(alternatives)
     if count and rc == 0:
@@ -1530,12 +1611,13 @@ def _render_variants(v):
                       "configuration still; here every delay is free to move, which is what the tuner hears.",
                   f"  ({JUNCTION_LEGEND})"]
     for fv in v.get("full_variants") or []:
-        head = (f"  {fv['purpose']}" if fv.get("rank_engine")
+        whole = fv.get("rank_engine") or fv.get("base")
+        head = (f"  {fv['purpose']}" if whole
                 else f"  {fv['purpose']} -- {fv['lower']} ↔ {fv['upper']}")
         if fv.get("not_built"):
             lines.append(f"{head}: no variant built ({fv['not_built']})")
             continue
-        if fv.get("rank_engine"):
+        if whole:
             lines.append(f"{head}, as a whole configuration: " + "; ".join(
                 f"{s['block']} {_edge_short(s.get('highPass'))} | {_edge_short(s.get('lowPass'))}"
                 for s in fv.get("settings") or []))
@@ -1861,12 +1943,27 @@ def smoke(dotnet=None, echo=print):
              [c for c in a.get("checks") or [] if c.get("verdict") != "OK"]) for a in alts])
         echo(render_variants(v))
         echo(f"  repairs planned: {len(v['repairs_planned'])}, fixes: {len(v['fixes'])}")
+        # The wish above named a type (BE), so no LR24 base; with no wish at all the base is on the front, every
+        # junction LR24, unless the best already is (the Arbiter, 2026-09-23).
+        assert not [fv for fv in v["full_variants"] if fv.get("base")], "a type was set, and a base was built anyway"
+        nw = variants_from(layout, channels, xo, wishes=None, notes=notes, dotnet=dotnet,
+                           out_dir=os.path.join(tmp, "out-no-wish"), set_dir=set_dir,
+                           target=[(20.0, 6.0), (200.0, 2.0), (2000.0, 0.0), (20000.0, -3.0)], alternatives=0)
+        base = [fv for fv in nw.get("full_variants") or [] if fv.get("base")]
+        if base:
+            assert not base[0].get("not_built"), base[0]
+            by = {s_["block"]: s_ for s_ in base[0]["settings"]}
+            assert all(_is_base(by[up]["highPass"]) and _is_base(by[lo]["lowPass"]) for lo, up in nw["chain"]), by
+            assert any(n_.startswith("LR24 base") for n_ in nw["front"]["candidates"]), nw["front"]["candidates"]
+        else:
+            assert any("LR24 base" in n_ and "already" in n_ for n_ in nw["notes"]), nw["notes"]
+        echo(render_variants(nw))
     echo("smoke[resonalyze_engine] OK -- a synthetic sub + three-way front through all three passes: a proposal per "
          "block, every repair applied and nothing left under a floor, seven delays inside the range with the early "
          "tweeter held back, the wish read on both sides against the best, and the same wish run as a whole "
          "configuration -- every junction read after its own Auto delay, and the delays it moved named; the "
          "engine's ranked alternatives built as whole variants too, and the lot put on a trade-off front by four "
-         "terms (issue #38)")
+         "terms (issue #38); with no type set, the LR24 base beside the best")
     return 0
 
 
@@ -1981,6 +2078,33 @@ def _selftest():
         [{"lower": "B Woofer", "upper": "C Mid", "purpose": "wish: x", "probe": [{"highPass": _edge(400)}]}],
         chain_pairs_fixed, run=_fake_run, out_dir=tempfile.gettempdir())
     assert broken[0]["not_built"] == "no block named 'C Mid'" and "edges" not in broken[0], broken[0]
+
+    # ── the LR24 base when no type was set (the Arbiter, 2026-09-23) ──
+    # A corner alone does not set a type; a family or a slope does. A best that is LR24 everywhere IS the base; one
+    # with a Bessel junction gets a base with every junction re-tuned in LR24 alone, around the best's corner.
+    assert not type_was_set([{"wish": {"family": None, "order_db": None, "f_hz": 2400.0}}])
+    assert type_was_set([{"wish": {"family": "BE", "order_db": None, "f_hz": None}}]) and not type_was_set([])
+    none_, why_ = base_type_layout(second_fixed, result_best, chain_pairs_fixed)
+    assert none_ is None and "already" in why_, why_
+    bessel_best = {**result_best, "settingsFinal": [
+        _side("A Sub", lp=_edge(80, "LinkwitzRiley")),
+        _side("B Woofer", hp=_edge(80, "LinkwitzRiley"), lp=_edge(500, "Bessel", 18), gain=-2.0),
+        _side("C Mid", hp=_edge(500, "Bessel", 18))]}
+    base_layout, _ = base_type_layout(second_fixed, bessel_best, chain_pairs_fixed)
+    assert [(r["lower"], r["upper"]) for r in base_layout["repairs"]] == chain_pairs_fixed, base_layout["repairs"]
+    assert all(r["tune"]["families"] == ["LinkwitzRiley"] and r["tune"]["slopes"] == [24]
+               for r in base_layout["repairs"]), base_layout["repairs"]
+    mid_tune = base_layout["repairs"][1]["tune"]
+    assert (mid_tune["minHz"], mid_tune["maxHz"]) == (350.0, 710.0), mid_tune          # half an octave either side
+    no_lr24 = {"types": {"BE": {"orders_db_per_oct": [12, 24]}, "LR": {"orders_db_per_oct": [12, 36]}}}
+    assert base_type_layout(second_fixed, bessel_best, chain_pairs_fixed, xo=no_lr24)[0] is None
+    base = base_type_variant(second_fixed, bessel_best, chain_pairs_fixed, run=_fake_run, out_dir=tempfile.gettempdir())
+    assert base["base"] and base.get("settings") and not base.get("not_built"), base
+    assert "LR24 base" in render_variants({"full_variants": [base], "chain": chain_pairs_fixed})
+    failed_base = base_type_variant(second_fixed, bessel_best, chain_pairs_fixed, out_dir=tempfile.gettempdir(),
+                                    run=lambda layout, path: (0, {**result_variant, "repairs": [
+                                        {"lower": "B Woofer", "upper": "C Mid", "tune": {"applied": False}}]}, ""))
+    assert "found no setting at B Woofer ↔ C Mid" in failed_base["not_built"], failed_base
 
     # ── fetching the prebuilt engine from a tag's release (TODO S-020; hub `RELEASE-CHANNEL.md` §12) ──
     # The network is faked. What is held here: the NAME is computed from the pin and this machine, a
