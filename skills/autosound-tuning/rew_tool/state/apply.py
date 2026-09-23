@@ -75,10 +75,16 @@ def structural_moves(current, proposed):
 
 def evidence_problems(evidence, project_dir):
     """`[]` when every item resolves, else what does not: a measurement title in the grammar, or a file (a tool's
-    verdict) that exists and does not say UNVERIFIED/BLOCK. Prose resolves to nothing, as in `finish_step`."""
+    verdict) that exists and does not say UNVERIFIED/BLOCK. Prose resolves to nothing, as in `finish_step`.
+
+    **A DESK result is evidence** (the Arbiter, 2026-09-23: «у нас є математика своя і Resonalyze … я хочу щоб
+    підходи до машини були мінімальні на перших етапах»): `predict --out …/predicted.json`, `resonalyze_engine run
+    --out …/variants.json`, an `--align` proposal. The car is for VERIFYING, once for several changes
+    (`state.py … verification-set <last verified> <now>`), not a trip per change."""
     items = [evidence] if isinstance(evidence, str) else list(evidence or [])
     if not items:
-        return ["no evidence given"]
+        return ["no evidence: a desk result (the file `predict --out` or `resonalyze_engine run --out` wrote) or "
+                "a measurement title -- no car trip is needed for the first"]
     import naming as _naming
     bad = []
     for item in items:
@@ -460,9 +466,10 @@ def propose(history, delta, note=None, provenance=None, registry=None, allow_non
     if adv:
         sheet += "\n\n⚠️ **Advisories (double-check, not blocking):**\n" + "\n".join("- " + a for a in adv)
     if candidate:
-        sheet = (f"🟠 CANDIDATE {version} -- banked on the line, NOT in the slot, not to be entered yet. "
+        sheet = (f"🟠 CANDIDATE {version} -- banked on the line, not in the slot yet. "
                  f"Structural: {', '.join(moves)}. What it waits for: " + "; ".join(held)
-                 + ". Propose it again with `evidence=` and `reviewed=` to bank it as the slot's version.\n\n"
+                 + ". Compute it at the desk (`predict`, `resonalyze_engine run`) and propose it again with "
+                   "`evidence=<that file>` and `reviewed=` -- no car trip is needed for that.\n\n"
                  + sheet)
     else:
         sheet += (f"\n\nAfter entering these in Helix, run `attest {version}` to bank it 🟢 applied, "
@@ -512,6 +519,11 @@ def _selftest():
         json.dump({"verdict": "apply UNVERIFIED"}, fh)
     assert evidence_problems(["joint-verdict.json"], h.project_dir), "an UNVERIFIED verdict passed as evidence"
     assert evidence_problems(["sub+w-L_2 (sw)"], h.project_dir) == [], "a measurement title is evidence"
+    # A DESK result is evidence too: the car is for verifying, once for several changes (the Arbiter, 2026-09-23).
+    desk = os.path.join(h.project_dir, "predicted.json")
+    with open(desk, "w", encoding="utf-8") as fh:
+        json.dump({"junctions": [{"lo": "sub", "hi": "w-L", "sum_loss_avg_db": -0.2}]}, fh)
+    assert evidence_problems(["predicted.json"], h.project_dir) == [], "a desk result is evidence"
     review = os.path.join(h.project_dir, "review-sub-inv.md")
     with open(review, "w", encoding="utf-8") as fh:
         fh.write("reviewed")

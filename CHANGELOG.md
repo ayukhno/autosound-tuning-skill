@@ -169,8 +169,10 @@ reason. Eight packages.
   `state/proposals/v_NNN.json`.
 - **A structural change banks in the slot only with evidence and one review** (#57 P2, #58 P7/P11). A
   polarity, a crossover edge, a delay of 0.5 ms or more, or a gain of 6 dB or more now needs
-  `apply.propose(…, evidence=[…], reviewed=<file>)`. Without them the change is banked as a 🟠 candidate:
-  on the line, not in the slot, never attested. An import of what the device already holds is exempt.
+  `apply.propose(…, evidence=[…], reviewed=<file>)`. The evidence may be the desk's own result
+  (`predict --out`, `resonalyze_engine run --out`), so no car trip is needed; the car verifies several
+  changes at once (`verification-set`). With not even a computation behind it, the change is banked as a 🟠
+  candidate: on the line, not in the slot. An import of what the device already holds is exempt.
 - **`analyze-joints` gives no verdict without a measured pair** (#56 item 1, #57 P1). It finds the pair in
   REW through the glossary, or names the title to measure. `--no-pair` keeps the old, pair-less reading,
   marked as not bankable; the Phase-1 baseline docs use it.
