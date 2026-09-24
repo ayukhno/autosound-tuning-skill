@@ -12,7 +12,7 @@ that is not deferred and can be done at the desk. The branch is `wave-2026-09-23
 | **#70** (S-057) | A verdict block at the top of every tool's output | **The shape** (the Arbiter): at most five lines. The verdict, then 2–3 numbers each with its quantity and its source, then what to do next ("enter this" / "measure these N"). Details follow below, or with `--verbose`. The tools a session calls at a step: `predict`, `analyze-joints`, `eq_propose`, `resonalyze_engine run`, `contract.py check`, `verify_prediction` |
 | **#69** (S-056) | The junction level step over the SHARED band | Computed in Python from the same solos and chains as the front's terms, over the band where both members play. No engine change, so no new binaries |
 | **#65** | The issue-posting gate is reachable only after the skill loads, and "file an issue" never loads it | Not decided: collected 2026-09-24 |
-| **#66** | `L m-tw_52 (rta)` parses silently as side `L` + modifier `m-tw` | Not decided: accept `m-tw` as the inverted junction, or refuse the title (his call) |
+| **#66** | `L m-tw_52 (rta)` parses silently as side `L` + modifier `m-tw` | His word 2026-09-24: accept. `-` between driver codes inverts the next member, in a chain of any length (`L w-m+tw`); side first (`L m-tw`, never `m-L-tw-L`); the rest of his grammar is quoted in #66 |
 | **#67** | Target-curve page: Compare and Analyze give one band two numbers (hub #203 TCC-029) | Not decided: collected 2026-09-24 |
 | **#68** | Critic channel: an agy stream cut off mid-answer counts as a refusal (hub #204 TCC-030) | Not decided: collected 2026-09-24 |
 | **#71** | README and FAQ name Gemini Pro (High); agy refuses it in some regions (found at #24) | Not decided: collected 2026-09-24 |
