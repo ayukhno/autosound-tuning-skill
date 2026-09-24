@@ -1,6 +1,6 @@
 # W-3 · v3.0.62 — the plan
 
-Opened 2026-09-23, straight after v3.0.61. **The wave is COLLECTING** (the Arbiter: «головне ми збираємо НЕ РОБИМО»): findings go into the milestone and this table, and nothing is built until he says so. **2026-09-24:** 17 issues on the milestone, every one assessed in its body (class · model · risk · complexity); `ok` on #24 only. The composition was agreed with the Arbiter the same day: everything open
+Opened 2026-09-23, straight after v3.0.61. **The wave is COLLECTING** (the Arbiter: «головне ми збираємо НЕ РОБИМО»): findings go into the milestone and this table, and nothing is built until he says so. **2026-09-24:** 18 issues on the milestone, every one assessed in its body (class · model · risk · complexity); `ok` on #24 only. The composition was agreed with the Arbiter the same day: everything open
 that is not deferred and can be done at the desk. The branch is `wave-2026-09-23`, and the milestone is `W-3 · v3.0.62`.
 
 | item | what | how (decided) |
@@ -22,6 +22,7 @@ that is not deferred and can be done at the desk. The branch is `wave-2026-09-23
 | **#75** | A capture series announced with no list; made up from the previous one after he asked (same cause as #73, #74) | Not decided: collected 2026-09-24 |
 | **#77** | The rule behind #74 and #75: a DSP configuration is born yellow, a measurement is a `cap_NNN` round with a per-driver list, closed against REW whatever captured it; all three modes | Not decided: collected 2026-09-24 |
 | **#78** | A round's list ordered by setup: the type the car is set up for first, then one switch (tripod sweep vs seated RTA) | Not decided: collected 2026-09-24 |
+| **#79** | A capture round in four columns: Solo (sw), Solo (rta), Group (sw), Group (rta); the panel is TCC's, the split open | Not decided: collected 2026-09-24 |
 
 **Deferred at the review:** S-055 (needs an ellipsoid round in the car). **Still deferred:** S-001, S-017,
 S-021 (after 3.1.x), hub #113 PAS-005, hub #82 HUB-031, #26 (a 3.2 candidate). **Waiting on his run:** S-059.
