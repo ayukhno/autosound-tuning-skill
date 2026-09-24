@@ -1,6 +1,6 @@
 # W-3 · v3.0.62 — the plan
 
-Opened 2026-09-23, straight after v3.0.61. **The wave is COLLECTING** (the Arbiter: «головне ми збираємо НЕ РОБИМО»): findings go into the milestone and this table, and nothing is built until he says so. **2026-09-24:** 11 issues on the milestone, every one assessed in its body (class · model · risk · complexity); `ok` on #24 only. The composition was agreed with the Arbiter the same day: everything open
+Opened 2026-09-23, straight after v3.0.61. **The wave is COLLECTING** (the Arbiter: «головне ми збираємо НЕ РОБИМО»): findings go into the milestone and this table, and nothing is built until he says so. **2026-09-24:** 13 issues on the milestone, every one assessed in its body (class · model · risk · complexity); `ok` on #24 only. The composition was agreed with the Arbiter the same day: everything open
 that is not deferred and can be done at the desk. The branch is `wave-2026-09-23`, and the milestone is `W-3 · v3.0.62`.
 
 | item | what | how (decided) |
@@ -16,6 +16,8 @@ that is not deferred and can be done at the desk. The branch is `wave-2026-09-23
 | **#67** | Target-curve page: Compare and Analyze give one band two numbers (hub #203 TCC-029) | Not decided: collected 2026-09-24 |
 | **#68** | Critic channel: an agy stream cut off mid-answer counts as a refusal (hub #204 TCC-030) | Not decided: collected 2026-09-24 |
 | **#71** | README and FAQ name Gemini Pro (High); agy refuses it in some regions (found at #24) | Not decided: collected 2026-09-24 |
+| **#72** | One plan step, two labels: the text says 2.8, the panel shows 2d | Not decided: collected 2026-09-24 |
+| **#73** | Phase 2's plan is too big; measure, compute, write, no progress — analyse and cut | Not decided: collected 2026-09-24 |
 
 **Deferred at the review:** S-055 (needs an ellipsoid round in the car). **Still deferred:** S-001, S-017,
 S-021 (after 3.1.x), hub #113 PAS-005, hub #82 HUB-031, #26 (a 3.2 candidate). **Waiting on his run:** S-059.
