@@ -1522,8 +1522,9 @@ Next: ask him what else goes into the collection. Build only on his explicit wor
 
 **2026-09-24:** collected #65, #66 (the Passat project's issues), #67 (hub #203 TCC-029), #68 (hub #204 TCC-030),
 #69 (S-056), #70 (S-057), #71 (the Gemini Pro refusal, found at #24). All 11 issues on the milestone carry the four
-assessment lines; the hub tickets name their issues. Next: his OK task by task (label `ok`), the rest leaves the
-milestone back to the pool.
+assessment lines; the hub tickets name their issues. Next: the collection goes on (his word, 24.09: «ми ще збираємо —
+це означає реєстрація нових проблем»): each new problem becomes an issue on W-3 with its assessment. His OK, task by
+task, is asked only after he says the collection is over.
 
 ## S-059 · v3.0.61's TCC upgrade path, run on the Windows VM
 
