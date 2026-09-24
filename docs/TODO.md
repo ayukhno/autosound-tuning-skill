@@ -1471,7 +1471,7 @@ Two things wait for measurements, and neither is a question for the Arbiter:
 
 ## S-056 · The junction level step read over the SHARED band
 
-**Status**: open 2026-09-23 · **W-3 · v3.0.62** (composition agreed with the Arbiter, 2026-09-23)
+**Status**: open 2026-09-23 · **W-3 · v3.0.62**, issue #69 (composition agreed with the Arbiter, 2026-09-23)
 accepted by the Arbiter with this as the follow-up.
 
 W-2 prints each junction's level step as the two blocks' OWN-band levels plus their gains, lower minus
@@ -1482,7 +1482,7 @@ which is a rebuilt engine, not a patch.
 
 ## S-057 · A five-line verdict block for every tool's output
 
-**Status**: open 2026-09-23 · **W-3 · v3.0.62** (composition agreed with the Arbiter, 2026-09-23)
+**Status**: open 2026-09-23 · **W-3 · v3.0.62**, issue #70 (composition agreed with the Arbiter, 2026-09-23)
 accepted by the Arbiter with this as the follow-up.
 
 #57 P5 asked for compact output. W-2 made it where the issue measured it: `predict`'s notes collapse by text,
@@ -1501,10 +1501,10 @@ All translations went through the Advisor (`ask`, `gemini-3.8-flash-high`).
 Open ends:
 - TCC's English guides are linked from the FAQ and the READMEs at `autosound-tcc/blob/main/docs/guide/…`; they
   resolve once TCC's `wave-0.1.44` reaches main. The guide's placement is hub #202 (SKL-053, to:tcc).
-- Findings for the pool, not built: `gemini-3.1-pro-high` is refused by `agy` in this region ("not supported in
+- Findings for the pool, not built (the first one is #71 on W-3): `gemini-3.1-pro-high` is refused by `agy` in this region ("not supported in
   the selected location"), while README and FAQ name Gemini Pro (High) as TCC's reviewer pick; and
   `tcc/README.md` links `FAQ.md#subscription-options-quotas--budgets-as-of-july-2026`, a heading that no longer exists.
-- #60, #61, #64 on the milestone are still without the assessment (class · model · risk · complexity).
+- #60, #61, #64 on the milestone are still without the assessment (class · model · risk · complexity). Assessed 2026-09-24.
 
 Next: the W-3 collection with him (S-060); #24 closes with the release.
 
@@ -1519,6 +1519,11 @@ translations through the Advisor (#24). A draft of #60 (Claude and Codex prompts
 is parked as a local stash on the author's Mac, `W-3 draft for #60 …`; it is not pushed, and #60 records what it does.
 
 Next: ask him what else goes into the collection. Build only on his explicit word ("робимо", "до зеленого PR").
+
+**2026-09-24:** collected #65, #66 (the Passat project's issues), #67 (hub #203 TCC-029), #68 (hub #204 TCC-030),
+#69 (S-056), #70 (S-057), #71 (the Gemini Pro refusal, found at #24). All 11 issues on the milestone carry the four
+assessment lines; the hub tickets name their issues. Next: his OK task by task (label `ok`), the rest leaves the
+milestone back to the pool.
 
 ## S-059 · v3.0.61's TCC upgrade path, run on the Windows VM
 
