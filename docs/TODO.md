@@ -1510,8 +1510,8 @@ Next: the W-3 collection with him (S-060); #24 closes with the release.
 
 ## S-060 · W-3 · v3.0.62 is collecting: pick up the collection with him
 
-**Status**: open 2026-09-23 · the session stopped on «добраніч» · the wave is COLLECTING, nothing is built (the
-Arbiter: «головне ми збираємо НЕ РОБИМО»)
+**Status**: open 2026-09-24 · the session stopped on «добраніч» · the wave is still COLLECTING, nothing is built;
+21 issues on `W-3 · v3.0.62`, all assessed, `ok` on #24 only · was: open 2026-09-23
 
 Where it stands: the milestone `W-3 · v3.0.62` holds #60, #61, #64 and #24, and S-056 and S-057 ride the wave
 (`docs/PLAN-W-3.md`). Decided at the review: `docs/` folders by kind (#61), the five-line verdict shape (S-057),
@@ -1525,6 +1525,18 @@ Next: ask him what else goes into the collection. Build only on his explicit wor
 assessment lines; the hub tickets name their issues. Next: the collection goes on (his word, 24.09: «ми ще збираємо —
 це означає реєстрація нових проблем»): each new problem becomes an issue on W-3 with its assessment. His OK, task by
 task, is asked only after he says the collection is over.
+
+**2026-09-24, later — from his work on the Passat project (screenshots of TCC):** #72 one plan step, two labels
+(2.8 vs 2d) · #73 Phase 2's plan too big, analyse and cut · #74 a proposal left as files, `apply.propose` skipped ·
+#75 a capture series announced with no list · #77 his rule behind #74/#75: a DSP configuration is born yellow, a
+measurement is a `cap_NNN` round with a per-driver list, closed against REW whatever captured it, in all three modes ·
+#78 a round's list ordered by setup (tripod sweep vs seated RTA), one switch · #79 four columns: Solo/Group × sw/rta ·
+#80 "if you have time" captures go into the list · #81 `scene_presets` drops pairs silently on `m_L` registry keys ·
+#82 its ladder degenerates. #66 decided by him: accept `-` as inversion in any chain (`L w-m+tw`), side first; his
+naming grammar is quoted in #66. (#76 does not exist: a GitHub error ate the number.)
+
+Next: the collection goes on until he says it is over; then his OK task by task. Resume:
+`hub/bin/role skill --resume 4c820164-7b49-418c-811d-be76c50bc9a5`.
 
 ## S-059 · v3.0.61's TCC upgrade path, run on the Windows VM
 
