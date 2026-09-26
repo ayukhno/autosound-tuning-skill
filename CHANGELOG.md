@@ -186,6 +186,13 @@ W-3 (`docs/PLAN-W-3.md`): the issues on the milestone that carry the Arbiter's `
   rule `predict` uses, and a pair the version does not hold is a problem with a non-zero exit. The same rule
   reached the two other readers that compared codes literally: `rew_tool`'s side of a channel (joints from the
   ledger) and `resonalyze_engine`'s protective floor.
+- **The reviewer's API waits as long as its CLI, and the step down to agy no longer sends an id agy refuses**
+  (`autosound_ai.py`, skill #85, hub #208). The API had a fixed 120 s while the CLI waits by the job (600 s at
+  least, 25 s per KB): a 20 KB translation through a pro model died on the API. Now both use one budget,
+  announced as the call starts, and `AUTOSOUND_API_TIMEOUT` overrides it. After an API failure the round used to
+  run agy with the API's id (`gemini-3.1-pro-preview`), which agy names differently and refused; now that rung stops
+  and names both ids and agy's models of that line, without guessing a tier. `ask` is in the usage text and in the
+  no-project error. A streamed read is not in this wave: the budget alone fixes the case seen.
 
 ## [v3.0.61] — 2026-09-23 · The installer upgrades an app it did not install, instead of breaking it
 

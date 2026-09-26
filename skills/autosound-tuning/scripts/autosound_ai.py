@@ -14,6 +14,7 @@ autosound_ai.py — Універсальний кросплатформний і
 Використання:
   python3 scripts/autosound_ai.py critic <package_file.md> [trace.csv]
   python3 scripts/autosound_ai.py advisor <package_file.md> [trace.csv]
+  python3 scripts/autosound_ai.py ask <question.md>   # просте питання чи переклад: без проекту й контракту
   python3 scripts/autosound_ai.py doctor
   python3 scripts/autosound_ai.py key set google      # ключ -- на прихований запит, у сховище ключів ОС
   python3 scripts/autosound_ai.py key status [--json] # де який ключ і який використовується, без значень
@@ -255,7 +256,7 @@ def copy_to_clipboard(text):
 # Each vendor's SDK would be a dependency the skill cannot assume, so the three call_* functions
 # below speak each API's documented wire format directly.
 
-def _post_json(url, headers, body, timeout=120):
+def _post_json(url, headers, body, timeout):
     req = urllib.request.Request(
         url, data=json.dumps(body).encode("utf-8"), headers=headers, method="POST"
     )
@@ -283,6 +284,7 @@ def call_anthropic_api(api_key, model, prompt):
             "max_tokens": 16000,
             "messages": [{"role": "user", "content": prompt}],
         },
+        api_wait(prompt),
     )
     if res.get("stop_reason") == "refusal":
         raise RuntimeError(
@@ -300,6 +302,7 @@ def call_openai_api(api_key, model, prompt):
         "https://api.openai.com/v1/chat/completions",
         {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
         {"model": model, "messages": [{"role": "user", "content": prompt}]},
+        api_wait(prompt),
     )
     choices = res.get("choices") or []
     if not choices:
@@ -675,7 +678,7 @@ def call_gemini_api(api_key, model, prompt, role_var="AUTOSOUND_CRITIC_MODEL"):
         method="POST"
     )
     try:
-        with urllib.request.urlopen(req, timeout=120) as r:
+        with urllib.request.urlopen(req, timeout=api_wait(prompt)) as r:
             res = json.loads(r.read().decode("utf-8"))
             return res["candidates"][0]["content"]["parts"][0]["text"], api_model
     except urllib.error.HTTPError as e:
@@ -950,6 +953,38 @@ def cli_wait(prompt):
         return int(set_by_env)
     kb = len(prompt.encode("utf-8")) / 1024
     return int(max(CLI_WAIT_MIN_S, CLI_WAIT_PER_KB_S * kb))
+
+
+def api_wait(prompt):
+    """Seconds to wait for an API answer: `AUTOSOUND_API_TIMEOUT` when set, else `cli_wait`'s rule (skill #85).
+
+    It was a fixed 120 s, while the CLI waits by the size of the job: a 20 KB translation through a pro model timed
+    out on the API and answered through the CLI. The timeout is per socket operation, so a dead connection still
+    fails at the first read that hears nothing within it; a long answer is simply let finish."""
+    set_by_env = os.environ.get("AUTOSOUND_API_TIMEOUT", "").strip()
+    if set_by_env:
+        return int(set_by_env)
+    kb = len(prompt.encode("utf-8")) / 1024
+    return int(max(CLI_WAIT_MIN_S, CLI_WAIT_PER_KB_S * kb))
+
+
+def cli_model_mismatch(provider, cli_bin, model):
+    """The line to stop on when agy would be run with an id it does not list, else None (skill #85).
+
+    The API and agy name one model differently (`gemini-3.1-pro-preview` vs `gemini-3.1-pro-high`), and a step down
+    from a failed API call carried the API's id to agy, which refused it: a rung that could not succeed. The two are
+    NOT mapped -- an alias table was removed on purpose (a table of names is a promise to keep it current, and a guessed
+    tier is a model nobody chose) -- so this names both and agy's own models of that line. When agy cannot list, there
+    is nothing to check against and the call goes as before."""
+    if provider != "google" or not cli_bin or cli_flavor(cli_bin) != "agy" or cli_only_model(model):
+        return None
+    known = list_cli_models()
+    if not known or model in known:
+        return None
+    family = re.sub(r"-(preview|latest|exp[\w-]*)$", "", str(model))
+    line = [m for m in known if m.startswith(family + "-")] or known
+    return (f"CLI 'agy' не знає `{model}` (так модель називає API); його моделі цієї лінії: {', '.join(line)}. "
+            f"Задай AUTOSOUND_CRITIC_MODEL=<одна з них> -- сходинка сама модель не вгадує")
 
 
 def call_cli(provider, cli_bin, model, prompt, timeout=None):
@@ -1275,6 +1310,21 @@ def _selftest():
             globals()["list_cli_models"] = lambda: []
             code, out, err = run_main("ask", pkg)
             assert code == 3, (code, err)
+            # skill #85: an API that times out steps down to agy with the API's id, which agy names differently
+            # (`-high`/`-low`). The CLI is not run with an id it does not list: the rung stops and names both, and
+            # agy's own models of that line. The API's wait is announced as the CLI's is.
+            os.environ["AUTOSOUND_CRITIC_MODEL"] = "gemini-3.1-pro-preview"
+            globals()["list_cli_models"] = lambda: ["gemini-3.1-pro-high", "gemini-3.1-pro-low", "gemini-3.8-flash-high"]
+            globals()["call_gemini_api"] = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("The read operation timed out"))
+            calls = []
+            subprocess.run = lambda cmd, **kw: (calls.append(cmd), subprocess.CompletedProcess(cmd, 0, ok_out, ""))[1]
+            code, out, err = run_main("ask", pkg)
+            assert code == 4 and not calls and "gemini-3.1-pro-high, gemini-3.1-pro-low" in err, (code, calls, err)
+            assert "gemini-3.8-flash-high" not in err and "чекаю до" in err.split("Підключення до API")[1], err
+            globals()["list_cli_models"] = lambda: []      # agy cannot list: nothing to check against, it runs
+            code, out, err = run_main("ask", pkg)
+            assert code == 0 and calls, (code, err)
+            subprocess.run = lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, ok_out, "")
             globals()["list_cli_models"] = real_list
             os.environ["AUTOSOUND_CRITIC_MODEL"] = "gemini-3.8-flash-low"
             globals()["call_gemini_api"] = real_api
@@ -1295,9 +1345,11 @@ def _selftest():
                  if k.startswith(_NESTED_MARKERS) or k in ("GEMINI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY",
                                                          "AUTOSOUND_CRITIC_MODEL", "GEMINI_CRITIC_MODEL",
                                                          "AUTOSOUND_CRITIC_BIN", "GEMINI_BIN", "APPDATA")}
-    real = {n: globals()[n] for n in ("call_gemini_api", "call_cli", "list_gemini_models")}
+    real = {n: globals()[n] for n in ("call_gemini_api", "call_cli", "list_gemini_models", "list_cli_models")}
     real_which = shutil.which
     try:
+        # The machine's own agy is not asked for its models: what it lists is this Mac's, not the check's (skill #85).
+        globals()["list_cli_models"] = lambda: []
         os.environ["APPDATA"] = os.path.join(os.sep, "Users", "me", "AppData", "Roaming")
         assert config_hint().startswith("%APPDATA%") and config_hint().endswith("critic-env"), config_hint()
         del os.environ["APPDATA"]
@@ -1478,15 +1530,23 @@ def _selftest():
     # The wait grows with the job (the Arbiter, 2026-09-23): a short review gets the floor, a 31 KB
     # translation gets twice what the slowest one took on 22.09, and a set variable wins.
     saved_wait = os.environ.pop("AUTOSOUND_CLI_TIMEOUT", None)
+    saved_api_wait = os.environ.pop("AUTOSOUND_API_TIMEOUT", None)
     try:
         assert cli_wait("x" * 2000) == CLI_WAIT_MIN_S
         assert 700 <= cli_wait("x" * 31795) <= 800, cli_wait("x" * 31795)
+        # The API waits as long as the CLI for the same job (skill #85): 120 s fixed cut a 20 KB translation.
+        assert api_wait("x" * 2000) == CLI_WAIT_MIN_S and api_wait("x" * 31795) == cli_wait("x" * 31795)
         os.environ["AUTOSOUND_CLI_TIMEOUT"] = "45"
-        assert cli_wait("x" * 31795) == 45
+        assert cli_wait("x" * 31795) == 45 and api_wait("x" * 31795) != 45
+        os.environ["AUTOSOUND_API_TIMEOUT"] = "90"
+        assert api_wait("x" * 31795) == 90
     finally:
         os.environ.pop("AUTOSOUND_CLI_TIMEOUT", None)
+        os.environ.pop("AUTOSOUND_API_TIMEOUT", None)
         if saved_wait is not None:
             os.environ["AUTOSOUND_CLI_TIMEOUT"] = saved_wait
+        if saved_api_wait is not None:
+            os.environ["AUTOSOUND_API_TIMEOUT"] = saved_api_wait
 
     if saved_keystore is None:
         os.environ.pop("AUTOSOUND_KEYSTORE", None)
@@ -1961,7 +2021,10 @@ def run_doctor(smoke=True):
                 kind, error = "model_choice", str(choice.why) if hasattr(choice, "why") else str(choice)
             except Exception as e:  # noqa: BLE001
                 kind, error = classify_failure(str(e)), str(e)
-                if cli_bin:
+                mismatch = cli_model_mismatch(provider, cli_bin, model)
+                if cli_bin and mismatch:
+                    print(f"· API не відповів ({str(e).strip()[:120]}); CLI не пробую: {mismatch}")
+                elif cli_bin:
                     # ...while any other API failure hands the call to the CLI, as `main` does.
                     print(f"· API не відповів ({str(e).strip()[:120]}) -- як і раунд, пробую CLI {cli_bin}")
                     via = f"CLI {cli_bin}"
@@ -2290,6 +2353,9 @@ def main():
         sys.exit(1)
     if tuning and (not CONTEXT or not os.path.isfile(CONTEXT)):
         print(f"Помилка: Не знайдено контекст проекту autosound_context.md у '{PROJECT_MIRROR}' чи в AUTOSOUND_DIR.", file=sys.stderr)
+        # `critic` and `advisor` are tuning and need the project; a plain question or a translation does not
+        # (skill #85: a session used `advisor` for a translation and borrowed a context file to get past this).
+        print("  Просте питання чи переклад -- `ask`: йому проект не потрібен.", file=sys.stderr)
         sys.exit(1)
 
     # Зчитування файлів
@@ -2386,7 +2452,7 @@ def main():
             file=sys.stderr,
         )
     if api_key:
-        print(f">> Підключення до API ({provider}, {api_model})...", file=sys.stderr)
+        print(f">> Підключення до API ({provider}, {api_model}), чекаю до {api_wait(compiled_prompt)} с...", file=sys.stderr)
         try:
             caller = {
                 "google": call_gemini_api,
@@ -2429,6 +2495,11 @@ def main():
 
     # 2. Локальний CLI (per-vendor: agy/gemini · claude · codex)
     cli_bin = detect_cli(provider) if (model and via not in ("api", "clipboard")) else None
+    mismatch = cli_model_mismatch(provider, cli_bin, model)
+    if mismatch:
+        print(f">> {mismatch}", file=sys.stderr)
+        failures.append(f"CLI {cli_bin}: {mismatch}")
+        cli_bin = None
     nested = nested_session_marker() if cli_bin else None
     if cli_bin:
         wait = cli_wait(compiled_prompt)

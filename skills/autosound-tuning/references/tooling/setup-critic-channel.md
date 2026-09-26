@@ -207,6 +207,13 @@ Check it took: `python3 scripts/autosound_ai.py doctor` names the key it found, 
   from inside a Claude Code session in 4 s with the markers stripped and in 27–48 s with them kept,
   and TCC-024 (hub #187) saw the same by hand. So a TCC-launched session, which has no separate
   terminal, reaches the reviewer too (skill #54). `AUTOSOUND_ALLOW_NESTED_CLI` is no longer needed.
+- **The API waits as long as the CLI, and the step down names models instead of guessing** (skill #85). An API
+  call gets the same budget as a CLI call for the same job (600 s at least, 25 s per KB), announced as it starts;
+  `AUTOSOUND_API_TIMEOUT` (seconds) overrides it. It was a fixed 120 s, and a 20 KB translation through a pro model
+  timed out there. When the API fails and the round steps down to `agy`, an API id agy does not list
+  (`gemini-3.1-pro-preview`; agy names that line `gemini-3.1-pro-high`/`-low`) is not sent: the rung stops, names
+  both ids and agy's own models of that line, and says which variable to set. `doctor` does the same before its
+  own fall to the CLI. A tier is never picked for you.
 - **The transport follows the model, not an exported key** (hub #187). A model named by its agy
   slug (`gemini-3.8-flash-high`: an effort tier at the end) goes to the CLI even with a key present,
   because the API does not know the tier and answered 404. A 404 on a name the CLI serves falls
