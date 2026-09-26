@@ -846,23 +846,40 @@ def cli_command(provider, binary, model, prompt_path, prompt_text):
     auto-denies wherever agy has not been told to approve every tool -- a clean Windows machine,
     and the call fell into the clipboard (hub TCC-014). The text itself as an argument would hit
     Windows' 32K command line; stdin has no such limit and reads no file.
+
+    Claude and Codex got the text AS AN ARGUMENT until skill #60: on Windows the call runs through
+    `cmd.exe` (`shell=True`, for the `.cmd` wrappers), whose line stops at 8191 characters, and a
+    review package is tens of KB. Both read stdin: `claude -p` with no prompt argument, `codex exec -`.
+    Codex also writes its last message -- the answer and nothing else -- to `-o <file>`
+    (`codex_answer_path`), so its transcript on stdout is not parsed unless that file stays empty.
     """
     extra = extra_cli_args()
     if provider == "anthropic":
-        return [binary, "--model", model, "--effort", CRITIC_EFFORT] + extra + ["-p", prompt_text]
+        return [binary, "--model", model, "--effort", CRITIC_EFFORT] + extra + ["-p"]
     if provider == "openai":
-        return [binary, "exec", "--model", model,
-                "-c", f"model_reasoning_effort={CRITIC_EFFORT}"] + extra + [prompt_text]
+        # `--skip-git-repo-check`: outside a repository codex trusts, `exec` refuses to start (found live on the
+        # Windows VM, 2026-09-23) -- and a review runs from a project folder, which is not one.
+        return [binary, "exec", "--skip-git-repo-check", "--model", model,
+                "-c", f"model_reasoning_effort={CRITIC_EFFORT}"] + extra + [
+            "-o", codex_answer_path(prompt_path), "-"]
     if cli_flavor(binary) == "agy":
         return [binary, "--model", model] + extra + [
             "--input-format", "stream-json", "--output-format", "stream-json", "--print="]
     return [binary, "--model", model, "--skip-trust"] + extra + ["-p", prompt_path]
 
 
+def codex_answer_path(prompt_path):
+    """Where `codex exec -o` writes its last message for one call: beside the prompt's temp file."""
+    return (prompt_path or os.path.join(tempfile.gettempdir(), "autosound_prompt")) + ".answer.txt"
+
+
 def cli_stdin(provider, binary, prompt_text):
-    """What goes to the CLI's stdin, or None. agy's stream-json input: one `user` event."""
+    """What goes to the CLI's stdin, or None. agy's stream-json input: one `user` event. Claude and Codex
+    read the prompt itself (skill #60)."""
     if provider == "google" and cli_flavor(binary) == "agy":
         return json.dumps({"event": "user", "message": {"content": prompt_text}}, ensure_ascii=False) + "\n"
+    if provider in ("anthropic", "openai"):
+        return prompt_text
     return None
 
 
@@ -884,6 +901,10 @@ def cli_reply(provider, binary, returncode, stdout, stderr):
                     return text, None
                 return None, (result.get("error") or f"agy: status {result.get('status')!r}, no answer")
         return None, ((stderr or "").strip() or "agy: no result in its output")
+    if provider == "openai" and returncode == 0 and (stdout or "").strip():
+        # No `-o` file (an older codex): the answer sits between the `codex` line and `tokens used`.
+        m = re.search(r"(?:^|\n)codex\r?\n(.*?)(?:\r?\ntokens used|\Z)", stdout, re.DOTALL)
+        return (m.group(1).strip() if m else stdout.strip()), None
     if returncode == 0 and (stdout or "").strip():
         return stdout, None
     return None, ((stderr or "").strip() or (stdout or "").strip() or f"exit {returncode}, no output")
@@ -1015,6 +1036,12 @@ def call_cli(provider, cli_bin, model, prompt, timeout=None):
                 keep_raw("cli", stdin or prompt, f"(no answer in {timeout} s)")
                 return None, "timeout", f"no answer in {timeout} s"
             keep_raw("cli", stdin or prompt, f"exit {proc.returncode}\n--- stdout\n{proc.stdout}\n--- stderr\n{proc.stderr}")
+            answer_file = codex_answer_path(prompt_path) if provider == "openai" else None
+            if answer_file and proc.returncode == 0 and os.path.isfile(answer_file):
+                with open(answer_file, encoding="utf-8", errors="replace") as fh:
+                    answered = fh.read().strip()
+                if answered:
+                    return answered, None, None
             text, error = cli_reply(provider, cli_bin, proc.returncode, proc.stdout, proc.stderr)
             if text:
                 return text, None, None
@@ -1026,11 +1053,12 @@ def call_cli(provider, cli_bin, model, prompt, timeout=None):
                       f"повторюю один раз на тій самій сходинці", file=sys.stderr)
         return None, kind, f"{error} (обірвано двічі поспіль)"
     finally:
-        if prompt_path:
-            try:
-                os.remove(prompt_path)
-            except OSError:
-                pass
+        for leftover in (prompt_path, codex_answer_path(prompt_path) if prompt_path else None):
+            if leftover:
+                try:
+                    os.remove(leftover)
+                except OSError:
+                    pass
 
 
 def gemini_key_shape(key):
@@ -1180,7 +1208,42 @@ def _selftest():
                         "--output-format", "stream-json", "--print="], argv
         assert "/tmp/p.txt" not in argv and "PROMPT" not in " ".join(argv)
         assert json.loads(cli_stdin("google", "agy.cmd", "PROMPT")) == {"event": "user", "message": {"content": "PROMPT"}}
-        assert cli_stdin("anthropic", "claude", "PROMPT") is None
+        # skill #60: Claude and Codex read the prompt on stdin, never as an argument -- cmd.exe stops at 8191
+        # characters, and a package is tens of KB. Codex writes its answer to `-o`, beside the prompt's file.
+        big = "P" * 9000
+        for vendor, binary in (("anthropic", "claude"), ("openai", "codex")):
+            argv_v = cli_command(vendor, binary, "m", "/tmp/p.txt", big)
+            assert big not in argv_v and len(" ".join(argv_v)) < 8191, argv_v
+            assert cli_stdin(vendor, binary, big) == big
+        assert cli_command("anthropic", "claude", "m", "/tmp/p.txt", big)[-1] == "-p"
+        codex_argv = cli_command("openai", "codex", "m", "/tmp/p.txt", big)
+        assert codex_argv[-1] == "-" and codex_argv[-2] == "/tmp/p.txt.answer.txt", codex_argv
+        # an older codex with no answer file: the answer is cut out of its transcript
+        transcript = "OpenAI Codex v0\n--------\nuser\nPROMPT\ncodex\nThe review.\nLine two.\ntokens used\n1234\n"
+        assert cli_reply("openai", "codex", 0, transcript, "") == ("The review.\nLine two.", None)
+        # ...and agy keeps its own error path: no SUCCESS result is an error, never its raw stream as a review
+        assert cli_reply("google", "agy", 0, '{"event": "progress"}\n', "")[0] is None
+        assert "--skip-git-repo-check" in codex_argv, codex_argv
+        # ...and through `call_cli`, as a round runs it: the 9000-character package reaches both CLIs on stdin, the
+        # command line stays under cmd.exe's 8191, Codex's answer comes from its `-o` file, and the file is gone after.
+        seen = []
+
+        def fake_run(cmd, **kw):
+            seen.append((cmd, kw.get("input")))
+            if "exec" in cmd:
+                with open(cmd[cmd.index("-o") + 1], "w", encoding="utf-8") as fh:
+                    fh.write("codex review")
+                return subprocess.CompletedProcess(cmd, 0, "OpenAI Codex v0\ncodex\nnot this\ntokens used\n", "")
+            return subprocess.CompletedProcess(cmd, 0, "claude review", "")
+        real_run_60 = subprocess.run
+        subprocess.run = fake_run
+        try:
+            assert call_cli("openai", "codex", "m", big)[0] == "codex review"
+            assert call_cli("anthropic", "claude", "m", big)[0] == "claude review"
+        finally:
+            subprocess.run = real_run_60
+        assert len(seen) == 2 and all(inp == big and len(subprocess.list2cmdline(cmd)) < 8191 for cmd, inp in seen), seen
+        assert not os.path.exists(seen[0][0][seen[0][0].index("-o") + 1]), "the answer file stayed behind"
         os.environ["AUTOSOUND_CRITIC_CLI_ARGS"] = '--sandbox --log-file "C:/logs/agy run.log"'
         argv = cli_command("google", "agy", "m", "/tmp/p.txt", "PROMPT")
         assert argv[3:6] == ["--sandbox", "--log-file", "C:/logs/agy run.log"], argv

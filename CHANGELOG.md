@@ -193,6 +193,12 @@ W-3 (`docs/PLAN-W-3.md`): the issues on the milestone that carry the Arbiter's `
   run agy with the API's id (`gemini-3.1-pro-preview`), which agy names differently and refused; now that rung stops
   and names both ids and agy's models of that line, without guessing a tier. `ask` is in the usage text and in the
   no-project error. A streamed read is not in this wave: the budget alone fixes the case seen.
+- **Claude and Codex as reviewers on Windows get the package on stdin** (`autosound_ai.py`, skill #60). Both got
+  the whole prompt as an argument, and on Windows the call goes through `cmd.exe`, whose line stops at 8191
+  characters, while a package is tens of KB. Now `claude -p` and `codex exec -` read it from stdin, Codex's answer
+  comes from its `-o` file (its transcript is parsed only when that file is empty), and `--skip-git-repo-check` lets
+  `codex exec` start from a project folder. agy's own error path is kept. Checked on the Mac with fake binaries;
+  the proof on Windows is one review through each CLI on the VM.
 
 ## [v3.0.61] — 2026-09-23 · The installer upgrades an app it did not install, instead of breaking it
 
