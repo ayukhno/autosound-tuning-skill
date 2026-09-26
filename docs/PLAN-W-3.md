@@ -1,6 +1,6 @@
 # W-3 · v3.0.62 — the plan
 
-Opened 2026-09-23, straight after v3.0.61. **The wave is COLLECTING** (the Arbiter: «головне ми збираємо НЕ РОБИМО»): findings go into the milestone and this table, and nothing is built until he says so. **2026-09-24:** 21 issues on the milestone, every one assessed in its body (class · model · risk · complexity); `ok` on #24 only. The composition was agreed with the Arbiter the same day: everything open
+Opened 2026-09-23, straight after v3.0.61. **The wave is COLLECTING** (the Arbiter: «головне ми збираємо НЕ РОБИМО»): findings go into the milestone and this table, and nothing is built until he says so. **2026-09-24:** 21 issues on the milestone, every one assessed in its body (class · model · risk · complexity); `ok` on #24 only. **2026-09-26:** 24 issues, #83–#85 from the bus queue (hub #205, #206, #208); hub #203 and #204 were already #67 and #68. The composition was agreed with the Arbiter the same day: everything open
 that is not deferred and can be done at the desk. The branch is `wave-2026-09-23`, and the milestone is `W-3 · v3.0.62`.
 
 | item | what | how (decided) |
@@ -26,6 +26,9 @@ that is not deferred and can be done at the desk. The branch is `wave-2026-09-23
 | **#80** | "If you have time" captures go into the round's list (#77), not only into the message | Not decided: collected 2026-09-24 |
 | **#81** | `scene_presets` drops every pair silently: registry keys `m_L`/`w_L`, the tool looks for `m-L` literally | Not decided: collected 2026-09-24 |
 | **#82** | `scene_presets`' ladder degenerates on the Passat: every rung the same, presets built by hand | Not decided: collected 2026-09-24 |
+| **#83** | An open capture round carries no grouping of its own; the glossary keeps `r-L`/`r-R` active while the registry has them off (hub #205 TCC-031; the rest of that ticket is held by #75, #77–#80) | Not decided: collected 2026-09-26 |
+| **#84** | `project_seed.py` records the wrong source project: the controls loop overwrites `name` (hub #206 RES-019) | Not decided: collected 2026-09-26 |
+| **#85** | Reviewer channel: the API waits a fixed 120 s, the step down to the CLI carries a model id it does not know, `ask` missing from the usage text (hub #208 RES-021; related #68, #71) | Not decided: collected 2026-09-26 |
 
 **Deferred at the review:** S-055 (needs an ellipsoid round in the car). **Still deferred:** S-001, S-017,
 S-021 (after 3.1.x), hub #113 PAS-005, hub #82 HUB-031, #26 (a 3.2 candidate). **Waiting on his run:** S-059.

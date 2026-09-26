@@ -1511,7 +1511,7 @@ Next: the W-3 collection with him (S-060); #24 closes with the release.
 ## S-060 · W-3 · v3.0.62 is collecting: pick up the collection with him
 
 **Status**: open 2026-09-24 · the session stopped on «добраніч» · the wave is still COLLECTING, nothing is built;
-21 issues on `W-3 · v3.0.62`, all assessed, `ok` on #24 only · was: open 2026-09-23
+24 issues on `W-3 · v3.0.62`, all assessed, `ok` on #24 only · was: open 2026-09-23
 
 Where it stands: the milestone `W-3 · v3.0.62` holds #60, #61, #64 and #24, and S-056 and S-057 ride the wave
 (`docs/PLAN-W-3.md`). Decided at the review: `docs/` folders by kind (#61), the five-line verdict shape (S-057),
@@ -1535,8 +1535,13 @@ measurement is a `cap_NNN` round with a per-driver list, closed against REW what
 #82 its ladder degenerates. #66 decided by him: accept `-` as inversion in any chain (`L w-m+tw`), side first; his
 naming grammar is quoted in #66. (#76 does not exist: a GitHub error ate the number.)
 
+**2026-09-26 — the bus queue to:skill:** #83 (hub #205 TCC-031: the round carries no grouping of its own, and
+the glossary keeps `r-L`/`r-R` active while the registry has them off; the rest of the ticket is held by #75, #77–#80) ·
+#84 (hub #206 RES-019: `project_seed.py` names the wrong source project) · #85 (hub #208 RES-021: the API's fixed 120 s,
+the API model id carried to the CLI, `ask` missing from the usage text). Hub #203 and #204 were already #67 and #68.
+
 Next: the collection goes on until he says it is over; then his OK task by task. Resume:
-`hub/bin/role skill --resume 4c820164-7b49-418c-811d-be76c50bc9a5`.
+`hub/bin/role skill --resume e458cb47-2e5b-4aa5-b5f8-448c47410551`.
 
 ## S-059 · v3.0.61's TCC upgrade path, run on the Windows VM
 
