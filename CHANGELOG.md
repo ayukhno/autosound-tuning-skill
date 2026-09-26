@@ -170,6 +170,10 @@ W-3 (`docs/PLAN-W-3.md`): the issues on the milestone that carry the Arbiter's `
   printed "about 700 MB -- a few minutes" and the version, and only then said the app was running and left as it
   is: it read as a download that never started. Now the running app is asked about first, and the size line
   prints only when the upgrade will run.
+- **A reviewer answer agy cuts off mid-stream is tried once more on the same rung** (`autosound_ai.py`, skill #68,
+  hub #204). "The stream was interrupted" used to count as a refusal, and one cut moved the review off the
+  subscription onto the clipboard or the metered API. Now the same call runs once more; a second cut fails as
+  before and says it was cut twice. Refusals, quota and timeouts are not retried. Nothing changes for TCC.
 
 ## [v3.0.61] — 2026-09-23 · The installer upgrades an app it did not install, instead of breaking it
 

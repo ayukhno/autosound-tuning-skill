@@ -308,6 +308,8 @@ for when that tool answers with a refusal.
 
 0. **Wait / retry — mid-session only.** An empty reply is usually an exhausted quota or lost auth,
    not a crash (§6); a minute or a model-group switch often costs less than changing channel.
+   One retry is automatic: an agy answer cut off mid-stream ("The stream was interrupted") is run
+   once more on the same rung before the script reports a failure (skill #68). A cut is not a refusal.
 1. **ANOTHER vendor than the one driving** — `python3 scripts/autosound_ai.py critic|advisor|ask`,
    through that vendor's key (§3) or its CLI. This is the recommended default: Generator one vendor,
    reviewer the other, which is what cross-vendor anti-anchoring means. Verify with `doctor`. From

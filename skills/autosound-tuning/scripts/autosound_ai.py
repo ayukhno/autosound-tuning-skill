@@ -893,6 +893,9 @@ _FAILURES = (
     ("tool_denied", r"headless mode cannot prompt|auto-denied"),
     ("bad_model", r"invalid model selection|not recognized as a known model|unknown model"),
     ("quota", r"quota|capacity|exhausted|RESOURCE_EXHAUSTED|TerminalQuotaError|\b429\b"),
+    # agy took the call and was cut off partway through the answer (skill #68, hub #204): not a refusal, so
+    # `call_cli` tries once more on the same rung before the ladder steps down to the clipboard or the API.
+    ("cut_stream", r"stream was interrupted"),
 )
 
 
@@ -912,6 +915,8 @@ FAILURE_ADVICE = {
                    "Не вмикай `toolPermission: always-proceed`: рецензентові інструменти не потрібні",
     "quota": "квоту або ємність вичерпано — сходинка 0: зачекай і повтори; вищий рівень тієї ж моделі "
              "— лише сказавши це вголос (setup-critic-channel.md §7)",
+    "cut_stream": "agy двічі поспіль обірвав відповідь посередині — повтори пізніше; або буфер обміну, "
+                  "або `--via api` з ключем (setup-critic-channel.md §7)",
     "timeout": "CLI не відповів вчасно — повтори з довшим AUTOSOUND_CLI_TIMEOUT (секунди), або бери буфер обміну",
     "other": "",
 }
@@ -951,7 +956,11 @@ def call_cli(provider, cli_bin, model, prompt, timeout=None):
     """One reviewer call through a local CLI: `(text, None, None)` or `(None, kind, error)`.
 
     The one place a CLI is run, for a review and for the doctor's smoke alike -- the smoke is worth
-    something only if it goes the way a round goes (skill#27: it used to run a model nobody chose)."""
+    something only if it goes the way a round goes (skill#27: it used to run a model nobody chose).
+
+    A stream cut mid-answer (`cut_stream`) is run once more with the same model and prompt: the CLI took the
+    call, so stepping down to the clipboard or the metered API on one cut would be the wrong rung (skill #68).
+    Only that failure is retried -- a refusal, a quota or a timeout would only double the wait."""
     timeout = timeout or cli_wait(prompt)
     prompt_path = None
     try:
@@ -959,21 +968,28 @@ def call_cli(provider, cli_bin, model, prompt, timeout=None):
                                          suffix=".txt", delete=False) as tf:
             prompt_path = tf.name
             tf.write(prompt)
-        try:
-            # На Windows потрібен shell=True, щоб запускати .cmd обгортки типу agy.cmd від npm/scoop
-            stdin = cli_stdin(provider, cli_bin, prompt)
-            proc = subprocess.run(cli_command(provider, cli_bin, model, prompt_path, prompt),
-                                  input=stdin, capture_output=True,
-                                  text=True, encoding="utf-8", timeout=timeout,
-                                  shell=(sys.platform == "win32"), env=child_env(cli_bin))
-        except subprocess.TimeoutExpired:
-            keep_raw("cli", stdin or prompt, f"(no answer in {timeout} s)")
-            return None, "timeout", f"no answer in {timeout} s"
-        keep_raw("cli", stdin or prompt, f"exit {proc.returncode}\n--- stdout\n{proc.stdout}\n--- stderr\n{proc.stderr}")
-        text, error = cli_reply(provider, cli_bin, proc.returncode, proc.stdout, proc.stderr)
-        if text:
-            return text, None, None
-        return None, classify_failure(error), error
+        for attempt in (1, 2):
+            try:
+                # На Windows потрібен shell=True, щоб запускати .cmd обгортки типу agy.cmd від npm/scoop
+                stdin = cli_stdin(provider, cli_bin, prompt)
+                proc = subprocess.run(cli_command(provider, cli_bin, model, prompt_path, prompt),
+                                      input=stdin, capture_output=True,
+                                      text=True, encoding="utf-8", timeout=timeout,
+                                      shell=(sys.platform == "win32"), env=child_env(cli_bin))
+            except subprocess.TimeoutExpired:
+                keep_raw("cli", stdin or prompt, f"(no answer in {timeout} s)")
+                return None, "timeout", f"no answer in {timeout} s"
+            keep_raw("cli", stdin or prompt, f"exit {proc.returncode}\n--- stdout\n{proc.stdout}\n--- stderr\n{proc.stderr}")
+            text, error = cli_reply(provider, cli_bin, proc.returncode, proc.stdout, proc.stderr)
+            if text:
+                return text, None, None
+            kind = classify_failure(error)
+            if kind != "cut_stream":
+                return None, kind, error
+            if attempt == 1:
+                print(f">> CLI '{os.path.basename(cli_bin)}' обірвав відповідь посередині — це не відмова; "
+                      f"повторюю один раз на тій самій сходинці", file=sys.stderr)
+        return None, kind, f"{error} (обірвано двічі поспіль)"
     finally:
         if prompt_path:
             try:
@@ -1118,8 +1134,9 @@ def _selftest():
             "Assist for individuals. To continue using Gemini, please migrate to the Antigravity suite")
     badmodel = ('error: invalid model selection (--model "gemini-3.5-flash-medium" --effort ""): model '
                 'gemini-3.5-flash-medium is not recognized as a known model or custom model in settings')
-    assert [classify_failure(t) for t in (headless, dead, badmodel, "Error: 429 RESOURCE_EXHAUSTED", "channel works")] \
-        == ["tool_denied", "dead_cli", "bad_model", "quota", "other"]
+    cut = "The stream was interrupted. Please continue the task you were working on."
+    assert [classify_failure(t) for t in (headless, dead, badmodel, "Error: 429 RESOURCE_EXHAUSTED", cut, "channel works")] \
+        == ["tool_denied", "dead_cli", "bad_model", "quota", "cut_stream", "other"]
     saved_args = os.environ.pop("AUTOSOUND_CRITIC_CLI_ARGS", None)
     try:
         # agy: the prompt on stdin as one stream-json message -- no path to read, no argv limit.
@@ -1220,6 +1237,20 @@ def _selftest():
             assert code == 0 and "pong" in out and "REVIEW_FILE: " in err and "REVIEW_ROUTE: cli" in err, (code, err)
             kept = sorted(os.listdir(raw))
             assert len(kept) == 2 and kept[0].endswith("-cli-received.txt") and kept[1].endswith("-cli-sent.txt"), kept
+            # An agy stream cut mid-answer is not a refusal (skill #68, hub #204): one more try on the same rung, and a
+            # second cut fails as before, saying so. A refusal is never retried (read_file above: one run each time).
+            cut_out = json.dumps({"event": "result", "result": {"status": "ERROR", "response": "", "error": cut}})
+            replies = [cut_out, ok_out]
+            subprocess.run = lambda cmd, **kw: (runs.append((cmd, kw.get("input"), kw.get("env") or {})),
+                                                subprocess.CompletedProcess(cmd, 0, replies.pop(0), ""))[1]
+            before = len(runs)
+            code, out, err = run_main("ask", pkg)
+            assert code == 0 and "pong" in out and len(runs) == before + 2 and "повторюю" in err, (code, err)
+            replies = [cut_out, cut_out, ok_out]
+            before = len(runs)
+            code, out, err = run_main("ask", pkg)
+            assert code == 4 and len(runs) == before + 2 and "двічі" in err, (code, len(runs) - before, err)
+            subprocess.run = lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, ok_out, "")
             # The transport follows the model (hub #187): an agy slug with a key present goes to
             # the CLI, not to the API that 404s on it.
             os.environ["GEMINI_API_KEY"] = "AQ." + "x" * 50
