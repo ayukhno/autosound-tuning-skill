@@ -236,6 +236,10 @@ W-3 (`docs/PLAN-W-3.md`): the issues on the milestone that carry the Arbiter's `
   model-resolved repository (the shape the side-effect gate exists to refuse, #23). `project_repo.py init` writes a
   `CLAUDE.md` into a fresh project pointing at `post_feedback(..., channel="skill"|"tcc")`, the file a session greps
   first; an existing one is left alone. A refusal at the `gh` layer is not in this (the Arbiter's separate call).
+- **Documents for the person land in `<project>/docs/`, by kind** (the Arbiter's rule, skill #61). `apply.propose`
+  writes the settings sheet to `docs/sheets/<v_NNN>-<slot>.md`, `capture-start` writes the round's list to
+  `docs/plans/<_N>-capture.md`, and a session's reports go to `docs/reports/`. `contract.py check` names a sheet, a
+  plan or a report found anywhere else (a project from before the rule keeps working; nothing is moved for it).
 
 ## [v3.0.61] — 2026-09-23 · The installer upgrades an app it did not install, instead of breaking it
 

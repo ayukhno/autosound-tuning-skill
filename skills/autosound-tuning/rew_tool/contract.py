@@ -465,6 +465,30 @@ def round_verdict(titles, round_, glossary=None):
     return verdict
 
 
+#: What a human deliverable's file name looks like (skill #61): a settings sheet, a measurement plan, a report. Named
+#: when found outside `<project>/docs/`; the project's own prose (README, TODO, CLAUDE.md, the context) is not one.
+_DELIVERABLE_RE = re.compile(r"(settings|sheet|plan|report)", re.I)
+_NOT_DELIVERABLE = {"readme", "todo", "claude", "autosound_context", "preference-profile", "changelog", "score-sheet"}
+
+
+def deliverables_outside_docs(project_dir):
+    """`.md` files that look like a sheet, a plan or a report and sit outside `<project>/docs/` (skill #61): the
+    Arbiter's rule is that every document meant for him during tuning lives in `docs/` -- `docs/sheets/` for what he
+    enters, `docs/plans/` for what he measures, `docs/reports/` for what he reads -- so he has one place to look. A
+    project from before the rule holds them elsewhere; they are named, not failed."""
+    out = []
+    for root, dirs, files in os.walk(project_dir):
+        rel_root = os.path.relpath(root, project_dir)
+        dirs[:] = [d for d in dirs if d not in (".git", "state", "process", "docs", "node_modules", "__pycache__")]
+        for name in files:
+            stem = name.lower().rsplit(".", 1)[0]
+            if not name.lower().endswith(".md") or stem.split(".")[0] in _NOT_DELIVERABLE:
+                continue
+            if _DELIVERABLE_RE.search(stem):
+                out.append(os.path.join("" if rel_root == "." else rel_root, name).replace(os.sep, "/"))
+    return sorted(out)
+
+
 def proposals_on_disk(project_dir):
     """`eq-delta.json` files newer than the ledger's HEAD (skill #74): a proposal that reached the disk and not the
     Arbiter. `eq_propose --accept` writes that file for `apply.propose` to bank as a yellow version; the round's final
@@ -648,6 +672,7 @@ def check_project(project_dir, skip_rew=False):
         "glossary_vs_ledgers": cross_check_glossary_vs_ledgers(glossary, snapshots),
         "tiers_vs_profile": cross_check_tiers_vs_profile(profile_data, snapshots, project_data),
         "proposals_on_disk": proposals_on_disk(project_dir),
+        "deliverables_outside_docs": deliverables_outside_docs(project_dir),
         "rew": ({"reachable": False, "note": "skipped (--no-rew)"} if skip_rew
                 else cross_check_rew(process_state, glossary, snapshots, project_data)),
     }
@@ -1039,6 +1064,12 @@ def render_report(report):
     lines.append("**Cross-file checks:**")
     for note in cross["glossary_vs_ledgers"] + cross["tiers_vs_profile"]:
         lines.append(f"- ⚠️ {note}")
+    outside = cross.get("deliverables_outside_docs") or []
+    if outside:
+        lines.append(f"- {len(outside)} document(s) for the person outside `docs/`: " + ", ".join(f"`{f}`" for f in outside[:8])
+                     + (" …" if len(outside) > 8 else "")
+                     + " — sheets go to `docs/sheets/`, measurement plans to `docs/plans/`, reports to `docs/reports/` "
+                       "(skill #61); the tools write theirs there, a session moves its own")
     for row in cross.get("proposals_on_disk") or []:
         lines.append(f"- ⚠️ a proposal on disk that no version carries: `{row['file']}`"
                      + (f" is {row['newer_by_s']} s newer than the ledger's HEAD ({row['head']})" if row["head"]
@@ -1331,6 +1362,16 @@ def _selftest():
     assert (rv_opt["missing"], rv_opt["missing_optional"], rv_opt["complete"]) == ([], ["r-R_01 (sw)"], True), rv_opt
     assert "optional left ['r-R_01 (sw)']" in render_report(dict(report, cross_checks=dict(report["cross_checks"], rew={
         "reachable": True, "round": "cap_001", "phase": "0", "version": "v_001", **rv_opt})))
+    # skill #61: a sheet, a plan or a report outside docs/ is named; the project's own prose and docs/ are not.
+    assert check_project(root, skip_rew=True)["cross_checks"]["deliverables_outside_docs"] == []
+    os.makedirs(os.path.join(root, "docs", "sheets"), exist_ok=True)
+    for rel in ("helix_settings_v7.md", "rew_analitic/measurement_plan_55.md", "docs/sheets/v_007-SQ.md", "README.md", "TODO.md"):
+        os.makedirs(os.path.dirname(os.path.join(root, rel)) or root, exist_ok=True)
+        with open(os.path.join(root, rel), "w", encoding="utf-8") as fh:
+            fh.write("x")
+    outside = check_project(root, skip_rew=True)["cross_checks"]["deliverables_outside_docs"]
+    assert outside == ["helix_settings_v7.md", "rew_analitic/measurement_plan_55.md"], outside
+    assert "docs/sheets/" in render_report(check_project(root, skip_rew=True))
     # skill #74: an `eq-delta.json` newer than the ledger's HEAD is a proposal that never reached the Arbiter.
     assert report["cross_checks"]["proposals_on_disk"] == [], report["cross_checks"]["proposals_on_disk"]
     os.makedirs(os.path.join(root, "rew_analitic", "phase2"), exist_ok=True)

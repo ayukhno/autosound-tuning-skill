@@ -475,8 +475,27 @@ def propose(history, delta, note=None, provenance=None, registry=None, allow_non
     else:
         sheet += (f"\n\nAfter entering these in Helix, run `attest {version}` to bank it 🟢 applied, "
                   f"then take a control measurement (→ 📏 measured).")
+    sheet_path = write_sheet(project_dir, history.preset, version, sheet)
     return {"version": version, "sheet": sheet, "full_render": history.render(version),
-            "diff": d, "advisories": adv, "candidate": candidate, "waits_for": held, "structural": moves}
+            "diff": d, "advisories": adv, "candidate": candidate, "waits_for": held, "structural": moves,
+            "sheet_path": sheet_path}
+
+
+def write_sheet(project_dir, preset, version, sheet):
+    """The settings sheet as a file the person can find: `<project>/docs/sheets/<v_NNN>-<slot>.md` (skill #61, the
+    Arbiter: every document meant for him goes into the project's `docs/`). Best effort, like `write_delta`: the
+    snapshot is the record; this is where he reads it. Returns the path written, or None."""
+    if not project_dir:
+        return None
+    folder = os.path.join(project_dir, "docs", "sheets")
+    path = os.path.join(folder, f"{version}-{preset}.md")
+    try:
+        os.makedirs(folder, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(f"# {preset} · {version} — the settings sheet\n\n{sheet.strip()}\n")
+    except OSError:
+        return None
+    return path
 
 
 def attest(history, version=None, note=None):
@@ -675,6 +694,9 @@ def _selftest():
                       "--evidence", "w-L_2 (sw)", "--reviewed", "review.md"]) == 0
     assert "🟡 proposed v_002 on SQ" in out.getvalue() and "w-L" in out.getvalue(), out.getvalue()
     assert cli_h.load("v_002")["channels"]["w-L"]["status"] == "proposed"
+    # skill #61: the sheet is a file in the project's docs/sheets/, by version and slot.
+    sheet_file = os.path.join(cli_root, "docs", "sheets", "v_002-SQ.md")
+    assert os.path.isfile(sheet_file) and "APPLY THIS" in open(sheet_file, encoding="utf-8").read(), sheet_file
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
         assert _main(["apply.py", cli_root, "attest"]) == 0

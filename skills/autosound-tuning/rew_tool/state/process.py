@@ -1255,6 +1255,8 @@ class Process:
         }
         state["capture"] = round_
         self._write(state)
+        round_["plan_path"] = self._write_capture_plan(round_)
+        self._write(state)
         self._append(
             EV_CAPTURE_ISSUED,
             capture=round_["id"],
@@ -1272,6 +1274,25 @@ class Process:
             note=note,
         )
         return round_
+
+    def _write_capture_plan(self, round_):
+        """The round's list as a file the person can take to the car: `<project>/docs/plans/<_N|v_NNN>-capture.md`
+        (skill #61). Best effort: the round is the record, this is where he reads it. Returns the path or None."""
+        folder = os.path.join(self.project_dir, "docs", "plans")
+        label = round_["version"] if round_.get("version_kind") == "ledger" else f"_{round_['version']}"
+        path = os.path.join(folder, f"{label}-capture.md")
+        try:
+            os.makedirs(folder, exist_ok=True)
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(f"# {round_['id']} — captures at {label}"
+                         + (f", phase {round_['phase']}" if round_.get("phase") else "")
+                         + (f", step {round_['step']}" if round_.get("step") else "") + "\n\n")
+                fh.write("\n".join(render_round_list(round_)) + "\n")
+                if round_.get("note"):
+                    fh.write(f"\n{round_['note']}\n")
+        except OSError:
+            return None
+        return os.path.relpath(path, self.project_dir).replace(os.sep, "/")
 
     def reconcile_captures(self, rew_titles):
         """Close the open round's list against what REW holds, however it was captured (skill #77, rule 3).
@@ -3212,6 +3233,10 @@ def _selftest():
     assert "c_55 (rta)" in rnd["groups"][0]["names"], "a title typed beside the plan is on the list, in its place"
     assert rnd["optional"] == ["Ws_55 (sw)"] and rnd["groups"][-1]["names"] == ["Ws_55 (sw)"], rnd
     assert rnd["setup"] == {"first": "rta", "from": "m-L_54 (rta)", "switches": 1}, rnd["setup"]
+    # skill #61: the list is also a file in the project's docs/plans/, the one he takes to the car.
+    assert rnd["plan_path"] == "docs/plans/_55-capture.md", rnd["plan_path"]
+    plan_text = open(os.path.join(rr_root, "docs", "plans", "_55-capture.md"), encoding="utf-8").read()
+    assert "cap_002" in plan_text and "Solo (rta)" in plan_text and "Ws_55 (sw)   (optional)" in plan_text, plan_text
     issued = [e for e in rr.events() if e.get("type") == EV_CAPTURE_ISSUED][-1]
     assert issued["groups"] == rnd["groups"] and issued["optional"] == ["Ws_55 (sw)"], issued
     # --start overrides what the last round says; with nothing known, the plan's order (sweeps first).

@@ -12,6 +12,8 @@ PROJECT  = one car + one install (drivers, DSP, amps, wiring) + ONE listening po
           └ STEP (the user's path) → GENERATOR↔CRITIC cycle (≤3 rounds) → Arbiter
 ```
 
+**Documents for the person live in `<project>/docs/`, by kind** (the Arbiter, 2026-09-20, skill #61): `docs/sheets/` — the settings sheet per version and slot (`v_007-SQ.md`, written by `apply.propose`); `docs/plans/` — a capture round's list (`_55-capture.md`, written by `capture-start`); `docs/reports/` — what a session writes for him to read (`2026-09-26-phase2-verdict.md`). One place to look, whatever the harness; `contract.py check` names a sheet, plan or report found elsewhere, and a project from before the rule keeps working.
+
 **The listening point is part of what the project IS** (`project.json` `project_type`, one of
 **driver · passenger · both · all · rear_left · rear_right**), not a setting inside it — the Arbiter's
 ruling 2026-09-20. Tuning the stage for another seat means taking every raw curve again and walking
