@@ -1492,7 +1492,7 @@ That is a redesign of every tool's output, not a patch.
 
 ## S-061 · #24 built on the wave: translations level in every language; what is left for W-3
 
-**Status**: open 2026-09-23 · the session stopped on «добраніч» · #24 built with the Arbiter's OK (label `ok`), waits for the W-3 release · `git -C skill log --oneline a1574b1^..f94ad14` on `wave-2026-09-23`
+**Status**: done 2026-09-26 · #24 released in v3.0.62 · was: open 2026-09-23 · the session stopped on «добраніч» · #24 built with the Arbiter's OK (label `ok`), waits for the W-3 release · `git -C skill log --oneline a1574b1^..f94ad14` on `wave-2026-09-23`
 
 Done: the de/pl listening references and `listening.py coverage` (a1574b1); README uk/de/pl (bc24729); FAQ in all
 four languages after a review round with him (1b50122, 6291ca7, f94ad14). `i18n-check` has no declared lag left.
@@ -1523,7 +1523,7 @@ this is the look, not a crash.
 
 ## S-060 · W-3 · v3.0.62 is collecting: pick up the collection with him
 
-**Status**: open 2026-09-24 · the session stopped on «добраніч» · the wave is still COLLECTING, nothing is built;
+**Status**: done 2026-09-26 · **v3.0.62 released** (`cd004e9`, PR #86 merged by `--ff-only`, tag pushed); 22 issues on W-3 closed with the milestone; hub #203 #204 #205 #206 #208 closed with the tag · was: open 2026-09-24 · the session stopped on «добраніч» · the wave is still COLLECTING, nothing is built;
 the collection is over (the Arbiter, 2026-09-26): `ok` on 22 issues, #70 and #71 back to the pool · was: 24 issues, all assessed, `ok` on #24 only
 
 Where it stands: the milestone `W-3 · v3.0.62` holds #60, #61, #64 and #24, and S-056 and S-057 ride the wave
@@ -1593,8 +1593,12 @@ declined to answer a filler-padded package with a bare "OK" and said why — its
 channel). Found on the way: a `.critic-env` in the working folder and `%APPDATA%\autosound\critic-env` win over the
 environment, as designed, so a one-off vendor switch needs a folder without one.
 
-Next: `git merge --ff-only` of `wave-2026-09-23` into `main`, push, the tag `v3.0.62` on that commit; hub #203 #204
-#205 #206 #208 close with the tag. Resume:
+**Released 2026-09-26:** `main` fast-forwarded to `cd004e9`, CI green (PR #86 and the push to `main`), `tag-check.sh` 4/4
+and the hub preflight 14/14, tag `v3.0.62` pushed; the tag's CI attaches the engine builds to its release. Open after
+it, not the skill's: hub #214 SKL-054 (TCC Control's half of the round rule, to tcc), hub #215 SKL-055 (the ladder's
+floor, to research). In the pool: S-062 (red mojibake in PowerShell 5), #70 (S-057), #71.
+
+Next: nothing in work. Resume:
 `hub/bin/role skill --resume e458cb47-2e5b-4aa5-b5f8-448c47410551`.
 
 ## S-059 · v3.0.61's TCC upgrade path, run on the Windows VM
