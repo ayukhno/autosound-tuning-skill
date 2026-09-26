@@ -1482,7 +1482,7 @@ which is a rebuilt engine, not a patch.
 
 ## S-057 · A five-line verdict block for every tool's output
 
-**Status**: open 2026-09-23 · **W-3 · v3.0.62**, issue #70 (composition agreed with the Arbiter, 2026-09-23)
+**Status**: open 2026-09-26 · back to the pool: not taken at the W-3 review (the Arbiter, 2026-09-26), for a later wave; the shape stays decided; issue #70 off the milestone · was: W-3 · v3.0.62, issue #70 (2026-09-23)
 accepted by the Arbiter with this as the follow-up.
 
 #57 P5 asked for compact output. W-2 made it where the issue measured it: `predict`'s notes collapse by text,
@@ -1511,7 +1511,7 @@ Next: the W-3 collection with him (S-060); #24 closes with the release.
 ## S-060 · W-3 · v3.0.62 is collecting: pick up the collection with him
 
 **Status**: open 2026-09-24 · the session stopped on «добраніч» · the wave is still COLLECTING, nothing is built;
-24 issues on `W-3 · v3.0.62`, all assessed, `ok` on #24 only · was: open 2026-09-23
+the collection is over (the Arbiter, 2026-09-26): `ok` on 22 issues, #70 and #71 back to the pool · was: 24 issues, all assessed, `ok` on #24 only
 
 Where it stands: the milestone `W-3 · v3.0.62` holds #60, #61, #64 and #24, and S-056 and S-057 ride the wave
 (`docs/PLAN-W-3.md`). Decided at the review: `docs/` folders by kind (#61), the five-line verdict shape (S-057),
@@ -1540,7 +1540,12 @@ the glossary keeps `r-L`/`r-R` active while the registry has them off; the rest 
 #84 (hub #206 RES-019: `project_seed.py` names the wrong source project) · #85 (hub #208 RES-021: the API's fixed 120 s,
 the API model id carried to the CLI, `ask` missing from the usage text). Hub #203 and #204 were already #67 and #68.
 
-Next: the collection goes on until he says it is over; then his OK task by task. Resume:
+**2026-09-26, the review:** he closed the collection and went through the tasks. `ok` on #77 #74 #75 #83 (the round
+rule), #78 #80 #79 #72 (the round's list and view), #68 #85 #60 (the reviewer channel), #69 #66 #81 #82 (numbers,
+names, scene presets), #73 #61 #65 (bigger; #65 its text part only, suggestions 1, 2, 4), #64 #67 #84 (small); #24 had
+it. Back to the pool: #70 (S-057) and #71 (Gemini Pro in README/FAQ, found at #24).
+
+Next: the plan for the `ok` issues (`docs/PLAN-W-3.md`), then the work on `wave-2026-09-23`. Resume:
 `hub/bin/role skill --resume e458cb47-2e5b-4aa5-b5f8-448c47410551`.
 
 ## S-059 · v3.0.61's TCC upgrade path, run on the Windows VM
