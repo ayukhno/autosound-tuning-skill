@@ -129,6 +129,22 @@ EV_USER_DECISION = "user_decision"
 EV_WRITTEN_BY = "written_by"
 
 
+
+# A label a caller typed at the head of a step's name: a section of a phase document (`2d:`, `2c —`) or another
+# number (`2.8`). skill #72: the session cited `2.8` while the panel showed `2d: фінальний EQ`, one step under two
+# labels, so the id now leads every name and any other label there is dropped.
+_LEADING_LABEL_RE = re.compile(r"^\s*(?:\d+\.\d+(?:\.\d+)*[a-z]?|\d+[a-z])\s*(?:[:\u2014\u2013-]\s*|\s+)")
+
+
+def _named_by_id(step_id, name):
+    """`<id> <name>`: the one label a step goes by, in the text and on every screen that shows the plan (skill #72)."""
+    name = str(name or "").strip()
+    head = f"{step_id} "
+    if name.startswith(head):
+        return name
+    return head + _LEADING_LABEL_RE.sub("", name, count=1)
+
+
 class ProcessError(ValueError):
     """A transition the process model refuses — e.g. a done step with no evidence."""
 
@@ -862,6 +878,7 @@ class Process:
         return state
 
     def add_step(self, step_id, name, source=SOURCE_SKILL, phase=None, covers=None):
+        # (skill #72) The name leads with the step's id -- `_named_by_id`, below the class.
         """Add a plan step. Instantiated from the phase template (`skill`) or situational
         (`project`) — the distinction is what lets the UI show which steps this car needed.
 
@@ -881,6 +898,7 @@ class Process:
             summary = covers_summary(covers)
             if summary not in name:
                 name = f"{name}: {summary}"
+        name = _named_by_id(step_id, name)
         state = self.load()
         if self.step(state, step_id):
             raise ProcessError(f"step {step_id!r} already exists; steps are never re-added")
@@ -2971,18 +2989,25 @@ def _selftest():
     entry = cv.add_step("0.4", "Закрити відкриті поля", phase="0", covers=facts)
     assert entry["covers"] == facts, entry
     assert entry["name"] == (
-        "Закрити відкриті поля: project.json:sources.sweep_input, "
+        "0.4 Закрити відкриті поля: project.json:sources.sweep_input, "
         "project.json:amps.front.gain_db, project.json:channels.r-L.driver +2"), entry["name"]
     # The name is GENERATED: passing it back composed a second time changes nothing, so a
     # front-end that re-reads and re-adds cannot stutter the summary into the title.
     again = Process(cv.dir).add_step("0.5", entry["name"], phase="0", covers=facts)
-    assert again["name"] == entry["name"], again["name"]
+    assert again["name"] == "0.5" + entry["name"][3:], again["name"]
     assert again["name"].count("+2") == 1, again["name"]
     # Blanks and duplicates are not facts; order is the caller's.
     assert cv.add_step("0.6", "x", phase="0", covers=["a", "", "a", " b "])["covers"] == ["a", "b"]
     # A step with nothing to cover is unchanged -- the field exists, the name is what was typed.
     plain = cv.add_step("0.7", "Raw baseline sweeps", phase="0")
-    assert plain["covers"] == [] and plain["name"] == "Raw baseline sweeps", plain
+    assert plain["covers"] == [] and plain["name"] == "0.7 Raw baseline sweeps", plain
+    # skill #72: one label per step, the same on every screen. The session cited `2.8` while the panel showed
+    # `2d: фінальний EQ` -- the section letter of phase_2_eq.md typed into the name. The id now leads the name and a
+    # different label is dropped; a name that already leads with its id is left alone.
+    assert cv.add_step("2.8", "2d: фінальний EQ до цілі", phase="2")["name"] == "2.8 фінальний EQ до цілі"
+    assert cv.add_step("2.7", "2c — два пресети сцени", phase="2")["name"] == "2.7 два пресети сцени"
+    assert cv.add_step("2.9", "2.9 центр", phase="2")["name"] == "2.9 центр"
+    assert cv.add_step("2.10", "4 тони на драбині рівня", phase="2")["name"] == "2.10 4 тони на драбині рівня"   # content, not a label
     # The printers show it: `open_work` carries the full list, `plan`/`show` are raw JSON.
     cv.start_attempt("0.4")
     assert cv.open_work()["steps_in_progress"][0]["covers"] == facts, cv.open_work()

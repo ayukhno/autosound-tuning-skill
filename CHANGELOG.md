@@ -199,6 +199,10 @@ W-3 (`docs/PLAN-W-3.md`): the issues on the milestone that carry the Arbiter's `
   comes from its `-o` file (its transcript is parsed only when that file is empty), and `--skip-git-repo-check` lets
   `codex exec` start from a project folder. agy's own error path is kept. Checked on the Mac with fake binaries;
   the proof on Windows is one review through each CLI on the VM.
+- **A plan step goes by one label** (`process.py`, skill #72). The session cited `2.8` while TCC's plan panel
+  showed `2d: фінальний EQ` — the section letter of `phase_2_eq.md` typed into the name. `add-step` now puts the
+  step's id at the head of its name and drops a section letter or another number typed there, so the text and the
+  panel read the same label. Steps already in a project keep their names.
 
 ## [v3.0.61] — 2026-09-23 · The installer upgrades an app it did not install, instead of breaking it
 
