@@ -109,6 +109,22 @@ def level_step_db(freqs, lo_db, hi_db, fc):
     return None if a is None or b is None else round(a - b, 2)
 
 
+#: The band both members of a junction play in: fc / SHARED_WIDTH .. fc * SHARED_WIDTH (skill #69). Half an octave
+#: each side of the crossover -- inside it both filters are within their first slope's reach, and the two members
+#: sum; outside it one member alone carries the sound.
+SHARED_WIDTH = 1.5
+
+
+def shared_step_db(freqs, lo_db, hi_db, fc, width=SHARED_WIDTH):
+    """The lower member's level minus the upper's over the band they SHARE (skill #69, S-056), each read through its
+    own chain, as the front's terms already read them. The own-band step (`level_step_db`) reads each member an
+    octave into its own band, which on a sloped plateau is a number the ear does not meet at the joint; this is the
+    difference where the two actually sum. Both are reported; neither replaces the other until real captures say."""
+    a = _band_level(freqs, lo_db, fc / width, fc * width)
+    b = _band_level(freqs, hi_db, fc / width, fc * width)
+    return None if a is None or b is None else round(a - b, 2)
+
+
 def terms(pred, target=None):
     """The four terms of ONE candidate, from `predict.to_json`'s shape (or `predict.predict`'s, converted).
 
@@ -133,10 +149,13 @@ def terms(pred, target=None):
     per = []
     for j in js:
         lo, hi = chans.get(j.get("lo")) or {}, chans.get(j.get("hi")) or {}
-        step = (level_step_db(freqs, lo["mag_db"], hi["mag_db"], j["fc"])
-                if freqs and lo.get("mag_db") and hi.get("mag_db") and j.get("fc") else None)
+        readable = bool(freqs and lo.get("mag_db") and hi.get("mag_db") and j.get("fc"))
+        step = level_step_db(freqs, lo["mag_db"], hi["mag_db"], j["fc"]) if readable else None
+        shared = shared_step_db(freqs, lo["mag_db"], hi["mag_db"], j["fc"]) if readable else None
         per.append({"lo": j.get("lo"), "hi": j.get("hi"), "fc": j.get("fc"),
-                    "loss_db": j.get("sum_loss_avg_db"), "level_step_db": step})
+                    "loss_db": j.get("sum_loss_avg_db"), "level_step_db": step,
+                    "shared_step_db": shared,
+                    "shared_band_hz": [round(j["fc"] / SHARED_WIDTH, 1), round(j["fc"] * SHARED_WIDTH, 1)] if readable else None})
     out["per_junction"] = per
     return out
 
@@ -262,10 +281,13 @@ def render(result, purpose=None):
         if worst:
             say.append(f"its largest L-R is {worst['delta_db']:+.1f} dB at {worst['band_hz'][0]:g}-"
                        f"{worst['band_hz'][1]:g} Hz")
-        steps = [f"{j['lo']}↔{j['hi']} {j['level_step_db']:+.1f}" for j in p["terms"].get("per_junction") or []
-                 if j.get("level_step_db") is not None and abs(j["level_step_db"]) >= 1.0]
+        steps = [f"{j['lo']}↔{j['hi']} {j['level_step_db']:+.1f}"
+                 + (f" (shared band {j['shared_step_db']:+.1f})" if j.get("shared_step_db") is not None else "")
+                 for j in p["terms"].get("per_junction") or []
+                 if (j.get("level_step_db") is not None and abs(j["level_step_db"]) >= 1.0)
+                 or (j.get("shared_step_db") is not None and abs(j["shared_step_db"]) >= 1.0)]
         if steps:
-            say.append("level steps " + ", ".join(steps) + " dB")
+            say.append("level steps " + ", ".join(steps) + " dB, own bands first")
         lines.append(f"  {p['name']}: " + ("; ".join(say) if say else "in the middle on every term"))
         if p.get("close"):
             lines.append(f"    close to it: {', '.join(p['close'])} -- within the tie margins on every term; worth "
@@ -320,6 +342,15 @@ def _selftest():
              {"name": "B (1800 Hz)", "terms": terms(pred(1.0, 2.0, -2.1), target)},
              {"name": "C (flatter)", "terms": terms(pred(0.2, 5.0, -1.9), target)}]
     assert cands[0]["terms"]["per_junction"][0]["level_step_db"] == 6.0, cands[0]["terms"]["per_junction"]
+    # skill #69 (S-056, #50): the level step over the band the two members SHARE, beside the own-band one. On flat
+    # members the two agree; on a sloped plateau they do not, and the shared one is what the ear meets at the joint.
+    assert cands[0]["terms"]["per_junction"][0]["shared_step_db"] == 6.0, cands[0]["terms"]["per_junction"]
+    assert shared_step_db(freqs, [80.0] * len(freqs), [80.0] * len(freqs), 2800.0) == 0.0
+    sloped = {"m-L": {"mag_db": [80.0 + 6.0 * math.log2(f / 2800.0) for f in freqs]},
+              "tw-L": {"mag_db": [80.0] * len(freqs)}}
+    sl = terms(dict(pred(1.0, 2.0, -2.0), channels=sloped), target)["per_junction"][0]
+    assert sl["level_step_db"] < -6.0 < sl["shared_step_db"] < 0.5, sl     # own band an octave down reads far lower
+    assert sl["shared_band_hz"] == [round(2800.0 / 1.5, 1), round(2800.0 * 1.5, 1)], sl
     res = front(cands)
     names = [p["name"] for p in res["picks"]]
     assert names == [c["name"] for c in cands if c["name"] in names], "picks must keep the candidates' order"
@@ -328,6 +359,7 @@ def _selftest():
     assert res["limited"] == [{"lo": "m-L", "hi": "tw-L", "best_loss_db": -1.6}], res["limited"]
     shown = render(res)
     assert "none of these repairs m-L ↔ tw-L" in shown and CANNOT_SEE in shown and "level steps m-L↔tw-L +6.0" in shown
+    assert "shared band +6.0" in shown, shown
     # The advice follows the goal (the Arbiter, 2026-09-23): competition -> the stage-first pick, for yourself ->
     # the tone-first one, both -> one per preset; no goal -> no advice, and the question to ask.
     stage_pick = next(p["name"] for p in res["picks"] if "stage first" in p["wins_under"])
