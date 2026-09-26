@@ -1508,6 +1508,19 @@ Open ends:
 
 Next: the W-3 collection with him (S-060); #24 closes with the release.
 
+## S-062 · autosound_ai.py's progress lines read as red mojibake in PowerShell 5
+
+**Status**: open 2026-09-26 · a finding from the Arbiter's #60 run on the Windows VM; for the next wave's pool
+
+With `python scripts\autosound_ai.py ask … 2>&1 | Tee-Object …` in PowerShell 5 the script's progress lines (`>> Виклик
+локального CLI …`, written to stderr in Ukrainian) come out as `╨Æ╨╕╨║╨╗╨╕╨║ …` in red, wrapped in a
+`NativeCommandError`; the answer itself (stdout) is clean. Two causes, neither the channel's: PowerShell 5 turns a native
+program's stderr into an error record under `2>&1`, and the VM's console code page is not UTF-8. The Arbiter: «а чому
+крякозяблами і я це бачу в червоному кольорі». What to decide: whether the script should print its progress in a form
+PowerShell 5 shows plainly (ASCII progress lines, or stdout for progress when stderr is not a terminal), or the FAQ's
+Windows section says `chcp 65001` / PowerShell 7. `console.install()` (issue #21) already keeps cp1252 from raising;
+this is the look, not a crash.
+
 ## S-060 · W-3 · v3.0.62 is collecting: pick up the collection with him
 
 **Status**: open 2026-09-24 · the session stopped on «добраніч» · the wave is still COLLECTING, nothing is built;
