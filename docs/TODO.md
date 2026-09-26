@@ -1549,7 +1549,11 @@ it. Back to the pool: #70 (S-057) and #71 (Gemini Pro in README/FAQ, found at #2
 (#84 #67 #64 #68 #66 #81, commits in `docs/PLAN-W-3.md`). #64 still needs one run on the Windows VM. Fable is
 asked for before #77 and #73 (the Arbiter offered it, 26.09).
 
-Next: #85 and #60 (the reviewer channel), then the round group with Fable. Resume:
+**2026-09-26, later still:** the reviewer channel is built — #85 `eccd6e9`, #60 `0436376` (the stash is applied and
+dropped). Two VM runs are owed before the release: #64 (TCC running / closed) and #60 (one review through Claude, one
+through Codex).
+
+Next: the round group with Fable (#77 first), and #72 #73 #69 #82 #61 #65. Resume:
 `hub/bin/role skill --resume e458cb47-2e5b-4aa5-b5f8-448c47410551`.
 
 ## S-059 · v3.0.61's TCC upgrade path, run on the Windows VM
