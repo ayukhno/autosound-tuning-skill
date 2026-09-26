@@ -1553,7 +1553,7 @@ asked for before #77 and #73 (the Arbiter offered it, 26.09).
 dropped). Two VM runs are owed before the release: #64 (TCC running / closed) and #60 (one review through Claude, one
 through Codex).
 
-Next: the round group with Fable (#77 first), and #72 #73 #69 #82 #61 #65. Resume:
+#72 built too (`9bad5d9`). Next: the round group on Fable (#77 first), then #73 #69 #82 #61 #65. Resume:
 `hub/bin/role skill --resume e458cb47-2e5b-4aa5-b5f8-448c47410551`.
 
 ## S-059 · v3.0.61's TCC upgrade path, run on the Windows VM
