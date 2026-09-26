@@ -277,6 +277,37 @@ GITIGNORE_LINES = [
 ]
 
 
+#: What a session finds when it greps a project before it thinks of loading the skill (skill #65): a request ABOUT
+#: the tooling ("file an issue for TCC") never matched the tuning skill's trigger, so the session resolved a repo by
+#: name and reached for a raw `gh issue create` -- the exact shape the side-effect gate exists to refuse (#23).
+CLAUDE_MD = """# This is an autosound tuning project
+
+The method is the `autosound-tuning` skill (Claude Code). Its rules, tools and phases are the skill's, not
+this folder's; `python3 rew_tool/contract.py check <project>` reads this project's state.
+
+**Reporting a bug or filing feedback — on the skill or on the Autosound TCC app — goes through the skill's gate,
+never through a hand-written `gh issue create`:** `rew_tool/gates/side_effect.py` →
+`post_feedback(body_file, car, dsp, channel="skill"|"tcc")`. The gate hardcodes the repository, de-identifies
+the text, asks for the person's consent, and verifies the URL it gets back. The full ritual is the skill's
+`references/core/feedback-loop.md`. A local markdown file is a draft, not a delivery.
+
+Documents for the person during tuning live in `docs/`: `docs/sheets/` (what to enter in the DSP software),
+`docs/plans/` (what to measure), `docs/reports/` (what to read).
+"""
+
+
+def write_claude_md(target):
+    """Write `CLAUDE.md` into a fresh project (skill #65). An existing file is left alone: a project may carry its
+    own, as the AYA bench does, and the pointer belongs there only when nobody wrote one."""
+    path = os.path.join(target, "CLAUDE.md")
+    if os.path.exists(path):
+        return False
+    os.makedirs(target, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(CLAUDE_MD)
+    return True
+
+
 def write_gitignore(target):
     """Write `.gitignore` into a fresh project. Returns True if it wrote one.
 

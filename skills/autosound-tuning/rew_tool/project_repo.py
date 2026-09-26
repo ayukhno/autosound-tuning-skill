@@ -92,6 +92,7 @@ def init(project_dir):
         return False, "git is not installed: the project has no history until it is (the installer brings it)"
     import project_seed
     project_seed.write_gitignore(project_dir)
+    project_seed.write_claude_md(project_dir)     # skill #65: the gate named where a session greps first
     fresh = not is_repo(project_dir)
     if fresh:
         r = _git(project_dir, "init", "-q")
@@ -168,6 +169,8 @@ def _selftest():
             assert is_repo(proj) and _git(proj, "log", "--oneline").stdout.count("\n") == 1
             tracked = _git(proj, "ls-files").stdout.split()
             assert "project.json" in tracked and ".gitignore" in tracked and ".critic-env" not in tracked, tracked
+            # skill #65: the project says where issues go, in the file a session reads first.
+            assert "CLAUDE.md" in tracked and "post_feedback" in open(os.path.join(proj, "CLAUDE.md"), encoding="utf-8").read()
             ok2, line2 = init(proj)
             assert ok2 and "a repository already" in line2, line2          # a second run changes nothing
             st2 = status(proj)

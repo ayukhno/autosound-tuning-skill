@@ -230,6 +230,12 @@ W-3 (`docs/PLAN-W-3.md`): the issues on the milestone that carry the Arbiter's `
   the front prints it beside the own-band step ("level steps m-L↔tw-L +6.0 (shared band +6.0) dB, own bands
   first"). Computed in Python from the same solos and chains; no engine change. Neither replaces the other until
   real captures say.
+- **A request to file an issue loads the skill, and a project says where issues go** (skill #65). The skill's
+  description now names reporting — "report a bug", "file an issue", "something in TCC is broken", with uk/de/pl —
+  so a request about the tooling loads the skill instead of ending in a hand-written `gh issue create` with a
+  model-resolved repository (the shape the side-effect gate exists to refuse, #23). `project_repo.py init` writes a
+  `CLAUDE.md` into a fresh project pointing at `post_feedback(..., channel="skill"|"tcc")`, the file a session greps
+  first; an existing one is left alone. A refusal at the `gh` layer is not in this (the Arbiter's separate call).
 
 ## [v3.0.61] — 2026-09-23 · The installer upgrades an app it did not install, instead of breaking it
 

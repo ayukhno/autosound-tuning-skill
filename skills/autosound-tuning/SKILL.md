@@ -16,7 +16,11 @@ description: >
   Also fires on native-language requests — UK: «налаштувати автозвук/процесор у машині»,
   «затримки та кросовери в авто», «образ липне до динаміка / сцена попливла»; DE: „Car-HiFi
   einmessen / DSP einstellen", „Laufzeitkorrektur im Auto"; PL: „strojenie DSP w aucie/samochodzie",
-  „ustawić opóźnienia czasowe car audio".
+  „ustawić opóźnienia czasowe car audio". Also fires when the request is ABOUT the tooling rather
+  than the tune — reporting a bug or filing feedback on this skill or on the Autosound TCC app:
+  "report a bug", "file an issue", "feedback package", "something in TCC is broken", «оформи ішью»,
+  «баг у TCC», «поскаржитись на TCC», „Fehler melden / Issue anlegen", „zgłoś błąd / załóż issue" —
+  issues go through the skill's own gate, never through a hand-written `gh issue create`.
 ---
 
 # Autosound Tuning Orchestrator
