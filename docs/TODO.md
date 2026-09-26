@@ -1545,7 +1545,11 @@ rule), #78 #80 #79 #72 (the round's list and view), #68 #85 #60 (the reviewer ch
 names, scene presets), #73 #61 #65 (bigger; #65 its text part only, suggestions 1, 2, 4), #64 #67 #84 (small); #24 had
 it. Back to the pool: #70 (S-057) and #71 (Gemini Pro in README/FAQ, found at #24).
 
-Next: the plan for the `ok` issues (`docs/PLAN-W-3.md`), then the work on `wave-2026-09-23`. Resume:
+**2026-09-26, later:** the plan's "how" is written for every `ok` issue (`c2b3114`); the six small ones are built
+(#84 #67 #64 #68 #66 #81, commits in `docs/PLAN-W-3.md`). #64 still needs one run on the Windows VM. Fable is
+asked for before #77 and #73 (the Arbiter offered it, 26.09).
+
+Next: #85 and #60 (the reviewer channel), then the round group with Fable. Resume:
 `hub/bin/role skill --resume e458cb47-2e5b-4aa5-b5f8-448c47410551`.
 
 ## S-059 · v3.0.61's TCC upgrade path, run on the Windows VM

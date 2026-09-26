@@ -35,6 +35,8 @@ that is not deferred and can be done at the desk. The branch is `wave-2026-09-23
 **Deferred at the review:** S-055 (needs an ellipsoid round in the car). **Still deferred:** S-001, S-017,
 S-021 (after 3.1.x), hub #113 PAS-005, hub #82 HUB-031, #26 (a 3.2 candidate). **Waiting on his run:** S-059.
 
+**Built on `wave-2026-09-23`, 2026-09-26** (each with its selftest red first, then green; CHANGELOG `[Unreleased]`): #84 `752dec0` · #67 `816431b` · #64 `20695c0` (needs one run on the Windows VM: no PowerShell on the Mac) · #68 `17b612e` · #66 `614ca19` · #81 `05a78a8`. Left: #85, #60, the round group (#77 #74 #75 #78 #80 #79 #83), #72, #73, #69, #82, #61, #65.
+
 **Built (with the Arbiter's OK, label `ok`):** #24, 2026-09-23 — through the Advisor (`ask`,
 `gemini-3.8-flash-high`; `gemini-3.1-pro-high` is refused in this region). Both cheat sheets are level
 with English (`c17`, the two missing sections, the five new route steps); `test-tracks.de.md` and
