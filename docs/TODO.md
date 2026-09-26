@@ -1562,7 +1562,11 @@ following the project's channel rows, `apply.py propose/attest` CLI, `contract.p
 HEAD. Hub #205 answered (asks 2, 3); SKL-054 (hub #214) to tcc for TCC Control's half. TCC's `wave-0.1.44` already reads
 a round's `groups`.
 
-Next: #73 (Phase 2's plan — the analysis first, `docs/W-3-PHASE2-ANALYSIS.md`, on Fable), then #69 #82 #61 #65. Resume:
+**2026-09-26, later:** #82 `048d959` · #69 `6b7f1e1` · #65 `8ab9133` (text part) · #61 `90d312b` built; SKL-055 (hub #215)
+to research on the ladder's floor. #73: the analysis is written (`docs/W-3-PHASE2-ANALYSIS.md`, `0de1fad`) and waits for
+his word on the four cuts and the step-naming rule. Everything with `ok` is built except #73's text changes.
+
+Next: his word on #73; then the full selftest set, the version bump and the CHANGELOG heading, the PR. Resume:
 `hub/bin/role skill --resume e458cb47-2e5b-4aa5-b5f8-448c47410551`.
 
 ## S-059 · v3.0.61's TCC upgrade path, run on the Windows VM
