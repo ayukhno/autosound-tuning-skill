@@ -391,9 +391,9 @@ def seed(source, target, *, include_findings=False, copy_profile=True, note=DEFA
     # older file has nowhere to say it); `_mark_inherited` below marks them.
     controls = (seeded.get("hardware") or {}).get("controls") if isinstance(seeded.get("hardware"), dict) else None
     if isinstance(controls, dict):
-        for name, pos in list(controls.items()):
+        for control, pos in list(controls.items()):
             if not (isinstance(pos, dict) and "value" in pos):
-                controls[name] = {"value": pos, "source": None, "at": None}
+                controls[control] = {"value": pos, "source": None, "at": None}
     # The drivers' Fs travel behind their own switch, on by default (the Arbiter: «імпеданс складна штука і
     # міряти його другий раз це подвиг»); off, they are left for this build to measure, and the record says so.
     if not include_fs:
@@ -697,6 +697,10 @@ def _selftest():
         sub = hd["hardware"]["controls"]["SubRC"]
         assert sub["value"] == "7/12" and sub["origin"] == "inherited" and sub["inherited_from"] == os.path.abspath(src), sub
         assert "controls" not in hist, hist
+        # hub #206 (skill #84): the controls loop reused `name`, so a source with controls was recorded as its
+        # last control's name ('VirtualX' on the AYA bench) in the import record, `sources` and the marker.
+        assert hd["seeded_from"]["project"] == os.path.basename(src), hd["seeded_from"]["project"]
+        assert f"seeded from project '{os.path.basename(src)}'" in hd["sources"][0], hd["sources"]
         # ...and so does every fact that came across, as a field a check reads (skill #36): the
         # project names its source as a path, and a bare Fs is wrapped so it can say it too.
         assert got["seeded_from"]["path"] == os.path.abspath(src) and got["seeded_from"]["at"] == "2026-08-23"
