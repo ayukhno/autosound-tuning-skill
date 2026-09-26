@@ -199,6 +199,20 @@ def ladder(base, steps=LADDER_MS, **limits):
     return [rung(base, t, **limits) for t in steps]
 
 
+def ladder_floor(base, rungs):
+    """Where the ladder's level half runs out (skill #82). RES-011 piece 3 holds the pull by reducing the near-side
+    cut 16 dB per ms, so the cut reaches 0 at t = cut/16 -- on the Passat's 2/4/4 dB the midbass from 0.125 ms, the
+    mid and tweeter at 0.25 -- and past every pair's floor the rungs differ by time only: the same cuts, the same trim,
+    0.05 ms more. That read as "every rung the same" in the car, and the presets were built by hand. Returns the floor
+    per pair, the rungs past every floor (`flat_rungs`, from `flat_from_ms`), and the rungs that still hold a cut."""
+    floors = {pair: round(b["cut_db"] / CUT_PER_MS_DB, 4) for pair, b in base.items()}
+    last = max(floors.values()) if floors else 0.0
+    flat = [r["t_ms"] for r in rungs if r["t_ms"] >= last - 1e-9]
+    return {"floor_ms": floors, "flat_from_ms": flat[0] if flat else None, "flat_rungs": flat,
+            "live_rungs": [r["t_ms"] for r in rungs if r["t_ms"] < last - 1e-9],
+            "smallest_cut_db": min((b["cut_db"] for b in base.values()), default=0.0)}
+
+
 def pair_verdict(a_pairs, b_pairs):
     """RES-011 piece 4 on two presets: 'probably inaudible' when every pair's pull differs under 10 %."""
     diffs = {k: abs(float(b_pairs[k]["f"]) - float(a_pairs[k]["f"])) for k in a_pairs if k in b_pairs}
@@ -251,7 +265,8 @@ def presets_for(project_dir, cut_text, preset=None, version=None, steps=LADDER_M
         return {"problems": notes or ["no pair of the map is in the version"]}
     rungs = ladder(base, steps, **_limits(project_dir))
     return {"preset": preset, "version": snapshot.get("version"), "near": near, "base": base, "rungs": rungs,
-            "notes": notes, "verdicts": {f"{r['t_ms']:g} ms": pair_verdict(base, r["pairs"]) for r in rungs}}
+            "notes": notes, "verdicts": {f"{r['t_ms']:g} ms": pair_verdict(base, r["pairs"]) for r in rungs},
+            "floor": ladder_floor(base, rungs)}
 
 
 def render(rep):
@@ -263,6 +278,21 @@ def render(rep):
     for pair, b in rep["base"].items():
         lines.append(f"    {b['label']:8} {b['near']} {b['gain_near_db']:+.1f} dB / {b['far']} {b['gain_far_db']:+.1f} dB   "
                      f"cut {b['cut_db']:g} dB -> f {b['f']:.0%}   centred {b['centred_db']:+.2f} dB")
+    floor = rep.get("floor")
+    if floor:
+        lines.append("")
+        lines.append("  Where the cut reaches 0 (t = cut / 16 dB per ms): "
+                     + ", ".join(f"{rep['base'][p]['label']} at {t:g} ms" for p, t in floor["floor_ms"].items()))
+        if floor["flat_rungs"] and floor["live_rungs"]:
+            lines.append(f"  From {floor['flat_from_ms']:g} ms every cut is 0, so the rungs "
+                         f"{', '.join(f'{t:g}' for t in floor['flat_rungs'])} ms differ by time only -- the level half of "
+                         f"the ladder is flat there; the rungs that still trade level for time: "
+                         f"{', '.join(f'{t:g}' for t in floor['live_rungs'])} ms")
+        elif floor["flat_rungs"]:
+            lines.append(f"  The base's smallest cut is {floor['smallest_cut_db']:g} dB, gone by {floor['flat_from_ms']:g} ms: "
+                         f"every rung of this ladder holds no cut and they differ by time only. A ladder below "
+                         f"{floor['flat_from_ms']:g} ms (`--steps`) would still trade level for time; whether it should "
+                         f"start there is the rule's question (research RES-011)")
     for r in rep["rungs"]:
         lines.append("")
         lines.append(f"  B at {r['t_ms']:g} ms (the near side later by {r['t_ms']:g} ms, its cut reduced, both channels trimmed):")
@@ -347,6 +377,21 @@ def _selftest():
     tw = rung(base2, 0.25)["pairs"]["tw"]
     assert tw["cut_db"] == 0.0 and abs(tw["df"]) < 1e-3 and tw["gain_near_db"] == round(-5.8 + 4.0 + tw["trim_db"], 3), tw
     assert "MECHANISM" in pair_verdict(base, r15["pairs"]) and "midbass" in pair_verdict(base, r25["pairs"])
+    # skill #82: the ladder degenerates on a real base -- the cut reaches 0 at t = cut/16 (Passat: the midbass from
+    # 0.125 ms, the mid and the tweeter at 0.25), and past the floor every rung holds the same cuts. The tool SAYS
+    # so: the floor per pair, which rungs are past it, and that from there the rungs differ by time only.
+    fl = ladder_floor(base, rungs)
+    assert fl["floor_ms"] == {"w": 0.125, "m": 0.25, "tw": 0.25}, fl
+    assert fl["flat_from_ms"] == 0.25 and fl["flat_rungs"] == [0.25, 0.3], fl
+    text_fl = render({"preset": "SQ", "version": 63, "near": "L", "base": base, "rungs": rungs, "notes": [],
+                      "verdicts": {f"{r['t_ms']:g} ms": pair_verdict(base, r["pairs"]) for r in rungs}, "floor": fl})
+    assert "cut reaches 0" in text_fl and "0.125 ms" in text_fl and "differ by time only" in text_fl, text_fl
+    shallow = {k: dict(v, cut_db=1.0, f=round(pull(0.0, 1.0), 4)) for k, v in base.items()}
+    sh_rungs = ladder(shallow, LADDER_MS)
+    fl2 = ladder_floor(shallow, sh_rungs)
+    assert fl2["flat_from_ms"] == 0.15 and "every rung" in render({"preset": "SQ", "version": 63, "near": "L", "base": shallow,
+        "rungs": sh_rungs, "notes": [], "floor": fl2,
+        "verdicts": {f"{r['t_ms']:g} ms": pair_verdict(shallow, r["pairs"]) for r in sh_rungs}}), fl2
     # the device's ceiling refuses a rung it cannot hold
     tight = ladder(base, (0.30,), delay_step_ms=0.01, gain_step_db=0.1, delay_max_ms=6.6)
     assert tight[0]["problems"] and "over the device's 6.6" in tight[0]["problems"][0], tight[0]["problems"]

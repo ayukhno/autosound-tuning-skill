@@ -217,6 +217,19 @@ W-3 (`docs/PLAN-W-3.md`): the issues on the milestone that carry the Arbiter's `
   <delta.json>` banks a delta from a terminal in one line (and `attest` turns it green), and `contract.py check`
   names an `eq-delta.json` newer than the ledger's HEAD as a proposal that never reached the Arbiter (#74). The rule
   is in `SKILL.md`; the round's schema in `process-schema.md`.
+- **The scene ladder says where its cut runs out** (`scene_presets.py`, skill #82). RES-011's rule — the near side
+  later by 0.15–0.30 ms, its cut reduced 16 dB per ms — reaches a cut of 0 at t = cut/16, and on the Passat's 2/4/4 dB
+  the midbass is there from 0.125 ms, the mid and the tweeter at 0.25: the rungs past that differ by time only, which
+  read as "every rung the same" and the presets were built by hand. The tool now prints the floor per pair, which
+  rungs are past it, and that they differ by time only; on a base whose cuts run out before the first rung it says so
+  and points at `--steps`. Whether the ladder should start below the floor is the rule's question: hub #215
+  (SKL-055) to research.
+- **A junction's level step over the band the two members share** (`variant_front.py`, skill #69, S-056). The
+  front's terms read each member an octave into its own band (#50); on a sloped plateau that is a number the ear
+  does not meet at the joint. Now `shared_step_db` reads both members through their chains over fc/1.5–fc·1.5 and
+  the front prints it beside the own-band step ("level steps m-L↔tw-L +6.0 (shared band +6.0) dB, own bands
+  first"). Computed in Python from the same solos and chains; no engine change. Neither replaces the other until
+  real captures say.
 
 ## [v3.0.61] — 2026-09-23 · The installer upgrades an app it did not install, instead of breaking it
 
