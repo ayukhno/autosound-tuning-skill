@@ -1572,8 +1572,15 @@ is built; the full selftest set is green (82 checks, ruff clean).
 Bookkeeping `f6c29d8` (pins, `plugin.json`, `## [v3.0.62]` with its Upgrading notes); `tag-check.sh v3.0.62` OK on the
 repo's half. **PR #86** opened 2026-09-26, CI on it.
 
-Next: the two VM runs (#64: install with TCC running, then closed; #60: one review through Claude, one through Codex),
-then `git merge --ff-only` of `wave-2026-09-23` into `main`, push, the tag `v3.0.62` on that commit; hub #203 #204
+**VM runs, 2026-09-26 22:48–22:57 (the Arbiter, Windows VM, files in `~/Downloads/тест/w3-*.txt`):** #64 — with TCC open
+the installer prints only "Autosound TCC is running … left as it is" (no size line); with it closed, "about 700 MB",
+`version v0.1.43`, "OK installed". #60 — a 9 KB `ask` package through `codex exec -` answered "OK" (`gpt-5.6-terra`,
+`REVIEW_ROUTE: cli`); through `claude -p` on stdin the answer came back too (`sonnet`, `REVIEW_ROUTE: cli`; the model
+declined to answer a filler-padded package with a bare "OK" and said why — its judgement of the test text, not the
+channel). Found on the way: a `.critic-env` in the working folder and `%APPDATA%\autosound\critic-env` win over the
+environment, as designed, so a one-off vendor switch needs a folder without one.
+
+Next: `git merge --ff-only` of `wave-2026-09-23` into `main`, push, the tag `v3.0.62` on that commit; hub #203 #204
 #205 #206 #208 close with the tag. Resume:
 `hub/bin/role skill --resume e458cb47-2e5b-4aa5-b5f8-448c47410551`.
 
