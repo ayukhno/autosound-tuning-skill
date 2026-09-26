@@ -1569,7 +1569,12 @@ his word on the four cuts and the step-naming rule. Everything with `ok` is buil
 **2026-09-26, evening:** #73 built on his word (four steps, the naming rule, the path marks). Every `ok` task of W-3
 is built; the full selftest set is green (82 checks, ruff clean).
 
-Next: the version bump and the CHANGELOG heading, the PR; the two VM runs (#64, #60) before the merge. Resume:
+Bookkeeping `f6c29d8` (pins, `plugin.json`, `## [v3.0.62]` with its Upgrading notes); `tag-check.sh v3.0.62` OK on the
+repo's half. **PR #86** opened 2026-09-26, CI on it.
+
+Next: the two VM runs (#64: install with TCC running, then closed; #60: one review through Claude, one through Codex),
+then `git merge --ff-only` of `wave-2026-09-23` into `main`, push, the tag `v3.0.62` on that commit; hub #203 #204
+#205 #206 #208 close with the tag. Resume:
 `hub/bin/role skill --resume e458cb47-2e5b-4aa5-b5f8-448c47410551`.
 
 ## S-059 · v3.0.61's TCC upgrade path, run on the Windows VM
