@@ -699,7 +699,7 @@ def floor_hz(codes, channels, xo):
     or None when none is fragile or no Fs is on record -- a floor nobody measured is not guessed."""
     worst = None
     for code in codes:
-        row = channels.get(code) or {}
+        row = channels.get(code) or channels.get(str(code).replace("_", "-")) or {}   # `w_L` is `w-L` (skill #81)
         if row.get("role") not in _xw.FRAGILE_ROLES:
             continue
         fs, _ = _xw._fs_of(row)

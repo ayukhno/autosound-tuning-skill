@@ -614,6 +614,7 @@ def _is_sub(ch):
 
 
 def _side_of(ch):
+    ch = str(ch).replace("_", "-")   # `w_L` (a capture file's form) is `w-L` (skill #81), not "other"
     if ch.endswith("-L"):
         return "L"
     if ch.endswith("-R"):
@@ -1556,6 +1557,7 @@ def _selftest():
               ("sub", "w-R", 45.0), ("w-R", "m-R", 270.0), ("m-R", "tw-R", 2800.0)]:
         assert j in jset, (j, jset)
     assert len(sp) == 6, sp                              # no spurious cross-side joints
+    assert _side_of("w_L") == "L" and _side_of("tw_R") == "R" and _side_of("sw") == "sub"   # skill #81
     print(f"selftest[state-map] OK — derived {len(sp)} joints from active slot "
           f"'{preset}' crossovers (sub↔w↔m↔tw per side).")
 

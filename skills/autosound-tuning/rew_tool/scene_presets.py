@@ -83,11 +83,17 @@ def near_side(car):
     return "R" if str((car or {}).get("wheel", "")).upper() == "RHD" else "L"
 
 
+def canon(code):
+    """`w_L` (a capture file's form) and `w-L` (the ledger's) are one channel -- `predict.canon`'s rule, kept here
+    because this module is stdlib-only and `predict` pulls numpy (skill #81)."""
+    return str(code).replace("_", "-")
+
+
 def pairs_of(rows):
     """{pair code: {"role", "L": code, "R": code}} for the front pairs of the channel map (woofer, midrange, tweeter)."""
     out = {}
     for r in rows or []:
-        code, role = r.get("code") or "", r.get("role")
+        code, role = canon(r.get("code") or ""), r.get("role")
         if role not in PAIR_ROLES or r.get("hidden"):
             continue
         if code.endswith("-L") or code.endswith("-R"):
@@ -115,10 +121,19 @@ def parse_cuts(text, pairs):
     return out
 
 
+def missing_pairs(snapshot, pairs):
+    """One line per front pair the version does not hold. A PROBLEM, not a note (skill #81): a pair left out quietly
+    made the whole step produce nothing while the tool exited as if it had run."""
+    rows = {canon(k) for k in (snapshot.get("channels") or {})}
+    return [f"{pair}: {spec['L']} or {spec['R']} is not in version {snapshot.get('version')} -- the pair cannot be "
+            f"placed; check the version's channel codes against the map"
+            for pair, spec in pairs.items() if spec["L"] not in rows or spec["R"] not in rows]
+
+
 def base_of(snapshot, pairs, near, cuts):
     """The base preset as the ledger holds it: per pair the near and far rows' gain and delay, the deliberate cut, its pull."""
     far = "R" if near == "L" else "L"
-    rows = snapshot.get("channels") or {}
+    rows = {canon(k): v for k, v in (snapshot.get("channels") or {}).items()}
     out, notes = {}, []
     for pair, spec in pairs.items():
         n, f = rows.get(spec[near]), rows.get(spec[far])
@@ -227,6 +242,9 @@ def presets_for(project_dir, cut_text, preset=None, version=None, steps=LADDER_M
     if not preset:
         return {"problems": [f"no active slot in {root}/registry -- pass --preset"]}
     snapshot = st.PresetHistory(root, preset, project_dir=project_dir).load(version)
+    gone = missing_pairs(snapshot, pairs)
+    if gone:
+        return {"problems": gone}
     cuts = parse_cuts(cut_text, pairs)
     base, notes = base_of(snapshot, pairs, near, cuts)
     if not base:
@@ -318,6 +336,14 @@ def _selftest():
     other = dict(snap, channels=dict(snap["channels"], **{"tw-L": {"gain_db": -5.8, "ta_ms": 6.27}, "tw-R": {"gain_db": -4.2, "ta_ms": 4.94}}))
     base2, notes3 = base_of(other, pairs, "L", {"w": 2.0, "m": 4.0, "tw": 4.0})
     assert notes3 and "tw" in notes3[0] and "is the base entered" in notes3[0], notes3
+    # skill #81: `m_L` (a capture file's form) and `m-L` (the ledger's) are one channel. Read literally, all three
+    # pairs of the Passat were left out with a note nobody printed, and the step produced nothing.
+    snap_u = dict(snap, channels={k.replace("-", "_"): v for k, v in snap["channels"].items()})
+    base_u, notes_u = base_of(snap_u, pairs, "L", {"w": 2.0, "m": 4.0, "tw": 4.0})
+    assert sorted(base_u) == ["m", "tw", "w"] and not notes_u, notes_u
+    assert pairs_of([dict(r, code=r["code"].replace("-", "_")) for r in rows]) == pairs
+    gone = missing_pairs(dict(snap, channels={k: v for k, v in snap["channels"].items() if not k.startswith("m")}), pairs)
+    assert len(gone) == 1 and gone[0].startswith("m:"), gone
     tw = rung(base2, 0.25)["pairs"]["tw"]
     assert tw["cut_db"] == 0.0 and abs(tw["df"]) < 1e-3 and tw["gain_near_db"] == round(-5.8 + 4.0 + tw["trim_db"], 3), tw
     assert "MECHANISM" in pair_verdict(base, r15["pairs"]) and "midbass" in pair_verdict(base, r25["pairs"])

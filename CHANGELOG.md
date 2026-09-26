@@ -180,6 +180,12 @@ W-3 (`docs/PLAN-W-3.md`): the issues on the milestone that carry the Arbiter's `
   that asked for the inverted take reported it missing. Read only with a glossary that knows the side and the
   drivers; `parse_name` now also returns `inverted` (the members after a `-`). The grammar is in
   `naming-and-structure.md` §3.
+- **`scene_presets` finds a pair written `m_L`, and a pair it cannot find stops it** (skill #81). The tool read the
+  channel codes literally, so a version keyed `m_L`/`w_L`/`tw_L` (a capture file's form) lost all three front pairs
+  with a note nobody printed, and the scene-preset step produced nothing. Codes now go through the same `_` → `-`
+  rule `predict` uses, and a pair the version does not hold is a problem with a non-zero exit. The same rule
+  reached the two other readers that compared codes literally: `rew_tool`'s side of a channel (joints from the
+  ledger) and `resonalyze_engine`'s protective floor.
 
 ## [v3.0.61] — 2026-09-23 · The installer upgrades an app it did not install, instead of breaking it
 
