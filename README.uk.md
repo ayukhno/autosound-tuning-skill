@@ -49,21 +49,21 @@
 
 **macOS** — відкрий Terminal (натисни ⌘-Space, набери «terminal», Enter) і встав:
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.61/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.62/install.sh | bash
 ```
 
 **Windows** — відкрий PowerShell (натисни Пуск, набери «powershell», Enter) і встав:
 ```powershell
-irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.61/install.ps1 | iex
+irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.62/install.ps1 | iex
 ```
 
 **Параметри:** `--with-omp` (моделі, відмінні від Claude), `--github` (бекап), `--terminal` (метод без застосунку), `--dry-run` (показати план, нічого не змінювати). На macOS вони вказуються після `bash -s --`:
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.61/install.sh | bash -s -- --github
+curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.62/install.sh | bash -s -- --github
 ```
 На Windows це `-WithOmp`, `-GitHub`, `-Terminal`, `-DryRun` у такому вигляді:
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.61/install.ps1))) -GitHub
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.62/install.ps1))) -GitHub
 ```
 
 **Після встановлення:**

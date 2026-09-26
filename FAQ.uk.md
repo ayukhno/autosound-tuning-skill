@@ -232,7 +232,7 @@ python3 ~/.claude/skills/.autosound-tuning-src/skills/autosound-tuning/rew_tool/
 1. Відкрий **Термінал** (натисни `Cmd + Space` → введи `Terminal` → натисни `Enter`).
 2. Встав команду та натисни `Enter`:
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.61/install.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.62/install.sh | bash
    ```
 3. Якщо інструменти командного рядка Apple (Command Line Tools) відсутні, один раз відкриється офіційне вікно встановлення Apple — натисни «Встановити». Сам скрипт ніколи не запитує пароль. Зачекай 10–20 хвилин.
 
@@ -244,7 +244,7 @@ python3 ~/.claude/skills/.autosound-tuning-src/skills/autosound-tuning/rew_tool/
 1. Відкрий **Windows PowerShell** (натисни Пуск → введи `powershell` → натисни `Enter`).
 2. Встав команду та натисни `Enter`:
    ```powershell
-   irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.61/install.ps1 | iex
+   irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.62/install.ps1 | iex
    ```
 3. Якщо Git відсутній, дозволь його встановлення. Скрипт також створить зручний ярлик **REW (API on)** на Робочому столі.
 
