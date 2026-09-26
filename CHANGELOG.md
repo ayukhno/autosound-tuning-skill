@@ -161,6 +161,11 @@ W-3 (`docs/PLAN-W-3.md`): the issues on the milestone that carry the Arbiter's `
   controls loop, so a source with DSP controls was recorded as its last control's name (`'VirtualX'` on the AYA
   bench) in `seeded_from.project`, in `sources` and in the prose marker. The path was always right. Projects seeded
   before this keep the wrong name until corrected by hand.
+- **The target-curve page says which number is which** (skill #67, hub #203). One band could read −1.2 dB in
+  Compare and −5.1 dB in Analyze with nothing saying why. Now a line under Analyze's table (and the Δ dB header's
+  tooltip) says its Δ dB is one feature's depth in a row with a PEAK / DIP / NULL badge and the band average in a
+  row without one; a line under Compare's table says each cell is the band average against the baseline, a dash
+  under 1 dB. In en, uk, de and pl (translated through the Advisor).
 
 ## [v3.0.61] — 2026-09-23 · The installer upgrades an app it did not install, instead of breaking it
 

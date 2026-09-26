@@ -576,7 +576,7 @@
             analyzeLevelMatch: 'Level match', analyzeAutoAnchor: 'Auto (300 Hz–3 kHz anchor):',
             analyzeFineTune: 'Fine-tune:', analyzeTotalApplied: 'Total applied:',
             analyzeBandHeader: 'Band-by-band analysis', analyzeHoverHint: '(hover a row to locate it on the chart)',
-            analyzeColBand: 'Band', analyzeColDelta: 'Δ dB', analyzeColFeature: 'Feature',
+            analyzeColBand: 'Band', analyzeColDelta: 'Δ dB', analyzeDeltaNote: 'Δ dB: in a row with a PEAK, DIP or NULL badge, the depth of that one feature; in a row without one, the band average. Compare (⚖️) shows band averages only, so one band can read differently there.', compareNote: 'Each cell: the band average minus the baseline\'s; — under 1 dB. Analyze (📊) reads single features inside a band, so its Δ dB can differ from this.', analyzeColFeature: 'Feature',
             analyzeColShift: 'Tonal shift', analyzeColInstr: 'Instruments',
             analyzeBalanced: 'balanced', analyzeVs: 'vs baseline',
             analyzeSkipped: (n, total) => n + ' of ' + total + ' bands average within ±1.5 dB of the baseline and are not shown above.',
@@ -639,7 +639,7 @@
             analyzeLevelMatch: 'Збіг рівня', analyzeAutoAnchor: 'Авто (якір 300 Гц–3 кГц):',
             analyzeFineTune: 'Точна підгонка:', analyzeTotalApplied: 'Застосовано всього:',
             analyzeBandHeader: 'Аналіз по смугах', analyzeHoverHint: '(наведи на рядок, щоб побачити на графіку)',
-            analyzeColBand: 'Смуга', analyzeColDelta: 'Δ дБ', analyzeColFeature: 'Особливість',
+            analyzeColBand: 'Смуга', analyzeColDelta: 'Δ дБ', analyzeDeltaNote: 'Δ дБ: у рядку з позначкою PEAK, DIP або NULL — глибина цієї ознаки; у рядку без неї — середнє по смузі. Порівняти (⚖️) показує лише середні по смугах, тому значення смуги там може бути іншим.', compareNote: 'Кожна комірка: середнє по смузі мінус база (референс); — менше 1 дБ. Аналіз по смугах (📊) зчитує окремі ознаки всередині смуги, тому його Δ дБ може відрізнятися.', analyzeColFeature: 'Особливість',
             analyzeColShift: 'Тональний зсув', analyzeColInstr: 'Інструменти',
             analyzeBalanced: 'збалансовано', analyzeVs: 'відносно бази',
             analyzeSkipped: (n, total) => n + ' з ' + total + ' смуг у середньому в межах ±1.5 дБ від бази і не показані вище.',
@@ -702,7 +702,7 @@
             analyzeLevelMatch: 'Pegelabgleich', analyzeAutoAnchor: 'Auto (Anker 300 Hz–3 kHz):',
             analyzeFineTune: 'Feinabstimmung:', analyzeTotalApplied: 'Gesamt angewendet:',
             analyzeBandHeader: 'Band-für-Band-Analyse', analyzeHoverHint: '(Zeile hovern, um sie im Diagramm zu finden)',
-            analyzeColBand: 'Band', analyzeColDelta: 'Δ dB', analyzeColFeature: 'Auffälligkeit',
+            analyzeColBand: 'Band', analyzeColDelta: 'Δ dB', analyzeDeltaNote: 'Δ dB: in einer Zeile mit PEAK-, DIP- oder NULL-Badge die Tiefe dieses Merkmals; in einer Zeile ohne Badge der Bandmittelwert. Vergleich (⚖️) zeigt nur Bandmittelwerte, daher kann ein Band dort einen anderen Wert haben.', compareNote: 'Jede Zelle: Bandmittelwert abzüglich Basis (Referenz); — unter 1 dB. Analyse (📊) erfasst einzelne Merkmale innerhalb eines Bandes, daher kann das Δ dB dort abweichen.', analyzeColFeature: 'Auffälligkeit',
             analyzeColShift: 'Klangliche Verschiebung', analyzeColInstr: 'Instrumente',
             analyzeBalanced: 'ausgewogen', analyzeVs: 'gegenüber Basis',
             analyzeSkipped: (n, total) => n + ' von ' + total + ' Bändern liegen im Mittel innerhalb von ±1.5 dB der Basis und werden oben nicht angezeigt.',
@@ -765,7 +765,7 @@
             analyzeLevelMatch: 'Dopasowanie poziomu', analyzeAutoAnchor: 'Auto (kotwica 300 Hz–3 kHz):',
             analyzeFineTune: 'Precyzyjna regulacja:', analyzeTotalApplied: 'Zastosowano łącznie:',
             analyzeBandHeader: 'Analiza pasmo po paśmie', analyzeHoverHint: '(najedź na wiersz, aby zobaczyć na wykresie)',
-            analyzeColBand: 'Pasmo', analyzeColDelta: 'Δ dB', analyzeColFeature: 'Cecha',
+            analyzeColBand: 'Pasmo', analyzeColDelta: 'Δ dB', analyzeDeltaNote: 'Δ dB: w wierszu z etykietą PEAK, DIP lub NULL — głębokość tej cechy; w wierszu bez niej — średnia pasma. Porównaj (⚖️) pokazuje tylko średnie pasm, więc to samo pasmo może mieć tam inną wartość.', compareNote: 'Każda komórka: średnia pasma minus baza (odniesienie); — poniżej 1 dB. Analiza (📊) odczytuje pojedyncze cechy wewnątrz pasma, więc jej Δ dB może się od tego różnić.', analyzeColFeature: 'Cecha',
             analyzeColShift: 'Zmiana tonalna', analyzeColInstr: 'Instrumenty',
             analyzeBalanced: 'zrównoważone', analyzeVs: 'względem bazy',
             analyzeSkipped: (n, total) => n + ' z ' + total + ' pasm mieści się średnio w ±1.5 dB od bazy i nie jest pokazanych powyżej.',
@@ -1559,6 +1559,7 @@
             html += '</tr>';
         });
         html += '</tbody></table></div>';
+        html += '<p style="color:var(--text-muted);font-size:12px;margin:8px 0 0;">' + s.compareNote + '</p>';
 
         panel.innerHTML = html;
         showComparePanel();
@@ -2355,11 +2356,12 @@
             h += '<div style="overflow-x:auto;max-height:260px;overflow-y:auto;border:1px solid var(--border-color);border-radius:10px;margin-bottom:6px;"><table style="border-collapse:collapse;width:100%;font-size:12.5px;">' +
                 '<thead><tr>' +
                     '<th style="text-align:left;padding:6px 10px;border-bottom:2px solid var(--border-color);color:var(--text-muted);">' + s.analyzeColBand + '</th>' +
-                    '<th style="text-align:left;padding:6px 10px;border-bottom:2px solid var(--border-color);color:var(--text-muted);">' + s.analyzeColDelta + '</th>' +
+                    '<th style="text-align:left;padding:6px 10px;border-bottom:2px solid var(--border-color);color:var(--text-muted);" title="' + s.analyzeDeltaNote + '">' + s.analyzeColDelta + '</th>' +
                     '<th style="text-align:left;padding:6px 10px;border-bottom:2px solid var(--border-color);color:var(--text-muted);">' + s.analyzeColFeature + '</th>' +
                     '<th style="text-align:left;padding:6px 10px;border-bottom:2px solid var(--border-color);color:var(--text-muted);">' + s.analyzeColShift + '</th>' +
                     '<th style="text-align:left;padding:6px 10px;border-bottom:2px solid var(--border-color);color:var(--text-muted);">' + s.analyzeColInstr + '</th>' +
                 '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+            h += '<p style="color:var(--text-muted);font-size:12px;margin:0 0 6px;">' + s.analyzeDeltaNote + '</p>';
             if (skipped > 0) h += '<p style="color:var(--text-muted);font-size:12px;margin:-2px 0 16px;">' + s.analyzeSkipped(skipped, FREQ_BANDS.length) + '</p>';
         }
 
