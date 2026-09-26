@@ -240,6 +240,13 @@ W-3 (`docs/PLAN-W-3.md`): the issues on the milestone that carry the Arbiter's `
   writes the settings sheet to `docs/sheets/<v_NNN>-<slot>.md`, `capture-start` writes the round's list to
   `docs/plans/<_N>-capture.md`, and a session's reports go to `docs/reports/`. `contract.py check` names a sheet, a
   plan or a report found anywhere else (a project from before the rule keeps working; nothing is moved for it).
+- **Phase 2 on the desk path is four steps, and a step is named for what it ends in** (skill #73, the Arbiter's
+  decision on `docs/W-3-PHASE2-ANALYSIS.md`). The Passat's ten-step plan had mixed the desk path with the
+  iterative one: two car trips inside Phase 2, a "summed response" step that repeated `eq_propose`'s own score,
+  step names that restated the tools' rules. Now `virtual-first.md` 2.1–2.4 is the plan — the packages, the check
+  at the desk, the review, the sheet — with the `add-step` lines to copy; `phase_2_eq.md` marks its 2a control
+  series and 2c's measured sums as the iterative path's (on the desk path they are Phase 3's); and `SKILL.md`
+  holds the rule: a step ends in something the Arbiter sees, or it is not a step.
 
 ## [v3.0.61] — 2026-09-23 · The installer upgrades an app it did not install, instead of breaking it
 

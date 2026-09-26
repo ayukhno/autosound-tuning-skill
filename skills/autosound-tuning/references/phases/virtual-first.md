@@ -251,7 +251,7 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
   critic. The predicted sums go into the target-curve visualizer beside the target — `sums_export.py --predicted
   DIR/predicted.json --out DIR/curves --label <variant> --smoothing 1/6|psy`, one file per sum, two variants dropped
   together are two lines; listening is offered, not required. **The tuner chooses, and with that OK the variant goes to
-  the sheet (2.3)** — nothing enters the DSP or the ledger before it. A bad joint → back to 1.3/1.5 —
+  the sheet (2.4)** — nothing enters the DSP or the ledger before it. A bad joint → back to 1.3/1.5 —
   iterations exist, but at the desk. Free play afterwards: the tuner changes settings as they like, the
   desk computes and compares where it can, or the tuner decides alone.
   - **A junction at the desk is computed by `predict`, or it is not computed.** A script written for
@@ -316,9 +316,25 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
   the window the prediction carries (`predicted.json`'s `window_spec`), per junction, so a gated
   prediction is never compared against a steady measurement: those are two questions subtracted from
   each other, and on the `_60` woofer↔mid that looked like 5.2 dB of model error (hub `RES-006`).
-- **2.3** **preset to disk**: the settings sheet — what is entered in PC-Tool per channel (HPF/LPF,
+- **2.3** **the review**: one critic round on the round's full package (`phase_2_eq.md`'s gate — the second, after
+  the joints, only when 2.1 reworked them). Ends in the review file (`process.py reviewer … --review <path>`); a
+  refusal sends its package back to 2.1.
+- **2.4** **preset to disk**: the settings sheet, `docs/sheets/<v_NNN>-<slot>.md` (`apply.propose` writes it; skill #61) — what is entered in PC-Tool per channel (HPF/LPF,
   gain, delay, polarity, APF, EQ), old → new, samples for the DSP rate, a "why" per row; the EQ file in
   the DSP format to import; the predicted graph. Into the project (+git if configured).
+
+  **The plan of Phase 2 on this path is these four steps and no more** (the Arbiter, skill #73: a ten-step plan
+  that mixed this path with the iterative one measured, computed and wrote without moving). Each step is named
+  for what it ENDS IN, which he sees — a version, a verdict, a review file, a sheet — never for a rule it follows;
+  the rules (Q ceiling, tolerance, cuts only, +6 dB) are the tools' and are not steps. A capture round, a
+  listening or a control series has no place in it: those are Phase 3's. As `add-step` lines:
+
+  ```
+  add-step 2.1 "the packages: each accepted or refused whole, each accepted one a yellow version"
+  add-step 2.2 "the check at the desk: verify_prediction on the accepted set, joints and L/R through the same windows"
+  add-step 2.3 "the review: one critic round on the full package"
+  add-step 2.4 "the sheet: docs/sheets/<v_NNN>-<slot>.md and the EQ file to import"
+  ```
 
 ### Phase 3 · Car, a short session — *goal: verify the desk against what the mic hears, do what the desk can't (MMM), and lock*
 - **3.1** **enter and check entry**: the preset into the DSP per the sheet (EQ by file import); "entered"
