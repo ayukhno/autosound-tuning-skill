@@ -81,6 +81,7 @@ EV_CRITIC_CALLED = "critic_called"
 EV_CONFIG_CHANGE = "config_change"
 # A capture round: what was asked for, what came back, what was deliberately not taken (SCR-034).
 EV_CAPTURE_ISSUED = "capture_task_issued"
+EV_CAPTURE_RECONCILED = "capture_reconciled"   # skill #77: the round read against REW's list
 EV_CAPTURE_TAKEN = "capture_taken"
 #: A capture round was declared RAW -- swept with protective filters that are not part of the tune
 #: (`rew_tool/protective.py`). Journalled rather than only stored, because it changes how every
@@ -644,13 +645,58 @@ def resolves(item, project_dir, versions=None, naming=None):
     return False
 
 
-def _outstanding(round_):
-    """Expected captures of one round that are neither taken nor skipped."""
+def _outstanding(round_, optional=False):
+    """Expected captures of one round that are neither taken nor skipped -- the REQUIRED ones; the optional ones
+    ("if you have time", skill #80) with `optional=True`. An optional capture left untaken is not a gap: it is on
+    the list so that it is not forgotten in the car and so that its taking is recorded, not so that its absence
+    holds a stop."""
+    wanted = set(round_.get("optional") or [])
     return [
         title
         for title in round_.get("expected", [])
-        if not _is_taken(round_, title) and title not in round_.get("skipped", {})
+        if (title in wanted) == optional
+        and not _is_taken(round_, title) and title not in round_.get("skipped", {})
     ]
+
+
+def render_round_list(round_):
+    """The round's list as the Arbiter reads it (skill #75): column by column, the switch of setup named, optional
+    captures marked. This is what `capture-start` prints, and the message that asks him to measure is this text."""
+    lines = []
+    optional = set(round_.get("optional") or [])
+    setup = round_.get("setup") or {}
+    if setup.get("first"):
+        lines.append(f"  set up for {setup['first']}"
+                     + (f" (last taken: {setup['from']})" if setup.get("from") else " (--start)"))
+    last_method = None
+    for group in round_.get("groups") or []:
+        switch = last_method is not None and group.get("method") != last_method
+        lines.append(f"  {group.get('label')}" + ("   <- switch: " + ("tripod in, driver out" if group.get("method") == "sw"
+                                                                       else "tripod out, driver in") if switch else ""))
+        for name in group.get("names") or []:
+            lines.append(f"    {name}" + ("   (optional)" if name in optional else ""))
+        last_method = group.get("method")
+    if not round_.get("groups"):
+        for name in round_.get("expected") or []:
+            lines.append(f"    {name}" + ("   (optional)" if name in optional else ""))
+    return lines
+
+
+def _outstanding_optional(round_):
+    return _outstanding(round_, optional=True)
+
+
+def _last_method_taken(round_):
+    """`(method, title)` of the last capture a round recorded, by its `at` -- the setup the car is in (skill #78)."""
+    naming = _load_naming()
+    if not round_ or naming is None:
+        return None, None
+    last = None
+    for title, entry in (round_.get("taken") or {}).items():
+        parsed = naming.parse_name(title)
+        if parsed and parsed.get("method") and (last is None or str((entry or {}).get("at") or "") > last[0]):
+            last = (str((entry or {}).get("at") or ""), parsed["method"], title)
+    return (last[1], last[2]) if last else (None, None)
 
 
 def _is_taken(round_, title):
@@ -1059,8 +1105,17 @@ class Process:
 
     # -- capture rounds (SCR-034) --
     def start_capture(self, version, expected=(), phase=None, note=None, step=None, origin=None, under=None,
-                      level=None, level_read_as=None):
+                      level=None, level_read_as=None, plan=False, optional=(), start_method=None):
         """Open a capture round: what was asked for, at which `_N`, in which phase.
+
+        **The list comes from the plan, not from a message** (skill #77, #75): with `plan=True` the round's
+        `expected` is `naming.expected_groups(phase, glossary, version)` -- what the method says this phase
+        measures, for the channels the project has on -- and the titles given beside it are added in their
+        place; without it, the titles given are the list. Either way the round carries its columns (`groups`,
+        skill #79/#83: Solo/Group by sw/rta, what a front-end draws), ordered by SETUP (skill #78): the method the
+        car is set up for first -- `start_method`, else the last capture the previous round recorded -- then one
+        switch. `optional` names the captures that go on the list "if there is time" (skill #80): listed, ordered,
+        recorded when taken, and not a gap when not.
 
         `version` is the series number the titles carry (`_N`); a round opened with a ledger version
         (`v_001`) is still found, since `protective_record_for` matches either -- but the two are
@@ -1136,10 +1191,40 @@ class Process:
             self._close_capture(state, previous, reason="superseded")
         number = int(previous.get("n", 0)) + 1 if previous else 1
         expected = [str(item) for item in (expected or []) if str(item).strip()]
+        optional = [str(item) for item in (optional or []) if str(item).strip()]
+        phase_key = str(phase) if phase is not None else state.get("active_phase")
+        naming = _load_naming()
+        glossary = naming.Glossary.for_project(self.project_dir) if naming is not None else None
+        groups = []
+        if plan:
+            if naming is None or glossary is None or not glossary.channel_codes():
+                raise ProcessError("--plan needs the project's glossary (project.json `glossary`, or glossary.json): "
+                                   "the list is what the method says this phase measures, for the channels the "
+                                   "project has -- with no glossary there is nothing to derive it from")
+            if kind != "series":
+                raise ProcessError("--plan builds titles from a SERIES number (`capture-start 55 --plan`); a ledger "
+                                   "version names no `_N` (naming-and-structure.md §3)")
+            if phase_key is None:
+                raise ProcessError("--plan needs the phase the round measures for: `enter-phase <N>` first, or "
+                                   "`--phase <N>`")
+            groups = naming.expected_groups(phase_key, glossary, version)
+            if not groups:
+                raise ProcessError(f"the method's plan for phase {phase_key!r} captures nothing -- open the round "
+                                   "with its titles instead")
+        if naming is not None:
+            groups = naming.place_in_groups(groups, expected + optional, glossary)
+            first, from_title = (start_method, None) if start_method else _last_method_taken(previous)
+            groups = naming.order_by_setup(groups, first)
+            setup = {"first": first, "from": from_title,
+                     "switches": naming.method_switches([g["method"] for g in groups])}
+            expected = naming.flatten_groups(groups)
+        else:
+            setup = None
+            expected = expected + [t for t in optional if t not in expected]
         round_ = {
             "id": "cap_%03d" % number,
             "n": number,
-            "phase": str(phase) if phase is not None else state.get("active_phase"),
+            "phase": phase_key,
             # The plan step this round satisfies (SCR-040). Without it a retake is a loose
             # measurement; with it, it is visibly attempt N of the step that asked for it.
             "step": step,
@@ -1157,6 +1242,13 @@ class Process:
             "issued": _now(),
             "closed": None,
             "expected": expected,
+            # The columns the list is read in (skill #79/#83): `[{"kind", "label", "method", "names"}]`, the same
+            # names as `expected`, in the order the car is taken in. A front-end draws THESE, not the phase plan.
+            "groups": groups,
+            # "If you have time" captures (skill #80): on the list, not a gap when left.
+            "optional": optional,
+            # Why the list is in this order (skill #78): the method taken first, from which capture it was read.
+            "setup": setup,
             "taken": {},
             "skipped": {},
             "note": note,
@@ -1173,10 +1265,54 @@ class Process:
             under=round_["under"],
             level=level_rec,
             expected=expected,
+            groups=groups,
+            optional=optional,
+            setup=setup,
             step=step,
             note=note,
         )
         return round_
+
+    def reconcile_captures(self, rew_titles):
+        """Close the open round's list against what REW holds, however it was captured (skill #77, rule 3).
+
+        The Arbiter measures outside TCC as often as inside it, so the round is not told what was taken -- it
+        READS it: a title REW holds that the list asked for is taken (under the list's spelling, with REW's own
+        spelling kept beside it when they differ, so the rename is named and nothing is re-measured); a title of
+        THIS series the list did not ask for is taken unplanned (the extra he took because he could); one he had
+        skipped and then took after all is taken; what REW does not hold stays open, yellow. Another series' titles
+        are not this round's business. Returns the verdict (`naming.validate_series` plus `missing_optional`).
+        """
+        state, round_ = self._require_capture()
+        naming = _load_naming()
+        if naming is None:
+            raise ProcessError("naming.py could not be loaded -- the round cannot be read against REW")
+        glossary = naming.Glossary.for_project(self.project_dir)
+        expected = [str(x) for x in round_.get("expected") or []]
+        verdict = naming.validate_series([str(t) for t in rew_titles], expected, glossary)
+        now = _now()
+        for name, actual in verdict["matched"].items():
+            entry = round_["taken"].setdefault(name, {"at": now, "planned": True})
+            if actual != name:
+                entry["as_in_rew"] = actual
+            round_["skipped"].pop(name, None)
+        series = {naming.parse_name(n, glossary).get("version_n") for n in expected if naming.parse_name(n, glossary)}
+        series.discard(None)
+        for title in verdict["extra"]:
+            parsed = naming.parse_name(title, glossary)
+            if parsed and parsed.get("version_n") in series:
+                round_["taken"].setdefault(title, {"at": now, "planned": False})
+                round_["skipped"].pop(title, None)
+        optional = set(round_.get("optional") or [])
+        verdict["missing_optional"] = [t for t in verdict["missing"] if t in optional]
+        verdict["missing"] = [t for t in verdict["missing"] if t not in optional]
+        round_["reconciled"] = {"at": now, "rew": True, "matched": len(verdict["matched"]),
+                                "extra": [t for t in verdict["extra"] if t in round_["taken"]],
+                                "renames": verdict["renames"], "missing": verdict["missing"],
+                                "missing_optional": verdict["missing_optional"]}
+        self._write(state)
+        self._append(EV_CAPTURE_RECONCILED, capture=round_["id"], version=round_["version"], **round_["reconciled"])
+        return verdict
 
     def series_used(self):
         """Every series number this project's rounds have used, as ints."""
@@ -1989,6 +2125,12 @@ class Process:
         outstanding = _outstanding(round_)
         round_["closed"] = _now()
         round_["closed_reason"] = reason
+        # What the closing was CHECKED against (skill #77): REW's list, through `reconcile_captures`, or nothing --
+        # a round closed on a session's word alone says so, because its taken/missing are then only what was typed.
+        rec = round_.get("reconciled") or {}
+        round_["closed_against"] = ({"rew": True, "missing": rec.get("missing") or [],
+                                     "extra": rec.get("extra") or [], "renames": rec.get("renames") or {}}
+                                    if rec.get("rew") else {"rew": False})
         self._append(
             EV_CAPTURE_CLOSED,
             capture=round_["id"],
@@ -1998,6 +2140,8 @@ class Process:
             # Named rather than left to be worked out: a round that ends with expected captures
             # neither taken nor skipped is the shape план-факт exists to show.
             outstanding=outstanding,
+            outstanding_optional=_outstanding_optional(round_),
+            rew_checked=bool(rec.get("rew")),
             # A round with no knob record closes anyway -- refusing would strand a session mid-car
             # -- but it closes SAYING so, at the one moment the answer is still in the room. The
             # knobs are the part of the setup that lives outside every file, so a reader months
@@ -2291,8 +2435,13 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
                                               Exits non-zero while anything is open, so "we
                                               stopped" cannot be said over an open round
   decision <question> <answer> [step] [--invalidates X]   what the Arbiter ruled, as itself
-  capture-start <version> [title ...] [--step ID] [--origin <project>:<their _N>]
+  capture-start <version> [title ...] [--plan] [--phase N] [--start sw|rta] [--optional <title>]...
+      [--step ID] [--origin <project>:<their _N>]
       [--under v_NNN] [--level "-25 dB rel. max"] [--level-read-as "7 lamps"]
+                                        --plan: the list from the method's plan for the phase (skill #77),
+                                        titles beside it added in their place; --start: the setup the car is
+                                        in (else the last capture's, skill #78); --optional: on the list,
+                                        no gap when left (skill #80). Prints the list, column by column
                                         --under: the ledger version the series is taken under (#57 P0;
                                         recorded only when given); --level: the level as a quantity (S-026)
                                         open a capture round; titles = what was
@@ -2345,6 +2494,8 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
                                         --json: {ok, missing, phase, resume, next_message}
   capture-skip <title> <reason>         deliberately NOT taken, and why
   capture-close [reason]                close the round; what is outstanding is named
+                                        reads REW first (skill #77): held -> taken, extra of the series ->
+                                        taken unplanned, absent -> left open; --no-rew closes on the record alone
   check                                 done steps with no evidence, and done steps whose
                                          evidence resolves to nothing on disk
   selftest                              this module's own gates, on a throwaway project
@@ -3039,6 +3190,80 @@ def _selftest():
     verified = [e for e in na.events() if e.get("type") == EV_CAPTURE_VERIFIED][-1]
     assert (verified["bad"], verified["not_applicable"]) == (["w-R_1 (sw)"], ["w-L_1 (rta)"]), verified
 
+    # ── skill #77 / #78 / #80 / #83: the round gets its list from the plan, ordered by setup, carries its
+    #    columns, keeps optional captures on the list, and closes against what REW holds ──────────────
+    rr_root = tempfile.mkdtemp(prefix="autosound_round_")
+    with open(os.path.join(rr_root, "project.json"), "w", encoding="utf-8") as fh:
+        json.dump({"channels": [{"code": c} for c in ("sw", "w-L", "w-R", "m-L", "m-R")] + [{"code": "c", "hidden": True}],
+                   "glossary": {"channels": [{"code": c, "active": True} for c in ("sw", "w-L", "w-R", "m-L", "m-R", "c")],
+                                "pairs": {"Ws": ["w-L", "w-R"], "Ms": ["m-L", "m-R"]},
+                                "sides": {"L": ["w-L", "m-L"], "R": ["w-R", "m-R"]},
+                                "joints": {"SW+Ws": ["sw", "w-L", "w-R"]}}}, fh)
+    rr = Process(os.path.join(rr_root, "process"))
+    # The previous pass ended on an RTA, so the car is set up for RTA: the list takes every RTA first, then ONE
+    # switch to the sweeps. `c` is hidden in the project's rows, so it is no task whatever the glossary says (#83).
+    rr.start_capture("54", ["m-L_54 (sw)", "m-L_54 (rta)"], phase="2")
+    rr.record_capture("m-L_54 (sw)", at="2026-09-26T10:00:00")
+    rr.record_capture("m-L_54 (rta)", at="2026-09-26T10:05:00")
+    rnd = rr.start_capture("55", ["c_55 (rta)"], phase="2", plan=True, optional=["Ws_55 (sw)"], step="2.3")
+    assert [g["label"] for g in rnd["groups"]] == ["Solo (rta)", "Group (rta)", "Solo (sw)", "Group (sw)"], rnd["groups"]
+    assert rnd["expected"] == [n for g in rnd["groups"] for n in g["names"]], "the list IS the columns, flattened"
+    assert rnd["expected"][0] == "sw_55 (rta)" and "c_55 (sw)" not in rnd["expected"], rnd["expected"]
+    assert "c_55 (rta)" in rnd["groups"][0]["names"], "a title typed beside the plan is on the list, in its place"
+    assert rnd["optional"] == ["Ws_55 (sw)"] and rnd["groups"][-1]["names"] == ["Ws_55 (sw)"], rnd
+    assert rnd["setup"] == {"first": "rta", "from": "m-L_54 (rta)", "switches": 1}, rnd["setup"]
+    issued = [e for e in rr.events() if e.get("type") == EV_CAPTURE_ISSUED][-1]
+    assert issued["groups"] == rnd["groups"] and issued["optional"] == ["Ws_55 (sw)"], issued
+    # --start overrides what the last round says; with nothing known, the plan's order (sweeps first).
+    assert rr.start_capture("56", phase="2", plan=True, start_method="sw")["groups"][0]["label"] == "Solo (sw)"
+    fresh = Process(os.path.join(tempfile.mkdtemp(prefix="autosound_fresh_"), "process"))
+    refuses("a plan with no glossary", lambda: fresh.start_capture("1", plan=True, phase="2"))
+    # A round opened without the plan still carries its columns (#83): by kind and method of its titles.
+    plain_r = rr.start_capture("57", ["m-L_57 (sw)", "Ms_57 (rta)", "w-L_57 (sw)"], phase="2")
+    assert [(g["label"], g["names"]) for g in plain_r["groups"]] == \
+        [("Solo (sw)", ["m-L_57 (sw)", "w-L_57 (sw)"]), ("Group (rta)", ["Ms_57 (rta)"])], plain_r["groups"]
+    # Optional captures do not count as a gap: outstanding names the required ones, the optional apart.
+    opt = rr.start_capture("58", ["m-L_58 (sw)"], phase="2", optional=["w-L_58 (sw)"])
+    assert opt["expected"] == ["m-L_58 (sw)", "w-L_58 (sw)"] and rr.capture_outstanding() == ["m-L_58 (sw)"]
+    assert _outstanding_optional(opt) == ["w-L_58 (sw)"]
+    rr.record_capture("m-L_58 (sw)")
+    assert rr.capture_outstanding() == [] and rr.open_work()["capture_round"]["outstanding"] == []
+    # Closing against REW (#77 rule 3): what REW holds is taken, extra of THIS series is taken unplanned, a title
+    # under another spelling is matched and named, a skipped one found after all is taken, missing stays open.
+    rec = rr.start_capture("59", ["m-L_59 (sw)", "w-L_59 (sw)", "tw-L_59 (sw)", "Ms_59 (rta)"], phase="2",
+                           optional=["Ws_59 (rta)"])
+    rr.skip_capture("w-L_59 (sw)", "door open")
+    verdict = rr.reconcile_captures(["m-L_59 (sw)", "w-L_59 (sw)", "Ms_059 (rta)", "sw_59 (sw)", "m-L_58 (sw)",
+                                     "room sim", "sw_59 (sw) x0"])
+    rec = rr.load()["capture"]
+    assert sorted(rec["taken"]) == ["Ms_59 (rta)", "m-L_59 (sw)", "sw_59 (sw)", "sw_59 (sw) x0", "w-L_59 (sw)"], rec["taken"]
+    assert rec["taken"]["Ms_59 (rta)"]["as_in_rew"] == "Ms_059 (rta)" and verdict["renames"] == {"Ms_059 (rta)": "Ms_59 (rta)"}
+    assert rec["taken"]["sw_59 (sw)"]["planned"] is False and rec["taken"]["m-L_59 (sw)"]["planned"] is True
+    assert "w-L_59 (sw)" not in rec["skipped"], "found in REW after all: taken, not skipped"
+    assert "m-L_58 (sw)" not in rec["taken"], "another series is not this round's extra"
+    assert verdict["missing"] == ["tw-L_59 (sw)"] and verdict["missing_optional"] == ["Ws_59 (rta)"], verdict
+    assert rr.capture_outstanding() == ["tw-L_59 (sw)"]
+    closed = rr.close_capture("done in the car")
+    assert closed["closed_against"]["rew"] is True and closed["closed_against"]["missing"] == ["tw-L_59 (sw)"]
+    ev = [e for e in rr.events() if e.get("type") == EV_CAPTURE_CLOSED][-1]
+    assert ev["outstanding"] == ["tw-L_59 (sw)"] and ev["outstanding_optional"] == ["Ws_59 (rta)"] and ev["rew_checked"] is True
+    # ...and a round closed with no REW in reach says so on the record.
+    rr.start_capture("60", ["m-L_60 (sw)"], phase="2")
+    assert rr.close_capture("no REW today")["closed_against"] == {"rew": False}
+    # The CLI: `capture-start --plan` prints the list the Arbiter reads, column by column, with the switch named.
+    import io, contextlib
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        _main(["process.py", rr.dir, "capture-start", "61", "--plan", "--phase", "2", "--start", "rta",
+               "--optional", "Ws_61 (sw)", "--step", "2.3"])
+    text = buf.getvalue()
+    assert "Solo (rta)" in text and "Group (sw)" in text and text.index("Solo (rta)") < text.index("Solo (sw)"), text
+    assert "1 optional" in text and "Ws_61 (sw)" in text and "switch" in text.lower(), text
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
+        _main(["process.py", rr.dir, "capture-close", "--no-rew", "desk only"])
+    assert "not checked against REW" in buf.getvalue(), buf.getvalue()
+
     print(
         "selftest OK — a skip refused without a reason and taken with either a sentence or a "
         "superseding step; evidence refused when empty and when it resolves to nothing (SCR-035), "
@@ -3198,17 +3423,27 @@ def _main(argv):
                 step = rest[i + 1] if len(rest) > i + 1 else None
                 rest = rest[:i] + rest[i + 2:]
             flags = {}
-            for flag in ("--under", "--level", "--level-read-as"):
+            for flag in ("--under", "--level", "--level-read-as", "--start", "--phase"):
                 if flag in rest:
                     i = rest.index(flag)
                     flags[flag] = rest[i + 1] if len(rest) > i + 1 else None
                     rest = rest[:i] + rest[i + 2:]
+            optional = []
+            while "--optional" in rest:            # repeatable: one title per flag (a title carries spaces)
+                i = rest.index("--optional")
+                if len(rest) > i + 1:
+                    optional.append(rest[i + 1])
+                rest = rest[:i] + rest[i + 2:]
+            plan = "--plan" in rest
+            rest = [a for a in rest if a != "--plan"]
             round_ = p.start_capture(rest[0], expected=rest[1:], step=step, origin=origin,
                                      under=flags.get("--under"), level=flags.get("--level"),
-                                     level_read_as=flags.get("--level-read-as"))
+                                     level_read_as=flags.get("--level-read-as"), phase=flags.get("--phase"),
+                                     plan=plan, optional=optional, start_method=flags.get("--start"))
             print(
                 f"{round_['id']} open at {round_['version']}, "
                 f"{len(round_['expected'])} capture(s) expected"
+                + (f" ({len(round_['optional'])} optional)" if round_.get("optional") else "")
                 + (f", under {round_['under']}" + (f" ({round_['under_note']})" if round_.get("under_note") else "")
                    if round_.get("under") else "")
                 + (f", level {round_['level']['value'] or '?'}" if round_.get("level") else "")
@@ -3216,6 +3451,8 @@ def _main(argv):
                    "not this project's own series"
                    if round_.get("origin") else "")
             )
+            for line in render_round_list(round_):
+                print(line)
         elif cmd == "capture-check":
             session = "--session" in args
             args = [a for a in args if a != "--session"]
@@ -3470,11 +3707,39 @@ def _main(argv):
             p.skip_capture(args[0], " ".join(args[1:]))
             print(f"{args[0]} skipped: {' '.join(args[1:])}")
         elif cmd == "capture-close":
+            # The round closes AGAINST REW (skill #77, rule 3), whatever captured the measurements: what REW holds is
+            # taken, the extra of this series is recorded, what it does not hold stays open -- and the checks run on
+            # what was taken. `--no-rew` closes on the record alone, and the record says so.
+            no_rew = "--no-rew" in args
+            args = [a for a in args if a != "--no-rew"]
+            checked = None
+            if not no_rew:
+                rew_api = _load_sibling("rew_api.py")
+                try:
+                    titles = [m.get("title", "") for m in (rew_api.get_measurements() or {}).values()]
+                    checked = p.reconcile_captures(titles)
+                except Exception as exc:  # noqa: BLE001 -- REW down is a fact to print, not a crash
+                    print(f"  REW not reached ({str(exc)[:120]}): closing on the record alone")
+            if checked is not None:
+                print(f"  read against REW: {len(checked['matched'])} of {len(checked['expected'])} on the list held"
+                      + (f", {len(p.load()['capture'].get('reconciled', {}).get('extra') or [])} taken beyond it" )
+                      + (f", {len(checked['renames'])} under another spelling" if checked["renames"] else ""))
+                for actual, canonical in sorted(checked["renames"].items()):
+                    print(f"    REW holds `{actual}` for `{canonical}` -- rename it there (REW's uuid survives)")
+                taken_now = sorted(p.load()["capture"].get("taken") or {})
+                if taken_now:
+                    try:
+                        p.check_captures(taken_now)
+                        print(f"  checks run on {len(taken_now)} taken capture(s) (capture-check for the verdicts)")
+                    except Exception as exc:  # noqa: BLE001
+                        print(f"  checks not run on the taken captures: {str(exc)[:160]}")
             outstanding = p.capture_outstanding()
             round_ = p.close_capture(" ".join(args) or None)
             print(
                 f"{round_['id']} closed: {len(round_['taken'])} taken, "
                 f"{len(round_['skipped'])} skipped, {len(outstanding)} outstanding"
+                + (f", {len(_outstanding_optional(round_))} optional left" if _outstanding_optional(round_) else "")
+                + ("" if round_["closed_against"]["rew"] else " -- not checked against REW")
             )
             for title in outstanding:
                 print(f"  OUTSTANDING: {title}")

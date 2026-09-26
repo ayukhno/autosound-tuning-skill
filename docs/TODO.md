@@ -1553,7 +1553,16 @@ asked for before #77 and #73 (the Arbiter offered it, 26.09).
 dropped). Two VM runs are owed before the release: #64 (TCC running / closed) and #60 (one review through Claude, one
 through Codex).
 
-#72 built too (`9bad5d9`). Next: the round group on Fable (#77 first), then #73 #69 #82 #61 #65. Resume:
+#72 built too (`9bad5d9`).
+
+**2026-09-26, on Fable — the round group is built** (#77 #74 #75 #78 #79 #80 #83, one commit): the rule in `SKILL.md`,
+`capture-start --plan/--start/--optional/--phase`, the round's `groups`/`optional`/`setup`, `capture-close` against REW
+(`reconcile_captures`), four columns and `order_by_setup`/`place_in_groups` in `naming.py`, `Glossary.for_project`
+following the project's channel rows, `apply.py propose/attest` CLI, `contract.py` naming an `eq-delta.json` newer than
+HEAD. Hub #205 answered (asks 2, 3); SKL-054 (hub #214) to tcc for TCC Control's half. TCC's `wave-0.1.44` already reads
+a round's `groups`.
+
+Next: #73 (Phase 2's plan — the analysis first, `docs/W-3-PHASE2-ANALYSIS.md`, on Fable), then #69 #82 #61 #65. Resume:
 `hub/bin/role skill --resume e458cb47-2e5b-4aa5-b5f8-448c47410551`.
 
 ## S-059 · v3.0.61's TCC upgrade path, run on the Windows VM

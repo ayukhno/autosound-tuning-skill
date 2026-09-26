@@ -148,16 +148,34 @@ class Glossary:
 
     @classmethod
     def for_project(cls, project_dir):
-        """`<project>/glossary.json`, or the `glossary` key of `project.json` (SCR-011)."""
+        """`<project>/glossary.json`, or the `glossary` key of `project.json` (SCR-011).
+
+        **Whether a channel is active comes from the project's channel rows** (skill #83): `channels[]` in
+        `project.json` is where the intake's slot switch writes `hidden` / role `unused`, and the glossary's own
+        `active` flag stayed true for `r-L`/`r-R` after they were switched off, so the plan asked for captures of
+        channels the car no longer had. A code the project has no row for keeps the glossary's flag.
+        """
         standalone = os.path.join(project_dir, "glossary.json")
-        if os.path.isfile(standalone):
-            return cls.load(standalone)
         combined = os.path.join(project_dir, "project.json")
+        data = {}
         try:
             with open(combined, encoding="utf-8") as f:
-                return cls((json.load(f) or {}).get("glossary") or {})
+                data = json.load(f) or {}
         except (OSError, ValueError):
-            return cls()
+            data = {}
+        glossary = cls.load(standalone) if os.path.isfile(standalone) else cls(data.get("glossary") or {})
+        glossary.follow_project_channels(data.get("channels") or [])
+        return glossary
+
+    def follow_project_channels(self, rows):
+        """Set each channel's `active` from the project's row of the same code, where there is one (skill #83)."""
+        on = {}
+        for row in rows or []:
+            if isinstance(row, dict) and row.get("code"):
+                on[row["code"]] = not row.get("hidden") and row.get("role") != "unused"
+        for c in self.channels:
+            if c.get("code") in on:
+                c["active"] = on[c["code"]]
 
     # -- queries --
     def channel_codes(self, active_only=False):
@@ -559,23 +577,25 @@ def validate_series(titles, expected, glossary=None):
     }
 
 
-# Human labels for the capture scopes, matching how the plan is read aloud ("solo sweeps, then the
-# rta groups") and how a front-end columns them.
-_SCOPE_LABELS = {
-    "channels": "solo",
-    "pairs": "pairs",
-    "sides": "sides",
-    "joints_sw_ws": "joints",
-    "combos_all": "combos",
-}
+# A round's columns (skill #79, the Arbiter 2026-09-24): what a capture is MADE OF -- one driver (solo) or several
+# together (group) -- by how it is taken (sw / rta). Four at most: Solo (sw), Solo (rta), Group (sw), Group (rta).
+# Pairs, sides, joints and combos are all groups; splitting them by what they are in the analysis gave five columns
+# nobody in the car needed.
+KIND_SOLO = "solo"
+KIND_GROUP = "group"
+_KIND_LABELS = {KIND_SOLO: "Solo", KIND_GROUP: "Group"}
+
+
+def group_label(kind, method):
+    return f"{_KIND_LABELS.get(kind, kind)} ({method})"
 
 
 def expected_groups(phase, glossary, version):
-    """`expected_series` split into the groups a checklist is actually read in.
+    """`expected_series` split into the groups a checklist is actually read in: the four columns of skill #79.
 
-    Returns `[{"scope", "label", "method", "names"}]`. A flat list is right for set comparison and
-    wrong for display: "10 of 20 captured" tells a tuner nothing about whether the solo pass is
-    done or the group pass hasn't started.
+    Returns `[{"kind", "label", "method", "names"}]`, in the plan's order (solo before group, sw before rta) -- a
+    flat list is right for set comparison and wrong for display: "10 of 20 captured" tells a tuner nothing about
+    whether the solo pass is done or the group pass hasn't started. `order_by_setup` reorders it for the car.
     """
     plan = _CAPTURE_PLAN.get(str(phase))
     if not plan:
@@ -585,16 +605,67 @@ def expected_groups(phase, glossary, version):
         codes = _codes_for(scope, glossary)
         if not codes:
             continue
+        kind = KIND_SOLO if scope == "channels" else KIND_GROUP
         for method in methods:
-            out.append(
-                {
-                    "scope": scope,
-                    "label": f"{_SCOPE_LABELS.get(scope, scope)} ({method})",
-                    "method": method,
-                    "names": [generate_name(code, version, method) for code in codes],
-                }
-            )
+            names = [generate_name(code, version, method) for code in codes]
+            group = next((g for g in out if g["kind"] == kind and g["method"] == method), None)
+            if group is None:
+                out.append({"kind": kind, "label": group_label(kind, method), "method": method, "names": names})
+            else:
+                group["names"].extend(n for n in names if n not in group["names"])
     return out
+
+
+def order_by_setup(groups, first):
+    """The round's groups in the order the car is taken in (skill #78, the Arbiter's rule from the seat).
+
+    A sweep is the mic on the tripod, the driver out of the seat; an RTA is the driver in the seat with the mic in
+    hand. Every change of method is the tripod going in or out, so the list takes `first` -- the method the car is
+    set up for, normally the last one captured -- in full, then switches ONCE and takes the rest. With `first`
+    unknown the plan's order stands. Stable: within a method the plan's order (solo, then group) is kept.
+    """
+    if not first:
+        return list(groups)
+    return [g for g in groups if g.get("method") == first] + [g for g in groups if g.get("method") != first]
+
+
+def method_switches(methods):
+    """How many times the setup changes along a list of methods: the number a round's order keeps at one."""
+    return sum(1 for a, b in zip(methods, methods[1:]) if a != b)
+
+
+def place_in_groups(groups, titles, glossary):
+    """`groups` with each of `titles` added in its place (skill #80): a solo with the solos of its method, a group
+    capture with the groups, and a method the round has no column for as a new one at the end. A title already
+    listed is not listed twice; one the grammar refuses is put in a group of its own so that it is still ON the
+    list and visibly odd. Used for the titles typed beside `--plan`, for "if you have time" captures and for a round
+    opened without a plan at all -- so every round carries its columns (skill #83)."""
+    out = [dict(g, names=list(g.get("names") or [])) for g in groups]
+    listed = {n for g in out for n in g["names"]}
+    solos = set(glossary.channel_codes()) | set(glossary.former_codes()) if glossary else set()
+    for title in titles:
+        title = str(title).strip()
+        if not title or title in listed:
+            continue
+        parsed = parse_name(title, glossary)
+        if parsed and parsed.get("method"):
+            kind = KIND_SOLO if (parsed.get("code_current") or parsed.get("code")) in solos else KIND_GROUP
+            method = parsed["method"]
+        else:
+            kind, method = "other", "?"
+        group = next((g for g in out if g.get("kind") == kind and g.get("method") == method), None)
+        if group is None:
+            group = {"kind": kind, "label": group_label(kind, method) if kind != "other" else "Not in the grammar",
+                     "method": method, "names": []}
+            out.append(group)
+        group["names"].append(title)
+        listed.add(title)
+    return out
+
+
+def flatten_groups(groups):
+    """The round's list as `expected` holds it: every group's names, in the groups' order."""
+    return [n for g in groups for n in (g.get("names") or [])]
 
 
 # --------------------------------------------------------------------------- CLI
@@ -767,6 +838,60 @@ def _selftest():
     else:
         raise AssertionError("expected_groups built titles from a ledger version")
     assert expected_groups("0", plain, "01")[0]["names"] == ["w-L_01 (sw)"]
+
+    # -- skill #79 (the Arbiter, 2026-09-24): a round in FOUR columns -- Solo (sw), Solo (rta), Group (sw),
+    #    Group (rta). Pairs, sides, joints and combos all go into Group of their method; five columns split by
+    #    what a capture IS in the analysis were the screen he refused.
+    car = Glossary({"channels": [{"code": c} for c in ("sw", "w-L", "w-R", "m-L", "m-R", "c", "r-L", "r-R")]
+                    + [{"code": "tw-L", "active": False}],
+                    "pairs": {"Ws": ["w-L", "w-R"], "Ms": ["m-L", "m-R"]},
+                    "sides": {"L": ["w-L", "m-L"], "R": ["w-R", "m-R"]},
+                    "joints": {"SW+Ws": ["sw", "w-L", "w-R"], "L w+m": ["w-L", "m-L"]},
+                    "combos": {"ALL": ["sw", "w-L", "w-R", "m-L", "m-R"]}})
+    g2 = expected_groups("2", car, 55)
+    assert [x["label"] for x in g2] == ["Solo (sw)", "Solo (rta)", "Group (rta)"], [x["label"] for x in g2]
+    assert [x["kind"] for x in g2] == ["solo", "solo", "group"]
+    assert g2[2]["names"] == ["Ws_55 (rta)", "Ms_55 (rta)", "L_55 (rta)", "R_55 (rta)", "SW+Ws_55 (rta)"], g2[2]
+    assert "tw-L_55 (sw)" not in g2[0]["names"], "an inactive channel is no task"
+    assert [x["label"] for x in expected_groups("3", car, "final")] == ["Solo (rta)", "Group (rta)"]
+    assert sum(len(x["names"]) for x in g2) == len(expected_series("2", car, 55)), "the same list, grouped"
+
+    # -- skill #78: the list is ordered by SETUP -- the method the car is already set up for first, then ONE switch.
+    #    A sweep is the tripod in the seat; an RTA is the driver in it with the mic in hand.
+    assert [x["label"] for x in order_by_setup(g2, "rta")] == ["Solo (rta)", "Group (rta)", "Solo (sw)"]
+    assert [x["label"] for x in order_by_setup(g2, "sw")] == ["Solo (sw)", "Solo (rta)", "Group (rta)"]
+    assert order_by_setup(g2, None) == g2, "nothing known about the setup: the plan's order"
+    assert method_switches([x["method"] for x in order_by_setup(g2, "rta")]) == 1
+
+    # -- skill #80: a capture asked for beside the plan ("if you have time") goes INTO the list, in its place: a solo
+    #    with the solos of its method, a group capture with the groups, a method the round did not have as a new
+    #    column. Never prose only.
+    placed = place_in_groups(g2, ["tw-L_55 (rta)", "L w+m_55 (rta)", "Ws_55 (sw)", "c_55 (rta)"], car)
+    assert [x["label"] for x in placed] == ["Solo (sw)", "Solo (rta)", "Group (rta)", "Group (sw)"], placed
+    assert placed[1]["names"][-1] == "tw-L_55 (rta)" and placed[2]["names"][-1] == "L w+m_55 (rta)", placed
+    assert placed[3]["names"] == ["Ws_55 (sw)"]
+    assert placed[1]["names"].count("c_55 (rta)") == 1, "a title already on the plan is not listed twice"
+    assert place_in_groups(placed, ["tw-L_55 (rta)"], car) == placed
+    assert [x["label"] for x in order_by_setup(placed, "rta")] == ["Solo (rta)", "Group (rta)", "Solo (sw)", "Group (sw)"]
+    bare = place_in_groups([], ["m-L_5 (sw)", "Ms_5 (rta)"], car)      # a round opened without the plan
+    assert [(x["label"], x["names"]) for x in bare] == [("Solo (sw)", ["m-L_5 (sw)"]), ("Group (rta)", ["Ms_5 (rta)"])]
+    assert flatten_groups(placed) == [n for x in placed for n in x["names"]]
+
+    # -- skill #83: ONE source for "active" -- the project's channel rows (`hidden`, role `unused`, what the intake's
+    #    slot switch writes), read when the glossary is loaded for a project. The glossary kept `r-L`/`r-R` active
+    #    while the registry had them off, and the plan asked for captures of channels that were switched off.
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        with open(os.path.join(d, "project.json"), "w", encoding="utf-8") as fh:
+            json.dump({"channels": [{"code": "w-L", "hidden": False}, {"code": "r-L", "hidden": True},
+                                    {"code": "r-R", "role": "unused"}, {"code": "c"}],
+                       "glossary": {"channels": [{"code": "w-L", "active": True}, {"code": "r-L", "active": True},
+                                                 {"code": "r-R", "active": True}, {"code": "c", "active": False},
+                                                 {"code": "tw-L", "active": True}]}}, fh)
+        pg = Glossary.for_project(d)
+        assert pg.channel_codes(active_only=True) == ["w-L", "c", "tw-L"], pg.channel_codes(active_only=True)
+        assert pg.is_active("r-L") is False and pg.is_active("c") is True, "the project's row decides, on or off"
+        assert pg.is_active("tw-L") is True, "a code the project has no row for keeps the glossary's flag"
 
     # S-042: one notation. A code with `_` is refused with the hyphen form named; a modifier after
     # a real code may still carry one, since `_` there is not the code's.

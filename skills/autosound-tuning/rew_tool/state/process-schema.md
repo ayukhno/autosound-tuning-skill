@@ -54,7 +54,13 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
     "level": {"value": "-25 dB rel. max",           // S-026: the level as a QUANTITY, and how it is
               "read_as": "7 lamps on the Conductor"},  //   read off the device; null when not given
     "issued": "…", "closed": null,                  //   same way only the active phase is.
-    "expected": ["tw-L_1 (sw)", "tw-L_1 (rta)"],    // what `naming.expected_groups` asked for
+    "expected": ["tw-L_1 (sw)", "tw-L_1 (rta)"],    // the list, flat: `groups` flattened (skill #77)
+    "groups": [{"kind": "solo", "label": "Solo (sw)", "method": "sw",   // skill #79/#83: the columns a
+                "names": ["tw-L_1 (sw)"]}, ...],                        //   front-end draws, in the order
+                                                    //   the car is taken in -- never the phase plan
+    "optional": ["Ws_1 (sw)"],                      // skill #80: on the list, not a gap when left
+    "setup": {"first": "sw", "from": "m-L_0 (sw)",  // skill #78: the method taken first and why;
+              "switches": 1},                       //   at most one switch of tripod/driver
     "step": "0.1",                                  // SCR-040: the plan step this round satisfies
     "taken": {"tw-L_1 (sw)": {"at": "…", "planned": true,     // planned=false: not on the list
       "superseded_by": null,                        // S-039: a row recorded under a WRONG title
@@ -64,7 +70,12 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
                    "uuid": "9ff4deb9-…",            //   REW's own id — the title is NOT identity
                    "at": "…", "issues": []}}},
     "skipped": {"c_1 (sw)": {"at": "…", "reason": "centre not wired yet",
-                             "planned": true}}     // planned=false: never on the list
+                             "planned": true}},    // planned=false: never on the list
+    "reconciled": {"at": "…", "rew": true,          // skill #77 rule 3: the list read against REW's
+                   "matched": 4, "extra": ["sw_1 (sw)"],   //   list before closing -- taken is what REW
+                   "renames": {"Ms_01 (rta)": "Ms_1 (rta)"},  // holds (`as_in_rew` on a row spelled
+                   "missing": ["tw-L_1 (sw)"], "missing_optional": []},  // differently there)
+    "closed_against": {"rew": true, "missing": [...], "extra": [...], "renames": {...}}  // or {"rew": false}
   }
 }
 ```
@@ -72,7 +83,7 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
 ## journal.jsonl
 
 One JSON object per line, oldest first: `{"at": …, "type": …, …}`. Types:
-`phase_entered` · `step_added` · `attempt_started` · `step_skipped` · `step_done` ·
+`phase_entered` · `step_added` · `attempt_started` · `step_skipped` · `step_done` · `capture_reconciled` ·
 `step_blocked` · `critic_called` · `config_change` · `capture_task_issued` · `capture_taken` ·
 `capture_skipped` · `capture_round_closed` · `capture_verified` · `session_started` ·
 `user_decision` · `written_by`.

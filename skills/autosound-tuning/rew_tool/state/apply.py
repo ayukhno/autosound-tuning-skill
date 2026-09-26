@@ -34,6 +34,7 @@ import copy
 import datetime
 import json
 import os
+import sys
 
 import state as _state
 
@@ -657,6 +658,29 @@ def _selftest():
     cur_ = {"channels": {"tw-L": {"hp": {"f": 2800, "type": "BE", "slope": 24}, "ta_ms": 2.6}}}
     new_ = {"channels": {"tw-L": {"hp": {"f": 3500, "type": "LR", "slope": 24}, "ta_ms": 2.6}}}
     assert any("set for the old edge" in a for a in advisories(cur_, new_)), advisories(cur_, new_)
+    # skill #74: from a terminal, one line banks a delta file as the yellow version and prints the sheet -- the step
+    # that puts a proposal in front of the Arbiter used to need Python typed by hand, and was skipped.
+    import io, contextlib
+    cli_root = tempfile.mkdtemp(prefix="autosound_apply_cli_")
+    cli_h = _state.PresetHistory(os.path.join(cli_root, "state"), "SQ", project_dir=cli_root)
+    cli_h.snapshot(_state._sample_state(), note="baseline")
+    _state.Registry(os.path.join(cli_root, "state")).set_active("SQ")
+    with open(os.path.join(cli_root, "eq-delta.json"), "w", encoding="utf-8") as fh:
+        json.dump({"w-L": {"gain_db": -1.0}}, fh)
+    with open(os.path.join(cli_root, "review.md"), "w", encoding="utf-8") as fh:
+        fh.write("reviewed")
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        assert _main(["apply.py", cli_root, "propose", "eq-delta.json", "--note", "trim",
+                      "--evidence", "w-L_2 (sw)", "--reviewed", "review.md"]) == 0
+    assert "🟡 proposed v_002 on SQ" in out.getvalue() and "w-L" in out.getvalue(), out.getvalue()
+    assert cli_h.load("v_002")["channels"]["w-L"]["status"] == "proposed"
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        assert _main(["apply.py", cli_root, "attest"]) == 0
+    assert "🟢 v_003" in out.getvalue() and cli_h.load("v_003")["channels"]["w-L"]["status"] == "applied", out.getvalue()
+    assert _main(["apply.py", cli_root, "propose", "no-such.json"]) == 1
+
     print(f"selftest OK — propose banked 🟡 + settings-sheet (old→new, 5.45 ms=523 smp@96k), "
           f"advisory on polarity flip, attest flipped 🟡→🟢 (w-L,sub); tier-keyed delta proposed+"
           f"attested a VIRTUAL-tier row (schema v2 — impossible before this), structured EQ bands "
@@ -667,6 +691,68 @@ def _selftest():
     return 0
 
 
+_USAGE = """usage: apply.py <project-dir> propose <delta.json> [--preset P] [--note TEXT] [--evidence E ...] [--reviewed FILE]
+       apply.py <project-dir> attest [v_NNN] [--preset P] [--note TEXT]
+       apply.py --selftest
+
+  propose   bank the delta as a YELLOW version and print the settings sheet the Arbiter enters (skill #74: a
+            proposal is a version on his screen, never files on disk; `eq_propose --accept` writes the delta)
+  attest    the Arbiter entered it: flip the proposed rows to green, as a new version
+"""
+
+
+def _main(argv):
+    if "--selftest" in argv:
+        return _selftest()
+    if len(argv) < 3:
+        print(_USAGE, file=sys.stderr)
+        return 2
+    project_dir, cmd, args = argv[1], argv[2], list(argv[3:])
+    opts = {"--preset": None, "--note": None, "--reviewed": None}
+    evidence = []
+    rest = []
+    i = 0
+    while i < len(args):
+        if args[i] in opts and i + 1 < len(args):
+            opts[args[i]] = args[i + 1]
+            i += 2
+        elif args[i] == "--evidence" and i + 1 < len(args):
+            evidence.append(args[i + 1])
+            i += 2
+        else:
+            rest.append(args[i])
+            i += 1
+    root = os.path.join(project_dir, "state")
+    registry = _state.Registry(root)
+    preset = opts["--preset"] or registry.get_active()
+    if not preset:
+        print(f"error: no active slot in {root}/registry -- pass --preset", file=sys.stderr)
+        return 2
+    history = _state.PresetHistory(root, preset, project_dir=project_dir)
+    try:
+        if cmd == "propose":
+            if not rest:
+                print(_USAGE, file=sys.stderr)
+                return 2
+            delta_path = rest[0] if os.path.isabs(rest[0]) else os.path.join(project_dir, rest[0])
+            with open(delta_path, encoding="utf-8") as fh:
+                delta = json.load(fh)
+            got = propose(history, delta, note=opts["--note"] or f"proposed from {os.path.basename(rest[0])}",
+                          registry=registry, evidence=evidence or None, reviewed=opts["--reviewed"])
+            print(f"{'🟠 candidate' if got['candidate'] else '🟡 proposed'} {got['version']} on {preset}")
+            print(got["sheet"])
+            return 0
+        if cmd == "attest":
+            got = attest(history, rest[0] if rest else None, note=opts["--note"])
+            print(f"🟢 {got['version']} on {preset}: applied {', '.join(got['applied_channels']) or 'nothing proposed'}")
+            return 0
+    except (ValueError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(_USAGE, file=sys.stderr)
+    return 2
+
+
 if __name__ == "__main__":
     # issue #21: a code page must not destroy a result. Run from a subdirectory, so the sibling
     # modules' own directory has to go on the path before `console` can be found at all.
@@ -674,4 +760,4 @@ if __name__ == "__main__":
     _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
     import console
     console.install()
-    raise SystemExit(_selftest())
+    raise SystemExit(_main(sys.argv))

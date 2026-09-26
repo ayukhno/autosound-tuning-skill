@@ -203,6 +203,20 @@ W-3 (`docs/PLAN-W-3.md`): the issues on the milestone that carry the Arbiter's `
   showed `2d: фінальний EQ` — the section letter of `phase_2_eq.md` typed into the name. `add-step` now puts the
   step's id at the head of its name and drops a section letter or another number typed there, so the text and the
   panel read the same label. Steps already in a project keep their names.
+- **A request to measure is a round, and a DSP change is a yellow version — in every mode** (the Arbiter's rule,
+  skill #77, with #74, #75, #78, #79, #80, #83). `capture-start <N> --plan` opens the round with its list from the
+  method's plan for the phase, for the channels the project has on (`project.json` `channels[]` is now the one source
+  for "active"; the glossary's flag follows it — #83), in four columns, Solo/Group × sw/rta (#79), ordered by setup:
+  the method the car is in first (the last capture taken, or `--start`), then one switch of tripod and driver (#78);
+  titles typed beside the plan go in their place, and `--optional` puts "if you have time" captures on the list
+  without making them a gap (#80). What it prints is the message to the Arbiter: a series announced with no list
+  (#75) has no carrier any more. The round carries its columns (`groups`), so TCC draws the round, not the phase plan.
+  **`capture-close` reads REW first**, whatever captured: held → taken (a different spelling matched and named),
+  taken beyond the list → recorded, absent → left open, the checks run on what was taken; `--no-rew` says on the
+  record that it was not checked. **A proposal is a version**: `rew_tool/state/apply.py <project> propose
+  <delta.json>` banks a delta from a terminal in one line (and `attest` turns it green), and `contract.py check`
+  names an `eq-delta.json` newer than the ledger's HEAD as a proposal that never reached the Arbiter (#74). The rule
+  is in `SKILL.md`; the round's schema in `process-schema.md`.
 
 ## [v3.0.61] — 2026-09-23 · The installer upgrades an app it did not install, instead of breaking it
 

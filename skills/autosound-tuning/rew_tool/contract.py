@@ -26,6 +26,7 @@ stdlib only, py3.9+.
 from __future__ import annotations
 
 import json
+from datetime import datetime
 import os
 import re
 import sys
@@ -455,9 +456,44 @@ def round_verdict(titles, round_, glossary=None):
     decided = {str(t): (entry or {}).get("reason") for t, entry in (round_.get("skipped") or {}).items()}
     verdict["skipped"] = dict(decided)
     verdict["skipped_unplanned"] = sorted(t for t in decided if t not in expected)
+    # An optional capture ("if you have time", skill #80) is on the list and not a gap: named apart, never MISSING.
+    optional = set(str(t) for t in (round_.get("optional") or []))
     verdict["missing"] = [t for t in verdict["missing"] if t not in decided]
+    verdict["missing_optional"] = [t for t in verdict["missing"] if t in optional]
+    verdict["missing"] = [t for t in verdict["missing"] if t not in optional]
     verdict["complete"] = not verdict["missing"]
     return verdict
+
+
+def proposals_on_disk(project_dir):
+    """`eq-delta.json` files newer than the ledger's HEAD (skill #74): a proposal that reached the disk and not the
+    Arbiter. `eq_propose --accept` writes that file for `apply.propose` to bank as a yellow version; the round's final
+    EQ once ended there, with a message, and no version on his screen. A delta older than HEAD was banked (or
+    overtaken) and is not named. Returns `[{"file", "head", "newer_by_s"}]`."""
+    state_root = os.path.join(project_dir, "state")
+    head_at = None
+    if os.path.isdir(state_root):
+        for preset in os.listdir(state_root):
+            folder = os.path.join(state_root, preset)
+            if not os.path.isdir(folder):
+                continue
+            for name in os.listdir(folder):
+                if re.fullmatch(r"v_\d{3,}\.json", name):
+                    at = os.path.getmtime(os.path.join(folder, name))
+                    head_at = at if head_at is None else max(head_at, at)
+    out = []
+    for root, dirs, files in os.walk(project_dir):
+        dirs[:] = [d for d in dirs if d not in (".git", "state", "node_modules", "__pycache__")]
+        for name in files:
+            if name != "eq-delta.json":
+                continue
+            path = os.path.join(root, name)
+            at = os.path.getmtime(path)
+            if head_at is None or at > head_at + 1:
+                out.append({"file": os.path.relpath(path, project_dir).replace(os.sep, "/"),
+                            "head": None if head_at is None else datetime.fromtimestamp(head_at).isoformat(timespec="seconds"),
+                            "newer_by_s": None if head_at is None else int(at - head_at)})
+    return sorted(out, key=lambda r: r["file"])
 
 
 def round_label(version):
@@ -611,6 +647,7 @@ def check_project(project_dir, skip_rew=False):
     cross = {
         "glossary_vs_ledgers": cross_check_glossary_vs_ledgers(glossary, snapshots),
         "tiers_vs_profile": cross_check_tiers_vs_profile(profile_data, snapshots, project_data),
+        "proposals_on_disk": proposals_on_disk(project_dir),
         "rew": ({"reachable": False, "note": "skipped (--no-rew)"} if skip_rew
                 else cross_check_rew(process_state, glossary, snapshots, project_data)),
     }
@@ -1002,6 +1039,12 @@ def render_report(report):
     lines.append("**Cross-file checks:**")
     for note in cross["glossary_vs_ledgers"] + cross["tiers_vs_profile"]:
         lines.append(f"- ⚠️ {note}")
+    for row in cross.get("proposals_on_disk") or []:
+        lines.append(f"- ⚠️ a proposal on disk that no version carries: `{row['file']}`"
+                     + (f" is {row['newer_by_s']} s newer than the ledger's HEAD ({row['head']})" if row["head"]
+                        else " and this project has no ledger snapshot at all")
+                     + " — a DSP change reaches the Arbiter only as a yellow version: "
+                       f"`python3 rew_tool/state/apply.py {report['project_dir']} propose {row['file']}` (skill #74)")
     rew = cross["rew"]
     if rew.get("reachable"):
         if rew.get("foreign"):
@@ -1025,7 +1068,8 @@ def render_report(report):
                          + (f", {len(skipped)} skipped" if skipped else "")
                          + (f", {len(rew['renames'])} under another title"
                             if rew.get("renames") else "")
-                         + ("" if rew["complete"] else f" — MISSING {rew['missing']}"))
+                         + ("" if rew["complete"] else f" — MISSING {rew['missing']}")
+                         + (f", optional left {rew['missing_optional']}" if rew.get("missing_optional") else ""))
             # skill #47: "captured" counted a measurement REW holds under a DIFFERENT title, and
             # said nothing. The count is right -- the comparison normalises `_01` to `_1`, and
             # they are the same number -- but a front-end that finds a measurement by its literal
@@ -1282,6 +1326,25 @@ def _selftest():
     rv = round_verdict(["w-L_01 (sw)"], round_)
     assert (rv["missing"], rv["skipped"], rv["complete"]) == \
         (["r-R_01 (sw)"], {"r-L_01 (sw)": "rears muted for this pass"}, False), rv
+    # skill #80: an optional capture left untaken is named apart and does not make the round incomplete.
+    rv_opt = round_verdict(["w-L_01 (sw)"], dict(round_, optional=["r-R_01 (sw)"]))
+    assert (rv_opt["missing"], rv_opt["missing_optional"], rv_opt["complete"]) == ([], ["r-R_01 (sw)"], True), rv_opt
+    assert "optional left ['r-R_01 (sw)']" in render_report(dict(report, cross_checks=dict(report["cross_checks"], rew={
+        "reachable": True, "round": "cap_001", "phase": "0", "version": "v_001", **rv_opt})))
+    # skill #74: an `eq-delta.json` newer than the ledger's HEAD is a proposal that never reached the Arbiter.
+    assert report["cross_checks"]["proposals_on_disk"] == [], report["cross_checks"]["proposals_on_disk"]
+    os.makedirs(os.path.join(root, "rew_analitic", "phase2"), exist_ok=True)
+    delta_path = os.path.join(root, "rew_analitic", "phase2", "eq-delta.json")
+    with open(delta_path, "w", encoding="utf-8") as fh:
+        json.dump({"m-L": {"eq": []}}, fh)
+    head_file = max((os.path.join(d, n) for d, _, names in os.walk(os.path.join(root, "state")) for n in names
+                     if n.startswith("v_") and n.endswith(".json")), key=os.path.getmtime)
+    os.utime(delta_path, (os.path.getmtime(head_file) + 120, os.path.getmtime(head_file) + 120))
+    on_disk = check_project(root, skip_rew=True)["cross_checks"]["proposals_on_disk"]
+    assert on_disk and on_disk[0]["file"] == "rew_analitic/phase2/eq-delta.json" and on_disk[0]["newer_by_s"] >= 119, on_disk
+    assert "apply.py" in render_report(check_project(root, skip_rew=True)) and "skill #74" in render_report(check_project(root, skip_rew=True))
+    os.utime(delta_path, (os.path.getmtime(head_file) - 120, os.path.getmtime(head_file) - 120))
+    assert check_project(root, skip_rew=True)["cross_checks"]["proposals_on_disk"] == [], "an older delta was banked"
     shown = render_report(dict(report, cross_checks=dict(report["cross_checks"], rew={
         "reachable": True, "round": "cap_001", "phase": "0", "version": "v_001", **rv})))
     assert "(round cap_001, phase 0, v_001): 1/3 captured, 1 skipped — MISSING ['r-R_01 (sw)']" in shown, shown
