@@ -174,6 +174,12 @@ W-3 (`docs/PLAN-W-3.md`): the issues on the milestone that carry the Arbiter's `
   hub #204). "The stream was interrupted" used to count as a refusal, and one cut moved the review off the
   subscription onto the clipboard or the metered API. Now the same call runs once more; a second cut fails as
   before and says it was cut twice. Refusals, quota and timeouts are not retried. Nothing changes for TCC.
+- **`L m-tw` is the junction with the tweeter inverted** (`naming.py`, skill #66). The Arbiter writes a sign between
+  a junction's lowercase members as its polarity: `L m-tw_52 (rta)` ≡ `L m+tw_52 (rta) inv`, and `L w-m+tw_1 (rta)`
+  has the mid inverted (`inv:m`). It used to parse, silently, as the side `L` with a modifier `m-tw`, so the round
+  that asked for the inverted take reported it missing. Read only with a glossary that knows the side and the
+  drivers; `parse_name` now also returns `inverted` (the members after a `-`). The grammar is in
+  `naming-and-structure.md` §3.
 
 ## [v3.0.61] — 2026-09-23 · The installer upgrades an app it did not install, instead of breaking it
 

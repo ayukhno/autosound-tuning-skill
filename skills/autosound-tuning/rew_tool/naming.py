@@ -90,6 +90,31 @@ CONTROL_OPEN = ("ctl1", "ctl")
 CONTROL_CLOSE = ("ctl3", "rep")
 
 
+# A junction written side first with a sign between its members (skill #66, the Arbiter 2026-09-24): `L m-tw`,
+# `L w-m+tw`. The member after `-` is inverted. Lowercase members only: the combos (`ALL+C`) are uppercase and keep
+# their `+`, and a driver's own side (`m-L`) never follows a space.
+_SIGNED_CHAIN_RE = re.compile(
+    r"^(?P<side>\S+)\s+(?P<chain>[a-z][a-z0-9]*(?:[+-][a-z][a-z0-9]*)+)(?P<rest>(?:\s.*)?)$")
+
+
+def _signed_chain(body, glossary):
+    """`(body with every sign a plus, [inverted members])` -- or `(body, [])` when it is not a signed junction.
+
+    Only with a glossary, and only when the side is one of its sides and every member is a driver it has
+    (`m` of `m-L`, `sw`): a variant spelled `w-alt` is left alone rather than read as `w` plus an inverted `alt`.
+    """
+    m = _SIGNED_CHAIN_RE.match(body)
+    if not glossary or not m or "-" not in m.group("chain") or m.group("side") not in glossary.sides:
+        return body, []
+    drivers = {code.split("-")[0] for code in glossary.channel_codes() + glossary.former_codes()}
+    members = re.split(r"[+-]", m.group("chain"))
+    if not all(member in drivers for member in members):
+        return body, []
+    signs = re.findall(r"[+-]", m.group("chain"))
+    inverted = [member for sign, member in zip(signs, members[1:]) if sign == "-"]
+    return f"{m.group('side')} {'+'.join(members)}{m.group('rest')}", inverted
+
+
 class NamingError(ValueError):
     """A title that cannot be expressed in, or parsed from, the grammar."""
 
@@ -348,6 +373,13 @@ def explain_name(title, glossary=None):
         return None, (f"`{head}` is not a code: a code carries its side or variant with `-` "
                       f"(`{head.replace('_', '-')}`), and `_` only begins the series number "
                       f"(naming-and-structure.md §3)")
+    # `L m-tw` is `L m+tw` with the tweeter inverted -- the same measurement as `L m+tw_52 (rta) inv`, so the
+    # inversion joins the clarification the way `inv` typed after the method does: `inv` for a two-member
+    # junction, `inv:<member>` where a longer chain has to say which (skill #66).
+    body, inverted = _signed_chain(body, glossary)
+    if inverted:
+        mark = "inv" if len(re.split(r"[+-]", body.split()[1])) == 2 else "inv:" + ",".join(inverted)
+        tail = f"{mark} {tail}" if tail else mark
     code, modifier = body, None
     if glossary:
         for candidate in glossary.all_codes():
@@ -380,6 +412,8 @@ def explain_name(title, glossary=None):
         # The clarification typed after the method (`noXO`), or None: what the measurement is and
         # what it is for. Part of which measurement it is -- `name_key` counts it with the modifier.
         "params": tail,
+        # The junction members typed after a `-` (`L m-tw` -> `["tw"]`): inverted for this take (skill #66).
+        "inverted": inverted,
         "title": text,
     }, None
 
@@ -739,6 +773,25 @@ def _selftest():
     got, why = explain_name("w_L_1 (sw)")
     assert got is None and "`w-L`" in why, why
     assert parse_name("w-L low_cut_49 (sw)", Glossary({"channels": [{"code": "w-L"}]}))["modifier"] == "low_cut"
+
+    # -- skill #66 (the Arbiter, 2026-09-24): `+`/`-` between lowercase driver codes, side first; the member after
+    # `-` is inverted. `L m-tw` is the junction `L m+tw` with the tweeter inverted -- it used to parse, silently, as
+    # the side `L` with a modifier `m-tw`, and the round that asked for the inverted take reported it missing.
+    jg = Glossary({"channels": [{"code": c} for c in ("tw-L", "m-L", "w-L", "sw")],
+                   "sides": {"L": ["tw-L", "m-L", "w-L"]},
+                   "joints": {"L m+tw": ["m-L", "tw-L"], "L w+m": ["w-L", "m-L"]}})
+    got = parse_name("L m-tw_52 (rta)", jg)
+    assert (got["code"], got["modifier"], got["params"], got["inverted"]) == ("L m+tw", None, "inv", ["tw"]), got
+    assert name_key(got) == name_key(parse_name("L m+tw_52 (rta) inv", jg))
+    assert name_key(got) != name_key(parse_name("L m+tw_52 (rta)", jg))
+    assert validate_series(["L m-tw_52 (rta)"], ["L m+tw_52 (rta) inv"], jg)["complete"]
+    three = parse_name("L w-m+tw_1 (rta)", jg)
+    assert (three["params"], three["inverted"]) == ("inv:m", ["m"]), three
+    assert parse_name("L m-tw_52 (rta) noXO", jg)["params"] == "inv noXO"
+    # A hyphen that is a driver's side stays one, and a member no channel has is not guessed at.
+    assert parse_name("m-L_52 (rta)", jg)["code"] == "m-L"
+    assert parse_name("L m-xx_52 (rta)", jg)["modifier"] == "m-xx"
+    assert parse_name("L m+tw_52 (rta)", jg)["inverted"] == []
     print("selftest OK — grammar round-trips, padding-insensitive version match, and a renamed "
           "channel's old captures resolve to it (SCR-039); positions p1..p9/x0 and controls "
           "ctl1/ctl3/ctl/rep parse in both forms and are identity, not code; a clarification "
