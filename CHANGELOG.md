@@ -166,6 +166,10 @@ W-3 (`docs/PLAN-W-3.md`): the issues on the milestone that carry the Arbiter's `
   tooltip) says its Δ dB is one feature's depth in a row with a PEAK / DIP / NULL badge and the band average in a
   row without one; a line under Compare's table says each cell is the band average against the baseline, a dash
   under 1 dB. In en, uk, de and pl (translated through the Advisor).
+- **A running TCC is named before anything else** (`install.ps1`, skill #64). With the app open, the installer
+  printed "about 700 MB -- a few minutes" and the version, and only then said the app was running and left as it
+  is: it read as a download that never started. Now the running app is asked about first, and the size line
+  prints only when the upgrade will run.
 
 ## [v3.0.61] — 2026-09-23 · The installer upgrades an app it did not install, instead of breaking it
 

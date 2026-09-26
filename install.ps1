@@ -1058,6 +1058,11 @@ if ($Mode -eq "tcc") {
     if (-not $Uv) {
         Warn "no uv, so no app. The method alone still works; re-run this later to add the app."
         $Mode = "terminal"
+    } elseif ((@(Get-Process -Name "autosound-tcc*" -ErrorAction SilentlyContinue).Count -gt 0) -and -not $DryRun) {
+        # A RUNNING app holds its files on Windows (skill #62), so it is left as it is, with the reason -- and this is
+        # asked FIRST (skill #64): the size line and the version used to print before it, and read as a download
+        # that never started.
+        Warn "Autosound TCC is running, so its files are in use. Close it and run this line again; the app was left as it is."
     } else {
         Say "the app and what it needs, about 700 MB -- a few minutes, no output until it is done..."
         # `--python` is not optional: without it uv picks whatever interpreter it finds, and the
@@ -1095,17 +1100,14 @@ if ($Mode -eq "tcc") {
         }
         # skill #62: a launcher uv did not put there (TCC's own updater did) makes `uv tool install --upgrade` refuse
         # ("Executable already exists"), and on the Windows VM that refusal left the old app unable to start. So uv
-        # is asked first: a tool it lists is upgraded, a launcher it does not own is replaced, and said. A RUNNING app
-        # holds its files on Windows, so it is left as it is, with the reason.
+        # is asked first: a tool it lists is upgraded, a launcher it does not own is replaced, and said. A running app
+        # never gets this far (above).
         $tccForce = @()
         if ($HaveTcc -and -not ((& $Uv tool list 2>$null | Out-String) -match '(?m)^autosound-tcc ')) {
             $tccForce = @("--force")
             Say "the app's launcher here was not put there by uv (TCC's own updater did) -- replacing it"
         }
-        $tccRunning = @(Get-Process -Name "autosound-tcc*" -ErrorAction SilentlyContinue).Count -gt 0
-        if ($tccRunning -and -not $DryRun) {
-            Warn "Autosound TCC is running, so its files are in use. Close it and run this line again; the app was left as it is."
-        } elseif (Run { & $Uv tool install --quiet --python 3.12 --upgrade @tccForce $TccSpec } "uv tool install autosound-tcc[gui,claude]") {
+        if (Run { & $Uv tool install --quiet --python 3.12 --upgrade @tccForce $TccSpec } "uv tool install autosound-tcc[gui,claude]") {
             Sync-ProcessPath
             # The windowed launcher when the package has one (no console window behind the app),
             # the console one otherwise.
