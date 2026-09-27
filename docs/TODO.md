@@ -1608,6 +1608,16 @@ bare name is what TCC's picker wrote before hub #216. `doctor` named it: `AUTOSO
 in `%APPDATA%\autosound\critic-env`, which «переписав однойменну змінну середовища». Its lines came through
 `| Select-String` as mojibake (S-062 again).
 
+## S-067 · Next: the next skill wave's collection, on the Arbiter's word
+
+**Status**: open 2026-09-27 · the session stopped on «добраніч» after v3.0.63; nothing in work, no background tasks
+
+Where it stands: v3.0.63 (the omp route, hub #216) is released and checked live on the Mac and the Windows VM. No
+wave is open in skill; tcc's `W-3 · v0.1.44` is open. For the next skill wave's pool: hub #213 (TCC-033), #70, #71,
+S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to open it, each becomes an issue with the
+four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
+6b9c70d1-4094-4337-a1fd-23976307dfc2`.
+
 ## S-060 · W-3 · v3.0.62 is collecting: pick up the collection with him
 
 **Status**: done 2026-09-26 · **v3.0.62 released** (`cd004e9`, PR #86 merged by `--ff-only`, tag pushed); 22 issues on W-3 closed with the milestone; hub #203 #204 #205 #206 #208 closed with the tag · was: open 2026-09-24 · the session stopped on «добраніч» · the wave is still COLLECTING, nothing is built;
