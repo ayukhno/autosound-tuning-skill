@@ -1523,7 +1523,7 @@ this is the look, not a crash.
 
 ## S-063 · omp as a reviewer transport (hub #216, TCC-034)
 
-**Status**: open 2026-09-27 · assessed, in the pool for the next skill wave (the Arbiter's pick); tcc greys OMP reviewer picks until it is in
+**Status**: done 2026-09-27 · **v3.0.63** (`680c078`, PR #88 merged by `--ff-only`, tag pushed) · `python3 skills/autosound-tuning/scripts/autosound_ai.py selftest` · hub #216 closed with the tag · was: open 2026-09-27, in the pool for the next wave, then built as a tag of its own on the Arbiter's word («давай робити окремим тегом»), issue #87
 
 The Arbiter's rule: a reviewer picked as «OMP · <model>» goes through `omp` only, with omp's credentials, and a
 refusal is omp's refusal — no fallback to a key or another CLI. Today `autosound_ai.py` has no omp route: TCC sent
