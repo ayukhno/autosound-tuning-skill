@@ -1622,13 +1622,21 @@ four assessment lines, and nothing is built before his `ok` on that task. Resume
 
 **Status**: open 2026-09-27 · opened on the Arbiter's word («відкрий віху»); tcc had no open wave, so the number is max+1
 
-Eleven issues, each with the four assessment lines: #97 (hub #219 TCC-035, the installed tools never update), #96 (S-071, `ok`), #95 (S-070), #89 (hub #213 TCC-033, the ledger), #90 (S-062), #91 (S-064),
+Twelve issues, each with the four assessment lines: #98 (S-072, the libraries), #97 (hub #219 TCC-035, the installed tools never update), #96 (S-071, `ok`), #95 (S-070), #89 (hub #213 TCC-033, the ledger), #90 (S-062), #91 (S-064),
 #92 (S-065), #93 (S-066), #94 (S-068), #70 (S-057), #71. Nothing is built until he puts `ok` on a task; a task he does
 not take goes back to the pool. More findings may still come: record them here and on the milestone.
 
 A fresh install at v3.0.63 on a new Windows arm64 VM ran clean (the Arbiter, 2026-09-27: «все ок»). It answers tcc's F-088,
 relayed as hub #218 SKL-057. The run's closing line names Gemini Pro (High) as the critic, so #71 now covers both
 installers (`install.ps1:1464`, `install.sh:1444`).
+
+## S-072 · numpy, scipy, matplotlib: a fresh install gets the newest, an updated machine keeps its first ones
+
+**Status**: open 2026-09-27 · **W-4 · v3.0.64**, issue #98 (collection) · the Arbiter: «оновлення вже буде на старих бібліотеках? не дуже добре»
+
+`requirements.txt` has lower bounds only; the installers run `pip install -r` without `--upgrade`; TCC's «Оновити Скіл»
+does not touch them. CI tests the newest numpy and scipy (unpinned by decision), no matplotlib. So an updated machine
+runs on a set nobody tested. Ask: an update brings them to what CI tests, in the same path as #97.
 
 ## S-071 · Installer output: a source line twice, `::` in the sign-in prompts, a heading that contradicts its list
 
