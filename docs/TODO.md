@@ -1604,7 +1604,9 @@ found for openai-codex. Use /login, se`. omp (a bun binary) prints the source li
 cut. The advice line (`no_login`) was right. What to decide: take omp's `error:` line and what follows it when it
 has one. The same run showed the model as `gpt-5.6-terra`, not the `anthropic/claude-sonnet-5` set in the
 environment on that line: a config file overrides the environment (`load_env_file`, by design since S-015), and a
-bare name is what TCC's picker wrote before hub #216. Where the value came from is being checked with `doctor`.
+bare name is what TCC's picker wrote before hub #216. `doctor` named it: `AUTOSOUND_CRITIC_MODEL=gpt-5.6-terra`
+in `%APPDATA%\autosound\critic-env`, which «переписав однойменну змінну середовища». Its lines came through
+`| Select-String` as mojibake (S-062 again).
 
 ## S-060 · W-3 · v3.0.62 is collecting: pick up the collection with him
 
