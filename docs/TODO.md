@@ -1544,6 +1544,30 @@ before the API rung or the call goes to a key silently · Complexity medium — 
   (429) … RESOURCE_EXHAUSTED` (`google-antigravity/gemini-3.1-pro-high`).
 - The model list for a choice: `omp models` (a table per provider).
 
+## S-064 · A session hand-patched `contract.py` in the installed skill on the Windows VM
+
+**Status**: open 2026-09-27 · a finding from the v3.0.63 update on the VM; for the next wave's pool
+
+Found when TCC's updater refused to move the VM's skill clone (`~\.claude\skills\.autosound-tuning-src`, still at
+`v3.0.61`): «Скіл 3.0.61 — має незакомічені зміни, тому не чіпаю». The one change, `rew_tool/contract.py`
+`render_report`, beside CRLF noise:
+
+```diff
+         if rew.get("foreign"):
++            if isinstance(rew["foreign"], dict):
+                 files = sorted(set(rew["foreign"].values()))
+                 lines.append(...)
++            else:
++                lines.append(f"- ⚠ REW: {len(rew['foreign'])} measurement(s) from other series found")
+```
+
+So on that machine `rew["foreign"]` reached `render_report` as something without `.values()`, and `contract.py
+check` crashed. In this repo `rew_api.foreign_measurements` returns a dict in v3.0.61 and today alike, and `main`
+still reads `.values()` unguarded (`contract.py` ~1081). What made it a non-dict is not known: which run, which
+project, whether another `rew_api` was on the path. Two things to decide: what reaches `render_report` there, and
+whether a session may patch the installed clone at all. A patch there blocks every update, with nothing said but
+the updater's one line. The VM's copy is discarded so v3.0.63 can install; this item keeps the diff.
+
 ## S-060 · W-3 · v3.0.62 is collecting: pick up the collection with him
 
 **Status**: done 2026-09-26 · **v3.0.62 released** (`cd004e9`, PR #86 merged by `--ff-only`, tag pushed); 22 issues on W-3 closed with the milestone; hub #203 #204 #205 #206 #208 closed with the tag · was: open 2026-09-24 · the session stopped on «добраніч» · the wave is still COLLECTING, nothing is built;
