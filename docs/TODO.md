@@ -1622,7 +1622,7 @@ four assessment lines, and nothing is built before his `ok` on that task. Resume
 
 **Status**: open 2026-09-27 · opened on the Arbiter's word («відкрий віху»); tcc had no open wave, so the number is max+1
 
-Ten issues, each with the four assessment lines: #96 (S-071, `ok`), #95 (S-070), #89 (hub #213 TCC-033, the ledger), #90 (S-062), #91 (S-064),
+Eleven issues, each with the four assessment lines: #97 (hub #219 TCC-035, the installed tools never update), #96 (S-071, `ok`), #95 (S-070), #89 (hub #213 TCC-033, the ledger), #90 (S-062), #91 (S-064),
 #92 (S-065), #93 (S-066), #94 (S-068), #70 (S-057), #71. Nothing is built until he puts `ok` on a task; a task he does
 not take goes back to the pool. More findings may still come: record them here and on the milestone.
 
