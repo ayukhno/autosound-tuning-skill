@@ -1631,7 +1631,8 @@ relayed as hub #218 SKL-057.
 
 Decided on 2026-09-27: after W-4, skill `v3.1.0` with TCC `v1.1.0`; the minor moves in both together, patches stay
 per product («згоден з мінором повністю. і тег - не синхронні теж згоден»). It reopens `WAVES.md` §3.1; sent to the
-hub to record as hub #220 SKL-058. The run's closing line names Gemini Pro (High) as the critic, so #71 now covers both
+hub to record as hub #220 SKL-058. Hub #84 (HUB-033, the tag ledger checks the signature) brought back from deferred into
+the hub's queue on his word («передай»), to come with #99. The run's closing line names Gemini Pro (High) as the critic, so #71 now covers both
 installers (`install.ps1:1464`, `install.sh:1444`).
 
 ## S-072 · numpy, scipy, matplotlib: a fresh install gets the newest, an updated machine keeps its first ones
