@@ -1629,8 +1629,9 @@ he drops goes back to the pool. More findings may still come: record them here a
 A fresh install at v3.0.63 on a new Windows arm64 VM ran clean (the Arbiter, 2026-09-27: «все ок»). It answers tcc's F-088,
 relayed as hub #218 SKL-057.
 
-Asked on 2026-09-27, not decided: after W-4, skill `v3.1.0` with TCC `v1.1.0`, «хочу синхронізувати мінорну версію».
-It reopens `WAVES.md` §3.1 (2026-09-18: a number carries no meaning, patches count up); recording it is the hub's. The run's closing line names Gemini Pro (High) as the critic, so #71 now covers both
+Decided on 2026-09-27: after W-4, skill `v3.1.0` with TCC `v1.1.0`; the minor moves in both together, patches stay
+per product («згоден з мінором повністю. і тег - не синхронні теж згоден»). It reopens `WAVES.md` §3.1; sent to the
+hub to record as hub #220 SKL-058. The run's closing line names Gemini Pro (High) as the critic, so #71 now covers both
 installers (`install.ps1:1464`, `install.sh:1444`).
 
 ## S-072 · numpy, scipy, matplotlib: a fresh install gets the newest, an updated machine keeps its first ones
