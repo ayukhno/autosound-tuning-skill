@@ -1622,13 +1622,22 @@ four assessment lines, and nothing is built before his `ok` on that task. Resume
 
 **Status**: open 2026-09-27 · opened on the Arbiter's word («відкрий віху»); tcc had no open wave, so the number is max+1
 
-Eight issues, each with the four assessment lines: #89 (hub #213 TCC-033, the ledger), #90 (S-062), #91 (S-064),
+Nine issues, each with the four assessment lines: #95 (S-070), #89 (hub #213 TCC-033, the ledger), #90 (S-062), #91 (S-064),
 #92 (S-065), #93 (S-066), #94 (S-068), #70 (S-057), #71. Nothing is built until he puts `ok` on a task; a task he does
 not take goes back to the pool. More findings may still come: record them here and on the milestone.
 
 A fresh install at v3.0.63 on a new Windows arm64 VM ran clean (the Arbiter, 2026-09-27: «все ок»). It answers tcc's F-088,
 relayed as hub #218 SKL-057. The run's closing line names Gemini Pro (High) as the critic, so #71 now covers both
 installers (`install.ps1:1464`, `install.sh:1444`).
+
+## S-070 · README's install section: the version in the line reads as the version installed, and the options are unclear
+
+**Status**: open 2026-09-27 · **W-4 · v3.0.64**, issue #95 (collection) · the Arbiter reading the README
+
+The Arbiter: «в readme в частині інсталяції жестко зашита версія, чому не останній тег, як робить ТСС? і зовсім не
+зрозуміло як додати опції установки.» The tag in the URL pins only the installer script (hub #81 HUB-030, 2026-09-06);
+the installer installs the newest `v3.*` tag, and `releases/latest` still answers `v2.8.3`. The README says none of
+it, and its options are one sentence plus two wrapper forms. Changing the pin itself reverses HUB-030: his call.
 
 ## S-068 · TCC's update window on the Mac prints the whole command, and the one line that matters is last
 
