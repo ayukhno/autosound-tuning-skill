@@ -1583,6 +1583,16 @@ user's OK, because it leaves the machine, and (3) resets the clone and updates i
 as a command, which TCC and the installers call, plus the installers naming the real reason. TCC's half is a
 button in place of the grey one.
 
+## S-065 · After TCC's «Оновити Скіл» the clone sits on the right commit but carries no tag
+
+**Status**: open 2026-09-27 · a finding from the v3.0.63 update on the Windows VM; tcc's side, for the next wave
+
+After TCC updated the VM's clone to v3.0.63, `git -C ~\.claude\skills\.autosound-tuning-src describe --tags` answered
+`fatal: No tags can describe '680c078…'`. HEAD is v3.0.63's commit, but no tag landed in `refs/tags`. The installers
+met the same thing and fixed it (`install.sh` / `install.ps1` fetch `+refs/tags/<tag>:refs/tags/<tag>`, "A TAG also
+lands in refs/tags"); TCC's updater apparently fetches the bare name. It matters wherever a version is read with
+`describe` (the doctor, a report, a person checking by hand). Not diagnosed: whether TCC's own version line reads it.
+
 ## S-060 · W-3 · v3.0.62 is collecting: pick up the collection with him
 
 **Status**: done 2026-09-26 · **v3.0.62 released** (`cd004e9`, PR #86 merged by `--ff-only`, tag pushed); 22 issues on W-3 closed with the milestone; hub #203 #204 #205 #206 #208 closed with the tag · was: open 2026-09-24 · the session stopped on «добраніч» · the wave is still COLLECTING, nothing is built;
