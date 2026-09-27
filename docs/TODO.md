@@ -1521,6 +1521,29 @@ PowerShell 5 shows plainly (ASCII progress lines, or stdout for progress when st
 Windows section says `chcp 65001` / PowerShell 7. `console.install()` (issue #21) already keeps cp1252 from raising;
 this is the look, not a crash.
 
+## S-063 · omp as a reviewer transport (hub #216, TCC-034)
+
+**Status**: open 2026-09-27 · assessed, in the pool for the next skill wave (the Arbiter's pick); tcc greys OMP reviewer picks until it is in
+
+The Arbiter's rule: a reviewer picked as «OMP · <model>» goes through `omp` only, with omp's credentials, and a
+refusal is omp's refusal — no fallback to a key or another CLI. Today `autosound_ai.py` has no omp route: TCC sent
+the bare name, `provider_for` mapped it to Google, and `gemini-3.1-pro` came back 404 from the API. Asks: the omp
+route (`AUTOSOUND_CRITIC_BIN=omp` or `--via omp`), `REVIEW_ROUTE: omp` and `[ask: <selector>]` on the answer, the tag
+to tcc.
+
+**Assessment:** Class feature · Model opus · Risk medium — the branch sits in the dispatch every review passes
+through, and an omp selector (`google-antigravity/gemini-…`) is read as Google today, so the omp branch must come
+before the API rung or the call goes to a key silently · Complexity medium — ~100–150 lines with selftest cases.
+
+**Checked live on the Windows VM, 2026-09-27 (omp is installed there):**
+- `omp -p --no-session --no-tools` reads the prompt from **stdin**: a 20 000-character prompt piped in PowerShell
+  answered `pong`, `EXIT=0`. Same shape as `claude -p` and `codex exec -` (#60), no temp file, no 8191 limit.
+- omp prints `Working...` beside the answer — the route has to drop that line, or it lands in the review.
+- Two refusals in omp's own words, both `EXIT=1`, for the selftest fixtures: `No API key found for anthropic.`
+  (`anthropic/claude-haiku-4-5`: the VM's omp is logged in to Antigravity only) and `Cloud Code Assist API error
+  (429) … RESOURCE_EXHAUSTED` (`google-antigravity/gemini-3.1-pro-high`).
+- The model list for a choice: `omp models` (a table per provider).
+
 ## S-060 · W-3 · v3.0.62 is collecting: pick up the collection with him
 
 **Status**: done 2026-09-26 · **v3.0.62 released** (`cd004e9`, PR #86 merged by `--ff-only`, tag pushed); 22 issues on W-3 closed with the milestone; hub #203 #204 #205 #206 #208 closed with the tag · was: open 2026-09-24 · the session stopped on «добраніч» · the wave is still COLLECTING, nothing is built;
