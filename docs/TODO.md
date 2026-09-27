@@ -1568,6 +1568,21 @@ project, whether another `rew_api` was on the path. Two things to decide: what r
 whether a session may patch the installed clone at all. A patch there blocks every update, with nothing said but
 the updater's one line. The VM's copy is discarded so v3.0.63 can install; this item keeps the diff.
 
+**What a user meets (checked 2026-09-27), and the Arbiter's requirement.** Any edit in the installed clone, made
+by a session to get past a crash or by hand, stops updates in both doors, with no way out that does not need git:
+- TCC's updater greys «Оновити Скіл» with «має незакомічені зміни, тому не чіпаю» (`tcc: core/updates.py`
+  `status --porcelain`). There is no button and no next step.
+- `install.sh` / `install.ps1` run `git checkout FETCH_HEAD`. When the patched file changed between the versions,
+  git refuses, and the installer says "check the network … nothing was changed", which is the wrong reason. When
+  the file did not change, the patch rides along silently into the new version.
+
+The Arbiter: «треба мати можливість це виправити і відправити issue для інфо скілу». So the user needs one step
+that (1) keeps the local change as a patch file beside the clone, (2) sends it to the skill as an issue through the
+feedback gateway (`rew_tool/gates/side_effect.py`), with the version, the files and the diff, and only after the
+user's OK, because it leaves the machine, and (3) resets the clone and updates it. The skill's half is that step
+as a command, which TCC and the installers call, plus the installers naming the real reason. TCC's half is a
+button in place of the grey one.
+
 ## S-060 · W-3 · v3.0.62 is collecting: pick up the collection with him
 
 **Status**: done 2026-09-26 · **v3.0.62 released** (`cd004e9`, PR #86 merged by `--ff-only`, tag pushed); 22 issues on W-3 closed with the milestone; hub #203 #204 #205 #206 #208 closed with the tag · was: open 2026-09-24 · the session stopped on «добраніч» · the wave is still COLLECTING, nothing is built;
