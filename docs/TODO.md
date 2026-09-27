@@ -1618,6 +1618,15 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-073 · Next: W-4's collection continues; the build starts on the Arbiter's word that it is closed
+
+**Status**: open 2026-09-27 · the session stopped on «добраніч»; nothing in work, no background tasks
+
+W-4 · v3.0.64 holds 13 issues, all `ok` (#70 #71 #89–#99); still collection (S-069). When he closes it: one branch
+`wave-…` for W-4, the plan, then the work; #99 (signed tags) needs his signing key set in git on this Mac and a run on
+the Windows VM and the Mac before the tag. After W-4: `v3.1.0` with TCC `v1.1.0` (hub #220). Resume:
+`hub/bin/role skill --resume 954f3e15-eb8e-4d09-aca1-b9295c7ee53b`.
+
 ## S-069 · W-4 · v3.0.64 is collecting: the Arbiter's `ok`, task by task
 
 **Status**: open 2026-09-27 · opened on the Arbiter's word («відкрий віху»); tcc had no open wave, so the number is max+1 · all `ok` (the Arbiter: «можеш на всі поставити ок, але ще не робимо - збираємо»): still collecting, nothing built until he closes the collection
