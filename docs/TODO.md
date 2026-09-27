@@ -1620,11 +1620,11 @@ four assessment lines, and nothing is built before his `ok` on that task. Resume
 
 ## S-069 · W-4 · v3.0.64 is collecting: the Arbiter's `ok`, task by task
 
-**Status**: open 2026-09-27 · opened on the Arbiter's word («відкрий віху»); tcc had no open wave, so the number is max+1
+**Status**: open 2026-09-27 · opened on the Arbiter's word («відкрий віху»); tcc had no open wave, so the number is max+1 · all twelve `ok` (the Arbiter: «можеш на всі поставити ок, але ще не робимо - збираємо»): still collecting, nothing built until he closes the collection
 
 Twelve issues, each with the four assessment lines: #98 (S-072, the libraries), #97 (hub #219 TCC-035, the installed tools never update), #96 (S-071, `ok`), #95 (S-070), #89 (hub #213 TCC-033, the ledger), #90 (S-062), #91 (S-064),
-#92 (S-065), #93 (S-066), #94 (S-068), #70 (S-057), #71. Nothing is built until he puts `ok` on a task; a task he does
-not take goes back to the pool. More findings may still come: record them here and on the milestone.
+#92 (S-065), #93 (S-066), #94 (S-068), #70 (S-057), #71. Every task carries `ok`, and still nothing is built until he says the collection is closed; a task
+he drops goes back to the pool. More findings may still come: record them here and on the milestone.
 
 A fresh install at v3.0.63 on a new Windows arm64 VM ran clean (the Arbiter, 2026-09-27: «все ок»). It answers tcc's F-088,
 relayed as hub #218 SKL-057. The run's closing line names Gemini Pro (High) as the critic, so #71 now covers both
