@@ -1626,6 +1626,10 @@ Eight issues, each with the four assessment lines: #89 (hub #213 TCC-033, the le
 #92 (S-065), #93 (S-066), #94 (S-068), #70 (S-057), #71. Nothing is built until he puts `ok` on a task; a task he does
 not take goes back to the pool. More findings may still come: record them here and on the milestone.
 
+A fresh install at v3.0.63 on a new Windows arm64 VM ran clean (the Arbiter, 2026-09-27: «все ок»). It answers tcc's F-088,
+relayed as hub #218 SKL-057. The run's closing line names Gemini Pro (High) as the critic, so #71 now covers both
+installers (`install.ps1:1464`, `install.sh:1444`).
+
 ## S-068 · TCC's update window on the Mac prints the whole command, and the one line that matters is last
 
 **Status**: open 2026-09-27 · **W-4 · v3.0.64**, issue #94 (collection) · tcc's side; one ticket to tcc with S-065
