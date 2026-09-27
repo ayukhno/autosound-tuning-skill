@@ -1593,6 +1593,19 @@ met the same thing and fixed it (`install.sh` / `install.ps1` fetch `+refs/tags/
 lands in refs/tags"); TCC's updater apparently fetches the bare name. It matters wherever a version is read with
 `describe` (the doctor, a report, a person checking by hand). Not diagnosed: whether TCC's own version line reads it.
 
+## S-066 · omp's refusal is cut before its reason: the 400 characters go to the source excerpt omp prints
+
+**Status**: open 2026-09-27 · a finding from the Arbiter's v3.0.63 check on the Windows VM; for the next wave
+
+`autosound_ai.py ask` through omp, with a model whose provider omp had no login for, printed as omp's refusal:
+`743607 | \` + \`Use /login, … 743612 |   throw new Error(\`No API key found for ${this.model.provider}. … error: No API key
+found for openai-codex. Use /login, se`. omp (a bun binary) prints the source lines around the throw before the
+`error:` line, and `review_through_omp` keeps the first 400 characters of the error, so the reason arrives last and
+cut. The advice line (`no_login`) was right. What to decide: take omp's `error:` line and what follows it when it
+has one. The same run showed the model as `gpt-5.6-terra`, not the `anthropic/claude-sonnet-5` set in the
+environment on that line: a config file overrides the environment (`load_env_file`, by design since S-015), and a
+bare name is what TCC's picker wrote before hub #216. Where the value came from is being checked with `doctor`.
+
 ## S-060 · W-3 · v3.0.62 is collecting: pick up the collection with him
 
 **Status**: done 2026-09-26 · **v3.0.62 released** (`cd004e9`, PR #86 merged by `--ff-only`, tag pushed); 22 issues on W-3 closed with the milestone; hub #203 #204 #205 #206 #208 closed with the tag · was: open 2026-09-24 · the session stopped on «добраніч» · the wave is still COLLECTING, nothing is built;
