@@ -1482,7 +1482,7 @@ which is a rebuilt engine, not a patch.
 
 ## S-057 · A five-line verdict block for every tool's output
 
-**Status**: open 2026-09-26 · back to the pool: not taken at the W-3 review (the Arbiter, 2026-09-26), for a later wave; the shape stays decided; issue #70 off the milestone · was: W-3 · v3.0.62, issue #70 (2026-09-23)
+**Status**: open 2026-09-27 · **W-4 · v3.0.64**, issue #70 (back on the milestone at the W-4 collection) · was: off W-3 by the Arbiter, 2026-09-26
 accepted by the Arbiter with this as the follow-up.
 
 #57 P5 asked for compact output. W-2 made it where the issue measured it: `predict`'s notes collapse by text,
@@ -1510,7 +1510,7 @@ Next: the W-3 collection with him (S-060); #24 closes with the release.
 
 ## S-062 · autosound_ai.py's progress lines read as red mojibake in PowerShell 5
 
-**Status**: open 2026-09-26 · a finding from the Arbiter's #60 run on the Windows VM; for the next wave's pool
+**Status**: open 2026-09-27 · **W-4 · v3.0.64**, issue #90 (collection) · a finding from the Arbiter's #60 run on the Windows VM
 
 With `python scripts\autosound_ai.py ask … 2>&1 | Tee-Object …` in PowerShell 5 the script's progress lines (`>> Виклик
 локального CLI …`, written to stderr in Ukrainian) come out as `╨Æ╨╕╨║╨╗╨╕╨║ …` in red, wrapped in a
@@ -1546,7 +1546,7 @@ before the API rung or the call goes to a key silently · Complexity medium — 
 
 ## S-064 · A session hand-patched `contract.py` in the installed skill on the Windows VM
 
-**Status**: open 2026-09-27 · a finding from the v3.0.63 update on the VM; for the next wave (the Arbiter's pick); TCC's half is hub #217 SKL-056
+**Status**: open 2026-09-27 · **W-4 · v3.0.64**, issue #91 (collection) · a finding from the v3.0.63 update on the VM; TCC's half is hub #217 SKL-056
 
 Found when TCC's updater refused to move the VM's skill clone (`~\.claude\skills\.autosound-tuning-src`, still at
 `v3.0.61`): «Скіл 3.0.61 — має незакомічені зміни, тому не чіпаю». The one change, `rew_tool/contract.py`
@@ -1585,7 +1585,7 @@ button in place of the grey one.
 
 ## S-065 · After TCC's «Оновити Скіл» the clone sits on the right commit but carries no tag
 
-**Status**: open 2026-09-27 · a finding from the v3.0.63 update on the Windows VM; tcc's side, for the next wave
+**Status**: open 2026-09-27 · **W-4 · v3.0.64**, issue #92 (collection) · tcc's side; one ticket to tcc with S-068
 
 After TCC updated the VM's clone to v3.0.63, `git -C ~\.claude\skills\.autosound-tuning-src describe --tags` answered
 `fatal: No tags can describe '680c078…'`. HEAD is v3.0.63's commit, but no tag landed in `refs/tags`. The installers
@@ -1595,7 +1595,7 @@ lands in refs/tags"); TCC's updater apparently fetches the bare name. It matters
 
 ## S-066 · omp's refusal is cut before its reason: the 400 characters go to the source excerpt omp prints
 
-**Status**: open 2026-09-27 · a finding from the Arbiter's v3.0.63 check on the Windows VM; for the next wave
+**Status**: open 2026-09-27 · **W-4 · v3.0.64**, issue #93 (collection) · a finding from the Arbiter's v3.0.63 check on the Windows VM
 
 `autosound_ai.py ask` through omp, with a model whose provider omp had no login for, printed as omp's refusal:
 `743607 | \` + \`Use /login, … 743612 |   throw new Error(\`No API key found for ${this.model.provider}. … error: No API key
@@ -1610,13 +1610,31 @@ in `%APPDATA%\autosound\critic-env`, which «переписав одноймен
 
 ## S-067 · Next: the next skill wave's collection, on the Arbiter's word
 
-**Status**: open 2026-09-27 · the session stopped on «добраніч» after v3.0.63; nothing in work, no background tasks
+**Status**: done 2026-09-27 · `gh issue list -R ayukhno/autosound-tuning-skill --milestone "W-4 · v3.0.64"` → #70 #71 #89–#94, each with the four assessment lines; nothing built before his `ok`
 
 Where it stands: v3.0.63 (the omp route, hub #216) is released and checked live on the Mac and the Windows VM. No
 wave is open in skill; tcc's `W-3 · v0.1.44` is open. For the next skill wave's pool: hub #213 (TCC-033), #70, #71,
 S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to open it, each becomes an issue with the
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
+
+## S-069 · W-4 · v3.0.64 is collecting: the Arbiter's `ok`, task by task
+
+**Status**: open 2026-09-27 · opened on the Arbiter's word («відкрий віху»); tcc had no open wave, so the number is max+1
+
+Eight issues, each with the four assessment lines: #89 (hub #213 TCC-033, the ledger), #90 (S-062), #91 (S-064),
+#92 (S-065), #93 (S-066), #94 (S-068), #70 (S-057), #71. Nothing is built until he puts `ok` on a task; a task he does
+not take goes back to the pool. More findings may still come: record them here and on the milestone.
+
+## S-068 · TCC's update window on the Mac prints the whole command, and the one line that matters is last
+
+**Status**: open 2026-09-27 · **W-4 · v3.0.64**, issue #94 (collection) · tcc's side; one ticket to tcc with S-065
+
+TCC's self-update opens a Terminal window, and zsh echoes the whole command it types (`echo 'Close TCC now — …'; while
+kill -0 <pid> …; uv tool install --python 3.12 --upgrade "autosound-tcc[gui,claude] @ git+…@v0.1.44"; echo; echo 'Done —
+start TCC again.'`). The line the user needs, «Close TCC now — this window is waiting for it, then it will update.», is
+last and lost under it. The Arbiter: «при оновленні ТСС на маку видає досить довгий промт замість однієї важливої
+(останньої) строки. можемо заховати зайве?» The text lives in tcc `src/autosound_tcc/core/updates.py`.
 
 ## S-060 · W-3 · v3.0.62 is collecting: pick up the collection with him
 
