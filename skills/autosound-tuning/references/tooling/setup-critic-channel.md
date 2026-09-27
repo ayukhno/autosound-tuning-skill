@@ -217,8 +217,8 @@ Check it took: `python3 scripts/autosound_ai.py doctor` names the key it found, 
 - **The transport follows the model, not an exported key** (hub #187). A model named by its agy
   slug (`gemini-3.8-flash-high`: an effort tier at the end) goes to the CLI even with a key present,
   because the API does not know the tier and answered 404. A 404 on a name the CLI serves falls
-  through to the CLI. `>> REVIEW_ROUTE: api|cli` on stderr says which path answered.
-- **`--via api|cli|clipboard` chooses the route for ONE run** (#55). `--via api` uses the key from
+  through to the CLI. `>> REVIEW_ROUTE: api|cli|omp` on stderr says which path answered.
+- **`--via api|cli|omp|clipboard` chooses the route for ONE run** (#55). `--via api` uses the key from
   the environment even where `critic-env` blanks it for every other run, and calls the API by the
   model's API id (the tier dropped). `--mode clipboard` is the older spelling of the last rung.
 - **`AUTOSOUND_REVIEW_RAW_DIR=<folder>`** keeps what was sent and what came back
@@ -279,6 +279,32 @@ follows the models; a dated id stays put until Google retires it.
 `scripts/autosound_ai.py doctor` answers the question that actually matters: which vendor the
 chosen reviewer belongs to, and whether THAT vendor's key or CLI is present. A `claude` on PATH
 does nothing for a Gemini reviewer.
+
+### Through omp — one door to many vendors (hub #216)
+
+`omp` is not a vendor: it reaches many vendors' models with its own logins. A reviewer picked
+through omp goes through omp **and nothing else** (the Arbiter, 2026-09-27: «якщо вибрана ОМР, то і
+йти треба тільки через цей виклик»):
+
+```bash
+AUTOSOUND_CRITIC_BIN=omp                                   # what TCC sets for an «OMP · …» pick
+AUTOSOUND_CRITIC_MODEL=google-antigravity/gemini-3.1-pro   # omp's FULL selector: provider/model
+```
+
+or `--via omp` for one run. The call is `omp -p --no-session --no-tools --no-skills --no-rules
+--no-title --model <selector>`, with the package on stdin; the answer ends `— [<task>: <selector>]`
+and stderr says `REVIEW_ROUTE: omp`.
+
+- **No fallback.** No key is looked at, no vendor CLI is searched for, no clipboard package is made.
+  omp's refusal is the answer, in omp's own words, with exit 4 — `No API key found for anthropic.`
+  (omp has no login for that provider: `omp`, then `/login`), a 429 (quota). A reviewer that silently
+  goes elsewhere is a different reviewer: before this route an OMP pick went to Google's API by its
+  bare name and came back 404.
+- **The provider is part of the name.** `omp models` lists what omp can run; a selector omp does not
+  know stops the run with that list (exit 3), the same as a key's 404 and agy's unknown name.
+- **Effort** rides in the selector or in `AUTOSOUND_CRITIC_CLI_ARGS="--thinking high"` — omp's levels
+  differ by model, so none is passed for you.
+- `--via api` or `--via clipboard` still name another route for one run, and win.
 
 ## 5. Where the channel reads the project from (no cross-project leaks)
 

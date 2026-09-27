@@ -609,6 +609,14 @@ class ModelChoiceNeeded(RuntimeError):
         super().__init__(why)
 
     def render(self):
+        if self.source == "omp":
+            # omp's full selectors (`provider/model`): the provider is part of the name there, and a
+            # bare name is what sent an OMP pick to Google's API (hub #216).
+            lines = [f">> {self.why}",
+                     ">> Моделі, які `omp` може запустити -- вибери одну і закріпи її повною назвою:",
+                     f">>   {self.role_var}=<провайдер/модель>   у {config_hint()}"]
+            lines += [f">>     {name}" for name in self.models]
+            return "\n".join(lines)
         if self.source == "cli":
             # The CLI's own ids, as it lists them: no key-shaped filter, no Google pointers.
             lines = [f">> {self.why}",
@@ -729,6 +737,37 @@ def detect_cli(provider="google", honour_forced=True):
         if shutil.which(binary):
             return binary
     return None
+
+
+def omp_bin(via=None):
+    """The omp binary when THIS run goes through omp, else None (hub #216, TCC-034).
+
+    omp is not a vendor: it is a door of its own to many vendors' models, with its own logins. The
+    Arbiter's rule (2026-09-27): «якщо вибрана ОМР, то і йти треба тільки через цей виклик». So it is
+    asked for by name -- `AUTOSOUND_CRITIC_BIN=omp`, which TCC sets for an OMP pick, or `--via omp` for
+    one run -- and never found by a search: an omp on PATH says nothing about who the reviewer is.
+    `--via api` / `--via clipboard` name another route for one run, and win.
+    """
+    if via in ("api", "clipboard"):
+        return None
+    forced = forced_cli()
+    if forced and cli_flavor(forced[1]) == "omp":
+        return forced[1]
+    if via == "omp":
+        return shutil.which("omp") or "omp"
+    return None
+
+
+def list_omp_models(binary="omp"):
+    """omp's own selectors (`provider/model`) for a text reviewer, from `omp models --json`; [] when it cannot list."""
+    try:
+        proc = subprocess.run([binary, "models", "--json"], capture_output=True, text=True, encoding="utf-8",
+                              timeout=30, shell=(sys.platform == "win32"), env=child_env(binary))
+        listed = json.loads(proc.stdout or "{}").get("models", [])
+    except Exception:  # noqa: BLE001 -- no list is an answer: the choice then names `omp models`
+        return []
+    return [m["selector"] for m in listed if isinstance(m, dict) and m.get("selector")
+            and not any(t in m["selector"] for t in _NOT_A_TEXT_REVIEWER)]
 
 
 #: The reviewer's model variables — ONE model, whatever the door (the Arbiter's ruling, 2026-09-11:
@@ -852,8 +891,17 @@ def cli_command(provider, binary, model, prompt_path, prompt_text):
     review package is tens of KB. Both read stdin: `claude -p` with no prompt argument, `codex exec -`.
     Codex also writes its last message -- the answer and nothing else -- to `-o <file>`
     (`codex_answer_path`), so its transcript on stdout is not parsed unless that file stays empty.
+
+    omp (hub #216) reads stdin too -- a 20 000-character prompt piped in PowerShell on the Windows VM
+    answered, 2026-09-27 -- and takes the model as its full selector. A reviewer reads text and writes
+    text: no tools, and none of the skills, rules or session omp would otherwise load from the project
+    folder. Effort rides in the selector or in `AUTOSOUND_CRITIC_CLI_ARGS` (`--thinking high`): omp's
+    levels differ by model, and a level a model does not have is a flag that fails for that model only.
     """
     extra = extra_cli_args()
+    if provider == "omp":
+        return [binary, "-p", "--no-session", "--no-tools", "--no-skills", "--no-rules", "--no-title",
+                "--model", model] + extra
     if provider == "anthropic":
         return [binary, "--model", model, "--effort", CRITIC_EFFORT] + extra + ["-p"]
     if provider == "openai":
@@ -875,10 +923,10 @@ def codex_answer_path(prompt_path):
 
 def cli_stdin(provider, binary, prompt_text):
     """What goes to the CLI's stdin, or None. agy's stream-json input: one `user` event. Claude and Codex
-    read the prompt itself (skill #60)."""
+    read the prompt itself (skill #60), and so does omp (hub #216)."""
     if provider == "google" and cli_flavor(binary) == "agy":
         return json.dumps({"event": "user", "message": {"content": prompt_text}}, ensure_ascii=False) + "\n"
-    if provider in ("anthropic", "openai"):
+    if provider in ("anthropic", "openai", "omp"):
         return prompt_text
     return None
 
@@ -901,6 +949,11 @@ def cli_reply(provider, binary, returncode, stdout, stderr):
                     return text, None
                 return None, (result.get("error") or f"agy: status {result.get('status')!r}, no answer")
         return None, ((stderr or "").strip() or "agy: no result in its output")
+    if provider == "omp":
+        # `Working...` is omp's progress line, on stderr (Mac and the Windows VM, 2026-09-27): not an answer
+        # and not a reason, so it is dropped from both before either is read.
+        stdout, stderr = ("\n".join(line for line in (s or "").splitlines() if line.strip() != "Working...")
+                          for s in (stdout, stderr))
     if provider == "openai" and returncode == 0 and (stdout or "").strip():
         # No `-o` file (an older codex): the answer sits between the `codex` line and `tokens used`.
         m = re.search(r"(?:^|\n)codex\r?\n(.*?)(?:\r?\ntokens used|\Z)", stdout, re.DOTALL)
@@ -915,7 +968,9 @@ def cli_reply(provider, binary, returncode, stdout, stderr):
 _FAILURES = (
     ("dead_cli", r"IneligibleTierError|no longer supported for Gemini Code Assist|migrate to the Antigravity"),
     ("tool_denied", r"headless mode cannot prompt|auto-denied"),
-    ("bad_model", r"invalid model selection|not recognized as a known model|unknown model"),
+    ("bad_model", r"invalid model selection|not recognized as a known model|unknown model|Model \"[^\"]*\" not found"),
+    # omp's words when it has no login for the selector's provider (hub #216; the Windows VM, 2026-09-27).
+    ("no_login", r"No API key found for"),
     ("quota", r"quota|capacity|exhausted|RESOURCE_EXHAUSTED|TerminalQuotaError|\b429\b"),
     # agy took the call and was cut off partway through the answer (skill #68, hub #204): not a refusal, so
     # `call_cli` tries once more on the same rung before the ladder steps down to the clipboard or the API.
@@ -941,6 +996,8 @@ FAILURE_ADVICE = {
              "— лише сказавши це вголос (setup-critic-channel.md §7)",
     "cut_stream": "agy двічі поспіль обірвав відповідь посередині — повтори пізніше; або буфер обміну, "
                   "або `--via api` з ключем (setup-critic-channel.md §7)",
+    "no_login": "omp не має входу до провайдера цієї моделі — увійди (`omp`, потім /login) або вибери модель "
+                "провайдера, до якого вхід є: `omp models`",
     "timeout": "CLI не відповів вчасно — повтори з довшим AUTOSOUND_CLI_TIMEOUT (секунди), або бери буфер обміну",
     "other": "",
 }
@@ -1390,6 +1447,51 @@ def _selftest():
             subprocess.run = lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, ok_out, "")
             globals()["list_cli_models"] = real_list
             os.environ["AUTOSOUND_CRITIC_MODEL"] = "gemini-3.8-flash-low"
+            # hub #216: an OMP pick goes through omp with its full selector and the prompt on stdin, and through
+            # nothing else -- the Google key set above is not looked at, and omp's refusal is the answer (exit 4,
+            # in omp's words, no package made). `Working...` is omp's progress line, never part of an answer.
+            os.environ.update({"AUTOSOUND_CRITIC_BIN": "omp", "AUTOSOUND_CRITIC_MODEL": "google-antigravity/gemini-3.1-pro"})
+            globals()["call_gemini_api"] = lambda *a, **k: (_ for _ in ()).throw(AssertionError("API called"))
+            omp_runs, omp_reply = [], [(0, "omp-pong\n", "Working...\n")]
+
+            def fake_omp(cmd, **kw):
+                if cmd[1:2] == ["models"]:
+                    return subprocess.CompletedProcess(cmd, 0, json.dumps({"models": [
+                        {"selector": "anthropic/claude-opus-5"}, {"selector": "google-antigravity/gemini-3.1-flash-image"}]}), "")
+                omp_runs.append((cmd, kw.get("input")))
+                return subprocess.CompletedProcess(cmd, *omp_reply[0])
+            subprocess.run = fake_omp
+            code, out, err = run_main("ask", pkg)
+            assert code == 0 and "omp-pong" in out and "Working" not in out and "REVIEW_ROUTE: omp" in err, (code, err)
+            assert "— [ask: google-antigravity/gemini-3.1-pro]" in out, out
+            cmd, fed = omp_runs[-1]
+            assert cmd[:2] == ["omp", "-p"] and cmd[cmd.index("--model") + 1] == "google-antigravity/gemini-3.1-pro", cmd
+            assert "--no-tools" in cmd and fed.endswith("Translate: stage"), (cmd, fed)
+            for words, kind in (("Working...\nNo API key found for anthropic.\n", "no_login"),
+                                ("Working...\nCloud Code Assist API error (429): RESOURCE_EXHAUSTED\n", "quota")):
+                omp_reply[0] = (1, "", words)
+                filed = len(os.listdir(reviews))
+                code, out, err = run_main("ask", pkg)
+                assert code == 4 and words.split("\n")[1] in err and "Working" not in err, (code, err)
+                assert FAILURE_ADVICE[kind][:30] in err and len(os.listdir(reviews)) == filed, (kind, err)
+                assert "PACKAGE_FILE" not in err and "REVIEW_ROUTE" not in err, err
+            # A selector omp does not know is the Arbiter's choice from omp's own list (text models only).
+            omp_reply[0] = (1, "", 'Model "google-antigravity/gemini-9" not found\n')
+            code, out, err = run_main("ask", pkg)
+            assert code == 3 and "anthropic/claude-opus-5" in err and "flash-image" not in err, (code, err)
+            # `--via api` names another route for one run, and wins; `--via omp` picks omp over a forced agy.
+            omp_reply[0] = (0, "omp-pong\n", "")
+            asked = []
+            globals()["call_gemini_api"] = lambda key, model, prompt, var=None: (asked.append(model), ("api-pong", model))[1]
+            before = len(omp_runs)
+            code, out, err = run_main("ask", pkg, "--via", "api")
+            assert code == 0 and asked and len(omp_runs) == before and "REVIEW_ROUTE: api" in err, (code, err)
+            os.environ["AUTOSOUND_CRITIC_BIN"] = os.path.join(project, "bin", "agy")
+            code, out, err = run_main("ask", pkg, "--via", "omp")
+            assert code == 0 and "REVIEW_ROUTE: omp" in err, (code, err)
+            assert os.path.basename(omp_runs[-1][0][0]).startswith("omp") and omp_runs[-1][0][1] == "-p", omp_runs[-1]
+            subprocess.run = lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, ok_out, "")
+            os.environ["AUTOSOUND_CRITIC_MODEL"] = "gemini-3.8-flash-low"
             globals()["call_gemini_api"] = real_api
             del os.environ["GEMINI_API_KEY"]
             assert [n for n in os.listdir(reviews) if n.endswith("-ask.md")], os.listdir(reviews)
@@ -1504,6 +1606,16 @@ def _selftest():
             run_doctor(smoke=True)
         out = buf.getvalue()
         assert cli_calls and "назва agy з рівнем" in out and "відповів CLI agy" in out, out
+        # An OMP pick (hub #216): the check goes through omp, as the round does, and the key present is not asked.
+        os.environ.update({"AUTOSOUND_CRITIC_BIN": "omp", "AUTOSOUND_CRITIC_MODEL": "google-antigravity/gemini-3.1-pro"})
+        del cli_calls[:]
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            run_doctor(smoke=True)
+        out = buf.getvalue()
+        assert cli_calls and cli_calls[-1][:2] == ("omp", "omp") and "вибрано через omp" in out, (cli_calls, out)
+        assert "відповів CLI omp" in out and "HTTP 404" not in out, out
+        del os.environ["AUTOSOUND_CRITIC_BIN"]
     finally:
         shutil.which = real_which
         globals().update(real)
@@ -1949,7 +2061,8 @@ def run_doctor(smoke=True):
     for line in retired_advisor_notice():
         print(line)
     model = resolve_model()
-    provider = provider_for(model)
+    omp = omp_bin()
+    provider = "omp" if omp else provider_for(model)
     print(f"· Сховище ключів: {keystore_name()} (`autosound_ai.py key status`)")
     for vendor, spec in _PROVIDERS.items():
         for var in spec["env"]:
@@ -1965,7 +2078,10 @@ def run_doctor(smoke=True):
     cli_bin = detect_cli(provider)
     nested = nested_session_marker() if cli_bin else None
     hidden = suppressed_key(provider)
-    if api_provider and model and cli_only_model(model) and cli_bin:
+    if omp:
+        # hub #216: a reviewer picked through omp goes through omp only, so no key decides anything here.
+        print(f"· Рецензента вибрано через omp ({omp}): ключі API й інші CLI для нього не діють")
+    elif api_provider and model and cli_only_model(model) and cli_bin:
         # The round goes the way the model can be served (hub #187): an agy slug through the CLI.
         print(f"· `{model}` — назва agy з рівнем: раунд іде через CLI {cli_bin}; API знає цю модель "
               f"як `{api_model_id(model)}` (для одного запуску — `--via api`)")
@@ -2052,12 +2168,15 @@ def run_doctor(smoke=True):
         # the same list a real call would stop on. With nothing to ask (no key, no CLI) the
         # clipboard is the path and there is nothing to choose here.
         offered = []
-        if api_key_for("google"):
-            try:
-                offered = choosable_models(list_gemini_models(api_key_for("google")))
-            except Exception:  # noqa: BLE001 -- the key line above already said what is wrong
-                offered = []
-        offered = offered or list_cli_models()
+        if omp:
+            offered = list_omp_models(omp)
+        else:
+            if api_key_for("google"):
+                try:
+                    offered = choosable_models(list_gemini_models(api_key_for("google")))
+                except Exception:  # noqa: BLE001 -- the key line above already said what is wrong
+                    offered = []
+            offered = offered or list_cli_models()
         if offered:
             print(f"✗ Модель рецензента не задано — за замовчуванням її нема. "
                   f"Вибери одну і закріпи {REVIEWER_MODEL_VARS[0]}=<модель> у {config_hint()}:")
@@ -2105,7 +2224,8 @@ def run_doctor(smoke=True):
                 ok = False
             elif kind == "bad_model":
                 print("✓ CLI відповів — він живий і в нього виконано вхід")
-                print(f"✗ Модель `{model}` йому не відома. Він може запустити: " + ", ".join(list_cli_models()))
+                print(f"✗ Модель `{model}` йому не відома. Він може запустити: "
+                      + ", ".join(list_omp_models(cli_bin) if omp else list_cli_models()))
                 ok = False
             else:
                 advice = FAILURE_ADVICE.get(kind, "")
@@ -2118,7 +2238,8 @@ def run_doctor(smoke=True):
             print(f"▶ Режим роботи: АВТОМАТИЧНИЙ (відповів {answered})")
         else:
             print("▶ Режим роботи: не автоматичний -- живий виклик не вдався (див. ✗ вище); "
-                  "раунд віддасть пакет у буфер обміну")
+                  + ("раунд через omp так само відмовить (exit 4): інших шляхів вибір через omp не має" if omp
+                     else "раунд віддасть пакет у буфер обміну"))
     elif api_provider:
         print(f"▶ Режим роботи: АВТОМАТИЧНИЙ (через API {api_provider})")
     elif cli_bin:
@@ -2306,8 +2427,8 @@ _SCRIPTS = os.path.dirname(os.path.abspath(__file__))
 REVIEWER_CONTRACT = os.path.join(os.path.dirname(_SCRIPTS), "assets", "interaction-contract.md")
 REVIEWER_TUNING = os.path.join(_SCRIPTS, "reviewer-tuning.txt")
 REVIEW_TASKS = ("critic", "advisor", "ask")
-#: The routes one run may ask for by name (`--via`).
-VIA_ROUTES = ("api", "cli", "clipboard")
+#: The routes one run may ask for by name (`--via`). `omp` is a door of its own, not a vendor's CLI (hub #216).
+VIA_ROUTES = ("api", "cli", "omp", "clipboard")
 TUNING_TASKS = ("critic", "advisor")
 
 
@@ -2354,6 +2475,59 @@ def compile_prompt(contract, context, package, memory="", trace="", task="critic
     if trace:
         parts += ["\n====== ATTACHED TRACE (decimated, to verify the reading of the data) ======", trace]
     return "\n".join(parts)
+
+
+def _log_audit(role, model, pkg_file):
+    """One line in the audit trail per answered review; a trail that cannot be written costs the review nothing."""
+    try:
+        with open(AUDIT_TRAIL, "a", encoding="utf-8") as f:
+            f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M')} | {role}={model} | package={os.path.basename(pkg_file)}\n")
+    except Exception:
+        pass
+
+
+def review_through_omp(role, binary, model, prompt, pkg_file, role_var):
+    """The round through omp, and through nothing else (hub #216, TCC-034).
+
+    The Arbiter, 2026-09-27: «OMP потрібен не для чогось додаткового — його задача дати доступ до різних
+    моделей … якщо вибрана ОМР, то і йти треба тільки через цей виклик». Before this route existed TCC sent
+    omp's model without its provider, `provider_for` read the name as a vendor, and «OMP · Gemini 3.1 Pro»
+    went to Google's API and came back 404: a reviewer that silently goes elsewhere is a different reviewer.
+    So no key is looked at, no vendor CLI is searched for, and no clipboard package is made: omp's refusal
+    is the answer, in omp's words, with exit 4. A model omp does not know is a choice from omp's own list
+    (exit 3), as it is for a key and for agy.
+    """
+    if not model:
+        print(ModelChoiceNeeded("Модель рецензента не задано (шлях omp).", list_omp_models(binary), role_var,
+                                source="omp").render(), file=sys.stderr)
+        sys.exit(3)
+    wait = cli_wait(prompt)
+    marker = nested_session_marker()
+    print(f">> Виклик omp ({model})" + (f", без маркерів агент-сесії ({marker})" if marker else "")
+          + f", чекаю до {wait} с...", file=sys.stderr)
+    try:
+        text, kind, error = call_cli("omp", binary, model, prompt, timeout=wait)
+    except Exception as e:  # noqa: BLE001
+        text, kind, error = None, "other", f"не виконано: {e}"
+    if text:
+        print(text)
+        print(f"\n— [{role}: {model}]")
+        print(">> REVIEW_ROUTE: omp", file=sys.stderr)
+        _persist_review(role, text, model, "omp")
+        _log_audit(role, model, pkg_file)
+        return
+    if kind == "bad_model":
+        print(ModelChoiceNeeded(f"Модель `{model}` omp не знає: {error.strip()[:200]}", list_omp_models(binary),
+                                role_var, source="omp").render(), file=sys.stderr)
+        sys.exit(3)
+    advice = FAILURE_ADVICE.get(kind, "") if kind != "timeout" else \
+        "omp не відповів вчасно — повтори пізніше або з довшим AUTOSOUND_CLI_TIMEOUT (секунди)"
+    print("\n" + "=" * 50, file=sys.stderr)
+    print("⛔ РЕЦЕНЗІЇ НЕ ОТРИМАНО — omp відмовив; рецензента вибрано через omp, тож іншого шляху цей раунд "
+          "не бере (ні ключа, ні іншого CLI, ні буфера):", file=sys.stderr)
+    print(f"   · omp: {error.strip()[:400]}" + (f"\n     → {advice}" if advice else ""), file=sys.stderr)
+    print("=" * 50, file=sys.stderr)
+    sys.exit(4)
 
 
 def main():
@@ -2444,10 +2618,16 @@ def main():
     compiled_prompt = compile_prompt(contract_content, context_content, pkg_content,
                                      memory=memory_content, trace=trace_content, task=role)
 
-    # 1. Спроба прямого API запиту (пріоритет)
     role_var = REVIEWER_MODEL_VARS[0]
     for line in retired_advisor_notice():
         print(line, file=sys.stderr)
+    # 0. omp, when it was the pick: before the key, because an omp selector names a vendor too (hub #216).
+    omp = omp_bin(via)
+    if omp:
+        review_through_omp(role, omp, resolve_model(), compiled_prompt, pkg_file, role_var)
+        return
+
+    # 1. Спроба прямого API запиту (пріоритет)
     named = resolve_model()
     if not named and api_key_for("google") and mode != "clipboard":
         # No model NAMED and a Google key present: the key is the thing to ask, and when the
@@ -2533,11 +2713,7 @@ def main():
             _persist_review(role, response_text, got_model, "api")
             
             # Логування в аудит
-            try:
-                with open(AUDIT_TRAIL, "a", encoding="utf-8") as f:
-                    f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M')} | {role}={got_model} | package={os.path.basename(pkg_file)}\n")
-            except Exception:
-                pass
+            _log_audit(role, got_model, pkg_file)
             return
         except KeyError:
             print(f">> Невідомий провайдер {provider!r} — у режим CLI/буфера.", file=sys.stderr)
@@ -2583,11 +2759,7 @@ def main():
             print(f"\n— [{role}: {model}]")
             print(">> REVIEW_ROUTE: cli", file=sys.stderr)
             _persist_review(role, text, model, "cli")
-            try:
-                with open(AUDIT_TRAIL, "a", encoding="utf-8") as f:
-                    f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M')} | {role}={model} | package={os.path.basename(pkg_file)}\n")
-            except Exception:
-                pass
+            _log_audit(role, model, pkg_file)
             return
         if kind == "bad_model":
             # The CLI is alive and the NAME is what it refused: a choice, not a fall-through.
