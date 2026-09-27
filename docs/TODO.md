@@ -1637,7 +1637,8 @@ installers (`install.ps1:1464`, `install.sh:1444`).
 The Arbiter: «в readme в частині інсталяції жестко зашита версія, чому не останній тег, як робить ТСС? і зовсім не
 зрозуміло як додати опції установки.» The tag in the URL pins only the installer script (hub #81 HUB-030, 2026-09-06);
 the installer installs the newest `v3.*` tag, and `releases/latest` still answers `v2.8.3`. The README says none of
-it, and its options are one sentence plus two wrapper forms. Changing the pin itself reverses HUB-030: his call.
+it, and its options are one sentence plus two wrapper forms. On GitHub the Windows option line is cut at the right edge, so
+its flag is off-screen («в реадмі не видно що строчка довга»). Changing the pin itself reverses HUB-030: his call.
 
 ## S-068 · TCC's update window on the Mac prints the whole command, and the one line that matters is last
 
