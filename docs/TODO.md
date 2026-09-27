@@ -1546,7 +1546,7 @@ before the API rung or the call goes to a key silently · Complexity medium — 
 
 ## S-064 · A session hand-patched `contract.py` in the installed skill on the Windows VM
 
-**Status**: open 2026-09-27 · a finding from the v3.0.63 update on the VM; for the next wave's pool
+**Status**: open 2026-09-27 · a finding from the v3.0.63 update on the VM; for the next wave (the Arbiter's pick); TCC's half is hub #217 SKL-056
 
 Found when TCC's updater refused to move the VM's skill clone (`~\.claude\skills\.autosound-tuning-src`, still at
 `v3.0.61`): «Скіл 3.0.61 — має незакомічені зміни, тому не чіпаю». The one change, `rew_tool/contract.py`
