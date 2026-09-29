@@ -1620,7 +1620,7 @@ four assessment lines, and nothing is built before his `ok` on that task. Resume
 
 ## S-075 · The skill updated from TCC to v3.0.64, checked on the VM
 
-**Status**: open 2026-09-29 · waiting on the Arbiter pressing «Оновити Скіл» in TCC on the VM
+**Status**: done 2026-09-29 · on the VM (the one updated to rc2 by the terminal), TCC's «Оновити Скіл» ran with no window and asked to reopen; then `upkeep.py status` → `skill: 6d6a987` (v3.0.64, a bare sha as expected), omp 18.4.3, gh 2.101.0, numpy 2.5.3, scipy 1.18.1, matplotlib 3.11.2; TCC shows «Скіл 3.0.64 — актуальна». In that PowerShell window `python3` did nothing (the Store alias, S-016): the full path to `~\.local\bin\python3.exe` ran it
 
 The Arbiter (2026-09-29): «скіл оновлюється з ТСС і я не бачу терміналу який це робить. треба там теж перевірити».
 TCC v0.1.44 moves the clone itself (bare `git fetch` + checkout; no signature check, no local-change handling, no
