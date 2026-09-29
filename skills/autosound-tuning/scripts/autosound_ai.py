@@ -33,11 +33,30 @@ import shutil
 import tempfile
 from datetime import datetime
 
-# Примусово налаштовуємо UTF-8 для виводу на Windows, щоб уникнути збоїв кодування (UnicodeEncodeError) на українських символах
+def stderr_encoding(platform, is_tty, env):
+    """What stderr is written in: `utf-8`, or `ascii` folded by `rew_tool/console.py` (skill #90).
+
+    stdout carries the answer -- a translation, a review -- so on Windows it is always UTF-8, and TCC reads
+    it that way. stderr carries the progress lines and the refusal, for a person. Piped in Windows PowerShell 5
+    (`2>&1 | Tee-Object`) its UTF-8 bytes were decoded with the console's OEM page and `Виклик` came out as
+    `╨Æ╨╕╨║╨╗╨╕╨║`: the reader of that pipe cannot be asked its encoding, so it gets ASCII, which every
+    code page reads alike (`Vyklyk omp`). A console (a TTY) draws Unicode itself, and a caller that sets
+    `PYTHONIOENCODING` (TCC does) has said what it reads: both keep UTF-8."""
+    if platform != "win32" or is_tty or env.get("PYTHONIOENCODING"):
+        return "utf-8"
+    return "ascii"
+
+
 if sys.platform == "win32":
     try:
         sys.stdout.reconfigure(encoding='utf-8')
-        sys.stderr.reconfigure(encoding='utf-8')
+        if stderr_encoding(sys.platform, sys.stderr.isatty(), os.environ) == "utf-8":
+            sys.stderr.reconfigure(encoding='utf-8')
+        else:
+            sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "rew_tool"))
+            import console as _console
+            _console.register()
+            sys.stderr.reconfigure(encoding='ascii', errors=_console.ERRORS)
     except Exception:
         pass
 
@@ -1153,6 +1172,20 @@ def _selftest():
     the list is parsed from the API's shape, and a run with a key and no model stops on the list."""
     import io
     import urllib.error
+    # skill #90: stderr piped on Windows with nobody saying its encoding is ASCII, folded legibly; a console, a
+    # caller that set PYTHONIOENCODING (TCC) and every other platform keep UTF-8.
+    assert stderr_encoding("win32", False, {}) == "ascii"
+    assert stderr_encoding("win32", True, {}) == "utf-8"
+    assert stderr_encoding("win32", False, {"PYTHONIOENCODING": "utf-8"}) == "utf-8"
+    assert stderr_encoding("darwin", False, {}) == "utf-8"
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "rew_tool"))
+    import console as _console
+    _console.register()
+    raw = io.BytesIO()
+    piped = io.TextIOWrapper(raw, encoding="ascii", errors=_console.ERRORS)
+    piped.write(">> Виклик omp (google-antigravity/gemini-3.1-pro), чекаю до 600 с...\n")
+    piped.flush()
+    assert raw.getvalue().decode("ascii") == ">> Vyklyk omp (google-antigravity/gemini-3.1-pro), chekaiu do 600 s...\n", raw.getvalue()
     # Every check below runs away from this machine's real keystore: a key the user stored must not decide a test.
     saved_keystore = os.environ.get("AUTOSOUND_KEYSTORE")
     os.environ["AUTOSOUND_KEYSTORE"] = "off"

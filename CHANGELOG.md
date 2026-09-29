@@ -164,6 +164,13 @@ W-4 (`docs/PLAN-W-4.md`): the issues on the milestone that carry the Arbiter's `
   came last and cut. A refusal now shows omp's `error:` line and what continues it, without the source dump or the
   stack frames; a failure with no `error:` line is cut as before. The same applies to a vendor CLI's refusal and to
   `doctor`'s live call.
+- **The reviewer's progress lines read plainly in Windows PowerShell 5** (skill #90). Piped there
+  (`2>&1 | Tee-Object`), the script's stderr went out as UTF-8 and PowerShell decoded it with the console's OEM
+  page: `Виклик` came out as `╨Æ╨╕╨║╨╗╨╕╨║`. On Windows, a stderr that is a pipe with nobody saying its encoding
+  is now written in ASCII, transliterated by the skill's own console fallback (`Vyklyk omp …`). stdout, where the
+  answer is, stays UTF-8; a console and a caller that sets `PYTHONIOENCODING` (TCC does) keep UTF-8 on stderr
+  too. PowerShell 5 still shows each stderr line in red under `2>&1`: that is how it wraps a native program's
+  stderr, not an error of the run.
 
 ## [v3.0.63] — 2026-09-27 · A reviewer picked through omp is called through omp, and through nothing else
 
