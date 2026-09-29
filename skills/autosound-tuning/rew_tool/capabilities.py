@@ -51,6 +51,8 @@ NOT_ON_BOARD = {
                      "not something a tuner runs (autosound-hub HUB-002)",
     "excess_gate.py": "the research / validation harness behind eq_gate",
     "capabilities.py": "this checker",
+    "verdict.py": "output plumbing: the five-line verdict block the tools open with (skill #70); its "
+                  "command line is its selftest, not a decision a tuner makes",
     "console.py": "output plumbing: the console code-page fold every entry point installs "
                   "(issue #21). Not a decision a tuner makes -- `console.py report` exists to "
                   "answer 'what is this terminal?' when a Windows machine reports a crash",
