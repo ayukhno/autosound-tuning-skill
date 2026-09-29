@@ -160,6 +160,12 @@ The fourth wave (`WAVES.md`), from the Arbiter's v3.0.63 checks on the Mac and a
 tickets. Collected as 13 issues on `W-4 · v3.0.64`, all with his `ok`; the collection was closed on 2026-09-29. The
 plan is `docs/PLAN-W-4.md`.
 
+**Run before the tag** (signed candidates `beta-v3.0.64-rc1`/`-rc2`, 2026-09-29). The signature check passed on the
+Windows VM and on two Macs. On rc1 the Windows installer refused a good signature, because PowerShell 5.1 dropped git's
+answer; that was fixed in rc2. On the Mac the tools were updated each its own way (claude 2.1.280 → 2.1.284, omp 17.2.9
+→ 18.4.3 through Homebrew, gh 2.92.0 → 2.101.0), and the libraries were upgraded. **Not yet met in a real run:** a
+clone with a local change (the keep-and-reset path, tested only in the selftests), and the tools step on Windows.
+
 ### Upgrading
 
 - **Run the install line again, as always.** It now also asks once whether to update the tools that were already
