@@ -634,7 +634,7 @@ $RewExe     = Get-RewExe
 $RewApp     = [bool]$RewExe
 $RewApi     = Test-RewApi
 
-Say "Already on this machine:"
+Say "What is here, and what will be installed:"
 if ($HaveGit)    { Say "  OK   Git for Windows (git, Git Bash)" } else { Say "  --   Git for Windows (git, Git Bash)   will install" }
 if ($HaveClaude) { Say "  OK   Claude Code" }                       else { Say "  --   Claude Code                        will install" }
 if ($HaveUv)     { Say "  OK   uv (installs Python)" }              else { Say "  --   uv, and a Python 3.12             will install" }
@@ -770,7 +770,7 @@ $ClaudeBin = Find-Bin claude
 if ($ClaudeBin) {
     Say "OK   $(& $ClaudeBin --version 2>$null)"
 } else {
-    Say "the official installer, claude.ai/install.ps1:"
+    # Invoke-Upstream says whose script runs, so the step does not say it first (skill #96: it read twice).
     if (Invoke-Upstream "https://claude.ai/install.ps1" "Claude Code") {
         Sync-ProcessPath
         if (Test-Path (Join-Path $LocalBin "claude.exe")) { Add-ManifestEntry "claude" }
@@ -793,10 +793,8 @@ $Uv = Find-Bin uv
 if ($Uv) {
     Say "OK   $(& $Uv --version 2>$null)"
 } else {
-    Say "the official installer, astral.sh/uv/install.ps1:"
     # PINNED -- see the same note in install.sh; the two versions must match, and
-    # installer-consistency.py fails when they drift.
-    Say "  from astral.sh, uv's own installer, pinned at $UvVersion"
+    # installer-consistency.py fails when they drift. The URL Invoke-Upstream prints carries the pin.
     if (Invoke-Upstream "https://astral.sh/uv/$UvVersion/install.ps1" "uv") {
         Sync-ProcessPath
         if (Test-Path (Join-Path $LocalBin "uv.exe")) { Add-ManifestEntry "uv" }
@@ -1179,7 +1177,7 @@ if ($WantReviewer) {
         # Google's own installer: a signed exe into %LOCALAPPDATA%\agy\bin, unblocked by the
         # script itself, no admin. Its output is kept back until it is done: it logs its own setup
         # in a form that reads as errors ("ERROR: logging before google.Init ...").
-        Say "the official installer, antigravity.google/cli/install.ps1 (about a minute)..."
+        Say "about a minute..."
         if ($DryRun) {
             Say "would run: irm https://antigravity.google/cli/install.ps1 | iex"
         } else {
@@ -1370,7 +1368,7 @@ if ($DryRun) {
         } elseif ($interactive) {
             Say "$n. Claude -- required. Your browser will open: sign in to your Claude account (a Pro or"
             Say "   Max subscription is what runs the method) and click Authorize, then come back here."
-            if (Offer "Enter opens the browser / s = later:") {
+            if (Offer "Enter opens the browser / s = later") {
                 & $ClaudeBin auth login
                 $signed = Get-ClaudeStatus
                 if ($signed) { Say "   OK   signed in as $signed" } else { Say "   --   not signed in yet. Later, in a terminal:  claude auth login" }
@@ -1405,7 +1403,7 @@ if ($DryRun) {
         Say "     agy opens; press Enter through its two setup screens; your browser asks you to sign"
         Say "     in with Google. If it then asks for a Project ID, copy it from"
         Say "     aistudio.google.com/app/apikey (the ID, not the name). When it says you're in, type /quit"
-        if ($interactive -and (Offer "Enter = sign in now / s = later:")) {
+        if ($interactive -and (Offer "Enter = sign in now / s = later")) {
             & $AgyBin
             Say "   Done. If it ever answers with `"Agent Platform API has not been used`", the message"
             Say "   carries a link -- open it, press Enable, wait a minute."
@@ -1422,7 +1420,7 @@ if ($DryRun) {
         else {
             Say "$n. GitHub -- optional. Your browser opens with a one-time code: sign in, paste it, and answer"
             Say "   Yes when gh asks to authenticate Git with your GitHub credentials."
-            if ($interactive -and (Offer "Enter = sign in now / s = later:")) {
+            if ($interactive -and (Offer "Enter = sign in now / s = later")) {
                 & $GhBin auth login --hostname github.com --git-protocol https --web
                 if (Test-Quiet { & $GhBin auth status }) { Test-Quiet { & $GhBin auth setup-git } | Out-Null }
             } else { $GhSkipped = $true; Say "   Later, in a terminal:  gh auth login --web" }

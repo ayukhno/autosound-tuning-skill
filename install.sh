@@ -602,7 +602,7 @@ HAVE_OMP=0;    find_bin omp >/dev/null && HAVE_OMP=1
 REW_APP=0;     rew_app_found && REW_APP=1
 REW_API=0;     rew_api_on && REW_API=1
 
-say "  Already on this machine:"
+say "  What is here, and what will be installed:"
 if on_mac; then
   if [ "$HAVE_CLT" = 1 ] && broken_tool git; then
     step "Apple's Command Line Tools are installed, but git does not run"

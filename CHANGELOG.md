@@ -181,6 +181,12 @@ W-4 (`docs/PLAN-W-4.md`): the issues on the milestone that carry the Arbiter's `
   from the line, a slot naming a version with no file. The method's own paths already mint a new version for a
   variant (`variant new`) and move a pointer to put it in a slot (`variant switch`), so nothing in the skill copies
   a file into the ledger.
+- **The installer's output says each thing once** (skill #96, from a fresh `install.ps1` run on a new Windows VM).
+  On Windows the source of Claude Code, uv and agy was printed twice, once by the step and once by the helper
+  that runs the upstream script; now only the helper says it. The sign-in prompts read `s = later:: s`, because
+  PowerShell's `Read-Host` adds its own colon; the prompts no longer end in one. Both installers headed the list
+  of tools "Already on this machine:" over rows that said `will install`; the heading is now "What is here, and
+  what will be installed:". Output text only; the Windows half is checked on the VM before the tag.
 
 ## [v3.0.63] — 2026-09-27 · A reviewer picked through omp is called through omp, and through nothing else
 
