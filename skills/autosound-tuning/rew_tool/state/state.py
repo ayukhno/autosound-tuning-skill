@@ -91,7 +91,7 @@ TOP_REQUIRED = ("preset", "sample_rate", "channels")
 _NON_TIER_KEYS = {
     "preset", "version", "created", "schema_version", "sample_rate", "target", "roles",
     "provenance", "banked_ear_verdicts", "virtual_eq_ptr", "note", "features", "slot_label",
-    "save", "parent", "migrated_from", "variant",
+    "save", "parent", "migrated_from", "variant", "version_was",
 }
 _VER_RE = re.compile(r"^v_(\d{3,})$")
 _EQ_GAIN_RE = re.compile(r"^[+-][\d.]+$")
@@ -757,6 +757,101 @@ def verify_seals(root):
     return out
 
 
+# ── identity: a file IS the version its name says (skill #89, hub #213 TCC-033) ─────────────────
+# The Passat's `v_011.json` carried `"version": "v_012"`: a variant promoted by a plain copy, byte-identical to
+# `variants/variant_D.json`, and `v_012.json` did not exist. HEAD named v_011, `load()` returned the file as it
+# was, and every report cited a version nobody had banked. A seal cannot see this when the copy itself was sealed,
+# so the name and the field are compared on every load, and the whole line is compared by `ledger_identity`.
+
+def identity_error(path, snap):
+    """None, or the sentence for a snapshot whose `version` field names another version than its file."""
+    name = os.path.basename(path)[:-5]
+    got = snap.get("version") if isinstance(snap, dict) else None
+    if got is None or got == name:
+        return None
+    return (f"{path}: the file is {name} and says it is {got!r} -- a version copied over another one, and the "
+            f"content {name} was banked with is gone from the ledger")
+
+
+def repair_version_command(root, version, preset=None):
+    return (f"python3 {os.path.abspath(__file__)} --root {root} repair-version {version}"
+            + (f" --preset {preset}" if preset and ledger_layout(root) == "preset" else ""))
+
+
+def ledger_identity(root):
+    """One line per finding over the whole line: a file whose `version` is not its name, two files claiming one
+    version, a number missing from the line, a slot (or HEAD) naming a version with no file."""
+    out = []
+    groups = {}
+    for key, path in _all_version_paths(root):
+        preset, _, name = key.rpartition("/")
+        try:
+            snap = _read_snapshot_json(path)
+        except SnapshotError as exc:
+            out.append(str(exc))
+            continue
+        why = identity_error(path, snap)
+        if why:
+            out.append(f"{why}; `{repair_version_command(root, name, preset)}` gives it its name back")
+        claimed = snap.get("version") or name
+        groups.setdefault(preset, {}).setdefault(claimed, []).append(name)
+    for preset, claims in sorted(groups.items()):
+        where = f" in {preset}" if preset else ""
+        for claimed, names in sorted(claims.items()):
+            if len(names) > 1:
+                out.append(f"two files say they are {claimed}{where}: " + ", ".join(sorted(names)))
+        numbers = sorted(int(_VER_RE.match(n).group(1)) for ns in claims.values() for n in ns)
+        missing = sorted(set(range(1, numbers[-1] + 1)) - set(numbers)) if numbers else []
+        for n in missing:
+            out.append(f"the line{where} runs to v_{numbers[-1]:03d} and has no v_{n:03d}: a banked version is "
+                       f"never deleted, so its file was lost")
+    if ledger_layout(root) == "project":
+        for slot, entry in sorted((_read_slots(root).get("slots") or {}).items()):
+            v = (entry or {}).get("version")
+            if v and not os.path.isfile(os.path.join(root, VERSIONS_DIR, v + ".json")):
+                out.append(f"slot {slot} holds {v}, and there is no such file in {VERSIONS_DIR}/")
+    else:
+        for preset in _old_preset_dirs(root):
+            hp = os.path.join(root, preset, "HEAD")
+            try:
+                with open(hp, encoding="utf-8") as fh:
+                    v = fh.read().strip()
+            except (OSError, UnicodeDecodeError):
+                continue
+            if v and not os.path.isfile(os.path.join(root, preset, v + ".json")):
+                out.append(f"{preset}/HEAD names {v}, and there is no such file")
+    return out
+
+
+def repair_version(root, version, preset=None):
+    """Give a file its own name back: `version` set to the file's name, the old claim kept as `version_was`.
+
+    It repairs the identity, not the content: what the file holds stays what was copied over it, and what was
+    banked under this name before the copy is not in the ledger to restore. The seal is renewed only when it
+    matched the file as it was -- the repair is then the one change -- so a mutation the seal already names stays
+    named. Returns `{"path", "was", "resealed"}`."""
+    path = (os.path.join(root, VERSIONS_DIR, version + ".json") if ledger_layout(root) == "project"
+            else os.path.join(root, preset or "", version + ".json"))
+    if ledger_layout(root) == "preset" and not preset:
+        raise SnapshotError(f"{root}: a per-preset ledger -- name the preset (--preset)")
+    snap = _read_snapshot_json(path)
+    if identity_error(path, snap) is None:
+        raise SnapshotError(f"{path}: already says it is {version} -- nothing to repair")
+    key = _seal_key(root, version, preset)
+    seals = _read_seals(root)
+    sealed_as_is = seals.get(key) == content_digest(snap)
+    was = snap["version"]
+    snap["version_was"], snap["version"] = was, version
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(snap, fh, indent=2, sort_keys=True, ensure_ascii=False)
+    os.replace(tmp, path)
+    if sealed_as_is:
+        seals[key] = content_digest(snap)
+        _write_seals(root, seals)
+    return {"path": path, "was": was, "resealed": sealed_as_is}
+
+
 def _side(code):
     return code[-1] if len(code) > 2 and code[-2] == "-" and code[-1] in "LR" else None
 
@@ -1026,7 +1121,14 @@ class PresetHistory:
         version = version or self.head()
         if version is None:
             raise FileNotFoundError(f"no snapshots yet for preset {self.preset!r}")
-        return _read_snapshot_json(self._path(version))
+        path = self._path(version)
+        snap = _read_snapshot_json(path)
+        why = identity_error(path, snap)
+        if why:
+            # skill #89: returned as it was, the file was read as `version` while it said another one.
+            raise SnapshotError(f"{why}. `{repair_version_command(self.root, version, self.preset)}` makes it say "
+                                f"its own name (the old one is kept as `version_was`)")
+        return snap
 
     @property
     def proposals_dir(self):
@@ -1657,7 +1759,12 @@ def _main(argv=None):
     cp.add_argument("--previous", default=None, help="save: the configuration it continues, when not its ancestor")
     cp.add_argument("--with", dest="against", default=None, help="compare: another name or a version")
     sub.add_parser("seal", help="seal every banked version not sealed yet (#58 P1); a seal is never renewed")
-    sub.add_parser("verify", help="name every sealed version whose content changed (#58 P1); exit 3 if any")
+    sub.add_parser("verify", help="name every sealed version whose content changed (#58 P1) and every file that "
+                                  "is not the version its name says (#89); exit 3 if any")
+    rv = sub.add_parser("repair-version", help="give a file whose `version` names another version its own name "
+                                               "back (#89); the old claim is kept as `version_was`")
+    rv.add_argument("version")
+    rv.add_argument("--preset", default=None, help="the preset, on a per-preset ledger")
     mp = sub.add_parser("migrate-line",
                         help="move a per-preset ledger onto one version line per project "
                              "(W-2, hub #195): the plan by default, --apply on the user's OK")
@@ -1692,7 +1799,23 @@ def _main(argv=None):
         for b in broken:
             print(f"✗ {b['version']}: {b['why']}")
         print("every sealed version is as it was banked" if not broken else "")
-        return 3 if broken else 0
+        identity = ledger_identity(args.root)
+        for line in identity:
+            print(f"✗ {line}")
+        print("every file is the version its name says" if not identity else "")
+        return 3 if broken or identity else 0
+    if args.cmd == "repair-version":
+        try:
+            got = repair_version(args.root, args.version, args.preset)
+        except SnapshotError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 3
+        print(f"{got['path']}: now says {args.version} (said {got['was']}, kept as `version_was`)"
+              + ("; its seal follows the repair" if got["resealed"] else
+                 "; its seal is left as it was -- a change before this one stays named by `verify`"))
+        print(f"what was banked as {args.version} before the copy is not in the ledger; the file holds what "
+              f"{got['was']} held")
+        return 0
     if args.cmd == "migrate-line":
         try:
             got = migrate_line(args.root, apply=args.apply)
@@ -2271,6 +2394,58 @@ def _selftest():
     broken = verify_seals(seal_root)
     assert [b["version"] for b in broken] == [sv] and "immutable" in broken[0]["why"], broken
     assert seal_all(seal_root) == [], "a seal must never be renewed over a mutation"
+
+    # -- skill #89 (hub #213): a file whose `version` names another version. The Passat's v_011.json said
+    # "v_012" -- a variant promoted by a plain copy -- and load() handed it over as v_011.
+    id_root = tempfile.mkdtemp(prefix="autosound_identity_")
+    ih = PresetHistory(id_root, "SQ")
+    for n in range(3):
+        ih.snapshot(_sample_state(), note=f"banked {n}")          # v_001 v_002 v_003, v_003 in the slot
+    assert ledger_identity(id_root) == [], ledger_identity(id_root)
+    lie = ih.load("v_002")
+    lie["version"] = "v_004"                                       # the copied variant carries its own name
+    with open(ih._path("v_002"), "w", encoding="utf-8") as fh:
+        json.dump(lie, fh)
+    try:
+        ih.load("v_002")
+        raise AssertionError("a file that names another version must not load as this one")
+    except SnapshotError as exc:
+        assert "v_002" in str(exc) and "'v_004'" in str(exc) and "repair-version v_002" in str(exc), exc
+    assert ih.load("v_001")["version"] == "v_001", "a sound file still loads"
+    found = ledger_identity(id_root)
+    assert len(found) == 1 and "v_002" in found[0] and "v_004" in found[0], found
+    # a duplicate `version`, a gap in the numbering, and a slot that names no file: one line each
+    dup = ih.load("v_001")
+    dup["version"] = "v_003"
+    with open(os.path.join(id_root, VERSIONS_DIR, "v_005.json"), "w", encoding="utf-8") as fh:
+        json.dump(dup, fh)
+    slots = _read_slots(id_root)
+    slots["slots"]["FULL"] = {"version": "v_009"}
+    _write_slots(id_root, slots)
+    found = ledger_identity(id_root)
+    assert any("v_005" in f and "'v_003'" in f for f in found), found
+    assert any("two files say they are v_003" in f for f in found), found
+    assert any("no v_004" in f for f in found), found
+    assert any("FULL" in f and "v_009" in f and "no such file" in f for f in found), found
+    os.remove(os.path.join(id_root, VERSIONS_DIR, "v_005.json"))
+    slots["slots"].pop("FULL")
+    _write_slots(id_root, slots)
+    # The way out: the file takes its own name back, the old claim kept beside it. The seal followed the lie
+    # (the copy was sealed as banked), so the repair -- the only change -- re-seals; the content is not blessed.
+    seals = _read_seals(id_root)
+    seals["v_002"] = content_digest(lie)
+    _write_seals(id_root, seals)
+    got = repair_version(id_root, "v_002")
+    assert got["was"] == "v_004" and got["resealed"], got
+    fixed = ih.load("v_002")
+    assert fixed["version"] == "v_002" and fixed["version_was"] == "v_004", fixed
+    assert verify_seals(id_root) == [] and ledger_identity(id_root) == [], (verify_seals(id_root),
+                                                                              ledger_identity(id_root))
+    try:
+        repair_version(id_root, "v_002")
+        raise AssertionError("repairing a file that already says its name must refuse, not rewrite")
+    except SnapshotError as exc:
+        assert "already says" in str(exc), exc
 
     # -- #57 P3: the next capture is derived from what moved, not from the reflex to re-measure the series.
     va = _sample_state()

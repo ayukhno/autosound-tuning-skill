@@ -171,6 +171,16 @@ W-4 (`docs/PLAN-W-4.md`): the issues on the milestone that carry the Arbiter's `
   answer is, stays UTF-8; a console and a caller that sets `PYTHONIOENCODING` (TCC does) keep UTF-8 on stderr
   too. PowerShell 5 still shows each stderr line in red under `2>&1`: that is how it wraps a native program's
   stderr, not an error of the run.
+- **A ledger file that names another version is refused, named and repairable** (skill #89, hub #213 TCC-033). The
+  Passat's `v_011.json` carried `"version": "v_012"`: a variant promoted by a plain copy, and `load()` handed it
+  over as v_011. Now `load()` refuses such a file, naming both versions and the repair command.
+  `state.py repair-version <v_NNN>` gives the file its own name back and keeps the old claim as `version_was`. It
+  repairs the name only: what was banked under that name before the copy is not in the ledger. The seal is
+  renewed only when it matched the file as it was. `contract.py check` and `state.py verify` go over the whole line,
+  one line per finding: a file whose `version` is not its name, two files claiming one version, a number missing
+  from the line, a slot naming a version with no file. The method's own paths already mint a new version for a
+  variant (`variant new`) and move a pointer to put it in a slot (`variant switch`), so nothing in the skill copies
+  a file into the ledger.
 
 ## [v3.0.63] — 2026-09-27 · A reviewer picked through omp is called through omp, and through nothing else
 

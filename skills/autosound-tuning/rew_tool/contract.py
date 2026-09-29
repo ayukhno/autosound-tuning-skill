@@ -308,6 +308,15 @@ def check_ledgers(project_dir):
     if broken:
         entries.append(_entry(f"state/{state_mod.SEALS_FILE}", True, None, False,
                               [f"{b['version']}: {b['why']}" for b in broken]))
+    # skill #89 (hub #213): every file is the version its name says, each version once, no number lost, and
+    # every slot names a file -- the half a seal cannot see when the copy itself was sealed.
+    try:
+        identity = state_mod.ledger_identity(root)
+    except state_mod.SnapshotError as exc:
+        identity = [str(exc)]
+    if identity:
+        entries.append(_entry(f"state/{state_mod.VERSIONS_DIR}/" if project_line else "state/", True, None, False,
+                              identity))
     return entries, snapshots
 
 
@@ -1318,6 +1327,22 @@ def _selftest():
 
     # cross-check: the ledger's virtual_channels tier IS declared in this profile -- no complaint.
     assert report["cross_checks"]["tiers_vs_profile"] == [], report["cross_checks"]
+
+    # skill #89: a file that names another version is a finding with its repair, and the slot holding it reads
+    # as unreadable rather than as that other version; the repair puts both back.
+    assert not any(f["file"] == "state/versions/" for f in report["files"]), report["files"]
+    v1 = h.head()
+    lie = h.load(v1)
+    lie["version"] = "v_009"
+    with open(h._path(v1), "w", encoding="utf-8") as fh:
+        json.dump(lie, fh)
+    lied = check_project(root, skip_rew=True)["files"]
+    line_f = next(f for f in lied if f["file"] == "state/versions/")
+    assert line_f["valid"] is False and any("'v_009'" in i and "repair-version" in i for i in line_f["issues"]), line_f
+    slot_f = next(f for f in lied if f.get("slot") == "SQ_Jazzi")
+    assert slot_f["valid"] is False and "'v_009'" in slot_f["issues"][0], slot_f
+    state_mod.repair_version(os.path.join(root, "state"), v1)
+    assert not any(f["file"] == "state/versions/" for f in check_project(root, skip_rew=True)["files"])
 
     # SCR-042: a spare slot's `tier` is the only thing tying it to a tier -- no ledger row exists
     # to contradict a typo -- so a tier the profile does not declare has to be caught here.
