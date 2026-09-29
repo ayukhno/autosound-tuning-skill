@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Everything that must be true BEFORE `git tag vX.Y.Z`. Run it, read it, then tag.
+# Everything that must be true BEFORE `git tag -s vX.Y.Z`. Run it, read it, then tag (signed: skill #99).
 #
 #   scripts/tag-check.sh v3.0.30
 #   scripts/tag-check.sh --candidate v3.1.0     a release candidate for v3.1.0; the hub names its rcN
@@ -112,6 +112,23 @@ else
   printf '%s\n' "$inst_out" | tail -n 12 | sed 's/^/         /'
 fi
 
+# 4b. The tag is SIGNED (skill #99, hub #82 HUB-031). From v3.0.64 the installers and TCC's update path refuse a
+#     release tag that does not verify against the author's key, so an unsigned tag cut here would stop every new
+#     install. Checked before the tag: git's signing config has to name the key in `allowed_signers`, which
+#     installer-consistency.py holds equal to the installers' own constant.
+sig_fmt="$(git config --get gpg.format || true)"
+sig_key="$(git config --get user.signingkey || true)"
+case "$sig_key" in key::*) sig_key="${sig_key#key::}" ;; "~/"*) sig_key="$HOME/${sig_key#\~/}" ;; esac
+[ -f "$sig_key" ] && sig_key="$(awk '{print $1, $2; exit}' "$sig_key")"
+sig_want="$(grep -v '^#' allowed_signers 2>/dev/null | awk 'NF {print $3, $4; exit}')"
+if [ -z "$sig_want" ]; then
+  bad signing "no key in allowed_signers -- the installers would have nothing to check the tag against"
+elif [ "$sig_fmt" != "ssh" ] || [ "$sig_key" != "$sig_want" ]; then
+  bad signing "git would not sign with the author's key (gpg.format=${sig_fmt:-unset}, user.signingkey $([ -n "$sig_key" ] && echo "names another key" || echo unset)) -- git config --global gpg.format ssh; git config --global user.signingkey ~/.ssh/id_ed25519.pub"
+else
+  ok signing "git signs with the key in allowed_signers (${sig_want:12:20}…)"
+fi
+
 # 5. The channel half, asked of the carrier with the tag named explicitly. Its lines are printed
 #    verbatim underneath, in the hub's language: a verdict restated in other words is a second
 #    copy of it, and this whole ticket exists because two copies drifted. A missing carrier is a
@@ -146,4 +163,4 @@ if [ "$fail" -ne 0 ]; then
   echo "NOT READY TO TAG $LABEL: $fail of $((pass + fail)) checks failed -- ${failed[*]}" >&2
   exit 1
 fi
-echo "all $pass checks passed -- ready: git tag -a $LABEL && git push origin $LABEL"
+echo "all $pass checks passed -- ready: git tag -s $LABEL -m $LABEL && git push origin $LABEL"

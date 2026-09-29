@@ -467,6 +467,16 @@ def main():
                 problems.append(f"the {what} differs -- install.sh {v_sh!r}, install.ps1 {v_ps!r}, upkeep.py {v_py!r}")
             else:
                 checked.append(f"the {what} agrees in both installers and upkeep.py ({v_sh[:24]}…)")
+    signers = ROOT / "allowed_signers"
+    listed = [ln.split() for ln in (signers.read_text(encoding="utf-8").splitlines() if signers.exists() else [])
+              if ln.strip() and not ln.startswith("#")]
+    key_sh, _ = one(r'^SKILL_SIGNING_KEY="([^"]+)"', sh, "SKILL_SIGNING_KEY", "install.sh")
+    if not listed or " ".join(listed[0][2:4]) != key_sh or listed[0][0] != (one(
+            r'^SKILL_SIGNING_PRINCIPAL="([^"]+)"', sh, "SKILL_SIGNING_PRINCIPAL", "install.sh")[0]):
+        problems.append("allowed_signers does not list the installers' signing key under their principal -- "
+                        "tag-check.sh reads it to decide whether git would sign with that key")
+    else:
+        checked.append("allowed_signers lists the installers' signing key")
     p_sh, p_ps = checkout_paths(sh, ps1, "LOCAL_CHANGES", "LocalChanges", problems)
     if p_sh and p_ps:
         if p_sh != p_ps or f'"{p_sh.split("/")[-1]}"' not in up:

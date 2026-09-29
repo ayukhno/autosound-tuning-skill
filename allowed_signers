@@ -1,0 +1,5 @@
+# Who signs release tags of this skill (skill #99, hub #82 HUB-031). For people and for `git verify-tag`:
+#   git -c gpg.ssh.allowedSignersFile=allowed_signers verify-tag v3.0.64
+# The installers and scripts/upkeep.py do NOT read this file -- they carry the same key as a constant, because a
+# tag's own copy of this file would vouch for itself. installer-consistency.py checks that all of them agree.
+ayukhno namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHLm4x1yz9JbFfBlxdQA8vR8yYMupVktswes3CL7QE1y
