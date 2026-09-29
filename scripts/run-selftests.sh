@@ -79,6 +79,9 @@ run_one "changelog-fresh" scripts/changelog-index.py --check
 # The direct-API reviewer: the key travels as a header, a retired model becomes a CHOICE carrying
 # the key's own list (never a fall-through to a CLI or the clipboard). Offline -- urlopen stubbed.
 run_one "autosound-ai" skills/autosound-tuning/scripts/autosound_ai.py selftest
+# The one update path (W-4: #91 #92 #97 #98 #99): signed / unsigned / foreign-signed tags in a temp repo, local
+# changes kept as a patch before the reset, each tool updated the way it was installed. Offline.
+run_one "upkeep" skills/autosound-tuning/scripts/upkeep.py selftest
 
 echo
 echo "rew_tool selftests ($PY)"
