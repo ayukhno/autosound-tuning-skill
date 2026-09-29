@@ -1618,6 +1618,17 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-076 · Waiting on TCC and the run before its release; the hub does its part
+
+**Status**: open 2026-09-29 · nothing in work on the skill's side
+
+The Arbiter (2026-09-29): «чекаємо на ТСС і прогон до релізу. Хаб відпрацьовує свою частину». TCC builds its half
+against v3.0.64: hub #221 (the skill through `upkeep.py clone` and `libs`, the update window's text), #217
+(`keep-local`), #219 (the tools row), #83 (its own signed tags). The hub: #84 (the ledger checks the signature), #220
+(the minor in both products). When TCC's release candidate is ready, the run before its release comes; the skill's
+next step (v3.1.0 with TCC v1.1.0, `docs/RELEASE-PLAN-3.1.0.md`) waits for that. Resume:
+`hub/bin/role skill --resume 8abdabc5-2f9d-4878-8185-4b741a41804e`.
+
 ## S-075 · The skill updated from TCC to v3.0.64, checked on the VM
 
 **Status**: done 2026-09-29 · on the VM (the one updated to rc2 by the terminal), TCC's «Оновити Скіл» ran with no window and asked to reopen; then `upkeep.py status` → `skill: 6d6a987` (v3.0.64, a bare sha as expected), omp 18.4.3, gh 2.101.0, numpy 2.5.3, scipy 1.18.1, matplotlib 3.11.2; TCC shows «Скіл 3.0.64 — актуальна». In that PowerShell window `python3` did nothing (the Store alias, S-016): the full path to `~\.local\bin\python3.exe` ran it
