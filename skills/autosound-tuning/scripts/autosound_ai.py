@@ -985,6 +985,26 @@ def classify_failure(text):
     return "other"
 
 
+def failure_reason(text, limit=400):
+    """The part of a CLI's failure worth showing, at most `limit` characters.
+
+    omp is a bun binary, and bun prints the source lines around a throw BEFORE its `error:` line, so the
+    first 400 characters were source and the reason came last and cut (skill #93). When there is an
+    `error:` line, the reason is that line and what continues it, up to the first stack frame (`at …`)
+    or blank line; otherwise the text as it came, cut as before."""
+    text = (text or "").strip()
+    lines = text.splitlines()
+    starts = [i for i, line in enumerate(lines) if line.lstrip().startswith("error:")]
+    if starts:
+        kept = []
+        for line in lines[starts[-1]:]:
+            if kept and (not line.strip() or line.lstrip().startswith("at ")):
+                break
+            kept.append(line.strip())
+        text = " ".join(kept)
+    return text[:limit]
+
+
 #: What each failure means for the Arbiter, and the ladder's next rung (setup-critic-channel.md §7).
 FAILURE_ADVICE = {
     "dead_cli": "шлях gemini CLI закрито Google (IneligibleTierError) — постав agy: "
@@ -1475,6 +1495,20 @@ def _selftest():
                 assert code == 4 and words.split("\n")[1] in err and "Working" not in err, (code, err)
                 assert FAILURE_ADVICE[kind][:30] in err and len(os.listdir(reviews)) == filed, (kind, err)
                 assert "PACKAGE_FILE" not in err and "REVIEW_ROUTE" not in err, err
+            # omp is a bun binary: it prints the source lines around the throw BEFORE its `error:` line, so the
+            # first 400 characters were source and the reason came last and cut (skill #93, the Windows VM
+            # 2026-09-27). The reason is omp's `error:` line; the source dump and the stack frames are not.
+            dump = "".join(f"7436{n:02d} |   const x{n} = this.registry.lookup(this.model.provider, opts);\n"
+                           for n in range(8))
+            omp_reply[0] = (1, "", "Working...\n" + dump + "743612 |   throw new Error(`No API key found for "
+                            "${this.model.provider}. Use /login, set an API key environment variable`);\n"
+                            "                   ^\nerror: No API key found for openai-codex. Use /login, set an "
+                            "API key environment variable, or pick a model you are logged in for.\n"
+                            "      at getApiKey (/$bunfs/root/omp:743612:15)\n")
+            code, out, err = run_main("ask", pkg)
+            assert code == 4 and "No API key found for openai-codex. Use /login, set an API key environment " \
+                "variable, or pick a model you are logged in for." in err, err
+            assert "743607 |" not in err and "getApiKey" not in err and FAILURE_ADVICE["no_login"][:30] in err, err
             # A selector omp does not know is the Arbiter's choice from omp's own list (text models only).
             omp_reply[0] = (1, "", 'Model "google-antigravity/gemini-9" not found\n')
             code, out, err = run_main("ask", pkg)
@@ -2229,7 +2263,7 @@ def run_doctor(smoke=True):
                 ok = False
             else:
                 advice = FAILURE_ADVICE.get(kind, "")
-                print(f"✗ Живий виклик не вдався: {(error or '').strip()[:200]}" + (f" → {advice}" if advice else ""))
+                print(f"✗ Живий виклик не вдався: {failure_reason(error, 200)}" + (f" → {advice}" if advice else ""))
                 ok = False
 
     # Рекомендація -- after a live call, what ANSWERED; without one, what is configured.
@@ -2525,7 +2559,7 @@ def review_through_omp(role, binary, model, prompt, pkg_file, role_var):
     print("\n" + "=" * 50, file=sys.stderr)
     print("⛔ РЕЦЕНЗІЇ НЕ ОТРИМАНО — omp відмовив; рецензента вибрано через omp, тож іншого шляху цей раунд "
           "не бере (ні ключа, ні іншого CLI, ні буфера):", file=sys.stderr)
-    print(f"   · omp: {error.strip()[:400]}" + (f"\n     → {advice}" if advice else ""), file=sys.stderr)
+    print(f"   · omp: {failure_reason(error)}" + (f"\n     → {advice}" if advice else ""), file=sys.stderr)
     print("=" * 50, file=sys.stderr)
     sys.exit(4)
 
@@ -2770,7 +2804,7 @@ def main():
         if kind == "timeout" and (api_key_for(provider) or suppressed_key(provider)):
             advice = ("CLI не відповів вчасно. У середовищі є ключ API — повтори з `--via api` "
                       "(для цього запуску; конфігурацію не змінює)")
-        failures.append(f"CLI '{cli_bin}': {error.strip()[:400]}" + (f"\n     → {advice}" if advice else ""))
+        failures.append(f"CLI '{cli_bin}': {failure_reason(error)}" + (f"\n     → {advice}" if advice else ""))
 
     # 3. Буфер обміну — сходинка драбини, а не «рецензія».
     print("\n" + "=" * 50, file=sys.stderr)
