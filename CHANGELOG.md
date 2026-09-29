@@ -187,6 +187,35 @@ W-4 (`docs/PLAN-W-4.md`): the issues on the milestone that carry the Arbiter's `
   PowerShell's `Read-Host` adds its own colon; the prompts no longer end in one. Both installers headed the list
   of tools "Already on this machine:" over rows that said `will install`; the heading is now "What is here, and
   what will be installed:". Output text only; the Windows half is checked on the VM before the tag.
+- **One update path for the skill, its tools and its libraries** (skill #91, #92, #97, #98; hub #217, #219). The
+  new `scripts/upkeep.py` is the part every door does the same way, and the installers and TCC call it:
+  `status --json` (the clone, each tool with its installed and available version and how it was installed, the
+  libraries), `keep-local [--send]`, `clone [--tag]`, `tools [--only]`, `libs`.
+  - **A local change in the installed skill no longer blocks updates** (#91). It used to stop the installers with
+    "check the network" and grey out TCC's button. Now it is kept as one patch file (new files included) in
+    `~/.claude/skills/autosound-local-changes/`, checked to reverse-apply before anything is reset. It goes to the
+    skill as an issue only when the person says so; then the clone is reset and updated. The installers ask
+    (Enter = send, `s` = keep it only here); `--yes` keeps it and sends nothing.
+  - **The crash that change was patching is fixed** (#91). With a capture round open, `contract.py check` merged
+    the round's list of titles the naming grammar cannot read into the same key as REW's measurements from another
+    file. `render_report` then died on `.values()`. The two are now apart: `other_file` for the second.
+  - **The tools the installer installs are updated too** (#97). A re-run of the installer asks once, then updates
+    each tool that was already there (omp, agy, gh, Claude Code) the way it was installed: Homebrew through
+    `brew upgrade`, omp, agy and Claude Code through their own `update`, gh from its release with the checksum
+    checked. Old → new is said per tool. A tool installed some other way is named and left alone, and nothing that
+    was never installed is added.
+  - **The libraries are upgraded** (#98). Both installers run `pip install --upgrade`, so an updated machine gets
+    the numpy, scipy and matplotlib that CI tests, not the ones it got first. CI now installs matplotlib too.
+  - **An update lands the tag in `refs/tags`** (#92), so `git describe` names the version after TCC's update, as
+    it already did after the installers'.
+- **Release tags are signed, and the installers check the signature** (skill #99, hub #82 HUB-031). From `v3.0.64`
+  every release tag is signed with the author's SSH key. `install.sh`, `install.ps1` and `upkeep.py clone` check
+  a fetched tag against that key before anything of it runs or is checked out. A fresh clone that fails the check
+  is removed, and the install stops with the reason. The key is a constant in all three, not read from the tag,
+  and `installer-consistency.py` keeps them equal. Tags before `v3.0.64` predate signing and still install, with a
+  line saying so. `AUTOSOUND_SKIP_TAG_VERIFY=1` skips the check for one run and says so. `allowed_signers` and
+  `SECURITY.md` carry the key and its fingerprint for anyone checking by hand. `tag-check.sh` goes red when git
+  would not sign with that key.
 
 ## [v3.0.63] — 2026-09-27 · A reviewer picked through omp is called through omp, and through nothing else
 

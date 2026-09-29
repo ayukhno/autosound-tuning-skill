@@ -407,7 +407,11 @@ def cross_check_rew(process_state, glossary, snapshots, project_data=None):
     own = ((project_data or {}).get("paths") or {}).get("rew_project") if isinstance(project_data, dict) else None
     foreign = rew_api.foreign_measurements(records, own) if hasattr(rew_api, "foreign_measurements") else {}
     if foreign:
-        out["foreign"] = foreign
+        # `other_file`, not `foreign`: the round's verdict below is merged into this same dict, and ITS `foreign` is
+        # the list of titles the naming grammar cannot read (naming.validate_series). With a round open and one such
+        # title, the list overwrote this dict and render_report died on `.values()` -- the crash a session patched
+        # by hand in the installed skill on the Windows VM (skill #91, S-064).
+        out["other_file"] = foreign
     if not own:
         # With no own file recorded nothing can be judged foreign -- so say which file(s) REW holds, with the full
         # path REW gives (`containingFilePath`, checked on a live REW 2026-09-23), for the user to confirm as this
@@ -1087,9 +1091,9 @@ def render_report(report):
                        f"`python3 rew_tool/state/apply.py {report['project_dir']} propose {row['file']}` (skill #74)")
     rew = cross["rew"]
     if rew.get("reachable"):
-        if rew.get("foreign"):
-            files = sorted(set(rew["foreign"].values()))
-            lines.append(f"- ⚠️ REW: {len(rew['foreign'])} measurement(s) come from another file "
+        if isinstance(rew.get("other_file"), dict) and rew["other_file"]:
+            files = sorted(set(rew["other_file"].values()))
+            lines.append(f"- ⚠️ REW: {len(rew['other_file'])} measurement(s) come from another file "
                          f"({', '.join(files)}), not this project's own -- another build's data; read them "
                          f"only as that, and never into this project's rounds (#58 P4)")
         for name, path in sorted((rew.get("files_unrecorded") or {}).items()):
@@ -1327,6 +1331,27 @@ def _selftest():
 
     # cross-check: the ledger's virtual_channels tier IS declared in this profile -- no complaint.
     assert report["cross_checks"]["tiers_vs_profile"] == [], report["cross_checks"]
+
+    # skill #91: with a capture round open, the round's verdict carries its own `foreign` (a LIST of titles the
+    # naming grammar cannot read) into the same dict as REW's other-file measurements; the two keys stay apart.
+    crossed = check_project(root, skip_rew=True)
+    crossed["cross_checks"]["rew"] = {"reachable": True, "note": "n", "foreign": ["garbage title"],
+                                      "other_file": {"m-L_3 (sw)": "/elsewhere/other.mdat"}}
+    shown = render_report(crossed)
+    assert "1 measurement(s) come from another file (/elsewhere/other.mdat)" in shown, shown
+    import types
+    fake = types.SimpleNamespace(get_measurements=lambda: {"1": {"title": "m-L_3 (sw)"}},
+                                 foreign_measurements=lambda recs, own: {"m-L_3 (sw)": "/elsewhere/other.mdat"},
+                                 measurement_file=lambda rec: "/elsewhere/other.mdat")
+    real_rew_api, sys.modules["rew_api"] = sys.modules.get("rew_api"), fake
+    try:
+        got = cross_check_rew({}, None, {}, {"paths": {"rew_project": "/mine/own.mdat"}})
+    finally:
+        if real_rew_api is None:
+            sys.modules.pop("rew_api", None)
+        else:
+            sys.modules["rew_api"] = real_rew_api
+    assert "other_file" in got and "foreign" not in got, got
 
     # skill #89: a file that names another version is a finding with its repair, and the slot holding it reads
     # as unreadable rather than as that other version; the repair puts both back.
