@@ -490,6 +490,16 @@ def main():
                        "lets an older tag and a branch through, and says when the switch skips it")
     if "Test-TagSignature" not in ps1 or "gpg.ssh.allowedSignersFile" not in ps1:
         problems.append("install.ps1: no Test-TagSignature with gpg.ssh.allowedSignersFile -- the Windows half of #99")
+    else:
+        # git says "Good" and every reason on stderr, and Windows PowerShell 5.1 drops a native program's stderr
+        # records at SilentlyContinue before `2>&1` merges them: the VM refused a good signature, with no reason
+        # printed, until the check ran under Continue (2026-09-29, beta-v3.0.64-rc1).
+        fn = re.search(r"^function Test-TagSignature \{.*?^\}", ps1, re.M | re.S)
+        if not fn or re.search(r'ErrorActionPreference\s*=\s*"SilentlyContinue"', fn.group(0)):
+            problems.append("install.ps1: Test-TagSignature reads git's answer under SilentlyContinue -- PowerShell 5.1 "
+                            "drops stderr there, so a good signature reads as refused")
+        else:
+            checked.append("install.ps1's Test-TagSignature reads git's stderr (not under SilentlyContinue)")
 
     # 5c. Phase 1's desk engine (TODO S-020, the user's decision 2026-09-18). Three things have to
     # be the same decision in all three files, or a Mac and a PC do not end up with the same

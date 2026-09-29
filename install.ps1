@@ -857,7 +857,10 @@ function Test-TagSignature {
     }
     $signers = [System.IO.Path]::GetTempFileName()
     [System.IO.File]::WriteAllText($signers, "$SkillSigningPrincipal namespaces=`"git`" $SkillSigningKey`n")
-    $prev = $ErrorActionPreference; $ErrorActionPreference = "SilentlyContinue"
+    # Under "Continue" (the script's own setting), not "SilentlyContinue": Windows PowerShell 5.1 drops a native
+    # program's stderr records at SilentlyContinue BEFORE `2>&1` can merge them, and git says both "Good" and every
+    # reason on stderr -- the VM refused beta-v3.0.64-rc1 with no reason printed at all (2026-09-29).
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
     $global:LASTEXITCODE = 0
     $out = @(& git -C $Dir -c gpg.format=ssh -c "gpg.ssh.allowedSignersFile=$signers" verify-tag $Ref 2>&1)
     $rc = $LASTEXITCODE
