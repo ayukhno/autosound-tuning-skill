@@ -59,6 +59,15 @@ SKILL_TAG_GLOB="v3.*"
 # glob. The different first letter is what keeps a candidate out of SKILL_TAG_GLOB, so the stable
 # channel -- the default, and TCC's updater -- never sees one.
 SKILL_BETA_GLOB="beta-v3.*"
+# Release tags are signed by the method's author (skill #99, hub #82 HUB-031): whoever holds the account's token
+# can push a tag, and only the laptop holds the key. The key is HERE, not read from the tag being checked -- a
+# tag's own copy would vouch for itself. Same values as install.ps1 and scripts/upkeep.py (installer-consistency.py
+# compares them). A tag before SKILL_SIGNED_FROM predates signing: it installs, and the line says so.
+SKILL_SIGNING_PRINCIPAL="ayukhno"
+SKILL_SIGNING_KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHLm4x1yz9JbFfBlxdQA8vR8yYMupVktswes3CL7QE1y"
+SKILL_SIGNED_FROM="v3.0.64"
+# Where a local change to the installed clone is kept before the update resets it (skill #91). Same as upkeep.py.
+LOCAL_CHANGES="${HOME}/.claude/skills/autosound-local-changes"
 # The app's supported line. It is `v*` and not `v3.*` because the app versions independently of the
 # method -- they are different products that ship together, and pinning them to one number is the
 # coupling SCR-055 is arguing about, not a thing to bake in here.
@@ -780,6 +789,77 @@ else
 fi
 
 # ── the tuning method ─────────────────────────────────────────────────────────
+# Is <ref>, fetched into <dir>, a signed release of this skill (skill #99)? 0 = yes -- or it predates signing, or
+# it is a branch named with --skill-ref, or AUTOSOUND_SKIP_TAG_VERIFY=1 -- each said on a line. 1 = it is not,
+# and nothing may be installed from it.
+verify_tag() {  # verify_tag <dir> <ref>
+  _vt_dir="$1"; _vt_ref="$2"
+  if [ "$DRY_RUN" = 1 ]; then say "  would check the signature of $_vt_ref"; return 0; fi
+  if [ "${AUTOSOUND_SKIP_TAG_VERIFY:-}" = 1 ]; then
+    warn "the signature of $_vt_ref is NOT checked: AUTOSOUND_SKIP_TAG_VERIFY=1 is set (a developer's switch)"
+    return 0
+  fi
+  _vt_ver="${_vt_ref#beta-}"; _vt_ver="${_vt_ver%%-rc*}"
+  case "$_vt_ver" in
+    v[0-9]*.[0-9]*.[0-9]*) ;;
+    *) say "  $_vt_ref is not a release tag -- no signature to check"; return 0 ;;
+  esac
+  if [ "$(printf '%s\n%s\n' "$SKILL_SIGNED_FROM" "$_vt_ver" | sort -V | head -1)" != "$SKILL_SIGNED_FROM" ]; then
+    say "  $_vt_ref predates signed tags (they start at $SKILL_SIGNED_FROM) -- installed without a signature check"
+    return 0
+  fi
+  _vt_signers="$(mktemp)"
+  printf '%s namespaces="git" %s\n' "$SKILL_SIGNING_PRINCIPAL" "$SKILL_SIGNING_KEY" > "$_vt_signers"
+  _vt_rc=0
+  _vt_said="$(git -C "$_vt_dir" -c gpg.format=ssh -c gpg.ssh.allowedSignersFile="$_vt_signers" \
+                verify-tag "$_vt_ref" 2>&1)" || _vt_rc=$?
+  rm -f "$_vt_signers"
+  case "$_vt_rc:$_vt_said" in
+    0:*Good*) say "  ✓ $_vt_ref is signed by the skill's author"; return 0 ;;
+  esac
+  warn "the signature of $_vt_ref does not check out -- it is not installed:"
+  printf '%s\n' "$_vt_said" | tail -2 | sed 's/^/      /' >&2
+  case "$_vt_said" in
+    *gpg.format*|*"unknown option"*|*"-Y"*)
+      warn "this git ($(git --version 2>/dev/null)) may be too old to check one: 2.34 or newer is needed" ;;
+  esac
+  warn "a release of this skill is signed by its author; this one is not, or not by that key."
+  return 1
+}
+
+# The installed clone has changes somebody made by hand -- a session patching a crash on the Windows VM (skill
+# #91). They used to stop every update with "check the network". Now they are kept as a patch by the NEW tag's
+# upkeep.py (fetched and verified: the clone's own version may predate the script), sent to the skill only on the
+# person's word, and the clone is reset so the update can go ahead.
+keep_local() {  # keep_local <dir> <what>; 0 = kept and reset, 1 = left as it was
+  _kl_dir="$1"; _kl_what="$2"
+  warn "$_kl_what has local changes -- somebody edited the installed copy:"
+  git -C "$_kl_dir" status --porcelain --untracked-files=all | cut -c4- | sed 's/^/      /' >&2
+  if [ "$DRY_RUN" = 1 ]; then say "  would keep them as a patch in $(pretty "$LOCAL_CHANGES"), then reset"; return 0; fi
+  _kl_py="$(command -v python3 || true)"
+  _kl_tmp="$(mktemp -d)"
+  for _kl_f in scripts/upkeep.py rew_tool/gates/side_effect.py rew_tool/console.py; do
+    mkdir -p "$_kl_tmp/skills/autosound-tuning/$(dirname "$_kl_f")"
+    git -C "$_kl_dir" show "FETCH_HEAD:skills/autosound-tuning/$_kl_f" \
+      > "$_kl_tmp/skills/autosound-tuning/$_kl_f" 2>/dev/null || true
+  done
+  if [ -z "$_kl_py" ] || [ ! -s "$_kl_tmp/skills/autosound-tuning/scripts/upkeep.py" ]; then
+    warn "they cannot be kept automatically here (no python3, or the new version has no upkeep.py)."
+    warn "keep them yourself (git -C $(pretty "$_kl_dir") stash), then run this again; nothing was changed."
+    rm -rf "$_kl_tmp"; return 1
+  fi
+  say "  they are kept as a patch in $(pretty "$LOCAL_CHANGES") before the update -- nothing is lost."
+  say "  Sent to the skill as an issue, the patch tells its author what had to be fixed by hand."
+  _kl_send=""
+  if offer "Enter = send it · s = keep it only here:"; then _kl_send="--send"; fi
+  if "$_kl_py" "$_kl_tmp/skills/autosound-tuning/scripts/upkeep.py" --clone "$_kl_dir" keep-local ${_kl_send:+"$_kl_send"}; then
+    rm -rf "$_kl_tmp"; return 0
+  fi
+  rm -rf "$_kl_tmp"
+  warn "the changes were not kept, so nothing was reset or updated -- see above."
+  return 1
+}
+
 # Put a checkout of the method at <dir> on <ref>: move it when it is already a checkout, clone it
 # when there is none. ONE function for both copies -- the terminal's and the beta channel's
 # (autosound-hub #145) -- so a lesson learned on one cannot miss the other. <what> names the copy
@@ -799,8 +879,19 @@ checkout_method() {
     # CHECKED, both of them. Unchecked, a network blip or a moved ref left the method sitting on
     # the previous version while this script printed "updating to <ref>" and carried on -- the one
     # failure mode where the user is told the opposite of what happened (HUB-042).
-    if run git -C "$_co_dir" fetch --quiet --depth 1 origin "$_co_spec" &&
-       run git -c advice.detachedHead=false -C "$_co_dir" checkout --quiet FETCH_HEAD; then
+    if ! run git -C "$_co_dir" fetch --quiet --depth 1 origin "$_co_spec"; then
+      warn "could not fetch $_co_ref for $_co_what -- it is STILL at" \
+           "$(git -C "$_co_dir" describe --tags --always 2>/dev/null || echo unknown)."
+      warn "check the network, then re-run this script; nothing was changed."
+      return 0
+    fi
+    # What was fetched is checked before anything of it runs or is checked out (skill #99), and a clone with
+    # local changes is kept as a patch rather than refused with the wrong reason (skill #91).
+    verify_tag "$_co_dir" "$_co_ref" || return 2
+    if [ -n "$(git -C "$_co_dir" status --porcelain --untracked-files=all 2>/dev/null)" ]; then
+      keep_local "$_co_dir" "$_co_what" || return 0
+    fi
+    if run git -c advice.detachedHead=false -C "$_co_dir" checkout --quiet FETCH_HEAD; then
       # And verify what it was supposed to produce, not just that the command exited 0. Against the
       # COMMIT: for an annotated tag -- every release -- FETCH_HEAD is the tag object, which HEAD
       # never equals, so each update warned "the update did not take" when it had (Windows VM,
@@ -812,9 +903,8 @@ checkout_method() {
         warn "$_co_what is still at $(git -C "$_co_dir" describe --tags --always 2>/dev/null || echo unknown)"
       fi
     else
-      warn "could not update $_co_what to $_co_ref -- it is STILL at" \
-           "$(git -C "$_co_dir" describe --tags --always 2>/dev/null || echo unknown)."
-      warn "check the network, then re-run this script; nothing was changed."
+      warn "could not check out $_co_ref for $_co_what -- it is STILL at" \
+           "$(git -C "$_co_dir" describe --tags --always 2>/dev/null || echo unknown); nothing was changed."
     fi
     return 0
   fi
@@ -832,6 +922,8 @@ checkout_method() {
        "$SKILL_REPO" "$_co_dir" 2>"$_err"; then
     grep -v 'is not a commit!' "$_err" >&2 || true
     rm -f "$_err"
+    # A fresh copy is checked like an update, and removed when it fails: nothing unverified stays behind.
+    verify_tag "$_co_dir" "$_co_ref" || { rm -rf "$_co_dir"; return 2; }
     return 0
   fi
   cat "$_err" >&2; rm -f "$_err"
@@ -864,11 +956,14 @@ elif [ -d "$SKILL_HOME" ] && [ ! -L "$SKILL_HOME" ]; then
   warn "move it aside and re-run if you want this script to manage it."
 elif [ -d "$SKILL_SRC/.git" ]; then
   say "  already installed — updating to $SKILL_REF"
-  checkout_method "$SKILL_SRC" "$SKILL_REF" "the method"
+  checkout_method "$SKILL_SRC" "$SKILL_REF" "the method" \
+    || { echo "stopped: $SKILL_REF is not a signed release of the method -- see above; the installed one is untouched" >&2; exit 1; }
 else
   say "  into ~/.claude/skills/autosound-tuning"
   if [ "$DRY_RUN" = 0 ]; then mkdir -p "$(dirname "$SKILL_HOME")"; fi
-  checkout_method "$SKILL_SRC" "$SKILL_REF" "the method" || { echo "clone failed — see above" >&2; exit 1; }
+  _co_rc=0; checkout_method "$SKILL_SRC" "$SKILL_REF" "the method" || _co_rc=$?
+  if [ "$_co_rc" = 2 ]; then echo "stopped: $SKILL_REF is not a signed release of the method -- see above" >&2; exit 1; fi
+  if [ "$_co_rc" != 0 ]; then echo "clone failed — see above" >&2; exit 1; fi
   if [ "$DRY_RUN" = 0 ]; then
     rm -f "$SKILL_HOME"
     ln -s "$SKILL_SRC/skills/autosound-tuning" "$SKILL_HOME"
@@ -887,7 +982,7 @@ if [ "$CHANNEL" = "beta" ]; then
   else
     say "  beta channel: $SKILL_BETA_REF in $(pretty "$SKILL_BETA_SRC") -- only an app that asks for beta runs it"
     checkout_method "$SKILL_BETA_SRC" "$SKILL_BETA_REF" "the beta channel's copy" \
-      || warn "the beta channel's copy did not clone -- see above; the terminal's method is not affected"
+      || warn "the beta channel's copy did not clone, or its signature did not check out -- see above; the terminal's method is not affected"
   fi
 fi
 
@@ -923,13 +1018,15 @@ else
   # whose site-packages live under /Library and need root — `--user` writes to ~/Library/Python
   # instead, which that interpreter already has on its path. Inside a venv the reverse holds:
   # `--user` is refused outright. So ask the interpreter which it is.
+  # `--upgrade` (skill #98): without it a machine kept whatever numpy, scipy and matplotlib it got first, while CI
+  # tests the newest -- every updated machine ran on a set nobody had tested.
   PY_BIN="$(command -v python3)"
   say "  into $PY_BIN ($("$PY_BIN" -V 2>&1))"
   if "$PY_BIN" -c 'import sys; sys.exit(0 if sys.prefix != sys.base_prefix else 1)' 2>/dev/null; then
-    run "$PY_BIN" -m pip install --quiet --no-warn-script-location --disable-pip-version-check -r "$REQS" \
+    run "$PY_BIN" -m pip install --quiet --upgrade --no-warn-script-location --disable-pip-version-check -r "$REQS" \
       || warn "install failed — see above"
   else
-    run "$PY_BIN" -m pip install --quiet --user --no-warn-script-location --disable-pip-version-check -r "$REQS" \
+    run "$PY_BIN" -m pip install --quiet --upgrade --user --no-warn-script-location --disable-pip-version-check -r "$REQS" \
       || warn "install failed — see above"
   fi
 fi
@@ -1219,6 +1316,34 @@ if [ "$WANT_GITHUB" = 1 ]; then
       warn "gh did not download. The backup can be set up later; see the last screen."
     fi
     rm -rf "$_tmp"
+  fi
+fi
+
+# ── the tools that were already here: updated on the person's word (skill #97, hub #219) ──
+# Every tool above is installed only when it is missing, so each one kept its first version for good: omp stayed
+# at 17.3.8 with 18.2.4 out (the Arbiter's second Mac, 2026-09-27). The update is the skill's one path, the one TCC
+# calls too -- `upkeep.py tools`: each tool the way it was installed (Homebrew, its own `update`, gh's release).
+# Only what was here before this run: a tool installed a minute ago is already the newest.
+_had_tools=""
+[ "$HAVE_CLAUDE" = 1 ] && _had_tools="$_had_tools claude"
+[ "$HAVE_OMP" = 1 ] && _had_tools="$_had_tools omp"
+[ "$HAVE_AGY" = 1 ] && _had_tools="$_had_tools agy"
+[ "$HAVE_GH" = 1 ] && _had_tools="$_had_tools gh"
+if [ -n "$_had_tools" ]; then
+  step "The tools that were already here:$_had_tools"
+  _upkeep="${SKILL_REAL:-$SKILL_HOME}/scripts/upkeep.py"
+  _only=""
+  for _t in $_had_tools; do _only="$_only --only $_t"; done
+  if [ "$DRY_RUN" = 1 ]; then
+    say "  would ask, then run: python3 $(pretty "$_upkeep") tools$_only"
+  elif ! usable python3 || [ ! -f "$_upkeep" ]; then
+    warn "no python3 or no upkeep.py beside the method -- the tools are left as they are"
+  elif ask "Update them to their newest versions (each the way it was installed)?" y; then
+    # shellcheck disable=SC2086  # _only is a list of flags on purpose
+    python3 "$_upkeep" tools $_only \
+      || warn "not every tool updated -- see above; each one that did not still works as it was"
+  else
+    say "  left as they are; the next run of this script asks again"
   fi
 fi
 

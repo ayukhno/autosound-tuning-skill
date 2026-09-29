@@ -162,6 +162,68 @@ def channel_order_problems(sh):
     return out
 
 
+UPKEEP = ROOT / "skills" / "autosound-tuning" / "scripts" / "upkeep.py"
+
+
+def signing_problems(sh):
+    """Run install.sh's own `verify_tag` against tags made here (skill #99); [] when it answers each right.
+
+    A temp repo gets a signed tag, a tag signed by another key, an unsigned one and one older than signing; the
+    function is cut out of the installer and run with THIS test's key in the constants it reads. Made in a
+    subprocess, not by a session's `git tag`, which the channel guard refuses.
+    """
+    import tempfile
+    m = re.search(r"^verify_tag\(\) \{  # verify_tag <dir> <ref>\n.*?^\}\n", sh, re.M | re.S)
+    if not m:
+        return ["install.sh: no `verify_tag() { ... }` -- the signature check cannot be run"]
+    bash, why = find_bash()
+    if not bash:
+        return [f"{why} -- install.sh's signature check cannot be run, and unrun is not agreed"]
+    tmp = tempfile.mkdtemp(prefix="autosound_sign_")
+    env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t",
+               GIT_COMMITTER_EMAIL="t@t", GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
+    env.pop("AUTOSOUND_SKIP_TAG_VERIFY", None)
+
+    def sh_run(*cmd, cwd=None):
+        r = subprocess.run(list(cmd), cwd=cwd, env=env, capture_output=True, text=True)
+        if r.returncode:
+            raise RuntimeError(f"{' '.join(cmd)}: {r.stderr.strip()[:200]}")
+        return r.stdout
+    try:
+        keys = {}
+        for who in ("author", "stranger"):
+            sh_run("ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", who, "-f", os.path.join(tmp, who))
+            keys[who] = " ".join(Path(tmp, who + ".pub").read_text().split()[:2])
+        repo = os.path.join(tmp, "repo")
+        sh_run("git", "init", "-q", repo)
+        Path(repo, "a").write_text("a\n")
+        sh_run("git", "-C", repo, "add", "a")
+        sh_run("git", "-C", repo, "commit", "-q", "-m", "a")
+        sh_run("git", "-C", repo, "tag", "-a", "v3.0.10", "-m", "before signing")
+        signed = ("git", "-C", repo, "-c", "gpg.format=ssh")
+        sh_run(*signed, "-c", f"user.signingkey={os.path.join(tmp, 'author')}.pub", "tag", "-s", "v3.0.64", "-m", "s")
+        sh_run(*signed, "-c", f"user.signingkey={os.path.join(tmp, 'stranger')}.pub", "tag", "-s", "v3.0.65", "-m", "f")
+        sh_run("git", "-C", repo, "tag", "-a", "v3.0.66", "-m", "unsigned")
+    except (OSError, RuntimeError) as exc:
+        return [f"the signature check's fixtures could not be made ({exc}) -- unrun is not agreed"]
+    cases = (("v3.0.64", "", 0, "signed by the skill's author"), ("v3.0.65", "", 1, "does not check out"),
+             ("v3.0.66", "", 1, "does not check out"), ("v3.0.10", "", 0, "predates signed tags"),
+             ("main", "", 0, "not a release tag"), ("v3.0.66", "1", 0, "NOT checked"))
+    out = []
+    for ref, skip, want_rc, want_text in cases:
+        script = (f'export PATH="/usr/bin:$PATH"\nsay() {{ printf "%s\\n" "$*"; }}\nwarn() {{ printf "! %s\\n" "$*"; }}\n'
+                  f'DRY_RUN=0\nAUTOSOUND_SKIP_TAG_VERIFY="{skip}"\nSKILL_SIGNING_PRINCIPAL=author\n'
+                  f'SKILL_SIGNING_KEY="{keys["author"]}"\nSKILL_SIGNED_FROM=v3.0.64\n' + m.group(0)
+                  + f'verify_tag "{Path(repo).as_posix()}" "{ref}" 2>&1\n')
+        r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True, env=env)
+        said = r.stdout.decode("utf-8", "replace") + r.stderr.decode("utf-8", "replace")
+        if r.returncode != want_rc or want_text not in said:
+            out.append(f"install.sh verify_tag {ref}{' (skip)' if skip else ''}: exit {r.returncode}, want {want_rc} "
+                       f"and {want_text!r} -- said {said.strip()[-160:]!r}")
+    shutil.rmtree(tmp, ignore_errors=True)
+    return out
+
+
 def ps1_stop_problems(ps1):
     """install.ps1 stops only through Stop-Installer; [] when it does.
 
@@ -388,6 +450,36 @@ def main():
         problems.append(f"the pinned uv version differs — install.sh {uv_sh} vs install.ps1 {uv_ps}")
     elif uv_sh:
         checked.append(f"both pin uv at {uv_sh}")
+
+    # 5d. signed tags (skill #99): one trust anchor, spelled the same in both installers and in upkeep.py (the path
+    # TCC calls), and install.sh's check run against real signed, foreign-signed, unsigned and older tags.
+    up = UPKEEP.read_text(encoding="utf-8") if UPKEEP.exists() else ""
+    for what, sh_name, ps_name, py_name in (("signing key", "SKILL_SIGNING_KEY", "SkillSigningKey", "SIGNING_KEY"),
+                                            ("signing principal", "SKILL_SIGNING_PRINCIPAL", "SkillSigningPrincipal",
+                                             "SIGNING_PRINCIPAL"),
+                                            ("first signed tag", "SKILL_SIGNED_FROM", "SkillSignedFrom", "SIGNED_FROM")):
+        v_sh, e1 = one(rf'^{sh_name}="([^"]+)"', sh, sh_name, "install.sh")
+        v_ps, e2 = one(rf'^\${ps_name}\s*=\s*"([^"]+)"', ps1, f"${ps_name}", "install.ps1")
+        v_py, e3 = one(rf'^{py_name} = "([^"]+)"', up, py_name, "upkeep.py")
+        problems.extend(e for e in (e1, e2, e3) if e)
+        if v_sh and v_ps and v_py:
+            if len({v_sh, v_ps, v_py}) != 1:
+                problems.append(f"the {what} differs -- install.sh {v_sh!r}, install.ps1 {v_ps!r}, upkeep.py {v_py!r}")
+            else:
+                checked.append(f"the {what} agrees in both installers and upkeep.py ({v_sh[:24]}…)")
+    p_sh, p_ps = checkout_paths(sh, ps1, "LOCAL_CHANGES", "LocalChanges", problems)
+    if p_sh and p_ps:
+        if p_sh != p_ps or f'"{p_sh.split("/")[-1]}"' not in up:
+            problems.append(f"where local changes are kept differs -- install.sh {p_sh!r}, install.ps1 {p_ps!r}")
+        else:
+            checked.append(f"local changes are kept in the same place (~/{p_sh})")
+    sig = signing_problems(sh)
+    problems.extend(sig)
+    if not sig:
+        checked.append("install.sh's verify_tag passes a signed tag, refuses a foreign-signed and an unsigned one, "
+                       "lets an older tag and a branch through, and says when the switch skips it")
+    if "Test-TagSignature" not in ps1 or "gpg.ssh.allowedSignersFile" not in ps1:
+        problems.append("install.ps1: no Test-TagSignature with gpg.ssh.allowedSignersFile -- the Windows half of #99")
 
     # 5c. Phase 1's desk engine (TODO S-020, the user's decision 2026-09-18). Three things have to
     # be the same decision in all three files, or a Mac and a PC do not end up with the same

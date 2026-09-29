@@ -77,9 +77,10 @@ jobs:
 
       # dsp_math and eq_gate import scipy by name, and since v3.0.12 the dsp_math selftest DESIGNS
       # crossovers, which needs it. This is the step whose absence turned a consumer's suite red on
-      # that upgrade -- it is stated here rather than assumed.
+      # that upgrade -- it is stated here rather than assumed. matplotlib too (skill #98): the installers now
+      # upgrade all three on every run, so the plotting tool is tested on the version users get.
       - name: install dependencies
-        run: python -m pip install --upgrade pip numpy scipy
+        run: python -m pip install --upgrade pip numpy scipy matplotlib
 
       - name: selftests and installer consistency
         run: scripts/run-selftests.sh

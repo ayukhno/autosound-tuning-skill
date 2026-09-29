@@ -137,6 +137,13 @@ $SkillTagGlob = "v3.*"
 # glob. The different first letter keeps a candidate out of $SkillTagGlob, so the stable channel --
 # the default, and TCC's updater -- never sees one. Same value as SKILL_BETA_GLOB in install.sh.
 $SkillBetaGlob = "beta-v3.*"
+# Release tags are signed by the method's author (skill #99, hub #82 HUB-031) -- see install.sh for why the key is
+# here and not read from the tag. Same values as install.sh and scripts/upkeep.py (installer-consistency.py).
+$SkillSigningPrincipal = "ayukhno"
+$SkillSigningKey       = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHLm4x1yz9JbFfBlxdQA8vR8yYMupVktswes3CL7QE1y"
+$SkillSignedFrom       = "v3.0.64"
+# Where a local change to the installed clone is kept before the update resets it (skill #91). Same as install.sh.
+$LocalChanges = Join-Path $HOME ".claude\skills\autosound-local-changes"
 # The app's supported line -- `v*`, not `v3.*`: the app versions independently of the method.
 $TccTagGlob   = "v*"
 # ...and the app's candidates, the same way.
@@ -832,6 +839,80 @@ if (Test-Path $Py3) {
 # when there is none. ONE function for both copies -- the terminal's and the beta channel's
 # (autosound-hub #145) -- the mirror of checkout_method in install.sh. $true unless a clone failed;
 # a failed MOVE is warned about and leaves the copy where it was.
+# Is $Ref, fetched into $Dir, a signed release of this skill (skill #99)? $true -- or it predates signing, or it is
+# a branch named with -SkillRef, or AUTOSOUND_SKIP_TAG_VERIFY=1, each said on a line; $false -- nothing may be
+# installed from it. The mirror of verify_tag in install.sh.
+function Test-TagSignature {
+    param([string]$Dir, [string]$Ref)
+    if ($DryRun) { Say "would check the signature of $Ref"; return $true }
+    if ($env:AUTOSOUND_SKIP_TAG_VERIFY -eq "1") {
+        Warn "the signature of $Ref is NOT checked: AUTOSOUND_SKIP_TAG_VERIFY=1 is set (a developer's switch)"
+        return $true
+    }
+    $ver = ($Ref -replace '^beta-', '') -replace '-rc.*$', ''
+    if ($ver -notmatch '^v\d+\.\d+\.\d+$') { Say "$Ref is not a release tag -- no signature to check"; return $true }
+    if ([version]($ver -replace '^v', '') -lt [version]($SkillSignedFrom -replace '^v', '')) {
+        Say "$Ref predates signed tags (they start at $SkillSignedFrom) -- installed without a signature check"
+        return $true
+    }
+    $signers = [System.IO.Path]::GetTempFileName()
+    [System.IO.File]::WriteAllText($signers, "$SkillSigningPrincipal namespaces=`"git`" $SkillSigningKey`n")
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "SilentlyContinue"
+    $global:LASTEXITCODE = 0
+    $out = @(& git -C $Dir -c gpg.format=ssh -c "gpg.ssh.allowedSignersFile=$signers" verify-tag $Ref 2>&1)
+    $rc = $LASTEXITCODE
+    $ErrorActionPreference = $prev
+    Remove-Item $signers -Force -ErrorAction SilentlyContinue
+    $said = ($out | ForEach-Object { "$_" }) -join "`n"
+    if ($rc -eq 0 -and $said -match 'Good') { Say "OK   $Ref is signed by the skill's author"; return $true }
+    Warn "the signature of $Ref does not check out -- it is not installed:"
+    $out | Select-Object -Last 2 | ForEach-Object { Write-Host "      $_" }
+    if ($said -match 'gpg\.format|unknown option|-Y') {
+        Warn "this git ($(& git --version 2>$null)) may be too old to check one: 2.34 or newer is needed"
+    }
+    Warn "a release of this skill is signed by its author; this one is not, or not by that key."
+    return $false
+}
+
+# The installed clone has changes somebody made by hand (skill #91; the Windows VM, 2026-09-27). Kept as a patch by
+# the NEW tag's upkeep.py, sent to the skill only on the person's word, then the clone is reset -- see keep_local in
+# install.sh. $true = kept and reset, $false = left as it was.
+function Save-LocalChanges {
+    param([string]$Dir, [string]$What)
+    Warn "$What has local changes -- somebody edited the installed copy:"
+    & git -C $Dir status --porcelain --untracked-files=all 2>$null | ForEach-Object { Write-Host "      $($_.Substring(3))" }
+    if ($DryRun) { Say "would keep them as a patch in $(Pretty $LocalChanges), then reset"; return $true }
+    # `git archive`, not `git show`: PowerShell 5 decodes a native program's output with the console's code page,
+    # so the files would arrive with every non-ASCII character changed. A zip carries the bytes as they are.
+    $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("autosound-upkeep-" + [guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+    $zip = Join-Path $tmp "upkeep.zip"
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "SilentlyContinue"
+    & git -C $Dir archive --format=zip -o $zip FETCH_HEAD skills/autosound-tuning/scripts/upkeep.py `
+        skills/autosound-tuning/rew_tool/gates/side_effect.py skills/autosound-tuning/rew_tool/console.py 2>&1 | Out-Null
+    $ErrorActionPreference = $prev
+    if (Test-Path $zip) { Expand-Archive -Path $zip -DestinationPath $tmp -Force }
+    $tool = Join-Path $tmp "skills\autosound-tuning\scripts\upkeep.py"
+    if (-not (Test-Path $Py3) -or -not (Test-Path $tool)) {
+        Warn "they cannot be kept automatically here (no python3, or the new version has no upkeep.py)."
+        Warn "keep them yourself (git -C $(Pretty $Dir) stash), then run this again; nothing was changed."
+        Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+        return $false
+    }
+    Say "they are kept as a patch in $(Pretty $LocalChanges) before the update -- nothing is lost."
+    Say "Sent to the skill as an issue, the patch tells its author what had to be fixed by hand."
+    $send = @()
+    if (Offer "Enter = send it / s = keep it only here") { $send = @("--send") }
+    $global:LASTEXITCODE = 0
+    & $Py3 $tool --clone $Dir keep-local @send
+    $kept = ($LASTEXITCODE -eq 0)
+    Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+    if (-not $kept) { Warn "the changes were not kept, so nothing was reset or updated -- see above." }
+    return $kept
+}
+
+# $script:SignatureRefused tells the caller that a copy was refused for its signature, not for the network.
+$script:SignatureRefused = $false
 function Sync-MethodCheckout {
     param([string]$Dir, [string]$Ref, [string]$What)
     if (Test-Path (Join-Path $Dir ".git")) {
@@ -845,12 +926,22 @@ function Sync-MethodCheckout {
         # checkout_method in install.sh. `${Ref}`, braced: "$Ref:refs" would read as a scoped variable.
         $spec     = if ($Ref -match '^(beta-)?v\d') { "+refs/tags/${Ref}:refs/tags/${Ref}" } else { $Ref }
         $fetched  = Run { & git -C $Dir fetch --quiet --depth 1 origin $spec } "git fetch $Ref"
-        $checked  = $fetched -and (Run { & git -c advice.detachedHead=false -C $Dir checkout --quiet FETCH_HEAD } "git checkout FETCH_HEAD")
+        if (-not $fetched) {
+            Warn "could not fetch $Ref for $What -- it is STILL at $(& git -C $Dir describe --tags --always 2>$null)."
+            Warn "check the network, then run this script again; nothing was changed."
+            return $true
+        }
+        # What was fetched is checked before anything of it runs or is checked out (skill #99), and local
+        # changes are kept as a patch rather than refused with the wrong reason (skill #91).
+        if (-not (Test-TagSignature $Dir $Ref)) { $script:SignatureRefused = $true; return $false }
+        if (@(& git -C $Dir status --porcelain --untracked-files=all 2>$null).Count -gt 0) {
+            if (-not (Save-LocalChanges $Dir $What)) { return $true }
+        }
+        $checked  = Run { & git -c advice.detachedHead=false -C $Dir checkout --quiet FETCH_HEAD } "git checkout FETCH_HEAD"
         if (-not $DryRun) {
             $at = (& git -C $Dir describe --tags --always 2>$null)
             if (-not $checked) {
-                Warn "could not update $What to $Ref -- it is STILL at $at."
-                Warn "check the network, then run this script again; nothing was changed."
+                Warn "could not check out $Ref for $What -- it is STILL at $at; nothing was changed."
             } elseif ((& git -C $Dir rev-parse HEAD 2>$null) -ne (& git -C $Dir rev-parse 'FETCH_HEAD^{commit}' 2>$null)) {
                 # What it was supposed to PRODUCE, not just that it exited 0 -- against the COMMIT:
                 # for an annotated tag FETCH_HEAD is the tag object (install.sh, 2026-09-14).
@@ -869,7 +960,14 @@ function Sync-MethodCheckout {
     $gitOut = @(& git -c advice.detachedHead=false clone --quiet --branch $Ref --depth 1 $SkillRepo $Dir 2>&1)
     $ErrorActionPreference = $prev
     $gitOut | ForEach-Object { "$_" } | Where-Object { $_ -and ($_ -notmatch 'is not a commit!') } | ForEach-Object { Write-Host "  $_" }
-    return (Test-Path (Join-Path $Dir "skills\autosound-tuning"))
+    if (-not (Test-Path (Join-Path $Dir "skills\autosound-tuning"))) { return $false }
+    # A fresh copy is checked like an update, and removed when it fails: nothing unverified stays behind.
+    if (-not (Test-TagSignature $Dir $Ref)) {
+        $script:SignatureRefused = $true
+        Remove-Item $Dir -Recurse -Force -ErrorAction SilentlyContinue
+        return $false
+    }
+    return $true
 }
 
 Step "The tuning method"
@@ -905,6 +1003,10 @@ if ((-not $linkExists) -or $isOurs) {
     if (Test-Path (Join-Path $SkillSrc ".git")) {
         Say "already installed -- updating to $SkillRef"
         Sync-MethodCheckout $SkillSrc $SkillRef "the method" | Out-Null
+        if ($script:SignatureRefused) {
+            Warn "stopped: $SkillRef is not a signed release of the method -- see above; the installed one is untouched"
+            Stop-Installer 1; return
+        }
     } else {
         Say "into ~\.claude\skills\autosound-tuning"
         if (-not $DryRun) { New-Item -ItemType Directory -Force -Path (Split-Path $SkillHome) | Out-Null }
@@ -917,6 +1019,9 @@ if ((-not $linkExists) -or $isOurs) {
             # A JUNCTION, not a symlink: junctions work for directories without Developer Mode
             # or an elevated prompt, which symlinks on Windows still require (INSTALLER-TZ section 3).
             New-Item -ItemType Junction -Path $SkillHome -Target (Join-Path $SkillSrc "skills\autosound-tuning") | Out-Null
+        } elseif ($script:SignatureRefused) {
+            Warn "stopped: $SkillRef is not a signed release of the method -- see above"
+            Stop-Installer 1; return
         } elseif (-not $cloned) {
             Warn "clone failed -- is the network up? Nothing below can use the method until it is here."
         }
@@ -939,7 +1044,7 @@ if ($Channel -eq "beta") {
     } else {
         Say "beta channel: $betaRef in $(Pretty $SkillBetaSrc) -- only an app that asks for beta runs it"
         if (-not (Sync-MethodCheckout $SkillBetaSrc $betaRef "the beta channel's copy")) {
-            Warn "the beta channel's copy did not clone -- see above; the terminal's method is not affected"
+            Warn "the beta channel's copy did not clone, or its signature did not check out -- see above; the terminal's method is not affected"
         }
     }
 }
@@ -964,7 +1069,8 @@ if ($DryRun -and -not (Test-Path $reqs)) {
     # was written; this side did not, so a machine that could not reach PyPI finished the install
     # looking successful and only said so much later, as a selftest failing on `import numpy`
     # with nothing pointing back here (HUB-042).
-    $pipOk = Run { & $Py3 -m pip install --quiet --user --break-system-packages --no-warn-script-location --disable-pip-version-check -r $reqs } "python3 -m pip install --user -r requirements.txt"
+    # `--upgrade` (skill #98): without it a machine kept the libraries it got first while CI tests the newest.
+    $pipOk = Run { & $Py3 -m pip install --quiet --upgrade --user --break-system-packages --no-warn-script-location --disable-pip-version-check -r $reqs } "python3 -m pip install --upgrade --user -r requirements.txt"
     if (-not $DryRun) {
         $haveDeps = Test-Quiet { & $Py3 -c "import numpy, scipy" }
         if (-not $haveDeps) {
@@ -1278,6 +1384,27 @@ if ($WantGitHub -eq "1") {
             Warn "gh did not download. The backup can be set up later; see the last screen."
         }
     }
+}
+
+# -- the tools that were already here: updated on the person's word (skill #97, hub #219) ------------
+# See install.sh: each tool is installed only when missing, so each kept its first version; the update is the skill's
+# one path (upkeep.py tools), each tool the way it was installed. Only what was here before this run.
+$hadTools = @()
+if ($HaveClaude) { $hadTools += "claude" }
+if ($HaveOmp)    { $hadTools += "omp" }
+if ($HaveAgy)    { $hadTools += "agy" }
+if ($HaveGh)     { $hadTools += "gh" }
+if ($hadTools.Count -gt 0) {
+    Step "The tools that were already here: $($hadTools -join ', ')"
+    $upkeep = Join-Path $SkillHome "scripts\upkeep.py"
+    $only = @(); foreach ($t in $hadTools) { $only += @("--only", $t) }
+    if ($DryRun) { Say "would ask, then run: python3 $(Pretty $upkeep) tools $($only -join ' ')" }
+    elseif (-not (Test-Path $Py3) -or -not (Test-Path $upkeep)) { Warn "no python3 or no upkeep.py beside the method -- the tools are left as they are" }
+    elseif (Ask "Update them to their newest versions (each the way it was installed)?" "y") {
+        $global:LASTEXITCODE = 0
+        & $Py3 $upkeep tools @only
+        if ($LASTEXITCODE -ne 0) { Warn "not every tool updated -- see above; each one that did not still works as it was" }
+    } else { Say "left as they are; the next run of this script asks again" }
 }
 
 # =============================================================================================
