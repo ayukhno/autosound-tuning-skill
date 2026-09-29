@@ -82,7 +82,10 @@ last screen. #95's options table carries the flags, with one full two-option exa
 the cells would be as wide as the line GitHub cut. #90's FAQ line was dropped: the red wrapper appears only for a
 person piping the script by hand in PowerShell 5, and the CHANGELOG says what it is.
 
-**Waiting on the Arbiter:** his signing key in git's config on this Mac; runs of the installers on the Windows VM
+**Released 2026-09-29:** `v3.0.64`, signed, on `6d6a987` (promotes `beta-v3.0.64-rc2`; rc1 was refused on the VM by
+a PowerShell 5.1 stderr bug in the check itself, fixed in `acd86f1`). The 13 issues and the milestone are closed.
+
+**Was waiting on the Arbiter:** his signing key in git's config on this Mac; runs of the installers on the Windows VM
 and the Mac (#90, #96, #99, #91's installer path) before the tag.
 
 ## Order

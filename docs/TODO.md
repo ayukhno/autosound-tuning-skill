@@ -1618,9 +1618,24 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
-## S-074 · W-4 built and merged; signed candidate `beta-v3.0.64-rc1` waits for the Arbiter's runs on the VM and the Mac
+## S-075 · The skill updated from TCC to v3.0.64, checked on the VM
 
-**Status**: open 2026-09-29 · PR #100 green, merged `--ff-only` (`main` = `32b2d7c`); `beta-v3.0.64-rc1` signed and pushed (a fresh clone verifies against the pinned key)
+**Status**: open 2026-09-29 · waiting on the Arbiter pressing «Оновити Скіл» in TCC on the VM
+
+The Arbiter (2026-09-29): «скіл оновлюється з ТСС і я не бачу терміналу який це робить. треба там теж перевірити».
+TCC v0.1.44 moves the clone itself (bare `git fetch` + checkout; no signature check, no local-change handling, no
+tools or libraries; that is tcc's work in hub #221, #217, #219), and it sees release tags only, so this could be
+checked only after `v3.0.64`. After the button, on the VM, one line:
+`python3 $HOME\.claude\skills\autosound-tuning\scripts\upkeep.py status` -- the file exists only on v3.0.64; its
+`skill:` line has to name commit `6d6a987` (a bare sha is expected: TCC stores no tag, skill #92 / hub #221).
+
+## S-074 · W-4 · v3.0.64: released
+
+**Status**: done 2026-09-29 · `v3.0.64` signed and pushed on `6d6a987` (promotes `beta-v3.0.64-rc2`); 13 issues and the milestone closed; hub #82 #213 #219 closed · was: open 2026-09-29 · PR #100 green, merged `--ff-only` (`main` = `32b2d7c`); `beta-v3.0.64-rc1` signed and pushed (a fresh clone verifies against the pinned key)
+
+rc1 was refused on the VM although its signature was good: PowerShell 5.1 dropped git's stderr under
+`SilentlyContinue` (`acd86f1`, and `installer-consistency.py` now fails on it). rc2 verified on the VM and two Macs;
+on the Mac the tools step updated claude, omp and gh the way each was installed.
 
 All 13 W-4 issues built (`docs/PLAN-W-4.md`, "Built"). Git on this Mac now signs with `~/.ssh/id_ed25519` (the Arbiter's
 OK, 2026-09-29). Waiting on his runs of the candidate, which exercise #99 (a real signature), #91 (a clone with a local
