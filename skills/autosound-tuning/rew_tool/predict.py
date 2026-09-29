@@ -73,6 +73,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import dsp_math  # noqa: E402
 import phase_rotation  # noqa: E402
+import verdict as verdict_block  # noqa: E402
 import windows as _windows  # noqa: E402
 
 PPO_DEFAULT = 96
@@ -1447,10 +1448,74 @@ def align_joints(freqs, solos, chains, joints=None, *, step_ms=0.01, max_delay_m
             "unverified": unverified, "notes": notes}
 
 
+# ---------------------------------------------------------------- the verdict blocks (skill #70)
+def _count(n, word):
+    return f"{n} {word}{'' if n == 1 else 's'}" if n else f"no {word}"
+
+
+def _finite(x):
+    return x is not None and math.isfinite(float(x))
+
+
+def alignment_verdict_lines(result):
+    """The block on top of `--align`'s output (skill #70): what the proposal changes, the numbers, the next step.
+
+    Unlike the prediction this IS a proposal -- `align_joints` searches and says so -- so the verdict is what it
+    changes, and the next step is the Arbiter's OK (В8: nothing into the DSP or the ledger without it), or first
+    the measurement a NOT BANKABLE junction needs (hub RES-013/016), or the ceiling that makes it not enterable.
+    """
+    steps = result.get("steps") or []
+    changes = (result.get("delta") or {}).get("channels") or {}
+    held = result.get("unverified") or []
+    ceiling = [w for w in result.get("warnings") or [] if "delay ceiling" in w]
+
+    def name(st):
+        return f"{st['lo']}↔{st['hi']}" if st["kind"] == "junction" else f"{st['lo']}+{st['hi']} pair"
+
+    def band(st):
+        return f"{st['band'][0]:.0f}-{st['band'][1]:.0f} Hz"
+
+    where = (_count(sum(1 for st in steps if st["kind"] == "junction"), "junction")
+             + (" and the sub pair" if any(st["kind"] == "pair" for st in steps) else ""))
+    if not steps:
+        head = "NO PROPOSAL -- no junction to align: no crossover joins these rows"
+    elif not changes:
+        head = f"NOTHING TO CHANGE -- {where} read aligned as recorded"
+    else:
+        head = f"PROPOSAL -- delay/polarity on {_count(len(changes), 'channel')} over {where}"
+        if held:
+            head += f"; {len(held)} NOT BANKABLE until measured ({', '.join(u['channel'] for u in held)})"
+        if ceiling:
+            head += f"; {_count(len(ceiling), 'delay')} over the DSP's ceiling"
+    numbers, big = [], None
+    scored = [st for st in steps if _finite(st["before"]["score_db"]) and _finite(st["after"]["score_db"])]
+    if scored and changes:
+        big = max(scored, key=lambda st: st["after"]["score_db"] - st["before"]["score_db"])
+        numbers.append(f"sum-loss score {big['before']['score_db']:+.2f} → {big['after']['score_db']:+.2f} dB at "
+                       f"{name(big)}, {band(big)}, the largest change (before → after the proposal, predicted)")
+    if scored:
+        low = min(scored, key=lambda st: st["after"]["score_db"])
+        if low is not big:
+            numbers.append(f"lowest {'after it' if changes else 'as recorded'}: sum-loss score "
+                           f"{low['after']['score_db']:+.2f} dB at {name(low)}, {band(low)} (predicted)")
+    if held:
+        pairs = [u["joint"].replace("<->", "+") for u in held]
+        step = (("measure the tuned pair " if len(pairs) == 1 else f"measure these {len(pairs)} tuned pairs ")
+                + ", ".join(pairs) + " before banking: the arrival picks the candidate")
+    elif ceiling:
+        step = "not enterable as is: a delay over the DSP's ceiling (WARNING below)"
+    elif changes:
+        step = "the Arbiter's call; with the OK, `apply.propose` banks aligned-delta.json and writes the sheet to enter"
+    else:
+        step = "nothing to enter at the junctions"
+    return verdict_block.block(head, numbers, step)
+
+
 def render_alignment(result, original=None, rate_hz=None):
-    lines = [f"  Align by sum loss, bottom-up  (grid {result['step_ms']:.4f} ms"
-             + (f" = 1 sample @ {rate_hz:g} Hz" if rate_hz else "")
-             + f"; search +/-{result['max_delay_ms']:g} ms; delay on the UPPER member)", ""]
+    lines = alignment_verdict_lines(result) + [""]
+    lines += [f"  Align by sum loss, bottom-up  (grid {result['step_ms']:.4f} ms"
+              + (f" = 1 sample @ {rate_hz:g} Hz" if rate_hz else "")
+              + f"; search +/-{result['max_delay_ms']:g} ms; delay on the UPPER member)", ""]
     lines.append(f"  {'step':16}{'fc':>6}{'before avg/dip':>17}{'delay':>9}{'pol':>5}"
                  f"{'after avg/dip':>17}{'margin':>8}")
     lines.append("  " + "-" * 78)
@@ -1782,9 +1847,81 @@ def compact_notes(notes, verbose=False, limit=NOTES_SHOWN):
     return lines[:limit] + [f"(+{len(lines) - limit} more -- --verbose, and all of them are in --out's JSON)"]
 
 
+def verdict_lines(result):
+    """The five-line block on top of the table (skill #70): what the prediction found, the numbers, the next step.
+
+    A READING, never a proposal (`rew-tool-docs.md`: ordering by the metric is a proposal and the desk does not
+    propose). So the verdict names what is there -- how many junctions, the one the tool's own ruler reads worst
+    (the sum-loss score, `avg + 0.5 (dip - avg)`, `dsp_math.sum_loss`), how many crossover pairs swing over the
+    Blauert & Laws threshold -- and never what to change, which stays the tuner's. Pairs (`SWs`, `c+FRONT`) are
+    counted but ranked only when there is no junction: no crossover joins their members, and `c+FRONT` carries
+    ALL+C's condition. The next step is the method's: a state with no delay on any row has not been through
+    Phase 1.5 yet (`--align`); otherwise a prediction is believed only after `verify_prediction` has the
+    measured pairs, their solos and ALL taken under it (the module docstring: "It PREDICTS and stops").
+    """
+    junctions = result.get("junctions") or []
+    pairs = result.get("pairs") or []
+    chains = {c: ch for c, ch in (result.get("chains") or {}).items() if not ch.get("group_of")}
+
+    def name(row):
+        return row.get("pair") or f"{row['lo']}↔{row['hi']}"
+
+    ranked = [r for r in (junctions or pairs) if _finite(r.get("sum_loss_score_db"))]
+    worst = min(ranked, key=lambda r: r["sum_loss_score_db"]) if ranked else None
+    gd_rows = [j for j in junctions if _finite(j.get("gd_swing_ms")) and _finite(j.get("gd_threshold_ms"))]
+    over = [j for j in gd_rows if j.get("gd_over_ms")]
+    if not junctions and not pairs:
+        head = f"PREDICTED -- {_count(len(chains), 'channel')}, no junction" + (" between them" if len(chains) > 1 else "")
+    else:
+        head = f"PREDICTED -- {_count(len(junctions), 'junction')}" + (f" and {_count(len(pairs), 'pair')}"
+                                                                       if pairs else "")
+        if worst is not None and len(ranked) > 1:
+            head += f"; {name(worst)} reads worst by sum-loss score"
+        if gd_rows:
+            head += f"; {len(over) or 'none'} over the group-delay threshold"
+
+    numbers = []
+    if worst is not None:
+        dip_at = f" @ {worst['sum_loss_dip_hz']:.0f} Hz" if _finite(worst.get("sum_loss_dip_hz")) else ""
+        numbers.append(f"sum-loss score {worst['sum_loss_score_db']:+.2f} dB at {name(worst)}, "
+                       f"{worst['band'][0]:.0f}-{worst['band'][1]:.0f} Hz (avg {worst['sum_loss_avg_db']:+.2f}, "
+                       f"dip {worst['sum_loss_dip_db']:+.1f} dB{dip_at}; predicted, "
+                       f"{worst.get('window') or _windows.STEADY} window)")
+    if gd_rows:
+        # Over the threshold: the junction furthest over it. None over: the one closest to it -- the
+        # threshold moves with the frequency, so the widest swing is not necessarily the nearest miss.
+        top = max(gd_rows, key=lambda j: j["gd_swing_ms"] - j["gd_threshold_ms"])
+        numbers.append(f"group-delay swing {top['gd_swing_ms']:.1f} ms at {name(top)} vs the "
+                       f"{top['gd_threshold_ms']:.1f} ms Blauert & Laws threshold ("
+                       + ("500 Hz clamp; " if top.get("gd_clamped") else "")
+                       + "crossover pair alone, predicted)")
+    # L-R only when both sides have a channel of their own: against an empty side the difference is the
+    # 1e-12 floor of `_db` (+240 dB), not a reading -- a sub alone is in both sides and says nothing either.
+    sides = result.get("sides") or {}
+    sided = all(any(_side_of(c) == s for c in (sides.get(s) or {}).get("members", ())) for s in ("L", "R"))
+    lr = [b for b in result.get("lr_delta") or [] if _finite(b.get("delta_db"))] if sided else []
+    if lr:
+        b = max(lr, key=lambda x: abs(x["delta_db"]))
+        numbers.append(f"L−R level difference {b['delta_db']:+.1f} dB at {b['band'][0]:.0f}-{b['band'][1]:.0f} Hz, "
+                       f"the largest per band (predicted side sums, + = left louder)")
+
+    delays = [float(ch.get("ta_ms") or 0.0) for ch in chains.values()]
+    if not junctions:
+        step = "no junction to verify: no crossover joins these rows (`--joint lo,hi,fc` names one)"
+    elif not result.get("aligned") and not any(abs(d) > 1e-9 for d in delays):
+        step = "no delay on any row, so the junctions are not aligned yet: `--align` proposes them (Phase 1.5)"
+    else:
+        members = {c for j in junctions for c in (j["lo"], j["hi"])}
+        n = len(junctions) + len(members) + 1
+        step = (f"measure these {n} under this state from the tripod ({_count(len(junctions), 'pair')}, "
+                f"{_count(len(members), 'solo')}, ALL), then verify_prediction.py")
+    return verdict_block.block(head, numbers, step)
+
+
 def render(result, verbose=False):
-    lines = ["  Prediction: solos x ledger chains -> what the mic would hear"
-             + (f"   (junctions read {result['window']})" if result.get("window") else ""), ""]
+    lines = verdict_lines(result) + [""]
+    lines += ["  Prediction: solos x ledger chains -> what the mic would hear"
+              + (f"   (junctions read {result['window']})" if result.get("window") else ""), ""]
     for c, chain in result["chains"].items():
         lines.append(f"  {c:6} {chain_label(chain)}")
     lines.append("")
@@ -2187,6 +2324,9 @@ def main(argv=None):
     result = predict(f, solos, chains, joints=joints, band_oct=args.band_oct,
                      solos_gate=solos_gate, gate_spec=gate_kw, gate_anchors=gate_anchors)
     result["knobs"] = knobs
+    # For the verdict block only (to_json does not carry it): an aligned state that came out with no delay on
+    # any row has been through Phase 1.5, and must not be sent back to `--align` (skill #70).
+    result["aligned"] = alignment is not None
     result["notes"].insert(0, f"state: {state_label}")
     if knobs and knobs.get("knobs"):
         result["notes"].insert(1, "hardware controls at this series (round "
@@ -2514,6 +2654,24 @@ def _selftest():
     js = to_json(r3, decimate=4)
     assert set(js["sides"]) == {"L", "R"} and len(js["junctions"]) == 4 and js["not_modelled"]
     assert "w-L↔m-L" in render(r3)
+    # 6a. skill #70: the output OPENS with the verdict block -- a reading, not a proposal: how many junctions, the
+    #     one the sum-loss score reads worst, the group-delay count; each number with its quantity and source; the
+    #     method's next step. The JSON does not carry it: TCC reads that shape.
+    txt3 = render(r3)
+    head3, *rest3 = txt3.splitlines()
+    worst3 = min(r3["junctions"], key=lambda jj: jj["sum_loss_score_db"])
+    assert verdict_block.is_block(txt3), txt3[:500]
+    assert head3.lstrip().startswith("▶ PREDICTED -- 4 junctions and 1 pair") and \
+        f"{worst3['lo']}↔{worst3['hi']} reads worst by sum-loss score" in head3, head3
+    assert rest3[0].lstrip().startswith("· sum-loss score") and "predicted, steady window" in rest3[0], rest3[0]
+    assert "Blauert & Laws" in rest3[1] and "L−R level difference" in rest3[2], rest3[:3]
+    assert "measure these 10" in rest3[3] and "verify_prediction" in rest3[3], rest3[3]   # 4 pairs, 5 solos, ALL
+    # ...no delay on any row: the junctions were never aligned, so the next step is --align -- unless this run
+    # aligned them and they came out at zero; a lone channel has no junction to rank and no L-R to read.
+    assert "`--align`" in verdict_lines(r2)[-1], verdict_lines(r2)
+    assert "measure these 4" in verdict_lines(dict(r2, aligned=True))[-1]
+    assert verdict_lines(r_cap)[0] == "  ▶ PREDICTED -- 1 channel, no junction" and len(verdict_lines(r_cap)) == 2
+    assert "aligned" not in to_json(dict(r3, aligned=True))
     # 6b. The virtual tier applies through a ROUTING fact, never by name: a VFL with a -6 dB PK at
     #     1 kHz routed to w-L puts -6 dB at 1 kHz on w-L's chain, nothing on w-R, and the label says
     #     where it came from; a virtual code the ledger lacks is refused.
@@ -2724,6 +2882,10 @@ def _selftest():
     assert w_cut["cut_read"] and abs(w_cut["apart_cycles"] - 1.0) < 0.05 and "apart" in w_cut["trigger"], w_cut
     txt_i = render_alignment(r7i, original=ch_i, rate_hz=fs)
     assert "UNVERIFIED" in txt_i and "not bankable" in txt_i and "RES-016" in txt_i, txt_i
+    # skill #70: the proposal's block names the junction that is not bankable, and its next step is the measurement
+    assert verdict_block.is_block(txt_i) and "NOT BANKABLE until measured (tw-L)" in txt_i.splitlines()[0], txt_i[:400]
+    assert alignment_verdict_lines(r7i)[-1].lstrip() == \
+        "→ measure the tuned pair m-L+tw-L before banking: the arrival picks the candidate", alignment_verdict_lines(r7i)
 
     # (k) hub RES-016 -- the BMW shape RES-013's trigger could not see: the score's best and the
     #     full-record witness AGREE (both a lie the cabin told), and only the 2-cycle cut disagrees.
@@ -2781,6 +2943,8 @@ def _selftest():
     assert not r7j["unverified"] and not any("BANKABLE" in w for w in r7j["warnings"]), r7j["warnings"]
     txt = render_alignment(r7d, original=ch3, rate_hz=fs)
     assert "proposal" in txt and "w-L" in txt and "smp" in txt, txt
+    assert verdict_block.is_block(txt) and txt.lstrip().startswith("▶ PROPOSAL -- delay/polarity on"), txt[:400]
+    assert "the Arbiter's call" in alignment_verdict_lines(r7d)[-1], alignment_verdict_lines(r7d)
 
     # ── RES-006: the two windows, the state de-embed, delta and ladder ────────────────────────
     # A synthetic capture with a REFLECTION: one driver, its own arrival, and a boundary 3 ms
@@ -2957,7 +3121,10 @@ def _selftest():
           "number, FDW holds where a fixed gate cannot, a state divided out and multiplied back "
           "cancels exactly on an unchanged row and is H x C_b/C_a on a changed one (absent below the "
           "floor, band named), delta reports only what differs, the ladder keeps the order it was "
-          "asked in, and a gated arrival recovers a pure 0.26 ms delay through the rows' own band.")
+          "asked in, and a gated arrival recovers a pure 0.26 ms delay through the rows' own band; "
+          "skill #70: the table and the alignment each open with a verdict block of five lines at most -- "
+          "the junction the sum-loss score reads worst, `--align` first when no row has a delay, the "
+          "not-bankable pair measured before anything is banked.")
     return 0
 
 

@@ -62,6 +62,7 @@ if _HERE not in sys.path:
 import dsp_profile as _dp  # noqa: E402
 import naming  # noqa: E402
 import project as _pj  # noqa: E402
+import verdict as _vd  # noqa: E402
 import xover_wishes as _xw  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))))
@@ -1545,8 +1546,117 @@ def _junction_short(candidate):
     return _edge_short(lp or hp) if (lp == hp or not lp or not hp) else f"{_edge_short(lp)} | {_edge_short(hp)}"
 
 
+def _count(n, word):
+    return f"{n} {word}" + ("" if n == 1 else "S" if word.isupper() else "s")
+
+
+def run_verdict(v):
+    """The five lines on top of `run` (skill #70): the verdict, the numbers it rests on, the next step.
+
+    Three verdicts, one per way a run ends -- and the exit code says the same thing in a number:
+      * NO PROPOSAL (exit 1): the layout or the engine stopped the run; the first problem is the reason;
+      * DELAYS REFUSED (exit 3): the crossovers came back, but Auto delay does not fit the device, so nothing
+        after it (the repairs, the wishes, the variants) was computed; the way out is the rear fill that fits, or
+        the device's range when the fill is not what is too long;
+      * PROPOSED (exit 0): the engine's best inside this car's limits, with the edges still to settle counted.
+    The next step offers; the tuner decides, and a DSP change reaches him only as a yellow version."""
+    problems = v.get("problems") or []
+    if problems:
+        engine = v.get("rc_crossover") is not None        # the layout held and the engine was called
+        numbers = ([f"{len(problems)} problems in all, each a ✗ line below ("
+                    + ("the engine's runs" if engine else "the layout built from the project and the set, before "
+                       "the engine ran") + ")"] if len(problems) > 1 else [])
+        step = ("`resonalyze_engine.py check` says whether the engine works here; without one, Phase 1 goes the "
+                "per-driver way (xover_candidates, then xover_select)" if engine
+                else "fix what the ✗ lines name in the project or the set, then run again")
+        return _vd.block(f"NO PROPOSAL (exit 1) -- {problems[0]}", numbers, step)
+
+    b = v.get("delays") or {}
+    after = bool(b.get("autoDelayAfterRepairs"))
+    delay = b.get("autoDelayAfterRepairs") or b.get("autoDelay") or {}
+    rc = v.get("rc_delays")
+    refused = rc not in (None, 0)
+    checks = v.get("checks_final") or []
+    flagged = [c for c in checks if c["verdict"] != "OK"]
+    limits = None
+    if checks:
+        kinds = {}
+        for c in flagged:
+            kinds[c["verdict"]] = kinds.get(c["verdict"], 0) + 1
+        unrepaired = refused and v.get("repairs_planned") and b.get("repairs") is None
+        limits = (f"{len(checks) - len(flagged)} of {_count(len(checks), 'crossover edge')} inside this car's limits"
+                  + (f", {len(flagged)} to settle: " + ", ".join(f"{n} {k}" for k, n in sorted(kinds.items()))
+                     if flagged else "")
+                  + (" (the engine's settings, unrepaired until the delays fit;" if unrepaired
+                     else " (the final settings") + " against the device profile and each driver's Fs floor)")
+
+    if refused:
+        over = delay.get("overRange") or {}
+        numbers = []
+        if over:
+            numbers.append(f"Auto delay needs {float(over['neededMs']):g} ms on {over.get('channel')}, the device holds "
+                           f"{float(over['limitMs']):g} ms (Auto delay against the profile's delay range, rear fill "
+                           f"{float(over.get('rearFillMs') or 0):g} ms)")
+        numbers.append(limits)
+        fill = fill_that_fits(over)
+        if not delay.get("error"):
+            head = (f"NOTHING ON OFFER (exit {rc}) -- the engine's second run (the delays, the repairs, the wishes) "
+                    "did not finish cleanly")
+            step = "read the notes below and the engine.log in the --out folder, then run again"
+        elif over:
+            head = (f"DELAYS REFUSED (exit {rc}) -- the crossovers below came back, but Auto delay does not fit this "
+                    "device, so nothing is on offer yet")
+            step = (f"offer the tuner a rear fill of {fill:g} ms (the largest that fits) and run again with "
+                    f"--rear-fill {fill:g}; nothing is entered until the delays fit"
+                    if fill is not None and fill < float(over.get("rearFillMs") or 0) else
+                    "the rear fill is not what is too long: check the device's delay range in its profile "
+                    "(delay.max_ms, a virtual channel's tier), then run again; nothing is entered until the delays fit")
+        else:
+            head = f"DELAYS REFUSED (exit {rc}) -- Auto delay: {delay['error']}; nothing is on offer yet"
+            step = "meet Auto delay's reason, then run again; nothing is entered until the delays fit"
+        return _vd.block(head, numbers, step)
+
+    props = final_proposals(b)
+    done = []
+    if v.get("repairs_planned"):
+        done.append(f"{_count(len(v['repairs_planned']), 'junction')} re-searched inside the limits")
+    fixed = sum(len(edges) for edges in (v.get("fixes") or {}).values())
+    if fixed:
+        done.append(f"{_count(fixed, 'edge')} set to the nearest allowed")
+    head = ((f"PROPOSED, {_count(len(flagged), 'EDGE')} TO SETTLE" if flagged else "PROPOSED WITHIN THE LIMITS")
+            + " -- Resonalyze's best" + (f" for {_count(len(props), 'block')}" if props else "")
+            + (", " + " and ".join(done) if done else "")
+            + ("; its delays fit the device" if delay.get("result") else ""))
+    numbers = [limits]
+    steps = v.get("level_steps") or {}
+    if steps:
+        junction, step_db = max(steps.items(), key=lambda kv: abs(kv[1]))
+        numbers.append(f"largest level step {step_db:+.1f} dB at {junction} (own-band level + gain, lower minus "
+                       "upper; the engine's band levels, this run's gains)")
+    rows = delay.get("result") or []
+    if rows:
+        top = max(rows, key=lambda r: float(r["delayMs"]))
+        ceiling = ((v.get("layout") or {}).get("processor") or {}).get("maxDelayMs")
+        low = [r for r in rows if (r.get("decision") or {}).get("confidence") == "Low"]
+        numbers.append(f"longest delay {float(top['delayMs']):.2f} ms on {top['channel']}"
+                       + (f" of the device's {float(ceiling):g} ms" if ceiling else "")
+                       + (f"; {len(low)} of {len(rows)} placements at LOW confidence" if low
+                          else f"; none of {len(rows)} placements at LOW confidence")
+                       + f" ({'Auto delay after the repairs' if after else 'Auto delay'})")
+    # virtual-first.md 1.7: the sums are predicted and the variants described BEFORE the tuner picks; only the pick
+    # he OKs reaches him, as a yellow version.
+    offer = ("predict and describe the variants on the trade-off front below (1.7, predict); the one the tuner OKs "
+             "goes" if v.get("front") else
+             "predict the sums with the crossovers below (1.7, predict); with the tuner's OK they go") \
+        + " to him as a yellow version (apply.propose)"
+    step = (f"settle the {_count(len(flagged), 'edge')} under \"still to settle\" with the tuner, then {offer}"
+            if flagged else offer)
+    return _vd.block(head, numbers, step)
+
+
 def render_variants(v):
-    text = _render_variants(v)
+    # skill #70: the verdict block first; the tables, the variants and the front stay below it, as they were.
+    text = "\n".join(run_verdict(v) + [""]) + "\n" + _render_variants(v)
     if v.get("front"):
         import variant_front as _vf
         text += "\n\n" + _vf.render(v["front"], v.get("goal_purpose"))
@@ -2477,6 +2587,55 @@ def _selftest():
     shown = render_variants({"delays": res_b, "costs": costs, "repairs_planned": repairs, "fixes": fixes,
                              "wishes_skipped": skipped, "checks_final": [], "notes": []})
     assert "THE BEST WITHIN THE LIMITS" in shown and "found at the window's edge" in shown and "not computed" in shown, shown
+
+    # skill #70: every run opens with the verdict block -- what the run ended in, each number with its quantity and
+    # source, the next step -- and the exit code's three ways are said in words there (1 no proposal, 3 delays
+    # refused, 0 proposed). Fails on the old code: `run_verdict` did not exist and the output opened with a table.
+    assert _vd.is_block(shown) and shown.lstrip().startswith("▶ PROPOSED WITHIN THE LIMITS -- Resonalyze's best "
+                                                             "for 1 block, 1 junction re-searched inside the limits "
+                                                             "and 1 edge set to the nearest allowed"), shown[:400]
+    ok_edge = {"block": "C Mid", "edge": "high-pass", "setting": "LR24 250 Hz", "verdict": "OK", "why": []}
+    caution = dict(ok_edge, verdict="CAUTION", why=["m-L: 1.15 x Fs"])
+    clean = {"delays": dict(res_b, autoDelay={"request": {"sceneOffsetMs": 0.25, "rearFillOffsetMs": 15.0}, "result": [
+                 {"channel": "C Mid L", "delayMs": 3.4, "invertPolarity": False, "decision": {"confidence": "High"}},
+                 {"channel": "E Rear L", "delayMs": 14.3, "invertPolarity": False, "decision": {"confidence": "Low"}}]}),
+             "rc_delays": 0, "checks_final": [ok_edge, dict(ok_edge, edge="low-pass")], "notes": [],
+             "level_steps": {"A Sub ↔ C Mid": 0.4, "C Mid ↔ D Tweeter": -1.8},
+             "layout": {"processor": {"maxDelayMs": 41.64}}}
+    top = run_verdict(clean)
+    assert _vd.is_block(render_variants(clean)) and top[0].endswith("its delays fit the device"), top
+    assert "2 of 2 crossover edges inside this car's limits (the final settings" in top[1], top
+    assert "largest level step -1.8 dB at C Mid ↔ D Tweeter (own-band level + gain" in top[2], top
+    assert "longest delay 14.30 ms on E Rear L of the device's 41.64 ms; 1 of 2 placements at LOW" in top[3], top
+    assert top[4] == "    → predict the sums with the crossovers below (1.7, predict); with the tuner's OK they go to " \
+                     "him as a yellow version (apply.propose)", top
+    top = run_verdict(dict(clean, checks_final=[ok_edge, caution], front={"picks": []}))
+    assert top[0].startswith("  ▶ PROPOSED, 1 EDGE TO SETTLE"), top
+    assert "1 of 2 crossover edges inside this car's limits, 1 to settle: 1 CAUTION" in top[1], top
+    assert 'settle the 1 edge under "still to settle" with the tuner, then predict and describe the variants on ' \
+           "the trade-off front below (1.7, predict); the one the tuner OKs goes" in top[-1], top
+    # exit 3: the crossovers came back, Auto delay did not fit; the repairs never ran, and the way out is the fill
+    over_rear = {"channel": "F Rear L", "neededMs": 23.67, "limitMs": 20.82, "rearFillMs": 15.0, "widestCarriesFill": True}
+    no_fit = {"delays": {"autoDelay": {"error": "does not fit", "overRange": over_rear},
+                         "settingsFinal": res_b["settingsFinal"]},
+              "rc_delays": EXIT_REFUSED, "repairs_planned": repairs, "notes": [],
+              "checks_final": [ok_edge, dict(ok_edge, edge="low-pass", verdict="REFUSED", why=["under the floor"])]}
+    shown_3 = render_variants(no_fit)
+    top = run_verdict(no_fit)
+    assert _vd.is_block(shown_3) and top[0].startswith(f"  ▶ DELAYS REFUSED (exit {EXIT_REFUSED})"), top
+    assert "Auto delay needs 23.67 ms on F Rear L, the device holds 20.82 ms" in top[1], top
+    assert "1 to settle: 1 REFUSED (the engine's settings, unrepaired until the delays fit;" in top[2], top
+    assert "rear fill of 12 ms (the largest that fits) and run again with --rear-fill 12" in top[-1], top
+    top = run_verdict(dict(no_fit, delays={"autoDelay": {"error": "x", "overRange": dict(over_rear, widestCarriesFill=False)}}))
+    assert "the rear fill is not what is too long" in top[-1], top
+    # exit 1: the verdict names the first problem, and every problem stays a ✗ line below it
+    bad = {"problems": ["no processing rate on record -- project.json dsp.dsp_processing_rate_hz",
+                        "no delay range on record -- the device profile's delay.max_ms"], "notes": []}
+    shown_1 = render_variants(bad)
+    assert _vd.is_block(shown_1) and shown_1.lstrip().startswith("▶ NO PROPOSAL (exit 1) -- no processing rate"), shown_1
+    assert shown_1.count("  ✗ ") == 2 and "2 problems in all" in shown_1 and "fix what the ✗ lines name" in shown_1
+    no_engine = render_variants({"problems": ["Auto crossover did not run (exit 2): no engine"], "rc_crossover": 2})
+    assert _vd.is_block(no_engine) and "`resonalyze_engine.py check`" in no_engine and "problems in all" not in no_engine
 
     # the PEQ bands travel as RBJ's Q on both sides: Resonalyze's analog magnitude (EqualizationCurve.cs) against the
     # skill's biquad, well below Nyquist where the two must agree

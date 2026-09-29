@@ -16,6 +16,7 @@ import rew_api as api
 import analysis as an
 import joint_analysis as ja
 import naming
+import verdict as verdict_block
 from target_curves import explain_target_curve, find_target_curve, interpolate_target
 
 DEFAULT_CURVES_DIR = os.path.expanduser(
@@ -760,9 +761,111 @@ def _read_joint_rew(lo, hi, lo_title, hi_title, pair_title, fc, window):
             "pair_missing": pair_missing, "window": used, "why": why, "notes": notes, "anchors": anchors}
 
 
+def _joints_verdict(rows, unread):
+    """The verdict block over `analyze-joints` (skill #70): `(verdict, numbers, next_step)` for
+    `verdict.block`.
+
+    Bankable means phase-verified: a measured pair of the joint's two channels reproduces the complex
+    solos (`phase_trust_gate`), so the row's delay and polarity may be entered (phase_2_eq.md 2b).
+    Every other joint is counted by what holds it back -- BLOCK (the pair disagrees: no delay; flip
+    polarity and re-measure), no pair (no verdict; the pair to measure is named), CHECK (a baseline
+    solo whose protective filter nobody recorded: a question, not a number -- estimator-scope.md 2a),
+    read without a pair (`--no-pair`: NOT BANKABLE), and a solo that could not be read at all.
+
+    Only a bankable delay reaches the block, with the joint, the channel it goes on and the pair that
+    verified it. An unverified delay stays on its row: on the Passat a flip was banked from exactly
+    such a reading and reverted once the pairs were attached (#56 item 1).
+    """
+    bank = [r for r in rows if r.get("bankable")]
+    blocked = [r for r in rows if r.get("verdict") == "blocked"]
+    nopair = [r for r in rows if r.get("verdict") is None]
+    check = [r for r in rows if r.get("verdict") == "check protective"]
+    unver = [r for r in rows if r.get("delay_ms") is not None and not r.get("bankable")]
+    total = len(rows) + len(unread)
+
+    def names(group, most=3):
+        js = [g["joint"] for g in group]
+        return ", ".join(js[:most]) + (f" +{len(js) - most} more" if len(js) > most else "")
+
+    def say(group):
+        return "its row says" if len(group) == 1 else "each row says"
+
+    held_back = ", ".join(f"{len(g)} {label}" for g, label in (
+        (blocked, "BLOCK"), (nopair, "no pair"), (check, "CHECK protective"),
+        (unver, "read without a pair (--no-pair)"), (unread, "solo not read")) if g)
+    if not total:
+        head = "NOTHING TO ENTER -- no joint given"
+    elif len(bank) == total:
+        head = f"BANKABLE -- {total} of {total} joint(s) phase-verified by a measured pair"
+    elif bank:
+        head = (f"PARTLY BANKABLE -- {len(bank)} of {total} joint(s) phase-verified; "
+                f"not bankable: {held_back}")
+    else:
+        head = f"NOTHING TO ENTER -- 0 of {total} joint(s) bankable: {held_back}"
+
+    def delay(r):
+        # `align_by_summation` sums lo + pol·hi·e^(-jωτ): the delay and the polarity are hi's,
+        # relative to lo -- and the residual all-pass is fitted on lo (`apply_to="lo"`).
+        lo, hi = r["joint"].split("↔")
+        apf = r.get("apf")
+        return (f"delay {r['delay_ms']:+.2f} ms and polarity {'NORM' if r['polarity'] == 1 else 'INV'} "
+                f"on {hi} vs {lo}"
+                + (f", all-pass {apf['f0_hz']:.0f} Hz Q {apf['q']:g} on {lo}" if apf else "")
+                + f" at {r['joint']} (drift-immune summation; phase-verified by the pair "
+                  f"`{r['pair']}`, trust {r['agreement']:.2f})")
+    if len(bank) <= 3:
+        numbers = [delay(r) for r in bank]
+    else:
+        numbers = [delay(r) for r in bank[:2]] + [
+            f"{len(bank) - 2} more phase-verified joint(s), {names(bank[2:])}: "
+            f"each delay on its row below"]
+    # What holds the rest back, most actionable first. The block keeps three numbers, so a run with
+    # every kind at once loses the tail here -- never the count, which the verdict line carries.
+    if blocked:
+        worst = max(blocked, key=lambda r: r.get("mismatch_rms_db") or 0.0)
+        miss = worst.get("mismatch_rms_db")
+        numbers.append(f"BLOCK at {names(blocked)}: the solos' complex sum misses the measured pair "
+                       f"`{worst['pair']}` "
+                       + (f"by {miss:.1f} dB rms" if miss is not None else "(no bins in the band)")
+                       + (", the worst" if len(blocked) > 1 else "")
+                       + " (phase_trust_gate) -- no delay computed")
+    if nopair:
+        numbers.append(f"no pair at {names(nopair)}: no measured pair of exactly the joint's two "
+                       f"channels attached -- no polarity, no delay")
+    chans = ", ".join(sorted({r["channel"] for r in check}))
+    if check:
+        numbers.append(f"CHECK at {names(check)}: {chans} unmarked on a baseline round -- its "
+                       f"protective filter is unknown, so no number")
+    if unver:
+        numbers.append(f"read without a pair at {names(unver)}: the delay on its row is NOT BANKABLE")
+    if unread:
+        numbers.append(f"solo not read at {names(unread)}: {say(unread)} why")
+    numbers = numbers[:verdict_block.MAX_NUMBERS]
+
+    steps = []
+    if bank:
+        steps.append(f"enter {names(bank) if len(bank) <= 3 else f'the {len(bank)} phase-verified joints'}"
+                     f" in the alignment order at the bottom")
+    titles = list(dict.fromkeys(r["measure"] for r in nopair + unver if r.get("measure")))
+    if titles:
+        steps.append(("measure this one: " if len(titles) == 1 else f"measure these {len(titles)}: ")
+                     + ", ".join(f"`{t}`" for t in titles[:3]) + (" …" if len(titles) > 3 else "")
+                     + " and re-run")
+    bare = [r for r in nopair + unver if not r.get("measure")]
+    if bare:
+        steps.append(f"attach a pair at {names(bare)} ({say(bare)} how)")
+    if blocked:
+        steps.append(f"flip polarity at {names(blocked)} and re-measure the pair")
+    if check:
+        steps.append(f"mark {chans} on the capture round (`capture-protective`) and re-run")
+    if unread:
+        steps.append(f"fix the solo at {names(unread)} ({say(unread)} why)")
+    return head, numbers, "; ".join(steps) or None
+
+
 def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
                    protective_record=None, baseline=None, window=None, gd_by_joint=None,
-                   glossary=None, no_pair=False):
+                   glossary=None, no_pair=False, verbose=False, preface=None):
     """Batch joint/group analysis: walk every adjacent joint in ONE pass and
     render one consolidated table (polarity + drift-immune delay + residual +
     APF suggestion per joint), reusing joint_analysis.py unchanged.
@@ -809,20 +912,56 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
     `gd_by_joint` (`joint_gd_from_rows`, from `--from-state`): the crossover pair's group-delay swing
     against the Blauert & Laws threshold, printed under the joint's row and kept in it as `gd` --
     a reading of the filters, beside the measured junction (hub RES-014).
+
+    The output opens with the verdict block (skill #70, `_joints_verdict`): how many joints can be
+    entered, the delays of the phase-verified ones with the pair that verified each, and the next
+    step. The table is built first and printed under it, since the block counts every row. The fixed
+    legend (trust, BLOCK, NOT BANKABLE, how the pair and the window are chosen) prints only with
+    `verbose`; `preface` lines go under the block, above the table (`--from-state` names its slot).
     """
+    import contextlib
+    import io
+    buf, unread = io.StringIO(), []
+    try:
+        with contextlib.redirect_stdout(buf):
+            rows = _joint_table(joint_specs, ver=ver, band_oct=band_oct, candidates=candidates,
+                                protective_record=protective_record, baseline=baseline,
+                                window=window, gd_by_joint=gd_by_joint, glossary=glossary,
+                                no_pair=no_pair, verbose=verbose, unread=unread)
+    except BaseException:
+        sys.stdout.write(buf.getvalue())       # the rows read before a failure are not lost with it
+        raise
+    print(verdict_block.render(*_joints_verdict(rows, unread)))
+    for line in preface or ():
+        print(line)
+    sys.stdout.write(buf.getvalue())
+    return rows
+
+
+def _joint_table(joint_specs, ver, band_oct, candidates, protective_record, baseline, window,
+                 gd_by_joint, glossary, no_pair, verbose, unread):
+    """The body of `analyze_joints`: prints the table, returns its rows. A joint whose solo cannot be
+    read has no row; it goes into `unread` instead, so the verdict block still counts it (skill #70)."""
     import predict as P
     window = dict(window or JOINT_WINDOW)
 
     print_header(f"BATCH-АНАЛІЗ СТИКІВ  ({len(joint_specs)} стик(ів) · solo = _{ver} (sw))")
-    print("  align_by_summation = дрейф-імунна полярність+затримка з сумування; "
-          "trust = чи комплексні solo відтворюють виміряну пару.")
-    print(f"  Пара стику: задана (lo,hi,fc,PAIR) або знайдена в REW за глосарієм — рівно lo+hi, _{ver} "
-          f"{' / '.join(f'({m})' for m in PAIR_METHODS)}; нема → вердикту нема, рядок каже, що зміряти"
-          + (" (--no-pair: читається без пари, NOT BANKABLE)." if no_pair else "."))
-    print("  ⚠️ BLOCK або NOT BANKABLE → НЕ вводь обчислену затримку/APF: BLOCK — перекинь "
-          "полярність і переміряй сумування; NOT BANKABLE — спершу зміряй пару.")
-    print(f"  Solo — з імпульсу, не з АЧХ REW: вікно {P._gate_label(window)}; стик, якого вікно не "
-          f"тримає, читається steady і каже чому.")
+    if verbose:
+        # The fixed legend: the same four paragraphs on every run. The verdict block now says what
+        # they mean for THIS run, so they wait behind --verbose (skill #70).
+        print("  align_by_summation = дрейф-імунна полярність+затримка з сумування; "
+              "trust = чи комплексні solo відтворюють виміряну пару.")
+        print(f"  Пара стику: задана (lo,hi,fc,PAIR) або знайдена в REW за глосарієм — рівно lo+hi, "
+              f"_{ver} {' / '.join(f'({m})' for m in PAIR_METHODS)}; нема → вердикту нема, рядок "
+              f"каже, що зміряти"
+              + (" (--no-pair: читається без пари, NOT BANKABLE)." if no_pair else "."))
+        print("  ⚠️ BLOCK або NOT BANKABLE → НЕ вводь обчислену затримку/APF: BLOCK — перекинь "
+              "полярність і переміряй сумування; NOT BANKABLE — спершу зміряй пару.")
+        print(f"  Solo — з імпульсу, не з АЧХ REW: вікно {P._gate_label(window)}; стик, якого вікно "
+              f"не тримає, читається steady і каже чому.")
+    else:
+        print("  the legend -- trust, BLOCK, NOT BANKABLE, how the pair and the window are chosen: "
+              "--verbose")
     candidates = dict(candidates or {})
     if baseline is None:
         # The round's phase decides; a round that never learnt its phase (opened before any phase
@@ -921,9 +1060,11 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
             read = _read_joint_rew(lo, hi, f"{lo}_{ver} (sw)", f"{hi}_{ver} (sw)", pair_name, fc, window)
         except KeyError as e:
             print(f"  {jl:<15}{fc:>6.0f}  — відсутній solo-замір: {e}")
+            unread.append({"joint": jl, "why": f"solo missing: {e}"})
             continue
         except P.PredictError as e:           # off the loopback base, or an RTA where a solo belongs
             print(f"  {jl:<15}{fc:>6.0f}  — {e}")
+            unread.append({"joint": jl, "why": str(e)})
             continue
         if read["pair_missing"]:
             # A pair named by hand that REW does not hold: until now the row went on as `pair?` with
@@ -979,7 +1120,7 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
         mB2, pB2 = mB, pB                    # one grid: both solos were read onto `fA`
 
         # No pair here means `no_pair` was asked for: a missing one was refused above.
-        trusted, trust_lbl, js_call = None, "—(nopair)", ""
+        trusted, trust_lbl, js_call, tg = None, "—(nopair)", "", None
         if pair_name:
             mP2 = read["pair"]                # through the same window as the solos
             tg = ja.phase_trust_gate(fA, mA, pA, mB2, pB2, mP2, band=band)
@@ -995,17 +1136,19 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
                   f"phase unreliable → power-sum: {js_call}; flip polarity + remeasure")
             rows.append({"joint": jl, "fc": fc, "trust": trusted,
                          "polarity": None, "delay_ms": None, "verdict": "blocked",
-                         "pair": pair_name, "bankable": False, "window": read["window"]})
+                         "pair": pair_name, "bankable": False, "window": read["window"],
+                         "agreement": tg["agreement"], "mismatch_rms_db": tg["mismatch_rms_db"]})
             continue
 
         al = ja.align_by_summation(fA, mA, pA, mB2, pB2, band=band)
         pol = "NORM" if al["polarity"] == 1 else "INV"
-        apf = "—"
+        apf, apf_row = "—", None
         if al["needs_allpass"]:
             ap = ja.allpass_for_residual_null(fA, mA, pA, mB2, pB2,
                                               apply_to="lo", band=band)
             if ap["improved"]:
                 apf = f"{ap['f0_hz']:.0f}/{ap['q']}"
+                apf_row = {"f0_hz": ap["f0_hz"], "q": ap["q"]}
         verdict = ("apply (phase-verified)" if trusted is True
                    else "UNVERIFIED (--no-pair) — NOT BANKABLE, confirm by summation")
         print(f"  {jl:<15}{fc:>6.0f}{band_s:>12}{trust_lbl:>12}"
@@ -1016,7 +1159,11 @@ def analyze_joints(joint_specs, ver="2", band_oct=1.0, candidates=None,
                      "residual_null_db": al["residual_null_db"],
                      "needs_allpass": al["needs_allpass"], "verdict": verdict,
                      "pair": pair_name, "pair_found": bool(found and found["title"]),
-                     "bankable": trusted is True, "window": read["window"]})
+                     "bankable": trusted is True, "window": read["window"],
+                     # For the verdict block (skill #70): the trust the pair gave, the all-pass the
+                     # row suggests, and -- read without a pair -- the pair to capture, if nameable.
+                     "agreement": tg["agreement"] if tg else None, "apf": apf_row,
+                     "measure": found["measure"] if found and not found["title"] else None})
         gd = (gd_by_joint or {}).get((lo, hi))
         if _gd_line(gd):
             print(f"  {'':<15}  ↳ {_gd_line(gd)}")
@@ -1192,6 +1339,13 @@ def _selftest_joint_impulse():
         assert "loopback" in out and len(rows) == 1, out                # r-L refused, w-L computed
         assert rows[0]["window"] == "gate" and rows[0]["polarity"] == -1, rows
         assert "window: 6 cycles at each frequency" in out, out
+        # skill #70: the verdict block comes first and counts the joint that has no row as well; the
+        # pair-less delay is NOT BANKABLE and stays on its row, out of the block.
+        top = out.split("\n\n")[0]
+        assert verdict_block.is_block(out), out
+        assert top.lstrip().startswith("▶ NOTHING TO ENTER -- 0 of 2 joint(s) bankable: "
+                                       "1 read without a pair (--no-pair), 1 solo not read"), top
+        assert "-0.20 ms" not in top and "fix the solo at r-L↔m-L" in top, top
         # #56 item 1, end to end through the real reader: the pair the glossary finds is read through
         # the same window as the solos and verifies the junction; the one it cannot find is named.
         gl = naming.Glossary({"channels": [{"code": c} for c in ("w-L", "m-L", "tw-L")],
@@ -1205,13 +1359,23 @@ def _selftest_joint_impulse():
         assert got[0]["trust"] is True and got[0]["bankable"] is True, got
         assert "pair: `L w+m_7 (sw)` -- found in REW for _7" in out, out
         assert got[1]["verdict"] is None and got[1]["measure"] == "L m+tw_7 (sw)", got
+        # One joint to enter, with the pair that verified it; one pair to capture, by its title.
+        top = out.split("\n\n")[0]
+        assert verdict_block.is_block(out), out
+        assert top.lstrip().startswith("▶ PARTLY BANKABLE -- 1 of 2 joint(s) phase-verified; "
+                                       "not bankable: 1 no pair"), top
+        assert "delay -0.20 ms and polarity INV on m-L vs w-L at w-L↔m-L" in top, top
+        assert "phase-verified by the pair `L w+m_7 (sw)`" in top, top
+        assert ("→ enter w-L↔m-L in the alignment order at the bottom; "
+                "measure this one: `L m+tw_7 (sw)` and re-run") in top, top
     finally:
         api = real
     print(f"selftest[joints:impulse] OK — solos read from the impulse through {JOINT_WINDOW['cycles']:g} "
           f"cycles: INV and {al['delay_ms']:+.3f} ms, residual {al['residual_null_db']:+.1f} dB where the "
           f"steady read carries a reflection as {al_s['residual_null_db']:+.1f} dB; a 1 ms "
           f"gate, arrivals 4 ms apart and an RTA pair read steady with the reason; a solo off the "
-          f"loopback base refused; a pair found by the glossary read through the same window.")
+          f"loopback base refused; a pair found by the glossary read through the same window; the "
+          f"verdict block on top counts every joint, the refused one too.")
 
 
 def _selftest():
@@ -1330,10 +1494,18 @@ def _selftest():
         # orchestrator must REFUSE to emit a delay (polarity None, blocked).
         jmeas["12"] = {"title": "Ws_2 (rta)"}
         jfr[12] = (hz, [0.0] * len(hz), None)                    # flat, wrong
-        rows_b = analyze_joints([("w-L", "m-L", 400.0, "Ws_2 (rta)")], ver="2")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rows_b = analyze_joints([("w-L", "m-L", 400.0, "Ws_2 (rta)")], ver="2")
         assert rows_b[0]["trust"] is False, rows_b               # gate tripped
         assert rows_b[0]["delay_ms"] is None, rows_b             # NO computed delay
         assert rows_b[0]["verdict"] == "blocked", rows_b
+        # skill #70: the block says nothing can be entered, how far the pair is off, and what to do.
+        top = buf.getvalue().split("\n\n")[0]
+        assert verdict_block.is_block(top), top
+        assert top.lstrip().startswith("▶ NOTHING TO ENTER -- 0 of 1 joint(s) bankable: 1 BLOCK"), top
+        assert "misses the measured pair `Ws_2 (rta)` by" in top and "dB rms" in top, top
+        assert "→ flip polarity at w-L↔m-L and re-measure the pair" in top, top
         print(f"selftest[joints] OK — recovered pol=INV, delay={rows[0]['delay_ms']}ms "
               f"(≈−{tau}); --no-pair→UNVERIFIED, NOT BANKABLE; bad-pair→BLOCK (no delay emitted).")
 
@@ -1361,6 +1533,16 @@ def _selftest():
             assert got[0]["trust"] is True and got[0]["bankable"] is True, got
             assert got[0]["verdict"] == "apply (phase-verified)" and got[0]["polarity"] == -1, got
             assert "pair: `L w+m_2 (sw)` -- found in REW for _2 (glossary `L w+m`), attached" in out, out
+            # skill #70: the block on top enters the joint, with the channel, quantity and pair named.
+            top = out.split("\n\n")[0]
+            assert verdict_block.is_block(out), out
+            assert top.lstrip().startswith("▶ BANKABLE -- 1 of 1 joint(s) phase-verified"), top
+            assert ("· delay -0.20 ms and polarity INV on m-L vs w-L at w-L↔m-L (drift-immune "
+                    "summation; phase-verified by the pair `L w+m_2 (sw)`, trust") in top, top
+            assert "→ enter w-L↔m-L in the alignment order at the bottom" in top, top
+            assert "the legend" in out and "trust = чи комплексні" not in out, "the legend waits for --verbose"
+            _, out_v = joints([("w-L", "m-L", 400.0, None)], glossary=gl, verbose=True)
+            assert verdict_block.is_block(out_v) and "trust = чи комплексні" in out_v, out_v
             # Two titles that are one measurement to the grammar: neither is picked.
             jmeas["16"] = {"title": "L w+m_02 (sw)"}
             got, _ = joints([("w-L", "m-L", 400.0, None)], glossary=gl)
@@ -1372,9 +1554,14 @@ def _selftest():
             assert got[0]["verdict"] is None and got[0]["measure"] == "L w+m_2 (sw)", got
             assert got[0]["polarity"] is None and got[0]["delay_ms"] is None, got
             assert got[0]["bankable"] is False and "candidate" not in got[0], got
-            line = next(ln for ln in out.splitlines() if "w-L↔m-L" in ln)
+            # The table row, not the verdict block above it, which names the joint too (skill #70).
+            line = next(ln for ln in out.splitlines() if ln.startswith("  w-L↔m-L"))
             assert "NO PAIR" in line and "pair missing — measure `L w+m_2 (sw)`" in line, line
             assert "INV" not in line and "NORM" not in line and "apply" not in line, line
+            top = out.split("\n\n")[0]                   # the verdict block: no polarity in it either
+            assert verdict_block.is_block(out) and "INV" not in top and "NORM" not in top, top
+            assert top.lstrip().startswith("▶ NOTHING TO ENTER -- 0 of 1 joint(s) bankable: 1 no pair"), top
+            assert "→ measure this one: `L w+m_2 (sw)` and re-run" in top, top
             assert "not checked" in out and "жоден стик" not in out, out
             # Asked for by name: the old pair-less reading, computed and marked -- with the reason.
             got, out = joints([("w-L", "m-L", 400.0, None)], glossary=gl, no_pair=True)
@@ -1621,6 +1808,10 @@ def main():
     pj.add_argument("--apf", action="append", default=[], metavar="ch,APF1,f0 | ch,APF2,f0,Q",
                     help="Кандидат all-pass ПЕРЕВІРИТИ (не запропонувати): виставлений вручну "
                          "в TCC. Напр. --apf 'm-L,APF2,300,0.71'. Повторюваний, один на канал.")
+    pj.add_argument("--verbose", action="store_true",
+                    help="print the fixed legend above the table too (what trust, BLOCK and NOT "
+                         "BANKABLE mean, how the pair and the window are chosen); the verdict block "
+                         "on top is printed either way (skill #70)")
     sub.add_parser("selftest", help="Офлайн-перевірка batch/joints режимів (без REW)")
     args = parser.parse_args()
 
@@ -1646,11 +1837,17 @@ def main():
         try:
             specs = []
             gd_by_joint = None
+            preface = []                 # printed under the verdict block, which comes first (skill #70)
             if args.from_state:
-                preset, ver_s, specs, state_rows = _joints_from_state(
-                    args.state_root, args.preset, args.state_ver, with_rows=True)
-                print(f"\n  Стики з кросоверів слота '{preset}' ({ver_s or 'HEAD'}): "
-                      f"{len(specs)} шт.")
+                import contextlib
+                import io
+                said = io.StringIO()
+                with contextlib.redirect_stdout(said):         # its two-subs note goes there too
+                    preset, ver_s, specs, state_rows = _joints_from_state(
+                        args.state_root, args.preset, args.state_ver, with_rows=True)
+                preface += said.getvalue().splitlines()
+                preface.append(f"  Стики з кросоверів слота '{preset}' ({ver_s or 'HEAD'}): "
+                               f"{len(specs)} шт.")
                 gd_by_joint = joint_gd_from_rows(specs, state_rows, args.band_oct)
             # user --joint entries override/add by (lo,hi) — e.g. to attach a pair
             by_key = {(lo, hi): (lo, hi, fc, pair) for (lo, hi, fc, pair) in specs}
@@ -1697,7 +1894,8 @@ def main():
             analyze_joints(specs, ver=args.ver, band_oct=args.band_oct,
                            candidates=candidates, protective_record=record,
                            baseline=True if args.baseline else None, window=window,
-                           gd_by_joint=gd_by_joint, glossary=glossary, no_pair=args.no_pair)
+                           gd_by_joint=gd_by_joint, glossary=glossary, no_pair=args.no_pair,
+                           verbose=args.verbose, preface=preface)
         except ValueError as e:
             print(f"Помилка: {e}")
             sys.exit(1)

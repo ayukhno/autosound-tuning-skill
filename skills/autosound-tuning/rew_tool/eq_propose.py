@@ -51,7 +51,10 @@ the sweep, and nothing in it is a baseline (#56 item 8).
                                    --house curve.txt [--part 1|all] [--out DIR] [--accept lr:Ms,res:mid]
     python3 rew_tool/eq_propose.py --project P --rew --ver N [--process DIR] --house curve.txt --part 2 ...
 
-Proposes; banks nothing. The delta files it writes are what `apply.propose` takes. The numbers
+Proposes; banks nothing. The delta files it writes are what `apply.propose` takes, and the human output
+opens with the verdict block (skill #70): how many packages have cuts, the first one's cut and score, and
+the command that offers it to the Arbiter as a yellow version -- the packages follow, notes last, the
+first five unless `--verbose`. The numbers
 (tolerances, budgets, Schroeder 150-200 Hz, the borrowed Q 6) are the doctrine's starting values,
 named as constants here so a later measurement can move them.
 """
@@ -77,6 +80,7 @@ import dsp_math  # noqa: E402
 import eq_gate  # noqa: E402
 import predict as P  # noqa: E402
 import target_bands  # noqa: E402
+import verdict as verdict_block  # noqa: E402
 
 LR_BAND = (300.0, 4000.0)         # where the image lives (diagnostic §23/§6): L-R is judged here
 LR_TOL_DB = 1.0                   # |L-R| per 1/3 oct: an ILD of ~1 dB already moves an image
@@ -649,11 +653,187 @@ def merge_deltas(packages):
     return delta
 
 
-def render(packages):
+# ---------------------------------------------------------------- the verdict block (skill #70)
+NOTES_SHOWN = P.NOTES_SHOWN       # notes a person reads before --verbose -- as many as predict shows
+LEFT_OUT_SHOWN = 12               # features a resonance package left out, shown per package before --verbose
+
+
+def _count(n, word):
+    return f"{n} {word}{'' if n == 1 else 's'}"
+
+
+def _names(codes, most=3):
+    codes = list(codes)
+    return ", ".join(codes) if len(codes) <= most else f"{len(codes)} channels"
+
+
+def _cuts_of(pk):
+    """`(channel, band)` of every band a package carries, the deepest cut first."""
+    return sorted(((c, b) for c, bs in pk["bands"].items() for b in bs), key=lambda cb: cb[1]["gain_db"])
+
+
+def _what_it_does(pk, source):
+    """The first proposed package in one number line: how many cuts, on what, and the deepest of them."""
+    chs = [c for c, bs in pk["bands"].items() if bs]
+    ch, b = _cuts_of(pk)[0]
+    if pk["kind"] == "tone":                     # one set of bands, identical on every member
+        where = f"{_count(len(pk['bands'][chs[0]]), 'cut')} on each of {', '.join(chs)}"
+        on = ""
+    else:
+        where = f"{_count(len(_cuts_of(pk)), 'cut')} on {', '.join(chs)}"
+        on = f" on {ch}" if len(chs) > 1 else ""
+    return (f"first in decision order: [{pk['id']}] {where}, deepest {b['gain_db']:+.1f} dB at {b['f']:g} Hz "
+            f"Q {b['q']:g}{on} (band gain, fitted on {source})")
+
+
+def _score_line(pk, source):
+    """The first proposed package's score before -> after, on the scale where its kind of curve is true."""
+    s = pk["score"]
+    src = f"{source}, then modelled with the package"
+    if pk["kind"] == "res":
+        ch = _cuts_of(pk)[0][0]
+        return (f"fine residual rms on {ch} {s[ch]['fine_rms_before']:.2f} → {s[ch]['fine_rms_after']:.2f} dB "
+                f"(measured − target, less its 1-oct trend; {src})")
+    if pk["kind"] == "lr":
+        lo, hi = s["read_band_hz"]
+        return (f"worst |L-R| per 1/3 oct {s['worst_lr_db_before']:.2f} → {s['worst_lr_db_after']:.2f} dB, "
+                f"tolerance {s['tolerance_db']:g} dB ({pk['pair']}, {lo:.0f}-{hi:.0f} Hz where both play; {src})")
+    return (f"macro rms vs target {s['macro_rms_before']:.2f} → {s['macro_rms_after']:.2f} dB "
+            f"({pk['pair']}, 1/3 oct where the pair plays; {src})")
+
+
+def _in_all(needed, source):
+    every = [(pk["id"], c, b) for pk in needed for c, b in _cuts_of(pk)]
+    pid, ch, b = min(every, key=lambda x: x[2]["gain_db"])
+    chans = sorted({c for _, c, _ in every})
+    return (f"in all: {_count(len(every), 'band')} on {_count(len(chans), 'channel')} across {len(needed)} "
+            f"packages, deepest {b['gain_db']:+.1f} dB at {b['f']:g} Hz on {ch} [{pid}] (band gain, fitted on {source})")
+
+
+def _quiet_numbers(packages, source):
+    """What a run with nothing to propose read -- one number per kind of package, in decision order, so
+    "nothing to do" says how far from the line each kind stood rather than only that nothing crossed it."""
+    out = []
+    res = [pk for pk in packages if pk["kind"] == "res"]
+    if res:
+        left = [lo for pk in res for lo in pk.get("left_out", [])]
+        chs = _names(c for pk in res for c in pk["channels"])
+        out.append(f"0 resonance cuts on {chs}: {_count(len(left), 'feature')} left out -- a dip, too narrow or "
+                   f"broad, moving, or near a junction; each named below (read on {source})" if left else
+                   f"0 resonance cuts on {chs}: no peak {RES_WIDTH[0]:.2g}-{RES_WIDTH[1]:.2g} oct wide and "
+                   f"{MIN_PROMINENCE_DB:g} dB over a 1-oct trend (read on {source})")
+    lr = [pk for pk in packages if pk["kind"] == "lr"]
+    scored = [pk for pk in lr if pk.get("score")]
+    if scored:
+        pk = max(scored, key=lambda p: p["score"]["worst_lr_db_before"])
+        s = pk["score"]
+        lo, hi = s["read_band_hz"]
+        out.append(f"worst |L-R| per 1/3 oct {s['worst_lr_db_before']:.2f} dB at {pk['pair']}, tolerance "
+                   f"{s['tolerance_db']:g} dB ({lo:.0f}-{hi:.0f} Hz where both play; measured on {source})")
+    elif lr:
+        pk = lr[0]
+        L, R = pk["channels"]
+        lb = pk.get("live_bands_hz") or {}
+        out.append(f"{pk['pair']} not read: {L} plays {_hz(lb.get(L))}, {R} {_hz(lb.get(R))} (within "
+                   f"{LIVE_BAND_DB:g} dB of each one's passband level, on {source}) -- nothing shared in "
+                   f"{LR_BAND[0]:g}-{LR_BAND[1]:g} Hz")
+    tone = [pk for pk in packages if pk["kind"] == "tone"]
+    if tone:
+        pk = max(tone, key=lambda p: p["score"]["macro_rms_before"])
+        out.append(f"macro rms vs target {pk['score']['macro_rms_before']:.2f} dB at {pk['pair']} "
+                   f"(1/3 oct where the pair plays; measured on {source})")
+    return out[:verdict_block.MAX_NUMBERS]
+
+
+def _next_step(packages, needed, project, out, accepted):
+    """What to do next -- an OFFER, never an application: the desk proposes, the Arbiter decides, and a
+    DSP change reaches him only as a yellow version through `apply.py <project> propose <delta.json>`
+    (SKILL.md, skill #74). A package's file on disk is not that; the round's final EQ once ended as three
+    files and a message, and no version on his screen."""
+    if not needed:
+        parts = sorted({pk.get("part", "?") for pk in packages})
+        return ("nothing to enter, no version to propose"
+                + (" -- go on to the delays (predict --align)" if parts == ["1"] else
+                   " -- Phase 2's next steps are read on the sums (predict, verify_prediction)" if parts == ["2"]
+                   else ""))
+    chosen = [pk for pk in needed if accepted and pk["id"] in accepted] if out else []
+    if chosen:
+        which = f"the accepted {', '.join(pk['id'] for pk in chosen)} to the Arbiter as ONE yellow version"
+        path = os.path.join(out, "eq-delta.json")
+        recheck = [j for pk in chosen for j in pk.get("recheck_junctions") or []]
+        rest = ""
+    else:
+        first = needed[0]
+        which = f"[{first['id']}] to the Arbiter as a yellow version"
+        path = os.path.join(out or "DIR", f"eq-{first['id'].replace(':', '-')}.json")
+        recheck = list(first.get("recheck_junctions") or [])
+        later = len(needed) - 1
+        rest = f"; the {_count(later, 'package')} after it assume it accepted" if later else ""
+    recheck = list(dict.fromkeys(recheck))
+    return ((f"re-check the delay at {', '.join(recheck)} (predict --align), then " if recheck else "")
+            + ("" if out else "re-run with --out DIR, then ")
+            + f"offer {which}: python3 rew_tool/state/apply.py {project or '<project>'} propose {path}{rest}")
+
+
+def verdict_lines(packages, *, source=None, project=None, out=None, accepted=None, refused=()):
+    """The five lines on top (skill #70): how many packages have cuts, the first one in decision order --
+    what it cuts and its score before -> after, each number with its quantity and the series it was read
+    on -- and the command that offers it. A run with nothing to propose says how each kind of package read.
+
+    `source` names the curves (`REW _51 (rta)`, `solos set_1r`); `project` and `out` fill the command;
+    `accepted` is what `--accept` merged into `eq-delta.json`; `refused` the channels refused at de-embed,
+    which no package read and the verdict names rather than lets "nothing to do" cover."""
+    source = source or "the curves given"
+    needed = [pk for pk in packages if pk.get("needed")]
+    parts = tuple(sorted({pk.get("part", "?") for pk in packages}))
+    part = {("1",): "part 1, per driver", ("2",): "part 2, pairs and tone"}.get(parts, "parts 1 and 2")
+    unread = [pk["id"] for pk in packages if pk["kind"] == "lr" and not pk.get("score")]
+    quiet = len(packages) - len(needed) - len(unread)
+    if needed:
+        ids = [pk["id"] for pk in needed]
+        head = (f"{len(needed)} of {_count(len(packages), 'EQ package')} PROPOSED ({part}): {', '.join(ids[:4])}"
+                + (f" +{len(ids) - 4} more" if len(ids) > 4 else "")
+                + (f" -- {quiet} nothing to do" if quiet else ""))
+        numbers = [_what_it_does(needed[0], source), _score_line(needed[0], source)]
+        if len(needed) > 1:
+            numbers.append(_in_all(needed, source))
+    elif packages:
+        head = f"NOTHING TO DO -- 0 of {_count(len(packages), 'EQ package')} proposed ({part})"
+        numbers = _quiet_numbers(packages, source)
+    else:
+        head = "NOTHING TO DO -- no EQ package to read: no channel or pair in this part"
+        numbers = []
+    if unread:
+        head += f"; {len(unread)} not read ({', '.join(unread)})"
+    if refused:
+        head += f"; {_count(len(refused), 'channel')} refused at de-embed, not read ({', '.join(refused)})"
+    return verdict_block.block(head, numbers, _next_step(packages, needed, project, out, accepted))
+
+
+def note_lines(notes, verbose=False, limit=NOTES_SHOWN):
+    """The run's notes as a person reads them (skill #70): `predict.compact_notes`' grouping -- one line per
+    distinct note, the channels it applies to joined -- and at most `limit` unless `verbose`.
+
+    Until skill #70 this was `notes[:8]`: the ninth note was cut in silence and nothing could show it. The
+    tail line is this module's own rather than predict's, which adds "all of them are in --out's JSON" --
+    true of predict's JSON, not of this one, which holds the packages alone."""
+    lines = P.compact_notes(notes, verbose=True)
+    if verbose or len(lines) <= limit:
+        return lines
+    return lines[:limit] + [f"(+{len(lines) - limit} more -- --verbose)"]
+
+
+def render(packages, *, source=None, project=None, out=None, accepted=None, refused=(), notes=(),
+           verbose=False):
+    """The human output: the verdict block (skill #70), then every package in decision order, then the
+    notes. The keywords only feed the block and the cuts; the packages themselves are not touched, so
+    `--json` / `--out` carry exactly what they did."""
     parts = sorted({pk.get("part", "?") for pk in packages})
     which = ("part 1, the coarse per-driver EQ -- Phase 1's, before the delays" if parts == ["1"] else
              "part 2, the pairs and the tone -- Phase 2's" if parts == ["2"] else "both parts")
-    lines = [f"  EQ proposals -- packages, in decision order ({which}); say yes or no to a package, not a band", ""]
+    lines = verdict_lines(packages, source=source, project=project, out=out, accepted=accepted,
+                          refused=refused) + [""]
+    lines += [f"  EQ proposals -- packages, in decision order ({which}); say yes or no to a package, not a band", ""]
     for pk in packages:
         head = f"  [{pk['id']}]  " + ("PROPOSED" if pk.get("needed") else "nothing to do")
         if pk["kind"] == "lr" and pk["score"]:
@@ -669,8 +849,11 @@ def render(packages):
         if pk["kind"] == "res":
             for code, sc in pk["score"].items():
                 lines.append(f"      {code:6} fine residual rms {sc['fine_rms_before']:.2f} -> {sc['fine_rms_after']:.2f} dB")
-            for lo in pk.get("left_out", [])[:12]:
+            left_out = pk.get("left_out", [])
+            for lo in (left_out if verbose else left_out[:LEFT_OUT_SHOWN]):
                 lines.append(f"      - {lo['channel']:6} {lo['f']:>8.1f} Hz {lo['db']:+5.1f} dB ({lo['width_oct']:.2f} oct): {lo['reason']}")
+            if not verbose and len(left_out) > LEFT_OUT_SHOWN:     # skill #70: a cut says so
+                lines.append(f"      - (+{len(left_out) - LEFT_OUT_SHOWN} more left out -- --verbose)")
         for w in pk["why"]:
             lines.append(f"      why: {w}")
         if pk.get("assumes"):
@@ -680,6 +863,8 @@ def render(packages):
                          f"(predict --align): its bands reach into the junction's band")
         lines.append(f"      listen: {', '.join(pk['listen'])}")
         lines.append("")
+    for n in note_lines(notes, verbose=verbose):
+        lines.append(f"  note: {n}")
     return "\n".join(lines)
 
 
@@ -782,6 +967,9 @@ def main(argv=None):
     ap.add_argument("--accept", default=None, help="comma list of package ids to merge into eq-delta.json")
     ap.add_argument("--out", metavar="DIR", default=None)
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--verbose", action="store_true",
+                    help=f"every note and every feature a package left out, not the first {NOTES_SHOWN} / "
+                         f"{LEFT_OUT_SHOWN} (skill #70); the JSON is the same either way")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args(argv)
     # The response model is bound to THIS device's processing rate before anything is modelled.
@@ -896,7 +1084,7 @@ def main(argv=None):
                        allow_boost=args.allow_boost, routes=routes, part=args.part)
     # A channel refused at de-embed gets no EQ package, and until 2026-09-01 that was ALL that
     # happened: `refused` was bound and never read, and the note explaining it rode in `notes`,
-    # which is truncated to eight lines and printed only in the human mode. So under `--json` a
+    # which is cut to five lines (skill #70; eight then) and printed only in the human mode. So under `--json` a
     # channel could vanish from the proposal in silence -- the same shape of silence the refusal
     # exists to prevent (autosound-hub #31). It goes to stderr in BOTH modes; stdout is untouched,
     # so the JSON contract is exactly what it was.
@@ -907,9 +1095,13 @@ def main(argv=None):
     if args.json:
         print(json.dumps(packages, indent=1, default=float))
     else:
-        print(render(packages))
-        for n in notes[:8]:
-            print(f"  note: {n}")
+        # skill #70: the verdict block on top names the series the numbers were read on and the command
+        # that offers the first package; the notes follow the packages, five unless --verbose.
+        source = (f"solos {os.path.basename(os.path.normpath(args.solos))}" if args.solos else
+                  f"REW _{args.ver} ({'rta' if args.part == '2' else 'sw'})")
+        accepted = [s.strip() for s in args.accept.split(",") if s.strip()] if args.accept else None
+        print(render(packages, source=source, project=args.project, out=args.out, accepted=accepted,
+                     refused=refused, notes=notes, verbose=args.verbose))
     if args.out:
         os.makedirs(args.out, exist_ok=True)
         with open(os.path.join(args.out, "eq-propose.json"), "w", encoding="utf-8") as fh:
@@ -1179,6 +1371,57 @@ def _selftest():
     assert r12 == [] and "m-L" in s12 and "as configured" in n12[0], n12
     _s, _n, r12b = P.de_embed_solos(loaded11, f, record=None, baseline=baseline_for("1"))
     assert r12b == ["m-L"], r12b                                  # what every part-2 run used to get
+    # 13. The verdict block on top (skill #70): at most five lines -- how many packages have cuts, the first
+    #     one's cut and score, each number with its quantity and the series it was read on, and a next step
+    #     that OFFERS the package as a yellow version (`apply.py <project> propose`, skill #74), never applies
+    #     it. A run with nothing to propose says how each kind read; the packages themselves are not touched.
+    def top(text):
+        return text.split("\n\n", 1)[0]
+    frozen = json.dumps([list(r.values()) for r in (pk, pk5, pk6)], default=float)
+    v6 = render([pk6["lr:Ms"]], source="REW _51 (rta)", project="P", out="OUT")
+    assert verdict_block.is_block(v6) and top(v6).lstrip().startswith(
+        "▶ 1 of 1 EQ package PROPOSED (part 2, pairs and tone): lr:Ms"), top(v6)
+    nums6 = [ln for ln in top(v6).splitlines() if ln.lstrip().startswith("·")]
+    assert len(nums6) == 2 and all("REW _51 (rta)" in ln and " dB" in ln for ln in nums6), nums6
+    assert "worst |L-R| per 1/3 oct" in nums6[1] and "tolerance 1 dB" in nums6[1], nums6
+    assert top(v6).splitlines()[-1].lstrip() == (
+        "→ re-check the delay at m-R↔tw-R (predict --align), then offer [lr:Ms] to the Arbiter as a yellow "
+        f"version: python3 rew_tool/state/apply.py P propose {os.path.join('OUT', 'eq-lr-Ms.json')}"), top(v6)
+    v1 = top(render(list(pk.values())))                           # the resonance run: one of three has cuts
+    assert verdict_block.is_block(v1) and "▶ 1 of 3 EQ packages PROPOSED (parts 1 and 2): res:mid -- 2 nothing to do" in v1, v1
+    assert "fine residual rms on m-L" in v1 and "re-run with --out DIR, then offer [res:mid]" in v1, v1
+    v2 = top(render(list(pk2.values()), project="P", out="OUT"))
+    if sum(p["needed"] for p in pk2.values()) > 1:                # several: the rest assume the first accepted
+        assert "in all:" in v2 and "after it assume it accepted" in v2, v2
+    v5 = top(render(list(pk5.values()), out="OUT", accepted=["tone:Ms", "lr:Ms"]))
+    assert "offer the accepted tone:Ms to the Arbiter as ONE yellow version" in v5 and "eq-delta.json" in v5, v5
+    v10 = render([p10b["lr:Ws"]])
+    assert verdict_block.is_block(v10) and top(v10).lstrip().startswith(
+        "▶ NOTHING TO DO -- 0 of 1 EQ package proposed (part 2, pairs and tone); 1 not read (lr:Ws)"), top(v10)
+    assert "Ws not read: w-L plays" in top(v10) and "→ nothing to enter, no version to propose" in top(v10), top(v10)
+    flat = meas_of(driver(), driver())
+    quiet = propose(f, flat, targets, chains, roles, pairs, joints)
+    vq = top(render(quiet, source="solos set_1"))
+    assert not any(p["needed"] for p in quiet) and verdict_block.is_block(vq), [p["id"] for p in quiet if p["needed"]]
+    assert vq.lstrip().startswith("▶ NOTHING TO DO -- 0 of 3 EQ packages proposed (parts 1 and 2)"), vq
+    assert "0 resonance cuts on m-L, m-R" in vq and "worst |L-R| per 1/3 oct" in vq and "macro rms vs target" in vq \
+        and vq.count("solos set_1") == 3 and "apply.py" not in vq, vq
+    vr = top(render(propose(f, flat, targets, chains, roles, pairs, joints, part="1"), refused=["tw-L"]))
+    assert "refused at de-embed, not read (tw-L)" in vr and "go on to the delays (predict --align)" in vr, vr
+    assert json.dumps([list(r.values()) for r in (pk, pk5, pk6)], default=float) == frozen   # --json / --out unchanged
+    # ...and the notes: predict's grouping, five shown, the rest named and behind --verbose -- not `notes[:8]`
+    many = [f"ch{i}: note number {i}" for i in range(8)] + ["m-L: solo used as recorded (x)",
+                                                           "m-R: solo used as recorded (x)"]
+    short = note_lines(many)
+    assert len(short) == NOTES_SHOWN + 1 and short[-1] == "(+4 more -- --verbose)", short
+    full = note_lines(many, verbose=True)
+    assert len(full) == 9 and full[-1] == "m-L, m-R: solo used as recorded (x)", full
+    assert "(+4 more -- --verbose)" in render(quiet, notes=many) and "ch7: note number 7" in render(quiet, notes=many,
+                                                                                                    verbose=True)
+    lo2 = pk2["res:mid"]["left_out"]
+    if len(lo2) > LEFT_OUT_SHOWN:                                 # the comb leaves out more than the page shows
+        assert f"(+{len(lo2) - LEFT_OUT_SHOWN} more left out -- --verbose)" in render([pk2["res:mid"]])
+        assert render([pk2["res:mid"]], verbose=True).count("\n      - ") == len(lo2)
     print("selftest[eq_propose] OK -- a +5 dB Q4 resonance is cut where it is and only on its channel; a "
           "comb is not boosted and its dips are listed with the reason; a peak that MOVES in the "
           "ellipsoid is not proposed and one that STAYS is; a 2.5 dB shelf difference is cut on the louder "
@@ -1187,7 +1430,9 @@ def _selftest():
           "excess-phase gate built from an impulse allows a resonance and blocks a comb null; every band "
           "sits where its channel plays, and one outside (tw-R PK 845.5 Hz) is dropped and named; a pair's "
           "level offset is read where both play (0.5 dB, not the floors' +12); part 2 reads the (rta), "
-          "refuses a series without it by name, and is never a baseline.")
+          "refuses a series without it by name, and is never a baseline; the human output opens with a verdict "
+          "block of at most five lines that offers the first package as a yellow version (or says nothing to "
+          "enter), and shows five notes unless --verbose.")
     return 0
 
 
