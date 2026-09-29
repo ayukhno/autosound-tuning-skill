@@ -1618,9 +1618,24 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-074 · W-4 built and merged; signed candidate `beta-v3.0.64-rc1` waits for the Arbiter's runs on the VM and the Mac
+
+**Status**: open 2026-09-29 · PR #100 green, merged `--ff-only` (`main` = `32b2d7c`); `beta-v3.0.64-rc1` signed and pushed (a fresh clone verifies against the pinned key)
+
+All 13 W-4 issues built (`docs/PLAN-W-4.md`, "Built"). Git on this Mac now signs with `~/.ssh/id_ed25519` (the Arbiter's
+OK, 2026-09-29). Waiting on his runs of the candidate, which exercise #99 (a real signature), #91 (a clone with a local
+change), #96 (the output text), #97 (the tools question) and #98 (`--upgrade`):
+- VM, one line: `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/beta-v3.0.64-rc1/install.ps1))) -SkillRef beta-v3.0.64-rc1 -Log "$HOME\Downloads\тест\w4-rc1-install.txt"`
+- Mac: `curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/beta-v3.0.64-rc1/install.sh | bash -s -- --skill-ref beta-v3.0.64-rc1 2>&1 | tee ~/Downloads/тест/w4-rc1-mac.txt`
+
+Then: `scripts/tag-check.sh v3.0.64`, `git tag -s v3.0.64`, push; close the 13 issues and the milestone with the tag; close
+hub #213 and #219 with the tag (and tell tcc on #219 and #217); merge this TODO commit into `main` only AFTER the tag
+(a commit on `main` between the candidate and the release is not bookkeeping, and the hub refuses the release then).
+Resume: `hub/bin/role skill --resume 8abdabc5-2f9d-4878-8185-4b741a41804e`.
+
 ## S-073 · Next: W-4's collection continues; the build starts on the Arbiter's word that it is closed
 
-**Status**: open 2026-09-27 · the session stopped on «добраніч»; nothing in work, no background tasks
+**Status**: done 2026-09-29 · the Arbiter closed the collection («Збір W-4 закрито — будувати»); built on `wave-2026-09-29`, see S-074 · was: open 2026-09-27
 
 W-4 · v3.0.64 holds 13 issues, all `ok` (#70 #71 #89–#99); still collection (S-069). When he closes it: one branch
 `wave-…` for W-4, the plan, then the work; #99 (signed tags) needs his signing key set in git on this Mac and a run on
