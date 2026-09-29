@@ -232,7 +232,7 @@ Du benötigst einen Laptop, ein Messmikrofon, einen DSP-Prozessor im Auto und ei
 1. Öffne das **Terminal** (drücke `Cmd + Leertaste` → tippe `Terminal` ein → drücke `Enter`).
 2. Füge folgenden Befehl ein und drücke `Enter`:
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.63/install.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.64/install.sh | bash
    ```
 3. Falls Apples Command Line Tools fehlen, öffnet sich einmalig das offizielle Installationsfenster von Apple — klicke auf Installieren. Das Skript selbst fragt niemals nach deinem Passwort. Warte 10–20 Minuten.
 
@@ -244,7 +244,7 @@ Du benötigst einen Laptop, ein Messmikrofon, einen DSP-Prozessor im Auto und ei
 1. Öffne die **Windows PowerShell** (drücke Start → tippe `powershell` ein → drücke `Enter`).
 2. Füge folgenden Befehl ein und drücke `Enter`:
    ```powershell
-   irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.63/install.ps1 | iex
+   irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.64/install.ps1 | iex
    ```
 3. Falls Git fehlt, erlaube dessen Installation. Das Skript erstellt außerdem eine Verknüpfung für **REW (API on)** auf deinem Desktop.
 

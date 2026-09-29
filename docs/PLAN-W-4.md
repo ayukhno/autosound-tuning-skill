@@ -68,6 +68,23 @@ way. Its name and JSON go onto hub #217 and #219 before TCC builds against them.
 | **#71** | README/FAQ name Gemini Pro (High) | README and FAQ say what to pick when agy refuses the model in your region, and the installers' closing line stops naming one model as the critic; four languages through the Advisor |
 | **#70** (S-057) | a five-line verdict block on top of six tools | a shared `rew_tool/verdict.py` (at most five lines: the verdict, two or three numbers each with its quantity and source, what to do next); each tool decides its verdict: `predict`, `rew_tool.py analyze-joints`, `eq_propose`, `resonalyze_engine run`, `contract.py check` (after the reply-language line, which stays first, SKILL.md), `verify_prediction` (its bottom verdict moves up). Details below; `--verbose` where a tool truncates. TCC reads only `contract.py --json`, which does not change |
 
+## Built on `wave-2026-09-29`, 2026-09-29
+
+Each with its selftest red first where a test could be red: #93 `755dd20` · #90 `7eebe2b` · #89 `68cba27` · #96
+`cceba5d` · `upkeep.py` `f1a12f5` · the installers (#91 #97 #98 #99) `25fdcae` · #99's `allowed_signers`,
+`SECURITY.md`, `tag-check.sh` `4422b08` · #91's crash (two meanings under `rew["foreign"]`: REW's other-file dict
+and the round's list of unreadable titles; the second overwrote the first when a round was open) `1c3a167` · #70
+`85f5423` `8688df8` `eb67c91` `78b66c1` · #95 #71 `2542d6e`. Tickets: the `upkeep.py` contract on hub #219 and
+#217; hub #221 (SKL-059) to tcc for #92, #94 and the libraries.
+
+Decided while building: #71's FAQ half was already done in W-3's FAQ rework, so #71 is README and the installers'
+last screen. #95's options table carries the flags, with one full two-option example per system; whole lines in
+the cells would be as wide as the line GitHub cut. #90's FAQ line was dropped: the red wrapper appears only for a
+person piping the script by hand in PowerShell 5, and the CHANGELOG says what it is.
+
+**Waiting on the Arbiter:** his signing key in git's config on this Mac; runs of the installers on the Windows VM
+and the Mac (#90, #96, #99, #91's installer path) before the tag.
+
 ## Order
 
 #93 #90 #89 #96 (built) → `upkeep.py` and the installers (#91 #97 #98 #99) → the tickets to tcc and the answers on

@@ -232,7 +232,7 @@ Będziesz potrzebować laptopa, mikrofonu pomiarowego, procesora DSP w aucie ora
 1. Otwórz program **Terminal** (naciśnij klawisze `Cmd + Spacja` → wpisz `Terminal` → naciśnij `Enter`).
 2. Wklej poniższą komendę i naciśnij `Enter`:
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.63/install.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.64/install.sh | bash
    ```
 3. Jeśli brakuje narzędzi Apple Command Line Tools, oficjalne okno instalatora Apple otworzy się jeden raz — kliknij Zainstaluj. Sam skrypt nigdy nie prosi o twoje hasło. Poczekaj 10–20 minut.
 
@@ -244,7 +244,7 @@ Będziesz potrzebować laptopa, mikrofonu pomiarowego, procesora DSP w aucie ora
 1. Otwórz program **Windows PowerShell** (naciśnij Start → wpisz `powershell` → naciśnij `Enter`).
 2. Wklej poniższą komendę i naciśnij `Enter`:
    ```powershell
-   irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.63/install.ps1 | iex
+   irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.64/install.ps1 | iex
    ```
 3. Jeśli brakuje programu Git, zezwól na jego instalację. Skrypt utworzy również skrót **REW (API on)** na twoim Pulpicie.
 
