@@ -29,9 +29,9 @@ way. Its name and JSON go onto hub #217 and #219 before TCC builds against them.
 - **#91** (S-064): `keep-local` above. The installers: a clone with changes no longer fails the checkout with
   "check the network"; they name the files, keep the patch, ask whether to send it (Enter = send, `s` = keep only;
   `--yes` keeps and does not send: sending needs a person), reset, update. The other half — what reached
-  `render_report` as a non-dict — is guarded: `rew["foreign"]` is read only when it is a dict, and a note says what
-  arrived instead; the producer (`rew_api.foreign_measurements`) returns a dict in every path of this tree, so the VM's
-  value came from a patched or older copy.
+  `render_report` as a non-dict — was found while building: the round's verdict carries its own `foreign` (a list of
+  titles the naming grammar cannot read) and was merged into the same dict as REW's other-file measurements, so with a
+  round open the list overwrote the dict. The dict is now `other_file`.
 - **#97** (hub #219 TCC-035): `tools` above; the installers call it on a re-run, after one question listing the tools
   and their versions.
 - **#98** (S-072): `--upgrade` in both installers' `pip install`, `libs` for TCC, and matplotlib in CI beside numpy and
@@ -66,7 +66,7 @@ way. Its name and JSON go onto hub #217 and #219 before TCC builds against them.
 | **#94** (S-068) | TCC's update window prints the whole command | a ticket to tcc, with #92 |
 | **#95** (S-070) | README's install section | one sentence under the install line (the tag in the URL pins the installer; it installs the newest release), the options as a table (what it does · macOS · Windows, each cell a whole line to paste) and one example with two options; four languages through the Advisor. The pin itself stays (HUB-030) |
 | **#71** | README/FAQ name Gemini Pro (High) | README and FAQ say what to pick when agy refuses the model in your region, and the installers' closing line stops naming one model as the critic; four languages through the Advisor |
-| **#70** (S-057) | a five-line verdict block on top of six tools | a shared `rew_tool/verdict.py` (at most five lines: the verdict, two or three numbers each with its quantity and source, what to do next); each tool decides its verdict: `predict`, `rew_tool.py analyze-joints`, `eq_propose`, `resonalyze_engine run`, `contract.py check` (after the reply-language line, which stays first, SKILL.md), `verify_prediction` (its bottom verdict moves up). Details below; `--verbose` where a tool truncates. TCC reads only `contract.py --json`, which does not change |
+| **#70** (S-057) | a five-line verdict block on top of six tools | a shared `rew_tool/verdict.py` (at most five lines: the verdict, two or three numbers each with its quantity and source, what to do next); each tool decides its verdict: `predict`, `rew_tool.py analyze-joints`, `eq_propose`, `resonalyze_engine run`, `contract.py check` (after the reply-language line, which stays first, SKILL.md), `verify_prediction` (its bottom verdict moves up). Details below; `--verbose` where a tool truncates. TCC reads only `contract.py --json`; its one change is #91's `other_file` |
 
 ## Built on `wave-2026-09-29`, 2026-09-29
 
