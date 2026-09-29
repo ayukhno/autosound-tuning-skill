@@ -42,6 +42,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import dsp_math  # noqa: E402
+import verdict as verdict_block  # noqa: E402
 
 # Every tolerance here is a LOG-WEIGHTED number on the predictor's grid (`dsp_math._log_weights`
 # in `_band_mean`), over the band it names, after 1/6-octave smoothing where `ENTRY_SMOOTHING_OCT`
@@ -572,12 +573,58 @@ def verify(predicted, measured, *, pair_names=None, solo_names=None, all_name=No
     return report
 
 
+def verdict_lines(report):
+    """The five-line block on top (skill #70): the verdict in short, the numbers it rests on, the next step.
+
+    The run's own verdict stays at the bottom in full; here it is cut to what a session acts on -- which
+    junctions, not the paragraph on what might be wrong with them."""
+    judged = [j for j in report["junctions"] if j.get("status") in ("trusted", "NOT trusted")]
+    unmeasured = [j for j in report["junctions"] if j.get("status") == "not measured"]
+    crit = report["criterion_db"]
+    entry = report.get("entry") or {}
+    head = report["verdict"].split("  ⚠️")[0]
+    numbers, step = [], None
+    if head.startswith("ENTRY"):
+        checked = report["channels"]
+        head = (f"ENTRY CHECK at {', '.join(entry['check'])}" if entry.get("check")
+                else head.split(" (")[0])
+        if checked:
+            worst = max(checked, key=lambda c: c["shape_rms_db"])
+            numbers.append(f"worst shape rms {worst['shape_rms_db']:.2f} dB at {worst['channel']} (measured solo vs "
+                           f"the chain as designed, one offset each; criterion {entry['criterion_db']:g} dB)")
+        step = ("find the chain fact on each channel named: its hint is on its row below" if entry.get("check")
+                else "the channels play as designed: go on to the junctions")
+    else:
+        if head.startswith("NOT trusted"):
+            head = head.split(" -- ")[0] + " -- the model disagrees with the car there"
+        if judged:
+            worst = max(judged, key=lambda j: j["worst_abs_delta_db"])
+            numbers.append(f"worst |mean Δ| {worst['worst_abs_delta_db']:.2f} dB at {worst['lo']}↔{worst['hi']} "
+                           f"(predicted − measured interference; criterion {crit:g} dB)")
+        numbers.append(f"{len(judged)} of {len(report['junctions'])} junction(s) measured with the pair and "
+                       f"both solos")
+        if entry.get("check"):
+            numbers.append(f"entry control: CHECK at {', '.join(entry['check'])}")
+        if head.startswith("TRUSTED"):
+            step = "the desk's prediction holds for this car: go on from it"
+        elif head.startswith("NOT trusted"):
+            step = "find the chain fact at the junctions marked ✗ below before trusting the desk there"
+        else:
+            titles = [t for j in unmeasured for t in j.get("missing", [])]
+            step = (f"measure these {len(titles)}: " + ", ".join(titles[:4]) + (" …" if len(titles) > 4 else "")
+                    if titles else "measure each junction's pair and both solos")
+    if "not on the point-sweep base" in report["verdict"]:
+        head += " (some rows not on the point-sweep base)"
+    return verdict_block.block(head, numbers, step)
+
+
 def render(report):
     spec = report.get("window_spec") or {}
     wins = sorted({j.get("window", "steady") for j in report["junctions"]
                    if j.get("status") != "not measured"}) or ["steady"]
     win = " + ".join(wins)
-    lines = [f"  Verify: predicted vs measured  (criterion |mean Δ| ≤ {report['criterion_db']:g} dB "
+    lines = verdict_lines(report) + [""] + [
+             f"  Verify: predicted vs measured  (criterion |mean Δ| ≤ {report['criterion_db']:g} dB "
              f"per junction band; Δ = predicted − measured interference)",
              f"  junctions read {win} (each row says which)"
              + (f" ({spec.get('gate_ms'):g} ms after the arrival)" if spec.get("gate_ms")
@@ -823,6 +870,13 @@ def _selftest():
     r5 = verify(pred, meas(A, B, base="rta"), **names)
     assert "not on the point-sweep base" in r5["verdict"] and r5["bases"] == ["rta"], r5["verdict"]
     assert "w-L↔m-L" in render(r3) and "✗" in render(r3)
+    # skill #70: every run opens with the five-line block -- the verdict in short, the worst Δ with its quantity
+    # and the criterion, the next step; the full verdict stays at the bottom.
+    for rep_, head in ((r, "TRUSTED"), (r3, "NOT trusted at w-L↔m-L -- the model disagrees"), (r4, "UNVERIFIED")):
+        shown = render(rep_)
+        assert verdict_block.is_block(shown) and shown.lstrip().startswith("▶ " + head), shown[:300]
+    assert "worst |mean Δ|" in render(r3).splitlines()[1] and "criterion" in render(r3).splitlines()[1]
+    assert "measure these" in render(r4) and render(r3).rstrip().endswith("the tuner's to find"), render(r4)[:400]
     # 6. The entry control. The exact car: every channel 'as designed', ENTRY OK. A +8 dB bump the
     #    DSP was not asked for: CHECK on that channel, the worst point at the bump, and the hint is
     #    the chain feature nearest to it -- the HPF when the bump sits on the corner, and "no chain
@@ -835,6 +889,7 @@ def _selftest():
     c6 = next(c for c in r6["channels"] if c["channel"] == "m-L")
     assert c6["status"] == "CHECK" and 1000 < c6["worst_hz"] < 1400 and c6["worst_db"] > 4, c6
     assert "no chain feature" in c6["hint"] and r6["verdict"].startswith("ENTRY CHECK: m-L"), (c6, r6["verdict"])
+    assert render(r6).lstrip().startswith("▶ ENTRY CHECK at m-L") and verdict_block.is_block(render(r6)), render(r6)[:300]
     assert next(c for c in r6["channels"] if c["channel"] == "w-L")["status"] == "as designed"
     r7 = verify(pred, meas(A, bump(B, 300.0)), **names, entry_criterion_db=0.5, entry_only=True)
     c7 = next(c for c in r7["channels"] if c["channel"] == "m-L")
