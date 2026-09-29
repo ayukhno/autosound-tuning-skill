@@ -38,6 +38,7 @@ if _HERE not in sys.path:
 import dsp_profile
 import naming
 import project
+import verdict as verdict_block
 
 # `state/state.py` schema_version this contract expects — kept as a literal constant table
 # (`CONTRACT`) rather than re-deriving it from the module on every run, so a version bump is a
@@ -957,6 +958,49 @@ def _migration_command(project_dir):
             f"--into <new-project-dir>")
 
 
+def verdict_lines(report):
+    """The five-line block (skill #70), printed right under the reply-language line, which stays first (SKILL.md:
+    it decides the language of the sentence that reports the rest). The same three questions the exit codes ask
+    -- is anything wrong (`ok`), does phase 0 have what it needs (`complete`), and what to do first."""
+    files = report["files"]
+    bad = [f for f in files if f["valid"] is False]
+    cross = report.get("cross_checks") or {}
+    cross_issues = (cross.get("glossary_vs_ledgers") or []) + (cross.get("tiers_vs_profile") or [])
+    missing = report.get("missing") or []
+    if not report["ok"]:
+        head = (f"Issues found -- {len(bad)} file(s) not valid" if bad else "Issues found")
+        head += f", {len(cross_issues)} cross-check finding(s)" if cross_issues else ""
+    elif missing:
+        head = "Nothing is wrong -- but phase 0 is not ready: intake has not produced everything"
+    else:
+        head = "OK -- nothing to fix"
+    present = [f for f in files if f["exists"]]
+    numbers = [f"{len(present) - len(bad)} of {len(present)} file(s) on disk valid against their schema (this check)"
+               if present else "no project file on disk yet (this check)"]
+    if missing:
+        numbers.append(f"phase 0 needs {len(missing)} more: " + ", ".join(missing[:3])
+                       + (" …" if len(missing) > 3 else ""))
+    rew = cross.get("rew") or {}
+    if rew.get("round") and rew.get("expected") is not None:
+        numbers.append(f"round {rew['round']}: {len(rew.get('found') or [])} of {len(rew['expected'])} captured "
+                       f"(REW, read now)")
+    proposals = cross.get("proposals_on_disk") or []
+    if bad:
+        first = bad[0]
+        issue = " ".join(str((first.get("issues") or ["see its row"])[0]).split())
+        step = f"fix {first['file']} first: {issue[:140]}{'…' if len(issue) > 140 else ''}"
+    elif cross_issues:
+        step = f"fix the cross-check below first: {cross_issues[0][:140]}"
+    elif missing:
+        step = "run intake for what phase 0 still needs (named above)"
+    elif proposals:
+        step = (f"a proposal on disk never reached the Arbiter: `apply.py {report['project_dir']} propose "
+                f"{proposals[0]['file']}` (skill #74)")
+    else:
+        step = "nothing to fix"
+    return verdict_block.block(head, numbers, step, indent="")
+
+
 def render_report(report):
     lines = [f"# Project contract check — {report['project_dir']}", ""]
     # FIRST, before the files: it decides the language of the very sentence that reports the rest.
@@ -974,6 +1018,7 @@ def render_report(report):
             "from the language of the last message: he typed English on a VM with no Ukrainian "
             "layout while the reply stayed Ukrainian (S-045).")
     lines.append("")
+    lines += verdict_lines(report) + [""]
     if report.get("prose"):
         # Before the file table and before any mention of intake. A tune already exists here; the
         # only thing missing is a machine-readable form of it.
@@ -1361,7 +1406,13 @@ def _selftest():
     lie["version"] = "v_009"
     with open(h._path(v1), "w", encoding="utf-8") as fh:
         json.dump(lie, fh)
-    lied = check_project(root, skip_rew=True)["files"]
+    lied_report = check_project(root, skip_rew=True)
+    lied = lied_report["files"]
+    # skill #70: the block sits right under the reply-language line and says what to fix first.
+    shown = render_report(lied_report)
+    after_lang = shown.split("\n\n", 2)[2]
+    assert shown.index("Reply language") < shown.index("▶ Issues found"), shown[:600]
+    assert verdict_block.is_block(after_lang) and "→ fix state/" in after_lang.split("\n\n")[0], after_lang[:600]
     line_f = next(f for f in lied if f["file"] == "state/versions/")
     assert line_f["valid"] is False and any("'v_009'" in i and "repair-version" in i for i in line_f["issues"]), line_f
     slot_f = next(f for f in lied if f.get("slot") == "SQ_Jazzi")
