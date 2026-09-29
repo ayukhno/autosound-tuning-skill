@@ -216,6 +216,15 @@ W-4 (`docs/PLAN-W-4.md`): the issues on the milestone that carry the Arbiter's `
   line saying so. `AUTOSOUND_SKIP_TAG_VERIFY=1` skips the check for one run and says so. `allowed_signers` and
   `SECURITY.md` carry the key and its fingerprint for anyone checking by hand. `tag-check.sh` goes red when git
   would not sign with that key.
+- **README's install section says what the version in the line is, and how to add options** (skill #95). The tag
+  in the install line pins the installer script, not the version installed: the installer always installs the
+  newest release, and the pin keeps a change to the repository from changing what runs on a new machine (hub #81
+  HUB-030, unchanged). The README now says so under the line. The options are a table (what each does · macOS ·
+  Windows), with one example of two options per system; the Windows one is two short lines, so its flags are no
+  longer cut off at the right edge on GitHub. All four languages, translated through the Advisor.
+- **Where agy refuses Gemini Pro, the docs name the way out** (skill #71). README's first-run step and the
+  installers' last screen now say to pick a Gemini Flash (High) model in the same list when the reviewer answers
+  that Pro is not supported in your location. The FAQ already said so in all four languages.
 
 ## [v3.0.63] — 2026-09-27 · A reviewer picked through omp is called through omp, and through nothing else
 

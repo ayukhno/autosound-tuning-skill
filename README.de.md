@@ -57,19 +57,31 @@ curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0
 irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.63/install.ps1 | iex
 ```
 
-**Optionen:** `--with-omp` (andere Modelle als Claude), `--github` (das Backup), `--terminal` (die Methode ohne die App), `--dry-run` (zeigt den Plan, ändert nichts). Unter macOS kommen sie hinter `bash -s --`:
+Die Version in der Adresse ist die des Installers selbst, nicht die Version, die du bekommst: Der Installer installiert immer das neueste Release. Die Adresse ist fixiert, damit eine Änderung am Repository nicht ändern kann, was auf deinem Rechner läuft.
+
+**Optionen** — füge die gewünschten am Ende der Zeile hinzu:
+
+| Was es bewirkt | macOS | Windows |
+|---|---|---|
+| andere Modelle als Claude, über `omp` (pro Nutzung abgerechnet) | `--with-omp` | `-WithOmp` |
+| das Projekt-Backup auf GitHub | `--github` | `-GitHub` |
+| die Methode ohne die App (nur Terminal) | `--terminal` | `-Terminal` |
+| zeigt den Plan und ändert nichts | `--dry-run` | `-DryRun` |
+
+Mit Optionen sieht die Zeile anders aus. Zwei Optionen auf einmal, unter macOS:
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.63/install.sh | bash -s -- --github
+curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.63/install.sh | bash -s -- --with-omp --github
 ```
-Unter Windows lauten sie `-WithOmp`, `-GitHub`, `-Terminal`, `-DryRun`, in dieser Form:
+und unter Windows als zwei Zeilen (die Optionen kommen in die zweite):
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.63/install.ps1))) -GitHub
+$i = irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.63/install.ps1
+& ([scriptblock]::Create($i)) -WithOmp -GitHub
 ```
 
 **Nach der Installation:**
 1. Der letzte Schritt des Installers meldet dich an: Claude im Browser, dann der Gemini-Reviewer über Googles `agy` (Enter meldet an, `s` überspringt) und GitHub, falls `gh` vorhanden ist.
 2. Auf dem Desktop erscheint die App **Autosound TCC**. Öffne sie.
-3. Erstelle einen neuen leeren Ordner für dein Auto (z.B. `MyCarTuning`) und wähle ihn im Programm aus, mit **AI main: Claude Opus (SDK)** und **AI critic: Gemini Pro (High)**.
+3. Erstelle einen neuen leeren Ordner für dein Auto (z.B. `MyCarTuning`) und wähle ihn im Programm aus, mit **AI main: Claude Opus (SDK)** und **AI critic: Gemini Pro (High)**. Wenn der Reviewer antwortet, dass Gemini Pro an deinem Standort nicht unterstützt wird, wähle ein **Gemini Flash (High)**-Modell aus derselben Liste.
 4. **WICHTIG:** Stelle vor deiner ersten Nachricht sicher, dass das Anstrengungsniveau (Effort) für **Claude Opus** mindestens auf `xhigh` steht (dies ist der Standardwert). Für sehr komplexe Schritte verwende `max`. Das ist entscheidend: Eine schwächere Modellstufe hält bei einem Fehler nicht an; sie stimmt dir einfach zu, was zu „stillen Fehlern“ beim Tuning führt. *Hinweis: Änderungen am Effort-Level gelten erst für die nächste Sitzung.*
 5. Schreibe in den App-Chat: **"tune a new car from scratch"**. Die KI fängt an, Fragen zu stellen und nimmt dich an die Hand.
 

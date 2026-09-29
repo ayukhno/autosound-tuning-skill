@@ -1567,6 +1567,8 @@ if [ "$MODE" = "tcc" ]; then
   say "     Browse… to a folder for the car — a new, empty one is right; everything about that car"
   say "     will live in it (for instance Autosound/my-car in your home folder)."
   say "     AI main: the Claude Opus line (SDK) · AI critic: the Gemini Pro (High) line. Open."
+  # skill #71: agy refuses Pro in some regions; the run must not end naming a model the person cannot get.
+  say "     (If agy says Pro is not supported where you are, pick a Gemini Flash (High) line instead.)"
   n=$((n + 1))
   say "  $n. In the panel on the right, say what you want, in any language:"
   say "     \"let's tune this car from scratch\"."
