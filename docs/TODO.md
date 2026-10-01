@@ -1627,6 +1627,13 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-089 · The installers print the code the app returned when the shortcuts were not created (hub #229)
+
+**Status**: open 2026-10-01 · **W-5 · v3.0.65**, issue #113, `ok` (the Arbiter relaying TCC's ask) · built on `wave-2026-10-01-b`
+
+TCC's half of the VM's shortcut failure logs the exit it chose (tcc#124); the installer's half prints it beside the
+warning, so the next failure in the field names itself. Diagnostic only.
+
 ## S-088 · The feedback form and its response sheet in English
 
 **Status**: open 2026-10-01 · **W-5 · v3.0.65**, issue #112, `ok` (the Arbiter: «давай переробимо на англійську (всі мови не потрібні)») · the form and the sheet changed the same day; the skill's words on `wave-2026-10-01-b`

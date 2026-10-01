@@ -1265,7 +1265,7 @@ if [ "$MODE" = "tcc" ]; then
         esac
       else
         printf '%s\n' "$_bout" >&2
-        warn "the double-clickable app was not built; the command still works:  autosound-tcc"
+        warn "the double-clickable app was not built (the app returned $_brc); the command still works:  autosound-tcc"
       fi
     fi
   fi

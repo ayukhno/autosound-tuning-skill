@@ -1310,8 +1310,11 @@ if ($Mode -eq "tcc" -and ($TccExe -or $DryRun)) {
         # a private module -- rename it there and the icon would have disappeared here with no
         # error on either side. The half that owns the icon now places it, and this script reads an
         # exit code. Needs the app at v0.1.13 or newer, which the tag resolution above installs.
+        # The exit code goes with the warning (hub #229): the next failure in the field names itself.
+        $global:LASTEXITCODE = 0
         $out = (& $TccExe --install-desktop 2>&1 | Out-String).Trim()
-        if ($LASTEXITCODE -eq 0) {
+        $rc = $LASTEXITCODE
+        if ($rc -eq 0) {
             Say "OK   `"Autosound TCC`" on your Desktop and in the Start Menu"
             # See install.sh: this matches TCC's OUTPUT by phrase. The two words are load-bearing
             # on both sides by agreement, not by anything enforcing it.
@@ -1320,7 +1323,7 @@ if ($Mode -eq "tcc" -and ($TccExe -or $DryRun)) {
             }
         } else {
             if ($out) { Write-Host $out }
-            Warn "the shortcuts were not created. The command still works:  autosound-tcc"
+            Warn "the shortcuts were not created (the app returned $rc). The command still works:  autosound-tcc"
         }
     }
 }

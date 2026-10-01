@@ -254,6 +254,8 @@ and the ledger's channel keys (three edge cases, fixed).
   only; `--drop` removes the export without storing it, refused when the OS keystore does not hold that key. It now
   exits 0 when it moved or removed something, 1 with nothing to do, 3 when something was refused. The Windows half
   (the user environment in the registry) was read, not run.
+- **«The shortcuts were not created» says what the app returned** (skill #113, hub #229), in both installers, so the
+  next failure in the field names itself; TCC's half logs why (tcc#124).
 - **The feedback form is English** (skill #112, the Arbiter 2026-10-01): questions, choices, the confirmation
   message, the response sheet's file, tab and columns. The skill sends the English choices; the old Ukrainian ones
   are gone from the form, so a report from an older client is refused there and falls back to the clipboard.
