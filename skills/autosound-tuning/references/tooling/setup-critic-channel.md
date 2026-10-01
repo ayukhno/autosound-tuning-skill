@@ -101,7 +101,12 @@ python3 scripts/autosound_ai.py critic pkg.md --model gemini-3.1-pro-high  # slu
 python3 scripts/autosound_ai.py key set google    # asks for the key without echo; or one line on stdin
 python3 scripts/autosound_ai.py key status        # where each key is and which is used -- never a value
 python3 scripts/autosound_ai.py key move-shell    # a key exported in ~/.zshrc (Windows: the user environment) -> the store, asks first
+python3 scripts/autosound_ai.py key move-shell google --drop   # only GEMINI_API_KEY, and not stored: the store already holds it
 ```
+
+- **`key move-shell [google|anthropic|openai] [--drop] [--yes]`** (hub #230): a provider moves that key's export
+  only; `--drop` removes the export without storing it, and is refused when the store does not hold that key (the
+  export would be the only copy). Exit 0 — moved or removed; 1 — nothing to do; 3 — something refused; 2 — usage.
 
 - **Where it lands:** the macOS Keychain (item `autosound-reviewer`, account `GEMINI_API_KEY`), written
   through `security -i` so the key is never an argv element; on Windows a file only this user's login

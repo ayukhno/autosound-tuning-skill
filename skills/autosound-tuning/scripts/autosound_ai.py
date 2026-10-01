@@ -22,6 +22,7 @@ autosound_ai.py — Універсальний кросплатформний і
   python3 scripts/autosound_ai.py key set google      # ключ -- на прихований запит, у сховище ключів ОС
   python3 scripts/autosound_ai.py key status [--json] # де який ключ і який використовується, без значень
   python3 scripts/autosound_ai.py key move-shell      # ключ із ~/.zshrc -- у сховище, з дозволу
+  python3 scripts/autosound_ai.py key move-shell google --drop   # лише GEMINI_API_KEY, і без збереження: ключ уже у сховищі
 """
 
 import sys
@@ -1909,6 +1910,30 @@ def _selftest():
             body, bak = open(rc).read(), open(rc + ".autosound-bak").read()
             assert good not in body and good not in bak and 'alias ll="ls -l"' in body and "moved to the OS keystore" in body
             assert shell_exports() == [] and "не знайдено" in move_shell(ask=False)[0]
+            # hub #230 (TCC-043): one provider, a drop-only form, and exit codes. A yes about Gemini moved an old
+            # OpenAI export too and stored it over the newer OpenAI key; and the only form always stored.
+            newer = "sk-proj-" + "n" * 40
+            mem["OPENAI_API_KEY"] = newer
+            _KEYSTORE_CACHE.clear()
+            with open(rc, "w") as fh:
+                fh.write(f'export GEMINI_API_KEY="{good}"\nexport OPENAI_API_KEY="sk-proj-{"o" * 40}"\n')
+            code, said = move_shell_run(ask=False, provider="google")
+            assert code == 0 and [h["var"] for h in shell_exports()] == ["OPENAI_API_KEY"], (code, said)
+            assert mem["OPENAI_API_KEY"] == newer, "a Gemini move touched the stored OpenAI key"
+            code, said = move_shell_run(ask=False, provider="openai", drop=True)
+            assert code == 0 and shell_exports() == [] and mem["OPENAI_API_KEY"] == newer, (code, said)
+            assert "--drop" in open(rc).read() and "o" * 40 not in open(rc + ".autosound-bak").read()
+            # --drop with nothing in the store: refused, the export left -- it is the only copy
+            mem.pop("GEMINI_API_KEY", None)
+            _KEYSTORE_CACHE.clear()
+            with open(rc, "a") as fh:
+                fh.write(f'export GEMINI_API_KEY="{good}"\n')
+            code, said = move_shell_run(ask=False, provider="google", drop=True)
+            assert code == 3 and "єдина" in said[0] and [h["var"] for h in shell_exports()] == ["GEMINI_API_KEY"], said
+            assert move_shell_run(ask=False, provider="anthropic")[0] == 1, "nothing to do is 1"
+            assert key_command(["move-shell", "bogus"]) == 2 and key_command(["move-shell", "a", "b"]) == 2
+            code, said = move_shell_run(ask=False, provider="google")
+            assert code == 0 and mem.get("GEMINI_API_KEY") == good and shell_exports() == [], said
     finally:
         _KEYSTORE_BACKENDS.pop("memory", None)
         for k, v in keep.items():
@@ -2160,14 +2185,27 @@ def _broadcast_env_change():
         pass
 
 
-def move_shell(ask=True):
+def move_shell(ask=True, provider=None, drop=False):
     """Move each key a shell profile (or the Windows user environment) exports into the keystore, one by one,
     with the user's OK. The profile line becomes a comment with no key in it; a backup of the profile is kept
-    with the key blanked out. Returns the lines to print."""
-    said = []
-    for hit in shell_exports():
+    with the key blanked out. Returns the lines to print (`move_shell_run` adds the exit code)."""
+    return move_shell_run(ask, provider, drop)[1]
+
+
+def move_shell_run(ask=True, provider=None, drop=False):
+    """`(exit code, lines)` of `key move-shell` (hub #230, TCC-043).
+
+    `provider` moves that provider's export only: TCC's key window asks about ONE key, and a yes about Gemini
+    used to move an old OpenAI line too -- and store it over a newer OpenAI key. `drop` removes the export
+    WITHOUT storing its value, for when the keystore already holds the key; it is refused when the store does
+    not, because the export would be the only copy. Exit: 0 something moved or removed and nothing refused;
+    1 nothing to do; 3 something refused or failed."""
+    said, done, refused = [], 0, 0
+    hits = [h for h in shell_exports()
+            if provider is None or h["var"] == key_var(provider)]
+    for hit in hits:
         var = hit["var"]
-        provider = next(p for p in _PROVIDERS if key_var(p) == var)
+        prov = next(p for p in _PROVIDERS if key_var(p) == var)
         where = hit["file"] + (f":{hit['line']}" if hit["line"] else "")
         if hit["line"] is None:                                   # the Windows registry
             import winreg
@@ -2177,17 +2215,29 @@ def move_shell(ask=True):
             m = _EXPORT_LINE.match(_file_lines(hit["file"])[hit["line"] - 1])
             value = _parse_profile_value(m.group(2)) if m else None
         if not value:
-            said.append(f"· {where}: {var} задано виразом, а не значенням -- `key set {provider}`, а рядок прибери сам")
+            said.append(f"· {where}: {var} задано виразом, а не значенням -- `key set {prov}`, а рядок прибери сам")
+            refused += 1
+            continue
+        if drop and not keystore_get(var):
+            said.append(f"✗ {where}: {var} не прибрано -- у сховищі ключів його нема, а --drop не зберігає: "
+                        f"ця копія єдина. Без --drop вона перейде в сховище")
+            refused += 1
             continue
         if ask:
-            reply = input(f"Перенести {var} з {where} у {keystore_name()} і прибрати звідти? [y/N] ").strip().lower()
+            question = (f"Прибрати {var} з {where}? У сховищі ключ уже є, ця копія не зберігається [y/N] " if drop
+                        else f"Перенести {var} з {where} у {keystore_name()} і прибрати звідти? [y/N] ")
+            reply = input(question).strip().lower()
             if reply not in ("y", "yes", "т", "так"):
                 said.append(f"· {where}: {var} лишено, як було")
                 continue
-        code, msg = key_set(provider, value)
-        if code:
-            said.append(f"✗ {where}: {msg}")
-            continue
+        if drop:
+            msg = f"{var} прибрано; у сховищі ключів лишився свій ({keystore_name()})"
+        else:
+            code, msg = key_set(prov, value)
+            if code:
+                said.append(f"✗ {where}: {msg}")
+                refused += 1
+                continue
         if hit["line"] is None:
             with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment", 0, winreg.KEY_ALL_ACCESS) as k:
                 winreg.DeleteValue(k, var)
@@ -2196,19 +2246,26 @@ def move_shell(ask=True):
             lines = _file_lines(hit["file"])
             original = lines[hit["line"] - 1]
             backup = list(lines)
-            backup[hit["line"] - 1] = original.replace(value, "<moved-to-keystore>")
+            backup[hit["line"] - 1] = original.replace(value, "<moved-to-keystore>" if not drop else "<removed>")
             _write_private(hit["file"] + ".autosound-bak", backup)
-            lines[hit["line"] - 1] = f"# {var}: moved to the OS keystore by autosound_ai.py key move-shell ({datetime.now():%Y-%m-%d})"
+            lines[hit["line"] - 1] = (
+                f"# {var}: removed by autosound_ai.py key move-shell --drop, the OS keystore holds the key "
+                f"({datetime.now():%Y-%m-%d})" if drop else
+                f"# {var}: moved to the OS keystore by autosound_ai.py key move-shell ({datetime.now():%Y-%m-%d})")
             mode = os.stat(hit["file"]).st_mode & 0o777
             _write_private(hit["file"], lines)
             os.chmod(hit["file"], mode)
+        done += 1
         said.append(f"✓ {where}: {msg}. У вже відкритих терміналах змінна ще жива -- відкрий новий"
                     + ("" if os.name == "nt" else f" або `unset {var}`"))
-    return said or ["· ключів у профілях оболонки не знайдено"]
+    if not hits:
+        said = [f"· {key_var(provider)} у профілях оболонки не знайдено" if provider
+                else "· ключів у профілях оболонки не знайдено"]
+    return (3 if refused else 0 if done else 1), said
 
 
 def key_command(args):
-    """`key set <provider> | status [--json] | rm <provider> | move-shell [--yes]`."""
+    """`key set <provider> | status [--json] | rm <provider> | move-shell [<provider>] [--drop] [--yes]`."""
     sub = args[0] if args else "status"
     if sub == "set":
         if len(args) != 2:
@@ -2226,9 +2283,16 @@ def key_command(args):
         print(key_rm(args[1]))
         return 0
     if sub == "move-shell":
-        for line in move_shell(ask="--yes" not in args):
+        # hub #230: one provider, a drop-only form, and an exit code that says what happened (0 / 1 / 3).
+        rest = [a for a in args[1:] if a not in ("--yes", "--drop")]
+        if len(rest) > 1 or (rest and rest[0] not in _PROVIDERS):
+            print(f"key move-shell [{'|'.join(_PROVIDERS)}] [--drop] [--yes]", file=sys.stderr)
+            return 2
+        code, lines = move_shell_run(ask="--yes" not in args, provider=rest[0] if rest else None,
+                                     drop="--drop" in args)
+        for line in lines:
             print(line)
-        return 0
+        return code
     if sub == "status":
         st = key_status()
         if "--json" in args:
@@ -2245,7 +2309,8 @@ def key_command(args):
             print(f"  ⚠ {hit['var']} у {hit['file']}" + (f" (рядок {hit['line']})" if hit["line"] else "")
                   + " -- перенеси: autosound_ai.py key move-shell")
         return 0
-    print("key set <provider> | key status [--json] | key rm <provider> | key move-shell [--yes]", file=sys.stderr)
+    print("key set <provider> | key status [--json] | key rm <provider> | key move-shell [<provider>] [--drop] [--yes]",
+          file=sys.stderr)
     return 2
 
 
