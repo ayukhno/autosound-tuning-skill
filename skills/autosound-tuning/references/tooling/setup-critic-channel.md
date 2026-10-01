@@ -86,9 +86,10 @@ wait, or a higher tier said out loud), never a weaker model swapped in quietly.
 
 > ℹ️ **`Gemini 3.5/3.1` are Antigravity's own display labels** (what `agy models` shows beside the slug ids), NOT real Gemini versions. Use the name your channel expects: the `agy` CLI wants its slug id (`gemini-3.1-pro-high`; the display label is rejected since agy 1.1.12); a raw `GEMINI_API_KEY` call wants the `gemini-2.5-*` id.
 
-**Name a Pro tier** — a Flash reviewer praises and misses obvious problems, and asked to settle a question it endorsed both sides of it (field-observed — «Which model for which role» below); "don't praise" prompt text doesn't fix a too-weak model. ⚠️ agy Starter shares one weekly Flash+Pro quota — Pro burns it faster; when dry, wait or take the clipboard rung (§7). Names drift — which is exactly why none is kept here: `agy models` is the list, and `--doctor` smokes **the model you named** and prints that list beside it when agy does not know the name. Override per call:
+**Name a Pro tier** — a Flash reviewer praises and misses obvious problems, and asked to settle a question it endorsed both sides of it (field-observed — «Which model for which role» below); "don't praise" prompt text doesn't fix a too-weak model. ⚠️ agy Starter shares one weekly Flash+Pro quota — Pro burns it faster; when dry, wait or take the clipboard rung (§7). Names drift — which is exactly why none is kept here: `agy models` is the list, and `--doctor` smokes **the model you named** and prints that list beside it when agy does not know the name. Override per call with `--model` (§3 — a variable set in front of the
+command loses to any critic-env that pins one):
 ```bash
-GEMINI_CRITIC_MODEL=gemini-3.1-pro-high python3 scripts/autosound_ai.py critic pkg.md  # slug id — agy ≥ 1.1.12 rejects the display label
+python3 scripts/autosound_ai.py critic pkg.md --model gemini-3.1-pro-high  # slug id — agy ≥ 1.1.12 rejects the display label
 ```
 
 ## 3. Pin config once — the KEY outside the project, the rest in it
@@ -221,6 +222,15 @@ Check it took: `python3 scripts/autosound_ai.py doctor` names the key it found, 
 - **`--via api|cli|omp|clipboard` chooses the route for ONE run** (#55). `--via api` uses the key from
   the environment even where `critic-env` blanks it for every other run, and calls the API by the
   model's API id (the tier dropped). `--mode clipboard` is the older spelling of the last rung.
+- **`--model <id>` names the reviewer for ONE run, and beats every pin** (hub #226) —
+  `AUTOSOUND_CRITIC_MODEL` / `GEMINI_CRITIC_MODEL` from the environment and from every critic-env.
+  A config file is written over the environment, so a model handed over as a variable lost to a
+  forgotten pin: TCC's pick was refused twice on a Windows machine, first by the machine file's GPT,
+  then, with that commented out, by the project file's Claude. The provider follows the run's model —
+  `--provider google|anthropic|openai` when the name does not give it away; a pinned
+  `AUTOSOUND_CRITIC_PROVIDER` belongs to the pinned model and does not apply. Every pin the run set
+  aside is named in one stderr line, with its value, file and line, and stays the default for runs
+  without `--model`. `doctor --model <id>` checks that model.
 - **`AUTOSOUND_REVIEW_RAW_DIR=<folder>`** keeps what was sent and what came back
   (`<stamp>-<route>-sent.txt` / `-received.txt`), for diagnosing the channel (hub #187 ask 3). Off by
   default, because a package carries the project.
@@ -234,7 +244,7 @@ reviewer and still get an automated channel rather than the clipboard.
 
 ```bash
 AUTOSOUND_CRITIC_MODEL=gemini-pro-latest # the reviewer, any vendor — a DIFFERENT one from the Generator is the point
-# AUTOSOUND_CRITIC_PROVIDER=anthropic     # only when the name does not give the vendor away
+# AUTOSOUND_CRITIC_PROVIDER=anthropic     # only when the name does not give the vendor away; not for a `--model` run
 # AUTOSOUND_CRITIC_BIN=claude             # force one binary, whatever is on PATH
 # AUTOSOUND_CRITIC_EFFORT=xhigh           # how hard the reviewer thinks; default xhigh
 ```
@@ -258,7 +268,8 @@ a flag would be rejected and the channel would break for one vendor only, quietl
 
 `GEMINI_CRITIC_MODEL` still works and means "the reviewer's model", whatever the vendor — every
 documented setup exports it and a front-end already sets it, so renaming would have broken working
-installs to tidy a table. `AUTOSOUND_CRITIC_MODEL` wins when both are set. The second slot's names
+installs to tidy a table. `AUTOSOUND_CRITIC_MODEL` wins when both are set, and `--model` beats
+both for one run (§3). The second slot's names
 (`GEMINI_ADVISOR_MODEL`, `AUTOSOUND_ADVISOR_MODEL`, `CLAUDE_/CODEX_ADVISOR_MODEL`) are **no longer
 read** — one reviewer, one model — and a value left in one is named on stderr rather than obeyed.
 
@@ -291,7 +302,7 @@ AUTOSOUND_CRITIC_BIN=omp                                   # what TCC sets for a
 AUTOSOUND_CRITIC_MODEL=google-antigravity/gemini-3.1-pro   # omp's FULL selector: provider/model
 ```
 
-or `--via omp` for one run. The call is `omp -p --no-session --no-tools --no-skills --no-rules
+or `--via omp --model <selector>` for one run. The call is `omp -p --no-session --no-tools --no-skills --no-rules
 --no-title --model <selector>`, with the package on stdin; the answer ends `— [<task>: <selector>]`
 and stderr says `REVIEW_ROUTE: omp`.
 

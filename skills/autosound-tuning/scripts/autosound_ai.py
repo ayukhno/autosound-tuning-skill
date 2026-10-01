@@ -16,6 +16,9 @@ autosound_ai.py — Універсальний кросплатформний і
   python3 scripts/autosound_ai.py advisor <package_file.md> [trace.csv]
   python3 scripts/autosound_ai.py ask <question.md>   # просте питання чи переклад: без проекту й контракту
   python3 scripts/autosound_ai.py doctor
+  python3 scripts/autosound_ai.py critic <package_file.md> [--via api|cli|omp|clipboard] --model <id> [--provider google|anthropic|openai]
+                                                      # шлях і модель ЦЬОГО запуску (і для advisor/ask/doctor):
+                                                      # --model б'є модель, закріплену в critic-env чи середовищі
   python3 scripts/autosound_ai.py key set google      # ключ -- на прихований запит, у сховище ключів ОС
   python3 scripts/autosound_ai.py key status [--json] # де який ключ і який використовується, без значень
   python3 scripts/autosound_ai.py key move-shell      # ключ із ~/.zshrc -- у сховище, з дозволу
@@ -171,6 +174,7 @@ def load_env_file():
                     os.environ[k] = v
                     ENV_ORIGIN[k] = path
                     ENV_LINE[k] = lineno
+                    ENV_PINS.setdefault(k, []).append((path, lineno, v))
             used.append(path)
         except Exception as e:
             print(f"Помилка зчитування .critic-env {path}: {e}", file=sys.stderr)
@@ -188,6 +192,10 @@ _ENV_BEFORE = frozenset(os.environ)
 _ENV_VALUES_BEFORE = dict(os.environ)
 #: `var -> line number` in the file that set it, so a message can point at the line.
 ENV_LINE = {}
+#: `var -> [(file, line, value)]` for EVERY file that set it, in the order applied: `ENV_ORIGIN` keeps only the last,
+#: and a run that names its own model says which pins it set aside, all of them at once (hub #226: on the Windows
+#: VM, commenting out the machine file's pin only uncovered the project's, and TCC's pick was refused twice).
+ENV_PINS = {}
 
 
 def env_origin(var):
@@ -331,7 +339,7 @@ def call_openai_api(api_key, model, prompt):
 
 # Which vendor a model name implies. A guess, and a cheap one -- the point of the whole feature is
 # that the Critic is a DIFFERENT vendor from the Generator, so getting this wrong costs a
-# clipboard fallback, not a wrong answer. `AUTOSOUND_CRITIC_PROVIDER` overrides it.
+# clipboard fallback, not a wrong answer. `AUTOSOUND_CRITIC_PROVIDER` overrides it, `--provider` overrides both.
 _PROVIDER_BY_MARKER = (
     ("gemini", "google"), ("google", "google"),
     ("claude", "anthropic"), ("opus", "anthropic"), ("sonnet", "anthropic"),
@@ -347,7 +355,14 @@ _PROVIDERS = {
 
 
 def provider_for(model):
-    forced = os.environ.get("AUTOSOUND_CRITIC_PROVIDER")
+    """The vendor: `--provider`, then a pinned `AUTOSOUND_CRITIC_PROVIDER`, then the model's name.
+
+    The pin is skipped for a run that names its own model (`--model`, hub #226): a provider pinned beside a pinned
+    model belongs to THAT model. On the Windows VM `openai` stood beside `gpt-5.6-terra`, and kept, it would have
+    sent TCC's Gemini pick to OpenAI."""
+    if RUN_PICK["provider"]:
+        return RUN_PICK["provider"]
+    forced = None if RUN_PICK["model"] else os.environ.get("AUTOSOUND_CRITIC_PROVIDER")
     if forced:
         return forced.lower()
     name = (model or "").lower()
@@ -627,25 +642,32 @@ class ModelChoiceNeeded(RuntimeError):
         self.why, self.models, self.role_var, self.source = why, models, role_var, source
         super().__init__(why)
 
+    def _name_it(self, shape):
+        """Where the chosen name goes: the pin in critic-env -- or, for a run that named its model with `--model`,
+        `--model` again, because a pin would lose to the next run's `--model` the same way (hub #226)."""
+        if self.role_var.startswith("--"):
+            return f">>   {self.role_var} {shape}   (цей запуск назвав модель сам)"
+        return f">>   {self.role_var}={shape}   у {config_hint()}"
+
     def render(self):
         if self.source == "omp":
             # omp's full selectors (`provider/model`): the provider is part of the name there, and a
             # bare name is what sent an OMP pick to Google's API (hub #216).
             lines = [f">> {self.why}",
                      ">> Моделі, які `omp` може запустити -- вибери одну і закріпи її повною назвою:",
-                     f">>   {self.role_var}=<провайдер/модель>   у {config_hint()}"]
+                     self._name_it("<провайдер/модель>")]
             lines += [f">>     {name}" for name in self.models]
             return "\n".join(lines)
         if self.source == "cli":
             # The CLI's own ids, as it lists them: no key-shaped filter, no Google pointers.
             lines = [f">> {self.why}",
                      ">> Моделі, які `agy` може запустити -- вибери одну і закріпи її:",
-                     f">>   {self.role_var}=<модель>   у {config_hint()}"]
+                     self._name_it("<модель>")]
             lines += [f">>     {name}" for name in self.models]
             return "\n".join(lines)
         lines = [f">> {self.why}",
                  ">> Моделі, які цей ключ може викликати (generateContent) -- вибери одну і закріпи її:",
-                 f">>   {self.role_var}=<модель>   у {config_hint()}"]
+                 self._name_it("<модель>")]
         for name in choosable_models(self.models):
             lines.append(f">>     {name}")
         lines.append(">> `gemini-pro-latest` / `gemini-flash-latest` -- Google's own pointers to the current "
@@ -800,6 +822,11 @@ REVIEWER_MODEL_VARS = ("AUTOSOUND_CRITIC_MODEL", "GEMINI_CRITIC_MODEL")
 #: cost a day: TCC set only the critic's model, the advisor door found none, and the reports said
 #: "the critic does not answer" while the critic had answered all along.
 RETIRED_ADVISOR_VARS = ("AUTOSOUND_ADVISOR_MODEL", "GEMINI_ADVISOR_MODEL")
+#: The reviewer THIS run names on its command line: `--model` and `--provider` (hub #226, TCC-040), set once in
+#: `main()`. TCC handed its footer pick over as `GEMINI_CRITIC_MODEL` in the environment, and every critic-env line
+#: is written over the environment (S-015), so a pin the person had forgotten beat the pick. An argument is not
+#: written over by anything: it beats every pin, and a pin stays the default for a run that names no model.
+RUN_PICK = {"model": None, "provider": None}
 
 
 def retired_advisor_notice():
@@ -817,12 +844,40 @@ def resolve_model():
     first id an installed CLI prints is choosing FOR the Arbiter. Both are what the user's rule of
     2026-09-08 replaced: "коли не знаєш яку -- дати користувачу список, щоб він вибрав". The caller
     turns None into that list (`cli_model_choice`, or the key's list) and stops.
+
+    `--model` comes first (hub #226): the run's own pick beats a pin in any critic-env or the environment.
     """
+    if RUN_PICK["model"]:
+        return RUN_PICK["model"]
     for var in REVIEWER_MODEL_VARS:
         value = os.environ.get(var)
         if value:
             return value
     return None
+
+
+def lost_pins():
+    """One line naming the pins this run set aside with `--model` / `--provider`, or None (hub #226).
+
+    Every pin, not only the one in force: each file that set it (`ENV_PINS`) and the inherited environment, with
+    the value and where it lives -- on the Windows VM the machine file's pin hid the project's, and finding them
+    one at a time cost two refused runs. A pin that agrees with the run lost nothing and is not named."""
+    if not (RUN_PICK["model"] or RUN_PICK["provider"]):
+        return None
+    model = resolve_model()
+    provider = provider_for(model)
+    wanted = {var: model for var in REVIEWER_MODEL_VARS} if RUN_PICK["model"] else {}
+    wanted["AUTOSOUND_CRITIC_PROVIDER"] = provider
+    lost = []
+    for var, kept in wanted.items():
+        for path, line, value in [(None, None, _ENV_VALUES_BEFORE.get(var))] + ENV_PINS.get(var, []):
+            if value and value.strip().lower() != str(kept).lower():
+                lost.append(f"{var}={value} ({f'{path}, рядок {line}' if path else 'змінна середовища'})")
+    if not lost:
+        return None
+    flags = " ".join(f"--{k} {v}" for k, v in RUN_PICK.items() if v)
+    return (f">> {flags}: рецензент цього запуску — {model or 'модель не задано'} (провайдер {provider}); "
+            f"не діють для нього: " + "; ".join(lost) + ". Для інших запусків закріплене лишається типовим")
 
 
 def list_cli_models():
@@ -1570,6 +1625,103 @@ def _selftest():
                 os.environ.pop(k, None)
             os.environ.update(markers)
 
+    # hub #226 (TCC-040): the run's model beats every pin. On the Windows VM the machine file pinned a GPT with
+    # `openai` beside it, and with those commented out the project's file pinned a Claude; TCC's footer pick came in
+    # the environment, S-015 writes every file line over the environment, and the pick was refused twice. Both files
+    # are real here and read by `load_env_file` itself; TCC's pick is the inherited `GEMINI_CRITIC_MODEL`.
+    pin_vars = REVIEWER_MODEL_VARS + ("AUTOSOUND_CRITIC_PROVIDER", "GEMINI_API_KEY", "OPENAI_API_KEY",
+                                      "ANTHROPIC_API_KEY", "AUTOSOUND_CRITIC_BIN", "GEMINI_BIN", "APPDATA",
+                                      "XDG_CONFIG_HOME", "AUTOSOUND_PROJECT_DIR")
+    kept_env = {k: os.environ.pop(k, None) for k in pin_vars}
+    kept_before = {k: _ENV_VALUES_BEFORE.pop(k, None) for k in pin_vars}
+    kept_maps = [dict(d) for d in (ENV_ORIGIN, ENV_LINE, ENV_PINS)]
+    kept_globals = {n: globals()[n] for n in ("PROJECT_MIRROR", "CWD", "call_gemini_api", "call_openai_api",
+                                              "call_anthropic_api", "list_gemini_models", "copy_to_clipboard")}
+    run_was, which_was, argv_was = subprocess.run, shutil.which, sys.argv
+    try:
+        with tempfile.TemporaryDirectory() as project:
+            os.environ["XDG_CONFIG_HOME"] = os.path.join(project, "cfg")
+            machine = machine_config_path()
+            os.makedirs(os.path.dirname(machine))
+            with open(machine, "w", encoding="utf-8") as fh:
+                fh.write("AUTOSOUND_CRITIC_MODEL=gpt-5.6-terra\nAUTOSOUND_CRITIC_PROVIDER=openai\n")
+            mirror = os.path.join(project, "rew_analitic")
+            os.makedirs(mirror)
+            local = os.path.join(mirror, ".critic-env")
+            with open(local, "w", encoding="utf-8") as fh:
+                fh.write("# the project's own pin\nAUTOSOUND_CRITIC_MODEL=anthropic/claude-sonnet-5\n")
+            open(os.path.join(project, "project.json"), "w").close()
+            pkg = os.path.join(project, "question.md")
+            with open(pkg, "w", encoding="utf-8") as fh:
+                fh.write("Translate: stage")
+            globals().update(PROJECT_MIRROR=mirror, CWD=project)
+            for d in (ENV_ORIGIN, ENV_LINE, ENV_PINS):
+                d.clear()
+            _ENV_VALUES_BEFORE["GEMINI_CRITIC_MODEL"] = os.environ["GEMINI_CRITIC_MODEL"] = "gemini-3.1-pro-preview"
+            assert load_env_file() == [machine, local]
+            os.environ.update(AUTOSOUND_PROJECT_DIR=project, OPENAI_API_KEY="sk-proj-" + "o" * 40,
+                              GEMINI_API_KEY="AQ." + "g" * 50, ANTHROPIC_API_KEY="sk-ant-" + "a" * 40)
+            asked = []
+            globals().update(
+                call_gemini_api=lambda key, model, prompt, var=None: (asked.append(("google", model)), ("g", model))[1],
+                call_openai_api=lambda key, model, prompt: (asked.append(("openai", model)), ("o", model))[1],
+                call_anthropic_api=lambda key, model, prompt: (asked.append(("anthropic", model)), ("a", model))[1],
+                list_gemini_models=lambda key, timeout=20: ["gemini-3.1-pro-preview"],
+                copy_to_clipboard=lambda text: False)
+            shutil.which = lambda name, *a, **k: None       # no CLI on this machine: the key's route or nothing
+            # `--model`: that model, the provider read from ITS name, and one line naming every pin set aside --
+            # both files' models and the machine's provider, with file and line. TCC's own hand-off agrees with the
+            # run, so it is not named.
+            code, out, err = run_main("ask", pkg, "--via", "api", "--model", "gemini-3.1-pro-preview")
+            assert code == 0 and asked == [("google", "gemini-3.1-pro-preview")] and "REVIEW_ROUTE: api" in err, (code, asked, err)
+            said = [line for line in err.splitlines() if "не діють" in line]
+            assert len(said) == 1 and "GEMINI_CRITIC_MODEL" not in said[0], err
+            for pin in (f"AUTOSOUND_CRITIC_MODEL=gpt-5.6-terra ({machine}, рядок 1)",
+                        f"AUTOSOUND_CRITIC_MODEL=anthropic/claude-sonnet-5 ({local}, рядок 2)",
+                        f"AUTOSOUND_CRITIC_PROVIDER=openai ({machine}, рядок 2)"):
+                assert pin in said[0], (pin, said[0])
+            # Without `--model` nothing changes, and nothing of the last run is left over: the project's pin is in
+            # force (the later file wins, files over the environment), the machine's provider pin applies.
+            del asked[:]
+            code, out, err = run_main("ask", pkg, "--via", "api")
+            assert code == 0 and asked == [("openai", "anthropic/claude-sonnet-5")] and "не діють" not in err, (code, asked, err)
+            # `--provider` names the vendor when the name does not give it away; an unknown one is refused with the
+            # list, like `--via`, and so is a `--model` with no name.
+            del asked[:]
+            code, out, err = run_main("ask", pkg, "--via", "api", "--model", "house-reviewer-2", "--provider", "Anthropic")
+            assert code == 0 and asked == [("anthropic", "house-reviewer-2")], (code, asked, err)
+            assert "(провайдер anthropic)" in err and "AUTOSOUND_CRITIC_PROVIDER=openai" in err, err
+            del asked[:]
+            code, out, err = run_main("ask", pkg, "--model", "gemini-3.1-pro-preview", "--provider", "bogus")
+            assert code == 1 and not asked and "'bogus'" in err and "google, anthropic, openai" in err, (code, err)
+            code, out, err = run_main("ask", pkg, "--model")
+            assert code == 1 and not asked and "--model <id>" in err, (code, err)
+            # `doctor --model` checks that model, against the key's own list, and names the pins it set aside.
+            code, out, err = run_main("doctor", "--no-smoke", "--model", "gemini-3.1-pro-preview")
+            assert "▶ Рецензент: gemini-3.1-pro-preview → провайдер google (--model" in out, out
+            assert "`gemini-3.1-pro-preview` — у списку ключа" in out and "gpt-5.6-terra" in err, (out, err)
+            # The omp route reads the same model.
+            omp_cmds = []
+            subprocess.run = lambda cmd, **kw: (omp_cmds.append(cmd), subprocess.CompletedProcess(cmd, 0, "omp-pong\n", ""))[1]
+            code, out, err = run_main("ask", pkg, "--via", "omp", "--model", "google-antigravity/gemini-3.1-pro")
+            assert code == 0 and "omp-pong" in out and omp_cmds, (code, err)
+            assert omp_cmds[-1][omp_cmds[-1].index("--model") + 1] == "google-antigravity/gemini-3.1-pro", omp_cmds[-1]
+            # A model the run named and the key refuses: the replacement goes to `--model` too, not to a pin it
+            # would beat again.
+            assert ">>   --model <модель>   (цей запуск" in ModelChoiceNeeded("404", ["gemini-pro-latest"], "--model").render()
+    finally:
+        subprocess.run, shutil.which, sys.argv = run_was, which_was, argv_was
+        globals().update(kept_globals)
+        RUN_PICK.update(model=None, provider=None)
+        for d, saved in zip((ENV_ORIGIN, ENV_LINE, ENV_PINS), kept_maps):
+            d.clear()
+            d.update(saved)
+        for store, saved in ((os.environ, kept_env), (_ENV_VALUES_BEFORE, kept_before)):
+            for k, v in saved.items():
+                store.pop(k, None)
+                if v is not None:
+                    store[k] = v
+
     # -- doctor (S-015): it says where a key and a forced CLI came from, names the config path of THIS
     #    platform, and its live call walks the round's own ladder: an API that fails hands over to the
     #    CLI, a model the key cannot call stops at the choice, and the mode line says what answered.
@@ -1810,7 +1962,9 @@ def _selftest():
           "the CLI runs without the session's markers and the wait is named first; the transport follows "
           "the model (an agy slug goes to the CLI, a 404 on a name the CLI serves falls to it, --via api "
           "sends the API id); the raw exchange is kept on request; --mode clipboard is a rung, not a failure; doctor names where a key and a forced "
-          "CLI came from and this platform's config path, and its live call walks the round's ladder")
+          "CLI came from and this platform's config path, and its live call walks the round's ladder; --model "
+          "beats every pin and names each one with its file and line, the provider follows the run's model unless "
+          "--provider says, an unknown --provider is refused")
     return 0
 
 
@@ -2222,7 +2376,10 @@ def run_doctor(smoke=True):
     if cli_bin and nested:
         print(f"· Ми всередині агент-сесії ({nested}): CLI рецензента запускається без маркерів сесії, "
               f"з обмеженим очікуванням (AUTOSOUND_CLI_TIMEOUT)")
-    if model:
+    if model and RUN_PICK["model"]:
+        # hub #226: the model this check was asked about, whatever a critic-env pins (the pins are named on stderr).
+        print(f"▶ Рецензент: {model} → провайдер {provider} (--model, лише цей запуск)")
+    elif model:
         var = next(v for v in REVIEWER_MODEL_VARS if os.environ.get(v))
         where = env_origin(var)
         if var == "GEMINI_CRITIC_MODEL" and var not in ENV_ORIGIN:
@@ -2599,7 +2756,8 @@ def review_through_omp(role, binary, model, prompt, pkg_file, role_var):
 
 def main():
     if len(sys.argv) < 2:
-        print("Використання: python3 scripts/autosound_ai.py [critic|advisor|ask|doctor] <package_file.md> [trace.csv]")
+        print("Використання: python3 scripts/autosound_ai.py [critic|advisor|ask|doctor] <package_file.md> [trace.csv] "
+              "[--via api|cli|omp|clipboard] [--model <id>] [--provider google|anthropic|openai]")
         sys.exit(1)
         
     argv = list(sys.argv)
@@ -2618,12 +2776,30 @@ def main():
                 print(f"Невідомий шлях {value!r} для {flag}: {', '.join(allowed)}", file=sys.stderr)
                 sys.exit(1)
             via = value
+    # `--model <id>` / `--provider <vendor>` -- the reviewer for THIS run (hub #226, TCC-040), read before any route
+    # is chosen, so the API, the CLI, omp and `doctor` all see it through `resolve_model` and `provider_for`.
+    RUN_PICK.update(model=None, provider=None)
+    for flag in ("--model", "--provider"):
+        if flag in argv:
+            i = argv.index(flag)
+            value = (argv[i + 1] if i + 1 < len(argv) else "").strip()
+            del argv[i:i + 2]
+            if flag == "--provider" and value.lower() not in _PROVIDERS:
+                print(f"Невідомий провайдер {value!r} для --provider: {', '.join(_PROVIDERS)}", file=sys.stderr)
+                sys.exit(1)
+            if flag == "--model" and (not value or value.startswith("-")):
+                print(f"--model без назви моделі ({value!r}): --model <id>", file=sys.stderr)
+                sys.exit(1)
+            RUN_PICK[flag[2:]] = value.lower() if flag == "--provider" else value
     mode = "clipboard" if via == "clipboard" else None
     sys.argv = argv
     role = sys.argv[1].lower()
-    
+
     if role in ("selftest", "--selftest"):
         sys.exit(_selftest())
+    lost = lost_pins() if role == "doctor" or role in REVIEW_TASKS else None
+    if lost:
+        print(lost, file=sys.stderr)
     if role == "doctor":
         success = run_doctor(smoke="--no-smoke" not in sys.argv)
         sys.exit(0 if success else 1)
@@ -2685,7 +2861,8 @@ def main():
     compiled_prompt = compile_prompt(contract_content, context_content, pkg_content,
                                      memory=memory_content, trace=trace_content, task=role)
 
-    role_var = REVIEWER_MODEL_VARS[0]
+    # Where a refused model's replacement is named: the pin, or `--model` for a run that named its own (hub #226).
+    role_var = "--model" if RUN_PICK["model"] else REVIEWER_MODEL_VARS[0]
     for line in retired_advisor_notice():
         print(line, file=sys.stderr)
     # 0. omp, when it was the pick: before the key, because an omp selector names a vendor too (hub #216).
