@@ -185,7 +185,8 @@ and the ledger's channel keys (three edge cases, fixed).
   `_` is read as the hyphen. A project with two channels — or a ledger with two rows — that are one name that way
   no longer loads or takes a delta; the refusal names both. None of the known projects has such a pair.
   `project.py <dir> fix-ids --apply` writes the hyphen into an old `project.json` (optional).
-- **For TCC:** `autosound_ai.py … --model <id> [--provider google|anthropic|openai]` names the reviewer for one run
+- **For TCC:** `key move-shell [<provider>] [--drop]` exits 0 / 1 / 3 instead of always 0 (hub #230).
+  `autosound_ai.py … --model <id> [--provider google|anthropic|openai]` names the reviewer for one run
   and beats every pinned model (hub #226; the contract is on that ticket). Pass it only to v3.0.65 and later — an
   older skill reads it as a positional argument. `process.py <dir> session-close` is unchanged; `session-close
   --check` asks without writing, and `session-reopen <reason>` appends `session_reopened` after a close: a
@@ -242,6 +243,12 @@ and the ledger's channel keys (three edge cases, fixed).
   session reconciling state ran `session-close` to look and wrote the close. `--check` asks the same question and
   writes nothing; `session-reopen <reason>` takes a close back without erasing it; `handoff` and `contract.py check`
   warn when the ▶️ CONTINUE block names a HEAD that is no slot's HEAD (the VM's said `v_010` at `v_013`).
+- **`key move-shell` takes one provider and a drop-only form** (skill #110, hub #230 TCC-043). TCC's key window asks
+  about one key: a yes about Gemini used to move every exported key, storing an old OpenAI export over the newer
+  stored one, and the only form always stored. `key move-shell [google|anthropic|openai] [--drop]` moves that key
+  only; `--drop` removes the export without storing it, refused when the OS keystore does not hold that key. It now
+  exits 0 when it moved or removed something, 1 with nothing to do, 3 when something was refused. The Windows half
+  (the user environment in the registry) was read, not run.
 - **`upkeep.py clone` names the tag it moved to** rather than what `git describe` picks: a release lands on its
   candidate's commit, so two tags can name one commit (the full suite once read `v3.0.66` for `v3.0.64`).
 

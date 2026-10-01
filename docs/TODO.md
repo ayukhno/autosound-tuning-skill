@@ -1627,6 +1627,12 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-086 · `key move-shell` moves every export and always stores: TCC's key window needs one key and a drop-only form (hub #230, TCC-043)
+
+**Status**: open 2026-10-01 · **W-5 · v3.0.65**, issue #110, `ok` (the Arbiter: «У W-5, до тега») · built on `wave-2026-10-01-b` (`6d9ac4c`); the Windows half (the registry) read, not run
+
+From TCC's finding 127 and its W-5 key window (tcc#117). The contract is on hub #230.
+
 ## S-085 · An automatically picked tag that is not release-shaped installs unchecked
 
 **Status**: done 2026-10-01 · v3.0.65 · #108 · was: open 2026-10-01 · **W-5 · v3.0.65**, issue #108, `ok` (the Arbiter: «Так, у W-5»); the Fable review of #101 found the same hole · was: pool (the next wave), found while building W-5 #101
