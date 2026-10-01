@@ -124,3 +124,17 @@ skill moves, `WAVES.md` §1 step 4).
 | #101 (hub #224) | nothing to build; every TCC tag from now on stays signed, betas included | — |
 | #105 | nothing for W-5: the "as is" block reaches TCC through the skill's plan. Later (3.2): a window for the transcription `setup_import` takes | — |
 | the release | pin skill v3.0.65 in its next release | after our tag |
+
+## Built (2026-10-01, branch `wave-2026-10-01`)
+
+All eight tasks, #108 added on the Arbiter's word after the plan (S-085: a tag that is not release-shaped was picked
+and installed unchecked). #101, #103, #106 and #107 were built by four agents in worktrees and brought onto the
+branch by this session (the role guard refuses a commit in a tree under `hub/`); #102, #104, #105, #108 here. A
+second model (Fable) reviewed the two places where a mistake costs most: the installers' signature check (one
+finding — the same hole as #108) and the ledger's channel keys (three edge cases, fixed in `67642ea`). The full
+suite found one flaky selftest outside the wave (`upkeep`'s `describe` between two tags on one commit), fixed in
+`0edd429`.
+
+**Before the tag:** the Arbiter's runs of the installers on the Windows VM and on the Mac — `install.ps1` has only
+been read. TCC's half after the tag: `--model` (hub #226), the reopening event (hub #227), the stale comment on the
+pre-sweep gate (hub #225), and the vendored skill pinned to v3.0.65.

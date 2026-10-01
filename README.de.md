@@ -49,12 +49,12 @@ Wir haben einen Installer entwickelt, der alles Nötige herunterlädt und eine p
 
 **macOS** — öffne das Terminal (⌘-Space drücken, "terminal" tippen, Enter) und füge ein:
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.64/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.65/install.sh | bash
 ```
 
 **Windows** — öffne PowerShell (Start drücken, "powershell" tippen, Enter) und füge ein:
 ```powershell
-irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.64/install.ps1 | iex
+irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.65/install.ps1 | iex
 ```
 
 Die Version in der Adresse ist die des Installers selbst, nicht die Version, die du bekommst: Der Installer installiert immer das neueste Release. Die Adresse ist fixiert, damit eine Änderung am Repository nicht ändern kann, was auf deinem Rechner läuft.
@@ -70,11 +70,11 @@ Die Version in der Adresse ist die des Installers selbst, nicht die Version, die
 
 Mit Optionen sieht die Zeile anders aus. Zwei Optionen auf einmal, unter macOS:
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.64/install.sh | bash -s -- --with-omp --github
+curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.65/install.sh | bash -s -- --with-omp --github
 ```
 und unter Windows als zwei Zeilen (die Optionen kommen in die zweite):
 ```powershell
-$i = irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.64/install.ps1
+$i = irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.65/install.ps1
 & ([scriptblock]::Create($i)) -WithOmp -GitHub
 ```
 

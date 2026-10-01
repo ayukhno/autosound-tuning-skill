@@ -49,12 +49,12 @@
 
 **macOS** — відкрий Terminal (натисни ⌘-Space, набери «terminal», Enter) і встав:
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.64/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.65/install.sh | bash
 ```
 
 **Windows** — відкрий PowerShell (натисни Пуск, набери «powershell», Enter) і встав:
 ```powershell
-irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.64/install.ps1 | iex
+irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.65/install.ps1 | iex
 ```
 
 Версія в адресі — це версія самого інсталятора, а не та, яку ти отримуєш: інсталятор завжди встановлює найновіший реліз. Адресу зафіксовано для того, щоб зміни в репозиторії не могли змінити те, що запускається на твоїй машині.
@@ -70,11 +70,11 @@ irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.64/ins
 
 З параметрами рядок набуває іншого вигляду. Два параметри одночасно, на macOS:
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.64/install.sh | bash -s -- --with-omp --github
+curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.65/install.sh | bash -s -- --with-omp --github
 ```
 і на Windows, у два рядки (параметри йдуть у другому):
 ```powershell
-$i = irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.64/install.ps1
+$i = irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.65/install.ps1
 & ([scriptblock]::Create($i)) -WithOmp -GitHub
 ```
 
