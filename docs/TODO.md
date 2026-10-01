@@ -403,7 +403,7 @@ Done looks like: in a new window after the install, `python3 -V` answers with th
 set up. The VM is left as found, so the fix can be checked on it.
 
 ## S-017 · Analysing a tune that already exists — noted, not started
-**Status**: open 2026-10-01 · **W-5 · v3.0.65**, issue #105 (review) · in v3.1.0's scope, walked on the Passat after AYA 17.10; not walked or slipped → 3.2.x (the Arbiter at the release-prep review) · was: deferred 2026-09-17 · the user: "note it with the source, we do not go there yet"; it comes back when Phase 1's variants work on a fresh system and a tuner brings a car that is already tuned
+**Status**: чекає 2026-10-01 · built in v3.0.65 (#105): the route is in virtual-first.md, block X, `run --current`; waits for the Arbiter's walk on the Passat after AYA 17.10, before v3.1.0 · was: open 2026-10-01 · **W-5 · v3.0.65**, issue #105 (review) · in v3.1.0's scope, walked on the Passat after AYA 17.10; not walked or slipped → 3.2.x (the Arbiter at the release-prep review) · was: deferred 2026-09-17 · the user: "note it with the source, we do not go there yet"; it comes back when Phase 1's variants work on a fresh system and a tuner brings a car that is already tuned
 
 **The route, in the Arbiter's words (2026-10-01):** «готова машина, зняти всі налаштування і криві як є, зняти всі
 сирі криві з захисними фільтрами і за столом програти декілька варіантів покращення або пропозиції налаштування з
@@ -1629,7 +1629,7 @@ four assessment lines, and nothing is built before his `ok` on that task. Resume
 
 ## S-085 · An automatically picked tag that is not release-shaped installs unchecked
 
-**Status**: open 2026-10-01 · **W-5 · v3.0.65**, issue #108, `ok` (the Arbiter: «Так, у W-5»); the Fable review of #101 found the same hole · was: pool (the next wave), found while building W-5 #101
+**Status**: done 2026-10-01 · v3.0.65 · #108 · was: open 2026-10-01 · **W-5 · v3.0.65**, issue #108, `ok` (the Arbiter: «Так, у W-5»); the Fable review of #101 found the same hole · was: pool (the next wave), found while building W-5 #101
 
 Both installers take the newest tag matching `v3.*` (and the app's `v*`) by `sort -V`. A tag that is not
 release-shaped (`v3.x`, `v0.x`) sorts newest, then passes `settled_by_name` as "not a release tag" and installs
@@ -1637,7 +1637,7 @@ with no signature check. TCC's own updater refuses such names (`_verdict_by_name
 
 ## S-084 · `session-close` run as a check wrote the close; the CONTINUE block was three versions behind (hub #227, TCC-041)
 
-**Status**: open 2026-10-01 · **W-5 · v3.0.65**, issue #107, `ok` (the Arbiter, 2026-10-01) · hub #227 from tcc (its finding 131); the Arbiter: everything found goes into W-5
+**Status**: done 2026-10-01 · v3.0.65 · #107 · was: open 2026-10-01 · **W-5 · v3.0.65**, issue #107, `ok` (the Arbiter, 2026-10-01) · hub #227 from tcc (its finding 131); the Arbiter: everything found goes into W-5
 
 A generator session on the Windows VM ran `process.py session-close` as a check and it appended `session_closed`; the
 `▶️ CONTINUE` block named `v_010` with the ledger at `v_013`. TCC calls `session-close` itself on the way out, so its
@@ -1645,7 +1645,7 @@ behaviour stays (`docs/PLAN-W-5.md`).
 
 ## S-083 · A reviewer model pinned in a critic-env outranks the model the run asked for (hub #226, TCC-040)
 
-**Status**: open 2026-10-01 · **W-5 · v3.0.65**, issue #106, `ok` (the Arbiter, 2026-10-01) · hub #226 from tcc (its finding 130); the Arbiter: everything found goes into W-5
+**Status**: done 2026-10-01 · v3.0.65 · #106 · was: open 2026-10-01 · **W-5 · v3.0.65**, issue #106, `ok` (the Arbiter, 2026-10-01) · hub #226 from tcc (its finding 130); the Arbiter: everything found goes into W-5
 
 TCC's footer pick (`GEMINI_CRITIC_MODEL`) lost twice on the Windows VM: to the machine critic-env's
 `AUTOSOUND_CRITIC_MODEL` + `AUTOSOUND_CRITIC_PROVIDER`, then to the project's `.critic-env`. The plan: `--model` /
@@ -1653,7 +1653,7 @@ TCC's footer pick (`GEMINI_CRITIC_MODEL`) lost twice on the Windows VM: to the m
 
 ## S-082 · A fragile driver's inherited Fs: a warning before the sweep, not a refusal (hub #225, TCC-039)
 
-**Status**: open 2026-10-01 · **W-5 · v3.0.65**, issue #102 (review) · hub #225 from tcc; the Arbiter at TCC's pre-release walk: «Тікет скілу: попередження»
+**Status**: done 2026-10-01 · v3.0.65 · #102 · was: open 2026-10-01 · **W-5 · v3.0.65**, issue #102 (review) · hub #225 from tcc; the Arbiter at TCC's pre-release walk: «Тікет скілу: попередження»
 
 `gates/presweep_safety.py` refuses the sweep when a tweeter's or mid's Fs is `origin: inherited`. The Arbiter's rule
 (2026-09-17): a carried Fs is a warning only; HPF ≥ 1.1 × Fs at ≥ 24 dB/oct stays a refusal. Since TCC v0.1.45 a
@@ -1662,7 +1662,7 @@ diagnosed; the asks are in the ticket.
 
 ## S-081 · The installers verify the method's tag signature and install TCC's tag unchecked (hub #224, TCC-038)
 
-**Status**: open 2026-10-01 · **W-5 · v3.0.65**, issue #101 (review) · hub #224 from tcc (its finding 120); the Arbiter: «У W-5, тікетом скілу»
+**Status**: done 2026-10-01 · v3.0.65 · #101; verified live on the VM and two Macs (✓ v0.1.45 is signed by TCC's author) · was: open 2026-10-01 · **W-5 · v3.0.65**, issue #101 (review) · hub #224 from tcc (its finding 120); the Arbiter: «У W-5, тікетом скілу»
 
 On the Mac, v0.1.45's install line printed `✓ installed` for the app and nothing about a signature: «а чому він не
 пише що поставив підписаний тег ТСС? на скілу так писав». Both installers `verify-tag` the method's tag and install
@@ -1671,7 +1671,7 @@ the ticket.
 
 ## S-080 · Improving an existing tune: the skill speaks with two voices
 
-**Status**: open 2026-10-01 · **W-5 · v3.0.65**, issue #105 with S-017 (review) · found answering the Arbiter's question at the release-prep review («як зараз відпрацює скіл, якщо взяти готову машину, ввести налаштування і попросити аналіз і покращення?»)
+**Status**: done 2026-10-01 · v3.0.65 · #105: one voice, virtual-first.md «Two ways in» · was: open 2026-10-01 · **W-5 · v3.0.65**, issue #105 with S-017 (review) · found answering the Arbiter's question at the release-prep review («як зараз відпрацює скіл, якщо взяти готову машину, ввести налаштування і попросити аналіз і покращення?»)
 
 `phases/phase_-1_intake.md` (the "One way in" note) and `phases/virtual-first.md` say improving somebody else's tune
 is not a route the method lays out (the ruling of 2026-09-09) and forbid a shortened phase order.
@@ -1682,7 +1682,7 @@ itself and stays deferred.
 
 ## S-079 · Channel names: read both `w-L` and `w_L`; `-` is the right one
 
-**Status**: open 2026-10-01 · **W-5 · v3.0.65**, issue #103 (review) · the Arbiter, answering hub #196: «розуміти обидві назви. правільна "-", коли в назві при замірах зустрічаєтсья "_" міняти на "-"»
+**Status**: done 2026-10-01 · v3.0.65 · #103 (and the Fable review's three ledger-key edges, 67642ea) · was: open 2026-10-01 · **W-5 · v3.0.65**, issue #103 (review) · the Arbiter, answering hub #196: «розуміти обидві назви. правільна "-", коли в назві при замірах зустрічаєтсья "_" міняти на "-"»
 
 The Passat's `project.json` carries six channels whose id (`w_L`) differs from the code (`w-L`); that split refused
 the Phase-0 gate on 2026-09-19 (hub #196, to car). The Arbiter's rule: the tools understand both notations, the right
@@ -1690,7 +1690,7 @@ one is the hyphen, and an underscore met in a capture's name is turned into a hy
 
 ## S-078 · Translations uk/de/pl brought to the English text
 
-**Status**: open 2026-10-01 · **W-5 · v3.0.65**, issue #104 (review) · the Arbiter at the release-prep review: in W-5, not just before v3.1.0
+**Status**: done 2026-10-01 · v3.0.65 · #104 · was: open 2026-10-01 · **W-5 · v3.0.65**, issue #104 (review) · the Arbiter at the release-prep review: in W-5, not just before v3.1.0
 
 Twelve files: `README`, `FAQ`, `listening-cheat-sheet`, `test-tracks` in uk, de, pl. By commit date none is older
 than its English source today. Translations go through the Advisor (`autosound_ai.py ask`); the session checks the
@@ -1698,7 +1698,7 @@ structure: headings, commands, version numbers.
 
 ## S-077 · W-5 is collecting: findings go to this pool, the milestone opens when the list is complete
 
-**Status**: open 2026-10-01 · built on `wave-2026-10-01` (eight tasks, #101–#108; `docs/PLAN-W-5.md`, "Built"); waiting for the Arbiter's installer runs on the VM and the Mac before the tag · was: collection closed on the Arbiter's «збір закінчено»: milestone `W-5 · v3.0.65` (#5) opened with #101–#105, each with the four assessment lines · all five `ok` (the Arbiter, 2026-10-01), and the build waits: «почекай йти в розробку від ТСС можуть бути додаткові тікети, або будь готовий їх додати по ходу роботи, бо вони з поточного релізу» — a ticket from tcc that arrives joins this milestone as an issue · #106 (hub #226) and #107 (hub #227) joined, `ok` the same day: all seven `ok`, the build still waits for his word · the plan: `docs/PLAN-W-5.md` (2026-10-01) · was: opened on the Arbiter's word («відкривай веху W-5», then «я мав на увазі не milestone а збір»)
+**Status**: done 2026-10-01 · v3.0.65 · W-5 released: eight issues (#101–#108) closed with the tag; candidate beta-v3.0.65-rc1 run on the Windows VM and two Macs · was: open 2026-10-01 · built on `wave-2026-10-01` (eight tasks, #101–#108; `docs/PLAN-W-5.md`, "Built"); waiting for the Arbiter's installer runs on the VM and the Mac before the tag · was: collection closed on the Arbiter's «збір закінчено»: milestone `W-5 · v3.0.65` (#5) opened with #101–#105, each with the four assessment lines · all five `ok` (the Arbiter, 2026-10-01), and the build waits: «почекай йти в розробку від ТСС можуть бути додаткові тікети, або будь готовий їх додати по ходу роботи, бо вони з поточного релізу» — a ticket from tcc that arrives joins this milestone as an issue · #106 (hub #226) and #107 (hub #227) joined, `ok` the same day: all seven `ok`, the build still waits for his word · the plan: `docs/PLAN-W-5.md` (2026-10-01) · was: opened on the Arbiter's word («відкривай веху W-5», then «я мав на увазі не milestone а збір»)
 
 The number is read: no open `W-…` milestone in skill or tcc, both closed at W-4, so W-5. The version waits for the
 milestone: hub #220's deferral (2026-09-27) puts a W-5 before v3.1.0, which reads as a patch, `v3.0.65`.
