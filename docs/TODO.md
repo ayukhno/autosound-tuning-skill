@@ -1680,6 +1680,8 @@ milestone opens and each item becomes an issue on it with the four assessment li
 - Hub #196 (the Passat's channel names): the skill reads both notations, `-` is the right one (S-079, W-5).
 - Hub #113 (PAS-005, learning to listen): all three parts after v3.1.0.
 - S-021 after the 3.1.x line, with a new car; S-055 after AYA; S-001 stays deferred.
+- S-017 (the existing-tune route) in v3.1.0's scope, walked on the Passat after AYA; S-080 is answered by its route
+  document. Skill #26 (Workflow) stays a 3.2.x candidate.
 
 ## S-076 · Waiting on TCC and the run before its release; the hub does its part
 
