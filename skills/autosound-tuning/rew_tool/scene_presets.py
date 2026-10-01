@@ -47,6 +47,7 @@ if _STATE not in sys.path:
     sys.path.insert(0, _STATE)
 
 import dsp_profile as _dp  # noqa: E402
+import naming as _naming  # noqa: E402
 import project as _pj  # noqa: E402
 
 #: Lee 2010, Table 4, through RES-011: 0.25 ms or 4 dB per 10 degrees, a third of the half-stage.
@@ -84,9 +85,9 @@ def near_side(car):
 
 
 def canon(code):
-    """`w_L` (a capture file's form) and `w-L` (the ledger's) are one channel -- `predict.canon`'s rule, kept here
-    because this module is stdlib-only and `predict` pulls numpy (skill #81)."""
-    return str(code).replace("_", "-")
+    """`w_L` (a capture file's form) and `w-L` (the ledger's) are one channel: `naming.canonical_code` (S-079), which
+    is stdlib-only like this module -- the copy kept here while the rule lived in `predict` (numpy) is gone."""
+    return _naming.canonical_code(str(code))
 
 
 def pairs_of(rows):

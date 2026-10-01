@@ -615,7 +615,7 @@ def _is_sub(ch):
 
 
 def _side_of(ch):
-    ch = str(ch).replace("_", "-")   # `w_L` (a capture file's form) is `w-L` (skill #81), not "other"
+    ch = naming.canonical_code(str(ch))   # `w_L` (a capture file's form) is `w-L` (S-079), not "other"
     if ch.endswith("-L"):
         return "L"
     if ch.endswith("-R"):

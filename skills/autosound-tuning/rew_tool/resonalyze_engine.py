@@ -467,7 +467,7 @@ def read_set(set_dir, pick=None):
         elif len(items) == 1:
             chosen = items[0]
         else:
-            exact = [it for it in items if it[0].replace("_", "-") == code]
+            exact = [it for it in items if naming.canonical_code(it[0]) == code]
             if len(exact) == 1:
                 chosen = exact[0]
             else:
@@ -700,7 +700,7 @@ def floor_hz(codes, channels, xo):
     or None when none is fragile or no Fs is on record -- a floor nobody measured is not guessed."""
     worst = None
     for code in codes:
-        row = channels.get(code) or channels.get(str(code).replace("_", "-")) or {}   # `w_L` is `w-L` (skill #81)
+        row = channels.get(code) or channels.get(naming.canonical_code(str(code))) or {}   # `w_L` is `w-L` (S-079)
         if row.get("role") not in _xw.FRAGILE_ROLES:
             continue
         fs, _ = _xw._fs_of(row)

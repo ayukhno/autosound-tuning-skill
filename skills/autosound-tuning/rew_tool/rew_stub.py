@@ -196,6 +196,7 @@ def measurements_from_v7_dir(directory, ver):
     for name in sorted(os.listdir(directory)):
         if not name.endswith(".json") or name == "manifest.json":
             continue
+        import naming
         import resonalyze_ir
         try:
             doc = resonalyze_ir.load_file(os.path.join(directory, name))
@@ -206,7 +207,7 @@ def measurements_from_v7_dir(directory, ver):
         if doc.get("transferRealSamples") is None:
             continue
         stem = name[:-5]
-        code = stem.replace("-ctl", "|ctl").replace("_", "-").replace("|ctl", "-ctl")
+        code = naming.canonical_code(stem)            # `m_L-ctl1` -> `m-L-ctl1`: a stem is read whole (S-079)
         rs = doc.get("rewSource") or {}
         out.append(Measurement(f"{code}_{ver} (sw)", doc["transferRealSamples"], doc["sampleRate"],
                                0.0, notes=rs.get("rewNotes", ""), uid=rs.get("rewUuid")))

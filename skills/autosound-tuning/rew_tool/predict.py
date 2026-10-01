@@ -72,6 +72,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import dsp_math  # noqa: E402
+import naming as _naming  # noqa: E402
 import phase_rotation  # noqa: E402
 import verdict as verdict_block  # noqa: E402
 import windows as _windows  # noqa: E402
@@ -153,8 +154,8 @@ def _edge_f(edge):
 
 
 def canon(code):
-    """`w_L` (file names) and `w-L` (ledger codes) are one channel."""
-    return str(code).replace("_", "-")
+    """`w_L` (file names) and `w-L` (ledger codes) are one channel: `naming.canonical_code` (S-079)."""
+    return _naming.canonical_code(str(code))
 
 
 # ---------------------------------------------------------------- chains

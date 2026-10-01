@@ -52,6 +52,7 @@ if _STATE not in sys.path:
 import analysis as _analysis  # noqa: E402
 import dsp_math  # noqa: E402
 import dsp_profile as _dp  # noqa: E402
+import naming  # noqa: E402
 import predict as P  # noqa: E402
 import project as _project  # noqa: E402
 import resonalyze_ir as _ir  # noqa: E402
@@ -335,9 +336,7 @@ def _selftest():
         doc = json.load(open(os.path.join(set1, name), encoding="utf-8"))
         x = list(doc["transferRealSamples"])
         imp = _analysis.analyze_impulse([i / FS for i in range(len(x))], x)   # the tool's own reader
-        title = name[:-5].replace("_", "-") + "_1 (sw)"
-        if "-ctl" in name:
-            title = name[:-5].replace("_", "-", 1) + "_1 (sw)"      # m_L-ctl1 -> m-L-ctl1_1 (sw)
+        title = naming.canonical_code(name[:-5]) + "_1 (sw)"      # m_L-ctl1 -> m-L-ctl1_1 (sw) (S-079)
         verdicts.append({"name": title, "exists": True, "valid": True, "issues": [],
                          "stats": {"live_mean_dB": 80.0 + (5.0 if name.startswith("sw") else 0.0),
                                    "peak_dB": 0.0, "pre_ringing_dB": -60.0,

@@ -46,9 +46,9 @@ def target_file_name(code):
     stands.
 
     The code must be one the grammar reads back as ITSELF. A file named for `w_L` would never be
-    found -- no title can carry that code since S-042 -- and one named for `m-L p1` would be read
-    as `m-L` at a position, so both are refused here, on the writer's side, before anything is on
-    disk, with the grammar's own reason."""
+    found -- a title typed with it is read as `w-L` (S-079) -- and one named for `m-L p1` would be
+    read as `m-L` at a position, so both are refused here, on the writer's side, before anything is
+    on disk, with the grammar's own reason."""
     text = str(code or "").strip()
     if not text:
         raise ValueError("a per-band target is filed under a code, and this one is empty")
@@ -205,9 +205,8 @@ def _selftest():
     for title in ("xyz_1 (sw)", "front-m-L_2 (sw)"):
         code, why = explain_channel(title, car)
         assert code is None and "not a code in this project's glossary" in why, (title, why)
-    # The grammar refuses `w_L` since S-042, and says the hyphen form; that is the reason here.
-    code, why = explain_channel("w_L_1 (sw)", car)
-    assert code is None and "`w-L`" in why, why
+    # S-079: a capture typed `w_L_1` is read as `w-L` (refused from S-042 on), so it is scored against `w-L`'s target.
+    assert explain_channel("w_L_1 (sw)", car) == ("w-L", None), explain_channel("w_L_1 (sw)", car)
     assert channel_of("Room sim") is None
     # SCR-039: a capture taken under a retired name is scored against the channel it belongs to.
     renamed = naming.Glossary({"channels": [{"code": "w-L", "previous_names": ["m-L"]}]})

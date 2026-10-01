@@ -18,6 +18,9 @@ has.
   changed DSP starts a new one -- `_N` does not number DSP states (the user, 2026-09-17). Saving to
   a DSP slot or a backup file does not move it, and it is not the ledger's `v_NNN`: that counter
   also moves for changes that are not the DSP's (skill #37, hub TCC-016). `final` is allowed.
+* **One notation for codes**: written with `-` (`w-L`). A `_` typed in a code (`w_L_3 (sw)`, a file
+  `w_L.json`) is read as `-`, and the parse says so in its `note` (S-079): `canonical_title`,
+  `canonical_code`.
 * **Method suffix**: `(sw)` = acoustic sweep, for phase/time/distortion; `(rta)` = MMM RTA, for
   magnitude/tone; `(imp)` = impedance sweep, for a driver's resonance in the install -- the one
   method with no `_N`: an impedance measurement is not tied to a DSP state (skill #33). Phases 0 and 2 want sw and
@@ -88,6 +91,39 @@ _CTL_RE = re.compile(r"^(?P<code>.+?)-(?P<ctl>ctl[0-9])$")
 POSITIONS = tuple(f"p{i}" for i in range(1, 10)) + ("x0",)
 CONTROL_OPEN = ("ctl1", "ctl")
 CONTROL_CLOSE = ("ctl3", "rep")
+
+
+# S-079 (the Arbiter, 2026-10-01: «розуміти обидві назви. правільна "-"»): a code is WRITTEN with `-`, and a `_` met
+# in one -- a capture typed `w_L_3 (sw)`, a file `w_L.json`, a project id `w_L` -- is READ as `-`. `_` stays the
+# series separator (`sw_1`, `ALL+C_25`), so the rule touches the code and never the `_N` after it. These two functions
+# are its one home: until now each module that met a `w_L` turned it into `w-L` on its own (skill #81).
+_FIRST_WORD_RE = re.compile(r"^\s*\S+")
+
+
+def canonical_code(code):
+    """A code in the one notation: `w_L` -> `w-L`, `m_L-ctl1` -> `m-L-ctl1` (S-079). None stays None.
+
+    For a name that carries no series: a channel code or id, a ledger key, a capture file's stem (`w_L` of
+    `irs_48/w_L.json`) -- so every `_` in it is a hyphen, `sw_1` included. Only the first word is the code's: a
+    modifier after it keeps what it was typed with (`w-L low_cut`). A TITLE carries a series; it goes through
+    `canonical_title`, which splits the series off first.
+    """
+    if code is None:
+        return None
+    return _FIRST_WORD_RE.sub(lambda m: m.group(0).replace("_", "-"), str(code), count=1)
+
+
+def canonical_title(title):
+    """A measurement title with its code in the one notation: `w_L_3 (sw)` -> `w-L_3 (sw)` (S-079).
+
+    The series is split off where the grammar splits it -- the LAST `_` before `<N>` or `final` -- and only what is
+    in front of it goes through `canonical_code`: `sw_1`, `w-L_2` and `ALL+C_25` come back as they are, `w_L (imp)`
+    is `w-L (imp)`. A text with no series and no method is a bare name, read whole: `w_L` is `w-L`.
+    """
+    text = str(title or "")
+    match = _NAME_RE.match(text) or _TAGGED_RE.match(text) or _UNVERSIONED_RE.match(text)
+    end = match.end("body") if match else len(text)
+    return canonical_code(text[:end]) + text[end:]
 
 
 # A junction written side first with a sign between its members (skill #66, the Arbiter 2026-09-24): `L m-tw`,
@@ -172,10 +208,10 @@ class Glossary:
         on = {}
         for row in rows or []:
             if isinstance(row, dict) and row.get("code"):
-                on[row["code"]] = not row.get("hidden") and row.get("role") != "unused"
+                on[canonical_code(row["code"])] = not row.get("hidden") and row.get("role") != "unused"
         for c in self.channels:
-            if c.get("code") in on:
-                c["active"] = on[c["code"]]
+            if canonical_code(c.get("code")) in on:
+                c["active"] = on[canonical_code(c["code"])]
 
     # -- queries --
     def channel_codes(self, active_only=False):
@@ -203,14 +239,21 @@ class Glossary:
         An unknown code comes back unchanged — a name this glossary never heard of is not ours to
         reinterpret (the same rule `is_active` follows). A live code always wins over some other
         channel's history, so a name that was handed on resolves to whoever holds it now.
+
+        Both notations are one name (S-079): `w_L` finds the channel `w-L`, and the answer is the
+        glossary's own spelling of it.
         """
         if not code:
             return code
         for c in self.channels:
             if c.get("code") == code:
                 return code
+        key = canonical_code(code)
         for c in self.channels:
-            if code in (c.get("previous_names") or []) and c.get("code"):
+            if c.get("code") and canonical_code(c["code"]) == key:
+                return c["code"]
+        for c in self.channels:
+            if c.get("code") and key in [canonical_code(n) for n in (c.get("previous_names") or [])]:
                 return c["code"]
         return code
 
@@ -220,13 +263,16 @@ class Glossary:
         Parsing fodder only: these are never generated into a capture plan (that would ask for a
         measurement under a name the project has retired), but a title already in REW carries one,
         and `parse_name` has to be able to split it off the modifier.
+
+        A previous name that is a live code in the other notation (`w_L` beside `w-L`) is not
+        retired: it is the same name (S-079).
         """
-        live = {c.get("code") for c in self.channels}
+        live = {canonical_code(c.get("code")) for c in self.channels}
         return [
             str(old)
             for c in self.channels
             for old in (c.get("previous_names") or [])
-            if str(old) and str(old) not in live
+            if str(old) and canonical_code(str(old)) not in live
         ]
 
     def all_codes(self):
@@ -384,13 +430,16 @@ def explain_name(title, glossary=None):
         body, control = cm.group("code").strip(), cm.group("ctl")
 
     head = body.split()[0] if body.split() else body
+    note = None
     if "_" in head:
-        # S-042: `w_L_1 (sw)` split on the LAST underscore and handed back `w_L` as a channel no
-        # glossary has. The notation is one (the Arbiter, 2026-09-22: «правильна назва через "-"»):
-        # a hyphen carries the side or the variant, and `_` appears only before the series.
-        return None, (f"`{head}` is not a code: a code carries its side or variant with `-` "
-                      f"(`{head.replace('_', '-')}`), and `_` only begins the series number "
-                      f"(naming-and-structure.md §3)")
+        # S-079 (the Arbiter, 2026-10-01): both notations are read, and the hyphen is the one written. From S-042
+        # until then `w_L_1 (sw)` was refused here; it is read as `w-L_1 (sw)`, and the note says so, so a session
+        # sees which code the title went to and what to rename it to. The reason slot stays None: a reader takes a
+        # reason as a refusal.
+        body = canonical_code(body)
+        note = (f"`{head}` read as `{canonical_code(head)}`: a code is written with `-`, and `_` only begins the "
+                f"series number -- this title in the one notation is `{canonical_title(text)}` "
+                f"(naming-and-structure.md §3)")
     # `L m-tw` is `L m+tw` with the tweeter inverted -- the same measurement as `L m+tw_52 (rta) inv`, so the
     # inversion joins the clarification the way `inv` typed after the method does: `inv` for a two-member
     # junction, `inv:<member>` where a longer chain has to say which (skill #66).
@@ -401,6 +450,7 @@ def explain_name(title, glossary=None):
     code, modifier = body, None
     if glossary:
         for candidate in glossary.all_codes():
+            candidate = canonical_code(candidate)     # a glossary written in the other notation (S-079)
             if body == candidate:
                 code, modifier = candidate, None
                 break
@@ -433,6 +483,9 @@ def explain_name(title, glossary=None):
         # The junction members typed after a `-` (`L m-tw` -> `["tw"]`): inverted for this take (skill #66).
         "inverted": inverted,
         "title": text,
+        # None, or what the reader did to the title on the way in: a code typed with `_` read as `-` (S-079).
+        # `code` is then the hyphen form and `title` stays what REW shows.
+        "note": note,
     }, None
 
 
@@ -893,11 +946,41 @@ def _selftest():
         assert pg.is_active("r-L") is False and pg.is_active("c") is True, "the project's row decides, on or off"
         assert pg.is_active("tw-L") is True, "a code the project has no row for keeps the glossary's flag"
 
-    # S-042: one notation. A code with `_` is refused with the hyphen form named; a modifier after
-    # a real code may still carry one, since `_` there is not the code's.
-    got, why = explain_name("w_L_1 (sw)")
-    assert got is None and "`w-L`" in why, why
+    # -- S-079 (the Arbiter, 2026-10-01): both notations are read, the hyphen is the one written. The Passat's shape:
+    #    its channels are `w-L`…, and a capture typed `w_L_3` was refused here from S-042 on.
+    #    `_` stays the series separator, so only the code in front of `_N` changes.
+    for typed, one in (("w_L_3", "w-L_3"), ("w_L", "w-L"), ("w_L (imp)", "w-L (imp)"), ("sw_1", "sw_1"),
+                       ("w-L_2", "w-L_2"), ("ALL+C_25", "ALL+C_25"), ("tw_R_final (rta) x0", "tw-R_final (rta) x0"),
+                       ("m_L-ctl1_49 (sw)", "m-L-ctl1_49 (sw)"), ("m_L p3_49 (sw)", "m-L p3_49 (sw)"),
+                       ("w_L low_cut_49 (sw)", "w-L low_cut_49 (sw)"), ("sw_01 (sw)", "sw_01 (sw)")):
+        assert canonical_title(typed) == one, (typed, canonical_title(typed), one)
+    # A file stem or an id has no series, so it is read whole -- the one place the two entry points differ.
+    assert canonical_code("w_L") == "w-L" and canonical_code("m_L-ctl1") == "m-L-ctl1"
+    assert canonical_code("sw_1") == "sw-1" and canonical_title("sw_1") == "sw_1"
+    assert canonical_code(None) is None and canonical_code("w-L low_cut") == "w-L low_cut"
+    passat = Glossary({"channels": [{"code": c} for c in ("sw", "w-L", "w-R", "m-L", "tw-L", "c")],
+                       "combos": {"ALL+C": ["sw", "w-L", "w-R", "m-L", "tw-L", "c"]}})
+    got, why = explain_name("w_L_3 (sw)", passat)
+    assert why is None, "a title the grammar reads carries no reason: a reader takes one as a refusal"
+    assert (got["code"], got["code_current"], got["version_n"], got["title"]) == ("w-L", "w-L", 3, "w_L_3 (sw)"), got
+    assert "`w-L`" in got["note"] and "`w-L_3 (sw)`" in got["note"], got["note"]
+    assert name_key(got) == name_key(parse_name("w-L_3 (sw)", passat)), "one channel, one series, one method"
+    assert parse_name("w-L_3 (sw)", passat)["note"] is None, "a title in the notation is not annotated"
+    for title, code in (("sw_1 (sw)", "sw"), ("ALL+C_25 (rta)", "ALL+C"), ("w_L (imp)", "w-L"), ("w_L_3", "w-L")):
+        assert parse_name(title, passat)["code"] == code, (title, parse_name(title, passat))
+    assert parse_name("w_L_3 (sw)")["code"] == "w-L", "no glossary: still the hyphen form"
+    assert parse_name("w_L FX_3 (sw)", passat)["modifier"] == "FX", "the code still splits off its modifier"
+    imp = parse_name("w_L (imp)", passat)
+    assert (imp["method"], imp["version"]) == ("imp", None) and name_key(imp) == name_key(parse_name("w-L (imp)"))
+    # The check finds it, and the rename it offers is the Arbiter's «`_` міняти на `-`».
+    seen = validate_series(["w_L_3 (sw)", "sw_1 (sw)"], ["w-L_3 (sw)", "sw_1 (sw)"], passat)
+    assert seen["complete"] and seen["renames"] == {"w_L_3 (sw)": "w-L_3 (sw)"}, seen
+    # A modifier's own `_` is not the code's, and a glossary in the other notation is the same names.
     assert parse_name("w-L low_cut_49 (sw)", Glossary({"channels": [{"code": "w-L"}]}))["modifier"] == "low_cut"
+    older = Glossary({"channels": [{"code": "w-L", "previous_names": ["w_L"]}, {"code": "tw_L"}]})
+    assert older.resolve_code("w_L") == "w-L" and older.resolve_code("tw-L") == "tw_L"
+    assert older.former_codes() == [], "`w_L` is `w-L`'s own name, not a retired one"
+    assert parse_name("tw-L FX_2 (sw)", older)["modifier"] == "FX"
 
     # -- skill #66 (the Arbiter, 2026-09-24): `+`/`-` between lowercase driver codes, side first; the member after
     # `-` is inverted. `L m-tw` is the junction `L m+tw` with the tweeter inverted -- it used to parse, silently, as
@@ -921,7 +1004,8 @@ def _selftest():
           "channel's old captures resolve to it (SCR-039); positions p1..p9/x0 and controls "
           "ctl1/ctl3/ctl/rep parse in both forms and are identity, not code; a clarification "
           "after the method is another measurement in the same series (#34), (imp) without `_N` (#33), refusals "
-          "with a reason, and no ledger version for `_N` (#37); a match the comparison NORMALISED says the title on disk differs and names the canonical one to rename it to (#47)")
+          "with a reason, and no ledger version for `_N` (#37); a match the comparison NORMALISED says the title on disk differs and names the canonical one to rename it to (#47); "
+          "a code typed with `_` is read as `-`, with a note, and the series is left alone (S-079)")
     return 0
 
 

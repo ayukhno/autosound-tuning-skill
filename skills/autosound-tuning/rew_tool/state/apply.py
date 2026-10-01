@@ -140,16 +140,36 @@ def _row_key(rows, name, identity):
 
     Falls through to the name as given whenever there is nothing to resolve — no project file, an
     unknown channel, or a project that has never renamed anything (i.e. almost always).
+
+    Both notations are one name (S-079, the Arbiter 2026-10-01): when nothing matches as typed, the
+    identity map and the row keys are compared in the one notation (`naming.canonical_code`), so a
+    delta for `w_L` lands on the row `w-L` and the other way round. Two rows that are one name that
+    way are refused, not merged: which one the delta meant is not guessed.
     """
-    if name in rows or not identity:
+    def aliases(entry):
+        if not isinstance(entry, dict):
+            return []
+        return [str(a) for a in [entry.get("id"), entry.get("code"), *(entry.get("previous_names") or [])] if a]
+
+    if name in rows:
         return name
-    entry = identity.get(name)
+    entry = (identity or {}).get(name)
+    for alias in aliases(entry):
+        if alias in rows:
+            return alias
+    import naming as _naming                         # only now: the exact names are the common case
+    one = _naming.canonical_code
+    key = one(str(name))
     if not isinstance(entry, dict):
-        return name
-    for alias in [entry.get("id"), entry.get("code"), *(entry.get("previous_names") or [])]:
-        if alias and str(alias) in rows:
-            return str(alias)
-    return name
+        # no channel under the name as typed: the one under it in the one notation, if exactly one is
+        found = {id(e): e for k, e in (identity or {}).items() if isinstance(e, dict) and one(str(k)) == key}
+        entry = next(iter(found.values())) if len(found) == 1 else None
+    wanted = {key} | {one(a) for a in aliases(entry)}
+    hits = [k for k in rows if one(str(k)) in wanted]
+    if len(hits) > 1:
+        raise ValueError(f"{name!r} is the rows {', '.join(map(repr, hits))} once `_` is read as `-` (S-079): "
+                         f"two rows of one name, and which one this delta means is not guessed")
+    return hits[0] if hits else name
 
 
 def apply_delta(current, delta, identity=None):
@@ -659,6 +679,26 @@ def _selftest():
     full = dict(seed["channels"]["m-L"], gain_db=-1.0)
     r_new = propose(h3, {"tw-L": full}, note="a real new channel")
     assert set(h3.load(r_new["version"])["channels"]) == {"m-L", "tw-L"}
+
+    # ── S-079 (the Arbiter, 2026-10-01): both notations are one name. The Passat's shape -- code `w-L`, id `w_L`,
+    # ledger rows keyed either way -- and a delta addressed either way lands on the row that is there.
+    passat = {"w-L": {"code": "w-L", "id": "w_L", "previous_names": ["w_L"]}}
+    passat["w_L"] = passat["w-L"]
+    for rows, name, row in (({"w-L": {}}, "w_L", "w-L"), ({"w_L": {}}, "w-L", "w_L"), ({"w-L": {}}, "w-L", "w-L"),
+                            ({"tw_L": {}}, "tw-L", "tw_L"), ({"tw-L": {}}, "tw_L", "tw-L")):
+        assert _row_key(rows, name, passat) == row, (rows, name, _row_key(rows, name, passat))
+        assert _row_key(rows, name, None) == row, "no project file: still one name"
+    assert _row_key({"m-L": {}}, "w-L", passat) == "w-L", "a different channel is not reached by the notation"
+    landed = apply_delta({"channels": {"w-L": {"gain_db": -7.0}}}, {"w_L": {"gain_db": -3.0}}, passat)
+    assert set(landed["channels"]) == {"w-L"} and landed["channels"]["w-L"]["gain_db"] == -3.0, landed
+    # Two rows of one name are refused, never merged: which one the delta meant is not guessed.
+    try:
+        apply_delta({"channels": {"a_b-c": {"gain_db": 0.0}, "a-b_c": {"gain_db": 0.0}}},
+                    {"a-b-c": {"gain_db": -1.0}})
+    except ValueError as exc:
+        assert "S-079" in str(exc) and "not guessed" in str(exc), exc
+    else:
+        raise AssertionError("apply_delta merged two rows of one name")
 
     # #52: the gain step is the machine's setting. Known: a trim off it is named; unknown: a trim with decimals asks.
     gproj = tempfile.mkdtemp(prefix="autosound_gaingrid_")

@@ -300,7 +300,7 @@ def _main(argv=None):
             return parsed["code"]
         if "-" in stem:                                # path_check's `m_L-ctl1` / `m_L-p5`: a tag
             return None
-        return stem.replace("_", "-")
+        return _naming.canonical_code(stem)            # a stem has no series: read whole (S-079)
 
     rows = []
     try:

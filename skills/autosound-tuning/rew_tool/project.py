@@ -35,6 +35,11 @@ import re
 import sys
 from datetime import datetime, timezone
 
+_HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+import naming as _naming  # noqa: E402 -- the one notation for codes (S-079); stdlib-only, like this module
+
 # One number across every machine file this skill writes (project.json, the ledger,
 # process-state.json, dsp_profile.json), moving together with the skill's own major version.
 # "Which format is this project in?" is then one question with one answer, and `contract.py` can
@@ -165,7 +170,7 @@ def id_mismatches(data):
         if not rid or not code or rid == code:
             continue
         if "_" in rid:
-            to = rid.replace("_", "-")
+            to = _naming.canonical_code(rid)
         elif rid in previous_names(row):
             continue                                   # a rename, in the notation: as designed
         else:
@@ -306,13 +311,21 @@ def validate(data):
     for key in ("amps", "presets", "channels", "sources", "_open_questions"):
         if key in data and not isinstance(data[key], list):
             raise ProjectError(f"{key!r} must be a list")
-    by_code, ids = {}, {}
+    # `by_one` and `ids_one` key the same rows by the canonical form (S-079): every reader takes `w_L` for `w-L`, so
+    # two channels named or keyed that way are one name, and a capture or a ledger row of either would go to both.
+    by_code, ids, by_one, ids_one = {}, {}, {}, {}
     for ch in data.get("channels", []):
         if not isinstance(ch, dict) or not ch.get("code"):
             raise ProjectError(f"every channels[] entry needs a code, got {ch!r}")
         if ch["code"] in by_code:
             raise ProjectError(f"duplicate channel code {ch['code']!r}")
         by_code[ch["code"]] = ch
+        twin = by_one.setdefault(_naming.canonical_code(ch["code"]), ch)
+        if twin is not ch:
+            raise ProjectError(
+                f"channels {twin['code']!r} and {ch['code']!r} are one name: `_` in a code is read as `-` "
+                f"(S-079), so a capture titled with either would go to both. Rename one of them "
+                f"(`project.py <project> rename-channel`)")
         if "previous_names" in ch and not isinstance(ch["previous_names"], list):
             raise ProjectError(
                 f"channel {ch['code']!r}: previous_names must be a list of names, got "
@@ -343,6 +356,11 @@ def validate(data):
                 "sharing one would merge their histories (SCR-039)"
             )
         ids[cid] = ch["code"]
+        twin_id = ids_one.setdefault(_naming.canonical_code(cid), cid)
+        if twin_id != cid:
+            raise ProjectError(
+                f"channel ids {twin_id!r} ({ids[twin_id]!r}) and {cid!r} ({ch['code']!r}) are one id once `_` is "
+                f"read as `-` (S-079) — the ledger rows of two channels would be read as one (SCR-039)")
     # A previous name is a join key for captures taken before a rename, so it may not also be some
     # OTHER channel's live name — that is the one shape where a title genuinely cannot be resolved
     # (code swaps between two channels being the realistic way to get here). Checked in a second
@@ -353,10 +371,13 @@ def validate(data):
                 raise ProjectError(
                     f"channel {ch['code']!r} lists its own current code as a previous name"
                 )
-            if by_code.get(old) not in (None, ch):
+            other = by_one.get(_naming.canonical_code(old))
+            if other not in (None, ch):
                 raise ProjectError(
-                    f"channel {ch['code']!r} lists {old!r} as a previous name, but {old!r} is the "
-                    "current code of another channel — a capture titled with it could belong to "
+                    f"channel {ch['code']!r} lists {old!r} as a previous name, but "
+                    + (f"{old!r} is" if old == other["code"] else
+                       f"{old!r} reads as {other['code']!r} (`_` is `-`, S-079), which is")
+                    + " the current code of another channel — a capture titled with it could belong to "
                     "either (SCR-039)"
                 )
     for path, wrapper in facts(data):
@@ -1066,6 +1087,11 @@ class Project:
         Current-code-before-id matters in exactly one case: A was renamed to B's old name. Then
         "B" is A's live code and someone else's dead id, and the live name is the one a human
         typing it today means.
+
+        A name that matches nothing as typed is tried again in the one notation, in the same order
+        (S-079, the Arbiter 2026-10-01: both notations are read): `w_L` finds the channel `w-L`
+        whatever its id says. A name two channels answer to that way is refused, not handed to the
+        first — `validate` refuses the file that has them, and this does not guess between them.
         """
         rows = (data or self.load()).get("channels") or []
         rows = [r for r in rows if isinstance(r, dict)]
@@ -1075,6 +1101,15 @@ class Project:
             row = next((r for r in rows if match(r)), None)
             if row is not None:
                 return row
+        key = _naming.canonical_code(name)
+        for names_of in (lambda r: [r.get("code")], lambda r: [channel_id(r)], previous_names):
+            hits = [r for r in rows if key in [_naming.canonical_code(n) for n in names_of(r) if n]]
+            if len(hits) > 1:
+                raise ProjectError(
+                    f"{name!r} is {' and '.join(repr(r.get('code')) for r in hits)} once `_` is read as `-` "
+                    f"(S-079): two channels answer to it, and which one is not guessed — rename one of them")
+            if hits:
+                return hits[0]
         return None
 
     def rename_channel(self, old, new, data=None):
@@ -2171,6 +2206,44 @@ def _selftest():
     assert ids.load()["channels"][0]["id"] == "w_L", "a plan wrote"
     fix_ids(ids_dir, apply=True)
     assert [c.get("id") for c in ids.load()["channels"]] == ["w-L", "m_L", "tw-L-old", "c", None]
+
+    # S-079 (the Arbiter, 2026-10-01): both notations are read, the hyphen is the one written. The Passat's shape --
+    # code `w-L`, id `w_L` (also a previous name) -- is valid, and every spelling reaches the row, before fix-ids
+    # and after it; a channel that never had an id answers to `m_L` too.
+    passat = Project(tempfile.mkdtemp(prefix="autosound_s079_"))
+    passat.save({"schema_version": SCHEMA_VERSION, "channels": [
+        {"code": "w-L", "id": "w_L", "previous_names": ["w_L"]}, {"code": "tw-L", "id": "tw_L"},
+        {"code": "m-L"}, {"code": "sw"}]})
+    for name, code in (("w-L", "w-L"), ("w_L", "w-L"), ("tw_L", "tw-L"), ("tw-L", "tw-L"), ("m_L", "m-L"),
+                       ("sw", "sw")):
+        assert (passat.resolve_channel(name) or {}).get("code") == code, (name, passat.resolve_channel(name))
+    fix_ids(passat.dir, apply=True)
+    assert [c.get("id") for c in passat.load()["channels"]] == ["w-L", "tw-L", None, None]
+    assert passat.resolve_channel("w_L")["code"] == "w-L" and passat.resolve_channel("tw_L")["code"] == "tw-L"
+    passat.set_channel("w_L", impedance_ohm=4)          # a write under the other spelling is the same row
+    assert len(passat.load()["channels"]) == 4 and passat.resolve_channel("w-L")["impedance_ohm"] == 4
+    # Two channels that are one name once `_` is `-` are REFUSED, never merged: a capture titled `w_L_3` is read as
+    # `w-L`, and it would go to both. The same for two ids, and for a previous name that reads as a live code.
+    for rows, words in (([{"code": "w_L"}, {"code": "w-L"}], "are one name"),
+                        ([{"code": "w-L"}, {"code": "x", "id": "w_L"}], "are one id"),
+                        ([{"code": "w-L"}, {"code": "x", "previous_names": ["w_L"]}], "reads as 'w-L'")):
+        try:
+            validate({"schema_version": SCHEMA_VERSION, "project_rev": 1, "channels": rows})
+        except ProjectError as exc:
+            assert words in str(exc) and "S-079" in str(exc), (rows, exc)
+            continue
+        raise AssertionError(f"validate took {rows!r}")
+    # A file written by hand past `validate`: an exact name still finds its own row, and a name two rows answer to
+    # only in the one notation is refused rather than handed to the first.
+    twins = {"channels": [{"code": "w_L"}, {"code": "w-L"}, {"code": "a_b-c"}, {"code": "a-b_c"}]}
+    assert passat.resolve_channel("w_L", twins) is twins["channels"][0]
+    assert passat.resolve_channel("w-L", twins) is twins["channels"][1]
+    try:
+        passat.resolve_channel("a-b-c", twins)
+    except ProjectError as exc:
+        assert "two channels answer" in str(exc), exc
+    else:
+        raise AssertionError("resolve_channel picked one of two channels")
 
     # set_hardware_control: SCR-017 -- a DSP-level knob position, recorded ONCE, not per-preset.
     proj.set_hardware_control("RearRC", "3/4", source="user")
