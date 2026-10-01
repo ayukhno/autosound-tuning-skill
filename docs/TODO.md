@@ -1627,6 +1627,24 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-082 · A fragile driver's inherited Fs: a warning before the sweep, not a refusal (hub #225, TCC-039)
+
+**Status**: open 2026-10-01 · W-5 collection · hub #225 from tcc; the Arbiter at TCC's pre-release walk: «Тікет скілу: попередження»
+
+`gates/presweep_safety.py` refuses the sweep when a tweeter's or mid's Fs is `origin: inherited`. The Arbiter's rule
+(2026-09-17): a carried Fs is a warning only; HPF ≥ 1.1 × Fs at ≥ 24 dB/oct stays a refusal. Since TCC v0.1.45 a
+copied project carries the Fs by default, so every copied project with a tweeter meets the refusal. Recorded, not
+diagnosed; the asks are in the ticket.
+
+## S-081 · The installers verify the method's tag signature and install TCC's tag unchecked (hub #224, TCC-038)
+
+**Status**: open 2026-10-01 · W-5 collection · hub #224 from tcc (its finding 120); the Arbiter: «У W-5, тікетом скілу»
+
+On the Mac, v0.1.45's install line printed `✓ installed` for the app and nothing about a signature: «а чому він не
+пише що поставив підписаний тег ТСС? на скілу так писав». Both installers `verify-tag` the method's tag and install
+TCC's with uv as is; TCC's tags are signed from v0.1.45 with the same key. Recorded, not diagnosed; the asks are in
+the ticket.
+
 ## S-080 · Improving an existing tune: the skill speaks with two voices
 
 **Status**: open 2026-10-01 · W-5 collection · found answering the Arbiter's question at the release-prep review («як зараз відпрацює скіл, якщо взяти готову машину, ввести налаштування і попросити аналіз і покращення?»)
