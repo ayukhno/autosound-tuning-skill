@@ -167,7 +167,8 @@ author's Mac the skill is a symlink to the working tree and is left alone). TCC'
 three — `✓ v0.1.45 is signed by TCC's author` — and the app installed. **Not met in a real run:** a refused TCC
 tag (selftests only), and #108's filter against a real `v3.x` tag (selftests only). On the VM the app's own
 `--install-desktop` exited non-zero after uv's «Making stdin inheritable failed», so that run created no shortcuts
-(an earlier install's were there) — TCC's command, unchanged on the skill's side since 2026-08-22; hub #229 to tcc.
+(an earlier install's were there); a second run on the same VM, same v0.1.45, created them — intermittent, TCC's
+command, unchanged on the skill's side since 2026-08-22; hub #229 to tcc.
 Reviewed by a second model (Fable) where a mistake costs most: the installers' signature check (one finding, #108)
 and the ledger's channel keys (three edge cases, fixed).
 
