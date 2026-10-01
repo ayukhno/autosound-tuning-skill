@@ -1627,6 +1627,14 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-085 · An automatically picked tag that is not release-shaped installs unchecked
+
+**Status**: open 2026-10-01 · pool (the next wave) · found while building W-5 #101; not built
+
+Both installers take the newest tag matching `v3.*` (and the app's `v*`) by `sort -V`. A tag that is not
+release-shaped (`v3.x`, `v0.x`) sorts newest, then passes `settled_by_name` as "not a release tag" and installs
+with no signature check. TCC's own updater refuses such names (`_verdict_by_name`). Recorded, not diagnosed.
+
 ## S-084 · `session-close` run as a check wrote the close; the CONTINUE block was three versions behind (hub #227, TCC-041)
 
 **Status**: open 2026-10-01 · **W-5 · v3.0.65**, issue #107, `ok` (the Arbiter, 2026-10-01) · hub #227 from tcc (its finding 131); the Arbiter: everything found goes into W-5
