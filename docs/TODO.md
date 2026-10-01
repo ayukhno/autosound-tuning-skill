@@ -1618,6 +1618,17 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-080 · Improving an existing tune: the skill speaks with two voices
+
+**Status**: open 2026-10-01 · W-5 collection · found answering the Arbiter's question at the release-prep review («як зараз відпрацює скіл, якщо взяти готову машину, ввести налаштування і попросити аналіз і покращення?»)
+
+`phases/phase_-1_intake.md` (the "One way in" note) and `phases/virtual-first.md` say improving somebody else's tune
+is not a route the method lays out (the ruling of 2026-09-09) and forbid a shortened phase order.
+`core/project-intake.md` ("Also pick the MODE here") offers exactly that mode: «improving an existing tune
+(−1 → 3 → 4, no new solos)». Its "Level 0" (a light-touch fine-tune from the current measurement) sits beside both.
+Which one a session follows depends on which file it reads first. Recorded, not diagnosed; S-017 is the feature
+itself and stays deferred.
+
 ## S-079 · Channel names: read both `w-L` and `w_L`; `-` is the right one
 
 **Status**: open 2026-10-01 · W-5 collection · the Arbiter, answering hub #196: «розуміти обидві назви. правільна "-", коли в назві при замірах зустрічаєтсья "_" міняти на "-"»
