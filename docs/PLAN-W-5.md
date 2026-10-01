@@ -2,7 +2,7 @@
 
 Collection opened 2026-10-01 (the Arbiter: «відкривай веху W-5», then «я мав на увазі не milestone а збір») and
 closed the same day («збір закінчено»). `ok` on #101–#105; #106 and #107 joined from tcc afterwards (hub #226, #227)
-and wait for his `ok`. **The build waits for his word**: «почекай йти в розробку від ТСС можуть бути додаткові
+and got his `ok` the same day. **The build waits for his word**: «почекай йти в розробку від ТСС можуть бути додаткові
 тікети, або будь готовий їх додати по ходу роботи». A patch: v3.1.0 with TCC v1.1.0 comes after it (hub #220).
 
 "How" below was read from the code on 2026-10-01; names marked *(name in code)* are decided while building.
@@ -88,14 +88,14 @@ the intake (`new_tune` / `improve_existing` / `light_touch`, `intake.py:96`), wh
 To check while building: a Phase-0 round opened `--under v0` plus `--from-state`'s default may divide the protective
 chain out twice. **The walk:** the Passat after AYA 17.10; v3.1.0 waits for it.
 
-### #106 — the run's reviewer model wins (hub #226) — waits for `ok`
+### #106 — the run's reviewer model wins (hub #226)
 
 `autosound_ai.py` gains `--model` and `--provider` for one run, beside `--via`: the run's model beats a pinned
 `AUTOSOUND_CRITIC_MODEL` in any critic-env; the provider follows the run's model unless `--provider` is given; one line
 names the pin that lost and its file. A pin stays the default for runs that name none. The flag names go onto hub
 #226 **before** TCC builds its half.
 
-### #107 — `session-close` as a check, a close taken back, a stale CONTINUE (hub #227) — waits for `ok`
+### #107 — `session-close` as a check, a close taken back, a stale CONTINUE (hub #227)
 
 TCC calls `session-close` itself on the way out and reads its exit code (`tcc core/process_writer.py`
 `close_session`), so its behaviour stays. Beside it: a read-only form *(name in code: `--check`)* with the same
