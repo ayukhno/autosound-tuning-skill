@@ -18,23 +18,43 @@ chain, **is** what the microphone would record. So the whole measurement budget 
 disciplined capture session; the tune is then designed at the desk against a predicted sum; the car is
 needed once more, briefly, to verify the prediction and do the fine EQ the desk cannot see.
 
-## One way in: from scratch
+## Two ways in: from scratch, or a car that is already tuned
 
-**−1 → 0 → desk (1–2) → 3 → 4.** That is the method: every driver is measured on its own, the tune
-is designed at the desk against a predicted sum, and the car verifies it. Whatever state the DSP is
-in, it is **read into the ledger first**.
+**From scratch — −1 → 0 → desk (1–2) → 3 → 4.** Every driver is measured on its own, the tune is
+designed at the desk against a predicted sum, and the car verifies it. Whatever state the DSP is in,
+it is **read into the ledger first**.
 
-**Improving somebody else’s existing tune is NOT a route this method lays out** (user’s ruling
-2026-09-09). People do want it, and the tools here serve it — a transcribed setup enters the ledger
-(`setup_import.py`), `predict.py --from-state` predicts a change from the series already in hand,
-and neither the flaw map nor the EQ proposer cares where the state came from. What is not laid out
-is the ORDER of that work, and pretending otherwise would sell a path nobody has walked end to end.
-A tuner who wants it builds that route with their own AI, out of these tools.
+**A car that is already tuned** (`goal.mode: improve_existing`; the Arbiter, 2026-10-01, skill #105:
+«готова машина, зняти всі налаштування і криві як є, зняти всі сирі криві з захисними фільтрами і за
+столом програти декілька варіантів покращення або пропозиції налаштування з нуля»). The same phases and
+the same capture, with one block and one candidate more:
 
-Say so plainly when it is asked for, and do **not** improvise a shortened phase order: an
-`enter-phase 3` that skipped the baseline still meets the gates asking for a target curve and a
-flaw map, and answering those with hand-typed placeholders is how a tune ends up built on numbers
-nobody measured.
+1. **−1 — the current tune into the ledger.** The intake records the mode; the setup goes in through
+   `setup_import.py` (the cost is below), and that version is **the current tune** — the baseline
+   everything later is described against. The backup file of −1.4 is made as always.
+2. **0 — the "as is" block FIRST, before anything in the DSP changes.** The current tune playing, the
+   tripod at P0, the session levels of 0.2: every channel's solo through its current chain, then L, R
+   and ALL — `(sw)`, as its own capture round under the current version (`capture-start … --under
+   <current>`). It is what the seat hears today, and it is the check of step 3. Then `v0` and the usual
+   capture (0.1–0.7): the raw solos under the protective filters.
+3. **Desk, first — the current tune predicted and checked.** `predict.py --project <p> --state-ver
+   <current>` on the raw solos, then `verify_prediction` against the "as is" block: per channel and
+   per sum within 1 dB → the transcription and the model agree. A channel that misses is a value typed
+   wrong from the screens or a processing block left on, and it is fixed before any variant is read —
+   every variant is described against this tune, so an error in it moves all of them.
+4. **Desk — the variants against the current tune** (1.3–1.7 as below). The current tune is a
+   candidate on the same trade-off front as the engine's best, its alternatives and the wishes, and
+   so is **the current crossovers re-timed** (its edges kept, Auto delay and levels again). Each
+   variant says what it buys and what it spends **against the current tune**; one that ties it on every
+   term within the margins is said to be no improvement, and keeping the current tune is a valid answer.
+5. **2 → 3 → 4** as from scratch. The "as is" block is the *before* the tuner compares with.
+
+**Light touch** (`goal.mode: light_touch`, `project-intake.md` §4, Level 0) stays the third door: a
+small correction toward the target from the current measurement, with no capture session.
+
+Do **not** improvise a shorter phase order for either: an `enter-phase 3` that skipped the baseline
+still meets the gates asking for a target curve and a flaw map, and answering those with hand-typed
+placeholders is how a tune ends up built on numbers nobody measured.
 
 ⚠️ **Reading the current setup costs time, and it is one-time.** On a Helix there is no reader for
   PC-Tool 6 — the current setup is transcribed from its screens (EQ is the slowest); say that cost
@@ -60,7 +80,7 @@ None of these blocks the path; they widen the delta the verification must forgiv
 
 Every change to the DSP is written to the ledger at the moment it is entered; nothing is asked twice.
 A question to the user is warranted only when the alternative is a **guess** — an error is not a
-problem, it is fixed together. (This matters most in "improve" mode, where the whole current tune is
+problem, it is fixed together. (This matters most for a car that is already tuned, where the whole current tune is
 transcribed once from the PC-Tool screens.)
 
 ## The path, phase by phase (input → action → output)
@@ -348,7 +368,7 @@ reveals a broken driver or wiring); without a rig, Fs from the datasheet with ma
   trusted; more → a **warning** (joint, band) + a "not trusted" mark, and we go on. For a warned joint,
   the decision is checked on the spot against the measured sum (delay/polarity/all-pass as today), a
   change in the DSP, the joint switch repeated. The only in-car iteration, and only for such joints.
-  *Improve mode:* the same without a prediction — joints read straight from the measured sums.
+  *A car that was already tuned:* the same — the prediction is the chosen variant's, and the "as is" block from Phase 0 is the before.
 - **3.3** **tripod down.** MMM `_02 (rta)` handheld: L, R, ALL, groups. Fine EQ over MMM as today
   (2c/2d): group targets, the residual to target, only what stands in the MMM → enter → `_final (rta)`:
   every channel, groups, L, R, ALL. **What cuts and what booms** (`ear_suspects`): the top three peaks

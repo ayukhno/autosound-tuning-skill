@@ -220,7 +220,7 @@
         "improve_existing": "Improve existing",
         "light_touch": "Light touch"
       },
-      "derive": "method has only one path — tune from scratch"
+      "derive": "from scratch — unless the car is already tuned and you want that tune improved"
     },
     "goal.design_path": {
       "ask": "Virtual-first at the desk, or iterative?",

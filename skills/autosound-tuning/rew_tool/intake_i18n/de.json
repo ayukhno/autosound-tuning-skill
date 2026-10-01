@@ -220,7 +220,7 @@
         "improve_existing": "Bestehendes verbessern",
         "light_touch": "Sanfter Feinschliff"
       },
-      "derive": "die Methode kennt nur einen Weg – Setup von Grund auf"
+      "derive": "von Grund auf – es sei denn, das Auto hat bereits ein Setup und du möchtest dieses verbessern"
     },
     "goal.design_path": {
       "ask": "Virtual-first am Schreibtisch oder iterativ?",

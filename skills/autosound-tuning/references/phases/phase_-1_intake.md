@@ -2,7 +2,7 @@
 
 This phase bootstraps a brand-new tuning project or a fresh system installation.
 
-> 🗺️ **One way in.** The method builds a tune **from scratch** — −1 → 0 → desk → 3 → 4 — reading whatever the DSP currently holds into the ledger first. *Improving somebody else's existing tune is not a route laid out here* (user's ruling 2026-09-09): the tools serve it, the order of work is the tuner's own. Say so plainly rather than improvising a shortened phase order. The virtual-first happy path, the gear loss table, the degradation rule and the day-before preparation (−1.4) live in [`virtual-first.md`](references/phases/virtual-first.md) and [`capture-session-sheet.md`](references/phases/capture-session-sheet.md).
+> 🗺️ **Two ways in.** A tune **from scratch** — −1 → 0 → desk → 3 → 4 — or **a car that is already tuned** (`goal.mode: improve_existing`): the same phases, with the current tune read into the ledger as the baseline, an "as is" block before the raw capture, and the current tune as a candidate beside every variant at the desk (`virtual-first.md`, "Two ways in"; skill #105). Either way, whatever the DSP holds is read into the ledger first, and no shortened phase order is improvised. The virtual-first happy path, the gear loss table, the degradation rule and the day-before preparation (−1.4) live in [`virtual-first.md`](references/phases/virtual-first.md) and [`capture-session-sheet.md`](references/phases/capture-session-sheet.md).
 
 ## 🎯 Goal-node
 

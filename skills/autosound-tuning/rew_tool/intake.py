@@ -1183,7 +1183,7 @@ FIELDS = (
        required=True, enum=MODES, lands="`autosound_context.md` + a recorded decision",
        note="An INTENT, orthogonal to the capability level. Both modes read the current DSP state "
             "into the ledger first.",
-       default="new_tune", derive="the method has one way in -- a tune from scratch (`phase_-1_intake.md`)"),
+       default="new_tune", derive="from scratch, unless the car is already tuned and the tuner wants that tune improved (`virtual-first.md`, two ways in)"),
     _f("goal.design_path", "goal", "Virtual-first at the desk, or iterative?", enum=DESIGN_PATHS,
        lands="`autosound_context.md` + a recorded decision",
        note="Virtual-first needs all three: level 1, a loopback on one clock, a hardware-verified "

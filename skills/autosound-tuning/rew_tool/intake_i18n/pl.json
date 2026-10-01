@@ -220,7 +220,7 @@
         "improve_existing": "Poprawa obecnego",
         "light_touch": "Delikatna korekta"
       },
-      "derive": "metoda ma jedną ścieżkę — strojenie od zera"
+      "derive": "od zera — chyba że auto ma już strojenie i chcesz je poprawić"
     },
     "goal.design_path": {
       "ask": "Virtual-first przy biurku czy iteracyjnie?",
