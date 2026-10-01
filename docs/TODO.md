@@ -403,7 +403,16 @@ Done looks like: in a new window after the install, `python3 -V` answers with th
 set up. The VM is left as found, so the fix can be checked on it.
 
 ## S-017 · Analysing a tune that already exists — noted, not started
-**Status**: deferred 2026-09-17 · the user: "note it with the source, we do not go there yet"; it comes back when Phase 1's variants work on a fresh system and a tuner brings a car that is already tuned
+**Status**: open 2026-10-01 · in v3.1.0's scope, walked on the Passat after AYA 17.10; not walked or slipped → 3.2.x (the Arbiter at the release-prep review) · was: deferred 2026-09-17 · the user: "note it with the source, we do not go there yet"; it comes back when Phase 1's variants work on a fresh system and a tuner brings a car that is already tuned
+
+**The route, in the Arbiter's words (2026-10-01):** «готова машина, зняти всі налаштування і криві як є, зняти всі
+сирі криві з захисними фільтрами і за столом програти декілька варіантів покращення або пропозиції налаштування з
+нуля. хотілось би мати таку функцію в релізі, але якщо це складно і ризиковано - відкладаємо до 3.2.x». Assessed from
+the documents and `--help`, not the code: the settings enter the ledger (`setup_import.py`), the raw solos are Phase
+0's capture, `predict.py --from-state` / `--delta-vs` predicts the current tune and any change from them, and
+`resonalyze_engine.py run` builds the best configuration, alternatives and wishes. Missing: the route's order of work
+(one document, which also answers S-080), an "as is" block in the capture sheet, and the current tune as the baseline
+every variant is described against. The predicted "as is" against the measured "as is" checks the predictor for free.
 
 **Due when:** Phase 1's variants (issue #38) work on a fresh system, and a tuner brings a car that is already
 tuned. The user, 2026-09-17: "note it with the source, we do not go there yet".
