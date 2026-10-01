@@ -1618,6 +1618,22 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-079 · Channel names: read both `w-L` and `w_L`; `-` is the right one
+
+**Status**: open 2026-10-01 · W-5 collection · the Arbiter, answering hub #196: «розуміти обидві назви. правільна "-", коли в назві при замірах зустрічаєтсья "_" міняти на "-"»
+
+The Passat's `project.json` carries six channels whose id (`w_L`) differs from the code (`w-L`); that split refused
+the Phase-0 gate on 2026-09-19 (hub #196, to car). The Arbiter's rule: the tools understand both notations, the right
+one is the hyphen, and an underscore met in a capture's name is turned into a hyphen. Recorded, not diagnosed.
+
+## S-078 · Translations uk/de/pl brought to the English text
+
+**Status**: open 2026-10-01 · W-5 collection · the Arbiter at the release-prep review: in W-5, not just before v3.1.0
+
+Twelve files: `README`, `FAQ`, `listening-cheat-sheet`, `test-tracks` in uk, de, pl. By commit date none is older
+than its English source today. Translations go through the Advisor (`autosound_ai.py ask`); the session checks the
+structure: headings, commands, version numbers.
+
 ## S-077 · W-5 is collecting: findings go to this pool, the milestone opens when the list is complete
 
 **Status**: open 2026-10-01 · opened on the Arbiter's word («відкривай веху W-5», then «я мав на увазі не milestone а збір»); no milestone yet, nothing built
@@ -1632,6 +1648,18 @@ closed; hub #220 (the minor pair) stays deferred.
 Each finding becomes a pool item here (S-078 onward), recorded, not diagnosed. When he says the list is complete, the
 milestone opens and each item becomes an issue on it with the four assessment lines; nothing is built before his
 `ok` on that task. Resume: `hub/bin/role skill --resume f8702763-06da-4ecc-9fd9-da0ad7d871a4`.
+
+**Release-prep review, 2026-10-01** (the Arbiter, item by item over everything not closed):
+- W-5 is a patch, `v3.0.65`; v3.1.0 after it. Hub #220 (the minor pair) stays deferred.
+- The full live session (`RELEASE-PLAN-3.1.0.md` step 6) is struck: «не потрібна».
+- Translations uk/de/pl: in W-5 (S-078).
+- The plugin catalog moves to v3.1.0 with the release; how the plugin path gets the tools and the signature check is
+  3.1.0's work, not W-5's.
+- S-059's third case: run in W-5's test.
+- Hub #156 (the Helix bench) after AYA 17.10; hub #215 (the scene ladder) stays with research.
+- Hub #196 (the Passat's channel names): the skill reads both notations, `-` is the right one (S-079, W-5).
+- Hub #113 (PAS-005, learning to listen): all three parts after v3.1.0.
+- S-021 after the 3.1.x line, with a new car; S-055 after AYA; S-001 stays deferred.
 
 ## S-076 · Waiting on TCC and the run before its release; the hub does its part
 
@@ -1818,7 +1846,7 @@ Next: nothing in work. Resume:
 
 ## S-059 · v3.0.61's TCC upgrade path, run on the Windows VM
 
-**Status**: waiting 2026-09-23 · two of three cases run by the Arbiter on the Windows VM at v3.0.61: running → "Autosound TCC is running … left as it is" and Checking "was here before and was not upgraded", the app still starting; closed → "OK installed", the app starting at 0.1.43. The third (a launcher TCC's own updater put there) waits for TCC's next in-app update · from skill #62, fixed in v3.0.61 (`git -C skill tag --contains c4fc023` → `v3.0.61`)
+**Status**: waiting 2026-10-01 · the third case runs in W-5's test (the Arbiter, release-prep review): on the VM, update TCC with its own button, then run the install line once · was: waiting 2026-09-23 · two of three cases run by the Arbiter on the Windows VM at v3.0.61: running → "Autosound TCC is running … left as it is" and Checking "was here before and was not upgraded", the app still starting; closed → "OK installed", the app starting at 0.1.43. The third (a launcher TCC's own updater put there) waits for TCC's next in-app update · from skill #62, fixed in v3.0.61 (`git -C skill tag --contains c4fc023` → `v3.0.61`)
 
 Two runs of the install line on the VM, the same one-liner at v3.0.61:
 1. **With TCC running.** Expected: "Autosound TCC is running, so its files are in use… left as it is", and in
