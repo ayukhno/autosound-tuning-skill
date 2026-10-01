@@ -119,8 +119,16 @@ EV_SESSION_STARTED = "session_started"
 # A session that stopped in order left NO trace at all: `session-close` reported what was open and
 # exited, so the journal could not tell "we stopped here, cleanly" from "the process was killed
 # mid-step". Written only on a clean close -- with work still open there is nothing to record but
-# the report itself (release review 2026-09-09).
+# the report itself (release review 2026-09-09). `session-close --check` asks the same question and
+# writes nothing (S-084).
 EV_SESSION_CLOSED = "session_closed"
+# A close taken back, with its reason (S-084, hub #227). A session reconciling state ran
+# `session-close` to look and it wrote the close. The close STAYS -- the journal is append-only --
+# and this follows it: wherever the last session event is read, a reopening after a close means
+# the session is open again (`Process.session_closed`).
+EV_SESSION_REOPENED = "session_reopened"
+#: The events that say whether a session is open, read together by `Process.last_session_event`.
+SESSION_EVENTS = (EV_SESSION_STARTED, EV_SESSION_CLOSED, EV_SESSION_REOPENED)
 # What the Arbiter ruled, as itself. Their half of the conversation was in no machine file at all:
 # the only surviving trace of an answer was a hand-typed evidence string, and a constraint the user
 # set was invisible to the next session unless it happened to be re-read out of prose (SCR-030).
@@ -578,21 +586,112 @@ def version_kind(version):
     return None
 
 
+def _changelog_text(project_dir):
+    """The text of `tuning-changelog`, or None when there is no such file or it cannot be read."""
+    for name in ("tuning-changelog.md", "tuning-changelog"):
+        path = os.path.join(project_dir, name)
+        if os.path.isfile(path):
+            try:
+                with open(path, encoding="utf-8") as fh:
+                    return fh.read()
+            except (OSError, UnicodeDecodeError):
+                return None
+    return None
+
+
 def _continue_block(project_dir):
     """Does `tuning-changelog` carry its ▶️ CONTINUE block? None when there is no such file.
 
     None means "no opinion", the same answer `_flaw_map_entries` gives for an unreadable project:
     a project that keeps no prose changelog is not failing a check it never opted into.
     """
-    for name in ("tuning-changelog.md", "tuning-changelog"):
-        path = os.path.join(project_dir, name)
-        if os.path.isfile(path):
-            try:
-                with open(path, encoding="utf-8") as fh:
-                    return "CONTINUE" in fh.read()
-            except OSError:
-                return None
-    return None
+    text = _changelog_text(project_dir)
+    return None if text is None else "CONTINUE" in text
+
+
+#: A ledger version as the ledger spells it, `v_NNN`. Stricter than `_LEDGER_RE` on purpose: that one
+#: also takes `v3`, and in a changelog's prose `v3.0.64` is the method's version far more often.
+_CONTINUE_VERSION_RE = re.compile(r"\bv_(\d{1,4})\b")
+_HEADING_RE = re.compile(r"^(#{1,6})\s")
+_RULE_RE = re.compile(r"^\s*(?:-{3,}|\*{3,}|_{3,})\s*$")
+
+
+def continue_block_heads(project_dir):
+    """The ledger versions the ▶️ CONTINUE block names as HEAD, as `v_NNN`; [] when it names none (S-084).
+
+    The block is the first line carrying `CONTINUE` and what follows it, up to the next heading of its
+    level or above (any heading, when the block is not one) or a rule. A version counts when it follows
+    the word `HEAD` on a line; a block that never writes `HEAD` but names exactly one version is read as
+    naming that one. Anything else -- several versions and no `HEAD`, or none -- is no answer, and no
+    answer warns of nothing: this is a cross-check on prose, and prose is written many ways.
+    """
+    text = _changelog_text(project_dir)
+    lines = (text or "").splitlines()
+    start = next((i for i, line in enumerate(lines) if "CONTINUE" in line), None)
+    if start is None:
+        return []
+    heading = _HEADING_RE.match(lines[start])
+    level = len(heading.group(1)) if heading else 6
+    block = [lines[start]]
+    for line in lines[start + 1:]:
+        found = _HEADING_RE.match(line)
+        if (found and len(found.group(1)) <= level) or _RULE_RE.match(line):
+            break
+        block.append(line)
+    named = []
+    for line in block:
+        for word in re.finditer(r"\bHEAD\b", line):
+            version = _CONTINUE_VERSION_RE.search(line, word.end())
+            if version and f"v_{int(version.group(1)):03d}" not in named:
+                named.append(f"v_{int(version.group(1)):03d}")
+    if named:
+        return named
+    every = {int(n) for n in _CONTINUE_VERSION_RE.findall("\n".join(block))}
+    return [f"v_{every.pop():03d}"] if len(every) == 1 else []
+
+
+def _ledger_heads(project_dir):
+    """`{slot: "v_NNN"}`: each slot's HEAD as `state.py` reads it, in either ledger layout.
+
+    `state.py` rather than a second reader of HEAD files: there are two layouts (`HEAD` per preset,
+    `slots.json` on the per-project line) and one module that knows both. {} when there is no ledger,
+    or it will not load -- this feeds a warning, and a ledger that cannot be read is reported by the
+    checks that own it (`handoff`, `contract.py check`).
+    """
+    root = _state_root(project_dir)
+    state_mod = _load_sibling(os.path.join("state", "state.py")) if os.path.isdir(root) else None
+    if state_mod is None:
+        return {}
+    try:
+        heads = {slot: state_mod.PresetHistory(root, slot, project_dir=project_dir).head()
+                 for slot in state_mod.Registry(root).list_presets()}
+    except Exception:  # noqa: BLE001 -- any failure here means "cannot tell", never a mismatch
+        return {}
+    return {slot: head for slot, head in heads.items() if head}
+
+
+def continue_head_drift(project_dir):
+    """The ▶️ CONTINUE block names a HEAD the ledger is not at: `{named, heads, stale, warning}`, or None (S-084).
+
+    Found on the Windows VM (hub #227): the block named `v_010` while the ledger stood at `v_013`, and
+    the only check was that the block exists. A WARNING, never a refusal: the block is the
+    human-readable cross-check and the ledger is what resume trusts, so a stale block is prose to bring
+    up to the ledger, not a state that stops anything. None when the block names no version it can be
+    read for, or there is no ledger to compare with -- both are "no opinion", as in `_continue_block`.
+    """
+    named = continue_block_heads(project_dir)
+    heads = _ledger_heads(project_dir) if named else {}
+    if not heads:
+        return None
+    stale = [v for v in named if v not in set(heads.values())]
+    if not stale:
+        return None
+    at = (f"{next(iter(heads.values()))} ({next(iter(heads))})" if len(heads) == 1
+          else ", ".join(f"{slot} {head}" for slot, head in sorted(heads.items())))
+    warning = (f"`tuning-changelog`'s ▶️ CONTINUE block names HEAD {', '.join(stale)}, and the ledger's HEAD is "
+               f"{at} — the block was written before the ledger moved. The ledger is what resume trusts; bring "
+               f"the block up to it")
+    return {"named": named, "heads": heads, "stale": stale, "warning": warning}
 
 
 def _ledger_versions(project_dir):
@@ -2212,6 +2311,45 @@ class Process:
         )
         return {"harness": harness, "model": model, "resumed": bool(resumed)}
 
+    def last_session_event(self):
+        """The journal's last `session_started` / `session_closed` / `session_reopened`, or None."""
+        seen = self.events(kinds=SESSION_EVENTS)
+        return seen[-1] if seen else None
+
+    def session_closed(self):
+        """Is the session closed? True only when the last session event is `session_closed`.
+
+        The one place this module reads the close, so a reopening (S-084) is read wherever the
+        question is asked: a `session_reopened` after the close means open again, and so does a
+        `session_started` after it.
+        """
+        return (self.last_session_event() or {}).get("type") == EV_SESSION_CLOSED
+
+    def reopen_session(self, reason):
+        """Take a close back: `session_reopened` with its reason, after the close (S-084, hub #227).
+
+        A session reconciling state ran `session-close` to look, and with nothing open it wrote the
+        close. The journal is append-only, so the close is not removed: the reopening follows it, and
+        both stay legible. Refused with no reason -- a reopening with no why reads like a close nobody
+        meant -- and refused unless the last session event IS a close, because there is nothing else to
+        take back.
+        """
+        reason = str(reason or "").strip()
+        if not reason:
+            raise ProcessError(
+                "a reopening needs its reason: `session-reopen <reason>` (e.g. «session-close was run as "
+                "a check»). The close stays in the journal either way, and a reopening with no why reads "
+                "like a close nobody meant")
+        last = self.last_session_event()
+        if (last or {}).get("type") != EV_SESSION_CLOSED:
+            raise ProcessError(
+                "nothing to reopen: "
+                + (f"the journal's last session event is `{last['type']}` ({last.get('at', '?')}), not "
+                   "`session_closed` — the session is open" if last
+                   else "the journal records no session event at all, so no close to take back")
+                + ". To ask what is open without closing anything: `session-close --check`")
+        return self._append(EV_SESSION_REOPENED, reason=reason, closed_at=last.get("at"))
+
     def open_work(self, state=None):
         """What this project still has OPEN — the list a session owes before it stops.
 
@@ -2264,8 +2402,10 @@ class Process:
         passes it prints the resume line — what he says next, and what must stay open — so the
         instruction is not improvised a second time.
 
-        `{"ok", "missing": [...], "phase", "resume"}`. It checks and writes nothing: which evidence
-        closes a step is a decision, the same split `session-close` already has.
+        `{"ok", "missing": [...], "phase", "resume", "warnings": [...]}`. It checks and writes nothing:
+        which evidence closes a step is a decision, the same split `session-close` already has.
+        `warnings` never moves `ok`: a ▶️ CONTINUE block that names a HEAD the ledger is not at (S-084)
+        is prose to bring up to date, not state the next session lacks.
         """
         state = self.load()
         missing = []
@@ -2305,6 +2445,8 @@ class Process:
             missing.append(
                 "`tuning-changelog` has no ▶️ CONTINUE block — it is the human-readable cross-check "
                 "the next session reads beside the machine files, and the one a person opens first")
+        drift = continue_head_drift(self.project_dir) if changelog else None
+        warnings = [drift["warning"]] if drift else []
         resume = None
         if not missing:
             keep = ""
@@ -2315,7 +2457,7 @@ class Process:
             resume = (f"State is on disk: phase {phase}, "
                       f"{len(self.plan_for(phase, state))} step(s) in its plan, ledger HEAD present. "
                       f"Clear the chat and say «продовжуй» in the new one.{keep}")
-        return {"ok": not missing, "missing": missing, "phase": phase, "resume": resume}
+        return {"ok": not missing, "missing": missing, "phase": phase, "resume": resume, "warnings": warnings}
 
     def set_target(self, preset, curve):
         """The active target curve for a preset — a pointer, the curve itself lives elsewhere."""
@@ -2454,7 +2596,14 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
                                               owes that this file does not hold. Reports, never
                                               closes: which evidence ends a step is a decision.
                                               Exits non-zero while anything is open, so "we
-                                              stopped" cannot be said over an open round
+                                              stopped" cannot be said over an open round.
+                                              With nothing open it RECORDS session_closed:
+                                              this is the stop itself, not a look
+  session-close --check                       the same report and exit code, and writes nothing:
+                                              the read-only question, for reconciling state
+  session-reopen <reason>                     take a mistaken close back: session_reopened with its
+                                              reason. Only right after session_closed; the close
+                                              stays in the journal and the session reads as open
   decision <question> <answer> [step] [--invalidates X]   what the Arbiter ruled, as itself
   capture-start <version> [title ...] [--plan] [--phase N] [--start sw|rta] [--optional <title>]...
       [--step ID] [--origin <project>:<their _N>]
@@ -2512,7 +2661,9 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
   handoff [--json]                      is everything the NEXT session needs on disk? Prints the
                                         resume line when it is, names what is missing when it is
                                         not (exit 1), and writes nothing either way (S-044).
-                                        --json: {ok, missing, phase, resume, next_message}
+                                        Warns, never refuses, when the ▶️ CONTINUE block names a
+                                        HEAD the ledger is not at (S-084).
+                                        --json: {ok, missing, phase, resume, warnings, next_message}
   capture-skip <title> <reason>         deliberately NOT taken, and why
   capture-close [reason]                close the round; what is outstanding is named
                                         reads REW first (skill #77): held -> taken, extra of the series ->
@@ -3026,6 +3177,49 @@ def _selftest():
     sp.start_attempt("0.1")
     assert [s["attempt"] for s in sp.open_work()["steps_in_progress"]] == [2], sp.open_work()
 
+    # ── S-084 (hub #227): `session-close --check` asks and writes nothing; a close is taken back ─
+    # Fails on the old code at the first `--check` on a clean stop: the flag was ignored, and a
+    # session reconciling state on the VM wrote `session_closed` by asking. Plain `session-close`
+    # must keep writing -- TCC calls it on the way out and reads its exit code as the answer.
+    def _cli(*argv):
+        import io, contextlib
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            code = _main(["process.py", sp.dir, *argv])
+        return code, out.getvalue()
+
+    def _journal():
+        with open(sp.journal_path, encoding="utf-8") as fh:
+            return fh.read()
+
+    sp.record_session("selftest", "-")
+    before = _journal()
+    checked, said = _cli("session-close", "--check")          # a step is still in progress
+    assert checked == 1 and "STEP IN PROGRESS 0.1" in said and "nothing recorded" in said, said
+    assert _journal() == before, "--check wrote to the journal over open work"
+    assert _cli("session-close")[0] == checked and _journal() == before, "the plain form owes the same answer"
+    sp.finish_step("0.1", ["w-L_1 (sw)"])
+    before = _journal()
+    checked, said = _cli("session-close", "--check")          # nothing open: the case the VM met
+    assert checked == 0 and "nothing open" in said and "nothing recorded" in said, said
+    assert _journal() == before and not sp.session_closed(), "--check recorded a close"
+    refuses("a reopening with no close before it", lambda: sp.reopen_session("ran it as a check"))
+    closed, said = _cli("session-close")
+    assert closed == checked and "recorded: session_closed" in said, said
+    assert sp.session_closed() and sp.last_session_event()["type"] == EV_SESSION_CLOSED, sp.last_session_event()
+    # A reopening needs its reason, and follows the close rather than replacing it.
+    refuses("a reopening with no reason", lambda: sp.reopen_session("  "))
+    assert _cli("session-reopen")[0] == 1 and sp.session_closed(), "a bare session-reopen was taken"
+    code, said = _cli("session-reopen", "session-close", "was", "run", "as", "a", "check")
+    assert code == 0 and "session_reopened" in said, said
+    kinds = [e["type"] for e in sp.events(kinds=SESSION_EVENTS)]
+    assert kinds[-2:] == [EV_SESSION_CLOSED, EV_SESSION_REOPENED], kinds
+    assert sp.events(kinds=(EV_SESSION_REOPENED,))[-1]["reason"] == "session-close was run as a check"
+    assert not sp.session_closed(), "the module still reads the session as closed after the reopening"
+    refuses("a second reopening of one close", lambda: sp.reopen_session("again"))
+    _cli("session-close")
+    assert sp.session_closed(), "a close after a reopening is a close again"
+
     # ── S-039: a capture under the wrong title is SUPERSEDED, never deleted ──────────────────
     # Fails on the old code at the call: a round had `record_capture` and `skip_capture` and nothing
     # else, so a ghost `r-R_1 (se)` -- a typo already fixed in REW -- stayed as permanent evidence of
@@ -3081,6 +3275,37 @@ def _selftest():
                         encoding="utf-8", env={**os.environ, "PYTHONIOENCODING": "utf-8"})
     got_j = json.loads(hj.stdout)
     assert hj.returncode == 0 and got_j["ok"] and got_j["next_message"] == "продовжуй" and got_j["resume"], hj.stdout
+    assert got_j["warnings"] == [], got_j
+
+    # ── S-084 (hub #227): a ▶️ CONTINUE block behind the ledger is WARNED of, never refused ──────
+    # Fails on the old code at the first warning: the block was only checked to exist, and on the
+    # VM it named `v_010` with the ledger at `v_013`. What would still pass with a reader that took
+    # every version in the file, or the method's own `v3.0.64` for a ledger version: the silent
+    # cases below, which put both after or beside a block that names none.
+    ty_head = _ledger_heads(ty_root)
+    assert list(ty_head.values()) == ["v_001"], ty_head
+
+    def _changelog(text):
+        with open(os.path.join(ty_root, "tuning-changelog.md"), "w", encoding="utf-8") as fh:
+            fh.write(text)
+        return ty.handoff()
+
+    later = "\n## 2026-09-28\n- banked v_007, listened on method v3.0.64\n"
+    ho = _changelog("# Tuning changelog\n\n## ▶️ CONTINUE\n- HEAD: v_009 (FULL), was v_001\n- next: the A/B\n" + later)
+    assert ho["ok"] is True and ho["resume"], "a stale block refused the handoff -- it is a warning"
+    assert len(ho["warnings"]) == 1 and "HEAD v_009" in ho["warnings"][0] and "v_001 (FULL)" in ho["warnings"][0], \
+        ho["warnings"]
+    hw = subprocess.run([sys.executable, _mod, ty.dir, "handoff"], capture_output=True, text=True,
+                        encoding="utf-8", env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+    assert hw.returncode == 0 and "WARNING:" in hw.stdout and "v_009" in hw.stdout, hw.stdout
+    assert _changelog("## ▶️ CONTINUE\n**HEAD = v_001** · FULL\n" + later)["warnings"] == [], "a matching HEAD warned"
+    assert _changelog("## ▶️ CONTINUE\n- next: the A/B on method v3.0.64\n" + later)["warnings"] == [], \
+        "a block naming no version warned"
+    assert _changelog("**▶️ CONTINUE** — compare v_001 and v_009 by ear\n\n---\n- HEAD v_009\n")["warnings"] == [], \
+        "a block naming two versions and no HEAD was read as naming one"
+    assert continue_block_heads(ty_root) == [], "the rule ends the block"
+    assert _changelog("▶️ CONTINUE: v_009 is where we are\n")["warnings"], "a block's one version is its HEAD"
+    os.remove(os.path.join(ty_root, "tuning-changelog.md"))
 
     # ── S-048: another project's series number does not walk in unannounced ──────────────────
     # Fails on the old code at the refusal: `start_capture` took any number, and a session that
@@ -3300,7 +3525,7 @@ def _selftest():
         "the journal headed itself with the writing checkout and re-headed only when it changed; "
         "and STOPPING is an event: `open_work` names the open round and every step left in "
         "progress, drops a round once it is closed, and owes a step again when it is picked "
-        "back up; an RTA the check does not apply to is kept as such and holds no step (#29); a step CARRIES what it covers and its name names the first three and counts the rest (S-031); a capture under the wrong title is SUPERSEDED and stops counting, never deleted (S-039); the handoff REFUSES while anything the next session needs is only in the chat, and prints the resume line when it is not (S-044); a series number that is not this project's is refused until its ORIGIN is on record (S-048); a round records WHICH counter its version is, refuses a `v_NNN` nobody banked with both ways on, and marks a skip planned or not (TCC-022); and a phase does not close over a flaw row that stands on an UNASKED question -- the refusal carries the titles that would settle it, and a round opened or a ruling recorded closes it (S-047). "
+        "back up; an RTA the check does not apply to is kept as such and holds no step (#29); a step CARRIES what it covers and its name names the first three and counts the rest (S-031); a capture under the wrong title is SUPERSEDED and stops counting, never deleted (S-039); the handoff REFUSES while anything the next session needs is only in the chat, and prints the resume line when it is not (S-044); `session-close --check` gives the same report and exit code and writes nothing, the plain form still records a clean stop, and a close is taken back only with a reason and only right after it, staying in the journal while the session reads as open; a ▶️ CONTINUE block naming a HEAD the ledger is not at is warned of and refuses nothing (S-084); a series number that is not this project's is refused until its ORIGIN is on record (S-048); a round records WHICH counter its version is, refuses a `v_NNN` nobody banked with both ways on, and marks a skip planned or not (TCC-022); and a phase does not close over a flaw row that stands on an UNASKED question -- the refusal carries the titles that would settle it, and a round opened or a ruling recorded closes it (S-047). "
         f"root={root}"
     )
     return 0
@@ -3396,6 +3621,10 @@ def _main(argv):
             p.record_session(args[0], args[1], resumed=(len(args) > 2 and args[2] == "resumed"))
             print(f"session recorded: {args[0]} / {args[1]}")
         elif cmd == "session-close":
+            # S-084: `--check` is the same question with no write. Run as a look, the plain form
+            # wrote `session_closed` on the VM; it stays as it is, because TCC calls it on the way out
+            # and reads its exit code as the answer.
+            check_only = "--check" in args
             open_ = p.open_work()
             lines, owed = [], 0
             round_ = open_["capture_round"]
@@ -3428,13 +3657,20 @@ def _main(argv):
                   "\n  - the session log / handoff line for the next session"
                   "\n  - the car itself: the in-car EXIT CHECKLIST (SKILL.md) — test values reverted, "
                   "knobs back, config backed up")
-            if not owed:
+            if check_only:
+                print("\nnothing recorded (--check): this asked what is open and wrote nothing. "
+                      "`session-close` without --check is the stop itself")
+            elif not owed:
                 # Only a CLEAN stop is an event: with work still open the honest record is the
                 # report above, and `session-close` exits non-zero so "we stopped" cannot be said
                 # over an open round.
                 p._append(EV_SESSION_CLOSED)
                 print("\nrecorded: session_closed")
             return 1 if owed else 0
+        elif cmd == "session-reopen":
+            event = p.reopen_session(" ".join(args))
+            print(f"recorded: session_reopened — {event['reason']}. The close ({event.get('closed_at', '?')}) "
+                  "stays in the journal; the session reads as open from here")
         elif cmd == "capture-start":
             step = None
             rest = list(args)
@@ -3721,13 +3957,16 @@ def _main(argv):
                 return 0 if got["ok"] else 1
             if got["ok"]:
                 print(got["resume"])
-                return 0
-            print("NOT ready to clear the chat — what the next session would not find:")
-            for item in got["missing"]:
-                print(f"  - {item}")
-            print("\nNothing was written: which evidence closes a step is a decision, not this "
-                  "command's. Fix what is named and run it again.")
-            return 1
+            else:
+                print("NOT ready to clear the chat — what the next session would not find:")
+                for item in got["missing"]:
+                    print(f"  - {item}")
+                print("\nNothing was written: which evidence closes a step is a decision, not this "
+                      "command's. Fix what is named and run it again.")
+            # S-084: said either way and never a refusal -- the exit code stays the answer above.
+            for item in got["warnings"]:
+                print(f"\nWARNING: {item}")
+            return 0 if got["ok"] else 1
         elif cmd == "capture-skip":
             p.skip_capture(args[0], " ".join(args[1:]))
             print(f"{args[0]} skipped: {' '.join(args[1:])}")

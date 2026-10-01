@@ -86,7 +86,7 @@ One JSON object per line, oldest first: `{"at": …, "type": …, …}`. Types:
 `phase_entered` · `step_added` · `attempt_started` · `step_skipped` · `step_done` · `capture_reconciled` ·
 `step_blocked` · `critic_called` · `config_change` · `capture_task_issued` · `capture_taken` ·
 `capture_skipped` · `capture_round_closed` · `capture_verified` · `session_started` ·
-`user_decision` · `written_by`.
+`session_closed` · `session_reopened` · `user_decision` · `written_by`.
 
 `user_decision` is the Arbiter's half of the conversation, recorded as the answer rather than as
 prose about it. `invalidates` carries the same shape as `config_change.impact`, so a ruling that
@@ -96,6 +96,13 @@ forcing it into that event would lie about where the fact came from.
 `session_started` is the one event a front-end writes rather than the model: only it knows a
 session was attached at all. Without it a journal whose first entry is a `step_done` cannot tell
 a session that recorded nothing from a session that never happened.
+
+`session_closed` is written by `session-close` on a clean stop, and only then; `session-close --check`
+asks the same question and writes nothing. `session_reopened` (`{reason, closed_at}`) takes a close
+back (S-084): it follows the close and never replaces it, and is refused unless the last of
+`session_started` / `session_closed` / `session_reopened` is a close. **The session is closed when
+that last event is `session_closed`** (`Process.session_closed`); a reopening or a new start after
+it means open.
 
 `written_by` is the header: `{"at": …, "type": "written_by", "skill_sha": "<40 hex>"}` — which
 checkout of the method wrote what follows (autosound-hub HUB-002). Written by the journal itself,
@@ -206,8 +213,9 @@ p.unevidenced_done_steps()      # resume drift check
   `todo` or `in_progress`, that is, after the `step_done` / `step_skipped` / `step_blocked` event that closed the
   last one. Right after `phase_entered` the new phase's steps are `todo` by definition, so `handoff` would refuse.
 - **The machine form:** `process.py <dir> handoff --json` prints `{ok, missing: [str], phase, resume,
-  next_message}`, with exit 0 when ready and 1 when not. `missing` is shown to the person as it is: each item
-  already names what to do. Nothing is written either way.
+  warnings: [str], next_message}`, with exit 0 when ready and 1 when not. `missing` is shown to the person as it
+  is: each item already names what to do. Nothing is written either way. `warnings` (S-084) never moves `ok` or
+  the exit code: today it carries one case, a ▶️ CONTINUE block naming a HEAD the ledger is not at.
 - **The resume line:** a front-end that can start a session starts a NEW one in the project with
   `next_message` («продовжуй») as its first message, and shows `resume` beside it (it names what must stay open,
   e.g. the REW session). A terminal prints `resume` for the person to follow.
@@ -222,3 +230,14 @@ p.unevidenced_done_steps()      # resume drift check
 - **Order: REW first, then the round.** Rename in REW, read REW back to confirm the right title exists and the
   wrong one does not, then run `capture-supersede`. If the rename fails, the round still says what REW holds.
   The other order leaves a round naming a title REW does not have.
+
+## Front-end contract: stopping asked, and a close taken back (hub #227, TCC-041)
+
+- **`session-close` is unchanged.** Exit 0 and `session_closed` recorded when nothing is open; exit 1 and the
+  report, nothing recorded, while a round or a step stands. The exit code is the answer, not a failure.
+- **`session-close --check`** prints the same report and exits with the same code, and writes nothing (its last
+  line says so). The form for a session reconciling state; a front-end stopping a session keeps the plain form.
+- **`session-reopen <reason>`** appends `session_reopened` (`{reason, closed_at}`). Exit 0 when the journal's last
+  session event is `session_closed`; exit 1 with the reason on stderr when it is not, or when no reason is given.
+  The close stays in the journal. A reader deciding whether a session is closed reads the LAST of
+  `session_started` / `session_closed` / `session_reopened`: a reopening after a close is an open session.

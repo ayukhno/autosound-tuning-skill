@@ -86,6 +86,13 @@ argument behind them, and a tool that guessed would write a plausible wrong reco
 words, the full order and the in-car half live in `SKILL.md`'s Pre-Session & Resume block, beside
 the checklist that already existed for the hardware.
 
+With nothing open, `session-close` **records** the stop (`session_closed`) — it is the stop, not a
+look. A session reconciling state on a Windows VM ran it to look and wrote the close (S-084, hub
+#227), so the question has a read-only form: `session-close --check` prints the same report, exits
+with the same code, and writes nothing. A close recorded by mistake is taken back with
+`session-reopen <reason>`: the close stays in the journal, the reopening follows it, and the session
+reads as open again.
+
 **No new carrier was added for this**, deliberately (autosound-hub `HUB-023`, the ask from the hub):
 a second record of the same thing drifts from the first. What was missing was an order, not a store.
 

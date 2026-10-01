@@ -687,6 +687,9 @@ def check_project(project_dir, skip_rew=False):
         "tiers_vs_profile": cross_check_tiers_vs_profile(profile_data, snapshots, project_data),
         "proposals_on_disk": proposals_on_disk(project_dir),
         "deliverables_outside_docs": deliverables_outside_docs(project_dir),
+        # S-084 (hub #227): the ▶️ CONTINUE block names a HEAD the ledger is not at -- `{named, heads, stale,
+        # warning}` or None. A warning, never part of `ok`: the block is the human-readable cross-check.
+        "continue_head": _load_vendored("process").continue_head_drift(project_dir),
         "rew": ({"reachable": False, "note": "skipped (--no-rew)"} if skip_rew
                 else cross_check_rew(process_state, glossary, snapshots, project_data)),
     }
@@ -1134,6 +1137,8 @@ def render_report(report):
                         else " and this project has no ledger snapshot at all")
                      + " — a DSP change reaches the Arbiter only as a yellow version: "
                        f"`python3 rew_tool/state/apply.py {report['project_dir']} propose {row['file']}` (skill #74)")
+    if cross.get("continue_head"):
+        lines.append(f"- ⚠️ {cross['continue_head']['warning']} (S-084)")
     rew = cross["rew"]
     if rew.get("reachable"):
         if isinstance(rew.get("other_file"), dict) and rew["other_file"]:
@@ -1487,6 +1492,25 @@ def _selftest():
     assert "apply.py" in render_report(check_project(root, skip_rew=True)) and "skill #74" in render_report(check_project(root, skip_rew=True))
     os.utime(delta_path, (os.path.getmtime(head_file) - 120, os.path.getmtime(head_file) - 120))
     assert check_project(root, skip_rew=True)["cross_checks"]["proposals_on_disk"] == [], "an older delta was banked"
+    # S-084 (hub #227): a ▶️ CONTINUE block that names a HEAD the ledger is not at is WARNED of and gates
+    # nothing. Fails on the old code at the key: the block was only checked to exist, in `process.handoff`.
+    plain = check_project(root, skip_rew=True)
+    assert plain["cross_checks"]["continue_head"] is None, "no changelog is no opinion"
+    changelog = os.path.join(root, "tuning-changelog.md")
+    with open(changelog, "w", encoding="utf-8") as fh:
+        fh.write(f"# Tuning changelog\n\n## ▶️ CONTINUE\n- HEAD: v_009 (SQ_Jazzi)\n\n## earlier\n- HEAD {v1}\n")
+    stale = check_project(root, skip_rew=True)
+    drift = stale["cross_checks"]["continue_head"]
+    assert drift and drift["stale"] == ["v_009"] and drift["heads"] == {"SQ_Jazzi": v1}, drift
+    assert (stale["ok"], stale["complete"]) == (plain["ok"], plain["complete"]), "a stale block moved the verdict"
+    assert f"names HEAD v_009, and the ledger's HEAD is {v1} (SQ_Jazzi)" in render_report(stale), render_report(stale)
+    with open(changelog, "w", encoding="utf-8") as fh:
+        fh.write(f"## ▶️ CONTINUE\n- HEAD: {v1} (SQ_Jazzi)\n")
+    assert check_project(root, skip_rew=True)["cross_checks"]["continue_head"] is None, "a matching HEAD warned"
+    with open(changelog, "w", encoding="utf-8") as fh:
+        fh.write("## ▶️ CONTINUE\n- next: the A/B, method v3.0.64\n")
+    assert check_project(root, skip_rew=True)["cross_checks"]["continue_head"] is None, "a block with no version warned"
+    os.remove(changelog)
     shown = render_report(dict(report, cross_checks=dict(report["cross_checks"], rew={
         "reachable": True, "round": "cap_001", "phase": "0", "version": "v_001", **rv})))
     assert "(round cap_001, phase 0, v_001): 1/3 captured, 1 skipped — MISSING ['r-R_01 (sw)']" in shown, shown
@@ -1786,7 +1810,7 @@ def _selftest():
           f"file and its repair rather than as a traceback, on one table line, and the repair it "
           f"names runs and clears it (TCC-007); `catch-up` fills the marked draft on a "
           f"project written before the field, is idempotent, leaves a `notch` row alone and "
-          f"still does NOT close the phase-0 gate; every skip is reported and one the round never expected is named as such (TCC-022); a fact carried in from another project is REPORTED and gates nothing (S-024); and the report names the REPLY language above "
+          f"still does NOT close the phase-0 gate; every skip is reported and one the round never expected is named as such (TCC-022); a fact carried in from another project is REPORTED and gates nothing (S-024); a ▶️ CONTINUE block naming a HEAD the ledger is not at is warned of and moves no verdict (S-084); and the report names the REPLY language above "
           f"the file table, or says nobody has answered (S-045). root={root}")
     return 0
 

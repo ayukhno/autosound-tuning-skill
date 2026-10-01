@@ -20,6 +20,13 @@ When assisting with a tuning session, the AI **MUST** follow this context-minimi
    a changelog nobody updated). `SKILL.md` had already been fixed of that same mistake inside
    itself, and this file kept the old text — so the words above are now checked by
    `scripts/docs-check.py`, not left to two texts agreeing (autosound-hub `HUB-035`).
+
+   The block names the ledger HEAD as the ledger spells it (`HEAD: v_013`), and `handoff` and
+   `contract.py check` WARN when it names one the ledger is not at — a stale block is prose to bring
+   up to the ledger, not a reason to stop (S-084). **Reconciling is reading:** to ask what is still
+   open, run `process.py <project>/process session-close --check`, which writes nothing. Plain
+   `session-close` is the stop itself and records it; a close recorded by mistake is taken back with
+   `session-reopen <reason>`, and the close stays in the journal with the reopening after it.
 2. **Load active & adjacent phases:** **read** **ONLY** the active phase file and the next
    logical phase file (e.g., `phase_1_foundation.md` and `phase_2_eq.md`) — with whatever your
    harness reads files with. The instruction is the ACTION, never one harness's tool name: this
