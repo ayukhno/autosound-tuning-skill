@@ -953,8 +953,10 @@ if [ -z "$SKILL_REF" ]; then
   # and an installer should put you on a release unless you say otherwise. On EITHER channel: this
   # is the copy Claude Code in a terminal loads, and the terminal runs releases (autosound-hub
   # #145). A candidate goes into its own copy, below.
+  # Release-shaped tags only (skill #108): `sort -V` put a `v3.x` above every release, and a name that is not a
+  # release passes the signature check as "not a release tag" -- a tag anyone with the token could push.
   SKILL_REF="$(git ls-remote --tags --refs "$SKILL_REPO" "$SKILL_TAG_GLOB" 2>/dev/null \
-      | awk -F/ '{print $NF}' | sort -V | tail -1)" || SKILL_REF=""
+      | awk -F/ '{print $NF}' | newest_on_channel)" || SKILL_REF=""
   [ -z "$SKILL_REF" ] && SKILL_REF="main"
 fi
 say "  version $SKILL_REF"
@@ -1187,8 +1189,9 @@ if [ "$MODE" = "tcc" ]; then
         | awk -F/ '{print $NF}' | newest_on_channel)" || TCC_REF=""
     TCC_REF_HOW=" (beta channel)"
   elif [ -z "$TCC_REF" ]; then
+    # Release-shaped tags only, as the method's (skill #108).
     TCC_REF="$(git ls-remote --tags --refs "$TCC_REPO" "$TCC_TAG_GLOB" 2>/dev/null \
-        | awk -F/ '{print $NF}' | sort -V | tail -1)" || TCC_REF=""
+        | awk -F/ '{print $NF}' | newest_on_channel)" || TCC_REF=""
   fi
   if [ -n "$TCC_REF" ]; then
     TCC_SPEC="autosound-tcc[gui,claude] @ git+${TCC_REPO}@${TCC_REF}"

@@ -1629,7 +1629,7 @@ four assessment lines, and nothing is built before his `ok` on that task. Resume
 
 ## S-085 · An automatically picked tag that is not release-shaped installs unchecked
 
-**Status**: open 2026-10-01 · pool (the next wave) · found while building W-5 #101; not built
+**Status**: open 2026-10-01 · **W-5 · v3.0.65**, issue #108, `ok` (the Arbiter: «Так, у W-5»); the Fable review of #101 found the same hole · was: pool (the next wave), found while building W-5 #101
 
 Both installers take the newest tag matching `v3.*` (and the app's `v*`) by `sort -V`. A tag that is not
 release-shaped (`v3.x`, `v0.x`) sorts newest, then passes `settled_by_name` as "not a release tag" and installs

@@ -1039,8 +1039,10 @@ if (-not $SkillRef) {
     # #145). A candidate goes into its own copy, below.
     $tags = @()
     if (Have git) {
+        # Release-shaped tags only (skill #108): a `v3.x` sorted above every release and installed unchecked.
         $tags = @((& git ls-remote --tags --refs $SkillRepo $SkillTagGlob 2>$null) |
                   ForEach-Object { ($_ -split "/")[-1] } |
+                  Where-Object { $_ -match '^v\d+\.\d+\.\d+$' } |
                   Sort-Object { [version]($_ -replace '^v', '') })
     }
     if ($tags.Count -gt 0) { $SkillRef = $tags[-1] } else { $SkillRef = "main" }
@@ -1251,6 +1253,7 @@ if ($Mode -eq "tcc") {
                 } else {
                     $tccTags = @((& git ls-remote --tags --refs $TccRepo $TccTagGlob 2>$null) |
                                  ForEach-Object { ($_ -split "/")[-1] } |
+                                 Where-Object { $_ -match '^v\d+\.\d+\.\d+$' } |
                                  Sort-Object { [version]($_ -replace '^v', '') })
                 }
             }

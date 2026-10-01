@@ -83,6 +83,9 @@ CHANNEL_CASES = (
     (["beta-v3.1.0-rc10", "v3.0.49", "beta-v3.1.0-rc2"], "beta-v3.1.0-rc10"),
     (["beta-v3.1.0-rc2", "v3.1.0", "v3.0.49"], "v3.1.0"),
     (["v3.1.1-foo", "beta-v3.1.1", "beta-v3.2.0-rc", "v3.0.49"], "v3.0.49"),
+    # skill #108: the STABLE pick goes through the same function, so a name that is not a release never wins.
+    (["v3.0.49", "v3.x", "v3.9"], "v3.0.49"),
+    (["v0.1.44", "v0.x", "v0.1.45"], "v0.1.45"),
     ([], ""),
 )
 #: What install.ps1's `Select-NewestOnChannel` must still carry. Read, not run: there is no
@@ -382,6 +385,19 @@ def main():
         problems.append("install.ps1 Select-NewestOnChannel no longer carries " + ", ".join(missing))
     else:
         checked.append("install.ps1 carries the same tag shapes and sort key (read, not run)")
+    # 2d'. the STABLE pick keeps release-shaped tags only (skill #108): a `v3.x` sorted above every release and,
+    # being "not a release tag", was installed with no signature check.
+    raw_sh = [i + 1 for i, line in enumerate(sh.splitlines()) if "sort -V | tail -1" in line]
+    raw_ps = [m.start() for m in re.finditer(r"Sort-Object \{ \[version\]", ps1)
+              if "Where-Object { $_ -match '^v\\d+\\.\\d+\\.\\d+$' }" not in ps1[max(0, m.start() - 160):m.start()]]
+    if raw_sh or raw_ps:
+        problems.append("a stable tag pick takes any name the glob matches: "
+                        + (f"install.sh `sort -V | tail -1` at line(s) {raw_sh}" if raw_sh else "")
+                        + ("; " if raw_sh and raw_ps else "")
+                        + (f"install.ps1 {len(raw_ps)} `Sort-Object {{ [version] }}` with no release-shape filter"
+                           if raw_ps else "") + " (skill #108)")
+    else:
+        checked.append("the stable tag picks keep release-shaped tags only, in both installers (skill #108)")
 
     # 2e. the method's two checkouts (autosound-hub #145): the terminal's and the beta channel's. A
     # consumer runs the beta one BY PATH, so the two installers putting it in different places would
