@@ -1618,6 +1618,21 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-077 · W-5 is collecting: findings go to this pool, the milestone opens when the list is complete
+
+**Status**: open 2026-10-01 · opened on the Arbiter's word («відкривай веху W-5», then «я мав на увазі не milestone а збір»); no milestone yet, nothing built
+
+The number is read: no open `W-…` milestone in skill or tcc, both closed at W-4, so W-5. The version waits for the
+milestone: hub #220's deferral (2026-09-27) puts a W-5 before v3.1.0, which reads as a patch, `v3.0.65`.
+
+At the start of the collection: queue `to:skill` 0; open issues in this repo 0 (#26 deferred to 3.2); hub #113
+deferred to `skill-v3.1.0`. The TCC half S-076 waited on has landed: hub #221 and #217 in TCC `v0.1.45`, #219 and #83
+closed; hub #220 (the minor pair) stays deferred.
+
+Each finding becomes a pool item here (S-078 onward), recorded, not diagnosed. When he says the list is complete, the
+milestone opens and each item becomes an issue on it with the four assessment lines; nothing is built before his
+`ok` on that task. Resume: `hub/bin/role skill --resume f8702763-06da-4ecc-9fd9-da0ad7d871a4`.
+
 ## S-076 · Waiting on TCC and the run before its release; the hub does its part
 
 **Status**: open 2026-09-29 · nothing in work on the skill's side
