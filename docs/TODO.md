@@ -1627,6 +1627,22 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-084 · `session-close` run as a check wrote the close; the CONTINUE block was three versions behind (hub #227, TCC-041)
+
+**Status**: open 2026-10-01 · **W-5 · v3.0.65**, issue #107 (review, waits for `ok`) · hub #227 from tcc (its finding 131); the Arbiter: everything found goes into W-5
+
+A generator session on the Windows VM ran `process.py session-close` as a check and it appended `session_closed`; the
+`▶️ CONTINUE` block named `v_010` with the ledger at `v_013`. TCC calls `session-close` itself on the way out, so its
+behaviour stays (`docs/PLAN-W-5.md`).
+
+## S-083 · A reviewer model pinned in a critic-env outranks the model the run asked for (hub #226, TCC-040)
+
+**Status**: open 2026-10-01 · **W-5 · v3.0.65**, issue #106 (review, waits for `ok`) · hub #226 from tcc (its finding 130); the Arbiter: everything found goes into W-5
+
+TCC's footer pick (`GEMINI_CRITIC_MODEL`) lost twice on the Windows VM: to the machine critic-env's
+`AUTOSOUND_CRITIC_MODEL` + `AUTOSOUND_CRITIC_PROVIDER`, then to the project's `.critic-env`. The plan: `--model` /
+`--provider` per run (`docs/PLAN-W-5.md`).
+
 ## S-082 · A fragile driver's inherited Fs: a warning before the sweep, not a refusal (hub #225, TCC-039)
 
 **Status**: open 2026-10-01 · **W-5 · v3.0.65**, issue #102 (review) · hub #225 from tcc; the Arbiter at TCC's pre-release walk: «Тікет скілу: попередження»
@@ -1674,7 +1690,7 @@ structure: headings, commands, version numbers.
 
 ## S-077 · W-5 is collecting: findings go to this pool, the milestone opens when the list is complete
 
-**Status**: open 2026-10-01 · collection closed on the Arbiter's «збір закінчено»: milestone `W-5 · v3.0.65` (#5) opened with #101–#105, each with the four assessment lines · all five `ok` (the Arbiter, 2026-10-01), and the build waits: «почекай йти в розробку від ТСС можуть бути додаткові тікети, або будь готовий їх додати по ходу роботи, бо вони з поточного релізу» — a ticket from tcc that arrives joins this milestone as an issue · was: opened on the Arbiter's word («відкривай веху W-5», then «я мав на увазі не milestone а збір»)
+**Status**: open 2026-10-01 · collection closed on the Arbiter's «збір закінчено»: milestone `W-5 · v3.0.65` (#5) opened with #101–#105, each with the four assessment lines · all five `ok` (the Arbiter, 2026-10-01), and the build waits: «почекай йти в розробку від ТСС можуть бути додаткові тікети, або будь готовий їх додати по ходу роботи, бо вони з поточного релізу» — a ticket from tcc that arrives joins this milestone as an issue · #106 (hub #226) and #107 (hub #227) joined, waiting for his `ok` · the plan: `docs/PLAN-W-5.md` (2026-10-01) · was: opened on the Arbiter's word («відкривай веху W-5», then «я мав на увазі не milestone а збір»)
 
 The number is read: no open `W-…` milestone in skill or tcc, both closed at W-4, so W-5. The version waits for the
 milestone: hub #220's deferral (2026-09-27) puts a W-5 before v3.1.0, which reads as a patch, `v3.0.65`.
