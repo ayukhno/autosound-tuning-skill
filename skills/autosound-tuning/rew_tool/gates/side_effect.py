@@ -58,7 +58,7 @@ _ASSET_PREFIX = f"https://raw.githubusercontent.com/{FEEDBACK_REPO}/{ASSET_BRANC
 #: the **Upgrading** note of the tag that carries it; the selftest pins the surface so it breaks here first.
 FORM_POST_URL = ("https://docs.google.com/forms/d/e/"
                  "1FAIpQLSdMzITv6Rzh8PWITy5QWc3xQMcAn9aDl1k0QbpZykHEQd6A4g/formResponse")
-FORM_FIELD_SENDER = "entry.240346646"      # required: a name and a contact, so the Arbiter can answer
+FORM_FIELD_SENDER = "entry.240346646"      # optional (hub #228): a name and a contact, for an answer if wanted
 FORM_FIELD_KIND = "entry.2096497360"       # required
 FORM_FIELD_IMPACT = "entry.42935929"       # asked of a problem
 FORM_FIELD_MESSAGE = "entry.970390217"     # required; Markdown travels as typed
@@ -269,17 +269,19 @@ def post_dsp_profile(profile_file, vendor, model, mode="new", prior_url=None,
 
 
 def form_answers(sender, kind, message, impact="", versions=""):
-    """The form's question ids with their answers. Raises `ValueError` for what the form would not take."""
-    if not str(sender or "").strip():
-        raise ValueError("the form asks who is writing -- a name and a contact the Arbiter can answer; ask the person")
+    """The form's question ids with their answers. Raises `ValueError` for what the form would not take.
+
+    The sender is optional (hub #228, TCC-042, the Arbiter 2026-10-01): it is for an answer, if the person wants
+    one, and a tester who leaves no contact could not send at all. An empty one is left out of the answers."""
     if not str(message or "").strip():
         raise ValueError("a report without words is not a report")
     if kind not in FORM_KINDS:
         raise ValueError(f"the kind is one of {', '.join(FORM_KINDS)}, not {kind!r}")
     if impact and impact not in FORM_IMPACTS:
         raise ValueError(f"how far it stops the tuning is one of {', '.join(FORM_IMPACTS)}, not {impact!r}")
-    answers = {FORM_FIELD_SENDER: str(sender).strip(), FORM_FIELD_KIND: FORM_KINDS[kind],
-               FORM_FIELD_MESSAGE: str(message).strip()}
+    answers = {FORM_FIELD_KIND: FORM_KINDS[kind], FORM_FIELD_MESSAGE: str(message).strip()}
+    if str(sender or "").strip():
+        answers = {FORM_FIELD_SENDER: str(sender).strip(), **answers}
     if impact:
         answers[FORM_FIELD_IMPACT] = FORM_IMPACTS[impact]
     if str(versions or "").strip():
@@ -348,8 +350,9 @@ def post_form(sender, kind, message, *, lang, channel="skill", impact="", consen
     if not consented:
         raise SideEffectRefused(
             "⛔ SIDE-EFFECT REFUSED — no consent recorded for sending to the Arbiter's form.\n"
-            "  reason : show the person the final text -- who is writing, the kind, for a problem how far it stops "
-            "the tuning, the message and the versions line -- wait for a yes, and pass consented=True.")
+            "  reason : show the person the final text -- who is writing (if they want an answer), the kind, for a "
+            "problem how far it stops the tuning, the message and the versions line -- wait for a yes, and pass "
+            "consented=True.")
     if dry_run:
         print("DRY-RUN — would send to the Arbiter's form:\n  " + FORM_POST_URL + "\n" +
               "\n".join(f"  {k} = {v[:80]}" for k, v in answers.items()))
@@ -502,12 +505,13 @@ def post_feedback(body_file, car, dsp, runner=_subprocess_runner, dry_run=False,
     if gh_is_ready is None:
         gh_is_ready = (lambda: gh_ready(runner)) if runner is _subprocess_runner else (lambda: True)
     if via == "form" or (via == "auto" and not dry_run and not gh_is_ready()):
-        if not str(sender or "").strip():
+        if not consented:
             raise EnvironmentError(
                 "no GitHub here (`gh` missing or not signed in) -- the route is the Arbiter's form: ask the person "
-                "who is writing (a name and a contact), the kind (problem / wish / feedback) and, for a problem, how "
-                "far it stops the tuning; show the final text; then post_feedback(..., via='form', sender=…, "
-                "kind=…, impact=…, lang=…, consented=True). Pictures do not go through the form.")
+                "the kind (problem / wish / feedback), for a problem how far it stops the tuning, and -- only if they "
+                "want an answer -- a name and a contact (optional, hub #228); show the final text; then "
+                "post_feedback(..., via='form', sender=…, kind=…, impact=…, lang=…, consented=True). Pictures do not "
+                "go through the form.")
         with open(body_file, encoding="utf-8") as fh:
             message = fh.read()
         return post_form(sender, kind, message, lang=lang, channel=channel, impact=impact, consented=consented,
@@ -771,7 +775,10 @@ def _selftest():
     assert ans == {FORM_FIELD_SENDER: "Олена, t.me/x", FORM_FIELD_KIND: "Проблема", FORM_FIELD_MESSAGE: "**зламалось** на кроці 2",
                    FORM_FIELD_IMPACT: "Заважає, але можна обійти", FORM_FIELD_VERSIONS: "method v3 · lang=uk"}, ans
     assert FORM_FIELD_IMPACT not in form_answers("a", "wish", "b")
-    for bad in (("", "wish", "b"), ("a", "wish", " "), ("a", "bug", "b"), ("a", "problem", "b", "blocks")):
+    # hub #228: the sender is optional -- an empty one is left out, everything else is checked as before
+    assert form_answers("", "wish", "b") == {FORM_FIELD_KIND: FORM_KINDS["wish"], FORM_FIELD_MESSAGE: "b"}
+    assert FORM_FIELD_SENDER not in form_answers("  ", "problem", "b", "stops")
+    for bad in (("", "wish", " "), ("a", "wish", " "), ("a", "bug", "b"), ("a", "problem", "b", "blocks")):
         try:
             form_answers(*bad)
             raise AssertionError(f"the form's answers took {bad!r}")
@@ -807,12 +814,12 @@ def _selftest():
         raise AssertionError("an unreachable form was reported as sent")
     except SideEffectRefused:
         pass
-    # auto: signed in → the issue, as before; not signed in → the form, which first needs who is writing
+    # auto: signed in → the issue, as before; not signed in → the form, which first needs the person's yes
     no_auth = lambda argv: (1, "", "not logged in") if argv[:3] == ["gh", "auth", "status"] else good(argv)
     assert gh_ready(good) and not gh_ready(no_auth)
     try:
         post_feedback(body, "car", "dsp", runner=no_auth, gh_is_ready=lambda: gh_ready(no_auth))
-        raise AssertionError("no GitHub and no sender, yet something was sent")
+        raise AssertionError("no GitHub and no consent, yet something was sent")
     except EnvironmentError as e:
         assert "Arbiter's form" in str(e) and "Pictures do not go" in str(e), e
     sent.clear()
@@ -822,6 +829,11 @@ def _selftest():
     assert via_form["via"] == "form" and sent[0][1][FORM_FIELD_MESSAGE] == ["# Feedback\nbody"], sent
     assert sent[0][1][FORM_FIELD_VERSIONS][0].endswith("lang=uk · about=tcc"), sent[0][1]
     assert sent[0][1][FORM_FIELD_IMPACT] == ["Зупиняє: далі налаштовувати не можу"]
+    # hub #228: no contact left, and the form still sends -- without the sender's question
+    sent.clear()
+    anon = post_feedback(body, "car", "dsp", runner=no_auth, kind="wish", lang="uk", consented=True, post=_confirming,
+                         gh_is_ready=lambda: gh_ready(no_auth))
+    assert anon["via"] == "form" and FORM_FIELD_SENDER not in sent[0][1], sent
     # the person may pick the form even with GitHub at hand
     assert post_feedback(body, "car", "dsp", runner=good, via="form", sender="a", consented=True,
                          post=_confirming)["via"] == "form"
