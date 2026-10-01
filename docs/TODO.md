@@ -1471,7 +1471,7 @@ Two things wait for measurements, and neither is a question for the Arbiter:
 
 ## S-056 · The junction level step read over the SHARED band
 
-**Status**: open 2026-09-23 · **W-3 · v3.0.62**, issue #69 (composition agreed with the Arbiter, 2026-09-23)
+**Status**: done 2026-10-01 · issue #69 closed with `W-3 · v3.0.62`, released in `v3.0.62` · was: open 2026-09-23 · **W-3 · v3.0.62**, issue #69 (composition agreed with the Arbiter, 2026-09-23)
 accepted by the Arbiter with this as the follow-up.
 
 W-2 prints each junction's level step as the two blocks' OWN-band levels plus their gains, lower minus
@@ -1482,7 +1482,7 @@ which is a rebuilt engine, not a patch.
 
 ## S-057 · A five-line verdict block for every tool's output
 
-**Status**: open 2026-09-27 · **W-4 · v3.0.64**, issue #70 (back on the milestone at the W-4 collection) · was: off W-3 by the Arbiter, 2026-09-26
+**Status**: done 2026-10-01 · issue #70 closed with `W-4 · v3.0.64`, released in `v3.0.64` (S-074) · was: open 2026-09-27 · **W-4 · v3.0.64**, issue #70 (back on the milestone at the W-4 collection) · was: off W-3 by the Arbiter, 2026-09-26
 accepted by the Arbiter with this as the follow-up.
 
 #57 P5 asked for compact output. W-2 made it where the issue measured it: `predict`'s notes collapse by text,
@@ -1510,7 +1510,7 @@ Next: the W-3 collection with him (S-060); #24 closes with the release.
 
 ## S-062 · autosound_ai.py's progress lines read as red mojibake in PowerShell 5
 
-**Status**: open 2026-09-27 · **W-4 · v3.0.64**, issue #90 (collection) · a finding from the Arbiter's #60 run on the Windows VM
+**Status**: done 2026-10-01 · issue #90 closed with `W-4 · v3.0.64`, released in `v3.0.64` (S-074) · was: open 2026-09-27 · **W-4 · v3.0.64**, issue #90 (collection) · a finding from the Arbiter's #60 run on the Windows VM
 
 With `python scripts\autosound_ai.py ask … 2>&1 | Tee-Object …` in PowerShell 5 the script's progress lines (`>> Виклик
 локального CLI …`, written to stderr in Ukrainian) come out as `╨Æ╨╕╨║╨╗╨╕╨║ …` in red, wrapped in a
@@ -1546,7 +1546,7 @@ before the API rung or the call goes to a key silently · Complexity medium — 
 
 ## S-064 · A session hand-patched `contract.py` in the installed skill on the Windows VM
 
-**Status**: open 2026-09-27 · **W-4 · v3.0.64**, issue #91 (collection) · a finding from the v3.0.63 update on the VM; TCC's half is hub #217 SKL-056
+**Status**: done 2026-10-01 · issue #91 closed with `W-4 · v3.0.64`, released in `v3.0.64` (S-074) · was: open 2026-09-27 · **W-4 · v3.0.64**, issue #91 (collection) · a finding from the v3.0.63 update on the VM; TCC's half is hub #217 SKL-056
 
 Found when TCC's updater refused to move the VM's skill clone (`~\.claude\skills\.autosound-tuning-src`, still at
 `v3.0.61`): «Скіл 3.0.61 — має незакомічені зміни, тому не чіпаю». The one change, `rew_tool/contract.py`
@@ -1585,7 +1585,7 @@ button in place of the grey one.
 
 ## S-065 · After TCC's «Оновити Скіл» the clone sits on the right commit but carries no tag
 
-**Status**: open 2026-09-27 · **W-4 · v3.0.64**, issue #92 (collection) · tcc's side; one ticket to tcc with S-068
+**Status**: done 2026-10-01 · issue #92 closed with `W-4 · v3.0.64`, released in `v3.0.64` (S-074) · was: open 2026-09-27 · **W-4 · v3.0.64**, issue #92 (collection) · tcc's side; one ticket to tcc with S-068
 
 After TCC updated the VM's clone to v3.0.63, `git -C ~\.claude\skills\.autosound-tuning-src describe --tags` answered
 `fatal: No tags can describe '680c078…'`. HEAD is v3.0.63's commit, but no tag landed in `refs/tags`. The installers
@@ -1595,7 +1595,7 @@ lands in refs/tags"); TCC's updater apparently fetches the bare name. It matters
 
 ## S-066 · omp's refusal is cut before its reason: the 400 characters go to the source excerpt omp prints
 
-**Status**: open 2026-09-27 · **W-4 · v3.0.64**, issue #93 (collection) · a finding from the Arbiter's v3.0.63 check on the Windows VM
+**Status**: done 2026-10-01 · issue #93 closed with `W-4 · v3.0.64`, released in `v3.0.64` (S-074) · was: open 2026-09-27 · **W-4 · v3.0.64**, issue #93 (collection) · a finding from the Arbiter's v3.0.63 check on the Windows VM
 
 `autosound_ai.py ask` through omp, with a model whose provider omp had no login for, printed as omp's refusal:
 `743607 | \` + \`Use /login, … 743612 |   throw new Error(\`No API key found for ${this.model.provider}. … error: No API key
@@ -1635,7 +1635,7 @@ milestone opens and each item becomes an issue on it with the four assessment li
 
 ## S-076 · Waiting on TCC and the run before its release; the hub does its part
 
-**Status**: open 2026-09-29 · nothing in work on the skill's side
+**Status**: done 2026-10-01 · TCC's half landed: hub #221 and #217 in TCC `v0.1.45`, #219 and #83 closed; the next step is W-5's collection (S-077), hub #220 stays deferred · was: open 2026-09-29 · nothing in work on the skill's side
 
 The Arbiter (2026-09-29): «чекаємо на ТСС і прогон до релізу. Хаб відпрацьовує свою частину». TCC builds its half
 against v3.0.64: hub #221 (the skill through `upkeep.py clone` and `libs`, the update window's text), #217
@@ -1685,7 +1685,7 @@ the Windows VM and the Mac before the tag. After W-4: `v3.1.0` with TCC `v1.1.0`
 
 ## S-069 · W-4 · v3.0.64 is collecting: the Arbiter's `ok`, task by task
 
-**Status**: open 2026-09-27 · opened on the Arbiter's word («відкрий віху»); tcc had no open wave, so the number is max+1 · all `ok` (the Arbiter: «можеш на всі поставити ок, але ще не робимо - збираємо»): still collecting, nothing built until he closes the collection
+**Status**: done 2026-10-01 · W-4 released as `v3.0.64`, its 13 issues and the milestone closed (S-074) · was: open 2026-09-27 · opened on the Arbiter's word («відкрий віху»); tcc had no open wave, so the number is max+1 · all `ok` (the Arbiter: «можеш на всі поставити ок, але ще не робимо - збираємо»): still collecting, nothing built until he closes the collection
 
 Thirteen issues, each with the four assessment lines: #99 (hub #82 HUB-031, signed tags, back from deferred on his word «давай W-4 випустимо вже з підписом»), #98 (S-072, the libraries), #97 (hub #219 TCC-035, the installed tools never update), #96 (S-071, `ok`), #95 (S-070), #89 (hub #213 TCC-033, the ledger), #90 (S-062), #91 (S-064),
 #92 (S-065), #93 (S-066), #94 (S-068), #70 (S-057), #71. Every task carries `ok`, and still nothing is built until he says the collection is closed; a task
@@ -1702,7 +1702,7 @@ installers (`install.ps1:1464`, `install.sh:1444`).
 
 ## S-072 · numpy, scipy, matplotlib: a fresh install gets the newest, an updated machine keeps its first ones
 
-**Status**: open 2026-09-27 · **W-4 · v3.0.64**, issue #98 (collection) · the Arbiter: «оновлення вже буде на старих бібліотеках? не дуже добре»
+**Status**: done 2026-10-01 · issue #98 closed with `W-4 · v3.0.64`, released in `v3.0.64` (S-074) · was: open 2026-09-27 · **W-4 · v3.0.64**, issue #98 (collection) · the Arbiter: «оновлення вже буде на старих бібліотеках? не дуже добре»
 
 `requirements.txt` has lower bounds only; the installers run `pip install -r` without `--upgrade`; TCC's «Оновити Скіл»
 does not touch them. CI tests the newest numpy and scipy (unpinned by decision), no matplotlib. So an updated machine
@@ -1710,7 +1710,7 @@ runs on a set nobody tested. Ask: an update brings them to what CI tests, in the
 
 ## S-071 · Installer output: a source line twice, `::` in the sign-in prompts, a heading that contradicts its list
 
-**Status**: open 2026-09-27 · **W-4 · v3.0.64**, issue #96, `ok` (the Arbiter: «так - наведи порядок»); built with the wave
+**Status**: done 2026-10-01 · issue #96 closed with `W-4 · v3.0.64`, released in `v3.0.64` (S-074) · was: open 2026-09-27 · **W-4 · v3.0.64**, issue #96, `ok` (the Arbiter: «так - наведи порядок»); built with the wave
 
 From the Arbiter's fresh-install run of `install.ps1` v3.0.63: «the official installer, claude.ai/install.ps1» printed
 twice (uv and agy too), `s = later:: s` (the prompt's `:` plus `Read-Host`'s own), and «Already on this machine:» over a
@@ -1718,7 +1718,7 @@ list where every row says `will install`. Both installers; the lines are named o
 
 ## S-070 · README's install section: the version in the line reads as the version installed, and the options are unclear
 
-**Status**: open 2026-09-27 · **W-4 · v3.0.64**, issue #95 (collection) · the Arbiter reading the README
+**Status**: done 2026-10-01 · issue #95 closed with `W-4 · v3.0.64`, released in `v3.0.64` (S-074) · was: open 2026-09-27 · **W-4 · v3.0.64**, issue #95 (collection) · the Arbiter reading the README
 
 The Arbiter: «в readme в частині інсталяції жестко зашита версія, чому не останній тег, як робить ТСС? і зовсім не
 зрозуміло як додати опції установки.» The tag in the URL pins only the installer script (hub #81 HUB-030, 2026-09-06);
@@ -1728,7 +1728,7 @@ its flag is off-screen («в реадмі не видно що строчка д
 
 ## S-068 · TCC's update window on the Mac prints the whole command, and the one line that matters is last
 
-**Status**: open 2026-09-27 · **W-4 · v3.0.64**, issue #94 (collection) · tcc's side; one ticket to tcc with S-065
+**Status**: done 2026-10-01 · issue #94 closed with `W-4 · v3.0.64`, released in `v3.0.64` (S-074) · was: open 2026-09-27 · **W-4 · v3.0.64**, issue #94 (collection) · tcc's side; one ticket to tcc with S-065
 
 TCC's self-update opens a Terminal window, and zsh echoes the whole command it types (`echo 'Close TCC now — …'; while
 kill -0 <pid> …; uv tool install --python 3.12 --upgrade "autosound-tcc[gui,claude] @ git+…@v0.1.44"; echo; echo 'Done —
