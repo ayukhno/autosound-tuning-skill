@@ -138,7 +138,7 @@ def _row_key(rows, name, identity):
     caller happened to give a full definition. `identity` is `state.project_channels()`, which maps
     the id, the current code and every previous name onto one entry.
 
-    Falls through to the name as given whenever there is nothing to resolve — no project file, an
+    Falls through to the name, in the hyphen notation, whenever there is nothing to resolve — no project file, an
     unknown channel, or a project that has never renamed anything (i.e. almost always).
 
     Both notations are one name (S-079, the Arbiter 2026-10-01): when nothing matches as typed, the
@@ -151,15 +151,21 @@ def _row_key(rows, name, identity):
             return []
         return [str(a) for a in [entry.get("id"), entry.get("code"), *(entry.get("previous_names") or [])] if a]
 
+    import naming as _naming
+    one = _naming.canonical_code
+    key = one(str(name))
+    # A ledger that already holds the name in BOTH notations (an old `w_L` row beside the live `w-L`): an exact
+    # match would update whichever was typed, silently -- refused like any other two rows of one name.
+    twins = [k for k in rows if one(str(k)) == key]
+    if len(twins) > 1:
+        raise ValueError(f"{name!r} is the rows {', '.join(map(repr, twins))} once `_` is read as `-` (S-079): "
+                         f"two rows of one name, and which one this delta means is not guessed")
     if name in rows:
         return name
     entry = (identity or {}).get(name)
     for alias in aliases(entry):
         if alias in rows:
             return alias
-    import naming as _naming                         # only now: the exact names are the common case
-    one = _naming.canonical_code
-    key = one(str(name))
     if not isinstance(entry, dict):
         # no channel under the name as typed: the one under it in the one notation, if exactly one is
         found = {id(e): e for k, e in (identity or {}).items() if isinstance(e, dict) and one(str(k)) == key}
@@ -169,7 +175,8 @@ def _row_key(rows, name, identity):
     if len(hits) > 1:
         raise ValueError(f"{name!r} is the rows {', '.join(map(repr, hits))} once `_` is read as `-` (S-079): "
                          f"two rows of one name, and which one this delta means is not guessed")
-    return hits[0] if hits else name
+    # A channel with no row yet gets one under the hyphen: the notation that is written (the Arbiter, 2026-10-01).
+    return hits[0] if hits else key
 
 
 def apply_delta(current, delta, identity=None):
@@ -699,6 +706,15 @@ def _selftest():
         assert "S-079" in str(exc) and "not guessed" in str(exc), exc
     else:
         raise AssertionError("apply_delta merged two rows of one name")
+    # The Fable review of W-5 #103: a ledger holding BOTH spellings is refused even when one matches as typed (the
+    # exact match would update the stale row silently), and a channel with no row yet gets it under the hyphen.
+    try:
+        _row_key({"w_L": {}, "w-L": {}}, "w-L", passat)
+    except ValueError as exc:
+        assert "not guessed" in str(exc), exc
+    else:
+        raise AssertionError("an exact match hid a twin row")
+    assert _row_key({"m-L": {}}, "tw_L", None) == "tw-L", "a new row is written in the hyphen notation"
 
     # #52: the gain step is the machine's setting. Known: a trim off it is named; unknown: a trim with decimals asks.
     gproj = tempfile.mkdtemp(prefix="autosound_gaingrid_")

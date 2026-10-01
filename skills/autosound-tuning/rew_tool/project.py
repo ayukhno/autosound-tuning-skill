@@ -371,14 +371,21 @@ def validate(data):
                 raise ProjectError(
                     f"channel {ch['code']!r} lists its own current code as a previous name"
                 )
-            other = by_one.get(_naming.canonical_code(old))
+            one_old = _naming.canonical_code(old)
+            other, as_id = by_one.get(one_old), False
+            if other is None and one_old in ids_one:
+                # Another channel's ID in either notation is a ledger key too: a delta addressed by this previous
+                # name would land on that channel's row (the Fable review of W-5 #103).
+                other, as_id = by_one.get(_naming.canonical_code(ids[ids_one[one_old]])), True
             if other not in (None, ch):
                 raise ProjectError(
                     f"channel {ch['code']!r} lists {old!r} as a previous name, but "
-                    + (f"{old!r} is" if old == other["code"] else
-                       f"{old!r} reads as {other['code']!r} (`_` is `-`, S-079), which is")
-                    + " the current code of another channel — a capture titled with it could belong to "
-                    "either (SCR-039)"
+                    + (f"{old!r} reads as the id {ids_one[one_old]!r} of {other['code']!r} (`_` is `-`, S-079), another "
+                       "channel — a ledger row keyed by it" if as_id else
+                       (f"{old!r} is" if old == other["code"] else
+                        f"{old!r} reads as {other['code']!r} (`_` is `-`, S-079), which is")
+                       + " the current code of another channel — a capture titled with it")
+                    + " could belong to either (SCR-039)"
                 )
     for path, wrapper in facts(data):
         if wrapper.get("origin", DEFAULT_FACT_ORIGIN) not in FACT_ORIGINS:
@@ -2226,7 +2233,9 @@ def _selftest():
     # `w-L`, and it would go to both. The same for two ids, and for a previous name that reads as a live code.
     for rows, words in (([{"code": "w_L"}, {"code": "w-L"}], "are one name"),
                         ([{"code": "w-L"}, {"code": "x", "id": "w_L"}], "are one id"),
-                        ([{"code": "w-L"}, {"code": "x", "previous_names": ["w_L"]}], "reads as 'w-L'")):
+                        ([{"code": "w-L"}, {"code": "x", "previous_names": ["w_L"]}], "reads as 'w-L'"),
+                        # the Fable review of W-5 #103: another channel's ID, in either notation, is a ledger key too
+                        ([{"code": "a", "previous_names": ["r-R"]}, {"code": "b", "id": "r_R"}], "reads as the id")):
         try:
             validate({"schema_version": SCHEMA_VERSION, "project_rev": 1, "channels": rows})
         except ProjectError as exc:
