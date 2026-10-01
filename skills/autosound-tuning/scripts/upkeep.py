@@ -243,7 +243,10 @@ def update_clone(clone=CLONE, tag=None, repo=None):
     rc, _, err = git(clone, "-c", "advice.detachedHead=false", "checkout", "--quiet", f"refs/tags/{tag}^{{commit}}")
     if rc != 0:
         raise Refused(f"could not check out {tag}: {err.strip()}")
-    return {"clone": clone, "from": was, "to": describe(clone), "signature": said}
+    # The tag asked for, not `describe`: a release lands on its candidate's commit, so `beta-…-rc2` and the release
+    # can name one commit, and `describe` picks between them by tagger date -- in the selftest's fixture, within one
+    # second, by chance (W-5: the suite named v3.0.66 once).
+    return {"clone": clone, "from": was, "to": tag, "signature": said}
 
 
 # ── tools (#97, hub #219) ────────────────────────────────────────────────────────────────────────
