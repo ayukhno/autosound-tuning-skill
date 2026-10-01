@@ -100,12 +100,24 @@ BLOCK F · CLOSE                                                 [0.7]
   save the .mdat into the project · finish the passport
   tripod untouched → the desk
 
+BLOCK X · AS IS — only for a car that is already tuned          [0.7b]
+  (virtual-first.md, "Two ways in"; goal.mode improve_existing)
+  the tripod still at P0 · the same levels as block A
+  close the raw round; DSP → the slot holding the CURRENT tune (never edited:
+    v0 lives in its own slot), the version setup_import banked at −1
+  naming.py <project> next-series → M
+  process.py <project>/process capture-start <M> --under <current version> "<title>" ...
+  <ch>_M (sw) for every channel, through its current chain
+  L_M (sw) · R_M (sw) · ALL_M (sw)
+  capture-check as in block E · close the round · save the .mdat again
+  the car leaves the session on its own tune
+
 APPENDIX · IMPEDANCE (a separate rig, another day)  — optional, not on the path
   what for: driver Fs in its box → protective ≥ 1.1·Fs; reveals a broken
   driver or wiring. Without a rig: Fs from the datasheet with margin, and say so.
 ```
 
-Minimum viable set = **Block A + D** (~25 min). Cutting for time, drop from the bottom by block; the
+Minimum viable set = **Block A + D** (~25 min); a car that is already tuned adds **block X** (~10 min). Cutting for time, drop from the bottom by block; the
 tripod block (D) is the one that is mandatory.
 
 ## The session passport

@@ -32,11 +32,13 @@ the same capture, with one block and one candidate more:
 1. **−1 — the current tune into the ledger.** The intake records the mode; the setup goes in through
    `setup_import.py` (the cost is below), and that version is **the current tune** — the baseline
    everything later is described against. The backup file of −1.4 is made as always.
-2. **0 — the "as is" block FIRST, before anything in the DSP changes.** The current tune playing, the
-   tripod at P0, the session levels of 0.2: every channel's solo through its current chain, then L, R
-   and ALL — `(sw)`, as its own capture round under the current version (`capture-start … --under
-   <current>`). It is what the seat hears today, and it is the check of step 3. Then `v0` and the usual
-   capture (0.1–0.7): the raw solos under the protective filters.
+2. **0 — the usual capture, then the "as is" block at the same tripod point.** The raw solos under
+   the protective filters come first, as always (0.1–0.7, on `v0` in its own slot). Then, the tripod
+   unmoved and the session levels unchanged, the DSP goes back to the slot that holds the current tune —
+   never edited, so it is still the car as it came — and every channel's solo through its current
+   chain, then L, R and ALL, are taken `(sw)` as their own capture round under the current version
+   (`capture-session-sheet.md`, block X). It is what the seat hears today, and it is the check of step
+   3. The car leaves the session on its own tune.
 3. **Desk, first — the current tune predicted and checked.** `predict.py --project <p> --state-ver
    <current>` on the raw solos, then `verify_prediction` against the "as is" block: per channel and
    per sum within 1 dB → the transcription and the model agree. A channel that misses is a value typed
