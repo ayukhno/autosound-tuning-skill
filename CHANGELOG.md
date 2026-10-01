@@ -161,11 +161,13 @@ The fifth wave (`WAVES.md`), a patch before v3.1.0. Collected on 2026-10-01 from
 everything open and from tcc's tickets: eight issues on `W-5 · v3.0.65` (#101–#108), all with the Arbiter's `ok`. The plan is
 `docs/PLAN-W-5.md`.
 
-**Run before the tag** (signed candidate `beta-v3.0.65-rc1`, 2026-10-01), on the Windows VM and on two Macs. The
+**Run before the tag** (signed candidates `beta-v3.0.65-rc1` and `-rc2`, 2026-10-01): rc1 on the Windows VM and on two
+Macs, rc2 — after the part-two tickets — on the Windows VM, green throughout. The
 candidate's own signature was verified on the VM and on the Mac whose skill is an installed clone (on the
 author's Mac the skill is a symlink to the working tree and is left alone). TCC's tag `v0.1.45` was verified on all
 three — `✓ v0.1.45 is signed by TCC's author` — and the app installed. **Not met in a real run:** a refused TCC
-tag (selftests only), and #108's filter against a real `v3.x` tag (selftests only). On the VM the app's own
+tag (selftests only), #108's filter against a real `v3.x` tag (selftests only), and `key move-shell`'s Windows
+half (#110, the registry; to be run through TCC's key window once TCC pins this tag). On the VM the app's own
 `--install-desktop` exited non-zero after uv's «Making stdin inheritable failed», so that run created no shortcuts
 (an earlier install's were there); a second run on the same VM, same v0.1.45, created them — intermittent, TCC's
 command, unchanged on the skill's side since 2026-08-22; hub #229 to tcc.

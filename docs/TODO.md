@@ -1629,7 +1629,7 @@ four assessment lines, and nothing is built before his `ok` on that task. Resume
 
 ## S-090 · `key move-shell`'s Windows half, run on the VM once TCC pins v3.0.65
 
-**Status**: open 2026-10-01 · pool (after the tag) · tcc's caveat when it said the skill can close W-5: the registry path of #110 was read, not run
+**Status**: чекає 2026-10-01 · v3.0.65 · the Windows half of #110, to be run on the VM through TCC's key window once TCC pins v3.0.65 · was: open 2026-10-01 · pool (after the tag) · tcc's caveat when it said the skill can close W-5: the registry path of #110 was read, not run
 
 `key move-shell <provider> [--drop]` on Windows reads and deletes the user environment's value through `winreg`;
 the selftests run the profile-file half. To check on the VM through TCC's key window once TCC pins v3.0.65. A fault
@@ -1637,14 +1637,14 @@ there ships as v3.0.66; the tag is not held for it (tcc, 2026-10-01).
 
 ## S-089 · The installers print the code the app returned when the shortcuts were not created (hub #229)
 
-**Status**: open 2026-10-01 · **W-5 · v3.0.65**, issue #113, `ok` (the Arbiter relaying TCC's ask) · built on `wave-2026-10-01-b`
+**Status**: done 2026-10-01 · v3.0.65 · #113 · was: open 2026-10-01 · **W-5 · v3.0.65**, issue #113, `ok` (the Arbiter relaying TCC's ask) · built on `wave-2026-10-01-b`
 
 TCC's half of the VM's shortcut failure logs the exit it chose (tcc#124); the installer's half prints it beside the
 warning, so the next failure in the field names itself. Diagnostic only.
 
 ## S-088 · The feedback form and its response sheet in English
 
-**Status**: open 2026-10-01 · **W-5 · v3.0.65**, issue #112, `ok` (the Arbiter: «давай переробимо на англійську (всі мови не потрібні)») · the form and the sheet changed the same day; the skill's words on `wave-2026-10-01-b`
+**Status**: done 2026-10-01 · v3.0.65 · #112; the form, the sheet and the skill's words in English; hub #231 to tcc · was: open 2026-10-01 · **W-5 · v3.0.65**, issue #112, `ok` (the Arbiter: «давай переробимо на англійську (всі мови не потрібні)») · the form and the sheet changed the same day; the skill's words on `wave-2026-10-01-b`
 
 The form, its confirmation message, the response sheet's file, tab and columns, and the skill's `FORM_KINDS`,
 `FORM_IMPACTS`, `FORM_LABELS`. A client older than v3.0.65 sends the Ukrainian choices the form no longer lists, and
@@ -1652,14 +1652,14 @@ its report falls back to the clipboard. TCC follows when it pins v3.0.65 (a tick
 
 ## S-087 · The feedback form's sender becomes optional (hub #228, TCC-042)
 
-**Status**: open 2026-10-01 · **W-5 · v3.0.65**, issue #111, `ok` (the Arbiter: «знахідку 135 бери теж») · built on `wave-2026-10-01-b` (`703eab4`); the Google Form's question made optional by the Arbiter the same day
+**Status**: done 2026-10-01 · v3.0.65 · #111; the Google Form's question optional the same day · was: open 2026-10-01 · **W-5 · v3.0.65**, issue #111, `ok` (the Arbiter: «знахідку 135 бери теж») · built on `wave-2026-10-01-b` (`703eab4`); the Google Form's question made optional by the Arbiter the same day
 
 A tester who leaves no contact could not send through the form at all: TCC's dialog, `gates/side_effect.py`
 `form_answers` and the form's own question all refused an empty «Від кого». TCC's finding 135.
 
 ## S-086 · `key move-shell` moves every export and always stores: TCC's key window needs one key and a drop-only form (hub #230, TCC-043)
 
-**Status**: open 2026-10-01 · **W-5 · v3.0.65**, issue #110, `ok` (the Arbiter: «У W-5, до тега») · built on `wave-2026-10-01-b` (`6d9ac4c`); the Windows half (the registry) read, not run
+**Status**: done 2026-10-01 · v3.0.65 · #110; the Windows half waits in S-090 · was: open 2026-10-01 · **W-5 · v3.0.65**, issue #110, `ok` (the Arbiter: «У W-5, до тега») · built on `wave-2026-10-01-b` (`6d9ac4c`); the Windows half (the registry) read, not run
 
 From TCC's finding 127 and its W-5 key window (tcc#117). The contract is on hub #230.
 
