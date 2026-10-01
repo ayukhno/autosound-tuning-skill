@@ -167,8 +167,12 @@ def _cost(name, value):
     return -value if name == "junctions" else value
 
 
-def front(candidates, weightings=None):
+def front(candidates, weightings=None, reference=None):
     """`candidates`: `[{"name", "terms"}]`. Returns `{"picks": [...], "limited": [...], "missing": [...]}`.
+
+    `reference`: the name of the candidate every pick is read AGAINST -- the current tune of a car that is already
+    tuned (skill #105). Each pick then carries `vs_reference` (per term, its cost minus the reference's: negative is
+    better) with `better` / `worse` beyond the tie margins, and a pick better on nothing is `no_improvement`.
 
     Each term is scaled across the candidates (0 = the best of them, 1 = the worst); a candidate's
     cost under a weighting is the weighted sum. Under each weighting the cheapest wins, and the
@@ -216,7 +220,22 @@ def front(candidates, weightings=None):
         i = names.index(p["name"])
         p["close"] = [names[k] for k in range(len(candidates)) if k != i and usable and all(
             abs(_cost(t, candidates[k]["terms"][t]) - _cost(t, candidates[i]["terms"][t])) < TIE_DB[t] for t in usable)]
-    return {"picks": picks, "limited": limited, "missing": missing, "ties": ties, "candidates": names}
+    out = {"picks": picks, "limited": limited, "missing": missing, "ties": ties, "candidates": names}
+    if reference in names:
+        r = names.index(reference)
+        out["reference"] = {"name": reference, "terms": candidates[r]["terms"],
+                            "picked": any(p["name"] == reference for p in picks)}
+        for p in picks:
+            if p["name"] == reference:
+                continue
+            i = names.index(p["name"])
+            delta = {t: round(_cost(t, candidates[i]["terms"][t]) - _cost(t, candidates[r]["terms"][t]), 2)
+                     for t in usable}
+            p["vs_reference"] = delta
+            p["better"] = [t for t in usable if delta[t] <= -TIE_DB[t]]
+            p["worse"] = [t for t in usable if delta[t] >= TIE_DB[t]]
+            p["no_improvement"] = not p["better"]
+    return out
 
 
 #: Which weighting the advice follows, by the project's `goal.purpose` (intake.PURPOSES).
@@ -304,6 +323,24 @@ def render(result, purpose=None):
     if result["missing"]:
         lines.append("  not scored: " + ", ".join(result["missing"])
                      + (" (no target curve given)" if "tonal" in result["missing"] else ""))
+    ref = result.get("reference")
+    if ref:
+        t = ref["terms"]
+        lines.append(f"  AGAINST {ref['name'].upper()} (#105) -- {_fmt(t.get('tonal'), '.2f')} tonal, "
+                     f"{_fmt(t.get('stage'), '.2f')} stage, {_fmt(t.get('junctions'))} junction loss, "
+                     f"{_fmt(t.get('ripple'), '.2f')} ripple:")
+        if ref["picked"]:
+            lines.append(f"    {ref['name']} itself wins under at least one weighting: keeping it is a valid answer")
+        for p in result["picks"]:
+            if "vs_reference" not in p:
+                continue
+            if p["no_improvement"]:
+                lines.append(f"    {p['name']}: no improvement -- better than {ref['name']} on no term beyond the tie "
+                             "margins" + (f"; worse on {', '.join(p['worse'])}" if p["worse"] else ""))
+                continue
+            say = [f"better on {t} by {abs(p['vs_reference'][t]):.2f} dB" for t in p["better"]]
+            say += [f"worse on {t} by {p['vs_reference'][t]:.2f} dB" for t in p["worse"]]
+            lines.append(f"    {p['name']}: " + "; ".join(say))
     lines += [f"  {a}" for a in advice(result, purpose)]
     lines.append(f"  {CANNOT_SEE}")
     lines.append("  The tuner chooses; nothing is entered without the tuner's OK.")
@@ -379,12 +416,28 @@ def _selftest():
     assert "taking both to the car" in render(tw), render(tw)
     no_target = front([{"name": c["name"], "terms": terms(pred(1.0, 2.0, -1.0), None)} for c in cands[:2]])
     assert no_target["missing"] == ["tonal"] and "no target curve given" in render(no_target), no_target
+    # skill #105: a car that is already tuned -- every pick read against the current tune.
+    now = {"name": "the current tune", "terms": terms(pred(1.0, 4.0, -1.6), target)}
+    better = {"name": "B", "terms": terms(pred(1.0, 1.0, -0.4), target)}
+    same = {"name": "C", "terms": terms(pred(1.0, 4.05, -1.62), target)}
+    ref = front([now, better, same], reference="the current tune")
+    b_pick = next(p for p in ref["picks"] if p["name"] == "B")
+    assert "stage" in b_pick["better"] and "junctions" in b_pick["better"] and not b_pick["no_improvement"], b_pick
+    assert ref["reference"]["name"] == "the current tune", ref
+    shown = render(ref)
+    assert "AGAINST THE CURRENT TUNE" in shown and "B: better on stage" in shown, shown
+    tie = front([now, same], reference="the current tune")
+    c_pick = next((p for p in tie["picks"] if p["name"] == "C"), None)
+    assert c_pick is None or c_pick["no_improvement"], tie
+    assert tie["reference"]["picked"] or "no improvement" in render(tie), render(tie)
+    assert "reference" not in front([better, same]), "no reference named, none read"
     print("selftest[variant_front] OK -- four terms per candidate (tonal against the target with the level removed, "
           "|L-R| per band, the level-normalised junction loss with each junction's level step, ripple); the front "
           "picks by three weightings in the candidates' own order, says what each buys and spends, names a junction "
           "no candidate repairs, drops a term nobody has and says so, advises from the project's goal (competition: "
           "stage first; for yourself: tone first; both: one per preset), names candidates too close to tell apart "
-          "for the ear, and always ends with what it cannot see")
+          "for the ear, reads every pick against the current tune of a car already tuned (#105), and always ends "
+          "with what it cannot see")
     return 0
 
 

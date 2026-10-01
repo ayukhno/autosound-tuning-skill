@@ -40,13 +40,15 @@ the same capture, with one block and one candidate more:
    (`capture-session-sheet.md`, block X). It is what the seat hears today, and it is the check of step
    3. The car leaves the session on its own tune.
 3. **Desk, first — the current tune predicted and checked.** `predict.py --project <p> --state-ver
-   <current>` on the raw solos, then `verify_prediction` against the "as is" block: per channel and
-   per sum within 1 dB → the transcription and the model agree. A channel that misses is a value typed
+   <current> --rew --ver <N> --process <p>/process --out <dir>` on the raw solos (series N), then
+   `verify_prediction.py --predicted <dir>/predicted.json --rew --ver <M>` against the "as is" block
+   (series M): per channel and for ALL within 1 dB → the transcription and the model agree. A channel that misses is a value typed
    wrong from the screens or a processing block left on, and it is fixed before any variant is read —
    every variant is described against this tune, so an error in it moves all of them.
-4. **Desk — the variants against the current tune** (1.3–1.7 as below). The current tune is a
-   candidate on the same trade-off front as the engine's best, its alternatives and the wishes, and
-   so is **the current crossovers re-timed** (its edges kept, Auto delay and levels again). Each
+4. **Desk — the variants against the current tune** (1.3–1.7 as below), with `resonalyze_engine.py run
+   <p> <set> --current <current>`. The current tune is a candidate on the same trade-off front as the
+   engine's best, its alternatives and the wishes — its EQ set aside, as every candidate's is — and so
+   is **the current crossovers re-timed** (its edges and levels kept, Auto delay again). Each
    variant says what it buys and what it spends **against the current tune**; one that ties it on every
    term within the margins is said to be no improvement, and keeping the current tune is a valid answer.
 5. **2 → 3 → 4** as from scratch. The "as is" block is the *before* the tuner compares with.

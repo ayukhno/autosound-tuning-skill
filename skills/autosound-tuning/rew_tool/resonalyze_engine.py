@@ -1119,19 +1119,25 @@ def wish_costs(result, layout=None, channels=None, xo=None):
     return out
 
 
-def variant_front_from(set_dir, layout, result_b, full_variants, target=None, target_note=None):
+def variant_front_from(set_dir, layout, result_b, full_variants, target=None, target_note=None, current=None):
     """`(front, notes)`: the best and every whole-configuration variant that fits, broken down by the same four terms
     and picked by different weightings (`variant_front`). A variant over the device's range or breaking a limit is
-    not on offer and is left out, named."""
+    not on offer and is left out, named.
+
+    `current` (`current_tune`'s dict): a car that is already tuned (skill #105). The current tune is a candidate on
+    the same front -- its EQ set aside, as every candidate's is -- and the REFERENCE each pick is read against."""
     import variant_front as _vf
     notes = []
     if target is None and target_note:
         notes.append(f"trade-off front: the tonal term is not scored -- {target_note}")
     cands = []
     try:
+        if current:
+            cands.append({"name": CURRENT_NAME, "terms": chain_terms(set_dir, current["chains"], target)})
+            notes += [f"trade-off front: {n}" for n in current.get("notes") or []]
         cands.append({"name": "the best", "terms": candidate_terms(set_dir, layout, final_proposals(result_b),
                                                                    delay_map(result_b), target)})
-        notes += [f"trade-off front: {n}" for n in cands[0]["terms"].get("notes") or []]
+        notes += [f"trade-off front: {n}" for n in cands[-1]["terms"].get("notes") or []]
         for fv in full_variants:
             refused = [c for c in fv.get("checks") or [] if c.get("verdict") == "REFUSED"]
             if fv.get("not_built") or fv.get("over_range") or refused or not fv.get("settings"):
@@ -1146,7 +1152,7 @@ def variant_front_from(set_dir, layout, result_b, full_variants, target=None, ta
         return None, notes + [f"trade-off front not computed: {exc}"]
     if len(cands) < 2:
         return None, notes + ["trade-off front: fewer than two candidates -- nothing to trade"]
-    return _vf.front(cands), notes
+    return _vf.front(cands, reference=CURRENT_NAME if current else None), notes
 
 
 def alternative_layout(second, result_b, proposals, chain):
@@ -1356,15 +1362,126 @@ def candidate_terms(set_dir, layout, settings, delays, target=None):
     suffer: the filter's phase at a 250 Hz corner is not its phase at a 300 Hz one, so candidates with different
     corners were read through different errors. A solo whose protection nobody recorded is left out and named in
     `terms["notes"]`, not read through a guess."""
+    return chain_terms(set_dir, chains_from_engine(layout, settings, delays), target)
+
+
+def chain_terms(set_dir, chains, target=None):
+    """`candidate_terms` on chains already in `predict`'s shape -- the engine's, or the ledger's (the current tune)."""
     import predict as _pr
     import variant_front as _vf
     freqs = _pr.grid()
     solos, notes, refused = _pr.de_embed_solos(_pr.load_solos_dir(set_dir, freqs), freqs)
-    chains = {c: ch for c, ch in chains_from_engine(layout, settings, delays).items() if c in solos}
+    chains = {c: ch for c, ch in chains.items() if c in solos}
     result = _pr.predict(freqs, {c: solos[c] for c in chains}, chains)
     out = _vf.terms(_pr.to_json(result), target)
     out["notes"] = [n for n in notes if "taken out" in n or "REFUSED" in n]
     return out
+
+
+#: The current tune's name on the front, and the reference every pick is read against (skill #105).
+CURRENT_NAME = "the current tune"
+
+
+def current_tune(project_dir, version=None, preset=None):
+    """The tune the car plays now, from the ledger (a car that is already tuned, skill #105): `{"label", "chains",
+    "proposals_by_code", "notes"}`.
+
+    `chains` are `predict`'s, the virtual tier routed in when the project records the routing, and **every EQ set
+    aside**: the engine's candidates carry no EQ (`chains_from_engine`), so the current tune on the same front has
+    none either -- its EQ is reread in Phase 2 like anybody's. A virtual tier that carries settings with no routing
+    recorded is named, never guessed (`predict`'s own rule)."""
+    import predict as _pr
+    preset, snap = _pr.load_project_state(project_dir, preset, version)
+    label = f"slot {preset} {snap.get('version') or 'HEAD'}"
+    phys = _pr.chains_from_snapshot(snap)
+    notes = []
+    routes = {}
+    try:
+        routes = _pj.Project(project_dir).virtual_routing() or {}
+    except Exception as exc:  # noqa: BLE001 -- unreadable is not routed, and said
+        notes.append(f"the current tune: project.json unreadable for routing ({exc})")
+    chains = phys
+    if routes:
+        chains, route_notes = _pr.route_chains(phys, _pr.chains_from_snapshot(snap, tier="virtual_channels"), routes)
+        notes += [f"the current tune: {n}" for n in route_notes]
+    else:
+        v_set = [c for c, r in (snap.get("virtual_channels") or {}).items()
+                 if isinstance(r, dict) and (r.get("eq") or r.get("ta_ms") or r.get("gain_db"))]
+        if v_set:
+            notes.append("the current tune: the ledger's virtual tier carries settings on " + ", ".join(sorted(v_set))
+                         + " and is NOT in this candidate -- no routing recorded (`project.py <dir> set-route`)")
+    eq_codes = sorted(c for c, ch in chains.items()
+                      if ch.get("eq") or any(up.get("eq") for up in ch.get("upstream") or []))
+    chains = {c: ch if ch.get("muted") else
+              dict(ch, eq=[], upstream=[dict(up, eq=[]) for up in ch.get("upstream") or []])
+              for c, ch in chains.items()}
+    if eq_codes:
+        notes.append(f"the current tune ({label}): its EQ on {', '.join(eq_codes)} is set aside on the front, as every "
+                     "candidate's is -- the comparison is crossovers, delays, polarity and levels")
+    unmodellable = sorted(c for c, ch in chains.items() if ch.get("unmodellable"))
+    if unmodellable:
+        notes.append(f"the current tune: {', '.join(unmodellable)} cannot be modelled and are left out")
+    by_code = {c: ch for c, ch in phys.items() if not ch.get("muted") and not ch.get("unmodellable")}
+    return {"label": label, "chains": chains, "proposals_by_code": by_code, "notes": notes}
+
+
+def current_proposals(layout, current):
+    """The current tune's crossovers and gains in the engine's proposal shape, one per block (`alternative_layout`'s
+    input), from each block's LEFT channel -- a crossover is one filter for both sides in the engine. A block whose
+    two sides differ in a crossover is named, so "the left side's edges" is said rather than assumed."""
+    def edge(leg):
+        if not leg:
+            return None
+        fam = ENGINE_FAMILY.get(str(leg.get("type") or "").upper())
+        if not fam:
+            return {"unsupported": leg.get("type")}
+        return {"family": fam, "frequencyHz": float(leg["f"]), "slopeDbPerOctave": int(leg["slope"])}
+    by_code, out, notes = current["proposals_by_code"], [], []
+    for b in layout.get("blocks") or []:
+        sides = b.get("channels") or {}
+        left = by_code.get(_pr_canon(sides.get("left"))) if sides.get("left") else None
+        right = by_code.get(_pr_canon(sides.get("right"))) if sides.get("right") else None
+        ch = left or right
+        if not ch:
+            continue
+        if left and right and (left.get("hp"), left.get("lp")) != (right.get("hp"), right.get("lp")):
+            notes.append(f"the current crossovers: {b['name']}'s two sides differ -- the left side's edges are used")
+        hp, lp = edge(ch.get("hp")), edge(ch.get("lp"))
+        bad = [e["unsupported"] for e in (hp, lp) if e and "unsupported" in e]
+        if bad:
+            notes.append(f"the current crossovers: {b['name']} has a {', '.join(map(str, bad))} edge the engine "
+                         "does not model -- the block keeps the best's crossover")
+            continue
+        out.append({"block": b["name"], "kind": (hp or lp or {}).get("family"), "highPass": hp, "lowPass": lp,
+                    "gainDb": float(ch.get("gain_db") or 0.0)})
+    return out, notes
+
+
+def _pr_canon(code):
+    import predict as _pr
+    return _pr.canon(code)
+
+
+def current_retimed_variant(second, result_b, chain, current, channels=None, xo=None, dotnet=None, out_dir=None,
+                            run=None):
+    """The current crossovers kept, Auto delay and the levels again over the whole chain -- "the same crossovers,
+    re-timed" beside the current tune itself (skill #105). Same entry shape as `wish_variants`; an edge of the
+    current tune under a limit leaves it off the front, named, as any variant's would."""
+    run = run or (lambda layout, path: run_engine(layout, path, dotnet))
+    proposals, notes = current_proposals(second, current)
+    entry = {"purpose": "the current crossovers, re-timed", "lower": None, "upper": None, "edges": None,
+             "notes": notes}
+    if not proposals:
+        entry["not_built"] = "no block of the layout found in the current tune"
+        return entry
+    layout = alternative_layout(second, result_b, proposals, chain)
+    rc, result_c, err = run(layout, os.path.join(out_dir or tempfile.mkdtemp(prefix="resonalyze-current-"),
+                                                 "4-current-retimed"))
+    entry["rc"] = rc
+    if result_c is None:
+        entry["not_built"] = f"the run wrote nothing (exit {rc}): {err.strip()[-200:]}"
+        return entry
+    return _read_whole(entry, result_c, layout, result_b, chain, channels, xo)
 
 
 def target_points(project_dir, target_file=None):
@@ -1402,11 +1519,19 @@ def variants(project_dir, set_dir, wishes=None, dotnet=None, out_dir=None, **kw)
     Auto delay and the wishes on the crossovers it proposed. Returns a dict for `render_variants` and the JSON."""
     target_file = kw.pop("target_file", None)
     alternatives = kw.pop("alternatives", None)
+    current_ver = kw.pop("current", None)
+    current_preset = kw.pop("current_preset", None)
     layout, notes, problems, channels, xo = build_layout(project_dir, set_dir, **kw)
     target, where = target_points(project_dir, target_file)
+    current = None
+    if current_ver:
+        try:
+            current = current_tune(project_dir, None if current_ver.upper() == "HEAD" else current_ver, current_preset)
+        except Exception as exc:  # noqa: BLE001 -- a ledger that cannot be read is a problem to name, not a crash
+            problems = list(problems) + [f"--current {current_ver}: the ledger version could not be read ({exc})"]
     out = variants_from(layout, channels, xo, wishes, notes, problems, dotnet, out_dir,
                         fill_given=kw.get("rear_fill_ms") is not None, set_dir=set_dir, target=target,
-                        target_note=where, alternatives=alternatives)
+                        target_note=where, alternatives=alternatives, current=current)
     # The front advises from the project's goal (the Arbiter, 2026-09-23): competition, for yourself, or both.
     goal = (_pj.Project(project_dir).load().get("goal") or {}).get("purpose")
     out["goal_purpose"] = _pj.fact_value(goal) if isinstance(goal, dict) else goal
@@ -1414,7 +1539,7 @@ def variants(project_dir, set_dir, wishes=None, dotnet=None, out_dir=None, **kw)
 
 
 def variants_from(layout, channels, xo, wishes=None, notes=(), problems=(), dotnet=None, out_dir=None, fill_given=False,
-                  set_dir=None, target=None, target_note=None, alternatives=None):
+                  set_dir=None, target=None, target_note=None, alternatives=None, current=None):
     """`variants` on a layout already built -- the project's facts passed in rather than read from a folder.
 
     When Auto delay cannot fit the device and the rear fill is the default rather than the tuner's, the run is repeated
@@ -1502,9 +1627,16 @@ def variants_from(layout, channels, xo, wishes=None, notes=(), problems=(), dotn
     if count and rc == 0:
         out.setdefault("full_variants", []).extend(
             alternative_variants(second, result_b, out.get("rerank"), chain, count, channels, xo, dotnet, out_dir))
+    # A car that is already tuned (skill #105): its crossovers re-timed are a variant, and the tune itself is the
+    # reference on the front.
+    if current and rc == 0:
+        retimed = current_retimed_variant(second, result_b, chain, current, channels, xo, dotnet, out_dir)
+        out["notes"] += retimed.pop("notes", [])
+        out.setdefault("full_variants", []).append(retimed)
+        out["current"] = current["label"]
     if set_dir and rc == 0:
         out["front"], front_notes = variant_front_from(set_dir, second, result_b, out.get("full_variants") or [],
-                                                       target, target_note)
+                                                       target, target_note, current=current)
         out["notes"] += front_notes
     final_delay = result_b.get("autoDelayAfterRepairs") or result_b.get("autoDelay")
     out["notes"] += notes_on({"autoCrossover": result_a.get("autoCrossover"), "autoDelay": final_delay})
@@ -2318,6 +2450,35 @@ def _selftest():
                                         {"lower": "B Woofer", "upper": "C Mid", "tune": {"applied": False}}]}, ""))
     assert "found no setting at B Woofer ↔ C Mid" in failed_base["not_built"], failed_base
 
+    # ── a car that is already tuned (skill #105): the current tune's crossovers as the engine's proposals, and
+    # re-timed as a whole configuration. Each block from its LEFT channel; two sides that differ are named; an edge
+    # family the engine does not model leaves that block on the best's crossover, named.
+    def _leg(f, typ, slope):
+        return {"f": float(f), "type": typ, "slope": slope}
+    layout_cur = {"blocks": [{"name": "A Sub", "channels": {"left": "sw"}},
+                             {"name": "B Woofer", "channels": {"left": "w-L", "right": "w-R"}},
+                             {"name": "C Mid", "channels": {"left": "m-L", "right": "m-R"}}]}
+    cur = {"label": "slot SQ v_013", "notes": [], "chains": {}, "proposals_by_code": {
+        "sw": {"lp": _leg(70, "LR", 24), "hp": None, "gain_db": 0.0},
+        "w-L": {"hp": _leg(70, "LR", 24), "lp": _leg(420, "BW", 12), "gain_db": -1.5},
+        "w-R": {"hp": _leg(70, "LR", 24), "lp": _leg(450, "BW", 12), "gain_db": -1.0},
+        "m-L": {"hp": _leg(420, "CHEB", 12), "lp": None, "gain_db": 0.0}}}
+    props, pnotes = current_proposals(layout_cur, cur)
+    by = {p_["block"]: p_ for p_ in props}
+    assert by["A Sub"]["lowPass"] == _edge(70, "LinkwitzRiley") and by["A Sub"]["highPass"] is None, by
+    assert by["B Woofer"]["lowPass"] == _edge(420, "Butterworth", 12) and by["B Woofer"]["gainDb"] == -1.5, by
+    assert "C Mid" not in by and any("C Mid has a CHEB edge" in n for n in pnotes), (by, pnotes)
+    assert any("B Woofer's two sides differ" in n for n in pnotes), pnotes
+    sent.clear()
+    retimed = current_retimed_variant(dict(second_fixed, blocks=layout_cur["blocks"]), result_best,
+                                      chain_pairs_fixed, cur, run=_fake_run, out_dir=tempfile.gettempdir())
+    given = {b_["name"]: b_.get("crossover") for b_ in sent[0][0]["blocks"]}
+    assert given["B Woofer"]["lowPass"] == _edge(420, "Butterworth", 12), given      # the current edge, kept
+    assert given["C Mid"]["highPass"] == _edge(500, "LinkwitzRiley"), given          # the best's, where unmodelled
+    assert retimed["purpose"] == "the current crossovers, re-timed" and retimed.get("settings"), retimed
+    assert current_retimed_variant(second_fixed, result_best, chain_pairs_fixed,
+                                   dict(cur, proposals_by_code={}), run=_fake_run)["not_built"], "nothing to build"
+
     # ── fetching the prebuilt engine from a tag's release (TODO S-020; hub `RELEASE-CHANNEL.md` §12) ──
     # The network is faked. What is held here: the NAME is computed from the pin and this machine, a
     # file that does not match `SHA256SUMS` is refused rather than installed, and "this release has
@@ -2744,6 +2905,11 @@ def main(argv=None):
         p.add_argument("--alternatives", type=int, metavar="N", help="run: how many of the engine's ranked "
                                                                    "alternatives to build as whole variants "
                                                                    "(default 3 with no wish, 0 with one)")
+        p.add_argument("--current", metavar="VER|HEAD", help="run: a car that is already tuned -- this ledger "
+                                                              "version is the current tune, a candidate on the front "
+                                                              "and the reference every pick is read against (#105)")
+        p.add_argument("--current-preset", metavar="SLOT", help="run: the slot --current is read from (default: "
+                                                                 "the active one)")
         p.add_argument("--json", action="store_true")
     p = sub.add_parser("acceptance")
     p.add_argument("--set")
@@ -2796,7 +2962,8 @@ def main(argv=None):
                  include_hidden=a.include_hidden, window_defaults=a.window_defaults, types=_pairs(a.type, "--type"),
                  scene_offset_ms=a.scene_offset, rear_fill_ms=a.rear_fill, adjust_gains=a.gains,
                  near_side_cut_db=a.near_side_cut, target_file=getattr(a, "target", None),
-                 alternatives=getattr(a, "alternatives", None))
+                 alternatives=getattr(a, "alternatives", None), current=getattr(a, "current", None),
+                 current_preset=getattr(a, "current_preset", None))
     if v.get("out_dir"):
         with open(os.path.join(v["out_dir"], "variants.json"), "w", encoding="utf-8") as fh:
             json.dump({k: v[k] for k in v if k not in ("crossover", "delays")}, fh, indent=1, ensure_ascii=False)
