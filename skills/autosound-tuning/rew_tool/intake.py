@@ -1180,9 +1180,10 @@ FIELDS = (
             "one's description and none of its measurements. Not the presets: SQ and FULL live in "
             "one project on one measurement base, and FULL is the rears and surround, not a seat."),
     _f("goal.mode", "goal", "A tune from scratch, improving an existing one, or a light touch?",
-       required=True, enum=MODES, lands="`autosound_context.md` + a recorded decision",
+       required=True, enum=MODES, writes="project:goal.mode",
+       lands="`project.json` `goal.mode` -> `autosound_context.md` + a recorded decision",
        note="An INTENT, orthogonal to the capability level. Both modes read the current DSP state "
-            "into the ledger first.",
+            "into the ledger first. Written to project.json so `handoff` can name the route (skill #105).",
        default="new_tune", derive="from scratch, unless the car is already tuned and the tuner wants that tune improved (`virtual-first.md`, two ways in)"),
     _f("goal.design_path", "goal", "Virtual-first at the desk, or iterative?", enum=DESIGN_PATHS,
        lands="`autosound_context.md` + a recorded decision",

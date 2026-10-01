@@ -670,6 +670,24 @@ def _ledger_heads(project_dir):
     return {slot: head for slot, head in heads.items() if head}
 
 
+def _route_line(project_dir):
+    """" The route: …" when the project is a car that is already tuned (`goal.mode`, skill #105), else "".
+
+    The route changes what the next session does in Phase 0 (block X) and at the desk (`run --current`), and
+    the mode lives in `project.json`, which a resumed session may not open before it acts."""
+    try:
+        with open(os.path.join(project_dir, "project.json"), encoding="utf-8") as fh:
+            mode = ((json.load(fh) or {}).get("goal") or {}).get("mode")
+    except (OSError, ValueError):
+        return ""
+    if isinstance(mode, dict):
+        mode = mode.get("value")
+    if mode != "improve_existing":
+        return ""
+    return (" The route: a car that is already tuned (goal.mode improve_existing) — `virtual-first.md`, "
+            "«Two ways in»: block X after the raw capture, `resonalyze_engine.py run --current` at the desk.")
+
+
 def continue_head_drift(project_dir):
     """The ▶️ CONTINUE block names a HEAD the ledger is not at: `{named, heads, stale, warning}`, or None (S-084).
 
@@ -2456,7 +2474,7 @@ class Process:
                         "only identity they have.")
             resume = (f"State is on disk: phase {phase}, "
                       f"{len(self.plan_for(phase, state))} step(s) in its plan, ledger HEAD present. "
-                      f"Clear the chat and say «продовжуй» in the new one.{keep}")
+                      f"Clear the chat and say «продовжуй» in the new one.{keep}{_route_line(self.project_dir)}")
         return {"ok": not missing, "missing": missing, "phase": phase, "resume": resume, "warnings": warnings}
 
     def set_target(self, preset, curve):
@@ -2714,6 +2732,18 @@ def _selftest():
     selftest at all, so every one of those gates was a thing nobody had run since it was written.
     """
     import tempfile
+
+    # skill #105: the route of a car that is already tuned is named at handoff; any other mode, a missing or an
+    # unreadable project.json says nothing.
+    routed = tempfile.mkdtemp(prefix="autosound_route_")
+    assert _route_line(routed) == ""
+    for mode, said in (("improve_existing", True), ({"value": "improve_existing"}, True), ("new_tune", False)):
+        with open(os.path.join(routed, "project.json"), "w", encoding="utf-8") as fh:
+            json.dump({"goal": {"mode": mode}}, fh)
+        assert ("Two ways in" in _route_line(routed)) is said, mode
+    with open(os.path.join(routed, "project.json"), "w", encoding="utf-8") as fh:
+        fh.write("{not json")
+    assert _route_line(routed) == ""
 
     root = tempfile.mkdtemp(prefix="autosound_process_")
     _seed_intake(root)  # the phase -1 gate is real now; a fixture has to pass it like anyone else
