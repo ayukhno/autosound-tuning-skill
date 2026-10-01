@@ -142,6 +142,9 @@ $SkillBetaGlob = "beta-v3.*"
 $SkillSigningPrincipal = "ayukhno"
 $SkillSigningKey       = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHLm4x1yz9JbFfBlxdQA8vR8yYMupVktswes3CL7QE1y"
 $SkillSignedFrom       = "v3.0.64"
+# The app's tags are signed with the same key, from its own first signed tag (TCC's core/signed_tags.py, skill #101),
+# and checked the same way before uv installs one. Same value as TCC_SIGNED_FROM in install.sh.
+$TccSignedFrom         = "v0.1.45"
 # Where a local change to the installed clone is kept before the update resets it (skill #91). Same as install.sh.
 $LocalChanges = Join-Path $HOME ".claude\skills\autosound-local-changes"
 # The app's supported line -- `v*`, not `v3.*`: the app versions independently of the method.
@@ -839,11 +842,11 @@ if (Test-Path $Py3) {
 # when there is none. ONE function for both copies -- the terminal's and the beta channel's
 # (autosound-hub #145) -- the mirror of checkout_method in install.sh. $true unless a clone failed;
 # a failed MOVE is warned about and leaves the copy where it was.
-# Is $Ref, fetched into $Dir, a signed release of this skill (skill #99)? $true -- or it predates signing, or it is
-# a branch named with -SkillRef, or AUTOSOUND_SKIP_TAG_VERIFY=1, each said on a line; $false -- nothing may be
-# installed from it. The mirror of verify_tag in install.sh.
-function Test-TagSignature {
-    param([string]$Dir, [string]$Ref)
+# What can be said of $Ref by its name alone, each said on a line (skill #99, #101): $true -- settled, nothing to
+# check (a dry run, AUTOSOUND_SKIP_TAG_VERIFY=1, a branch named with -SkillRef or -TccRef, a tag before $SignedFrom);
+# $false -- its signature has to be checked. The mirror of settled_by_name in install.sh.
+function Test-SettledByName {
+    param([string]$Ref, [string]$SignedFrom)
     if ($DryRun) { Say "would check the signature of $Ref"; return $true }
     if ($env:AUTOSOUND_SKIP_TAG_VERIFY -eq "1") {
         Warn "the signature of $Ref is NOT checked: AUTOSOUND_SKIP_TAG_VERIFY=1 is set (a developer's switch)"
@@ -851,10 +854,19 @@ function Test-TagSignature {
     }
     $ver = ($Ref -replace '^beta-', '') -replace '-rc.*$', ''
     if ($ver -notmatch '^v\d+\.\d+\.\d+$') { Say "$Ref is not a release tag -- no signature to check"; return $true }
-    if ([version]($ver -replace '^v', '') -lt [version]($SkillSignedFrom -replace '^v', '')) {
-        Say "$Ref predates signed tags (they start at $SkillSignedFrom) -- installed without a signature check"
+    if ([version]($ver -replace '^v', '') -lt [version]($SignedFrom -replace '^v', '')) {
+        Say "$Ref predates signed tags (they start at $SignedFrom) -- installed without a signature check"
         return $true
     }
+    return $false
+}
+
+# Is $Ref, fetched into $Dir, a signed release (skill #99)? $true -- or it is settled by its name, above; $false --
+# nothing may be installed from it. $SignedFrom and $Whose are the method's unless given: the app's own tags pass
+# $TccSignedFrom and "TCC" (skill #101). The mirror of verify_tag in install.sh.
+function Test-TagSignature {
+    param([string]$Dir, [string]$Ref, [string]$SignedFrom = $SkillSignedFrom, [string]$Whose = "the skill")
+    if (Test-SettledByName $Ref $SignedFrom) { return $true }
     $signers = [System.IO.Path]::GetTempFileName()
     [System.IO.File]::WriteAllText($signers, "$SkillSigningPrincipal namespaces=`"git`" $SkillSigningKey`n")
     # Under "Continue" (the script's own setting), not "SilentlyContinue": Windows PowerShell 5.1 drops a native
@@ -867,14 +879,60 @@ function Test-TagSignature {
     $ErrorActionPreference = $prev
     Remove-Item $signers -Force -ErrorAction SilentlyContinue
     $said = ($out | ForEach-Object { "$_" }) -join "`n"
-    if ($rc -eq 0 -and $said -match 'Good') { Say "OK   $Ref is signed by the skill's author"; return $true }
+    if ($rc -eq 0 -and $said -match 'Good') { Say "OK   $Ref is signed by $Whose's author"; return $true }
+    # A git that cannot check is not a bad signature -- see install.sh. Case-sensitive, as install.sh's `case` is.
+    if ($said -cmatch 'gpg\.format|unknown option|-Y|cannot run ssh-keygen|cannot spawn ssh-keygen') {
+        Warn "the signature of $Ref could not be checked here -- it is not installed:"
+        $out | Select-Object -Last 2 | ForEach-Object { Write-Host "      $_" }
+        Warn "this git ($(& git --version 2>$null)) may be too old to check one: 2.34 or newer is needed"
+        return $false
+    }
     Warn "the signature of $Ref does not check out -- it is not installed:"
     $out | Select-Object -Last 2 | ForEach-Object { Write-Host "      $_" }
-    if ($said -match 'gpg\.format|unknown option|-Y') {
-        Warn "this git ($(& git --version 2>$null)) may be too old to check one: 2.34 or newer is needed"
-    }
-    Warn "a release of this skill is signed by its author; this one is not, or not by that key."
+    Warn "a release of $Whose is signed by its author; this one is not, or not by that key."
     return $false
+}
+
+# The app's tag is checked like the method's before uv installs it (skill #101) -- the mirror of check_tcc_tag in
+# install.sh and of TCC's own updater: the one tag is fetched into a temporary BARE repository and verified there.
+# $true -- install it, and $script:TccSha is the commit the verified tag names ("" when nothing was verified); $false
+# -- it is not installed. Under $Scratch, not %TEMP%: see the note beside $Scratch.
+$script:TccSha = ""
+function Test-TccTag {
+    param([string]$Ref)
+    $script:TccSha = ""
+    if (Test-SettledByName $Ref $TccSignedFrom) { return $true }
+    $repo = Join-Path $Scratch ("tcc-tag-" + [guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Force -Path $repo | Out-Null
+    # Under "Continue", as in Test-TagSignature: git says every reason on stderr.
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    $global:LASTEXITCODE = 0
+    $said = @(& git init --quiet --bare $repo 2>&1)
+    if ($LASTEXITCODE -eq 0) {
+        $said = @(& git -C $repo fetch --quiet --no-tags --depth 1 $TccRepo "+refs/tags/${Ref}:refs/tags/${Ref}" 2>&1)
+    }
+    $rc = $LASTEXITCODE
+    $ErrorActionPreference = $prev
+    if ($rc -ne 0) {
+        Warn "could not fetch $Ref to check its signature -- it is not installed:"
+        $said | Select-Object -Last 2 | ForEach-Object { Write-Host "      $_" }
+        Remove-Item $repo -Recurse -Force -ErrorAction SilentlyContinue
+        return $false
+    }
+    $verified = Test-TagSignature $repo $Ref $TccSignedFrom "TCC"
+    if ($verified) { $script:TccSha = "$(& git -C $repo rev-parse --verify --quiet "refs/tags/${Ref}^{commit}" 2>$null)".Trim() }
+    Remove-Item $repo -Recurse -Force -ErrorAction SilentlyContinue
+    if (-not $verified) { return $false }
+    # Fail closed, as TCC does: a verified tag whose commit git cannot name is not installed unpinned.
+    if (-not $script:TccSha) { Warn "git names no commit for $Ref, verified a moment ago -- it is not installed"; return $false }
+    return $true
+}
+# Does $Ref still name $Sha? TCC's "moved" check, right before uv -- see tcc_tag_still_at in install.sh.
+function Test-TccTagStillAt {
+    param([string]$Ref, [string]$Sha)
+    $peeled = @(& git ls-remote $TccRepo "refs/tags/${Ref}^{}" 2>$null)
+    $now = if ($peeled.Count -gt 0) { ("$($peeled[0])" -split "\s+")[0] } else { "" }
+    return ($now -eq $Sha)
 }
 
 # The installed clone has changes somebody made by hand (skill #91; the Windows VM, 2026-09-27). Kept as a patch by
@@ -1160,6 +1218,8 @@ if ($WantEngine -eq "0") {
 
 # -- the desktop app ---------------------------------------------------------------------------
 $TccExe = $null
+# Why the app's tag was not installed, when it was not (skill #101); said in its block, in the checks, and last.
+$TccRefused = ""
 if ($Mode -eq "tcc") {
     Step "Autosound TCC -- the desktop app"
     if (-not $Uv) {
@@ -1199,22 +1259,31 @@ if ($Mode -eq "tcc") {
         if ($TccRef) {
             $TccSpec = "autosound-tcc[gui,claude] @ git+$TccRepo@$TccRef"
             Say "version $TccRef$tccHow"
+            # Its signature, before uv sees it (skill #101). A tag that does not check out is not installed, and the
+            # method's install goes on without it.
+            if (-not (Test-TccTag $TccRef)) { $TccRefused = "$TccRef could not be shown to be a signed release of TCC" }
         } else {
             # No network, no git, or no tags yet. The default branch still installs, and saying so
             # is better than stopping over a version number.
             $TccSpec = "autosound-tcc[gui,claude] @ git+$TccRepo"
-            Warn "could not read the app's releases -- installing from the default branch instead"
+            Warn "could not read the app's releases -- installing from the default branch instead, which has no signature to check"
+        }
+        if (-not $TccRefused -and $script:TccSha -and -not (Test-TccTagStillAt $TccRef $script:TccSha)) {
+            $TccRefused = "$TccRef changed after its signature was checked, or the server did not answer"
         }
         # skill #62: a launcher uv did not put there (TCC's own updater did) makes `uv tool install --upgrade` refuse
         # ("Executable already exists"), and on the Windows VM that refusal left the old app unable to start. So uv
         # is asked first: a tool it lists is upgraded, a launcher it does not own is replaced, and said. A running app
         # never gets this far (above).
         $tccForce = @()
-        if ($HaveTcc -and -not ((& $Uv tool list 2>$null | Out-String) -match '(?m)^autosound-tcc ')) {
+        if (-not $TccRefused -and $HaveTcc -and -not ((& $Uv tool list 2>$null | Out-String) -match '(?m)^autosound-tcc ')) {
             $tccForce = @("--force")
             Say "the app's launcher here was not put there by uv (TCC's own updater did) -- replacing it"
         }
-        if (Run { & $Uv tool install --quiet --python 3.12 --upgrade @tccForce $TccSpec } "uv tool install autosound-tcc[gui,claude]") {
+        if ($TccRefused) {
+            Warn "the app is not installed: $TccRefused."
+            Warn "The method is installed and works without it; the end of this run says so again."
+        } elseif (Run { & $Uv tool install --quiet --python 3.12 --upgrade @tccForce $TccSpec } "uv tool install autosound-tcc[gui,claude]") {
             Sync-ProcessPath
             # The windowed launcher when the package has one (no console window behind the app),
             # the console one otherwise.
@@ -1451,7 +1520,11 @@ if ($Channel -eq "beta" -and -not $DryRun) {
     }
 }
 if ($Mode -eq "tcc" -and -not $DryRun) {
-    if ($TccExe -and (Test-Path $DesktopLnk)) { Say "OK   Autosound TCC -- on your Desktop and in the Start Menu" }
+    if ($TccRefused) {
+        $kept = if ($HaveTcc) { " -- the one already here is left as it was" } else { "" }
+        Warn "Autosound TCC was not installed: $TccRefused$kept"; $ok = $false
+    }
+    elseif ($TccExe -and (Test-Path $DesktopLnk)) { Say "OK   Autosound TCC -- on your Desktop and in the Start Menu" }
     elseif ($TccExe) { Say "OK   Autosound TCC -- the command:  autosound-tcc" }
     elseif ($HaveTcc) { Warn "Autosound TCC was here before and was not upgraded this time (above) -- it is left as it was"; $ok = $false }
     else { Warn "Autosound TCC is not installed"; $ok = $false }
@@ -1652,6 +1725,11 @@ Say "the tuning method   $SkillRepoUrl"
 Say "the desktop app     $TccRepo"
 Say "something wrong, or an idea -- open an issue in whichever of the two it belongs to."
 Write-Host ""
+# The method's refusal stops the run; the app's does not (skill #101), so the reason is the last thing on screen.
+if ($TccRefused) {
+    Warn "the app was not installed: $TccRefused -- the app's block above says why."
+    Warn "The method is installed and works without it."
+}
 # The normal end. Run as a file the process ending closes a -Log transcript; run as the one-liner
 # the session goes on, so the transcript is stopped here rather than left recording it.
 if ($AutosoundTranscriptOn) { try { Stop-Transcript | Out-Null } catch { $null = $_ } }

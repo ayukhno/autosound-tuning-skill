@@ -66,6 +66,9 @@ SKILL_BETA_GLOB="beta-v3.*"
 SKILL_SIGNING_PRINCIPAL="ayukhno"
 SKILL_SIGNING_KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHLm4x1yz9JbFfBlxdQA8vR8yYMupVktswes3CL7QE1y"
 SKILL_SIGNED_FROM="v3.0.64"
+# The app's tags are signed with the same key, from its own first signed tag (TCC's core/signed_tags.py, skill #101),
+# and checked the same way before uv installs one. Same value as install.ps1 (installer-consistency.py compares them).
+TCC_SIGNED_FROM="v0.1.45"
 # Where a local change to the installed clone is kept before the update resets it (skill #91). Same as upkeep.py.
 LOCAL_CHANGES="${HOME}/.claude/skills/autosound-local-changes"
 # The app's supported line. It is `v*` and not `v3.*` because the app versions independently of the
@@ -789,25 +792,34 @@ else
 fi
 
 # ── the tuning method ─────────────────────────────────────────────────────────
-# Is <ref>, fetched into <dir>, a signed release of this skill (skill #99)? 0 = yes -- or it predates signing, or
-# it is a branch named with --skill-ref, or AUTOSOUND_SKIP_TAG_VERIFY=1 -- each said on a line. 1 = it is not,
-# and nothing may be installed from it.
-verify_tag() {  # verify_tag <dir> <ref>
-  _vt_dir="$1"; _vt_ref="$2"
-  if [ "$DRY_RUN" = 1 ]; then say "  would check the signature of $_vt_ref"; return 0; fi
+# What can be said of <ref> by its name alone, each said on a line (skill #99, #101). 0 = settled, nothing to check:
+# a dry run, AUTOSOUND_SKIP_TAG_VERIFY=1, a branch named with --skill-ref or --tcc-ref, a tag before <first signed
+# tag>. 1 = its signature has to be checked. TCC's `_verdict_by_name`: the app's tag is fetched only when it must be.
+settled_by_name() {  # settled_by_name <ref> <first signed tag>
+  _sn_ref="$1"; _sn_from="$2"
+  if [ "$DRY_RUN" = 1 ]; then say "  would check the signature of $_sn_ref"; return 0; fi
   if [ "${AUTOSOUND_SKIP_TAG_VERIFY:-}" = 1 ]; then
-    warn "the signature of $_vt_ref is NOT checked: AUTOSOUND_SKIP_TAG_VERIFY=1 is set (a developer's switch)"
+    warn "the signature of $_sn_ref is NOT checked: AUTOSOUND_SKIP_TAG_VERIFY=1 is set (a developer's switch)"
     return 0
   fi
-  _vt_ver="${_vt_ref#beta-}"; _vt_ver="${_vt_ver%%-rc*}"
-  case "$_vt_ver" in
+  _sn_ver="${_sn_ref#beta-}"; _sn_ver="${_sn_ver%%-rc*}"
+  case "$_sn_ver" in
     v[0-9]*.[0-9]*.[0-9]*) ;;
-    *) say "  $_vt_ref is not a release tag -- no signature to check"; return 0 ;;
+    *) say "  $_sn_ref is not a release tag -- no signature to check"; return 0 ;;
   esac
-  if [ "$(printf '%s\n%s\n' "$SKILL_SIGNED_FROM" "$_vt_ver" | sort -V | head -1)" != "$SKILL_SIGNED_FROM" ]; then
-    say "  $_vt_ref predates signed tags (they start at $SKILL_SIGNED_FROM) -- installed without a signature check"
+  if [ "$(printf '%s\n%s\n' "$_sn_from" "$_sn_ver" | sort -V | head -1)" != "$_sn_from" ]; then
+    say "  $_sn_ref predates signed tags (they start at $_sn_from) -- installed without a signature check"
     return 0
   fi
+  return 1
+}
+
+# Is <ref>, fetched into <dir>, a signed release (skill #99)? 0 = yes -- or it is settled by its name, above. 1 = it
+# is not, and nothing may be installed from it. <first signed tag> and <whose> are the method's unless given: the
+# app's own tags pass TCC_SIGNED_FROM and "TCC" (skill #101).
+verify_tag() {  # verify_tag <dir> <ref> [<first signed tag> <whose>]
+  _vt_dir="$1"; _vt_ref="$2"; _vt_from="${3:-$SKILL_SIGNED_FROM}"; _vt_whose="${4:-the skill}"
+  settled_by_name "$_vt_ref" "$_vt_from" && return 0
   _vt_signers="$(mktemp)"
   printf '%s namespaces="git" %s\n' "$SKILL_SIGNING_PRINCIPAL" "$SKILL_SIGNING_KEY" > "$_vt_signers"
   _vt_rc=0
@@ -815,15 +827,20 @@ verify_tag() {  # verify_tag <dir> <ref>
                 verify-tag "$_vt_ref" 2>&1)" || _vt_rc=$?
   rm -f "$_vt_signers"
   case "$_vt_rc:$_vt_said" in
-    0:*Good*) say "  ✓ $_vt_ref is signed by the skill's author"; return 0 ;;
+    0:*Good*) say "  ✓ $_vt_ref is signed by $_vt_whose's author"; return 0 ;;
+  esac
+  # A git that cannot check is not a bad signature (TCC's `_CANNOT_CHECK`): before 2.34 git does not know
+  # gpg.format=ssh, an old ssh-keygen has no -Y, and with no ssh-keygen git cannot run one. Refused all the same.
+  case "$_vt_said" in
+    *gpg.format*|*"unknown option"*|*"-Y"*|*"cannot run ssh-keygen"*|*"cannot spawn ssh-keygen"*)
+      warn "the signature of $_vt_ref could not be checked here -- it is not installed:"
+      printf '%s\n' "$_vt_said" | tail -2 | sed 's/^/      /' >&2
+      warn "this git ($(git --version 2>/dev/null)) may be too old to check one: 2.34 or newer is needed"
+      return 1 ;;
   esac
   warn "the signature of $_vt_ref does not check out -- it is not installed:"
   printf '%s\n' "$_vt_said" | tail -2 | sed 's/^/      /' >&2
-  case "$_vt_said" in
-    *gpg.format*|*"unknown option"*|*"-Y"*)
-      warn "this git ($(git --version 2>/dev/null)) may be too old to check one: 2.34 or newer is needed" ;;
-  esac
-  warn "a release of this skill is signed by its author; this one is not, or not by that key."
+  warn "a release of $_vt_whose is signed by its author; this one is not, or not by that key."
   return 1
 }
 
@@ -1093,8 +1110,41 @@ else
 fi
 
 # ── the desktop app ───────────────────────────────────────────────────────────
+# The app's tag is checked like the method's before uv installs it (skill #101, hub #224 TCC-038): uv checks no
+# signature. The mirror of TCC's own updater (core/updates.py `check_tcc_tag`): there is no clone of TCC on disk, so
+# the one tag is fetched into a temporary BARE repository and verified there. 0 = install it, and TCC_SHA is the
+# commit the verified tag names -- "" when nothing was verified (settled by its name); 1 = it is not installed.
+check_tcc_tag() {  # check_tcc_tag <ref>
+  _ct_ref="$1"; TCC_SHA=""
+  settled_by_name "$_ct_ref" "$TCC_SIGNED_FROM" && return 0
+  _ct_git="$(mktemp -d)"
+  _ct_rc=0
+  _ct_said="$(git init --quiet --bare "$_ct_git" 2>&1 &&
+              git -C "$_ct_git" fetch --quiet --no-tags --depth 1 "$TCC_REPO" "+refs/tags/$_ct_ref:refs/tags/$_ct_ref" 2>&1)" \
+    || _ct_rc=$?
+  if [ "$_ct_rc" != 0 ]; then
+    warn "could not fetch $_ct_ref to check its signature -- it is not installed:"
+    printf '%s\n' "$_ct_said" | tail -2 | sed 's/^/      /' >&2
+    rm -rf "$_ct_git"; return 1
+  fi
+  if ! verify_tag "$_ct_git" "$_ct_ref" "$TCC_SIGNED_FROM" "TCC"; then rm -rf "$_ct_git"; return 1; fi
+  TCC_SHA="$(git -C "$_ct_git" rev-parse --verify --quiet "refs/tags/$_ct_ref^{commit}" 2>/dev/null)" || TCC_SHA=""
+  rm -rf "$_ct_git"
+  # Fail closed, as TCC does: a verified tag whose commit git cannot name is not installed unpinned.
+  [ -n "$TCC_SHA" ] || { warn "git names no commit for $_ct_ref, verified a moment ago -- it is not installed"; return 1; }
+}
+# Does <ref> still name <sha>? TCC's "moved" check (core/updates.py `tcc_install_script`), right before uv: uv asks
+# for the tag by NAME -- the name is what TCC reads back as its version -- so the name must still peel to the commit
+# that was verified. A tag moved since, a lightweight one put in its place (no ^{} line) or no answer: no.
+tcc_tag_still_at() {  # tcc_tag_still_at <ref> <sha>
+  [ "$(git ls-remote "$TCC_REPO" "refs/tags/$1^{}" 2>/dev/null | cut -f1)" = "$2" ]
+}
+
 TCC_BIN=""
 UV=""
+# Why the app's tag was not installed, when it was not (skill #101); said in its block, in the checks, and last.
+TCC_REFUSED=""
+TCC_SHA=""
 if [ "$MODE" = "tcc" ]; then
   step "Autosound TCC — the desktop app"
   UV="$(find_bin uv || true)"
@@ -1143,22 +1193,32 @@ if [ "$MODE" = "tcc" ]; then
   if [ -n "$TCC_REF" ]; then
     TCC_SPEC="autosound-tcc[gui,claude] @ git+${TCC_REPO}@${TCC_REF}"
     say "  version $TCC_REF$TCC_REF_HOW"
+    # Its signature, before uv sees it (skill #101). A tag that does not check out is not installed, and the
+    # method's install goes on without it.
+    check_tcc_tag "$TCC_REF" || TCC_REFUSED="$TCC_REF could not be shown to be a signed release of TCC"
   else
     # No network, or a repository with no tags yet. The default branch is still an install that
     # works, and saying so is better than stopping over a version number.
     TCC_SPEC="autosound-tcc[gui,claude] @ git+${TCC_REPO}"
-    warn "could not read the app's releases -- installing from the default branch instead"
+    warn "could not read the app's releases -- installing from the default branch instead, which has no signature to check"
+  fi
+  if [ -z "$TCC_REFUSED" ] && [ -n "$TCC_SHA" ] && ! tcc_tag_still_at "$TCC_REF" "$TCC_SHA"; then
+    TCC_REFUSED="$TCC_REF changed after its signature was checked, or the server did not answer"
   fi
   # skill #62: a launcher uv did not put there (TCC's own updater did) makes `uv tool install --upgrade` refuse
   # ("Executable already exists"), and on the Windows VM the refusal left the old app unable to start. So the
   # upgrade asks uv first: a tool it lists is upgraded, and a launcher it does not own is replaced, and said.
   TCC_FORCE=""
-  if { [ -n "$(find_bin autosound-tcc 2>/dev/null || true)" ] || [ -e "${UV_TOOL_BIN_DIR:-$LOCAL_BIN}/autosound-tcc" ]; } \
+  if [ -z "$TCC_REFUSED" ] \
+     && { [ -n "$(find_bin autosound-tcc 2>/dev/null || true)" ] || [ -e "${UV_TOOL_BIN_DIR:-$LOCAL_BIN}/autosound-tcc" ]; } \
      && ! "$UV" tool list 2>/dev/null | grep -q '^autosound-tcc '; then
     TCC_FORCE="--force"
     say "  the app's launcher here was not put there by uv (TCC's own updater did) — replacing it"
   fi
-  if run "$UV" tool install --quiet --python 3.12 --upgrade $TCC_FORCE "$TCC_SPEC"; then
+  if [ -n "$TCC_REFUSED" ]; then
+    warn "the app is not installed: $TCC_REFUSED."
+    warn "The method is installed and works without it; the end of this run says so again."
+  elif run "$UV" tool install --quiet --python 3.12 --upgrade $TCC_FORCE "$TCC_SPEC"; then
     # Where uv actually put it, which is not always `~/.local/bin`.
     TCC_BIN="$(command -v autosound-tcc 2>/dev/null || true)"
     [ -z "$TCC_BIN" ] && [ -x "${UV_TOOL_BIN_DIR:-$LOCAL_BIN}/autosound-tcc" ] \
@@ -1384,7 +1444,12 @@ if [ "$CHANNEL" = "beta" ] && [ "$DRY_RUN" = 0 ]; then
   fi
 fi
 if [ "$MODE" = "tcc" ] && [ "$DRY_RUN" = 0 ]; then
-  if on_mac && [ -d "$APP" ]; then
+  if [ -n "$TCC_REFUSED" ]; then
+    # Before the ✓ lines: an app from an earlier run would read as this run's.
+    _kept=""; { [ -d "$APP" ] || find_bin autosound-tcc >/dev/null; } && _kept=" -- the one already here is left as it was"
+    warn "Autosound TCC was not installed: $TCC_REFUSED$_kept"
+    ok=0
+  elif on_mac && [ -d "$APP" ]; then
     _where="in ~/Applications"; [ -L "$DESKTOP_LINK" ] && _where="$_where, and on your Desktop"
     say "  ✓ Autosound TCC — \"Autosound TCC.app\" $_where"
   elif [ -n "$TCC_BIN" ] || find_bin autosound-tcc >/dev/null; then
@@ -1629,3 +1694,9 @@ say "  the tuning method   $SKILL_REPO_URL"
 say "  the desktop app     $TCC_REPO"
 say "  something wrong, or an idea — open an issue in whichever of the two it belongs to."
 say ""
+# The method's refusal stops the run; the app's does not (skill #101), so the reason is the last thing on screen
+# rather than left in a block that has scrolled away.
+if [ -n "$TCC_REFUSED" ]; then
+  warn "the app was not installed: $TCC_REFUSED -- the app's block above says why."
+  warn "The method is installed and works without it."
+fi

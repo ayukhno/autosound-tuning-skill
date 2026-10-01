@@ -165,17 +165,27 @@ def channel_order_problems(sh):
 UPKEEP = ROOT / "skills" / "autosound-tuning" / "scripts" / "upkeep.py"
 
 
-def signing_problems(sh):
-    """Run install.sh's own `verify_tag` against tags made here (skill #99); [] when it answers each right.
+#: The functions of install.sh's signature check, cut out and run together: the method's tag and the app's (#99, #101).
+SIGNING_FUNCTIONS = ("settled_by_name", "verify_tag", "check_tcc_tag", "tcc_tag_still_at")
 
-    A temp repo gets a signed tag, a tag signed by another key, an unsigned one and one older than signing; the
-    function is cut out of the installer and run with THIS test's key in the constants it reads. Made in a
-    subprocess, not by a session's `git tag`, which the channel guard refuses.
+
+def signing_problems(sh):
+    """Run install.sh's own signature check against tags made here (skill #99, #101); [] when it answers each right.
+
+    A temp repo gets a signed tag, a tag signed by another key, an unsigned one and one older than signing, for the
+    method's line and for the app's; the functions are cut out of the installer and run with THIS test's key in the
+    constants they read. The app's tags go through `check_tcc_tag` whole, with the temp repo standing in for
+    TCC_REPO: the fetch into a bare repo, the check, the commit it hands on, and the "moved" check before uv. Made in
+    a subprocess, not by a session's `git tag`, which the channel guard refuses.
     """
     import tempfile
-    m = re.search(r"^verify_tag\(\) \{  # verify_tag <dir> <ref>\n.*?^\}\n", sh, re.M | re.S)
-    if not m:
-        return ["install.sh: no `verify_tag() { ... }` -- the signature check cannot be run"]
+    cut = []
+    for name in SIGNING_FUNCTIONS:
+        m = re.search(rf"^{name}\(\) \{{[^\n]*\n.*?^\}}\n", sh, re.M | re.S)
+        if not m:
+            return [f"install.sh: no `{name}() {{ ... }}` -- the signature check cannot be run"]
+        cut.append(m.group(0))
+    functions = "".join(cut)
     bash, why = find_bash()
     if not bash:
         return [f"{why} -- install.sh's signature check cannot be run, and unrun is not agreed"]
@@ -204,22 +214,53 @@ def signing_problems(sh):
         sh_run(*signed, "-c", f"user.signingkey={os.path.join(tmp, 'author')}.pub", "tag", "-s", "v3.0.64", "-m", "s")
         sh_run(*signed, "-c", f"user.signingkey={os.path.join(tmp, 'stranger')}.pub", "tag", "-s", "v3.0.65", "-m", "f")
         sh_run("git", "-C", repo, "tag", "-a", "v3.0.66", "-m", "unsigned")
+        # The app's line (#101): v0.1.45 is TCC's first signed tag; v0.1.48 is lightweight -- no ^{} line to peel.
+        sh_run("git", "-C", repo, "tag", "-a", "v0.1.44", "-m", "before signing")
+        sh_run(*signed, "-c", f"user.signingkey={os.path.join(tmp, 'author')}.pub", "tag", "-s", "v0.1.45", "-m", "s")
+        sh_run(*signed, "-c", f"user.signingkey={os.path.join(tmp, 'stranger')}.pub", "tag", "-s", "v0.1.46", "-m", "f")
+        sh_run("git", "-C", repo, "tag", "-a", "v0.1.47", "-m", "unsigned")
+        sh_run("git", "-C", repo, "tag", "v0.1.48")
+        commit = sh_run("git", "-C", repo, "rev-parse", "HEAD").strip()
     except (OSError, RuntimeError) as exc:
         return [f"the signature check's fixtures could not be made ({exc}) -- unrun is not agreed"]
+    repo_posix = Path(repo).as_posix()
+
+    def run(call, skip="", dry="0"):
+        script = (f'export PATH="/usr/bin:$PATH"\nsay() {{ printf "%s\\n" "$*"; }}\nwarn() {{ printf "! %s\\n" "$*"; }}\n'
+                  f'DRY_RUN={dry}\nAUTOSOUND_SKIP_TAG_VERIFY="{skip}"\nSKILL_SIGNING_PRINCIPAL=author\n'
+                  f'SKILL_SIGNING_KEY="{keys["author"]}"\nSKILL_SIGNED_FROM=v3.0.64\nTCC_SIGNED_FROM=v0.1.45\n'
+                  f'TCC_REPO="{repo_posix}"\n' + functions + call)
+        r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True, env=env)
+        return r.returncode, r.stdout.decode("utf-8", "replace") + r.stderr.decode("utf-8", "replace")
+
+    out = []
     cases = (("v3.0.64", "", 0, "signed by the skill's author"), ("v3.0.65", "", 1, "does not check out"),
              ("v3.0.66", "", 1, "does not check out"), ("v3.0.10", "", 0, "predates signed tags"),
              ("main", "", 0, "not a release tag"), ("v3.0.66", "1", 0, "NOT checked"))
-    out = []
     for ref, skip, want_rc, want_text in cases:
-        script = (f'export PATH="/usr/bin:$PATH"\nsay() {{ printf "%s\\n" "$*"; }}\nwarn() {{ printf "! %s\\n" "$*"; }}\n'
-                  f'DRY_RUN=0\nAUTOSOUND_SKIP_TAG_VERIFY="{skip}"\nSKILL_SIGNING_PRINCIPAL=author\n'
-                  f'SKILL_SIGNING_KEY="{keys["author"]}"\nSKILL_SIGNED_FROM=v3.0.64\n' + m.group(0)
-                  + f'verify_tag "{Path(repo).as_posix()}" "{ref}" 2>&1\n')
-        r = subprocess.run([bash, "-s"], input=script.encode("utf-8"), capture_output=True, env=env)
-        said = r.stdout.decode("utf-8", "replace") + r.stderr.decode("utf-8", "replace")
-        if r.returncode != want_rc or want_text not in said:
-            out.append(f"install.sh verify_tag {ref}{' (skip)' if skip else ''}: exit {r.returncode}, want {want_rc} "
+        rc, said = run(f'verify_tag "{repo_posix}" "{ref}" 2>&1\n', skip)
+        if rc != want_rc or want_text not in said:
+            out.append(f"install.sh verify_tag {ref}{' (skip)' if skip else ''}: exit {rc}, want {want_rc} "
                        f"and {want_text!r} -- said {said.strip()[-160:]!r}")
+    # The app's tags, through check_tcc_tag: (ref, the switch, a dry run, exit, words, the commit it hands on).
+    tcc_cases = (("v0.1.45", "", "0", 0, "v0.1.45 is signed by TCC's author", commit),
+                 ("v0.1.46", "", "0", 1, "does not check out", ""),
+                 ("v0.1.47", "", "0", 1, "a release of TCC is signed by its author", ""),
+                 ("v0.1.44", "", "0", 0, "predates signed tags (they start at v0.1.45)", ""),
+                 ("v0.1.47", "1", "0", 0, "NOT checked", ""),
+                 ("v0.1.99", "", "0", 1, "could not fetch v0.1.99", ""),
+                 ("v0.1.45", "", "1", 0, "would check the signature of v0.1.45", ""))
+    for ref, skip, dry, want_rc, want_text, want_sha in tcc_cases:
+        rc, said = run(f'check_tcc_tag "{ref}" 2>&1; rc=$?; printf "TCC_SHA=%s\\n" "$TCC_SHA"; exit $rc\n', skip, dry)
+        if rc != want_rc or want_text not in said or f"TCC_SHA={want_sha}\n" not in said:
+            out.append(f"install.sh check_tcc_tag {ref}{' (skip)' if skip else ''}{' (dry run)' if dry == '1' else ''}: "
+                       f"exit {rc}, want {want_rc}, {want_text!r} and TCC_SHA={want_sha[:12]!r} -- said "
+                       f"{said.strip()[-160:]!r}")
+    # ...and the "moved" check before uv: the verified commit passes; another commit, or a tag with no ^{} line, not.
+    for ref, sha, want_rc in (("v0.1.45", commit, 0), ("v0.1.45", "0" * 40, 1), ("v0.1.48", commit, 1)):
+        rc, said = run(f'tcc_tag_still_at "{ref}" "{sha}"\n')
+        if rc != want_rc:
+            out.append(f"install.sh tcc_tag_still_at {ref} {sha[:12]}: exit {rc}, want {want_rc} -- said {said.strip()[-120:]!r}")
     shutil.rmtree(tmp, ignore_errors=True)
     return out
 
@@ -467,6 +508,16 @@ def main():
                 problems.append(f"the {what} differs -- install.sh {v_sh!r}, install.ps1 {v_ps!r}, upkeep.py {v_py!r}")
             else:
                 checked.append(f"the {what} agrees in both installers and upkeep.py ({v_sh[:24]}…)")
+    # The app's first signed tag (#101): the two installers only -- TCC's own copy is in its repository
+    # (core/signed_tags.py TCC_SIGNED_FROM), out of reach of a check that runs offline in this one.
+    t_sh, e1 = one(r'^TCC_SIGNED_FROM="([^"]+)"', sh, "TCC_SIGNED_FROM", "install.sh")
+    t_ps, e2 = one(r'^\$TccSignedFrom\s*=\s*"([^"]+)"', ps1, "$TccSignedFrom", "install.ps1")
+    problems.extend(e for e in (e1, e2) if e)
+    if t_sh and t_ps:
+        if t_sh != t_ps:
+            problems.append(f"the app's first signed tag differs -- install.sh {t_sh!r}, install.ps1 {t_ps!r}")
+        else:
+            checked.append(f"the app's first signed tag agrees in both installers ({t_sh})")
     signers = ROOT / "allowed_signers"
     listed = [ln.split() for ln in (signers.read_text(encoding="utf-8").splitlines() if signers.exists() else [])
               if ln.strip() and not ln.startswith("#")]
@@ -488,6 +539,8 @@ def main():
     if not sig:
         checked.append("install.sh's verify_tag passes a signed tag, refuses a foreign-signed and an unsigned one, "
                        "lets an older tag and a branch through, and says when the switch skips it")
+        checked.append("install.sh's check_tcc_tag does the same for the app's tags from a bare fetch, hands on the "
+                       "verified commit, refuses a tag it cannot fetch, and tcc_tag_still_at refuses a moved tag (run)")
     if "Test-TagSignature" not in ps1 or "gpg.ssh.allowedSignersFile" not in ps1:
         problems.append("install.ps1: no Test-TagSignature with gpg.ssh.allowedSignersFile -- the Windows half of #99")
     else:
@@ -500,6 +553,19 @@ def main():
                             "drops stderr there, so a good signature reads as refused")
         else:
             checked.append("install.ps1's Test-TagSignature reads git's stderr (not under SilentlyContinue)")
+    # ...and the app's tag, both installers (#101): checked before uv, held to its commit right before it. install.sh's
+    # functions are RUN above; these are the calls that put them in the app's path, and install.ps1's half, READ.
+    tcc_calls = (("install.sh", sh, ('check_tcc_tag "$TCC_REF"', 'tcc_tag_still_at "$TCC_REF" "$TCC_SHA"')),
+                 ("install.ps1", ps1, ("Test-TccTag $TccRef", "Test-TccTagStillAt $TccRef $script:TccSha",
+                                       "Test-TagSignature $repo $Ref $TccSignedFrom", "init --quiet --bare",
+                                       "refs/tags/${Ref}^{}")))
+    tcc_missing = [f"{where}: {needle}" for where, text, needles in tcc_calls for needle in needles
+                   if needle not in text]
+    if tcc_missing:
+        problems.append("the app's tag is not checked the same way before uv -- missing " + "; ".join(tcc_missing))
+    else:
+        checked.append("both installers check the app's tag before uv and hold it to its commit (install.ps1 read, "
+                       "not run)")
 
     # 5c. Phase 1's desk engine (TODO S-020, the user's decision 2026-09-18). Three things have to
     # be the same decision in all three files, or a Mac and a PC do not end up with the same
