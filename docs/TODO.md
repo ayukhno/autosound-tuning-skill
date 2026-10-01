@@ -1627,6 +1627,14 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-090 · `key move-shell`'s Windows half, run on the VM once TCC pins v3.0.65
+
+**Status**: open 2026-10-01 · pool (after the tag) · tcc's caveat when it said the skill can close W-5: the registry path of #110 was read, not run
+
+`key move-shell <provider> [--drop]` on Windows reads and deletes the user environment's value through `winreg`;
+the selftests run the profile-file half. To check on the VM through TCC's key window once TCC pins v3.0.65. A fault
+there ships as v3.0.66; the tag is not held for it (tcc, 2026-10-01).
+
 ## S-089 · The installers print the code the app returned when the shortcuts were not created (hub #229)
 
 **Status**: open 2026-10-01 · **W-5 · v3.0.65**, issue #113, `ok` (the Arbiter relaying TCC's ask) · built on `wave-2026-10-01-b`
