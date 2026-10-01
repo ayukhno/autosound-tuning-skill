@@ -179,7 +179,7 @@ prints the rows that match, best first — read those instead of the whole board
 
 | what you want | what you get | command / call | needs · refuses without | phase | maturity | read |
 |---|---|---|---|---|---|---|
-| is it SAFE to sweep this driver at this level / чи безпечний свіп | a pass or a named refusal (no HPF, too-low corner, hot level) | `gates/presweep_safety.require_safe(...)` | the driver's fragility and its protective filter | 0 | field | `phases/phase_0_baseline.md` |
+| is it SAFE to sweep this driver at this level / чи безпечний свіп | a pass or a named refusal (no HPF, too-low corner, hot level); a carried-in Fs is a warning | `gates/presweep_safety.require_safe(...)` | the driver's fragility and its protective filter | 0 | field | `phases/phase_0_baseline.md` |
 | where does each tool have NO vote / де інструмент мовчить | the abstention table: what governs instead, and the ordering it implies | (doctrine) | — | any | field | `core/estimator-scope.md` |
 
 ## M · Health of the installation

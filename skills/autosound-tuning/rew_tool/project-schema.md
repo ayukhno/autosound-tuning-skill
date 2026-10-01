@@ -355,8 +355,8 @@ Two granularities, deliberately not one:
   `hardware.controls` (the control module's state). The source's knob positions, protective filters and
   machine paths arrive only as `history`. The drivers' Fs travel unless `--no-fs`. `sources` holds one line,
   not the source's own, and an absolute path of the source machine never travels. `contract.py check` lists inherited facts and
-  every source path that no longer exists — reported, never gated — and the pre-sweep gate refuses
-  a fragile driver's Fs passed as an inherited fact. Confirming one is setting it again here:
+  every source path that no longer exists — reported, never gated — and the pre-sweep gate warns about
+  a fragile driver's Fs passed as an inherited fact (the filter is still held to it; hub #225). Confirming one is setting it again here:
   `project.py <dir> set-channel <code> fs_hz=<Hz> --source user` (the Arbiter vouches) or
   `--source measured` after an `(imp)` sweep.
 

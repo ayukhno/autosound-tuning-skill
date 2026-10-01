@@ -12,6 +12,11 @@ high-pass — sees low-frequency energy far below its Fs and can be destroyed. S
 `check_presweep` returns the list of problems (empty = safe); `require_safe` raises `UnsafeToSweep`
 (FAIL LOUD) if any driver is unprotected. This is hardware safety, which is acoustic-domain but HARD
 (no waiver) — a blown tweeter is not recoverable by a logged override.
+
+`presweep_warnings` is the other channel: what the Arbiter should hear before the sweep but which does
+not stop it. Today that is one thing, an Fs carried in from another project (hub #225): the filter
+still has to clear 1.1 × that Fs, so the driver stays protected; only WHERE the number came from is a
+question, and the Arbiter's rule (2026-09-17, given again 2026-10-01) is that it is a warning.
 """
 
 HPF_FS_MARGIN = 1.1          # HPF must sit at least 10% above Fs
@@ -31,24 +36,16 @@ def check_presweep(channel, driver_fs=None, hpf=None, level_db=None,
     driver_fs   : the driver's resonance (Hz), or its `project.json` fact as written (a `fact()`
                   wrapper). If given and `fragile`, HPF protection is required. Omit for a driver
                   that carries no LF risk. Pass the FACT: an Fs carried in from another project
-                  (`origin: inherited`) is refused until the Arbiter confirms it or it is measured
-                  on this build -- the filter would stand on a number nobody here established
-                  (skill #36).
+                  (`origin: inherited`) is checked here like any other and NAMED by
+                  `presweep_warnings` (skill #36, hub #225) -- a warning, not a refusal.
     hpf         : the high-pass ACTIVE during the sweep — None/"OFF", or {f, type, slope}.
     level_db    : the sweep output level (relative). Checked against `safe_level_db`.
     headroom_db : gain/clip headroom before the converter/amp clips. <0 = clipping.
     fragile     : True for tweeters/mids (LF-fragile). A woofer/sub can pass fragile=False.
     """
     problems = []
-    fs_fact = driver_fs if isinstance(driver_fs, dict) else None
-    if fs_fact is not None:
-        driver_fs = fs_fact.get("value")
-        if driver_fs and fragile and fs_fact.get("origin") == "inherited":
-            problems.append(f"{channel}: Fs={driver_fs:g} Hz was carried in from "
-                            f"{fs_fact.get('inherited_from') or 'another project'}, not established on "
-                            "this build — the Arbiter's conscious decision passes it: confirm the value "
-                            "(set it again with --source user), or measure it here (an impedance sweep, "
-                            f"`{channel} (imp)`)")
+    if isinstance(driver_fs, dict):
+        driver_fs = driver_fs.get("value")
     if driver_fs and fragile:
         need = HPF_FS_MARGIN * driver_fs
         if hpf is None or hpf == "OFF":
@@ -70,19 +67,42 @@ def check_presweep(channel, driver_fs=None, hpf=None, level_db=None,
     return problems
 
 
+def presweep_warnings(channel, driver_fs=None, fragile=True, **_):
+    """What to tell the Arbiter before this channel's sweep without stopping it ([] = nothing).
+
+    Takes the same kwargs as `check_presweep`, so one spec feeds both. An Fs carried in from another
+    project (`origin: inherited`) on a fragile driver: the sweep goes past it -- `check_presweep`
+    still holds the filter to 1.1 × that Fs -- and the sentence says where the number came from
+    and how to make it this build's own (hub #225).
+    """
+    if not (isinstance(driver_fs, dict) and fragile and driver_fs.get("value")
+            and driver_fs.get("origin") == "inherited"):
+        return []
+    return [f"{channel}: Fs={driver_fs['value']:g} Hz was carried in from "
+            f"{driver_fs.get('inherited_from') or 'another project'}, not established on this build — "
+            "confirm the value (set it again with --source user), or measure it here (an impedance "
+            f"sweep, `{channel} (imp)`)"]
+
+
 def require_safe(channels):
     """Gate over many channels. `channels` = list of dicts of check_presweep kwargs (with 'channel').
 
-    Returns None when all clear; raises UnsafeToSweep listing every problem otherwise. FAIL LOUD —
-    hardware safety has no waiver (a blown tweeter isn't recoverable).
+    Raises UnsafeToSweep listing every problem when any driver is unprotected. FAIL LOUD —
+    hardware safety has no waiver (a blown tweeter isn't recoverable). Otherwise prints the
+    warnings, if any, to stderr and returns them (a list; [] when there is nothing to say).
     """
-    all_problems = []
+    all_problems, all_warnings = [], []
     for spec in channels:
         all_problems += check_presweep(**spec)
+        all_warnings += presweep_warnings(**spec)
     if all_problems:
         raise UnsafeToSweep("⛔ UNSAFE TO SWEEP — fix before measuring:\n  - " +
-                            "\n  - ".join(all_problems))
-    return None
+                            "\n  - ".join(all_problems + all_warnings))
+    if all_warnings:
+        import sys
+        print("⚠️ before the sweep — the sweep goes on:\n  - " + "\n  - ".join(all_warnings),
+              file=sys.stderr)
+    return all_warnings
 
 
 # ── self-test ─────────────────────────────────────────────────────────────────
@@ -108,10 +128,10 @@ def _selftest():
     assert check_presweep("w-L", driver_fs=45, hpf="OFF", level_db=-12, fragile=False) == []
 
     # require_safe: all-clear passes; any unsafe FAILS LOUD listing every problem.
-    require_safe([
+    assert require_safe([
         {"channel": "tw-R", "driver_fs": 1400, "hpf": {"f": 5000, "slope": 24}, "level_db": -12},
         {"channel": "w-L", "driver_fs": 45, "hpf": "OFF", "level_db": -12, "fragile": False},
-    ])
+    ]) == []
     try:
         require_safe([
             {"channel": "tw-L", "driver_fs": 1400, "hpf": "OFF"},
@@ -121,20 +141,26 @@ def _selftest():
     except UnsafeToSweep as e:
         assert "tw-L" in str(e) and "m-R" in str(e), str(e)
 
-    # skill #36: the Fs as project.json holds it. Established here -- the same verdict as the bare
-    # number; carried in from another build -- refused, however well the filter sits on it.
+    # skill #36, hub #225: the Fs as project.json holds it. Established here -- the same verdict as
+    # the bare number; carried in from another build -- a warning, and the sweep goes on; the
+    # filter is still held to 1.1 × the carried Fs.
     here = {"value": 1400, "source": "measured", "at": "2026-09-16"}
     carried = dict(here, origin="inherited", inherited_from="/gone/old-car")
     guard = {"f": 5000, "type": "BE", "slope": 24}
     assert check_presweep("tw-R", driver_fs=here, hpf=guard) == []
-    refused = check_presweep("tw-R", driver_fs=carried, hpf=guard)
-    assert len(refused) == 1 and "carried in from /gone/old-car" in refused[0] and "(imp)" in refused[0], refused
-    assert check_presweep("w-L", driver_fs=dict(carried, value=45), hpf="OFF", fragile=False) == [], \
+    assert presweep_warnings("tw-R", driver_fs=here, hpf=guard) == []
+    assert check_presweep("tw-R", driver_fs=carried, hpf=guard) == [], "a carried Fs no longer refuses"
+    warned = presweep_warnings("tw-R", driver_fs=carried, hpf=guard)
+    assert len(warned) == 1 and "carried in from /gone/old-car" in warned[0] and "(imp)" in warned[0], warned
+    assert require_safe([{"channel": "tw-R", "driver_fs": carried, "hpf": guard}]) == warned
+    low = check_presweep("tw-R", driver_fs=carried, hpf={"f": 1200, "slope": 24})
+    assert len(low) == 1 and "too low" in low[0], "the filter is still checked against the carried Fs"
+    assert presweep_warnings("w-L", driver_fs=dict(carried, value=45), hpf="OFF", fragile=False) == [], \
         "a driver with no LF risk is not asked about its Fs"
 
     print("selftest OK — protected tweeter passes; caught NO-HPF, too-low + too-gentle HPF, "
           "hot-level + clipping; woofer fragile=False exempt; require_safe FAILs LOUD listing all; "
-          "an Fs carried in from another build is refused until confirmed or measured (#36).")
+          "an Fs carried in from another build is a warning, the filter still held to it (#36, hub #225).")
     return 0
 
 
