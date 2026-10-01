@@ -249,6 +249,9 @@ and the ledger's channel keys (three edge cases, fixed).
   only; `--drop` removes the export without storing it, refused when the OS keystore does not hold that key. It now
   exits 0 when it moved or removed something, 1 with nothing to do, 3 when something was refused. The Windows half
   (the user environment in the registry) was read, not run.
+- **The feedback form's «Від кого» is optional** (skill #111, hub #228 TCC-042). A tester who leaves no contact could
+  not send at all. `form_answers` leaves an empty sender out; the form route asks for the person's yes and a contact
+  only if they want an answer. The Arbiter made the Google Form's question optional the same day.
 - **`upkeep.py clone` names the tag it moved to** rather than what `git describe` picks: a release lands on its
   candidate's commit, so two tags can name one commit (the full suite once read `v3.0.66` for `v3.0.64`).
 

@@ -1627,6 +1627,13 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-087 · The feedback form's sender becomes optional (hub #228, TCC-042)
+
+**Status**: open 2026-10-01 · **W-5 · v3.0.65**, issue #111, `ok` (the Arbiter: «знахідку 135 бери теж») · built on `wave-2026-10-01-b` (`703eab4`); the Google Form's question made optional by the Arbiter the same day
+
+A tester who leaves no contact could not send through the form at all: TCC's dialog, `gates/side_effect.py`
+`form_answers` and the form's own question all refused an empty «Від кого». TCC's finding 135.
+
 ## S-086 · `key move-shell` moves every export and always stores: TCC's key window needs one key and a drop-only form (hub #230, TCC-043)
 
 **Status**: open 2026-10-01 · **W-5 · v3.0.65**, issue #110, `ok` (the Arbiter: «У W-5, до тега») · built on `wave-2026-10-01-b` (`6d9ac4c`); the Windows half (the registry) read, not run
