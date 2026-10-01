@@ -1627,6 +1627,14 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-088 · The feedback form and its response sheet in English
+
+**Status**: open 2026-10-01 · **W-5 · v3.0.65**, issue #112, `ok` (the Arbiter: «давай переробимо на англійську (всі мови не потрібні)») · the form and the sheet changed the same day; the skill's words on `wave-2026-10-01-b`
+
+The form, its confirmation message, the response sheet's file, tab and columns, and the skill's `FORM_KINDS`,
+`FORM_IMPACTS`, `FORM_LABELS`. A client older than v3.0.65 sends the Ukrainian choices the form no longer lists, and
+its report falls back to the clipboard. TCC follows when it pins v3.0.65 (a ticket to tcc).
+
 ## S-087 · The feedback form's sender becomes optional (hub #228, TCC-042)
 
 **Status**: open 2026-10-01 · **W-5 · v3.0.65**, issue #111, `ok` (the Arbiter: «знахідку 135 бери теж») · built on `wave-2026-10-01-b` (`703eab4`); the Google Form's question made optional by the Arbiter the same day

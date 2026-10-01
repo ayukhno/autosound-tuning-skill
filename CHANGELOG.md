@@ -185,6 +185,11 @@ and the ledger's channel keys (three edge cases, fixed).
   `_` is read as the hyphen. A project with two channels — or a ledger with two rows — that are one name that way
   no longer loads or takes a delta; the refusal names both. None of the known projects has such a pair.
   `project.py <dir> fix-ids --apply` writes the hyphen into an old `project.json` (optional).
+- **The feedback form is English** (the Arbiter, 2026-10-01): its questions (`From`, `Type`, `How much it gets in
+  the way of tuning`, `Message`, `Versions`), its choices and its response sheet. `gates/side_effect.py`'s
+  `FORM_KINDS`, `FORM_IMPACTS` and `FORM_LABELS` carry the new words (the keys are unchanged), so the surface TCC
+  reads moved. **A client older than this one** (skill v3.0.64, TCC v0.1.45) sends the Ukrainian choices the form
+  no longer lists: the form refuses the report and it goes to the clipboard, as for any refusal. Update to send.
 - **For TCC:** `key move-shell [<provider>] [--drop]` exits 0 / 1 / 3 instead of always 0 (hub #230).
   `autosound_ai.py … --model <id> [--provider google|anthropic|openai]` names the reviewer for one run
   and beats every pinned model (hub #226; the contract is on that ticket). Pass it only to v3.0.65 and later — an
@@ -249,6 +254,9 @@ and the ledger's channel keys (three edge cases, fixed).
   only; `--drop` removes the export without storing it, refused when the OS keystore does not hold that key. It now
   exits 0 when it moved or removed something, 1 with nothing to do, 3 when something was refused. The Windows half
   (the user environment in the registry) was read, not run.
+- **The feedback form is English** (skill #112, the Arbiter 2026-10-01): questions, choices, the confirmation
+  message, the response sheet's file, tab and columns. The skill sends the English choices; the old Ukrainian ones
+  are gone from the form, so a report from an older client is refused there and falls back to the clipboard.
 - **The feedback form's «Від кого» is optional** (skill #111, hub #228 TCC-042). A tester who leaves no contact could
   not send at all. `form_answers` leaves an empty sender out; the form route asks for the person's yes and a contact
   only if they want an answer. The Arbiter made the Google Form's question optional the same day.

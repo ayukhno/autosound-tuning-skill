@@ -67,18 +67,20 @@ FORM_FIELD_VERSIONS = "entry.1476583291"
 #: `form_answers()` returns can be labelled straight, without a second table anywhere. Exported
 #: because a report the form did not take goes to the clipboard instead, and the lines there are
 #: read beside the sheet, whose columns wear exactly these words (hub SCR-057: until now TCC wrote
-#: them from its own copy). The words are the form's Ukrainian, not a translation: TCC shows its
-#: four languages for what a person CHOOSES, while a column's name belongs to the form.
-FORM_LABELS = {FORM_FIELD_SENDER: "Від кого", FORM_FIELD_KIND: "Тип",
-               FORM_FIELD_IMPACT: "Наскільки заважає налаштуванню",
-               FORM_FIELD_MESSAGE: "Повідомлення", FORM_FIELD_VERSIONS: "Версії"}
+#: them from its own copy). The words are the form's own, not a translation: TCC shows its
+#: four languages for what a person CHOOSES, while a column's name belongs to the form. The form went English on
+#: 2026-10-01 (the Arbiter): questions, choices and the sheet; a client older than v3.0.65 sends the Ukrainian
+#: choices the form no longer lists, and its report falls back to the clipboard.
+FORM_LABELS = {FORM_FIELD_SENDER: "From", FORM_FIELD_KIND: "Type",
+               FORM_FIELD_IMPACT: "How much it gets in the way of tuning",
+               FORM_FIELD_MESSAGE: "Message", FORM_FIELD_VERSIONS: "Versions"}
 #: The form's own words: a choice it does not list is not an answer it takes.
-FORM_KINDS = {"problem": "Проблема", "wish": "Побажання", "feedback": "Відгук", "test": "Тест"}
+FORM_KINDS = {"problem": "Problem", "wish": "Wish", "feedback": "Feedback", "test": "Test"}
 #: What a PERSON's report is. `test` is for a probe of the channel: its row is marked, so nothing needs cleaning.
 FORM_PERSON_KINDS = ("problem", "wish", "feedback")
-FORM_IMPACTS = {"stops": "Зупиняє: далі налаштовувати не можу",
-                "workaround": "Заважає, але можна обійти",
-                "none": "Не заважає"}
+FORM_IMPACTS = {"stops": "Stops tuning: I can't go on",
+                "workaround": "Gets in the way, but I can work around it",
+                "none": "Doesn't get in the way"}
 #: Only the confirmation page carries it (the "submit another response" link); a form that did not take the answer
 #: replies 200 with its own page, which does not. Measured 2026-09-17 by TCC with entries that reached the sheet.
 FORM_ACCEPTED_MARKER = "usp=form_confirm"
@@ -765,15 +767,15 @@ def _selftest():
         else f"{name}={globals()[name]!r}"
         for name in surface)
     digest = hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()[:16]
-    assert digest == "8e0d1b84d7aae4d0", (
+    assert digest == "d44400ec7f46d6f6", (
         f"the form's surface changed (digest {digest}, was 8e0d1b84d7aae4d0). TCC reads these at run time and "
         "degrades silently -- name the move in the CHANGELOG's Upgrading note, then put the new digest here:\n"
         + fingerprint)
 
     # ── the route without GitHub: the Arbiter's form (hub TCC-017) -- the network is faked ──
     ans = form_answers("Олена, t.me/x", "problem", "**зламалось** на кроці 2", "workaround", "method v3 · lang=uk")
-    assert ans == {FORM_FIELD_SENDER: "Олена, t.me/x", FORM_FIELD_KIND: "Проблема", FORM_FIELD_MESSAGE: "**зламалось** на кроці 2",
-                   FORM_FIELD_IMPACT: "Заважає, але можна обійти", FORM_FIELD_VERSIONS: "method v3 · lang=uk"}, ans
+    assert ans == {FORM_FIELD_SENDER: "Олена, t.me/x", FORM_FIELD_KIND: "Problem", FORM_FIELD_MESSAGE: "**зламалось** на кроці 2",
+                   FORM_FIELD_IMPACT: "Gets in the way, but I can work around it", FORM_FIELD_VERSIONS: "method v3 · lang=uk"}, ans
     assert FORM_FIELD_IMPACT not in form_answers("a", "wish", "b")
     # hub #228: the sender is optional -- an empty one is left out, everything else is checked as before
     assert form_answers("", "wish", "b") == {FORM_FIELD_KIND: FORM_KINDS["wish"], FORM_FIELD_MESSAGE: "b"}
@@ -799,7 +801,7 @@ def _selftest():
     assert not sent, "a refused send must not reach the network"
     done = post_form("Олена", "feedback", "текст", lang="uk", consented=True, post=_confirming, versions="v")
     assert done["detail"] == "confirmed by the form" and sent[0][0] == FORM_POST_URL, done
-    assert sent[0][1][FORM_FIELD_KIND] == ["Відгук"] and sent[0][1][FORM_FIELD_SENDER] == ["Олена"], sent[0]
+    assert sent[0][1][FORM_FIELD_KIND] == ["Feedback"] and sent[0][1][FORM_FIELD_SENDER] == ["Олена"], sent[0]
     for reply, why in (((200, "<html>the form page</html>"), "a 200 without the confirmation page"),
                        ((500, "?usp=form_confirm"), "an error status")):
         try:
@@ -828,7 +830,7 @@ def _selftest():
                              gh_is_ready=lambda: gh_ready(no_auth))
     assert via_form["via"] == "form" and sent[0][1][FORM_FIELD_MESSAGE] == ["# Feedback\nbody"], sent
     assert sent[0][1][FORM_FIELD_VERSIONS][0].endswith("lang=uk · about=tcc"), sent[0][1]
-    assert sent[0][1][FORM_FIELD_IMPACT] == ["Зупиняє: далі налаштовувати не можу"]
+    assert sent[0][1][FORM_FIELD_IMPACT] == ["Stops tuning: I can't go on"]
     # hub #228: no contact left, and the form still sends -- without the sender's question
     sent.clear()
     anon = post_feedback(body, "car", "dsp", runner=no_auth, kind="wish", lang="uk", consented=True, post=_confirming,
