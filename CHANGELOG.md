@@ -167,6 +167,11 @@ W-6 · v3.1.0 (`docs/PLAN-W-6.md`): ten issues, #116–#125, all with the Arbite
   starts from the Dock or the Start menu, which never reads `~/.zshrc`, gets it too. `doctor` names the sign-in agy will
   use — ADC (the credentials file, gcloud's account and project, where the switch came from), agy's own account, or
   none, with what to do — read off disk, no credential file opened.
+- **The DSP sheet finds a `w_L` channel's `w-L` row** (#116, hub #233). From v3.0.65 a driver's row is banked under
+  the hyphen also for a channel written with `_`, and `state.py` looked the row up by the literal key: «—» in the Slot
+  column. `project_channels` now answers to both notations through `naming.canonical_code` (a name as written wins),
+  and the sheet's own lookup does too. A row v3.0.65 banked as `sw-f` for a channel `sw_f` is not read back:
+  `contract.py check` names it as that version's spelling, and which row holds the live values is the Arbiter's call.
 - **agy reviews as a tool-less agent, in a folder of its own** (#117, hub #234 ask 7). Headless `-p` runs honour agy's
   persisted `settings.json` policies, so Tool Permission `always-proceed`, set for comfort in agy's own window, gave
   the reviewer a shell in the project folder (measured: a prompt asking for `ls -d ~/dev` got the listing, with

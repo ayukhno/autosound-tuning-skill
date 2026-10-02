@@ -46,3 +46,14 @@ Mac only).
   `tools: []`); the same prompt answered NO-TOOLS, and the doctor's live call through it answered. So the tip (#118)
   may describe Tool Permission for agy's own window freely, saying that the method's reviews are not affected.
 - Selftests: the marker exception, the child's environment, the agent file, the four sign-in outcomes on a fake home.
+
+### #116 — the DSP sheet joins a `w_L` channel to its `w-L` row (hub #233) — built
+
+- **Ask 1.** `state.py` `project_channels` adds each key's `naming.canonical_code` form where the name as written is
+  not already a key, and `render_state`'s `slot_of` falls back to the row key's canonical form. `naming` is loaded by
+  path (`_canonical_code`): `state.py` is imported by consumers that put neither `state/` nor its parent on `sys.path`.
+- **Ask 2, an `sw-f` row from v3.0.65: named, not read back.** `contract.py`'s ledger cross-check already lists it as
+  foreign; it now says it is v3.0.65's spelling of the channel `sw_f` and that which row holds the live values is the
+  Arbiter's call. Reading it back on its own could merge two rows of one channel.
+- Selftests: `state.py` (both directions on the sheet; `sw_f` stays apart), `contract.py` (the sentence, only for that
+  case).

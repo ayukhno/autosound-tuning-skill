@@ -244,6 +244,22 @@ def _project_json(project_dir):
     return data if isinstance(data, dict) else {}
 
 
+_NAMING = []
+
+
+def _canonical_code(code):
+    """`naming.canonical_code` -- the one home of the notation rule (S-079, hub #232) -- loaded from beside this
+    folder by path: this module is imported by consumers that put neither `state/` nor its parent on `sys.path`."""
+    if not _NAMING:
+        import importlib.util
+        path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "naming.py")
+        spec = importlib.util.spec_from_file_location("_autosound_naming_for_state", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _NAMING.append(module)
+    return _NAMING[0].canonical_code(code)
+
+
 def project_channels(project_dir):
     """`project.json`'s `channels[]` keyed by every name a ledger row might use — SCR-001/039.
 
@@ -271,6 +287,11 @@ def project_channels(project_dir):
             # came first in the file own the name, which is row order deciding identity.
             if key and (str(key) not in out or key == c.get("code")):
                 out[str(key)] = c
+    # Both notations are one name (S-079): since v3.0.65 a driver's row is banked under the hyphen (`w-L`) also for
+    # a channel written `w_L`, and the sheet looked the row up by the literal key -- «—» in the Slot column (hub #233).
+    # A name as written wins; the other notation only fills a gap.
+    for key, c in list(out.items()):
+        out.setdefault(_canonical_code(key), c)
     return out
 
 
@@ -1289,7 +1310,7 @@ def render_state(state, channels=None, current_target=None, processing_rate_hz=N
 
     def slot_of(code):
         """The hardware slot for one row, from `project.json` (v3 identity, SCR-001)."""
-        entry = channels.get(code) or {}
+        entry = channels.get(code) or channels.get(_canonical_code(code)) or {}
         value = entry.get("slot")
         value = value.get("value") if isinstance(value, dict) and "value" in value else value
         return value if value not in (None, "") else "—"
@@ -2162,6 +2183,19 @@ def _selftest():
     assert "| sub | K |" in renamed, renamed
     identity = project_channels(proj_root)
     assert identity["sub"] is identity["sw"], "id, current name and old name are one channel"
+    # hub #233: a channel written `w_L` and its row banked as `w-L` (v3.0.65 on) are one channel on the sheet; a name
+    # as written still wins, and a code `_` that is not a driver's side stays apart (hub #232).
+    with tempfile.TemporaryDirectory() as notation:
+        with open(os.path.join(notation, "project.json"), "w", encoding="utf-8") as f:
+            json.dump({"schema_version": SCHEMA_VERSION, "project_rev": 1,
+                       "channels": [{"code": "w_L", "id": "w_L", "slot": "B"}, {"code": "sw_f", "slot": "K"}]}, f)
+        both = project_channels(notation)
+        assert both["w-L"] is both["w_L"] and "sw-f" not in both, sorted(both)
+        sheet_state = _sample_state()
+        sheet_state["channels"]["w-L"] = sheet_state["channels"].pop("sub")
+        assert "| w-L | B |" in render_state(sheet_state, channels=both)
+        sheet_state["channels"]["w_L"] = sheet_state["channels"].pop("w-L")
+        assert "| w_L | B |" in render_state(sheet_state, channels={"w-L": {"slot": "B"}}), "an old `w_L` row, a `w-L` channel"
 
     no_rev = _sample_state()
     del no_rev["project_rev"]

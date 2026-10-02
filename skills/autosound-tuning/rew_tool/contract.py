@@ -345,6 +345,15 @@ def cross_check_glossary_vs_ledgers(glossary, snapshots):
             issues.append(f"{preset}: glossary has active channel(s) with no ledger row: {missing}")
         if foreign:
             issues.append(f"{preset}: ledger channel(s) not in the glossary: {foreign}")
+        # hub #233: v3.0.65 read EVERY `_` in a code as `-` for its one day, so a channel written `sw_f` got a row
+        # `sw-f`; v3.0.66 reads only a driver's side (hub #232) and the row answers to no channel. Named, not repaired:
+        # which row holds the live values is the Arbiter's call.
+        for row in foreign:
+            twin = next((c for c in sorted(known) if c != row and str(c).replace("_", "-") == row), None)
+            if twin:
+                issues.append(f"{preset}: ledger row {row!r} is v3.0.65's spelling of the channel {twin!r} (that version "
+                              f"read every `_` as `-`; from v3.0.66 only a driver's side, hub #232) -- it is not read "
+                              f"back on its own: which row holds the live values is the Arbiter's call (hub #233)")
     return issues
 
 
@@ -1331,6 +1340,14 @@ def _selftest():
     import tempfile
 
     root = tempfile.mkdtemp(prefix="autosound_contract_")
+
+    # hub #233: a row v3.0.65 banked as `sw-f` for the channel `sw_f` is named with what happened; a plain foreign row
+    # is not given that sentence, and a driver's side (`w_L` / `w-L`) is one channel, not a foreign row.
+    naming = _load_vendored("naming")
+    g233 = naming.Glossary({"channels": [{"code": "sw_f"}, {"code": "w_L"}]})
+    said = cross_check_glossary_vs_ledgers(g233, {"FULL": {"channels": {"sw-f": {}, "w-L": {}, "zz": {}}}})
+    assert any("'sw-f' is v3.0.65's spelling of the channel 'sw_f'" in i for i in said), said
+    assert not any("'zz' is v3.0.65" in i for i in said) and not any("w-L" in i for i in said), said
 
     # an empty project: every file reports missing, nothing crashes. Missing is not the same as
     # INVALID (a brand-new project hasn't been intake'd yet, which is normal, not broken) -- so
