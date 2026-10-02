@@ -96,14 +96,9 @@ A plugin brings the method's files only: in the first session type **`/autosound
 ## What the Tuning Process Looks Like
 
 1. **Preparation at home:** You tell the AI about your system (which speakers, which processor).
-2. **Measurements in the car (once):** one session; the tune is then designed at the desk.
-   - Turn on the basic protective filters on your DSP.
-   - Record each driver on its own: an RTA with the microphone moving around your head by hand, then sweeps from a **tripod microphone that does not move until the end** (the tripod block takes ~25 minutes).
-   - Optionally: nine short hand-held sweeps around the listening point for the main drivers, which tell a cabin feature from a spot one — up to about an hour in all.
-   - The app walks you through it block by block (the sheet: `capture-session-sheet.md`).
-   - A midbass without a low-pass filter sounds harsh on top during a sweep — that is normal (cone breakup), keep going.
-3. **Math at the desk:** You sit at your computer (without the car nearby). The AI analyzes measurements, joins the subwoofer to the midbass, evens out the soundstage, and calculates the EQ. The desk only predicts the results; the car then verifies them. If the desk's predictions do not match reality during verification — the system rolls back the steps.
-4. **Enjoyment in the car:** You go back to the car, enter the ready numbers into the DSP, play test and favorite tracks, and enjoy. If something hums a little, "hurts the ear", or "the stage is off" — you tell the AI, and you pinpoint and correct the issue.
+2. **Measurements in the car (once):** with protective filters on the DSP, you record each driver on its own, in one session; the TCC app walks you through it step by step. The tune is then designed at the desk.
+3. **Math at the desk:** You sit at your computer (without the car nearby). The AI analyzes measurements, joins the subwoofer to the midbass, evens out the soundstage, and calculates the EQ. The desk only predicts the results; the car then verifies them.
+4. **Back in the car — verify, correct, fine-tune:** enter the numbers into the DSP, check them with a few measurements and by ear, and correct what is off. Then comes fine tuning, best done in the car with the most capable model (today Claude Fable): you tell the AI what you hear, and the better you want it to sound, the more rounds it takes. Working at the desk is possible too — the model and the method adapt.
 
 ## Feedback, Support, and Privacy
 
@@ -112,10 +107,11 @@ A plugin brings the method's files only: in the first session type **`/autosound
 **Issues and bugs:**
 - If something is wrong with the tuning logic itself: [Open an issue on GitHub (autosound-tuning-skill)](https://github.com/ayukhno/autosound-tuning-skill/issues/new/choose).
 - If the issue is related to the GUI (Autosound TCC) — write to the [TCC app repository](https://github.com/ayukhno/autosound-tcc/issues/new/choose).
+- No GitHub account? Ask the session ("report a bug") or use TCC's report window: your report goes to the author through a Google Form instead — text only.
 
 This tool is **completely free**. The code and scripts are licensed under **MIT**, and the documentation and method itself under **CC BY-SA 4.0**. 
 
-**Credits:** part of the DSP maths follows the logic of [Resonalyze](https://github.com/DIMOSUS/Resonalyze) by DIMOSUS (MIT) — the junction sum-loss metric and the HELIX channel phase control are ports of it, so that a tuner moving between the two tools gets one answer per filter, not two. Details in [`LICENSES/NOTICE.md`](LICENSES/NOTICE.md).
+**Credits:** part of the DSP maths is ported from [Resonalyze](https://github.com/DIMOSUS/Resonalyze) by DIMOSUS (MIT) — [`LICENSES/NOTICE.md`](LICENSES/NOTICE.md).
 
 If it saved you weeks of tuning time and you want to thank the author, you can do it here:
 💜 **[GitHub Sponsors](https://github.com/sponsors/ayukhno)** · ☕ **[Monobank Jar (UA)](https://send.monobank.ua/jar/8wThVcodjm)**
