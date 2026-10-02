@@ -210,3 +210,8 @@ one joint run and to tag v1.1.0 on v3.1.0 the same day (hub #238, SKL-062).
   also carries S-096 (the Arbiter's word: it joins only if an rc2 is cut for another finding).
 - **rc2** (`beta-v3.1.0-rc2`, `4aa8124`, PR #128 CI green, `tag-check --candidate` 5/5): an export with a
   `.in_use/4368` folder verifies (279 files). `rc-catalog` now installs rc2; TCC told on hub #238 to pin rc2.
+- **The plugin route on the VM, rc2:** reinstalled (the catalog version stays 3.1.0 across candidates, so `plugin
+  update` sees nothing to do — testers reinstall); setup on the Arbiter's yes: «All 279 files match … beta-v3.1.0-rc2»,
+  the libraries installed, agy/gh already signed in, `doctor`'s new line for a model not named (S-096). **The next
+  session carried no note** — the setup's `plugin-ready` line silenced the hook. Two skill entries listed (the
+  installer's copy and the plugin's), as expected on a machine with both.
