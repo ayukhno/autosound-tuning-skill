@@ -1629,7 +1629,7 @@ four assessment lines, and nothing is built before his `ok` on that task. Resume
 
 ## S-096 · `doctor`'s mode line and key line read wrong in two cases (found in the W-6 candidate run)
 
-**Status**: open 2026-10-02 · pool for the next wave (not W-6: cosmetic, nothing stops)
+**Status**: open 2026-10-02 · joins W-6 only if an rc2 is cut for another finding, else the next wave (the Arbiter: «ок», 2026-10-02 — not critical: nothing stops, the live call still tells the truth)
 
 On the Windows VM at `beta-v3.1.0-rc1`: with no reviewer model pinned, `doctor` lists the key's models and still prints
 «▶ Режим роботи: АВТОМАТИЧНИЙ (через API google)», though a round would stop at the choice (exit 3) and no live call was
