@@ -76,6 +76,16 @@ def git(clone, *args, env=None, timeout=120):
     return run(["git", "-C", clone, *args], env=env, timeout=timeout)
 
 
+_CANDIDATE_RE = re.compile(r"^beta-v(\d+)\.(\d+)\.(\d+)-rc(\d+)$")
+
+
+def release_key(tag):
+    """The release a tag names: `v3.1.0` and `beta-v3.1.0-rc2` both name (3, 1, 0); None for anything else. A
+    candidate is signed like a release (the installers verify both), so the signature rules read this, not the name."""
+    m = _TAG_RE.match(tag or "") or _CANDIDATE_RE.match(tag or "")
+    return tuple(int(x) for x in m.groups()[:3]) if m else None
+
+
 def tag_key(tag):
     m = _TAG_RE.match(tag or "")
     return tuple(int(x) for x in m.groups()) if m else None
@@ -97,9 +107,9 @@ def verify_tag(clone, tag, principal=None, key=None, signed_from=None, env=None)
     signed_from = signed_from or SIGNED_FROM
     if env.get(SKIP_VERIFY_VAR) == "1":
         return True, f"signature NOT checked: {SKIP_VERIFY_VAR}=1 is set (a developer's switch)"
-    if tag_key(tag) is None:
-        return False, f"{tag!r} is not a release tag (vX.Y.Z), so there is no signature to check"
-    if tag_key(tag) < tag_key(signed_from):
+    if release_key(tag) is None:
+        return False, f"{tag!r} is not a release tag (vX.Y.Z or beta-vX.Y.Z-rcN), so there is no signature to check"
+    if release_key(tag) < tag_key(signed_from):
         return True, f"{tag} predates signed tags (they start at {signed_from}): installed without a signature check"
     with tempfile.TemporaryDirectory(prefix="autosound_signers_") as tmp:
         signers = os.path.join(tmp, "allowed_signers")
@@ -153,6 +163,22 @@ def copy_files(root):
     return out
 
 
+def copy_tag(root, repo=None):
+    """The tag a plugin copy is checked against: `v<version>` from its `plugin.json`, or -- before that release
+    exists -- its newest candidate `beta-v<version>-rcN`, so a candidate can be installed and set up as a plugin too
+    (the W-6 run of rc1). Asked of the remote, like the installers' ls-remote; "" when neither is there."""
+    version = copy_version(os.path.abspath(root))
+    if not version:
+        return ""
+    rc, out, _ = run(["git", "ls-remote", "--tags", "--refs", repo or SKILL_REPO, f"v{version}",
+                      f"beta-v{version}-rc*"], timeout=60)
+    names = [line.rsplit("/", 1)[-1] for line in out.splitlines() if rc == 0 and "refs/tags/" in line]
+    if f"v{version}" in names:
+        return f"v{version}"
+    candidates = [n for n in names if _CANDIDATE_RE.match(n)]
+    return max(candidates, key=lambda n: int(_CANDIDATE_RE.match(n).group(4))) if candidates else ""
+
+
 def verify_copy(root, repo=None, tag=None):
     """A copy with no `.git` -- what `/plugin install` leaves -- checked against its signed release tag (W-6 #121).
 
@@ -165,8 +191,8 @@ def verify_copy(root, repo=None, tag=None):
     """
     root = os.path.abspath(root)
     version = copy_version(root)
-    tag = tag or (f"v{version}" if version else "")
-    if tag_key(tag) is None:
+    tag = tag or copy_tag(root, repo) or (f"v{version}" if version else "")
+    if release_key(tag) is None:
         raise Refused(f"{root}: no release version in .claude-plugin/plugin.json ({version!r}), so no tag to check "
                       f"this copy against")
     with tempfile.TemporaryDirectory(prefix="autosound_verify_") as bare:
@@ -920,6 +946,16 @@ def _selftest():
                 raise AssertionError(f"a copy with a file {harm} passed")
             except Refused as exc:
                 assert word in str(exc) and "Reinstall" in str(exc), (harm, exc)
+        # A candidate before its release (W-6 rc1): the copy names 3.0.72, only beta-v3.0.72-rc1 exists, signed.
+        with open(os.path.join(origin, ".claude-plugin", "plugin.json"), "w", encoding="utf-8") as fh:
+            json.dump({"name": "autosound-tuning", "version": "3.0.72"}, fh)
+        sh("git", "-C", origin, "commit", "-q", "-am", "3.0.72 rc1")
+        sh(*signed, "-c", f"user.signingkey={os.path.join(tmp, 'author')}.pub", "tag", "-s", "beta-v3.0.72-rc1", "-m", "rc1")
+        cand = plugin_copy("beta-v3.0.72-rc1")
+        assert copy_tag(cand, repo="file://" + origin) == "beta-v3.0.72-rc1"
+        got = verify_copy(cand, repo="file://" + origin)
+        assert got["tag"] == "beta-v3.0.72-rc1" and "signature good" in got["signature"], got
+        assert release_key("beta-v3.0.72-rc1") == (3, 0, 72) == release_key("v3.0.72") and release_key("v3.x") is None
         try:
             verify_copy(plugin_copy("v3.0.71"), repo="file://" + origin)
             raise AssertionError("an unsigned release passed")

@@ -198,7 +198,8 @@ W-6 · v3.1.0 (`docs/PLAN-W-6.md`): ten issues, #116–#125, all with the Arbite
   repository, verifies its signature against the same constant key the installers use, and compares every file of its
   tree with the copy by blob id; a file changed, missing or added is a refusal that names it (CRLF line endings from a
   Windows checkout are the same file; Claude Code's markers and `__pycache__` are not counted). `plugin-ready` writes
-  the verified, set-up version down for the plugin's SessionStart hook.
+  the verified, set-up version down for the plugin's SessionStart hook. Before a release exists, a copy is checked
+  against its newest signed candidate (`beta-vX.Y.Z-rcN`), so a candidate can be installed and set up as a plugin too.
 - **`deployment.py` knows a plugin install** (#122). A catalog install is a copy in
   `~/.claude/plugins/cache/<marketplace>/autosound-tuning/<version>/` with no `.git`, so it read as a deployment that
   cannot say which checkout it is. Its commit is now read from Claude Code's `installed_plugins.json`
