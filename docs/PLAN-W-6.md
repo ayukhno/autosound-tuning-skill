@@ -208,3 +208,5 @@ one joint run and to tag v1.1.0 on v3.1.0 the same day (hub #238, SKL-062).
   Windows Claude Code's `.in_use` marker is a folder with a file per process; `copy_files` knew only the file form.
   Fixed (`_COPY_NOISE_DIRS` gains `.in_use`, `.orphaned_at`; selftest with a `.in_use/4368` folder) → **rc2**, which
   also carries S-096 (the Arbiter's word: it joins only if an rc2 is cut for another finding).
+- **rc2** (`beta-v3.1.0-rc2`, `4aa8124`, PR #128 CI green, `tag-check --candidate` 5/5): an export with a
+  `.in_use/4368` folder verifies (279 files). `rc-catalog` now installs rc2; TCC told on hub #238 to pin rc2.
