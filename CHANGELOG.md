@@ -167,6 +167,11 @@ W-6 · v3.1.0 (`docs/PLAN-W-6.md`): ten issues, #116–#125, all with the Arbite
   starts from the Dock or the Start menu, which never reads `~/.zshrc`, gets it too. `doctor` names the sign-in agy will
   use — ADC (the credentials file, gcloud's account and project, where the switch came from), agy's own account, or
   none, with what to do — read off disk, no credential file opened.
+- **`deployment.py` knows a plugin install** (#122). A catalog install is a copy in
+  `~/.claude/plugins/cache/<marketplace>/autosound-tuning/<version>/` with no `.git`, so it read as a deployment that
+  cannot say which checkout it is. Its commit is now read from Claude Code's `installed_plugins.json`
+  (`gitCommitSha`), and every user-scope install (and a project-scope one for that project) is a candidate like the
+  personal and the project copies: the same commit agrees, another is a split, no recorded commit is unknown.
 - **A CLI route never bills an API key** (#119, hub #236). A key in the OS store sent every CLI pick to the vendor's
   API, because a run with no `--via` tries the API whenever it finds a key, and `--via cli` left the keys in the
   CLI's environment, where `claude -p` bills `ANTHROPIC_API_KEY` instead of the subscription. Now

@@ -13,7 +13,10 @@ The method is deployed more than once ON PURPOSE, and that is not the fault:
     in `~/.claude/skills/.autosound-tuning-src`, with `~/.claude/skills/autosound-tuning` symlinked
     at its `skills/autosound-tuning` (install.sh:61, :774);
   * a per-project pin -- a detached checkout a run holds still so its numbers stay reproducible;
-  * a submodule, whose sha the consuming repository records for it (`autosound-tcc`).
+  * a submodule, whose sha the consuming repository records for it (`autosound-tcc`);
+  * a PLUGIN install from the catalog (`/plugin install`): a copy of the files at the catalog's commit in
+    `~/.claude/plugins/cache/<marketplace>/autosound-tuning/<version>/`, with no `.git` -- the commit is recorded
+    by Claude Code in `~/.claude/plugins/installed_plugins.json` (`gitCommitSha`), and that is where it is read.
 
 The fault is that none of them SAYS which it is. A project's scripts resolve `rew_tool` through
 their own `.claude/skills/autosound-tuning`, the session loads `SKILL.md` through the personal one;
@@ -106,7 +109,39 @@ def version_at(root):
     return got if isinstance(got, str) else ""
 
 
-def describe(path):
+#: The plugin this repository publishes (`.claude-plugin/plugin.json` `name`); Claude Code keys an install of it
+#: `autosound-tuning@<marketplace>` in its registry.
+PLUGIN_NAME = "autosound-tuning"
+
+
+def plugin_installs(home):
+    """Every install of this plugin Claude Code has recorded: `[{install, sha, version, scope, project}]`.
+
+    A plugin install is a copy with no `.git` (09.09 review §3.4, W-6 #122): read through `describe` alone it was a
+    deployment that "cannot say which checkout it is" (exit 4), and the version check said nothing true about the
+    route the catalog will hand out from v3.1.0. Claude Code records the commit it installed; that is the identity.
+    Absent or malformed registry -> [], the same "nothing recorded" a machine without plugins gives.
+    """
+    path = os.path.join(home, ".claude", "plugins", "installed_plugins.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except Exception:  # noqa: BLE001
+        return []
+    plugins = data.get("plugins") if isinstance(data, dict) and isinstance(data.get("plugins"), dict) else {}
+    out = []
+    for key, entries in plugins.items():
+        if str(key).split("@")[0] != PLUGIN_NAME:
+            continue
+        for e in entries if isinstance(entries, list) else [entries]:
+            if isinstance(e, dict) and e.get("installPath"):
+                out.append({"install": e["installPath"], "sha": str(e.get("gitCommitSha") or ""),
+                            "version": str(e.get("version") or ""), "scope": e.get("scope") or "user",
+                            "project": e.get("projectPath") or ""})
+    return out
+
+
+def describe(path, plugins=None):
     """Identify the deployment whose skill folder is `path`.
 
     `sha` is the answer that gets COMPARED; `version`, `ref` and `branch` are for the screen. `ref`
@@ -129,6 +164,14 @@ def describe(path):
             break
         here = parent
     sha = _git(root, "rev-parse", "HEAD") if root else ""
+    recorded = next((p for p in plugins or () if root and os.path.realpath(p["install"]) == root), None)
+    if recorded and not sha:
+        # A plugin install: no `.git`, and the commit Claude Code recorded for it is its identity (#122).
+        sha = recorded["sha"]
+        return {"path": real, "exists": True, "root": root, "plugin": True,
+                "sha": sha if len(sha) == 40 and all(c in "0123456789abcdef" for c in sha) else "",
+                "version": version_at(root) or recorded["version"],
+                "ref": f"plugin {recorded['version'] or '?'} @ {sha[:12]}" if sha else "", "branch": ""}
     return {
         "path": real,
         "exists": True,
@@ -150,14 +193,22 @@ def candidates(project_dir=None, home=None, declared=None):
     so the row the others are held to sits under the copy doing the talking.
     """
     home = home or os.path.expanduser("~")
-    out = [dict(describe(skill_dir()), origin="here", link=skill_dir())]
+    plugins = plugin_installs(home)
+    out = [dict(describe(skill_dir(), plugins), origin="here", link=skill_dir())]
     if declared:
-        out.append(dict(describe(declared), origin="declared", link=declared))
+        out.append(dict(describe(declared, plugins), origin="declared", link=declared))
     if project_dir:
         link = os.path.join(project_dir, ".claude", "skills", SKILL_DIRNAME)
-        out.append(dict(describe(link), origin="project", link=link))
+        out.append(dict(describe(link, plugins), origin="project", link=link))
     link = os.path.join(home, ".claude", "skills", SKILL_DIRNAME)
-    out.append(dict(describe(link), origin="personal", link=link))
+    out.append(dict(describe(link, plugins), origin="personal", link=link))
+    # A plugin install a session on this machine loads: every user-scope one, and a project-scope one for THIS
+    # project (#122). A session loads a plugin's skill as well as a personal one, so it is a candidate like them.
+    for p in plugins:
+        if p["scope"] == "user" or (project_dir and os.path.realpath(p["project"] or "") == os.path.realpath(project_dir)):
+            link = os.path.join(p["install"], "skills", SKILL_DIRNAME)
+            if os.path.realpath(link) not in {os.path.realpath(c["link"]) for c in out}:
+                out.append(dict(describe(link, plugins), origin="plugin", link=link))
     return out
 
 
@@ -298,6 +349,38 @@ def _selftest():
         assert code == 3, f"two checkouts read as {code}: {line}"
         assert "3.0.33" in line or "different" in line, line
 
+        # -- #122: a plugin install has no `.git`; Claude Code's registry names its commit, and it is a candidate --
+        fake_home = os.path.join(tmp, "home")
+        install = os.path.join(fake_home, ".claude", "plugins", "cache", "autosound-tuning-skill", PLUGIN_NAME, "3.1.0")
+        os.makedirs(os.path.join(install, ".claude-plugin"))
+        os.makedirs(os.path.join(install, "skills", SKILL_DIRNAME))
+        with open(os.path.join(install, ".claude-plugin", "plugin.json"), "w", encoding="utf-8") as fh:
+            json.dump({"name": PLUGIN_NAME, "version": "3.1.0"}, fh)
+        registry = os.path.join(fake_home, ".claude", "plugins", "installed_plugins.json")
+
+        def record(sha, scope="user"):
+            with open(registry, "w", encoding="utf-8") as fh:
+                json.dump({"version": 2, "plugins": {
+                    f"{PLUGIN_NAME}@autosound-tuning-skill": [{"scope": scope, "installPath": install, "version": "3.1.0",
+                                                               "gitCommitSha": sha}],
+                    "humanizer@humanizer": [{"scope": "user", "installPath": "/nowhere", "gitCommitSha": "f" * 40}]}}, fh)
+
+        record(describe(a)["sha"])
+        found = plugin_installs(fake_home)
+        assert [p["install"] for p in found] == [install], found
+        pd = describe(os.path.join(install, "skills", SKILL_DIRNAME), found)
+        assert pd["plugin"] and pd["sha"] == describe(a)["sha"] and pd["version"] == "3.1.0", pd
+        assert "plugin 3.1.0" in pd["ref"], pd
+        plug = [c for c in candidates(home=fake_home) if c["origin"] == "plugin"]
+        assert len(plug) == 1 and plug[0]["sha"] == describe(a)["sha"], plug
+        assert verdict([dict(describe(a), origin="project", link=a), plug[0]])[0] == 0, "same commit: one method"
+        assert verdict([dict(describe(b), origin="project", link=b), plug[0]])[0] == 3, "another commit: a split"
+        record("")
+        unnamed = [c for c in candidates(home=fake_home) if c["origin"] == "plugin"]
+        assert verdict([dict(describe(a), origin="project", link=a), unnamed[0]])[0] == 4, "no recorded commit: unknown"
+        record(describe(a)["sha"], scope="project")
+        assert not [c for c in candidates(home=fake_home) if c["origin"] == "plugin"], "another project's install"
+
         # -- two PATHS at the same commit is not a fault; a clone beside a worktree is normal --
         clone = os.path.join(tmp, "clone")
         subprocess.run(["git", "clone", "--quiet", os.path.join(tmp, "a"), clone],
@@ -367,7 +450,7 @@ def _selftest():
     # -- and on this machine, whatever it is, the answer has ONE shape --
     code, line = verdict(candidates())
     assert code in (0, 3, 4), f"unknown verdict {code}"
-    print(f"selftest OK — disagreement, agreement, no-identity and nothing-at-all all named; "
+    print(f"selftest OK — disagreement, agreement, no-identity and nothing-at-all all named; a plugin install read by its recorded commit (#122); "
           f"here: {line}")
     return 0
 

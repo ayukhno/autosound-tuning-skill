@@ -69,3 +69,11 @@ Mac only).
 - Selftests: no vendor key in any subscription CLI's environment, omp untouched; the route variable's clipboard run,
   `--via` beating it, a bogus value refused.
 - **Tell tcc** with the tag: the variable's name is `AUTOSOUND_CRITIC_VIA`.
+
+### #122 — `deployment.py` knows the plugin install folder — built
+
+- `plugin_installs(home)` reads `~/.claude/plugins/installed_plugins.json` for `autosound-tuning@<marketplace>`
+  (install path, `gitCommitSha`, version, scope, project). `describe(path, plugins)` takes the recorded commit for a
+  copy with no `.git` whose root is a recorded install; `candidates` adds every user-scope install and a project-scope
+  one for that project as origin `plugin`. Verdicts unchanged: same sha agrees, another splits, no sha is unknown.
+- Selftests on a fake home: the registry read, the plugin's identity, agreement, split, unknown, another project's.
