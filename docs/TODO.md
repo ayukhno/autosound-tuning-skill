@@ -1629,7 +1629,7 @@ four assessment lines, and nothing is built before his `ok` on that task. Resume
 
 ## S-095 · The documentation brought to the release's state for v3.1.0, the translations with it
 
-**Status**: open 2026-10-02 · W-6 pool (collection) · after the Advisor works on the new connection (hub #234, agy through ADC) — the Arbiter, 2026-10-02: «документацію робимо після того як запрацює Радник на новому конекті»
+**Status**: open 2026-10-02 · **W-6 · v3.1.0**, issues #124 (English) and #125 (translations) (review); hub #234's docs half is #118 · after the Advisor works on the new connection (#117, hub #234, agy through ADC) — the Arbiter, 2026-10-02: «документацію робимо після того як запрацює Радник на новому конекті»
 
 The Arbiter (2026-10-02): «давай запишемо ще роботу з документацією щоб її привести до стану релізу». Not only
 `docs/RELEASE-PLAN-3.1.0.md` step 5 (README, FAQ and their uk/de/pl versions read as the release, not as a patch line):
@@ -1642,7 +1642,7 @@ the whole documentation brought to the state v3.1.0 ships in. Known parts so far
 
 ## S-094 · The plugin catalog moves to v3.1.0: how a plugin install gets the tools and the signature check
 
-**Status**: open 2026-10-02 · W-6 pool (collection) · in W-6's work, the Arbiter 2026-10-02: «так включай це до списку робіт»
+**Status**: open 2026-10-02 · **W-6 · v3.1.0**, issues #120 (the tools), #121 (the signature check), #122 (`deployment.py`), #123 (the catalog at the tag) (review) · in W-6's work, the Arbiter 2026-10-02: «так включай це до списку робіт»
 
 `.claude-plugin/marketplace.json` points at `2.x`, sha `255d6c8`, version 2.8.3. v3.1.0 is the moment it moves (the
 CHANGELOG's doctrine; the Arbiter at the release-prep review, 2026-10-01: «how the plugin path gets the tools and the
@@ -1660,7 +1660,7 @@ diagnosed. What the plugin route lacks, as listed to the Arbiter on 2026-10-02 �
 
 ## S-093 · W-6 is collecting: v3.1.0's wave, findings go to this pool
 
-**Status**: open 2026-10-02 · collection, no milestone yet · the Arbiter: «відкривай W-6» (2026-10-02), earlier than the «after TCC v0.1.46» of the same morning (S-092)
+**Status**: open 2026-10-02 · milestone `W-6 · v3.1.0` (#6) opened on the Arbiter's «збір закінчено» with ten issues, #116–#125, each with the four assessment lines; nothing built before his `ok` on a task · was: collection, no milestone yet · the Arbiter: «відкривай W-6» (2026-10-02), earlier than the «after TCC v0.1.46» of the same morning (S-092)
 
 **The wave's goal** (the Arbiter, 2026-10-02): «на кінці W-6 все повино бути готове для випуску релізу» — when W-6
 ends, v3.1.0 is ready to ship: the plugin route (S-094), the documentation (S-095) and the queue's tickets done.
