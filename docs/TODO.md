@@ -1660,7 +1660,7 @@ diagnosed. What the plugin route lacks, as listed to the Arbiter on 2026-10-02 �
 
 ## S-093 · W-6 is collecting: v3.1.0's wave, findings go to this pool
 
-**Status**: open 2026-10-02 · building on `wave-2026-10-02` (`docs/PLAN-W-6.md`): #116 #117 #118 #119 #120 #121 #122 built, #124's English hygiene done; next the README/FAQ pass with the Arbiter (English), then #125 (translations), #123 at the tag; candidate run on the Mac and the VM before it · was: open 2026-10-02 · milestone `W-6 · v3.1.0` (#6) opened on the Arbiter's «збір закінчено» with ten issues, #116–#125, all `ok` (2026-10-02) · was: collection, no milestone yet · the Arbiter: «відкривай W-6» (2026-10-02), earlier than the «after TCC v0.1.46» of the same morning (S-092)
+**Status**: open 2026-10-02 · building on `wave-2026-10-02` (`docs/PLAN-W-6.md`): #116–#122, #124, #125 built; left #123 (the catalog) at the tag, and the candidate `beta-v3.1.0-rc1` run on the Mac and the VM before it · was: open 2026-10-02 · milestone `W-6 · v3.1.0` (#6) opened on the Arbiter's «збір закінчено» with ten issues, #116–#125, all `ok` (2026-10-02) · was: collection, no milestone yet · the Arbiter: «відкривай W-6» (2026-10-02), earlier than the «after TCC v0.1.46» of the same morning (S-092)
 
 **The wave's goal** (the Arbiter, 2026-10-02): «на кінці W-6 все повино бути готове для випуску релізу» — when W-6
 ends, v3.1.0 is ready to ship: the plugin route (S-094), the documentation (S-095) and the queue's tickets done.

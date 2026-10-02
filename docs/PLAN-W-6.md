@@ -142,3 +142,19 @@ The Arbiter, 2026-10-02: «зроби базову гігієну в одній 
 - The six translations carry `Translation lags the English original:` until #125, so `i18n-check` notes, not fails.
 - Left for the release's bookkeeping (#123): `commands/install-tcc.md`'s app pin (v0.1.35 → the paired TCC v1.1.0),
   the install pins, the CHANGELOG doctrine's «the catalogue is pinned to 2.8.3».
+
+### #124 (continued) — the README/FAQ pass with the Arbiter — done
+
+- README, line by line with the Arbiter (English); the Advisor proofread it (four fixes).
+- The roadmap: 3.1 is the release, one-command installer; next is what users ask for (the Arbiter: no further plans).
+- FAQ: the Advisor compressed it by the README's rules, sections dropped and merged on the Arbiter's word; Fable read
+  README + FAQ as a novice (no terminal, AI only as a browser chat) and listed where they get stuck. On the Arbiter's
+  choice: a glossary, «Before you start», one path from installation to the car, Control mode, the naming rules kept;
+  the terminal, other ways, versions and the reviewer by hand moved to `ADVANCED.md` (English only). README untouched
+  except the terminal + Control mode line and its bar (quick guide); the FAQ bar carries the full guide and the roadmap.
+- The capture sheet: the minimum set includes the hand-held RTA; only the nine sweeps are optional.
+
+### #125 — the translations — done
+
+README and FAQ in uk/de/pl, translated whole by the Advisor through agy/ADC; bars set per language, in-page anchors
+remapped to the translated headings, two Ukrainian slips fixed. `i18n-check` OK; every anchor resolves.
