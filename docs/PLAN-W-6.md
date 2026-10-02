@@ -166,3 +166,18 @@ Joined W-6 on the Arbiter's word (2026-10-02: «додаємо і робимо»
 `self` → `registry.npmjs.org/-/package/@anthropic-ai/claude-code/dist-tags`, the tag of `claude_channel()`
 (`autoUpdatesChannel`, `latest` by default). `_http_json` returns None on any failure → "". `tool_rows` takes `fetch`, so
 the selftest stays offline. Live on the Mac: agy 1.2.15 → 1.2.15. **Tell tcc** with the tag.
+
+## The candidate — `beta-v3.1.0-rc1` (2026-10-02)
+
+PR #127 (CI green) fast-forwarded to `main`; `tag-check.sh --candidate v3.1.0` 5/5; signed tag on `4dbb969`. An export
+of rc1 verifies against it by itself (279 files; `v3.1.0` does not exist yet, so `copy_tag` takes the candidate).
+For the plugin route, branch `rc-catalog` holds a catalog (`autosound-rc`) that installs rc1 by its sha — for the run
+only, deleted after it.
+
+What the run covers (the Arbiter, the Mac and the Windows VM):
+1. The installer at rc1 (`--skill-ref` / `-SkillRef beta-v3.1.0-rc1`): the signature line, the ADC offer where a
+   Google Cloud ADC file exists, `doctor` — on Windows agy's tool-less reviewer agent for the first time.
+2. The plugin route on a machine without the installer's copy: `claude plugin marketplace add
+   ayukhno/autosound-tuning-skill#rc-catalog`, `claude plugin install autosound-tuning@autosound-rc`, the session's
+   note, `/autosound-tuning:setup` («beta-v3.1.0-rc1 as its author signed it», the tools), no note in the next session.
+3. S-090: `key move-shell` on the VM.
