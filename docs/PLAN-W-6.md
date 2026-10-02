@@ -114,3 +114,17 @@ Mac only).
 - **Needs the Arbiter (the candidate run):** a real `/plugin install` from a catalog at the rc's commit on the Mac and
   the Windows VM, then `/autosound-tuning:setup` — the PowerShell half has never run (no PowerShell on the Mac), and
   the hook on Windows depends on Git Bash.
+
+### #118 — agy through ADC: the installers and the docs (hub #234 asks 4, 5) — built; Windows half for the VM
+
+- **Ask 4.** `install.sh`: `adc_file`, `critic_env_path`, `adc_switch_on`, `critic_env_set_adc`; `agy_status` signal 0
+  is ADC (switch on + file present). In the sign-in step, an ADC file and no agy sign-in → offer to write the line
+  (`offer`: Enter writes, `s` goes to the account sign-in; `--yes` never writes — ADC can bill a project kept for
+  other work). The account route ends with one line pointing to the FAQ's ADC section. `install.ps1`: the same with
+  `Get-AdcFile`, `Get-CriticEnvPath`, `Test-AdcSwitch`, `Set-CriticEnvAdc` (UTF-8 without a BOM: the method reads
+  the file as plain UTF-8, and a BOM would hide the first key). Checked: the sh helpers on a fake home (none / file
+  only / file + switch; the line written once, after a last line with no newline, mode 600). The PowerShell half has
+  not run (no PowerShell on the Mac): the candidate's VM run.
+- **Ask 5.** FAQ section in four languages (English written here, uk/de/pl by the Advisor through agy/ADC — the first
+  translations on the new connection; `i18n-check` OK, the literals checked); `setup-critic-channel.md` §1 bullet.
+- The README's model recommendation (Pro `-high`, not offered under ADC) goes with the docs pass, #124.

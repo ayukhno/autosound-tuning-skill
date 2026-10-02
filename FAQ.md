@@ -33,6 +33,7 @@ Real user questions about installing and tuning your system with this tool. [REA
   - [Updates and Bug Reporting](#updates-and-bug-reporting)
 - [Standalone AI Reviewer Gemini/Antigravity](#standalone-ai-reviewer-geminiantigravity)
   - [Installation for macOS and Windows (Recommended)](#installation-for-macos-and-windows-recommended)
+  - [agy through Google Cloud's ADC (the free trial: $300 for 90 days)](#agy-through-google-clouds-adc-the-free-trial-300-for-90-days)
   - [Fallback Option: Direct Gemini API Key](#fallback-option-direct-gemini-api-key)
   - [Can I run the method entirely in Gemini?](#can-i-run-the-method-entirely-in-gemini)
 - [Performing Measurements](#performing-measurements)
@@ -330,6 +331,37 @@ The official **Antigravity CLI (`agy`)** needs no API key — you authenticate i
    python3 ~/.claude/skills/autosound-tuning/scripts/autosound_ai.py doctor
    ```
    `doctor` names the model, the CLI and the key it found, makes one short live call, and prints the fix for anything wrong.
+
+---
+
+### agy through Google Cloud's ADC (the free trial: $300 for 90 days)
+
+For a Google account that AI Studio does not give an API key (a new account, for example), Google Cloud's free trial is the route: $300 of credit for 90 days, a card for verification only, nothing charged without an upgrade. The credit pays for Gemini on Vertex AI and not for the "Gemini API in AI Studio", so on this offer a key is the wrong route and Application Default Credentials (ADC) are the right one. agy signs in with them.
+
+1. In **console.cloud.google.com**, with that account: start the free trial and create a project on its billing account.
+2. Install Google Cloud's command-line tool: on macOS `brew install --cask gcloud-cli`, on Windows the Google Cloud SDK installer.
+3. Sign in, point it at the project, switch on Vertex AI and create the ADC file:
+   ```bash
+   gcloud auth login
+   gcloud config set project <PROJECT_ID>
+   gcloud services enable aiplatform.googleapis.com
+   gcloud auth application-default login --project <PROJECT_ID>
+   ```
+   On Google's consent page tick **Select all**: without the Cloud Platform scope the last command fails with "cloud-platform scope is required but not consented". The file lands in `~/.config/gcloud/` (`%APPDATA%\gcloud\` on Windows) and names the project agy bills.
+4. Tell agy to use it. One line in the reviewer's config file, `~/.config/autosound/critic-env` (`%APPDATA%\autosound\critic-env` on Windows), which every run of the method reads, the app's runs included:
+   ```env
+   AGY_ADC_AUTH=true
+   ```
+   The installer offers to write this line when it finds the ADC file. For agy in your own terminal, also add `export AGY_ADC_AUTH=true` to `~/.zshrc` (on Windows: `setx AGY_ADC_AUTH true`); without it agy asks for the browser sign-in.
+5. Pick the reviewer's model. Under ADC agy offers Gemini 3.6–3.8 Flash in three tiers each, 3.1 Pro only at its low tier, and older Flash lines (`agy models`); Pro at its high tier is not offered. The method's choice is the newest line at its top tier:
+   ```env
+   AUTOSOUND_CRITIC_MODEL=gemini-3.8-flash-high
+   ```
+6. Check with `doctor` (the command above): it names the sign-in agy will use ("ADC (Google Cloud)", the account and the project) and makes one short live call.
+
+The Windows steps are the same, with the commands named above; they have not been walked on Windows yet.
+
+**agy's own settings, for its own window** (`/settings`): **Tool Permission** (`request-review`, `proceed-in-sandbox` or `always-proceed`) is what stops its confirmation questions; Agent Mode `accept-edits` covers file edits only. **Artifact Review** stops the plan-review question. **Verbosity** `medium` groups tool calls and thoughts into short summaries and keeps commands and answers visible. agy applies these settings to its scripted runs too, but not to the method's reviews: the reviewer runs agy as an agent with no tools, in a folder of its own.
 
 ---
 

@@ -35,6 +35,7 @@ Rzeczywiste pytania użytkowników dotyczące instalacji i konfiguracji systemu 
   - [Aktualizacje i zgłaszanie błędów](#aktualizacje-i-zgłaszanie-błędów)
 - [Autonomiczny Krytyk AI Gemini/Antigravity](#autonomiczny-krytyk-ai-geminiantigravity)
   - [Instalacja dla macOS i Windows (Zalecana)](#instalacja-dla-macos-i-windows-zalecana)
+  - [agy przez ADC w Google Cloud (bezpłatny okres próbny: 300 $ na 90 dni)](#agy-przez-adc-w-google-cloud-bezpłatny-okres-próbny-300--na-90-dni)
   - [Wariant rezerwowy: Bezpośredni klucz API Gemini](#wariant-rezerwowy-bezpośredni-klucz-api-gemini)
   - [Czy można pracować tylko w Gemini, bez Claude?](#czy-można-pracować-tylko-w-gemini-bez-claude)
 - [Przeprowadzanie pomiarów](#przeprowadzanie-pomiarów)
@@ -332,6 +333,37 @@ Oficjalne narzędzie **Antigravity CLI (`agy`)** nie wymaga klucza API — uwier
    python3 ~/.claude/skills/autosound-tuning/scripts/autosound_ai.py doctor
    ```
    Polecenie `doctor` podaje nazwę modelu, CLI i znaleziony klucz, wykonuje jedno krótkie wywołanie testowe na żywo i wyświetla rozwiązanie w razie jakichkolwiek problemów.
+
+---
+
+### agy przez ADC w Google Cloud (bezpłatny okres próbny: 300 $ na 90 dni)
+
+W przypadku konta Google, dla którego AI Studio nie udostępnia klucza API (na przykład nowego konta), właściwą drogą jest bezpłatny okres próbny w Google Cloud: 300 $ środków na 90 dni, karta wyłącznie do weryfikacji, brak jakichkolwiek opłat bez przejścia na wyższy plan. Środki te pokrywają korzystanie z Gemini w Vertex AI, a nie z "Gemini API in AI Studio", więc w ramach tej oferty klucz jest niewłaściwym rozwiązaniem, a odpowiednim są Application Default Credentials (ADC). agy loguje się za ich pomocą.
+
+1. W **console.cloud.google.com**, na tym koncie: uruchom bezpłatny okres próbny i utwórz projekt powiązany z jego kontem rozliczeniowym.
+2. Zainstaluj narzędzie wiersza poleceń Google Cloud: w systemie macOS `brew install --cask gcloud-cli`, w systemie Windows instalator Google Cloud SDK.
+3. Zaloguj się, wskaż projekt, włącz Vertex AI i utwórz plik ADC:
+   ```bash
+   gcloud auth login
+   gcloud config set project <PROJECT_ID>
+   gcloud services enable aiplatform.googleapis.com
+   gcloud auth application-default login --project <PROJECT_ID>
+   ```
+   Na stronie zgody Google zaznacz **Select all**: bez zakresu Cloud Platform ostatnie polecenie zakończy się błędem "cloud-platform scope is required but not consented". Plik trafia do `~/.config/gcloud/` (`%APPDATA%\gcloud\` w systemie Windows) i wskazuje projekt, który agy obciąża.
+4. Wskaż agy, aby z niego korzystał. Wystarczy jedna linijka w pliku konfiguracyjnym recenzenta, `~/.config/autosound/critic-env` (`%APPDATA%\autosound\critic-env` w systemie Windows), który odczytuje każde uruchomienie metody, w tym uruchomienia aplikacji:
+   ```env
+   AGY_ADC_AUTH=true
+   ```
+   Instalator proponuje dopisanie tej linijki, gdy wykryje plik ADC. W przypadku korzystania z agy we własnym terminalu dodaj również `export AGY_ADC_AUTH=true` do `~/.zshrc` (w systemie Windows: `setx AGY_ADC_AUTH true`); bez tego agy poprosi o logowanie przez przeglądarkę.
+5. Wybierz model recenzenta. W ramach ADC agy oferuje Gemini 3.6–3.8 Flash w trzech poziomach każdy, 3.1 Pro wyłącznie na najniższym poziomie oraz starsze linie Flash (`agy models`); Pro na najwyższym poziomie nie jest oferowany. Wybór metody to najnowsza linia na najwyższym poziomie:
+   ```env
+   AUTOSOUND_CRITIC_MODEL=gemini-3.8-flash-high
+   ```
+6. Sprawdź za pomocą `doctor` (polecenie powyżej): wskazuje ono sposób logowania, z którego skorzysta agy ("ADC (Google Cloud)", konto i projekt), i wykonuje jedno krótkie wywołanie na żywo.
+
+Kroki w systemie Windows są takie same, z użyciem poleceń wymienionych powyżej; nie zostały one jeszcze przetestowane w systemie Windows.
+
+**Własne ustawienia agy, dla jego własnego okna** (`/settings`): **Tool Permission** (`request-review`, `proceed-in-sandbox` lub `always-proceed`) odpowiada za wyłączenie pytań o potwierdzenie; Agent Mode `accept-edits` dotyczy wyłącznie edycji plików. **Artifact Review** wyłącza pytanie o zatwierdzenie planu. **Verbosity** `medium` grupuje wywołania narzędzi i przemyślenia w krótkie podsumowania oraz pozostawia polecenia i odpowiedzi widocznymi. agy stosuje te ustawienia również do swoich uruchomień skryptowych, ale nie do recenzji metody: recenzent uruchamia agy jako agenta bez narzędzi, we własnym folderze.
 
 ---
 

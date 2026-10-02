@@ -454,6 +454,31 @@ function Get-RewExe {
     return $null
 }
 function Test-RewApp { return [bool](Get-RewExe) }
+# agy through Google Cloud's ADC (hub #234): the credentials file, the machine's critic-env -- the one place every run
+# of the method reads, the app's included (autosound_ai.py agy_sign_in) -- and whether the switch is on.
+function Get-AdcFile {
+    if ($env:GOOGLE_APPLICATION_CREDENTIALS) { return $env:GOOGLE_APPLICATION_CREDENTIALS }
+    return (Join-Path $env:APPDATA "gcloud\application_default_credentials.json")
+}
+function Get-CriticEnvPath { return (Join-Path $env:APPDATA "autosound\critic-env") }
+function Test-AdcSwitch {
+    if ($env:AGY_ADC_AUTH -eq "true") { return $true }
+    $ce = Get-CriticEnvPath
+    if (Test-Path $ce) { return [bool](Select-String -Path $ce -Pattern '^AGY_ADC_AUTH=true$' -Quiet) }
+    return $false
+}
+function Set-CriticEnvAdc {  # AGY_ADC_AUTH=true into the critic-env, once; UTF-8 without a BOM, as the method reads it
+    $ce = Get-CriticEnvPath
+    if ((Test-Path $ce) -and (Select-String -Path $ce -Pattern '^AGY_ADC_AUTH=true$' -Quiet)) { return $true }
+    try {
+        New-Item -ItemType Directory -Force -Path (Split-Path $ce) | Out-Null
+        $text = "# agy signs in through Google Cloud ADC (hub #234) -- written by the installer`nAGY_ADC_AUTH=true`n"
+        if ((Test-Path $ce) -and (Get-Item $ce).Length -gt 0 -and -not ((Get-Content $ce -Raw).EndsWith("`n"))) { $text = "`n" + $text }
+        [System.IO.File]::AppendAllText($ce, $text, (New-Object System.Text.UTF8Encoding $false))
+        return $true
+    } catch { return $false }
+}
+
 function Get-AgyStatus {  # the account, or "set up", when the reviewer is already configured
     # Read off disk, not by running `agy`: the CLI is interactive -- it opens its own screen and
     # waits -- so there is nothing to ask it that does not take over the terminal.
@@ -471,7 +496,11 @@ function Get-AgyStatus {  # the account, or "set up", when the reviewer is alrea
     #      signing in.
     #   (An exported API key is NOT a sign of this: it used to be the fifth signal, and on a machine
     #   that never signed in it skipped the sign-in while agy never reads the key -- hub #187.)
+    #   0. Google Cloud's ADC (hub #234): agy signs in with it when AGY_ADC_AUTH=true reaches it and the file
+    #      exists -- the existence only, like the rest.
     # Only the ACCOUNT is ever read -- no credential file is opened for its contents.
+    $adc = Get-AdcFile
+    if ((Test-Path $adc) -and ((Get-Item $adc).Length -gt 0) -and (Test-AdcSwitch)) { return "ADC (Google Cloud)" }
     $creds = Join-Path $HOME ".gemini\oauth_creds.json"
     if ((Test-Path $creds) -and ((Get-Item $creds).Length -gt 0)) {
         $accounts = Join-Path $HOME ".gemini\google_accounts.json"
@@ -1658,6 +1687,18 @@ if ($DryRun) {
             Say "   can read it there. To keep it for the reviewer, move it into the Windows store (asks first):"
             Say "      python3 `"$HOME\.claude\skills\autosound-tuning\scripts\autosound_ai.py`" key move-shell"
         }
+        $adcDone = $false
+        $adc = Get-AdcFile
+        if ((Test-Path $adc) -and ((Get-Item $adc).Length -gt 0)) {
+            # hub #234: offered, never assumed -- ADC may bill a Cloud project the person keeps for other work.
+            Say "$n. Gemini reviewer through Google Cloud's ADC: this machine has its credentials ($(Pretty $adc))."
+            Say "   agy uses them once AGY_ADC_AUTH=true is in $(Pretty (Get-CriticEnvPath)) -- the file every run reads, the app's too."
+            if ($interactive -and (Offer "Enter = write that line / s = no, the Google account sign-in below")) {
+                if (Set-CriticEnvAdc) { $adcDone = $true; Say "   OK   written -- the reviewer signs in through ADC" }
+                else { Warn "could not write $(Pretty (Get-CriticEnvPath)) -- the Google account sign-in below still works" }
+            } else { Say "   (later: add the line AGY_ADC_AUTH=true to that file)" }
+        }
+        if (-not $adcDone) {
         Say "$n. Gemini reviewer -- optional, once. Have a Google account ready. What happens:"
         Say "     agy opens; press Enter through its two setup screens; your browser asks you to sign"
         Say "     in with Google. If it then asks for a Project ID, copy it from"
@@ -1667,6 +1708,8 @@ if ($DryRun) {
             Say "   Done. If it ever answers with `"Agent Platform API has not been used`", the message"
             Say "   carries a link -- open it, press Enable, wait a minute."
         } else { $AgySkipped = $true; Say "   Later, in a terminal:  agy" }
+        Say "   Or Google Cloud's free trial through ADC, no Google AI subscription: the FAQ, `"agy through Google Cloud's ADC`"."
+        }   # not ADC
         $n++
     }
     if ($GhBin) {

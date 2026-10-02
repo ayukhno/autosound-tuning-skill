@@ -167,6 +167,14 @@ W-6 · v3.1.0 (`docs/PLAN-W-6.md`): ten issues, #116–#125, all with the Arbite
   starts from the Dock or the Start menu, which never reads `~/.zshrc`, gets it too. `doctor` names the sign-in agy will
   use — ADC (the credentials file, gcloud's account and project, where the switch came from), agy's own account, or
   none, with what to do — read off disk, no credential file opened.
+- **The installers know agy through ADC, and the FAQ walks it** (#118, hub #234). `agy_status` / `Get-AgyStatus`
+  count Google Cloud's ADC as the reviewer being set up (`AGY_ADC_AUTH=true` in the environment or the machine's
+  critic-env, and the ADC file present — existence only). Where the ADC file exists and agy is not set up, the
+  sign-in step offers to write `AGY_ADC_AUTH=true` into the critic-env (offered, never assumed: ADC may bill a Cloud
+  project kept for other work; `--yes` does not write it). FAQ, all four languages: «agy through Google Cloud's ADC
+  (the free trial: $300 for 90 days)» — the walk as tested on macOS, the Windows commands not yet walked, the model
+  under ADC (`gemini-3.8-flash-high`), and agy's own settings (Tool Permission, Artifact Review, Verbosity) as tips
+  that do not reach the method's reviews. The translations came through the Advisor on the new connection.
 - **The plugin route reaches a working method** (#120). Claude Code runs no script at plugin install, and a plugin
   install is a copy of files: no Python libraries, no reviewer, no desk engine. Three pieces:
   - **`install.sh --plugin` / `install.ps1 -Plugin`**, run from inside the plugin copy: the method IS that copy, so it

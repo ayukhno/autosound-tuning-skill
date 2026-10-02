@@ -424,6 +424,21 @@ rew_app_found() {
   # Anywhere else: Spotlight, by bundle id. Silent and fast when Spotlight is on; empty when off.
   [ -n "$(mdfind "kMDItemCFBundleIdentifier == 'roomeqwizard*'" 2>/dev/null | head -1)" ]
 }
+# agy through Google Cloud's ADC (hub #234): the credentials file, the machine's critic-env -- the one place every run
+# of the method reads, the app's included (`autosound_ai.py` `agy_sign_in`) -- and whether the switch is on.
+adc_file() { printf '%s' "${GOOGLE_APPLICATION_CREDENTIALS:-$HOME/.config/gcloud/application_default_credentials.json}"; }
+critic_env_path() { printf '%s' "${XDG_CONFIG_HOME:-$HOME/.config}/autosound/critic-env"; }
+adc_switch_on() { [ "${AGY_ADC_AUTH:-}" = true ] || grep -qx 'AGY_ADC_AUTH=true' "$(critic_env_path)" 2>/dev/null; }
+critic_env_set_adc() {  # AGY_ADC_AUTH=true into the critic-env, once; the file stays the person's (600)
+  _ce="$(critic_env_path)"
+  grep -qx 'AGY_ADC_AUTH=true' "$_ce" 2>/dev/null && return 0
+  mkdir -p "$(dirname "$_ce")" || return 1
+  [ -f "$_ce" ] || : > "$_ce"
+  chmod 600 "$_ce" 2>/dev/null || true
+  [ -s "$_ce" ] && [ -n "$(tail -c1 "$_ce")" ] && printf '\n' >> "$_ce"
+  printf '# agy signs in through Google Cloud ADC (hub #234) -- written by the installer\nAGY_ADC_AUTH=true\n' >> "$_ce"
+}
+
 agy_status() {  # prints the account, or "set up", when the reviewer is already configured
   # Read off disk, not by running `agy`: the CLI is interactive — it opens its own screen and
   # waits — so there is nothing to ask it that does not take over the terminal.
@@ -447,6 +462,12 @@ agy_status() {  # prints the account, or "set up", when the reviewer is already 
   #
   # Only the ACCOUNT is ever read. No credential file is opened for its contents — the `[ -s ]`
   # tests ask whether a file exists and is not empty, and nothing more.
+  #   0. Google Cloud's ADC (hub #234): agy signs in with it when AGY_ADC_AUTH=true reaches it and the file exists --
+  #      the existence only, like the rest.
+  if [ -s "$(adc_file)" ] && adc_switch_on; then
+    printf 'ADC (Google Cloud)'
+    return 0
+  fi
   _a=""
   if [ -s "$HOME/.gemini/oauth_creds.json" ]; then
     _a="$(sed -n 's/.*"active": *"\([^"]*\)".*/\1/p' "$HOME/.gemini/google_accounts.json" \
@@ -1616,6 +1637,20 @@ else
       say "     can read it there. To keep it for the reviewer, move it into the macOS Keychain (asks first):"
       say "       python3 $(pretty "$SKILL_HOME")/scripts/autosound_ai.py key move-shell"
     fi
+    _adc_done=0
+    if [ -s "$(adc_file)" ]; then
+      # hub #234: a machine with Google Cloud's credentials can give the reviewer those instead of a Google
+      # account sign-in -- offered, never assumed: ADC may bill a Cloud project the person keeps for other work.
+      say "  $n. Gemini reviewer through Google Cloud's ADC: this machine has its credentials ($(pretty "$(adc_file)"))."
+      say "     agy uses them once AGY_ADC_AUTH=true is in $(pretty "$(critic_env_path)") -- the file every run reads, the app's too."
+      if offer "Enter = write that line · s = no, the Google account sign-in below:"; then
+        if critic_env_set_adc; then _adc_done=1; say "     ✓ written -- the reviewer signs in through ADC"
+        else warn "could not write $(pretty "$(critic_env_path)") -- the Google account sign-in below still works"; fi
+      else
+        say "     (later: add the line AGY_ADC_AUTH=true to that file)"
+      fi
+    fi
+    if [ "$_adc_done" = 0 ]; then
     say "  $n. Gemini reviewer — optional, once. Have a Google account ready. What happens:"
     say "       agy opens; press Enter through its two setup screens; your browser asks you to sign"
     say "       in with Google. If it then asks for a Project ID, copy it from"
@@ -1628,6 +1663,8 @@ else
       AGY_SKIPPED=1
       say "     Later, in a terminal:  agy"
     fi
+    say "     Or Google Cloud's free trial through ADC, no Google AI subscription: the FAQ, «agy through Google Cloud's ADC»."
+    fi   # not ADC
     n=$((n + 1))
   fi
   # 3. GitHub — optional.

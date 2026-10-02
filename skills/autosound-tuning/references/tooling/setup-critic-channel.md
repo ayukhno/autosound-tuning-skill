@@ -54,6 +54,20 @@ brew install --cask antigravity-cli      # the REAL agy — NOT a symlink to gem
   - **Watch the billing on that project.** The calls run through *your* Google Cloud project, not past it, whatever the free-tier wording elsewhere suggests. If you keep separate balances in AI Studio and Cloud, this is the Cloud one.
   - **OAuth Verification Code:** Open the generated URL in a browser, log in with your Google account, copy the code, and paste it back into your terminal.
   The authorization token will be saved and persist across sessions. (Do not smoke-test `agy --version`/`-p` before completing this login, as they will hang/re-trigger OAuth).
+- **Or sign in through Google Cloud's ADC instead of the account (hub #234, W-6 #117 #118).** For an account AI
+  Studio gives no key — and on Google Cloud's free trial ($300 / 90 days), whose credit pays for Gemini on Vertex AI
+  and not for the AI Studio API — agy signs in with Application Default Credentials: `gcloud auth application-default
+  login --project <ID>` (tick **Select all** on the consent page: the Cloud Platform scope is required), Vertex AI
+  enabled on the project, and **`AGY_ADC_AUTH=true` in the machine's critic-env** — the one carrier every run reads,
+  a TCC started from the Dock included (`~/.zshrc` reaches only shells). The installers offer to write that line
+  when they find the ADC file and count ADC as the reviewer being set up. `doctor` names which sign-in agy will use
+  (ADC with the file, gcloud's account and project, and where the switch came from; agy's account; or none). Under
+  ADC agy offers Gemini 3.6–3.8 Flash in three tiers, 3.1 Pro only at `low`, and older Flash: **the reviewer's model
+  there is `gemini-3.8-flash-high`**. The full walk, with the commands: FAQ, «agy through Google Cloud's ADC».
+- **agy's own settings do not reach the method's reviews.** Headless `-p` runs honour agy's persisted
+  `settings.json` (Tool Permission, sandbox, auto-execution, Artifact Review); `always-proceed`, set for comfort in
+  agy's own window, gave a review prompt a shell in the project folder. The reviewer therefore runs agy as a
+  tool-less agent (`--agent autosound-reviewer`, `tools: []`) in a temporary folder holding only that agent.
 - **Quota:** Antigravity's free *Starter* tier is a **WEEKLY** Flash+Pro group limit. At 0% the channel returns empty for ~a week (`agy` shows the countdown) — fall back to manual channel (§6) when it's dry.
 - ⚠️ **Agentic — slow / hangs on BIG inputs.** `agy` is an *agentic* CLI; on a large package (tens of KB — e.g. several long docs at once) it can think for minutes or hang outright (seen: a 34 KB review timed out at 5 min, no output). Keep packages **lean** (decimated numbers, one focus — `analysis-playbook.md`). For a genuine bulk one-off review, skip the CLI and use the **copy-paste desktop channel (§6)** — faster and more reliable.
 
