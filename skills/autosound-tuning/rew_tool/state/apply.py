@@ -700,8 +700,8 @@ def _selftest():
     assert set(landed["channels"]) == {"w-L"} and landed["channels"]["w-L"]["gain_db"] == -3.0, landed
     # Two rows of one name are refused, never merged: which one the delta meant is not guessed.
     try:
-        apply_delta({"channels": {"a_b-c": {"gain_db": 0.0}, "a-b_c": {"gain_db": 0.0}}},
-                    {"a-b-c": {"gain_db": -1.0}})
+        apply_delta({"channels": {"w_L+tw-L": {"gain_db": 0.0}, "w-L+tw_L": {"gain_db": 0.0}}},
+                    {"w-L+tw-L": {"gain_db": -1.0}})
     except ValueError as exc:
         assert "S-079" in str(exc) and "not guessed" in str(exc), exc
     else:

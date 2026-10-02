@@ -18,9 +18,10 @@ has.
   changed DSP starts a new one -- `_N` does not number DSP states (the user, 2026-09-17). Saving to
   a DSP slot or a backup file does not move it, and it is not the ledger's `v_NNN`: that counter
   also moves for changes that are not the DSP's (skill #37, hub TCC-016). `final` is allowed.
-* **One notation for codes**: written with `-` (`w-L`). A `_` typed in a code (`w_L_3 (sw)`, a file
-  `w_L.json`) is read as `-`, and the parse says so in its `note` (S-079): `canonical_title`,
-  `canonical_code`.
+* **One notation for codes**: written with `-` (`w-L`). A driver's side typed with `_` (`w_L_3 (sw)`,
+  a file `w_L.json`) is read as `-`, and the parse says so in its `note` (S-079): `canonical_title`,
+  `canonical_code`. Any other `_` in a code is refused -- the old configuration prefix `D_L_7 (rta)`
+  among them, which is not a channel `D-L` (hub #232).
 * **Method suffix**: `(sw)` = acoustic sweep, for phase/time/distortion; `(rta)` = MMM RTA, for
   magnitude/tone; `(imp)` = impedance sweep, for a driver's resonance in the install -- the one
   method with no `_N`: an impedance measurement is not tied to a DSP state (skill #33). Phases 0 and 2 want sw and
@@ -93,24 +94,32 @@ CONTROL_OPEN = ("ctl1", "ctl")
 CONTROL_CLOSE = ("ctl3", "rep")
 
 
-# S-079 (the Arbiter, 2026-10-01: «розуміти обидві назви. правільна "-"»): a code is WRITTEN with `-`, and a `_` met
-# in one -- a capture typed `w_L_3 (sw)`, a file `w_L.json`, a project id `w_L` -- is READ as `-`. `_` stays the
-# series separator (`sw_1`, `ALL+C_25`), so the rule touches the code and never the `_N` after it. These two functions
-# are its one home: until now each module that met a `w_L` turned it into `w-L` on its own (skill #81).
+# S-079 (the Arbiter, 2026-10-01: «розуміти обидві назви. правільна "-"»): a code is WRITTEN with `-`, and a driver's
+# side met with `_` -- a capture typed `w_L_3 (sw)`, a file `w_L.json`, a project id `w_L` -- is READ as `-`. `_` stays
+# the series separator (`sw_1`, `ALL+C_25`), so the rule touches the code and never the `_N` after it. These two
+# functions are its one home: until now each module that met a `w_L` turned it into `w-L` on its own (skill #81).
+#
+# Only a driver's side (hub #232 TCC-044, the Arbiter 2026-10-01: «це правило до драйвер-L/R і все»): a lowercase
+# driver, `_`, then `L` or `R` as a whole token. v3.0.65 read every `_` in a code, and the old configuration prefix
+# `D_L_7 (rta)` became a channel `D-L` the car does not have.
 _FIRST_WORD_RE = re.compile(r"^\s*\S+")
+_SIDE_UNDERSCORE_RE = re.compile(r"(?<![A-Za-z0-9])([a-z][a-z0-9]*)_([LR])(?![A-Za-z0-9])")
+# The old configuration prefix (`D_L_7 (rta)`, `D_SW+Ws_9 (rta)`): one capital letter and `_` at the front of a code.
+# The Arbiter, 2026-09-29: «наші префікси були помилкою» -- the letter now goes in front of the series number (`L_D7`).
+_CONFIG_PREFIX_RE = re.compile(r"^(?P<letter>[A-Z])_(?=\S)")
 
 
 def canonical_code(code):
     """A code in the one notation: `w_L` -> `w-L`, `m_L-ctl1` -> `m-L-ctl1` (S-079). None stays None.
 
     For a name that carries no series: a channel code or id, a ledger key, a capture file's stem (`w_L` of
-    `irs_48/w_L.json`) -- so every `_` in it is a hyphen, `sw_1` included. Only the first word is the code's: a
-    modifier after it keeps what it was typed with (`w-L low_cut`). A TITLE carries a series; it goes through
-    `canonical_title`, which splits the series off first.
+    `irs_48/w_L.json`). Only a driver's side is read (hub #232): `sw_1`, `D_L` and `sw_f` keep their `_`. Only the
+    first word is the code's: a modifier after it keeps what it was typed with (`w-L low_cut`). A TITLE carries a
+    series; it goes through `canonical_title`, which splits the series off first.
     """
     if code is None:
         return None
-    return _FIRST_WORD_RE.sub(lambda m: m.group(0).replace("_", "-"), str(code), count=1)
+    return _FIRST_WORD_RE.sub(lambda m: _SIDE_UNDERSCORE_RE.sub(r"\1-\2", m.group(0)), str(code), count=1)
 
 
 def canonical_title(title):
@@ -431,7 +440,23 @@ def explain_name(title, glossary=None):
 
     head = body.split()[0] if body.split() else body
     note = None
-    if "_" in head:
+    if "_" in canonical_code(head):
+        # S-042: `_` only begins the series. A driver's side is the one `_` read as `-` (hub #232); any other is
+        # refused, as it was until v3.0.65, and the old configuration prefix says what it was.
+        prefix = _CONFIG_PREFIX_RE.match(text)
+        if prefix:
+            letter = prefix.group("letter")
+            rest = text[prefix.end():]
+            if version is None:
+                where = f"an impedance sweep is not tied to a configuration: `{rest}`"
+            else:
+                at = match.start("version") - prefix.end()
+                where = f"the letter goes in front of the series number: `{rest[:at]}{letter}{rest[at:]}`"
+            return None, (f"`{letter}_` is an old configuration prefix, not part of a code -- {where}, a form this "
+                          f"grammar does not read either (naming-and-structure.md §3)")
+        return None, (f"`{head}`: a code has no `_` -- `_` only begins the series number, and the one `_` read as "
+                      f"`-` is a driver's side (`w_L` is `w-L`) (naming-and-structure.md §3)")
+    if canonical_code(head) != head:
         # S-079 (the Arbiter, 2026-10-01): both notations are read, and the hyphen is the one written. From S-042
         # until then `w_L_1 (sw)` was refused here; it is read as `w-L_1 (sw)`, and the note says so, so a session
         # sees which code the title went to and what to rename it to. The reason slot stays None: a reader takes a
@@ -956,8 +981,21 @@ def _selftest():
         assert canonical_title(typed) == one, (typed, canonical_title(typed), one)
     # A file stem or an id has no series, so it is read whole -- the one place the two entry points differ.
     assert canonical_code("w_L") == "w-L" and canonical_code("m_L-ctl1") == "m-L-ctl1"
-    assert canonical_code("sw_1") == "sw-1" and canonical_title("sw_1") == "sw_1"
     assert canonical_code(None) is None and canonical_code("w-L low_cut") == "w-L low_cut"
+    # -- hub #232 TCC-044 (the Arbiter, 2026-10-01: «це правило до драйвер-L/R і все»): only a driver's side. v3.0.65
+    #    read every `_`, and the old configuration prefix of real captures (cap_010, cap_013) became a channel `D-L`.
+    for kept in ("sw_1", "D_L", "D_SW+Ws", "sw_f", "c_H", "w_Lx", "W_L"):
+        assert canonical_code(kept) == kept, (kept, canonical_code(kept))
+    assert canonical_code("sw+w_L") == "sw+w-L" and canonical_code("D_w_L") == "D_w-L"
+    assert canonical_title("D_L_7 (rta) m-L: lev=-4.5, PK=-2") == "D_L_7 (rta) m-L: lev=-4.5, PK=-2"
+    for title, new in (("D_L_7 (rta) m-L: lev=-4.5, PK=-2", "`L_D7 (rta) m-L: lev=-4.5, PK=-2`"),
+                       ("D_L w+m_7 (rta) inv", "`L w+m_D7 (rta) inv`"), ("D_SW+Ws_9 (rta)", "`SW+Ws_D9 (rta)`"),
+                       ("D_w-L (imp) case35l", "`w-L (imp) case35l`"), ("D_w_L_7 (sw)", "`w_L_D7 (sw)`")):
+        got, why = explain_name(title)
+        assert got is None and "`D_` is an old configuration prefix" in why and new in why, (title, why)
+    got, why = explain_name("sw_f_1 (sw)")
+    assert got is None and "`sw_f`: a code has no `_`" in why, why
+    assert parse_name("D_L_7 (rta)", Glossary({"channels": [{"code": "w-L"}], "sides": {"L": ["w-L"]}})) is None
     passat = Glossary({"channels": [{"code": c} for c in ("sw", "w-L", "w-R", "m-L", "tw-L", "c")],
                        "combos": {"ALL+C": ["sw", "w-L", "w-R", "m-L", "tw-L", "c"]}})
     got, why = explain_name("w_L_3 (sw)", passat)
@@ -1005,7 +1043,8 @@ def _selftest():
           "ctl1/ctl3/ctl/rep parse in both forms and are identity, not code; a clarification "
           "after the method is another measurement in the same series (#34), (imp) without `_N` (#33), refusals "
           "with a reason, and no ledger version for `_N` (#37); a match the comparison NORMALISED says the title on disk differs and names the canonical one to rename it to (#47); "
-          "a code typed with `_` is read as `-`, with a note, and the series is left alone (S-079)")
+          "a driver's side typed with `_` is read as `-`, with a note, and the series is left alone (S-079); any "
+          "other `_` in a code is refused, the old `D_` prefix by name (#232)")
     return 0
 
 

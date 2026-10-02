@@ -1627,6 +1627,20 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-091 · A driver's side is the one `_` read as `-`; the old `D_` prefix is refused (hub #232 TCC-044)
+
+**Status**: doing 2026-10-02 · branch `fix-tcc-044`, tag v3.0.66 · the Arbiter: «давай зробимо 232 і випустимо тег»
+
+v3.0.65 read every `_` in a code as `-` (S-079), so tcc's real captures `D_L_7 (rta) …` and `D_L w+m_7 (rta) inv`
+(cap_010, cap_013) became a channel `D-L`. The Arbiter, 2026-10-01: «це правило до драйвер-L/R і все». Built:
+`canonical_code` reads only `<driver>_L/R`; any other `_` in a code is refused as before v3.0.65, and the `D_`
+prefix is named in the refusal with the form the letter moved to (`L_D7 (rta)`), which the grammar does not read
+either. Of the ticket's two options for `D_` — read it as `_Dnnn` or refuse it with a note — the refusal: the
+Arbiter on 2026-09-29 called the prefixes a mistake and said the grammar was right to refuse them (tcc
+TEST-FINDINGS 117), and reading `_Dnnn` needs the preset letter in the grammar, which is research's proposal
+(AYA audit item 11), not decided. After the tag: tell tcc on #232, which re-pins and restores its two `D_L`
+fixture tests.
+
 ## S-090 · `key move-shell`'s Windows half, run on the VM once TCC pins v3.0.65
 
 **Status**: чекає 2026-10-01 · v3.0.65 · the Windows half of #110, to be run on the VM through TCC's key window once TCC pins v3.0.65 · was: open 2026-10-01 · pool (after the tag) · tcc's caveat when it said the skill can close W-5: the registry path of #110 was read, not run

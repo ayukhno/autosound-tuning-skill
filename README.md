@@ -49,12 +49,12 @@ We created an installer that downloads everything you need and sets up a conveni
 
 **macOS** — open Terminal (press ⌘-Space, type "terminal", Enter) and paste:
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.65/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.66/install.sh | bash
 ```
 
 **Windows** — open PowerShell (press Start, type "powershell", Enter) and paste:
 ```powershell
-irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.65/install.ps1 | iex
+irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.66/install.ps1 | iex
 ```
 
 The version in the address is the installer's own, not the version you get: the installer always installs the newest release. The address is pinned so that a change to the repository cannot change what runs on your machine.
@@ -70,11 +70,11 @@ The version in the address is the installer's own, not the version you get: the 
 
 With options the line takes another form. Two options at once, on macOS:
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.65/install.sh | bash -s -- --with-omp --github
+curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.66/install.sh | bash -s -- --with-omp --github
 ```
 and on Windows, as two lines (the options go on the second):
 ```powershell
-$i = irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.65/install.ps1
+$i = irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.66/install.ps1
 & ([scriptblock]::Create($i)) -WithOmp -GitHub
 ```
 

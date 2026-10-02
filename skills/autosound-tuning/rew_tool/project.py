@@ -2244,11 +2244,11 @@ def _selftest():
         raise AssertionError(f"validate took {rows!r}")
     # A file written by hand past `validate`: an exact name still finds its own row, and a name two rows answer to
     # only in the one notation is refused rather than handed to the first.
-    twins = {"channels": [{"code": "w_L"}, {"code": "w-L"}, {"code": "a_b-c"}, {"code": "a-b_c"}]}
+    twins = {"channels": [{"code": "w_L"}, {"code": "w-L"}, {"code": "w_L+tw-L"}, {"code": "w-L+tw_L"}]}
     assert passat.resolve_channel("w_L", twins) is twins["channels"][0]
     assert passat.resolve_channel("w-L", twins) is twins["channels"][1]
     try:
-        passat.resolve_channel("a-b-c", twins)
+        passat.resolve_channel("w-L+tw-L", twins)
     except ProjectError as exc:
         assert "two channels answer" in str(exc), exc
     else:
