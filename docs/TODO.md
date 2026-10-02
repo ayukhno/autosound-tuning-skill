@@ -1627,9 +1627,45 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-095 · The README/FAQ pass for v3.1.0, with the translations brought to it
+
+**Status**: open 2026-10-02 · W-6 pool (collection)
+
+`docs/RELEASE-PLAN-3.1.0.md` step 5: README, FAQ and their uk/de/pl versions read as the release, not as a patch line.
+The translations were brought to the English text in W-5 (S-078); this pass changes the English, so they follow it once
+more, through the Advisor.
+
+## S-094 · The plugin catalog moves to v3.1.0: how a plugin install gets the tools and the signature check
+
+**Status**: open 2026-10-02 · W-6 pool (collection)
+
+`.claude-plugin/marketplace.json` points at `2.x`, sha `255d6c8`, version 2.8.3. v3.1.0 is the moment it moves (the
+CHANGELOG's doctrine; the Arbiter at the release-prep review, 2026-10-01: «how the plugin path gets the tools and the
+signature check is 3.1.0's work»). The installers do both today; a plugin install does neither. Recorded, not
+diagnosed.
+
+## S-093 · W-6 is collecting: v3.1.0's wave, findings go to this pool
+
+**Status**: open 2026-10-02 · collection, no milestone yet · the Arbiter: «відкривай W-6» (2026-10-02), earlier than the «after TCC v0.1.46» of the same morning (S-092)
+
+The number is the Arbiter's: W-5 is closed in skill (v3.0.65); TCC's `W-5 · v0.1.46` is still open and is not this
+wave. The version waits for the milestone; the plan is v3.1.0 with TCC v1.1.0 (hub #220).
+
+The pool at the start, recorded, not diagnosed:
+- S-094 — the plugin catalog to v3.1.0;
+- S-095 — the README/FAQ pass and the translations;
+- the queue `to:skill`: #233 TCC-045 (the method's DSP sheet joins a channel to its ledger), #234 HUB-071 (agy through
+  ADC; the Arbiter put it here on 2026-10-02), #236 TCC-046 (a reviewer run named for a CLI can still bill an API);
+- outside the skill, before the tag: hub #220 (the minor-pair rule and its check); TCC v1.1.0 pins v3.1.0 the same day;
+- S-017's walk on the Passat after AYA 17.10 — not walked by the release, it moves to 3.2.x (2026-10-01).
+
+Each finding that arrives becomes a pool item here (S-096 onward), or stays a bus ticket. On the Arbiter's «збір
+закінчено» the milestone `W-6 · v3.1.0` opens and each item becomes an issue on it with the four assessment lines;
+nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume 205e26fb-aa4b-4093-abf7-2fec0b06a86b`.
+
 ## S-092 · v3.1.0 is its own wave, W-6: the collection opens after TCC v0.1.46
 
-**Status**: deferred 2026-10-02 · the Arbiter: the W-6 collection opens after TCC v0.1.46 is released, with its findings in the pool; it comes back when that tag is out
+**Status**: done 2026-10-02 · the collection opened the same day, before TCC v0.1.46, on the Arbiter's «відкривай W-6»: S-093 · was: deferred 2026-10-02 · the Arbiter: the W-6 collection opens after TCC v0.1.46 is released, with its findings in the pool; it comes back when that tag is out
 
 What v3.1.0 still needs on the skill's side (the Arbiter asked on 2026-10-02 whether TCC's readiness is enough):
 the plugin catalog — `.claude-plugin/marketplace.json` still points at `2.x` / 2.8.3, and how a plugin install gets
