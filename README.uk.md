@@ -2,6 +2,8 @@
 
 🇬🇧 [English](README.md) · 🇩🇪 [Deutsch](README.de.md) · 🇵🇱 [Polski](README.pl.md) · 🇺🇦 **Українська** · ❓ [FAQ](FAQ.uk.md) · 📘 [TCC guide (EN)](https://github.com/ayukhno/autosound-tcc/blob/main/docs/guide/QUICK-GUIDE.md) · <img src="assets/icons/roadmap.svg" width="14" height="14" valign="middle" alt="Roadmap" /> [Roadmap (EN)](ROADMAP.md)
 
+> Translation lags the English original: the English text is being brought to the v3.1.0 release first (W-6); this version follows it before the release.
+
 **Простою мовою:** Це твій персональний ШІ-майстер з налаштування автозвуку. Ти хочеш ідеальну сцену і рівний тональний баланс, але графіки, фази та затримки здаються занадто складними? Цей помічник візьме найскладніше на себе. Він читає твої заміри з мікрофона і крок за кроком веде тебе до ідеального звуку.
 
 - **Ти робиш заміри — ШІ рахує:** Він працює разом з програмою REW, аналізує акустику твого салону і пропонує точні налаштування для еквалайзера, кросоверів та затримок.

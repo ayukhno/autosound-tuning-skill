@@ -2,6 +2,8 @@
 
 🇬🇧 [English](FAQ.md) · 🇩🇪 **Deutsch** · 🇵🇱 [Polski](FAQ.pl.md) · 🇺🇦 [Українська](FAQ.uk.md) · 📄 [README](README.de.md) · <img src="assets/icons/roadmap.svg" width="14" height="14" valign="middle" alt="Roadmap" /> [Roadmap (EN, Entwurf)](ROADMAP.md)
 
+> Translation lags the English original: the English text is being brought to the v3.1.0 release first (W-6); this version follows it before the release.
+
 Echte Benutzerfragen zur Installation und Abstimmung deines Systems mit diesem Tool. [README](README.de.md) ist die Kurzversion; diese Seite enthält alle Details.
 
 ---

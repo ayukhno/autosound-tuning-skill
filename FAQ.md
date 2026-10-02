@@ -60,15 +60,15 @@ Real user questions about installing and tuning your system with this tool. [REA
   The most automated and visual path. The installer sets up Claude Code, Python, the core method, the graphical UI, and the automatic AI reviewer.
   * **Requirements:** macOS or Windows, paid Claude Pro/Max, REW beta with API enabled; the app adds about 700 MB to the download.
   * **Pros:** You see the system tree, measurement curves, step-by-step plan, and chat window in a single interface. The state is saved automatically on disk, and actions in the version registry are tracked.
-  * **Cons:** The graphical app is younger than the underlying tuning method and is currently in beta status.
+  * **Cons:** The graphical app is younger than the underlying tuning method.
 
 * 💻 **Option 2 · Version 3.x in Terminal (Claude Code or Headless Plugin)**  
-  The exact same modern core, calculation tools, and level of automation, but the interaction is text-based in the console. Installed with the `--terminal` flag (or via the Claude Code plugin).
+  The exact same modern core, calculation tools, and level of automation, but the interaction is text-based in the console. Installed with the `--terminal` flag, or as a Claude Code plugin from this repository's catalog — then `/autosound-tuning:setup` in the first session brings the tools (README, «Already in Claude Code? As a plugin»).
   * **Requirements:** The same subscriptions and REW beta with API enabled, but without the graphical UI.
   * **Pros:** Maximum execution speed, zero GUI overhead, ideal for console lovers. Projects are 100% compatible with the graphical TCC app.
 
 * 🏆 **Option 3 · The 2.x Line (The Proven Champion)**  
-  The classic plugin for Claude Code, locked on version `v2.8.3` (branch `2.x`). Tuned with this algorithm, the author's car took awards in 2026 at EMMA and AYA championships.
+  The classic plugin for Claude Code, on the `2.x` branch (version 2.8.x). Tuned with this algorithm, the author's car took awards in 2026 at EMMA and AYA championships. The catalog installs 3.x from v3.1.0 on; the 2.x line is added by its branch (below, «How do I stay on the stable 2.x line?»).
   * **Requirements:** Paid Claude Pro, REW beta with API enabled, working in the terminal.
   * **Pros:** A fixed, competition-proven algorithm. Receives only critical bug fixes, with no new features added.
   * **Cons:** Manual state tracking in text Markdown files (`dsp-state-current.md`), no "Desk-First" automated virtual prediction, and no modern calculation tools.
@@ -95,7 +95,7 @@ Real user questions about installing and tuning your system with this tool. [REA
 
 ### How do I check the currently installed version?
 
-* **By the command used:** If you installed the plugin using the `/plugin install autosound-tuning` command inside Claude Code, you are using version **2.x**. If you ran the single-line installation script (`curl … | bash` or `irm … | iex`), you are using version **3.x**.
+* **By the command used:** The single-line installation script (`curl … | bash` or `irm … | iex`) installs **3.x**. A plugin shows its version in `claude plugin list`: **3.1.0** and later from the catalog, **2.8.x** from the `2.x` branch.
 * **By the contents of the project folder:** If the folder contains a file named `dsp-state-current.md`, it is a **2.x** project. If the folder contains machine-readable files `project.json` and `process-state.json`, it is a **3.x** project.
 * **Through the program interface:** In the TCC app, go to *Diagnostics → Installation*.
 
@@ -103,24 +103,19 @@ Real user questions about installing and tuning your system with this tool. [REA
 
 ### How do I stay on the stable 2.x line?
 
-The standard automatic plugin update will not transition you to version 3.x without your consent. However, if you want to completely freeze the version and locally control updates on the 2.x branch, clone the repository yourself:
+From v3.1.0 the catalog installs **3.x**: a plugin installed from it moves to 3.x on `claude plugin update` (or on the marketplace's auto-update, if you turned it on). To stay on 2.x, add the catalog **as it stands on the `2.x` branch** — it then follows that branch only:
 
 ```bash
-git clone -b 2.x https://github.com/ayukhno/autosound-tuning-skill.git ~/autosound-2x
-```
-
-Then run these two commands in a terminal:
-```bash
-claude plugin marketplace add ~/autosound-2x
+claude plugin marketplace add ayukhno/autosound-tuning-skill#2.x
 claude plugin install autosound-tuning
 ```
-Now your plugin points to your local folder. You can update it whenever needed with a simple `git -C ~/autosound-2x pull`.
+If the main catalog is already added, remove it first (the two commands in «Switching from 2.x to 3.x» below): the two carry the same name.
 
 ---
 
 ### Switching from 2.x to 3.x
 
-Only one such plugin can be active in the system at a time. Before installing version 3.x, make sure to uninstall the old 2.x version (in a terminal):
+Only one such plugin can be active in the system at a time. Before installing version 3.x — by the installer or as the plugin from the main catalog — make sure to uninstall the old 2.x version (in a terminal):
 
 ```
 claude plugin uninstall autosound-tuning
@@ -132,7 +127,7 @@ After installing version 3.x, you can migrate an existing car project into the n
 ```sh
 python3 ~/.claude/skills/.autosound-tuning-src/skills/autosound-tuning/rew_tool/state/migrate.py <path-to-old-project> --into <path-to-new-project>
 ```
-*(Note: verify channel mappings and speaker specs after running the migration).*
+*(Note: verify channel mappings and speaker specs after running the migration. With the plugin, the migrator is inside the plugin's own folder — ask the session to run it.)*
 
 ---
 
@@ -189,7 +184,7 @@ The AI handles routine calculations and cabin acoustics: it analyzes impulse arr
 ### Which AI models are officially supported?
 
 * 🧠 **Primary Model (Generator):** **Claude Opus** (configured with `xhigh` effort level; `max` for complex phase alignment).
-* 👁️ **AI Reviewer (Critic):** **Gemini Pro (High)** via Google Antigravity (`agy`) or direct API key.
+* 👁️ **AI Reviewer (Critic):** **Gemini Pro (High)** via Google Antigravity (`agy`) or direct API key. With a Google Cloud sign-in (ADC, the free trial) Pro (High) is not offered: there the reviewer is **Gemini 3.8 Flash (High)** (`gemini-3.8-flash-high`).
 * 🛠️ **Other reviewers:** TCC's picker also offers Codex (and, with `--with-omp`, other models) for the reviewer's role. The Generator stays Claude.
 
 *As of September 2026.* Model names change fast. If one named here is refused (for example, `agy` answers that the model is not supported in your location), pick another from `agy models`.
@@ -279,9 +274,9 @@ All files are stored within your user profile:
 
 ### Updating, Locking Version, and Uninstallation
 
-* **Updating the skill:** You can update the skill directly inside TCC, or simply re-run the installation command in a terminal. The script downloads the newest `v3.*` tag (the `v3.0.*` tags are pre-releases until 3.1.0; the competition-proven stable line is 2.8.x) and does not touch your project files.
+* **Updating the skill:** You can update the skill directly inside TCC, or simply re-run the installation command in a terminal. The script downloads the newest `v3.*` release tag, checks its signature, and does not touch your project files. A plugin updates with `claude plugin update autosound-tuning`; the next session then offers `/autosound-tuning:setup` once more, which checks the new version against its signed release.
 * **Updating TCC:** TCC's in-app update button provides the update command to run in terminal (a running application cannot overwrite its own executable).
-* **Options:** they go after `bash -s --` on macOS and after the `& ([scriptblock]::Create((irm …)))` form on Windows (both shown in the [README](README.md#how-to-install-and-start-version-3x--beta)): `--terminal` / `-Terminal` (no app), `--github` / `-GitHub`, `--with-omp` / `-WithOmp`, `--no-reviewer` / `-NoReviewer`, `--dry-run` / `-DryRun`.
+* **Options:** they go after `bash -s --` on macOS and after the `& ([scriptblock]::Create((irm …)))` form on Windows (both shown in the [README](README.md#how-to-install-and-start)): `--terminal` / `-Terminal` (no app), `--github` / `-GitHub`, `--with-omp` / `-WithOmp`, `--no-reviewer` / `-NoReviewer`, `--dry-run` / `-DryRun`.
 * **Locking Version:** `--skill-ref` and `--tcc-ref` (`-SkillRef` and `-TccRef` on Windows) pin the method and the app to the versions released together — quote the two as a **pair** or not at all; a mixed pair is untested.
 * **Uninstallation:** Run the installer with `--uninstall` (`-Uninstall`); `--all` also removes uv, Claude Code and `~/.claude`, and `agy`/`gh`/`omp` when the installer put them there — it asks first. Your project folders are never deleted.
 
@@ -325,7 +320,7 @@ The official **Antigravity CLI (`agy`)** needs no API key — you authenticate i
    ```env
    AUTOSOUND_CRITIC_MODEL=gemini-3.1-pro-high
    ```
-   The app sets it from its own picker. If `agy` answers that the model is not supported in your location, pick another id from the list.
+   The app sets it from its own picker. If `agy` answers that the model is not supported in your location, pick another id from the list. Signed in through Google Cloud (ADC, next section), use `gemini-3.8-flash-high`: Pro at its high tier is not offered there.
 4. **Check:**
    ```bash
    python3 ~/.claude/skills/autosound-tuning/scripts/autosound_ai.py doctor

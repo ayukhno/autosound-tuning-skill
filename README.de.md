@@ -2,6 +2,8 @@
 
 🇬🇧 [English](README.md) · 🇩🇪 **Deutsch** · 🇵🇱 [Polski](README.pl.md) · 🇺🇦 [Українська](README.uk.md) · ❓ [FAQ](FAQ.de.md) · 📘 [TCC guide (EN)](https://github.com/ayukhno/autosound-tcc/blob/main/docs/guide/QUICK-GUIDE.md) · <img src="assets/icons/roadmap.svg" width="14" height="14" valign="middle" alt="Roadmap" /> [Roadmap (EN)](ROADMAP.md)
 
+> Translation lags the English original: the English text is being brought to the v3.1.0 release first (W-6); this version follows it before the release.
+
 **In einfachen Worten:** Dies ist dein persönlicher KI-Meister für das Einstellen von Car-HiFi. Du willst eine perfekte Bühne und eine saubere tonale Balance, aber Graphen, Phasen und Laufzeiten erscheinen dir zu kompliziert? Dieser Assistent übernimmt den schwierigsten Teil. Er liest deine Mikrofonmessungen und führt dich Schritt für Schritt zum perfekten Sound.
 
 - **Du misst — die KI rechnet:** Sie arbeitet mit der REW-Software zusammen, analysiert die Akustik deines Innenraums und schlägt genaue Einstellungen für EQ, Frequenzweichen und Laufzeitkorrektur vor.

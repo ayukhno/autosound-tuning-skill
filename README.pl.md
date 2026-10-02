@@ -2,6 +2,8 @@
 
 🇬🇧 [English](README.md) · 🇩🇪 [Deutsch](README.de.md) · 🇵🇱 **Polski** · 🇺🇦 [Українська](README.uk.md) · ❓ [FAQ](FAQ.pl.md) · 📘 [TCC guide (EN)](https://github.com/ayukhno/autosound-tcc/blob/main/docs/guide/QUICK-GUIDE.md) · <img src="assets/icons/roadmap.svg" width="14" height="14" valign="middle" alt="Roadmap" /> [Roadmap (EN)](ROADMAP.md)
 
+> Translation lags the English original: the English text is being brought to the v3.1.0 release first (W-6); this version follows it before the release.
+
 **Prostymi słowami:** To twój osobisty mistrz AI do strojenia car audio. Chcesz idealnej sceny i równego balansu tonalnego, ale wykresy, fazy i opóźnienia wydają ci się zbyt skomplikowane? Ten asystent weźmie najtrudniejsze na siebie. Czyta twoje pomiary z mikrofonu i krok po kroku prowadzi cię do idealnego dźwięku.
 
 - **Ty mierzysz — AI liczy:** Współpracuje z programem REW, analizuje akustykę twojej kabiny i proponuje dokładne ustawienia dla korektora, zwrotnic i opóźnień (time alignment).

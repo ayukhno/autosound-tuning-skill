@@ -13,7 +13,7 @@
 
 ## Proven in Competitions
 
-With version 2.x of this method, the author's car took four awards in 2026 at **EMMA** and **AYA** championships (the first award was won before it was bundled into a skill, using AI hints from the same graphs, which inspired this project). The latest version 3.x (with a graphical interface) is currently in beta and has just begun its competition trials: the fifth award — 3rd place at the **German EMMA Final 2026** — came from refining the existing tune with 3.x, not from tuning from scratch. So for a guaranteed result, many still choose to stick with the time-tested version 2.8.x.
+With version 2.x of this method, the author's car took four awards in 2026 at **EMMA** and **AYA** championships (the first award was won before it was bundled into a skill, using AI hints from the same graphs, which inspired this project). Version 3.x (with a graphical interface) is the current release and has begun its competition trials: the fifth award — 3rd place at the **German EMMA Final 2026** — came from refining the existing tune with 3.x, not from tuning from scratch. The 2.8.x line behind the first four awards is still available: the FAQ, [path 3](FAQ.md#four-paths-of-usage).
 
 <p align="left">
   <img src="assets/awards/aya-may26-einsteiger5000.jpg" height="120" alt="AYA May 2026, Einsteiger 5000, 1st place">
@@ -43,7 +43,7 @@ You don't need to be a programmer — the app installs with a single command. Bu
 
 *(We also recommend a free GitHub account to back your tuning history up to a private repository — the installer adds GitHub's `gh` for that when you ask: `--github`, or `-GitHub` on Windows. Your Gemini API key, if you use one, does **not** travel with that backup: it lives outside the project, in `~/.config/autosound/critic-env` — `%APPDATA%\autosound\critic-env` on Windows — and a new project is created with a `.gitignore` that keeps the project-local config out of git as well.)*
 
-## How to Install and Start (Version 3.x — Beta)
+## How to Install and Start
 
 We created an installer that downloads everything you need and sets up a convenient **graphical application (Autosound TCC)**. Models other than Claude come through **`omp`**, which the installer adds **only when you ask** (options below). Those models are **billed per use**, and nothing runs through `omp` unless you pick one; the terminal-only install never brings it. The process takes 10–20 minutes (on macOS, Apple's own installer window opens once for the developer tools — one click, and no password is typed into the script; on Windows, it will show a Git permission dialog).
 
@@ -79,9 +79,9 @@ $i = irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.6
 ```
 
 **After installation:**
-1. The installer's last step signs you in: Claude in the browser, then the Gemini reviewer through Google's `agy` (Enter signs in, `s` skips), and GitHub if `gh` is there.
+1. The installer's last step signs you in: Claude in the browser, then the Gemini reviewer through Google's `agy` (Enter signs in, `s` skips) — or, when it finds Google Cloud credentials on the machine, it offers those for the reviewer instead (FAQ, «agy through Google Cloud's ADC») — and GitHub if `gh` is there.
 2. The **Autosound TCC** app will appear on your desktop. Open it.
-3. Create a new empty folder for your car (e.g., `MyCarTuning`) and select it in the app, with **AI main: Claude Opus (SDK)** and **AI critic: Gemini Pro (High)**. If the reviewer answers that Gemini Pro is not supported in your location, pick a **Gemini Flash (High)** model in the same list.
+3. Create a new empty folder for your car (e.g., `MyCarTuning`) and select it in the app, with **AI main: Claude Opus (SDK)** and **AI critic: Gemini Pro (High)**. If the reviewer answers that Gemini Pro is not supported in your location, pick a **Gemini Flash (High)** model in the same list — the one to pick with a Google Cloud sign-in (ADC), where Pro (High) is not offered.
 4. **IMPORTANT:** Before your first message, make sure the effort level for **Claude Opus** is set to no lower than `xhigh` (this is the default value). For very complex steps, use `max`. This is critical: a weaker model doesn't stop with an error; it just agrees with you, leading to "silent failures" in your tuning. *Note: effort level changes apply only to the next session.*
 5. Type in the app chat: **"tune a new car from scratch"**. The AI will start asking questions and lead you by the hand.
 
@@ -89,13 +89,14 @@ $i = irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.6
 
 ---
 
-**Competition-Proven Version 2.8.x** — [path 3 in the FAQ](FAQ.md#four-paths-of-usage)
+**Already in Claude Code? As a plugin** — [path 2 in the FAQ](FAQ.md#four-paths-of-usage)
 
-If you want to use the exact **2.8.x** version that won the competitions, it works exclusively through the terminal. Instead of the scripts above, run these two commands in a terminal with `claude` (Claude Code) already installed:
+The same method installs as a Claude Code plugin from this repository's catalog. In a terminal with `claude` (Claude Code) already installed:
 ```sh
 claude plugin marketplace add ayukhno/autosound-tuning-skill
 claude plugin install autosound-tuning
 ```
+A plugin is a copy of the method's files and nothing it runs on, so in your first session type **`/autosound-tuning:setup`**: it checks the plugin against its signed release and installs the Python libraries, the Gemini reviewer and the desk engine (the app only if you ask). Until it has run, each session starts with a note offering it.
 *(If `claude` is not installed yet, you can add it via the official script: `curl -fsSL https://claude.ai/install.sh | sh`, or via npm as a fallback).*
 
 ## What the Tuning Process Looks Like

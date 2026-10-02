@@ -128,3 +128,17 @@ Mac only).
 - **Ask 5.** FAQ section in four languages (English written here, uk/de/pl by the Advisor through agy/ADC — the first
   translations on the new connection; `i18n-check` OK, the literals checked); `setup-critic-channel.md` §1 bullet.
 - The README's model recommendation (Pro `-high`, not offered under ADC) goes with the docs pass, #124.
+
+### #124 — the documentation to the release's state (English) — hygiene done; the interactive pass with the Arbiter next
+
+The Arbiter, 2026-10-02: «зроби базову гігієну в одній мові - далі я хотів попрацювати ітерактивно з реадмі та ФАК з
+тобою (до перекладу на всі мови)». Hygiene, English only:
+- README: 3.x is the release (no «beta»); 2.8.x is a pointer to the FAQ's path 3; the plugin block now leads to 3.x
+  with `/autosound-tuning:setup`; the ADC sign-in at the installer's last step; the critic's Flash (High) for ADC.
+- FAQ: path 1 without «beta»; path 2 names the plugin and the setup; path 3 and «stay on 2.x» use the catalog at its
+  branch (`claude plugin marketplace add ayukhno/autosound-tuning-skill#2.x`, Claude Code's documented way to hold a
+  version; the old local-clone recipe is gone); «which version» reads `claude plugin list`; the migrator inside the
+  plugin; the models with the ADC line; updating names the signed tag and the plugin's update; the README anchor.
+- The six translations carry `Translation lags the English original:` until #125, so `i18n-check` notes, not fails.
+- Left for the release's bookkeeping (#123): `commands/install-tcc.md`'s app pin (v0.1.35 → the paired TCC v1.1.0),
+  the install pins, the CHANGELOG doctrine's «the catalogue is pinned to 2.8.3».

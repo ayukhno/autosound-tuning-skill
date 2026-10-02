@@ -2,6 +2,8 @@
 
 🇬🇧 [English](FAQ.md) · 🇩🇪 [Deutsch](FAQ.de.md) · 🇵🇱 [Polski](FAQ.pl.md) · 🇺🇦 **Українська** · 📄 [README](README.uk.md) · <img src="assets/icons/roadmap.svg" width="14" height="14" valign="middle" alt="Roadmap" /> [Roadmap (EN)](ROADMAP.md)
 
+> Translation lags the English original: the English text is being brought to the v3.1.0 release first (W-6); this version follows it before the release.
+
 Реальні питання користувачів про встановлення та налаштування аудіосистеми за допомогою цього інструменту. [README](README.uk.md) — коротка версія; ця сторінка містить усі подробиці.
 
 ---
