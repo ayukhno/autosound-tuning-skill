@@ -1642,16 +1642,28 @@ the whole documentation brought to the state v3.1.0 ships in. Known parts so far
 
 ## S-094 · The plugin catalog moves to v3.1.0: how a plugin install gets the tools and the signature check
 
-**Status**: open 2026-10-02 · W-6 pool (collection)
+**Status**: open 2026-10-02 · W-6 pool (collection) · in W-6's work, the Arbiter 2026-10-02: «так включай це до списку робіт»
 
 `.claude-plugin/marketplace.json` points at `2.x`, sha `255d6c8`, version 2.8.3. v3.1.0 is the moment it moves (the
 CHANGELOG's doctrine; the Arbiter at the release-prep review, 2026-10-01: «how the plugin path gets the tools and the
 signature check is 3.1.0's work»). The installers do both today; a plugin install does neither. Recorded, not
-diagnosed.
+diagnosed. What the plugin route lacks, as listed to the Arbiter on 2026-10-02 — each part is in W-6:
+- the catalog entry itself: `marketplace.json` from `2.x` / 2.8.3 to the v3.1.0 tag (`plugin.json` already carries
+  3.x and points at `./skills/autosound-tuning`);
+- the Python libraries (numpy, scipy, matplotlib) — the installers put them in (`upkeep.py libs`), a plugin install
+  copies files only;
+- omp and gh;
+- the Resonalyze engine (prebuilt binary or the .NET SDK route);
+- the signature check of what was installed;
+- `deployment.py` does not know the folder plugins install into (`~/.claude/plugins`), named in the 09.09 review
+  (§3.4) and not done.
 
 ## S-093 · W-6 is collecting: v3.1.0's wave, findings go to this pool
 
 **Status**: open 2026-10-02 · collection, no milestone yet · the Arbiter: «відкривай W-6» (2026-10-02), earlier than the «after TCC v0.1.46» of the same morning (S-092)
+
+**The wave's goal** (the Arbiter, 2026-10-02): «на кінці W-6 все повино бути готове для випуску релізу» — when W-6
+ends, v3.1.0 is ready to ship: the plugin route (S-094), the documentation (S-095) and the queue's tickets done.
 
 The number is the Arbiter's: W-5 is closed in skill (v3.0.65); TCC's `W-5 · v0.1.46` is still open and is not this
 wave. The version waits for the milestone; the plan is v3.1.0 with TCC v1.1.0 (hub #220).
