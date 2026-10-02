@@ -1627,6 +1627,19 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-092 · v3.1.0 is its own wave, W-6: the collection opens after TCC v0.1.46
+
+**Status**: deferred 2026-10-02 · the Arbiter: the W-6 collection opens after TCC v0.1.46 is released, with its findings in the pool; it comes back when that tag is out
+
+What v3.1.0 still needs on the skill's side (the Arbiter asked on 2026-10-02 whether TCC's readiness is enough):
+the plugin catalog — `.claude-plugin/marketplace.json` still points at `2.x` / 2.8.3, and how a plugin install gets
+the tools and the signature check is unsolved; the README/FAQ pass for the release, with the translations brought to
+it. Outside the skill: hub #220 (the minor-pair rule and its check, before the tag) and TCC v1.1.0 pinning v3.1.0 on
+the same day. S-017 does not hold the release: not walked on the Passat by then, it moves to 3.2.x (the Arbiter,
+2026-10-01). The order proposed: collection → milestone `W-6 · v3.1.0` → one branch, one PR → a candidate
+`beta-v3.1.0-rc1` run on the Mac and the VM (the plugin path is new) → the skill's tag, the catalog with it → TCC
+re-pins and tags v1.1.0.
+
 ## S-091 · A driver's side is the one `_` read as `-`; the old `D_` prefix is refused (hub #232 TCC-044)
 
 **Status**: done 2026-10-02 · v3.0.66 · `git tag --contains fd89466` → v3.0.66 (signed); `python3 skills/autosound-tuning/rew_tool/naming.py . selftest` → OK; hub #232 closed with the receipt to tcc · was: doing 2026-10-02 · branch `fix-tcc-044`, PR #115 · the Arbiter: «давай зробимо 232 і випустимо тег»
