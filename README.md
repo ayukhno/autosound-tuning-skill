@@ -1,6 +1,6 @@
 # AI Autosound Tuning Assistant (Autosound Tuning Skill)
 
-🇬🇧 **English** · 🇩🇪 [Deutsch](README.de.md) · 🇵🇱 [Polski](README.pl.md) · 🇺🇦 [Українська](README.uk.md) · ❓ [FAQ](FAQ.md) · 📘 [TCC guide (EN)](https://github.com/ayukhno/autosound-tcc/blob/main/docs/guide/QUICK-GUIDE.md) · <img src="assets/icons/roadmap.svg" width="14" height="14" valign="middle" alt="Roadmap" /> [Roadmap (EN)](ROADMAP.md)
+🇬🇧 **English** · 🇩🇪 [Deutsch](README.de.md) · 🇵🇱 [Polski](README.pl.md) · 🇺🇦 [Українська](README.uk.md) · ❓ [FAQ](FAQ.md) · 📘 [TCC quick guide (EN)](https://github.com/ayukhno/autosound-tcc/blob/main/docs/guide/QUICK-GUIDE.md)
 
 **In simple terms:** This is your personal AI car audio tuning master. You want a perfect soundstage and a smooth tonal balance, but graphs, phases, and delays seem too complicated? This assistant will take care of the hard parts. It reads your microphone measurements and guides you step-by-step to perfect sound.
 
@@ -90,6 +90,8 @@ A plugin brings the method's files only: in the first session type **`/autosound
 3. Create an empty folder for your car (e.g., `MyCarTuning`) and select it in the app, with **AI main: Claude Opus (SDK)** and **AI critic: Gemini Pro (High)** — or **Gemini Flash (High)** if Pro is not offered to you.
 4. **Important:** keep Claude Opus's effort at `xhigh` or higher (the default; `max` for hard steps).
 5. Type in the app chat: **"tune a new car from scratch"**. The AI will start asking questions and lead you by the hand.
+
+Prefer to talk to the AI in a terminal? That works too, and many find it handier: keep TCC beside it in **Control mode**, where you see and control every parameter while the session works ([TCC guide](https://github.com/ayukhno/autosound-tcc/blob/main/docs/guide/REFERENCE.md#control-mode), [FAQ](FAQ.md#control-mode-the-session-in-a-terminal)).
 
 ▶ **Target curves:** the method comes with its own curve for competitions, **SQ-Comp-Ref**. The **[Target Curve Visualizer](https://ayukhno.github.io/autosound-tuning-skill/_curve-visualizer.html?lang=en)** analyzes and compares curves side by side — SQ-Comp-Ref, your own from REW, or the standard ones from [Nono Tuning Tool](https://nonotuningtool.com) — and saves the one you choose. How to pick one: the [target-curve guide](skills/autosound-tuning/references/patterns/target-curves/target_curves_guide.md).
 
