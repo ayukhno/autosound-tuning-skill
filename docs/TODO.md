@@ -1635,7 +1635,7 @@ What v3.1.0 still needs on the skill's side (the Arbiter asked on 2026-10-02 whe
 the plugin catalog — `.claude-plugin/marketplace.json` still points at `2.x` / 2.8.3, and how a plugin install gets
 the tools and the signature check is unsolved; the README/FAQ pass for the release, with the translations brought to
 it. Outside the skill: hub #220 (the minor-pair rule and its check, before the tag) and TCC v1.1.0 pinning v3.1.0 on
-the same day. S-017 does not hold the release: not walked on the Passat by then, it moves to 3.2.x (the Arbiter,
+the same day. Hub #234 (HUB-071, agy through ADC: the reviewer channel strips `AGY_ADC_AUTH`, so `doctor --model gemini-3.8-flash-high` fails «authentication failed or timed out», checked 2026-10-02) waits for W-6 too — the Arbiter, 2026-10-02: «Чекати W-6»; until codex's limit ends on 2026-10-20 a Critic round goes to the clipboard. S-017 does not hold the release: not walked on the Passat by then, it moves to 3.2.x (the Arbiter,
 2026-10-01). The order proposed: collection → milestone `W-6 · v3.1.0` → one branch, one PR → a candidate
 `beta-v3.1.0-rc1` run on the Mac and the VM (the plugin path is new) → the skill's tag, the catalog with it → TCC
 re-pins and tags v1.1.0.
