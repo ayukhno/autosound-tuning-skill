@@ -181,3 +181,10 @@ What the run covers (the Arbiter, the Mac and the Windows VM):
    ayukhno/autosound-tuning-skill#rc-catalog`, `claude plugin install autosound-tuning@autosound-rc`, the session's
    note, `/autosound-tuning:setup` («beta-v3.1.0-rc1 as its author signed it», the tools), no note in the next session.
 3. S-090: `key move-shell` on the VM.
+
+### #123 — the catalog: a protected surface (hub #239)
+
+`main:.claude-plugin/marketplace.json`'s pin is protected surface №2 and the `Latest` release is №9
+(`RELEASE-CHANNEL.md` §3): the release role's. Hub #239 (SKL-063) asks how they are done for v3.1.0, and for hub #220's
+minor-pair rule before the tag; the skill touches neither surface before the answer. TCC is asked to re-pin to rc1 for
+one joint run and to tag v1.1.0 on v3.1.0 the same day (hub #238, SKL-062).
