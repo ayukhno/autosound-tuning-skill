@@ -215,3 +215,7 @@ one joint run and to tag v1.1.0 on v3.1.0 the same day (hub #238, SKL-062).
   the libraries installed, agy/gh already signed in, `doctor`'s new line for a model not named (S-096). **The next
   session carried no note** — the setup's `plugin-ready` line silenced the hook. Two skill entries listed (the
   installer's copy and the plugin's), as expected on a machine with both.
+- **S-090 on the VM, rc2:** `key move-shell google --drop --yes` over a test value in the user environment →
+  «HKCU\Environment: GEMINI_API_KEY прибрано; у сховищі ключів лишився свій (DPAPI)». The Windows half of #110 has run.
+- **Left for the joint run:** TCC's candidate pinned to rc2 (hub #238) — its Updates rows for agy/Claude (#126) and the
+  route variable for its sessions (#119); then hub #239's answer on the catalog (№2), `Latest` (№9) and #220.

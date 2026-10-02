@@ -1718,7 +1718,7 @@ fixture tests.
 
 ## S-090 · `key move-shell`'s Windows half, run on the VM once TCC pins v3.0.65
 
-**Status**: чекає 2026-10-01 · v3.0.65 · the Windows half of #110, to be run on the VM through TCC's key window once TCC pins v3.0.65 · was: open 2026-10-01 · pool (after the tag) · tcc's caveat when it said the skill can close W-5: the registry path of #110 was read, not run
+**Status**: done 2026-10-03 · the W-6 candidate run on the Windows VM (rc2): a test value set with `setx GEMINI_API_KEY …`, then `autosound_ai.py key move-shell google --drop --yes` → «✓ HKCU\Environment: GEMINI_API_KEY прибрано; у сховищі ключів лишився свій (DPAPI)» · was: чекає 2026-10-01 · v3.0.65 · the Windows half of #110, to be run on the VM through TCC's key window once TCC pins v3.0.65 · was: open 2026-10-01 · pool (after the tag) · tcc's caveat when it said the skill can close W-5: the registry path of #110 was read, not run
 
 `key move-shell <provider> [--drop]` on Windows reads and deletes the user environment's value through `winreg`;
 the selftests run the profile-file half. To check on the VM through TCC's key window once TCC pins v3.0.65. A fault
