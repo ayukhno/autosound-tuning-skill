@@ -422,8 +422,58 @@ def _brew():
                                          if os.path.isfile(p)), None)
 
 
-def available_version(name, path, how, package, runner=run):
-    """What the tool's source offers now, or "" when it cannot say without installing (agy, a native Claude)."""
+#: Where a self-installed agy and a native Claude Code say what is newest, without installing (W-6 #126, hub #237).
+#: agy's own installers read a manifest per platform from its update server (`antigravity.google/cli/install.sh`,
+#: `install.ps1`, 2026-10-02); Claude Code's native updater follows a CHANNEL (`autoUpdatesChannel` in
+#: `~/.claude/settings.json`, `latest` by default, or `stable`), whose newest is the npm registry's dist-tag of that name
+#: -- read over HTTP, so no npm is needed. TCC's Updates row could only say «cannot be known» for these two before.
+AGY_MANIFEST = "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/{platform}.json"
+CLAUDE_DIST_TAGS = "https://registry.npmjs.org/-/package/@anthropic-ai/claude-code/dist-tags"
+
+
+def _http_json(url, timeout=20):
+    """The JSON at `url`, or None for any failure -- an unknown is "", never an exception in a status row."""
+    import urllib.request
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, headers={"Accept": "application/json"}),
+                                    timeout=timeout) as r:
+            return json.load(r)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def agy_platform(platform=None, machine=None):
+    """agy's manifest name for this machine (`darwin_arm64`, `windows_amd64`, `linux_amd64[_musl]`), or "" when it
+    builds for none of them. The same rule as agy's installers."""
+    import platform as _platform
+    system = (platform or sys.platform)
+    machine = (machine or _platform.machine() or "").lower()
+    arch = {"x86_64": "amd64", "amd64": "amd64", "arm64": "arm64", "aarch64": "arm64"}.get(machine)
+    if not arch:
+        return ""
+    if system.startswith("darwin"):
+        return f"darwin_{arch}"
+    if system.startswith("win"):
+        return f"windows_{arch}"
+    if system.startswith("linux"):
+        musl = any(os.path.exists(f) for f in ("/lib/libc.musl-x86_64.so.1", "/lib/libc.musl-aarch64.so.1"))
+        return f"linux_{arch}" + ("_musl" if musl else "")
+    return ""
+
+
+def claude_channel(home=None):
+    """The native Claude Code's update channel: `autoUpdatesChannel` from `~/.claude/settings.json`, `latest` when unset."""
+    path = os.path.join(home or os.path.expanduser("~"), ".claude", "settings.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            got = (json.load(fh) or {}).get("autoUpdatesChannel")
+    except (OSError, ValueError, AttributeError):
+        got = None
+    return got if got in ("latest", "stable") else "latest"
+
+
+def available_version(name, path, how, package, runner=run, fetch=_http_json, home=None):
+    """What the tool's source offers now, or "" when it cannot say without installing."""
     if how in ("brew", "brew-cask") and _brew():
         rc, out, _ = runner([_brew(), "info", "--json=v2", ("--cask" if how == "brew-cask" else "--formula"),
                              package], timeout=60)
@@ -444,6 +494,15 @@ def available_version(name, path, how, package, runner=run):
     if name == "claude" and how == "npm":
         rc, out, _ = runner(["npm", "view", package, "version"], timeout=60)
         return out.strip() if rc == 0 else ""
+    if name == "claude" and how == "self":
+        tags = fetch(CLAUDE_DIST_TAGS) or {}
+        got = tags.get(claude_channel(home)) if isinstance(tags, dict) else None
+        return got if isinstance(got, str) and _VERSION_RE.fullmatch(got) else ""
+    if name == "agy" and how == "self":
+        platform = agy_platform()
+        manifest = fetch(AGY_MANIFEST.format(platform=platform)) if platform else None
+        got = manifest.get("version") if isinstance(manifest, dict) else None
+        return got if isinstance(got, str) and _VERSION_RE.fullmatch(got) else ""
     if how == "release":
         return _gh_latest()
     return ""
@@ -473,7 +532,7 @@ def update_command(name, path, how, package):
     return None
 
 
-def tool_rows(env=None, runner=run, ask_available=True):
+def tool_rows(env=None, runner=run, ask_available=True, fetch=_http_json):
     rows = []
     for name in TOOLS:
         path = locate(name, env)
@@ -482,7 +541,7 @@ def tool_rows(env=None, runner=run, ask_available=True):
         how, package = how_installed(name, path)
         rows.append({"name": name, "path": path, "how": how, "package": package,
                      "installed": tool_version(path),
-                     "available": available_version(name, path, how, package, runner) if ask_available else "",
+                     "available": available_version(name, path, how, package, runner, fetch) if ask_available else "",
                      "updatable": update_command(name, path, how, package) is not None})
     return rows
 
@@ -899,10 +958,36 @@ def _selftest():
             return 0, "Current version: 17.2.9\nNew version available: 18.4.3\n", ""
         return (0, "", "") if os.path.basename(cmd[0]) == "omp" else (1, "", "agy: update server unreachable\n")
 
-    rows = tool_rows(env=fake_env, runner=fake)
+    fetched = []
+
+    def fake_fetch(url, timeout=20):
+        fetched.append(url)
+        if "/manifests/" in url:
+            return {"version": "1.2.15", "url": "https://x/agy", "sha512": "0" * 128}
+        if "dist-tags" in url:
+            return {"stable": "2.1.285", "latest": "2.1.288", "next": "2.1.288"}
+        return None
+
+    rows = tool_rows(env=fake_env, runner=fake, fetch=fake_fetch)
     assert [r["name"] for r in rows] == ["omp", "agy"], "claude and gh are not here: not listed, not added"
     omp = rows[0]
     assert omp["installed"] == "17.2.9" and omp["available"] == "18.4.3" and omp["how"] == "self", omp
+    # W-6 #126 (hub #237): a self-installed agy reads its update server's manifest for this platform, a native
+    # Claude Code the npm dist-tag of its own channel; no answer is "" as before, never an exception.
+    assert rows[1]["available"] == "1.2.15" and fetched and "/manifests/" in fetched[0], (rows[1], fetched)
+    assert agy_platform("darwin", "arm64") == "darwin_arm64" and agy_platform("win32", "AMD64") == "windows_amd64"
+    assert agy_platform("linux", "aarch64").startswith("linux_arm64") and agy_platform("sunos5", "sparc") == ""
+    with tempfile.TemporaryDirectory() as fake_home:
+        assert available_version("claude", "/x/claude", "self", "@anthropic-ai/claude-code", fetch=fake_fetch,
+                                 home=fake_home) == "2.1.288", "no settings: the latest channel"
+        os.makedirs(os.path.join(fake_home, ".claude"))
+        with open(os.path.join(fake_home, ".claude", "settings.json"), "w", encoding="utf-8") as fh:
+            json.dump({"autoUpdatesChannel": "stable"}, fh)
+        assert claude_channel(fake_home) == "stable"
+        assert available_version("claude", "/x/claude", "self", "@anthropic-ai/claude-code", fetch=fake_fetch,
+                                 home=fake_home) == "2.1.285", "the stable channel's newest"
+    assert available_version("agy", "/x/agy", "self", "agy", fetch=lambda url, timeout=20: None) == ""
+    assert available_version("claude", "/x/claude", "self", "c", fetch=lambda url, timeout=20: {"latest": "oops"}) == ""
     calls.clear()
     done = update_tools(env=fake_env, runner=fake)
     assert [c[1:] for c in calls] == [["update"], ["update"]], calls

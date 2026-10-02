@@ -158,3 +158,11 @@ The Arbiter, 2026-10-02: «зроби базову гігієну в одній 
 
 README and FAQ in uk/de/pl, translated whole by the Advisor through agy/ADC; bars set per language, in-page anchors
 remapped to the translated headings, two Ukrainian slips fixed. `i18n-check` OK; every anchor resolves.
+
+### #126 — upkeep names the newest agy and native Claude Code (hub #237) — built
+
+Joined W-6 on the Arbiter's word (2026-10-02: «додаємо і робимо»). `available_version`: agy `self` → the manifest
+`…/manifests/<platform>.json` its installers read (`agy_platform`: darwin/windows/linux[_musl] × amd64/arm64); Claude
+`self` → `registry.npmjs.org/-/package/@anthropic-ai/claude-code/dist-tags`, the tag of `claude_channel()`
+(`autoUpdatesChannel`, `latest` by default). `_http_json` returns None on any failure → "". `tool_rows` takes `fetch`, so
+the selftest stays offline. Live on the Mac: agy 1.2.15 → 1.2.15. **Tell tcc** with the tag.

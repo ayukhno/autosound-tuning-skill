@@ -167,6 +167,11 @@ W-6 · v3.1.0 (`docs/PLAN-W-6.md`): ten issues, #116–#125, all with the Arbite
   starts from the Dock or the Start menu, which never reads `~/.zshrc`, gets it too. `doctor` names the sign-in agy will
   use — ADC (the credentials file, gcloud's account and project, where the switch came from), agy's own account, or
   none, with what to do — read off disk, no credential file opened.
+- **`upkeep.py` names the newest agy and native Claude Code** (#126, hub #237). For a self-installed agy and a native
+  Claude Code `available_version` returned "", so TCC's Updates row could never read «up to date» for them. agy's
+  newest now comes from its update server's manifest for this platform (the source its own installers read);
+  a native Claude Code's from the npm registry's dist-tag of its update channel (`autoUpdatesChannel`, `latest` by
+  default, or `stable`), over HTTP with no npm. No answer is still "". Live: agy 1.2.15 → 1.2.15.
 - **The installers know agy through ADC, and the FAQ walks it** (#118, hub #234). `agy_status` / `Get-AgyStatus`
   count Google Cloud's ADC as the reviewer being set up (`AGY_ADC_AUTH=true` in the environment or the machine's
   critic-env, and the ADC file present — existence only). Where the ADC file exists and agy is not set up, the
