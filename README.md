@@ -13,7 +13,7 @@
 
 ## Proven in Competitions
 
-With version 2.x of this method, the author's car took four awards in 2026 at **EMMA** and **AYA** championships (the first award was won before it was bundled into a skill, using AI hints from the same graphs, which inspired this project). Version 3.1, with a graphical interface, is the current release. The fifth award — 3rd place at the **German EMMA Final 2026** — came with 3.x, by refining the existing tune rather than tuning from scratch. The 2.8.x line behind the first four is still available: the FAQ, [path 3](FAQ.md#four-paths-of-usage).
+With version 2.x of this method, the author's car took four awards in 2026 at **EMMA** and **AYA** championships (the first award was won before it was bundled into a skill, using AI hints from the same graphs, which inspired this project). Version 3.1, with a graphical interface, is the current release. The fifth award — 3rd place at the **German EMMA Final 2026** — came with 3.x, by refining the existing tune rather than tuning from scratch. The 2.8.x line behind the first four is still available: see the FAQ, [path 3](FAQ.md#four-paths-of-usage).
 
 <p align="left">
   <img src="assets/awards/aya-may26-einsteiger5000.jpg" height="120" alt="AYA May 2026, Einsteiger 5000, 1st place">
@@ -91,7 +91,7 @@ A plugin brings the method's files only: in the first session type **`/autosound
 4. **Important:** keep Claude Opus's effort at `xhigh` or higher (the default; `max` for hard steps).
 5. Type in the app chat: **"tune a new car from scratch"**. The AI will start asking questions and lead you by the hand.
 
-▶ **Target curves:** the method comes with its own curve for competitions, **SQ-Comp-Ref**. The **[Target Curve Visualizer](https://ayukhno.github.io/autosound-tuning-skill/_curve-visualizer.html?lang=en)** analyses and compares curves side by side — SQ-Comp-Ref, your own from REW, or the standard ones from [Nono Tuning Tool](https://nonotuningtool.com) — and saves the one you choose. How to pick one: the [target-curve guide](skills/autosound-tuning/references/patterns/target-curves/target_curves_guide.md).
+▶ **Target curves:** the method comes with its own curve for competitions, **SQ-Comp-Ref**. The **[Target Curve Visualizer](https://ayukhno.github.io/autosound-tuning-skill/_curve-visualizer.html?lang=en)** analyzes and compares curves side by side — SQ-Comp-Ref, your own from REW, or the standard ones from [Nono Tuning Tool](https://nonotuningtool.com) — and saves the one you choose. How to pick one: the [target-curve guide](skills/autosound-tuning/references/patterns/target-curves/target_curves_guide.md).
 
 ## What the Tuning Process Looks Like
 
@@ -109,9 +109,9 @@ A plugin brings the method's files only: in the first session type **`/autosound
 - If the issue is related to the GUI (Autosound TCC) — write to the [TCC app repository](https://github.com/ayukhno/autosound-tcc/issues/new/choose).
 - No GitHub account? Ask the session ("report a bug") or use TCC's report window: your report goes to the author through a Google Form instead — text only.
 
-This tool is **completely free**. The code and scripts are licensed under **MIT**, and the documentation and method itself under **CC BY-SA 4.0**. 
+This tool is **completely free**. The code and scripts are licensed under **MIT**, and the documentation and method themselves under **CC BY-SA 4.0**. 
 
-**Credits:** part of the DSP maths is ported from [Resonalyze](https://github.com/DIMOSUS/Resonalyze) by DIMOSUS (MIT) — [`LICENSES/NOTICE.md`](LICENSES/NOTICE.md).
+**Credits:** part of the DSP math is ported from [Resonalyze](https://github.com/DIMOSUS/Resonalyze) by DIMOSUS (MIT) — [`LICENSES/NOTICE.md`](LICENSES/NOTICE.md).
 
 If it saved you weeks of tuning time and you want to thank the author, you can do it here:
 💜 **[GitHub Sponsors](https://github.com/sponsors/ayukhno)** · ☕ **[Monobank Jar (UA)](https://send.monobank.ua/jar/8wThVcodjm)**

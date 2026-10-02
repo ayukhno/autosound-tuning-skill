@@ -2,124 +2,118 @@
 
 🇬🇧 [English](README.md) · 🇩🇪 **Deutsch** · 🇵🇱 [Polski](README.pl.md) · 🇺🇦 [Українська](README.uk.md) · ❓ [FAQ](FAQ.de.md) · 📘 [TCC guide (EN)](https://github.com/ayukhno/autosound-tcc/blob/main/docs/guide/QUICK-GUIDE.md) · <img src="assets/icons/roadmap.svg" width="14" height="14" valign="middle" alt="Roadmap" /> [Roadmap (EN)](ROADMAP.md)
 
-> Translation lags the English original: the English text is being brought to the v3.1.0 release first (W-6); this version follows it before the release.
+**Einfach gesagt:** Das ist dein persönlicher KI-Car-Audio-Tuning-Master. Du willst eine perfekte Bühne und eine ausgewogene tonale Balance, aber Diagramme, Phasen und Laufzeiten wirken zu kompliziert? Dieser Assistent übernimmt den schwierigen Teil. Er liest deine Mikrofonmessungen ein und führt dich Schritt für Schritt zum perfekten Klang.
 
-**In einfachen Worten:** Dies ist dein persönlicher KI-Meister für das Einstellen von Car-HiFi. Du willst eine perfekte Bühne und eine saubere tonale Balance, aber Graphen, Phasen und Laufzeiten erscheinen dir zu kompliziert? Dieser Assistent übernimmt den schwierigsten Teil. Er liest deine Mikrofonmessungen und führt dich Schritt für Schritt zum perfekten Sound.
+- **Du misst — die KI rechnet:** Sie arbeitet mit der REW-Software zusammen, analysiert die Akustik deines Innenraums und schlägt dir exakte Einstellungen für EQ, Frequenzweichen und Laufzeitkorrektur vor.
+- **Minimale Zeit im Auto:** Die Hauptberechnungen finden zu Hause am Schreibtisch statt. Du machst im Auto nur die ersten Messungen und kehrst dann mit einsatzbereiten Werten zurück, um dir das Ergebnis anzuhören und Schritt für Schritt ins Detail-Tuning einzusteigen.
+- **Schreibt nichts in deinen DSP — du lädst es selbst:** Der Assistent greift niemals direkt auf deinen Prozessor zu. Er zeigt dir Zahlen und Diagramme und bereitet den EQ für den Import vor: Bei einem Helix wandert die gesamte Full-EQ-Bank über das DSP PC-Tool in einem Schritt hinein, und bei Prozessoren ohne Datei-Import fügt der kostenlose [REW-EQ-CopyPaste-Assistant](https://github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant) die Werte ein. Du entscheidest, was übernommen wird.
+- **Kein gewöhnlicher Chat:** Der Projektstatus und alle Einstellungen werden in Dateien auf deiner Festplatte gespeichert, sodass zwischen den Sitzungen nichts „vergessen“ wird und du jederzeit einen Schritt zurückgehen kannst.
+- **Zwei KIs, und dein Gehör entscheidet:** Eine KI schlägt Einstellungen vor, eine zweite prüft sie. Die Prüfung ist fester Bestandteil der Methode; lediglich die automatische Verbindung zwischen beiden ist optional — ohne sie fügst du das Paket von Hand in einen beliebigen KI-Chat ein. Die letzte Instanz ist dein Gehör: Du hörst probe und entscheidest, statt nur abzunicken.
+- **Arbeitet mit Fakten:** Die KI rät keine Einstellungen. Wenn Messungen fehlerhaft sind oder nicht ausreichen, schlägt eine Prüfung an und bittet dich, die Messung zu wiederholen — oder wissentlich fortzufahren und das Fehlerrisiko in Kauf zu nehmen.
 
-- **Du misst — die KI rechnet:** Sie arbeitet mit der REW-Software zusammen, analysiert die Akustik deines Innenraums und schlägt genaue Einstellungen für EQ, Frequenzweichen und Laufzeitkorrektur vor.
-- **Minimale Zeit im Auto:** Die Hauptberechnungen finden an deinem Schreibtisch zu Hause statt. Du machst nur die initialen Messungen im Auto und kommst dann mit fertigen Zahlen zurück, um dir das Ergebnis anzuhören und tiefer ins Tuning einzusteigen.
-- **Schreibt nichts in deinen DSP — du lädst es:** Der Assistent greift niemals direkt in deinen Prozessor ein. Er zeigt dir Zahlen und Graphen und bereitet den EQ für den Import vor: Bei einem Helix wandert die gesamte Full-EQ-Bank über das DSP PC-Tool in einem Schritt hinein, und für Prozessoren ohne Datei-Import fügt der kostenlose [REW-EQ-CopyPaste-Assistant](https://github.com/IvanBakhmutov/REW-EQ-CopyPaste-Assistant) ihn ein. Du entscheidest, was hineinkommt.
-- **Kein normaler Chat:** Der Projektstatus und alle Einstellungen werden als Dateien auf deiner Festplatte gespeichert, sodass zwischen den Sitzungen nichts „vergessen“ wird und du jederzeit einen Schritt zurückgehen kannst.
-- **Zwei KIs — ein Reviewer gehört zur Methode:** Eine KI schlägt Einstellungen vor, eine zweite kritisiert und überprüft sie. Optional ist lediglich der *automatische Kanal* (ein lokales Skript, das Pakete zwischen ihnen übergibt); die *Rolle* des Reviewers ist es nicht — ohne zweite Meinung ist die Methode spürbar schlechter, und wo sich kein Kanal einrichten lässt, fügst du das Paket manuell in den Chat einer beliebigen anderen KI ein oder liest es selbst. Aber der letzte Richter ist dein Ohr: Du hörst zu und entscheidest, anstatt ihre Ideen einfach blind zu übernehmen.
-- **Arbeitet mit Fakten:** Eine Überprüfung, der Daten fehlen, verweigert die Arbeit. Die KI rät keine Einstellungen — wenn die Messungen falsch gemacht wurden oder unzureichend sind, wird eine spezifische Prüfung die Berechnung einfach ablehnen und stoppen.
+## Im Wettbewerb erprobt
 
-## Auf Wettbewerben bewährt
-
-Mit der Version 2.x dieser Methode holte das Auto des Autors im Jahr 2026 vier Auszeichnungen bei **EMMA**- und **AYA**-Meisterschaften (die erste Auszeichnung wurde errungen, bevor die Methode zu einem Skill wurde, durch KI-Tipps anhand derselben Graphen, was die Idee für diesen Skill lieferte). Die neueste Version 3.x (mit grafischer Oberfläche) befindet sich derzeit in der Beta-Phase und hat ihre Wettbewerbserprobung gerade begonnen: Die fünfte Auszeichnung — der 3. Platz beim **Deutschen EMMA Finale 2026** — entstand durch die Nachabstimmung des bestehenden Setups mit 3.x, nicht durch ein Tuning von Grund auf. Für ein garantiertes Ergebnis entscheiden sich daher viele weiterhin für die bewährte Version 2.8.x.
+Mit Version 2.x dieser Methode holte das Auto des Autors im Jahr 2026 vier Auszeichnungen bei **EMMA**- und **AYA**-Meisterschaften (der erste Pokal wurde geholt, bevor alles in einen Skill gebündelt wurde, mithilfe von KI-Hinweisen aus denselben Diagrammen – was dieses Projekt überhaupt erst inspirierte). Version 3.1 mit grafischer Benutzeroberfläche ist das aktuelle Release. Die fünfte Auszeichnung — 3. Platz beim **German EMMA Final 2026** — kam mit 3.x, indem das bestehende Tuning verfeinert statt von Grund auf neu eingemessen wurde. Die 2.8.x-Reihe hinter den ersten vier ist weiterhin verfügbar: siehe FAQ, [Pfad 3](FAQ.de.md#vier-optionen-zur-nutzung).
 
 <p align="left">
-  <img src="assets/awards/aya-may26-einsteiger5000.jpg" height="120" alt="AYA Mai 2026, Einsteiger 5000, 1. Platz">
+  <img src="assets/awards/aya-may26-einsteiger5000.jpg" height="120" alt="AYA May 2026, Einsteiger 5000, 1st place">
   &nbsp;&nbsp;&nbsp;
-  <img src="assets/awards/aya-jul26-amateur5000.jpg" height="120" alt="AYA Juli 2026, Amateur 5000, 1. Platz">
+  <img src="assets/awards/aya-jul26-amateur5000.jpg" height="120" alt="AYA July 2026, Amateur 5000, 1st place">
   &nbsp;&nbsp;&nbsp;
-  <img src="assets/awards/aya-aug26-amateur5000.jpg" height="120" alt="AYA August 2026, Amateur 5000, 2. Platz">
+  <img src="assets/awards/aya-aug26-amateur5000.jpg" height="120" alt="AYA August 2026, Amateur 5000, 2nd place">
   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="assets/awards/emma-aug26-entry-unlimited.jpg" height="120" alt="EMMA Sound Off 2026, SQ Entry Unlimited, 3. Platz">
+  <img src="assets/awards/emma-aug26-entry-unlimited.jpg" height="120" alt="EMMA Sound Off 2026, SQ Entry Unlimited, 3rd place">
   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="assets/awards/emma-sep26-final-entry-unlimited.jpg" height="120" alt="Deutsches EMMA Finale 2026, Frankfurt, SQ Entry Unlimited, 3. Platz">
+  <img src="assets/awards/emma-sep26-final-entry-unlimited.jpg" height="120" alt="German EMMA Final 2026, Frankfurt, SQ Entry Unlimited, 3rd place">
 </p>
 
-*Deine Anlage kann auch wie ein Champion klingen!*
+*Auch deine Anlage kann wie ein Champion klingen!*
 
 > [!CAUTION]
-> Die KI ist ein Assistent, aber die Verantwortung liegt bei dir. Eine manuell mit Tippfehler eingegebene Zahl kann einen Hochtöner durchbrennen lassen. Überprüfe immer die Trennfrequenzen, bevor du den Ton einschaltest, und beginne immer mit geringer Lautstärke.
+> Die KI ist ein Assistent, aber die Verantwortung liegt bei dir. Ein Tippfehler bei einer manuell eingegebenen Zahl kann einen Hochtöner zerstören. Prüfe Trennfrequenzen immer, bevor du die Stummschaltung aufhebst, und beginne grundsätzlich mit geringer Lautstärke.
 
 ## Was du für den Start brauchst
 
-Du musst kein Programmierer sein — das Programm lässt sich mit einem einzigen Befehl installieren. Aber an Hardware und Abos brauchst du Folgendes:
+Die App lässt sich mit einem einzigen Befehl installieren. An Hardware und Abonnements benötigst du Folgendes:
 
-1. **Messmikrofon** (z.B. UMIK-1, besser ein XLR-Mikrofon mit Soundkarte und physischem Loopback).
+1. **Messmikrofon** (z. B. UMIK-1 oder vorzugsweise ein XLR-Mikrofon mit Audio-Interface und physischem Loopback).
 2. **Prozessor (DSP)** in deinem Auto.
-3. **REW (Room EQ Wizard) Software** — **Beta-Version** ist erforderlich (der aktuelle Release-Build, V5.31.3 vom Juli 2024, hat überhaupt keine API — prüfe Help → About, bevor du beginnst). Hol dir den Beta-Build unter [roomeqwizard.com/beta.html](https://www.roomeqwizard.com/beta.html). Nach dem Start von REW gehe auf *Preferences → API*, aktiviere **Start the API when REW starts** und klicke auf **Start server**.
-4. **Kostenpflichtiges Claude-Abo (Pro oder Max)** — diese KI erledigt die Hauptarbeit und löst komplexe mathematische Probleme. Dies ist der unterstützte Weg, und die grafische App ist dafür gebaut. Ein Durchlauf, der vollständig von einer anderen KI gesteuert wird, ist möglich, aber manuell, und du verzichtest auf die zweite Meinung, auf die sich die Methode stützt — siehe FAQ, „Kann ich die Methode komplett in Gemini ausführen?“. Ohne Internet am Auto funktioniert die Sitzung so oder so nicht.
+3. **REW-Software (Room EQ Wizard)** — die **Beta-Version** ist erforderlich (der aktuelle Release-Build, V5.31.3 vom Juli 2024, hat keinerlei API — prüfe Help → About, bevor du startest). Lade dir den Beta-Build von [roomeqwizard.com/beta.html](https://www.roomeqwizard.com/beta.html) herunter. Gehe nach dem Starten von REW auf *Preferences → API*, aktiviere **Start the API when REW starts** und klicke auf **Start server**.
+4. **Kostenpflichtiges Claude-Abonnement (Pro oder Max)** — Claude übernimmt die Hauptarbeit; dies ist der unterstützte Weg und die App ist dafür ausgelegt. Andere KIs können den Durchlauf über `omp` steuern (wird nur auf Anfrage installiert) — auf eigenes Risiko.
 
-*(Wir empfehlen außerdem ein kostenloses GitHub-Konto, um deinen Tuning-Verlauf in einem privaten Repository zu sichern — der Installer fügt GitHubs `gh` dafür hinzu, wenn du danach fragst: `--github`, oder `-GitHub` unter Windows. Dein Gemini-API-Key, falls du einen verwendest, wandert **nicht** mit diesem Backup: Er liegt außerhalb des Projekts in `~/.config/autosound/critic-env` — `%APPDATA%\autosound\critic-env` unter Windows — und ein neues Projekt wird mit einer `.gitignore` angelegt, die auch die projektlokale Konfiguration aus Git heraushält.)*
+*(Empfohlen: ein kostenloses GitHub-Konto, um deinen Tuning-Verlauf in einem privaten Repository zu sichern.)*
 
-## Installation und Start (Version 3.x — Beta)
+## Installation und Start
 
-Wir haben einen Installer entwickelt, der alles Nötige herunterlädt und eine praktische **grafische Anwendung (Autosound TCC)** vorbereitet. Andere Modelle als Claude laufen über **`omp`**, was der Installer **nur auf Wunsch** hinzufügt (Optionen unten). Diese Modelle werden **nach Nutzung abgerechnet**, und nichts läuft über `omp`, es sei denn, du wählst eines davon aus; die reine Terminal-Installation bringt es nie mit. Der Vorgang dauert 10–20 Minuten (unter macOS öffnet sich einmalig Apples eigenes Installationsfenster für die Entwicklerwerkzeuge — ein Klick, und kein Passwort wird in das Skript eingegeben; unter Windows erscheint ein Git-Berechtigungsdialog).
+**Standardmäßig richtet der Installer Folgendes ein:** Claude Code, die Tuning-Methode samt den von ihren Tools benötigten Python-Bibliotheken, die Desktop-App **Autosound TCC** und den Gemini-Reviewer (`agy`). Das dauert 10–20 Minuten. Je nach System fragen andere Installer währenddessen eventuell nach Berechtigungen — das ist normal (Details in den FAQ).
 
-**macOS** — öffne das Terminal (⌘-Space drücken, "terminal" tippen, Enter) und füge ein:
+**macOS** — öffne das Terminal (⌘-Leertaste, tippe „terminal“, Enter) und füge Folgendes ein:
 ```sh
 curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.66/install.sh | bash
 ```
 
-**Windows** — öffne PowerShell (Start drücken, "powershell" tippen, Enter) und füge ein:
+**Windows** — öffne PowerShell (Start, tippe „powershell“, Enter) und füge Folgendes ein:
 ```powershell
 irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.66/install.ps1 | iex
 ```
+*(Die Version in der Adresse pinnt nur den Installer selbst; es wird immer das neueste Release installiert.)*
 
-Die Version in der Adresse ist die des Installers selbst, nicht die Version, die du bekommst: Der Installer installiert immer das neueste Release. Die Adresse ist fixiert, damit eine Änderung am Repository nicht ändern kann, was auf deinem Rechner läuft.
+**Optionen:**
 
-**Optionen** — füge die gewünschten am Ende der Zeile hinzu:
-
-| Was es bewirkt | macOS | Windows |
+| Funktion | macOS | Windows |
 |---|---|---|
-| andere Modelle als Claude, über `omp` (pro Nutzung abgerechnet) | `--with-omp` | `-WithOmp` |
-| das Projekt-Backup auf GitHub | `--github` | `-GitHub` |
+| andere Modelle als Claude, über `omp` | `--with-omp` | `-WithOmp` |
+| das Projekt-Backup auf GitHub (ein privates Repository; die Keys bleiben außen vor) | `--github` | `-GitHub` |
 | die Methode ohne die App (nur Terminal) | `--terminal` | `-Terminal` |
-| zeigt den Plan und ändert nichts | `--dry-run` | `-DryRun` |
+| den Plan anzeigen und nichts ändern | `--dry-run` | `-DryRun` |
 
-Mit Optionen sieht die Zeile anders aus. Zwei Optionen auf einmal, unter macOS:
+Mit Optionen — zum Beispiel `omp` und dem GitHub-Backup — unter macOS:
 ```sh
 curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.66/install.sh | bash -s -- --with-omp --github
 ```
-und unter Windows als zwei Zeilen (die Optionen kommen in die zweite):
+und unter Windows als zwei Zeilen:
 ```powershell
 $i = irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.66/install.ps1
 & ([scriptblock]::Create($i)) -WithOmp -GitHub
 ```
 
-**Nach der Installation:**
-1. Der letzte Schritt des Installers meldet dich an: Claude im Browser, dann der Gemini-Reviewer über Googles `agy` (Enter meldet an, `s` überspringt) und GitHub, falls `gh` vorhanden ist.
-2. Auf dem Desktop erscheint die App **Autosound TCC**. Öffne sie.
-3. Erstelle einen neuen leeren Ordner für dein Auto (z.B. `MyCarTuning`) und wähle ihn im Programm aus, mit **AI main: Claude Opus (SDK)** und **AI critic: Gemini Pro (High)**. Wenn der Reviewer antwortet, dass Gemini Pro an deinem Standort nicht unterstützt wird, wähle ein **Gemini Flash (High)**-Modell aus derselben Liste.
-4. **WICHTIG:** Stelle vor deiner ersten Nachricht sicher, dass das Anstrengungsniveau (Effort) für **Claude Opus** mindestens auf `xhigh` steht (dies ist der Standardwert). Für sehr komplexe Schritte verwende `max`. Das ist entscheidend: Eine schwächere Modellstufe hält bei einem Fehler nicht an; sie stimmt dir einfach zu, was zu „stillen Fehlern“ beim Tuning führt. *Hinweis: Änderungen am Effort-Level gelten erst für die nächste Sitzung.*
-5. Schreibe in den App-Chat: **"tune a new car from scratch"**. Die KI fängt an, Fragen zu stellen und nimmt dich an die Hand.
-
-▶ **[Öffne den Target Curve Visualizer online](https://ayukhno.github.io/autosound-tuning-skill/_curve-visualizer.html?lang=de)** — ziehe deine Kurve oder eine Standardkurve aus dem [Nono Tuning Tool](https://nonotuningtool.com) hinein, vergleiche Graphen und speichere sie.
-
----
-
-**Wettbewerbserprobte Version 2.8.x** — [Weg 3 im FAQ](FAQ.de.md#vier-optionen-zur-nutzung)
-
-Wenn du genau die **2.8.x** Version nutzen möchtest, mit der die Wettbewerbe gewonnen wurden: Diese funktioniert ausschließlich über das Terminal. Anstelle der obigen Skripte führe in einem Terminal mit bereits installiertem `claude` (Claude Code) zwei Befehle aus:
+**Bereits in Claude Code?** Die Methode lässt sich auch als Plugin installieren:
 ```sh
 claude plugin marketplace add ayukhno/autosound-tuning-skill
 claude plugin install autosound-tuning
 ```
-*(Falls `claude` noch nicht installiert ist, kannst du es mit dem offiziellen Skript hinzufügen: `curl -fsSL https://claude.ai/install.sh | sh`, oder alternativ über npm).*
+Ein Plugin bringt nur die Dateien der Methode mit: Tippe in der ersten Sitzung **`/autosound-tuning:setup`** ein — es prüft das Plugin anhand seines signierten Releases und installiert den Rest. Die TCC-Desktop-App ist so nicht enthalten; füge sie mit `/autosound-tuning:setup app` (oder `/autosound-tuning:install-tcc`) hinzu.
 
-## Wie der Tuning-Prozess abläuft
+**Nach der Installation:**
+1. Der letzte Schritt des Installers meldet dich an: bei Claude, dann beim Gemini-Reviewer (`agy`) und bei GitHub, falls du es ausgewählt hast.
+2. Öffne die **Autosound TCC**-App von deinem Desktop.
+3. Erstelle einen leeren Ordner für dein Auto (z. B. `MyCarTuning`) und wähle ihn in der App aus, mit **AI main: Claude Opus (SDK)** und **AI critic: Gemini Pro (High)** — oder **Gemini Flash (High)**, falls dir Pro nicht angeboten wird.
+4. **Wichtig:** Belasse den Effort von Claude Opus auf `xhigh` oder höher (der Standardwert; `max` für schwierige Schritte).
+5. Tippe im App-Chat: **"tune a new car from scratch"**. Die KI beginnt mit Fragen und nimmt dich an die Hand.
 
-1. **Vorbereitung zu Hause:** Du erzählst der KI von deinem System (welche Lautsprecher, welcher Prozessor).
-2. **Messungen im Auto (einmalig):** eine disziplinierte Sitzung, und die Abstimmung wird anschließend am Schreibtisch entworfen. Du aktivierst die grundlegenden Schutzfilter an deinem DSP und nimmst jeden Treiber einzeln auf — zuerst ein handgeführter Durchgang, dann derselbe Satz mit einem **Mikrofon auf einem Stativ, das bis zum Schluss nicht bewegt wird**, eingerahmt von je einem Kontroll-Sweep zu Beginn und am Ende, damit jede Drift sichtbar wird. Plane **~25 Minuten für den Pflichtteil** (den Stativ-Block) ein und bis zu etwa einer Stunde, wenn du auch den handgeführten Neun-Positionen-Satz aufnimmst, der Innenraum-Eigenschaften von punktuellen Effekten unterscheidet. Das genaue Ablaufblatt befindet sich in der Methode (`capture-session-sheet.md`); die App führt dich Block für Block hindurch. *Hinweis: Ein Tiefmitteltöner ohne Tiefpassfilter (LPF) klingt obenrum beim Sweep schrill — das ist normal (Membranaufbruch), brich die Messungen nicht ab.*
-3. **Mathematik am Schreibtisch:** Du sitzt am Computer (ohne das Auto in der Nähe). Die KI analysiert die Messungen, koppelt den Subwoofer an den Tiefmitteltöner, richtet die Bühne aus und berechnet den Equalizer. Der Schreibtisch prognostiziert nur die Ergebnisse; das Auto verifiziert sie anschließend. Wenn die Prognosen des Schreibtischs bei der Überprüfung nicht mit der Realität übereinstimmen, macht das System die Schritte rückgängig.
-4. **Genuss im Auto:** Du gehst zurück zum Auto, gibst die fertigen Zahlen in den DSP ein, spielst Test- und Lieblingslieder ab und genießt. Wenn etwas leicht brummt, „in den Ohren wehtut“ oder „die Bühne verschoben ist“ — sagst du es der KI, und ihr korrigiert das Problem gezielt.
+▶ **Zielkurven:** Die Methode bringt ihre eigene Kurve für Wettbewerbe mit: **SQ-Comp-Ref**. Der **[Target Curve Visualizer](https://ayukhno.github.io/autosound-tuning-skill/_curve-visualizer.html?lang=de)** analysiert und vergleicht Kurven nebeneinander — SQ-Comp-Ref, deine eigenen aus REW oder die Standardkurven aus dem [Nono Tuning Tool](https://nonotuningtool.com) — und speichert diejenige, die du auswählst. Wie man eine auswählt: der [Leitfaden für Zielkurven](skills/autosound-tuning/references/patterns/target-curves/target_curves_guide.md).
+
+## So sieht der Tuning-Prozess aus
+
+1. **Vorbereitung zu Hause:** Du informierst die KI über deine Anlage (welche Lautsprecher, welcher Prozessor).
+2. **Messungen im Auto (einmalig):** Mit Schutzfiltern auf dem DSP misst du jedes Chassis einzeln in einer einzigen Sitzung ein; die TCC-App leitet dich Schritt für Schritt hindurch. Das Tuning wird anschließend am Schreibtisch entworfen.
+3. **Mathematik am Schreibtisch:** Du sitzt an deinem Computer (ohne das Auto in der Nähe). Die KI analysiert die Messungen, bindet den Subwoofer an den Tiefmitteltöner an, gleicht die Bühne an und berechnet den EQ. Am Schreibtisch werden die Ergebnisse nur prognostiziert; im Auto werden sie anschließend überprüft.
+4. **Zurück im Auto — überprüfen, korrigieren, feintunen:** Trage die Werte in den DSP ein, prüfe sie mit ein paar Kontrollmessungen sowie nach Gehör und korrigiere, was noch nicht passt. Danach folgt das Feintuning, das man am besten direkt im Auto mit dem fähigsten Modell macht (derzeit Claude Fable): Du sagst der KI, was du hörst, und je besser es klingen soll, desto mehr Runden sind nötig. Das Arbeiten am Schreibtisch ist ebenfalls möglich — das Modell und die Methode passen sich an.
 
 ## Feedback, Support und Datenschutz
 
-**Datenschutz:** Der Skill lernt aus jedem Tuning und sendet, nur mit deiner ausdrücklichen Zustimmung, verallgemeinerte Lektionen an eine gemeinsame Wissensdatenbank. Er sammelt niemals persönliche Daten und versendet keine vollständigen Messungen.
+**Datenschutz:** Der Skill lernt aus jedem Tuning und sendet nur mit deiner ausdrücklichen Einwilligung generalisierte Erkenntnisse an eine gemeinsame Wissensdatenbank. Er sammelt niemals personenbezogene Daten und überträgt niemals vollständige Messungen.
 
-**Probleme und Bugs:**
-- Wenn mit der Tuning-Logik selbst etwas nicht stimmt: [Öffne ein Issue auf GitHub (autosound-tuning-skill)](https://github.com/ayukhno/autosound-tuning-skill/issues/new/choose).
-- Wenn das Problem die grafische Oberfläche (Autosound TCC) betrifft — schreibe ins [Repository der TCC-App](https://github.com/ayukhno/autosound-tcc/issues/new/choose).
+**Probleme und Fehler:**
+- Wenn etwas mit der Tuning-Logik selbst nicht stimmt: [Öffne ein Issue auf GitHub (autosound-tuning-skill)](https://github.com/ayukhno/autosound-tuning-skill/issues/new/choose).
+- Wenn das Problem die Benutzeroberfläche (Autosound TCC) betrifft — schreibe an das [TCC-App-Repository](https://github.com/ayukhno/autosound-tcc/issues/new/choose).
+- Kein GitHub-Account? Frage in der Session ("report a bug") oder nutze das Meldefenster von TCC: Dein Bericht geht stattdessen über ein Google Form an den Autor — reiner Text.
 
-Dieses Tool ist **komplett kostenlos**. Der Code und die Skripte stehen unter der **MIT**-Lizenz, die Dokumentation und die Methode selbst unter **CC BY-SA 4.0**.
+Dieses Tool ist **völlig kostenlos**. Der Code und die Skripte sind unter **MIT** lizenziert, die Dokumentation und die Methode selbst unter **CC BY-SA 4.0**.
 
-**Danksagung:** Ein Teil der DSP-Mathematik folgt der Logik des Projekts [Resonalyze](https://github.com/DIMOSUS/Resonalyze) von DIMOSUS (MIT) — die Summenverlust-Metrik an der Trennstelle und die HELIX-Kanal-Phasensteuerung sind Portierungen daraus, damit ein Tuner, der zwischen beiden Werkzeugen wechselt, pro Filter eine Antwort erhält und nicht zwei. Details in [`LICENSES/NOTICE.md`](LICENSES/NOTICE.md).
+**Credits:** Ein Teil der DSP-Mathematik wurde aus [Resonalyze](https://github.com/DIMOSUS/Resonalyze) von DIMOSUS (MIT) portiert — [`LICENSES/NOTICE.md`](LICENSES/NOTICE.md).
 
-Wenn es dir Wochen an Tuning-Zeit gespart hat und du dem Autor danken möchtest, kannst du das hier tun:
+Wenn es dir wochenlange Tuning-Zeit erspart hat und du dem Autor danken möchtest, kannst du das hier tun:
 💜 **[GitHub Sponsors](https://github.com/sponsors/ayukhno)** · ☕ **[Monobank Jar (UA)](https://send.monobank.ua/jar/8wThVcodjm)**
 
-**Guten Sound!**
+**Guten Klang!**
