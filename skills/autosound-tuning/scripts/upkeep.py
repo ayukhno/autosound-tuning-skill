@@ -131,7 +131,9 @@ def verify_tag(clone, tag, principal=None, key=None, signed_from=None, env=None)
 PLUGIN_READY = os.path.join(os.path.expanduser("~"), ".config", "autosound", "plugin-ready")
 #: What is in a plugin copy that is not the release's: Claude Code's own markers, and what running the tools leaves.
 _COPY_NOISE_FILES = (".in_use", ".orphaned_at", ".DS_Store")
-_COPY_NOISE_DIRS = (".git", "__pycache__")
+#: `.in_use` is a FOLDER on Windows, one file per process holding the plugin (`.in_use/4368`, the W-6 candidate run on
+#: the VM refused a fresh plugin install over it); a marker either way, never the release's.
+_COPY_NOISE_DIRS = (".git", "__pycache__", ".in_use", ".orphaned_at")
 
 
 def blob_id(data):
@@ -928,6 +930,10 @@ def _selftest():
         os.makedirs(os.path.join(plug, "__pycache__"))
         for noise in (".in_use", os.path.join("__pycache__", "x.cpython-312.pyc")):
             open(os.path.join(plug, noise), "w").close()
+        win = plugin_copy("v3.0.70")                         # Windows: `.in_use` is a folder with a file per process
+        os.makedirs(os.path.join(win, ".in_use"))
+        open(os.path.join(win, ".in_use", "4368"), "w").close()
+        assert verify_copy(win, repo="file://" + origin)["files"] == 2, "the .in_use folder is a marker, not a file"
         with open(os.path.join(plug, "a.txt"), "wb") as fh:
             fh.write(b"one\r\ntwo\r\n")                      # a Windows checkout's line endings: the same file
         assert verify_copy(plug, repo="file://" + origin)["files"] == 2

@@ -167,6 +167,9 @@ W-6 · v3.1.0 (`docs/PLAN-W-6.md`): ten issues, #116–#125, all with the Arbite
   starts from the Dock or the Start menu, which never reads `~/.zshrc`, gets it too. `doctor` names the sign-in agy will
   use — ADC (the credentials file, gcloud's account and project, where the switch came from), agy's own account, or
   none, with what to do — read off disk, no credential file opened.
+- **`doctor` says «ще не автоматичний» when no reviewer model is named** (S-096, the candidate run): a round stops at
+  the model choice, so «АВТОМАТИЧНИЙ» was a promise no live call had checked; and on a CLI route with a key in the store
+  it no longer prints «Ключа API немає» beside «ключ … не береться».
 - **`upkeep.py` names the newest agy and native Claude Code** (#126, hub #237). For a self-installed agy and a native
   Claude Code `available_version` returned "", so TCC's Updates row could never read «up to date» for them. agy's
   newest now comes from its update server's manifest for this platform (the source its own installers read);
@@ -200,6 +203,8 @@ W-6 · v3.1.0 (`docs/PLAN-W-6.md`): ten issues, #116–#125, all with the Arbite
   Windows checkout are the same file; Claude Code's markers and `__pycache__` are not counted). `plugin-ready` writes
   the verified, set-up version down for the plugin's SessionStart hook. Before a release exists, a copy is checked
   against its newest signed candidate (`beta-vX.Y.Z-rcN`), so a candidate can be installed and set up as a plugin too.
+  Claude Code's `.in_use` marker is a folder on Windows (`.in_use/<pid>`); it is not counted, like the file on macOS
+  (found by the candidate run: rc1's setup on the Windows VM refused a fresh plugin install over it).
 - **`deployment.py` knows a plugin install** (#122). A catalog install is a copy in
   `~/.claude/plugins/cache/<marketplace>/autosound-tuning/<version>/` with no `.git`, so it read as a deployment that
   cannot say which checkout it is. Its commit is now read from Claude Code's `installed_plugins.json`

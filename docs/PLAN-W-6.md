@@ -202,3 +202,9 @@ one joint run and to tag v1.1.0 on v3.1.0 the same day (hub #238, SKL-062).
 - Pool for the next wave (cosmetic, `doctor`): with no model pinned it still prints «Режим роботи: АВТОМАТИЧНИЙ (через
   API google)» though a round would stop at the choice; on a CLI route it prints «Ключа API … немає» beside «ключ … не
   береться» while the key is in the store.
+- **The plugin route on the VM, rc1:** the catalog `autosound-rc` added and the plugin installed; the SessionStart
+  note reached the session word for word (both reasons, the offer of `/autosound-tuning:setup`); the setup showed the
+  PowerShell line and ran it on the Arbiter's yes; **the check refused**: «1 not in the release: .in_use/4368». On
+  Windows Claude Code's `.in_use` marker is a folder with a file per process; `copy_files` knew only the file form.
+  Fixed (`_COPY_NOISE_DIRS` gains `.in_use`, `.orphaned_at`; selftest with a `.in_use/4368` folder) → **rc2**, which
+  also carries S-096 (the Arbiter's word: it joins only if an rc2 is cut for another finding).

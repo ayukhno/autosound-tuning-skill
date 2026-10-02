@@ -2024,6 +2024,21 @@ def _selftest():
         assert cli_calls and cli_calls[-1][:2] == ("omp", "omp") and "вибрано через omp" in out, (cli_calls, out)
         assert "відповів CLI omp" in out and "HTTP 404" not in out, out
         del os.environ["AUTOSOUND_CRITIC_BIN"]
+        # S-096: no model named -> not «АВТОМАТИЧНИЙ» (a round stops at the choice); a CLI route with a key in hand ->
+        # no «Ключа API немає» beside «ключ … не береться».
+        del os.environ["AUTOSOUND_CRITIC_MODEL"]
+        globals()["list_cli_models"] = lambda: ["gemini-3.8-flash-high"]
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            run_doctor(smoke=True)
+        out = buf.getvalue()
+        assert "ще не автоматичний" in out and "▶ Режим роботи: АВТОМАТИЧНИЙ" not in out, out
+        os.environ["AUTOSOUND_CRITIC_MODEL"] = "gemini-3.8-flash-high"
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            run_doctor(smoke=False, via="cli")
+        out = buf.getvalue()
+        assert "не береться" in out and "Ключа API для рецензента" not in out, out
     finally:
         shutil.which = real_which
         globals().update(real)
@@ -2576,7 +2591,8 @@ def run_doctor(smoke=True, via=None):
         print(f"· Ключ {hidden[0]} Є в середовищі, але {hidden[2]}"
               f"{f' (рядок {hidden[3]})' if hidden[3] else ''} гасить його порожнім значенням — "
               f"канал іде через CLI. Для одного запуску ключ бере `--via api`, конфігурацію це не змінює")
-    elif not api_provider:
+    elif not api_provider and not (via in ("cli", "clipboard") and api_key_for(provider)):
+        # S-096: on a CLI route the key is there and set aside (said above) -- "no key" beside it read as a contradiction.
         print(f"· Ключа API для рецензента ({provider}) немає — буде CLI або ручне копіювання")
     elif provider == "google":
         # The key's own list, not a table: the one check that catches a retired id BEFORE a
@@ -2735,6 +2751,11 @@ def run_doctor(smoke=True, via=None):
             print("▶ Режим роботи: не автоматичний -- живий виклик не вдався (див. ✗ вище); "
                   + ("раунд через omp так само відмовить (exit 4): інших шляхів вибір через omp не має" if omp
                      else "раунд віддасть пакет у буфер обміну"))
+    elif not model and (api_provider or cli_bin):
+        # S-096 (the W-6 candidate run on the Windows VM): with no model named a round stops at the choice (exit 3);
+        # «АВТОМАТИЧНИЙ» here was a promise no live call had checked.
+        print("▶ Режим роботи: ще не автоматичний -- модель рецензента не задано: раунд зупиниться на виборі (exit 3); "
+              "закріпи одну зі списку вище, і `doctor` перевірить її живим викликом")
     elif api_provider:
         print(f"▶ Режим роботи: АВТОМАТИЧНИЙ (через API {api_provider})")
     elif cli_bin:
