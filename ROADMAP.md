@@ -1,26 +1,10 @@
 # Roadmap
 
-> **Draft.** This describes direction, not commitments or dates. Things here can change or drop as research plays out.
+**3.1 is the current release:** the tuning method, the Autosound TCC desktop app, and the plugin for Claude Code.
 
-**Why:** lower the barrier to entry for non-expert users (terminal, dual-AI setup, manual DSP work, the tuning-decision role) — without changing the existing expert workflow.
+## Next: what you ask for
 
-## Now
+There are no further plans for now. What comes next is decided by the feedback and wishes of the people who use it — tell us what gets in your way and what you miss:
 
-- **Guided Setup Wizard** — interactive onboarding instead of manual README steps
-- **Tuning Command Center (TCC)** — shows current tuning state, what to do manually vs. what happens automatically. Repo: [autosound-tcc](https://github.com/ayukhno/autosound-tcc). Currently in prototyping stage.
-
-## Next
-
-*Research — these gate any automation work below, not the other way around.*
-
-- Can DSP software GUIs be read and controlled reliably and safely? Under investigation.
-- Hard safety limits on volume/EQ changes — this must be solved **before** any automated write to a real system, not after.
-- Where a DSP brand supports direct control without a GUI, prefer that over automation.
-
-## Later
-
-*Depends on Next passing.*
-
-- DSP GUI automation, once safety and reliability are proven
-- A decision-support layer for tuning choices, with a trust level you control — from fully manual to, eventually, bounded automatic within limits you set yourself
-- Expert track unchanged — same tools, plus the ability to build and share DSP maps for new hardware
+- a GitHub issue: [the method](https://github.com/ayukhno/autosound-tuning-skill/issues/new/choose) · [the TCC app](https://github.com/ayukhno/autosound-tcc/issues/new/choose);
+- no GitHub account? Ask the session ("report a bug") or use TCC's report window — your message goes to the author through a Google Form.
