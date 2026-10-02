@@ -589,11 +589,92 @@ def child_env(cli_bin=None):
     (hub #187) saw the same by hand. What hung was a wait with no end and no word, so the call now
     runs with the markers removed and a bounded timeout, and it says so before it waits.
     """
-    env = {k: v for k, v in os.environ.items() if not k.startswith(_NESTED_MARKERS)}
+    env = {k: v for k, v in os.environ.items() if not _is_marker(k)}
     if cli_bin and cli_flavor(cli_bin) == "gemini" and not os.path.basename(cli_bin).lower().startswith("agy") \
             and key_source("GEMINI_API_KEY") == "keystore":
         env["GEMINI_API_KEY"] = keystore_get("GEMINI_API_KEY")
     return env
+
+
+def _gcloud_dir(env, home):
+    """gcloud's configuration folder: `%APPDATA%\\gcloud` on Windows, `~/.config/gcloud` elsewhere."""
+    if sys.platform == "win32" and env.get("APPDATA"):
+        return os.path.join(env["APPDATA"], "gcloud")
+    return os.path.join(home, ".config", "gcloud")
+
+
+def _gcloud_core(env, home):
+    """`(account, project)` of gcloud's active configuration -- its own settings file, not a credential."""
+    base = _gcloud_dir(env, home)
+    try:
+        with open(os.path.join(base, "active_config"), encoding="utf-8") as fh:
+            name = fh.read().strip() or "default"
+    except OSError:
+        name = "default"
+    found = {}
+    try:
+        with open(os.path.join(base, "configurations", f"config_{name}"), encoding="utf-8") as fh:
+            for line in fh:
+                key, _, value = line.partition("=")
+                if key.strip() in ("account", "project") and value.strip():
+                    found.setdefault(key.strip(), value.strip())
+    except OSError:
+        pass
+    return found.get("account"), found.get("project")
+
+
+def agy_sign_in(env=None, home=None):
+    """`(route, line)`: how agy will sign in for a review -- `adc`, `account` or `none` (hub #234 ask 3).
+
+    `doctor` said only «authentication failed or timed out», and which route was live had to be read off agy's own
+    banner. Read here off disk and off the environment the CLI is started with (`child_env`), never by running agy, and
+    by the installers' signals (`install.sh` `agy_status`). No credential file is opened: the ADC file is asked whether
+    it exists, and the account and project come from the environment or gcloud's own settings, said as such.
+
+    The one carrier for the ADC switch is the machine's critic-env (ask 2): the method reads it itself, so a run TCC
+    starts from the Dock or the Start menu, which never read `~/.zshrc`, gets it too."""
+    env = child_env() if env is None else env
+    home = home or os.path.expanduser("~")
+    adc = env.get("GOOGLE_APPLICATION_CREDENTIALS") or os.path.join(_gcloud_dir(env, home),
+                                                                    "application_default_credentials.json")
+    carrier = f"рядок AGY_ADC_AUTH=true у {machine_config_path()} (його читає кожен запуск, і з TCC теж)"
+    if str(env.get("AGY_ADC_AUTH", "")).strip().lower() in ("1", "true", "yes"):
+        if not os.path.isfile(adc):
+            return "none", (f"AGY_ADC_AUTH=true ({env_origin('AGY_ADC_AUTH')}), але файлу ADC нема: {adc} -- "
+                            f"gcloud auth application-default login")
+        account, project = _gcloud_core(env, home)
+        project = env.get("GOOGLE_CLOUD_QUOTA_PROJECT") or env.get("GOOGLE_CLOUD_PROJECT") or project
+        said = ", ".join(x for x in (f"обліковий запис gcloud {account}" if account else "",
+                                     f"проєкт {project}" if project else "") if x)
+        return "adc", (f"ADC (Google Cloud), {adc}" + (f"; {said}" if said else "")
+                       + f"; AGY_ADC_AUTH — {env_origin('AGY_ADC_AUTH')}")
+    gemini = os.path.join(home, ".gemini")
+    account = None
+    signed = False
+    if os.path.isfile(os.path.join(gemini, "oauth_creds.json")) and os.path.getsize(os.path.join(gemini, "oauth_creds.json")):
+        signed = True
+        try:
+            with open(os.path.join(gemini, "google_accounts.json"), encoding="utf-8") as fh:
+                account = (json.load(fh) or {}).get("active")
+        except (OSError, ValueError, AttributeError):
+            account = None
+    for path, mark in ((os.path.join(gemini, "antigravity", "antigravity_state.pbtxt"), "agent_onboarding_completed: true"),
+                       (os.path.join(gemini, "antigravity-cli", "jetski_state.pbtxt"), "POST_ONBOARDING_STEP_TYPE")):
+        try:
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                signed = signed or mark in fh.read()
+        except OSError:
+            pass
+    projects = os.path.join(gemini, "config", "projects")
+    signed = signed or (os.path.isdir(projects) and any(n.endswith(".json") for n in os.listdir(projects)))
+    adc_here = os.path.isfile(adc)
+    if signed:
+        return "account", (f"обліковий запис agy ({account or 'вхід є'})"
+                           + (f"; файл ADC теж є, але agy візьме його лише з AGY_ADC_AUTH=true — {carrier}" if adc_here else ""))
+    if adc_here:
+        return "none", f"agy без входу, а файл ADC є ({adc}): agy бере його лише з AGY_ADC_AUTH=true — {carrier}"
+    return "none", ("agy без входу: запусти `agy` раз і увійди обліковим записом, або ADC — "
+                    "gcloud auth application-default login і " + carrier)
 
 
 def raw_exchange_dir():
@@ -986,9 +1067,37 @@ def cli_command(provider, binary, model, prompt_path, prompt_text):
                 "-c", f"model_reasoning_effort={CRITIC_EFFORT}"] + extra + [
             "-o", codex_answer_path(prompt_path), "-"]
     if cli_flavor(binary) == "agy":
-        return [binary, "--model", model] + extra + [
+        return [binary, "--agent", AGY_REVIEWER_AGENT, "--model", model] + extra + [
             "--input-format", "stream-json", "--output-format", "stream-json", "--print="]
     return [binary, "--model", model, "--skip-trust"] + extra + ["-p", prompt_path]
+
+
+#: The agent agy runs a review as: no tools, in a folder of its own (hub #234 ask 7). Headless `-p` runs honour the
+#: persisted `settings.json` policies (agy's changelog: «permissions, file access, sandbox mode, auto-execution»), so a
+#: person who sets Tool Permission to `always-proceed` for comfort in agy's own window gave the reviewer a shell in the
+#: project folder: measured 2026-10-02, agy 1.2.14, a review prompt asking for `ls -d ~/dev` got the listing, with
+#: `--sandbox` too. The same prompt to this agent answered NO-TOOLS. The reviewer reads the text it is sent and writes
+#: text (omp gets `--no-tools` for the same reason), so it does not depend on what anyone set for their own sessions.
+AGY_REVIEWER_AGENT = "autosound-reviewer"
+_AGY_REVIEWER_MD = """---
+name: autosound-reviewer
+description: Reads the review package in the user's message and answers in text. No tools.
+excludeDefaultComponents: true
+tools: []
+---
+# Reviewer
+
+You read the text in the user's message and answer in text. You have no tools and need none.
+"""
+
+
+def agy_workspace():
+    """A fresh folder holding only the reviewer agent: agy's working folder for one call, removed after it."""
+    folder = tempfile.mkdtemp(prefix="autosound_agy_")
+    os.makedirs(os.path.join(folder, ".agents", "agents"))
+    with open(os.path.join(folder, ".agents", "agents", AGY_REVIEWER_AGENT + ".md"), "w", encoding="utf-8") as fh:
+        fh.write(_AGY_REVIEWER_MD)
+    return folder
 
 
 def codex_answer_path(prompt_path):
@@ -1104,13 +1213,22 @@ FAILURE_ADVICE = {
 #: these stripped from its environment (`child_env`), with a bounded wait that is announced first
 #: (W-2, hub #187 ask 2, skill #54).
 _NESTED_MARKERS = ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "ANTIGRAVITY", "AGY_", "GEMINI_SESSION")
+#: Names that start like a marker and are configuration the CLI needs (hub #234): agy signs in through Google Cloud's
+#: Application Default Credentials only when it sees `AGY_ADC_AUTH=true`. Stripped with the `AGY_` markers, every review
+#: through ADC failed «authentication failed or timed out» while `agy -p` from the same shell answered (2026-10-02), and
+#: a person who keeps it in `~/.zshrc`, as agy's docs say, was told every run was inside an agent session.
+_NOT_MARKERS = frozenset({"AGY_ADC_AUTH"})
+
+
+def _is_marker(name):
+    return name.startswith(_NESTED_MARKERS) and name not in _NOT_MARKERS
 
 
 def nested_session_marker(env=None):
     env = os.environ if env is None else env
     if env.get("AUTOSOUND_ALLOW_NESTED_CLI") == "1":
         return None
-    return next((k for k in env if k.startswith(_NESTED_MARKERS)), None)
+    return next((k for k in env if _is_marker(k)), None)
 
 # How long a CLI is waited for (the Arbiter, 2026-09-23: "300 s is too little -- yesterday the Polish
 # translation dropped"). The intake translations of 22.09 were 31 KB each, and the answer came in 170-370 s:
@@ -1171,6 +1289,7 @@ def call_cli(provider, cli_bin, model, prompt, timeout=None):
     Only that failure is retried -- a refusal, a quota or a timeout would only double the wait."""
     timeout = timeout or cli_wait(prompt)
     prompt_path = None
+    workspace = agy_workspace() if provider == "google" and cli_flavor(cli_bin) == "agy" else None
     try:
         with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", prefix="autosound_prompt_",
                                          suffix=".txt", delete=False) as tf:
@@ -1182,7 +1301,7 @@ def call_cli(provider, cli_bin, model, prompt, timeout=None):
                 stdin = cli_stdin(provider, cli_bin, prompt)
                 proc = subprocess.run(cli_command(provider, cli_bin, model, prompt_path, prompt),
                                       input=stdin, capture_output=True,
-                                      text=True, encoding="utf-8", timeout=timeout,
+                                      text=True, encoding="utf-8", timeout=timeout, cwd=workspace,
                                       shell=(sys.platform == "win32"), env=child_env(cli_bin))
             except subprocess.TimeoutExpired:
                 keep_raw("cli", stdin or prompt, f"(no answer in {timeout} s)")
@@ -1211,6 +1330,8 @@ def call_cli(provider, cli_bin, model, prompt, timeout=None):
                     os.remove(leftover)
                 except OSError:
                     pass
+        if workspace:
+            shutil.rmtree(workspace, ignore_errors=True)
 
 
 def gemini_key_shape(key):
@@ -1370,8 +1491,8 @@ def _selftest():
     try:
         # agy: the prompt on stdin as one stream-json message -- no path to read, no argv limit.
         argv = cli_command("google", "agy", "gemini-3.8-flash-low", "/tmp/p.txt", "PROMPT")
-        assert argv == ["agy", "--model", "gemini-3.8-flash-low", "--input-format", "stream-json",
-                        "--output-format", "stream-json", "--print="], argv
+        assert argv == ["agy", "--agent", AGY_REVIEWER_AGENT, "--model", "gemini-3.8-flash-low", "--input-format",
+                        "stream-json", "--output-format", "stream-json", "--print="], argv
         assert "/tmp/p.txt" not in argv and "PROMPT" not in " ".join(argv)
         assert json.loads(cli_stdin("google", "agy.cmd", "PROMPT")) == {"event": "user", "message": {"content": "PROMPT"}}
         # skill #60: Claude and Codex read the prompt on stdin, never as an argument -- cmd.exe stops at 8191
@@ -1412,7 +1533,7 @@ def _selftest():
         assert not os.path.exists(seen[0][0][seen[0][0].index("-o") + 1]), "the answer file stayed behind"
         os.environ["AUTOSOUND_CRITIC_CLI_ARGS"] = '--sandbox --log-file "C:/logs/agy run.log"'
         argv = cli_command("google", "agy", "m", "/tmp/p.txt", "PROMPT")
-        assert argv[3:6] == ["--sandbox", "--log-file", "C:/logs/agy run.log"], argv
+        assert argv[5:8] == ["--sandbox", "--log-file", "C:/logs/agy run.log"], argv
     finally:
         os.environ.pop("AUTOSOUND_CRITIC_CLI_ARGS", None)
         if saved_args is not None:
@@ -1427,6 +1548,47 @@ def _selftest():
     assert nested_session_marker({"CLAUDECODE": "1"}) == "CLAUDECODE"
     assert nested_session_marker({"CLAUDECODE": "1", "AUTOSOUND_ALLOW_NESTED_CLI": "1"}) is None
     assert nested_session_marker({"HOME": "/x"}) is None
+    # hub #234: agy's ADC switch starts like a marker and is not one -- it reaches the CLI and marks no session.
+    assert nested_session_marker({"AGY_ADC_AUTH": "true"}) is None
+    assert nested_session_marker({"AGY_ADC_AUTH": "true", "AGY_SESSION": "1"}) == "AGY_SESSION"
+    _was = {k: os.environ.get(k) for k in ("AGY_ADC_AUTH", "AGY_SESSION", "GOOGLE_CLOUD_QUOTA_PROJECT")}
+    os.environ.update({"AGY_ADC_AUTH": "true", "AGY_SESSION": "1", "GOOGLE_CLOUD_QUOTA_PROJECT": "q-1"})
+    try:
+        kid = child_env("agy")
+        assert kid.get("AGY_ADC_AUTH") == "true" and "AGY_SESSION" not in kid and kid.get("GOOGLE_CLOUD_QUOTA_PROJECT") == "q-1"
+    finally:
+        for k, v in _was.items():
+            os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v)
+    # hub #234 ask 7: agy reviews as a tool-less agent, in a folder holding only that agent.
+    ws = agy_workspace()
+    try:
+        with open(os.path.join(ws, ".agents", "agents", AGY_REVIEWER_AGENT + ".md"), encoding="utf-8") as fh:
+            agent = fh.read()
+        assert "tools: []" in agent and "excludeDefaultComponents: true" in agent and f"name: {AGY_REVIEWER_AGENT}" in agent
+        assert sorted(os.listdir(ws)) == [".agents"]
+    finally:
+        shutil.rmtree(ws, ignore_errors=True)
+    # hub #234 ask 3: which sign-in agy will use, read off a fake home -- ADC, the account, or none, and the carrier.
+    with tempfile.TemporaryDirectory() as fake_home:
+        gdir = os.path.join(fake_home, ".config", "gcloud")
+        env0 = {"HOME": fake_home}
+        route, line = agy_sign_in(env0, fake_home)
+        assert route == "none" and "AGY_ADC_AUTH=true" in line, line
+        route, line = agy_sign_in(dict(env0, AGY_ADC_AUTH="true"), fake_home)
+        assert route == "none" and "application-default login" in line, line
+        os.makedirs(os.path.join(gdir, "configurations"))
+        open(os.path.join(gdir, "application_default_credentials.json"), "w").write("{}")
+        with open(os.path.join(gdir, "configurations", "config_default"), "w") as fh:
+            fh.write("[core]\naccount = tuner@example.com\nproject = p-1\n")
+        route, line = agy_sign_in(env0, fake_home)
+        assert route == "none" and "файл ADC є" in line and "critic-env" in line, line
+        route, line = agy_sign_in(dict(env0, AGY_ADC_AUTH="true", GOOGLE_CLOUD_QUOTA_PROJECT="q-2"), fake_home)
+        assert route == "adc" and "tuner@example.com" in line and "q-2" in line, line
+        os.makedirs(os.path.join(fake_home, ".gemini", "antigravity-cli"))
+        with open(os.path.join(fake_home, ".gemini", "antigravity-cli", "jetski_state.pbtxt"), "w") as fh:
+            fh.write("step: POST_ONBOARDING_STEP_TYPE_DONE\n")
+        route, line = agy_sign_in(env0, fake_home)
+        assert route == "account" and "AGY_ADC_AUTH=true" in line, line
     # `agy` that is a symlink to gemini is gemini.
     with tempfile.TemporaryDirectory() as bindir:
         real = os.path.join(bindir, "gemini")
@@ -2436,6 +2598,10 @@ def run_doctor(smoke=True):
                 ["xattr", "-p", "com.apple.quarantine", where], capture_output=True).returncode == 0:
             print(f"✗ {where} у карантині Gatekeeper. Виправлення: xattr -dr com.apple.quarantine \"{where}\"")
             ok = False
+        if provider == "google" and cli_flavor(cli_bin) == "agy":
+            route, line = agy_sign_in()
+            print(f"{'✗' if route == 'none' else '✓'} Вхід agy: {line}")
+            ok = ok and route != "none"
     if api_key_for("google"):
         print(f"· GEMINI_API_KEY: {gemini_key_shape(api_key_for('google'))}")
     if cli_bin and nested:
