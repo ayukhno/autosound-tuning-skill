@@ -1627,13 +1627,18 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
-## S-095 · The README/FAQ pass for v3.1.0, with the translations brought to it
+## S-095 · The documentation brought to the release's state for v3.1.0, the translations with it
 
-**Status**: open 2026-10-02 · W-6 pool (collection)
+**Status**: open 2026-10-02 · W-6 pool (collection) · after the Advisor works on the new connection (hub #234, agy through ADC) — the Arbiter, 2026-10-02: «документацію робимо після того як запрацює Радник на новому конекті»
 
-`docs/RELEASE-PLAN-3.1.0.md` step 5: README, FAQ and their uk/de/pl versions read as the release, not as a patch line.
-The translations were brought to the English text in W-5 (S-078); this pass changes the English, so they follow it once
-more, through the Advisor.
+The Arbiter (2026-10-02): «давай запишемо ще роботу з документацією щоб її привести до стану релізу». Not only
+`docs/RELEASE-PLAN-3.1.0.md` step 5 (README, FAQ and their uk/de/pl versions read as the release, not as a patch line):
+the whole documentation brought to the state v3.1.0 ships in. Known parts so far, recorded, not diagnosed:
+- the 09.09 decision (`REVIEW-2026-09-09-release-readiness.md` §9, item 2): README leads only to 3.x; 2.8.x is
+  mentioned in the FAQ and leaves the storefront;
+- the plugin catalog as an install route, once S-094 settles it;
+- the translations follow the English once more, through the Advisor (`autosound_ai.py ask`) — which is why the pass
+  waits for the Advisor on the new connection.
 
 ## S-094 · The plugin catalog moves to v3.1.0: how a plugin install gets the tools and the signature check
 
@@ -1653,7 +1658,7 @@ wave. The version waits for the milestone; the plan is v3.1.0 with TCC v1.1.0 (h
 
 The pool at the start, recorded, not diagnosed:
 - S-094 — the plugin catalog to v3.1.0;
-- S-095 — the README/FAQ pass and the translations;
+- S-095 — the documentation brought to the release's state, the translations with it (after the Advisor works on the new connection, #234);
 - the queue `to:skill`: #233 TCC-045 (the method's DSP sheet joins a channel to its ledger), #234 HUB-071 (agy through
   ADC; the Arbiter put it here on 2026-10-02), #236 TCC-046 (a reviewer run named for a CLI can still bill an API);
 - outside the skill, before the tag: hub #220 (the minor-pair rule and its check); TCC v1.1.0 pins v3.1.0 the same day;
