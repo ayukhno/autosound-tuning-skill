@@ -1629,7 +1629,7 @@ four assessment lines, and nothing is built before his `ok` on that task. Resume
 
 ## S-091 · A driver's side is the one `_` read as `-`; the old `D_` prefix is refused (hub #232 TCC-044)
 
-**Status**: doing 2026-10-02 · branch `fix-tcc-044`, tag v3.0.66 · the Arbiter: «давай зробимо 232 і випустимо тег»
+**Status**: done 2026-10-02 · v3.0.66 · `git tag --contains fd89466` → v3.0.66 (signed); `python3 skills/autosound-tuning/rew_tool/naming.py . selftest` → OK; hub #232 closed with the receipt to tcc · was: doing 2026-10-02 · branch `fix-tcc-044`, PR #115 · the Arbiter: «давай зробимо 232 і випустимо тег»
 
 v3.0.65 read every `_` in a code as `-` (S-079), so tcc's real captures `D_L_7 (rta) …` and `D_L w+m_7 (rta) inv`
 (cap_010, cap_013) became a channel `D-L`. The Arbiter, 2026-10-01: «це правило до драйвер-L/R і все». Built:
