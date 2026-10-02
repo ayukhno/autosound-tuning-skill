@@ -77,3 +77,19 @@ Mac only).
   copy with no `.git` whose root is a recorded install; `candidates` adds every user-scope install and a project-scope
   one for that project as origin `plugin`. Verdicts unchanged: same sha agrees, another splits, no sha is unknown.
 - Selftests on a fake home: the registry read, the plugin's identity, agreement, split, unknown, another project's.
+
+### #121 — the plugin route's signature check — built
+
+- **What Claude Code guarantees** (its plugin docs, 2026-10-02): a `url` source with `ref` and `sha` is checked out at
+  the `sha` — git's content addressing holds the copy to the pin — and no signature is verified; `sha256` exists only
+  for `archive` sources. So the pin is as trustworthy as whoever can edit the catalog.
+- **Decided: the copy verifies itself against the signed tag.** `upkeep.py verify-copy --root <plugin root>`: the tag
+  `v<plugin.json version>` into a throwaway bare repository, `verify_tag` with the constant key (the installers'),
+  then every blob of the tag's tree against the copy (`blob_id`, computed in Python; CRLF accepted as the same file;
+  `.in_use`, `.orphaned_at`, `.DS_Store`, `__pycache__`, `*.pyc` ignored). Changed, missing, added: refused by name.
+  No reliance on `installed_plugins.json` (its `gitCommitSha` is undocumented). Live: an export of v3.0.66 verified,
+  274 files, 2 s; one changed byte refused.
+- `plugin-ready --root` writes `vX.Y.Z` into `~/.config/autosound/plugin-ready` (once), for the SessionStart hook.
+  A version, not a path: the hook runs in Git Bash on Windows and the paths would not compare across shells.
+- Selftests: a signed copy passes, CRLF passes, noise ignored, changed/added/missing refused, an unsigned release
+  refused, the ready line written once.

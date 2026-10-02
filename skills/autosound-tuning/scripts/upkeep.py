@@ -14,6 +14,9 @@ once, and every door calls it:
     clone [--tag vX.Y.Z]         the tag fetched into refs/tags, its signature verified, checked out (#92, #99)
     tools [--only NAME]          every tool that is present, updated the way it was installed; old -> new (#97)
     libs                         numpy, scipy, matplotlib upgraded in the Python the method's tools run on (#98)
+    verify-copy --root DIR       a copy with no .git (a plugin install) checked against its signed release tag,
+                                 file by file (W-6 #121)
+    plugin-ready --root DIR      record that this plugin version is verified and set up on the machine (#120)
 
 TCC runs this from its vendored skill (as new as TCC). The installers run the copy inside the tag they are about
 to check out (`git show FETCH_HEAD:<this file>`), so a clone that predates this script is not in the way.
@@ -110,6 +113,120 @@ def verify_tag(clone, tag, principal=None, key=None, signed_from=None, env=None)
     reason = said.splitlines()[-1].rstrip(".") if said else f"git verify-tag exit {rc}"
     return False, (f"{tag}: the signature does not check out -- {reason}. Not installed: a release tag of this "
                    f"skill is signed by its author, and this one is not, or not by that key")
+
+
+# ── a copy with no .git: the plugin install (W-6 #120, #121) ─────────────────────────────────────
+#: Where a plugin version, once verified and set up, is written down -- one `vX.Y.Z` per line. The plugin's
+#: SessionStart hook (`hooks/session-start.sh`) reads the same file to decide whether to offer the setup.
+PLUGIN_READY = os.path.join(os.path.expanduser("~"), ".config", "autosound", "plugin-ready")
+#: What is in a plugin copy that is not the release's: Claude Code's own markers, and what running the tools leaves.
+_COPY_NOISE_FILES = (".in_use", ".orphaned_at", ".DS_Store")
+_COPY_NOISE_DIRS = (".git", "__pycache__")
+
+
+def blob_id(data):
+    """git's id of a file's bytes (`git hash-object`), computed here: no repository needed, no process per file."""
+    import hashlib
+    return hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
+
+
+def copy_version(root):
+    """The `version` in the copy's `.claude-plugin/plugin.json`, or "" -- the tag a copy says it is."""
+    try:
+        with open(os.path.join(root, ".claude-plugin", "plugin.json"), encoding="utf-8") as fh:
+            got = json.load(fh).get("version", "")
+    except (OSError, ValueError, AttributeError):
+        return ""
+    return got if isinstance(got, str) else ""
+
+
+def copy_files(root):
+    """`{relative posix path: absolute path}` of every file in the copy, the noise left out."""
+    out = {}
+    for here, dirs, files in os.walk(root):
+        dirs[:] = [d for d in dirs if d not in _COPY_NOISE_DIRS]
+        for name in files:
+            if name in _COPY_NOISE_FILES or name.endswith(".pyc"):
+                continue
+            path = os.path.join(here, name)
+            out[os.path.relpath(path, root).replace(os.sep, "/")] = path
+    return out
+
+
+def verify_copy(root, repo=None, tag=None):
+    """A copy with no `.git` -- what `/plugin install` leaves -- checked against its signed release tag (W-6 #121).
+
+    The catalog pins a commit, and Claude Code checks that commit out: git's content addressing holds the copy to the
+    pin, but nothing holds the pin to the author -- whoever can change the catalog can change the sha, and Claude Code
+    verifies no signature (2026-10-02, the plugin docs). So the copy is held to what the installers hold a clone to:
+    the release tag named by its own `plugin.json` is fetched into a throwaway bare repository, its signature verified
+    against the constant key, and every file of its tree compared, by blob id, with the copy. A file missing, changed
+    or added is a refusal that names it. A line ending turned into CRLF by a Windows checkout is the same file.
+    """
+    root = os.path.abspath(root)
+    version = copy_version(root)
+    tag = tag or (f"v{version}" if version else "")
+    if tag_key(tag) is None:
+        raise Refused(f"{root}: no release version in .claude-plugin/plugin.json ({version!r}), so no tag to check "
+                      f"this copy against")
+    with tempfile.TemporaryDirectory(prefix="autosound_verify_") as bare:
+        rc, _, err = run(["git", "init", "--quiet", "--bare", bare])
+        if rc != 0:
+            raise Refused(f"git is needed to check this copy, and `git init` failed: {err.strip()}")
+        rc, _, err = git(bare, "fetch", "--quiet", "--depth", "1", repo or SKILL_REPO,
+                         f"+refs/tags/{tag}:refs/tags/{tag}", timeout=300)
+        if rc != 0:
+            raise Refused(f"could not fetch {tag} to check this copy against (no network?): {err.strip()}")
+        ok, said = verify_tag(bare, tag)
+        if not ok:
+            raise Refused(said)
+        rc, out, err = git(bare, "ls-tree", "-r", "-z", "--full-tree", f"refs/tags/{tag}^{{commit}}")
+        if rc != 0:
+            raise Refused(f"could not list {tag}: {err.strip()}")
+    expected = {}
+    for entry in out.split("\0"):
+        if "\t" not in entry:
+            continue
+        meta, path = entry.split("\t", 1)
+        mode, kind, oid = meta.split()
+        if kind == "blob":
+            expected[path] = oid
+    local = copy_files(root)
+    missing = sorted(set(expected) - set(local))
+    added = sorted(set(local) - set(expected))
+    changed = []
+    for path in sorted(set(expected) & set(local)):
+        with open(local[path], "rb") as fh:
+            data = fh.read()
+        if expected[path] not in (blob_id(data), blob_id(data.replace(b"\r\n", b"\n"))):
+            changed.append(path)
+    if missing or added or changed:
+        def few(paths):
+            return ", ".join(paths[:5]) + (f" (+{len(paths) - 5} more)" if len(paths) > 5 else "")
+        parts = [f"{len(changed)} changed: {few(changed)}" if changed else "",
+                 f"{len(missing)} missing: {few(missing)}" if missing else "",
+                 f"{len(added)} not in the release: {few(added)}" if added else ""]
+        raise Refused(f"{root} is not {tag} as its author signed it -- " + "; ".join(p for p in parts if p)
+                      + ". Reinstall the plugin, or install with the installer (install.sh / install.ps1)")
+    return {"root": root, "tag": tag, "signature": said, "files": len(expected)}
+
+
+def plugin_ready(root, path=None):
+    """Write down that the copy's version is verified and set up here (#120): one line, `vX.Y.Z`, kept once."""
+    version = copy_version(os.path.abspath(root))
+    if tag_key(f"v{version}") is None:
+        raise Refused(f"{root}: no release version in .claude-plugin/plugin.json ({version!r})")
+    path = path or PLUGIN_READY
+    try:
+        with open(path, encoding="utf-8") as fh:
+            have = [line.strip() for line in fh if line.strip()]
+    except OSError:
+        have = []
+    if f"v{version}" not in have:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(f"v{version}\n")
+    return {"root": os.path.abspath(root), "version": f"v{version}", "file": path}
 
 
 # ── the clone and its local changes (#91, #92) ───────────────────────────────────────────────────
@@ -532,6 +649,11 @@ def main(argv=None):
     tp = sub.add_parser("tools")
     tp.add_argument("--only", action="append", choices=TOOLS)
     sub.add_parser("libs")
+    vp = sub.add_parser("verify-copy")
+    vp.add_argument("--root", required=True, help="the copy's root: the folder holding .claude-plugin/")
+    vp.add_argument("--tag", default=None, help="the release to check against (default: v<plugin.json version>)")
+    rp = sub.add_parser("plugin-ready")
+    rp.add_argument("--root", required=True, help="the plugin copy's root")
     sub.add_parser("selftest")
     args = p.parse_args(argv)
     if args.cmd == "selftest":
@@ -548,6 +670,10 @@ def main(argv=None):
             got = update_clone(args.clone, args.tag)
         elif args.cmd == "tools":
             got = update_tools(args.only)
+        elif args.cmd == "verify-copy":
+            got = verify_copy(args.root, tag=args.tag)
+        elif args.cmd == "plugin-ready":
+            got = plugin_ready(args.root)
         else:
             got = update_libs()
     except Refused as exc:
@@ -572,6 +698,10 @@ def main(argv=None):
             print(f"{got['clone']} is reset to {got['version']}; `git apply {got['patch']}` there brings the changes back")
     elif args.cmd == "clone":
         print(f"skill {got['from']} -> {got['to']} ({got['signature']})")
+    elif args.cmd == "verify-copy":
+        print(f"✓ {got['root']} is {got['tag']} as its author signed it: {got['files']} files ({got['signature']})")
+    elif args.cmd == "plugin-ready":
+        print(f"{got['version']} is set up here ({got['file']})")
     elif args.cmd == "tools":
         for t in got:
             print(f"  {t['name']:7} {t['old'] or '?'} -> {t['new'] or '?'}" if t["ok"] else
@@ -684,6 +814,62 @@ def _selftest():
                 raise AssertionError(f"{bad} must not be checked out")
             except Refused as exc:
                 assert "does not check out" in str(exc) and describe(clone) == "v3.0.64", (exc, describe(clone))
+
+        # W-6 #121: a plugin copy (no .git) against its signed tag, file by file. Two more releases in the origin:
+        # v3.0.70 signed by the author, v3.0.71 unsigned, each naming itself in .claude-plugin/plugin.json.
+        os.makedirs(os.path.join(origin, ".claude-plugin"), exist_ok=True)
+        for version, how in (("3.0.70", "signed"), ("3.0.71", "unsigned")):
+            with open(os.path.join(origin, ".claude-plugin", "plugin.json"), "w", encoding="utf-8") as fh:
+                json.dump({"name": "autosound-tuning", "version": version}, fh)
+            sh("git", "-C", origin, "add", "-A")
+            sh("git", "-C", origin, "commit", "-q", "-m", version)
+            if how == "signed":
+                sh(*signed, "-c", f"user.signingkey={os.path.join(tmp, 'author')}.pub", "tag", "-s", f"v{version}", "-m", version)
+            else:
+                sh("git", "-C", origin, "tag", "-a", f"v{version}", "-m", version)
+
+        def plugin_copy(tag):
+            dest = os.path.join(tmp, "plugin-" + tag)
+            shutil.rmtree(dest, ignore_errors=True)
+            os.makedirs(dest)
+            tar = os.path.join(tmp, tag + ".tar")
+            sh("git", "-C", origin, "archive", "-o", tar, tag)
+            sh("tar", "-xf", tar, "-C", dest)
+            return dest
+
+        plug = plugin_copy("v3.0.70")
+        got = verify_copy(plug, repo="file://" + origin)
+        assert got["tag"] == "v3.0.70" and got["files"] == 2 and "signature good" in got["signature"], got
+        os.makedirs(os.path.join(plug, "__pycache__"))
+        for noise in (".in_use", os.path.join("__pycache__", "x.cpython-312.pyc")):
+            open(os.path.join(plug, noise), "w").close()
+        with open(os.path.join(plug, "a.txt"), "wb") as fh:
+            fh.write(b"one\r\ntwo\r\n")                      # a Windows checkout's line endings: the same file
+        assert verify_copy(plug, repo="file://" + origin)["files"] == 2
+        for harm, word in (("changed", "1 changed: a.txt"), ("added", "1 not in the release: evil.py"),
+                           ("missing", "1 missing: a.txt")):
+            plug = plugin_copy("v3.0.70")
+            if harm == "changed":
+                with open(os.path.join(plug, "a.txt"), "a", encoding="utf-8") as fh:
+                    fh.write("injected\n")
+            elif harm == "added":
+                open(os.path.join(plug, "evil.py"), "w").close()
+            else:
+                os.remove(os.path.join(plug, "a.txt"))
+            try:
+                verify_copy(plug, repo="file://" + origin)
+                raise AssertionError(f"a copy with a file {harm} passed")
+            except Refused as exc:
+                assert word in str(exc) and "Reinstall" in str(exc), (harm, exc)
+        try:
+            verify_copy(plugin_copy("v3.0.71"), repo="file://" + origin)
+            raise AssertionError("an unsigned release passed")
+        except Refused as exc:
+            assert "does not check out" in str(exc), exc
+        ready = os.path.join(tmp, "plugin-ready")
+        for _ in range(2):
+            assert plugin_ready(plugin_copy("v3.0.70"), path=ready)["version"] == "v3.0.70"
+        assert open(ready, encoding="utf-8").read() == "v3.0.70\n", "one line per version, written once"
     finally:
         SIGNING_PRINCIPAL, SIGNING_KEY = saved
 

@@ -167,6 +167,13 @@ W-6 · v3.1.0 (`docs/PLAN-W-6.md`): ten issues, #116–#125, all with the Arbite
   starts from the Dock or the Start menu, which never reads `~/.zshrc`, gets it too. `doctor` names the sign-in agy will
   use — ADC (the credentials file, gcloud's account and project, where the switch came from), agy's own account, or
   none, with what to do — read off disk, no credential file opened.
+- **A plugin copy is checked against its signed release, file by file** (#121). The catalog pins a commit and Claude
+  Code checks it out, but nothing ties the pin to the author: Claude Code verifies no signature. `upkeep.py
+  verify-copy --root <plugin root>` fetches the tag the copy's own `plugin.json` names into a throwaway bare
+  repository, verifies its signature against the same constant key the installers use, and compares every file of its
+  tree with the copy by blob id; a file changed, missing or added is a refusal that names it (CRLF line endings from a
+  Windows checkout are the same file; Claude Code's markers and `__pycache__` are not counted). `plugin-ready` writes
+  the verified, set-up version down for the plugin's SessionStart hook.
 - **`deployment.py` knows a plugin install** (#122). A catalog install is a copy in
   `~/.claude/plugins/cache/<marketplace>/autosound-tuning/<version>/` with no `.git`, so it read as a deployment that
   cannot say which checkout it is. Its commit is now read from Claude Code's `installed_plugins.json`
