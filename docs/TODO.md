@@ -1627,6 +1627,15 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-096 · `doctor`'s mode line and key line read wrong in two cases (found in the W-6 candidate run)
+
+**Status**: open 2026-10-02 · pool for the next wave (not W-6: cosmetic, nothing stops)
+
+On the Windows VM at `beta-v3.1.0-rc1`: with no reviewer model pinned, `doctor` lists the key's models and still prints
+«▶ Режим роботи: АВТОМАТИЧНИЙ (через API google)», though a round would stop at the choice (exit 3) and no live call was
+made. On a CLI route (`--via cli`) it prints «· Ключа API для рецензента (google) немає — буде CLI або ручне
+копіювання» right under «ключ google для раунду не береться», while the key sits in the store. Recorded, not diagnosed.
+
 ## S-095 · The documentation brought to the release's state for v3.1.0, the translations with it
 
 **Status**: open 2026-10-02 · **W-6 · v3.1.0**, issues #124 (English) and #125 (translations) (review); hub #234's docs half is #118 · after the Advisor works on the new connection (#117, hub #234, agy through ADC) — the Arbiter, 2026-10-02: «документацію робимо після того як запрацює Радник на новому конекті»

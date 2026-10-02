@@ -188,3 +188,17 @@ What the run covers (the Arbiter, the Mac and the Windows VM):
 (`RELEASE-CHANNEL.md` §3): the release role's. Hub #239 (SKL-063) asks how they are done for v3.1.0, and for hub #220's
 minor-pair rule before the tag; the skill touches neither surface before the answer. TCC is asked to re-pin to rc1 for
 one joint run and to tag v1.1.0 on v3.1.0 the same day (hub #238, SKL-062).
+
+### The candidate run — results so far
+
+- **Windows VM (ARM64), installer at rc1, 2026-10-02:** «beta-v3.1.0-rc1 is signed by the skill's author»; libraries,
+  the REW shortcut, TCC v0.1.46 (TCC's candidate not cut yet); agy «already set up», no ADC on the VM, so no ADC offer
+  (as expected). No prebuilt engine for the candidate («no SHA256SUMS on beta-v3.1.0-rc1»): `engine-binaries` runs on
+  `v3.*` tags only, so a candidate never carries one — the release will; the VM had one from an earlier install.
+- **`doctor` on the VM:** «Вхід agy: обліковий запис agy (вхід є)» (#117), «CLI agy запускається без ключів API» (#119);
+  with `--via cli --model gemini-3.8-flash-high`: «Шлях cli … ключ google для раунду не береться», **«Живий виклик (CLI
+  agy): channel works», «АВТОМАТИЧНИЙ (відповів CLI agy)»** — agy's tool-less reviewer agent in its temporary folder
+  answers on Windows (#117 ask 7).
+- Pool for the next wave (cosmetic, `doctor`): with no model pinned it still prints «Режим роботи: АВТОМАТИЧНИЙ (через
+  API google)» though a round would stop at the choice; on a CLI route it prints «Ключа API … немає» beside «ключ … не
+  береться» while the key is in the store.
