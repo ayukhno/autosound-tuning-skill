@@ -34,6 +34,9 @@
 #   ./install.sh --no-engine         without Phase 1's desk engine (default: fetched only when this
 #   ./install.sh --engine            machine has no .NET SDK to build it from; --engine fetches anyway)
 #   ./install.sh --dry-run           say what it would do, change nothing
+#   ./install.sh --plugin            run from inside a plugin copy (/plugin install): the method IS that copy, so
+#                                    it is checked against its signed release and not cloned; everything else as
+#                                    usual (W-6 #120) -- what /autosound-tuning:setup runs
 #   ./install.sh --yes               yes to every question; sign-ins are printed, not run
 #   ./install.sh --skill-ref v3.0.33 a specific skill version (default: the newest 3.x tag)
 #   ./install.sh --channel beta      also release candidates: for the app, and in a SECOND copy of the
@@ -131,6 +134,10 @@ REMOVE_ALL=0
 DRY_RUN=0
 ASSUME_YES=0
 SKILL_REF=""
+#: `--plugin` (W-6 #120): the folder `/plugin install` made, which this script sits in, and the version it names.
+WANT_PLUGIN=0
+PLUGIN_ROOT=""
+PLUGIN_VERSION=""
 # stable (the default): releases only. beta: releases AND release candidates, for trying a version
 # before it is released -- for the app, and in the method's second copy (SKILL_BETA_SRC); the
 # terminal's copy stays on releases either way. --skill-ref sets the terminal's copy, --tcc-ref the app.
@@ -206,6 +213,7 @@ while [ $# -gt 0 ]; do
     --uninstall)   UNINSTALL=1 ;;
     --all)         REMOVE_ALL=1 ;;
     --dry-run)     DRY_RUN=1 ;;
+    --plugin)      WANT_PLUGIN=1 ;;
     --yes|-y)      ASSUME_YES=1 ;;
     --skill-ref)   SKILL_REF="${2:-}"; shift ;;
     --channel)     CHANNEL="${2:-}"; shift ;;
@@ -219,6 +227,23 @@ case "$CHANNEL" in
   stable|beta) ;;
   *) echo "unknown channel: '$CHANNEL' (stable or beta)" >&2; exit 2 ;;
 esac
+# --plugin (W-6 #120): the method is the plugin copy this script sits in -- `/plugin install` put the files there, and
+# a copy of files brings none of what the method runs on. This run brings that, and checks the copy against its
+# signed release instead of cloning one (upkeep.py verify-copy, #121).
+if [ "$WANT_PLUGIN" = 1 ]; then
+  PLUGIN_ROOT="$(cd "$(dirname "$0")" 2>/dev/null && pwd)" || PLUGIN_ROOT=""
+  PLUGIN_VERSION="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$PLUGIN_ROOT/.claude-plugin/plugin.json" 2>/dev/null | head -1)"
+  if [ -z "$PLUGIN_ROOT" ] || [ -z "$PLUGIN_VERSION" ] || [ -d "$PLUGIN_ROOT/.git" ]; then
+    echo "--plugin runs the installer inside a plugin copy -- the folder /plugin install made, with" \
+         ".claude-plugin/plugin.json and no .git; this is not one: ${PLUGIN_ROOT:-?}" >&2
+    exit 2
+  fi
+  if [ "$UNINSTALL" = 1 ] || [ -n "$SKILL_REF" ] || [ "$CHANNEL" = "beta" ]; then
+    echo "--plugin sets up this plugin copy (v$PLUGIN_VERSION); --uninstall, --skill-ref and --channel beta are" \
+         "for the installer's own copy of the method" >&2
+    exit 2
+  fi
+fi
 
 # omp follows the app — see `WANT_OMP` above. `--terminal` is the method in a plain terminal, where
 # the model is Claude Code's own and a picker for TCC's models has nothing to pick for.
@@ -660,7 +685,11 @@ _mb=100   # the method and its three Python packages
 if [ "$HAVE_CLAUDE" = 0 ]; then
   say "    • Claude Code — the AI that runs the method              claude.ai"; _mb=$((_mb + 200))
 fi
-say "    • the tuning method — its references and tools           github.com/ayukhno/autosound-tuning-skill"
+if [ -n "$PLUGIN_ROOT" ]; then
+  say "    • the tuning method — this plugin, v$PLUGIN_VERSION, checked against its signed release (not cloned)"
+else
+  say "    • the tuning method — its references and tools           github.com/ayukhno/autosound-tuning-skill"
+fi
 say "    • numpy, scipy, matplotlib — the method's own tools       pypi.org"
 if [ "$MODE" = "tcc" ]; then
   if [ "$HAVE_UV" = 1 ]; then
@@ -948,7 +977,23 @@ checkout_method() {
 }
 
 step "The tuning method"
-if [ -z "$SKILL_REF" ]; then
+if [ -n "$PLUGIN_ROOT" ]; then
+  # The plugin's copy is the method: checked, not cloned, and every later step reads it where it is.
+  SKILL_HOME="$PLUGIN_ROOT/skills/autosound-tuning"
+  SKILL_REF="v$PLUGIN_VERSION"
+  say "  this plugin: $SKILL_REF at $(pretty "$PLUGIN_ROOT")"
+  if [ "$DRY_RUN" = 1 ]; then
+    say "  would check it against its signed release: python3 upkeep.py verify-copy --root $(pretty "$PLUGIN_ROOT")"
+  elif ! usable python3; then
+    echo "stopped: python3 is needed to check this plugin copy against its signed release, and it does not run here" >&2
+    exit 1
+  elif python3 "$SKILL_HOME/scripts/upkeep.py" verify-copy --root "$PLUGIN_ROOT"; then
+    :
+  else
+    echo "stopped: this plugin copy is not $SKILL_REF as its author signed it -- see above; nothing was installed" >&2
+    exit 1
+  fi
+elif [ -z "$SKILL_REF" ]; then
   # The newest 3.x tag. Asked for by name rather than "main": main is where development lands,
   # and an installer should put you on a release unless you say otherwise. On EITHER channel: this
   # is the copy Claude Code in a terminal loads, and the terminal runs releases (autosound-hub
@@ -959,6 +1004,7 @@ if [ -z "$SKILL_REF" ]; then
       | awk -F/ '{print $NF}' | newest_on_channel)" || SKILL_REF=""
   [ -z "$SKILL_REF" ] && SKILL_REF="main"
 fi
+if [ -z "$PLUGIN_ROOT" ]; then
 say "  version $SKILL_REF"
 
 ours=0
@@ -1004,6 +1050,7 @@ if [ "$CHANNEL" = "beta" ]; then
       || warn "the beta channel's copy did not clone, or its signature did not check out -- see above; the terminal's method is not affected"
   fi
 fi
+fi   # not --plugin
 
 # ── what the method's own tools need ──────────────────────────────────────────
 # The reason this script exists, ahead of anything about models (INSTALLER-TZ §0): put the wall
@@ -1690,6 +1737,12 @@ if [ "$DRY_RUN" != 1 ]; then
       "$SKILL_REF" "$MODE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(uname -s)-$(uname -m)" "${ENGINE_DID:-not reached}" \
       > "$_rd/install-receipt.json" 2>/dev/null || true
   fi
+fi
+
+# --plugin: this version is verified and set up -- the plugin's SessionStart hook stops offering the setup (#120).
+if [ -n "$PLUGIN_ROOT" ] && [ "$DRY_RUN" != 1 ]; then
+  python3 "$SKILL_HOME/scripts/upkeep.py" plugin-ready --root "$PLUGIN_ROOT" \
+    || warn "could not write down that v$PLUGIN_VERSION is set up -- the next session will offer the setup again"
 fi
 
 step "Where this lives"

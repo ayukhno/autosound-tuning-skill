@@ -663,6 +663,16 @@ def main():
         else:
             checked.append(f"install.cmd fetches install.ps1 at the released tag ({released})")
 
+    # The plugin route (W-6 #120): both installers take the flag, check the copy with `upkeep.py verify-copy` before
+    # anything is installed, and write it down with `plugin-ready` at the end -- the hook reads what they write.
+    plugin = {"install.sh": (sh, "--plugin)"), "install.ps1": (ps1, "[switch]$Plugin")}
+    lacking = [f"{name}: {what}" for name, (text, flag) in plugin.items()
+               for what in (flag, "verify-copy --root", "plugin-ready --root") if what not in text]
+    if lacking:
+        problems.append("the plugin route is not in both installers -- missing " + "; ".join(lacking))
+    else:
+        checked.append("both installers take the plugin flag, verify the copy first and write it down last")
+
     # And the app: `install-tcc.md` is the OTHER way into TCC, so it must pin too (SCR-054).
     tcc_doc = read(ROOT / "commands" / "install-tcc.md")
     tcc_refs = set(re.findall(r"autosound-tcc(@v[0-9.]+)?'", tcc_doc))

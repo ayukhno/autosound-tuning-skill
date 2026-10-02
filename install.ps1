@@ -41,6 +41,8 @@
 #   .\install.ps1 -NoEngine           without Phase 1's desk engine (default: fetched only when this
 #   .\install.ps1 -Engine             machine has no .NET SDK to build it from; -Engine fetches anyway)
 #   .\install.ps1 -DryRun             say what it would do, change nothing
+#   .\install.ps1 -Plugin             run from inside a plugin copy (/plugin install): the method IS that copy,
+#                                     checked against its signed release, not cloned (W-6 #120)
 #   .\install.ps1 -Yes                yes to every question; sign-ins are printed, not run
 #   .\install.ps1 -SkillRef v3.0.33   a specific skill version (default: the newest 3.x tag)
 #   .\install.ps1 -Channel beta       also release candidates: for the app, and in a SECOND copy of the
@@ -65,6 +67,7 @@ param(
     [switch]$Engine,    # fetch the prebuilt desk engine even where the .NET SDK could build one
     [switch]$NoEngine,  # never fetch it
     [switch]$DryRun,
+    [switch]$Plugin,    # W-6 #120: the method is the plugin copy this script sits in
     [switch]$Yes,
     [string]$SkillRef = "",
     [string]$TccRef = "",
@@ -192,6 +195,8 @@ Autosound tuning -- installer for Windows
   install.ps1 -NoEngine           without Phase 1's desk engine; -Engine fetches it even where the
                                   .NET SDK could build it (default: fetched only when there is no SDK)
   install.ps1 -DryRun             say what it would do, change nothing
+  install.ps1 -Plugin             from inside a plugin copy (/plugin install): the method is that copy,
+                                  checked against its signed release, not cloned
   install.ps1 -Yes                yes to every question; sign-ins are printed, not run
   install.ps1 -SkillRef v3.0.33   a specific skill version (default: the newest 3.x tag)
   install.ps1 -Channel beta       also release candidates: for the app, and in a SECOND copy of
@@ -212,6 +217,27 @@ Through the one-liner, options go on the scriptblock:
 if ($Channel -notin @("stable", "beta")) {
     Write-Host "unknown channel: '$Channel' (stable or beta)"
     Stop-Installer 2; return
+}
+# -Plugin (W-6 #120): the method is the plugin copy this script sits in -- `/plugin install` put the files there, and
+# a copy of files brings none of what the method runs on. This run brings that, and checks the copy against its signed
+# release instead of cloning one (upkeep.py verify-copy, #121). The same rule as install.sh's --plugin.
+$PluginRoot = ""; $PluginVersion = ""
+if ($Plugin) {
+    $PluginRoot = "$PSScriptRoot"
+    $pluginJson = if ($PluginRoot) { Join-Path $PluginRoot ".claude-plugin\plugin.json" } else { "" }
+    if ($pluginJson -and (Test-Path $pluginJson)) {
+        try { $PluginVersion = [string]((Get-Content $pluginJson -Raw | ConvertFrom-Json).version) } catch { $PluginVersion = "" }
+    }
+    if (-not $PluginRoot -or -not $PluginVersion -or (Test-Path (Join-Path $PluginRoot ".git"))) {
+        Write-Host ("-Plugin runs the installer inside a plugin copy -- the folder /plugin install made, with " +
+                    ".claude-plugin\plugin.json and no .git; this is not one: $(if ($PluginRoot) { $PluginRoot } else { '?' })")
+        Stop-Installer 2; return
+    }
+    if ($Uninstall -or $SkillRef -or $Channel -eq "beta") {
+        Write-Host ("-Plugin sets up this plugin copy (v$PluginVersion); -Uninstall, -SkillRef and -Channel beta are " +
+                    "for the installer's own copy of the method")
+        Stop-Installer 2; return
+    }
 }
 $Mode         = if ($Terminal -and -not $Tcc) { "terminal" } else { "tcc" }   # -Tcc is the default, kept for old command lines
 $WantReviewer = -not $NoReviewer
@@ -672,7 +698,11 @@ if (-not $HaveGit)    { Say "  * Git for Windows -- git, and Git Bash for Claude
 if (-not $HaveClaude) { Say "  * Claude Code -- the AI that runs the method              claude.ai"; $mb += 200 }
 if (-not $HaveUv)     { Say "  * uv, and a Python 3.12 of its own                        astral.sh"; $mb += 60 }
 elseif (-not $HavePy3){ Say "  * a Python 3.12, through uv                               astral.sh"; $mb += 40 }
-Say "  * the tuning method -- its references and tools           github.com/ayukhno/autosound-tuning-skill"
+if ($PluginRoot) {
+    Say "  * the tuning method -- this plugin, v$PluginVersion, checked against its signed release (not cloned)"
+} else {
+    Say "  * the tuning method -- its references and tools           github.com/ayukhno/autosound-tuning-skill"
+}
 Say "  * numpy, scipy, matplotlib -- the method's own tools       pypi.org"
 if ($Mode -eq "tcc") {
     Say "  * Autosound TCC -- the desktop app, ~700 MB                github.com/ayukhno/autosound-tcc"
@@ -1032,6 +1062,24 @@ function Sync-MethodCheckout {
 }
 
 Step "The tuning method"
+if ($PluginRoot) {
+    # The plugin's copy is the method: checked, not cloned, and every later step reads it where it is.
+    $SkillHome = Join-Path $PluginRoot "skills\autosound-tuning"
+    $SkillRef = "v$PluginVersion"
+    Say "this plugin: $SkillRef at $(Pretty $PluginRoot)"
+    if ($DryRun) {
+        Say "would check it against its signed release: python3 upkeep.py verify-copy --root $(Pretty $PluginRoot)"
+    } elseif (-not (Test-Path $Py3)) {
+        Warn "stopped: python3 is needed to check this plugin copy against its signed release, and there is none"
+        Stop-Installer 1; return
+    } else {
+        & $Py3 (Join-Path $SkillHome "scripts\upkeep.py") verify-copy --root $PluginRoot
+        if ($LASTEXITCODE -ne 0) {
+            Warn "stopped: this plugin copy is not $SkillRef as its author signed it -- see above; nothing was installed"
+            Stop-Installer 1; return
+        }
+    }
+} else {
 if (-not $SkillRef) {
     # The newest 3.x tag, by name rather than "main": main is where development lands, and an
     # installer should put you on a release unless you say otherwise. On EITHER channel: this is
@@ -1111,6 +1159,8 @@ if ($Channel -eq "beta") {
         }
     }
 }
+
+}   # not -Plugin
 
 # -- what the method's tools need --------------------------------------------------------------
 Step "What the method's tools need (numpy, scipy, matplotlib)"
@@ -1724,6 +1774,12 @@ if (-not $DryRun) {
                                platform = "Windows-$env:PROCESSOR_ARCHITECTURE"; engine = $EngineDid }
         $receipt | ConvertTo-Json -Compress | Set-Content -Encoding UTF8 (Join-Path $rd "install-receipt.json")
     } catch { }
+}
+
+# -Plugin: this version is verified and set up -- the plugin's SessionStart hook stops offering the setup (#120).
+if ($PluginRoot -and -not $DryRun -and (Test-Path $Py3)) {
+    & $Py3 (Join-Path $SkillHome "scripts\upkeep.py") plugin-ready --root $PluginRoot
+    if ($LASTEXITCODE -ne 0) { Warn "could not write down that v$PluginVersion is set up -- the next session will offer the setup again" }
 }
 
 Step "Where this lives"

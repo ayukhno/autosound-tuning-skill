@@ -167,6 +167,18 @@ W-6 · v3.1.0 (`docs/PLAN-W-6.md`): ten issues, #116–#125, all with the Arbite
   starts from the Dock or the Start menu, which never reads `~/.zshrc`, gets it too. `doctor` names the sign-in agy will
   use — ADC (the credentials file, gcloud's account and project, where the switch came from), agy's own account, or
   none, with what to do — read off disk, no credential file opened.
+- **The plugin route reaches a working method** (#120). Claude Code runs no script at plugin install, and a plugin
+  install is a copy of files: no Python libraries, no reviewer, no desk engine. Three pieces:
+  - **`install.sh --plugin` / `install.ps1 -Plugin`**, run from inside the plugin copy: the method IS that copy, so it
+    is checked against its signed release (#121) instead of cloned, every later step reads it where it is, and
+    everything else installs as usual (`--terminal` leaves out the app). `--uninstall`, `--skill-ref` and
+    `--channel beta` are refused with it; a folder with a `.git` is not a plugin copy.
+  - **`/autosound-tuning:setup`** (`commands/setup.md`): shows the line for the system, runs it on the person's yes
+    with `--yes` (sign-ins printed, then relayed as `!` commands), stops plainly if the copy does not verify.
+  - **A SessionStart hook** (`hooks/hooks.json`, `hooks/session-start.sh`): reads one file and, while this plugin
+    version is not set up, puts a note in the session's context to offer the setup before running the method's
+    scripts. No Python, no network, silent once set up and for a checkout.
+  `installer-consistency.py` checks the plugin route is in both installers. `claude plugin validate` passes.
 - **A plugin copy is checked against its signed release, file by file** (#121). The catalog pins a commit and Claude
   Code checks it out, but nothing ties the pin to the author: Claude Code verifies no signature. `upkeep.py
   verify-copy --root <plugin root>` fetches the tag the copy's own `plugin.json` names into a throwaway bare

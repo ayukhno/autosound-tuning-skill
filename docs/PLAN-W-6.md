@@ -93,3 +93,24 @@ Mac only).
   A version, not a path: the hook runs in Git Bash on Windows and the paths would not compare across shells.
 - Selftests: a signed copy passes, CRLF passes, noise ignored, changed/added/missing refused, an unsigned release
   refused, the ready line written once.
+
+### #120 — the plugin route reaches a working method — built; the real install is the candidate's run
+
+- **What Claude Code offers** (plugin docs, 2026-10-02): no install-time script; a `SessionStart` hook in
+  `hooks/hooks.json` (stdout goes into the session's context, default timeout 600 s, `${CLAUDE_PLUGIN_ROOT}`,
+  `${CLAUDE_PLUGIN_DATA}`); plugin commands `commands/*.md` → `/autosound-tuning:<name>`; hooks run in Git Bash on
+  Windows, PowerShell only when there is no Git Bash.
+- **Decided: the installers do the work, in plugin mode; the hook only nudges.** Installing packages from a hook at
+  every session start would open macOS's Command Line Tools dialog and wait on downloads, and a second installer
+  would be a fourth copy of the triplet's decisions. `install.sh --plugin` / `install.ps1 -Plugin`: the plugin root
+  from the script's own folder (no `.git`, a `plugin.json` with a version), `upkeep.py verify-copy` before anything,
+  `SKILL_HOME` set to the plugin's skill folder so every later step reads it, `plugin-ready` at the end. The clone
+  and the beta copy are skipped. `commands/setup.md` runs it with `--yes` on the person's word.
+- **The hook** reads `~/.config/autosound/plugin-ready` for `v<version>`; absent, it prints four lines for the
+  session to offer `/autosound-tuning:setup` first. Silent when set up and for a checkout. Version, not path: see #121.
+- Checked: `install.sh --plugin --terminal --dry-run` from an exported copy (the plan line, the check, the
+  requirements and engine from the copy); `--plugin` from the working tree and with `--skill-ref` refused; the hook on
+  a fake copy (note / silent / silent); `claude plugin validate` passes; `installer-consistency.py` 33 OK.
+- **Needs the Arbiter (the candidate run):** a real `/plugin install` from a catalog at the rc's commit on the Mac and
+  the Windows VM, then `/autosound-tuning:setup` — the PowerShell half has never run (no PowerShell on the Mac), and
+  the hook on Windows depends on Git Bash.
