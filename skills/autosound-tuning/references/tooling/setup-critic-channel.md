@@ -227,6 +227,16 @@ Check it took: `python3 scripts/autosound_ai.py doctor` names the key it found, 
 - **`--via api|cli|omp|clipboard` chooses the route for ONE run** (#55). `--via api` uses the key from
   the environment even where `critic-env` blanks it for every other run, and calls the API by the
   model's API id (the tier dropped). `--mode clipboard` is the older spelling of the last rung.
+- **`AUTOSOUND_CRITIC_VIA=api|cli|omp|clipboard` is the route of a run that names none** (hub #236): TCC sets it
+  for the sessions it starts, so a session that runs the method itself follows the Arbiter's choice instead of
+  trying the API whenever a key is found; `--via` still beats it for one run. **A CLI a person signs in to — agy,
+  `claude`, `codex` — is started without the vendors' API keys**, wherever they came from (environment, critic-env,
+  the store), so its login pays: `claude -p` bills `ANTHROPIC_API_KEY` whenever it is set. The `gemini` CLI keeps
+  its key (that is how it signs in), and omp keeps its environment.
+- **agy through Google Cloud's ADC** (hub #234): `AGY_ADC_AUTH=true` in the machine's critic-env — the one place
+  every run reads, a TCC started from the Dock included — reaches agy; `doctor` names the sign-in agy will use.
+  Each review runs agy as a tool-less agent in a temporary folder, so agy's own Tool Permission setting does not
+  give the reviewer a shell.
 - **`--model <id>` names the reviewer for ONE run, and beats every pin** (hub #226) —
   `AUTOSOUND_CRITIC_MODEL` / `GEMINI_CRITIC_MODEL` from the environment and from every critic-env.
   A config file is written over the environment, so a model handed over as a variable lost to a

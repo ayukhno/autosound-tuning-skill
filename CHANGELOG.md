@@ -167,6 +167,12 @@ W-6 · v3.1.0 (`docs/PLAN-W-6.md`): ten issues, #116–#125, all with the Arbite
   starts from the Dock or the Start menu, which never reads `~/.zshrc`, gets it too. `doctor` names the sign-in agy will
   use — ADC (the credentials file, gcloud's account and project, where the switch came from), agy's own account, or
   none, with what to do — read off disk, no credential file opened.
+- **A CLI route never bills an API key** (#119, hub #236). A key in the OS store sent every CLI pick to the vendor's
+  API, because a run with no `--via` tries the API whenever it finds a key, and `--via cli` left the keys in the
+  CLI's environment, where `claude -p` bills `ANTHROPIC_API_KEY` instead of the subscription. Now
+  **`AUTOSOUND_CRITIC_VIA=api|cli|omp|clipboard`** is the route of a run that names none (said on stderr; `--via`
+  beats it for one run; an unknown value is refused), `doctor` follows it, and **agy, `claude` and `codex` are started
+  without the vendors' API keys**, wherever they came from. The `gemini` CLI keeps its key; omp keeps its environment.
 - **The DSP sheet finds a `w_L` channel's `w-L` row** (#116, hub #233). From v3.0.65 a driver's row is banked under
   the hyphen also for a channel written with `_`, and `state.py` looked the row up by the literal key: «—» in the Slot
   column. `project_channels` now answers to both notations through `naming.canonical_code` (a name as written wins),

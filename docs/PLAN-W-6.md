@@ -57,3 +57,15 @@ Mac only).
   Arbiter's call. Reading it back on its own could merge two rows of one channel.
 - Selftests: `state.py` (both directions on the sheet; `sw_f` stays apart), `contract.py` (the sentence, only for that
   case).
+
+### #119 — a CLI route never bills an API key (hub #236) — built
+
+- **Ask 1.** `main` reads `AUTOSOUND_CRITIC_VIA` when no `--via` is given (validated against `VIA_ROUTES`, an unknown
+  value refused, the route said on stderr); `doctor` takes the same `via` and, on `cli`/`clipboard`, checks the CLI.
+- **Ask 2.** `child_env` drops `VENDOR_KEYS` for `SUBSCRIPTION_CLIS` (agy, `claude`, `codex`), so a key from the
+  environment, a critic-env line or the store reaches none of them. The `gemini` CLI keeps its key (a key is how it
+  signs in); omp keeps its environment (a door of its own, hub #216). `doctor` says the CLI runs without the keys.
+- `setup-critic-channel.md` names the variable, the stripped keys and the ADC carrier (#117).
+- Selftests: no vendor key in any subscription CLI's environment, omp untouched; the route variable's clipboard run,
+  `--via` beating it, a bogus value refused.
+- **Tell tcc** with the tag: the variable's name is `AUTOSOUND_CRITIC_VIA`.

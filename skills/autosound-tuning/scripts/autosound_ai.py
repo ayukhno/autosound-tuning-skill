@@ -19,6 +19,7 @@ autosound_ai.py — Універсальний кросплатформний і
   python3 scripts/autosound_ai.py critic <package_file.md> [--via api|cli|omp|clipboard] --model <id> [--provider google|anthropic|openai]
                                                       # шлях і модель ЦЬОГО запуску (і для advisor/ask/doctor):
                                                       # --model б'є модель, закріплену в critic-env чи середовищі
+                                                      # без --via шлях бере AUTOSOUND_CRITIC_VIA (hub #236)
   python3 scripts/autosound_ai.py key set google      # ключ -- на прихований запит, у сховище ключів ОС
   python3 scripts/autosound_ai.py key status [--json] # де який ключ і який використовується, без значень
   python3 scripts/autosound_ai.py key move-shell      # ключ із ~/.zshrc -- у сховище, з дозволу
@@ -577,6 +578,15 @@ def api_model_id(model):
     return name
 
 
+#: The CLIs a person signs in to (an account, a subscription, ADC), and the vendors' API keys kept out of their
+#: environment (hub #236). `claude -p` bills `ANTHROPIC_API_KEY` instead of the subscription whenever it is set, and a
+#: key in the environment, a critic-env line or the store reached every CLI child, so a review the Arbiter sent through
+#: the CLI to cost nothing billed the key. The `gemini` CLI is not one of them: a key is how it signs in (`child_env`
+#: hands it the stored one), and omp is a door of its own (hub #216).
+SUBSCRIPTION_CLIS = ("agy", "claude", "codex")
+VENDOR_KEYS = tuple(var for spec in _PROVIDERS.values() for var in spec["env"])
+
+
 def child_env(cli_bin=None):
     """The environment a reviewer CLI is started with: ours, minus the agent session's markers.
 
@@ -590,6 +600,9 @@ def child_env(cli_bin=None):
     runs with the markers removed and a bounded timeout, and it says so before it waits.
     """
     env = {k: v for k, v in os.environ.items() if not _is_marker(k)}
+    if cli_bin and cli_flavor(cli_bin) in SUBSCRIPTION_CLIS:
+        for var in VENDOR_KEYS:
+            env.pop(var, None)
     if cli_bin and cli_flavor(cli_bin) == "gemini" and not os.path.basename(cli_bin).lower().startswith("agy") \
             and key_source("GEMINI_API_KEY") == "keystore":
         env["GEMINI_API_KEY"] = keystore_get("GEMINI_API_KEY")
@@ -1655,6 +1668,19 @@ def _selftest():
             assert code == 0 and len(runs) == before and "РЕЦЕНЗІЇ НЕ ОТРИМАНО" not in err, (code, err)
             code, out, err = run_main("ask", pkg, "--via", "clipboard")
             assert code == 0 and len(runs) == before, (code, err)
+            # hub #236: AUTOSOUND_CRITIC_VIA is the route of a run that names none, said on stderr; `--via` beats it for
+            # one run; a route nobody knows is refused, not guessed.
+            os.environ["AUTOSOUND_CRITIC_VIA"] = "clipboard"
+            try:
+                code, out, err = run_main("ask", pkg)
+                assert code == 0 and len(runs) == before and "AUTOSOUND_CRITIC_VIA=clipboard" in err, (code, err)
+                code, out, err = run_main("ask", pkg, "--via", "cli")
+                assert code == 4 and len(runs) == before + 1, (code, len(runs) - before, err)
+                os.environ["AUTOSOUND_CRITIC_VIA"] = "bogus"
+                code, out, err = run_main("ask", pkg)
+                assert code == 1 and "AUTOSOUND_CRITIC_VIA" in err and len(runs) == before + 1, (code, err)
+            finally:
+                os.environ.pop("AUTOSOUND_CRITIC_VIA", None)
             subprocess.run = lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, ok_out, "")
             raw = os.path.join(project, "raw")
             os.environ["AUTOSOUND_REVIEW_RAW_DIR"] = raw
@@ -2044,7 +2070,15 @@ def _selftest():
             os.environ["GEMINI_API_KEY"] = stale
             # the gemini CLI gets the stored key in its own environment; agy gets nothing added
             assert child_env("/usr/local/bin/gemini")["GEMINI_API_KEY"] == good
-            assert child_env("agy")["GEMINI_API_KEY"] == stale
+            # hub #236: a CLI a person signs in to gets no vendor key at all -- not the inherited one either -- so its
+            # login pays; omp, a door of its own, keeps its environment.
+            os.environ["ANTHROPIC_API_KEY"] = "sk-ant-" + "a" * 30
+            try:
+                for cli in ("agy", "claude", "/opt/homebrew/bin/codex", "agy.cmd"):
+                    assert not set(VENDOR_KEYS) & set(child_env(cli)), (cli, sorted(set(VENDOR_KEYS) & set(child_env(cli))))
+                assert child_env("omp").get("ANTHROPIC_API_KEY", "").startswith("sk-ant-")
+            finally:
+                os.environ.pop("ANTHROPIC_API_KEY", None)
             # the status: sources, never a value
             st = json.dumps(key_status())
             assert good not in st and stale not in st and '"used": "keystore"' in st, st
@@ -2476,7 +2510,7 @@ def key_command(args):
     return 2
 
 
-def run_doctor(smoke=True):
+def run_doctor(smoke=True, via=None):
     print("=== ДІАГНОСТИКА СЕРЕДОВИЩА (DOCTOR MODE) ===")
     ok = True
     for good, line in machine_lines():
@@ -2522,9 +2556,12 @@ def run_doctor(smoke=True):
         print(f"⚠ {hit['var']} у {hit['file']}" + (f" (рядок {hit['line']})" if hit["line"] else "")
               + ": його не бачать сесії з TCC, і його читає кожна програма -- перенеси у сховище ключів: "
                 "`autosound_ai.py key move-shell` (спитає дозволу)")
-    api_provider = provider if api_key_for(provider) else None
+    api_provider = provider if api_key_for(provider) and via not in ("cli", "clipboard") else None
     cli_bin = detect_cli(provider)
     nested = nested_session_marker() if cli_bin else None
+    if via in ("cli", "clipboard") and api_key_for(provider):
+        # hub #236: the check goes the way the round goes -- a CLI route asks no key, whatever is stored.
+        print(f"· Шлях {via} (--via або AUTOSOUND_CRITIC_VIA): ключ {provider} для раунду не береться")
     hidden = suppressed_key(provider)
     if omp:
         # hub #216: a reviewer picked through omp goes through omp only, so no key decides anything here.
@@ -2604,6 +2641,9 @@ def run_doctor(smoke=True):
             ok = ok and route != "none"
     if api_key_for("google"):
         print(f"· GEMINI_API_KEY: {gemini_key_shape(api_key_for('google'))}")
+    if cli_bin and cli_flavor(cli_bin) in SUBSCRIPTION_CLIS and any(key_source(v) for v in VENDOR_KEYS):
+        print(f"· CLI {cli_flavor(cli_bin)} запускається без ключів API ({', '.join(v for v in VENDOR_KEYS if key_source(v))}): "
+              f"платить його вхід, не ключ (hub #236)")
     if cli_bin and nested:
         print(f"· Ми всередині агент-сесії ({nested}): CLI рецензента запускається без маркерів сесії, "
               f"з обмеженим очікуванням (AUTOSOUND_CLI_TIMEOUT)")
@@ -3022,6 +3062,19 @@ def main():
                 print(f"--model без назви моделі ({value!r}): --model <id>", file=sys.stderr)
                 sys.exit(1)
             RUN_PICK[flag[2:]] = value.lower() if flag == "--provider" else value
+    if via is None and os.environ.get("AUTOSOUND_CRITIC_VIA", "").strip():
+        # The route for a run that names none (hub #236): TCC sets it for the sessions it starts, so a session that
+        # runs the method itself follows the Arbiter's choice instead of trying the API whenever a key is found.
+        # `--via` still names another route for one run.
+        value = os.environ["AUTOSOUND_CRITIC_VIA"].strip().lower()
+        if value not in VIA_ROUTES:
+            print(f"Невідомий шлях {value!r} в AUTOSOUND_CRITIC_VIA ({env_origin('AUTOSOUND_CRITIC_VIA')}): "
+                  f"{', '.join(VIA_ROUTES)}", file=sys.stderr)
+            sys.exit(1)
+        via = value
+        if argv[1].lower() == "doctor" or argv[1].lower() in REVIEW_TASKS:
+            print(f">> AUTOSOUND_CRITIC_VIA={via} ({env_origin('AUTOSOUND_CRITIC_VIA')}): шлях цього запуску; "
+                  f"`--via` перекриває його для одного запуску", file=sys.stderr)
     mode = "clipboard" if via == "clipboard" else None
     sys.argv = argv
     role = sys.argv[1].lower()
@@ -3032,7 +3085,7 @@ def main():
     if lost:
         print(lost, file=sys.stderr)
     if role == "doctor":
-        success = run_doctor(smoke="--no-smoke" not in sys.argv)
+        success = run_doctor(smoke="--no-smoke" not in sys.argv, via=via)
         sys.exit(0 if success else 1)
     if role == "key":
         sys.exit(key_command(sys.argv[2:]))
