@@ -219,3 +219,4 @@ one joint run and to tag v1.1.0 on v3.1.0 the same day (hub #238, SKL-062).
   «HKCU\Environment: GEMINI_API_KEY прибрано; у сховищі ключів лишився свій (DPAPI)». The Windows half of #110 has run.
 - **Left for the joint run:** TCC's candidate pinned to rc2 (hub #238) — its Updates rows for agy/Claude (#126) and the
   route variable for its sessions (#119); then hub #239's answer on the catalog (№2), `Latest` (№9) and #220.
+- `beta-v3.1.0-rc3` (`87f7ab5`): rc2 plus the run notes in `docs/` only, so `v3.1.0` promotes it plus bookkeeping; the run on rc2 stands for v3.1.0.
