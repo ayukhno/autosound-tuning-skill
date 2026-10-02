@@ -89,7 +89,7 @@ You will need a laptop, a measurement microphone, a DSP processor in the car, an
 - Open **Terminal** (press `Cmd + Space` → type `Terminal` → press `Enter`).
 - Paste the following command and press `Enter`:
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.66/install.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.0/install.sh | bash
    ```
 - Depending on the system, other installers may ask for permission; this is normal. Wait 10–20 minutes.
 
@@ -101,7 +101,7 @@ You will need a laptop, a measurement microphone, a DSP processor in the car, an
 - Open **Windows PowerShell** (press Start → type `powershell` → press `Enter`).
 - Paste the following command and press `Enter`:
    ```powershell
-   irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.66/install.ps1 | iex
+   irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.0/install.ps1 | iex
    ```
 - Depending on the system, other installers may ask for permission; this is normal. The script creates a **REW (API on)** shortcut on your Desktop.
 
