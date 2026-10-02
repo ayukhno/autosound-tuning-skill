@@ -57,7 +57,7 @@ BLOCK A · SESSION LEVELS (handheld, ~5 min, nothing saved)     [0.2]
 BLOCK B · HANDHELD (before the tripod)                          [0.3]
   RTA:        <ch>_01 (rta)  for every channel        (~20–30 s of movement)
   ellipsoid:  <ch> p1…p9_01 (sw)  for w-L w-R m-L m-R (+ any channel with an
-              EQ decision in 0.2–2 kHz)
+              EQ decision in 0.2–2 kHz) — OPTIONAL; the RTA is not
   (near-field optional here or any time later on the v0 slot)
 
       the nine sweeps of one driver (hand-held, seen from the seat):
@@ -117,8 +117,9 @@ APPENDIX · IMPEDANCE (a separate rig, another day)  — optional, not on the pa
   driver or wiring. Without a rig: Fs from the datasheet with margin, and say so.
 ```
 
-Minimum viable set = **Block A + D** (~25 min); a car that is already tuned adds **block X** (~10 min). Cutting for time, drop from the bottom by block; the
-tripod block (D) is the one that is mandatory.
+Minimum viable set = **Block A, the RTA of block B, and D** (~30 min); a car that is already tuned adds **block X** (~10 min). The
+ellipsoid of block B is the one optional part (the Arbiter, 2026-10-02: «RTA MMM знімаємо обовʼязково, а от 9 свіпів —
+то да»). Cutting for time, drop the ellipsoid first; the RTA and the tripod block (D) are mandatory.
 
 ## The session passport
 
