@@ -1,6 +1,6 @@
 # Roadmap
 
-**3.1 is the current release:** the tuning method, the Autosound TCC desktop app, and the plugin for Claude Code.
+**3.1 is the current release:** the tuning method, the Autosound TCC desktop app, and the plugin for Claude Code — with an installer that sets everything up with one command on macOS and Windows ([README](README.md#how-to-install-and-start)).
 
 ## Next: what you ask for
 
