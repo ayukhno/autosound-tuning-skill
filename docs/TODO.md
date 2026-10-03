@@ -1629,7 +1629,7 @@ four assessment lines, and nothing is built before his `ok` on that task. Resume
 
 ## S-097 · After v3.1.0: the TCC pin in `install-tcc` and the SessionStart note in a submodule
 
-**Status**: doing 2026-10-03 · patch `v3.1.1`, issue #130, on the Arbiter's «роби»; the tag after TCC `v1.1.0` is out · was: open 2026-10-03 · in the pool for the next wave, or a patch `v3.1.1` on the Arbiter's word · nothing stops: no user path is wrong today
+**Status**: done 2026-10-03 · **v3.1.1** signed on `e8dabf7` (PR #131 `--ff-only`, `tag-check.sh` 16/16), after TCC `v1.1.0`; issue #130 closed; the catalog and `Latest` by the release role (hub #244) · was: doing 2026-10-03 · patch `v3.1.1`, issue #130, on the Arbiter's «роби»; the tag after TCC `v1.1.0` is out · was: open 2026-10-03 · in the pool for the next wave, or a patch `v3.1.1` on the Arbiter's word · nothing stops: no user path is wrong today
 
 Two things v3.1.0 left on purpose, because a release lands on its candidate plus bookkeeping only:
 
