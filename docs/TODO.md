@@ -1641,7 +1641,7 @@ Recorded, not diagnosed.
 
 ## S-098 · After v3.1.1: what waits for the Arbiter's word
 
-**Status**: waiting 2026-10-03 · the Arbiter: «я сам скажу» — none of it is started · resume: `hub/bin/role skill --resume 205e26fb-aa4b-4093-abf7-2fec0b06a86b`
+**Status**: waiting 2026-10-03 · item 1 done: hub #245 closed — `78e457d` (PR #132), `tag-check.sh --at`; items 2 and 3 wait · was: waiting 2026-10-03 · the Arbiter: «я сам скажу» — none of it is started · resume: `hub/bin/role skill --resume 205e26fb-aa4b-4093-abf7-2fec0b06a86b`
 
 v3.1.0 and v3.1.1 are out and closed (catalog and `Latest` on `v3.1.1`, hub #238 #239 #244 closed). Three things are
 open, each for the Arbiter to start:
