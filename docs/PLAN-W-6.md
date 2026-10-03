@@ -220,3 +220,14 @@ one joint run and to tag v1.1.0 on v3.1.0 the same day (hub #238, SKL-062).
 - **Left for the joint run:** TCC's candidate pinned to rc2 (hub #238) — its Updates rows for agy/Claude (#126) and the
   route variable for its sessions (#119); then hub #239's answer on the catalog (№2), `Latest` (№9) and #220.
 - `beta-v3.1.0-rc3` (`87f7ab5`): rc2 plus the run notes in `docs/` only, so `v3.1.0` promotes it plus bookkeeping; the run on rc2 stands for v3.1.0.
+
+## The release — `v3.1.0` (2026-10-03)
+
+- On the Arbiter's «випускай»: PR #129 (the bookkeeping) merged `--ff-only`, `main` = `705ab3e`, CI green;
+  `tag-check.sh v3.1.0` failed only `rule` and its oracles — the release role's.
+- The release role: `v3.1.0` signed on `705ab3e` (`git tag -v` Good, key `SHA256:nSazijzZf…`), `engine-binaries`
+  green; the catalog to `v3.1.0` (`65800e4`, surface №2); `Latest` = `v3.1.0` (№9).
+- Closed: milestone `W-6 · v3.1.0` with #116–#126, each with `git tag --contains` → `v3.1.0`; hub #233 #234 #236
+  #237; branches `release-3.1.0` and `rc-catalog` deleted.
+- Left: TCC's `v1.1.0` (re-pins to `v3.1.0`, hub #238); hub #239's ledger; S-097 (the TCC pin in `install-tcc`, the
+  SessionStart note in a submodule).

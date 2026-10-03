@@ -1627,6 +1627,19 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-097 · After v3.1.0: the TCC pin in `install-tcc` and the SessionStart note in a submodule
+
+**Status**: open 2026-10-03 · in the pool for the next wave, or a patch `v3.1.1` on the Arbiter's word · nothing stops: no user path is wrong today
+
+Two things v3.1.0 left on purpose, because a release lands on its candidate plus bookkeeping only:
+
+1. `commands/install-tcc.md` still pins TCC `v0.1.35`; it should name the TCC paired with this line (`v1.1.0`, once
+   tagged). `promotes` refused the change on the release branch (`10c1a81`).
+2. `hooks/session-start.sh` skips a source checkout with `[ -d "$root/.git" ]`; in a git submodule `.git` is a file,
+   so a Claude session started from TCC's source checkout (the skill vendored as a submodule) gets «plugin v3.1.0 is not
+   set up». `-e` instead of `-d`. Found by TCC while building against rc3 (hub #238), confirmed by reading the line,
+   not run. An installed TCC (a plain clone) and a plugin install are not affected.
+
 ## S-096 · `doctor`'s mode line and key line read wrong in two cases (found in the W-6 candidate run)
 
 **Status**: done 2026-10-02 · in rc2 (the `.in_use` folder made an rc2 necessary): `autosound_ai.py selftest` covers both lines · was: open 2026-10-02 · joins W-6 only if an rc2 is cut for another finding, else the next wave (the Arbiter: «ок», 2026-10-02 — not critical: nothing stops, the live call still tells the truth)
