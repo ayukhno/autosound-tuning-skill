@@ -1627,6 +1627,18 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-099 · The installers' own help shows a one-liner pinned to an old tag (install.sh) or to `main` (install.ps1)
+
+**Status**: open 2026-10-03 · in the pool for the next wave (the Arbiter: «запиши») · found while building hub #245
+
+`install.sh --help` ends with an example of passing an option through the one-liner:
+`curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.46/install.sh | bash -s -- --terminal`
+(`install.sh` line 180). Nobody moved it since v3.0.46, and no check reads it: `installer-consistency.py` holds the
+README lines and `install.cmd`'s PS1URL to the release, not this. Copied as is, it installs 3.0.46. `install.ps1`'s
+help shows the same example on `main` (line 212) — the moving branch HUB-030 took off every other line. The help is
+shipped inside the tag, so whatever fixes it belongs to the candidate, not to the release train's publication commit.
+Recorded, not diagnosed.
+
 ## S-098 · After v3.1.1: what waits for the Arbiter's word
 
 **Status**: waiting 2026-10-03 · the Arbiter: «я сам скажу» — none of it is started · resume: `hub/bin/role skill --resume 205e26fb-aa4b-4093-abf7-2fec0b06a86b`
