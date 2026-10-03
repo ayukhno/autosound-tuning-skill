@@ -304,7 +304,9 @@ def rule_install_ref(root: str) -> list[str]:
     README (4 languages) pinned a tag while FAQ (4 languages) took `main`, so which software a
     reader got depended on which file they opened first. And a tag written into eight files rots
     the moment a release is cut, so it is compared with the newest entry in CHANGELOG.md rather
-    than left to somebody's memory.
+    than left to somebody's memory. One release behind the newest entry is accepted: the last candidate
+    of a minor carries its heading before the tag exists, and the release train moves these lines right
+    after the tag (hub #245); a patch is held to the current tag by `tag-check.sh`.
     """
     bad = []
     ref_re = re.compile(r"autosound-tuning-skill/([^/\s]+)/install\.(?:sh|ps1)")
@@ -327,12 +329,12 @@ def rule_install_ref(root: str) -> list[str]:
             bad.append(f"{where[0]}: installs from '{ref}', which is not a release tag — a branch "
                        f"changes under the reader between two attempts")
     changelog = _read(root, "CHANGELOG.md") or ""
-    newest = re.search(r"^##\s*\[?(v\d+\.\d+\.\d+)\]?", changelog, re.M)
-    if newest and len(found) == 1:
+    heads = re.findall(r"^##\s*\[?(v\d+\.\d+\.\d+)\]?", changelog, re.M)
+    if heads and len(found) == 1:
         (ref, where), = found.items()
-        if re.fullmatch(r"v\d+\.\d+\.\d+", ref) and ref != newest.group(1):
+        if re.fullmatch(r"v\d+\.\d+\.\d+", ref) and ref not in heads[:2]:
             bad.append(f"the docs install {ref} while CHANGELOG.md's newest release is "
-                       f"{newest.group(1)} ({len(where)} places to update: "
+                       f"{heads[0]} ({len(where)} places to update: "
                        f"{', '.join(where)})")
     return bad
 
@@ -545,9 +547,12 @@ def _selftest() -> int:
         assert any("not a release tag" in c for c in complaints), complaints
         assert rule_install_ref(docs_root(tag, tag)) == [], rule_install_ref(docs_root(tag, tag))
         # the tag rots the moment a release is cut, so it is compared with the changelog
-        stale = docs_root(tag, tag, "## [v1.3.0] - today\n\n## [v1.2.3] - before\n")
-        assert any("CHANGELOG.md's newest release is v1.3.0" in c
+        stale = docs_root(tag, tag, "## [v1.4.0] - today\n\n## [v1.3.0] - before\n\n## [v1.2.3] - long ago\n")
+        assert any("CHANGELOG.md's newest release is v1.4.0" in c
                    for c in rule_install_ref(stale)), rule_install_ref(stale)
+        # one behind: a minor's last candidate names v1.3.0 before its tag; the release train moves the lines
+        behind = docs_root(tag, tag, "## [v1.3.0] - today\n\n## [v1.2.3] - before\n")
+        assert rule_install_ref(behind) == [], rule_install_ref(behind)
 
         # -- rule 8: the protective floor has one home, the gate's constants
         def floor_tree(doc: str, margin: str = "1.1", slope: str = "24"):

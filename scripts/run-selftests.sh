@@ -36,6 +36,9 @@ run_one() {                       # name, then the argv to hand the module
 
 echo "installer consistency"
 run_one "installers" scripts/installer-consistency.py
+# HUB-075 (hub #245): the release train runs `tag-check.sh --at <commit> vX.Y.Z` as this repo's half. Its own
+# mechanics in a throwaway repo built from this tree: a last candidate passes, each missing piece is named.
+run_one "tag-check" scripts/tag-check.sh --selftest
 # The upstream-drift checker's own mechanics (a throwaway git repo, no network). The real check
 # against the upstream is `scripts/upstream-drift.py --fork <clone> --fetch`, run by a person.
 run_one "upstream-drift" scripts/upstream-drift.py --selftest

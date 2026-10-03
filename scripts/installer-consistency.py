@@ -618,11 +618,16 @@ def main():
     # URL is only worth pinning while it is current: a stale one keeps handing new users a build
     # that is not the newest. Compared against the CHANGELOG's own top entry, which is what this
     # repo already treats as the released version -- and offline, because CI has no network.
+    #   One release behind is accepted too (hub #245, the release train): the last candidate of a minor carries its
+    # `## [vX.Y.Z]` before the tag exists, and the lines people paste from main's front page must not name a tag
+    # that does not exist yet -- the train moves them in its publication commit, right after the tag. A patch keeps
+    # them current itself, and `tag-check.sh vX.Y.Z` holds it to that before the tag.
     changelog = read(ROOT / "CHANGELOG.md")
-    released = None
-    m = re.search(r"^## \[(v3\.[0-9.]+)\]", changelog, re.M)
-    if m:
-        released = m.group(1)
+    released = previous = None
+    heads = re.findall(r"^## \[(v3\.[0-9.]+)\]", changelog, re.M)
+    if heads:
+        released = heads[0]
+        previous = heads[1] if len(heads) > 1 else None
     else:
         problems.append("CHANGELOG.md: no `## [v3.x.y]` heading — the released version cannot be "
                         "established, so the install lines cannot be checked against it")
@@ -644,6 +649,9 @@ def main():
     elif pasted and len(set(pasted.values())) > 1:
         problems.append("the four READMEs paste different versions — "
                         + ", ".join(f"{n} {t}" for n, t in sorted(pasted.items())))
+    elif pasted and previous and set(pasted.values()) == {previous}:
+        checked.append(f"all four READMEs paste {previous}, the release before CHANGELOG's newest {released} -- "
+                       f"not tagged yet; the release train's publication commit moves them")
     elif pasted and released and set(pasted.values()) != {released}:
         problems.append(f"the READMEs paste {pasted['README.md']} but CHANGELOG's newest is "
                         f"{released} — the pinned line is behind the release")

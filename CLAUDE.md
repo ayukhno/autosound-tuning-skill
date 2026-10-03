@@ -32,8 +32,17 @@ message with Cyrillic in it and names the line (its `--selftest` runs in CI).
   bump and the CHANGELOG entry committed on it, one PR with the full CI, `git merge --ff-only` and push
   `main`, then `scripts/tag-check.sh vX.Y.Z` and the tag on that commit. A work branch runs no CI on
   push; `gh workflow run checks --ref <branch>` runs it by hand, and only for a change to Windows or the
-  installers. A candidate (`scripts/tag-check.sh --candidate vX.Y.Z`, tag `beta-vX.Y.Z-rcN`) is optional,
-  even for a minor; when one exists the release lands on it plus only its bookkeeping (§11.3).
+  installers. A candidate (`scripts/tag-check.sh --candidate vX.Y.Z`, tag `beta-vX.Y.Z-rcN`) is optional
+  for a patch.
+- **A minor, a major or a skipped version goes out by the release train** (hub #245, `RELEASE-CHANNEL.md`
+  §11.6): the user's «релізь» in `hub/bin/role release`, and the tag lands on the LAST candidate's commit —
+  nothing is committed on release day. So that candidate carries the release's bookkeeping: `## [vX.Y.Z]`,
+  `plugin.json` at X.Y.Z, `install.cmd`'s PS1URL at the tag, `commands/install-tcc.md` at the paired TCC,
+  the pool closed. The README/FAQ/ADVANCED install lines stay on the release before — they must never name
+  a tag that does not exist yet — and the train moves them, with the catalog, in one commit after the tag.
+  The train runs `scripts/tag-check.sh --at <commit> vX.Y.Z` as this repo's half. **An ordinary patch is
+  the session's own, as before**: its bookkeeping commit moves the front-page lines too, and
+  `tag-check.sh vX.Y.Z` holds them to the tag.
 
 ## The installers are a TRIPLET
 
