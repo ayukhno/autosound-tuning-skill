@@ -4,12 +4,13 @@
 # prints a note into the session's context ONLY while this plugin version is not set up on the machine -- the
 # installer in plugin mode (`/autosound-tuning:setup`) checks the copy against its signed release, installs the tools,
 # and writes the version into `~/.config/autosound/plugin-ready` (`upkeep.py plugin-ready`). Silent otherwise, and
-# silent for a checkout (a `.git` beside it identifies itself: `deployment.py`).
+# silent for a checkout (a `.git` beside it identifies itself: `deployment.py`) -- a folder in a clone, a file in a
+# submodule (TCC vendors the skill as one), so `-e`, not `-d`.
 #
 # No Python, no network, no probing of tools: a session start must not open macOS's Command Line Tools dialog or wait
 # on a download. What is missing is the installer's business, said by the installer.
 root="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." 2>/dev/null && pwd)}"
-[ -d "$root/.git" ] && exit 0
+[ -e "$root/.git" ] && exit 0
 version="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$root/.claude-plugin/plugin.json" 2>/dev/null | head -1)"
 [ -n "$version" ] || exit 0
 grep -qxF "v$version" "${HOME}/.config/autosound/plugin-ready" 2>/dev/null && exit 0

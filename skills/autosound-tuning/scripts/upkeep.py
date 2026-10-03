@@ -971,6 +971,21 @@ def _selftest():
         for _ in range(2):
             assert plugin_ready(plugin_copy("v3.0.70"), path=ready)["version"] == "v3.0.70"
         assert open(ready, encoding="utf-8").read() == "v3.0.70\n", "one line per version, written once"
+        # The SessionStart hook reads the same file, and is silent for a checkout: `.git` a folder in a clone, a file
+        # in a submodule (TCC vendors the skill as one, hub #238). Only where the hook and bash are both here.
+        hook = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "hooks", "session-start.sh")
+        if os.path.isfile(hook) and shutil.which("bash") and os.name != "nt":
+            def note(root):
+                env = dict(os.environ, HOME=os.path.join(tmp, "nohome"), CLAUDE_PLUGIN_ROOT=root)
+                return subprocess.run(["bash", hook], env=env, capture_output=True, text=True).stdout
+            plug = plugin_copy("v3.0.70")
+            assert "not set up" in note(plug), "a plugin copy not set up gets the note"
+            with open(os.path.join(plug, ".git"), "w", encoding="utf-8") as fh:
+                fh.write("gitdir: ../.git/modules/skill\n")
+            assert note(plug) == "", "a submodule checkout is a checkout"
+            os.remove(os.path.join(plug, ".git"))
+            os.makedirs(os.path.join(plug, ".git"))
+            assert note(plug) == "", "a clone is a checkout"
     finally:
         SIGNING_PRINCIPAL, SIGNING_KEY = saved
 
