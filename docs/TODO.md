@@ -1627,6 +1627,20 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-098 · After v3.1.1: what waits for the Arbiter's word
+
+**Status**: waiting 2026-10-03 · the Arbiter: «я сам скажу» — none of it is started · resume: `hub/bin/role skill --resume 205e26fb-aa4b-4093-abf7-2fec0b06a86b`
+
+v3.1.0 and v3.1.1 are out and closed (catalog and `Latest` on `v3.1.1`, hub #238 #239 #244 closed). Three things are
+open, each for the Arbiter to start:
+
+1. **Hub #245 HUB-075, the release train's skill half** (first train W-7): the last candidate carries the release's
+   bookkeeping; the README/FAQ/ADVANCED install lines and the catalog are left to the train; a read-only check at a
+   commit (`scripts/tag-check.sh --at <commit> vX.Y.Z`).
+2. **Hub #113 PAS-005 «Навчання слухати»** was deferred until skill v3.1.0; that tag is out, so it is due back.
+3. **TCC v1.1.1 re-pinning to v3.1.1** — optional (TCC takes the method's tag at runtime); offered to the Arbiter as a
+   ticket to tcc, not sent. TCC has W-7 · v1.1.1 open; the skill has no wave open.
+
 ## S-097 · After v3.1.0: the TCC pin in `install-tcc` and the SessionStart note in a submodule
 
 **Status**: done 2026-10-03 · **v3.1.1** signed on `e8dabf7` (PR #131 `--ff-only`, `tag-check.sh` 16/16), after TCC `v1.1.0`; issue #130 closed; the catalog and `Latest` by the release role (hub #244) · was: doing 2026-10-03 · patch `v3.1.1`, issue #130, on the Arbiter's «роби»; the tag after TCC `v1.1.0` is out · was: open 2026-10-03 · in the pool for the next wave, or a patch `v3.1.1` on the Arbiter's word · nothing stops: no user path is wrong today
