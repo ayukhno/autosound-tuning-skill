@@ -49,12 +49,12 @@ Aplikację instaluje się jednym poleceniem. Ze sprzętu i subskrypcji będziesz
 
 **macOS** — otwórz Terminal (⌘-Spacja, wpisz „terminal”, Enter) i wklej:
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.1/install.sh | bash
 ```
 
 **Windows** — otwórz PowerShell (Start, wpisz „powershell”, Enter) i wklej:
 ```powershell
-irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.0/install.ps1 | iex
+irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.1/install.ps1 | iex
 ```
 *(Wersja w adresie przypina sam instalator; zawsze instaluje on najnowsze wydanie).*
 
@@ -69,11 +69,11 @@ irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.0/inst
 
 Z opcjami — na przykład `omp` i kopią zapasową na GitHub — na macOS:
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.0/install.sh | bash -s -- --with-omp --github
+curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.1/install.sh | bash -s -- --with-omp --github
 ```
 a na Windows, w dwóch wierszach:
 ```powershell
-$i = irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.0/install.ps1
+$i = irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.1/install.ps1
 & ([scriptblock]::Create($i)) -WithOmp -GitHub
 ```
 

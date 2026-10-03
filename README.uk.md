@@ -49,12 +49,12 @@
 
 **macOS** — відкрий Terminal (⌘-Пробіл, введи «terminal», Enter) і встав:
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.1/install.sh | bash
 ```
 
 **Windows** — відкрий PowerShell (Пуск, введи «powershell», Enter) і встав:
 ```powershell
-irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.0/install.ps1 | iex
+irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.1/install.ps1 | iex
 ```
 *(Версія в адресі фіксує сам інсталятор; він завжди встановлює найновіший реліз.)*
 
@@ -69,11 +69,11 @@ irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.0/inst
 
 З опціями — наприклад, `omp` та резервне копіювання на GitHub — на macOS:
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.0/install.sh | bash -s -- --with-omp --github
+curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.1/install.sh | bash -s -- --with-omp --github
 ```
 і на Windows двома рядками:
 ```powershell
-$i = irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.0/install.ps1
+$i = irm https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.1.1/install.ps1
 & ([scriptblock]::Create($i)) -WithOmp -GitHub
 ```
 
