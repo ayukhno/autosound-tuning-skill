@@ -1627,6 +1627,17 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-100 · The October audit volume: the plan is written, the milestone decides (hub #252 HUB-080)
+
+**Status**: waiting 2026-10-04 · `docs/PLAN-AUDIT-2026-10.md` — five reports verified at `7b3232b`, grouped, planned over W-8…W-11; seven questions for the Arbiter in its §1; nothing built · hub #252
+
+On the Arbiter's word the whole audit volume (hub `docs/AUDIT-INDEX-2026-10.md`: S1, S2, S3 and TCC's TA, TB) came to
+this session to verify, group and plan, with agents. The plan is the input to W-8's milestone when the collection closes;
+it is not the milestone. Each task is built only after its `ok`. Two points go back to the hub, with the evidence in
+the plan's §3: the lock lives only inside the skill's writers (TCC never takes it), so J2 and J3 need not ship on
+both sides in one wave. To check first in J6a: the installers accept any "Good" signature line (read from git's
+design, not reproduced).
+
 ## S-099 · The installers' own help shows a one-liner pinned to an old tag (install.sh) or to `main` (install.ps1)
 
 **Status**: open 2026-10-03 · in the pool for the next wave (the Arbiter: «запиши») · found while building hub #245
