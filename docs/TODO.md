@@ -1629,7 +1629,7 @@ four assessment lines, and nothing is built before his `ok` on that task. Resume
 
 ## S-100 · The October audit volume: the plan is written, the milestone decides (hub #252 HUB-080)
 
-**Status**: waiting 2026-10-04 · `docs/PLAN-AUDIT-2026-10.md` — five reports verified at `7b3232b`, grouped, planned over W-8…W-11; seven questions for the Arbiter in its §1; nothing built · hub #252
+**Status**: waiting 2026-10-04 · `docs/PLAN-AUDIT-2026-10.md` — five reports verified at `7b3232b`, grouped, planned over W-8…W-12; the rows matched with TCC's plan settled in its §8 (hub #254); six questions for the Arbiter in its §1; nothing built · hub #252, #254
 
 On the Arbiter's word the whole audit volume (hub `docs/AUDIT-INDEX-2026-10.md`: S1, S2, S3 and TCC's TA, TB) came to
 this session to verify, group and plan, with agents. The plan is the input to W-8's milestone when the collection closes;

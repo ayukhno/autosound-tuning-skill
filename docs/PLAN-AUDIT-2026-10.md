@@ -2,7 +2,8 @@
 
 Hub #252 (HUB-080), 2026-10-04. Supersedes the "record in the pool" route of #250. **A plan, not a build**: no code
 changed for it, no milestone issue opened, the W-8 pool not rewritten. Nothing here is built before the Arbiter's
-`ok` on the task, at its wave's milestone (hub `WAVES.md` §1).
+`ok` on the task, at its wave's milestone (hub `WAVES.md` §1). **Updated for hub #254 (HUB-082):** the rows settled
+with TCC's plan (tcc `c8e9e3d`, hub `docs/AUDIT-PLANS-MATCH-2026-10.md` §2) are answered in §8 and carried into §3–§7.
 
 **The volume** (hub `docs/AUDIT-INDEX-2026-10.md`): S1 the instructions (branch `claude/relaxed-ritchie-pk2nci`,
 `docs/AUDIT-INSTRUCTIONS-2026-10-04.md`, I-1…I-31), S2 the tooling (branch `claude/charming-faraday-dcn0ez`,
@@ -25,12 +26,9 @@ groups touch; and a coverage read of this file against the finding list. The age
 
 Each with the advice first. None of them stops the first wave's safe groups (§5); each stops the group named.
 
-1. **How the method's modules find each other — J1's mechanism.** (a) A small sibling loader, `rew_tool/siblings.py`,
-   that adopts a copy already loaded from the same file (TCC's copies included) and is rolled out over three waves;
-   or (b) `rew_tool/` becomes a package, with the same bootstrap lines at the top of all 64 modules, in one wave.
-   **Advice: (a).** Every documented `python3 rew_tool/x.py` line keeps working, TCC's copies join without a TCC
-   release, and the one dangerous step — removing the `sys.path` edits — happens once, when the guard counts zero bare
-   imports. (b) is the cleanest end state and the widest diff of any task here.
+1. ~~How the method's modules find each other~~ — **not a question any more**: it is technical, and TCC's need
+   (§8 M4) settles it. Decided: the sibling loader `rew_tool/siblings.py` (not a package). Every documented
+   `python3 rew_tool/x.py` line keeps working and TCC's copies join without a TCC release.
 2. **Which Python runs the method on macOS and Linux (T-34).** In every case J6a (W-9) makes an install that
    cannot import numpy say "not ready" (exit 3) instead of "Installed". Then: (a) uv's Python 3.12 becomes the
    `python3` in `~/.local/bin`, as Windows already does (`install.ps1:876-885`, `:1215`); (b) keep whatever `python3`
@@ -197,10 +195,12 @@ and counts "NOT RUN" nowhere (`:131`) — and J1 edits every module it runs. The
   only in a minor (a `### Breaking` entry, which the hub preflight already refuses on a patch); additions do not bump.
   The loader `siblings.py`: one module object per file, adopting any copy already in `sys.modules` by real path,
   registered before it runs and removed if it fails, under one lock — this ends the two `NamingError` classes TCC
-  sees today. Every `sys.path` edit stays until J1c, then all go at once.
-- **Weighed:** the clean variant (a package, `contract-surface.json`, `CONTRACT_MIN`) — kept `CONTRACT_MIN` for the
-  first real bump; the package is question 1 (b). The smallest variant — kept its signature pins in `IMPORTABLE`
-  instead of `__all__` on every module.
+  sees today. **Contract 1 = the v3.1.x surface TCC lists** (its plan §9); what J1a–J4a add is additive under 1
+  (§8 M5). The `sys.path` edits of the importable closure go in J1b, by W-10 (§8 M4); the rest in J1c.
+- **Weighed:** the clean variant (a package, `contract-surface.json`, `CONTRACT_MIN`) — not taken: the package is
+  the widest diff here, and `CONTRACT_MIN` is covered by TCC's own rule that a bump waits for a TCC release that
+  accepts it (§8 M6). The smallest variant — kept its signature pins in `IMPORTABLE` instead of `__all__` on every
+  module.
 - **J1a (first wave):** (1) the `version` verb and the constant; (2) `CONTRACT.md` and `IMPORTABLE`, with TCC's names,
   plus a guard (`scripts/contract-guard.py`, run by the runner) that holds the literals, the tables and the promised
   names; (3) `siblings.py`; (4) convert the sites that break today — `dsp_profile.py:318,384,348`, `rew_api.py:331`
@@ -208,12 +208,19 @@ and counts "NOT RUN" nowhere (`:131`) — and J1 edits every module it runs. The
   clean. Tests first: the by-path probe from a temp folder under `python3 -P` (red today: `annotate_modellable`
   raises `ModuleNotFoundError`), each loader returns a real object and a deleted sibling raises, one `NamingError`.
   **infra · opus · medium** (shared module objects change what tests that patch globals see) **· M.**
-- **J1b:** the rest of the importable closure (`contract.py` first, it unblocks `process.py`); T-20 an explicit rate
-  parameter, the bind kept; T-24 notes returned instead of printed, environment precedence written down, not
-  flipped; T-21/T-22 versioned reads and a `"contract"` key on object-shaped JSON outputs (never on `plan`'s list).
-  **infra · opus · medium · L.**
-- **J1c:** remove every `sys.path` edit and the bare-name alias; the guard forbids both. **infra · opus · medium · S.**
-  Needs TCC's conftest to patch the shared `rew_api` first.
+- **J1b (W-10):** (1) the rest of the importable closure onto the loader (`contract.py` first, it unblocks
+  `process.py`); (2) then, with the guard counting zero bare sibling imports in the closure, **no module TCC imports —
+  nor any module they load in-process — edits `sys.path` at import or call time**: `verify.py:33`, `project.py:40,
+  1389,1568`, `naming.py:1081`, `project_seed.py:71,340`, `eq_export.py:50,585`, `resonalyze_vc.py:95`,
+  `protective.py:75` (§8 M4); (3) T-24 notes returned instead of printed, environment precedence written down, not
+  flipped; (4) the readers TCC asks for (its §4.1 item 6): `Process.capture_history()` in the state-slice shape,
+  `is_taken` and `outstanding` public, `capture_superseded` and the closed event's `outstanding` documented; a public
+  `PresetHistory` path accessor in place of the `_path` TCC calls; (5) `CONTRACT.md` complete (T-22). Not built:
+  a `"contract"` key in outputs, T-20 (§6). **infra · opus · medium · L.**
+- **J1c (W-11):** the modules outside the closure (CLI-only) keep their `sys.path` edits only under `__main__`; the
+  bare-name alias goes; the guard forbids both. TCC's prerequisite is already met: its conftest re-points a bare
+  `sys.modules['rew_api']` (`tests/conftest.py:208-210`) — after J1c there is none, the branch goes dead and nothing
+  breaks; the patch that matters goes through `vendor_loader.load_rew_api()` (`:214`). **infra · opus · medium · S.**
 
 #### J2 · Writers and the lock
 
@@ -229,7 +236,9 @@ and counts "NOT RUN" nowhere (`:131`) — and J1 edits every module it runs. The
   `atomic_write_json/text` (a unique temp name opened exclusively — `mkstemp` would make `project.json` 0600 — then
   flush, `fsync`, `os.replace`, a short `PermissionError` retry on Windows); `create_exclusive` (`O_EXCL`, for ledger
   versions); `project_lock` (`<project>/.autosound/write.lock` with its own `.gitignore`, `flock`/`msvcrt.locking`,
-  re-entrant, 10 s — under TCC's 20 s child timeout); `read_json` (absent → default; anything else → `Unreadable`,
+  re-entrant; a held lock waits `AUTOSOUND_LOCK_TIMEOUT_S` — default 10 s, set per call by TCC, never in
+  `child_env()` — then exits **75**, "busy, nothing written, safe to retry", with a `busy:` line naming the lock
+  (§8 M1)); `read_json` (absent → default; anything else → `Unreadable`,
   which is **not** a `ValueError`, or today's `except (OSError, ValueError)` blocks would swallow it again). No
   revision counter in `process-state.json`: every read-modify-write loads inside the lock, and a new field would
   change what TCC's own fold reads. The lock is never held across REW, git or `gh`: `check_captures` reads REW
@@ -247,11 +256,14 @@ and counts "NOT RUN" nowhere (`:131`) — and J1 edits every module it runs. The
   the old one byte-identical (fault injected through the writer, not by patching `open`). **defect · opus · low**
   (same bytes for one writer) **· S–M.**
 - **J2b:** (1) `project_lock`; (2) every `Process` verb under it, `check_captures` and `enter_phase` split around
-  their slow calls; (3) `Project.save` takes the rev from disk under the lock, opt-in `expected_rev`, a
-  `Project.update(fn)`; (4) ledger snapshot, seals, slots and `dsp_profile` writers under it; (5) contract §8 and
-  `process-schema.md:203`. Tests: two processes (`spawn`, never `fork`) synchronised by events, not sleeps; a held
-  lock makes a child CLI exit 1 "busy"; a Windows CI step, because `msvcrt` runs nowhere else; a VM run before the
-  tag. **defect · opus + Fable · high · M.**
+  their slow calls; (3) `Project.save` takes the rev from disk under the lock, and a `Project.update(fn)` — TCC's
+  `car_library` moves to it; no `expected_rev` (§6); (4) ledger snapshot, seals, slots, `state.py config save`,
+  `intake.py set-car` and the `dsp_profile` writers under it — every writer CLI TCC runs; (5) contract §8 and `process-schema.md:203`; a `PROTOCOL = 1` literal TCC reads as text to know a copy locks
+  itself. Tests: two processes (`spawn`, never `fork`) synchronised by events, not sleeps; a held lock makes a child
+  CLI exit 75 "busy" with the files byte-identical; a Windows CI step, because `msvcrt` runs nowhere else; a VM run
+  before the tag. T-8's Windows retry is already out with J2a — never later than the lock (TCC's condition).
+  TCC adopts the lock in its own W-11 (its lane and the lock together); an older TCC with this tag is safe (§8 M2).
+  **defect · opus + Fable · high · M.**
 
 #### J3 · Unreadable is not empty
 
@@ -259,28 +271,30 @@ and counts "NOT RUN" nowhere (`:131`) — and J1 edits every module it runs. The
 - **Design (both architects):** strictness is opt-in — `Process.load(strict=True)` — because ~12 read-only callers
   and TCC's screen rely on today's default; `_write` refuses to replace an existing unreadable file, which protects
   every write verb at once; strict reads in `contract.check_process`, `show` and `session-close`.
-- **Against the hub's map:** AUDIT-INDEX J3 says TCC's handling must ship in the same wave "or TCC's screen breaks".
-  It does not break: TCC already passes refusals through verbatim and renders `valid: false`; without its change it
+- **Settled with TCC (§8 M2):** the hub withdrew its "or TCC's screen breaks". It does not break: TCC already passes refusals through verbatim and renders `valid: false`; without its change it
   still shows an empty plan as today — but `_write`'s guard stops the overwrite. TCC's better display (the reason
   instead of an empty plan) can follow in its next wave.
 - **J3a (first wave, with J2a):** (1) `read_json`/`Unreadable` over a matrix — absent, empty, truncated, a cp1251
   byte, a BOM, `[1,2]`, a directory; (2) K-2 as above; (3) T-11 seals and `_project_rev` strict; (4) T-13 the draft
   refuses instead of `break`ing to a blank one; (5) T-10's unreadable half — a checker that raises or a file that
   cannot be read refuses (this reverses `process.py:397-402`'s "must not become a wall", by design); (6) I-28 the gate
-  report's last line states the verdict. Tests first: today's fresh-project path pinned (no file → empty state);
+  report's last line states the verdict; (7) T-21's refusal of a newer schema in `Process.load(strict=True)`,
+  `PresetHistory` and `load_profile` (TCC's §4.1 item 4). Tests first: today's fresh-project path pinned (no file → empty state);
   a torn journal line still skipped; then `{trunc` → `enter-phase -1` exits 1, bytes unchanged.
   **defect · opus + Fable · medium** (existing damage in the cp1251 population surfaces; every refusal names the
   repair command) **· M.**
-- **J3b:** T-10 gating on `complete` with a parity test against `contract --gate`; T-21 `check_schema` for the ledger,
-  the profile and the glossary; T-15's four sites; every external `Process.load` caller states `strict=` (a scan
+- **J3b:** T-10 gating on `complete` with a parity test against `contract --gate`; T-21 `check_schema` for the
+  glossary, migration hints for older files, every format constant equal to `FORMAT_VERSION`; T-15's four sites; every external `Process.load` caller states `strict=` (a scan
   refuses a bare call). **defect · opus · medium · M.**
 
 #### J4 · REW: three states, two new exit codes, a write that reads back
 
 - **Findings:** T-1, T-2, T-3, T-4, T-5, T-6, T-7, K-1, T-23, T-29. TCC: TB-F4, TA-3, TA-5.
 - **Design (advised: the smallest variant's first wave):** exit codes 0/1/2 keep their meaning, 3 and 4 stay per
-  tool; two new: **69** REW unavailable (nothing written) and **70** unexpected error (sysexits; no tool uses
-  either). `process._main` gets the catch-all. REW exceptions live in `rew_api.py` itself (a new sibling import would
+  tool; three new, from sysexits, none used by any tool today: **69** REW unavailable (nothing written), **70**
+  unexpected error, **75** busy (reserved here, raised by J2b's lock — §8 M1). An unknown `--flag` on any
+  `process.py` verb is a usage error (exit 2), never absorbed as titles or reason text (N19 from TCC's plan,
+  `process.py:3602-3609`, `:3706-3730`). `process._main` gets the catch-all. REW exceptions live in `rew_api.py` itself (a new sibling import would
   break TCC's by-path load): `RewUnavailable` (also an `OSError`), `RewProtocolError` (also a `ValueError`),
   `MeasurementNotFound`/`AmbiguousTitle` (still `KeyError`, same words — TCC reads them), `RewWriteMismatch`; matched
   by an attribute, never by class across module copies (`rew_api` is loaded three times today). `verify` gains a
@@ -293,8 +307,10 @@ and counts "NOT RUN" nowhere (`:131`) — and J1 edits every module it runs. The
   J4b. Taken from balance: a key **denylist** (`gain`, `gain_db`, `freq`, `f`, `Q`), not an allow-list, until the live
   pass shows REW's real key set; and its client design for J4b.
 - **J4a (first wave):** (1) the exit table and catch-all; (2) the exceptions, a `_fetch` that covers the read
-  timeout, the listing's shape check; (3) `verify`'s states and T-4; (4) T-1; (5) K-1; (6) the table in both usage
-  texts and the CHANGELOG. Tests first: today's `KeyError` wording and the `capture-close` REW-down exit 0 pinned;
+  timeout, the listing's shape check; (3) `verify`'s states and T-4; (4) T-1, with N17 from TCC's plan —
+  `unusable_captures`, `capture-check`'s print loop and the closing event's `taken` ignore `superseded_by`
+  (`process.py:2223-2231`, `:3759-3769`, `:2276`) and move to `_is_taken`; (5) K-1; (6) N19's usage rule; (7) the
+  table in both usage texts and the CHANGELOG. Tests first: today's `KeyError` wording and the `capture-close` REW-down exit 0 pinned;
   then a real closed port (not a patched function) → exit 69 with state and journal byte-identical; a local
   `http.server` answering 500, HTML, `[]`; `capture-protective --hp abc` → 70; a `gain` entry refused with zero
   requests counted at the handler. Before the tag: question 7's live pass. **defect · opus · medium · M.**
@@ -302,14 +318,16 @@ and counts "NOT RUN" nowhere (`:131`) — and J1 edits every module it runs. The
   supports a REW on another host); a thread-local base URL (`BASE_URL` stays readable — TCC reads it); T-5; the
   12+ callers of §2.1 narrowed and payload errors moved to `RewProtocolError`; 69/70 in every tool's main; T-29 the
   stub serves REW's recorded shapes. Selftests move from patching `urlopen` to `_fetch` first, or the new opener
-  sends them to the network. **defect · opus · medium · M–L.**
+  sends them to the network — **TCC's fixture `tests/test_rew_api_shapes.py` too** (§4 N9). `BASE_URL` stays a
+  readable, assignable module name (TCC's conftest and `rew_bridge` use it). **defect · opus · medium · M–L.**
 
 #### J5 · The seed preview
 
 - **Finding:** K-4. TCC: TA-1's part (a seed into a temp folder on every typing pause).
-- **Found on the way:** `project_seed.describe()` (`--describe --json`) is already a no-write preview. **Ask TCC
-  first** whether it covers what the New-project dialog shows; only if not, `seed(..., dry_run=True)` that also skips
-  `Project.save` (`:485`), `.gitignore` (`:491`), git and `gh`. **feature · opus · low · S.**
+- **Answered by TCC's plan (§4.1 item 9):** `describe()` does not cover the dialog; TCC needs a real dry run.
+  `seed(..., dry_run=True)` with no git, no `gh`, no `Project.save` (`:485`), no `.gitignore` (`:491`), whose
+  record carries the Fs count; the module's lazy imports moved to the top. Before TCC's W-12.
+  **feature · opus · low · S.**
 
 #### J6 · Trust what users install
 
@@ -337,8 +355,10 @@ and counts "NOT RUN" nowhere (`:131`) — and J1 edits every module it runs. The
 - **J6b (after question 2):** the interpreter (advised: uv's 3.12 as `python3`), T-43, F17/T-46 — CI on Python 3.9 and
   3.12, macOS and Ubuntu jobs asserting the login shell's `python3`. **infra · opus · medium · M–L.**
 - **J6c:** T-36's code half — `SHA256SUMS` signed with the release key and checked in `fetch_binary` (the settings half
-  is the hub's and the Arbiter's, §4); TB-F1 — `-c constraints.txt` once TCC ships the file with each tag.
-  **infra · opus · low · M.**
+  is the hub's and the Arbiter's, §4). **infra · opus · low · M.**
+- **J6d (W-12, with TCC — §8 M10):** TB-F1 — the installers read `constraints.txt` from the verified TCC tag and pass
+  `-c`; a tag without the file installs as today and says so once. Safe before TCC ships the file, so both land in
+  W-12 in either order. **infra · opus · low · S.**
 
 #### J7 · The user's path — the text
 
@@ -385,7 +405,10 @@ and counts "NOT RUN" nowhere (`:131`) — and J1 edits every module it runs. The
   state, 15 Time Offset, 19 when taste is asked, 20 how the language is recorded and the double `-1.2`, 21 stop order,
   22 the generated sheet, 23 Phase-3 titles — with the one-liners on delays vs all-pass, review before or after
   banking, the RTA FFT and installing by hand-copy; the sweep-level pair gets both quantities named (output dBFS vs
-  input peak). **docs · opus · low · S.**
+  input peak); and the TCC facts its plan corrected — `SKILL.md:98`'s tool map (TCC has `session_close`,
+  `set_target`, `capture_knobs`; `capture-protective` and `listening-verdict` are UI-only; `reviewer` is written by
+  `call_critic`) and `reviewer.reachable`, present as null when not configured, with `model`/`ready` absent
+  (`core/project-intake.md:16-17`, `phase_-1_intake.md:41`). **docs · opus · low · S.**
 
 #### S2 · SKILL.md back under the re-attach budget
 
@@ -470,25 +493,26 @@ tag, unless marked *before*.
 
 | # | what | for | when |
 |---|---|---|---|
-| N1 | The ~40 names TCC reads from the skill's modules (its AST inventory) | J1a `IMPORTABLE` | **before** J1a's task 2 |
+| N1 | The ~40 names TCC reads from the skill's modules (its AST inventory) | J1a `IMPORTABLE` | **delivered** — TCC's plan §9 |
 | N2 | TCC's suite run against the J1a and J4a candidates (`AUTOSOUND_SKILL_DIR` at the candidate) | shared module objects; new exception types | **before** those tags |
 | N3 | Whether TCC quotes or injects SKILL.md sections | S2's cut | **before** S2 |
-| N4 | Whether `project_seed.describe()` covers the New-project dialog | J5 | before J5 |
+| N4 | Whether `project_seed.describe()` covers the New-project dialog | J5 | **answered** — no; a dry run (§3 J5) |
 | N5 | J8's checks on TCC's side: opener, system prompt, `reviewer.configured`, the MCP tool list, which skill copy | J8 | with J8 |
 | N6 | Which of P2/P5/P7/P8 TCC's screens already carry | J7 | after question 6's walk |
-| N7 | A `constraints.txt` with each TCC tag | J6c (TB-F1) | TCC first |
+| N7 | A `constraints.txt` with each TCC tag | J6d (TB-F1) | W-12, either order (§8 M10) |
 | N8 | Agreement on rewording `goal.design_path`'s question (`intake.py:99,1188`, four i18n files) | S3 | before S3 |
+| N9 | TCC's `tests/test_rew_api_shapes.py` patches `urllib.request.urlopen`; it moves to `rew_api._fetch` | J4b (the new opener bypasses `urlopen`) | **before** J4b's tag |
 
 **What TCC gets from the skill**
 
 | # | what | closes for TCC | wave |
 |---|---|---|---|
-| R1 | `contract.py version --json`, `CONTRACT_VERSION` readable from a tag | TB-F2: a handshake instead of three files existing; the updater picks the newest tag it supports | J1a |
+| R1 | `CONTRACT_VERSION = 1` (= the v3.1.x surface), readable from a tag with `ast`; `contract.py version --json` for diagnostics | TB-F2: a handshake instead of three files existing; the updater picks the newest tag it supports | J1a |
 | R2 | `siblings.py`, one module object per file | the duplicate `NamingError`; TCC's `vendor_loader` goes through it | J1a |
-| R3 | Exit codes 69/70, the REW states, the read-back in `set_filters` | TB-F4: `write_rew_filters` returns `applied: false` with the reason; **no second read-back in TCC**; `tests/test_rew_api_shapes.py:54-67` must answer GET /filters with what was written — **blocking for TCC's re-pin** | J4a |
-| R4 | `Process.load(strict=True)`, the overwrite guard | TB-F5: TCC shows the reason, not an empty plan; `report_phase` stops telling the agent to `enter_phase` | J3a |
-| R5 | The lock inside the skill's writers | TB-F9 cancelled; TA-1's lock wait gone: TCC deletes `_exclusive` and `_THREAD_LOCK` in the commit that re-pins; **TCC never holds `.autosound/write.lock`** | J2b |
-| R6 | The read-only module list with guarantees | TB-F6: TCC calls the skill's readers instead of its own folds, with parity tests | J1b |
+| R3 | Exit codes 69/70 and 75 reserved, unknown flags refused (N19), the REW states, the read-back in `set_filters`, N17 | TB-F4: `write_rew_filters` returns `applied: false` with the reason; **no second read-back in TCC**; `tests/test_rew_api_shapes.py:54-67` must answer GET /filters with what was written — **blocking for TCC's re-pin** | J4a |
+| R4 | `Process.load(strict=True)`, the overwrite guard, newer schemas refused in three readers | TB-F5: TCC shows the reason, not an empty plan; `report_phase` stops telling the agent to `enter_phase` | J3a |
+| R5 | The lock inside the skill's writers; exit 75 «busy»; `AUTOSOUND_LOCK_TIMEOUT_S` per call; `PROTOCOL = 1` | TB-F9 cancelled; TA-1's lock wait gone: TCC deletes `_exclusive` and `_THREAD_LOCK` in the commit that re-pins; **TCC never holds `.autosound/write.lock`** | J2b |
+| R6 | The read-only module list with guarantees, no `sys.path` edit in it, `capture_history()`, public `is_taken`/`outstanding`, a `PresetHistory` path accessor | TB-F6: TCC calls the skill's readers instead of its own folds, with parity tests; T-19 gone for TCC | J1b (W-10) |
 | R7 | The installers' exit 3 and receipt | nothing required (TCC reads neither) | J6a |
 | R8 | — | TB-F8 (D-1): TCC uses `dsp_profile.find_bundled`'s own library; nothing new from the skill | — |
 
@@ -498,8 +522,7 @@ tag, unless marked *before*.
 **TCC's twin of a skill finding:** T-35 — `updates.py:830` verifies tags without pinning `gpg.ssh.program`, and its
 classifier matches a bare "-Y" (`:767-773`). Same fix, TCC's own wave.
 
-**For the hub:** (1) J2 and J3 need not ship in one wave on both sides (above, with the evidence) — AUDIT-INDEX J2/J3
-read otherwise. (2) T-36's settings half — a tag ruleset on `refs/tags/v*` and `beta-v*`, immutable releases on — is the
+**For the hub:** (1) J2 and J3: each side's half is safe alone — §8 M2. (2) T-36's settings half — a tag ruleset on `refs/tags/v*` and `beta-v*`, immutable releases on — is the
 Arbiter's flip (AUDIT-INDEX §3). (3) T-48 stays with the hub's preflight (§6).
 
 ---
@@ -511,10 +534,11 @@ collection; this plan is an input to its milestone, not the milestone.
 
 | wave | groups | why here |
 |---|---|---|
-| **W-8** | S4a · J4a (with question 7's live pass) · J2a + J3a · J1a · S1 | the runner first; then the defects that corrupt a record or report a false success (a capture counted taken, a flat filter "applied", a bricked `project.json`, unreadable read as empty); the handshake TCC plans against; the wrong advice read on every tune. All of it is invisible to, or additive for, today's TCC. |
-| **W-9** | J2b (Fable) · J6a · J8 · J7 (P3, P9, P10) · S2 · S6 | the lock once J2a/J3a are out; honest installs and the signature rule; what the model is told; SKILL.md under the budget once S1's sentences are right. |
-| **W-10** | J1b · J4b · S4b · S5 · J5 | the wide, mechanical moves once the guards from W-8 hold them. |
+| **W-8** | S4a · J4a (with question 7's live pass; N17, N19, the exit table with 75 reserved) · J2a + J3a · J1a (contract 1) · S1 | the runner first; then the defects that corrupt a record or report a false success (a capture counted taken, a flat filter "applied", a bricked `project.json`, unreadable read as empty); the handshake TCC plans against; the wrong advice read on every tune. All of it is invisible to, or additive for, today's TCC. |
+| **W-9** | J2b (Fable) · J6a · J8 · J7 (P3, P9, P10) · S2 · S6 | the lock once J2a/J3a are out (TCC adopts it in its W-11; each half safe alone, §8 M2); honest installs and the signature rule; what the model is told; SKILL.md under the budget once S1's sentences are right. |
+| **W-10** | J1b (no `sys.path` edit in TCC's modules) · J4b · S4b · S5 · J5 | the wide, mechanical moves once the guards from W-8 hold them; TCC's «joint 1» re-pins onto them. |
 | **W-11** | J1c · J3b · S3 · J6b · J6c · J7 (P1, P4, the car family) | the steps that need a decision or a walk first (questions 2, 3–6), and the last `sys.path` removal. |
+| **W-12** | J6d (constraints, with TCC) | TCC's G4 part 2 lands in the same wave (§8 M10). |
 
 ---
 
@@ -532,6 +556,15 @@ collection; this plan is an input to its milestone, not the milestone.
 - **A revision field in `process-state.json`** — every read-modify-write runs under the lock (J2b); a new field changes
   what TCC's own fold reads.
 - **`__all__` on every module (~250 names)** — the contract lists what front ends use, with signatures.
+- **What TCC said it does not need** (its §4.1; §8 M6): a `"contract": N` key in JSON outputs (one handshake per copy
+  is enough); `CONTRACT_MIN`, SINCE/SURFACE tables; a `--lock-timeout` flag (an older `process.py` would read it as
+  data — the environment variable carries the wait); lock tokens, pids, read locks; `expected_rev` on `Project.save`
+  (`Project.update` under the lock covers the one in-process writer, `car_library`); contract promises for the CLIs
+  TCC imports instead (`naming parse`, `verify --json`, `verify_prediction`, `predict`, `timebase`, `eq_propose`,
+  `resonalyze_vc --json`), for `deployment.py --json`, and for `session-reopen`, `capture-import`, `amp-gain`,
+  `amp-changes`, `selftest` — they stay documented as the skill's own, not as front-end promises.
+- **T-20** — TCC binds no DSP rate in-process (its plan §1), and the CLI models one project per process. Revisit if a
+  host models two projects in one process.
 - **TCC holding the skill's lock, or an "already held" token in the environment** — a deadlock, and a token that
   leaks into the agent's Bash (J2).
 - **`--break-system-packages` on a system or Homebrew Python** — forbidden by the method's own docs; question 2's (a)
@@ -566,7 +599,8 @@ collection; this plan is an input to its milestone, not the milestone.
 | T-15 | J3b |
 | T-16 | dropped (§6) |
 | T-19 | J1a (TCC's modules), J1b (the rest), J1c (`sys.path`) |
-| T-20, T-22, T-24 | J1b |
+| T-22, T-24 | J1b |
+| T-20 | dropped (§6) |
 | T-21 | J1b (versioned outputs), J3b (`check_schema`) |
 | T-23 | J4a |
 | T-25, T-28, T-30, T-33 | S4a |
@@ -599,6 +633,63 @@ collection; this plan is an input to its milestone, not the milestone.
 | C3 (09-09) | TCC's (§4) |
 | S1 §5.2 verbs nobody routes to | S5 |
 | P11 | dropped (§6) |
+| TCC's N17, N19 | J4a |
+| TCC's N20 (`verify.py:33`) | J1b |
+| TCC's B9/B10 corrections | S1 |
 | F15 | S2 (retired) |
 | F17, E-time, E-pair | J6a (E-time, E-pair), J6b (F17) |
 | TB/TA joint items | §4 |
+
+---
+
+## 8. Settled with TCC — hub #254 (AUDIT-PLANS-MATCH §2)
+
+One round, through the hub. Rows marked *both* carry the skill's position; the hub matches it with TCC's.
+
+- **M1 · busy exit code and wait — agreed with TCC.** A held lock waits `AUTOSOUND_LOCK_TIMEOUT_S` (seconds; default
+  10 when unset; a value that does not parse is a usage error, exit 2, naming the variable — a missing input fails
+  loudly), then exits **75** with one `busy:` line naming the lock file: nothing written, safe to retry. 75 is sysexits'
+  `EX_TEMPFAIL`, beside 69 and 70 in J4a's table; no tool in the skill returns 69, 70 or 75 today
+  (`grep -rnE '(return|exit|sys\.exit)\(? *(69|70|75)\b'` over `*.py`, `*.sh`, `*.ps1` → nothing). TCC sets the
+  variable per writer call, never through `child_env()` (its point: the omp session inherits `child_env()`). Every
+  writer CLI TCC runs returns it: `state/process.py`, `dsp_profile.py`, `state/state.py config save`,
+  `intake.py set-car`. No `--lock-timeout` flag (§6).
+- **M2 · J2/J3 staging — the skill's position (both).** Same wave on both sides is the **target**, not a gate: each
+  half is safe alone, so neither side's tag waits for the other's.
+  - *J3, a new skill with today's TCC:* the strict read is opt-in, so `Process.load()` keeps today's default and TCC
+    shows an empty plan as today; the next write is refused by `_write`'s guard instead of erasing the plan. TCC
+    already treats any non-zero exit as a failure and shows its text (tcc `core/process_writer.py:186-193`), parses
+    `contract.py check --json` whatever the exit (`core/contract_check.py:234-240`) and renders `valid: false`
+    (`:78`). Nothing regresses; the data is protected a wave earlier.
+  - *J2, a new skill with today's TCC:* TCC's own lock is a different file, `process/.process-write.lock`
+    (`core/process_writer.py:49`), so its `flock` around a child that takes `.autosound/write.lock` cannot deadlock —
+    it only keeps today's serialisation. A busy child answers 75, which today's TCC shows as a failure line.
+  - *A new TCC with an older skill:* TCC's own plan §5.4 probes `PROTOCOL = 1` per copy and keeps its legacy lock for
+    a method that does not lock itself.
+  - So the skill plans J2a/J3a in W-8 and J2b in W-9; TCC shows the refusals in its W-10 and adopts the lock in its
+    W-11, as its plan says. T-8's Windows retry ships with J2a — before the lock's tag, as TCC requires.
+- **M4 · `sys.path` edits — agreed to TCC's date (both).** By W-10 (J1b) none of TCC's 15 modules, nor anything they
+  load in-process, edits `sys.path` at import or call time (§3 J1b lists the sites). `siblings.py` from W-8 (J1a)
+  gives one module object per file — one `NamingError` — but does not remove `rew_tool/` from the front of TCC's
+  `sys.path`; that stays as today until W-10, no worse. J1c (W-11) keeps only the CLI-only modules and the bare-name
+  alias. **J1c's prerequisite is already met on TCC's side:** its conftest re-points a bare `sys.modules['rew_api']`
+  (`tests/conftest.py:208-210`) — a dead branch after J1c, nothing breaks — and patches through
+  `vendor_loader.load_rew_api()` (`:214`), which stays valid. The prerequisite that is real comes with J4b, not J1c:
+  TCC's `tests/test_rew_api_shapes.py` patches `urllib.request.urlopen`, which the new opener bypasses (§4 N9).
+- **M5 · contract 1 — confirmed.** `CONTRACT_VERSION = 1` means the v3.1.x surface TCC lists in its plan §9; everything
+  J1a–J4a add is additive under 1 (new exit codes, new exception subclasses of the old types, opt-in strictness, a
+  usage error for an unknown flag a correct caller never sends). TCC can ship `KNOWN_CONTRACT = 1` in its W-9. A bump
+  to 2 comes only on a breaking change, only in a minor, and only after a TCC release that accepts 2 is out.
+- **M6 · what TCC does not need — trimmed.** Out of J1b: the `"contract"` key in outputs, `CONTRACT_MIN` and
+  SINCE/SURFACE tables, `expected_rev`, a `--lock-timeout` flag, contract promises for the CLIs TCC imports, for
+  `deployment.py --json` and for the five verbs (§6). T-20 dropped: no caller in the skill models two projects in one
+  process. Kept, because TCC asks for them: the readers and the `PresetHistory` accessor (J1b).
+- **M8 · TCC's findings in the skill's code — taken.** N17 → J4a (read at `process.py:2223-2231`, `:3759-3769`,
+  `:2276`: a superseded entry counts as taken in all three); N19 → J4a (read at `process.py:3602-3609`, `:3706-3730`:
+  the hand parser pulls out the flags it knows and passes the rest on as titles or reason text); N20 → J1b; B9 and
+  B10's corrections → S1; K-4's preview without `Project.save` and `.gitignore`, with the Fs count → J5.
+- **M10 · constraints order — one wave (both).** J6d in W-12 with TCC's G4 part 2: the installers read
+  `constraints.txt` from the verified TCC tag when it is there and install as today otherwise, so the order inside the
+  wave does not matter.
+- **For information, no evidence against:** M3 (TCC's answer to N2), M7 (TCC reads the literal with `ast`; the verb
+  stays, for diagnostics), M9 (TCC answers N3 and N8; N4 is answered by its §4.1 item 9).
