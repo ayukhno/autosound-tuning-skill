@@ -1627,9 +1627,26 @@ S-062, S-064 (with TCC's half, hub #217 SKL-056), S-065, S-066. When he says to 
 four assessment lines, and nothing is built before his `ok` on that task. Resume: `hub/bin/role skill --resume
 6b9c70d1-4094-4337-a1fd-23976307dfc2`.
 
+## S-101 · W-8 · v3.1.2 — the audit's first wave: in review
+
+**Status**: open 2026-10-06 · milestone `W-8 · v3.1.2` (milestone 7) opened on the Arbiter's «збір закінчили» with six issues — #133 S4a, #134 J4a, #135 J2a, #136 J3a, #137 J1a, #138 S1 — each with the four assessment lines; no `ok` yet, nothing built
+
+The Arbiter, 2026-10-06: «я хотів спочатку зробити задачі аудіта, а потім все інше». So W-8 takes the audit plan's
+W-8 row (`docs/PLAN-AUDIT-2026-10.md` §5) and nothing else; the rest of the pool waits until the audit's waves are
+done: S-099, hub #247 (TCC-049), hub #258 (HUB-084), hub #259 (TCC-052), hub #261 (TCC-053), hub #113 (PAS-005,
+S-098 item 2). A structure pass in the skill, which TCC asked about (hub #256), comes after W-11 too, if wanted.
+
+Proposed groups (hub `hub:seam`; one review pass per group, on its diff): **silent failures at the edges** — #134 J4a,
+#135 J2a, #136 J3a (J3a's final review on Fable); **S4** — #133, first in the wave; **J1** — #137; **S1** — #138. The
+architects ran when the plan was made (hub #252); each issue names the plan's advised variant.
+
+Before the tag: the Arbiter's live pass at REW for J4a (~15 minutes, plan §1 question 7) and TCC's suite on the
+candidate for J1a and J4a (plan §4 N2) — so the wave cuts a candidate first. Resume: `hub/bin/role skill --resume
+fe9776b9-fd37-4a3d-bbc9-e402f6f9ff3b`.
+
 ## S-100 · The October audit volume: the plan is written, the milestone decides (hub #252 HUB-080)
 
-**Status**: waiting 2026-10-04 · `docs/PLAN-AUDIT-2026-10.md` — five reports verified at `7b3232b`, grouped, planned over W-8…W-12; the rows matched with TCC's plan settled in its §8 (hub #254); six questions for the Arbiter in its §1; nothing built · hub #252, #254
+**Status**: waiting 2026-10-06 · W-8's row is on its milestone (S-101); W-9…W-12 follow, each at its own milestone · was: waiting 2026-10-04 · `docs/PLAN-AUDIT-2026-10.md` — five reports verified at `7b3232b`, grouped, planned over W-8…W-12; the rows matched with TCC's plan settled in its §8 (hub #254); six questions for the Arbiter in its §1; nothing built · hub #252, #254
 
 On the Arbiter's word the whole audit volume (hub `docs/AUDIT-INDEX-2026-10.md`: S1, S2, S3 and TCC's TA, TB) came to
 this session to verify, group and plan, with agents. The plan is the input to W-8's milestone when the collection closes;
@@ -1640,7 +1657,7 @@ design, not reproduced).
 
 ## S-099 · The installers' own help shows a one-liner pinned to an old tag (install.sh) or to `main` (install.ps1)
 
-**Status**: open 2026-10-03 · in the pool for the next wave (the Arbiter: «запиши») · found while building hub #245
+**Status**: deferred 2026-10-06 · not in W-8: the Arbiter, «спочатку зробити задачі аудіта, а потім все інше» — returns when the audit's waves are done (S-101) · was: open 2026-10-03 · in the pool for the next wave (the Arbiter: «запиши») · found while building hub #245
 
 `install.sh --help` ends with an example of passing an option through the one-liner:
 `curl -fsSL https://raw.githubusercontent.com/ayukhno/autosound-tuning-skill/v3.0.46/install.sh | bash -s -- --terminal`
