@@ -32,59 +32,80 @@ if [ "${1:-}" = "--selftest" ]; then
   printf 'print("selftest OK -- good")\n'                    > "$tmp/t/good.py"
   printf 'print("usage: usage.py --selftest")\n'            > "$tmp/t/usage.py"
   printf 'print("selftest SKIPPED -- no tool here")\n'      > "$tmp/t/skipped.py"
-  printf 'import time\ntime.sleep(5)\nprint("selftest OK")\n' > "$tmp/t/slow.py"
-  # A module that starts a child: the timeout must stop the child too, or the child holds the output pipe open and
-  # the run waits for it.
+  printf 'import time\nprint("slow: started", flush=True)\ntime.sleep(5)\nprint("selftest OK")\n' > "$tmp/t/slow.py"
+  # Modules that start a child: whether the check times out (spawner) or passes and exits (leaver), the child is
+  # stopped with it -- otherwise it holds the output pipe open and the run waits for it, past any timeout.
   printf 'import subprocess, time\nsubprocess.Popen(["sleep", "30"])\ntime.sleep(5)\nprint("selftest OK")\n' \
                                                             > "$tmp/t/spawner.py"
+  printf 'import subprocess\nsubprocess.Popen(["sleep", "30"])\nprint("selftest OK -- left a child")\n' \
+                                                            > "$tmp/t/leaver.py"
+  printf 'raise SystemExit(3)\n'                            > "$tmp/t/exit3.py"
+  printf 'print("selftest OK")\n'                           > "$tmp/t/noreason.py"
   printf 'print("selftest OK")\n'                           > "$tmp/t/unlisted.py"
-  printf '%s\n' "$tmp/t/good.py" "$tmp/t/usage.py" "$tmp/t/skipped.py" "$tmp/t/slow.py" "$tmp/t/spawner.py" \
-                "$tmp/t/gone.py" > "$tmp/m.txt"
+  # A skip line names a file on disk and gives a reason; the manifest's last line counts without its newline.
+  { printf '%s\n' "$tmp/t/good.py" "$tmp/t/usage.py" "$tmp/t/skipped.py" "$tmp/t/slow.py" "$tmp/t/spawner.py" \
+                  "$tmp/t/leaver.py" "$tmp/t/exit3.py" "skip $tmp/t/vanished.py gone from disk" "skip $tmp/t/noreason.py"
+    printf '%s' "$tmp/t/gone.py"; } > "$tmp/m.txt"
   started=$SECONDS
   out="$(SELFTEST_ONLY_TOOL=1 SELFTEST_TOOL="$tmp/t" SELFTEST_MANIFEST="$tmp/m.txt" SELFTEST_TIMEOUT=1 CI= \
          bash "$SELF" 2>&1)"; rc=$?
   took=$((SECONDS - started))
-  want() { printf '%s\n' "$out" | grep -Eq -- "$1" || { printf 'runner selftest: no line matching "%s" in:\n%s\n' "$1" "$out"; exit 1; }; }
+  # grep reads to EOF (no -q), so printf never dies of SIGPIPE and pipefail never reads a match as a miss.
+  want() { printf '%s\n' "$out" | grep -E -- "$1" >/dev/null || { printf 'runner selftest: no line matching "%s" in:\n%s\n' "$1" "$out"; exit 1; }; }
   [ "$rc" -eq 1 ] || { printf 'runner selftest: rc %s, want 1\n%s\n' "$rc" "$out"; exit 1; }
   want '^  ok   good\.py'
   want '^  FAIL usage\.py .*no OK line'
   want '^  --   skipped\.py .*NOT RUN'
   want '^  FAIL slow\.py .*timeout after 1s'
+  want '^         slow: started$'                     # a timeout shows what the check printed before it hung
   want '^  FAIL spawner\.py .*timeout after 1s'
-  [ "$took" -lt 15 ] || { printf 'runner selftest: the fixture run took %ss -- a timeout must stop what the module started (its sleep 30), not only the module\n%s\n' "$took" "$out"; exit 1; }
-  want '^  FAIL gone\.py .*not on disk'
+  want '^  ok   leaver\.py'
+  [ "$took" -lt 15 ] || { printf 'runner selftest: the fixture run took %ss -- what a check started must stop when the check ends or times out (spawner.py and leaver.py each leave a sleep 30)\n%s\n' "$took" "$out"; exit 1; }
+  want '^  FAIL exit3\.py +rc=3$'
+  want '^  FAIL vanished\.py .*skip line names a file not on disk'
+  want '^  FAIL noreason\.py .*skip line without a reason'
+  want '^  FAIL gone\.py .*listed in .*not on disk'   # the manifest's last line, which has no newline
   want '^  FAIL unlisted\.py .*not in '
   want '^FAILED: '
   # Under CI a NOT RUN alone fails the run; locally it is counted and the run passes.
   printf '%s\n' "$tmp/t/good.py" "$tmp/t/skipped.py" "skip $tmp/t/usage.py fixture" "skip $tmp/t/slow.py fixture" \
-                "skip $tmp/t/spawner.py fixture" "skip $tmp/t/unlisted.py fixture" > "$tmp/m2.txt"
+                "skip $tmp/t/spawner.py fixture" "skip $tmp/t/leaver.py fixture" "skip $tmp/t/exit3.py fixture" \
+                "skip $tmp/t/noreason.py fixture" "skip $tmp/t/unlisted.py fixture" > "$tmp/m2.txt"
   out="$(SELFTEST_ONLY_TOOL=1 SELFTEST_TOOL="$tmp/t" SELFTEST_MANIFEST="$tmp/m2.txt" CI=true bash "$SELF" 2>&1)"; rc=$?
   [ "$rc" -eq 1 ] || { printf 'runner selftest: under CI a NOT RUN must fail (rc %s)\n%s\n' "$rc" "$out"; exit 1; }
   want 'did not run under CI'
   out="$(SELFTEST_ONLY_TOOL=1 SELFTEST_TOOL="$tmp/t" SELFTEST_MANIFEST="$tmp/m2.txt" CI= bash "$SELF" 2>&1)"; rc=$?
   [ "$rc" -eq 0 ] || { printf 'runner selftest: locally a NOT RUN is counted, not failed (rc %s)\n%s\n' "$rc" "$out"; exit 1; }
   want 'NOT RUN: skipped\.py'
-  echo "runner selftest OK -- usage text, skip, timeout (with what the module started), missing and unlisted modules are all named"
+  echo "runner selftest OK -- a usage text, SKIPPED, rc 3, a timeout, a missing or unlisted module and a bad skip line are named; a child left behind is stopped"
   exit 0
 fi
 
 pass=0 fail=0 notrun=0 failed=() skipped=()
 
 # The timeout bounds the check AND what it started: a child that outlived the check would hold the output pipe open,
-# and the run would wait for it. perl forks; the child leads its own process group and execs the check (the parent
-# sets the group too, so an early alarm still finds it); at the limit the parent kills the whole group and exits 142
-# (128 + SIGALRM), otherwise with the check's status (128 + the signal when a signal ended it). The group is no longer
-# the terminal's, so Ctrl-C, TERM and HUP are passed on to it -- an interrupted run leaves nothing running.
+# and the run would wait for it, past any timeout. perl forks; the child leads its own process group and execs the
+# check (the parent sets the group too, so an early alarm still finds it). At the limit the parent kills the whole
+# group and exits 142 (128 + SIGALRM). When the check ends first, whatever it left in its group is killed too, and the
+# exit is the check's own status (128 + the signal when a signal ended it). The group is no longer the terminal's, so
+# Ctrl-C, TERM and HUP are passed on to it -- an interrupted run leaves nothing running -- except a signal the run was
+# started with ignored (a background job, nohup): that one stays ignored.
 GROUP_TIMEOUT='
   my $limit = shift;
   defined(my $pid = fork) or die "fork: $!\n";
   if (!$pid) { setpgrp(0, 0); exec @ARGV or die "exec $ARGV[0]: $!\n" }
   setpgrp($pid, $pid);
-  $SIG{$_} = sub { my $s = shift; $SIG{$s} = "DEFAULT"; kill $s, -$pid; waitpid $pid, 0; kill $s, $$ } for qw(INT TERM HUP);
+  for my $s (qw(INT TERM HUP)) {
+    next if ($SIG{$s} // "") eq "IGNORE";
+    $SIG{$s} = sub { $SIG{$s} = "DEFAULT"; kill $s, -$pid; waitpid $pid, 0; kill $s, $$ };
+  }
   $SIG{ALRM} = sub { kill "KILL", -$pid; waitpid $pid, 0; exit 142 };
   alarm $limit;
   waitpid $pid, 0;
-  exit(($? & 127) ? 128 + ($? & 127) : $? >> 8);'
+  alarm 0;
+  my $st = $?;
+  kill "KILL", -$pid;
+  exit(($st & 127) ? 128 + ($st & 127) : $st >> 8);'
 
 # run_one NAME MODE ARGV...   MODE: "ok" = exit 0 AND a last line saying OK; "rc" = exit 0 (tree checks).
 run_one() {
@@ -98,6 +119,7 @@ run_one() {
   last="$(printf '%s\n' "$out" | sed '/^[[:space:]]*$/d' | tail -n1)"
   if [ "$rc" -eq 142 ]; then                                   # 128 + SIGALRM
     fail=$((fail + 1)); failed+=("$name"); printf '  FAIL %-24s timeout after %ss\n' "$name" "$LIMIT"
+    [ -z "$out" ] || printf '%s\n' "$out" | tail -n 12 | sed 's/^/         /'
   elif [ "$rc" -eq 0 ] && printf '%s\n' "$last" | grep -qw 'SKIPPED'; then   # the LAST line, as eq_gate/project_repo print it
     notrun=$((notrun + 1)); skipped+=("$name"); printf '  --   %-24s NOT RUN: %s\n' "$name" "$(printf '%s' "$last" | cut -c1-60)"
   elif [ "$rc" -eq 0 ] && { [ "$mode" = rc ] || printf '%s\n' "$last" | grep -qw 'OK'; }; then
@@ -106,7 +128,7 @@ run_one() {
     fail=$((fail + 1)); failed+=("$name")
     if [ "$rc" -eq 0 ]; then printf '  FAIL %-24s exit 0 but no OK line -- a usage text is not a pass\n' "$name"
     else                     printf '  FAIL %-24s rc=%s\n' "$name" "$rc"; fi
-    printf '%s\n' "$out" | tail -n 12 | sed 's/^/         /'
+    [ -z "$out" ] || printf '%s\n' "$out" | tail -n 12 | sed 's/^/         /'
   fi
 }
 
@@ -168,9 +190,19 @@ fi
 echo
 echo "rew_tool selftests ($PY)"
 listed=()
-while read -r first rest; do
+while read -r first rest || [ -n "$first" ]; do     # `||`: a last line without its newline still counts
   case "$first" in ''|'#'*) continue ;; esac
-  if [ "$first" = skip ]; then listed+=("${rest%% *}"); continue; fi
+  if [ "$first" = skip ]; then                       # skip <path> <reason>: the file is on disk, the reason is given
+    path="${rest%%[[:space:]]*}"; reason="${rest#"$path"}"
+    name="${path#"$TOOL"/}"; listed+=("$path")
+    if [ ! -f "$path" ]; then
+      fail=$((fail + 1)); failed+=("${name:-skip}")
+      printf '  FAIL %-24s skip line names a file not on disk (%s)\n' "${name:-skip}" "$MANIFEST"
+    elif [ -z "$reason" ]; then
+      fail=$((fail + 1)); failed+=("$name"); printf '  FAIL %-24s skip line without a reason (%s)\n' "$name" "$MANIFEST"
+    fi
+    continue
+  fi
   listed+=("$first")
   name="${first#"$TOOL"/}"
   if [ ! -f "$first" ]; then
@@ -179,11 +211,17 @@ while read -r first rest; do
   # shellcheck disable=SC2086  # the argv is words on purpose
   run_one "$name" ok "$first" $rest
 done < "$MANIFEST"
+# find, not a glob: rew_tool has subpackages (state/, gates/), and a glob that did not recurse once left six of their
+# modules out of the run. A heredoc, not `< <(...)`: `sh scripts/run-selftests.sh` must parse too.
+# grep reads to EOF (no -q): an early exit would kill printf with SIGPIPE, and pipefail would read a match as a miss.
 while IFS= read -r f; do
-  printf '%s\n' "${listed[@]}" | grep -qxF -- "$f" && continue
+  [ -n "$f" ] || continue
+  printf '%s\n' "${listed[@]}" | grep -xF -- "$f" >/dev/null && continue
   fail=$((fail + 1)); failed+=("${f#"$TOOL"/}")
   printf '  FAIL %-24s not in %s: list its selftest argv, or a skip line with the reason\n' "${f#"$TOOL"/}" "$MANIFEST"
-done < <(find "$TOOL" -name '*.py' | sort)
+done <<EOF
+$(find "$TOOL" -name '*.py' | sort)
+EOF
 
 if [ -z "${SELFTEST_ONLY_TOOL:-}" ]; then
   # The LINTER, at the pin CI uses. A check that quietly does not run is worse than one that is absent: no ruff here is

@@ -68,12 +68,10 @@ Before opening a PR, make sure you have:
   `scripts/selftests.txt` with the argv its selftest takes, or on a `skip` line with the reason; a
   module in neither fails the run. It needs `numpy` and `scipy` (`dsp_math` and `eq_gate` import
   scipy by name, and the `dsp_math` selftest designs crossovers). CI runs this exact script on push
-  and PR, so a green run here is a green run there.
-- **Deliberately without a selftest:** `make_plot.py`. It renders one synthetic PNG for a
-  one-off experiment (does a model read a picture of a curve better than the numbers?), and
-  covering it would mean adding `matplotlib` to CI for a module no part of the method calls. A
-  new module without a selftest needs a line here saying why — an empty one is worse than the
-  honest exception.
+  and PR, so a green run here with nothing NOT RUN is a green run there: under CI a NOT RUN fails.
+- **Deliberately without a selftest:** the `skip` lines in `scripts/selftests.txt`, each with its
+  reason. A new module without a selftest gets one there — the run fails on a module that is
+  neither listed nor skipped, and on a `skip` line without a reason or without its file.
 - **Run `uvx ruff@0.12.0 check`.** CI runs it too, and it fails the build. Which rule classes are
   on and why the rest are off is written in `pyproject.toml`, next to the choice.
 

@@ -118,8 +118,8 @@ symlink on every user machine. It came back on 2026-08-26 and nothing noticed.
   it ages in silence (this one said 42 while CONTRIBUTING said 20 on the same day). A new
   `rew_tool` module goes into `scripts/selftests.txt` with the argv its selftest takes, or on a
   `skip` line with the reason; a module in neither fails the run (#133).
-  It needs `numpy` and `scipy`, and CI runs this exact script, so a green run locally is a green
-  run there.
+  It needs `numpy` and `scipy`, and CI runs this exact script, so a green run locally with
+  nothing NOT RUN is a green run there (under CI a NOT RUN fails).
 - **`uvx ruff@0.12.0 check` runs in CI and fails the build.** `F` and `E9` are on; `E4`/`E7` are
   off on purpose, and `pyproject.toml` says why. It earned the slot on its first run: `F811`
   found `get_distortion` defined twice in `rew_api.py`, and the caller was written against the
