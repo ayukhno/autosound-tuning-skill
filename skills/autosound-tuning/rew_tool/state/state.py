@@ -2039,7 +2039,42 @@ def _sample_state():
     }
 
 
+def _check_eq_refusals():
+    """One refused band per check `_validate_eq` makes, so a check that is mutated away goes red. The unknown `type`
+    is not here: `_selftest` refuses it through `validate` ("an unknown EQ band type")."""
+    good = {"type": "PK", "f": 1000, "gain_db": -3.0, "q": 1.0, "i": 1}
+    _validate_eq("tiers", "w-L", [good])
+    bad = {
+        "eq not a list": {"PK": 1},
+        # `{"PK": 1}` iterates to "PK", which the object check refuses on its own; `{}` reaches the list check alone.
+        "eq an empty object": {},
+        "band not an object": ["PK"],
+        "f missing": [{"type": "PK", "gain_db": -3.0}],
+        "f zero": [{"type": "PK", "f": 0}],
+        "f a bool": [{"type": "PK", "f": True}],
+        "gain_db text": [{"type": "PK", "f": 1000, "gain_db": "-3"}],
+        "q text": [{"type": "PK", "f": 1000, "q": "1"}],
+        "bypass text": [{"type": "PK", "f": 1000, "bypass": "yes"}],
+        "i a bool": [{"type": "PK", "f": 1000, "i": True}],
+        "i twice": [dict(good), dict(good)],
+    }
+    for label, eq in bad.items():
+        try:
+            _validate_eq("tiers", "w-L", eq)
+        except ValueError:
+            continue
+        raise AssertionError(f"_validate_eq accepted {label}: {eq!r}")
+
+
 def _selftest():
+    failures = []
+    for check in (_check_eq_refusals,):
+        try:
+            check()
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
+
     import tempfile
     root = tempfile.mkdtemp(prefix="autosound_state_")
     h = PresetHistory(root, "SQ_Jazzi")

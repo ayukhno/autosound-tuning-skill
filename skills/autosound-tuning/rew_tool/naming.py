@@ -759,12 +759,46 @@ _USAGE = """usage: naming.py <project-dir> <command> [args]
 """
 
 
+def _check_productions():
+    """One title per production of the grammar at the top of this file, and the parts nothing else here asserts
+    (`p4`…`p9`, `-ctl3`, `_final`) -- by value."""
+    cases = {
+        "w-L_3 (sw)":       {"code": "w-L", "version_n": 3, "method": "sw", "position": None, "control": None},
+        "m-L p9_49 (sw)":   {"code": "m-L", "position": "p9", "version_n": 49},
+        "w-L_49 (sw) p5":   {"code": "w-L", "position": "p5", "version_n": 49},
+        "m-L-ctl3_49 (sw)": {"code": "m-L", "control": "ctl3", "version_n": 49},
+        "sw_final (rta)":   {"code": "sw", "version": "final", "method": "rta"},
+        "r-L_17 (sw) noXO": {"code": "r-L", "version_n": 17, "method": "sw"},
+        "w-L (imp)":        {"code": "w-L", "method": "imp"},
+    }
+    for title, want in cases.items():
+        got = parse_name(title)
+        assert got is not None, f"{title!r} is in the documented grammar and parses to None"
+        for key, value in want.items():
+            assert got.get(key) == value, (title, key, got.get(key), value)
+    # ...and the role the grammar gives each control: `ctl1`/`ctl` open a series, `ctl3`/`rep` close it. The parse
+    # never reads these tuples (`_CTL_RE` takes any `ctl<digit>`), so `ctl3` dropped from `CONTROL_CLOSE` stayed
+    # green above, while `verify.py` finds a series' closing control by that tuple.
+    for title, role in (("m-L-ctl1_49 (sw)", CONTROL_OPEN), ("m-L_49ctl (sw)", CONTROL_OPEN),
+                        ("m-L-ctl3_49 (sw)", CONTROL_CLOSE), ("m-L_49rep (sw)", CONTROL_CLOSE)):
+        control = parse_name(title)["control"]
+        assert control in role, (title, control, role)
+
+
 def _selftest():
     """The grammar's own checks, and SCR-039's: a renamed channel keeps its captures.
 
     Run as `python3 naming.py . selftest` — the project argument is ignored, since nothing here
     touches disk.
     """
+    failures = []
+    for check in (_check_productions,):
+        try:
+            check()
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
+
     assert generate_name("w-L", 2, "sw") == "w-L_2 (sw)"
     assert generate_name("ALL+C", "final", "rta") == "ALL+C_final (rta)"
 

@@ -431,7 +431,30 @@ def _profile(vendor="Audiotec-Fischer", size=30, types=None, name="Helix DSP Ult
                             "groups": [group]}}
 
 
+def _check_atf_values():
+    """The ATF rows by value (audit T-25): until this check the selftest looked at types and counts only. Read as
+    text, through no parser of ours (the row format is `atf_eq.format_atf_eq`)."""
+    rows = [{"type": "PK", "f": 2551, "gain_db": -14.1, "q": 1.5},
+            {"type": "LSH", "f": 60, "gain_db": 2.0, "q": 0.7},
+            {"type": "APF2", "f": 1200, "q": 1.7}]
+    text = export_eq(_profile(), rows, channel="m-L").text
+    want = ("1\tTrue\tManual\tPK\t2551.0\t-14.1\t1.50\t",
+            "2\tTrue\tManual\tLS_Q\t60.0\t2.0\t0.7\t",
+            "3\tTrue\tManual\tAP2\t1200.0\t\t1.70")
+    lines = text.splitlines()
+    for row in want:
+        assert any(line.startswith(row) for line in lines), (row, lines[:5])
+
+
 def _selftest():
+    failures = []
+    for check in (_check_atf_values,):
+        try:
+            check()
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
+
     rows = [{"type": "PK", "f": 2551, "gain_db": -14.1, "q": 1.5},
             {"type": "LSH", "f": 60, "gain_db": 2.0, "q": 0.7},
             {"type": "APF2", "f": 1200, "q": 1.7}]

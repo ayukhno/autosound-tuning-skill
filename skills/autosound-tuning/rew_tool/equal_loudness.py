@@ -117,8 +117,22 @@ def eq_from_measurements(anchor_freq, anchor_spl, measured):
     return phon, out
 
 
+def _check_iso226_anchors():
+    """ISO 226:2003 (audit T-33): the contour's SHAPE, at points of the 40- and 80-phon contours -- the standard's
+    Eq. (1) with its Table 1 parameters, evaluated outside this module. Until this check only 1 kHz was anchored,
+    and moving the 63 Hz point by 6 dB stayed green."""
+    for phon, f, spl in ((40, 20, 99.85), (40, 63, 73.08), (80, 63, 98.36), (80, 125, 90.09)):
+        got = iso226_spl(phon, f)
+        assert abs(got - spl) <= 0.05, f"iso226_spl({phon}, {f}) = {got:.2f}; ISO 226:2003 says {spl}"
+
+
 def _selftest():
     ok = True
+    for check in (_check_iso226_anchors,):
+        try:
+            check()
+        except AssertionError as exc:
+            print(f"  FAIL {check.__name__}: {exc}"); ok = False
     # 1) At 1 kHz, SPL == phon by definition (validates formula + reference row).
     for p in (40, 60, 80):
         v = iso226_spl(p, 1000)

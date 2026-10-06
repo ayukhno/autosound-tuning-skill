@@ -1335,8 +1335,26 @@ def _main(argv):
 
 
 # ── self-test ─────────────────────────────────────────────────────────────────
+def _check_invalid_project_json():
+    """A `project.json` that is present and invalid is reported as one: exists, not valid, with the issue."""
+    import tempfile
+    d = tempfile.mkdtemp()
+    with open(os.path.join(d, "project.json"), "w", encoding="utf-8") as f:
+        json.dump({"schema_version": 3, "channels": "not-a-list"}, f)
+    entry, _data = check_project_json(d)
+    assert entry["exists"] and entry["valid"] is False and entry["issues"], entry
+
+
 def _selftest():
     os.environ["AUTOSOUND_NO_GH"] = "1"          # the history line is checked; GitHub is never reached from a test
+    failures = []
+    for check in (_check_invalid_project_json,):
+        try:
+            check()
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
+
     import tempfile
 
     root = tempfile.mkdtemp(prefix="autosound_contract_")
