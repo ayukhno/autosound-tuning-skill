@@ -1629,7 +1629,7 @@ four assessment lines, and nothing is built before his `ok` on that task. Resume
 
 ## S-101 · W-8 · v3.1.2 — the audit's first wave: in review
 
-**Status**: open 2026-10-06 · milestone `W-8 · v3.1.2` (milestone 7) opened on the Arbiter's «збір закінчили» with six issues — #133 S4a, #134 J4a, #135 J2a, #136 J3a, #137 J1a, #138 S1 — each with the four assessment lines; no `ok` yet, nothing built
+**Status**: open 2026-10-06 · `ok` on all six (the Arbiter, 2026-10-06); the plan `docs/PLAN-W-8.md` (16 tasks, ~16 h of machine time, branch `wave-2026-10-06`) waits for his «го»; nothing built · was: open 2026-10-06 · milestone `W-8 · v3.1.2` (milestone 7) opened on the Arbiter's «збір закінчили» with six issues — #133 S4a, #134 J4a, #135 J2a, #136 J3a, #137 J1a, #138 S1 — each with the four assessment lines; no `ok` yet, nothing built
 
 The Arbiter, 2026-10-06: «я хотів спочатку зробити задачі аудіта, а потім все інше». So W-8 takes the audit plan's
 W-8 row (`docs/PLAN-AUDIT-2026-10.md` §5) and nothing else; the rest of the pool waits until the audit's waves are
