@@ -59,8 +59,9 @@ reports: `git show origin/claude/charming-faraday-dcn0ez:docs/AUDIT-TOOLING-2026
   the suite otherwise) and a line in the runner (Task 1).
 - `CHANGELOG.md`: one `## [Unreleased]` section above `## [v3.1.1]`; each task adds its bullets; `### Upgrading`
   collects what a user or TCC must know.
-- Models: implementers **opus**; per-task reviewers and group reviewers **sonnet** (read-only); the final review of
-  the silent-failures group **Fable**.
+- Models: implementers **opus**; every reviewer — per task and per group — **opus** (the Arbiter's rule since
+  2026-09-29: an opus reviewer found three real defects in W-4's sonnet code); **sonnet** only for reading and grep
+  (the code maps this plan was written from); the final review of the silent-failures group **Fable**.
 - Paths below are relative to the repo root; `RT` = `skills/autosound-tuning/rew_tool`.
 
 ## Order, groups, reviews
@@ -85,7 +86,7 @@ reports: `git show origin/claude/charming-faraday-dcn0ez:docs/AUDIT-TOOLING-2026
 | 13 | Text checks, and the sentences they hold (I-1, I-11, I-20, I-12) | #138 | S1 |
 | 14 | Step numbers that point where they say (I-6) | #138 | S1 |
 | 15 | One recipe, one answer per rule (I-7, I-16, I-23, I-29, §5.1 rows) | #138 | S1 |
-| — | group review S1: one sonnet reader per §5.1 row pair, full suite | | |
+| — | group review S1: one opus reviewer over Task 15's rows, full suite | | |
 | 16 | Close the wave: CHANGELOG, PR, candidate, TCC's run, release | all | — |
 
 **Why J1 before J2:** `project_io.py` is loaded from `rew_tool/`, `rew_tool/state/` and `scripts/`, by path, and
@@ -495,7 +496,7 @@ git commit -am "#133: selftests check values -- ATF rows by text, ISO 226 points
 
 ### Group review S4
 
-`pr-review-toolkit:pr-test-analyzer` (sonnet) on `git diff main..HEAD`; fixes in one round; then
+`pr-review-toolkit:pr-test-analyzer` (opus) on `git diff main..HEAD`; fixes in one round; then
 `scripts/run-selftests.sh | tail -1` → `all N checks passed`.
 
 ---
@@ -1097,7 +1098,7 @@ git commit -m "#137: contract 1 -- CONTRACT_VERSION, the IMPORTABLE list TCC rea
 
 ### Group review J1
 
-`pr-review-toolkit:pr-test-analyzer` (sonnet) on the J1 diff; one fix round; the full suite once.
+`pr-review-toolkit:pr-test-analyzer` (opus) on the J1 diff; one fix round; the full suite once.
 
 ---
 
@@ -2209,7 +2210,7 @@ git commit -am "#134: the live pass at REW -- the filters' read-back shape and r
 
 ### Group review — silent failures (Tasks 5–12)
 
-- `pr-review-toolkit:silent-failure-hunter` and `pr-review-toolkit:pr-test-analyzer` (sonnet), both on
+- `pr-review-toolkit:silent-failure-hunter` and `pr-review-toolkit:pr-test-analyzer` (opus), both on
   `git diff <the commit before Task 5>..HEAD`. Their findings: one fix round, each fix with its test.
 - Fable: the final review of the same diff — `project_io`, `Process.load`/`_write`, the gates, the catch-all,
   `rew_api`'s transport and read-back.
@@ -2341,8 +2342,8 @@ Resolutions — the source of truth is named in each row; where it is the code, 
 
 ### Group review S1
 
-One sonnet reader per §5.1 row pair: "do the two copies now say the same thing, and does it match the source of
-truth named in Task 15's table?" Then `scripts/run-selftests.sh | tail -1`.
+One opus reviewer over every row of Task 15's table: "do the copies now say the same thing, and does it match the
+source of truth named in the row?" Then `scripts/run-selftests.sh | tail -1`.
 
 ---
 
