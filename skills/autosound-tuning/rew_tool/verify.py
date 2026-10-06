@@ -472,10 +472,10 @@ def _selftest():
     assert _driver_of("tw-R_01") == "tw-R"
 
     # ── an RTA is not a failed sweep (TCC-008) ──────────────────────────────────────────────
-    # The three states this verdict keeps apart, exercised without REW by stubbing the one call
-    # that needs it. `applicable: False` must NOT read as `valid: False` to anyone downstream:
+    # The three states this verdict keeps apart, exercised without REW by stubbing the calls
+    # that need it. `applicable: False` must NOT read as `valid: False` to anyone downstream:
     # a front-end colouring rows sees "grey", not "red", and the reason says which.
-    _orig_gm, _orig_fr = _api.get_measurements, _api.get_fr
+    _orig_gm, _orig_fr, _orig_ir = _api.get_measurements, _api.get_fr, _api.get_impulse_response
     rta   = {"title": "ALL_60 (rta)", "uuid": "u1",
              "notes": "65536-point 1/48 octave RTA using Hann window, no smoothing and 150 averages"}
     swept = {"title": "sw_60 (sw)", "uuid": "u2",
@@ -487,6 +487,8 @@ def _selftest():
         asked = []
         _api.get_fr = lambda mid, smoothing=None: (asked.append(smoothing), (
             [20 * (10 ** (k / 100.0)) for k in range(301)], [70 + 10 * (k % 7) for k in range(301)], None))[1]
+        # The impulse too (T-30): unstubbed, the sweep's IR came from whatever REW runs here.
+        _api.get_impulse_response = lambda mid, normalised=True: ([0.0, 1 / 48000, 2 / 48000], [0.0, 1.0, 0.0])
         v_rta = verdict("ALL_60 (rta)", measurements=listing)
         assert v_rta["exists"] is True, v_rta
         assert v_rta["applicable"] is False and v_rta["kind"] == _api.RTA, v_rta
@@ -508,7 +510,7 @@ def _selftest():
         assert [r["applicable"] for r in probe["rows"]] == [False, True], probe["rows"]
         assert "0 unusable, 1 not checked (not a sweep)" in render_session(probe).splitlines()[0]
     finally:
-        _api.get_measurements, _api.get_fr = _orig_gm, _orig_fr
+        _api.get_measurements, _api.get_fr, _api.get_impulse_response = _orig_gm, _orig_fr, _orig_ir
 
     # Two captures of one driver, 24 dB apart: the worse one is flagged, the cleaner is not, and
     # a different driver's capture is judged only against its own.

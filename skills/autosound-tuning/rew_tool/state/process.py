@@ -3052,12 +3052,14 @@ def _selftest():
         except ProcessError:
             pass
     # A round that closes with no knobs recorded says so, at the one moment the answer is still in
-    # the room -- and closes anyway, because refusing would strand a session mid-car.
+    # the room -- and closes anyway, because refusing would strand a session mid-car. REW is a dead
+    # port here (T-30): the close runs with REW down whatever listens on 4735 on this machine.
     bare = Process(os.path.join(root, "process-bare"))
     bare.enter_phase("0")
     bare.start_capture("7", expected=["m-L_7 (sw)"], phase="0")
     bare_out = subprocess.run([sys.executable, _mod, bare.dir, "capture-close"],
-                              capture_output=True, text=True, encoding="utf-8", errors="replace")
+                              capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              env={**os.environ, "PYTHONIOENCODING": "utf-8", "REW_API_URL": "http://127.0.0.1:1"})
     assert bare_out.returncode == 0 and "NO KNOBS RECORDED" in bare_out.stdout, bare_out
     out = _cli("capture-protective", "tw-L", "--hp", "1000", "LR", "24")
     assert out.returncode == 0, out.stderr

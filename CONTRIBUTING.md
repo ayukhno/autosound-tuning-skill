@@ -62,12 +62,13 @@ Before opening a PR, make sure you have:
   `node scripts/xss-proof-visualizer.mjs <the .html>` drops that file name, that name inside a
   file body and that name in a `#curve=` link into headless Chrome and reports whether the text
   stayed text — or drop such a file by hand and read the card.
-- **Run `scripts/run-selftests.sh`** — the installer check plus every `rew_tool` module's own
-  selftest, 69 in all (2026-09-09; the runner prints the current count itself —
-  `scripts/run-selftests.sh | tail -1`, and that command is the answer, not this number). It needs
-  `numpy` and `scipy` (`dsp_math` and `eq_gate` import scipy by name, and the `dsp_math` selftest
-  designs crossovers). CI runs this exact script on push and PR, so a green run here is a green run
-  there.
+- **Run `scripts/run-selftests.sh`** — the repo's checks, every `rew_tool` module's own selftest
+  and ruff. Read the count off `scripts/run-selftests.sh | tail -1`, never off this line: the
+  verdict is always the last stdout line. A new `rew_tool` module goes into
+  `scripts/selftests.txt` with the argv its selftest takes, or on a `skip` line with the reason; a
+  module in neither fails the run. It needs `numpy` and `scipy` (`dsp_math` and `eq_gate` import
+  scipy by name, and the `dsp_math` selftest designs crossovers). CI runs this exact script on push
+  and PR, so a green run here is a green run there.
 - **Deliberately without a selftest:** `make_plot.py`. It renders one synthetic PNG for a
   one-off experiment (does a model read a picture of a curve better than the numbers?), and
   covering it would mean adding `matplotlib` to CI for a module no part of the method calls. A

@@ -79,18 +79,8 @@ jobs:
       # crossovers, which needs it. This is the step whose absence turned a consumer's suite red on
       # that upgrade -- it is stated here rather than assumed. matplotlib too (skill #98): the installers now
       # upgrade all three on every run, so the plotting tool is tested on the version users get.
-      - name: install dependencies
-        run: python -m pip install --upgrade pip numpy scipy matplotlib
-
-      - name: selftests and installer consistency
-        run: scripts/run-selftests.sh
-
-      # The installer is read by installer-consistency.py, never parsed by the shell that runs it; an
-      # edit that breaks its syntax would reach a person's machine first. `-n` reads, runs nothing.
-      - name: install.sh parses
-        run: bash -n install.sh
-
-      # The linter is PINNED while numpy and scipy above are not, and the difference is deliberate.
+      #
+      # The linter is PINNED while numpy and scipy on the same line are not, and the difference is deliberate.
       # A new numpy breaking us is information about the code. A new ruff going red is information
       # about ruff -- it ships new rules, and a check that turns red without anybody touching the
       # tree is exactly the blinking check this file opens by refusing to have. Raising the pin is
@@ -99,11 +89,19 @@ jobs:
       # Which classes run, and why only those, is in pyproject.toml next to the choice itself.
       # Installed explicitly rather than through `uvx`: `uv` is not guaranteed on the runner
       # image, and a check that depends on a tool nobody promised is a check that goes red for a
-      # reason unrelated to this repo. Same command locally: `uvx ruff@0.12.0 check`.
-      - name: ruff
-        run: |
-          python -m pip install ruff==0.12.0
-          ruff check
+      # reason unrelated to this repo. The runner below runs it (#133): it takes a ruff 0.12.0 on
+      # PATH, and locally `uvx ruff@0.12.0 check`.
+      - name: install dependencies
+        run: python -m pip install --upgrade pip numpy scipy matplotlib ruff==0.12.0
+
+      # GitHub sets CI=true, so a check the runner could not run (NOT RUN) fails here.
+      - name: selftests, installer consistency and ruff
+        run: scripts/run-selftests.sh
+
+      # The installer is read by installer-consistency.py, never parsed by the shell that runs it; an
+      # edit that breaks its syntax would reach a person's machine first. `-n` reads, runs nothing.
+      - name: install.sh parses
+        run: bash -n install.sh
 
   # Resonalyze's engines through the skill's wrapper (docs/DESIGN-2026-09-17-phase1-variants.md §3). The fork is
   # a submodule with `update = none` -- a recursive clone of the skill does not fetch it -- so this job asks for it

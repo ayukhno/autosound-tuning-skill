@@ -112,10 +112,12 @@ symlink on every user machine. It came back on 2026-08-26 and nothing noticed.
 
 ## Tests
 
-- **`scripts/run-selftests.sh` is the single entry point** — the installer check plus every
-  `rew_tool` module's own selftest, 55 in all (2026-09-07 — but read the count off
-  `scripts/run-selftests.sh | tail -1` rather than off this line; a number with no command beside
-  it ages in silence, which is how this one said 42 and CONTRIBUTING said 20 on the same day).
+- **`scripts/run-selftests.sh` is the single entry point** — the repo's checks, every `rew_tool`
+  module's own selftest and ruff. Read the count off `scripts/run-selftests.sh | tail -1`, never
+  off this line: the verdict is always the last stdout line, and a number with no command beside
+  it ages in silence (this one said 42 while CONTRIBUTING said 20 on the same day). A new
+  `rew_tool` module goes into `scripts/selftests.txt` with the argv its selftest takes, or on a
+  `skip` line with the reason; a module in neither fails the run (#133).
   It needs `numpy` and `scipy`, and CI runs this exact script, so a green run locally is a green
   run there.
 - **`uvx ruff@0.12.0 check` runs in CI and fails the build.** `F` and `E9` are on; `E4`/`E7` are

@@ -125,15 +125,17 @@ def _run(*args, env=None, ok=(0,)):
         set and stdout/stderr captured. Every tool here ends in `sys.exit(main())`, so the exit code
         is the `SystemExit` it raises. This saves the ~0.6 s numpy/scipy start-up per call, which
         was 22 of this walk's 31 seconds (measured 2026-08-27; 36 calls).
-      * a fresh process, ONLY when `env` carries `REW_API_URL`: `rew_api.BASE_URL` is read at
-        import, so a tool that must see the stub's address needs an interpreter that has not
-        imported `rew_api` yet. Running that stage in-process would silently talk to localhost:4735
-        -- the exact quiet failure this walk exists to catch.
+      * a fresh process, ONLY when `env` sets a `REW_API_URL` other than this process's own:
+        `rew_api.BASE_URL` is read at import, so a tool that must see the stub's address needs an
+        interpreter that has not imported `rew_api` yet. Running that stage in-process would
+        silently talk to localhost:4735 -- the exact quiet failure this walk exists to catch. The
+        same address as this process's (the runner exports a dead port to every selftest, #133)
+        changes nothing at import, so it stays in-process.
 
     A tool that raises anything other than `SystemExit` in-process is reported as rc 1 with its
     traceback in `out`, which is what the subprocess version would have shown.
     """
-    if env and "REW_API_URL" in env:
+    if env is not None and env.get("REW_API_URL") != os.environ.get("REW_API_URL"):
         # The child is one of ours, and the pipe between two of our own processes has no console
         # to respect: pin it to UTF-8 at both ends rather than inherit whatever page the machine
         # runs (issue #21). Without this the parent decodes UTF-8 while a Windows child writes

@@ -73,13 +73,20 @@ PYEOF
   base="$(G rev-parse HEAD)"
   # The last candidate of $next: the heading, the manifest, install.cmd's PS1URL -- and the front page left alone.
   "$PY" - "$repo" "$newest" "$next" <<'PYEOF' || return 1
-import json, pathlib, sys
+import json, pathlib, re, sys
 root, old, new = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
 ch = root / "CHANGELOG.md"
 s = ch.read_text(encoding="utf-8")
-i = s.index(f"## [{old}]")
-ch.write_text(s[:i] + f"## [{new}] — selftest\n\nA candidate that is the release.\n\n### Upgrading\n\n"
-              "- Nothing to do.\n\n" + s[i:], encoding="utf-8")
+note = f"## [{new}] — selftest\n\nA candidate that is the release.\n\n### Upgrading\n\n- Nothing to do.\n\n"
+# Between tags the tree carries `## [Unreleased]` (a wave's work in progress), and the release commit renames it: a
+# last candidate has none. Anchored to a line start -- the CHANGELOG's prose quotes the heading in backticks.
+m = re.search(r"(?m)^## \[[Uu]nreleased\][^\n]*\n", s)
+if m:
+    s = s[:m.start()] + note + s[m.end():]
+else:
+    i = s.index(f"## [{old}]")
+    s = s[:i] + note + s[i:]
+ch.write_text(s, encoding="utf-8")
 pj = root / ".claude-plugin" / "plugin.json"
 d = json.loads(pj.read_text(encoding="utf-8")); d["version"] = new[1:]
 pj.write_text(json.dumps(d, indent=2) + "\n", encoding="utf-8")
