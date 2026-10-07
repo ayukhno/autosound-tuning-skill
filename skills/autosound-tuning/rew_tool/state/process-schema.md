@@ -189,8 +189,9 @@ appended line is fsynced (and the folder, when the append made the file), so it 
   gets the new verdict. A title REW does not hold stays outstanding. It used to become a `taken` row
   with a failed verdict: a capture the round took, outstanding nowhere. A title REW holds more than
   once is taken, and not usable until it is renamed (H I-8): its verdict carries `ambiguous`, the
-  count, and its line reads `AMBIGUOUS <title> — REW holds N measurements under this title; rename so
-  titles are unique, then run capture-check again`; it was left outstanding as nobody's measurement.
+  count, and its line reads `UNUSABLE <title> — AMBIGUOUS: REW holds N measurements under this title;
+  rename so titles are unique, then run capture-check again` -- an UNUSABLE line, so a front end that
+  reads those reads it as it is (R57); it was left outstanding as nobody's measurement.
   `capture-check` reads a title's line from its `taken` row, else from `checks`. With REW not
   answering it records nothing and exits 69 (below); with REW's list not read for another reason --
   REW answered it with an error or with something it cannot read, or `REW_API_URL` is no address --

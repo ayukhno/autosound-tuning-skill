@@ -5758,7 +5758,8 @@ def _check_ambiguous_capture():
     """A title REW holds twice is its own verdict in the round too (#134, H I-8, T m4), through the real `verify`:
     REW holds it, so the check takes it -- a `taken` row, `exists` true -- where it was left outstanding as nobody's
     measurement and the tuner measured a third copy; and it is not usable until it is renamed. `capture-check` says
-    AMBIGUOUS with the count, exit 1, the step gate counts it unusable, and `--session` counts it apart."""
+    AMBIGUOUS with the count on an UNUSABLE line, in the form TCC's strip reads (`UNUSABLE <title> — `, R57), exit 1;
+    the step gate counts it unusable, and `--session` counts it apart."""
     import contextlib
     import io as _io
     import shutil
@@ -5781,9 +5782,14 @@ def _check_ambiguous_capture():
         assert p.capture_outstanding() == [] and p.unusable_captures() == ["a (sw)"], \
             (p.capture_outstanding(), p.unusable_captures())
         rc, out, err = _run_main(["process.py", d, "capture-check", "--session"])
-        lines = out.splitlines()
-        assert rc == EXIT_NO and "AMBIGUOUS a (sw) — REW holds 2 measurements under this title; rename so titles are " \
-            "unique, then run capture-check again" in lines and "UNUSABLE a (sw)" not in out, (rc, out, err)
+        said = [line for line in out.splitlines() if "a (sw)" in line and not line.startswith(" ")]
+        # An UNUSABLE line, so TCC's strip shows it with no change of TCC's (R57): it keeps the lines that start
+        # `UNUSABLE <title> — ` for a title it handed in (`main_window._on_capture_check_done`). AMBIGUOUS and the
+        # count ride in the reason.
+        assert rc == EXIT_NO and len(said) == 1 and said[0].startswith("UNUSABLE a (sw) — ") \
+            and "AMBIGUOUS" in said[0] and "REW holds 2 measurements" in said[0], (rc, out, err)
+        assert said[0] == ("UNUSABLE a (sw) — AMBIGUOUS: REW holds 2 measurements under this title; rename so titles "
+                           "are unique, then run capture-check again"), said
         assert "titles, 0 usable, 0 missing, 0 unusable, 1 ambiguous" in out, out
     finally:
         api.get_measurements = real
@@ -6996,9 +7002,10 @@ def _main(argv):
                 elif verdict.get("applicable") is False:
                     print(f"N/A     {title} — {'; '.join(verdict.get('issues') or [])}")
                 elif verdict.get("ambiguous"):
-                    # Its own verdict (H I-8): REW holds it, so it is not missing -- and not usable until renamed.
-                    print(f"AMBIGUOUS {title} — REW holds {verdict['ambiguous']} measurements under this title; "
-                          "rename so titles are unique, then run capture-check again")
+                    # Its own verdict (H I-8): REW holds it, so it is not missing -- and not usable until renamed. On
+                    # an UNUSABLE line, `UNUSABLE <title> — `, the form TCC's strip keeps (R57): it shows there as it is.
+                    print(f"UNUSABLE {title} — AMBIGUOUS: REW holds {verdict['ambiguous']} measurements under this "
+                          "title; rename so titles are unique, then run capture-check again")
                 else:
                     reason = "; ".join(verdict.get("issues") or ["не перевірено"])
                     print(f"UNUSABLE {title} — {reason}")
