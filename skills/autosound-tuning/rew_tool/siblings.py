@@ -103,6 +103,7 @@ def _selftest():
     put("fb.py", "import siblings_probe\nA = siblings_probe.load('fa.py')\n")
     put("gated.py", "import sys\ngate = sys.modules['siblings_load_gate']\ngate.entered.set()\ngate.release.wait(60)\n"
                     "DONE = True\n")
+    put("linked.py", "N = object()\n")
     spec = importlib.util.spec_from_file_location("siblings_probe", os.path.join(root, "siblings.py"))
     sib = importlib.util.module_from_spec(spec); sys.modules["siblings_probe"] = sib; spec.loader.exec_module(sib)
     failures = []
@@ -122,6 +123,58 @@ def _selftest():
         other = importlib.util.module_from_spec(other_spec); sys.modules["someone_elses_name"] = other
         other_spec.loader.exec_module(other)
         assert sib.load("a.py") is other
+    def same_name_elsewhere_is_not_adopted():
+        # A front end holds files of the method's NAMES in folders of its own (TCC: core/listening.py,
+        # core/eq_export.py, core/protective.py). One of the same file name from another folder is not this file:
+        # loaded first, under a name of its own, it is never adopted for it.
+        other_dir = tempfile.mkdtemp()
+        want = os.path.normcase(os.path.realpath(os.path.join(root, "a.py")))
+        earlier = {k: m for k, m in list(sys.modules.items())
+                   if getattr(m, "__file__", None) and os.path.normcase(os.path.realpath(m.__file__)) == want}
+        try:
+            with open(os.path.join(other_dir, "a.py"), "w", encoding="utf-8") as f:
+                f.write("X = 'not the method'\n")
+            for k in earlier:                       # nothing of the method's a.py left to find first
+                del sys.modules[k]
+            sib._BY_PATH.clear()
+            spec_ = importlib.util.spec_from_file_location("front_end_core_a", os.path.join(other_dir, "a.py"))
+            foreign = importlib.util.module_from_spec(spec_)
+            sys.modules[spec_.name] = foreign
+            spec_.loader.exec_module(foreign)
+            got = sib.load("a.py")
+            assert got is not foreign, "a.py from another folder was adopted for the method's a.py"
+            assert os.path.normcase(os.path.realpath(got.__file__)) == want, got.__file__
+        finally:
+            sys.modules.pop("front_end_core_a", None)
+            sys.modules.update(earlier)
+            sib._BY_PATH.clear()
+            shutil.rmtree(other_dir, ignore_errors=True)
+    no_symlinks = []
+    def adopts_through_a_linked_folder():
+        # An installed method is a link into the clone, and a front end loads it through that link: a module whose
+        # `__file__` runs through a linked FOLDER is this file, and is adopted. Pinned here, not by macOS's /var ->
+        # /private/var alone: where the temporary folder is a real path (a Linux CI), nothing else tells the real
+        # path's comparison from a plain one.
+        links = tempfile.mkdtemp()
+        link = os.path.join(links, "method")
+        try:
+            os.symlink(root, link)
+        except (OSError, NotImplementedError):
+            shutil.rmtree(links, ignore_errors=True)
+            no_symlinks.append(True)                # Windows without the privilege: said above the last line
+            return
+        try:
+            spec_ = importlib.util.spec_from_file_location("front_end_vendor_linked", os.path.join(link, "linked.py"))
+            linked = importlib.util.module_from_spec(spec_)
+            sys.modules[spec_.name] = linked
+            spec_.loader.exec_module(linked)
+            sib._BY_PATH.clear()
+            assert sib.load("linked.py") is linked, "a copy loaded through a linked folder was run a second time"
+        finally:
+            sys.modules.pop("front_end_vendor_linked", None)
+            sys.modules.pop(sib.module_name("linked.py"), None)
+            (os.rmdir if os.name == "nt" else os.unlink)(link)     # the link only, never what it points at
+            shutil.rmtree(links, ignore_errors=True)
     def fails_clean():
         try:
             sib.load("boom.py")
@@ -214,6 +267,7 @@ def _selftest():
                 assert got.get("first") is second is published, f"{rel}: the racing calls ended with two objects"
         finally:
             sys.modules.pop(gate.__name__, None)
+            shutil.rmtree(fake, ignore_errors=True)
     def cycle():
         c1 = sib.load("cyc1.py")
         assert c1.B.A is c1
@@ -258,15 +312,25 @@ def _selftest():
             sib._LOCK = lock
             sys.modules.pop(gate.__name__, None)
         assert got.get("complete") is True, "a thread was handed gated.py while another was still running it"
-    for label, fn in (("one object", one_object), ("adopts a loaded copy", adopts), ("fails clean", fails_clean),
-                      ("a miss reads only that name", a_miss_reads_only_that_name),
-                      ("the bootstrap publishes after it has run", bootstrap_publishes_after_run),
-                      ("cycle", cycle), ("threads", threads),
-                      ("a load in progress is waited for", waits_for_a_load_in_progress)):
-        check(label, fn)
+    try:
+        for label, fn in (("one object", one_object), ("adopts a loaded copy", adopts),
+                          ("a file of the same name in another folder is not adopted",
+                           same_name_elsewhere_is_not_adopted),
+                          ("a copy loaded through a linked folder is adopted", adopts_through_a_linked_folder),
+                          ("fails clean", fails_clean),
+                          ("a miss reads only that name", a_miss_reads_only_that_name),
+                          ("the bootstrap publishes after it has run", bootstrap_publishes_after_run),
+                          ("cycle", cycle), ("threads", threads),
+                          ("a load in progress is waited for", waits_for_a_load_in_progress)):
+            check(label, fn)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
     assert not failures, "\n".join(failures)
-    print("siblings selftest OK -- one object per file, adoption, clean failure, cycles, threads, a load in progress "
-          "waited for; a miss reads only that name; every _siblings() copy publishes siblings.py only after it has run")
+    if no_symlinks:
+        print("siblings: this system refuses symlinks -- the linked-folder adoption was not checked here")
+    print("siblings selftest OK -- one object per file, adoption (a copy through a linked folder too, never a file of "
+          "the same name from another folder), clean failure, cycles, threads, a load in progress waited for; a miss "
+          "reads only that name; every _siblings() copy publishes siblings.py only after it has run")
 
 
 if __name__ == "__main__":

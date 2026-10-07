@@ -1286,25 +1286,66 @@ def _musway_stub():
 def _check_loads_by_path():
     """The load TCC does (skill #137, audit T-27): this file by its path, from an empty folder, `PYTHONPATH` unset --
     and a call that reaches a lazy sibling load. The probe must run to its end ("loaded", then what the call
-    returned), so a probe that dies another way -- a half-run siblings, a file not found -- fails here too."""
+    returned), so a probe that dies another way -- a half-run siblings, a file not found -- fails here too.
+
+    The profile declares one crossover family, so `annotate_modellable` runs its loop (J1 review): called with `{}`,
+    it never did, and a sibling load moved into the loop went unprobed. LR at 24 dB/oct is a family and an order
+    the method realises, so the stamp the loop writes is `true`."""
     import subprocess, tempfile
-    probe = ("import importlib.util, sys\n"
+    probe = ("import importlib.util, json, sys\n"
              "spec = importlib.util.spec_from_file_location('probe_dsp_profile', sys.argv[1])\n"
              "m = importlib.util.module_from_spec(spec); sys.modules[spec.name] = m; spec.loader.exec_module(m)\n"
              "print('loaded', flush=True)\n"
-             "print(m.annotate_modellable({}))\n")
+             "p = {'groups': [{'crossover_filters': {'types': {'LR': {'orders_db_per_oct': [24]}}}}]}\n"
+             "print(json.dumps(m.modellable_families(m.annotate_modellable(p))))\n")
     env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
     with tempfile.TemporaryDirectory() as empty:
         r = subprocess.run([sys.executable, "-c", probe, os.path.abspath(__file__)], cwd=empty,
                            env=env, capture_output=True, text=True, timeout=120)
     assert "ModuleNotFoundError" not in r.stderr and "ImportError" not in r.stderr, r.stderr[-600:]
-    assert r.returncode == 0 and r.stdout.splitlines() == ["loaded", "{}"], \
+    assert r.returncode == 0 and r.stdout.splitlines() == ["loaded", '{"LR": true}'], \
         (r.returncode, r.stdout[-300:], r.stderr[-600:])
+
+
+def _check_bind_model_rate_binds_the_callers_dsp_math():
+    """`bind_model_rate` binds the rate on THE `dsp_math` its caller computes with (J1 review) -- a front end's copy
+    loaded by path under a name of its own, or the bare `import dsp_math` predict.py makes -- never on a copy of its
+    own: that leaves the caller modelling a 48 kHz device at the assumed 96 kHz, and nothing says so. Each form in a
+    fresh python: a binding is sticky (`RateConflict`). The rate is the profile's; "profile" is the source a profile's
+    binding carries."""
+    import subprocess, tempfile
+    profile = {"dsp_profile": {"name": "x", "vendor": "x", "groups": [], "dsp_processing_rate_hz": 48000}}
+    by_path = ("import importlib.util, json, os, sys\n"
+               "def by_path(name, rel):\n"
+               "    spec = importlib.util.spec_from_file_location(name, os.path.join(sys.argv[1], rel))\n"
+               "    m = importlib.util.module_from_spec(spec); sys.modules[name] = m; spec.loader.exec_module(m)\n"
+               "    return m\n"
+               "math_ = by_path('front_end_dsp_math', 'dsp_math.py')\n"
+               "prof = by_path('front_end_dsp_profile', 'dsp_profile.py')\n"
+               "print(json.dumps([prof.bind_model_rate(json.loads(sys.argv[2])), math_.processing_rate()]))\n")
+    bare = ("import json, sys\n"
+            "sys.path.insert(0, sys.argv[1])\n"
+            "import dsp_math\n"
+            "import dsp_profile\n"
+            "print(json.dumps([dsp_profile.bind_model_rate(json.loads(sys.argv[2])), dsp_math.processing_rate()]))\n")
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    missed = []
+    for form, probe in (("by path, under a front end's names", by_path), ("bare imports, as predict.py", bare)):
+        with tempfile.TemporaryDirectory() as empty:
+            r = subprocess.run([sys.executable, "-c", probe, os.path.dirname(os.path.abspath(__file__)),
+                                json.dumps(profile)], cwd=empty, env=env, capture_output=True, text=True, timeout=120)
+        if r.returncode != 0:
+            missed.append(f"{form}: {r.stderr.strip().splitlines()[-1:]}")
+            continue
+        said = json.loads(r.stdout.splitlines()[-1])
+        if said != [[48000.0, None], [48000.0, "profile"]]:
+            missed.append(f"{form}: bind_model_rate said {said[0]}, the caller's dsp_math models at {said[1]}")
+    assert not missed, "; ".join(missed)
 
 
 def _selftest():
     failures = []
-    for check in (_check_loads_by_path,):
+    for check in (_check_loads_by_path, _check_bind_model_rate_binds_the_callers_dsp_math):
         try:
             check()
         except AssertionError as exc:

@@ -2717,6 +2717,38 @@ def _check_every_loader_shares():
         assert got is sib.load(rel), f"{rel}: the loader ran a copy of its own"
 
 
+def _check_load_sibling_reads_a_failure_as_none():
+    """`_load_sibling` is None when a sibling cannot be loaded -- a file that is not there, or one that fails at import
+    (verify.py needs numpy) -- and never raises (J1 review): its callers read None as "cannot tell", and a gate must
+    not crash on it. Through `Process._load_verifier` too, the one a capture check calls. Not through `_load_naming`:
+    that caches the None for the whole process."""
+    import types
+
+    def loaded(fn, *args):
+        try:
+            return fn(*args)
+        except Exception as exc:  # noqa: BLE001 -- the contract under test is "None, never a raise"
+            return f"raised {type(exc).__name__}: {exc}"
+
+    got = loaded(_load_sibling, "no_such_module.py")
+    assert got is None, f"a sibling that is not there: {got}"
+    real = globals()["_siblings"]
+
+    def failing(exc):
+        def load(rel):
+            raise exc
+        return lambda: types.SimpleNamespace(load=load)
+    try:
+        for exc in (RuntimeError("verify.py fails at import"), ModuleNotFoundError("No module named 'numpy'")):
+            globals()["_siblings"] = failing(exc)
+            got = loaded(_load_sibling, "verify.py")
+            assert got is None, f"{exc!r}: _load_sibling gave {got}"
+            got = loaded(Process(os.path.join("never-written", "process"))._load_verifier)
+            assert got is None, f"{exc!r}: Process._load_verifier gave {got}"
+    finally:
+        globals()["_siblings"] = real
+
+
 def _selftest():
     """The refusals, exercised. This module is the one with the most of them — evidence must exist
     and must resolve (SCR-035), a round's captures must be usable (SCR-040), phase 0 must record a
@@ -2724,7 +2756,7 @@ def _selftest():
     selftest at all, so every one of those gates was a thing nobody had run since it was written.
     """
     failures = []
-    for check in (_check_one_naming, _check_every_loader_shares):
+    for check in (_check_one_naming, _check_every_loader_shares, _check_load_sibling_reads_a_failure_as_none):
         try:
             check()
         except AssertionError as exc:
