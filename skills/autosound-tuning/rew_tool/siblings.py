@@ -276,7 +276,7 @@ def _selftest():
         ts = [threading.Thread(target=sib.load, args=("slow.py",)) for _ in range(8)]
         for t in ts: t.start()
         for t in ts: t.join()
-        with open(os.path.join(root, "ran.txt")) as f:
+        with open(os.path.join(root, "ran.txt"), encoding="utf-8") as f:
             assert f.read() == "x", "slow.py ran more than once"
     def waits_for_a_load_in_progress():
         # A thread asking for a file another thread is still running waits until it has run -- never handed the
@@ -334,4 +334,6 @@ def _selftest():
 
 
 if __name__ == "__main__":
+    console = load("console.py")         # issue #21: a code page must not destroy a result; by this file's own route
+    console.install()
     _selftest()

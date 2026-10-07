@@ -723,9 +723,11 @@ def _check_loads_by_path():
              "    print('dead port')\n")
     env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
     env["REW_API_URL"] = "http://127.0.0.1:1"
+    env["PYTHONIOENCODING"] = "utf-8"                    # both ends of the pipe in UTF-8 (issue #21)
     with tempfile.TemporaryDirectory() as empty:
         r = subprocess.run([sys.executable, "-c", probe, os.path.abspath(__file__)], cwd=empty,
-                           env=env, capture_output=True, text=True, timeout=120)
+                           env=env, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           timeout=120)
     assert "ModuleNotFoundError" not in r.stderr and "ImportError" not in r.stderr, r.stderr[-600:]
     assert r.returncode == 0 and r.stdout.splitlines() == ["loaded", "dead port"], \
         (r.returncode, r.stdout[-300:], r.stderr[-600:])

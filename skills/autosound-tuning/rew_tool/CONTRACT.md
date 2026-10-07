@@ -158,11 +158,14 @@ today, every one the code reads:
 - the Resonalyze engine: `AUTOSOUND_RESONALYZE_ENGINE`;
 - for developers only: `AUTOSOUND_SKIP_TAG_VERIFY` (the installers), `AUTOSOUND_UPSTREAM_CLONE`
   (`scripts/upstream-drift.py`), `AUTOSOUND_PASSAT_IR_SET` and `AUTOSOUND_PASSAT_PROJECT` (the Resonalyze
-  engine's acceptance run), `SMOKE_VERBOSE` (`scripts/smoke_test.py`), and the selftest runner's `SELFTEST_TIMEOUT`,
-  `SELFTEST_TOOL`, `SELFTEST_MANIFEST` and `SELFTEST_ONLY_TOOL`.
+  engine's acceptance run), `SMOKE_VERBOSE` (`scripts/smoke_test.py`), the selftest runner's `SELFTEST_TIMEOUT`,
+  `SELFTEST_TOOL`, `SELFTEST_MANIFEST` and `SELFTEST_ONLY_TOOL`, `PYTHON` (the interpreter `scripts/run-selftests.sh`
+  and `scripts/tag-check.sh` run) and `PREFLIGHT` (`scripts/tag-check.sh`'s path to the hub's release preflight).
 
-Beyond these, the code reads only the system's own (`PATH`, `HOME`, `APPDATA`, `LOCALAPPDATA`, `XDG_*`, `EDITOR`,
-`VISUAL`, ...) and Claude Code's `CLAUDE_PLUGIN_ROOT` (the plugin's session hook).
+Beyond these, the code reads only the system's and Python's own (`PATH`, `HOME`, `SHELL`, `APPDATA`,
+`LOCALAPPDATA`, `ProgramFiles`, `XDG_*`, `EDITOR`, `VISUAL`, `no_proxy`, `PYTHONPATH`, ...), a CI's `CI`
+(`scripts/run-selftests.sh`), uv's `UV_TOOL_BIN_DIR` (where `install.sh` also looks for TCC), and Claude Code's
+`CLAUDE_PLUGIN_ROOT` (the plugin's session hook).
 
 ## 11. REW write semantics — planned (W-8, #134)
 
@@ -175,8 +178,9 @@ is verified (audit K-1). PLAN-W-8 Task 9 flips this item.
   strictness a caller opts into, a new trailing parameter with a default, a usage error for a flag a correct caller
   never sends.
 - A breaking change to a guaranteed item moves `CONTRACT_VERSION`. For a listed name that is: removing or renaming
-  it, or a parameter TCC passes removed, renamed, made keyword-only or positional-only, or its default removed or
-  given another value. It happens only in a minor (a `### Breaking` entry, which the release preflight refuses on a
+  it; making it another kind of thing (a value made a function, a function made async or a property); or a
+  parameter TCC passes removed, renamed, made keyword-only or positional-only, or its default removed or given
+  another value. It happens only in a minor (a `### Breaking` entry, which the release preflight refuses on a
   patch), and only after a TCC release that accepts the new number is out (§8 M5).
 - A bump to N+1 moves `CONTRACT_VERSION` and this file's title, and adds the table of contract N+1 to the guard's
   `FROZEN`, generated from the bump's `IMPORTABLE` in the same commit; the table of contract N stays as it was. The

@@ -26,7 +26,8 @@
      whatever IMPORTABLE says now.
   7. No function of a CLEAN module imports a sibling by its bare name -- loaded by path, rew_tool/ is not on
      sys.path -- but the command lines CLI_IMPORTS names; and no module of the method calls `_siblings()` at import,
-     where a load under the import lock can deadlock against siblings' own lock.
+     where a load under the import lock can deadlock against siblings' own lock. The body of a top-level
+     `if __name__ == "__main__":` is not import: it runs as a script, outside any import lock.
 """
 import ast
 import json
@@ -373,14 +374,37 @@ def _sibling_names(tool):
     return names
 
 
+def _runs_as_script(test):
+    """Is an `if`'s test `__name__ == "__main__"` (either way round)?"""
+    if not (isinstance(test, ast.Compare) and len(test.ops) == 1 and isinstance(test.ops[0], ast.Eq)):
+        return False
+    sides = (test.left, test.comparators[0])
+    return (any(isinstance(s, ast.Name) and s.id == "__name__" for s in sides)
+            and any(isinstance(s, ast.Constant) and s.value == "__main__" for s in sides))
+
+
 class _Scopes(ast.NodeVisitor):
     """Where a module's imports and `_siblings()` calls run (rule 7): inside a function, when it is called; or at
-    import -- the module's body, a class body, a decorator, a default value."""
+    import -- the module's body, a class body, a decorator, a default value. The body of a top-level
+    `if __name__ == "__main__":` is neither: it runs as a script, outside any import lock."""
 
     def __init__(self):
         self.stack = []          # ("class" | "def", name), from the module down
         self.imports = []        # (the outermost function, `f` or `Class.f`; line; the top name imported)
         self.at_import = []      # lines of a `_siblings()` call that runs at import
+        self.as_script = 0       # inside the body of `if __name__ == "__main__":`
+
+    def visit_If(self, node):
+        if self.stack or not _runs_as_script(node.test):
+            self.generic_visit(node)
+            return
+        self.visit(node.test)
+        self.as_script += 1
+        for n in node.body:
+            self.visit(n)
+        self.as_script -= 1
+        for n in node.orelse:    # the `else:` runs on import
+            self.visit(n)
 
     def _function(self):
         names = []
@@ -429,7 +453,7 @@ class _Scopes(ast.NodeVisitor):
             self.imports.append((function, node.lineno, node.module.split(".")[0]))
 
     def visit_Call(self, node):
-        if self._function() is None and getattr(node.func, "id", None) == "_siblings":
+        if self._function() is None and not self.as_script and getattr(node.func, "id", None) == "_siblings":
             self.at_import.append(node.lineno)
         self.generic_visit(node)
 
@@ -540,6 +564,7 @@ def check(tool, scripts, clean=CLEAN, calls=CALLS, frozen=FROZEN, cli_imports=CL
     # is open on the machine.
     env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
     env["REW_API_URL"] = "http://127.0.0.1:1"
+    env["PYTHONIOENCODING"] = "utf-8"                    # both ends of the pipe in UTF-8, whatever the code page
     for rel in importable:
         path = os.path.join(tool, *rel.split("/"))
         if not os.path.isfile(path):
@@ -547,7 +572,7 @@ def check(tool, scripts, clean=CLEAN, calls=CALLS, frozen=FROZEN, cli_imports=CL
         call, args = calls.get(rel, ("", "()"))
         with tempfile.TemporaryDirectory(prefix="contract_probe_") as empty:   # a fresh empty folder, removed after
             r = subprocess.run([sys.executable, "-c", PROBE, path, call, args], cwd=empty, env=env,
-                               capture_output=True, text=True, timeout=120)
+                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
         if r.returncode != 0:
             problems.append(f"{rel}: does not load by path from an empty folder -- {r.stderr.strip().splitlines()[-1:]}")
             continue
@@ -744,6 +769,16 @@ def _selftest():
                "m.py: _siblings() runs at module level")
         broken("_siblings() in a default value", "rew_tool/m.py", "def _main(argv):\n",
                "def _main(argv=_siblings()):\n", "m.py: _siblings() runs at module level")
+        # A script's `if __name__ == "__main__":` block runs outside any import lock: a load there is not at import.
+        # Its `else:`, and a test that is not that one, still run on import (J1 review, round 2).
+        script = "def _main(argv):\n    import n\n    return n.Y\n"
+        allowed("_siblings() in the `if __name__ == \"__main__\":` block", "rew_tool/m.py", script,
+                script + '\n\nif __name__ == "__main__":\n    _siblings().load("sub/n.py")\n')
+        broken("_siblings() in the else of that block", "rew_tool/m.py", script,
+               script + '\n\nif __name__ == "__main__":\n    pass\nelse:\n    _siblings()\n',
+               "m.py: _siblings() runs at module level")
+        broken("_siblings() under `if __name__ != \"__main__\":`", "rew_tool/m.py", script,
+               script + '\n\nif __name__ != "__main__":\n    _siblings()\n', "m.py: _siblings() runs at module level")
         # The probe's arguments evaluate before the call, outside its `except` (J1 review).
         named("a CALLS literal that does not evaluate", "m.py: CALLS gives lazy() the arguments '(', which are not "
               "a tuple literal", calls_={"m.py": ("lazy", "(")})
@@ -893,7 +928,8 @@ def _selftest():
           "IMPORTABLE does not, CONTRACT.md item 9 out of step with IMPORTABLE or CLEAN, a _siblings copy that is "
           "not the guard's text (one copy or all of them), a module with _siblings and no top-level os or sys, a "
           "bare sibling import inside a function of a CLEAN module (its named command line passes), _siblings() "
-          "run at import, a module that fails at load, a CLEAN module that edits sys.path, a bare import in a probe "
+          "run at import (a script's `__main__` block passes), a module that fails at load, a CLEAN module that "
+          "edits sys.path, a bare import in a probe "
           "call, a probe call that is not there, probe arguments that are not a tuple literal; the probe ignores "
           "the caller's PYTHONPATH and REW_API_URL; the verdict names the contract the tree holds")
 

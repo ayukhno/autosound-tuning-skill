@@ -1298,10 +1298,13 @@ def _check_loads_by_path():
              "print('loaded', flush=True)\n"
              "p = {'groups': [{'crossover_filters': {'types': {'LR': {'orders_db_per_oct': [24]}}}}]}\n"
              "print(json.dumps(m.modellable_families(m.annotate_modellable(p))))\n")
+    # The child writes UTF-8 and the parent reads it as UTF-8, whatever the machine's code page (issue #21).
     env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    env["PYTHONIOENCODING"] = "utf-8"
     with tempfile.TemporaryDirectory() as empty:
         r = subprocess.run([sys.executable, "-c", probe, os.path.abspath(__file__)], cwd=empty,
-                           env=env, capture_output=True, text=True, timeout=120)
+                           env=env, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           timeout=120)
     assert "ModuleNotFoundError" not in r.stderr and "ImportError" not in r.stderr, r.stderr[-600:]
     assert r.returncode == 0 and r.stdout.splitlines() == ["loaded", '{"LR": true}'], \
         (r.returncode, r.stdout[-300:], r.stderr[-600:])
@@ -1329,11 +1332,13 @@ def _check_bind_model_rate_binds_the_callers_dsp_math():
             "import dsp_profile\n"
             "print(json.dumps([dsp_profile.bind_model_rate(json.loads(sys.argv[2])), dsp_math.processing_rate()]))\n")
     env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    env["PYTHONIOENCODING"] = "utf-8"                    # both ends of the pipe in UTF-8 (issue #21)
     missed = []
     for form, probe in (("by path, under a front end's names", by_path), ("bare imports, as predict.py", bare)):
         with tempfile.TemporaryDirectory() as empty:
             r = subprocess.run([sys.executable, "-c", probe, os.path.dirname(os.path.abspath(__file__)),
-                                json.dumps(profile)], cwd=empty, env=env, capture_output=True, text=True, timeout=120)
+                                json.dumps(profile)], cwd=empty, env=env, capture_output=True, text=True,
+                               encoding="utf-8", errors="replace", timeout=120)
         if r.returncode != 0:
             missed.append(f"{form}: {r.stderr.strip().splitlines()[-1:]}")
             continue
