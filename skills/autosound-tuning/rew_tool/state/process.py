@@ -957,12 +957,13 @@ class Process:
         modes part (#136, audit K-2):
 
         * lenient, the default: the empty process, as before. For readers -- a screen, a lookup -- where an empty
-          plan beats a traceback: the callers outside this module, and TCC, read it so.
+          plan beats a traceback: the callers outside this module, TCC, and the display-only verbs
+          (`_DISPLAY_VERBS`).
         * `strict=True`: `project_io.Unreadable`, naming the file and its repair; match it by its `is_unreadable`
-          attribute. For a reader whose answer IS the state: `show`, `session-close`, `contract.py check`.
+          attribute. Every other verb reads so before it does anything (`_main`), and so does `contract.py check`.
 
-        A writer never puts what a lenient read made of such a file back on disk: `_write` reads the file strictly
-        before it replaces it.
+        Nothing is written from what a lenient read made of such a file: `_write` and `_append` read the file
+        strictly before they write.
         """
         try:
             state = self._read_state()
@@ -2579,6 +2580,10 @@ class Process:
 
     def _append(self, event_type, **payload):
         if event_type != EV_WRITTEN_BY:
+            # Strictly first, as `_write` (#136): no event is appended beside a state that cannot be read -- several
+            # carry what they read of it (the phase, the open round), and `project.py record-change` and any other
+            # caller outside `_main` write through here.
+            self._read_state()
             self._stamp()
         event = {"at": _now(), "type": event_type}
         event.update({k: v for k, v in payload.items() if v is not None})
@@ -2697,6 +2702,11 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
                                          evidence resolves to nothing on disk
   selftest                              this module's own gates, on a throwaway project
 """
+
+#: The verbs that only DISPLAY (#136, the read rule): they write nothing and show a `process-state.json` that cannot
+#: be read as an empty process. Every other verb -- each that writes the state or the journal, each verdict, and
+#: `show` -- reads the file strictly before it does anything, so a verb not listed here is strict.
+_DISPLAY_VERBS = ("plan", "amp-changes", "listening-verdicts")
 
 
 def _seed_intake(root):
@@ -2969,6 +2979,96 @@ def _check_unreadable_state():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_every_writer_refuses_unreadable():
+    """The read rule, verb by verb (#136, R24). On a `process-state.json` that is there and cannot be read, every verb
+    that writes -- the state or the journal -- and every verdict (`check`, `handoff`, `session-close`, and `show`)
+    exits 1 naming the file and its repair before it does anything: nothing on stdout, the state and the journal
+    byte for byte as they were. Each used to run on an empty process: the journal-only verbs appended, `check` said
+    0 and exit 0, the others refused for a step or a round the empty process lacked. The verbs are read off `_main`'s
+    dispatch, so a new one cannot slip past this table; only `_DISPLAY_VERBS` still read such a file as an empty
+    process, and they write nothing. In code, `_append` refuses as `_write` does (`project.py record-change` appends
+    through it)."""
+    import ast
+    import contextlib
+    import io as _io
+    import shutil
+    import tempfile
+    strict = (["show"], ["enter-phase", "-1"], ["add-step", "2.9", "a step", "--project"], ["start", "2.3"],
+              ["done", "2.3", "v_001"], ["skip", "2.3", "not needed"], ["block", "2.3", "waiting"],
+              ["reviewer", "Gemini", "g-3"], ["target", "FULL", "Jazzi"], ["decision", "keep 45 degrees?", "yes"],
+              ["session-start", "tcc", "opus"], ["session-close"], ["session-close", "--check"],
+              ["session-reopen", "it", "was", "a", "check"], ["capture-start", "2", "w-L_2 (sw)"], ["capture-check"],
+              ["capture-taken", "w-L_2 (sw)"],
+              ["capture-import", "2", "w-L_2 (sw)", "--bind", "=v_001", "--knob", "SubRC=4/4"],
+              ["amp-gain", "sw=+3"], ["capture-knobs", "SubRC=4/4"],
+              ["capture-knobs", "--amend", "cap_001", "--reason", "late", "SubRC=4/4"],
+              ["capture-protective", "w-L", "OFF"],
+              ["capture-protective", "--amend", "cap_001", "--reason", "late", "w-L", "OFF"],
+              ["listening-verdict", "--text", "fine"], ["capture-supersede", "w-L_2 (sw)", "w-L_2 (rta)"],
+              ["handoff"], ["handoff", "--json"], ["capture-skip", "w-L_2 (sw)", "later"],
+              ["capture-close", "--no-rew"], ["check"])
+    display = (["plan"], ["amp-changes"], ["listening-verdicts"], ["listening-verdicts", "--bank"])
+    src = open(os.path.abspath(__file__), encoding="utf-8").read()
+    main = next(n for n in ast.parse(src).body if isinstance(n, ast.FunctionDef) and n.name == "_main")
+    verbs = {c.comparators[0].value for c in ast.walk(main)
+             if isinstance(c, ast.Compare) and isinstance(c.left, ast.Name) and c.left.id == "cmd"
+             and isinstance(c.comparators[0], ast.Constant)}
+    named = {a[0] for a in strict} | {a[0] for a in display}
+    assert named == verbs, f"verbs this table does not drive: {sorted(verbs - named)}; gone: {sorted(named - verbs)}"
+    assert {a[0] for a in display} == set(_DISPLAY_VERBS), ("display-only", sorted(_DISPLAY_VERBS))
+    # A closed round and a close: what `session-reopen` and the `--amend` forms would write after, were they let.
+    journal = "".join(json.dumps(e) + "\n" for e in (
+        {"at": "2026-10-01T00:00:00+00:00", "type": EV_CAPTURE_ISSUED, "capture": "cap_001", "version": "1",
+         "phase": "0", "expected": ["w-L_1 (sw)"]},
+        {"at": "2026-10-01T00:00:01+00:00", "type": EV_CAPTURE_CLOSED, "capture": "cap_001", "version": "1"},
+        {"at": "2026-10-01T00:00:02+00:00", "type": EV_SESSION_CLOSED})).encode("utf-8")
+    top = tempfile.mkdtemp(prefix="autosound_process_every_verb_")
+    failures = []
+    try:
+        for label, content in _UNREADABLE.items():
+            repair = "repair-encoding" if label == "cp1251" else "checkout HEAD -- process-state.json"
+            for argv in strict + display:
+                d = _state_dir_with(content, top)
+                with open(os.path.join(d, "journal.jsonl"), "wb") as f:
+                    f.write(journal)
+                out, err = _io.StringIO(), _io.StringIO()
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    rc = _main(["process.py", d, *argv])
+                with open(os.path.join(d, "process-state.json"), "rb") as f:
+                    state_kept = f.read() == content
+                with open(os.path.join(d, "journal.jsonl"), "rb") as f:
+                    journal_kept = f.read() == journal
+                if argv in display:
+                    ok = rc == 0 and state_kept and journal_kept
+                else:
+                    ok = (rc == 1 and not out.getvalue() and "process-state.json" in err.getvalue()
+                          and repair in err.getvalue() and state_kept and journal_kept)
+                if not ok:
+                    failures.append(f"{label}: {' '.join(argv)} -> rc {rc}, state kept {state_kept}, journal kept "
+                                    f"{journal_kept}, said {(err.getvalue() or out.getvalue()).strip()[-90:]!r}")
+        # In code: the two primitives refuse, so a writer that does not come through `_main` cannot write either.
+        d = _state_dir_with(_UNREADABLE["truncated"], top)
+        with open(os.path.join(d, "journal.jsonl"), "wb") as f:
+            f.write(journal)
+        p = Process(d)
+        for what, call in (("_append", lambda: p._append(EV_CONFIG_CHANGE, file="project.json", what="a swap")),
+                           ("record_decision", lambda: p.record_decision("q?", "yes")),
+                           ("record_session", lambda: p.record_session("tcc", "opus"))):
+            try:
+                call()
+            except Exception as exc:  # noqa: BLE001 -- the kind is what is under test
+                if not getattr(exc, "is_unreadable", False):
+                    failures.append(f"{what}: raised {type(exc).__name__}: {exc}")
+            else:
+                failures.append(f"{what}: wrote beside an unreadable state")
+        with open(os.path.join(d, "journal.jsonl"), "rb") as f:
+            if f.read() != journal:
+                failures.append("in code: the journal changed")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, f"{len(failures)} verb run(s) read an unreadable state as empty:\n  " + "\n  ".join(failures)
+
+
 def _selftest():
     """The refusals, exercised. This module is the one with the most of them — evidence must exist
     and must resolve (SCR-035), a round's captures must be usable (SCR-040), phase 0 must record a
@@ -2978,7 +3078,8 @@ def _selftest():
     failures = []
     for check in (_check_one_naming, _check_every_loader_shares, _check_load_sibling_reads_a_failure_as_none,
                   _check_foreign_tmp_untouched, _check_state_bytes, _check_torn_journal_line,
-                  _check_line_torn_inside_a_character, _check_unreadable_state):
+                  _check_line_torn_inside_a_character, _check_unreadable_state,
+                  _check_every_writer_refuses_unreadable):
         try:
             check()
         except AssertionError as exc:
@@ -3813,7 +3914,7 @@ def _selftest():
         "the journal headed itself with the writing checkout and re-headed only when it changed; "
         "and STOPPING is an event: `open_work` names the open round and every step left in "
         "progress, drops a round once it is closed, and owes a step again when it is picked "
-        "back up; an RTA the check does not apply to is kept as such and holds no step (#29); a step CARRIES what it covers and its name names the first three and counts the rest (S-031); a capture under the wrong title is SUPERSEDED and stops counting, never deleted (S-039); the handoff REFUSES while anything the next session needs is only in the chat, and prints the resume line when it is not (S-044); `session-close --check` gives the same report and exit code and writes nothing, the plain form still records a clean stop, and a close is taken back only with a reason and only right after it, staying in the journal while the session reads as open; a ▶️ CONTINUE block naming a HEAD the ledger is not at is warned of and refuses nothing (S-084); a series number that is not this project's is refused until its ORIGIN is on record (S-048); a round records WHICH counter its version is, refuses a `v_NNN` nobody banked with both ways on, and marks a skip planned or not (TCC-022); and a phase does not close over a flaw row that stands on an UNASKED question -- the refusal carries the titles that would settle it, and a round opened or a ruling recorded closes it (S-047); a process-state.json that is there and cannot be read is refused by a write, `show` and `session-close`, naming it and its repair and leaving its bytes, while a missing one is a fresh project and a BOM is read (#136). "
+        "back up; an RTA the check does not apply to is kept as such and holds no step (#29); a step CARRIES what it covers and its name names the first three and counts the rest (S-031); a capture under the wrong title is SUPERSEDED and stops counting, never deleted (S-039); the handoff REFUSES while anything the next session needs is only in the chat, and prints the resume line when it is not (S-044); `session-close --check` gives the same report and exit code and writes nothing, the plain form still records a clean stop, and a close is taken back only with a reason and only right after it, staying in the journal while the session reads as open; a ▶️ CONTINUE block naming a HEAD the ledger is not at is warned of and refuses nothing (S-084); a series number that is not this project's is refused until its ORIGIN is on record (S-048); a round records WHICH counter its version is, refuses a `v_NNN` nobody banked with both ways on, and marks a skip planned or not (TCC-022); and a phase does not close over a flaw row that stands on an UNASKED question -- the refusal carries the titles that would settle it, and a round opened or a ruling recorded closes it (S-047); a process-state.json that is there and cannot be read is refused before anything is done by every verb but the three display-only ones -- each writer of the state or the journal, each verdict, and show -- naming it and its repair and leaving the state and the journal byte for byte, while a missing one is a fresh project and a BOM is read (#136). "
         f"root={root}"
     )
     return 0
@@ -3828,6 +3929,11 @@ def _main(argv):
     root, cmd, args = argv[1], argv[2], argv[3:]
     p = Process(root)
     try:
+        if cmd not in _DISPLAY_VERBS:
+            # The read rule (#136): every verb but the display-only ones reads the state strictly FIRST -- before its
+            # own refusals, which would blame a step or a round the empty process lacks, before REW, before anything
+            # is printed or written. One line for all of them, so a new verb is strict unless it is listed there.
+            p.load(strict=True)
         if cmd == "show":
             # Strict (#136): printed as JSON, an unreadable file was an empty process to every screen that read it.
             print(json.dumps(p.load(strict=True), indent=2, ensure_ascii=False))

@@ -205,23 +205,28 @@ p.unevidenced_done_steps()      # resume drift check
 array, `null`). Only the first is a fresh project.
 
 - **No file** is the empty process in every reader: a project that has not entered a phase yet.
-- **Lenient for readers.** `Process.load()`, the default, reads an unreadable file as the empty process too, as it
-  did (an array or `null` raised `TypeError` there): the readers outside `process.py` (`flaw_map`, `predict`,
-  `eq_propose`, ...) and TCC's screen, and the read-only verbs `plan`, `check` and `handoff`.
-- **Strict for writers.** No transition writes the state over such a file: `_write` reads the file strictly before it
-  replaces it, so a verb that writes the state exits 1 with nothing written, where it put an empty process over the
-  plan. A verb that needs a step or a capture round refuses before that, with what the empty process lacks (`no such
-  step`, `no capture round is open`). The journal is not the state: the verbs that only append to it (`decision`,
-  `session-start`, `session-reopen`, `amp-gain`, `listening-verdict`, the `--amend` forms) still append, and the
-  phase or the open round some of them record is read leniently, so it is missing from their event.
-- **Strict for the readers whose answer is the state:** `show`, `session-close` (with `--check` too) and
-  `contract.py check`. `show` and `session-close` exit 1 with the reason on stderr and print or record nothing
-  (`session-close` found nothing open in such a file and recorded a clean stop); `check` reports the file as there
-  and not valid, the reason in `issues`, and the project as not OK.
-- **The refusal names the file and the repair:** `git -C <process-dir> checkout HEAD -- process-state.json` (the
-  journal keeps every event), or `contract.py repair-encoding <project-dir>` for a file written in another code page.
-  `Process.load(strict=True)` raises `project_io.Unreadable` (`.path`, `.reason`, `.repair`), neither an `OSError`
-  nor a `ValueError`; match it by its `is_unreadable` attribute, never by its class. A UTF-8 BOM is read.
+- **Strict for every verb but three.** Each verb that writes the state or the journal (`session-start`, `decision`,
+  `session-reopen`, `amp-gain`, `listening-verdict` and the `--amend` forms included), each verdict (`check`,
+  `handoff`, `session-close` with or without `--check`), and `show`, which prints the state itself, read the file
+  strictly before they do anything. On such a file they exit 1 with the file and the repair on stderr, nothing on
+  stdout, the state and the journal as they were. This comes before their own refusals, which blamed a step or a round
+  the empty process lacked, and before any call to REW. Before this, the journal-only verbs appended, `check` said
+  nothing was wrong (exit 0), `show` printed an empty process, `session-close` recorded a clean stop, and a verb that
+  wrote the state put an empty process over the plan.
+- **Lenient only for the display-only verbs: `plan`, `amp-changes` and `listening-verdicts`** (with `--bank` too).
+  They write nothing and show such a file as an empty process (the last two read only the journal). `_DISPLAY_VERBS`
+  in `process.py` is this list, and `_main` reads strictly for any verb not on it, so a new verb is strict unless it is
+  added there.
+- **In code:** `Process.load()` stays lenient by default. That serves the readers outside `process.py` (`flaw_map`,
+  `predict`, `eq_propose`, ...) and TCC's screen, and an array or `null` no longer raises `TypeError` there.
+  `load(strict=True)` raises `project_io.Unreadable` (`.path`, `.reason`, `.repair`), which is neither an `OSError`
+  nor a `ValueError`: match it by its `is_unreadable` attribute, never by its class. `_write` and `_append` read the
+  file strictly before they write, so no caller puts an empty process over the state or appends beside a file that
+  cannot be read. That covers the callers outside `_main` too, `project.py record-change` among them. `contract.py
+  check` reports the file as there and not valid, the reason in `issues`, and the project as not OK.
+- **The refusal names the repair:** `git -C <process-dir> checkout HEAD -- process-state.json` (the journal keeps
+  every event), or `contract.py repair-encoding <project-dir>` for a file written in another code page. A UTF-8 BOM is
+  read.
 
 ## Consumers
 
