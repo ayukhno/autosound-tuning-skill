@@ -2,8 +2,8 @@
 
 What a front end (TCC) can rely on in this copy of the method (skill #137). Contract 1 is the v3.1.x surface TCC
 listed (its `docs/PLAN-AUDIT-2026-10.md` §9), written down. The number is `CONTRACT_VERSION` in `contract.py`.
-`scripts/contract-guard.py` holds this file's title, the constant, the `IMPORTABLE` table and the probe of item 9;
-`scripts/run-selftests.sh` runs it.
+`scripts/contract-guard.py` holds this file's title, the constant, the `IMPORTABLE` table (and contract 1's table,
+frozen) and the probe of item 9; `scripts/run-selftests.sh` runs it.
 
 Each item says where it stands:
 
@@ -80,12 +80,23 @@ The names TCC reads from each module, with the parameters it passes, are the `IM
 The guard holds every entry to the code: each listed parameter keeps its name, its place, its kind (positional or
 keyword) and its default value. These fail the guard: a removal, a rename, a default removed or changed, a
 parameter made keyword-only or positional-only. These pass: a new trailing parameter with a default, and a
-keyword-only parameter widened to positional-or-keyword.
+keyword-only parameter widened to positional-or-keyword. Each name also stays the kind of thing it is: one listed
+without parentheses stays a value (an assignment, a class, an attribute `__init__` sets) and never becomes a function;
+one listed with them stays a plain function (not async, not a property) or a class.
+
+The table of contract 1 is frozen in the guard: `FROZEN[1]` in `scripts/contract-guard.py`, generated once from
+`IMPORTABLE` as committed in dd4312d. While `CONTRACT_VERSION` is 1, every module of that table stays in `IMPORTABLE`,
+and every name in it holds against the code by the rules above, whatever `IMPORTABLE` says now. `IMPORTABLE` may grow
+(a name, a module, a trailing parameter with a default); a rename or a removal fails the guard even when `IMPORTABLE`
+is edited with it.
 
 The guard's probe loads every module below by path, in a fresh python started in an empty folder with `PYTHONPATH`
 unset. For two of them it also calls the function that reaches their lazy sibling loads
-(`dsp_profile.annotate_modellable`, `rew_api.get_timing`), and that call must raise no `ImportError`. The column says
-whether the load also leaves `sys.path` as it was; the guard holds this column equal to its `CLEAN` set:
+(`dsp_profile.annotate_modellable`, with one crossover family so that its loop runs, and `rew_api.get_timing`), and
+that call must raise no `ImportError`. It also reads the code of the guaranteed modules: no function of theirs imports
+a sibling by its bare name, which fails when the module is loaded by path, except the command lines the guard names
+(`CLI_IMPORTS`); and no module of the method calls `_siblings()` at import. The column says whether the load also
+leaves `sys.path` as it was; the guard holds this column equal to its `CLEAN` set:
 
 | module | loads by path without touching `sys.path` |
 |---|---|
@@ -147,4 +158,7 @@ is verified (audit K-1). PLAN-W-8 Task 9 flips this item.
   it, or a parameter TCC passes removed, renamed, made keyword-only or positional-only, or its default removed or
   given another value. It happens only in a minor (a `### Breaking` entry, which the release preflight refuses on a
   patch), and only after a TCC release that accepts the new number is out (§8 M5).
+- A bump to N+1 moves `CONTRACT_VERSION` and this file's title, and adds the table of contract N+1 to the guard's
+  `FROZEN`, generated from the bump's `IMPORTABLE` in the same commit; the table of contract N stays as it was. The
+  guard holds the frozen table of the number the literal names.
 - Every change to an item is named in the CHANGELOG's `### Upgrading` note, with a line for TCC.
