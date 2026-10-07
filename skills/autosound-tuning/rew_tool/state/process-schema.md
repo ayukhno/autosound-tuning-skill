@@ -237,11 +237,14 @@ usage on stdout, exit 0.
   exit 2, with the flags the verb takes named on stderr and nothing written; it used to become a title, a reason or a
   piece of evidence (TCC's N19). Text that only begins with two dashes is a word, not a flag: `--бас гуде`, `--bass
   hums`, `-- note`, as well as a bare `--` and a negative number. `--flag value` and `--flag=value` are the same: the
-  value is taken as it stands, whatever it looks like (`--text --loud`, `--note=--loud`), except that the word after
-  the flag is not its value when it is one of the verb's own flags (`capture-start 1 --optional --plan`) -- the value
-  is then missing, exit 2. A flag that takes no value (`--plan`, `--session`, `--json`, `--check`, `--no-rew`, ...)
-  takes no `=`. The refusal's words never contain `usage: process.py`, which a front-end reads as "this method is too
-  old".
+  value is taken as it stands, whatever it looks like (`--text --loud`, `--note=--loud`), with one exception in both
+  forms -- a value that is one of the verb's own flags (`capture-start 1 --optional --plan`, `amp-gain sw=+3
+  --note=--measured`; the name before any `=` counts) is no value: the value is missing, exit 2. A branch that scans
+  for its flags read `--note=--measured` as the flag `--measured` and recorded no note. A flag that takes a value and
+  stands last, with nothing after it, is its verb's to answer: a refusal of its own, or the flag taken as unset --
+  never an IndexError (`_check_value_flag_last` sweeps every one). A flag that takes no value (`--plan`, `--session`,
+  `--json`, `--check`, `--no-rew`, ...) takes no `=`. The refusal's words never contain `usage: process.py`, which a
+  front-end reads as "this method is too old".
 - **Too few arguments are a usage error.** A verb needs the arguments its line in the usage names in `<...>`
   (`_VERB_ARGS`): `target <preset> <curve>`, `capture-skip <title> <reason>`, `done <id> <evidence>`; `skip` needs its
   `<id>`, then a reason or `--superseded-by`, which `skip_step` checks. Fewer is exit 2, naming them, and the verb

@@ -2923,13 +2923,13 @@ def _asks_help(token):
 
 
 def _args_checked(cmd, args):
-    """`args` as the verb `cmd` reads them (#134, N19, R35). A flag's value passes as it is, whatever it looks like:
-    after `=` (`--flag=value` becomes `--flag`, `value`), or as the next word when the flag takes one (`--text
-    --loud`) -- unless that word is one of the verb's own flags: then the value is missing. That, a flag-shaped token
-    (`_flag_shaped`) the verb does not take, `=` on a flag that takes no value, and `--help` or `-h` anywhere here
-    (they are asked right after the verb, `_main`) raise `UsageError`, exit 2. A bare `--` and the words pass, and so
-    does a flag with nothing after it: its verb says what is missing. The words of a refusal never contain `usage:
-    process.py`: TCC reads that as "the method is too old"."""
+    """`args` as the verb `cmd` reads them (#134, N19, R35, R37). A flag's value passes as it is, whatever it looks
+    like: after `=` (`--flag=value` becomes `--flag`, `value`), or as the next word when the flag takes one (`--text
+    --loud`) -- unless, in either form, it is one of the verb's own flags: then the value is missing. That, a
+    flag-shaped token (`_flag_shaped`) the verb does not take, `=` on a flag that takes no value, and `--help` or
+    `-h` anywhere here (they are asked right after the verb, `_main`) raise `UsageError`, exit 2. A bare `--` and the
+    words pass, and so does a flag with nothing after it: its verb says what is missing (R38). The words of a refusal
+    never contain `usage: process.py`: TCC reads that as "the method is too old"."""
     known = VERB_FLAGS.get(cmd, ())
     out, i = [], 0
     while i < len(args):
@@ -2948,16 +2948,20 @@ def _args_checked(cmd, args):
         if eq and flag in _FLAGS_WITHOUT_VALUE:
             raise UsageError(f"{flag} takes no value ({token!r}): `{flag}` alone")
         out.append(flag)
+        if flag in _FLAGS_WITHOUT_VALUE:
+            continue
         if eq:
-            out.append(value)
-        elif flag not in _FLAGS_WITHOUT_VALUE and i < len(args):
-            nxt = args[i]
-            if _asks_help(nxt):
-                continue                        # refused as a help out of place, on the loop's next turn
-            if _flag_shaped(nxt) and nxt.partition("=")[0] in known:
-                raise UsageError(f"{cmd}: {flag} needs a value")
-            out.append(nxt)
+            given = value
+        elif i < len(args) and not _asks_help(args[i]):
+            given = args[i]
             i += 1
+        else:
+            continue            # nothing after it: its verb answers (R38); a help out of place: refused next turn
+        # One test for both forms (R35, R37): a value that is one of the verb's own flags is no value. A branch that
+        # scans for its flags read `--note=--measured` as `--measured`, and recorded no note.
+        if _flag_shaped(given) and given.partition("=")[0] in known:
+            raise UsageError(f"{cmd}: {flag} needs a value")
+        out.append(given)
     return out
 
 
@@ -3972,12 +3976,13 @@ def _check_unknown_flags():
 
 
 def _check_flag_values_as_they_stand():
-    """R35 (#134): the word after a flag that takes a value is that value, whatever it looks like -- as after `=` --
-    unless it is one of the verb's own flags: then the value is missing, exit 2. A flag is `--`, an ASCII letter and
-    no whitespace before any `=`, so text that only begins with two dashes is a word. TCC sends the
-    Arbiter's own words both ways: after `--text` and `--note` (listening_dialog), after `--reason` (protective_dialog,
-    an amendment), and as arguments -- `decision`'s question and answer, the reasons of `capture-skip`, `block`,
-    `capture-close`. Each was refused as a flag the verb does not take; `--text "--бас гуде"` was recorded before."""
+    """R35, R37 (#134): the word after a flag that takes a value is that value, whatever it looks like -- as after
+    `=` -- unless, in either form, it is one of the verb's own flags: then the value is missing, exit 2. A flag is
+    `--`, an ASCII letter and no whitespace before any `=`, so text that only begins with two dashes is a word. TCC
+    sends the Arbiter's own words both ways: after `--text` and `--note` (listening_dialog), after `--reason`
+    (protective_dialog, an amendment), and as arguments -- `decision`'s question and answer, the reasons of
+    `capture-skip`, `block`, `capture-close`. Each was refused as a flag the verb does not take; `--text "--бас гуде"`
+    was recorded before."""
     import shutil
     import tempfile
     bass = "--бас гуде"                 # data: the Arbiter's own words, as TCC passes them on
@@ -4027,10 +4032,21 @@ def _check_flag_values_as_they_stand():
                            (["capture-protective", "m-L", "--hp", "--lp", "4000", "BW", "36"],
                             "capture-protective: --hp needs a value"),
                            (["listening-verdict", "--pair", "CarMus#07:c09:ok", "--text", "--route", "full"],
-                            "listening-verdict: --text needs a value")):
+                            "listening-verdict: --text needs a value"),
+                           # R37: after `=` the same test -- the two forms stay one. A scanning branch read
+                           # `--note=--measured` as the flag `--measured` and recorded no note.
+                           (["amp-gain", "sw=+3", "--note=--measured"], "amp-gain: --note needs a value"),
+                           (["capture-start", "3", "a (sw)", "--optional=--plan"],
+                            "capture-start: --optional needs a value"),
+                           (["capture-protective", "--amend", cap_id, "--reason=--source", "m-L", "OFF"],
+                            "capture-protective: --reason needs a value")):
             rc, out, err = _run_main(["process.py", d, *argv])
             assert rc == EXIT_USAGE and said in err and not out and "usage: process.py" not in err, (argv, rc, err, out)
         assert _project_bytes(d) == before, "a refused command line wrote something"
+        assert p.amp_changes() == [], p.amp_changes()
+        # ...while a value after `=` that is no flag of the verb is the value, whatever it looks like.
+        rc, _, err = _run_main(["process.py", d, "amp-gain", "sw=+3", "--note=--loud"])
+        assert rc == 0 and [c.get("note") for c in p.amp_changes()] == ["--loud"], (rc, err[-300:], p.amp_changes())
         assert not _flag_shaped(bass) and not _flag_shaped(bass_word) and not _flag_shaped("--bass hums") \
             and not _flag_shaped("-- note") and _flag_shaped("--invalidates=w-L_1 (sw)") and _flag_shaped("--origni")
     finally:
@@ -4074,6 +4090,29 @@ def _check_too_few_arguments():
             r = _cli_env(d, [verb, *["1"] * len(_VERB_ARGS[verb])])
             assert r.returncode not in (EXIT_USAGE, EXIT_UNEXPECTED) and "Traceback" not in r.stderr, \
                 (verb, r.returncode, r.stderr[-300:])
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_value_flag_last():
+    """R38 (#134): a flag that takes a value, last on the line with nothing after it, stays with its verb -- each
+    branch guards the missing value: a refusal of its own, `--hp needs three values`, or the flag taken as unset.
+    Since R36 an IndexError is a bug's 70, so the guards are held here: every value-taking flag of every verb, put
+    last after the arguments the verb needs (`_VERB_ARGS`), exits by the table, never 70, with no traceback. The
+    cases come from the tables, so a verb or a flag added later is swept too. Run as processes on the dead port:
+    `capture-import` goes on to ask REW for the series' titles."""
+    import shutil
+    import tempfile
+    cases = [(verb, flag) for verb, flags in VERB_FLAGS.items() for flag in flags if flag not in _FLAGS_WITHOUT_VALUE]
+    top = tempfile.mkdtemp(prefix="autosound_process_flag_last_")
+    try:
+        d = os.path.join(top, "process")
+        Process(d).enter_phase("-1")
+        Process(d).start_capture("1", expected=["a_1 (sw)"])
+        for verb, flag in cases:
+            r = _cli_env(d, [verb, *["1"] * len(_VERB_ARGS[verb]), flag])
+            assert r.returncode in (EXIT_OK, EXIT_NO, EXIT_USAGE, EXIT_REW_UNAVAILABLE) and "Traceback" not in r.stderr, \
+                (verb, flag, r.returncode, r.stderr[-300:])
     finally:
         shutil.rmtree(top, ignore_errors=True)
 
@@ -4428,7 +4467,7 @@ def _selftest():
                   _check_every_writer_refuses_unreadable, _check_write_guard_catches_damage_after_the_read,
                   _check_writers_read_strictly, _check_gates_refuse_unreadable, _check_newer_state_refused,
                   _check_exit_table, _check_catch_all_reads_the_type, _check_unknown_flags, _check_flags_tcc_sends,
-                  _check_flag_values_as_they_stand, _check_too_few_arguments,
+                  _check_flag_values_as_they_stand, _check_too_few_arguments, _check_value_flag_last,
                   _check_help_writes_nothing, _check_usage_before_the_read, _check_superseded_not_taken,
                   _check_check_never_invents_taken, _check_close_says_what_rew_did):
         try:
@@ -5269,8 +5308,9 @@ def _selftest():
         "back up; an RTA the check does not apply to is kept as such and holds no step (#29); a step CARRIES what it covers and its name names the first three and counts the rest (S-031); a capture under the wrong title is SUPERSEDED and stops counting, never deleted (S-039); the handoff REFUSES while anything the next session needs is only in the chat, and prints the resume line when it is not (S-044); `session-close --check` gives the same report and exit code and writes nothing, the plain form still records a clean stop, and a close is taken back only with a reason and only right after it, staying in the journal while the session reads as open; a ▶️ CONTINUE block naming a HEAD the ledger is not at is warned of and refuses nothing (S-084); a series number that is not this project's is refused until its ORIGIN is on record (S-048); a round records WHICH counter its version is, refuses a `v_NNN` nobody banked with both ways on, and marks a skip planned or not (TCC-022); and a phase does not close over a flaw row that stands on an UNASKED question -- the refusal carries the titles that would settle it, and a round opened or a ruling recorded closes it (S-047); a process-state.json that is there and cannot be read is refused before anything is done by every verb but the three display-only ones -- each writer of the state or the journal, each verdict, and show; handoff --json in its own JSON -- naming it and its repair and leaving the state and the journal byte for byte; every writer method reads it strictly itself, so a read that fails once never becomes an empty process written over the plan, and _write and _append refuse a file damaged after that read; a missing one is a fresh project and a BOM is read (#136); the phase gates refuse what they cannot check -- an intake check that raised or would not load, a profile check that would not load, a project.json or a dsp_profile.json that cannot be read -- writing nothing, and a state a newer method wrote is refused by every strict read and by both guards (#136, T-10, T-21); "
         "the command line exits by its table -- a bug 70 with its traceback (an IndexError too), REW down 69 with "
         "nothing written, REW's unreadable answer 1, the catch-all reading the exception's class -- refuses a flag "
-        "its verb does not take, a flag given another flag for its value and too few arguments with 2 before the "
-        "state is read, takes "
+        "its verb does not take, a flag given another flag for its value (`--note --measured` and "
+        "`--note=--measured` alike) and too few arguments with 2 before the state is read, leaves a value flag "
+        "standing last to its verb and never to a bug's 70, takes "
         "the word after a flag as its value as `--flag=value` does and the Arbiter's words that begin `--` as words, "
         "takes every flag TCC sends, and answers `<verb> --help` writing nothing (`-h` and `--help` elsewhere are 2); "
         "a superseded row counts nowhere as taken, the reconcile's extra included, and a check never invents a "

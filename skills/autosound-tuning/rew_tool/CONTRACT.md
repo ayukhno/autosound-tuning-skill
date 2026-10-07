@@ -65,10 +65,11 @@ resolves) and `handoff` (1 while the next session would miss something), as `sta
 letter and no whitespace before an `=`; any other token is a word -- a bare `--`, a negative number, and text that
 only begins with two dashes (`--бас гуде`, `--bass hums`). A flag the verb does not take is a usage error, exit 2,
 and the verb does not run; its words never contain `usage: process.py`. `--flag value` and `--flag=value` are one:
-the value is taken as it stands, whatever it looks like (`--text --loud`, `--text=--loud`), except that the word
-after the flag is not its value when it is one of the verb's own flags -- then the value is missing, exit 2.
-`--project`, `--check`, `--plan`, `--session`, `--measured`, `--bank`, `--json` and `--no-rew` take no value and no
-`=`. A verb needs the arguments its line in the usage names in `<...>` (`_VERB_ARGS` in `process.py`; `skip` needs
+the value is taken as it stands, whatever it looks like (`--text --loud`, `--text=--loud`), with one exception in
+both forms -- a value that is one of the verb's own flags (`--note --measured`, `--note=--measured`; the name before
+any `=` counts) is no value: the value is missing, exit 2. A flag that takes a value and stands last, with nothing
+after it, is its verb's to answer. `--project`, `--check`, `--plan`, `--session`, `--measured`, `--bank`, `--json`
+and `--no-rew` take no value and no `=`. A verb needs the arguments its line in the usage names in `<...>` (`_VERB_ARGS` in `process.py`; `skip` needs
 its `<id>`, then a reason or `--superseded-by`); fewer is a usage error, exit 2, naming them. `<verb> --help` (or
 `-h`), right after the verb, prints that verb's lines and exits 0, reading and writing nothing; after other
 arguments either is a usage error, exit 2. `process.py --help` prints the whole usage on stdout. A verb or a flag
