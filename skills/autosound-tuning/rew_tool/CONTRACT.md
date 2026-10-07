@@ -30,7 +30,7 @@ too when the path is wrong, with `can't open file` on stderr: the usage line is 
 | exit | means |
 |---|---|
 | 0 | done, or yes |
-| 1 | refused, or no: the reason on stderr, `error: <reason>`; REW answering something the method cannot read, `error: <REW's words> -- nothing was written`; REW answering with an error, `error: REW answered with an error: <REW's words> -- nothing was written` |
+| 1 | refused, or no: the reason on stderr, `error: <reason>`; REW answering with an error, `error: REW answered with an error: <REW's words> -- nothing was written`; any other state REW's exceptions name but "unavailable" (`protocol`, `write_mismatch`, `not_found`, `ambiguous`, `config`), read off the class, `error: <its words> -- nothing was written` |
 | 2 | usage: an unknown verb (the usage on stderr), a flag the verb does not take, a flag's value missing (one of the verb's flags, `-h` or `--help` in its place, or nothing after it: a value flag left last), `=` on a flag that takes no value, one of the verb's flags with its hyphens autocorrected to a dash, `--help` or `-h` after other arguments, too few arguments |
 | 69 | REW did not answer, and nothing was written |
 | 70 | an unexpected error, a bug: Python's traceback on stderr, then `error: unexpected <type>: <message>` |
@@ -74,9 +74,11 @@ both forms -- a value that is one of the verb's own flags, `-h` and `--help` amo
 `--note=--measured`, `--text=-h`; the name before any `=` counts), is no value: the value is missing, exit 2. So is
 a flag that takes a value and stands last, with nothing after it -- refused before the verb runs -- except
 capture-protective's legs `--hp` and `--lp`, which the verb parses: `--hp needs three values` (a flag among them
-too), `--hp: 'abc' is not a number`, `--hp: '24.5' is not a whole number`, exit 1; their values are not the verb's
-arguments, so legs with no channel are too few. A series `capture-import` cannot read as a number is exit 1 too,
-before REW is asked. `--project`,
+too), `--hp: 'abc' is not a number`, `--hp: '24.5' is not a whole number`, a frequency or a slope not above 0, a
+type other than LR, BW or BE (any letter case), exit 1; their values are not the verb's arguments, so legs with no
+channel are too few. A series `capture-import` cannot read as a number is exit 1 too, before REW is asked; with no
+titles, REW holding nothing of the series is exit 1, and every title of it on record already is exit 0, `nothing
+new`. `--project`,
 `--check`, `--plan`, `--session`, `--measured`, `--bank`, `--json` and `--no-rew` take no value and no `=`. A verb needs the arguments its line in the usage names in `<...>` (`_VERB_ARGS` in `process.py`; `skip` needs
 its `<id>`, then a reason or `--superseded-by`); fewer is a usage error, exit 2, naming them. `<verb> --help` (or
 `-h`), right after the verb, prints that verb's lines and exits 0, reading and writing nothing; after other

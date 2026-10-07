@@ -2051,6 +2051,21 @@ class Process:
             out.append(r)
         return out
 
+    def _titles_on_record(self, state):
+        """Every title a round of this project took, as REW may hold it (#134, R47a): what `capture-import <N>` with no
+        titles passes over. Four sources, each for what the others miss: the journal's `capture_taken` (a superseded
+        typo too -- REW may still hold it, and it is this project's trace, not a capture to import); a closed round's
+        `taken` (what the read against REW added, with no `capture_taken` of its own); REW's own spelling of a title
+        that read matched (`capture_reconciled`'s `renames`); and the open round's `taken` rows in `state`."""
+        titles = set()
+        for event in self.events(kinds=(EV_CAPTURE_TAKEN, EV_CAPTURE_CLOSED, EV_CAPTURE_RECONCILED)):
+            if event.get("title"):
+                titles.add(str(event["title"]))
+            titles.update(str(t) for t in event.get("taken") or [])
+            titles.update(str(t) for t in (event.get("renames") or {}))
+        titles.update(str(t) for t in ((state.get("capture") or {}).get("taken") or {}))
+        return titles
+
     def protective_record_for(self, version):
         """The protective record of the round the solos `<ch>_<version> (sw)` were taken in.
 
@@ -2839,7 +2854,9 @@ _USAGE = """usage: process.py <process-dir> <command> [args]
   capture-taken <title>                 a measurement came back (unplanned ones are flagged)
   capture-import <N> [title ...] --bind MOD=v_NNN [--bind =v_NNN] --knob NAME=POS [...] [--late "why"]
                                         register what REW holds as this project's rounds, one per DSP
-                                        state; unbound modifiers and missing knobs refuse (#58 P3)
+                                        state; unbound modifiers and missing knobs refuse (#58 P3).
+                                        No titles: what REW holds of series N and this project has not
+                                        on record yet -- none held refuses, all on record is "nothing new"
   capture-knobs --amend <cap_id> --reason "..." <NAME>=<POS> [...]
                                         the knobs of a CLOSED round, as a correction (#56 item 9)
   amp-gain <CH>=<dB> [...] [--measured] [--amends amp-N] [--note "..."]
@@ -3113,12 +3130,19 @@ def _args_counted(cmd, args):
                          f"{cmd} --help")
 
 
+#: The filter types a protective leg can be (#134, R47b): the families this method can take back out of a sweep --
+#: `dsp_math.MODELLABLE_FAMILIES`, the docs' "types (LR/BW/BE)", and the selftest holds the two equal. A Chebyshev can
+#: be entered on a DSP and modelled by nothing here: `dsp_math.xo_response` took it for a Butterworth.
+_LEG_TYPES = ("LR", "BW", "BE")
+
+
 def _leg(kind, values):
     """One filter leg of capture-protective, `{f, type, slope}`, from the values typed after `--hp` or `--lp` (#134, F
-    I-1, T I1, H I-7). A typed mistake is the verb's refusal, exit 1, in its words: a value missing -- fewer than
-    three, or a flag where a value stands (`--hp 100 LR --lp 4000 BW 36`) -- a frequency that is no number (`abc`,
-    `100Hz`, `nan`), a slope that is no whole number (`24.5`). They reached `float()` and `int()` unguarded and exited
-    70, a bug's code; TCC sends a leg as the person typed it."""
+    I-1, T I1, H I-7, R47b). A typed mistake is the verb's refusal, exit 1, in its words: a value missing -- fewer
+    than three, or a flag where a value stands (`--hp 100 LR --lp 4000 BW 36`) -- a frequency that is no number
+    (`abc`, `100Hz`, `nan`) or not above 0, a type the method cannot take back out (`_LEG_TYPES`; `CH`, a Chebyshev,
+    was taken out as a Butterworth), a slope that is no whole number (`24.5`) or not above 0. They reached `float()`
+    and `int()` unguarded and exited 70, a bug's code, or were recorded; TCC sends a leg as the person typed it."""
     example = f"e.g. --{kind} 100 LR 24"
     if len(values) < 3 or any(_flag_shaped(v) for v in values):
         raise ProcessError(f"--{kind} needs three values: f type slope, {example}. "
@@ -3130,10 +3154,17 @@ def _leg(kind, values):
         f_hz = math.nan
     if not math.isfinite(f_hz):
         raise ProcessError(f"--{kind}: {f!r} is not a number -- the frequency in Hz, {example}")
+    if f_hz <= 0:
+        raise ProcessError(f"--{kind}: {f!r} is not a frequency above 0 Hz, {example}")
+    if kind_of.upper() not in _LEG_TYPES:
+        raise ProcessError(f"--{kind}: {kind_of!r} is not a filter type this method can take back out: "
+                           f"{', '.join(_LEG_TYPES[:-1])} or {_LEG_TYPES[-1]}, {example}")
     try:
         db_per_oct = int(slope)
     except ValueError:
         raise ProcessError(f"--{kind}: {slope!r} is not a whole number -- the slope in dB/oct, {example}") from None
+    if db_per_oct <= 0:
+        raise ProcessError(f"--{kind}: {slope!r} is not a slope above 0 dB/oct, {example}")
     return {"f": f_hz, "type": kind_of.upper(), "slope": db_per_oct}
 
 
@@ -4071,7 +4102,10 @@ def _check_typed_values_refused():
     value's place (`--hp 100 LR --lp 4000 BW 36`), a frequency that is no number (`abc`, `100Hz`), a slope that is no
     whole number (`24.5`) each exited 70 with a traceback, and TCC sends a leg as the person typed it
     (`protective_dialog.read_leg`). So did capture-import's series (`1a`) -- with titles given, and with none, where
-    REW was asked first. Nothing is written, nothing goes to stdout, no traceback, and REW is not asked."""
+    REW was asked first. Nothing is written, nothing goes to stdout, no traceback, and REW is not asked. A value that
+    parses is checked too (R47b): a frequency above 0, a type the method can take back out (`dsp_math`'s modellable
+    families, LR, BW and BE, in any letter case), a slope above 0 -- a Chebyshev was recorded, and taken out of the
+    sweeps as a Butterworth."""
     import shutil
     import tempfile
     import types
@@ -4106,6 +4140,18 @@ def _check_typed_values_refused():
                 (["capture-protective", "m-L", "--hp", "100", "LR", "24.5"], "--hp: '24.5' is not a whole number"),
                 (["capture-protective", "m-L", "--lp", "4000", "BW", "36", "--hp", "100", "LR", "x"],
                  "--hp: 'x' is not a whole number"),
+                # R47b: each value checked -- a frequency above 0, a type the method can take back out, a slope
+                # above 0. A Chebyshev (TCC's dialog offers `CH`) was recorded and then modelled as a Butterworth.
+                (["capture-protective", "m-L", "--hp", "0", "LR", "24"], "--hp: '0' is not a frequency above 0 Hz"),
+                (["capture-protective", "m-L", "--hp", "-100", "LR", "24"],
+                 "--hp: '-100' is not a frequency above 0 Hz"),
+                (["capture-protective", "m-L", "--hp", "100", "CH", "24"],
+                 "--hp: 'CH' is not a filter type this method can take back out: LR, BW or BE"),
+                (["capture-protective", "m-L", "--lp", "4000", "XX", "36"],
+                 "--lp: 'XX' is not a filter type this method can take back out: LR, BW or BE"),
+                (["capture-protective", "m-L", "--hp", "100", "LR", "0"], "--hp: '0' is not a slope above 0 dB/oct"),
+                (["capture-protective", "m-L", "--hp", "100", "LR", "-24"],
+                 "--hp: '-24' is not a slope above 0 dB/oct"),
                 (["capture-protective", "--amend", cap_id, "--reason", "the roll-off shows", "m-L", "--lp", "4k",
                   "BW", "36"], "--lp: '4k' is not a number"),
                 (["capture-import", "1a", "m-L_1 (sw)", "--bind", "=v_001", "--knob", "SubRC=4/4"],
@@ -4131,6 +4177,22 @@ def _check_typed_values_refused():
             failures.append(f"capture_import('1a') raised {type(exc).__name__}: {exc}")
         else:
             failures.append("capture_import('1a') went through")
+        # A type in any letter case is the type (R47b): `be` is recorded as `BE`. The types are the method's own
+        # modellable families, the ones `dsp_math` can take back out.
+        rc, out, err = _run_main(["process.py", d, "capture-protective", "m-L", "--hp", "80", "be", "12"])
+        legs = (p.protective_record() or {}).get("channels", {}).get("m-L")
+        if rc != 0 or legs != {"hp": {"f": 80.0, "type": "BE", "slope": 12}}:
+            failures.append(f"capture-protective m-L --hp 80 be 12: rc {rc}, recorded {legs}, said {err.strip()!r}")
+        # Read off `dsp_math.py`'s text, not imported: it needs numpy, and this module's checks do not.
+        import ast
+        with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "dsp_math.py"),
+                  encoding="utf-8") as fh:
+            families = next((ast.literal_eval(n.value) for n in ast.parse(fh.read()).body
+                             if isinstance(n, ast.Assign)
+                             and any(isinstance(t, ast.Name) and t.id == "MODELLABLE_FAMILIES" for t in n.targets)),
+                            None)
+        if tuple(_LEG_TYPES) != tuple(families or ()):
+            failures.append(f"the leg types {_LEG_TYPES} are not dsp_math's modellable families {families}")
     finally:
         if saved is None:
             sys.modules.pop("rew_api", None)
@@ -4190,6 +4252,84 @@ def _check_refused_capture_writes_nothing():
     assert not failures, f"{len(failures)} refused capture verb(s) wrote:\n  " + "\n  ".join(failures)
 
 
+def _check_import_of_a_whole_series():
+    """`capture-import <N>` with no titles imports what REW holds of series N and this project has not on record
+    (#134, R47a). REW holding nothing of series N is exit 1, `REW holds no measurement of series _N; nothing was
+    imported` -- it said "imported 0 title(s)", exit 0, and wrote nothing. Every title REW holds of it on record already
+    is exit 0, `nothing new`, and nothing written -- a re-run imported the series again, as rounds of their own. With
+    some on record, only the rest is imported. REW is a stand-in `rew_api` in `sys.modules`, which `_main`'s
+    `import rew_api` finds first."""
+    import shutil
+    import tempfile
+    import types
+    listing = {}
+    stand_in = types.ModuleType("rew_api")
+    stand_in.get_measurements = lambda: dict(listing)
+    saved = sys.modules.get("rew_api")
+    top = tempfile.mkdtemp(prefix="autosound_process_import_series_")
+    failures = []
+
+    def run(*argv):
+        before = _project_bytes(d)
+        rc, out, err = _run_main(["process.py", d, "capture-import", *argv, "--bind", "=v_001", "--knob", "SubRC=4/4"])
+        return rc, out, err, _project_bytes(d) == before
+    try:
+        os.makedirs(os.path.join(top, "state", "SQ"))
+        with open(os.path.join(top, "state", "SQ", "v_001.json"), "w", encoding="utf-8") as fh:
+            fh.write("{}")
+        d = os.path.join(top, "process")
+        Process(d).enter_phase("-1")
+        sys.modules["rew_api"] = stand_in
+        listing.update({"1": {"title": "m-L_2 (sw)"}, "2": {"title": "a note"}})
+        rc, out, err, kept = run("1")
+        if rc != EXIT_NO or "REW holds no measurement of series _1; nothing was imported" not in err or out or not kept:
+            failures.append(f"none of series _1 held: rc {rc}, kept {kept}, said {(err or out).strip()!r}")
+        listing.update({"3": {"title": "m-L_1 (sw)"}, "4": {"title": "m-R_1 (sw)"}})
+        rc, out, err, kept = run("1")
+        rounds = Process(d).capture_rounds()
+        if rc != 0 or "imported 2 title(s) of _1" not in out or len(rounds) != 1:
+            failures.append(f"the first import: rc {rc}, rounds {rounds}, said {(err or out).strip()!r}")
+        rc, out, err, kept = run("_1")
+        if rc != 0 or "nothing new" not in out or not kept or len(Process(d).capture_rounds()) != 1:
+            failures.append(f"all on record: rc {rc}, kept {kept}, rounds {len(Process(d).capture_rounds())}, "
+                            f"said {(err or out).strip()!r}")
+        listing.update({"5": {"title": "w-L_1 (sw)"}})
+        rc, out, err, kept = run("1")
+        rounds = Process(d).capture_rounds()
+        if rc != 0 or "imported 1 title(s) of _1" not in out or "2 already on record" not in out \
+                or len(rounds) != 2 or set(rounds[-1]["titles"]) != {"w-L_1 (sw)"}:
+            failures.append(f"one new: rc {rc}, rounds {rounds}, said {(err or out).strip()!r}")
+        # On record by every road a title takes: a typo superseded (only its `capture_taken` names it), a title read
+        # against REW under REW's own spelling (`renames`) and one taken beyond the list (only the closed round's
+        # `taken` names it) -- and, in a round still open, what the read against REW took (only the state names it).
+        d = os.path.join(tempfile.mkdtemp(dir=top), "process")
+        os.makedirs(os.path.join(os.path.dirname(d), "state", "SQ"))
+        with open(os.path.join(os.path.dirname(d), "state", "SQ", "v_001.json"), "w", encoding="utf-8") as fh:
+            fh.write("{}")
+        p = Process(d)
+        p.enter_phase("-1")
+        p.start_capture("1", expected=["m-L_1 (sw)"])
+        p.record_capture("m-R_1 (sw)")
+        p.supersede_capture("m-R_1 (sw)", "m-L_1 (sw)", "typed R for L")
+        p.reconcile_captures(["m-L_01 (sw)", "m-R_1 (sw)", "w-L_1 (sw)"])
+        p.close_capture("done")
+        p.start_capture("1", expected=["tw-L_1 (sw)"])
+        p.reconcile_captures(["tw-L_1 (sw)", "tw-R_1 (sw)"])
+        listing.clear()
+        listing.update({str(i): {"title": t} for i, t in enumerate(
+            ("m-L_01 (sw)", "m-R_1 (sw)", "w-L_1 (sw)", "tw-L_1 (sw)", "tw-R_1 (sw)"))})
+        rc, out, err, kept = run("1")
+        if rc != 0 or "nothing new: the 5 measurement(s) of series _1" not in out or not kept:
+            failures.append(f"on record by every road: rc {rc}, kept {kept}, said {(err or out).strip()!r}")
+    finally:
+        if saved is None:
+            sys.modules.pop("rew_api", None)
+        else:
+            sys.modules["rew_api"] = saved
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, f"{len(failures)} import(s) of a whole series misread:\n  " + "\n  ".join(failures)
+
+
 def _check_catch_all_reads_the_type():
     """The catch-all reads `rew_state` and `is_unreadable` off the exception's CLASS (#134): REW down raised by any
     copy of `rew_api` (another class, the same attribute) is 69; REW answering something this method cannot read is
@@ -4197,8 +4337,13 @@ def _check_catch_all_reads_the_type():
     REW's list); so is REW answering with an error (F M-4, H minor 1): a stdlib `HTTPError`, REW's 4xx/5xx with its
     words, and an exception whose class says `rew_state` "error" -- 1, where the `HTTPError` was a bug's 70 with a
     traceback. One built without a body -- whose instance, on Python 3.9, answers every attribute it lacks with
-    `KeyError: 'file'` -- is said the same way, never a crash of the handler itself. An IndexError raised inside a
+    `KeyError: 'file'` -- is said the same way, never a crash of the handler itself. Every other state REW's
+    exceptions name is REW's answer as well (R47c): `write_mismatch`, `not_found`, `ambiguous` and `config` (a
+    `REW_API_URL` that is no address) exit 1 with their message -- a `not_found` or an `ambiguous` a `KeyError`, its
+    words without the quotes a `KeyError` puts round them -- read off the class, so a foreign copy of `rew_api`
+    raising its own `RewWriteMismatch` is said the same way. Only "unavailable" is 69. An IndexError raised inside a
     verb (R36) is a bug's 70 with its traceback: it exited 1 like a refusal, with no traceback."""
+    import importlib.util
     import shutil
     import tempfile
     import urllib.error
@@ -4212,11 +4357,31 @@ def _check_catch_all_reads_the_type():
     class Answered(Exception):                 # REW answering with an error, as a copy that names the state raises it
         rew_state = "error"
 
+    class Misread(Exception):                  # a filter write REW did not keep
+        rew_state = "write_mismatch"
+
+    class Gone(KeyError):                      # a title REW does not hold, as `find_measurement_id` raises it
+        rew_state = "not_found"
+
+    class Twice(KeyError):                     # a title REW holds twice
+        rew_state = "ambiguous"
+
+    class Misconfigured(ValueError):           # a `REW_API_URL` that is no address (batch 3 raises it)
+        rew_state = "config"
+
+    # A foreign copy of `rew_api`, loaded by its path under another name: its classes are not the sibling's.
+    spec = importlib.util.spec_from_file_location(
+        "autosound_rew_api_foreign_copy", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                                       "rew_api.py"))
+    foreign = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(foreign)
+    assert foreign.RewWriteMismatch is not _siblings().load("rew_api.py").RewWriteMismatch, "not a foreign copy"
     top = tempfile.mkdtemp(prefix="autosound_process_catch_all_")
     real = Process.record_decision
     try:
         d = os.path.join(top, "process")
         Process(d).enter_phase("-1")
+        nothing = " -- nothing was written"
         for exc, code, said in ((Down("REW is not answering at http://127.0.0.1:1"), 69, "-- nothing was written"),
                                 (Unreadable("REW's measurement list is not a map of measurements: list"), 1,
                                  "error: REW's measurement list is not a map of measurements: list -- nothing was "
@@ -4226,6 +4391,18 @@ def _check_catch_all_reads_the_type():
                                 (Answered("HTTP Error 404: Not Found -- REW said: no such measurement"), 1,
                                  "error: REW answered with an error: HTTP Error 404: Not Found -- REW said: no such "
                                  "measurement -- nothing was written"),
+                                (Misread("slot 3: REW holds gaindB +12.0 where +14.0 was sent"), 1,
+                                 "error: slot 3: REW holds gaindB +12.0 where +14.0 was sent" + nothing),
+                                (Gone("No measurement titled 'w-L_1 (sw)' (REW holds 3)"), 1,
+                                 "error: No measurement titled 'w-L_1 (sw)' (REW holds 3)" + nothing),
+                                (Twice("Ambiguous: 2 measurements titled 'w-L_1 (sw)'"), 1,
+                                 "error: Ambiguous: 2 measurements titled 'w-L_1 (sw)'" + nothing),
+                                (Misconfigured("REW_API_URL 'localhost:4735' is not an address: no scheme"), 1,
+                                 "error: REW_API_URL 'localhost:4735' is not an address: no scheme" + nothing),
+                                (foreign.RewWriteMismatch("slot 2 missing from REW's filters after the write"), 1,
+                                 "error: slot 2 missing from REW's filters after the write" + nothing),
+                                (foreign.MeasurementNotFound("No measurement titled 'm-L_1 (sw)' (REW holds 0)"), 1,
+                                 "error: No measurement titled 'm-L_1 (sw)' (REW holds 0)" + nothing),
                                 (IndexError("list index out of range"), 70,
                                  "error: unexpected IndexError: list index out of range")):
             def boom(self, *args, _exc=exc, **kwargs):
@@ -4985,7 +5162,8 @@ def _selftest():
                   _check_every_writer_refuses_unreadable, _check_write_guard_catches_damage_after_the_read,
                   _check_writers_read_strictly, _check_gates_refuse_unreadable, _check_newer_state_refused,
                   _check_exit_table, _check_typed_values_refused, _check_refused_capture_writes_nothing,
-                  _check_catch_all_reads_the_type, _check_unknown_flags, _check_flags_tcc_sends,
+                  _check_import_of_a_whole_series, _check_catch_all_reads_the_type, _check_unknown_flags,
+                  _check_flags_tcc_sends,
                   _check_flag_values_as_they_stand, _check_autocorrected_dashes, _check_too_few_arguments,
                   _check_value_flag_last, _check_help_writes_nothing, _check_usage_before_the_read,
                   _check_handoff_says_an_unreadable_changelog, _check_superseded_not_taken,
@@ -5827,8 +6005,9 @@ def _selftest():
         "progress, drops a round once it is closed, and owes a step again when it is picked "
         "back up; an RTA the check does not apply to is kept as such and holds no step (#29); a step CARRIES what it covers and its name names the first three and counts the rest (S-031); a capture under the wrong title is SUPERSEDED and stops counting, never deleted (S-039); the handoff REFUSES while anything the next session needs is only in the chat, and prints the resume line when it is not (S-044); `session-close --check` gives the same report and exit code and writes nothing, the plain form still records a clean stop, and a close is taken back only with a reason and only right after it, staying in the journal while the session reads as open; a ▶️ CONTINUE block naming a HEAD the ledger is not at is warned of and refuses nothing (S-084); a series number that is not this project's is refused until its ORIGIN is on record (S-048); a round records WHICH counter its version is, refuses a `v_NNN` nobody banked with both ways on, and marks a skip planned or not (TCC-022); and a phase does not close over a flaw row that stands on an UNASKED question -- the refusal carries the titles that would settle it, and a round opened or a ruling recorded closes it (S-047); a process-state.json that is there and cannot be read is refused before anything is done by every verb but the three display-only ones -- each writer of the state or the journal, each verdict, and show; handoff --json in its own JSON -- naming it and its repair and leaving the state and the journal byte for byte; every writer method reads it strictly itself, so a read that fails once never becomes an empty process written over the plan, and _write and _append refuse a file damaged after that read; a missing one is a fresh project and a BOM is read (#136); the phase gates refuse what they cannot check -- an intake check that raised or would not load, a profile check that would not load, a project.json or a dsp_profile.json that cannot be read -- writing nothing, and a state a newer method wrote is refused by every strict read and by both guards (#136, T-10, T-21); "
         "the command line exits by its table -- a bug 70 with its traceback (an IndexError too), REW down 69 with "
-        "nothing written, REW's unreadable answer and REW's error answer 1, a typed mistake in a leg or a series the "
-        "verb's own 1, the catch-all reading the exception's class -- refuses a flag "
+        "nothing written, every other answer of REW's 1 (an error, a list it cannot read, a write it did not keep, a "
+        "title missing or held twice, an address that is none), a typed mistake in a leg or a series and a leg value "
+        "out of range the verb's own 1, the catch-all reading the exception's class -- refuses a flag "
         "its verb does not take, a flag given another flag for its value (`--note --measured` and "
         "`--note=--measured` alike, `-h` among them), a flag whose hyphens were autocorrected to a dash, a value "
         "flag left last (but capture-protective's legs, the verb's own) and too few arguments -- a leg's values "
@@ -5836,7 +6015,9 @@ def _selftest():
         "the word after a flag as its value as `--flag=value` does and the Arbiter's words that begin `--` and hold a "
         "space as words, takes every flag TCC sends, classifies every flag as taking a value or not, and answers "
         "`<verb> --help` writing nothing (`-h` and `--help` elsewhere are 2); a refused capture-start or "
-        "capture-import writes nothing; a writer reached through a private helper is driven by the strict-read table; "
+        "capture-import writes nothing, and an import of a whole series imports what is not on record, refuses a "
+        "series REW holds nothing of and says when nothing is new; a writer reached through a private helper is driven "
+        "by the strict-read table; "
         "a verifier that will not load is named with why; the handoff says a changelog it cannot read; "
         "a superseded row counts nowhere as taken, the reconcile's extra included, and a check never invents a "
         "capture REW does not hold (#134, #138 I-15). "
@@ -6121,13 +6302,29 @@ def _main(argv):
                                    "title of that series REW holds)")
             series, titles = rest[0], rest[1:]
             number = _series_number(series)        # a typed mistake is refused before REW is asked (H I-7)
+            on_record = 0
             if not titles:
+                # The whole series as REW holds it (R47a): none of it is a refusal -- it read "imported 0 title(s)",
+                # exit 0 -- and a title already on record is passed over: a re-run imported the series again.
                 import rew_api as _rew_api
                 _naming = _load_naming()
-                titles = [m.get("title", "") for m in _rew_api.get_measurements().values()
-                          if (_naming.parse_name(m.get("title", "")) or {}).get("version_n") == number]
+                if _naming is None:
+                    raise ProcessError(f"the title grammar (naming.py) cannot be loaded{_load_failure('naming.py')} "
+                                       "-- nothing was imported")
+                held = [m.get("title", "") for m in _rew_api.get_measurements().values()
+                        if (_naming.parse_name(m.get("title", "")) or {}).get("version_n") == number]
+                if not held:
+                    raise ProcessError(f"REW holds no measurement of series _{number}; nothing was imported")
+                known = p._titles_on_record(p.load(strict=True))
+                titles = [t for t in held if t not in known]
+                on_record = len(held) - len(titles)
+                if not titles:
+                    print(f"nothing new: the {len(held)} measurement(s) of series _{number} REW holds are on record "
+                          "already -- nothing was imported")
+                    return EXIT_OK
             ids = p.capture_import(series, titles, binds, knobs, late=late)
-            print(f"imported {len(titles)} title(s) of _{series} as {', '.join(ids)}"
+            print(f"imported {len(titles)} title(s) of _{number} as {', '.join(ids)}"
+                  + (f" ({on_record} already on record, left as they are)" if on_record else "")
                   + (f" -- late: {late}" if late else ""))
         elif cmd == "amp-gain":
             rest, read_as, amends, note = list(args), "said", None, None
@@ -6416,16 +6613,20 @@ def _main(argv):
         if rew_said == "unavailable":
             print(f"error: {exc} -- nothing was written", file=sys.stderr)
             return EXIT_REW_UNAVAILABLE
-        if rew_said == "protocol":
-            # REW answered, with something this method cannot read (#134): REW's answer, not a bug of the method -- a
-            # refusal in REW's words, where it was a bug's 70 (`capture-import`, reading REW's list itself).
-            print(f"error: {exc} -- nothing was written", file=sys.stderr)
-            return EXIT_NO
         if rew_said == "error" or isinstance(exc, urllib.error.HTTPError):
             # REW answered with an error, its 4xx/5xx and its words (`rew_api._open` puts them on the message): REW's
             # answer too, a refusal in its words (F M-4, H minor 1), where it was a bug's 70 with a traceback. Matched
             # as the stdlib's one `HTTPError` class -- one in every copy -- or by the state its class names.
             print(f"error: REW answered with an error: {exc} -- nothing was written", file=sys.stderr)
+            return EXIT_NO
+        if rew_said is not None:
+            # Every other state of REW's is REW's answer, not a bug of the method (#134, R47c): "protocol" (an answer
+            # this method cannot read -- `capture-import` reading REW's list itself), and "write_mismatch",
+            # "not_found", "ambiguous" and "config" (a `REW_API_URL` that is no address), which no verb meets here
+            # today: a refusal in its own words, exit 1, where it was a bug's 70. A `not_found` or an `ambiguous` is a
+            # `KeyError`, whose `str` puts quotes round its words; its words are said as they are.
+            said = exc.args[0] if isinstance(exc, KeyError) and len(exc.args) == 1 else exc
+            print(f"error: {said} -- nothing was written", file=sys.stderr)
             return EXIT_NO
         traceback.print_exc()
         print(f"error: unexpected {type(exc).__name__}: {exc}", file=sys.stderr)

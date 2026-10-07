@@ -230,7 +230,7 @@ usage on stdout, exit 0.
 | exit | means |
 |---|---|
 | 0 | done, or yes |
-| 1 | refused, or no: the reason on stderr (`error: …`); REW answering something the method cannot read (`error: <REW's words> -- nothing was written`), or answering with an error (`error: REW answered with an error: <REW's words> -- nothing was written`); a typed mistake in a value the verb parses itself (a leg, a series) |
+| 1 | refused, or no: the reason on stderr (`error: …`); REW answering with an error (`error: REW answered with an error: <REW's words> -- nothing was written`), or with any other state but "unavailable" -- something the method cannot read (`protocol`), `write_mismatch`, `not_found`, `ambiguous`, `config` -- (`error: <its words> -- nothing was written`); a typed mistake in a value the verb parses itself (a leg, a series) |
 | 2 | usage: an unknown verb, a flag the verb does not take, a flag's value missing (one of the verb's flags, `-h` or `--help` in its place, or nothing after it: a value flag left last), a value on a flag that takes none, one of the verb's flags with its hyphens autocorrected to a dash, `--help` or `-h` after other arguments, too few arguments |
 | 69 | REW did not answer, and nothing was written (sysexits' `EX_UNAVAILABLE`) |
 | 70 | an unexpected error, a bug: Python's traceback on stderr, then `error: unexpected <type>: <message>` (`EX_SOFTWARE`) |
@@ -256,9 +256,16 @@ usage on stdout, exit 0.
   decision without its link and `capture-import <N> --bind` asked REW. capture-protective's legs `--hp` and `--lp`
   (`_LEG_FLAGS`) are the exception: the verb parses their three values and says what is wrong, exit 1 -- `--hp needs
   three values: f type slope, e.g. --hp 100 LR 24` (fewer, or a flag among them), `--hp: 'abc' is not a number`
-  (`100Hz`, `nan` too), `--hp: '24.5' is not a whole number`. They exited 70, a bug's code. A leg's values are the
-  leg's, not the verb's arguments: legs with no channel are too few, exit 2. `capture-import`'s series is read the
-  same way before REW is asked: `capture-import: '1a' is not a number`, exit 1. A flag that takes no value (`--plan`,
+  (`100Hz`, `nan` too), `--hp: '24.5' is not a whole number`. They exited 70, a bug's code. Each value is checked as
+  well (R47b), and each of these was recorded: a frequency not above 0, a slope not above 0, a type other than the
+  families the method can take back out of a sweep -- `_LEG_TYPES`, LR, BW and BE, `dsp_math.MODELLABLE_FAMILIES`
+  (`--hp: 'CH' is not a filter type this method can take back out: LR, BW or BE`; a Chebyshev was taken out as a
+  Butterworth). A leg's values are the leg's, not the verb's arguments: legs with no channel are too few, exit 2.
+  `capture-import`'s series is read the same way before REW is asked: `capture-import: '1a' is not a number`, exit 1.
+  With no titles (R47a), `capture-import <N>` imports what REW holds of series N and the project has not on record
+  (taken in a round, superseded there, or held by REW under its own spelling of one): none held is exit 1, `REW holds
+  no measurement of series _N; nothing was imported`; all on record is exit 0, `nothing new`. A flag that takes no
+  value (`--plan`,
   `--session`, `--json`, `--check`, `--no-rew`, ...) takes no `=`. The refusal's words never contain `usage:
   process.py`, which a front-end reads as "this method is too old".
 - **Too few arguments are a usage error.** A verb needs the arguments its line in the usage names in `<...>`
@@ -277,7 +284,9 @@ usage on stdout, exit 0.
   itself (`capture-import`, for a series' titles) exits 69 too. REW answering such a verb with something the method
   cannot read (`rew_state` "protocol") is exit 1, REW's words and `-- nothing was written`: REW's answer, not a bug;
   so is REW answering it with an error -- an `HTTPError`, its 4xx/5xx, or a class whose `rew_state` is "error" --
-  said `error: REW answered with an error: <REW's words> -- nothing was written`, where it was a bug's 70.
+  said `error: REW answered with an error: <REW's words> -- nothing was written`, where it was a bug's 70. Every
+  other state but "unavailable" is exit 1 the same way, read off the exception's class (R47c): `write_mismatch`,
+  `not_found`, `ambiguous` and `config` (a `REW_API_URL` that is no address), which no verb meets there today.
   `capture-close` still closes on the record alone with REW down, exit 0, and says which it met, with what was
   raised: `REW not reached`, or `REW answered something that is not a measurement list`. REW gone between its list
   and the checks `capture-close` runs is said as what happens: the checks were not run, and the round closes on the
