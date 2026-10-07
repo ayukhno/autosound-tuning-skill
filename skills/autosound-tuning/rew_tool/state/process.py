@@ -2376,13 +2376,16 @@ class Process:
         graph it judged. A measurement REW no longer holds records no uuid and reads as not ok.
 
         **A check reads; it does not take** (#134, audit T-1). Every title's verdict goes into the
-        round's `checks` (`{title: verified}`), `exists` as the check said it: True, False, or None
-        when REW's list was not read. A `taken` row is created only for a title REW HOLDS (the rule
-        `capture-close` closes by, skill #77), and a row already there gets the new verdict. A
-        check used to create a `taken` row for every title it was handed, so a title nobody had
-        measured stood as a capture the round took, outstanding nowhere. And REW not answering is
-        no verdict at all: when any title went unanswered (`reachable` False) this raises
-        `RewUnavailableError` (exit 69) before anything is written.
+        round's `checks` (`{title: verified}`), `exists` as the check said it: True or False. A
+        `taken` row is created only for a title REW HOLDS (the rule `capture-close` closes by, skill
+        #77) -- one REW holds more than once too, `ambiguous` on its verdict (H I-8) -- and a row
+        already there gets the new verdict. A check used to create a `taken` row for every title it
+        was handed, so a title nobody had measured stood as a capture the round took, outstanding
+        nowhere. And REW not answering is no verdict at all: when any title went unanswered
+        (`reachable` False) this raises `RewUnavailableError` (exit 69) before anything is written.
+        Nor is a list of REW's nobody read (`exists` None: REW answered it with an error or with
+        something it cannot read, or its address is none): `ProcessError`, exit 1, nothing written
+        (H I-6) -- it was recorded as REW's verdict on every title.
 
         `session=True` adds the whole-session probe (Phase 0.6, `verify.session_report`) and
         records it on the round as `session` -- the ctl1->ctl3 drift is the DRIFT RECORD the
@@ -2407,6 +2410,14 @@ class Process:
         if down is not None:
             raise RewUnavailableError(
                 f"REW did not answer ({(down.get('issues') or ['no answer'])[0]}) -- nothing was recorded")
+        # Nor is REW's list unread (`exists` null): REW answered it with an error or with something it cannot read, or
+        # was never asked -- its address no address (H I-6, H I-5). Every title was recorded as REW's verdict, `bad` in
+        # a `capture_verified` and over a verdict already on a taken row. Refused, exit 1, with what was said; a bug in
+        # that read never comes back as a verdict (`verify` raises it).
+        unread = next((v for v in verdicts if v.get("exists") is None), None)
+        if unread is not None:
+            raise ProcessError(f"REW's measurement list was not read ({(unread.get('issues') or ['no answer'])[0]}) "
+                               "-- nothing was recorded")
         taken, checks = round_.setdefault("taken", {}), round_.setdefault("checks", {})
         for verdict in verdicts:
             title = verdict["name"]
@@ -2422,6 +2433,8 @@ class Process:
                 "at": _now(),
                 "issues": list(verdict.get("issues") or []),
             }
+            if verdict.get("ambiguous"):
+                verified["ambiguous"] = verdict["ambiguous"]   # REW holds it more than once (H I-8): rename it
             checks[title] = dict(verified)          # every title checked, held or not (T-1)
             if title in taken:
                 taken[title]["verified"] = verified
@@ -4833,7 +4846,11 @@ def _check_catch_all_reads_the_type():
     `REW_API_URL` that is no address) exit 1 with their message -- a `not_found` or an `ambiguous` a `KeyError`, its
     words without the quotes a `KeyError` puts round them -- read off the class, so a foreign copy of `rew_api`
     raising its own `RewWriteMismatch` is said the same way. Only "unavailable" is 69. An IndexError raised inside a
-    verb (R36) is a bug's 70 with its traceback: it exited 1 like a refusal, with no traceback."""
+    verb (R36) is a bug's 70 with its traceback: it exited 1 like a refusal, with no traceback. A write REW took is
+    never "nothing was written" (m3, H 10): a `write_mismatch` says REW may hold part of it, and a write REW
+    acknowledged and nobody could read back (`rew_unchecked`) is said in its own words. The traps raise for any
+    attribute their instance lacks on every Python, as an `HTTPError` built without a body does on 3.9 alone, so
+    the class-read rule is held on 3.12 too (T m1)."""
     import importlib.util
     import shutil
     import tempfile
@@ -4857,8 +4874,20 @@ def _check_catch_all_reads_the_type():
     class Twice(KeyError):                     # a title REW holds twice
         rew_state = "ambiguous"
 
-    class Misconfigured(ValueError):           # a `REW_API_URL` that is no address (batch 3 raises it)
+    class Misconfigured(ValueError):           # a `REW_API_URL` that is no address (`rew_api.RewAddressError`)
         rew_state = "config"
+
+    class SentUnchecked(OSError):              # a filter write REW acknowledged, its read-back unanswered (H 10)
+        rew_state = "unavailable"
+        rew_unchecked = True
+
+    class Trap(Exception):                     # an instance that raises for any attribute it lacks, on every Python:
+        def __getattr__(self, name):           # what an `HTTPError` built without a body does on 3.9 (T m1)
+            raise KeyError("file")
+
+    class TrapHTTP(urllib.error.HTTPError):    # REW's error answer whose instance raises so
+        def __getattr__(self, name):
+            raise KeyError("file")
 
     # A foreign copy of `rew_api`, loaded by its path under another name: its classes are not the sibling's.
     spec = importlib.util.spec_from_file_location(
@@ -4873,17 +4902,27 @@ def _check_catch_all_reads_the_type():
         d = os.path.join(top, "process")
         Process(d).enter_phase("-1")
         nothing = " -- nothing was written"
-        for exc, code, said in ((Down("REW is not answering at http://127.0.0.1:1"), 69, "-- nothing was written"),
+        # A write REW took is never "nothing was written" (m3, H 10): REW may hold part of a write it did not keep,
+        # and a write it acknowledged and nobody could read back says so in its own words.
+        took = " -- REW may hold part of the write: check REW's EQ before going on"
+        sent = ("REW acknowledged the filter write to measurement 3 ('Filters set'), and reading the filters back "
+                "failed (refused): the write was sent and acknowledged but not checked -- check REW's EQ before going "
+                "on")
+        for exc, code, said in ((Down("REW is not answering at http://127.0.0.1:1"), 69,
+                                 "error: REW is not answering at http://127.0.0.1:1" + nothing),
                                 (Unreadable("REW's measurement list is not a map of measurements: list"), 1,
                                  "error: REW's measurement list is not a map of measurements: list -- nothing was "
                                  "written"),
                                 (urllib.error.HTTPError("http://127.0.0.1:1/x", 500, "boom", {}, None), 1,
                                  "error: REW answered with an error: HTTP Error 500: boom -- nothing was written"),
+                                (TrapHTTP("http://127.0.0.1:1/x", 500, "boom", {}, None), 1,
+                                 "error: REW answered with an error: HTTP Error 500: boom -- nothing was written"),
                                 (Answered("HTTP Error 404: Not Found -- REW said: no such measurement"), 1,
                                  "error: REW answered with an error: HTTP Error 404: Not Found -- REW said: no such "
                                  "measurement -- nothing was written"),
                                 (Misread("slot 3: REW holds gaindB +12.0 where +14.0 was sent"), 1,
-                                 "error: slot 3: REW holds gaindB +12.0 where +14.0 was sent" + nothing),
+                                 "error: slot 3: REW holds gaindB +12.0 where +14.0 was sent" + took),
+                                (SentUnchecked(sent), 69, f"error: {sent}\n"),
                                 (Gone("No measurement titled 'w-L_1 (sw)' (REW holds 3)"), 1,
                                  "error: No measurement titled 'w-L_1 (sw)' (REW holds 3)" + nothing),
                                 (Twice("Ambiguous: 2 measurements titled 'w-L_1 (sw)'"), 1,
@@ -4891,11 +4930,13 @@ def _check_catch_all_reads_the_type():
                                 (Misconfigured("REW_API_URL 'localhost:4735' is not an address: no scheme"), 1,
                                  "error: REW_API_URL 'localhost:4735' is not an address: no scheme" + nothing),
                                 (foreign.RewWriteMismatch("slot 2 missing from REW's filters after the write"), 1,
-                                 "error: slot 2 missing from REW's filters after the write" + nothing),
+                                 "error: slot 2 missing from REW's filters after the write" + took),
                                 (foreign.MeasurementNotFound("No measurement titled 'm-L_1 (sw)' (REW holds 0)"), 1,
                                  "error: No measurement titled 'm-L_1 (sw)' (REW holds 0)" + nothing),
                                 (IndexError("list index out of range"), 70,
-                                 "error: unexpected IndexError: list index out of range")):
+                                 "error: unexpected IndexError: list index out of range"),
+                                (Trap("the handler reads no instance"), 70,
+                                 "error: unexpected Trap: the handler reads no instance")):
             def boom(self, *args, _exc=exc, **kwargs):
                 raise _exc
             Process.record_decision = boom
@@ -4906,6 +4947,8 @@ def _check_catch_all_reads_the_type():
                 rc, err = f"raised {type(e).__name__}: {e}", ""
             assert rc == code and said in err, (type(exc).__name__, rc, err[-300:])
             assert ("Traceback" in err) is (code == 70), (type(exc).__name__, err[-300:])
+            assert (nothing in err) is (said.endswith(nothing)), ("'nothing was written' where a write was sent",
+                                                                  type(exc).__name__, err[-300:])
             assert _project_bytes(d) == before, f"{type(exc).__name__}: something was written"
         Process.record_decision = real
         # `capture-import` asks REW for a series' titles itself, through its own `import rew_api` -- which finds
@@ -5590,8 +5633,10 @@ def _check_close_says_what_rew_did():
 
 def _check_check_never_invents_taken():
     """T-1 (#134): a check records a verdict for every title (`round.checks`), and creates a `taken` row only for a
-    title REW holds (#77) -- a title REW does not hold stays outstanding; a row already there is updated; a title
-    whose presence is not known keeps `exists` null; and REW not answering records nothing at all (69)."""
+    title REW holds (#77) -- a title REW does not hold stays outstanding; a row already there is updated. A check
+    whose listing of REW was not read records nothing at all (H I-6): REW answering the list with an error is 1, and
+    it was recorded as REW's verdict on every title -- `checks` with `exists` null, a `capture_verified` naming each
+    in `bad`; REW not answering is 69."""
     import shutil
     import tempfile
 
@@ -5630,9 +5675,16 @@ def _check_check_never_invents_taken():
         lines = out.splitlines()
         assert "UNUSABLE b (sw) — No measurement titled 'b (sw)' (REW holds 1)" in lines and "OK      a (sw)" in lines \
             and rc == 1, (rc, out, err)
-        p.check_captures(["b (sw)"], verifier=Unread())
-        round_ = Process(d).load()["capture"]
-        assert round_["checks"]["b (sw)"]["exists"] is None and "b (sw)" not in round_["taken"], round_
+        before = _project_bytes(d)
+        try:
+            p.check_captures(["a (sw)", "b (sw)"], verifier=Unread())
+        except ProcessError as exc:
+            assert getattr(exc, "exit_code", EXIT_NO) == EXIT_NO and str(exc) == (
+                "REW's measurement list was not read (REW answered an error: HTTP Error 500) -- nothing was "
+                "recorded"), str(exc)
+        else:
+            raise AssertionError("a check whose listing of REW was not read was recorded as REW's verdict")
+        assert _project_bytes(d) == before, "a listing that was not read wrote something"
         p.record_capture("b (sw)")                               # taken by hand: a check updates the row
         p.check_captures(["b (sw)"], verifier=Verifier())
         round_ = Process(d).load()["capture"]
@@ -5648,6 +5700,164 @@ def _check_check_never_invents_taken():
         assert _project_bytes(d) == before, "a check with REW down wrote something"
     finally:
         Process._load_verifier = real
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_listing_never_read_as_rew():
+    """A listing read that never reached REW is never recorded as REW's answer (#134, H I-6, H I-5), and the verb
+    exits by its state. `REW_API_URL` that is no address, through the real `verify` and `rew_api`: `capture-check`
+    is 1 with the address's words, where it was 69 ("start REW", which mends no typo), `capture-close` is 1 with the
+    round left open, where it closed it unchecked, and `capture-import <N>` asking REW itself is 1. REW answering the
+    list with an error: `capture-check` is 1 with REW's words, where every title was recorded as its verdict. A bug
+    in reading the list is 70 with its traceback. Each writes nothing."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_process_listing_unread_")
+    real = Process._load_verifier
+    try:
+        d = os.path.join(top, "process")
+        p = Process(d)
+        p.enter_phase("-1")
+        p.start_capture("1", expected=["a (sw)"])
+        before = _project_bytes(d)
+        address = ("REW_API_URL 'localhost:4735' is not an address: it does not start with http:// or https:// — "
+                   "set it right, or unset it for REW's default (http://localhost:4735)")
+        for argv in (["capture-check"], ["capture-close"],
+                     ["capture-import", "1", "--bind", "=v_001", "--knob", "SubRC=4/4"]):
+            r = _cli_env(d, argv, REW_API_URL="localhost:4735")
+            assert r.returncode == EXIT_NO and address in r.stderr and "Traceback" not in r.stderr \
+                and "start REW" not in r.stderr and "closing on the record alone" not in r.stdout, \
+                (argv, r.returncode, r.stdout[-300:], r.stderr[-400:])
+            assert _project_bytes(d) == before, f"{argv[0]}: an address that is none wrote something"
+        assert not Process(d).load()["capture"].get("closed"), "the round closed over an address that is none"
+
+        class Answered:                        # REW answered its list with an error: no title was read
+            def verify(self, titles):
+                return [{"name": t, "exists": None, "reachable": True, "valid": False, "stats": {},
+                         "issues": ["REW answered an error: HTTP Error 500: Internal Server Error -- REW said: boom"]}
+                        for t in titles]
+
+        class Buggy:                           # the listing's reader broke: no verdict at all
+            def verify(self, titles):
+                raise TypeError("a bug in the listing's reader")
+        for verifier, code, said in (
+                (Answered(), EXIT_NO, "error: REW's measurement list was not read (REW answered an error: HTTP Error "
+                                      "500: Internal Server Error -- REW said: boom) -- nothing was recorded"),
+                (Buggy(), EXIT_UNEXPECTED, "error: unexpected TypeError: a bug in the listing's reader")):
+            Process._load_verifier = lambda self, _verifier=verifier: _verifier
+            rc, out, err = _run_main(["process.py", d, "capture-check"])
+            assert rc == code and said in err and ("Traceback" in err) is (code == EXIT_UNEXPECTED) \
+                and not out.strip(), (type(verifier).__name__, rc, out, err[-400:])
+            assert _project_bytes(d) == before, f"{type(verifier).__name__}: a listing nobody read wrote something"
+    finally:
+        Process._load_verifier = real
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_ambiguous_capture():
+    """A title REW holds twice is its own verdict in the round too (#134, H I-8, T m4), through the real `verify`:
+    REW holds it, so the check takes it -- a `taken` row, `exists` true -- where it was left outstanding as nobody's
+    measurement and the tuner measured a third copy; and it is not usable until it is renamed. `capture-check` says
+    AMBIGUOUS with the count, exit 1, the step gate counts it unusable, and `--session` counts it apart."""
+    import contextlib
+    import io as _io
+    import shutil
+    import tempfile
+    api = _load_sibling("verify.py")._api
+    real = api.get_measurements
+    top = tempfile.mkdtemp(prefix="autosound_process_ambiguous_")
+    try:
+        api.get_measurements = lambda: {"1": {"title": "a (sw)", "uuid": "u1"}, "2": {"title": "a (sw)", "uuid": "u2"}}
+        d = os.path.join(top, "process")
+        p = Process(d)
+        p.enter_phase("-1")
+        p.start_capture("1", expected=["a (sw)"])
+        with contextlib.redirect_stdout(_io.StringIO()):
+            p.check_captures()
+        round_ = Process(d).load()["capture"]
+        verified = (round_["taken"].get("a (sw)") or {}).get("verified") or {}
+        assert verified.get("ambiguous") == 2 and verified["exists"] is True and verified["ok"] is False, round_
+        assert round_["checks"]["a (sw)"].get("ambiguous") == 2, round_["checks"]
+        assert p.capture_outstanding() == [] and p.unusable_captures() == ["a (sw)"], \
+            (p.capture_outstanding(), p.unusable_captures())
+        rc, out, err = _run_main(["process.py", d, "capture-check", "--session"])
+        lines = out.splitlines()
+        assert rc == EXIT_NO and "AMBIGUOUS a (sw) — REW holds 2 measurements under this title; rename so titles are " \
+            "unique, then run capture-check again" in lines and "UNUSABLE a (sw)" not in out, (rc, out, err)
+        assert "titles, 0 usable, 0 missing, 0 unusable, 1 ambiguous" in out, out
+    finally:
+        api.get_measurements = real
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_close_swallows_only_rew():
+    """`capture-close` closes on the record alone over REW's own states only (#134, T I4, F M-11, H minor 5, T m17):
+    REW down, REW answering something that is no measurement list, and REW answering an error -- an `HTTPError`,
+    untested before, said as "not read against REW" -- each named, exit 0 (the design). Anything else is raised
+    before a line is printed: the state refused at the reconcile's own read (the round closed, unchecked, under
+    "not read against REW" -- T I4's probe), the reconcile's own refusal, an address that is none -- exit 1, the
+    round open, nothing written -- and a bug, 70 with its traceback."""
+    import contextlib
+    import shutil
+    import tempfile
+    import urllib.error
+    global _load_naming
+    rew_api = _siblings().load("rew_api.py")
+    real_list, real_naming = rew_api.get_measurements, _load_naming
+    top = tempfile.mkdtemp(prefix="autosound_process_close_only_rew_")
+
+    def fresh():
+        d = os.path.join(tempfile.mkdtemp(dir=top), "process")
+        Process(d).enter_phase("-1")
+        Process(d).start_capture("1", expected=["m-L_1 (sw)"])
+        return d
+
+    def answer(exc):
+        def listing():
+            raise exc
+        return listing
+
+    class Misaddressed(ValueError):          # `rew_api.RewAddressError`, as any copy raises it
+        rew_state = "config"
+    try:
+        d = fresh()
+        rew_api.get_measurements = answer(urllib.error.HTTPError(
+            "http://127.0.0.1:1/measurements", 500, "Internal Server Error -- REW said: boom", {}, None))
+        rc, out, err = _run_main(["process.py", d, "capture-close"])
+        assert rc == EXIT_OK and "REW answered with an error (HTTPError: HTTP Error 500: Internal Server Error -- REW " \
+            "said: boom): closing on the record alone" in out and "not checked against REW" in out \
+            and Process(d).load()["capture"].get("closed"), (rc, out, err)
+
+        def refused_at_the_reconcile(n, read):          # `_main`'s read is the first; the reconcile's own, the second
+            if n == 2:
+                raise _project_io().Unreadable(os.path.join(d, "process-state.json"),
+                                               "cannot be opened (held a moment by another writer)",
+                                               "close what holds it and run again")
+            return read()
+        cases = (   # (what fails, the listing REW gives, the state's reads, naming, the exit, what stderr says)
+            ("a read refused at the reconcile", lambda: {"1": {"title": "m-L_1 (sw)"}}, refused_at_the_reconcile,
+             real_naming, EXIT_NO, "cannot be opened (held a moment by another writer)"),
+            ("the reconcile's own refusal", lambda: {"1": {"title": "m-L_1 (sw)"}}, None, lambda: None, EXIT_NO,
+             "naming.py could not be loaded"),
+            ("an address that is none", answer(Misaddressed("REW_API_URL 'localhost:4735' is not an address: it "
+                                                            "does not start with http:// or https://")),
+             None, real_naming, EXIT_NO, "error: REW_API_URL 'localhost:4735' is not an address"),
+            ("a bug", answer(TypeError("a bug in the listing's reader")), None, real_naming, EXIT_UNEXPECTED,
+             "error: unexpected TypeError: a bug in the listing's reader"),
+        )
+        for what, listing, reads, naming, code, said in cases:
+            d = fresh()
+            rew_api.get_measurements, _load_naming = listing, naming
+            before = _project_bytes(d)
+            with (_StateReads(reads) if reads else contextlib.nullcontext()):
+                rc, out, err = _run_main(["process.py", d, "capture-close"])
+            _load_naming = real_naming
+            assert rc == code and said in err and not out.strip() and ("Traceback" in err) is (code == EXIT_UNEXPECTED), \
+                (what, rc, out, err[-400:])
+            assert _project_bytes(d) == before and not Process(d).load()["capture"].get("closed"), \
+                f"{what}: the round was closed, or something written"
+    finally:
+        rew_api.get_measurements, _load_naming = real_list, real_naming
         shutil.rmtree(top, ignore_errors=True)
 
 
@@ -5672,7 +5882,8 @@ def _selftest():
                   _check_flag_values_as_they_stand, _check_autocorrected_dashes, _check_too_few_arguments,
                   _check_value_flag_last, _check_help_writes_nothing, _check_usage_before_the_read,
                   _check_handoff_says_an_unreadable_changelog, _check_superseded_not_taken,
-                  _check_check_never_invents_taken, _check_close_says_what_rew_did):
+                  _check_check_never_invents_taken, _check_close_says_what_rew_did,
+                  _check_listing_never_read_as_rew, _check_ambiguous_capture, _check_close_swallows_only_rew):
         try:
             check()
         except AssertionError as exc:
@@ -6760,10 +6971,11 @@ def _main(argv):
                 return EXIT_REW_UNAVAILABLE
             if session and round_.get("session"):
                 verifier = p._load_verifier()
-                # `reachable` kept (#134): a row REW did not answer for is counted unreachable, never unusable.
+                # `reachable` kept (#134): a row REW did not answer for is counted unreachable, never unusable; and
+                # `ambiguous`, a title REW holds more than once, counted apart (H I-8).
                 probe = dict(round_["session"], counts=verifier.summary(
                     [{"exists": r["exists"], "valid": r["valid"], "applicable": r.get("applicable", True),
-                      "reachable": r.get("reachable", True)}
+                      "reachable": r.get("reachable", True), "ambiguous": r.get("ambiguous")}
                      for r in round_["session"]["rows"]]),
                     processing_rate_hz=None, rate_note=None)
                 print(verifier.render_session(probe))
@@ -6783,6 +6995,10 @@ def _main(argv):
                     print(f"UNUSABLE {title} — superseded by {superseded}")
                 elif verdict.get("applicable") is False:
                     print(f"N/A     {title} — {'; '.join(verdict.get('issues') or [])}")
+                elif verdict.get("ambiguous"):
+                    # Its own verdict (H I-8): REW holds it, so it is not missing -- and not usable until renamed.
+                    print(f"AMBIGUOUS {title} — REW holds {verdict['ambiguous']} measurements under this title; "
+                          "rename so titles are unique, then run capture-check again")
                 else:
                     reason = "; ".join(verdict.get("issues") or ["не перевірено"])
                     print(f"UNUSABLE {title} — {reason}")
@@ -7041,13 +7257,18 @@ def _main(argv):
             checked = None
             if not no_rew:
                 rew_api = _load_sibling("rew_api.py")
+                if rew_api is None:
+                    raise ProcessError(f"rew_api.py could not be loaded{_load_failure('rew_api.py')} -- the round "
+                                       "cannot be read against REW, and nothing was written; `capture-close "
+                                       "--no-rew` closes it on the record alone")
                 try:
                     # A listing that is not a map of measurements raises (`RewProtocolError`, #134): never `{}`.
                     titles = [m.get("title", "") for m in rew_api.get_measurements().values()]
-                    checked = p.reconcile_captures(titles)
-                except Exception as exc:  # noqa: BLE001 -- REW down is a fact to print, not a crash
-                    # Said as what it was, by the state on the exception's class (#134): REW down is not REW answering
-                    # something that is no measurement list. Each line names what was raised, and its words.
+                except Exception as exc:  # noqa: BLE001 -- REW's own states are said below; anything else is raised
+                    # Only REW's states close on the record alone (#134, T I4, F M-11, H minor 5), each said as what
+                    # it was, by the state on the exception's class, with what was raised: REW down, REW answering
+                    # something that is no measurement list, REW answering with an error. Anything else -- an
+                    # address that is none, a bug -- is raised before a line is printed, the round left open.
                     rew_said = getattr(type(exc), "rew_state", None)
                     raised = f"{type(exc).__name__}: {str(exc)[:120]}"
                     if rew_said == "unavailable":
@@ -7055,8 +7276,15 @@ def _main(argv):
                     elif rew_said == "protocol":
                         print(f"  REW answered something that is not a measurement list ({raised}): closing on the "
                               "record alone")
+                    elif rew_said == "error" or isinstance(exc, urllib.error.HTTPError):
+                        print(f"  REW answered with an error ({raised}): closing on the record alone")
                     else:
-                        print(f"  not read against REW ({raised}): closing on the record alone")
+                        raise
+                else:
+                    # Outside the `try`: the reconcile's own refusals -- the state it cannot read, naming.py that
+                    # cannot be loaded -- are this verb's refusal (1), never "not read against REW" over a round that
+                    # then closed unchecked (T I4's probe), and a bug in it is 70.
+                    checked = p.reconcile_captures(titles)
             if checked is not None:
                 print(f"  read against REW: {len(checked['matched'])} of {len(checked['expected'])} on the list held"
                       + (f", {len(p.load(strict=True)['capture'].get('reconciled', {}).get('extra') or [])} taken "
@@ -7126,23 +7354,33 @@ def _main(argv):
             print(f"error: {exc}", file=sys.stderr)
             return EXIT_NO
         rew_said = getattr(type(exc), "rew_state", None)
+        # A filter write REW acknowledged and nobody could read back (`rew_unchecked`, rew_api's H 10) says so in its
+        # own words, and a write REW did not keep may be partly in REW (m3): neither is "nothing was written". No verb
+        # writes filters today; the line stays true the day one does.
+        if getattr(type(exc), "rew_unchecked", False):
+            after = ""
+        elif rew_said == "write_mismatch":
+            after = " -- REW may hold part of the write: check REW's EQ before going on"
+        else:
+            after = " -- nothing was written"
         if rew_said == "unavailable":
-            print(f"error: {exc} -- nothing was written", file=sys.stderr)
+            print(f"error: {exc}{after}", file=sys.stderr)
             return EXIT_REW_UNAVAILABLE
         if rew_said == "error" or isinstance(exc, urllib.error.HTTPError):
             # REW answered with an error, its 4xx/5xx and its words (`rew_api._open` puts them on the message): REW's
             # answer too, a refusal in its words (F M-4, H minor 1), where it was a bug's 70 with a traceback. Matched
             # as the stdlib's one `HTTPError` class -- one in every copy -- or by the state its class names.
-            print(f"error: REW answered with an error: {exc} -- nothing was written", file=sys.stderr)
+            print(f"error: REW answered with an error: {exc}{after}", file=sys.stderr)
             return EXIT_NO
         if rew_said is not None:
             # Every other state of REW's is REW's answer, not a bug of the method (#134, R47c): "protocol" (an answer
-            # this method cannot read -- `capture-import` reading REW's list itself), and "write_mismatch",
-            # "not_found", "ambiguous" and "config" (a `REW_API_URL` that is no address), which no verb meets here
-            # today: a refusal in its own words, exit 1, where it was a bug's 70. A `not_found` or an `ambiguous` is a
-            # `KeyError`, whose `str` puts quotes round its words; its words are said as they are.
+            # this method cannot read -- `capture-import` reading REW's list itself), "config" (a `REW_API_URL` that
+            # is no address: `capture-import` asking REW meets it, H I-5), and "write_mismatch", "not_found" and
+            # "ambiguous", which no verb meets here today: a refusal in its own words, exit 1, where it was a bug's
+            # 70. A `not_found` or an `ambiguous` is a `KeyError`, whose `str` puts quotes round its words; its words
+            # are said as they are.
             said = exc.args[0] if isinstance(exc, KeyError) and len(exc.args) == 1 else exc
-            print(f"error: {said} -- nothing was written", file=sys.stderr)
+            print(f"error: {said}{after}", file=sys.stderr)
             return EXIT_NO
         traceback.print_exc()
         print(f"error: unexpected {type(exc).__name__}: {exc}", file=sys.stderr)

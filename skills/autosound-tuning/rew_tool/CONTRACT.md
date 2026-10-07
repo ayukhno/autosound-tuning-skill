@@ -30,7 +30,7 @@ too when the path is wrong, with `can't open file` on stderr: the usage line is 
 | exit | means |
 |---|---|
 | 0 | done, or yes |
-| 1 | refused, or no: the reason on stderr, `error: <reason>`; REW answering with an error, `error: REW answered with an error: <REW's words> -- nothing was written`; any other state REW's exceptions name but "unavailable" (`protocol`, `write_mismatch`, `not_found`, `ambiguous`, `config`), read off the class, `error: <its words> -- nothing was written` |
+| 1 | refused, or no: the reason on stderr, `error: <reason>`; REW answering with an error, `error: REW answered with an error: <REW's words> -- nothing was written`; any other state REW's exceptions name but "unavailable" (`protocol`, `write_mismatch`, `not_found`, `ambiguous`, `config`), read off the class, `error: <its words> -- nothing was written`, except that a `write_mismatch` ends `-- REW may hold part of the write: check REW's EQ before going on` and a filter write REW acknowledged and nobody could read back (`rew_unchecked` on its class) is said in its own words alone; `capture-check` when REW's measurement list was not read and REW did not stay silent -- it answered with an error or with something the method cannot read, or it was not asked, its address being none -- `error: REW's measurement list was not read (<why>) -- nothing was recorded` |
 | 2 | usage: an unknown verb (the usage on stderr), a flag the verb does not take, a flag's value missing (one of the verb's flags, `-h` or `--help` in its place, or nothing after it: a value flag left last), `=` on a flag that takes no value, one of the verb's flags with its hyphens autocorrected to a dash, `--help` or `-h` after other arguments, too few arguments |
 | 69 | REW did not answer, and nothing was written |
 | 70 | an unexpected error, a bug: Python's traceback on stderr, then `error: unexpected <type>: <message>` |
@@ -357,17 +357,25 @@ within `rew_api._READBACK_TOL`; a slot written `"None"` is checked for its type 
 raises `RewProtocolError` (`"protocol"`). Both were measured at the live pass at REW (PLAN-W-8 Task 12, 2026-10-07;
 REW's answers in `rew_tool/testdata/rew/`): REW answers the read with a list of every slot, each carrying its
 `index` (`filters-after-pk.json`), and the tolerance comes from REW's grid (`grid.json`) -- a value REW snapped
-passes, a value REW clamped to the equaliser's range does not.
+passes, a value REW clamped to the equaliser's range does not. A read-back that fails once REW has acknowledged the
+write -- REW stops answering, answers the read with an error, or with something that is no list of slots -- raises
+in the state it met, with `rew_unchecked = True` on its class and words that say the write was sent and acknowledged
+but not checked, ending `check REW's EQ before going on`: `RewReadBackUnavailable` (a `RewUnavailable`),
+`RewReadBackRefused` (an `HTTPError`, no `rew_state`), `RewReadBackUnreadable` (a `RewProtocolError`).
 
 `rename_measurement` is not read back: it returns REW's answer, as before.
 
-The exceptions `rew_api` raises for REW carry `rew_state`, and these five values are what a front end may match:
-`"unavailable"` (REW did not answer, or dropped its answer midway: `RewUnavailable`, a `URLError`), `"protocol"` (REW
-answered something that cannot be read: `RewProtocolError`, a `ValueError`), `"write_mismatch"` (above),
-`"not_found"` and `"ambiguous"` (`find_measurement_id` found no measurement, or two, under a title:
-`MeasurementNotFound` and `AmbiguousTitle`, `KeyError`s with the words they always had). REW answering with an error
-is an `HTTPError`, with no `rew_state`. Match the value (`rew_api.rew_state(exc)`, or the attribute on the exception's
-class), never the class: the copy a front end loads by path and the method's own raise different classes.
+The exceptions `rew_api` raises for REW carry `rew_state`, and these six values are what a front end may match:
+`"unavailable"` (REW did not answer, or dropped its answer midway: `RewUnavailable`, a `URLError`; a host that does
+not resolve is this too, its words naming the host), `"protocol"` (REW answered something that cannot be read:
+`RewProtocolError`, a `ValueError`), `"write_mismatch"` (above), `"not_found"` and `"ambiguous"`
+(`find_measurement_id` found no measurement, or two, under a title: `MeasurementNotFound` and `AmbiguousTitle`,
+`KeyError`s with the words they always had), and `"config"` (REW's address is no address -- no `http://` or
+`https://`, another scheme, no host, a port that is not a whole number from 0 to 65535, a space or a control character
+-- refused before anything is sent: `RewAddressError`, a `ValueError`; its words name `REW_API_URL` only when the
+address came from it). REW answering with an error is an `HTTPError`, with no `rew_state`. Match the value
+(`rew_api.rew_state(exc)`, or the attribute on the exception's class), never the class: the copy a front end loads by
+path and the method's own raise different classes.
 
 ## 12. Compatibility — guaranteed
 

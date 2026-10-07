@@ -1,6 +1,7 @@
 import urllib.request
 import urllib.error
 import urllib.parse
+import functools
 import http.client
 import json
 import math
@@ -36,7 +37,9 @@ def _siblings():
 # REW's own API port. `REW_API_URL` overrides it -- for a REW on another host, and for
 # `rew_tool/rew_stub.py`, which serves the same four endpoints from files so the commands that talk
 # to REW (`capture-check`, `predict --rew`, `verify_prediction --rew`) can be run with no REW.
-BASE_URL = os.environ.get("REW_API_URL", "http://localhost:4735").rstrip("/")
+# Read before every request (`_check_address`): a value that is no address is refused, never sent.
+_DEFAULT_URL = "http://localhost:4735"
+BASE_URL = os.environ.get("REW_API_URL", _DEFAULT_URL).rstrip("/")
 # No timeout on urlopen() meant a REW-unreachable call (REW not running, port filtered rather than
 # actively refused, ...) could hang a caller forever -- fatal when that caller is a Qt QThread: the
 # app hangs, gets force-quit, and Qt aborts with "QThread: Destroyed while thread is still running"
@@ -112,10 +115,46 @@ class AmbiguousTitle(KeyError):
     rew_state = "ambiguous"
 
 
+class RewAddressError(ValueError):
+    """REW's address is no address a request can go to (#134, H I-5): no http:// or https://, a scheme of another
+    name, no host, a port that is not a whole number from 0 to 65535, or a space or a control character in it --
+    `REW_API_URL` mistyped, most often. Refused before anything is sent (`_check_address`).
+
+    A `ValueError`, as R34 made a port that is no number, so an `except ValueError` keeps catching it. Not REW down:
+    each of these read as `RewUnavailable` ("start REW", which mends no typo), and the method's verbs exited 69 on it.
+    Not anything REW answered either. `rew_state` "config". The words name the address and why it is none; they
+    name `REW_API_URL` only when the address came from it, and then say to set it right or unset it.
+    """
+    rew_state = "config"
+
+
+# A filter write REW acknowledged and whose read-back failed (#134, H 10): the write was sent and REW said it was done,
+# and nothing checked it. Each keeps the state the read-back met -- REW stopped answering, answered the read with an
+# error, or answered something that is no list of slots -- and carries `rew_unchecked` on its class, so a caller that
+# says "nothing was written" for that state can tell. Raised by `set_filters` and `set_filter` (`_read_back_after`).
+
+class RewReadBackUnavailable(RewUnavailable):
+    """REW stopped answering between acknowledging a filter write and its read-back. `rew_state` "unavailable"."""
+    rew_unchecked = True
+
+    def __str__(self):
+        return str(self.reason)
+
+
+class RewReadBackUnreadable(RewProtocolError):
+    """REW answered a filter write's read-back with something that is no list of slots. `rew_state` "protocol"."""
+    rew_unchecked = True
+
+
+class RewReadBackRefused(urllib.error.HTTPError):
+    """REW answered a filter write's read-back with an error, 4xx/5xx. An `HTTPError`, with no `rew_state`."""
+    rew_unchecked = True
+
+
 def rew_state(exc):
-    """The REW state an exception stands for -- "unavailable", "protocol", "write_mismatch", "not_found" or
-    "ambiguous" -- or None when it carries none. None includes an `HTTPError`: REW answered, with an error (its
-    `code`, and REW's words in its message and `rew_body`). Reads the attribute, so it answers the same for an
+    """The REW state an exception stands for -- "unavailable", "protocol", "write_mismatch", "not_found",
+    "ambiguous" or "config" -- or None when it carries none. None includes an `HTTPError`: REW answered, with an error
+    (its `code`, and REW's words in its message and `rew_body`). Reads the attribute, so it answers the same for an
     exception raised by any copy of this module.
 
     The attribute is read off the exception's class, where every state is set. Off the instance it can raise: on
@@ -158,6 +197,51 @@ def _open(req_or_url):
         raise
 
 
+#: What no address holds: a space or a control character. `http.client` refuses a URL with one before it sends
+#: (`InvalidURL`), and in a host urllib reads it as a name that does not resolve.
+_NOT_IN_AN_ADDRESS = re.compile(r"[\x00-\x20\x7f]")
+
+
+@functools.lru_cache(maxsize=16)
+def _address_problem(base):
+    """Why `base` is no address a request can go to, or None when it is one (#134, H I-5): it starts with http:// or
+    https://, names a host, and its port, when it has one, is a whole number from 0 to 65535; no space or control
+    character anywhere. Read once for each value: `BASE_URL` is set by callers too (a tool's `--rew`, a test)."""
+    bad = _NOT_IN_AN_ADDRESS.search(base)
+    if bad:
+        return f"it holds {bad.group()!r}, a space or a control character"
+    if "://" not in base:
+        return "it does not start with http:// or https://"
+    try:
+        parts = urllib.parse.urlsplit(base)
+    except ValueError as exc:                    # an IPv6 address whose `[` is never closed
+        return f"it cannot be read as one ({exc})"
+    if parts.scheme not in ("http", "https"):
+        return f"its scheme is {parts.scheme!r}, not http or https"
+    if not parts.hostname:
+        return "it names no host"
+    try:
+        parts.port
+    except ValueError:                           # not a number, or out of 0-65535
+        return f"its port {parts.netloc.rpartition(':')[2]!r} is not a whole number from 0 to 65535"
+    return None
+
+
+def _check_address():
+    """Refuse a `BASE_URL` that is no address before anything is sent: `RewAddressError` (`rew_state` "config"),
+    naming it and why. `REW_API_URL` is named only when the address came from it (T12-1): a caller sets `BASE_URL`
+    too, and then the variable is not at fault."""
+    base = BASE_URL
+    why = _address_problem(base)
+    if why is None:
+        return
+    env = os.environ.get("REW_API_URL")
+    if env is not None and env.rstrip("/") == base:
+        raise RewAddressError(f"REW_API_URL {env!r} is not an address: {why} — set it right, or unset it for REW's "
+                              f"default ({_DEFAULT_URL})")
+    raise RewAddressError(f"REW's address {base!r} (rew_api.BASE_URL) is not an address: {why}")
+
+
 def _fetch(method, path, data=None):
     """One request to REW, read whole -- the one place REW's states are told apart (#134, audit T-2).
 
@@ -169,9 +253,12 @@ def _fetch(method, path, data=None):
     mid-answer -> `RewUnavailable` (a write may have landed); a status line or a header that is not HTTP ->
     `RewProtocolError`. `http.client` raises both as its own errors, neither a `URLError` nor a `ValueError`.
 
-    An address no request can be sent to -- a port that is not a number in `REW_API_URL`, a path with a space --
-    is a plain `ValueError` naming it, with no `rew_state` (R34): nothing was sent, so REW said nothing either way.
+    REW's address that is no address (`REW_API_URL` mistyped) -> `RewAddressError`, `rew_state` "config", before
+    anything is sent (H I-5); a host that does not resolve is REW unavailable, the host named. A request path a URL
+    cannot carry -- an id with a space -- is a plain `ValueError` naming it, with no `rew_state` (R34): nothing was
+    sent, so REW said nothing either way.
     """
+    _check_address()
     url = BASE_URL + path
     if method == "GET":
         req = url
@@ -185,16 +272,20 @@ def _fetch(method, path, data=None):
     except urllib.error.HTTPError:
         raise
     except urllib.error.URLError as exc:
-        raise RewUnavailable(exc.reason, url) from exc
+        reason = exc.reason
+        if isinstance(reason, socket.gaierror):          # the name was asked of DNS and found nothing (H I-5)
+            reason = f"the host {urllib.parse.urlsplit(url).hostname!r} cannot be resolved ({reason})"
+        raise RewUnavailable(reason, url) from exc
     except (TimeoutError, ConnectionError, socket.timeout) as exc:   # socket.timeout: Python 3.9
         raise RewUnavailable(exc, url) from exc
     # After ConnectionError: `RemoteDisconnected` is a `BadStatusLine` too, and a hang-up is REW not answering.
     except http.client.IncompleteRead as exc:
         raise RewUnavailable(exc, url) from exc
-    # Before HTTPException, which it is: raised before anything is sent, so it is no answer of REW's.
+    # Before HTTPException, which it is: raised before anything is sent, so it is no answer of REW's. The address was
+    # read whole above (`_check_address`), so what a URL cannot carry is in the request's path (T12-1).
     except http.client.InvalidURL as exc:
-        raise ValueError(f"cannot send a request to {url!r}: {exc}. Nothing was sent (REW's address, from "
-                         f"REW_API_URL: {BASE_URL!r})") from exc
+        raise ValueError(f"cannot send a request to {url!r}: {exc}. Nothing was sent: the request's path {path!r} is "
+                         f"not one a URL can carry") from exc
     except http.client.HTTPException as exc:
         raise RewProtocolError(f"REW answered {method} {path} with something that is not HTTP: {exc!r:.120}") from exc
     if not raw:
@@ -778,6 +869,36 @@ def _read_back(mid, written):
         raise RewWriteMismatch(f"REW did not keep the filter write to measurement {mid}: " + "; ".join(problems))
 
 
+def _read_back_after(mid, written, said):
+    """`_read_back`, once REW has acknowledged the write with `said` (#134, H 10).
+
+    A read-back that shows REW did not keep the write is `RewWriteMismatch`, as it is: checked. A read-back that fails
+    -- REW stopped answering, answered the read with an error, or with something that is no list of slots -- leaves
+    the write sent, acknowledged and unchecked; it raised as REW not answering the write's own address, so a caller
+    could not tell the write had landed. It is said as that now (`RewReadBackUnavailable`, `RewReadBackRefused`,
+    `RewReadBackUnreadable`: the state the read met, and `rew_unchecked`). Anything that is not REW's (a bug) is
+    raised as it is.
+    """
+    try:
+        _read_back(mid, written)
+    except Exception as exc:  # noqa: BLE001 -- REW's answers are said below, anything else is raised as it is
+        state = rew_state(exc)
+        if state == "write_mismatch" or not (state in ("unavailable", "protocol")
+                                             or isinstance(exc, urllib.error.HTTPError)):
+            raise
+        answer = said.get("message") if isinstance(said, dict) and said.get("message") else said
+        note = (f"REW acknowledged the filter write to measurement {mid} ({answer!r}), and reading the filters back "
+                f"failed ({exc}): the write was sent and acknowledged but not checked -- check REW's EQ before going on")
+        if isinstance(exc, urllib.error.HTTPError):
+            raised = RewReadBackRefused(f"{BASE_URL}/measurements/{mid}/filters", exc.code, note, exc.hdrs, None)
+            raised.rew_body = exc.__dict__.get("rew_body", "")   # off the instance's own dict: Python 3.9's trap
+        elif state == "unavailable":
+            raised = RewReadBackUnavailable(note, getattr(exc, "url", None))
+        else:
+            raised = RewReadBackUnreadable(note)
+        raise raised from exc
+
+
 def set_filters(mid, filters):
     """Write filter slots to a measurement in one call. `filters` is a list of FilterSetting dicts.
 
@@ -811,15 +932,18 @@ def set_filters(mid, filters):
     `slopedBPerOctave`), and its `frequency`, `gaindB` and `q` within `_READBACK_TOL` -- REW's
     grid, measured (a slot written `"None"` checks its type only). A difference -- a dropped
     gain, a slot cut off past the equaliser's count, a changed type, a value REW clamped --
-    raises `RewWriteMismatch` (`rew_state` "write_mismatch"); a read-back in another shape than
-    REW's list of slots raises `RewProtocolError`. Returns REW's answer to the write.
+    raises `RewWriteMismatch` (`rew_state` "write_mismatch"). A read-back that fails once REW
+    has acknowledged the write -- REW stops answering, answers the read with an error, or with
+    something that is no list of slots -- says the write was sent and acknowledged but not
+    checked, `check REW's EQ before going on`, in the state the read met, `rew_unchecked` on its
+    class (`_read_back_after`). Returns REW's answer to the write.
     """
     if not isinstance(filters, (list, tuple)):
         raise ValueError(f"set_filters takes a list of FilterSetting dicts, not {type(filters).__name__} -- "
                          f"nothing was sent (one slot alone: set_filter)")
     _refuse_before_sending(filters)
     said = _post(f"/measurements/{mid}/filters", {"filters": filters})
-    _read_back(mid, filters)
+    _read_back_after(mid, filters, said)
     return said
 
 
@@ -831,11 +955,12 @@ def set_filter(mid, filt):
 
     Checked as `set_filters` is (#134, audit K-1): a key REW does not take is refused before
     anything is sent, and the slot is read back after the PUT -- a difference raises
-    `RewWriteMismatch`. Returns REW's answer to the write.
+    `RewWriteMismatch`, and a read-back that fails says the write was sent and acknowledged but
+    not checked. Returns REW's answer to the write.
     """
     _refuse_before_sending([filt])
     said = _put(f"/measurements/{mid}/filters", filt)
-    _read_back(mid, [filt])
+    _read_back_after(mid, [filt], said)
     return said
 
 
@@ -1117,7 +1242,9 @@ def _check_fake_rew_answers():
                "/measurements": (200, b"[]")}
     fake = _FakeRew(lambda m, p, b, f: answers[p])
     try:
-        for path, want in (("/a", "REW said: boom"), ("/b", "HTTP Error 500")):
+        # REW's words are kept when its error is JSON that is not an object too (`[]`): reading `.get` off it raised
+        # AttributeError, and the words were lost (T m5).
+        for path, want in (("/a", "REW said: boom"), ("/b", "HTTP Error 500: Internal Server Error -- REW said: []")):
             try:
                 _with_base(fake.url, lambda: _get(path))
             except urllib.error.HTTPError as e:
@@ -1350,6 +1477,8 @@ def _check_read_back_cases():
         (set_filters, [pk], changed(frequency=1004.0), "write_mismatch", "frequency"),   # 4 Hz off at 1 kHz (R43)
         # The band is the written value's (R43): 99.7 Hz is on the 0.1 Hz grid, so 100.0 held is three steps off.
         (set_filters, [dict(pk, frequency=99.7)], changed(frequency=100.0), "write_mismatch", "frequency"),
+        # ...and 100 Hz itself is on the 1 Hz grid ("from 100 Hz"): 100.4 held is within half its step (T12-2).
+        (set_filters, [dict(pk, frequency=100.0)], changed(frequency=100.4), None, None),
         (set_filters, [pk], changed(q=None), "write_mismatch", "q"),
         (set_filters, [pk], lambda s: [{k: v for k, v in x.items() if k != "q"} for x in s], "write_mismatch", "q"),
         (set_filters, [pk], lambda s: [dict(x, index=5) for x in s], "write_mismatch", "slot 1"),
@@ -1370,6 +1499,65 @@ def _check_read_back_cases():
             assert state is None, f"{writer.__name__}: a write REW did not keep was reported done ({word})"
         finally:
             fake.close()
+
+
+def _check_read_back_unchecked():
+    """A read-back that fails once REW has acknowledged the write says so (#134, H 10): the write was sent and REW
+    said it was done, and nothing checked it -- `check REW's EQ before going on`. It read as REW not answering the
+    write's own address, which says nothing of the write that landed. The state is the read's (REW stopped answering:
+    "unavailable"; it answered the read with an error: an `HTTPError`; with something that is no list of slots:
+    "protocol"), and the class carries `rew_unchecked`. A read-back that shows REW did not keep the write is
+    `write_mismatch` as before, checked; a write refused before anything is sent carries no `rew_unchecked`."""
+    global get_filters
+    pk = {"index": 1, "type": "PK", "enabled": True, "frequency": 1000.0, "gaindB": -3.0, "q": 1.41}
+    real_read = get_filters
+
+    def acknowledges(get):
+        """A REW that answers the write "Filters set" (or "Filter set" for one slot) and the read with `get`."""
+        def routes(method, path, body, f):
+            if method in ("POST", "PUT"):
+                return 200, json.dumps({"message": "Filters set" if method == "POST" else "Filter set"}).encode()
+            return get(path)
+        return routes
+
+    def stopped(mid):
+        raise RewUnavailable(ConnectionRefusedError(61, "Connection refused"), f"{BASE_URL}/measurements/{mid}/filters")
+    cases = (   # (writer, what REW answers the read, a stand-in for the read or None, the state, the class's mark)
+        (set_filters, lambda p: (200, b"[]"), stopped, "unavailable", True),
+        (set_filter, lambda p: (200, b"[]"), stopped, "unavailable", True),
+        (set_filters, lambda p: (500, b'{"message": "the equaliser is being rebuilt"}'), None, None, True),
+        (set_filters, lambda p: (200, b'{"filters": []}'), None, "protocol", True),
+        (set_filter, lambda p: (200, b"not json"), None, "protocol", True),
+        (set_filters, lambda p: (200, json.dumps([dict(pk, gaindB=0.0)]).encode()), None, "write_mismatch", False),
+    )
+    for writer, answer, read, state, unchecked in cases:
+        fake = _FakeRew(acknowledges(answer))
+        get_filters = read or real_read
+        try:
+            _with_base(fake.url, lambda: writer("1", [pk] if writer is set_filters else pk))
+        except (OSError, ValueError) as e:
+            said, marked = str(e), getattr(type(e), "rew_unchecked", False)
+            assert rew_state(e) == state and marked is unchecked, (writer.__name__, state, rew_state(e), marked, said)
+            if unchecked:
+                assert ("REW acknowledged the filter write to measurement 1 ('Filter" in said
+                        and "was sent and acknowledged but not checked" in said
+                        and said.rstrip().endswith("check REW's EQ before going on")), said
+                assert state is not None or (isinstance(e, urllib.error.HTTPError) and e.code == 500
+                                             and "the equaliser is being rebuilt" in said), (repr(e), said)
+            else:
+                assert "not checked" not in said and "gaindB" in said, said
+        else:
+            raise AssertionError(f"{writer.__name__}: a read-back that failed ({state}) was reported done")
+        finally:
+            get_filters = real_read
+            fake.close()
+    # Refused before anything is sent: no write, nothing acknowledged, no mark.
+    try:
+        set_filters("1", [dict(pk, gain=-3.0)])
+    except ValueError as e:
+        assert not getattr(type(e), "rew_unchecked", False) and "Nothing was sent" in str(e), str(e)
+    else:
+        raise AssertionError("a filter REW does not take was sent")
 
 
 def _check_silence_and_hangup():
@@ -1409,16 +1597,76 @@ def _check_silence_and_hangup():
 
 
 def _check_malformed_address():
-    """An address no request can be sent to is a plain `ValueError` naming it, and nothing is sent (#134, R34): not
-    REW down, not REW answering something unreadable. `http.client` raises `InvalidURL` for it -- a port that is not a
-    number in `REW_API_URL`, a measurement id with a space -- an `HTTPException`, which read as `protocol`."""
-    for base, call in (("http://127.0.0.1:abc", get_measurements), ("http://127.0.0.1:1", lambda: get_fr("1 2"))):
+    """An address no request can be sent to is refused before anything is sent (#134, R34, H I-5). REW's address
+    itself -- no http:// or https://, a scheme of another name, no host, a port that is not a whole number from 0 to
+    65535, a space in it -- is `RewAddressError`: a `ValueError` (R34), `rew_state` "config". It read as REW down
+    ("start REW", which cannot mend a typo), or, for a port that is no number, as a plain `ValueError`. Its words name
+    `REW_API_URL` only when the address came from it, and then say to set it right or unset it (T12-1). A request
+    path a URL cannot carry (an id with a space) is a plain `ValueError` naming the path, never `REW_API_URL`. A host
+    that does not resolve is REW unavailable, said as such: the host named, and that it cannot be resolved."""
+    sent = []
+    real_open, real_resolve = urllib.request.urlopen, socket.getaddrinfo
+    saved_env = os.environ.get("REW_API_URL")
+
+    def recorded(req, *args, **kwargs):
+        sent.append(req)
+        return real_open(req, *args, **kwargs)
+    urllib.request.urlopen = recorded
+    try:
+        for base, why in (("localhost:4735", "does not start with http:// or https://"),
+                          ("127.0.0.1:4735", "does not start with http:// or https://"),
+                          ("localhost", "does not start with http:// or https://"),
+                          ("http:/127.0.0.1:4735", "does not start with http:// or https://"),
+                          ("htp://127.0.0.1:4735", "its scheme is 'htp'"),
+                          ("http://:4735", "names no host"),
+                          ("http://127.0.0.1:99999", "its port '99999' is not a whole number from 0 to 65535"),
+                          ("http://127.0.0.1:65536", "its port '65536'"),
+                          ("http://127.0.0.1:abc", "its port 'abc'"),
+                          ("http://rew host:4735", "a space")):
+            for from_env in (True, False):
+                os.environ["REW_API_URL"] = base if from_env else "http://127.0.0.1:1"
+                try:
+                    _with_base(base, get_measurements)
+                except ValueError as e:
+                    said = str(e)
+                    assert rew_state(e) == "config" and repr(base) in said and why in said, (base, repr(e))
+                    assert ("REW_API_URL" in said) is from_env, ("REW_API_URL blamed only when it is at fault", said)
+                    assert not from_env or said.startswith(f"REW_API_URL {base!r} is not an address: ") \
+                        and "set it right, or unset it for REW's default" in said, said
+                except Exception as e:  # noqa: BLE001 -- what is under test is which state it is
+                    raise AssertionError(f"{base!r}: {type(e).__name__} {rew_state(e)!r}: {e}") from e
+                else:
+                    raise AssertionError(f"{base!r}: an address no request can be sent to was asked")
+        assert not sent, ("a request went out to an address that is none", sent)
+        # The edges of the port are addresses: REW there is a REW down, never a typo.
+        for base in ("http://127.0.0.1:0", "http://127.0.0.1:65535", "http://[::1]:4735", "https://rew.local"):
+            assert _address_problem(base) is None, (base, _address_problem(base))
+        # A request path a URL cannot carry is the caller's id, not REW's address.
         try:
-            _with_base(base, call)
+            _with_base("http://127.0.0.1:1", lambda: get_fr("1 2"))
         except ValueError as e:
-            assert type(e) is ValueError and rew_state(e) is None and base in str(e), (base, repr(e))
+            said = str(e)
+            assert type(e) is ValueError and rew_state(e) is None and "'/measurements/1 2/frequency-response'" in said \
+                and "Nothing was sent" in said and "REW_API_URL" not in said, said
         else:
-            raise AssertionError(f"{base}: an address no request can be sent to was asked")
+            raise AssertionError("a path with a space was asked")
+        # A host that does not resolve: REW not reached, the host named (the resolver stands in for DNS here).
+
+        def unresolved(*_args, **_kwargs):
+            raise socket.gaierror(8, "nodename nor servname provided, or not known")
+        socket.getaddrinfo = unresolved
+        try:
+            _with_base("http://rew-host.invalid:4735", get_measurements)
+        except urllib.error.URLError as e:
+            assert rew_state(e) == "unavailable" and "the host 'rew-host.invalid' cannot be resolved" in str(e), str(e)
+        else:
+            raise AssertionError("a host that does not resolve answered")
+    finally:
+        urllib.request.urlopen, socket.getaddrinfo = real_open, real_resolve
+        if saved_env is None:
+            os.environ.pop("REW_API_URL", None)
+        else:
+            os.environ["REW_API_URL"] = saved_env
 
 
 #: REW's own answers, recorded at the live pass at REW (2026-10-07, PLAN-W-8 Task 12) on one swept measurement (id 3,
@@ -1454,14 +1702,19 @@ def _check_recorded_answers():
             return 200, raw_listing
         if method == "GET":
             rew["reads"] += 1
+            rew["read"].append(path)
             return 200, rew["lists"]
         rew["sent"].append((method, path, json.loads(body)))
         return rew["status"], json.dumps({"message": rew["says"]}).encode()
 
     def write(writer, written, lists, says="Filters set", status=200):
-        """`writer` to measurement 3: REW answers the write `status`, `says`, and lists `lists` when read."""
-        rew.update(lists=lists, says=says, status=status, sent=[], reads=0)
-        return _with_base(fake.url, lambda: writer("3", written))
+        """`writer` to measurement 3: REW answers the write `status`, `says`, and lists `lists` when read. The
+        read-back asks the measurement written, no other (T m6): any other read fails here, whatever it answered."""
+        rew.update(lists=lists, says=says, status=status, sent=[], reads=0, read=[])
+        try:
+            return _with_base(fake.url, lambda: writer("3", written))
+        finally:
+            assert rew["read"] in ([], ["/measurements/3/filters"]), ("the read-back read elsewhere", rew["read"])
 
     def lists(slot):
         """REW's 30 slots after a write to `slot`'s index: that slot as given, every other one cleared."""
@@ -1501,8 +1754,10 @@ def _check_recorded_answers():
         # (d) REW's grid. rounding.py and grid.py wrote slot 2 so; REW lists a PK slot with `isAuto` beside it.
         on = {"index": 2, "type": "PK", "enabled": True}
         listed = dict(on, isAuto=True)
+        replayed = {"value": 0, "type": 0, "freq": 0, "gain": 0, "q": 0}
         for probe in _recorded("rounding.json")[1]["probes"]:
             if "wrote" in probe:
+                replayed["value"] += 1
                 written, held = dict(on, **probe["wrote"]), dict(listed, **probe["stored"])
                 kept([written], lists(held))                                    # what REW snapped passes
                 for key, step in (("frequency", 0.1 if held["frequency"] < 100.0 else 1.0), ("gaindB", 0.1),
@@ -1511,6 +1766,7 @@ def _check_recorded_answers():
                         not_kept(set_filters, [written], dict(held, **{key: held[key] + off}), f"slot 2: {key} ")
                 continue
             # A type REW does not take: REW's 400 in its own words -- an error REW answered, not a write it dropped.
+            replayed["type"] += 1
             words = probe["error"].split(" -- REW said: ", 1)[1]
             try:
                 write(set_filters, [dict(on, type=probe["type_wrote"], frequency=500.0, gaindB=-2.0, q=0.7)],
@@ -1528,11 +1784,14 @@ def _check_recorded_answers():
         # every clamp raises.
         for name, key in (("freq", "frequency"), ("gain", "gaindB"), ("q", "q")):
             for value, stored in grid[name]:
+                replayed[name] += 1
                 written, held = dict(on, **dict(steady, **{key: value})), dict(listed, **dict(steady, **{key: stored}))
                 if (key, value) in clamped:
                     not_kept(set_filters, [written], held, f"slot 2: {key} {value!r} was written, REW holds {stored!r}")
                 else:
                     kept([written], lists(held))
+        # As many as the live pass recorded (T12-3): a golden trimmed later thins this replay, and it says so.
+        assert replayed == {"value": 4, "type": 13, "freq": 13, "gain": 9, "q": 10}, replayed
         # A frequency one grid step off REW's own snap, either way, from 100 Hz up (R43): 150 Hz, 1 kHz and 10 kHz,
         # where REW's step is 1 Hz. Below 100 Hz, 63 Hz is rounding.json's (above).
         snapped = {value: stored for value, stored in grid["freq"]}
@@ -1558,7 +1817,7 @@ def _selftest():
     failures = []
     for check in (_check_loads_by_path, _check_words_pinned, _check_closed_port, _check_fake_rew_answers,
                   _check_filter_keys_refused, _check_read_back, _check_foreign_keys_every_writer,
-                  _check_read_back_cases, _check_silence_and_hangup, _check_title_states,
+                  _check_read_back_cases, _check_read_back_unchecked, _check_silence_and_hangup, _check_title_states,
                   _check_listing_entries_and_empty_bodies, _check_rew_state_reads_any_http_error,
                   _check_http_level_broken_answers, _check_malformed_address, _check_recorded_answers):
         try:
@@ -1786,8 +2045,10 @@ def _selftest():
           "excess/min-phase wrappers post REW's four keys and raise when nothing appears; "
           "duplicate titles are found; an HTTP error carries REW's own explanation; "
           "REW down (refused, silent, hung up, cut off midway) is `unavailable`, an unreadable or non-HTTP answer "
-          "`protocol`; a filter key REW does not take is refused before any request, naming REW's spelling, and a "
-          "filter write REW did not keep is caught on the read-back; REW's own answers from the live pass replay: "
+          "`protocol`, an address that is none `config` before anything is sent; a filter key REW does not take is "
+          "refused before any request, naming REW's spelling, a filter write REW did not keep is caught on the "
+          "read-back, and one whose read-back failed is said as sent and not checked; REW's own answers from the "
+          "live pass replay: "
           "the listing parses, the PK write and the clear read back clean, a value REW snapped to its grid passes "
           "and one a step further off, or clamped, does not")
 
@@ -1800,7 +2061,7 @@ _DECIDED_ASKS = {
     ("rew_tool.py", "run", "get_fr"): ["1/6", "Var"],
     ("rew_tool.py", "run", "get_group_delay"): ["1/12"],
     ("rew_tool.py", "_read_joint_rew", "get_fr"): ["1/48"],   # an RTA pair: magnitude only
-    ("ear_suspects.py", "main", "get_fr"): ["1/48"],
+    ("ear_suspects.py", "_main", "get_fr"): ["1/48"],     # `main` is its refusal's wrapper since #134 (R53)
     ("verify_prediction.py", "measured_from_rew", "get_fr"): ["1/48"],
     ("spot_check.py", "_fetch", "get_fr"): ["<arg>"],
 }

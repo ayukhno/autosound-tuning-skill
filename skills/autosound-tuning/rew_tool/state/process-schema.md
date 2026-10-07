@@ -67,9 +67,9 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
                                                     //   stays, dimmed, naming what it was
                                                     //   corrected to. Never deleted, and counted
                                                     //   nowhere as taken (N17)
-      "verified": {"ok": true, "exists": true,      // SCR-040: what the arithmetic said; `exists`
-                   "uuid": "9ff4deb9-…",            //   null when REW's list was not read. REW's own
-                   "at": "…", "issues": []}}},      //   id — the title is NOT identity
+      "verified": {"ok": true, "exists": true,      // SCR-040: what the arithmetic said (`ambiguous`:
+                   "uuid": "9ff4deb9-…",            //   how many REW holds under the title, when
+                   "at": "…", "issues": []}}},      //   more than one). REW's own id — the title is NOT identity
     "checks": {"tw-L_1 (sw)": {"ok": true, "exists": true, "applicable": true,   // #134 (T-1): the last
                                "uuid": "9ff4deb9-…", "at": "…", "issues": []},   //   check of EVERY title,
                "tw-L_1 (rta)": {"ok": false, "exists": false,                     //   held or not -- what
@@ -184,12 +184,19 @@ appended line is fsynced (and the folder, when the append made the file), so it 
   `capture-check` prints it `UNUSABLE <title> — superseded by <right title>`. Before, a row checked
   and passed under the wrong title counted as a usable capture.
 - **A check reads; it does not take** (#134, audit T-1). `capture-check` records every title's
-  verdict in the round's `checks` (`{title: verified}`, `exists` true, false, or null when REW's
-  list was not read), and creates a `taken` row only for a title REW holds — the rule `capture-close`
-  closes by (skill #77); a row already there gets the new verdict. A title REW does not hold stays
-  outstanding. It used to become a `taken` row with a failed verdict: a capture the round took,
-  outstanding nowhere. `capture-check` reads a title's line from its `taken` row, else from
-  `checks`. With REW not answering it records nothing and exits 69 (below).
+  verdict in the round's `checks` (`{title: verified}`, `exists` true or false), and creates a `taken`
+  row only for a title REW holds — the rule `capture-close` closes by (skill #77); a row already there
+  gets the new verdict. A title REW does not hold stays outstanding. It used to become a `taken` row
+  with a failed verdict: a capture the round took, outstanding nowhere. A title REW holds more than
+  once is taken, and not usable until it is renamed (H I-8): its verdict carries `ambiguous`, the
+  count, and its line reads `AMBIGUOUS <title> — REW holds N measurements under this title; rename so
+  titles are unique, then run capture-check again`; it was left outstanding as nobody's measurement.
+  `capture-check` reads a title's line from its `taken` row, else from `checks`. With REW not
+  answering it records nothing and exits 69 (below); with REW's list not read for another reason --
+  REW answered it with an error or with something it cannot read, or `REW_API_URL` is no address --
+  it records nothing and exits 1, `REW's measurement list was not read (<why>) -- nothing was
+  recorded` (H I-6). It recorded every title as REW's verdict, `exists` null, and a
+  `capture_verified` naming each in `bad`; old states may still hold such a null.
 - **Nothing is cleared over work that is only in the chat** (S-044). `handoff` answers one question
   — is everything the NEXT session needs on disk — and REFUSES while it is not: no phase recorded,
   an open capture round, a plan step left `todo`/`in_progress`, a done step whose evidence resolves
@@ -267,7 +274,7 @@ usage on stdout, exit 0.
 | exit | means |
 |---|---|
 | 0 | done, or yes |
-| 1 | refused, or no: the reason on stderr (`error: …`); REW answering with an error (`error: REW answered with an error: <REW's words> -- nothing was written`), or with any other state but "unavailable" -- something the method cannot read (`protocol`), `write_mismatch`, `not_found`, `ambiguous`, `config` -- (`error: <its words> -- nothing was written`); a typed mistake in a value the verb parses itself (a leg, a series) |
+| 1 | refused, or no: the reason on stderr (`error: …`); REW answering with an error (`error: REW answered with an error: <REW's words> -- nothing was written`), or with any other state but "unavailable" -- something the method cannot read (`protocol`), `write_mismatch`, `not_found`, `ambiguous`, `config` -- (`error: <its words> -- nothing was written`; a `write_mismatch` ends `-- REW may hold part of the write: check REW's EQ before going on`, and a filter write REW acknowledged and nobody could read back, `rew_unchecked` on its class, is said in its own words); `capture-check` with REW's list not read for any reason but REW not answering (`error: REW's measurement list was not read (<why>) -- nothing was recorded`); a typed mistake in a value the verb parses itself (a leg, a series) |
 | 2 | usage: an unknown verb, a flag the verb does not take, a flag's value missing (one of the verb's flags, `-h` or `--help` in its place, or nothing after it: a value flag left last), a value on a flag that takes none, one of the verb's flags with its hyphens autocorrected to a dash, `--help` or `-h` after other arguments, too few arguments |
 | 69 | REW did not answer, and nothing was written (sysexits' `EX_UNAVAILABLE`) |
 | 70 | an unexpected error, a bug: Python's traceback on stderr, then `error: unexpected <type>: <message>` (`EX_SOFTWARE`) |
@@ -322,12 +329,19 @@ usage on stdout, exit 0.
   cannot read (`rew_state` "protocol") is exit 1, REW's words and `-- nothing was written`: REW's answer, not a bug;
   so is REW answering it with an error -- an `HTTPError`, its 4xx/5xx, or a class whose `rew_state` is "error" --
   said `error: REW answered with an error: <REW's words> -- nothing was written`, where it was a bug's 70. Every
-  other state but "unavailable" is exit 1 the same way, read off the exception's class (R47c): `write_mismatch`,
-  `not_found`, `ambiguous` and `config` (a `REW_API_URL` that is no address), which no verb meets there today.
-  `capture-close` still closes on the record alone with REW down, exit 0, and says which it met, with what was
-  raised: `REW not reached`, or `REW answered something that is not a measurement list`. REW gone between its list
-  and the checks `capture-close` runs is said as what happens: the checks were not run, and the round closes on the
-  record, unchecked.
+  other state but "unavailable" is exit 1 the same way, read off the exception's class (R47c): `config` (a
+  `REW_API_URL` that is no address, which `capture-import <N>` meets asking REW itself: `REW_API_URL '<value>' is
+  not an address: <why> — set it right, or unset it for REW's default`, where it was 69), and `write_mismatch`,
+  `not_found` and `ambiguous`, which no verb meets there today. A write REW took is never "nothing was written":
+  a `write_mismatch` ends `-- REW may hold part of the write: check REW's EQ before going on`, and a filter write
+  REW acknowledged and nobody could read back is said in its own words (m3). `capture-close` still closes on the
+  record alone over REW's own states, exit 0, and says which it met, with what was raised: `REW not reached`, `REW
+  answered something that is not a measurement list`, or `REW answered with an error`. Anything else stops it
+  before a line is printed, the round left open and nothing written (T I4, F M-11, H minor 5): a `REW_API_URL`
+  that is no address (1), the reconcile's own refusal -- its read of the state refused, `naming.py` that cannot be
+  loaded (1) -- and a bug (70). Before, any of them printed `not read against REW (...)` and the round closed
+  unchecked when the next read went through. REW gone between its list and the checks `capture-close` runs is
+  said as what happens: the checks were not run, and the round closes on the record, unchecked.
 - **A bug is 70, not 1.** An exception no refusal names exits 70 with its traceback, where it exited 1 like a
   refusal or escaped as a bare traceback; an IndexError too. An unreadable file (`is_unreadable`) stays a refusal,
   exit 1.
