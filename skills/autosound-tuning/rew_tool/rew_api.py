@@ -648,14 +648,16 @@ _REW_SPELLING = dict({key.lower(): key for key in _REW_FILTER_KEYS},
 _DROPPED_COST = {"gaindB": "the filter would be stored flat, at 0 dB",
                  "frequency": "the filter would not get this frequency",
                  "q": "the filter would not get this Q"}
-#: (absolute, relative) tolerance per field when a write is read back: REW's grid, measured at the live pass at REW
-#: (2026-10-07) under the equaliser Audiotec Fischer "Full EQ (30 bands)" -- rew_tool/testdata/rew/grid.json. REW
-#: snaps a frequency to 0.1 Hz below 100 Hz and to 1 Hz from 100 Hz, a gain to 0.1 dB and a Q to 0.01. A gain's and
-#: a Q's tolerance is half a step plus float slack (-15.55 dB is held as -15.5, 0.0500000000000007 off). A
-#: frequency's is 0.05 Hz or 0.5 %, whichever is wider (`math.isclose`): half REW's step at 100 Hz, wider elsewhere.
-#: Every value REW snapped passes, and a value REW clamped to its range (+14 dB held as +12) does not. An equaliser
-#: with a coarser grid raises `RewWriteMismatch` naming the field: loud, never silent.
-_READBACK_TOL = {"frequency": (0.05 + 1e-6, 0.005), "gaindB": (0.05 + 1e-6, 0.0), "q": (0.005 + 1e-6, 0.0)}
+#: How far REW may hold a value from the one written, per field, by the value written: half a step of REW's grid
+#: there, plus float slack (-15.55 dB is held as -15.5, 0.0500000000000007 off). The grid, measured at the live pass
+#: at REW (2026-10-07) under the equaliser Audiotec Fischer "Full EQ (30 bands)" (rew_tool/testdata/rew/grid.json):
+#: a frequency to 0.1 Hz below 100 Hz and to 1 Hz from 100 Hz -- the written value picks the band, so 99.96 and
+#: 100.37 both held as 100.0 pass -- a gain to 0.1 dB, a Q to 0.01 (R31, R43). Every value REW snapped passes; one a
+#: step further off, or clamped to the equaliser's range (+14 dB held as +12), does not. An equaliser with a coarser
+#: grid raises `RewWriteMismatch` naming the field: loud, never silent.
+_READBACK_TOL = {"frequency": lambda hz: (0.05 if hz < 100.0 else 0.5) + 1e-6,
+                 "gaindB": lambda db: 0.05 + 1e-6,
+                 "q": lambda q: 0.005 + 1e-6}
 
 
 def _foreign_key_note(key):
@@ -726,11 +728,12 @@ def _slot_differences(number, wrote, holds):
     for key in ("enabled", "shape", "slopedBPerOctave"):
         if key in wrote and holds.get(key, object()) != wrote[key]:
             differs(key)
-    for key, (abs_tol, rel_tol) in _READBACK_TOL.items():
+    for key, tolerance in _READBACK_TOL.items():
         if key not in wrote:
             continue
         try:
-            same = math.isclose(float(holds[key]), float(wrote[key]), rel_tol=rel_tol, abs_tol=abs_tol)
+            written = float(wrote[key])
+            same = math.isclose(float(holds[key]), written, rel_tol=0.0, abs_tol=tolerance(written))
         except (KeyError, TypeError, ValueError):
             same = False
         if not same:
@@ -1344,6 +1347,9 @@ def _check_read_back_cases():
         (set_filters, [clear], changed(type="PK"), "write_mismatch", "type"),
         (set_filters, [pk], changed(enabled=False), "write_mismatch", "enabled"),
         (set_filters, [pk], changed(frequency=1100.0), "write_mismatch", "frequency"),
+        (set_filters, [pk], changed(frequency=1004.0), "write_mismatch", "frequency"),   # 4 Hz off at 1 kHz (R43)
+        # The band is the written value's (R43): 99.7 Hz is on the 0.1 Hz grid, so 100.0 held is three steps off.
+        (set_filters, [dict(pk, frequency=99.7)], changed(frequency=100.0), "write_mismatch", "frequency"),
         (set_filters, [pk], changed(q=None), "write_mismatch", "q"),
         (set_filters, [pk], lambda s: [{k: v for k, v in x.items() if k != "q"} for x in s], "write_mismatch", "q"),
         (set_filters, [pk], lambda s: [dict(x, index=5) for x in s], "write_mismatch", "slot 1"),
@@ -1433,11 +1439,11 @@ def _check_recorded_answers():
 
     (a) The listing parses (`measurements.json`). (b) The live pass's PK write reads back clean against the slots REW
     listed after it (`filters-after-pk.json`), and (c) so does the clear (`filters-after-clear.json`). (d) Every value
-    REW snapped to its grid passes `_READBACK_TOL` (`rounding.json`, `grid.json`); a value REW clamped, a gain or a
-    Q one grid step further off, and a frequency a step further off where the step is wider than 0.5 % (150 Hz),
-    raise `RewWriteMismatch` naming the field; a type REW does not take is REW's 400, in its words. REW's "no
-    impulse" answer (`impulse-none.json`) is replayed in `verify`'s selftest: imported here, `verify` would read a
-    second copy of this module, with a `BASE_URL` of its own.
+    REW snapped to its grid passes `_READBACK_TOL` (`rounding.json`, `grid.json`); a value REW clamped, and a
+    frequency, a gain or a Q one grid step off REW's snap either way (frequency at 20 Hz, 63 Hz, 150 Hz, 1 kHz,
+    1.2 kHz, 10 kHz and 20 kHz), raise `RewWriteMismatch` naming the field; a type REW does not take is REW's 400, in
+    its words. REW's "no impulse" answer (`impulse-none.json`) is replayed in `verify`'s selftest: imported here,
+    `verify` would read a second copy of this module, with a `BASE_URL` of its own.
     """
     raw_listing, listing = _recorded("measurements.json")
     raw_cleared, cleared = _recorded("filters-after-clear.json")
@@ -1499,7 +1505,8 @@ def _check_recorded_answers():
             if "wrote" in probe:
                 written, held = dict(on, **probe["wrote"]), dict(listed, **probe["stored"])
                 kept([written], lists(held))                                    # what REW snapped passes
-                for key, step in (("gaindB", 0.1), ("q", 0.01)):
+                for key, step in (("frequency", 0.1 if held["frequency"] < 100.0 else 1.0), ("gaindB", 0.1),
+                                  ("q", 0.01)):
                     for off in (-step, step):
                         not_kept(set_filters, [written], dict(held, **{key: held[key] + off}), f"slot 2: {key} ")
                 continue
@@ -1517,6 +1524,8 @@ def _check_recorded_answers():
         assert grid["equaliser"] == {"manufacturer": "Audiotec Fischer", "model": "Full EQ (30 bands)"}, grid
         clamped = {("gaindB", 14.96), ("q", 0.2049), ("q", 0.3333)}     # REW's range: gain up to +12 dB, Q from 0.5
         steady = {"frequency": 1000.0, "gaindB": -3.0, "q": 1.0}           # grid.py held the other two values here
+        # Every snap passes -- 99.96 and 100.37 Hz, both held as 100.0, by the written value's band (R43) -- and
+        # every clamp raises.
         for name, key in (("freq", "frequency"), ("gain", "gaindB"), ("q", "q")):
             for value, stored in grid[name]:
                 written, held = dict(on, **dict(steady, **{key: value})), dict(listed, **dict(steady, **{key: stored}))
@@ -1524,11 +1533,13 @@ def _check_recorded_answers():
                     not_kept(set_filters, [written], held, f"slot 2: {key} {value!r} was written, REW holds {stored!r}")
                 else:
                     kept([written], lists(held))
-        # A frequency is held to 0.5 %, half REW's 1 Hz step at 100 Hz (`_READBACK_TOL`): at 150 Hz, a step further
-        # off is outside it.
-        at_150 = dict(on, **dict(steady, frequency=150.37))
-        not_kept(set_filters, [at_150], dict(listed, **dict(steady, frequency=149.0)),
-                 "slot 2: frequency 150.37 was written, REW holds 149.0")
+        # A frequency one grid step off REW's own snap, either way, from 100 Hz up (R43): 150 Hz, 1 kHz and 10 kHz,
+        # where REW's step is 1 Hz. Below 100 Hz, 63 Hz is rounding.json's (above).
+        snapped = {value: stored for value, stored in grid["freq"]}
+        for value in (150.37, 1000.6, 9999.4):
+            for off in (-1.0, 1.0):
+                not_kept(set_filters, [dict(on, **dict(steady, frequency=value))],
+                         dict(listed, **dict(steady, frequency=snapped[value] + off)), "slot 2: frequency ")
         # The clamp the live pass met through `set_filter` (put.py), in the words it raised there.
         clamp = dict(on, frequency=2000.0, gaindB=14.0, q=2.0)
         not_kept(set_filter, clamp, dict(listed, frequency=2000.0, gaindB=12.0, q=2.0),
