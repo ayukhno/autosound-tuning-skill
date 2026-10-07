@@ -71,7 +71,8 @@ Before opening a PR, make sure you have:
   and PR, so a green run here with nothing NOT RUN is a green run there: under CI a NOT RUN fails.
 - **Deliberately without a selftest:** the `skip` lines in `scripts/selftests.txt`, each with its
   reason. A new module without a selftest gets one there — the run fails on a module that is
-  neither listed nor skipped, and on a `skip` line without a reason or without its file.
+  neither listed nor skipped, and on a `skip` line without a reason, without its file or whose file
+  has a selftest of its own; each skip line is printed with its reason.
 - **Run `uvx ruff@0.12.0 check`.** CI runs it too, and it fails the build. Which rule classes are
   on and why the rest are off is written in `pyproject.toml`, next to the choice.
 
