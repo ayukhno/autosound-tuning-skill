@@ -167,7 +167,8 @@ for that checkout — see `rew_tool/provenance.py` for why it is the sha and not
 - **Nothing is cleared over work that is only in the chat** (S-044). `handoff` answers one question
   — is everything the NEXT session needs on disk — and REFUSES while it is not: no phase recorded,
   an open capture round, a plan step left `todo`/`in_progress`, a done step whose evidence resolves
-  to nothing, no ledger snapshot, a `tuning-changelog` with no ▶️ CONTINUE block. It writes nothing
+  to nothing, no ledger snapshot, a `tuning-changelog` with no ▶️ CONTINUE block, or one it cannot read (another code
+  page, a file that cannot be opened: named, where it read as no changelog). It writes nothing
   either way (which evidence closes a step is a decision), and when it passes it prints the resume
   line: what to say next, and what must stay open.
 - **A round says WHICH counter its version is, and a ledger version must exist** (TCC-022). The two
@@ -191,7 +192,10 @@ for that checkout — see `rew_tool/provenance.py` for why it is the sha and not
 - **Captures belong to a ROUND, not to a version.** The ledger version names the config a
   measurement was taken under; it cannot tell two passes at the same config apart, and "this
   session's task" is what the Arbiter asks about. Opening a round while one is open closes the
-  first — a round nobody closed ended when the next one began.
+  first — a round nobody closed ended when the next one began. It closes once the new round has passed every refusal
+  (#134, H I-3): a refused `capture-start` (a `--plan` with no glossary, say) writes nothing, where it appended the
+  first round's `capture_round_closed` while the state kept it open; and `capture-import` checks every bind against
+  the ledger before its first round, so a bad one is refused with nothing imported.
 - **Phases are the skill's, not the project's.** Only status and re-entry change. Phase 5 is
   explicitly cyclical, so `enter_phase` is not a one-way ratchet.
 - **State writes are atomic** (write-temp-then-rename). A torn write would otherwise read back as
@@ -226,17 +230,23 @@ usage on stdout, exit 0.
 | exit | means |
 |---|---|
 | 0 | done, or yes |
-| 1 | refused, or no: the reason on stderr (`error: …`); REW answering something the method cannot read (`error: <REW's words> -- nothing was written`) |
-| 2 | usage: an unknown verb, a flag the verb does not take, a flag's value missing (one of the verb's flags, `-h` or `--help` in its place, or nothing after it: a value flag left last), a value on a flag that takes none, `--help` or `-h` after other arguments, too few arguments |
+| 1 | refused, or no: the reason on stderr (`error: …`); REW answering something the method cannot read (`error: <REW's words> -- nothing was written`), or answering with an error (`error: REW answered with an error: <REW's words> -- nothing was written`); a typed mistake in a value the verb parses itself (a leg, a series) |
+| 2 | usage: an unknown verb, a flag the verb does not take, a flag's value missing (one of the verb's flags, `-h` or `--help` in its place, or nothing after it: a value flag left last), a value on a flag that takes none, one of the verb's flags with its hyphens autocorrected to a dash, `--help` or `-h` after other arguments, too few arguments |
 | 69 | REW did not answer, and nothing was written (sysexits' `EX_UNAVAILABLE`) |
 | 70 | an unexpected error, a bug: Python's traceback on stderr, then `error: unexpected <type>: <message>` (`EX_SOFTWARE`) |
 | 75 | the project busy: reserved for the lock (J2b, W-9), not raised yet (`EX_TEMPFAIL`) |
 
 - **Each verb takes its own flags, and only those.** `VERB_FLAGS` in `process.py` is the table, one string literal
-  per flag. A flag is `--`, an ASCII letter and no whitespace before an `=`. Any other `--<word>` is a usage error,
+  per flag, and `_FLAG_TAKES_VALUE` says of each whether it takes a value (the selftest holds the two to each other).
+  A flag is `--`, an ASCII letter and no whitespace -- after an `=`, whitespace is the value's only when the name
+  before it is one of the verb's flags (`--invalidates=w-L_1 (sw)`). Any other `--<word>` is a usage error,
   exit 2, with the flags the verb takes named on stderr and nothing written; it used to become a title, a reason or a
   piece of evidence (TCC's N19). Text that only begins with two dashes is a word, not a flag: `--бас гуде`, `--bass
-  hums`, `-- note`, as well as a bare `--` and a negative number. `--flag value` and `--flag=value` are the same: the
+  hums`, `--bass=45 Hz hums?`, `-- note`, as well as a bare `--` and a negative number. Where a flag stands, one of the
+  verb's flags whose two hyphens an editor autocorrected to a dash -- a word that starts with an em or an en dash and
+  names the flag past its dashes (`—origin`, `–origin=other:49`) -- is a usage error, exit 2: `<verb>: —origin looks
+  like --origin with its dashes autocorrected; type two hyphens`; as a word it opened a round expecting `—origin`.
+  After a flag that takes a value, such a word is the value. `--flag value` and `--flag=value` are the same: the
   value is taken as it stands, whatever it looks like (`--text --loud`, `--note=--loud`), with one exception in both
   forms -- a value that is one of the verb's own flags, `-h` and `--help` among them (`capture-start 1 --optional
   --plan`, `amp-gain sw=+3 --note=--measured`, `--text=-h`; the name before any `=` counts), is no value: the value is
@@ -244,9 +254,13 @@ usage on stdout, exit 0.
   note. A flag that takes a value and stands last, with nothing after it, is refused the same way before the verb
   runs (`_check_value_flag_last` sweeps every one): taken as unset, `decision <q> <a> --invalidates` recorded the
   decision without its link and `capture-import <N> --bind` asked REW. capture-protective's legs `--hp` and `--lp`
-  (`_LEG_FLAGS`) are the exception: the verb parses their three values and says what is missing, `--hp needs three
-  values`, exit 1. A flag that takes no value (`--plan`, `--session`, `--json`, `--check`, `--no-rew`, ...) takes no
-  `=`. The refusal's words never contain `usage: process.py`, which a front-end reads as "this method is too old".
+  (`_LEG_FLAGS`) are the exception: the verb parses their three values and says what is wrong, exit 1 -- `--hp needs
+  three values: f type slope, e.g. --hp 100 LR 24` (fewer, or a flag among them), `--hp: 'abc' is not a number`
+  (`100Hz`, `nan` too), `--hp: '24.5' is not a whole number`. They exited 70, a bug's code. A leg's values are the
+  leg's, not the verb's arguments: legs with no channel are too few, exit 2. `capture-import`'s series is read the
+  same way before REW is asked: `capture-import: '1a' is not a number`, exit 1. A flag that takes no value (`--plan`,
+  `--session`, `--json`, `--check`, `--no-rew`, ...) takes no `=`. The refusal's words never contain `usage:
+  process.py`, which a front-end reads as "this method is too old".
 - **Too few arguments are a usage error.** A verb needs the arguments its line in the usage names in `<...>`
   (`_VERB_ARGS`): `target <preset> <curve>`, `capture-skip <title> <reason>`, `done <id> <evidence>`; `skip` needs its
   `<id>`, then a reason or `--superseded-by`, which `skip_step` checks. Fewer is exit 2, naming them, and the verb
@@ -261,7 +275,9 @@ usage on stdout, exit 0.
 - **REW down is 69, nothing written.** `capture-check` with REW not answering (any title `reachable: false` in
   `verify`'s verdicts) records no verdict, no round change and no event; REW not answering a verb that asks it
   itself (`capture-import`, for a series' titles) exits 69 too. REW answering such a verb with something the method
-  cannot read (`rew_state` "protocol") is exit 1, REW's words and `-- nothing was written`: REW's answer, not a bug.
+  cannot read (`rew_state` "protocol") is exit 1, REW's words and `-- nothing was written`: REW's answer, not a bug;
+  so is REW answering it with an error -- an `HTTPError`, its 4xx/5xx, or a class whose `rew_state` is "error" --
+  said `error: REW answered with an error: <REW's words> -- nothing was written`, where it was a bug's 70.
   `capture-close` still closes on the record alone with REW down, exit 0, and says which it met, with what was
   raised: `REW not reached`, or `REW answered something that is not a measurement list`. REW gone between its list
   and the checks `capture-close` runs is said as what happens: the checks were not run, and the round closes on the
@@ -305,7 +321,10 @@ usage on stdout, exit 0.
   not OK.
 - **The refusal names the repair:**
   - for damaged contents (empty, cut off, not JSON, the wrong type), `git -C <process-dir> checkout HEAD --
-    process-state.json` (the journal keeps every event);
+    process-state.json`, said as what it gives (H 13): the copy may be older than the journal -- a project's
+    repository may hold only its first commit -- and nothing replays the events since into it; with no committed copy
+    (no git repository), move `process-state.json` aside: the process starts empty, and the journal keeps every
+    event;
   - for a file written in another code page, `contract.py repair-encoding <project-dir>`;
   - for a file that cannot be opened, close what holds it (an editor, a sync client, another tool) and run again;
   - for a folder in its place, move the folder aside.

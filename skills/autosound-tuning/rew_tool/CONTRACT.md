@@ -30,8 +30,8 @@ too when the path is wrong, with `can't open file` on stderr: the usage line is 
 | exit | means |
 |---|---|
 | 0 | done, or yes |
-| 1 | refused, or no: the reason on stderr, `error: <reason>`; REW answering something the method cannot read, `error: <REW's words> -- nothing was written` |
-| 2 | usage: an unknown verb (the usage on stderr), a flag the verb does not take, a flag's value missing (one of the verb's flags, `-h` or `--help` in its place, or nothing after it: a value flag left last), `=` on a flag that takes no value, `--help` or `-h` after other arguments, too few arguments |
+| 1 | refused, or no: the reason on stderr, `error: <reason>`; REW answering something the method cannot read, `error: <REW's words> -- nothing was written`; REW answering with an error, `error: REW answered with an error: <REW's words> -- nothing was written` |
+| 2 | usage: an unknown verb (the usage on stderr), a flag the verb does not take, a flag's value missing (one of the verb's flags, `-h` or `--help` in its place, or nothing after it: a value flag left last), `=` on a flag that takes no value, one of the verb's flags with its hyphens autocorrected to a dash, `--help` or `-h` after other arguments, too few arguments |
 | 69 | REW did not answer, and nothing was written |
 | 70 | an unexpected error, a bug: Python's traceback on stderr, then `error: unexpected <type>: <message>` |
 | 75 | the project busy: reserved for the lock (W-9, J2b), not raised yet |
@@ -62,14 +62,21 @@ resolves) and `handoff` (1 while the next session would miss something), as `sta
 
 `show`, `plan`, `enter-phase`, `start`, `done`, `block`, `target`, `session-start`, `session-reopen`,
 `capture-taken`, `amp-changes`, `capture-supersede`, `capture-skip` and `check` take none. A flag is `--`, an ASCII
-letter and no whitespace before an `=`; any other token is a word -- a bare `--`, a negative number, and text that
-only begins with two dashes (`--бас гуде`, `--bass hums`). A flag the verb does not take is a usage error, exit 2,
-and the verb does not run; its words never contain `usage: process.py`. `--flag value` and `--flag=value` are one:
+letter and no whitespace -- after an `=`, whitespace is the value's only when the name before it is one of the
+verb's flags (`--invalidates=w-L_1 (sw)`); any other token is a word -- a bare `--`, a negative number, and text that
+only begins with two dashes (`--бас гуде`, `--bass hums`, `--bass=45 Hz hums?`). A flag the verb does not take is a
+usage error, exit 2, and the verb does not run; its words never contain `usage: process.py`. So is, where a flag
+stands, one of the verb's flags with its two hyphens autocorrected to a dash: a word that starts with an em or an en
+dash and names that flag past its dashes (`—origin`, `–origin=other:49`), said as `<verb>: —origin looks like
+--origin with its dashes autocorrected; type two hyphens`. `--flag value` and `--flag=value` are one:
 the value is taken as it stands, whatever it looks like (`--text --loud`, `--text=--loud`), with one exception in
 both forms -- a value that is one of the verb's own flags, `-h` and `--help` among them (`--note --measured`,
 `--note=--measured`, `--text=-h`; the name before any `=` counts), is no value: the value is missing, exit 2. So is
 a flag that takes a value and stands last, with nothing after it -- refused before the verb runs -- except
-capture-protective's legs `--hp` and `--lp`, which the verb parses: `--hp needs three values`, exit 1. `--project`,
+capture-protective's legs `--hp` and `--lp`, which the verb parses: `--hp needs three values` (a flag among them
+too), `--hp: 'abc' is not a number`, `--hp: '24.5' is not a whole number`, exit 1; their values are not the verb's
+arguments, so legs with no channel are too few. A series `capture-import` cannot read as a number is exit 1 too,
+before REW is asked. `--project`,
 `--check`, `--plan`, `--session`, `--measured`, `--bank`, `--json` and `--no-rew` take no value and no `=`. A verb needs the arguments its line in the usage names in `<...>` (`_VERB_ARGS` in `process.py`; `skip` needs
 its `<id>`, then a reason or `--superseded-by`); fewer is a usage error, exit 2, naming them. `<verb> --help` (or
 `-h`), right after the verb, prints that verb's lines and exits 0, reading and writing nothing; after other
