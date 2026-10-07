@@ -1525,9 +1525,14 @@ def _check_version_verb():
         assert _main(["contract.py", "version", "--json"]) == 0
     v = json.loads(out.getvalue())
     assert v["contract_version"] == CONTRACT_VERSION == 1 and v["format_version"] == FORMAT_VERSION, v
-    # an older method has no `version`: it answers usage and exit 2 -- that is how a caller reads "contract 0"
-    with contextlib.redirect_stderr(io.StringIO()):
+    # An older method has no `version`: it answers usage and exit 2 -- that is how a caller reads "contract 0". Python
+    # exits 2 too for a wrong path ("can't open file"), so the usage line on stderr is what tells them apart (J1
+    # review: v3.0.0, v3.0.40 and v3.1.1 answer `version --json` with exit 2, nothing on stdout, this line on stderr).
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
         assert _main(["contract.py", "no-such-verb"]) == 2
+    assert out.getvalue() == "" and err.getvalue().startswith("usage: contract.py "), \
+        (out.getvalue()[:200], err.getvalue()[:200])
 
 
 def _check_version_shape():

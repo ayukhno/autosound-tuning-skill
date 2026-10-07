@@ -19,7 +19,9 @@ Each item says where it stands:
 For diagnostics, `python3 rew_tool/contract.py version --json` prints
 `{"contract_version": 1, "format_version": 3, "skill_version": "<plugin.json version>" | null, "sha": "<git sha>" | null}`
 (without `--json`, the same on one line). It runs with the module's own imports, so it answers only where the method
-loads. A method older than contract 1 has no `version` verb: it prints its usage and exits 2. Read that as contract 0.
+loads. A method older than contract 1 has no `version` verb: it exits 2, prints nothing on stdout, and its usage on
+stderr begins `usage: contract.py` (v3.0.0, v3.0.40 and v3.1.1 answer so). Read that as contract 0. Python exits 2
+too when the path is wrong, with `can't open file` on stderr: the usage line is what tells the two apart.
 
 ## 2. `state/process.py <process-dir> <verb>` — planned (W-8, #134)
 
@@ -40,20 +42,29 @@ TCC does not need it (§8 M6). It answers as `SKILL.md` documents, outside this 
 ## 5. `scripts/autosound_ai.py critic|advisor|ask|doctor|key` — guaranteed, as today
 
 Before any verb runs, the script exits 2 when a project's `.critic-env` carries a key and git would take it (the file
-is tracked, or not ignored). It exits 1 when `--via`, `--model`, `--provider` or `AUTOSOUND_CRITIC_VIA` is not
-valid, when no verb is given, or when the verb is unknown. Then each verb answers:
+is tracked, or not ignored). It exits 1 when `--via`, `--model` or `--provider` is not valid, when
+`AUTOSOUND_CRITIC_VIA` is not valid and the run names no route of its own (`--via` or `--mode`), when no verb is
+given, or when the verb is unknown. Any verb also exits 1 on an exception the script does not catch, with Python's
+traceback on stderr. Then each verb answers:
 
 | verb | exit codes |
 |---|---|
-| `critic`, `advisor`, `ask <package> [<trace>]` | 0 a review came back and was filed, or the clipboard route made the package · 1 an input is missing: the package, or for `critic` and `advisor` the contract or the project context · 3 a model must be picked · 4 the reviewer refused or failed, and no review was filed |
+| `critic`, `advisor`, `ask <package> [<trace>]` | 0 a review came back, or the clipboard route made the package · 1 an input is missing: the package, or for `critic` and `advisor` the contract or the project context · 3 a model must be picked · 4 the reviewer refused or failed, and no review was filed |
 | `doctor` | 0 every check passed · 1 a check failed |
 | `key set <provider>` | 0 stored · 2 refused: an unknown provider, wrong arguments, or a value that is not a key |
 | `key status [--json]`, `key rm <provider>` | 0 |
-| `key move-shell [<provider>] [--drop] [--yes]` | 0 something moved or removed, and nothing refused · 1 nothing to do · 3 something refused or failed · 2 usage |
+| `key move-shell [<provider>] [--drop] [--yes]` | 0 something moved or removed, and nothing refused · 1 nothing to do: no export found, or every export found kept at the prompt (declined; a closed stdin ends in an uncaught `EOFError`, exit 1 as well) · 3 something refused or failed · 2 usage |
 | `key` with anything else | 2 usage |
 
+A 0 from `critic`, `advisor` or `ask` does not say the review was filed: `>> REVIEW_FILE: <rel>` on stderr does.
+Outside a project, or when the file cannot be written, the review is printed and not filed, and the exit is still 0.
 On stderr: `>> REVIEW_FILE: <rel>`, `>> REVIEW_ROUTE: omp|api|cli`, `>> PACKAGE_FILE: <path>`. Reviews are written
 under `<project>/process/reviews/`.
+
+`key move-shell`'s "no export found" is a stdout line that ends `у профілях оболонки не знайдено`:
+`· <VAR> у профілях оболонки не знайдено` with a provider, `· ключів у профілях оболонки не знайдено` without one
+(`autosound_ai.py`, `move_shell_run`). TCC tells "nothing to remove" from the other exits 1 by that sentence (tcc
+`core/reviewer_key.py`, `_NOTHING_FOUND`), so it stays as it is, like `capture-check`'s Ukrainian lines.
 
 ## 6. `"contract": N` in every JSON output — not built
 
@@ -137,12 +148,21 @@ today, every one the code reads:
 - the reviewer (`scripts/autosound_ai.py`; `issue_triage.py` for the advisor's model): `AUTOSOUND_DIR`,
   `AUTOSOUND_KEYSTORE`, `AUTOSOUND_CRITIC_MODEL`, `AUTOSOUND_CRITIC_PROVIDER`, `AUTOSOUND_CRITIC_VIA`,
   `AUTOSOUND_CRITIC_BIN`, `AUTOSOUND_CRITIC_CLI_ARGS`, `AUTOSOUND_CRITIC_EFFORT`, `AUTOSOUND_ADVISOR_MODEL`,
-  `AUTOSOUND_API_TIMEOUT`, `AUTOSOUND_CLI_TIMEOUT`, `AUTOSOUND_REVIEW_RAW_DIR`, `AUTOSOUND_ALLOW_NESTED_CLI`; it
-  also reads the vendors' own (`GEMINI_*`, the providers' API keys);
+  `AUTOSOUND_API_TIMEOUT`, `AUTOSOUND_CLI_TIMEOUT`, `AUTOSOUND_REVIEW_RAW_DIR`, `AUTOSOUND_ALLOW_NESTED_CLI`, and two
+  without the prefix: `PROJECT_MIRROR` (the folder the reviewer looks in first for the project's contract, context
+  and `.critic-env`; `rew_analitic/` in the current folder by default) and `ADVISOR_MEMORY` (the reviewer's memory
+  file; `depth-advisor-memory.md` in that folder by default). It also reads the vendors' own: `GEMINI_*`, the
+  providers' API keys, agy's `AGY_ADC_AUTH` with Google's `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLOUD_PROJECT`
+  and `GOOGLE_CLOUD_QUOTA_PROJECT`, and the markers of an agent session it runs in (`CLAUDECODE`,
+  `CLAUDE_CODE_ENTRYPOINT`, `ANTIGRAVITY`, `AGY_*`, `GEMINI_SESSION`);
 - the Resonalyze engine: `AUTOSOUND_RESONALYZE_ENGINE`;
 - for developers only: `AUTOSOUND_SKIP_TAG_VERIFY` (the installers), `AUTOSOUND_UPSTREAM_CLONE`
   (`scripts/upstream-drift.py`), `AUTOSOUND_PASSAT_IR_SET` and `AUTOSOUND_PASSAT_PROJECT` (the Resonalyze
-  engine's acceptance run).
+  engine's acceptance run), `SMOKE_VERBOSE` (`scripts/smoke_test.py`), and the selftest runner's `SELFTEST_TIMEOUT`,
+  `SELFTEST_TOOL`, `SELFTEST_MANIFEST` and `SELFTEST_ONLY_TOOL`.
+
+Beyond these, the code reads only the system's own (`PATH`, `HOME`, `APPDATA`, `LOCALAPPDATA`, `XDG_*`, `EDITOR`,
+`VISUAL`, ...) and Claude Code's `CLAUDE_PLUGIN_ROOT` (the plugin's session hook).
 
 ## 11. REW write semantics — planned (W-8, #134)
 
