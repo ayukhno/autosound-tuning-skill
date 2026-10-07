@@ -3130,19 +3130,21 @@ def _args_counted(cmd, args):
                          f"{cmd} --help")
 
 
-#: The filter types a protective leg can be (#134, R47b): the families this method can take back out of a sweep --
-#: `dsp_math.MODELLABLE_FAMILIES`, the docs' "types (LR/BW/BE)", and the selftest holds the two equal. A Chebyshev can
-#: be entered on a DSP and modelled by nothing here: `dsp_math.xo_response` took it for a Butterworth.
-_LEG_TYPES = ("LR", "BW", "BE")
+#: The filter types a protective leg can be (#134, R47b, R48): `dsp_math.MODELLABLE_FAMILIES` (the docs' "types
+#: (LR/BW/BE)") and the Chebyshev, `CH`, recorded as typed -- it is what was in the chain: TCC's dialog offers it, a
+#: Helix offers the family, and refusing it stopped the person recording the filter really there. `dsp_math` models no
+#: Chebyshev. The selftest holds this to the modellable families and CH, so a family `dsp_math` comes to model is a
+#: type a leg can carry.
+_LEG_TYPES = ("LR", "BW", "BE", "CH")
 
 
 def _leg(kind, values):
     """One filter leg of capture-protective, `{f, type, slope}`, from the values typed after `--hp` or `--lp` (#134, F
-    I-1, T I1, H I-7, R47b). A typed mistake is the verb's refusal, exit 1, in its words: a value missing -- fewer
-    than three, or a flag where a value stands (`--hp 100 LR --lp 4000 BW 36`) -- a frequency that is no number
-    (`abc`, `100Hz`, `nan`) or not above 0, a type the method cannot take back out (`_LEG_TYPES`; `CH`, a Chebyshev,
-    was taken out as a Butterworth), a slope that is no whole number (`24.5`) or not above 0. They reached `float()`
-    and `int()` unguarded and exited 70, a bug's code, or were recorded; TCC sends a leg as the person typed it."""
+    I-1, T I1, H I-7, R47b, R48). A typed mistake is the verb's refusal, exit 1, in its words: a value missing --
+    fewer than three, or a flag where a value stands (`--hp 100 LR --lp 4000 BW 36`) -- a frequency that is no number
+    (`abc`, `100Hz`, `nan`) or not above 0, a type that is none of `_LEG_TYPES` (empty, `XX`; any letter case is the
+    type), a slope that is no whole number (`24.5`) or not above 0. They reached `float()` and `int()` unguarded and
+    exited 70, a bug's code, or were recorded; TCC sends a leg as the person typed it."""
     example = f"e.g. --{kind} 100 LR 24"
     if len(values) < 3 or any(_flag_shaped(v) for v in values):
         raise ProcessError(f"--{kind} needs three values: f type slope, {example}. "
@@ -3157,8 +3159,8 @@ def _leg(kind, values):
     if f_hz <= 0:
         raise ProcessError(f"--{kind}: {f!r} is not a frequency above 0 Hz, {example}")
     if kind_of.upper() not in _LEG_TYPES:
-        raise ProcessError(f"--{kind}: {kind_of!r} is not a filter type this method can take back out: "
-                           f"{', '.join(_LEG_TYPES[:-1])} or {_LEG_TYPES[-1]}, {example}")
+        raise ProcessError(f"--{kind}: {kind_of!r} is not a filter type: {', '.join(_LEG_TYPES[:-1])} or "
+                           f"{_LEG_TYPES[-1]}, {example}")
     try:
         db_per_oct = int(slope)
     except ValueError:
@@ -4103,9 +4105,9 @@ def _check_typed_values_refused():
     whole number (`24.5`) each exited 70 with a traceback, and TCC sends a leg as the person typed it
     (`protective_dialog.read_leg`). So did capture-import's series (`1a`) -- with titles given, and with none, where
     REW was asked first. Nothing is written, nothing goes to stdout, no traceback, and REW is not asked. A value that
-    parses is checked too (R47b): a frequency above 0, a type the method can take back out (`dsp_math`'s modellable
-    families, LR, BW and BE, in any letter case), a slope above 0 -- a Chebyshev was recorded, and taken out of the
-    sweeps as a Butterworth."""
+    parses is checked too (R47b, R48): a frequency above 0, a type of the four (`dsp_math`'s modellable families LR,
+    BW and BE, and CH, recorded as typed: a Chebyshev is what a Helix and TCC's dialog offer; any letter case), a slope
+    above 0 -- an empty type, `XX`, a zero slope were each recorded."""
     import shutil
     import tempfile
     import types
@@ -4140,15 +4142,15 @@ def _check_typed_values_refused():
                 (["capture-protective", "m-L", "--hp", "100", "LR", "24.5"], "--hp: '24.5' is not a whole number"),
                 (["capture-protective", "m-L", "--lp", "4000", "BW", "36", "--hp", "100", "LR", "x"],
                  "--hp: 'x' is not a whole number"),
-                # R47b: each value checked -- a frequency above 0, a type the method can take back out, a slope
-                # above 0. A Chebyshev (TCC's dialog offers `CH`) was recorded and then modelled as a Butterworth.
+                # R47b, R48: each value checked -- a frequency above 0, a type of the four (LR, BW, BE, CH; empty is
+                # none), a slope above 0.
                 (["capture-protective", "m-L", "--hp", "0", "LR", "24"], "--hp: '0' is not a frequency above 0 Hz"),
                 (["capture-protective", "m-L", "--hp", "-100", "LR", "24"],
                  "--hp: '-100' is not a frequency above 0 Hz"),
-                (["capture-protective", "m-L", "--hp", "100", "CH", "24"],
-                 "--hp: 'CH' is not a filter type this method can take back out: LR, BW or BE"),
+                (["capture-protective", "m-L", "--hp", "100", "", "24"],
+                 "--hp: '' is not a filter type: LR, BW, BE or CH"),
                 (["capture-protective", "m-L", "--lp", "4000", "XX", "36"],
-                 "--lp: 'XX' is not a filter type this method can take back out: LR, BW or BE"),
+                 "--lp: 'XX' is not a filter type: LR, BW, BE or CH"),
                 (["capture-protective", "m-L", "--hp", "100", "LR", "0"], "--hp: '0' is not a slope above 0 dB/oct"),
                 (["capture-protective", "m-L", "--hp", "100", "LR", "-24"],
                  "--hp: '-24' is not a slope above 0 dB/oct"),
@@ -4177,13 +4179,19 @@ def _check_typed_values_refused():
             failures.append(f"capture_import('1a') raised {type(exc).__name__}: {exc}")
         else:
             failures.append("capture_import('1a') went through")
-        # A type in any letter case is the type (R47b): `be` is recorded as `BE`. The types are the method's own
-        # modellable families, the ones `dsp_math` can take back out.
-        rc, out, err = _run_main(["process.py", d, "capture-protective", "m-L", "--hp", "80", "be", "12"])
+        # A type in any letter case is the type (R47b): `be` is recorded as `BE`. A Chebyshev is recorded as typed
+        # (R48): it is what was in the chain -- TCC's dialog offers `CH`, a Helix offers the family -- though `dsp_math`
+        # models no Chebyshev.
+        rc, out, err = _run_main(["process.py", d, "capture-protective", "m-L", "--hp", "80", "be", "12",
+                                  "--lp", "4000", "ch", "36"])
         legs = (p.protective_record() or {}).get("channels", {}).get("m-L")
-        if rc != 0 or legs != {"hp": {"f": 80.0, "type": "BE", "slope": 12}}:
-            failures.append(f"capture-protective m-L --hp 80 be 12: rc {rc}, recorded {legs}, said {err.strip()!r}")
-        # Read off `dsp_math.py`'s text, not imported: it needs numpy, and this module's checks do not.
+        if rc != 0 or legs != {"hp": {"f": 80.0, "type": "BE", "slope": 12},
+                               "lp": {"f": 4000.0, "type": "CH", "slope": 36}}:
+            failures.append(f"capture-protective m-L --hp 80 be 12 --lp 4000 ch 36: rc {rc}, recorded {legs}, "
+                            f"said {err.strip()!r}")
+        # The leg types are dsp_math's modellable families and the Chebyshev, nothing else: a family `dsp_math` comes
+        # to model is a type a leg can carry. Read off `dsp_math.py`'s text, not imported: it needs numpy, and this
+        # module's checks do not.
         import ast
         with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "dsp_math.py"),
                   encoding="utf-8") as fh:
@@ -4191,8 +4199,8 @@ def _check_typed_values_refused():
                              if isinstance(n, ast.Assign)
                              and any(isinstance(t, ast.Name) and t.id == "MODELLABLE_FAMILIES" for t in n.targets)),
                             None)
-        if tuple(_LEG_TYPES) != tuple(families or ()):
-            failures.append(f"the leg types {_LEG_TYPES} are not dsp_math's modellable families {families}")
+        if not set(families or ()) <= set(_LEG_TYPES) or set(_LEG_TYPES) - set(families or ()) != {"CH"}:
+            failures.append(f"the leg types {_LEG_TYPES} are not dsp_math's modellable families {families} and CH")
     finally:
         if saved is None:
             sys.modules.pop("rew_api", None)

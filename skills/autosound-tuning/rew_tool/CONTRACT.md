@@ -75,7 +75,7 @@ both forms -- a value that is one of the verb's own flags, `-h` and `--help` amo
 a flag that takes a value and stands last, with nothing after it -- refused before the verb runs -- except
 capture-protective's legs `--hp` and `--lp`, which the verb parses: `--hp needs three values` (a flag among them
 too), `--hp: 'abc' is not a number`, `--hp: '24.5' is not a whole number`, a frequency or a slope not above 0, a
-type other than LR, BW or BE (any letter case), exit 1; their values are not the verb's arguments, so legs with no
+type other than LR, BW, BE or CH (any letter case), exit 1; their values are not the verb's arguments, so legs with no
 channel are too few. A series `capture-import` cannot read as a number is exit 1 too, before REW is asked; with no
 titles, REW holding nothing of the series is exit 1, and every title of it on record already is exit 0, `nothing
 new`. `--project`,

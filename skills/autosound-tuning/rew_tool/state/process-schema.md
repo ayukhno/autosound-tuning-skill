@@ -257,10 +257,10 @@ usage on stdout, exit 0.
   (`_LEG_FLAGS`) are the exception: the verb parses their three values and says what is wrong, exit 1 -- `--hp needs
   three values: f type slope, e.g. --hp 100 LR 24` (fewer, or a flag among them), `--hp: 'abc' is not a number`
   (`100Hz`, `nan` too), `--hp: '24.5' is not a whole number`. They exited 70, a bug's code. Each value is checked as
-  well (R47b), and each of these was recorded: a frequency not above 0, a slope not above 0, a type other than the
-  families the method can take back out of a sweep -- `_LEG_TYPES`, LR, BW and BE, `dsp_math.MODELLABLE_FAMILIES`
-  (`--hp: 'CH' is not a filter type this method can take back out: LR, BW or BE`; a Chebyshev was taken out as a
-  Butterworth). A leg's values are the leg's, not the verb's arguments: legs with no channel are too few, exit 2.
+  well (R47b, R48), and each of these was recorded: a frequency not above 0, a slope not above 0, a type that is none
+  of `_LEG_TYPES` -- `dsp_math.MODELLABLE_FAMILIES` (LR, BW, BE) and CH, the Chebyshev a Helix and TCC's dialog
+  offer, recorded as typed -- an empty type included (`--hp: 'XX' is not a filter type: LR, BW, BE or CH`). A leg's
+  values are the leg's, not the verb's arguments: legs with no channel are too few, exit 2.
   `capture-import`'s series is read the same way before REW is asked: `capture-import: '1a' is not a number`, exit 1.
   With no titles (R47a), `capture-import <N>` imports what REW holds of series N and the project has not on record
   (taken in a round, superseded there, or held by REW under its own spelling of one): none held is exit 1, `REW holds
