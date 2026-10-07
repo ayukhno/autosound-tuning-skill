@@ -30,8 +30,8 @@ too when the path is wrong, with `can't open file` on stderr: the usage line is 
 | exit | means |
 |---|---|
 | 0 | done, or yes |
-| 1 | refused, or no: the reason on stderr, `error: <reason>` |
-| 2 | usage: an unknown verb (the usage on stderr), a flag the verb does not take, `=` on a flag that takes no value |
+| 1 | refused, or no: the reason on stderr, `error: <reason>`; REW answering something the method cannot read, `error: <REW's words> -- nothing was written` |
+| 2 | usage: an unknown verb (the usage on stderr), a flag the verb does not take, a flag's value missing, `=` on a flag that takes no value, `--help` or `-h` after other arguments, too few arguments |
 | 69 | REW did not answer, and nothing was written |
 | 70 | an unexpected error, a bug: Python's traceback on stderr, then `error: unexpected <type>: <message>` |
 | 75 | the project busy: reserved for the lock (W-9, J2b), not raised yet |
@@ -61,12 +61,18 @@ resolves) and `handoff` (1 while the next session would miss something), as `sta
 | `capture-close` | `--no-rew` |
 
 `show`, `plan`, `enter-phase`, `start`, `done`, `block`, `target`, `session-start`, `session-reopen`,
-`capture-taken`, `amp-changes`, `capture-supersede`, `capture-skip` and `check` take none. Any other flag (`--`
-and a letter) is a usage error, exit 2, and the verb does not run; its words never contain `usage: process.py`.
-`--flag value` and `--flag=value` are one; `--project`, `--check`, `--plan`, `--session`, `--measured`, `--bank`,
-`--json` and `--no-rew` take no value. `<verb> --help` (or `-h`), right after the verb, prints that verb's lines and
-exits 0, reading and writing nothing; `process.py --help` prints the whole usage on stdout. A verb or a flag added
-later is an addition (item 12); removing or renaming one is a contract change.
+`capture-taken`, `amp-changes`, `capture-supersede`, `capture-skip` and `check` take none. A flag is `--`, an ASCII
+letter and no whitespace before an `=`; any other token is a word -- a bare `--`, a negative number, and text that
+only begins with two dashes (`--бас гуде`, `--bass hums`). A flag the verb does not take is a usage error, exit 2,
+and the verb does not run; its words never contain `usage: process.py`. `--flag value` and `--flag=value` are one:
+the value is taken as it stands, whatever it looks like (`--text --loud`, `--text=--loud`), except that the word
+after the flag is not its value when it is one of the verb's own flags -- then the value is missing, exit 2.
+`--project`, `--check`, `--plan`, `--session`, `--measured`, `--bank`, `--json` and `--no-rew` take no value and no
+`=`. A verb needs the arguments its line in the usage names in `<...>` (`_VERB_ARGS` in `process.py`; `skip` needs
+its `<id>`, then a reason or `--superseded-by`); fewer is a usage error, exit 2, naming them. `<verb> --help` (or
+`-h`), right after the verb, prints that verb's lines and exits 0, reading and writing nothing; after other
+arguments either is a usage error, exit 2. `process.py --help` prints the whole usage on stdout. A verb or a flag
+added later is an addition (item 12); removing or renaming one is a contract change.
 
 **The JSON:** `show` prints `process-state.json` as `state/process-schema.md` describes it (a round's `checks` among
 its keys); `plan [phase]` a list of the plan's steps; `handoff --json` `{ok, missing, phase, resume, warnings,

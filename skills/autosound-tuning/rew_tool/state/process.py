@@ -1509,7 +1509,10 @@ class Process:
         spelling kept beside it when they differ, so the rename is named and nothing is re-measured); a title of
         THIS series the list did not ask for is taken unplanned (the extra he took because he could); one he had
         skipped and then took after all is taken; what REW does not hold stays open, yellow. Another series' titles
-        are not this round's business. Returns the verdict (`naming.validate_series` plus `missing_optional`).
+        are not this round's business. A row the round SUPERSEDED is skipped (N17, #134): it is a typo's trace, so
+        REW still holding its title takes nothing back and counts nowhere -- not among the titles held, the renames,
+        or the extra taken beyond the list. Returns the verdict (`naming.validate_series` plus `missing_optional`),
+        those titles left out.
         """
         state, round_ = self._require_capture()
         naming = _load_naming()
@@ -1518,6 +1521,11 @@ class Process:
         glossary = naming.Glossary.for_project(self.project_dir)
         expected = [str(x) for x in round_.get("expected") or []]
         verdict = naming.validate_series([str(t) for t in rew_titles], expected, glossary)
+        gone = {t for t in round_.get("taken") or {} if not _is_taken(round_, t)}
+        verdict["matched"] = {n: a for n, a in verdict["matched"].items() if n not in gone}
+        verdict["found"] = [n for n in verdict["found"] if n not in gone]
+        verdict["renames"] = {a: n for a, n in verdict["renames"].items() if n not in gone}
+        verdict["extra"] = [t for t in verdict["extra"] if t not in gone]
         now = _now()
         for name, actual in verdict["matched"].items():
             entry = round_["taken"].setdefault(name, {"at": now, "planned": True})
@@ -1535,7 +1543,7 @@ class Process:
         verdict["missing_optional"] = [t for t in verdict["missing"] if t in optional]
         verdict["missing"] = [t for t in verdict["missing"] if t not in optional]
         round_["reconciled"] = {"at": now, "rew": True, "matched": len(verdict["matched"]),
-                                "extra": [t for t in verdict["extra"] if t in round_["taken"]],
+                                "extra": [t for t in verdict["extra"] if _is_taken(round_, t)],
                                 "renames": verdict["renames"], "missing": verdict["missing"],
                                 "missing_optional": verdict["missing_optional"]}
         self._write(state)
@@ -2236,12 +2244,12 @@ class Process:
             raise ProcessError("this round expects no captures — nothing to check")
         verdicts = verifier.verify(wanted)
         # REW not answering is no verdict on any title (#134): refused before anything is written, so the round and
-        # the journal stay as they were and the check is run again once REW is up.
+        # the journal stay as they were and the check is run again once REW is up. What to do next is the caller's to
+        # say: `capture-check` says "run it again", `capture-close` closes the round, unchecked.
         down = next((v for v in verdicts if v.get("reachable") is False), None)
         if down is not None:
             raise RewUnavailableError(
-                f"REW did not answer ({(down.get('issues') or ['no answer'])[0]}) -- nothing was recorded; start REW "
-                "and run capture-check again")
+                f"REW did not answer ({(down.get('issues') or ['no answer'])[0]}) -- nothing was recorded")
         taken, checks = round_.setdefault("taken", {}), round_.setdefault("checks", {})
         for verdict in verdicts:
             title = verdict["name"]
@@ -2699,8 +2707,9 @@ class Process:
 
 _USAGE = """usage: process.py <process-dir> <command> [args]
        process.py <process-dir> <command> --help    that command's lines below; nothing is read or written
-       A command takes the flags written beside it, as `--flag value` or `--flag=value`; any other flag is
-       a usage error (exit 2), never a title or a reason.
+       A command takes the flags written beside it, as `--flag value` or `--flag=value`, the value as it
+       stands (never another of its flags); any other flag and fewer arguments than its line names are a
+       usage error (exit 2), never a title or a reason. Text that only begins with `--` (`--bass hums`) is a word.
 
   show                                  print the current state as JSON
   plan [phase]                          print the plan (default: active phase)
@@ -2859,27 +2868,80 @@ _FLAGS_WITHOUT_VALUE = ("--project", "--check", "--plan", "--session", "--measur
 #: the verb (`<verb> --help`). `-h` is the same.
 _HELP = ("--help", "-h")
 
+#: The arguments each verb cannot run without, by the names its lines in `_USAGE` give them (#134, R36). Fewer is a
+#: usage error, exit 2, naming them, before the project is touched: it raised IndexError -- "list index out of
+#: range", exit 1 like a refusal with no reason. Every verb has its row, so `_check_too_few_arguments` finds a verb
+#: added to `_main` without one. `skip` needs a reason OR `--superseded-by`, which no count can say: `skip_step`
+#: refuses a skip with neither (exit 1, its own words).
+_VERB_ARGS = {
+    "show": (),
+    "plan": (),
+    "enter-phase": ("<phase>",),
+    "add-step": ("<id>", "<name>"),
+    "start": ("<id>",),
+    "done": ("<id>", "<evidence>"),
+    "skip": ("<id>",),
+    "block": ("<id>", "<reason>"),
+    "reviewer": ("<vendor>", "<model>"),
+    "target": ("<preset>", "<curve>"),
+    "decision": ("<question>", "<answer>"),
+    "session-start": ("<harness>", "<model>"),
+    "session-close": (),
+    "session-reopen": ("<reason>",),
+    "capture-start": ("<version>",),
+    "capture-check": (),
+    "capture-taken": ("<title>",),
+    "capture-import": ("<N>",),
+    "amp-gain": ("<CH>=<dB>",),
+    "amp-changes": (),
+    "capture-knobs": ("<NAME>=<POS>",),
+    "capture-protective": ("<ch>",),
+    "listening-verdict": (),
+    "listening-verdicts": (),
+    "capture-supersede": ("<wrong>", "<right>"),
+    "handoff": (),
+    "capture-skip": ("<title>", "<reason>"),
+    "capture-close": (),
+    "check": (),
+}
+
 
 def _flag_shaped(token):
-    """`--` and a letter: a token the command line reads as a flag (`--origin`, `--hp=100`). A bare `--`, a negative
-    number (`-25`, `--5`) and every word stay arguments."""
-    return len(token) > 2 and token.startswith("--") and token[2].isalpha()
+    """A token the command line reads as a flag (#134, R35): `--`, an ASCII letter, and no whitespace before an `=` --
+    `--origin`, `--hp=100`, `--invalidates=w-L_1 (sw)` (after `=` the value is the value's, spaces and all). A bare
+    `--`, a negative number (`-25`, `--5`) and a word stay arguments, and so does text that only begins with two
+    dashes: `--бас гуде`, `--bass hums`, `-- note`. A flag is never Cyrillic and never holds a space; the Arbiter's own
+    words, typed into TCC, can be both."""
+    name = token.partition("=")[0]
+    return (len(name) > 2 and name.startswith("--") and name[2].isascii() and name[2].isalpha()
+            and not any(ch.isspace() for ch in name))
+
+
+def _asks_help(token):
+    """`--help` (`--help=...` too) or `-h`: a question about the command line, wherever it stands."""
+    return token == "-h" or token.partition("=")[0] == "--help"
 
 
 def _args_checked(cmd, args):
-    """`args` as the verb `cmd` reads them (#134, N19): `--flag=value` becomes `--flag`, `value` when `--flag` is the
-    verb's (the value then passes as it is, whatever it looks like); any other flag-shaped token -- a flag the verb
-    does not take, `=` on a flag that takes no value -- raises `UsageError`, exit 2. A bare `--` and the words pass.
-    The words of a refusal never contain `usage: process.py`: TCC reads that as "the method is too old"."""
+    """`args` as the verb `cmd` reads them (#134, N19, R35). A flag's value passes as it is, whatever it looks like:
+    after `=` (`--flag=value` becomes `--flag`, `value`), or as the next word when the flag takes one (`--text
+    --loud`) -- unless that word is one of the verb's own flags: then the value is missing. That, a flag-shaped token
+    (`_flag_shaped`) the verb does not take, `=` on a flag that takes no value, and `--help` or `-h` anywhere here
+    (they are asked right after the verb, `_main`) raise `UsageError`, exit 2. A bare `--` and the words pass, and so
+    does a flag with nothing after it: its verb says what is missing. The words of a refusal never contain `usage:
+    process.py`: TCC reads that as "the method is too old"."""
     known = VERB_FLAGS.get(cmd, ())
-    out = []
-    for token in args:
+    out, i = [], 0
+    while i < len(args):
+        token = args[i]
+        i += 1
+        if _asks_help(token):
+            word = token.partition("=")[0]
+            raise UsageError(f"{word} is asked right after the command: process.py <process-dir> {cmd} {word}")
         if not _flag_shaped(token):
             out.append(token)
             continue
         flag, eq, value = token.partition("=")
-        if flag == "--help":
-            raise UsageError(f"--help is asked right after the command: process.py <process-dir> {cmd} --help")
         if flag not in known:
             raise UsageError(f"{cmd} does not take {flag}"
                              + (f" -- it takes {', '.join(known)}" if known else " -- it takes no flags"))
@@ -2888,7 +2950,31 @@ def _args_checked(cmd, args):
         out.append(flag)
         if eq:
             out.append(value)
+        elif flag not in _FLAGS_WITHOUT_VALUE and i < len(args):
+            nxt = args[i]
+            if _asks_help(nxt):
+                continue                        # refused as a help out of place, on the loop's next turn
+            if _flag_shaped(nxt) and nxt.partition("=")[0] in known:
+                raise UsageError(f"{cmd}: {flag} needs a value")
+            out.append(nxt)
+            i += 1
     return out
+
+
+def _args_counted(cmd, args):
+    """Refuses (`UsageError`, exit 2) fewer arguments than `_VERB_ARGS` names for `cmd`, naming them (#134, R36).
+    `args` as `_args_checked` returns them: a flag of the verb and its value are not arguments."""
+    known, given, i = VERB_FLAGS.get(cmd, ()), 0, 0
+    while i < len(args):
+        if args[i] in known:
+            i += 1 if args[i] in _FLAGS_WITHOUT_VALUE else 2
+        else:
+            given += 1
+            i += 1
+    needs = _VERB_ARGS.get(cmd, ())
+    if given < len(needs):
+        raise UsageError(f"{cmd} needs {' '.join(needs)}: {given} of {len(needs)} given -- process.py <process-dir> "
+                         f"{cmd} --help")
 
 
 def _verb_usage(verb):
@@ -3718,7 +3804,8 @@ def _check_exit_table():
         before = _project_bytes(d)
         r = _cli_env(d, ["capture-check"], REW_API_URL="http://127.0.0.1:1")
         assert r.returncode == 69, (r.returncode, r.stderr[-300:])
-        assert "REW did not answer" in r.stderr and "nothing was recorded" in r.stderr, r.stderr[-300:]
+        assert "REW did not answer" in r.stderr and "nothing was recorded" in r.stderr \
+            and "start REW and run capture-check again" in r.stderr, r.stderr[-300:]
         assert _project_bytes(d) == before, "REW down wrote something"
         # REW's own exception, met by a verb that asks REW itself (the titles of a series, for an import).
         r = _cli_env(d, ["capture-import", "1", "--bind", "=v_001", "--knob", "SubRC=4/4"])
@@ -3734,9 +3821,11 @@ def _check_exit_table():
 
 def _check_catch_all_reads_the_type():
     """The catch-all reads `rew_state` and `is_unreadable` off the exception's CLASS (#134): REW down raised by any
-    copy of `rew_api` (another class, the same attribute) is 69, and an `HTTPError` built without a body -- whose
-    instance, on Python 3.9, answers every attribute it lacks with `KeyError: 'file'` -- is a bug's 70 with its
-    traceback, never a crash of the handler itself."""
+    copy of `rew_api` (another class, the same attribute) is 69; REW answering something this method cannot read is
+    REW's answer, not a bug -- 1, REW's words and "nothing was written", where it was 70 (`capture-import` met it on
+    REW's list); an `HTTPError` built without a body -- whose instance, on Python 3.9, answers every attribute it
+    lacks with `KeyError: 'file'` -- is a bug's 70 with its traceback, never a crash of the handler itself; and so is
+    an IndexError raised inside a verb (R36), which exited 1 like a refusal, with no traceback."""
     import shutil
     import tempfile
     import urllib.error
@@ -3744,14 +3833,22 @@ def _check_catch_all_reads_the_type():
     class Down(Exception):                     # REW down as another copy of `rew_api` raises it
         rew_state = "unavailable"
 
+    class Unreadable(Exception):               # REW's answer unreadable, as another copy of `rew_api` raises it
+        rew_state = "protocol"
+
     top = tempfile.mkdtemp(prefix="autosound_process_catch_all_")
     real = Process.record_decision
     try:
         d = os.path.join(top, "process")
         Process(d).enter_phase("-1")
         for exc, code, said in ((Down("REW is not answering at http://127.0.0.1:1"), 69, "-- nothing was written"),
+                                (Unreadable("REW's measurement list is not a map of measurements: list"), 1,
+                                 "error: REW's measurement list is not a map of measurements: list -- nothing was "
+                                 "written"),
                                 (urllib.error.HTTPError("http://127.0.0.1:1/x", 500, "boom", {}, None), 70,
-                                 "error: unexpected HTTPError: HTTP Error 500: boom")):
+                                 "error: unexpected HTTPError: HTTP Error 500: boom"),
+                                (IndexError("list index out of range"), 70,
+                                 "error: unexpected IndexError: list index out of range")):
             def boom(self, *args, _exc=exc, **kwargs):
                 raise _exc
             Process.record_decision = boom
@@ -3763,6 +3860,30 @@ def _check_catch_all_reads_the_type():
             assert rc == code and said in err, (type(exc).__name__, rc, err[-300:])
             assert ("Traceback" in err) is (code == 70), (type(exc).__name__, err[-300:])
             assert _project_bytes(d) == before, f"{type(exc).__name__}: something was written"
+        Process.record_decision = real
+        # `capture-import` asks REW for a series' titles itself, through its own `import rew_api` -- which finds
+        # `sys.modules` first, so a stand-in there answers it: REW's list unreadable reached the catch-all as a bug
+        # (70, a traceback). REW's own class, from the sibling copy.
+        import types
+        protocol = _siblings().load("rew_api.py").RewProtocolError
+
+        def unreadable():
+            raise protocol("REW's measurement list is not a map of measurements: list")
+        stand_in = types.ModuleType("rew_api")
+        stand_in.get_measurements = unreadable
+        saved = sys.modules.get("rew_api")
+        sys.modules["rew_api"] = stand_in
+        try:
+            before = _project_bytes(d)
+            rc, out, err = _run_main(["process.py", d, "capture-import", "1", "--bind", "=v_001", "--knob", "SubRC=4/4"])
+        finally:
+            if saved is None:
+                sys.modules.pop("rew_api", None)
+            else:
+                sys.modules["rew_api"] = saved
+        assert rc == 1 and "not a map of measurements" in err and "nothing was written" in err \
+            and "Traceback" not in err, (rc, out, err[-300:])
+        assert _project_bytes(d) == before, "capture-import wrote beside REW's unreadable list"
     finally:
         Process.record_decision = real
         shutil.rmtree(top, ignore_errors=True)
@@ -3811,6 +3932,8 @@ def _check_unknown_flags():
             ["2.3", "--", "x"], "a bare `--`, a negative number and a word pass"
         assert _args_checked("amp-gain", ["sw=+3", "--note=--loud"]) == ["sw=+3", "--note", "--loud"], \
             "a value given with `=` is the flag's, whatever it looks like"
+        assert _args_checked("amp-gain", ["sw=+3", "--note", "--loud"]) == ["sw=+3", "--note", "--loud"], \
+            "...and so is the word after the flag (R35): the two forms are one"
         for cmd, argv, said in (("show", ["--json"], "show does not take --json -- it takes no flags"),
                                 ("capture-close", ["--no-rew=1"], "--no-rew takes no value")):
             try:
@@ -3844,6 +3967,113 @@ def _check_unknown_flags():
             assert read[verb] <= set(flags), (verb, "reads flags its row lacks", sorted(read[verb] - set(flags)))
             legs = {"--hp", "--lp"} if verb == "capture-protective" else set()
             assert set(flags) - legs <= read[verb], (verb, "lists flags it never reads", sorted(set(flags) - read[verb]))
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_flag_values_as_they_stand():
+    """R35 (#134): the word after a flag that takes a value is that value, whatever it looks like -- as after `=` --
+    unless it is one of the verb's own flags: then the value is missing, exit 2. A flag is `--`, an ASCII letter and
+    no whitespace before any `=`, so text that only begins with two dashes is a word. TCC sends the
+    Arbiter's own words both ways: after `--text` and `--note` (listening_dialog), after `--reason` (protective_dialog,
+    an amendment), and as arguments -- `decision`'s question and answer, the reasons of `capture-skip`, `block`,
+    `capture-close`. Each was refused as a flag the verb does not take; `--text "--бас гуде"` was recorded before."""
+    import shutil
+    import tempfile
+    bass = "--бас гуде"                 # data: the Arbiter's own words, as TCC passes them on
+    bass_word = "--бас"                 # the same with no space: not ASCII, so still a word
+    top = tempfile.mkdtemp(prefix="autosound_process_values_")
+    try:
+        d = os.path.join(top, "process")
+        p = Process(d)
+        p.enter_phase("-1")
+        # TCC's listening dialog: the pairs, then --text, --ledger-version, --note (process_writer.py).
+        for text, note in (("--loud", bass), (bass, "--quiet"), ("--loud vocals", bass_word)):
+            rc, _, err = _run_main(["process.py", d, "listening-verdict", "--pair", "CarMus#07:c09:bad", "--text", text,
+                                    "--ledger-version", "v_003", "--note", note])
+            assert rc == 0, (text, note, rc, err[-300:])
+            got = p.events(kinds=(EV_LISTENING_VERDICT,))[-1]
+            assert (got["text"], got["note"]) == (text, note), (text, note, got)
+        # TCC's protective dialog on a closed round: --amend, --reason, then the channel and its legs.
+        p.start_capture("1", expected=["m-L_1 (sw)"])
+        p.set_protective("m-L", "OFF", source="front_end")
+        cap_id = p.protective_record()["id"]
+        p.close_capture("the pass is over")
+        for reason in ("--typo", bass):
+            rc, _, err = _run_main(["process.py", d, "capture-protective", "--amend", cap_id, "--reason", reason,
+                                    "m-L", "--hp", "100", "LR", "24"])
+            assert rc == 0, (reason, rc, err[-300:])
+            got = [e for e in p.events(kinds=(EV_CAPTURE_PROTECTIVE,)) if e.get("amends")][-1]
+            assert got["reason"] == reason, (reason, got)
+        # The Arbiter's words as arguments: with a space, or not ASCII, they are words.
+        rc, _, err = _run_main(["process.py", d, "decision", "--bass hums at 45 Hz?", bass_word])
+        assert rc == 0, (rc, err[-300:])
+        said = p.events(kinds=(EV_USER_DECISION,))[-1]
+        assert (said["question"], said["answer"]) == ("--bass hums at 45 Hz?", bass_word), said
+        p.add_step("1.1", "a")
+        rc, _, err = _run_main(["process.py", d, "block", "1.1", "--waiting for the amp"])
+        assert rc == 0 and p.step(p.load(), "1.1")["blocked_reason"] == "--waiting for the amp", (rc, err)
+        p.start_capture("2", expected=["a_2 (sw)", "b_2 (sw)"])
+        rc, _, err = _run_main(["process.py", d, "capture-skip", "a_2 (sw)", "--door open, retake", bass])
+        assert rc == 0 and p.load()["capture"]["skipped"]["a_2 (sw)"]["reason"] == "--door open, retake " + bass, \
+            (rc, err, p.load()["capture"]["skipped"])
+        # Still refused, nothing written: an ASCII `--word` as an argument or where a flag stands, and a flag whose
+        # value is missing -- one of the verb's own flags in its place.
+        before = _project_bytes(d)
+        for argv, said in ((["capture-skip", "b_2 (sw)", "--loud"], "capture-skip does not take --loud"),
+                           (["capture-start", "3", "a (sw)", "--origni", "x"], "capture-start does not take --origni"),
+                           (["capture-start", "3", "--optional", "--plan"], "capture-start: --optional needs a value"),
+                           (["amp-gain", "sw=+3", "--note", "--amends=amp-1"], "amp-gain: --note needs a value"),
+                           (["capture-protective", "m-L", "--hp", "--lp", "4000", "BW", "36"],
+                            "capture-protective: --hp needs a value"),
+                           (["listening-verdict", "--pair", "CarMus#07:c09:ok", "--text", "--route", "full"],
+                            "listening-verdict: --text needs a value")):
+            rc, out, err = _run_main(["process.py", d, *argv])
+            assert rc == EXIT_USAGE and said in err and not out and "usage: process.py" not in err, (argv, rc, err, out)
+        assert _project_bytes(d) == before, "a refused command line wrote something"
+        assert not _flag_shaped(bass) and not _flag_shaped(bass_word) and not _flag_shaped("--bass hums") \
+            and not _flag_shaped("-- note") and _flag_shaped("--invalidates=w-L_1 (sw)") and _flag_shaped("--origni")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_too_few_arguments():
+    """R36 (#134): a verb given fewer arguments than its line names is a usage error -- exit 2, naming what it needs,
+    nothing written, no traceback -- where it raised IndexError and exited 1, "list index out of range" (`target`,
+    `decision`, `capture-skip` with none). Every verb `_main` dispatches has its row in `_VERB_ARGS`, so a verb added
+    there cannot slip past; each name in a row is on the verb's own lines; a flag and its value are not arguments; and
+    with exactly the arguments named no verb meets an IndexError, which is a bug's 70 now."""
+    import ast
+    import shutil
+    import tempfile
+    src = open(os.path.abspath(__file__), encoding="utf-8").read()
+    main = next(n for n in ast.parse(src).body if isinstance(n, ast.FunctionDef) and n.name == "_main")
+    verbs = sorted({c.comparators[0].value for c in ast.walk(main)
+                    if isinstance(c, ast.Compare) and isinstance(c.left, ast.Name) and c.left.id == "cmd"
+                    and isinstance(c.comparators[0], ast.Constant)})
+    assert set(verbs) == set(_VERB_ARGS), ("the dispatcher's verbs and _VERB_ARGS differ",
+                                           sorted(set(verbs) ^ set(_VERB_ARGS)))
+    top = tempfile.mkdtemp(prefix="autosound_process_args_")
+    try:
+        d = os.path.join(top, "process")
+        Process(d).enter_phase("-1")
+        Process(d).start_capture("1", expected=["a_1 (sw)"])
+        before = _project_bytes(d)
+        short = [[verb, *["1"] * (len(_VERB_ARGS[verb]) - 1)] for verb in verbs if _VERB_ARGS[verb]]
+        short += [["capture-start", "--step", "2.1", "--plan"], ["reviewer", "Gemini", "--review", "r.md"],
+                  ["capture-knobs", "--amend", "cap_001", "--reason", "known in the car"]]
+        for argv in short:
+            needs = _VERB_ARGS[argv[0]]
+            assert all(name in _verb_usage(argv[0]) for name in needs), (argv[0], needs)
+            rc, out, err = _run_main(["process.py", d, *argv])
+            assert rc == EXIT_USAGE and f"{argv[0]} needs {' '.join(needs)}" in err, (argv, rc, err, out)
+            assert "Traceback" not in err and "usage: process.py" not in err and not out, (argv, err)
+        assert _project_bytes(d) == before, "too few arguments wrote something"
+        # Exactly the arguments named: run as processes, on the dead port -- some of these ask REW.
+        for verb in verbs:
+            r = _cli_env(d, [verb, *["1"] * len(_VERB_ARGS[verb])])
+            assert r.returncode not in (EXIT_USAGE, EXIT_UNEXPECTED) and "Traceback" not in r.stderr, \
+                (verb, r.returncode, r.stderr[-300:])
     finally:
         shutil.rmtree(top, ignore_errors=True)
 
@@ -3920,11 +4150,23 @@ def _check_help_writes_nothing():
         before = _project_bytes(d)
         for verb in verbs:
             r = _cli_env(d, [verb, "--help"])
-            assert r.returncode == 0 and verb in r.stdout, (verb, r.returncode, r.stdout[:200], r.stderr[-200:])
+            # The verb's OWN lines -- each entry `_USAGE` heads with it -- not its name anywhere: `done` is in the
+            # exit table's "0 done", so a `done --help` that printed the table alone passed.
+            own = [line for line in _USAGE.splitlines() if line.startswith(f"  {verb} ") or line == f"  {verb}"]
+            assert own and r.returncode == 0 and all(line in r.stdout.splitlines() for line in own), \
+                (verb, own, r.returncode, r.stdout[:300], r.stderr[-200:])
             assert "exit  0 done" in r.stdout and "usage: process.py" not in r.stdout, (verb, r.stdout[-300:])
             missing = [f for f in VERB_FLAGS[verb] if f not in r.stdout]
             assert not missing, f"{verb} --help does not name {missing}"
         assert _project_bytes(d) == before, "a --help wrote to the project"
+        # Anywhere but right after the verb, `--help` and `-h` are a usage error and run nothing: `-h` was data there --
+        # `capture-start 1 -h` opened a round expecting a capture titled "-h", a reason became "-h".
+        for argv in (["capture-start", "1", "-h"], ["capture-skip", "a (sw)", "-h"], ["capture-start", "1", "--help"],
+                     ["listening-verdict", "--pair", "CarMus#07:c09:ok", "--text", "-h"],
+                     ["capture-start", "1", "--optional", "--help"], ["capture-close", "done in the car", "-h"]):
+            rc, out, err = _run_main(["process.py", d, *argv])
+            assert rc == EXIT_USAGE and "is asked right after the command" in err and not out, (argv, rc, err, out)
+        assert _project_bytes(d) == before, "a help asked out of place wrote to the project"
         for argv in (["process.py", "--help"], ["process.py", "-h"], ["process.py", d, "--help"],
                      ["process.py", d, "-h"]):
             rc, out, err = _run_main(argv)
@@ -3953,7 +4195,8 @@ def _check_usage_before_the_read():
                                          (["capture-start", "-h"], 0, "out", "capture-start"),
                                          (["no-such-verb"], 2, "err", "usage: process.py"),
                                          (["capture-start", "1", "--origni", "x"], 2, "err", "--origni"),
-                                         (["capture-check", "--session=yes"], 2, "err", "--session")):
+                                         (["capture-check", "--session=yes"], 2, "err", "--session"),
+                                         (["target", "FULL"], 2, "err", "target needs <preset> <curve>")):
             rc, out, err = _run_main(["process.py", d, *argv])
             text = out if stream == "out" else err
             assert rc == code and said in text, (argv, rc, (err or out)[-200:])
@@ -4055,8 +4298,55 @@ def _check_close_says_what_rew_did():
             rew_api.get_measurements = answer
             rc, out, err = _run_main(["process.py", d, "capture-close"])
             assert rc == 0 and said in out and "not checked against REW" in out, (type(exc).__name__, rc, out, err)
+            assert f"({type(exc).__name__}: " in out, ("the line names what was raised", out)
             if "not reached" not in said:
                 assert "REW not reached" not in out, out
+
+        # REW answered its list, then stopped before the checks: the round closes on the record, unchecked -- said
+        # so, with what was raised. It said "run capture-check again", and the round it would run on was closing.
+        class Dropped:
+            def verify(self, titles):
+                return [{"name": t, "exists": True, "reachable": False, "valid": False,
+                         "issues": ["REW unavailable while reading the frequency response: refused"], "stats": {}}
+                        for t in titles]
+        d = os.path.join(tempfile.mkdtemp(dir=top), "process")
+        Process(d).enter_phase("-1")
+        Process(d).start_capture("1", expected=["m-L_1 (sw)"])
+        rew_api.get_measurements = lambda: {"1": {"title": "m-L_1 (sw)"}}
+        Process._load_verifier = lambda self: Dropped()
+        rc, out, err = _run_main(["process.py", d, "capture-close"])
+        assert rc == 0 and "checks not run on the taken captures (RewUnavailableError: REW did not answer" in out \
+            and "the round closes on the record, unchecked" in out and "capture-check again" not in out \
+            and "closed: 1 taken" in out, (rc, out, err)
+        Process._load_verifier = lambda self: Verifier()
+        # A superseded row whose title REW still holds -- the typo not yet renamed there -- is skipped by the
+        # reconcile (N17): it was "1 taken beyond it", in the record's `extra` and the close's.
+        d = os.path.join(tempfile.mkdtemp(dir=top), "process")
+        p = Process(d)
+        p.enter_phase("-1")
+        p.start_capture("1", expected=["m-L_1 (sw)"])
+        p.record_capture("m-R_1 (sw)")
+        p.supersede_capture("m-R_1 (sw)", "m-L_1 (sw)", "typed R for L")
+        rew_api.get_measurements = lambda: {"1": {"title": "m-L_1 (sw)"}, "2": {"title": "m-R_1 (sw)"}}
+        rc, out, err = _run_main(["process.py", d, "capture-close"])
+        round_ = p.load()["capture"]
+        assert rc == 0 and "1 of 1 on the list held, 0 taken beyond it" in out and "closed: 1 taken" in out, \
+            (rc, out, err)
+        assert round_["reconciled"]["extra"] == [] and round_["closed_against"]["extra"] == [], round_
+        assert round_["taken"]["m-R_1 (sw)"]["superseded_by"] == "m-L_1 (sw)", round_["taken"]
+        # ...and a superseded title on the list that REW holds under it is not held for the round: no rename named
+        # for it, no `as_in_rew` written on the row, not counted among the held.
+        d = os.path.join(tempfile.mkdtemp(dir=top), "process")
+        p = Process(d)
+        p.enter_phase("-1")
+        p.start_capture("1", expected=["m-L_1 (sw)", "m-R_1 (sw)"])
+        p.record_capture("m-L_1 (sw)")
+        p.supersede_capture("m-L_1 (sw)", "m-R_1 (sw)", "typed L for R")
+        verdict = p.reconcile_captures(["m-L_01 (sw)"])
+        round_ = p.load()["capture"]
+        assert verdict["matched"] == {} and verdict["renames"] == {} and round_["reconciled"]["matched"] == 0, \
+            (verdict, round_["reconciled"])
+        assert "as_in_rew" not in round_["taken"]["m-L_1 (sw)"], round_["taken"]
     finally:
         rew_api.get_measurements, Process._load_verifier = real, real_verifier
         shutil.rmtree(top, ignore_errors=True)
@@ -4138,6 +4428,7 @@ def _selftest():
                   _check_every_writer_refuses_unreadable, _check_write_guard_catches_damage_after_the_read,
                   _check_writers_read_strictly, _check_gates_refuse_unreadable, _check_newer_state_refused,
                   _check_exit_table, _check_catch_all_reads_the_type, _check_unknown_flags, _check_flags_tcc_sends,
+                  _check_flag_values_as_they_stand, _check_too_few_arguments,
                   _check_help_writes_nothing, _check_usage_before_the_read, _check_superseded_not_taken,
                   _check_check_never_invents_taken, _check_close_says_what_rew_did):
         try:
@@ -4658,7 +4949,8 @@ def _selftest():
     assert sp.session_closed() and sp.last_session_event()["type"] == EV_SESSION_CLOSED, sp.last_session_event()
     # A reopening needs its reason, and follows the close rather than replacing it.
     refuses("a reopening with no reason", lambda: sp.reopen_session("  "))
-    assert _cli("session-reopen")[0] == 1 and sp.session_closed(), "a bare session-reopen was taken"
+    # No reason given at all is too few arguments (R36): a usage error, 2; a blank one is refused above.
+    assert _cli("session-reopen")[0] == EXIT_USAGE and sp.session_closed(), "a bare session-reopen was taken"
     code, said = _cli("session-reopen", "session-close", "was", "run", "as", "a", "check")
     assert code == 0 and "session_reopened" in said, said
     kinds = [e["type"] for e in sp.events(kinds=SESSION_EVENTS)]
@@ -4975,11 +5267,14 @@ def _selftest():
         "and STOPPING is an event: `open_work` names the open round and every step left in "
         "progress, drops a round once it is closed, and owes a step again when it is picked "
         "back up; an RTA the check does not apply to is kept as such and holds no step (#29); a step CARRIES what it covers and its name names the first three and counts the rest (S-031); a capture under the wrong title is SUPERSEDED and stops counting, never deleted (S-039); the handoff REFUSES while anything the next session needs is only in the chat, and prints the resume line when it is not (S-044); `session-close --check` gives the same report and exit code and writes nothing, the plain form still records a clean stop, and a close is taken back only with a reason and only right after it, staying in the journal while the session reads as open; a ▶️ CONTINUE block naming a HEAD the ledger is not at is warned of and refuses nothing (S-084); a series number that is not this project's is refused until its ORIGIN is on record (S-048); a round records WHICH counter its version is, refuses a `v_NNN` nobody banked with both ways on, and marks a skip planned or not (TCC-022); and a phase does not close over a flaw row that stands on an UNASKED question -- the refusal carries the titles that would settle it, and a round opened or a ruling recorded closes it (S-047); a process-state.json that is there and cannot be read is refused before anything is done by every verb but the three display-only ones -- each writer of the state or the journal, each verdict, and show; handoff --json in its own JSON -- naming it and its repair and leaving the state and the journal byte for byte; every writer method reads it strictly itself, so a read that fails once never becomes an empty process written over the plan, and _write and _append refuse a file damaged after that read; a missing one is a fresh project and a BOM is read (#136); the phase gates refuse what they cannot check -- an intake check that raised or would not load, a profile check that would not load, a project.json or a dsp_profile.json that cannot be read -- writing nothing, and a state a newer method wrote is refused by every strict read and by both guards (#136, T-10, T-21); "
-        "the command line exits by its table -- a bug 70 with its traceback, REW down 69 with nothing written, the "
-        "catch-all reading the exception's class -- refuses a flag its verb does not take with 2 before the state is "
-        "read, reads `--flag=value`, takes every flag TCC sends, and answers `<verb> --help` writing nothing; a "
-        "superseded row counts nowhere as taken, and a check never invents a capture REW does not hold (#134, #138 "
-        "I-15). "
+        "the command line exits by its table -- a bug 70 with its traceback (an IndexError too), REW down 69 with "
+        "nothing written, REW's unreadable answer 1, the catch-all reading the exception's class -- refuses a flag "
+        "its verb does not take, a flag given another flag for its value and too few arguments with 2 before the "
+        "state is read, takes "
+        "the word after a flag as its value as `--flag=value` does and the Arbiter's words that begin `--` as words, "
+        "takes every flag TCC sends, and answers `<verb> --help` writing nothing (`-h` and `--help` elsewhere are 2); "
+        "a superseded row counts nowhere as taken, the reconcile's extra included, and a check never invents a "
+        "capture REW does not hold (#134, #138 I-15). "
         f"root={root}"
     )
     return 0
@@ -5009,6 +5304,7 @@ def _main(argv):
         return EXIT_OK
     try:
         args = _args_checked(cmd, args)
+        _args_counted(cmd, args)
     except UsageError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_USAGE
@@ -5193,7 +5489,13 @@ def _main(argv):
         elif cmd == "capture-check":
             session = "--session" in args
             args = [a for a in args if a != "--session"]
-            round_ = p.check_captures(args or None, session=session)
+            try:
+                round_ = p.check_captures(args or None, session=session)
+            except RewUnavailableError as exc:
+                # The advice is this verb's (#134): `capture-close` runs the same check and then closes the round, so
+                # "run capture-check again" cannot be followed there.
+                print(f"error: {exc}; start REW and run capture-check again", file=sys.stderr)
+                return EXIT_REW_UNAVAILABLE
             if session and round_.get("session"):
                 verifier = p._load_verifier()
                 # `reachable` kept (#134): a row REW did not answer for is counted unreachable, never unusable.
@@ -5471,16 +5773,16 @@ def _main(argv):
                     checked = p.reconcile_captures(titles)
                 except Exception as exc:  # noqa: BLE001 -- REW down is a fact to print, not a crash
                     # Said as what it was, by the state on the exception's class (#134): REW down is not REW answering
-                    # something that is no measurement list.
+                    # something that is no measurement list. Each line names what was raised, and its words.
                     rew_said = getattr(type(exc), "rew_state", None)
+                    raised = f"{type(exc).__name__}: {str(exc)[:120]}"
                     if rew_said == "unavailable":
-                        print(f"  REW not reached ({str(exc)[:120]}): closing on the record alone")
+                        print(f"  REW not reached ({raised}): closing on the record alone")
                     elif rew_said == "protocol":
-                        print(f"  REW answered something that is not a measurement list ({str(exc)[:120]}): "
-                              "closing on the record alone")
+                        print(f"  REW answered something that is not a measurement list ({raised}): closing on the "
+                              "record alone")
                     else:
-                        print(f"  not read against REW ({type(exc).__name__}: {str(exc)[:120]}): "
-                              "closing on the record alone")
+                        print(f"  not read against REW ({raised}): closing on the record alone")
             if checked is not None:
                 print(f"  read against REW: {len(checked['matched'])} of {len(checked['expected'])} on the list held"
                       + (f", {len(p.load(strict=True)['capture'].get('reconciled', {}).get('extra') or [])} taken "
@@ -5494,8 +5796,10 @@ def _main(argv):
                     try:
                         p.check_captures(taken_now)
                         print(f"  checks run on {len(taken_now)} taken capture(s) (capture-check for the verdicts)")
-                    except Exception as exc:  # noqa: BLE001
-                        print(f"  checks not run on the taken captures: {str(exc)[:160]}")
+                    except Exception as exc:  # noqa: BLE001 -- the close goes on (exit 0): the checks are not the close
+                        # Said as what happens (#134): the round is closing, so a check cannot be run on it again.
+                        print(f"  checks not run on the taken captures ({type(exc).__name__}: {str(exc)[:160]}): "
+                              "the round closes on the record, unchecked")
             outstanding = p.capture_outstanding(p.load(strict=True))   # what the close is about to say (#136)
             round_ = p.close_capture(" ".join(args) or None)
             print(
@@ -5534,10 +5838,9 @@ def _main(argv):
     except ProcessError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return getattr(exc, "exit_code", EXIT_NO)      # 2 for a usage error, 69 for REW down, else 1
-    except IndexError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return EXIT_NO
     except Exception as exc:  # noqa: BLE001 -- the catch-all (#134, audit T-23): a bug exits 70, not 1
+        # An IndexError is one of them (R36): too few arguments are refused before the verb runs (`_args_counted`), so
+        # one raised inside a verb is a bug, and its traceback is printed -- it exited 1, with no traceback.
         # Read off the exception's CLASS, never the instance (#134): on Python 3.9 an `HTTPError` built without a body
         # answers any attribute it lacks with `KeyError: 'file'`, which would crash this handler instead of naming it.
         if getattr(type(exc), "is_unreadable", False):
@@ -5548,9 +5851,15 @@ def _main(argv):
                                   "next_message": None}, ensure_ascii=False))
             print(f"error: {exc}", file=sys.stderr)
             return EXIT_NO
-        if getattr(type(exc), "rew_state", None) == "unavailable":
+        rew_said = getattr(type(exc), "rew_state", None)
+        if rew_said == "unavailable":
             print(f"error: {exc} -- nothing was written", file=sys.stderr)
             return EXIT_REW_UNAVAILABLE
+        if rew_said == "protocol":
+            # REW answered, with something this method cannot read (#134): REW's answer, not a bug of the method -- a
+            # refusal in REW's words, where it was a bug's 70 (`capture-import`, reading REW's list itself).
+            print(f"error: {exc} -- nothing was written", file=sys.stderr)
+            return EXIT_NO
         traceback.print_exc()
         print(f"error: unexpected {type(exc).__name__}: {exc}", file=sys.stderr)
         return EXIT_UNEXPECTED

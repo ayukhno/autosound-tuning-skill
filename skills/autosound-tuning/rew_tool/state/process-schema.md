@@ -152,7 +152,9 @@ for that checkout — see `rew_tool/provenance.py` for why it is the sha and not
   counting the ghost as a capture that exists. A round that quietly loses a row is a round nobody
   can audit. **Nothing counts a superseded row as taken** (N17, #134): not the step gate
   (`unusable_captures`), not `capture_round_closed`'s `taken`, not the counts `session-close` and
-  `capture-close` print, not the setup a next round starts from, not a channel the round captured.
+  `capture-close` print, not the setup a next round starts from, not a channel the round captured,
+  and not the read against REW: `reconcile_captures` skips the row when REW still holds its title, so
+  it is no title held, no rename and no `extra` taken beyond the list (`reconciled`, `closed_against`).
   `capture-check` prints it `UNUSABLE <title> — superseded by <right title>`. Before, a row checked
   and passed under the wrong title counted as a usable capture.
 - **A check reads; it does not take** (#134, audit T-1). `capture-check` records every title's
@@ -224,30 +226,44 @@ usage on stdout, exit 0.
 | exit | means |
 |---|---|
 | 0 | done, or yes |
-| 1 | refused, or no: the reason on stderr (`error: …`) |
-| 2 | usage: an unknown verb, a flag the verb does not take, a value on a flag that takes none |
+| 1 | refused, or no: the reason on stderr (`error: …`); REW answering something the method cannot read (`error: <REW's words> -- nothing was written`) |
+| 2 | usage: an unknown verb, a flag the verb does not take, a flag's value missing, a value on a flag that takes none, `--help` or `-h` after other arguments, too few arguments |
 | 69 | REW did not answer, and nothing was written (sysexits' `EX_UNAVAILABLE`) |
 | 70 | an unexpected error, a bug: Python's traceback on stderr, then `error: unexpected <type>: <message>` (`EX_SOFTWARE`) |
 | 75 | the project busy: reserved for the lock (J2b, W-9), not raised yet (`EX_TEMPFAIL`) |
 
 - **Each verb takes its own flags, and only those.** `VERB_FLAGS` in `process.py` is the table, one string literal
-  per flag. Any other `--<word>` is a usage error, exit 2, with the flags the verb takes named on stderr and nothing
-  written; it used to become a title, a reason or a piece of evidence (TCC's N19). `--flag value` and `--flag=value`
-  are the same (a value given with `=` passes as it is); a flag that takes no value (`--plan`, `--session`, `--json`,
-  `--check`, `--no-rew`, ...) takes no `=`. A bare `--` and a negative number are arguments. The refusal's words never
-  contain `usage: process.py`, which a front-end reads as "this method is too old".
+  per flag. A flag is `--`, an ASCII letter and no whitespace before an `=`. Any other `--<word>` is a usage error,
+  exit 2, with the flags the verb takes named on stderr and nothing written; it used to become a title, a reason or a
+  piece of evidence (TCC's N19). Text that only begins with two dashes is a word, not a flag: `--бас гуде`, `--bass
+  hums`, `-- note`, as well as a bare `--` and a negative number. `--flag value` and `--flag=value` are the same: the
+  value is taken as it stands, whatever it looks like (`--text --loud`, `--note=--loud`), except that the word after
+  the flag is not its value when it is one of the verb's own flags (`capture-start 1 --optional --plan`) -- the value
+  is then missing, exit 2. A flag that takes no value (`--plan`, `--session`, `--json`, `--check`, `--no-rew`, ...)
+  takes no `=`. The refusal's words never contain `usage: process.py`, which a front-end reads as "this method is too
+  old".
+- **Too few arguments are a usage error.** A verb needs the arguments its line in the usage names in `<...>`
+  (`_VERB_ARGS`): `target <preset> <curve>`, `capture-skip <title> <reason>`, `done <id> <evidence>`; `skip` needs its
+  `<id>`, then a reason or `--superseded-by`, which `skip_step` checks. Fewer is exit 2, naming them, and the verb
+  does not run. It raised IndexError -- "list index out of range", exit 1 like a refusal with no reason; an
+  IndexError raised inside a verb is a bug now, exit 70 with its traceback.
 - **`<verb> --help`** (or `-h`), right after the verb, prints that verb's lines of the usage and the exit table on
   stdout, exit 0, and reads and writes nothing. It ran the verb: `session-close --help` recorded a close,
-  `capture-start --help` opened a round at `--help`.
-- **The command line is answered first**: `--help`, an unknown verb and an unknown flag come before the strict read
-  below, so on a state that cannot be read they still answer 0 or 2, not 1.
+  `capture-start --help` opened a round at `--help`. After other arguments, `--help` and `-h` are a usage error,
+  exit 2: `-h` was data there (`capture-start 1 -h` opened a round expecting a capture titled `-h`).
+- **The command line is answered first**: `--help`, an unknown verb, an unknown flag and too few arguments come
+  before the strict read below, so on a state that cannot be read they still answer 0 or 2, not 1.
 - **REW down is 69, nothing written.** `capture-check` with REW not answering (any title `reachable: false` in
   `verify`'s verdicts) records no verdict, no round change and no event; REW not answering a verb that asks it
-  itself (`capture-import`, for a series' titles) exits 69 too. `capture-close` still closes on the record alone
-  with REW down, exit 0, and says which it met: `REW not reached`, or `REW answered something that is not a
-  measurement list`.
+  itself (`capture-import`, for a series' titles) exits 69 too. REW answering such a verb with something the method
+  cannot read (`rew_state` "protocol") is exit 1, REW's words and `-- nothing was written`: REW's answer, not a bug.
+  `capture-close` still closes on the record alone with REW down, exit 0, and says which it met, with what was
+  raised: `REW not reached`, or `REW answered something that is not a measurement list`. REW gone between its list
+  and the checks `capture-close` runs is said as what happens: the checks were not run, and the round closes on the
+  record, unchecked.
 - **A bug is 70, not 1.** An exception no refusal names exits 70 with its traceback, where it exited 1 like a
-  refusal or escaped as a bare traceback. An unreadable file (`is_unreadable`) stays a refusal, exit 1.
+  refusal or escaped as a bare traceback; an IndexError too. An unreadable file (`is_unreadable`) stays a refusal,
+  exit 1.
 
 ## The read rule: unreadable is not empty (#136, audit K-2)
 
