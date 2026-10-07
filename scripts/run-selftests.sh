@@ -3,7 +3,8 @@
 #
 # One runner so CI and a person execute the SAME thing. It must be able to FAIL (#133, audit T-28):
 #   * every rew_tool module is in scripts/selftests.txt with the argv its selftest takes, or on a `skip` line with
-#     the reason -- a module in neither fails the run (no silent skip);
+#     the reason -- a module in neither fails the run (no silent skip); a skip line is printed, and one whose file
+#     has a selftest of its own fails;
 #   * a selftest passes on exit 0 AND a last output line saying OK: a usage text that exits 0 is not a pass;
 #   * each one runs under a timeout (SELFTEST_TIMEOUT seconds, default 300) that stops the check AND everything it
 #     started -- perl's alarm over a process group, since macOS has no `timeout`;
@@ -25,10 +26,11 @@ PY="${PYTHON:-python3}"
 LIMIT="${SELFTEST_TIMEOUT:-300}"
 export REW_API_URL="http://127.0.0.1:1"   # refused at once on every platform (TCC's conftest does the same)
 export no_proxy="127.0.0.1,localhost${no_proxy:+,$no_proxy}" NO_PROXY="127.0.0.1,localhost${NO_PROXY:+,$NO_PROXY}"
+unset PYTHONOPTIMIZE   # -O strips every assert, and a selftest whose asserts are gone passes: never inherited
 
 if [ "${1:-}" = "--selftest" ]; then
   tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
-  mkdir -p "$tmp/t"
+  mkdir -p "$tmp/t" "$tmp/t2"
   printf 'print("selftest OK -- good")\n'                    > "$tmp/t/good.py"
   printf 'print("usage: usage.py --selftest")\n'            > "$tmp/t/usage.py"
   printf 'print("selftest SKIPPED -- no tool here")\n'      > "$tmp/t/skipped.py"
@@ -39,19 +41,51 @@ if [ "${1:-}" = "--selftest" ]; then
                                                             > "$tmp/t/spawner.py"
   printf 'import subprocess\nsubprocess.Popen(["sleep", "30"])\nprint("selftest OK -- left a child")\n' \
                                                             > "$tmp/t/leaver.py"
+  # ...and when the run is interrupted: TERM reaches the wrapper (as when a job is cancelled), the check goes, and its
+  # child, which ignores TERM, is killed with the group rather than left holding the pipe.
+  printf '%s\n' 'import os, signal, subprocess, time' \
+                'signal.signal(signal.SIGTERM, signal.SIG_IGN)' \
+                'subprocess.Popen(["sleep", "30"])          # inherits TERM ignored' \
+                'signal.signal(signal.SIGTERM, signal.SIG_DFL)' \
+                'time.sleep(0.1)' \
+                'os.kill(os.getppid(), signal.SIGTERM)' \
+                'time.sleep(30)'                            > "$tmp/t/deaf.py"
   printf 'raise SystemExit(3)\n'                            > "$tmp/t/exit3.py"
+  # Each half of the pass rule alone: an OK line with a non-zero exit, and an OK line that is not the last.
+  printf 'print("selftest OK")\nraise SystemExit(1)\n'       > "$tmp/t/okrc1.py"
+  printf 'print("selftest OK")\nprint("then 2 checks FAILED")\n' > "$tmp/t/oknotlast.py"
+  # The environment a check runs in (T-30): rew_api, imported from this tree (the runner's cwd), reads the dead port
+  # -- the run below hands the runner another REW_API_URL, which must be replaced, not kept -- and asserts are on.
+  printf '%s\n' 'import sys' \
+                'sys.path.insert(0, "skills/autosound-tuning/rew_tool")' \
+                'import rew_api' \
+                'if rew_api.BASE_URL != "http://127.0.0.1:1":' \
+                '    sys.exit("rew_api.BASE_URL is " + rew_api.BASE_URL + ", not the dead port")' \
+                'print("selftest OK -- rew_api reads the dead port")' > "$tmp/t/deadport.py"
+  printf '%s\n' 'import sys' \
+                'if sys.flags.optimize:' \
+                '    sys.exit("asserts are stripped here (PYTHONOPTIMIZE reached the check)")' \
+                'print("selftest OK -- asserts run")'      > "$tmp/t/optimize.py"
   printf 'print("selftest OK")\n'                           > "$tmp/t/noreason.py"
+  # A skip line cannot hide a module that has a selftest of its own.
+  printf 'def _selftest():\n    print("selftest OK")\n\n\nif __name__ == "__main__":\n    _selftest()\n' \
+                                                            > "$tmp/t/hidden.py"
   printf 'print("selftest OK")\n'                           > "$tmp/t/unlisted.py"
   # A skip line names a file on disk and gives a reason; the manifest's last line counts without its newline.
   { printf '%s\n' "$tmp/t/good.py" "$tmp/t/usage.py" "$tmp/t/skipped.py" "$tmp/t/slow.py" "$tmp/t/spawner.py" \
-                  "$tmp/t/leaver.py" "$tmp/t/exit3.py" "skip $tmp/t/vanished.py gone from disk" "skip $tmp/t/noreason.py"
+                  "$tmp/t/leaver.py" "$tmp/t/deaf.py" "$tmp/t/exit3.py" "$tmp/t/okrc1.py" "$tmp/t/oknotlast.py" \
+                  "$tmp/t/deadport.py" "$tmp/t/optimize.py" "skip $tmp/t/vanished.py gone from disk" \
+                  "skip $tmp/t/noreason.py" "skip $tmp/t/hidden.py a reason that hides a selftest"
     printf '%s' "$tmp/t/gone.py"; } > "$tmp/m.txt"
   started=$SECONDS
-  out="$(SELFTEST_ONLY_TOOL=1 SELFTEST_TOOL="$tmp/t" SELFTEST_MANIFEST="$tmp/m.txt" SELFTEST_TIMEOUT=1 CI= \
-         bash "$SELF" 2>&1)"; rc=$?
+  out="$(REW_API_URL="http://127.0.0.1:9" PYTHONOPTIMIZE=1 SELFTEST_ONLY_TOOL=1 SELFTEST_TOOL="$tmp/t" \
+         SELFTEST_MANIFEST="$tmp/m.txt" SELFTEST_TIMEOUT=1 CI= bash "$SELF" 2>&1)"; rc=$?
   took=$((SECONDS - started))
   # grep reads to EOF (no -q), so printf never dies of SIGPIPE and pipefail never reads a match as a miss.
   want() { printf '%s\n' "$out" | grep -E -- "$1" >/dev/null || { printf 'runner selftest: no line matching "%s" in:\n%s\n' "$1" "$out"; exit 1; }; }
+  # The verdict, exactly, as the LAST line: each failure is COUNTED, not only printed (a kind that stopped counting
+  # once left `all 1 checks passed`, rc 0, under its own FAIL line).
+  last_is() { [ "$(printf '%s\n' "$out" | tail -n 1)" = "$1" ] || { printf 'runner selftest: the last line is not\n  %s\nin:\n%s\n' "$1" "$out"; exit 1; }; }
   [ "$rc" -eq 1 ] || { printf 'runner selftest: rc %s, want 1\n%s\n' "$rc" "$out"; exit 1; }
   want '^  ok   good\.py'
   want '^  FAIL usage\.py .*no OK line'
@@ -60,24 +94,32 @@ if [ "${1:-}" = "--selftest" ]; then
   want '^         slow: started$'                     # a timeout shows what the check printed before it hung
   want '^  FAIL spawner\.py .*timeout after 1s'
   want '^  ok   leaver\.py'
-  [ "$took" -lt 15 ] || { printf 'runner selftest: the fixture run took %ss -- what a check started must stop when the check ends or times out (spawner.py and leaver.py each leave a sleep 30)\n%s\n' "$took" "$out"; exit 1; }
+  want '^  FAIL deaf\.py +rc=143$'                    # 128 + TERM: the interrupted check, reported as such
+  [ "$took" -lt 15 ] || { printf 'runner selftest: the fixture run took %ss -- what a check started must stop when the check ends, times out or is interrupted (spawner.py, leaver.py and deaf.py each leave a sleep 30, and the one deaf.py leaves ignores TERM)\n%s\n' "$took" "$out"; exit 1; }
   want '^  FAIL exit3\.py +rc=3$'
+  want '^  FAIL okrc1\.py +rc=1$'
+  want '^  FAIL oknotlast\.py .*no OK line'
+  want '^  ok   deadport\.py'
+  want '^  ok   optimize\.py'
   want '^  FAIL vanished\.py .*skip line names a file not on disk'
   want '^  FAIL noreason\.py .*skip line without a reason'
+  want '^  FAIL hidden\.py .*has a selftest: list it, do not skip it'
   want '^  FAIL gone\.py .*listed in .*not on disk'   # the manifest's last line, which has no newline
   want '^  FAIL unlisted\.py .*not in '
-  want '^FAILED: '
-  # Under CI a NOT RUN alone fails the run; locally it is counted and the run passes.
-  printf '%s\n' "$tmp/t/good.py" "$tmp/t/skipped.py" "skip $tmp/t/usage.py fixture" "skip $tmp/t/slow.py fixture" \
-                "skip $tmp/t/spawner.py fixture" "skip $tmp/t/leaver.py fixture" "skip $tmp/t/exit3.py fixture" \
-                "skip $tmp/t/noreason.py fixture" "skip $tmp/t/unlisted.py fixture" > "$tmp/m2.txt"
-  out="$(SELFTEST_ONLY_TOOL=1 SELFTEST_TOOL="$tmp/t" SELFTEST_MANIFEST="$tmp/m2.txt" CI=true bash "$SELF" 2>&1)"; rc=$?
+  last_is "FAILED: 12 of 17 -- usage.py slow.py spawner.py deaf.py exit3.py okrc1.py oknotlast.py vanished.py noreason.py hidden.py gone.py unlisted.py; NOT RUN: skipped.py"
+  # Under CI a NOT RUN alone fails the run; locally it is counted and the run passes. A valid skip line -- a file
+  # with no selftest, and the reason -- fails nothing, and is printed.
+  cp "$tmp/t/good.py" "$tmp/t/skipped.py" "$tmp/t2/"
+  printf '# a plotting helper: no selftest\n'               > "$tmp/t2/plot.py"
+  printf '%s\n' "$tmp/t2/good.py" "$tmp/t2/skipped.py" "skip $tmp/t2/plot.py a plotting helper" > "$tmp/m2.txt"
+  out="$(SELFTEST_ONLY_TOOL=1 SELFTEST_TOOL="$tmp/t2" SELFTEST_MANIFEST="$tmp/m2.txt" CI=true bash "$SELF" 2>&1)"; rc=$?
   [ "$rc" -eq 1 ] || { printf 'runner selftest: under CI a NOT RUN must fail (rc %s)\n%s\n' "$rc" "$out"; exit 1; }
-  want 'did not run under CI'
-  out="$(SELFTEST_ONLY_TOOL=1 SELFTEST_TOOL="$tmp/t" SELFTEST_MANIFEST="$tmp/m2.txt" CI= bash "$SELF" 2>&1)"; rc=$?
+  last_is "FAILED: 1 of 2 did not run under CI -- skipped.py"
+  out="$(SELFTEST_ONLY_TOOL=1 SELFTEST_TOOL="$tmp/t2" SELFTEST_MANIFEST="$tmp/m2.txt" CI= bash "$SELF" 2>&1)"; rc=$?
   [ "$rc" -eq 0 ] || { printf 'runner selftest: locally a NOT RUN is counted, not failed (rc %s)\n%s\n' "$rc" "$out"; exit 1; }
-  want 'NOT RUN: skipped\.py'
-  echo "runner selftest OK -- a usage text, SKIPPED, rc 3, a timeout, a missing or unlisted module and a bad skip line are named; a child left behind is stopped"
+  want '^  --   plot\.py +skipped: a plotting helper$'
+  last_is "all 1 checks passed; NOT RUN: skipped.py"
+  echo "runner selftest OK -- every failure is named and counted in the verdict: a usage text, rc 1 under an OK line, an OK line not last, rc 3, SKIPPED, a timeout, a missing or unlisted module, a bad skip line or one hiding a selftest; a child left behind, or deaf to TERM, is stopped; checks see REW at the dead port, with asserts on"
   exit 0
 fi
 
@@ -88,8 +130,9 @@ pass=0 fail=0 notrun=0 failed=() skipped=()
 # check (the parent sets the group too, so an early alarm still finds it). At the limit the parent kills the whole
 # group and exits 142 (128 + SIGALRM). When the check ends first, whatever it left in its group is killed too, and the
 # exit is the check's own status (128 + the signal when a signal ended it). The group is no longer the terminal's, so
-# Ctrl-C, TERM and HUP are passed on to it -- an interrupted run leaves nothing running -- except a signal the run was
-# started with ignored (a background job, nohup): that one stays ignored.
+# Ctrl-C, TERM and HUP are passed on to it, and once the check has gone, what is left in its group is killed as on the
+# normal path, a member that ignored the signal included -- an interrupted run leaves nothing running -- except a
+# signal the run was started with ignored (a background job, nohup): that one stays ignored.
 GROUP_TIMEOUT='
   my $limit = shift;
   defined(my $pid = fork) or die "fork: $!\n";
@@ -97,7 +140,7 @@ GROUP_TIMEOUT='
   setpgrp($pid, $pid);
   for my $s (qw(INT TERM HUP)) {
     next if ($SIG{$s} // "") eq "IGNORE";
-    $SIG{$s} = sub { $SIG{$s} = "DEFAULT"; kill $s, -$pid; waitpid $pid, 0; kill $s, $$ };
+    $SIG{$s} = sub { $SIG{$s} = "DEFAULT"; kill $s, -$pid; waitpid $pid, 0; kill "KILL", -$pid; kill $s, $$ };
   }
   $SIG{ALRM} = sub { kill "KILL", -$pid; waitpid $pid, 0; exit 142 };
   alarm $limit;
@@ -107,7 +150,8 @@ GROUP_TIMEOUT='
   kill "KILL", -$pid;
   exit(($st & 127) ? 128 + ($st & 127) : $st >> 8);'
 
-# run_one NAME MODE ARGV...   MODE: "ok" = exit 0 AND a last line saying OK; "rc" = exit 0 (tree checks).
+# run_one NAME MODE ARGV...   MODE: "ok" = exit 0 AND a last line saying OK; "rc" = exit 0, for a tree check whose
+# success line says no OK (secret-scan's "clean"). Every check that does end its success with an OK line is `ok`.
 run_one() {
   local name="$1" mode="$2"; shift 2
   local out rc last
@@ -120,9 +164,9 @@ run_one() {
   if [ "$rc" -eq 142 ]; then                                   # 128 + SIGALRM
     fail=$((fail + 1)); failed+=("$name"); printf '  FAIL %-24s timeout after %ss\n' "$name" "$LIMIT"
     [ -z "$out" ] || printf '%s\n' "$out" | tail -n 12 | sed 's/^/         /'
-  elif [ "$rc" -eq 0 ] && printf '%s\n' "$last" | grep -qw 'SKIPPED'; then   # the LAST line, as eq_gate/project_repo print it
+  elif [ "$rc" -eq 0 ] && printf '%s\n' "$last" | grep -w 'SKIPPED' >/dev/null; then   # the LAST line, as eq_gate/project_repo print it
     notrun=$((notrun + 1)); skipped+=("$name"); printf '  --   %-24s NOT RUN: %s\n' "$name" "$(printf '%s' "$last" | cut -c1-60)"
-  elif [ "$rc" -eq 0 ] && { [ "$mode" = rc ] || printf '%s\n' "$last" | grep -qw 'OK'; }; then
+  elif [ "$rc" -eq 0 ] && { [ "$mode" = rc ] || printf '%s\n' "$last" | grep -w 'OK' >/dev/null; }; then
     pass=$((pass + 1)); printf '  ok   %-24s %s\n' "$name" "$(printf '%s' "$last" | cut -c1-72)"
   else
     fail=$((fail + 1)); failed+=("$name")
@@ -135,7 +179,7 @@ run_one() {
 if [ -z "${SELFTEST_ONLY_TOOL:-}" ]; then
   echo "repo checks"
   run_one "runner"          ok "$SELF" --selftest
-  run_one "installers"      rc scripts/installer-consistency.py
+  run_one "installers"      ok scripts/installer-consistency.py
   # HUB-075 (hub #245): the release train runs `tag-check.sh --at <commit> vX.Y.Z` as this repo's half. Its own
   # mechanics in a throwaway repo built from this tree: a last candidate passes, each missing piece is named.
   run_one "tag-check"       ok scripts/tag-check.sh --selftest
@@ -155,12 +199,12 @@ if [ -z "${SELFTEST_ONLY_TOOL:-}" ]; then
   # HUB-040: in the curve visualizer a dropped file's name (and the `#curve=` link) is data, never
   # markup. The checker's own mechanics, then every .html in the tree.
   run_one "html-data"       ok scripts/html-data-check.py --selftest
-  run_one "html-in-tree"    rc scripts/html-data-check.py
+  run_one "html-in-tree"    ok scripts/html-data-check.py
   # HUB-029: a rule that lives only in prose can be deleted by a tidy-up. The checker's own
   # mechanics, then the documents: SKILL.md's always-on guardrails must still say that everything
   # the session READS is data, not instructions, and the inbox page must say it too.
   run_one "docs-check"      ok scripts/docs-check.py --selftest
-  run_one "docs-in-tree"    rc scripts/docs-check.py
+  run_one "docs-in-tree"    ok scripts/docs-check.py
   # The same rule where a stranger's text meets a model: the issue body travels inside a fence with
   # a random marker, and the warning stands before it. Offline -- the prompt is built, not sent.
   run_one "issue-triage"    ok skills/autosound-tuning/scripts/issue_triage.py --selftest
@@ -171,12 +215,12 @@ if [ -z "${SELFTEST_ONLY_TOOL:-}" ]; then
   # knowing them -- the heading skeleton and the commands -- and says out loud that it cannot see all
   # four lagging the code together.
   run_one "i18n-check"      ok scripts/i18n-check.py --selftest
-  run_one "i18n-in-tree"    rc scripts/i18n-check.py
+  run_one "i18n-in-tree"    ok scripts/i18n-check.py
   # HUB-043: the CHANGELOG's way in. The index is generated from the version headings of the live file
   # and the archive, so a new note without a regenerated table fails here rather than being noticed by
   # a reader who cannot find it.
   run_one "changelog-index" ok scripts/changelog-index.py --selftest
-  run_one "changelog-fresh" rc scripts/changelog-index.py --check
+  run_one "changelog-fresh" ok scripts/changelog-index.py --check
   # The reviewer channel's shell plumbing: the closed gemini-CLI path is recognised and named, not
   # retried on a fallback model (hub PAS-004). Offline -- the CLI call is stubbed.
   # The direct-API reviewer: the key travels as a header, a retired model becomes a CHOICE carrying
@@ -192,14 +236,21 @@ echo "rew_tool selftests ($PY)"
 listed=()
 while read -r first rest || [ -n "$first" ]; do     # `||`: a last line without its newline still counts
   case "$first" in ''|'#'*) continue ;; esac
-  if [ "$first" = skip ]; then                       # skip <path> <reason>: the file is on disk, the reason is given
-    path="${rest%%[[:space:]]*}"; reason="${rest#"$path"}"
+  # skip <path> <reason>: the file is on disk, the reason is given, and the file has no selftest of its own -- a skip
+  # line must not be able to silence a module. A valid one is printed, so what the run left out is seen.
+  if [ "$first" = skip ]; then
+    path="${rest%%[[:space:]]*}"; reason="${rest#"$path"}"; reason="${reason#"${reason%%[![:space:]]*}"}"
     name="${path#"$TOOL"/}"; listed+=("$path")
     if [ ! -f "$path" ]; then
       fail=$((fail + 1)); failed+=("${name:-skip}")
       printf '  FAIL %-24s skip line names a file not on disk (%s)\n' "${name:-skip}" "$MANIFEST"
     elif [ -z "$reason" ]; then
       fail=$((fail + 1)); failed+=("$name"); printf '  FAIL %-24s skip line without a reason (%s)\n' "$name" "$MANIFEST"
+    elif grep -E '^[[:space:]]*def _?selftest\(' "$path" >/dev/null; then
+      fail=$((fail + 1)); failed+=("$name")
+      printf '  FAIL %-24s has a selftest: list it, do not skip it (%s)\n' "$name" "$MANIFEST"
+    else
+      printf '  --   %-24s skipped: %s\n' "$name" "$reason"
     fi
     continue
   fi
