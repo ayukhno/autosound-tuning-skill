@@ -949,19 +949,50 @@ class Process:
         return os.path.join(self.dir, "journal.jsonl")
 
     # -- reads --
-    def load(self):
-        """The current slice. A missing or unreadable file reads as an empty process, not an error:
-        a project that has never run should show an empty plan, not a traceback."""
+    def load(self, strict=False):
+        """The current slice. A missing file reads as an empty process in both modes: a project that has never run
+        shows an empty plan, not a traceback.
+
+        A file that is THERE and cannot be read -- empty, cut off, not UTF-8, not a JSON object -- is where the two
+        modes part (#136, audit K-2):
+
+        * lenient, the default: the empty process, as before. For readers -- a screen, a lookup -- where an empty
+          plan beats a traceback: the callers outside this module, and TCC, read it so.
+        * `strict=True`: `project_io.Unreadable`, naming the file and its repair; match it by its `is_unreadable`
+          attribute. For a reader whose answer IS the state: `show`, `session-close`, `contract.py check`.
+
+        A writer never puts what a lenient read made of such a file back on disk: `_write` reads the file strictly
+        before it replaces it.
+        """
         try:
-            with open(self.state_path, encoding="utf-8") as f:
-                state = json.load(f)
-        except (OSError, ValueError):
-            return _empty_state()
+            state = self._read_state()
+        except Exception as exc:  # noqa: BLE001 -- only the unreadable file is read as empty; anything else raises
+            if strict or not getattr(exc, "is_unreadable", False):
+                raise
+            state = None
         base = _empty_state()
+        if state is None:
+            return base
         base.update(state)
         for phase, entry in base["phases"].items():
             entry.setdefault("title", PHASE_TITLES.get(phase, phase))
         return base
+
+    def _read_state(self):
+        """`process-state.json` read strictly: its JSON object, None when there is no file, and `Unreadable` naming
+        the file and its repair when there is one that cannot be read."""
+        return _project_io().read_json(self.state_path, None, repair=self._repair(),
+                                       repair_encoding=self._repair(encoding=True))
+
+    def _repair(self, encoding=False):
+        """The line that puts an unreadable `process-state.json` right, said with the refusal (#136): the committed
+        copy back -- the state is rewritten after every transition, and the journal keeps every event -- or, for a
+        file in another code page (`encoding`), the rewrite as UTF-8 that `contract.py repair-encoding` offers."""
+        if encoding:
+            contract_py = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "contract.py")
+            return f"rewrite it as UTF-8: python3 {contract_py} repair-encoding {self.project_dir}"
+        return (f"restore the last committed copy: git -C {os.path.abspath(self.dir)} checkout HEAD -- "
+                f"process-state.json (the journal keeps every event)")
 
     def events(self, limit=None, kinds=None):
         """Journal entries oldest-first. `kinds` filters by event type.
@@ -2503,6 +2534,11 @@ class Process:
     def _write(self, state):
         state["updated"] = _now()
         validate(state)
+        # Strictly first (#136, audit K-2): a file that is there and cannot be read is never replaced by what a
+        # lenient read made of it. Each transition reads through `load()`, which gives the empty process for such a
+        # file, and this write put that -- no plan, no round -- over the one on disk. `Unreadable` names the file and
+        # the repair; no file at all is a fresh project, and passes.
+        self._read_state()
         os.makedirs(self.dir, exist_ok=True)  # first real write is what creates `process/`
         # A temp of this writer's own, then one move (skill #135): a crash mid-write would otherwise leave truncated
         # JSON, and the next session would read an empty process and think nothing had happened; a fixed temp name
@@ -2865,6 +2901,74 @@ def _check_line_torn_inside_a_character():
         shutil.rmtree(top, ignore_errors=True)
 
 
+_UNREADABLE = {
+    "empty": b"",
+    "truncated": b'{"schema_version": 3, "pla',
+    "cp1251": '{"schema_version": 3, "note": "тест"}'.encode("cp1251"),
+    "a list": b"[1, 2]",
+    "null": b"null",
+}
+
+
+def _state_dir_with(content, top=None):
+    """A `process/` folder whose `process-state.json` holds exactly `content`, in a new folder under `top`."""
+    import tempfile
+    d = os.path.join(tempfile.mkdtemp(dir=top), "process")
+    os.makedirs(d)
+    with open(os.path.join(d, "process-state.json"), "wb") as f:
+        f.write(content)
+    return d
+
+
+def _check_unreadable_state():
+    """K-2 (#136): a `process-state.json` that is there and cannot be read is not an empty process. The lenient read
+    still gives one (a `[1, 2]` or a `null` raised `TypeError` there); the strict read raises an exception with
+    `is_unreadable`; `enter-phase` (a write), `show` and `session-close` exit 1 naming the file and its repair, its
+    bytes left as they were -- the write put an empty process over it, `show` printed one, and `session-close` found
+    nothing open and recorded a close. A fresh project has no file, and that is not a fault; a UTF-8 BOM is an
+    editor's marker, not damage."""
+    import contextlib
+    import io as _io
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_process_unreadable_")
+    try:
+        for label, content in _UNREADABLE.items():
+            d = _state_dir_with(content, top)
+            p = Process(d)
+            assert p.load()["plan"] == [], f"{label}: the lenient read is an empty process"
+            try:
+                p.load(strict=True)
+            except Exception as exc:  # noqa: BLE001 -- the kind is what is under test
+                assert getattr(exc, "is_unreadable", False), (label, exc)
+            else:
+                raise AssertionError(f"{label}: strict load read it")
+            repair = "repair-encoding" if label == "cp1251" else "checkout HEAD -- process-state.json"
+            for argv in (["enter-phase", "-1"], ["show"], ["session-close"]):
+                err = _io.StringIO()
+                with contextlib.redirect_stderr(err), contextlib.redirect_stdout(_io.StringIO()):
+                    rc = _main(["process.py", d, *argv])
+                said = err.getvalue()
+                assert rc == 1 and "process-state.json" in said and repair in said, (label, argv, rc, said)
+                with open(p.state_path, "rb") as f:
+                    assert f.read() == content, f"{label}: {argv[0]} rewrote the unreadable file"
+            assert not any(e.get("type") == EV_SESSION_CLOSED for e in p.events()), \
+                f"{label}: session-close wrote a close"
+        # A fresh project has no file, and that is not a fault -- in either mode.
+        fresh = os.path.join(tempfile.mkdtemp(dir=top), "process")
+        assert Process(fresh).load(strict=True)["plan"] == [], "no file is the empty process, strict too"
+        with contextlib.redirect_stdout(_io.StringIO()):
+            assert _main(["process.py", fresh, "enter-phase", "-1"]) == 0
+        # A BOM is an editor's marker, not damage: read, and replaced by the next transition.
+        d = _state_dir_with(b'\xef\xbb\xbf' + json.dumps(_empty_state()).encode(), top)
+        assert Process(d).load(strict=True)["schema_version"] == SCHEMA_VERSION
+        with contextlib.redirect_stdout(_io.StringIO()):
+            assert _main(["process.py", d, "enter-phase", "-1"]) == 0, "the write refused a state with a BOM"
+        assert Process(d).load(strict=True)["active_phase"] == "-1"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _selftest():
     """The refusals, exercised. This module is the one with the most of them — evidence must exist
     and must resolve (SCR-035), a round's captures must be usable (SCR-040), phase 0 must record a
@@ -2874,7 +2978,7 @@ def _selftest():
     failures = []
     for check in (_check_one_naming, _check_every_loader_shares, _check_load_sibling_reads_a_failure_as_none,
                   _check_foreign_tmp_untouched, _check_state_bytes, _check_torn_journal_line,
-                  _check_line_torn_inside_a_character):
+                  _check_line_torn_inside_a_character, _check_unreadable_state):
         try:
             check()
         except AssertionError as exc:
@@ -3709,7 +3813,7 @@ def _selftest():
         "the journal headed itself with the writing checkout and re-headed only when it changed; "
         "and STOPPING is an event: `open_work` names the open round and every step left in "
         "progress, drops a round once it is closed, and owes a step again when it is picked "
-        "back up; an RTA the check does not apply to is kept as such and holds no step (#29); a step CARRIES what it covers and its name names the first three and counts the rest (S-031); a capture under the wrong title is SUPERSEDED and stops counting, never deleted (S-039); the handoff REFUSES while anything the next session needs is only in the chat, and prints the resume line when it is not (S-044); `session-close --check` gives the same report and exit code and writes nothing, the plain form still records a clean stop, and a close is taken back only with a reason and only right after it, staying in the journal while the session reads as open; a ▶️ CONTINUE block naming a HEAD the ledger is not at is warned of and refuses nothing (S-084); a series number that is not this project's is refused until its ORIGIN is on record (S-048); a round records WHICH counter its version is, refuses a `v_NNN` nobody banked with both ways on, and marks a skip planned or not (TCC-022); and a phase does not close over a flaw row that stands on an UNASKED question -- the refusal carries the titles that would settle it, and a round opened or a ruling recorded closes it (S-047). "
+        "back up; an RTA the check does not apply to is kept as such and holds no step (#29); a step CARRIES what it covers and its name names the first three and counts the rest (S-031); a capture under the wrong title is SUPERSEDED and stops counting, never deleted (S-039); the handoff REFUSES while anything the next session needs is only in the chat, and prints the resume line when it is not (S-044); `session-close --check` gives the same report and exit code and writes nothing, the plain form still records a clean stop, and a close is taken back only with a reason and only right after it, staying in the journal while the session reads as open; a ▶️ CONTINUE block naming a HEAD the ledger is not at is warned of and refuses nothing (S-084); a series number that is not this project's is refused until its ORIGIN is on record (S-048); a round records WHICH counter its version is, refuses a `v_NNN` nobody banked with both ways on, and marks a skip planned or not (TCC-022); and a phase does not close over a flaw row that stands on an UNASKED question -- the refusal carries the titles that would settle it, and a round opened or a ruling recorded closes it (S-047); a process-state.json that is there and cannot be read is refused by a write, `show` and `session-close`, naming it and its repair and leaving its bytes, while a missing one is a fresh project and a BOM is read (#136). "
         f"root={root}"
     )
     return 0
@@ -3725,7 +3829,8 @@ def _main(argv):
     p = Process(root)
     try:
         if cmd == "show":
-            print(json.dumps(p.load(), indent=2, ensure_ascii=False))
+            # Strict (#136): printed as JSON, an unreadable file was an empty process to every screen that read it.
+            print(json.dumps(p.load(strict=True), indent=2, ensure_ascii=False))
         elif cmd == "plan":
             phase = args[0] if args else None
             print(json.dumps(p.plan_for(phase), indent=2, ensure_ascii=False))
@@ -3809,7 +3914,9 @@ def _main(argv):
             # wrote `session_closed` on the VM; it stays as it is, because TCC calls it on the way out
             # and reads its exit code as the answer.
             check_only = "--check" in args
-            open_ = p.open_work()
+            # Strict, before anything is written (#136): read as an empty process, an unreadable file had nothing
+            # open, and the plain form recorded a clean stop over a round or a step it could not see.
+            open_ = p.open_work(state=p.load(strict=True))
             lines, owed = [], 0
             round_ = open_["capture_round"]
             if round_:
@@ -4218,6 +4325,11 @@ def _main(argv):
     except (ProcessError, IndexError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+    except Exception as exc:  # noqa: BLE001 -- an unreadable file is a refusal; the catch-all is #134's (Task 11)
+        if getattr(exc, "is_unreadable", False):
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        raise
     return 0
 
 

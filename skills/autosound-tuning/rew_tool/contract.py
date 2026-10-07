@@ -133,7 +133,8 @@ IMPORTABLE = {
         "SnapshotError", "identity_error(path, snap)", "project_channels(project_dir)",
     ),
     "state/process.py": (
-        "Process(root)", "Process.load()", "Process.events(limit=None, kinds=None)", "Process.session_closed()",
+        "Process(root)", "Process.load(strict=False)", "Process.events(limit=None, kinds=None)",
+        "Process.session_closed()",
         "Process.protective_record()", "PHASES", "PHASE_TITLES", "EV_CONFIG_CHANGE", "EV_STEP_DONE",
     ),
     "naming.py": (
@@ -297,7 +298,18 @@ def check_process(project_dir):
     process_mod = _load_vendored("process")
     process_dir = os.path.join(project_dir, "process")
     proc = process_mod.Process(process_dir)
-    state = proc.load()  # never raises -- empty skeleton if the project has no process yet
+    journal_exists = os.path.isfile(proc.journal_path)
+    journal_entry = _entry("process/journal.jsonl", journal_exists, None, journal_exists or None,
+                            events=len(proc.events()) if journal_exists else 0)
+    try:
+        # Strict (#136, audit K-2): no file is a project with no process yet, the empty skeleton; a file that is there
+        # and cannot be read is reported as one, with its repair. Read leniently it was an empty process here,
+        # `valid: True`, and the plan was gone without a word. No state is handed on: nothing was read.
+        state = proc.load(strict=True)
+    except Exception as exc:  # noqa: BLE001 -- matched by its attribute below; anything else still raises
+        if not (getattr(exc, "is_unreadable", False) or isinstance(exc, process_mod.ProcessError)):
+            raise
+        return _entry("process/process-state.json", True, None, False, [str(exc)]), journal_entry, None
     exists = os.path.isfile(proc.state_path)
     try:
         process_mod.validate(state)
@@ -311,9 +323,6 @@ def check_process(project_dir):
             f"{len(unevidenced)} done step(s) with no evidence: "
             + ", ".join(s["id"] for s in unevidenced)
         )
-    journal_exists = os.path.isfile(proc.journal_path)
-    journal_entry = _entry("process/journal.jsonl", journal_exists, None, journal_exists or None,
-                            events=len(proc.events()) if journal_exists else 0)
     return entry, journal_entry, state
 
 
@@ -1514,6 +1523,30 @@ def _check_invalid_project_json():
         shutil.rmtree(d, ignore_errors=True)
 
 
+def _check_unreadable_process_state():
+    """A `process/process-state.json` cut off mid-object is reported as there and not valid, with the file and its
+    repair named, and the project is not OK (#136, audit K-2): it read as an empty process, `valid: True`, the plan
+    gone without a word. A missing one is still a fresh project, not a fault."""
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_contract_ps_")
+    try:
+        entry, _journal, state = check_process(d)
+        assert entry["exists"] is False and entry["valid"] is True and state["plan"] == [], (entry, state)
+        os.makedirs(os.path.join(d, "process"))
+        with open(os.path.join(d, "process", "process-state.json"), "w", encoding="utf-8") as f:
+            f.write('{"schema_version": 3, "pla')
+        entry, journal, state = check_process(d)
+        assert (entry["file"], entry["exists"], entry["valid"], state) == (
+            "process/process-state.json", True, False, None), (entry, state)
+        assert len(entry["issues"]) == 1 and "process-state.json" in entry["issues"][0], entry
+        assert "checkout HEAD -- process-state.json" in entry["issues"][0], entry
+        assert (journal["file"], journal["exists"]) == ("process/journal.jsonl", False), journal
+        assert check_project(d, skip_rew=True)["ok"] is False, "an unreadable process state made an OK project"
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def _check_version_verb():
     import ast, contextlib, io
     tree = ast.parse(open(os.path.abspath(__file__), encoding="utf-8").read())
@@ -1626,8 +1659,8 @@ def _check_skill_sha():
 def _selftest():
     os.environ["AUTOSOUND_NO_GH"] = "1"          # the history line is checked; GitHub is never reached from a test
     failures = []
-    for check in (_check_invalid_project_json, _check_version_verb, _check_version_shape, _check_skill_version,
-                  _check_skill_sha):
+    for check in (_check_invalid_project_json, _check_unreadable_process_state, _check_version_verb,
+                  _check_version_shape, _check_skill_version, _check_skill_sha):
         try:
             check()
         except AssertionError as exc:
@@ -2124,7 +2157,7 @@ def _selftest():
           f"file and its repair rather than as a traceback, on one table line, and the repair it "
           f"names runs and clears it (TCC-007); `catch-up` fills the marked draft on a "
           f"project written before the field, is idempotent, leaves a `notch` row alone and "
-          f"still does NOT close the phase-0 gate; every skip is reported and one the round never expected is named as such (TCC-022); a fact carried in from another project is REPORTED and gates nothing (S-024); a ▶️ CONTINUE block naming a HEAD the ledger is not at is warned of and moves no verdict (S-084); and the report names the REPLY language above "
+          f"still does NOT close the phase-0 gate; a process-state.json cut off mid-object is reported as there and not valid, its repair named (#136); every skip is reported and one the round never expected is named as such (TCC-022); a fact carried in from another project is REPORTED and gates nothing (S-024); a ▶️ CONTINUE block naming a HEAD the ledger is not at is warned of and moves no verdict (S-084); and the report names the REPLY language above "
           f"the file table, or says nobody has answered (S-045). root={root}")
     return 0
 

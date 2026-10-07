@@ -10,6 +10,14 @@ second.
 A file whose NAME is the claim -- a ledger version -- is made by `create_exclusive`: the same temp, linked into place,
 never over a file that is there. `append_line` appends one line, and after a torn last line starts on a fresh one.
 
+READS: `read_json` tells a file that is not there from one that is there and cannot be read (audit K-2). Absent is
+the caller's default, the one quiet case -- a fresh project has no state yet. Empty, cut off, not UTF-8, not JSON, the
+wrong top-level type, a directory: each raises `Unreadable`, naming the file and, when the caller knows one, the
+repair. Read as empty instead, such a file was written over with an empty one by the next write. `Unreadable` is
+neither an `OSError` nor a `ValueError`, so the `except (OSError, ValueError)` blocks that read "empty" do not catch
+it, and it is matched by its attribute `is_unreadable`, never by its class: a copy of this module loaded under
+another name has a class of its own.
+
 Stdlib only. Loaded by path like every sibling: `_siblings().load("project_io.py")`.
 
     python3 project_io.py --selftest
@@ -187,6 +195,65 @@ def append_line(path, line):
         pass
     with open(path, "a", encoding="utf-8") as f:
         f.write(("\n" if torn else "") + line + "\n")
+
+
+class Unreadable(Exception):
+    """A file that is THERE and cannot be read (K-2). Deliberately neither a `ValueError` nor an `OSError`: the method
+    has dozens of `except (OSError, ValueError)` blocks that would turn it back into "empty". Matched by the attribute
+    `is_unreadable` -- module copies make `except Unreadable` unreliable."""
+    is_unreadable = True
+
+    def __init__(self, path, reason, repair=None):
+        self.path, self.reason, self.repair = path, reason, repair
+        super().__init__(f"{path} {reason}" + (f" -- {repair}" if repair else ""))
+
+
+#: What a refusal calls a JSON value: JSON's words, not Python's type names ("null", not "NoneType").
+_JSON_KINDS = ((bool, "true or false"), (dict, "an object"), (list, "an array"), (str, "a string"),
+               ((int, float), "a number"), (type(None), "null"))
+
+
+def _json_kind(kind):
+    """`kind`, a type or a tuple of them, in JSON's words."""
+    if isinstance(kind, tuple):
+        return " or ".join(_json_kind(k) for k in kind)
+    for types, name in _JSON_KINDS:
+        if kind in (types if isinstance(types, tuple) else (types,)):
+            return name
+    return getattr(kind, "__name__", str(kind))
+
+
+def read_json(path, default=None, *, want=dict, repair=None, repair_encoding=None):
+    """The JSON in `path`; `default` if there is no such file; `Unreadable` for anything else that cannot be read.
+
+    Absent is the one quiet case: a fresh project has no state yet. Empty, truncated, not UTF-8, not JSON, the wrong
+    top-level type (`want`: a type or a tuple of them; None takes any), a directory -- each raises `Unreadable` naming
+    the file and, where one is known, the repair: `repair`, or for a file that is not UTF-8 `repair_encoding` when
+    given -- a file in another code page is mended by re-encoding it, not by an older copy. A UTF-8 BOM is read: it is
+    an editor's marker, not damage. The bytes are decoded here, so the platform's code page plays no part.
+    """
+    if os.path.isdir(path):
+        raise Unreadable(path, "is a directory, not a file", repair)
+    try:
+        with open(path, "rb") as f:
+            raw = f.read()
+    except FileNotFoundError:
+        return default
+    except OSError as exc:
+        raise Unreadable(path, f"cannot be opened ({exc})", repair) from exc
+    if not raw.strip():
+        raise Unreadable(path, "is empty -- a write was cut off", repair)
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise Unreadable(path, f"is not UTF-8 (byte {exc.start})", repair_encoding or repair) from exc
+    try:
+        data = json.loads(text)
+    except ValueError as exc:
+        raise Unreadable(path, f"is not valid JSON ({exc})", repair) from exc
+    if want is not None and not isinstance(data, want):
+        raise Unreadable(path, f"holds {_json_kind(type(data))} where {_json_kind(want)} belongs", repair)
+    return data
 
 
 # ── selftest ─────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -569,6 +636,53 @@ def _check_append_line():
         _drop(d)
 
 
+def _check_read_json():
+    """K-2's matrix (#136): no file is the default; a file that is there and cannot be read -- empty, blank, cut off,
+    a cp1251 byte, an array or null where an object belongs, a directory -- raises `Unreadable` naming the file and
+    the repair it was given (the encoding repair for the code page). A UTF-8 BOM is read. `Unreadable` is neither an
+    `OSError` nor a `ValueError`: the `except (OSError, ValueError)` blocks that read "empty" do not catch it."""
+    d = _scratch()
+    try:
+        assert not issubclass(Unreadable, (OSError, ValueError)), Unreadable.__mro__
+        path = os.path.join(d, "process-state.json")
+        absent = object()
+        assert read_json(path, absent) is absent and read_json(path) is None, "an absent file is not its default"
+        for label, raw in (("empty", b""), ("blank", b" \r\n\t"),
+                           ("truncated", b'{"schema_version": 3, "pla'),
+                           ("cp1251", '{"schema_version": 3, "note": "тест"}'.encode("cp1251")),
+                           ("an array", b"[1, 2]"), ("null", b"null"), ("not JSON", b"schema_version: 3")):
+            with open(path, "wb") as f:
+                f.write(raw)
+            try:
+                read_json(path, {}, repair="REPAIR", repair_encoding="RE-ENCODE")
+            except Exception as exc:  # noqa: BLE001 -- the kind is what is under test
+                assert getattr(exc, "is_unreadable", False), (label, repr(exc))
+                repair = "RE-ENCODE" if label == "cp1251" else "REPAIR"
+                assert (exc.path, exc.repair) == (path, repair), (label, exc.path, exc.repair)
+                assert str(exc).startswith(path + " ") and str(exc).endswith(" -- " + repair), (label, str(exc))
+            else:
+                raise AssertionError(f"{label}: read as JSON")
+            assert _read_bytes(path) == raw, f"{label}: the read changed the file"
+        with open(path, "wb") as f:
+            f.write(b"[1, 2]")
+        assert read_json(path, want=None) == [1, 2] and read_json(path, want=list) == [1, 2], "want= is the type"
+        with open(path, "wb") as f:
+            f.write(b"\xef\xbb\xbf" + json.dumps({"note": "нуль"}, ensure_ascii=False).encode("utf-8"))
+        assert read_json(path) == {"note": "нуль"}, "a UTF-8 BOM is an editor's marker, not damage"
+        os.remove(path)
+        os.makedirs(path)
+        try:
+            read_json(path, {})
+        except Exception as exc:  # noqa: BLE001
+            # Said as a directory everywhere: opening one raises IsADirectoryError on POSIX, PermissionError on Windows.
+            assert getattr(exc, "is_unreadable", False) and exc.reason == "is a directory, not a file", repr(exc)
+            assert exc.repair is None and str(exc) == f"{path} {exc.reason}", str(exc)
+        else:
+            raise AssertionError("a directory was read as JSON")
+    finally:
+        _drop(d)
+
+
 def _check_two_writers_one_reader():
     """Audit T-8's test: two processes write one file 100 times each while a third reads it: every read parses.
 
@@ -628,7 +742,7 @@ def _selftest():
     failures, seen = [], {}
     for check in (_check_text_and_json, _check_foreign_tmp, _check_replace_fails_clean, _check_write_fails_clean,
                   _check_replace_retry, _check_private_mode, _check_create_exclusive, _check_append_line,
-                  _check_two_writers_one_reader):
+                  _check_read_json, _check_two_writers_one_reader):
         try:
             seen[check.__name__] = check()
         except Exception as exc:  # noqa: BLE001 -- each check is reported by name; one failing must not hide the rest
@@ -643,8 +757,9 @@ def _selftest():
           f"Ctrl-C there leave the old file whole and no temp behind; a held move is retried on Windows only; a "
           f"private file is private from its first byte, its mode set again before the move; an exclusive create "
           f"never writes over a name, linked or (no hard links) in place, and a failed one leaves no name; a line "
-          f"appended after a torn one starts on a fresh line, the old append's bytes otherwise; two writers x 100 "
-          f"and a reader: {reads} reads, every one whole")
+          f"appended after a torn one starts on a fresh line, the old append's bytes otherwise; read_json gives the "
+          f"default for no file, reads a BOM, and refuses an empty, cut-off, cp1251, wrong-type or directory one as "
+          f"Unreadable, naming it and its repair; two writers x 100 and a reader: {reads} reads, every one whole")
     return 0
 
 

@@ -193,10 +193,35 @@ p.start_attempt("2.3")
 p.finish_step("2.3", ["m-L_10 (sw)", "v_007"])     # raises without evidence
 p.record_reviewer("Gemini", "Gemini 3.1 Pro (High)", step="2.3")
 
-state = p.load()
+state = p.load()                # a file that cannot be read is an empty process here
+state = p.load(strict=True)     # ... and here it raises project_io.Unreadable (see the read rule below)
 p.plan_for("2", state)          # steps of one phase
 p.unevidenced_done_steps()      # resume drift check
 ```
+
+## The read rule: unreadable is not empty (#136, audit K-2)
+
+`process-state.json` can be missing, or there and unreadable: empty, cut off, not UTF-8, or not a JSON object (an
+array, `null`). Only the first is a fresh project.
+
+- **No file** is the empty process in every reader: a project that has not entered a phase yet.
+- **Lenient for readers.** `Process.load()`, the default, reads an unreadable file as the empty process too, as it
+  did (an array or `null` raised `TypeError` there): the readers outside `process.py` (`flaw_map`, `predict`,
+  `eq_propose`, ...) and TCC's screen, and the read-only verbs `plan`, `check` and `handoff`.
+- **Strict for writers.** No transition writes the state over such a file: `_write` reads the file strictly before it
+  replaces it, so a verb that writes the state exits 1 with nothing written, where it put an empty process over the
+  plan. A verb that needs a step or a capture round refuses before that, with what the empty process lacks (`no such
+  step`, `no capture round is open`). The journal is not the state: the verbs that only append to it (`decision`,
+  `session-start`, `session-reopen`, `amp-gain`, `listening-verdict`, the `--amend` forms) still append, and the
+  phase or the open round some of them record is read leniently, so it is missing from their event.
+- **Strict for the readers whose answer is the state:** `show`, `session-close` (with `--check` too) and
+  `contract.py check`. `show` and `session-close` exit 1 with the reason on stderr and print or record nothing
+  (`session-close` found nothing open in such a file and recorded a clean stop); `check` reports the file as there
+  and not valid, the reason in `issues`, and the project as not OK.
+- **The refusal names the file and the repair:** `git -C <process-dir> checkout HEAD -- process-state.json` (the
+  journal keeps every event), or `contract.py repair-encoding <project-dir>` for a file written in another code page.
+  `Process.load(strict=True)` raises `project_io.Unreadable` (`.path`, `.reason`, `.repair`), neither an `OSError`
+  nor a `ValueError`; match it by its `is_unreadable` attribute, never by its class. A UTF-8 BOM is read.
 
 ## Consumers
 
