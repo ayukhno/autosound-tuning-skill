@@ -114,14 +114,19 @@ Two more writes go through `project_io.py`; neither replaces a file:
 
 - A new ledger version (`state.py`, `PresetHistory.snapshot`) is created, never written over (`create_exclusive`),
   with the bytes its old writer wrote. Its text goes into a temp of its own as above, which is then linked to the
-  version's name; the link fails when the name is there, and the temp is removed either way. Two writers that pick
-  one number cannot overwrite each other: the second is told and takes the next number, and after 100 numbers taken
-  under it gives up with `SnapshotError`. A watcher of the versions folder sees the temp come and go and the version
-  appear whole. On a filesystem that refuses hard links (FAT, some network shares) the name is created exclusively
-  and written in place, so there a reader can meet a version mid-write for an instant.
+  version's name; the link fails when the name is there. The temp is removed afterwards, best effort: one a remove
+  could not take (a Windows scanner holding it) stays as a `*.tmp` beside the version, a second link to it (a copy
+  where hard links are refused) that no lister reads. Two writers that pick one number cannot overwrite each other:
+  the second is told and takes the next number, and after 100 numbers taken under it gives up with `SnapshotError`,
+  naming the numbers it tried. A watcher of the versions folder sees the temp come and go and the version appear
+  whole. On a filesystem that refuses hard links (FAT, some network shares) the name is created exclusively and
+  written in place, so there a reader can meet a version mid-write for an instant.
 - A line appended to `process/journal.jsonl` (`append_line`) has the old append's bytes, with one line ending before
   it when the file's last write was cut before its newline: the torn line stays one line a reader skips, and the
-  event after it is read. The append itself is a plain one: text mode, the platform's line ending, no lock.
+  event after it is read. That holds for a write cut inside a multi-byte character too: the method's readers decode
+  the journal line by line, so a line that is not UTF-8 is skipped like one that is not JSON, and the survey of
+  `repair-encoding` reads a `.jsonl` line by line and does not count a line that stops inside its last character as
+  a wrong code page. The append itself is a plain one: text mode, the platform's line ending, no lock.
 
 Every other write is still a plain one, in place. Among them: `state/apply.py`'s proposal deltas and sheets; the
 capture plans in `docs/plans/`; the review files in `process/reviews/` (each created under a name of its own since

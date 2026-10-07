@@ -265,17 +265,8 @@ def _positions_asked(project_dir):
     Anything else is the question never having been put, which is exactly the state this gate is
     about: 43 rows written on an assumption while the set that would settle them sat on the disk.
     """
-    root = os.path.join(project_dir, "process", "journal.jsonl")
-    try:
-        with open(root, encoding="utf-8") as fh:
-            lines = fh.readlines()
-    except OSError:
-        return False
-    for line in lines:
-        try:
-            event = json.loads(line)
-        except ValueError:
-            continue                      # a torn last line is skipped, not fatal (the file's rule)
+    # Through `events()`: a torn line -- cut inside a character too -- is skipped, not fatal (the file's rule, R23).
+    for event in Process(os.path.join(project_dir, "process")).events(kinds=(EV_CAPTURE_ISSUED, EV_USER_DECISION)):
         kind = event.get("type")
         if kind == EV_CAPTURE_ISSUED:
             if any(_POSITION_IN_TITLE.search(str(t)) for t in (event.get("expected") or [])):
@@ -973,23 +964,29 @@ class Process:
         return base
 
     def events(self, limit=None, kinds=None):
-        """Journal entries oldest-first. `kinds` filters by event type."""
-        out = []
+        """Journal entries oldest-first. `kinds` filters by event type.
+
+        Read as bytes and decoded line by line (R23): a write cut inside a multi-byte character leaves a line that
+        is not UTF-8, and decoding the whole file raised on it -- here, and in `_stamp` before every append. Such a
+        line is skipped like a line that is not JSON. The lines split as text mode split them ("\\n", "\\r\\n",
+        "\\r"), and a byte-order mark stays part of its line, as with `encoding="utf-8"` before."""
         try:
-            with open(self.journal_path, encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        event = json.loads(line)
-                    except ValueError:
-                        continue  # a torn last line must not hide the rest of the history
-                    if kinds and event.get("type") not in kinds:
-                        continue
-                    out.append(event)
+            with open(self.journal_path, "rb") as f:
+                lines = f.read().splitlines()
         except OSError:
             return []
+        out = []
+        for raw in lines:
+            try:
+                line = raw.decode("utf-8").strip()
+                if not line:
+                    continue
+                event = json.loads(line)
+            except ValueError:
+                continue  # a torn last line -- cut inside a character too -- must not hide the rest of the history
+            if kinds and event.get("type") not in kinds:
+                continue
+            out.append(event)
         return out[-limit:] if limit else out
 
     def step(self, state, step_id):
@@ -2822,6 +2819,52 @@ def _check_torn_journal_line():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_line_torn_inside_a_character():
+    """A journal whose last write was cut INSIDE a multi-byte character keeps working (R23): the events before the cut
+    are read, the gate that reads the journal answers, and the next event is appended and read back. The journal was
+    decoded whole, so the cut raised `UnicodeDecodeError` -- out of `events()`, out of `_stamp` before the write (no
+    event could follow it), and out of `_positions_asked`."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_process_cut_char_")
+    real_sha = _writer_sha
+
+    def survives(label, fn):
+        try:
+            return fn()
+        except ValueError as exc:                          # UnicodeDecodeError is a ValueError
+            raise AssertionError(f"{label} raised {type(exc).__name__}: {exc}") from None
+    try:
+        d = os.path.join(top, "process")
+        os.makedirs(d)
+        journal = os.path.join(d, "journal.jsonl")
+        head = {"at": "2026-10-06T00:00:00+00:00", "type": EV_WRITTEN_BY, "skill_sha": "a" * 40}
+        asked = {"at": "2026-10-06T00:00:01+00:00", "type": EV_USER_DECISION,
+                 "question": "the ellipsoid positions?", "answer": "так"}
+        cut = json.dumps({"at": "2026-10-06T00:00:02+00:00", "type": EV_USER_DECISION, "question": "лишаємо 45°?"},
+                         ensure_ascii=False).encode("utf-8")
+        cut = cut[:cut.index("л".encode("utf-8")) + 1]     # the write stopped after the first byte of "л"
+        before = b"".join((json.dumps(e, ensure_ascii=False) + os.linesep).encode("utf-8") for e in (head, asked))
+        with open(journal, "wb") as f:
+            f.write(before + cut)
+        globals()["_writer_sha"] = lambda: "a" * 40
+        assert survives("events()", lambda: Process(d).events()) == [head, asked], "the events before the cut"
+        assert survives("_positions_asked", lambda: _positions_asked(top)) is True, "the decision before the cut"
+        with contextlib.redirect_stdout(io.StringIO()):
+            assert survives("decision", lambda: _main(["process.py", d, "decision", "q2", "yes"])) == 0
+        events = Process(d).events()
+        assert [e.get("question") for e in events[1:]] == ["the ellipsoid positions?", "q2"], events
+        with open(journal, "rb") as f:
+            written = f.read()
+        assert written == before + cut + (os.linesep + json.dumps(events[-1], ensure_ascii=False) + os.linesep).encode(
+            "utf-8"), written[len(before):]
+    finally:
+        globals()["_writer_sha"] = real_sha
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _selftest():
     """The refusals, exercised. This module is the one with the most of them — evidence must exist
     and must resolve (SCR-035), a round's captures must be usable (SCR-040), phase 0 must record a
@@ -2830,7 +2873,8 @@ def _selftest():
     """
     failures = []
     for check in (_check_one_naming, _check_every_loader_shares, _check_load_sibling_reads_a_failure_as_none,
-                  _check_foreign_tmp_untouched, _check_state_bytes, _check_torn_journal_line):
+                  _check_foreign_tmp_untouched, _check_state_bytes, _check_torn_journal_line,
+                  _check_line_torn_inside_a_character):
         try:
             check()
         except AssertionError as exc:

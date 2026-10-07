@@ -150,9 +150,11 @@ def create_exclusive(path, text, *, newline=None):
     For files whose NAME is the claim (a ledger version `v_NNN.json`): of two writers that picked one number, one
     wins and the other is told, the file there left as it was. The text becomes bytes as in `atomic_write_text`
     (UTF-8, `newline` as `open()`'s) and goes into a temp of its own, fsynced, which is then LINKED into place, so the
-    name never appears empty or half-written; the temp is removed whatever happens. Where the filesystem cannot
-    hard-link (FAT, some network shares), the name is created exclusively and written in place -- a reader can then
-    meet it mid-write for an instant; said, not hidden -- and a write that fails there removes the name again.
+    name never appears empty or half-written. Where the filesystem cannot hard-link (FAT, some network shares), the
+    name is created exclusively and written in place -- a reader can then meet it mid-write for an instant; said, not
+    hidden -- and a write that fails there removes the name again. The temp is removed afterwards, best effort: one a
+    remove could not take (a Windows scanner holding it) stays beside the version with its bytes -- a second link to
+    it, or a copy where links are refused -- under a `.tmp` name no lister reads.
     """
     data = _encoded(text, newline)
     tmp = _temp_name(path)
@@ -456,7 +458,7 @@ def _check_create_exclusive():
     name is still created exclusively, written in place, and a write that fails there leaves no name behind."""
     import errno
     d = _scratch()
-    real_link, real_fsync = os.link, os.fsync
+    real_link, real_fsync, real_remove = os.link, os.fsync, os.remove
     refused = []
 
     def no_links(src, dst):                      # FAT, some network shares: the filesystem refuses a hard link
@@ -508,8 +510,24 @@ def _check_create_exclusive():
         finally:
             os.link, os.fsync = real_link, real_fsync
         assert os.listdir(sub) == [], os.listdir(sub)
+        # Removing the temp is best effort: refused (a Windows scanner holding it), the version is created all the
+        # same, and the temp stays beside it with the version's bytes -- a second link to it -- under a name no
+        # lister reads.
+        sub = os.path.join(d, "held")
+        os.makedirs(sub)
+
+        def held(p):
+            raise PermissionError(13, "held by a scanner", p)
+        os.remove = held
+        try:
+            create_exclusive(os.path.join(sub, "v_004.json"), text)
+        finally:
+            os.remove = real_remove
+        left = sorted(os.listdir(sub))
+        assert len(left) == 2 and left[0] == "v_004.json" and left[1].endswith(".tmp"), left
+        assert _read_bytes(os.path.join(sub, left[0])) == _read_bytes(os.path.join(sub, left[1])) == _read_bytes(ref)
     finally:
-        os.link, os.fsync = real_link, real_fsync
+        os.link, os.fsync, os.remove = real_link, real_fsync, real_remove
         _drop(d)
 
 

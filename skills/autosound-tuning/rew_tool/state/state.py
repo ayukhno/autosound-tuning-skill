@@ -50,6 +50,7 @@ every snapshot going forward.
 """
 
 import argparse
+import codecs
 import copy
 import datetime
 import json
@@ -1214,8 +1215,10 @@ class PresetHistory:
         os.makedirs(os.path.join(self.root, VERSIONS_DIR) if project_line else self.dir, exist_ok=True)
         # Two writers that read the line together pick one number. `open(path, "w")` let the second truncate the
         # first's version and bank its own under that name; the file is created now, and the loser picks again.
+        first = None
         for _ in range(100):
             version = self._next_version()
+            first = first or version
             state["version"] = version
             state["created"] = datetime.datetime.now().isoformat(timespec="seconds")
             text = json.dumps(state, indent=2, sort_keys=True, ensure_ascii=False)   # the bytes json.dump wrote
@@ -1225,8 +1228,12 @@ class PresetHistory:
             except FileExistsError:
                 continue
         else:
-            raise SnapshotError("no free version number after 100 tries -- another writer is claiming them as fast as "
-                                "this one")
+            # The numbers tried tell the two causes apart: numbers that moved are another writer's; one that never
+            # moved is held by a file `project_versions` does not list -- `V_002.JSON`, say, on a case-blind disk.
+            raise SnapshotError(
+                f"no free version number after 100 tries, {first} to {version}: each was taken when this writer came "
+                f"to it. If the numbers moved, another writer is claiming them as fast as this one; if they did not, "
+                f"a file the ledger does not list holds that name ({self._path(version)}, in another case)")
         seals = _read_seals(self.root)
         seals[_seal_key(self.root, version, self.preset)] = content_digest(state)
         _write_seals(self.root, seals)
@@ -1612,6 +1619,35 @@ def ledger_files(root):
     return out
 
 
+def _utf8_damage(raw, appended):
+    """The `UnicodeDecodeError` at the first byte of `raw` that UTF-8 cannot read, or None.
+
+    `appended` (a `.jsonl`): judged line by line, and a line that is UTF-8 up to an unfinished last character is not
+    damage -- an append cut inside a character, the last line or one the next append put a line ending after (R23).
+    It is torn, not mis-encoded, and the method's readers skip it; read as a wrong code page, a repair from a legacy
+    page would have decoded every good line of the journal wrongly. A line written in a legacy page has its wrong
+    bytes before its end (a JSON line ends in `}`), so it still counts.
+    """
+    if not appended:
+        try:
+            raw.decode("utf-8")
+            return None
+        except UnicodeDecodeError as exc:
+            return exc
+    start = 0
+    for line in raw.splitlines(keepends=True):
+        body = line.rstrip(b"\r\n")
+        try:
+            body.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            try:
+                codecs.getincrementaldecoder("utf-8")().decode(body)   # holds an unfinished last character back
+            except UnicodeDecodeError:
+                return UnicodeDecodeError("utf-8", raw, start + exc.start, start + exc.end, exc.reason)
+        start += len(line)
+    return None
+
+
 def encoding_survey(paths):
     """Which of `paths` are not UTF-8, and what each one could say instead.
 
@@ -1625,12 +1661,10 @@ def encoding_survey(paths):
     found = []
     for path in paths:
         raw = open(path, "rb").read()
-        try:
-            raw.decode("utf-8")
+        exc = _utf8_damage(raw, path.endswith(".jsonl"))
+        if exc is None:
             continue                            # already UTF-8: nothing to repair
-        except UnicodeDecodeError as exc:
-            entry = {"path": path, "byte": raw[exc.start], "position": exc.start,
-                     "reason": exc.reason, "candidates": []}
+        entry = {"path": path, "byte": raw[exc.start], "position": exc.start, "reason": exc.reason, "candidates": []}
         for page in LEGACY_PAGES:
             try:
                 text = raw.decode(page)
@@ -2221,17 +2255,50 @@ def _check_version_never_overwritten():
             h.snapshot(_sample_state(), note="never banked")
             raise AssertionError("a snapshot with no free number was banked")
         except SnapshotError as exc:
-            assert "no free version number after 100 tries" in str(exc), exc
+            # The numbers tried tell the two causes apart: numbers that moved are another writer; one that never
+            # moved is a name the ledger does not list (`V_002.JSON` on a disk that ignores case).
+            assert "no free version number after 100 tries, v_002 to v_002" in str(exc), exc
         assert sorted(os.listdir(versions)) == ["v_001.json", "v_002.json", "v_003.json"], os.listdir(versions)
         assert h.head() == "v_003" and _read_seals(root) == seals, h.head()
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
 
+def _check_survey_reads_a_torn_journal_as_torn():
+    """A journal with a write cut inside a multi-byte character is torn, not mis-encoded (R23): the survey judges a
+    `.jsonl` line by line, and a line that is UTF-8 up to an unfinished last character is a torn append -- the last
+    line, or one the next append put a line ending after. It named the whole journal "not UTF-8", and `repair-encoding
+    --from cp1251` would then have decoded every good line of it as cp1251. A journal written in cp1251 is still
+    named, at its first wrong byte, and so is a line whose bad byte is not at its end."""
+    import shutil
+    import tempfile
+    folder = tempfile.mkdtemp(prefix="autosound_survey_jsonl_")
+    try:
+        lines = "".join(json.dumps({"type": "user_decision", "question": q}, ensure_ascii=False) + "\n"
+                        for q in ("лишаємо 45°?", "q2"))
+        cut = '{"question": "л'.encode("utf-8")[:-1]                       # cut inside "л"
+        files = {"at-the-end.jsonl": lines.encode("utf-8") + cut,
+                 "appended-after.jsonl": lines.encode("utf-8") + cut + b"\n" + lines.encode("utf-8"),
+                 "crlf.jsonl": (lines.encode("utf-8") + cut + b"\n" + lines.encode("utf-8")).replace(b"\n", b"\r\n"),
+                 "cp1251.jsonl": lines.encode("cp1251"),
+                 "bad-mid-line.jsonl": lines.encode("utf-8") + b'{"q": "\xd0x"}\n'}
+        for name, data in files.items():
+            with open(os.path.join(folder, name), "wb") as fh:
+                fh.write(data)
+        found = encoding_survey([os.path.join(folder, name) for name in files])
+        assert [os.path.basename(e["path"]) for e in found] == ["cp1251.jsonl", "bad-mid-line.jsonl"], found
+        first_cyrillic = files["cp1251.jsonl"].index(b'"question": "') + len(b'"question": "')
+        assert (found[0]["position"], found[0]["byte"]) == (first_cyrillic, 0xEB), found[0]   # "л" in cp1251
+        assert found[1]["position"] == len(lines.encode("utf-8")) + len(b'{"q": "'), found[1]
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+
+
 def _selftest():
     failures = []
     for check in (_check_eq_refusals, _check_canonical_code_uses_the_loaded_naming,
-                  _check_repair_encoding_keeps_the_file, _check_version_never_overwritten):
+                  _check_repair_encoding_keeps_the_file, _check_version_never_overwritten,
+                  _check_survey_reads_a_torn_journal_as_torn):
         try:
             check()
         except AssertionError as exc:

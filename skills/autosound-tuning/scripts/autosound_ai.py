@@ -743,15 +743,22 @@ def _write_free(folder, stamp, role, suffix, text, names=_REVIEW_NAMES):
     """Write `text` as `<base><suffix>` in `folder` under the first free base (`_free_base`), and return the base.
 
     Opened with "x", never over a file: a name another writer took between the look and the open sends the write to
-    the next base. UTF-8 in the platform's line ending, as the "w" it replaces wrote."""
+    the next base. A writer of the other kind (a review and a package) can take the same base at once, each creating
+    its own name: so each looks at the base's other names AFTER its create, and steps aside to the next base when one
+    is there -- of two that created at once, the later always sees the earlier. UTF-8 in the platform's line ending,
+    as the "w" it replaces wrote."""
     for _ in range(100):
         base = _free_base(folder, stamp, role, names)
+        path = os.path.join(folder, base + suffix)
         try:
-            with open(os.path.join(folder, base + suffix), "x", encoding="utf-8") as fh:
+            with open(path, "x", encoding="utf-8") as fh:
                 fh.write(text)
-            return base
         except FileExistsError:
             continue
+        if any(os.path.exists(os.path.join(folder, base + name)) for name in names if name != suffix):
+            os.remove(path)
+            continue
+        return base
     raise FileExistsError(f"{folder}: no free name for {stamp}-{role} after 100 tries")
 
 
@@ -1463,16 +1470,33 @@ def _check_review_names_unique():
             assert third == os.path.join(reviews, f"{stamp}-advisor-3.md"), f"a review took a package's answer: {third}"
             p3, r3 = _write_package("critic", "package three")
             assert r3 == os.path.join(reviews, f"{stamp}-critic-3-package.md"), r3
-            looks = []
+            def stale_once(base):                   # the look saw `base` free; another writer took it before the open
+                looks = []
 
-            def raced(*args, **kw):                 # the look saw a free base; another writer took it before the open
-                looks.append(args)
-                return f"{stamp}-critic" if len(looks) == 1 else real_free(*args, **kw)
-            globals()["_free_base"] = raced
+                def look(*args, **kw):
+                    looks.append(args)
+                    return base if len(looks) == 1 else real_free(*args, **kw)
+                globals()["_free_base"] = look
+                return looks
+            looks = stale_once(f"{stamp}-critic")   # its review is there: the "x" open refuses
             fourth = _persist_review("critic", "the fourth critique", "m", "api")
             globals()["_free_base"] = real_free
             assert (fourth, len(looks)) == (os.path.join(reviews, f"{stamp}-critic-4.md"), 2), (fourth, looks)
             assert read(os.path.join(project, first)).endswith("the first critique"), "an open over a taken name"
+            # Two kinds took one base at once: the open succeeds, then the writer sees the base's other name, removes
+            # its own file and takes the next base -- so a package's answer name is never a review.
+            for kind, other, write in (("review", "-package.md", lambda: _persist_review("critic", "5th", "m", "api")),
+                                       ("package", ".md", lambda: _write_package("critic", "a package")[1])):
+                taken = f"{stamp}-critic-{5 if kind == 'review' else 7}"
+                with open(os.path.join(project, reviews, taken + other), "x", encoding="utf-8") as fh:
+                    fh.write("another writer's file")
+                looks = stale_once(taken)
+                got = write()
+                globals()["_free_base"] = real_free
+                mine = ".md" if kind == "review" else "-package.md"
+                nxt = os.path.join(reviews, f"{stamp}-critic-{6 if kind == 'review' else 8}{mine}")
+                assert (got, len(looks)) == (nxt, 2), (kind, got, looks)
+                assert not os.path.exists(os.path.join(project, reviews, taken + mine)), f"{kind}: a shared base kept"
             raw = os.path.join(project, "raw")
             os.environ["AUTOSOUND_REVIEW_RAW_DIR"] = raw
             for n in (1, 2):
