@@ -260,10 +260,18 @@ Beyond these, the code reads only the system's and Python's own (`PATH`, `HOME`,
 (`scripts/run-selftests.sh`), uv's `UV_TOOL_BIN_DIR` (where `install.sh` also looks for TCC), and Claude Code's
 `CLAUDE_PLUGIN_ROOT` (the plugin's session hook).
 
-## 11. REW write semantics — planned (W-8, #134)
+## 11. REW write semantics — the filter writes guaranteed (W-8, #134); a rename's read-back not built
 
-What `set_filters`, `set_filter` and `rename_measurement` guarantee once they return: REW is read back and the write
-is verified (audit K-1). PLAN-W-8 Task 9 flips this item.
+`set_filters` and `set_filter` refuse with a `ValueError`, before any request, a filter that is not a dict or that
+carries a key REW drops without a word: `gain`, `gain_db`, `freq`, `f` or `Q` (REW answers 200 and stores a `gain`
+filter flat, at 0 dB: audit K-1). Once they return, the filters have been read back from REW: every written slot is
+there, with its `type` and `enabled`, and its `frequency`, `gaindB` and `q` within `rew_api._READBACK_TOL`; a slot
+written `"None"` is checked for its type only. A difference raises `RewWriteMismatch` (`rew_state` `"write_mismatch"`,
+a `ValueError`), and a read-back in a shape it does not read raises `RewProtocolError` (`"protocol"`). The tolerances
+and the read-back's shape (a list of slots, or `{"filters": [...]}`) are provisional until the live pass at REW
+(PLAN-W-8 Task 12) puts in their place the rounding and the shape REW is seen to use.
+
+`rename_measurement` is not read back: it returns REW's answer, as before.
 
 ## 12. Compatibility — guaranteed
 
