@@ -118,17 +118,44 @@ def eq_from_measurements(anchor_freq, anchor_spl, measured):
 
 
 def _check_iso226_anchors():
-    """ISO 226:2003 (audit T-33): the contour's SHAPE, at points of the 40- and 80-phon contours -- the standard's
-    Eq. (1) with its Table 1 parameters, evaluated outside this module. Until this check only 1 kHz was anchored,
-    and moving the 63 Hz point by 6 dB stayed green."""
-    for phon, f, spl in ((40, 20, 99.85), (40, 63, 73.08), (80, 63, 98.36), (80, 125, 90.09)):
+    """ISO 226:2003 (audit T-33): the contour's SHAPE, at points of the 20-, 40- and 80-phon contours -- the
+    standard's Eq. (1) with its Table 1 parameters, evaluated outside this module. Until this check only 1 kHz was
+    anchored, and moving the 63 Hz point by 6 dB stayed green. The 20-phon point is where the threshold T_f weighs
+    most (T_f at 63 Hz one dB off moves it 0.14 dB, the 40-phon point 0.04), and 4 kHz is a row no other point here
+    reads. Table 1 (alpha_f, L_U dB, T_f dB) used: 20 Hz (0.532, -31.6, 78.5); 63 Hz (0.409, -13.0, 37.5);
+    125 Hz (0.349, -6.2, 22.1); 4000 Hz (0.242, 1.2, -5.4)."""
+    for phon, f, spl in ((40, 20, 99.85), (40, 63, 73.08), (80, 63, 98.36), (80, 125, 90.09),
+                         (20, 63, 58.55), (40, 4000, 36.65)):
         got = iso226_spl(phon, f)
         assert abs(got - spl) <= 0.05, f"iso226_spl({phon}, {f}) = {got:.2f}; ISO 226:2003 says {spl}"
 
 
+def _check_iso226_between_rows():
+    """Between Table 1's rows, where the method's calls land (the CLI's example: 27.4, 36, 45, 54 Hz) -- the anchors
+    above all sit ON a row.
+    80 phon at 27.4 Hz, with (alpha_f, L_U, T_f) interpolated linearly in f -- as `_param` says it does -- between
+    the 25 Hz row (0.506, -27.2, 68.7) and the 31.5 Hz row (0.480, -23.0, 59.5), i.e. (0.4964, -25.649, 65.303),
+    then Eq. (1): 112.54 dB, evaluated outside this module. Interpolated in log f it would read 112.42."""
+    got = iso226_spl(80, 27.4)
+    assert abs(got - 112.54) <= 0.05, (f"iso226_spl(80, 27.4) = {got:.2f}; Table 1 interpolated linearly in f, "
+                                       f"then Eq. (1), says 112.54")
+
+
+def _check_eq_from_measurements():
+    """The CLI's Adjust column is target - measured: a band measured LOUDER than the contour is a CUT. Anchored at
+    27.4 Hz @ 108.2 dB the contour is 71.45 phon; at 54 Hz (between the 50 Hz row (0.432, -15.9, 44.0) and the
+    63 Hz row, linear in f) it asks 95.61 dB, so 110.0 dB measured there is a -14.39 dB cut -- Table 1 + Eq. (1),
+    evaluated outside this module. The anchor itself needs nothing."""
+    phon, rows = eq_from_measurements(27.4, 108.2, [(27.4, 108.2), (54.0, 110.0)])
+    assert abs(phon - 71.45) <= 0.05, f"the anchor calibrates to {phon:.2f} phon; Eq. (1) says 71.45"
+    assert abs(rows[0][3]) <= 0.05, f"the anchor's own adjust is {rows[0][3]:+.2f}, not 0"
+    adj = rows[1][3]
+    assert adj < 0 and abs(adj - (-14.39)) <= 0.05, f"54 Hz measured at 110.0 dB: adjust {adj:+.2f}; want a -14.39 cut"
+
+
 def _selftest():
     ok = True
-    for check in (_check_iso226_anchors,):
+    for check in (_check_iso226_anchors, _check_iso226_between_rows, _check_eq_from_measurements):
         try:
             check()
         except AssertionError as exc:
