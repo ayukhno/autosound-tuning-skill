@@ -2708,8 +2708,9 @@ class Process:
 _USAGE = """usage: process.py <process-dir> <command> [args]
        process.py <process-dir> <command> --help    that command's lines below; nothing is read or written
        A command takes the flags written beside it, as `--flag value` or `--flag=value`, the value as it
-       stands (never another of its flags); any other flag and fewer arguments than its line names are a
-       usage error (exit 2), never a title or a reason. Text that only begins with `--` (`--bass hums`) is a word.
+       stands (never another of its flags, -h or --help); any other flag, a flag with no value after it and
+       fewer arguments than its line names are a usage error (exit 2), never a title or a reason. Text that
+       only begins with `--` (`--bass hums`) is a word.
 
   show                                  print the current state as JSON
   plan [phase]                          print the plan (default: active phase)
@@ -2868,6 +2869,11 @@ _FLAGS_WITHOUT_VALUE = ("--project", "--check", "--plan", "--session", "--measur
 #: the verb (`<verb> --help`). `-h` is the same.
 _HELP = ("--help", "-h")
 
+#: The flags whose values their verb parses itself: capture-protective's filter legs, three values each (`--hp 100 LR
+#: 24`), read by the branch, not by `_args_checked`. One with nothing after it is the verb's to answer -- "--hp needs
+#: three values", exit 1 -- where any other value-taking flag left last is a usage error (#134, R40).
+_LEG_FLAGS = {"capture-protective": ("--hp", "--lp")}
+
 #: The arguments each verb cannot run without, by the names its lines in `_USAGE` give them (#134, R36). Fewer is a
 #: usage error, exit 2, naming them, before the project is touched: it raised IndexError -- "list index out of
 #: range", exit 1 like a refusal with no reason. Every verb has its row, so `_check_too_few_arguments` finds a verb
@@ -2923,13 +2929,14 @@ def _asks_help(token):
 
 
 def _args_checked(cmd, args):
-    """`args` as the verb `cmd` reads them (#134, N19, R35, R37). A flag's value passes as it is, whatever it looks
-    like: after `=` (`--flag=value` becomes `--flag`, `value`), or as the next word when the flag takes one (`--text
-    --loud`) -- unless, in either form, it is one of the verb's own flags: then the value is missing. That, a
-    flag-shaped token (`_flag_shaped`) the verb does not take, `=` on a flag that takes no value, and `--help` or
-    `-h` anywhere here (they are asked right after the verb, `_main`) raise `UsageError`, exit 2. A bare `--` and the
-    words pass, and so does a flag with nothing after it: its verb says what is missing (R38). The words of a refusal
-    never contain `usage: process.py`: TCC reads that as "the method is too old"."""
+    """`args` as the verb `cmd` reads them (#134, N19, R35, R37, R40, R41). A flag's value passes as it is, whatever
+    it looks like: after `=` (`--flag=value` becomes `--flag`, `value`), or as the next word when the flag takes one
+    (`--text --loud`) -- unless, in either form, it is one of the verb's own flags, `-h` and `--help` among them, or
+    there is nothing after the flag: then the value is missing. capture-protective's legs (`_LEG_FLAGS`) with nothing
+    after them are the verb's to answer. A missing value, a flag-shaped token (`_flag_shaped`) the verb does not
+    take, `=` on a flag that takes no value, and `--help` or `-h` anywhere else here (they are asked right after the
+    verb, `_main`) raise `UsageError`, exit 2. A bare `--` and the words pass. The words of a refusal never contain
+    `usage: process.py`: TCC reads that as "the method is too old"."""
     known = VERB_FLAGS.get(cmd, ())
     out, i = [], 0
     while i < len(args):
@@ -2952,14 +2959,19 @@ def _args_checked(cmd, args):
             continue
         if eq:
             given = value
-        elif i < len(args) and not _asks_help(args[i]):
+        elif i < len(args):
             given = args[i]
             i += 1
+        elif flag in _LEG_FLAGS.get(cmd, ()):
+            continue            # a leg with nothing after it: its verb says what is missing (R40)
         else:
-            continue            # nothing after it: its verb answers (R38); a help out of place: refused next turn
-        # One test for both forms (R35, R37): a value that is one of the verb's own flags is no value. A branch that
-        # scans for its flags read `--note=--measured` as `--measured`, and recorded no note.
-        if _flag_shaped(given) and given.partition("=")[0] in known:
+            # Nothing after it (R40): before the verb runs. Taken as unset, `decision <q> <a> --invalidates` recorded
+            # the decision without its link, and `capture-import <N> --bind` went on to ask REW.
+            raise UsageError(f"{cmd}: {flag} needs a value")
+        # One test for both forms (R35, R37): a value that is one of the verb's own flags is no value -- and `-h` and
+        # `--help` are among every verb's flags (R41). A branch that scans for its flags read `--note=--measured` as
+        # `--measured`, and recorded no note.
+        if _asks_help(given) or (_flag_shaped(given) and given.partition("=")[0] in known):
             raise UsageError(f"{cmd}: {flag} needs a value")
         out.append(given)
     return out
@@ -3969,7 +3981,7 @@ def _check_unknown_flags():
         assert set(read) == set(VERB_FLAGS), sorted(set(read) ^ set(VERB_FLAGS))
         for verb, flags in VERB_FLAGS.items():
             assert read[verb] <= set(flags), (verb, "reads flags its row lacks", sorted(read[verb] - set(flags)))
-            legs = {"--hp", "--lp"} if verb == "capture-protective" else set()
+            legs = set(_LEG_FLAGS.get(verb, ()))
             assert set(flags) - legs <= read[verb], (verb, "lists flags it never reads", sorted(set(flags) - read[verb]))
     finally:
         shutil.rmtree(top, ignore_errors=True)
@@ -4039,7 +4051,15 @@ def _check_flag_values_as_they_stand():
                            (["capture-start", "3", "a (sw)", "--optional=--plan"],
                             "capture-start: --optional needs a value"),
                            (["capture-protective", "--amend", cap_id, "--reason=--source", "m-L", "OFF"],
-                            "capture-protective: --reason needs a value")):
+                            "capture-protective: --reason needs a value"),
+                           # R41: `-h` and `--help` are among every verb's own flags, in both forms. `--text=-h` was
+                           # recorded as the text "-h".
+                           (["listening-verdict", "--pair", "CarMus#07:c09:ok", "--text=-h"],
+                            "listening-verdict: --text needs a value"),
+                           (["listening-verdict", "--pair", "CarMus#07:c09:ok", "--text", "-h"],
+                            "listening-verdict: --text needs a value"),
+                           (["amp-gain", "sw=+3", "--note=--help"], "amp-gain: --note needs a value"),
+                           (["amp-gain", "sw=+3", "--note", "--help"], "amp-gain: --note needs a value")):
             rc, out, err = _run_main(["process.py", d, *argv])
             assert rc == EXIT_USAGE and said in err and not out and "usage: process.py" not in err, (argv, rc, err, out)
         assert _project_bytes(d) == before, "a refused command line wrote something"
@@ -4095,12 +4115,14 @@ def _check_too_few_arguments():
 
 
 def _check_value_flag_last():
-    """R38 (#134): a flag that takes a value, last on the line with nothing after it, stays with its verb -- each
-    branch guards the missing value: a refusal of its own, `--hp needs three values`, or the flag taken as unset.
-    Since R36 an IndexError is a bug's 70, so the guards are held here: every value-taking flag of every verb, put
-    last after the arguments the verb needs (`_VERB_ARGS`), exits by the table, never 70, with no traceback. The
-    cases come from the tables, so a verb or a flag added later is swept too. Run as processes on the dead port:
-    `capture-import` goes on to ask REW for the series' titles."""
+    """R40 (#134, revising R38): a flag that takes a value, last on the line with nothing after it, is a usage error --
+    "<verb>: <flag> needs a value", exit 2, R35's words -- before the verb runs. It was the verb's: twelve took the
+    flag as unset and ran (`decision <q> <a> --invalidates` recorded the decision without its link), three asked REW
+    (`capture-import <N> --bind`), the rest refused it in words of their own, exit 1. capture-protective's legs
+    (`_LEG_FLAGS`) are the one exception: the verb parses them, and says "needs three values", exit 1. Every
+    value-taking flag of every verb is swept, last after the arguments the verb needs (`_VERB_ARGS`): never 70, no
+    traceback, nothing written. The cases come from the tables, so a verb or a flag added later is swept too. Run as
+    processes on the dead port: a verb that went on could ask REW."""
     import shutil
     import tempfile
     cases = [(verb, flag) for verb, flags in VERB_FLAGS.items() for flag in flags if flag not in _FLAGS_WITHOUT_VALUE]
@@ -4109,10 +4131,18 @@ def _check_value_flag_last():
         d = os.path.join(top, "process")
         Process(d).enter_phase("-1")
         Process(d).start_capture("1", expected=["a_1 (sw)"])
+        before = _project_bytes(d)
+        failures = []
         for verb, flag in cases:
-            r = _cli_env(d, [verb, *["1"] * len(_VERB_ARGS[verb]), flag])
-            assert r.returncode in (EXIT_OK, EXIT_NO, EXIT_USAGE, EXIT_REW_UNAVAILABLE) and "Traceback" not in r.stderr, \
-                (verb, flag, r.returncode, r.stderr[-300:])
+            argv = [verb, *["1"] * len(_VERB_ARGS[verb]), flag]
+            r = _cli_env(d, argv)
+            leg = flag in _LEG_FLAGS.get(verb, ())
+            code, said = (EXIT_NO, f"{flag} needs three values") if leg else (EXIT_USAGE, f"{verb}: {flag} needs a value")
+            if r.returncode != code or said not in r.stderr or "Traceback" in r.stderr:
+                failures.append(f"{' '.join(argv)}: exit {r.returncode}, "
+                                f"{(r.stderr.strip() or r.stdout.strip()).splitlines()[-1:]}")
+        assert not failures, f"{len(failures)} of {len(cases)}:\n  " + "\n  ".join(failures)
+        assert _project_bytes(d) == before, "a value flag left last wrote something"
     finally:
         shutil.rmtree(top, ignore_errors=True)
 
@@ -4199,12 +4229,16 @@ def _check_help_writes_nothing():
             assert not missing, f"{verb} --help does not name {missing}"
         assert _project_bytes(d) == before, "a --help wrote to the project"
         # Anywhere but right after the verb, `--help` and `-h` are a usage error and run nothing: `-h` was data there --
-        # `capture-start 1 -h` opened a round expecting a capture titled "-h", a reason became "-h".
-        for argv in (["capture-start", "1", "-h"], ["capture-skip", "a (sw)", "-h"], ["capture-start", "1", "--help"],
-                     ["listening-verdict", "--pair", "CarMus#07:c09:ok", "--text", "-h"],
-                     ["capture-start", "1", "--optional", "--help"], ["capture-close", "done in the car", "-h"]):
+        # `capture-start 1 -h` opened a round expecting a capture titled "-h", a reason became "-h". Where a flag's
+        # value stands they are among the verb's own flags (R41): the value is missing.
+        asked = "is asked right after the command"
+        for argv, said in ((["capture-start", "1", "-h"], asked), (["capture-skip", "a (sw)", "-h"], asked),
+                           (["capture-start", "1", "--help"], asked), (["capture-close", "done in the car", "-h"], asked),
+                           (["listening-verdict", "--pair", "CarMus#07:c09:ok", "--text", "-h"],
+                            "listening-verdict: --text needs a value"),
+                           (["capture-start", "1", "--optional", "--help"], "capture-start: --optional needs a value")):
             rc, out, err = _run_main(["process.py", d, *argv])
-            assert rc == EXIT_USAGE and "is asked right after the command" in err and not out, (argv, rc, err, out)
+            assert rc == EXIT_USAGE and said in err and not out, (argv, rc, err, out)
         assert _project_bytes(d) == before, "a help asked out of place wrote to the project"
         for argv in (["process.py", "--help"], ["process.py", "-h"], ["process.py", d, "--help"],
                      ["process.py", d, "-h"]):
@@ -5309,8 +5343,8 @@ def _selftest():
         "the command line exits by its table -- a bug 70 with its traceback (an IndexError too), REW down 69 with "
         "nothing written, REW's unreadable answer 1, the catch-all reading the exception's class -- refuses a flag "
         "its verb does not take, a flag given another flag for its value (`--note --measured` and "
-        "`--note=--measured` alike) and too few arguments with 2 before the state is read, leaves a value flag "
-        "standing last to its verb and never to a bug's 70, takes "
+        "`--note=--measured` alike, `-h` among them), a value flag left last (but capture-protective's legs, the "
+        "verb's own) and too few arguments with 2 before the state is read, takes "
         "the word after a flag as its value as `--flag=value` does and the Arbiter's words that begin `--` as words, "
         "takes every flag TCC sends, and answers `<verb> --help` writing nothing (`-h` and `--help` elsewhere are 2); "
         "a superseded row counts nowhere as taken, the reconcile's extra included, and a check never invents a "

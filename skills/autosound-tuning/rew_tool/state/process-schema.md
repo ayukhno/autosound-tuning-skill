@@ -227,7 +227,7 @@ usage on stdout, exit 0.
 |---|---|
 | 0 | done, or yes |
 | 1 | refused, or no: the reason on stderr (`error: …`); REW answering something the method cannot read (`error: <REW's words> -- nothing was written`) |
-| 2 | usage: an unknown verb, a flag the verb does not take, a flag's value missing, a value on a flag that takes none, `--help` or `-h` after other arguments, too few arguments |
+| 2 | usage: an unknown verb, a flag the verb does not take, a flag's value missing (one of the verb's flags, `-h` or `--help` in its place, or nothing after it: a value flag left last), a value on a flag that takes none, `--help` or `-h` after other arguments, too few arguments |
 | 69 | REW did not answer, and nothing was written (sysexits' `EX_UNAVAILABLE`) |
 | 70 | an unexpected error, a bug: Python's traceback on stderr, then `error: unexpected <type>: <message>` (`EX_SOFTWARE`) |
 | 75 | the project busy: reserved for the lock (J2b, W-9), not raised yet (`EX_TEMPFAIL`) |
@@ -238,13 +238,15 @@ usage on stdout, exit 0.
   piece of evidence (TCC's N19). Text that only begins with two dashes is a word, not a flag: `--бас гуде`, `--bass
   hums`, `-- note`, as well as a bare `--` and a negative number. `--flag value` and `--flag=value` are the same: the
   value is taken as it stands, whatever it looks like (`--text --loud`, `--note=--loud`), with one exception in both
-  forms -- a value that is one of the verb's own flags (`capture-start 1 --optional --plan`, `amp-gain sw=+3
-  --note=--measured`; the name before any `=` counts) is no value: the value is missing, exit 2. A branch that scans
-  for its flags read `--note=--measured` as the flag `--measured` and recorded no note. A flag that takes a value and
-  stands last, with nothing after it, is its verb's to answer: a refusal of its own, or the flag taken as unset --
-  never an IndexError (`_check_value_flag_last` sweeps every one). A flag that takes no value (`--plan`, `--session`,
-  `--json`, `--check`, `--no-rew`, ...) takes no `=`. The refusal's words never contain `usage: process.py`, which a
-  front-end reads as "this method is too old".
+  forms -- a value that is one of the verb's own flags, `-h` and `--help` among them (`capture-start 1 --optional
+  --plan`, `amp-gain sw=+3 --note=--measured`, `--text=-h`; the name before any `=` counts), is no value: the value is
+  missing, exit 2. A branch that scans for its flags read `--note=--measured` as the flag `--measured` and recorded no
+  note. A flag that takes a value and stands last, with nothing after it, is refused the same way before the verb
+  runs (`_check_value_flag_last` sweeps every one): taken as unset, `decision <q> <a> --invalidates` recorded the
+  decision without its link and `capture-import <N> --bind` asked REW. capture-protective's legs `--hp` and `--lp`
+  (`_LEG_FLAGS`) are the exception: the verb parses their three values and says what is missing, `--hp needs three
+  values`, exit 1. A flag that takes no value (`--plan`, `--session`, `--json`, `--check`, `--no-rew`, ...) takes no
+  `=`. The refusal's words never contain `usage: process.py`, which a front-end reads as "this method is too old".
 - **Too few arguments are a usage error.** A verb needs the arguments its line in the usage names in `<...>`
   (`_VERB_ARGS`): `target <preset> <curve>`, `capture-skip <title> <reason>`, `done <id> <evidence>`; `skip` needs its
   `<id>`, then a reason or `--superseded-by`, which `skip_step` checks. Fewer is exit 2, naming them, and the verb

@@ -31,7 +31,7 @@ too when the path is wrong, with `can't open file` on stderr: the usage line is 
 |---|---|
 | 0 | done, or yes |
 | 1 | refused, or no: the reason on stderr, `error: <reason>`; REW answering something the method cannot read, `error: <REW's words> -- nothing was written` |
-| 2 | usage: an unknown verb (the usage on stderr), a flag the verb does not take, a flag's value missing, `=` on a flag that takes no value, `--help` or `-h` after other arguments, too few arguments |
+| 2 | usage: an unknown verb (the usage on stderr), a flag the verb does not take, a flag's value missing (one of the verb's flags, `-h` or `--help` in its place, or nothing after it: a value flag left last), `=` on a flag that takes no value, `--help` or `-h` after other arguments, too few arguments |
 | 69 | REW did not answer, and nothing was written |
 | 70 | an unexpected error, a bug: Python's traceback on stderr, then `error: unexpected <type>: <message>` |
 | 75 | the project busy: reserved for the lock (W-9, J2b), not raised yet |
@@ -66,10 +66,11 @@ letter and no whitespace before an `=`; any other token is a word -- a bare `--`
 only begins with two dashes (`--бас гуде`, `--bass hums`). A flag the verb does not take is a usage error, exit 2,
 and the verb does not run; its words never contain `usage: process.py`. `--flag value` and `--flag=value` are one:
 the value is taken as it stands, whatever it looks like (`--text --loud`, `--text=--loud`), with one exception in
-both forms -- a value that is one of the verb's own flags (`--note --measured`, `--note=--measured`; the name before
-any `=` counts) is no value: the value is missing, exit 2. A flag that takes a value and stands last, with nothing
-after it, is its verb's to answer. `--project`, `--check`, `--plan`, `--session`, `--measured`, `--bank`, `--json`
-and `--no-rew` take no value and no `=`. A verb needs the arguments its line in the usage names in `<...>` (`_VERB_ARGS` in `process.py`; `skip` needs
+both forms -- a value that is one of the verb's own flags, `-h` and `--help` among them (`--note --measured`,
+`--note=--measured`, `--text=-h`; the name before any `=` counts), is no value: the value is missing, exit 2. So is
+a flag that takes a value and stands last, with nothing after it -- refused before the verb runs -- except
+capture-protective's legs `--hp` and `--lp`, which the verb parses: `--hp needs three values`, exit 1. `--project`,
+`--check`, `--plan`, `--session`, `--measured`, `--bank`, `--json` and `--no-rew` take no value and no `=`. A verb needs the arguments its line in the usage names in `<...>` (`_VERB_ARGS` in `process.py`; `skip` needs
 its `<id>`, then a reason or `--superseded-by`); fewer is a usage error, exit 2, naming them. `<verb> --help` (or
 `-h`), right after the verb, prints that verb's lines and exits 0, reading and writing nothing; after other
 arguments either is a usage error, exit 2. `process.py --help` prints the whole usage on stdout. A verb or a flag
