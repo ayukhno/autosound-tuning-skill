@@ -2056,6 +2056,7 @@ def _check_eq_refusals():
         "q text": [{"type": "PK", "f": 1000, "q": "1"}],
         "bypass text": [{"type": "PK", "f": 1000, "bypass": "yes"}],
         "i a bool": [{"type": "PK", "f": 1000, "i": True}],
+        "i text": [{"type": "PK", "f": 1000, "i": "1"}],
         "i twice": [dict(good), dict(good)],
     }
     for label, eq in bad.items():

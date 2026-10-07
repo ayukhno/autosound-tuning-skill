@@ -781,8 +781,9 @@ def _check_productions():
     # green above, while `verify.py` finds a series' closing control by that tuple.
     for title, role in (("m-L-ctl1_49 (sw)", CONTROL_OPEN), ("m-L_49ctl (sw)", CONTROL_OPEN),
                         ("m-L-ctl3_49 (sw)", CONTROL_CLOSE), ("m-L_49rep (sw)", CONTROL_CLOSE)):
-        control = parse_name(title)["control"]
-        assert control in role, (title, control, role)
+        got = parse_name(title)
+        assert got is not None, f"{title!r} is in the documented grammar and parses to None"
+        assert got["control"] in role, (title, got["control"], role)
 
 
 def _selftest():
