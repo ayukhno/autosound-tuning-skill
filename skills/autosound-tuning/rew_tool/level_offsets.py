@@ -174,7 +174,49 @@ def dsp_level_plan(offsets: dict, plus_db=None, threshold: float = CUT_SPREAD_DB
     return {"gains": gains, "lift": lift, "short": short, "text": text}
 
 
+def _check_cli_refuses_unreadable_profile() -> None:
+    """`--project` with a `dsp_profile.json` that is there and cannot be read, or that a newer method wrote, is refused
+    before anything else is read: `error: <file> <reason> -- <repair>`, exit 1, nothing on stdout (#136). It was read
+    as "no plus", and the level plan went on without the DSP's range; once `load_profile` raised its own exception for
+    it, the command printed its table and ended in a traceback. No profile at all is still no plus."""
+    import contextlib
+    import io
+    import json
+    import os
+    import shutil
+    import tempfile
+    import dsp_profile
+    d = tempfile.mkdtemp(prefix="autosound_levels_unreadable_")
+    try:
+        path = os.path.join(d, "dsp_profile.json")
+        newer = dsp_profile.SCHEMA_VERSION + 1
+        for raw, said in (
+                (b'{"dsp_profile": {"name": "X", "channel_gain": {"ran', "checkout HEAD -- dsp_profile.json"),
+                (json.dumps({"schema_version": newer, "dsp_profile": {"name": "X"}}).encode("utf-8"),
+                 f"is schema v{newer}; this method reads v{dsp_profile.SCHEMA_VERSION} -- update the method")):
+            with open(path, "wb") as fh:
+                fh.write(raw)
+            out, err = io.StringIO(), io.StringIO()
+            try:
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    rc = _main(["--solos", d, "--ver", "1", "--levels-fixed", "--project", d])
+            except Exception as exc:  # noqa: BLE001 -- the failure under test is the traceback itself
+                raise AssertionError(f"raised {type(exc).__name__}: {exc}") from None
+            assert rc == 1 and err.getvalue().startswith(f"error: {path} ") and said in err.getvalue(), \
+                (rc, err.getvalue()[-300:])
+            assert not out.getvalue(), out.getvalue()[-300:]
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def _selftest() -> None:
+    failures = []
+    for check in (_check_cli_refuses_unreadable_profile,):
+        try:
+            check()
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
     assert abs(bessj1(0.0)) < 1e-9, "J1(0)=0"
     assert abs(bessj1(1.0) - 0.4400505857) < 1e-6, f"J1(1)={bessj1(1.0)}"
     assert abs(directivity(1000, 0.0, 0.05) - 1.0) < 1e-9, "on-axis → 1"
@@ -265,6 +307,22 @@ def _main(argv=None):
     _here = _os.path.dirname(_os.path.abspath(__file__))
     if _here not in sys.path:
         sys.path.insert(0, _here)
+    # The DSP's plus, for the level plan at the end, read before anything else is: a profile that is there and cannot be
+    # read, or that a newer method wrote, is refused here (#136) -- it was read as "no plus", and the plan went on
+    # without the device's range. No profile, or no range in it, is still no plus.
+    plus = None
+    if args.project:
+        try:
+            import dsp_profile as _dp
+            rng = (_dp._unwrap(_dp.load_profile(_dp.profile_path(args.project))).get("channel_gain") or {}).get("range_db")
+            plus = float(rng[1]) if rng else None
+        except (OSError, ValueError, TypeError, IndexError):
+            plus = None
+        except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
+            if not getattr(exc, "is_unreadable", False):
+                raise
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
     import naming as _naming                         # the title grammar, for stem -> channel code
     import predict as _predict                       # numpy lives there, not here
     import verify_prediction as _vp                  # the SAME v7 reader the predictions use
@@ -335,14 +393,6 @@ def _main(argv=None):
         d = "" if g is None else f"{off[code] - g:+.1f}"
         print(f"{code:10} {band[0]:7.0f}–{band[1]:<8.0f} {lvl:12.1f} {off[code]:10.1f} "
               f"{'—' if g is None else f'{g:12.1f}'} {d:>7}")
-    plus = None
-    if args.project:
-        try:
-            import dsp_profile as _dp
-            rng = (_dp._unwrap(_dp.load_profile(_dp.profile_path(args.project))).get("channel_gain") or {}).get("range_db")
-            plus = float(rng[1]) if rng else None
-        except (OSError, ValueError, TypeError, IndexError):
-            plus = None
     plan = dsp_level_plan(off, plus_db=plus)
     if plan:
         print("\n" + plan["text"])

@@ -314,8 +314,60 @@ def render(rep):
 
 
 # ---------------------------------------------------------------- selftest
+def _check_cli_refuses_unreadable_profile():
+    """`--project` with a `dsp_profile.json` that is there and cannot be read, or that a newer method wrote, ends as this
+    command's refusals do: `  ✗ <file> <reason> -- <repair>` on stderr, exit 2, nothing on stdout and nothing written
+    (#136). The device's limits come from that file, and `load_profile` raises its own exception for it now -- neither
+    a `ValueError` nor an `OSError` -- which ended the command in a traceback."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    import state as st
+    d = tempfile.mkdtemp(prefix="autosound_scene_unreadable_")
+    try:
+        with open(os.path.join(d, "project.json"), "w", encoding="utf-8") as fh:
+            json.dump({"schema_version": _pj.SCHEMA_VERSION, "car": {"wheel": "LHD"}, "channels": [
+                {"code": c, "role": r} for c, r in (("w-L", "woofer"), ("w-R", "woofer"), ("m-L", "midrange"),
+                                                     ("m-R", "midrange"), ("tw-L", "tweeter"), ("tw-R", "tweeter"))]}, fh)
+        snap = st._sample_state()
+        row = snap["channels"]["w-L"]
+        snap["channels"] = {c: dict(row, gain_db=g) for c, g in (("w-L", -2.0), ("w-R", 0.0), ("m-L", -4.0),
+                                                                  ("m-R", 0.0), ("tw-L", -4.0), ("tw-R", 0.0))}
+        root = os.path.join(d, "state")
+        st.PresetHistory(root, "SQ", project_dir=d).snapshot(snap, note="the base")
+        st.Registry(root).set_active("SQ")
+        out_dir = os.path.join(d, "out")
+        path = os.path.join(d, "dsp_profile.json")
+        newer = _dp.SCHEMA_VERSION + 1
+        for raw, said in (
+                (b'{"dsp_profile": {"delay": {"step_ms": 0.01, "max', "checkout HEAD -- dsp_profile.json"),
+                (json.dumps({"schema_version": newer, "dsp_profile": {"delay": {"step_ms": 0.01}}}).encode("utf-8"),
+                 f"is schema v{newer}; this method reads v{_dp.SCHEMA_VERSION} -- update the method")):
+            with open(path, "wb") as fh:
+                fh.write(raw)
+            out, err = io.StringIO(), io.StringIO()
+            try:
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    rc = main(["--project", d, "--cut", "w=2,m=4,tw=4", "--out", out_dir])
+            except Exception as exc:  # noqa: BLE001 -- the failure under test is the traceback itself
+                raise AssertionError(f"raised {type(exc).__name__}: {exc}") from None
+            assert rc == 2 and err.getvalue().startswith(f"  ✗ {path} ") and said in err.getvalue(), \
+                (rc, err.getvalue()[-300:])
+            assert not out.getvalue() and not os.path.exists(out_dir), out.getvalue()[-300:]
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def _selftest():
     import tempfile
+    failures = []
+    for check in (_check_cli_refuses_unreadable_profile,):
+        try:
+            check()
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
     assert abs(pull(0.25, 0.0) - 1 / 3) < 1e-9 and abs(pull(0.0, 4.0) - 1 / 3) < 1e-9 and CUT_PER_MS_DB == 16.0
     assert abs(centred_level_db(-4.0, 0.0) - (-1.77)) < 0.01, centred_level_db(-4.0, 0.0)   # research's number
     rows = [{"code": "sw", "role": "sub"}, {"code": "w-L", "role": "woofer"}, {"code": "w-R", "role": "woofer"},
@@ -437,6 +489,13 @@ def main(argv=None):
     try:
         rep = presets_for(a.project, a.cut, a.preset, a.ver, steps)
     except (ValueError, FileNotFoundError) as e:
+        print(f"  ✗ {e}", file=sys.stderr)
+        return 2
+    except Exception as e:  # noqa: BLE001 -- matched by its attribute; anything else still raises
+        # The device's limits come from `dsp_profile.json`: one that is there and cannot be read, or that a newer method
+        # wrote, is refused as this command refuses (#136) -- `load_profile` raises its own exception for it now.
+        if not getattr(e, "is_unreadable", False):
+            raise
         print(f"  ✗ {e}", file=sys.stderr)
         return 2
     if a.out and not rep.get("problems"):

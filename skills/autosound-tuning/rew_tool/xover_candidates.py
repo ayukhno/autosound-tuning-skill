@@ -216,7 +216,48 @@ def render(descs, channel):
     return "\n".join(lines)
 
 
+def _check_cli_refuses_unreadable_profile():
+    """A `dsp_profile.json` that is there and cannot be read, or that a newer method wrote, is refused before anything
+    else is read: `error: <file> <reason> -- <repair>`, exit 1, nothing on stdout (#136). It was read as "no range",
+    and each candidate's trim was borrowed; once `load_profile` raised its own exception for it, the command ended in
+    a traceback. No profile at all is still no range."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    import dsp_profile
+    d = tempfile.mkdtemp(prefix="autosound_xover_unreadable_")
+    try:
+        path = os.path.join(d, "dsp_profile.json")
+        newer = dsp_profile.SCHEMA_VERSION + 1
+        for raw, said in (
+                (b'{"dsp_profile": {"name": "X", "channel_gain": {"ran', "checkout HEAD -- dsp_profile.json"),
+                (json.dumps({"schema_version": newer, "dsp_profile": {"name": "X"}}).encode("utf-8"),
+                 f"is schema v{newer}; this method reads v{dsp_profile.SCHEMA_VERSION} -- update the method")):
+            with open(path, "wb") as fh:
+                fh.write(raw)
+            out, err = io.StringIO(), io.StringIO()
+            try:
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    rc = _main(["--solos", d, "--project", d, "--house", os.path.join(d, "house.txt"),
+                                "--channel", "m-L", "--hp", "100:200:10"])
+            except Exception as exc:  # noqa: BLE001 -- the failure under test is the traceback itself
+                raise AssertionError(f"raised {type(exc).__name__}: {exc}") from None
+            last = (err.getvalue().strip().splitlines() or [""])[-1]
+            assert rc == 1 and last.startswith(f"error: {path} ") and said in last, (rc, err.getvalue()[-300:])
+            assert not out.getvalue(), out.getvalue()[-300:]
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def _selftest():
+    failures = []
+    for check in (_check_cli_refuses_unreadable_profile,):
+        try:
+            check()
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
     f = P.grid(20, 20000, 96)
     flat = np.zeros(len(f))
     tgt = dsp_math.mag_db(dsp_math.xo_response(f, 80, 24, "hp", "LR")) \
@@ -302,6 +343,23 @@ def _main(argv=None):
             print(f"  \u26a0 {_rate_note}", file=sys.stderr)
     if not args.hp and not args.lp:
         ap.error("at least one of --hp / --lp")
+    # The profile's channel-gain range bounds each candidate's trim, read before anything else is: a profile that is there
+    # and cannot be read, or that a newer method wrote, is refused here (#136) -- it was read as "no range", and the trim
+    # was borrowed. No profile, or no range in it, is still no range.
+    trim_range = None
+    try:
+        import dsp_profile
+        prof = dsp_profile.load_profile(dsp_profile.profile_path(args.project))
+        rng = (dsp_profile._unwrap(prof).get("channel_gain") or {}).get("range_db")
+        if rng and len(rng) == 2:
+            trim_range = (float(rng[0]), float(rng[1]))
+    except (OSError, ValueError):
+        pass
+    except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
+        if not getattr(exc, "is_unreadable", False):
+            raise
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
 
     f = P.grid(20, 20000, 96)
     preset, snap = P.load_project_state(args.project, args.preset)
@@ -332,15 +390,6 @@ def _main(argv=None):
     lo = (hp[0] / 2) if hp else 20.0
     hi = (lp[1] * 2) if lp else 20000.0
     trust = (max(20.0, lo), min(20000.0, hi))
-    trim_range = None
-    try:
-        import dsp_profile
-        prof = dsp_profile.load_profile(dsp_profile.profile_path(args.project))
-        rng = (dsp_profile._unwrap(prof).get("channel_gain") or {}).get("range_db")
-        if rng and len(rng) == 2:
-            trim_range = (float(rng[0]), float(rng[1]))
-    except (OSError, ValueError):
-        pass
     try:
         cands = candidates(f, mag, targets[code], hp, lp, trust, top=args.top, trim_range_db=trim_range)
     except ValueError as exc:

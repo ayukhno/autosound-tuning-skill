@@ -260,9 +260,55 @@ def render(result):
     return "\n".join(lines)
 
 
+def _check_cli_refuses_unreadable_profile():
+    """A `dsp_profile.json` that is there and cannot be read, or that a newer method wrote, is refused as such a profile
+    always was here: `REFUSED -- <file> <reason> -- <repair>`, exit 3, nothing on stdout and nothing written (#136;
+    `references/core/capabilities.md`). `load_profile` raises its own exception for it now, neither a `ValueError` nor
+    an `OSError`, and the command ended in a traceback."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    proj = tempfile.mkdtemp(prefix="setup_import_unreadable_")
+    try:
+        os.makedirs(os.path.join(proj, "state"))
+        doc = os.path.join(proj, "transcription.json")
+        with open(doc, "w", encoding="utf-8") as fh:
+            json.dump({"preset": "SQ", "channels": {"m-L": {"gain_db": -3.0}}}, fh)
+        path = os.path.join(proj, "dsp_profile.json")
+        newer = dsp_profile.SCHEMA_VERSION + 1
+        for raw, said in (
+                (b'{"dsp_profile": {"name": "Helix", "gro', "checkout HEAD -- dsp_profile.json"),
+                (json.dumps({"schema_version": newer, "dsp_profile": {"name": "Helix"}}).encode("utf-8"),
+                 f"is schema v{newer}; this method reads v{dsp_profile.SCHEMA_VERSION} -- update the method")):
+            with open(path, "wb") as fh:
+                fh.write(raw)
+            out, err = io.StringIO(), io.StringIO()
+            try:
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    rc = _main([proj, doc, "--write"])
+            except Exception as exc:  # noqa: BLE001 -- the failure under test is the traceback itself
+                raise AssertionError(f"raised {type(exc).__name__}: {exc}") from None
+            assert rc == 3 and err.getvalue().startswith(f"REFUSED -- {path} ") and said in err.getvalue(), \
+                (rc, err.getvalue()[-300:])
+            assert not out.getvalue() and os.listdir(os.path.join(proj, "state")) == [], out.getvalue()
+            with open(path, "rb") as fh:
+                assert fh.read() == raw, "dsp_profile.json changed"
+    finally:
+        shutil.rmtree(proj, ignore_errors=True)
+
+
 def _selftest():
     import shutil
     import tempfile
+
+    failures = []
+    for check in (_check_cli_refuses_unreadable_profile,):
+        try:
+            check()
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
 
     tmp = tempfile.mkdtemp(prefix="setup_import_")
     try:
@@ -380,6 +426,13 @@ def _main(argv=None):
         r = run(args.project, args.transcription, atf=atf, write=args.write,
                 preset=args.preset, note=args.note)
     except (ImportRefusal, ValueError) as exc:
+        print(f"REFUSED -- {exc}", file=sys.stderr)
+        return 3
+    except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
+        # A profile that is there and cannot be read, or that a newer method wrote (#136): `load_profile` raises its
+        # own exception for it now, and it is refused as such a profile was before -- named, with its repair, exit 3.
+        if not getattr(exc, "is_unreadable", False):
+            raise
         print(f"REFUSED -- {exc}", file=sys.stderr)
         return 3
     print(render(r))
