@@ -1336,13 +1336,27 @@ def _main(argv):
 
 # ── self-test ─────────────────────────────────────────────────────────────────
 def _check_invalid_project_json():
-    """A `project.json` that is present and invalid is reported as one: exists, not valid, with the issue."""
+    """A `project.json` that is present and invalid is reported as one: exists, not valid, with the validator's own
+    refusal (any refusal passed here once, and with the list check gone the string was refused per character).
+    One that cannot even be READ -- cut off mid-object -- is a report too: exists, not valid, the read failure
+    named, no data."""
+    import shutil
     import tempfile
-    d = tempfile.mkdtemp()
-    with open(os.path.join(d, "project.json"), "w", encoding="utf-8") as f:
-        json.dump({"schema_version": 3, "channels": "not-a-list"}, f)
-    entry, _data = check_project_json(d)
-    assert entry["exists"] and entry["valid"] is False and entry["issues"], entry
+    d = tempfile.mkdtemp(prefix="autosound_contract_pj_")
+    path = os.path.join(d, "project.json")
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"schema_version": project.SCHEMA_VERSION, "channels": "not-a-list"}, f)
+        entry, _data = check_project_json(d)
+        assert entry["exists"] and entry["valid"] is False and entry["issues"], entry
+        assert "'channels' must be a list" in entry["issues"][0], entry
+        with open(path, "w", encoding="utf-8") as f:
+            f.write('{"schema_version": %d, ' % project.SCHEMA_VERSION)
+        entry, data = check_project_json(d)
+        assert entry["exists"] and entry["valid"] is False and data is None, entry
+        assert "exists and cannot be read" in entry["issues"][0], entry
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
 
 
 def _selftest():
