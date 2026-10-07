@@ -3060,7 +3060,9 @@ def _selftest():
     bare_out = subprocess.run([sys.executable, _mod, bare.dir, "capture-close"],
                               capture_output=True, text=True, encoding="utf-8", errors="replace",
                               env={**os.environ, "PYTHONIOENCODING": "utf-8", "REW_API_URL": "http://127.0.0.1:1"})
-    assert bare_out.returncode == 0 and "NO KNOBS RECORDED" in bare_out.stdout, bare_out
+    # ...and REW really was down for it: a REW that answered would have closed the round against its list instead.
+    assert bare_out.returncode == 0 and "NO KNOBS RECORDED" in bare_out.stdout \
+        and "not checked against REW" in bare_out.stdout, bare_out
     out = _cli("capture-protective", "tw-L", "--hp", "1000", "LR", "24")
     assert out.returncode == 0, out.stderr
     assert pr.protective_record()["channels"]["tw-L"]["hp"]["f"] == 1000.0, out.stdout

@@ -502,6 +502,9 @@ def _selftest():
         assert asked == [READ_SMOOTHING], asked
         # And the swept one really did get checked -- otherwise the assert above proves nothing.
         assert v_sw["stats"].get("range_dB") is not None, v_sw
+        # ...and its impulse came from the stub: samples 1/48000 s apart read as a 48 kHz capture. Without the stub
+        # the read fails (at the dead port) and the verdict swallows that, so nothing else here would notice.
+        assert v_sw["stats"].get("capture_rate_hz") == 48000, v_sw
         # skill #29: the counts keep what the verdict said. An RTA is "not checked", never
         # "unusable" -- in the counts, in the session rows, and in the header a person reads.
         counts = summary([v_rta, v_sw])
