@@ -21,8 +21,9 @@
      call raises no ImportError; for CLEAN modules sys.path is untouched by the load.
   5. CLEAN and CALLS name only IMPORTABLE modules, and CONTRACT.md item 9 has one row per IMPORTABLE module, saying
      "guaranteed" for exactly the CLEAN ones.
-  6. While CONTRACT_VERSION is N, contract N's table, frozen in FROZEN[N], holds: every module it lists is in
-     IMPORTABLE, and every entry it lists passes rule 2 against the code, whatever IMPORTABLE says now.
+  6. While CONTRACT_VERSION is N, FROZEN has contract N's table (a bump freezes it in the same commit), and that
+     table holds: every module it lists is in IMPORTABLE, and every entry it lists passes rule 2 against the code,
+     whatever IMPORTABLE says now.
   7. No function of a CLEAN module imports a sibling by its bare name -- loaded by path, rew_tool/ is not on
      sys.path -- but the command lines CLI_IMPORTS names; and no module of the method calls `_siblings()` at import,
      where a load under the import lock can deadlock against siblings' own lock.
@@ -57,7 +58,7 @@ CALLS = {"dsp_profile.py": ("annotate_modellable",
 #: (a name, a trailing parameter with a default); this table does not move. Contract 1's was generated once from
 #: contract.py's IMPORTABLE as committed in dd4312d (unchanged through d8e8cae), and it is not edited by hand. A bump
 #: to N+1 adds FROZEN[N+1], generated the same way from the bump's IMPORTABLE, and leaves FROZEN[N] as it is
-#: (CONTRACT.md item 12).
+#: (CONTRACT.md item 12); until it does, the guard fails.
 FROZEN = {
     1: {
         "rew_api.py": (
@@ -445,6 +446,10 @@ def check(tool, scripts, clean=CLEAN, calls=CALLS, frozen=FROZEN, cli_imports=CL
         title = open(md, encoding="utf-8").readline().strip() if os.path.isfile(md) else ""
         if title != f"# Contract {cv.value}":
             problems.append(f"CONTRACT.md's title is {title!r}, not '# Contract {cv.value}'")
+        # Rule 6 needs a table to hold: a bump freezes its own in the same commit, or the new number holds nothing.
+        if cv.value not in frozen:
+            problems.append(f"contract {cv.value} has no frozen table: a bump freezes its IMPORTABLE as FROZEN"
+                            f"[{cv.value}] in scripts/contract-guard.py, in the same commit (CONTRACT.md item 12)")
     imp = _literal(tree, "IMPORTABLE")
     try:
         importable = ast.literal_eval(imp) if imp is not None else None
@@ -676,6 +681,10 @@ def _selftest():
                also=(("rew_tool/CONTRACT.md", "| `sub/n.py` | W-10 (J1b) |\n", ""),))
         allowed("a frozen entry listed with a new trailing parameter that has a default", "rew_tool/contract.py",
                 '"f(a, b=1)"', '"f(a, b=1, added=2)"')
+        # A bump freezes its own table in the same commit: a number with none would hold nothing (J1 review).
+        broken("a bump without its frozen table", "rew_tool/contract.py", "CONTRACT_VERSION = 1\n",
+               "CONTRACT_VERSION = 2\n", "contract 2 has no frozen table",
+               also=(("rew_tool/CONTRACT.md", "# Contract 1", "# Contract 2"),))
         # The KIND of thing an entry names (J1 review): a value stays a value, a function a plain function.
         broken("a value made a function", "rew_tool/m.py", "X = 1\n", "def X():\n    return 1\n",
                "m.py: X is listed as a value and is a function")
@@ -774,10 +783,10 @@ def _selftest():
             with open(os.path.join(root, *rel.split("/")), "w", encoding="utf-8") as f:
                 f.write(text)
 
-        def verdict():
+        def verdict(frozen_=frozen):
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
-                rc = main(["contract-guard.py"], tool, scripts, clean, calls, frozen, cli)
+                rc = main(["contract-guard.py"], tool, scripts, clean, calls, frozen_, cli)
             return rc, out.getvalue().strip().splitlines()[-1]
 
         said = verdict()
@@ -785,12 +794,13 @@ def _selftest():
             failures.append(f"the verdict on the good tree: {said}")
         put("rew_tool/contract.py", files["rew_tool/contract.py"].replace("CONTRACT_VERSION = 1\n",
                                                                           "CONTRACT_VERSION = 2\n"))
+        bumped = {**frozen, 2: frozen[1]}                    # the bump froze its table, as it must
         try:
-            said = verdict()                                 # 2 in the literal, 1 in the title: one problem
+            said = verdict(bumped)                           # 2 in the literal, 1 in the title: one problem
             if said != (1, "contract-guard: 1 problem(s)"):
                 failures.append(f"the verdict on a tree with one problem: {said}")
             put("rew_tool/CONTRACT.md", files["rew_tool/CONTRACT.md"].replace("# Contract 1", "# Contract 2"))
-            said = verdict()
+            said = verdict(bumped)
             if said != (0, "contract-guard OK -- contract 2 holds"):
                 failures.append(f"the verdict on a contract 2 tree: {said}")
         finally:
@@ -878,7 +888,8 @@ def _selftest():
           "keyword-only or positional-only (a widened one passes), an attribute __init__ no longer sets, a class "
           "with no __init__ of its own, a constant listed as a function, a value made a function, a function made "
           "async or a property, an entry that does not parse, a module not there, a frozen name renamed or removed "
-          "with its entry and a frozen module dropped (a frozen entry may grow), CLEAN or CALLS naming a module "
+          "with its entry and a frozen module dropped (a frozen entry may grow), a bump without its frozen table, "
+          "CLEAN or CALLS naming a module "
           "IMPORTABLE does not, CONTRACT.md item 9 out of step with IMPORTABLE or CLEAN, a _siblings copy that is "
           "not the guard's text (one copy or all of them), a module with _siblings and no top-level os or sys, a "
           "bare sibling import inside a function of a CLEAN module (its named command line passes), _siblings() "

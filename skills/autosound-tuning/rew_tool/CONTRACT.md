@@ -180,5 +180,5 @@ is verified (audit K-1). PLAN-W-8 Task 9 flips this item.
   patch), and only after a TCC release that accepts the new number is out (§8 M5).
 - A bump to N+1 moves `CONTRACT_VERSION` and this file's title, and adds the table of contract N+1 to the guard's
   `FROZEN`, generated from the bump's `IMPORTABLE` in the same commit; the table of contract N stays as it was. The
-  guard holds the frozen table of the number the literal names.
+  guard holds the frozen table of the number the literal names, and fails while that number has none.
 - Every change to an item is named in the CHANGELOG's `### Upgrading` note, with a line for TCC.
