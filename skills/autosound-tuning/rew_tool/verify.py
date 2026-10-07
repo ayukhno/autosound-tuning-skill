@@ -682,6 +682,37 @@ def _check_ir_failure_on_a_sweep():
     assert rta["applicable"] is False and rta["reachable"] is True and not any("asked" in i for i in rta["issues"])
 
 
+def _check_recorded_no_impulse():
+    """REW's own answer for a capture it keeps no impulse for, recorded at the live pass at REW (2026-10-07,
+    `testdata/rew/impulse-none.json`), replayed over HTTP through `rew_api`'s `_FakeRew`: the read fails with it, and
+    the verdict counts it against nothing. Another 400 is still `impulse response unreadable` (#134, audit T-4). Here,
+    not in `rew_api`'s selftest: run as a script, that module is `__main__`, and importing this one there would load
+    a second `rew_api`, with a `BASE_URL` of its own. The listing carries no notes, so the kind is unknown and the
+    impulse is asked for -- the case where REW's own answer is all there is."""
+    with open(os.path.join(_HERE, "testdata", "rew", "impulse-none.json"), encoding="utf-8") as f:
+        recorded = json.load(f)
+    listing = {"39": {"title": "m6 (rta)", "uuid": "cf49fc57-66cf-4fd4-a389-3ededc4d5e8c"}}
+    another = {"status": 400, "body": {"message": "The request is missing parameters: normalised"}}
+    for answer, issue in ((recorded, None), (another, "impulse response unreadable: ")):
+        asked = []
+
+        def routes(method, path, _body, _fake, answer=answer):
+            asked.append((method, path))
+            return answer["status"], json.dumps(answer["body"]).encode()
+        fake = _api._FakeRew(routes)
+        try:
+            with _rew_as(get_fr=_sweep_fr):
+                v = _api._with_base(fake.url, lambda: verdict("m6 (rta)", measurements=listing))
+        finally:
+            fake.close()
+        assert asked == [("GET", "/measurements/39/impulse-response?normalised=false")], asked
+        assert v["exists"] is True and v["reachable"] is True, v
+        if issue is None:
+            assert v["valid"] is True and v["issues"] == [], (answer, v["issues"])
+        else:
+            assert v["valid"] is False and [i for i in v["issues"] if i.startswith(issue)], (answer, v["issues"])
+
+
 def _check_counts_add_up():
     """Each verdict is counted once -- usable, missing, unusable, not checked or unreachable -- so the counts add up
     to the total (#134); and a verdict the outlier rule reads is one REW holds (`exists` True), never one nobody
@@ -710,7 +741,7 @@ def _selftest():
     """The outlier rule, offline. Everything else here needs REW, which a selftest must not."""
     failures = []
     for check in (_check_unreachable_state, _check_protocol_error_state, _check_ir_failure_on_a_sweep,
-                  _check_counts_add_up):
+                  _check_recorded_no_impulse, _check_counts_add_up):
         try:
             check()
         except Exception as exc:  # noqa: BLE001 -- a check that raises is reported by name, like one that fails
@@ -829,7 +860,8 @@ def _selftest():
 
     print("selftest OK — REW down is its own state (unreachable, `exists` null, exit 69), REW answering an error "
           "is unusable, and neither is ever \"missing\"; a failed impulse read on a sweep is an issue, REW's own "
-          "\"no impulse\" answer (400 in its words, or 404) let through; the counts add up; the post-sweep gate "
+          "\"no impulse\" answer (400 in its words, or 404) let through -- replayed as REW sent it at the live pass; "
+          "the counts add up; the post-sweep gate "
           "compares a driver against ITSELF: a 24 dB outlier "
           "flagged and still readable, a close pair left alone, a lone capture and an RTA (no "
           "impulse) judged not at all; the session table: spread on the solos' in-band mean, the "

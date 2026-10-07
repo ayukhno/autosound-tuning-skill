@@ -2198,7 +2198,7 @@ Not a subagent task: it needs REW and the Arbiter, about 15 minutes.
   3. The gain trap: the same filter with `gain` instead of `gaindB` is refused before any request.
   4. Clear the slot: `set_filters(mid, [{"index": 1, "type": "None", "enabled": True}])`; check it reads back.
   5. Save one `GET /measurements/<an RTA or a non-IR id>/impulse-response` error answer, if REW has one, as
-     `RT/testdata/rew/impulse-404.json` (status and body).
+     `RT/testdata/rew/impulse-none.json` (status and body).
   6. The Arbiter quits REW; `process.py <throwaway project>/process capture-check` exits 69 and the files are unchanged.
 - [ ] **Step 3:** a `rew_api` selftest `_check_recorded_answers()` replays the three files through `_FakeRew`: the
   listing parses, the PK read-back passes, the 404 is recognised by `verify` as "no impulse".

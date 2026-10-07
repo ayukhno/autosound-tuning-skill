@@ -1,0 +1,185 @@
+[
+  {
+    "index": 1,
+    "type": "PK",
+    "enabled": true,
+    "isAuto": true,
+    "frequency": 1000.0,
+    "gaindB": -3.0,
+    "q": 1.41
+  },
+  {
+    "index": 2,
+    "type": "None",
+    "enabled": true,
+    "isAuto": true
+  },
+  {
+    "index": 3,
+    "type": "None",
+    "enabled": true,
+    "isAuto": true
+  },
+  {
+    "index": 4,
+    "type": "None",
+    "enabled": true,
+    "isAuto": true
+  },
+  {
+    "index": 5,
+    "type": "None",
+    "enabled": true,
+    "isAuto": true
+  },
+  {
+    "index": 6,
+    "type": "None",
+    "enabled": true,
+    "isAuto": true
+  },
+  {
+    "index": 7,
+    "type": "None",
+    "enabled": true,
+    "isAuto": true
+  },
+  {
+    "index": 8,
+    "type": "None",
+    "enabled": true,
+    "isAuto": true
+  },
+  {
+    "index": 9,
+    "type": "None",
+    "enabled": true,
+    "isAuto": true
+  },
+  {
+    "index": 10,
+    "type": "None",
+    "enabled": true,
+    "isAuto": true
+  },
+  {
+    "index": 11,
+    "type": "None",
+    "enabled": true,
+    "isAuto": true
+  },
+  {
+    "index": 12,
+    "type": "None",
+    "enabled": true,
+    "isAuto": true
+  },
+  {
+    "index": 13,
+    "type": "None",
+    "enabled": true,
+    "isAuto": true
+  },
+  {
+    "index": 14,
+    "type": "None",
+    "enabled": true,
+    "isAuto": true
+  },
+  {
+    "index": 15,
+    "type": "None",
+    "enabled": true,
+    "isAuto": true
+  },
+  {
+    "index": 16,
+    "type": "None",
+    "enabled": true,
+    "isAuto": true
+  },
+  {
+    "index": 17,
+    "type": "None",
+    "enabled": true,
+    "isAuto": true
+  },
+  {
+    "index": 18,
+    "type": "None",
+    "enabled": true,
+    "isAuto": true
+  },
+  {
+    "index": 19,
+    "type": "None",
+    "enabled": true,
+    "isAuto": true
+  },
+  {
+    "index": 20,
+    "type": "None",
+    "enabled": true,
+    "isAuto": true
+  },
+  {
+    "index": 21,
+    "type": "None",
+    "enabled": true,
+    "isAuto": true
+  },
+  {
+    "index": 22,
+    "type": "None",
+    "enabled": true,
+    "isAuto": true
+  },
+  {
+    "index": 23,
+    "type": "None",
+    "enabled": true,
+    "isAuto": true
+  },
+  {
+    "index": 24,
+    "type": "None",
+    "enabled": true,
+    "isAuto": true
+  },
+  {
+    "index": 25,
+    "type": "None",
+    "enabled": true,
+    "isAuto": true
+  },
+  {
+    "index": 26,
+    "type": "None",
+    "enabled": true,
+    "isAuto": true
+  },
+  {
+    "index": 27,
+    "type": "None",
+    "enabled": true,
+    "isAuto": true
+  },
+  {
+    "index": 28,
+    "type": "None",
+    "enabled": true,
+    "isAuto": true
+  },
+  {
+    "index": 29,
+    "type": "None",
+    "enabled": true,
+    "isAuto": true
+  },
+  {
+    "index": 30,
+    "type": "None",
+    "enabled": true,
+    "isAuto": true
+  }
+]

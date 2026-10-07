@@ -318,11 +318,13 @@ carrying any key but the ones REW takes (`index`, `type`, `enabled`, `isAuto`, `
 `slopedBPerOctave`), and a write that names one slot twice. REW drops a key it does not know without a word: it
 answers 200 and stores a `gain` filter flat, at 0 dB (audit K-1). The refusal names the key and, where one is known,
 REW's spelling of it. Once they return, the filters have been read back from REW: every written slot is there, with
-its `type` and `enabled`, and its `frequency`, `gaindB` and `q` within `rew_api._READBACK_TOL`; a slot written
-`"None"` is checked for its type only. A difference raises `RewWriteMismatch` (`rew_state` `"write_mismatch"`, a
-`ValueError`), and a read-back in a shape it does not read raises `RewProtocolError` (`"protocol"`). The tolerances
-and the read-back's shape (a list of slots, or `{"filters": [...]}`) are provisional until the live pass at REW
-(PLAN-W-8 Task 12) puts in their place the rounding and the shape REW is seen to use.
+its `type` and `enabled` (and a crossover's `shape` and `slopedBPerOctave`), and its `frequency`, `gaindB` and `q`
+within `rew_api._READBACK_TOL`; a slot written `"None"` is checked for its type only. A difference raises
+`RewWriteMismatch` (`rew_state` `"write_mismatch"`, a `ValueError`), and a read-back in another shape than REW's
+raises `RewProtocolError` (`"protocol"`). Both were measured at the live pass at REW (PLAN-W-8 Task 12, 2026-10-07;
+REW's answers in `rew_tool/testdata/rew/`): REW answers the read with a list of every slot, each carrying its
+`index` (`filters-after-pk.json`), and the tolerance comes from REW's grid (`grid.json`) -- a value REW snapped
+passes, a value REW clamped to the equaliser's range does not.
 
 `rename_measurement` is not read back: it returns REW's answer, as before.
 

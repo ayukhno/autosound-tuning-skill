@@ -1,0 +1,113 @@
+{
+ "probes": [
+  {
+   "wrote": {
+    "frequency": 1234.5678,
+    "gaindB": -3.3333,
+    "q": 1.41421
+   },
+   "stored": {
+    "frequency": 1235.0,
+    "gaindB": -3.3000000000000003,
+    "q": 1.41,
+    "type": "PK",
+    "enabled": true
+   }
+  },
+  {
+   "wrote": {
+    "frequency": 20.04,
+    "gaindB": -0.04,
+    "q": 0.5049
+   },
+   "stored": {
+    "frequency": 20.0,
+    "gaindB": 0.0,
+    "q": 0.5,
+    "type": "PK",
+    "enabled": true
+   }
+  },
+  {
+   "wrote": {
+    "frequency": 19999.96,
+    "gaindB": 11.996,
+    "q": 9.99949
+   },
+   "stored": {
+    "frequency": 20000.0,
+    "gaindB": 12.0,
+    "q": 10.0,
+    "type": "PK",
+    "enabled": true
+   }
+  },
+  {
+   "wrote": {
+    "frequency": 63.123456,
+    "gaindB": -14.987654,
+    "q": 0.707107
+   },
+   "stored": {
+    "frequency": 63.1,
+    "gaindB": -15.0,
+    "q": 0.71,
+    "type": "PK",
+    "enabled": true
+   }
+  },
+  {
+   "type_wrote": "LS",
+   "error": "HTTPError: HTTP Error 400: Bad Request -- REW said: LS is not supported by Audiotec Fischer Full EQ (30 bands) at index 2"
+  },
+  {
+   "type_wrote": "HS",
+   "error": "HTTPError: HTTP Error 400: Bad Request -- REW said: HS is not supported by Audiotec Fischer Full EQ (30 bands) at index 2"
+  },
+  {
+   "type_wrote": "LSQ",
+   "error": "HTTPError: HTTP Error 400: Bad Request -- REW said: LSQ is not a recognised filter type for index 2"
+  },
+  {
+   "type_wrote": "HSQ",
+   "error": "HTTPError: HTTP Error 400: Bad Request -- REW said: HSQ is not a recognised filter type for index 2"
+  },
+  {
+   "type_wrote": "LS_Q",
+   "error": "HTTPError: HTTP Error 400: Bad Request -- REW said: LS_Q is not a recognised filter type for index 2"
+  },
+  {
+   "type_wrote": "HS_Q",
+   "error": "HTTPError: HTTP Error 400: Bad Request -- REW said: HS_Q is not a recognised filter type for index 2"
+  },
+  {
+   "type_wrote": "Low shelf",
+   "error": "HTTPError: HTTP Error 400: Bad Request -- REW said: Low shelf is not a recognised filter type for index 2"
+  },
+  {
+   "type_wrote": "High shelf",
+   "error": "HTTPError: HTTP Error 400: Bad Request -- REW said: High shelf is not a recognised filter type for index 2"
+  },
+  {
+   "type_wrote": "AP",
+   "error": "HTTPError: HTTP Error 400: Bad Request -- REW said: AP is not a recognised filter type for index 2"
+  },
+  {
+   "type_wrote": "AP2",
+   "error": "HTTPError: HTTP Error 400: Bad Request -- REW said: AP2 is not a recognised filter type for index 2"
+  },
+  {
+   "type_wrote": "LP",
+   "error": "HTTPError: HTTP Error 400: Bad Request -- REW said: LP is not supported by Audiotec Fischer Full EQ (30 bands) at index 2"
+  },
+  {
+   "type_wrote": "HP",
+   "error": "HTTPError: HTTP Error 400: Bad Request -- REW said: HP is not supported by Audiotec Fischer Full EQ (30 bands) at index 2"
+  },
+  {
+   "type_wrote": "NO",
+   "error": "HTTPError: HTTP Error 400: Bad Request -- REW said: NO is not a recognised filter type for index 2"
+  }
+ ],
+ "restored": true
+}

@@ -1,0 +1,6 @@
+{
+  "status": 400,
+  "body": {
+    "message": "m6 (rta) at index 39 uuid cf49fc57-66cf-4fd4-a389-3ededc4d5e8c does not have an impulse response"
+  }
+}

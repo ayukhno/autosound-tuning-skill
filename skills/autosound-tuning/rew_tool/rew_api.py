@@ -52,12 +52,14 @@ _TIMEOUT_S = 5
 # REW's own words on it (`_open`): REW answered, so it is neither down nor unreadable.
 
 class RewUnavailable(urllib.error.URLError):
-    """REW did not answer: the connection was refused, timed out, or dropped before an answer came.
+    """REW did not answer: the connection was refused, timed out, or dropped before an answer came or in the middle
+    of one -- a body cut short of its length, a chunked body cut off (R33).
 
     A `URLError`, so also an `OSError`, because that is what a caller saw before when REW was not running, and
-    every `except URLError` or `except OSError` keeps catching it. A timeout and a dropped line used to escape
-    `urlopen` raw (`socket.timeout`, `RemoteDisconnected`); they are this now too. Nothing was read; a write that
-    was sent may or may not have landed. `reason` is the socket's own error, `url` the address asked.
+    every `except URLError` or `except OSError` keeps catching it. A timeout, a dropped line and an answer cut off
+    used to escape `urlopen` raw (`socket.timeout`, `RemoteDisconnected`, `http.client.IncompleteRead`); they are
+    this now too. Nothing was read; a write that was sent may or may not have landed. `reason` is the socket's own
+    error, `url` the address asked.
     """
     rew_state = "unavailable"
 
@@ -70,11 +72,14 @@ class RewUnavailable(urllib.error.URLError):
 
 
 class RewProtocolError(ValueError):
-    """REW answered, and the answer cannot be read: not JSON, empty where data belongs, or the wrong shape.
+    """REW answered, and the answer cannot be read: not JSON, empty where data belongs, the wrong shape, or not HTTP
+    at all -- a status line or a header `http.client` cannot read (`BadStatusLine`, `LineTooLong`, R33), which
+    escaped `urlopen` raw.
 
     A `ValueError` because a body that would not parse raised one before (`json.JSONDecodeError`), so an
     `except ValueError` keeps catching it. Not "REW is down" and not "the measurement is missing": re-measuring
-    fixes nothing here.
+    fixes nothing here. Not an address no request can be sent to either (`http.client.InvalidURL`): nothing was
+    sent, and that is a plain `ValueError` naming the address (R34).
     """
     rew_state = "protocol"
 
@@ -163,6 +168,9 @@ def _fetch(method, path, data=None):
     Broken at the HTTP level (R33): an answer cut short of its length, or a chunked one cut off, is REW dropping
     mid-answer -> `RewUnavailable` (a write may have landed); a status line or a header that is not HTTP ->
     `RewProtocolError`. `http.client` raises both as its own errors, neither a `URLError` nor a `ValueError`.
+
+    An address no request can be sent to -- a port that is not a number in `REW_API_URL`, a path with a space --
+    is a plain `ValueError` naming it, with no `rew_state` (R34): nothing was sent, so REW said nothing either way.
     """
     url = BASE_URL + path
     if method == "GET":
@@ -183,6 +191,10 @@ def _fetch(method, path, data=None):
     # After ConnectionError: `RemoteDisconnected` is a `BadStatusLine` too, and a hang-up is REW not answering.
     except http.client.IncompleteRead as exc:
         raise RewUnavailable(exc, url) from exc
+    # Before HTTPException, which it is: raised before anything is sent, so it is no answer of REW's.
+    except http.client.InvalidURL as exc:
+        raise ValueError(f"cannot send a request to {url!r}: {exc}. Nothing was sent (REW's address, from "
+                         f"REW_API_URL: {BASE_URL!r})") from exc
     except http.client.HTTPException as exc:
         raise RewProtocolError(f"REW answered {method} {path} with something that is not HTTP: {exc!r:.120}") from exc
     if not raw:
@@ -636,9 +648,14 @@ _REW_SPELLING = dict({key.lower(): key for key in _REW_FILTER_KEYS},
 _DROPPED_COST = {"gaindB": "the filter would be stored flat, at 0 dB",
                  "frequency": "the filter would not get this frequency",
                  "q": "the filter would not get this Q"}
-#: (absolute, relative) tolerance per field when a write is read back. PROVISIONAL: Task 12 of docs/PLAN-W-8.md
-#: replaces these with the rounding REW is seen to apply.
-_READBACK_TOL = {"frequency": (0.1, 0.005), "gaindB": (0.05, 0.0), "q": (0.005, 0.01)}
+#: (absolute, relative) tolerance per field when a write is read back: REW's grid, measured at the live pass at REW
+#: (2026-10-07) under the equaliser Audiotec Fischer "Full EQ (30 bands)" -- rew_tool/testdata/rew/grid.json. REW
+#: snaps a frequency to 0.1 Hz below 100 Hz and to 1 Hz from 100 Hz, a gain to 0.1 dB and a Q to 0.01. A gain's and
+#: a Q's tolerance is half a step plus float slack (-15.55 dB is held as -15.5, 0.0500000000000007 off). A
+#: frequency's is 0.05 Hz or 0.5 %, whichever is wider (`math.isclose`): half REW's step at 100 Hz, wider elsewhere.
+#: Every value REW snapped passes, and a value REW clamped to its range (+14 dB held as +12) does not. An equaliser
+#: with a coarser grid raises `RewWriteMismatch` naming the field: loud, never silent.
+_READBACK_TOL = {"frequency": (0.05 + 1e-6, 0.005), "gaindB": (0.05 + 1e-6, 0.0), "q": (0.005 + 1e-6, 0.0)}
 
 
 def _foreign_key_note(key):
@@ -690,9 +707,11 @@ def _slot_number(slot, position):
 def _slot_differences(number, wrote, holds):
     """Each way slot `number` as REW holds it differs from what was written there, one phrase each.
 
-    `type` and `enabled` must be equal, `frequency`, `gaindB` and `q` within `_READBACK_TOL`; a key the write did
-    not send is not judged. A slot written `"None"` (cleared) checks its type only: REW may keep the old numbers
-    in a slot that holds no filter.
+    `type` and `enabled` must be equal, and so must a crossover's `shape` and `slopedBPerOctave`; `frequency`,
+    `gaindB` and `q` must be within `_READBACK_TOL`, REW's grid. A key the write did not send is not judged. A slot
+    written `"None"` (cleared) is held to its type alone: REW lists a cleared slot with no values, only its index,
+    type, enabled and isAuto (`testdata/rew/filters-after-clear.json`), and a slot that holds no filter changes
+    nothing, enabled or not.
     """
     out = []
 
@@ -704,8 +723,9 @@ def _slot_differences(number, wrote, holds):
         differs("type")
     if wrote.get("type") == "None":
         return out
-    if "enabled" in wrote and holds.get("enabled", object()) != wrote["enabled"]:
-        differs("enabled")
+    for key in ("enabled", "shape", "slopedBPerOctave"):
+        if key in wrote and holds.get(key, object()) != wrote[key]:
+            differs(key)
     for key, (abs_tol, rel_tol) in _READBACK_TOL.items():
         if key not in wrote:
             continue
@@ -722,19 +742,23 @@ def _read_back(mid, written):
     """Read measurement `mid`'s filters back after a write and hold each written slot to them (#134, audit K-1).
 
     REW answers a filter write as done whatever it kept: a `gain` it dropped, slots past the equaliser's count it
-    cut off (`rew-api-quirks.md`, "Writing filters"). So the write is read back: REW's answer may be a list of slot
-    dicts or `{"filters": [...]}` -- the shape is seen live only in the live pass at REW -- and anything else is a
-    `RewProtocolError`. A written slot (by `index`, else its place + 1) missing from it, or held differently
-    (`_slot_differences`), raises `RewWriteMismatch` naming each difference.
+    cut off (`rew-api-quirks.md`, "Writing filters"). So the write is read back, in the shape REW answers the read
+    (the live pass at REW, 2026-10-07: `testdata/rew/filters-after-pk.json`): a list of every slot of the equaliser,
+    each a dict carrying its `index`, a whole number. Any other answer -- `{"filters": [...]}`, a slot with no index,
+    one index listed twice -- is a `RewProtocolError`. A written slot (by `index`, else its place + 1) missing from
+    it, or held differently (`_slot_differences`), raises `RewWriteMismatch` naming each difference.
     """
-    answer = get_filters(mid)
-    slots = answer.get("filters") if isinstance(answer, dict) else answer
-    if not isinstance(slots, list) or not all(isinstance(slot, dict) for slot in slots):
+    slots = get_filters(mid)
+    if not isinstance(slots, list) or not all(isinstance(slot, dict) and type(slot.get("index")) is int
+                                              for slot in slots):
         raise RewProtocolError(f"cannot read the filters back from measurement {mid}: REW answered "
-                               f"{json.dumps(answer)[:120]}, not a list of filter slots")
+                               f"{json.dumps(slots)[:120]}, not a list of filter slots, each with its index")
     held = {}
-    for position, slot in enumerate(slots):
-        held.setdefault(_slot_number(slot, position), slot)
+    for slot in slots:
+        if slot["index"] in held:
+            raise RewProtocolError(f"cannot read the filters back from measurement {mid}: REW listed slot "
+                                   f"{slot['index']} twice")
+        held[slot["index"]] = slot
     missing, problems = [], []
     for position, wrote in enumerate(written):
         number = _slot_number(wrote, position)
@@ -764,8 +788,9 @@ def set_filters(mid, filters):
     takes a *single* FilterSetting (see `set_filter`), not a collection.
 
     Each entry needs at least `index` (1-based, matching the slot numbering `get_filters` returns)
-    and `type`; omit `isAuto`, which REW reports but does not accept back. Clear a slot with
-    `{"index": N, "type": "None", "enabled": True}`.
+    and `type`. `isAuto`, which REW lists on every slot, may be sent back as REW listed it: it is
+    one of REW's keys, and the live pass put whole slots back, `isAuto` and all, and REW held them
+    as before. Clear a slot with `{"index": N, "type": "None", "enabled": True}`.
 
     ⚠️ The gain key is **`gaindB`**, not `gain`. An entry using `gain` is accepted with a 200 and
     the filter is created at **0 dB** -- silently flat. Verified live: sending `gain: -3.0` stores
@@ -778,13 +803,13 @@ def set_filters(mid, filters):
     takes (`_REW_FILTER_KEYS`: `index`, `type`, `enabled`, `isAuto`, `frequency`, `gaindB`, `q`,
     `shape`, `slopedBPerOctave`), an entry that is not a dict, or a write naming one slot twice is
     refused with a `ValueError` before anything is sent; the refusal names the key and REW's
-    spelling of it. After the POST the filters are read
-    back (`_read_back`): each written slot must be there, with its `type` and `enabled`, and its
-    `frequency`, `gaindB` and `q` within `_READBACK_TOL` (a slot written `"None"` checks its type
-    only). A difference -- a dropped gain, a slot cut off past the equaliser's count, a changed
-    type -- raises `RewWriteMismatch` (`rew_state` "write_mismatch"); a read-back REW answers in
-    a shape not understood raises `RewProtocolError`. The tolerances are provisional until the
-    live pass at REW records the rounding REW applies. Returns REW's answer to the write.
+    spelling of it. After the POST the filters are read back (`_read_back`): each written slot
+    must be there, with its `type` and `enabled` (and a crossover's `shape` and
+    `slopedBPerOctave`), and its `frequency`, `gaindB` and `q` within `_READBACK_TOL` -- REW's
+    grid, measured (a slot written `"None"` checks its type only). A difference -- a dropped
+    gain, a slot cut off past the equaliser's count, a changed type, a value REW clamped --
+    raises `RewWriteMismatch` (`rew_state` "write_mismatch"); a read-back in another shape than
+    REW's list of slots raises `RewProtocolError`. Returns REW's answer to the write.
     """
     if not isinstance(filters, (list, tuple)):
         raise ValueError(f"set_filters takes a list of FilterSetting dicts, not {type(filters).__name__} -- "
@@ -1224,11 +1249,20 @@ def _check_listing_entries_and_empty_bodies():
 
 
 def _check_rew_state_reads_any_http_error():
-    """`rew_state` answers None for an `HTTPError` built without a body. On Python 3.9 such an error raises
-    `KeyError: 'file'` for any attribute it lacks (its `fp` is None, and `tempfile`'s wrapper behind it has no
-    file), so a state read off the instance crashed the caller that asked."""
-    e = urllib.error.HTTPError("http://127.0.0.1:1/x", 500, "boom", {}, None)
-    assert rew_state(e) is None, rew_state(e)
+    """`rew_state` reads the state off the exception's class, never the instance: an instance can raise for an
+    attribute it lacks. On Python 3.9 an `HTTPError` built without a body does (`KeyError: 'file'`: its `fp` is None,
+    and `tempfile`'s wrapper behind it has no file), so a state read off the instance crashed the caller that asked.
+    From 3.12 that error answers None, and guards nothing there; an exception whose `__getattr__` raises holds the
+    rule on every version (#134, R34)."""
+    class Trap(Exception):
+        def __getattr__(self, name):
+            raise KeyError("file")
+    for exc in (urllib.error.HTTPError("http://127.0.0.1:1/x", 500, "boom", {}, None), Trap("x")):
+        try:
+            got = rew_state(exc)
+        except Exception as raised:  # noqa: BLE001 -- what is under test is that nothing is raised
+            raise AssertionError(f"rew_state read the {type(exc).__name__}'s instance: {raised!r}") from raised
+        assert got is None, (type(exc).__name__, got)
     assert rew_state(RewUnavailable("refused", "http://127.0.0.1:1/x")) == "unavailable"
     assert rew_state(None) is None and rew_state(ValueError("x")) is None
 
@@ -1268,9 +1302,11 @@ def _check_http_level_broken_answers():
 
 
 def _check_read_back_cases():
-    """The rest of what a read-back must not pass, through both writers, and the shapes it reads (#134, K-1).
-    REW's own GET shape is unseen until the live pass (Task 12): a list of slots and `{"filters": [...]}` are both
-    read; any other answer is refused as unreadable (`protocol`), never passed as written."""
+    """The rest of what a read-back must not pass, through both writers, and the shape it reads (#134, K-1). REW
+    answers the read with a list of every slot, each carrying its `index` (the live pass at REW, 2026-10-07:
+    `testdata/rew/filters-after-pk.json`); any other answer -- `{"filters": [...]}`, a slot with no index, an index
+    listed twice -- is refused as unreadable (`protocol`), never passed as written. A crossover's `shape` and slope
+    are held to what was written (R34)."""
     pk = {"index": 1, "type": "PK", "enabled": True, "frequency": 1000.0, "gaindB": -3.0, "q": 1.41}
     clear = {"index": 2, "type": "None", "enabled": True}
 
@@ -1292,10 +1328,18 @@ def _check_read_back_cases():
     xo = {"index": 3, "type": "High pass", "enabled": True, "isAuto": False, "frequency": 80.0, "shape": "L-R",
           "slopedBPerOctave": 24}
     cases = (   # (writer, what is written, what REW holds after it, the state raised or None, a word it names)
-        (set_filters, [pk, clear], lambda s: {"filters": s}, None, None),
+        (set_filters, [pk, clear], lambda s: s, None, None),
         (set_filters, [xo, dict(pk, isAuto=False)], lambda s: s, None, None),   # every key REW takes goes through
         (set_filters, [pk], changed(frequency=1000.4, gaindB=-3.04, q=1.4135), None, None),   # within the tolerance
-        (set_filters, [clear], changed(enabled=False, frequency=500.0, gaindB=1.0, q=0.7), None, None),
+        (set_filters, [clear], changed(enabled=False), None, None),   # a cleared slot is held to its type alone
+        (set_filters, [xo], changed(shape="BU"), "write_mismatch", "shape"),
+        (set_filters, [xo], changed(slopedBPerOctave=12), "write_mismatch", "slopedBPerOctave"),
+        (set_filters, [pk, clear], lambda s: {"filters": s}, "protocol", "cannot read the filters back"),
+        (set_filters, [pk], lambda s: [{k: v for k, v in x.items() if k != "index"} for x in s], "protocol",
+         "cannot read the filters back"),
+        (set_filters, [pk], lambda s: [dict(x, index=str(x["index"])) for x in s], "protocol",
+         "cannot read the filters back"),
+        (set_filters, [pk], lambda s: s + s, "protocol", "slot 1 twice"),
         (set_filters, [pk], changed(type="LS Q"), "write_mismatch", "type"),
         (set_filters, [clear], changed(type="PK"), "write_mismatch", "type"),
         (set_filters, [pk], changed(enabled=False), "write_mismatch", "enabled"),
@@ -1358,6 +1402,142 @@ def _check_silence_and_hangup():
         hangup.close()
 
 
+def _check_malformed_address():
+    """An address no request can be sent to is a plain `ValueError` naming it, and nothing is sent (#134, R34): not
+    REW down, not REW answering something unreadable. `http.client` raises `InvalidURL` for it -- a port that is not a
+    number in `REW_API_URL`, a measurement id with a space -- an `HTTPException`, which read as `protocol`."""
+    for base, call in (("http://127.0.0.1:abc", get_measurements), ("http://127.0.0.1:1", lambda: get_fr("1 2"))):
+        try:
+            _with_base(base, call)
+        except ValueError as e:
+            assert type(e) is ValueError and rew_state(e) is None and base in str(e), (base, repr(e))
+        else:
+            raise AssertionError(f"{base}: an address no request can be sent to was asked")
+
+
+#: REW's own answers, recorded at the live pass at REW (2026-10-07, PLAN-W-8 Task 12) on one swept measurement (id 3,
+#: 96 kHz) under the equaliser Audiotec Fischer "Full EQ (30 bands)". `_check_recorded_answers` says what each holds.
+_RECORDED = os.path.join(os.path.dirname(os.path.abspath(__file__)), "testdata", "rew")
+
+
+def _recorded(name):
+    """`testdata/rew/<name>`: (its bytes, parsed)."""
+    with open(os.path.join(_RECORDED, name), "rb") as f:
+        raw = f.read()
+    return raw, json.loads(raw)
+
+
+def _check_recorded_answers():
+    """REW's own answers, recorded at the live pass at REW in `testdata/rew/`, replayed over HTTP through `_FakeRew`:
+    the method reads what REW sends, not what a test supposed it sends (#134, PLAN-W-8 Task 12).
+
+    (a) The listing parses (`measurements.json`). (b) The live pass's PK write reads back clean against the slots REW
+    listed after it (`filters-after-pk.json`), and (c) so does the clear (`filters-after-clear.json`). (d) Every value
+    REW snapped to its grid passes `_READBACK_TOL` (`rounding.json`, `grid.json`); a value REW clamped, a gain or a
+    Q one grid step further off, and a frequency a step further off where the step is wider than 0.5 % (150 Hz),
+    raise `RewWriteMismatch` naming the field; a type REW does not take is REW's 400, in its words. REW's "no
+    impulse" answer (`impulse-none.json`) is replayed in `verify`'s selftest: imported here, `verify` would read a
+    second copy of this module, with a `BASE_URL` of its own.
+    """
+    raw_listing, listing = _recorded("measurements.json")
+    raw_cleared, cleared = _recorded("filters-after-clear.json")
+    rew = {}
+
+    def routes(method, path, body, f):
+        if method == "GET" and path == "/measurements":
+            return 200, raw_listing
+        if method == "GET":
+            rew["reads"] += 1
+            return 200, rew["lists"]
+        rew["sent"].append((method, path, json.loads(body)))
+        return rew["status"], json.dumps({"message": rew["says"]}).encode()
+
+    def write(writer, written, lists, says="Filters set", status=200):
+        """`writer` to measurement 3: REW answers the write `status`, `says`, and lists `lists` when read."""
+        rew.update(lists=lists, says=says, status=status, sent=[], reads=0)
+        return _with_base(fake.url, lambda: writer("3", written))
+
+    def lists(slot):
+        """REW's 30 slots after a write to `slot`'s index: that slot as given, every other one cleared."""
+        return json.dumps([slot if s["index"] == slot["index"] else s for s in cleared]).encode()
+
+    def kept(written, answer):
+        """`set_filters` of `written`, REW listing `answer` after it: must return, REW's answer to the write."""
+        try:
+            return write(set_filters, written, answer)
+        except ValueError as e:
+            raise AssertionError(f"REW kept the write {written}, and the read-back said: {e}") from e
+
+    def not_kept(writer, written, held, words, says="Filters set"):
+        try:
+            write(writer, written, lists(held), says=says)
+        except ValueError as e:
+            assert rew_state(e) == "write_mismatch" and words in str(e), (words, rew_state(e), str(e))
+        else:
+            raise AssertionError(f"REW listed {held} after the write {written}, and the write was reported done")
+
+    fake = _FakeRew(routes)
+    try:
+        # (a) the listing: a map of five measurements, as REW listed them (titles anonymised to m1..m5)
+        try:
+            got = _with_base(fake.url, get_measurements)
+        except ValueError as e:
+            raise AssertionError(f"REW's own listing was refused: {e}") from e
+        assert got == listing and [m["title"] for m in got.values()] == ["m1", "m2", "m3", "m4", "m5"], got
+        assert find_measurement_id("m3", got) == "3"
+        # (b), (c) the live pass's two writes, each read back against what REW listed after it
+        pk = {"index": 1, "type": "PK", "enabled": True, "frequency": 1000.0, "gaindB": -3.0, "q": 1.41}
+        clear = {"index": 1, "type": "None", "enabled": True}
+        for written, name in ((pk, "filters-after-pk.json"), (clear, "filters-after-clear.json")):
+            said = kept([written], _recorded(name)[0])
+            assert said == {"message": "Filters set"} and rew["reads"] == 1, (name, said, rew["reads"])
+            assert rew["sent"] == [("POST", "/measurements/3/filters", {"filters": [written]})], (name, rew["sent"])
+        # (d) REW's grid. rounding.py and grid.py wrote slot 2 so; REW lists a PK slot with `isAuto` beside it.
+        on = {"index": 2, "type": "PK", "enabled": True}
+        listed = dict(on, isAuto=True)
+        for probe in _recorded("rounding.json")[1]["probes"]:
+            if "wrote" in probe:
+                written, held = dict(on, **probe["wrote"]), dict(listed, **probe["stored"])
+                kept([written], lists(held))                                    # what REW snapped passes
+                for key, step in (("gaindB", 0.1), ("q", 0.01)):
+                    for off in (-step, step):
+                        not_kept(set_filters, [written], dict(held, **{key: held[key] + off}), f"slot 2: {key} ")
+                continue
+            # A type REW does not take: REW's 400 in its own words -- an error REW answered, not a write it dropped.
+            words = probe["error"].split(" -- REW said: ", 1)[1]
+            try:
+                write(set_filters, [dict(on, type=probe["type_wrote"], frequency=500.0, gaindB=-2.0, q=0.7)],
+                      raw_cleared, says=words, status=400)
+            except urllib.error.HTTPError as e:
+                assert rew_state(e) is None and f"HTTPError: {e}" == probe["error"] and rew["reads"] == 0, \
+                    (probe["error"], str(e), rew["reads"])
+            else:
+                raise AssertionError(f"REW refused the type {probe['type_wrote']!r}, and the write was reported done")
+        _, grid = _recorded("grid.json")
+        assert grid["equaliser"] == {"manufacturer": "Audiotec Fischer", "model": "Full EQ (30 bands)"}, grid
+        clamped = {("gaindB", 14.96), ("q", 0.2049), ("q", 0.3333)}     # REW's range: gain up to +12 dB, Q from 0.5
+        steady = {"frequency": 1000.0, "gaindB": -3.0, "q": 1.0}           # grid.py held the other two values here
+        for name, key in (("freq", "frequency"), ("gain", "gaindB"), ("q", "q")):
+            for value, stored in grid[name]:
+                written, held = dict(on, **dict(steady, **{key: value})), dict(listed, **dict(steady, **{key: stored}))
+                if (key, value) in clamped:
+                    not_kept(set_filters, [written], held, f"slot 2: {key} {value!r} was written, REW holds {stored!r}")
+                else:
+                    kept([written], lists(held))
+        # A frequency is held to 0.5 %, half REW's 1 Hz step at 100 Hz (`_READBACK_TOL`): at 150 Hz, a step further
+        # off is outside it.
+        at_150 = dict(on, **dict(steady, frequency=150.37))
+        not_kept(set_filters, [at_150], dict(listed, **dict(steady, frequency=149.0)),
+                 "slot 2: frequency 150.37 was written, REW holds 149.0")
+        # The clamp the live pass met through `set_filter` (put.py), in the words it raised there.
+        clamp = dict(on, frequency=2000.0, gaindB=14.0, q=2.0)
+        not_kept(set_filter, clamp, dict(listed, frequency=2000.0, gaindB=12.0, q=2.0),
+                 "slot 2: gaindB 14.0 was written, REW holds 12.0", says="Filter set")
+        assert rew["sent"] == [("PUT", "/measurements/3/filters", clamp)], rew["sent"]
+    finally:
+        fake.close()
+
+
 def _selftest():
     """Exercise both branches of get_fr offline — phase-present (sweep) and
     phase-absent (RTA). The RTA branch used to KeyError on data["phase"]
@@ -1369,7 +1549,7 @@ def _selftest():
                   _check_filter_keys_refused, _check_read_back, _check_foreign_keys_every_writer,
                   _check_read_back_cases, _check_silence_and_hangup, _check_title_states,
                   _check_listing_entries_and_empty_bodies, _check_rew_state_reads_any_http_error,
-                  _check_http_level_broken_answers):
+                  _check_http_level_broken_answers, _check_malformed_address, _check_recorded_answers):
         try:
             check()
         except AssertionError as exc:
@@ -1596,7 +1776,9 @@ def _selftest():
           "duplicate titles are found; an HTTP error carries REW's own explanation; "
           "REW down (refused, silent, hung up, cut off midway) is `unavailable`, an unreadable or non-HTTP answer "
           "`protocol`; a filter key REW does not take is refused before any request, naming REW's spelling, and a "
-          "filter write REW did not keep is caught on the read-back")
+          "filter write REW did not keep is caught on the read-back; REW's own answers from the live pass replay: "
+          "the listing parses, the PK write and the clear read back clean, a value REW snapped to its grid passes "
+          "and one a step further off, or clamped, does not")
 
 
 # What each reader was decided to ask, (module, function, call) -> the values its calls name
