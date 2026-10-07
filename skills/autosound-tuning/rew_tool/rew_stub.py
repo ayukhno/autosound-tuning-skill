@@ -20,7 +20,10 @@ What is served, and only that (`rew_api.py` is the list of what is read):
                                           (an RTA record: freqStep instead of ppo, no phase)
   GET /measurements/{id}/impulse-response {startTime, sampleRate, unit: "percent", data}
                                           peak-normalised to ±1.0 UNLESS `?normalised=false`,
-                                          which serves the raw IR in percent of full scale
+                                          which serves the raw IR in percent of full scale;
+                                          a measurement with no impulse (an RTA) answers 400,
+                                          "<title> at index N uuid <uuid> does not have an
+                                          impulse response", as REW does (live, 2026-10-07)
 
 Floats travel as REW sends them -- base64 of big-endian float32 -- so `rew_api.decode_floats` is
 the reader on both. Everything else answers 404 with a message, the way REW does: a tool that
@@ -169,7 +172,11 @@ class _Handler(BaseHTTPRequestHandler):
                 # REW's reading of the flag: anything but a literal false is the default (normalised).
                 ir = m.impulse_response(normalised=params.get("normalised", "").lower() != "false")
                 if ir is None:
-                    return self._json(404, {"message": f"{m.title!r} has no impulse response (an RTA)"})
+                    # REW's own answer, as the live pass recorded it (2026-10-07): 400, not 404, in these words
+                    # ("<title> at index N uuid <uuid> does not have an impulse response"). Which index REW
+                    # names was not recorded; the stub names the id it serves.
+                    return self._json(400, {"message": f"{m.title} at index {parts[1]} uuid {m.uid} "
+                                                       f"does not have an impulse response"})
                 return self._json(200, ir)
         return self._json(404, {"message": f"rew_stub does not serve {self.path}"})
 
@@ -240,6 +247,8 @@ def main(argv=None):
 def _selftest():
     """Through `rew_api` itself, with `BASE_URL` pointed at the stub: what the tools read comes back
     as REW would send it, and a pure delay reads as a pure delay."""
+    import urllib.error
+
     import dsp_math
     import rew_api
     import verify as _verify
@@ -281,11 +290,21 @@ def _selftest():
         assert t2["has_ir"] is False, t2
         f2, m2, p2 = rew_api.get_fr("2")
         assert p2 is None and abs(f2[1] - f2[0] - 10.0) < 1e-9 and abs(m2[0] - 70.0) < 1e-6
+        # ...and its impulse read answered as REW answers it (the live pass at REW, 2026-10-07): HTTP 400, not 404,
+        # in REW's words. (This read used to be asserted inside the `try`, where the "handed back" AssertionError
+        # was caught by the `except` and passed for having "impulse" in it.)
         try:
             rew_api.get_impulse_response("2")
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 400 and "w-L_1 (rta) at index 2 uuid " in str(exc) \
+                and str(exc).endswith(" does not have an impulse response"), (exc.code, str(exc))
+        else:
             raise AssertionError("an RTA handed back an impulse response")
-        except Exception as exc:  # noqa: BLE001 -- REW's 404 carries a message; so does ours
-            assert "impulse" in str(exc), exc
+        # The capture gate reads that answer as REW's "no impulse", not as a read that failed (R30). Listed with no
+        # notes, this capture is taken for a sweep (`is_swept`: unknown is checked), so the gate asks for its impulse.
+        v_none = _verify.verdict("w-L_1 (rta)", listing)
+        assert v_none["reachable"] is True and v_none["kind"] == rew_api.UNKNOWN, v_none
+        assert not any("impulse" in issue for issue in v_none["issues"]), v_none["issues"]
         # the odd one: an offset the tools must refuse as a shared base
         t3 = rew_api.get_timing("3")
         assert abs(t3["offset_s"] - 0.0077) < 1e-12 and t3["ir_start_s"] == -0.5
@@ -325,7 +344,8 @@ def _selftest():
     print("selftest[rew_stub] OK -- the four endpoints read back through rew_api: listing, timing "
           "(loopback / offset / no-IR), log-axis FR (the designed shape comes back), the impulse with its "
           "start time AT ITS LEVEL (raw = stored; REW's default form peaks at 1.0; two channels 20 dB "
-          "apart stay 20 dB apart through predict), a linear-axis RTA without phase or impulse, the capture gate's verdict on a "
+          "apart stay 20 dB apart through predict), a linear-axis RTA without phase or impulse (its impulse read "
+          "answered 400 in REW's words, which the capture gate lets through), the capture gate's verdict on a "
           "served sweep, and a 404 by name for what is not served.")
     return 0
 

@@ -12,18 +12,23 @@ holds looks like a real capture — not whether the tune is good. Judging the so
 job and it happens elsewhere; this is the gate that stops a session analysing a sweep that never
 completed, and stops a checklist showing a row as captured because a title exists.
 
-    {"name": "tw-L_1 (sw)", "exists": true, "valid": false,
+    {"name": "tw-L_1 (sw)", "exists": true, "reachable": true, "valid": false,
      "issues": ["ir peak is 0.4 dB above the pre-ringing floor — no clear arrival"],
      "stats": {...}}
 
 Two failure modes are kept apart on purpose. `exists: false` is "nobody measured it"; `valid:
 false` is "it was measured and cannot be used", which is a different conversation with the Arbiter
-and a different colour on the panel.
+and a different colour on the panel. REW itself is a third (#134): `reachable: false` is "REW did
+not answer", and then `exists` is null, because nobody can say whether the title is there --
+counting it "missing" sent the tuner to re-measure what REW, once started, still held. `exists:
+null` with `reachable: true` is REW answering an error.
 
 stdlib only (plus this package's own `rew_api`/`analysis`), py3.9+.
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import sys
@@ -55,6 +60,38 @@ _SILENT_MEAN_DB = -80.0
 # got above 200 Hz reads as "captured" by title alone.
 _MIN_SPAN_FRACTION = 0.5
 
+# What `verify.py` exits with when REW did not answer: sysexits' EX_UNAVAILABLE, the code `process.py` gives the
+# same state (#134). 0 and 1 keep their meaning, so a gate that only knew those still stops on it.
+EXIT_REW_UNAVAILABLE = 69
+
+
+def _rew_down(exc):
+    """Whether `exc` is REW not answering (#134): its `rew_state`, read off the exception's CLASS.
+
+    Never the class itself -- a copy of `rew_api` loaded by path (TCC's) raises classes of its own -- and never the
+    instance: on Python 3.9 an `HTTPError` built without a body answers any attribute it lacks with `KeyError:
+    'file'`, which would turn REW's answer into a traceback here."""
+    return getattr(type(exc), "rew_state", None) == "unavailable"
+
+
+def _unreached(name, exc):
+    """The verdict for a title when REW's measurement list could not be read: whether REW holds the title is not
+    known, so `exists` is None -- never False, which is "nobody measured it" (#134, audit T-2). `reachable` says
+    which: False when REW did not answer, True when it answered with an error or with something it cannot read."""
+    down = _rew_down(exc)
+    return {"name": name, "exists": None, "reachable": not down, "applicable": True, "kind": _api.UNKNOWN,
+            "valid": False, "issues": [f"REW unavailable: {exc}" if down else f"REW answered an error: {exc}"],
+            "stats": {}}
+
+
+def _no_impulse(exc):
+    """Whether a failed impulse read is REW saying that it keeps no impulse response for this capture -- the one
+    failed read that counts against nothing (audit T-4). REW answers it HTTP 400 with "<title> at index N uuid ...
+    does not have an impulse response" (the live pass at REW, 2026-10-07, ruling R30); a 404 is let through too.
+    `code` is set on every `HTTPError` itself, so reading it never meets Python 3.9's `KeyError: 'file'`."""
+    code = getattr(exc, "code", None)
+    return code == 404 or (code == 400 and "does not have an impulse response" in str(exc))
+
 
 def verdict(name, measurements=None, f_low=20, f_high=20000):
     """One measurement's verdict, by REW title. Never raises — a verdict is always an answer.
@@ -67,14 +104,14 @@ def verdict(name, measurements=None, f_low=20, f_high=20000):
     # one step earlier -- this check asks swept-capture questions (is the impulse there, does the
     # span cover the band), and an RTA answers none of them by its nature. Judging it against them
     # paints a row red where nothing is wrong (TCC-008). Defaults to True so a caller that never
-    # looks at the field keeps the behaviour it had.
-    out = {"name": name, "exists": False, "applicable": True, "kind": _api.UNKNOWN,
+    # looks at the field keeps the behaviour it had. `reachable` stands beside them all (#134): REW
+    # not answering is no fact about the capture, and it is never read as one.
+    out = {"name": name, "exists": False, "reachable": True, "applicable": True, "kind": _api.UNKNOWN,
            "valid": False, "issues": [], "stats": {}}
     try:
         ms = _api.get_measurements() if measurements is None else measurements
-    except Exception as exc:  # noqa: BLE001 — REW not running is a verdict, not a traceback
-        out["issues"].append(f"REW unreachable: {exc}")
-        return out
+    except Exception as exc:  # noqa: BLE001 — REW down or answering an error is a verdict, not a traceback
+        return _unreached(name, exc)
     try:
         mid = _api.find_measurement_id(name, ms, exact=True)
     except KeyError as exc:
@@ -106,7 +143,12 @@ def verdict(name, measurements=None, f_low=20, f_high=20000):
     try:
         freqs, mag, phase = _api.get_fr(mid, smoothing=READ_SMOOTHING)
     except Exception as exc:  # noqa: BLE001
-        out["issues"].append(f"frequency response unreadable: {exc}")
+        if _rew_down(exc):
+            # REW stopped answering after its list: the title is there, the curve was not read -- no word about it.
+            out["reachable"] = False
+            out["issues"].append(f"REW unavailable while reading the frequency response: {exc}")
+        else:
+            out["issues"].append(f"frequency response unreadable: {exc}")
         return out
     if not freqs or not mag:
         out["issues"].append("frequency response is empty")
@@ -144,15 +186,22 @@ def verdict(name, measurements=None, f_low=20, f_high=20000):
     # never judged: `pre_ringing_dB` is everything before the peak, which on a real car sweep
     # includes the loopback reference and earlier arrivals -- gating on it marked both of this
     # project's real sweeps unusable, which is the failure this whole verdict exists to avoid.
-    # An RTA capture legitimately has no impulse at all, so its absence counts against nothing.
+    # A capture REW keeps no impulse for (REW says so, `_no_impulse`) counts against nothing. Any
+    # other failed read is said (audit T-4): swallowed, a sweep whose impulse could not be read
+    # passed as usable, and the arrivals read off it later had nothing under them.
     try:
         # Raw, so `peak_dB` is the impulse's real peak in dBFS. Read peak-normalised (the
         # endpoint's default until 2026-09-08) it was 0.0 on every row and said nothing between
         # titles; the level spread is still read on the live-band mean, because a single peak
         # sample is a worse ruler for loudness than a band -- but the number is at least true now.
         times, ir = _api.get_impulse_response(mid, normalised=False)
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 -- every failure is sorted below, none is dropped
         times, ir = None, None
+        if _rew_down(exc):
+            out["reachable"] = False
+            out["issues"].append(f"REW unavailable while reading the impulse response: {exc}")
+        elif not _no_impulse(exc):
+            out["issues"].append(f"impulse response unreadable: {exc}")
     if times and ir:
         out["stats"].update(_analysis.analyze_impulse(times, ir))
         # The CAPTURE rate -- what this measurement was recorded at. A separate fact from the DSP's
@@ -167,15 +216,15 @@ def verdict(name, measurements=None, f_low=20, f_high=20000):
 
 
 def verify(names, f_low=20, f_high=20000):
-    """Verdicts for a list of titles, in the order given. One REW round trip for the index."""
+    """Verdicts for a list of titles, in the order given. One REW round trip for the index.
+
+    An index REW does not give leaves every title's presence unknown: each verdict is `exists: None`, with
+    `reachable: False` when REW did not answer (#134) -- never "missing", which is REW saying it holds no such title.
+    """
     try:
         measurements = _api.get_measurements()
-    except Exception as exc:  # noqa: BLE001
-        return [
-            {"name": n, "exists": False, "valid": False,
-             "issues": [f"REW unreachable: {exc}"], "stats": {}}
-            for n in names
-        ]
+    except Exception as exc:  # noqa: BLE001 -- REW down or answering an error is a verdict for every title
+        return [_unreached(n, exc) for n in names]
     verdicts = [verdict(n, measurements, f_low=f_low, f_high=f_high) for n in names]
     return _flag_outlier_sweeps(verdicts)
 
@@ -205,7 +254,8 @@ def _flag_outlier_sweeps(verdicts):
     scored, by_name = [], {v["name"]: v for v in verdicts}
     for v in verdicts:
         pre = (v.get("stats") or {}).get("pre_ringing_dB")
-        if v.get("exists") and isinstance(pre, (int, float)):
+        # Only a capture REW holds: a title nobody could read (`exists` None, #134) is no driver's cleanest capture.
+        if v.get("exists") is True and isinstance(pre, (int, float)):
             scored.append((v["name"], _driver_of(v["name"]), float(pre)))
     if len(scored) < 2:
         return verdicts
@@ -286,7 +336,9 @@ def session_report(verdicts, processing_rate_hz=None, ir_of=_rew_ir_of):
     rows = []
     for v in verdicts:
         st = v.get("stats") or {}
-        rows.append({"name": v["name"], "exists": bool(v.get("exists")), "valid": bool(v.get("valid")),
+        # `exists` None stays None: REW's list was not read, and the row must not say "missing" (#134).
+        rows.append({"name": v["name"], "exists": None if v.get("exists") is None else bool(v.get("exists")),
+                     "reachable": v.get("reachable", True) is not False, "valid": bool(v.get("valid")),
                      "mean_dB": st.get("live_mean_dB", st.get("mean_dB")), "peak_dB": st.get("peak_dB"),
                      "peak_time_ms": st.get("peak_time_ms"), "pre_ringing_dB": st.get("pre_ringing_dB"),
                      "capture_rate_hz": st.get("capture_rate_hz"),
@@ -318,8 +370,11 @@ def session_report(verdicts, processing_rate_hz=None, ir_of=_rew_ir_of):
         partner = p["name"] if p else _naming.generate_name(
             pr["code"], pr["version"], pr["method"], pr["modifier"], position=pr["position"],
             control="ctl3" if pr["control"] == "ctl1" else "rep")
-        if p is None or not p["exists"]:
+        if p is None or p["exists"] is False:
             drift = {"ctl1": r["name"], "ctl3": partner, "missing": partner}
+        elif r["exists"] is None or p["exists"] is None:
+            # REW's list was not read (#134): neither control can be called there or missing.
+            drift = {"ctl1": r["name"], "ctl3": partner, "not_read": True}
         elif r["peak_time_ms"] is None or p["peak_time_ms"] is None:
             drift = {"ctl1": r["name"], "ctl3": partner, "missing": "an impulse on both"}
         else:
@@ -354,10 +409,14 @@ def render_session(report):
     lines = [f"  session probe -- {counts['total']} titles, {counts['ok']} usable, "
              f"{counts['missing']} missing, {counts['invalid']} unusable"
              + (f", {counts['not_applicable']} not checked (not a sweep)"
-                if counts.get("not_applicable") else ""), ""]
+                if counts.get("not_applicable") else "")
+             + (f", {counts['unreachable']} unreachable" if counts.get("unreachable") else ""), ""]
     lines.append(f"  {'title':24}{'live dB':>9}{'IR peak':>9}{'pre-ring':>10}{'arrival ms':>12}{'rate':>7}  ")
     lines.append("  " + "-" * 74)
     for r in report["rows"]:
+        if r["exists"] is None:              # REW's list was not read (#134): not "missing"
+            lines.append(f"  {r['name']:24}  -- not read: {(r['issues'] or ['REW did not answer'])[0]}")
+            continue
         if not r["exists"]:
             lines.append(f"  {r['name']:24}  -- missing")
             continue
@@ -376,6 +435,8 @@ def render_session(report):
     d = report["drift"]
     if d is None:
         lines.append("  drift: no `-ctl1 (sw)` title in this set -- the drift record needs ctl1 and ctl3")
+    elif d.get("not_read"):
+        lines.append(f"  drift: {d['ctl1']} -> {d['ctl3']} not read -- REW's measurement list was not read")
     elif d.get("missing"):
         lines.append(f"  drift: {d['ctl1']} present, {d['missing']} missing -- no drift record")
     else:
@@ -392,30 +453,46 @@ def render_session(report):
     return "\n".join(lines)
 
 
+def _counted_as(v):
+    """The one count of `summary` a verdict goes in. Each goes in exactly one, so the counts add up to the total."""
+    if v.get("reachable", True) is False:
+        return "unreachable"               # REW did not answer: nothing is known of the title (#134)
+    if v["valid"]:
+        return "ok"
+    if v["exists"] is False:
+        return "missing"                   # REW answered, and holds no such title
+    if v["exists"] and v.get("applicable", True) is False:
+        return "not_applicable"            # an RTA: not checked, never unusable (skill #29)
+    return "invalid"                       # measured and unusable -- or REW answered an error (`exists` None)
+
+
 def summary(verdicts):
     """Counts a caller can act on without walking the list.
 
     A capture this check does not apply to (an RTA, `applicable: False`) is counted apart, never
     as `invalid`: counting it there is how every `(rta)` of a phase-0 round read as unusable in
-    the header of the very output whose rows said "nothing here was checked" (skill #29).
+    the header of the very output whose rows said "nothing here was checked" (skill #29). And a
+    title REW did not answer for (`reachable: False`) is `unreachable`, never `missing`: `missing`
+    is REW answering that it holds no such title, `exists` False and nothing else (#134).
     """
-    not_applicable = [v for v in verdicts if v["exists"] and v.get("applicable", True) is False]
-    return {
-        "total": len(verdicts),
-        "missing": sum(1 for v in verdicts if not v["exists"]),
-        "invalid": sum(1 for v in verdicts if v["exists"] and not v["valid"]) - len(not_applicable),
-        "not_applicable": len(not_applicable),
-        "ok": sum(1 for v in verdicts if v["valid"]),
-    }
+    counts = {"total": len(verdicts), "missing": 0, "invalid": 0, "not_applicable": 0, "ok": 0, "unreachable": 0}
+    for v in verdicts:
+        counts[_counted_as(v)] += 1
+    return counts
 
 
 _USAGE = """usage: verify.py <title> [title ...] [--json] [--band LOW HIGH] [--session]
 
   Verdict per REW measurement title: does it exist, is what REW holds usable.
-  Exit code 0 when every title is valid, 1 otherwise — so a shell gate can branch on it.
+  Exit 0 when every title is valid, 1 otherwise, 69 when REW did not answer — so a shell gate
+  can branch on it. A capture this check does not apply to (an RTA) does not make it 1.
   --session adds the whole-session table (Phase 0.6): level and impulse of every title side by
   side, loudest/quietest, and the ctl1->ctl3 drift record.
 """
+
+# The mark a verdict line starts with, by its count; `ERROR  ` is an `invalid` whose title REW could not list.
+_MARKS = {"ok": "OK  ", "missing": "MISSING", "not_applicable": "N/A ", "invalid": "INVALID",
+          "unreachable": "NO REW "}
 
 
 def _main(argv):
@@ -450,20 +527,196 @@ def _main(argv):
             print(render_session(session_report(verdicts)))
             print()
         for v in verdicts:
-            mark = ("OK  " if v["valid"] else "MISSING" if not v["exists"]
-                    else "N/A " if v.get("applicable", True) is False else "INVALID")
+            counted = _counted_as(v)
+            mark = "ERROR  " if counted == "invalid" and v["exists"] is None else _MARKS[counted]
             print(f"{mark} {v['name']}")
             for issue in v["issues"]:
                 print(f"      - {issue}")
         counts = summary(verdicts)
         print(f"{counts['ok']}/{counts['total']} usable, "
               f"{counts['missing']} missing, {counts['invalid']} unusable"
-              + (f", {counts['not_applicable']} not checked (not a sweep)" if counts["not_applicable"] else ""))
+              + (f", {counts['not_applicable']} not checked (not a sweep)" if counts["not_applicable"] else "")
+              + (f", {counts['unreachable']} unreachable" if counts["unreachable"] else ""))
+    if any(v.get("reachable", True) is False for v in verdicts):
+        return EXIT_REW_UNAVAILABLE       # REW did not answer: no verdict on those titles, so neither 0 nor 1
     return 0 if all(v["valid"] or v.get("applicable", True) is False for v in verdicts) else 1
+
+
+# ── the selftest's stand-in REW ─────────────────────────────────────────────────────────────────
+# An RTA and a sweep as REW lists them, a sweep-shaped curve and a 48 kHz impulse: what `verdict` reads, answered
+# without REW, which a selftest must not reach.
+_RTA_RECORD = {"title": "ALL_60 (rta)", "uuid": "u1",
+               "notes": "65536-point 1/48 octave RTA using Hann window, no smoothing and 150 averages"}
+_SWEPT_RECORD = {"title": "sw_60 (sw)", "uuid": "u2", "notes": "DELAY 22.6504 ms (7.769 m, 25 ft 5.9 in)"}
+
+
+def _sweep_fr(mid, smoothing=None):
+    """A real-looking sweep: rising then falling, nothing flat, nothing silent."""
+    return [20 * (10 ** (k / 100.0)) for k in range(301)], [70 + 10 * (k % 7) for k in range(301)], None
+
+
+def _impulse_48k(mid, normalised=True):
+    """Three samples 1/48000 s apart: a 48 kHz capture."""
+    return [0.0, 1 / 48000, 2 / 48000], [0.0, 1.0, 0.0]
+
+
+@contextlib.contextmanager
+def _rew_as(**readers):
+    """`rew_api`'s readers replaced by `readers` for the length of a `with`, and put back however it ends."""
+    saved = {name: getattr(_api, name) for name in readers}
+    try:
+        for name, reader in readers.items():
+            setattr(_api, name, reader)
+        yield
+    finally:
+        for name, reader in saved.items():
+            setattr(_api, name, reader)
+
+
+def _raising(exc):
+    """A reader that fails with `exc`, whatever it is asked."""
+    def reader(*_args, **_kwargs):
+        raise exc
+    return reader
+
+
+def _run_main(argv):
+    """`_main(argv)`'s exit code and what it printed."""
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        rc = _main(argv)
+    return rc, out.getvalue()
+
+
+class _Down(OSError):
+    """REW not answering, as any copy of `rew_api` raises it: matched by its `rew_state`, never by its class."""
+    rew_state = "unavailable"
+
+
+def _check_unreachable_state():
+    """REW down is its own state (#134, audit T-2): `reachable` False and `exists` None -- nobody can say whether
+    REW holds the title -- counted `unreachable`, never `missing`, and the command exits 69."""
+    with _rew_as(get_measurements=_raising(_Down("refused"))):
+        vs = verify(["a (sw)"])
+        assert vs[0]["reachable"] is False and vs[0]["exists"] is None, vs
+        assert vs[0]["valid"] is False and vs[0]["issues"][0].startswith("REW unavailable: "), vs
+        s = summary(vs)
+        assert (s["missing"], s["unreachable"], s["invalid"], s["ok"]) == (0, 1, 0, 0), s
+        # Asked alone (no listing handed in), the verdict reads the listing itself and says the same.
+        one = verdict("a (sw)")
+        assert one["reachable"] is False and one["exists"] is None, one
+        rc, out = _run_main(["verify.py", "a (sw)"])
+        assert rc == 69, (rc, out)
+        assert "NO REW  a (sw)" in out and "MISSING" not in out, out
+        assert out.rstrip().endswith("0/1 usable, 0 missing, 0 unusable, 1 unreachable"), out
+        rc, out = _run_main(["verify.py", "a (sw)", "--json"])
+        doc = json.loads(out)
+        assert rc == 69 and (doc["summary"]["unreachable"], doc["summary"]["missing"]) == (1, 0), (rc, doc)
+        assert doc["measurements"][0]["exists"] is None and doc["measurements"][0]["reachable"] is False, doc
+        # The session table says the same: no row and no drift record reads "missing" for a title nobody read.
+        rc, out = _run_main(["verify.py", "m-L-ctl1_1 (sw)", "m-L-ctl3_1 (sw)", "--session"])
+        assert rc == 69 and "-- missing" not in out and " missing --" not in out, (rc, out)
+        assert "titles, 0 usable, 0 missing, 0 unusable, 2 unreachable" in out and "not read" in out, out
+    # REW stops answering in the middle of a check: the title is in REW's list, the curve could not be read.
+    with _rew_as(get_measurements=lambda: {"2": dict(_SWEPT_RECORD)}, get_fr=_raising(_Down("refused")),
+                 get_impulse_response=_impulse_48k):
+        v = verify(["sw_60 (sw)"])[0]
+        assert v["exists"] is True and v["reachable"] is False and v["valid"] is False, v
+        assert v["issues"][0].startswith("REW unavailable while reading the frequency response"), v
+        assert summary([v])["unreachable"] == 1 and summary([v])["invalid"] == 0, summary([v])
+        assert _run_main(["verify.py", "sw_60 (sw)"])[0] == 69
+
+
+def _check_protocol_error_state():
+    """REW answered, with an error or with something that is not a measurement list: REW is there (`reachable`
+    True), whether it holds the title is not known (`exists` None) -- unusable, never "missing", exit 1 (#134)."""
+    import urllib.error
+
+    class Garbled(ValueError):
+        rew_state = "protocol"
+    # An HTTPError built without a body, as REW's 500 can arrive: on Python 3.9 reading `rew_state` off the instance
+    # raises `KeyError: 'file'`, so the state is read off the exception's class.
+    refused = urllib.error.HTTPError("http://127.0.0.1:1/measurements", 500, "Server Error -- REW said: boom", {}, None)
+    for exc in (Garbled("REW's measurement list is not a map of measurements: list"), refused):
+        with _rew_as(get_measurements=_raising(exc)):
+            v = verify(["a (sw)"])[0]
+            assert v["reachable"] is True and v["exists"] is None and v["valid"] is False, (exc, v)
+            assert v["issues"][0].startswith("REW answered an error: "), (exc, v)
+            s = summary([v])
+            assert (s["missing"], s["unreachable"], s["invalid"], s["ok"]) == (0, 0, 1, 0), (exc, s)
+            rc, out = _run_main(["verify.py", "a (sw)"])
+            assert rc == 1 and "ERROR   a (sw)" in out and "MISSING" not in out, (exc, rc, out)
+
+
+def _check_ir_failure_on_a_sweep():
+    """Audit T-4: an impulse read that fails on a swept capture is an issue, not silence. REW's own answer for a
+    capture it keeps no impulse for is the one let through: HTTP 400 whose words say so (the live pass at REW,
+    2026-10-07, ruling R30), or a 404."""
+    import urllib.error
+    url = "http://127.0.0.1:1/measurements/2/impulse-response?normalised=false"
+
+    def http(code, msg):          # built without a body, as a test builds one (Python 3.9's `KeyError: 'file'` trap)
+        return urllib.error.HTTPError(url, code, msg, {}, None)
+    no_impulse = "Bad Request -- REW said: sw_60 (sw) at index 2 uuid u2 does not have an impulse response"
+    listing = {"1": dict(_RTA_RECORD), "2": dict(_SWEPT_RECORD)}
+    cases = (  # exception, valid, reachable, the issue's start (None: no issue)
+        (RuntimeError("the stream closed early"), False, True, "impulse response unreadable: "),
+        (http(404, "Not Found"), True, True, None),
+        (http(400, no_impulse), True, True, None),
+        (http(400, "Bad Request -- REW said: The request is missing parameters: normalised"), False, True,
+         "impulse response unreadable: "),
+        (_Down("refused"), False, False, "REW unavailable while reading the impulse response"),
+        (_api.RewUnavailable("refused", url), False, False, "REW unavailable while reading the impulse response"),
+    )
+    for exc, valid, reachable, issue in cases:
+        with _rew_as(get_fr=_sweep_fr, get_impulse_response=_raising(exc)):
+            v = verdict("sw_60 (sw)", measurements=listing)
+        assert v["exists"] is True and v["valid"] is valid and v["reachable"] is reachable, (repr(exc), v)
+        if issue is None:
+            assert v["issues"] == [], (repr(exc), v["issues"])
+        else:
+            assert [i for i in v["issues"] if i.startswith(issue)], (repr(exc), v["issues"])
+    # An RTA is never asked for an impulse: it is answered from the listing, before any read.
+    with _rew_as(get_fr=_raising(RuntimeError("asked")), get_impulse_response=_raising(RuntimeError("asked"))):
+        rta = verdict("ALL_60 (rta)", measurements=listing)
+    assert rta["applicable"] is False and rta["reachable"] is True and not any("asked" in i for i in rta["issues"])
+
+
+def _check_counts_add_up():
+    """Each verdict is counted once -- usable, missing, unusable, not checked or unreachable -- so the counts add up
+    to the total (#134); and a verdict the outlier rule reads is one REW holds (`exists` True), never one nobody
+    could read, whatever numbers it carries."""
+    def v(exists, valid=False, applicable=True, reachable=True):
+        return {"name": "x", "exists": exists, "reachable": reachable, "applicable": applicable, "valid": valid,
+                "issues": [] if valid else ["x"], "stats": {}}
+    vs = [v(True, valid=True), v(False), v(True), v(True, applicable=False), v(None, reachable=False),
+          v(True, reachable=False), v(None)]
+    s = summary(vs)
+    assert (s["ok"], s["missing"], s["invalid"], s["not_applicable"], s["unreachable"]) == (1, 1, 2, 1, 2), s
+    assert s["ok"] + s["missing"] + s["invalid"] + s["not_applicable"] + s["unreachable"] == s["total"] == 7, s
+    # A verdict made before `reachable` existed (a front end's own, process.py's recount of a round) counts as before.
+    old = [{"exists": True, "valid": True}, {"exists": False, "valid": False},
+           {"exists": True, "valid": False, "applicable": False}, {"exists": True, "valid": False}]
+    s = summary(old)
+    assert (s["ok"], s["missing"], s["invalid"], s["not_applicable"], s["unreachable"]) == (1, 1, 1, 1, 0), s
+    unread = dict(v(None, reachable=False), name="w-L_00 (sw)", stats={"pre_ringing_dB": -80.0})
+    pair = [dict(v(True, valid=True), name="w-L_01 (sw)", stats={"pre_ringing_dB": -42.0}),
+            dict(v(True, valid=True), name="w-L_02 (sw)", stats={"pre_ringing_dB": -18.0})]
+    flagged = {x["name"]: bool(x.get("remeasure")) for x in _flag_outlier_sweeps([unread] + pair)}
+    assert flagged == {"w-L_00 (sw)": False, "w-L_01 (sw)": False, "w-L_02 (sw)": True}, flagged
 
 
 def _selftest():
     """The outlier rule, offline. Everything else here needs REW, which a selftest must not."""
+    failures = []
+    for check in (_check_unreachable_state, _check_protocol_error_state, _check_ir_failure_on_a_sweep,
+                  _check_counts_add_up):
+        try:
+            check()
+        except Exception as exc:  # noqa: BLE001 -- a check that raises is reported by name, like one that fails
+            failures.append(f"{check.__name__}: {type(exc).__name__}: {exc}")
+    assert not failures, "\n".join(failures)
+
     def cap(name, pre):
         return {"name": name, "exists": True, "valid": True, "issues": [],
                 "stats": {} if pre is None else {"pre_ringing_dB": pre}}
@@ -476,19 +729,14 @@ def _selftest():
     # that need it. `applicable: False` must NOT read as `valid: False` to anyone downstream:
     # a front-end colouring rows sees "grey", not "red", and the reason says which.
     _orig_gm, _orig_fr, _orig_ir = _api.get_measurements, _api.get_fr, _api.get_impulse_response
-    rta   = {"title": "ALL_60 (rta)", "uuid": "u1",
-             "notes": "65536-point 1/48 octave RTA using Hann window, no smoothing and 150 averages"}
-    swept = {"title": "sw_60 (sw)", "uuid": "u2",
-             "notes": "DELAY 22.6504 ms (7.769 m, 25 ft 5.9 in)"}
-    listing = {"1": rta, "2": swept}
+    listing = {"1": dict(_RTA_RECORD), "2": dict(_SWEPT_RECORD)}
     try:
         _api.get_measurements = lambda: listing
         # A real-looking sweep: rising then falling, nothing flat, nothing silent.
         asked = []
-        _api.get_fr = lambda mid, smoothing=None: (asked.append(smoothing), (
-            [20 * (10 ** (k / 100.0)) for k in range(301)], [70 + 10 * (k % 7) for k in range(301)], None))[1]
+        _api.get_fr = lambda mid, smoothing=None: (asked.append(smoothing), _sweep_fr(mid, smoothing))[1]
         # The impulse too (T-30): unstubbed, the sweep's IR came from whatever REW runs here.
-        _api.get_impulse_response = lambda mid, normalised=True: ([0.0, 1 / 48000, 2 / 48000], [0.0, 1.0, 0.0])
+        _api.get_impulse_response = _impulse_48k
         v_rta = verdict("ALL_60 (rta)", measurements=listing)
         assert v_rta["exists"] is True, v_rta
         assert v_rta["applicable"] is False and v_rta["kind"] == _api.RTA, v_rta
@@ -579,7 +827,10 @@ def _selftest():
     assert "HELD" in txt and "spread 17.3" in txt and "no drift record" not in txt, txt
     assert "MOVED" in render_session(moved) and "no drift record" in render_session(lone)
 
-    print("selftest OK — the post-sweep gate compares a driver against ITSELF: a 24 dB outlier "
+    print("selftest OK — REW down is its own state (unreachable, `exists` null, exit 69), REW answering an error "
+          "is unusable, and neither is ever \"missing\"; a failed impulse read on a sweep is an issue, REW's own "
+          "\"no impulse\" answer (400 in its words, or 404) let through; the counts add up; the post-sweep gate "
+          "compares a driver against ITSELF: a 24 dB outlier "
           "flagged and still readable, a close pair left alone, a lone capture and an RTA (no "
           "impulse) judged not at all; the session table: spread on the solos' in-band mean, the "
           "ctl1->ctl3 drift in capture samples held/moved/missing, the capture-vs-processing rate said.")
