@@ -490,7 +490,11 @@ class SnapshotError(ValueError):
     `ValueError`s already, so callers that were written to catch a broken file keep working -- but
     a caller that wants to tell "cannot read this file" apart from "this number is wrong" now can,
     and the message carries the repair command instead of a stack.
+
+    Where another copy of this module may have raised it, match `is_snapshot_error`, not the class (#136): two
+    copies are two classes. `variant --delta` loads `apply.py`, which loads `state.py` again.
     """
+    is_snapshot_error = True
 
 
 def _read_snapshot_json(path):
@@ -1890,8 +1894,10 @@ def _main(argv=None):
     except Exception as exc:  # noqa: BLE001 -- matched below; anything else still raises
         # A file the ledger reads that is there and cannot be read -- `seals.json`, `project.json` (#136) -- or a
         # version it cannot take (`SnapshotError`: one a newer method wrote, audit T-21, or one in another code page)
-        # is a refusal naming it and its repair: exit 1, as the traceback it was, with the sentence instead.
-        if not (getattr(exc, "is_unreadable", False) or isinstance(exc, SnapshotError)):
+        # is a refusal naming it and its repair: exit 1, as the traceback it was, with the sentence instead. Both are
+        # matched by their attribute: a `SnapshotError` from another copy of this module (`variant --delta` loads
+        # `apply.py`, which loads `state.py` again) is another class.
+        if not (getattr(exc, "is_unreadable", False) or getattr(exc, "is_snapshot_error", False)):
             raise
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -2441,12 +2447,56 @@ def _check_newer_version_refused():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def _check_snapshot_error_from_another_copy():
+    """A `SnapshotError` that another copy of this module raised is said in one line like this copy's, exit 1 (#136):
+    `_main` matched the class, and two copies are two classes. `variant --delta` loads `apply.py`, which loads
+    `state.py` again (run as a script this file is `__main__`), so such a refusal from there ended in a traceback. It is
+    matched by `is_snapshot_error` now -- never by class across module copies."""
+    import contextlib
+    import importlib.util
+    import io
+    import shutil
+    import tempfile
+    name = "_autosound_state_second_copy"
+    spec = importlib.util.spec_from_file_location(name, os.path.abspath(__file__))
+    second = importlib.util.module_from_spec(spec)
+    sys.modules[name] = second
+    try:
+        spec.loader.exec_module(second)
+    finally:
+        sys.modules.pop(name, None)
+    assert not issubclass(second.SnapshotError, SnapshotError), "one class in both copies: nothing would be tested"
+    # The bank of `variant new` raises the other copy's refusal, as a call into `apply.py` would. Patched on this copy,
+    # not on `apply`: a bare `import apply` inside a function is a command line's alone (scripts/contract-guard.py).
+    banks = PresetHistory.snapshot
+
+    def refused(self, *_args, **_kwargs):
+        raise second.SnapshotError("a refusal from the other copy")
+    top = tempfile.mkdtemp(prefix="autosound_state_copies_")
+    try:
+        root = os.path.join(top, "state")
+        PresetHistory(root, "SQ", project_dir=top).snapshot(_sample_state(), note="base")
+        PresetHistory.snapshot = refused
+        out, err = io.StringIO(), io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                rc = _main(["--root", root, "variant", "new", "SQ", "B"])
+        except Exception as exc:  # noqa: BLE001 -- the failure under test is the traceback itself
+            raise AssertionError(f"raised {type(exc).__name__}: {exc}") from None
+        assert (rc, err.getvalue(), out.getvalue()) == (1, "error: a refusal from the other copy\n", ""), \
+            (rc, err.getvalue(), out.getvalue())
+        assert project_versions(root) == ["v_001"], project_versions(root)
+    finally:
+        PresetHistory.snapshot = banks
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _selftest():
     failures = []
     for check in (_check_eq_refusals, _check_canonical_code_uses_the_loaded_naming,
                   _check_repair_encoding_keeps_the_file, _check_version_never_overwritten,
                   _check_survey_reads_a_torn_journal_as_torn, _check_unreadable_seals_and_project_refused,
-                  _check_newer_version_refused):
+                  _check_newer_version_refused, _check_snapshot_error_from_another_copy):
         try:
             check()
         except AssertionError as exc:
