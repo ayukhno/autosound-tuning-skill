@@ -262,16 +262,26 @@ Beyond these, the code reads only the system's and Python's own (`PATH`, `HOME`,
 
 ## 11. REW write semantics — the filter writes guaranteed (W-8, #134); a rename's read-back not built
 
-`set_filters` and `set_filter` refuse with a `ValueError`, before any request, a filter that is not a dict or that
-carries a key REW drops without a word: `gain`, `gain_db`, `freq`, `f` or `Q` (REW answers 200 and stores a `gain`
-filter flat, at 0 dB: audit K-1). Once they return, the filters have been read back from REW: every written slot is
-there, with its `type` and `enabled`, and its `frequency`, `gaindB` and `q` within `rew_api._READBACK_TOL`; a slot
-written `"None"` is checked for its type only. A difference raises `RewWriteMismatch` (`rew_state` `"write_mismatch"`,
-a `ValueError`), and a read-back in a shape it does not read raises `RewProtocolError` (`"protocol"`). The tolerances
+`set_filters` and `set_filter` refuse with a `ValueError`, before any request, a filter that is not a dict, a filter
+carrying any key but the ones REW takes (`index`, `type`, `enabled`, `isAuto`, `frequency`, `gaindB`, `q`, `shape`,
+`slopedBPerOctave`), and a write that names one slot twice. REW drops a key it does not know without a word: it
+answers 200 and stores a `gain` filter flat, at 0 dB (audit K-1). The refusal names the key and, where one is known,
+REW's spelling of it. Once they return, the filters have been read back from REW: every written slot is there, with
+its `type` and `enabled`, and its `frequency`, `gaindB` and `q` within `rew_api._READBACK_TOL`; a slot written
+`"None"` is checked for its type only. A difference raises `RewWriteMismatch` (`rew_state` `"write_mismatch"`, a
+`ValueError`), and a read-back in a shape it does not read raises `RewProtocolError` (`"protocol"`). The tolerances
 and the read-back's shape (a list of slots, or `{"filters": [...]}`) are provisional until the live pass at REW
 (PLAN-W-8 Task 12) puts in their place the rounding and the shape REW is seen to use.
 
 `rename_measurement` is not read back: it returns REW's answer, as before.
+
+The exceptions `rew_api` raises for REW carry `rew_state`, and these five values are what a front end may match:
+`"unavailable"` (REW did not answer, or dropped its answer midway: `RewUnavailable`, a `URLError`), `"protocol"` (REW
+answered something that cannot be read: `RewProtocolError`, a `ValueError`), `"write_mismatch"` (above),
+`"not_found"` and `"ambiguous"` (`find_measurement_id` found no measurement, or two, under a title:
+`MeasurementNotFound` and `AmbiguousTitle`, `KeyError`s with the words they always had). REW answering with an error
+is an `HTTPError`, with no `rew_state`. Match the value (`rew_api.rew_state(exc)`, or the attribute on the exception's
+class), never the class: the copy a front end loads by path and the method's own raise different classes.
 
 ## 12. Compatibility — guaranteed
 

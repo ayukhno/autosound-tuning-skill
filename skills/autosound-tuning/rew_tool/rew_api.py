@@ -1,6 +1,7 @@
 import urllib.request
 import urllib.error
 import urllib.parse
+import http.client
 import json
 import math
 import re
@@ -110,8 +111,12 @@ def rew_state(exc):
     """The REW state an exception stands for -- "unavailable", "protocol", "write_mismatch", "not_found" or
     "ambiguous" -- or None when it carries none. None includes an `HTTPError`: REW answered, with an error (its
     `code`, and REW's words in its message and `rew_body`). Reads the attribute, so it answers the same for an
-    exception raised by any copy of this module."""
-    return getattr(exc, "rew_state", None)
+    exception raised by any copy of this module.
+
+    The attribute is read off the exception's class, where every state is set. Off the instance it can raise: on
+    Python 3.9 an `HTTPError` built without a body (`fp` None, as a test builds one) answers any attribute it lacks
+    with `KeyError: 'file'`, from the `tempfile` wrapper behind it."""
+    return getattr(type(exc), "rew_state", None)
 
 
 def _open(req_or_url):
@@ -154,6 +159,10 @@ def _fetch(method, path, data=None):
     No answer (refused, timed out, reset) -> `RewUnavailable`; an HTTP error -> `HTTPError` carrying REW's words (it
     answered); an answer that is not JSON -> `RewProtocolError`. An empty body is `{}` for a write and a protocol error
     for a read.
+
+    Broken at the HTTP level (R33): an answer cut short of its length, or a chunked one cut off, is REW dropping
+    mid-answer -> `RewUnavailable` (a write may have landed); a status line or a header that is not HTTP ->
+    `RewProtocolError`. `http.client` raises both as its own errors, neither a `URLError` nor a `ValueError`.
     """
     url = BASE_URL + path
     if method == "GET":
@@ -171,6 +180,11 @@ def _fetch(method, path, data=None):
         raise RewUnavailable(exc.reason, url) from exc
     except (TimeoutError, ConnectionError, socket.timeout) as exc:   # socket.timeout: Python 3.9
         raise RewUnavailable(exc, url) from exc
+    # After ConnectionError: `RemoteDisconnected` is a `BadStatusLine` too, and a hang-up is REW not answering.
+    except http.client.IncompleteRead as exc:
+        raise RewUnavailable(exc, url) from exc
+    except http.client.HTTPException as exc:
+        raise RewProtocolError(f"REW answered {method} {path} with something that is not HTTP: {exc!r:.120}") from exc
     if not raw:
         if method == "GET":
             raise RewProtocolError(f"REW answered GET {path} with nothing")
@@ -606,31 +620,60 @@ def get_filters(mid):
     return _get(f"/measurements/{mid}/filters")
 
 
-#: REW's keys are index, type, enabled, frequency, gaindB, q. The method's own dialects use these instead, and REW
-#: drops an unknown key without a word -- a `gain` lands as a flat filter (K-1). A denylist until the live pass
-#: (docs/PLAN-W-8.md Task 12) shows REW's full key set.
-_FOREIGN_FILTER_KEYS = ("gain", "gain_db", "freq", "f", "Q")
+#: The keys REW takes in a filter slot -- the only keys a write may carry (#134, K-1, R32). A PK slot as REW holds it
+#: carries exactly index, type, enabled, isAuto, frequency, gaindB and q (the live pass at REW, 2026-10-07:
+#: rew_tool/testdata/rew/filters-after-pk.json); a crossover adds shape and slopedBPerOctave (pushed to REW's
+#: Generic Extended equaliser, 2026-07-12: rew-api-quirks.md, "Writing filters"). REW drops any other key without a
+#: word -- a `gain` lands as a flat filter at 0 dB -- and the read-back cannot see a value sent under a name it does
+#: not know, so a write carrying any other key is refused before a request is sent.
+_REW_FILTER_KEYS = ("index", "type", "enabled", "isAuto", "frequency", "gaindB", "q", "shape", "slopedBPerOctave")
+#: REW's spelling for a key it does not know, by that key lower-cased with `_` and `-` taken out: REW's own keys in
+#: another case, and the method's other dialects (`rew_tool.py` writes `freq`, `gain`, `Q`; `eq_propose.py` `f`,
+#: `gain_db`).
+_REW_SPELLING = dict({key.lower(): key for key in _REW_FILTER_KEYS},
+                     gain="gaindB", freq="frequency", f="frequency", fc="frequency")
+#: What a value sent under a key REW does not know costs, by the key REW would have read it from.
+_DROPPED_COST = {"gaindB": "the filter would be stored flat, at 0 dB",
+                 "frequency": "the filter would not get this frequency",
+                 "q": "the filter would not get this Q"}
 #: (absolute, relative) tolerance per field when a write is read back. PROVISIONAL: Task 12 of docs/PLAN-W-8.md
 #: replaces these with the rounding REW is seen to apply.
 _READBACK_TOL = {"frequency": (0.1, 0.005), "gaindB": (0.05, 0.0), "q": (0.005, 0.01)}
 
 
-def _refuse_foreign_keys(filters):
-    """Refuse, before anything is sent, a filter REW would answer with a 200 and store wrong (#134, audit K-1).
+def _foreign_key_note(key):
+    """One refused key, with REW's spelling and what the key costs where they are known."""
+    rews = _REW_SPELLING.get(str(key).lower().replace("_", "").replace("-", ""))
+    if rews is None:
+        return f"`{key}` is not a key REW knows"
+    cost = _DROPPED_COST.get(rews)
+    return f"`{key}` is not a key REW knows (REW's is `{rews}`" + (f"; sent as `{key}`, {cost}" if cost else "") + ")"
 
-    REW drops a key it does not know without a word: a `gain` lands as a flat filter at 0 dB. `filters` is the
-    list of FilterSetting dicts a write would send; what is not a dict is refused too, before a key test that would
-    read a string's letters.
+
+def _refuse_before_sending(filters):
+    """Refuse, before anything is sent, a write REW would answer with a 200 and not keep (#134, audit K-1).
+
+    `filters` is the list of FilterSetting dicts a write would send. Each must be a dict, and each of its keys one
+    REW takes (`_REW_FILTER_KEYS`): REW drops another key without a word, so the value under it is never written,
+    and the read-back, which compares what REW takes, cannot see it. The refusal names each such key, REW's
+    spelling where one is known, and what the key costs. A write that names one slot twice is refused too: REW keeps
+    one of the two, and the read-back could only call the other "not kept".
     """
+    named = {}
     for n, filt in enumerate(filters, 1):
         if not isinstance(filt, dict):
             raise ValueError(f"filter {n} is {type(filt).__name__}, not a FilterSetting dict -- nothing was sent")
-        foreign = [key for key in _FOREIGN_FILTER_KEYS if key in filt]
+        foreign = [key for key in filt if key not in _REW_FILTER_KEYS]
         if foreign:
-            keys = " and ".join(f"`{key}`" for key in foreign)
-            raise ValueError(f"filter {n} (slot {filt.get('index', n)}) carries {keys}, which REW does not know: "
-                             f"REW drops a key it does not know without a word, so a `gain` lands as a flat filter "
-                             f"at 0 dB. REW's keys are `gaindB`, `frequency` and `q`. Nothing was sent.")
+            raise ValueError(f"filter {n} (slot {filt.get('index', n)}): "
+                             + "; ".join(_foreign_key_note(key) for key in foreign)
+                             + ". REW drops a key it does not know without a word; its keys are "
+                             + ", ".join(f"`{key}`" for key in _REW_FILTER_KEYS) + ". Nothing was sent.")
+        number = _slot_number(filt, n - 1)
+        if number in named:
+            raise ValueError(f"the write named slot {number} twice (filters {named[number]} and {n}): REW would keep "
+                             f"one of the two -- nothing was sent")
+        named[number] = n
 
 
 def _slot_number(slot, position):
@@ -709,7 +752,10 @@ def _read_back(mid, written):
 
 
 def set_filters(mid, filters):
-    """Replace a measurement's whole filter set. `filters` is a list of FilterSetting dicts.
+    """Write filter slots to a measurement in one call. `filters` is a list of FilterSetting dicts.
+
+    REW writes the slots the list names and keeps every other slot as it was (the live pass at
+    REW, 2026-10-07): it does not replace the whole set, so clear a slot by sending it as `"None"`.
 
     POST with a `{"filters": [...]}` envelope, verified against a live REW (returns
     `{"message": "Filters set"}`). The previous shape here -- PUT with a bare array -- could never
@@ -728,9 +774,11 @@ def set_filters(mid, filters):
     mode this API has. A working PK entry:
     `{"index": 1, "type": "PK", "enabled": True, "frequency": 1000.0, "gaindB": -3.0, "q": 2.0}`.
 
-    So nothing is taken on REW's word (#134, audit K-1). A filter carrying a key REW does not know
-    (`_FOREIGN_FILTER_KEYS`: `gain`, `gain_db`, `freq`, `f`, `Q`), or an entry that is not a dict,
-    is refused with a `ValueError` before anything is sent. After the POST the filters are read
+    So nothing is taken on REW's word (#134, audit K-1). A filter carrying any key but the ones REW
+    takes (`_REW_FILTER_KEYS`: `index`, `type`, `enabled`, `isAuto`, `frequency`, `gaindB`, `q`,
+    `shape`, `slopedBPerOctave`), an entry that is not a dict, or a write naming one slot twice is
+    refused with a `ValueError` before anything is sent; the refusal names the key and REW's
+    spelling of it. After the POST the filters are read
     back (`_read_back`): each written slot must be there, with its `type` and `enabled`, and its
     `frequency`, `gaindB` and `q` within `_READBACK_TOL` (a slot written `"None"` checks its type
     only). A difference -- a dropped gain, a slot cut off past the equaliser's count, a changed
@@ -741,7 +789,7 @@ def set_filters(mid, filters):
     if not isinstance(filters, (list, tuple)):
         raise ValueError(f"set_filters takes a list of FilterSetting dicts, not {type(filters).__name__} -- "
                          f"nothing was sent (one slot alone: set_filter)")
-    _refuse_foreign_keys(filters)
+    _refuse_before_sending(filters)
     said = _post(f"/measurements/{mid}/filters", {"filters": filters})
     _read_back(mid, filters)
     return said
@@ -753,11 +801,11 @@ def set_filter(mid, filt):
     PUT on the same path as `set_filters`; REW answers `{"message": "Filter set"}` (singular).
     Useful for touching a single band without resending the other thirty slots.
 
-    Checked as `set_filters` is (#134, audit K-1): a key REW does not know is refused before
+    Checked as `set_filters` is (#134, audit K-1): a key REW does not take is refused before
     anything is sent, and the slot is read back after the PUT -- a difference raises
     `RewWriteMismatch`. Returns REW's answer to the write.
     """
-    _refuse_foreign_keys([filt])
+    _refuse_before_sending([filt])
     said = _put(f"/measurements/{mid}/filters", filt)
     _read_back(mid, [filt])
     return said
@@ -1102,30 +1150,121 @@ def _check_read_back():
 
 
 def _check_foreign_keys_every_writer():
-    """Each key of `_FOREIGN_FILTER_KEYS`, through both writers, is refused with nothing sent (#134, K-1): REW
-    drops an unknown key without a word. And what is not a FilterSetting dict is refused the same way, before a
-    key test that would read a string's letters."""
+    """Any key outside REW's own is refused through both writers with nothing sent (#134, K-1, R32). REW drops a
+    key it does not know without a word, and the read-back cannot see a value sent under a name it does not know:
+    `gain_dB` once passed it with REW at 0 dB. The refusal names the key, REW's spelling where one is known, and the
+    key's own cost (only a gain costs "0 dB"). What is not a FilterSetting dict, and a write naming one slot twice,
+    are refused the same way."""
     fake = _FakeRew(lambda m, p, b, f: (200, b'{"message": "Filters set"}'))
     try:
-        for key in ("gain", "gain_db", "freq", "f", "Q"):
+        for key, rews in (("gain", "gaindB"), ("gain_db", "gaindB"), ("gain_dB", "gaindB"), ("gainDB", "gaindB"),
+                          ("Gain", "gaindB"), ("freq", "frequency"), ("f", "frequency"), ("Freq", "frequency"),
+                          ("fc", "frequency"), ("Q", "q"), ("Type", "type"), ("comment", None)):
             band = {"index": 1, "type": "PK", "enabled": True, key: -3.0}
             for writer, arg in ((set_filters, [band]), (set_filter, band)):
                 try:
                     _with_base(fake.url, lambda: writer("1", arg))
                 except ValueError as e:
-                    assert f"`{key}`" in str(e) and fake.count == 0, (writer.__name__, key, str(e), fake.count)
+                    said = str(e)
+                    assert f"`{key}`" in said and fake.count == 0, (writer.__name__, key, said, fake.count)
+                    assert rews is None or f"`{rews}`" in said, (key, rews, said)
+                    assert ("0 dB" in said) == (rews == "gaindB"), ("the cost named is not the key's own", key, said)
                 else:
                     raise AssertionError(f"{writer.__name__} sent a filter with REW-foreign key `{key}`")
-        for writer, arg in ((set_filters, {"index": 1, "type": "PK"}), (set_filters, ["gaindB"]),
-                            (set_filter, [{"index": 1, "type": "PK"}])):
+        for writer, arg, word in ((set_filters, {"index": 1, "type": "PK"}, "list"),
+                                  (set_filters, ["gaindB"], "not a FilterSetting"),
+                                  (set_filter, [{"index": 1, "type": "PK"}], "not a FilterSetting"),
+                                  (set_filters, [{"index": 2, "type": "PK"}, {"index": 2, "type": "None"}],
+                                   "named slot 2 twice")):
             try:
                 _with_base(fake.url, lambda: writer("1", arg))
-            except ValueError:
-                assert fake.count == 0, (writer.__name__, arg, fake.count)
+            except ValueError as e:
+                assert word in str(e) and fake.count == 0, (writer.__name__, arg, str(e), fake.count)
             else:
                 raise AssertionError(f"{writer.__name__} sent {arg!r}, which is not what it takes")
     finally:
         fake.close()
+
+
+def _check_title_states():
+    """A title lookup's refusal carries its state, not only its words (#134, T-3): a plain `KeyError` with the same
+    words must not pass for `MeasurementNotFound` or `AmbiguousTitle`."""
+    ms = {"1": {"title": "a (sw)"}, "2": {"title": "b (sw)"}, "3": {"title": "b (sw)"}}
+    for title, want in (("c (sw)", "not_found"), ("b (sw)", "ambiguous")):
+        try:
+            find_measurement_id(title, ms)
+        except KeyError as e:
+            assert rew_state(e) == want, (title, want, rew_state(e), e)
+        else:
+            raise AssertionError(f"{title!r} resolved")
+
+
+def _check_listing_entries_and_empty_bodies():
+    """The listing is held entry by entry, and an empty body is nothing to a read but `{}` to a write (#134)."""
+    answers = {("GET", "/measurements"): (200, b'{"1": {"title": "a (sw)"}, "2": null}'),
+               ("GET", "/empty"): (200, b""), ("POST", "/empty"): (200, b"")}
+    fake = _FakeRew(lambda m, p, b, f: answers[(m, p)])
+    try:
+        try:
+            _with_base(fake.url, get_measurements)
+        except ValueError as e:
+            assert rew_state(e) == "protocol" and "'2'" in str(e), str(e)
+        else:
+            raise AssertionError("a listing holding a null entry was returned as the list")
+        try:
+            _with_base(fake.url, lambda: _get("/empty"))
+        except ValueError as e:
+            assert rew_state(e) == "protocol" and "with nothing" in str(e), str(e)
+        else:
+            raise AssertionError("an empty answer to a read was returned as data")
+        got = _with_base(fake.url, lambda: _post("/empty", {"x": 1}))
+        assert got == {}, ("an empty answer to a write is {}", got)
+    finally:
+        fake.close()
+
+
+def _check_rew_state_reads_any_http_error():
+    """`rew_state` answers None for an `HTTPError` built without a body. On Python 3.9 such an error raises
+    `KeyError: 'file'` for any attribute it lacks (its `fp` is None, and `tempfile`'s wrapper behind it has no
+    file), so a state read off the instance crashed the caller that asked."""
+    e = urllib.error.HTTPError("http://127.0.0.1:1/x", 500, "boom", {}, None)
+    assert rew_state(e) is None, rew_state(e)
+    assert rew_state(RewUnavailable("refused", "http://127.0.0.1:1/x")) == "unavailable"
+    assert rew_state(None) is None and rew_state(ValueError("x")) is None
+
+
+def _check_http_level_broken_answers():
+    """An answer broken at the HTTP level has a state too (#134, R33). A body cut short of its length, or a chunked
+    body cut off, is REW dropping mid-answer: `unavailable`, and a write may have landed. A status line or a header
+    that is not HTTP is an answer that cannot be read: `protocol`. They left `urlopen` as `http.client` errors,
+    neither a `URLError` nor a `ValueError`, with no state at all."""
+    import threading
+    cases = ((b'HTTP/1.0 200 OK\r\nContent-Length: 100\r\n\r\n{"1": {', "unavailable"),
+             (b'HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n20\r\n{"1": {', "unavailable"),
+             (b"hello, this is not HTTP\r\n\r\n", "protocol"),
+             (b"HTTP/1.1 200 OK\r\nX: " + b"a" * 70000 + b"\r\n\r\n{}", "protocol"))
+    for answer, want in cases:
+        srv = socket.socket()
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(1)
+
+        def serve(srv=srv, answer=answer):
+            try:
+                conn, _ = srv.accept()
+                conn.recv(65536)
+                conn.sendall(answer)
+                conn.close()
+            except OSError:                      # the client stopped reading first, or the check ended
+                pass
+        threading.Thread(target=serve, daemon=True).start()
+        try:
+            _with_base(f"http://127.0.0.1:{srv.getsockname()[1]}", get_measurements)
+        except (OSError, ValueError) as e:
+            assert rew_state(e) == want, (answer[:40], want, rew_state(e), repr(e))
+        else:
+            raise AssertionError(f"{answer[:40]!r} was read as a listing")
+        finally:
+            srv.close()
 
 
 def _check_read_back_cases():
@@ -1150,8 +1289,11 @@ def _check_read_back_cases():
     def changed(**kw):
         return lambda slots: [dict(s, **kw) for s in slots]
 
+    xo = {"index": 3, "type": "High pass", "enabled": True, "isAuto": False, "frequency": 80.0, "shape": "L-R",
+          "slopedBPerOctave": 24}
     cases = (   # (writer, what is written, what REW holds after it, the state raised or None, a word it names)
         (set_filters, [pk, clear], lambda s: {"filters": s}, None, None),
+        (set_filters, [xo, dict(pk, isAuto=False)], lambda s: s, None, None),   # every key REW takes goes through
         (set_filters, [pk], changed(frequency=1000.4, gaindB=-3.04, q=1.4135), None, None),   # within the tolerance
         (set_filters, [clear], changed(enabled=False, frequency=500.0, gaindB=1.0, q=0.7), None, None),
         (set_filters, [pk], changed(type="LS Q"), "write_mismatch", "type"),
@@ -1225,7 +1367,9 @@ def _selftest():
     failures = []
     for check in (_check_loads_by_path, _check_words_pinned, _check_closed_port, _check_fake_rew_answers,
                   _check_filter_keys_refused, _check_read_back, _check_foreign_keys_every_writer,
-                  _check_read_back_cases, _check_silence_and_hangup):
+                  _check_read_back_cases, _check_silence_and_hangup, _check_title_states,
+                  _check_listing_entries_and_empty_bodies, _check_rew_state_reads_any_http_error,
+                  _check_http_level_broken_answers):
         try:
             check()
         except AssertionError as exc:
@@ -1450,9 +1594,9 @@ def _selftest():
     print("rew_api selftest OK — get_fr handles sweep/RTA phase branch; "
           "excess/min-phase wrappers post REW's four keys and raise when nothing appears; "
           "duplicate titles are found; an HTTP error carries REW's own explanation; "
-          "REW down (refused, silent, hung up) is `unavailable`, an unreadable answer `protocol`; "
-          "a foreign filter key is refused before any request, and a filter write REW did not keep is caught "
-          "on the read-back")
+          "REW down (refused, silent, hung up, cut off midway) is `unavailable`, an unreadable or non-HTTP answer "
+          "`protocol`; a filter key REW does not take is refused before any request, naming REW's spelling, and a "
+          "filter write REW did not keep is caught on the read-back")
 
 
 # What each reader was decided to ask, (module, function, call) -> the values its calls name
