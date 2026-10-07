@@ -2550,8 +2550,8 @@ class Process:
         event = {"at": _now(), "type": event_type}
         event.update({k: v for k, v in payload.items() if v is not None})
         os.makedirs(self.dir, exist_ok=True)
-        with open(self.journal_path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(event, ensure_ascii=False) + "\n")
+        # After a torn last line the event starts on a fresh one instead of being glued to it and lost (audit T-14).
+        _project_io().append_line(self.journal_path, json.dumps(event, ensure_ascii=False))
         return event
 
 
@@ -2785,6 +2785,43 @@ def _check_state_bytes():
         shutil.rmtree(top, ignore_errors=True)
 
 
+def _check_torn_journal_line():
+    """A journal whose last line was cut keeps the NEXT event readable (audit T-14): the event used to be glued to the
+    torn line, one line that does not parse, and skipped with it. The bytes stay the old append's -- each event
+    `json.dumps(event, ensure_ascii=False)` and the platform's line ending -- with one line ending more after the torn
+    line, and nothing else."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_process_torn_")
+    real_sha = _writer_sha
+    try:
+        d = os.path.join(top, "process")
+        os.makedirs(d)
+        journal = os.path.join(d, "journal.jsonl")
+        # The header names this run's checkout, so `_stamp` adds nothing: the decision is the next line written.
+        head = json.dumps({"at": "2026-10-06T00:00:00+00:00", "type": EV_WRITTEN_BY, "skill_sha": "a" * 40})
+        torn = '{"at": "2026-10-06T00:00:01+00:00", "type": "' + EV_USER_DECISION + '", "question": "q1"'
+        with open(journal, "w", encoding="utf-8") as f:
+            f.write(head + "\n" + torn)                     # no newline after the last line: torn
+        globals()["_writer_sha"] = lambda: "a" * 40
+        with contextlib.redirect_stdout(io.StringIO()):
+            assert _main(["process.py", d, "decision", "q2 — лишаємо 45°?", "yes", "-1.1"]) == 0
+            assert any(e.get("type") == EV_USER_DECISION and e.get("question") == "q2 — лишаємо 45°?"
+                       for e in Process(d).events()), "the event after a torn line was glued to it and lost"
+            assert _main(["process.py", d, "decision", "q3", "no"]) == 0
+        events = Process(d).events()
+        assert [e["type"] for e in events] == [EV_WRITTEN_BY, EV_USER_DECISION, EV_USER_DECISION], events
+        lines = [head, torn] + [json.dumps(e, ensure_ascii=False) for e in events[1:]]
+        with open(journal, "rb") as f:
+            written = f.read()
+        assert written == ("\n".join(lines) + "\n").replace("\n", os.linesep).encode("utf-8"), written
+    finally:
+        globals()["_writer_sha"] = real_sha
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _selftest():
     """The refusals, exercised. This module is the one with the most of them — evidence must exist
     and must resolve (SCR-035), a round's captures must be usable (SCR-040), phase 0 must record a
@@ -2793,7 +2830,7 @@ def _selftest():
     """
     failures = []
     for check in (_check_one_naming, _check_every_loader_shares, _check_load_sibling_reads_a_failure_as_none,
-                  _check_foreign_tmp_untouched, _check_state_bytes):
+                  _check_foreign_tmp_untouched, _check_state_bytes, _check_torn_journal_line):
         try:
             check()
         except AssertionError as exc:

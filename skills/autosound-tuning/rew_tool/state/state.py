@@ -1182,7 +1182,10 @@ class PresetHistory:
         return version
 
     def snapshot(self, state, note=None, project_rev=None, project_dir=None, place=True, parent=None):
-        """Validate, assign the next version, write it, advance HEAD. Returns the version name.
+        """Validate, claim the next version, write it, advance HEAD. Returns the version name.
+
+        The number is claimed by creating its file, never by writing over one (audit T-9): a number another writer
+        took first is passed by, and the next one tried; after 100 taken, `SnapshotError`.
 
         `project_rev` (SCR-024) is the revision of `project.json` in force when these values were
         banked. Read from the project's own file by default, since a snapshot is created NOW and
@@ -1204,16 +1207,26 @@ class PresetHistory:
         if project_line:
             # The version it was made from: a line of numbers is a tree of edits (hub #195).
             state["parent"] = parent or self.head()
-        version = self._next_version()
-        state["version"] = version
-        state["created"] = datetime.datetime.now().isoformat(timespec="seconds")
         # The first snapshot is what creates the directory. On the per-project line `slots.json`
         # goes down FIRST, so a stop between the two cannot leave `versions/` without it.
         if project_line and not os.path.isfile(os.path.join(self.root, SLOTS_FILE)):
             _write_slots(self.root, {"active": None, "slots": {}})
         os.makedirs(os.path.join(self.root, VERSIONS_DIR) if project_line else self.dir, exist_ok=True)
-        with open(self._path(version), "w", encoding="utf-8") as f:
-            json.dump(state, f, indent=2, sort_keys=True, ensure_ascii=False)
+        # Two writers that read the line together pick one number. `open(path, "w")` let the second truncate the
+        # first's version and bank its own under that name; the file is created now, and the loser picks again.
+        for _ in range(100):
+            version = self._next_version()
+            state["version"] = version
+            state["created"] = datetime.datetime.now().isoformat(timespec="seconds")
+            text = json.dumps(state, indent=2, sort_keys=True, ensure_ascii=False)   # the bytes json.dump wrote
+            try:
+                _project_io().create_exclusive(self._path(version), text)
+                break
+            except FileExistsError:
+                continue
+        else:
+            raise SnapshotError("no free version number after 100 tries -- another writer is claiming them as fast as "
+                                "this one")
         seals = _read_seals(self.root)
         seals[_seal_key(self.root, version, self.preset)] = content_digest(state)
         _write_seals(self.root, seals)
@@ -2170,10 +2183,55 @@ def _check_repair_encoding_keeps_the_file():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def _check_version_never_overwritten():
+    """Two writers that pick one number: the second takes the next, and the first's file is untouched (audit T-9).
+
+    `snapshot` opened the version's name for writing, so a writer that read the line before another banked picked the
+    same number, truncated that version and wrote its own over it. A number is claimed by creating its file now: a
+    writer that finds it taken picks again, and after 100 numbers taken under it gives up, saying so, banking nothing.
+    """
+    import shutil
+    import tempfile
+    root = tempfile.mkdtemp(prefix="autosound_t9_")
+    try:
+        h = PresetHistory(root, "SQ")
+        assert h.snapshot(_sample_state(), note="banked") == "v_001"
+        theirs = h._path("v_002")
+        foreign = '{"note": "another writer\'s v_002, banked a moment ago"}\n'.encode("utf-8")
+        with open(theirs, "wb") as fh:
+            fh.write(foreign)
+        real_next = h._next_version
+        picks = []
+
+        def read_too_early():            # this writer read the line before the other one banked v_002
+            picks.append(len(picks))
+            return "v_002" if len(picks) == 1 else real_next()
+        h._next_version = read_too_early
+        mine = h.snapshot(_sample_state(), note="mine")
+        assert (mine, len(picks)) == ("v_003", 2), (mine, picks)
+        with open(theirs, "rb") as fh:
+            assert fh.read() == foreign, "the other writer's v_002 was written over"
+        assert h.load("v_003")["note"] == "mine" and h.head() == "v_003", h.head()
+        seals = _read_seals(root)
+        assert _seal_key(root, "v_003", "SQ") in seals and _seal_key(root, "v_002", "SQ") not in seals, sorted(seals)
+        versions = os.path.join(root, VERSIONS_DIR)
+        assert sorted(os.listdir(versions)) == ["v_001.json", "v_002.json", "v_003.json"], os.listdir(versions)
+        h._next_version = lambda: "v_002"                  # every number it picks is taken
+        try:
+            h.snapshot(_sample_state(), note="never banked")
+            raise AssertionError("a snapshot with no free number was banked")
+        except SnapshotError as exc:
+            assert "no free version number after 100 tries" in str(exc), exc
+        assert sorted(os.listdir(versions)) == ["v_001.json", "v_002.json", "v_003.json"], os.listdir(versions)
+        assert h.head() == "v_003" and _read_seals(root) == seals, h.head()
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def _selftest():
     failures = []
     for check in (_check_eq_refusals, _check_canonical_code_uses_the_loaded_naming,
-                  _check_repair_encoding_keeps_the_file):
+                  _check_repair_encoding_keeps_the_file, _check_version_never_overwritten):
         try:
             check()
         except AssertionError as exc:

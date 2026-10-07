@@ -85,8 +85,8 @@ Atomic writes: a writer that replaces one of the files below writes a temporary 
 own (`<file>.<pid>-<8 hex>.tmp`, created exclusively), flushes and fsyncs it, then moves it over the file with one
 `os.replace`. That writer is `rew_tool/project_io.py` (`atomic_write_text`, `atomic_write_json`,
 `atomic_write_bytes`). A reader sees the old file or the new one, never part of either, and two writers never share a
-temp file. A private file (the reviewer's machine file, 0600) is private from its first byte: its temp is created with
-that mode. The files, each with the bytes its old writer wrote:
+temp file. On POSIX a private file (the reviewer's machine file, 0600) is private from its first byte: its temp is
+created with that mode (Windows ignores the mode). The files, each with the bytes its old writer wrote:
 
 - `project.json`, `process/process-state.json`, `state/slots.json`, `state/seals.json`;
 - `dsp_profile.json` and `dsp_profile.draft.json`;
@@ -104,19 +104,32 @@ with the old file whole. A `*.tmp` beside a file is a crash's leftover, never a 
 two it names (neither is a temp name), and no `os.replace`, `os.rename` or `os.renames` but three named moves of whole
 files.
 
-Four of these files were written in place before W-8 and are replaced now: `dsp_profile.json` (`save_profile`,
-`set_setting`) and the old layout's `registry.json` and `HEAD`. So a symbolic or hard link at such a name becomes a
-regular file, the file's mode becomes the umask's default, a watcher sees the file replaced rather than changed, and
-on Windows a reader holding the file open makes the write fail after the retries, where the in-place write went
-through.
+Three of these files, by four writers, were written in place before W-8 and are replaced now: `dsp_profile.json`
+(`save_profile`, `set_setting`) and the old layout's `registry.json` and `HEAD`. So a symbolic or hard link at such a
+name becomes a regular file, the file's mode becomes the umask's default, a watcher sees the file replaced rather than
+changed, and on Windows a reader holding the file open makes the write fail after the retries, where the in-place
+write went through.
 
-Every other write is still a plain one, in place. Among them: a new ledger version and a line appended to
-`process/journal.jsonl` (an exclusive create and an append that cannot tear a line are planned, W-8, #135);
-`state/apply.py`'s proposal deltas and sheets; the capture plans in `docs/plans/`; the review files in
-`process/reviews/`; what `state.py migrate-line` rebuilds, and the `HEAD` that `migrate.py --into` writes; a fresh
-project's `CLAUDE.md` and `.gitignore`; and what the command lines export (`eq_export`, `sums_export`, the Resonalyze
-conversion's `manifest.json`, ...). `scripts/atomic-write-check.py` does not see these: it checks temp names and
-moves, not every write. The lock comes with J2b in W-9: which file, how long a writer waits, and the busy exit 75.
+Two more writes go through `project_io.py`; neither replaces a file:
+
+- A new ledger version (`state.py`, `PresetHistory.snapshot`) is created, never written over (`create_exclusive`),
+  with the bytes its old writer wrote. Its text goes into a temp of its own as above, which is then linked to the
+  version's name; the link fails when the name is there, and the temp is removed either way. Two writers that pick
+  one number cannot overwrite each other: the second is told and takes the next number, and after 100 numbers taken
+  under it gives up with `SnapshotError`. A watcher of the versions folder sees the temp come and go and the version
+  appear whole. On a filesystem that refuses hard links (FAT, some network shares) the name is created exclusively
+  and written in place, so there a reader can meet a version mid-write for an instant.
+- A line appended to `process/journal.jsonl` (`append_line`) has the old append's bytes, with one line ending before
+  it when the file's last write was cut before its newline: the torn line stays one line a reader skips, and the
+  event after it is read. The append itself is a plain one: text mode, the platform's line ending, no lock.
+
+Every other write is still a plain one, in place. Among them: `state/apply.py`'s proposal deltas and sheets; the
+capture plans in `docs/plans/`; the review files in `process/reviews/` (each created under a name of its own since
+#135, `-2`, `-3`, ... when its second already holds one, so never over another file, but written in place); what
+`state.py migrate-line` rebuilds, and the `HEAD` that `migrate.py --into` writes; a fresh project's `CLAUDE.md` and
+`.gitignore`; and what the command lines export (`eq_export`, `sums_export`, the Resonalyze conversion's
+`manifest.json`, ...). `scripts/atomic-write-check.py` does not see these: it checks temp names and moves, not every
+write. The lock comes with J2b in W-9: which file, how long a writer waits, and the busy exit 75.
 
 ## 9. The modules TCC imports — guaranteed (names); `sys.path` partly planned (W-10, J1b)
 

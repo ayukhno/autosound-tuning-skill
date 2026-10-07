@@ -1,10 +1,14 @@
-"""How the method writes, and reads, the files it owns (skill #135, #136; audit T-8, T-17, K-2).
+"""How the method writes, and reads, the files it owns (skill #135, #136; audit T-8, T-9, T-14, T-17, K-2).
 
 WRITES go through `atomic_write_text` / `atomic_write_json` / `atomic_write_bytes`, which share one path: a temp file
 with a name no other writer uses, opened exclusively, written, flushed and fsynced, then moved over the target in one
-`os.replace`. A reader sees the old file or the new one, never half of either; two writers never share a temp file. A
-private file (`mode`) is private from its first byte: the temp is created with that mode. A Windows `PermissionError`
-on the move (an editor, an antivirus scan or TCC holding the target open) is retried for under a second.
+`os.replace`. A reader sees the old file or the new one, never half of either; two writers never share a temp file. On
+POSIX a private file (`mode`) is private from its first byte: the temp is created with that mode. A Windows
+`PermissionError` on the move (an editor, an antivirus scan or TCC holding the target open) is retried for under a
+second.
+
+A file whose NAME is the claim -- a ledger version -- is made by `create_exclusive`: the same temp, linked into place,
+never over a file that is there. `append_line` appends one line, and after a torn last line starts on a fresh one.
 
 Stdlib only. Loaded by path like every sibling: `_siblings().load("project_io.py")`.
 
@@ -59,6 +63,50 @@ def _replace(src, dst):
             time.sleep(delay)
 
 
+def _discard(path):
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
+def _create(path, data, mode=None):
+    """Create `path`, which must not exist, holding `data`, flushed and fsynced: the first step of a replace
+    (`atomic_write_bytes`) and of an exclusive create (`create_exclusive`).
+
+    `FileExistsError` when the name is taken, the file there untouched. A failure once the name is created removes it
+    again: a failed write leaves no name behind. `mode`: `atomic_write_bytes`.
+    """
+    private = mode is not None and os.name != "nt"
+    # O_BINARY (Windows; 0 elsewhere): a descriptor from `os.open` is otherwise in the C runtime's text mode, which
+    # turns each "\n" written into "\r\n": a copy of bytes would not be the original's, a text with the platform's
+    # ending would get "\r\r\n", and `newline=""` would not keep the text's own. `open(path, "w")` opens binary
+    # underneath too; so does `tempfile.mkstemp`.
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), mode if private else 0o666)
+    try:
+        with io.open(fd, "wb") as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        if private:
+            os.chmod(path, mode)
+    except BaseException:
+        _discard(path)
+        raise
+
+
+def _encoded(text, newline):
+    """`text` as the bytes a UTF-8 text file opened with `newline` writes (`open()`'s rule): None writes the
+    platform's line ending, "" and "\\n" keep the text's own, "\\r" and "\\r\\n" write that. A text UTF-8 cannot carry
+    is refused here, before anything is written."""
+    if newline not in (None, "", "\n", "\r", "\r\n"):
+        raise ValueError(f"illegal newline value: {newline!r}")
+    ending = os.linesep if newline is None else newline
+    if ending not in ("", "\n"):
+        text = text.replace("\n", ending)            # what a text file opened with this `newline` writes
+    return text.encode("utf-8")
+
+
 def atomic_write_bytes(path, data, *, mode=None, makedirs=False):
     """Write `data` to `path` so that no reader ever sees a half-written file: the one path every writer here takes.
 
@@ -69,25 +117,11 @@ def atomic_write_bytes(path, data, *, mode=None, makedirs=False):
     if makedirs:
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     tmp = _temp_name(path)
-    private = mode is not None and os.name != "nt"
-    # O_BINARY (Windows; 0 elsewhere): a descriptor from `os.open` is otherwise in the C runtime's text mode, which
-    # turns each "\n" written into "\r\n": a copy of bytes would not be the original's, a text with the platform's
-    # ending would get "\r\r\n", and `newline=""` would not keep the text's own. `open(path, "w")` opens binary
-    # underneath too; so does `tempfile.mkstemp`.
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), mode if private else 0o666)
+    _create(tmp, data, mode)
     try:
-        with io.open(fd, "wb") as f:
-            f.write(data)
-            f.flush()
-            os.fsync(f.fileno())
-        if private:
-            os.chmod(tmp, mode)
         _replace(tmp, path)
     except BaseException:
-        try:
-            os.remove(tmp)
-        except OSError:
-            pass
+        _discard(tmp)
         raise
 
 
@@ -98,12 +132,7 @@ def atomic_write_text(path, text, *, newline=None, mode=None, makedirs=False):
     replaces -- while "" and "\\n" keep the text's own, and "\\r" or "\\r\\n" write that. `mode`: `atomic_write_bytes`.
     A text UTF-8 cannot carry is refused before anything is written.
     """
-    if newline not in (None, "", "\n", "\r", "\r\n"):
-        raise ValueError(f"illegal newline value: {newline!r}")
-    ending = os.linesep if newline is None else newline
-    if ending not in ("", "\n"):
-        text = text.replace("\n", ending)            # what a text file opened with this `newline` writes
-    atomic_write_bytes(path, text.encode("utf-8"), mode=mode, makedirs=makedirs)
+    atomic_write_bytes(path, _encoded(text, newline), mode=mode, makedirs=makedirs)
 
 
 def atomic_write_json(path, data, *, indent=2, sort_keys=False, ensure_ascii=False, trailing_newline=False,
@@ -113,6 +142,49 @@ def atomic_write_json(path, data, *, indent=2, sort_keys=False, ensure_ascii=Fal
     if trailing_newline:
         text += "\n"
     atomic_write_text(path, text, newline=newline, mode=mode, makedirs=makedirs)
+
+
+def create_exclusive(path, text, *, newline=None):
+    """Create `path` holding `text`, or raise `FileExistsError` -- never overwrite (audit T-9).
+
+    For files whose NAME is the claim (a ledger version `v_NNN.json`): of two writers that picked one number, one
+    wins and the other is told, the file there left as it was. The text becomes bytes as in `atomic_write_text`
+    (UTF-8, `newline` as `open()`'s) and goes into a temp of its own, fsynced, which is then LINKED into place, so the
+    name never appears empty or half-written; the temp is removed whatever happens. Where the filesystem cannot
+    hard-link (FAT, some network shares), the name is created exclusively and written in place -- a reader can then
+    meet it mid-write for an instant; said, not hidden -- and a write that fails there removes the name again.
+    """
+    data = _encoded(text, newline)
+    tmp = _temp_name(path)
+    _create(tmp, data)
+    try:
+        try:
+            os.link(tmp, path)
+        except FileExistsError:
+            raise
+        except OSError:
+            _create(path, data)                 # no hard links here: the name itself, exclusively, in place
+    finally:
+        _discard(tmp)
+
+
+def append_line(path, line):
+    """Append `line` and a newline. If the file's last write was cut before its newline, start on a fresh line, so
+    the torn line stays one skipped line and the new one is read (audit T-14).
+
+    Text mode, UTF-8: the line ending is the platform's, as the `open(path, "a")` this replaces wrote it. The append
+    itself is a plain one and takes no lock; the lock comes in W-9 (J2b).
+    """
+    torn = False
+    try:
+        with open(path, "rb") as f:
+            if f.seek(0, os.SEEK_END):
+                f.seek(-1, os.SEEK_END)
+                torn = f.read(1) != b"\n"
+    except FileNotFoundError:
+        pass
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(("\n" if torn else "") + line + "\n")
 
 
 # ── selftest ─────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -377,6 +449,108 @@ def _check_write_fails_clean():
         _drop(d)
 
 
+def _check_create_exclusive():
+    """Audit T-9: `create_exclusive` makes the file with the bytes `open(path, "w")` wrote -- the platform's line
+    ending, the text's own with `newline=""` -- and a second create of that name raises `FileExistsError`, the first
+    file as it was; no temp is left either way. Where hard links are refused (`os.link` raising EPERM, as on FAT), the
+    name is still created exclusively, written in place, and a write that fails there leaves no name behind."""
+    import errno
+    d = _scratch()
+    real_link, real_fsync = os.link, os.fsync
+    refused = []
+
+    def no_links(src, dst):                      # FAT, some network shares: the filesystem refuses a hard link
+        refused.append(dst)
+        raise OSError(errno.EPERM, "Operation not permitted", dst)
+    try:
+        text = '{\n  "note": "нуль — 45°",\n  "version": "v_002"\n}'
+        ref = os.path.join(d, "ref.json")
+        with open(ref, "w", encoding="utf-8") as f:            # how a ledger version was written before #135
+            f.write(text)
+        for label, link in (("linked", real_link), ("no-links", no_links)):
+            sub = os.path.join(d, label)
+            os.makedirs(sub)
+            path, own = os.path.join(sub, "v_002.json"), os.path.join(sub, "own.txt")
+            os.link = link
+            try:
+                create_exclusive(path, text)
+                assert _read_bytes(path) == _read_bytes(ref), (label, _read_bytes(path)[:80])
+                try:
+                    create_exclusive(path, "the second writer's version")
+                except FileExistsError:
+                    pass
+                else:
+                    raise AssertionError(f"{label}: a second create of one name was taken")
+                assert _read_bytes(path) == _read_bytes(ref), f"{label}: the second create changed the first's file"
+                create_exclusive(own, "a\r\nb\n", newline="")
+                assert _read_bytes(own) == b"a\r\nb\n", (label, _read_bytes(own))
+            finally:
+                os.link = real_link
+            assert sorted(os.listdir(sub)) == ["own.txt", "v_002.json"], (label, os.listdir(sub))   # no temp left
+        assert len(refused) == 3, f"the fallback was reached {len(refused)} times, not 3"
+        # A write that fails in place -- a full disk at its fsync -- leaves no name behind, and no temp.
+        sub = os.path.join(d, "failing")
+        os.makedirs(sub)
+        syncs = []
+
+        def full_at_the_second(fd):              # the temp's fsync passes; the one in place fails
+            syncs.append(fd)
+            if len(syncs) == 2:
+                raise OSError(errno.ENOSPC, "No space left on device")
+            real_fsync(fd)
+        os.link, os.fsync = no_links, full_at_the_second
+        try:
+            create_exclusive(os.path.join(sub, "v_003.json"), text)
+        except OSError as exc:
+            assert exc.errno == errno.ENOSPC, exc
+        else:
+            raise AssertionError("a create that failed in place was reported as written")
+        finally:
+            os.link, os.fsync = real_link, real_fsync
+        assert os.listdir(sub) == [], os.listdir(sub)
+    finally:
+        os.link, os.fsync = real_link, real_fsync
+        _drop(d)
+
+
+def _check_append_line():
+    """Audit T-14: `append_line` writes what `open(path, "a")` wrote -- the line and the platform's line ending, into
+    a new file, an empty one and after a whole last line ("\\r\\n" too) -- and after a torn last line (no newline: a
+    write cut short) it starts on a fresh line first: the torn line stays one line a reader skips, the new one whole."""
+    d = _scratch()
+    try:
+        path, ref = os.path.join(d, "journal.jsonl"), os.path.join(d, "ref.jsonl")
+
+        def old_append(target, text):                       # how process.py appended before #135
+            with open(target, "a", encoding="utf-8") as f:
+                f.write(text)
+        lines = ['{"at": "2026-10-07T00:00:00+00:00", "type": "user_decision", "question": "нуль → 45°?"}',
+                 '{"type": "session_start"}']
+        for line in lines:                                 # a new file, then after a whole last line
+            append_line(path, line)
+            old_append(ref, line + "\n")
+            assert _read_bytes(path) == _read_bytes(ref), _read_bytes(path)
+        torn = '{"at": "2026-10-07T00:00:01+00:00", "type": "user_dec'
+        old_append(path, torn)                             # a write cut before its newline
+        old_append(ref, torn)
+        append_line(path, '{"type": "after"}')
+        old_append(ref, '\n{"type": "after"}\n')
+        assert _read_bytes(path) == _read_bytes(ref), _read_bytes(path)
+        with open(path, encoding="utf-8") as f:
+            read = [line.rstrip("\n") for line in f]
+        assert read == lines + [torn, '{"type": "after"}'], read
+        for name, start in (("empty.jsonl", b""), ("crlf.jsonl", b'{"a": 1}\r\n')):
+            target, target_ref = os.path.join(d, name), os.path.join(d, "ref-" + name)
+            for f_ in (target, target_ref):
+                with open(f_, "wb") as f:
+                    f.write(start)
+            append_line(target, "{}")
+            old_append(target_ref, "{}\n")
+            assert _read_bytes(target) == _read_bytes(target_ref), (name, _read_bytes(target))
+    finally:
+        _drop(d)
+
+
 def _check_two_writers_one_reader():
     """Audit T-8's test: two processes write one file 100 times each while a third reads it: every read parses.
 
@@ -435,7 +609,8 @@ def _check_two_writers_one_reader():
 def _selftest():
     failures, seen = [], {}
     for check in (_check_text_and_json, _check_foreign_tmp, _check_replace_fails_clean, _check_write_fails_clean,
-                  _check_replace_retry, _check_private_mode, _check_two_writers_one_reader):
+                  _check_replace_retry, _check_private_mode, _check_create_exclusive, _check_append_line,
+                  _check_two_writers_one_reader):
         try:
             seen[check.__name__] = check()
         except Exception as exc:  # noqa: BLE001 -- each check is reported by name; one failing must not hide the rest
@@ -448,8 +623,10 @@ def _selftest():
     print(f"project_io selftest OK -- text, JSON and bytes land with the old sites' bytes; a foreign <file>.tmp is "
           f"left alone and no temp name repeats; a failed move, a write failing with its bytes in the temp and a "
           f"Ctrl-C there leave the old file whole and no temp behind; a held move is retried on Windows only; a "
-          f"private file is private from its first byte, its mode set again before the move; two writers x 100 and "
-          f"a reader: {reads} reads, every one whole")
+          f"private file is private from its first byte, its mode set again before the move; an exclusive create "
+          f"never writes over a name, linked or (no hard links) in place, and a failed one leaves no name; a line "
+          f"appended after a torn one starts on a fresh line, the old append's bytes otherwise; two writers x 100 "
+          f"and a reader: {reads} reads, every one whole")
     return 0
 
 

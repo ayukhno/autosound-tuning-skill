@@ -718,17 +718,58 @@ def raw_exchange_dir():
     return os.path.expanduser(d) if d else None
 
 
+#: The names one base gives in `process/reviews/`: the review -- or the answer to a package, which the person saves
+#: under the package's name less `-package` -- and the package.
+_REVIEW_NAMES = (".md", "-package.md")
+#: The names one base gives in the raw folder (`AUTOSOUND_REVIEW_RAW_DIR`).
+_RAW_NAMES = ("-sent.txt", "-received.txt")
+
+
+def _free_base(folder, stamp, role, names=_REVIEW_NAMES):
+    """The first of `<stamp>-<role>`, `<stamp>-<role>-2`, `-3`, ... for which no file of `names` exists in `folder`.
+
+    A stamp is to the second, and one second can hold two reviews: the later used to write over the earlier (#135,
+    audit T-17). A base is taken while any of its names is, so a package and its answer keep one base, and a review
+    never takes the name a package's answer is to be saved under."""
+    n = 1
+    while True:
+        base = f"{stamp}-{role}" if n == 1 else f"{stamp}-{role}-{n}"
+        if not any(os.path.exists(os.path.join(folder, base + name)) for name in names):
+            return base
+        n += 1
+
+
+def _write_free(folder, stamp, role, suffix, text, names=_REVIEW_NAMES):
+    """Write `text` as `<base><suffix>` in `folder` under the first free base (`_free_base`), and return the base.
+
+    Opened with "x", never over a file: a name another writer took between the look and the open sends the write to
+    the next base. UTF-8 in the platform's line ending, as the "w" it replaces wrote."""
+    for _ in range(100):
+        base = _free_base(folder, stamp, role, names)
+        try:
+            with open(os.path.join(folder, base + suffix), "x", encoding="utf-8") as fh:
+                fh.write(text)
+            return base
+        except FileExistsError:
+            continue
+    raise FileExistsError(f"{folder}: no free name for {stamp}-{role} after 100 tries")
+
+
 def keep_raw(route, sent, received):
-    """Write `<stamp>-<route>-sent.txt` and `-received.txt` into the raw folder, if one is named."""
+    """Write `<stamp>-<route>-sent.txt` and `-received.txt` into the raw folder, if one is named; under `-2`, `-3`, ...
+    when that second already holds a pair (`_free_base`)."""
     folder = raw_exchange_dir()
     if not folder:
         return None
     try:
         os.makedirs(folder, exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        for part, body in (("sent", sent), ("received", received)):
-            with open(os.path.join(folder, f"{stamp}-{route}-{part}.txt"), "w", encoding="utf-8") as fh:
-                fh.write(body if isinstance(body, str) else json.dumps(body, ensure_ascii=False, indent=2))
+        sent, received = (body if isinstance(body, str) else json.dumps(body, ensure_ascii=False, indent=2)
+                          for body in (sent, received))
+        base = _write_free(folder, stamp, route, "-sent.txt", sent, _RAW_NAMES)
+        # A writer claims its base with the `-sent.txt`, so the `-received.txt` of that base is this one's to write.
+        with open(os.path.join(folder, base + "-received.txt"), "x", encoding="utf-8") as fh:
+            fh.write(received)
         return folder
     except OSError as exc:
         print(f"· сирий обмін не збережено в {folder}: {exc}", file=sys.stderr)
@@ -1378,9 +1419,90 @@ def gemini_key_shape(key):
     return f"unrecognised shape ({len(key)} chars)"
 
 
+def _check_review_names_unique():
+    """Two reviews in one second are two files; a package and its answer keep one base name (#135, audit T-17).
+
+    A review was `<stamp>-<role>.md` to the second, opened with "w": a second review of that role in that second wrote
+    over the first, and so did a second package or raw exchange. A base is now taken while any of its names is (a
+    review's `.md` is also the name a package's answer is saved under), and a file is opened with "x": a name another
+    writer took between the look and the open moves the write to the next base."""
+    import contextlib
+    import io
+    real_dt, real_free = globals()["datetime"], globals().get("_free_base")
+    saved = {k: os.environ.pop(k, None) for k in ("AUTOSOUND_PROJECT_DIR", "AUTOSOUND_REVIEW_RAW_DIR")}
+
+    class Frozen(real_dt):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 10, 7, 1, 2, 3, tzinfo=tz)
+
+    def read(path):
+        with open(path, encoding="utf-8") as f:
+            return f.read()
+    try:
+        with tempfile.TemporaryDirectory() as project, contextlib.redirect_stderr(io.StringIO()):
+            open(os.path.join(project, "project.json"), "w", encoding="utf-8").close()
+            os.environ["AUTOSOUND_PROJECT_DIR"] = project
+            globals()["datetime"] = Frozen
+            stamp, reviews = "2026-10-07T01-02-03", os.path.join("process", "reviews")
+            first = _persist_review("critic", "the first critique", "m", "api")
+            second = _persist_review("critic", "the second critique", "m", "api")
+            assert (first, second) == (os.path.join(reviews, f"{stamp}-critic.md"),
+                                       os.path.join(reviews, f"{stamp}-critic-2.md")), (first, second)
+            assert read(os.path.join(project, first)).endswith("the first critique"), "the first was written over"
+            assert read(os.path.join(project, second)).endswith("the second critique"), second
+            p1, r1 = _write_package("advisor", "package one")
+            p2, r2 = _write_package("advisor", "package two")
+            assert (r1, r2) == (os.path.join(reviews, f"{stamp}-advisor-package.md"),
+                                os.path.join(reviews, f"{stamp}-advisor-2-package.md")), (r1, r2)
+            assert (read(p1), read(p2)) == ("package one", "package two"), "a package was written over"
+            for rel in (r1, r2):                    # the name the person saves the answer under is free
+                answer = rel.replace("-package.md", ".md")
+                assert not os.path.exists(os.path.join(project, answer)), f"{answer} is taken before the answer"
+            third = _persist_review("advisor", "a critique", "m", "cli")
+            assert third == os.path.join(reviews, f"{stamp}-advisor-3.md"), f"a review took a package's answer: {third}"
+            p3, r3 = _write_package("critic", "package three")
+            assert r3 == os.path.join(reviews, f"{stamp}-critic-3-package.md"), r3
+            looks = []
+
+            def raced(*args, **kw):                 # the look saw a free base; another writer took it before the open
+                looks.append(args)
+                return f"{stamp}-critic" if len(looks) == 1 else real_free(*args, **kw)
+            globals()["_free_base"] = raced
+            fourth = _persist_review("critic", "the fourth critique", "m", "api")
+            globals()["_free_base"] = real_free
+            assert (fourth, len(looks)) == (os.path.join(reviews, f"{stamp}-critic-4.md"), 2), (fourth, looks)
+            assert read(os.path.join(project, first)).endswith("the first critique"), "an open over a taken name"
+            raw = os.path.join(project, "raw")
+            os.environ["AUTOSOUND_REVIEW_RAW_DIR"] = raw
+            for n in (1, 2):
+                assert keep_raw("cli", f"sent {n}", {"received": n}) == raw
+            base = "20261007-010203-cli"
+            assert sorted(os.listdir(raw)) == sorted(f"{b}-{part}.txt" for b in (base, base + "-2")
+                                                     for part in ("sent", "received")), os.listdir(raw)
+            assert (read(os.path.join(raw, f"{base}-sent.txt")), read(os.path.join(raw, f"{base}-2-sent.txt"))) == \
+                ("sent 1", "sent 2"), "a raw exchange was written over"
+            assert json.loads(read(os.path.join(raw, f"{base}-2-received.txt"))) == {"received": 2}
+    finally:
+        globals()["datetime"] = real_dt
+        if real_free is not None:
+            globals()["_free_base"] = real_free
+        for k, v in saved.items():
+            os.environ.pop(k, None)
+            if v is not None:
+                os.environ[k] = v
+
+
 def _selftest():
     """Offline: a retired model becomes a CHOICE carrying the key's list (never a fall-through),
     the list is parsed from the API's shape, and a run with a key and no model stops on the list."""
+    failures = []
+    for check in (_check_review_names_unique,):
+        try:
+            check()
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
     import io
     import urllib.error
     # skill #90: stderr piped on Windows with nobody saying its encoding is ASCII, folded legibly; a console, a
@@ -1826,7 +1948,8 @@ def _selftest():
             os.environ["AUTOSOUND_CRITIC_MODEL"] = "gemini-3.8-flash-low"
             globals()["call_gemini_api"] = real_api
             del os.environ["GEMINI_API_KEY"]
-            assert [n for n in os.listdir(reviews) if n.endswith("-ask.md")], os.listdir(reviews)
+            # A review filed in a second that already holds a package of this role is `-ask-<N>.md` (#135).
+            assert [n for n in os.listdir(reviews) if re.search(r"-ask(-\d+)?\.md$", n)], os.listdir(reviews)
         finally:
             subprocess.run, sys.argv = real_run, real_argv
             globals()["copy_to_clipboard"] = real_copy
@@ -2891,6 +3014,8 @@ def _persist_review(role, text, model, mode):
     reading back a week later, and the part an audit needs. Only an ANSWER is filed here: the
     clipboard rung writes the outgoing package beside it as `-package.md` (`_write_package`), and
     an answer brought back by hand is saved by the person under this name (hub TCC-014 ask 4).
+    A second that already holds a review or a package of this role gives `<ts>-<role>-2.md`, `-3`, ...
+    (`_free_base`): never written over another (#135).
 
     Returns a PROJECT-RELATIVE path: it goes into the journal, and an absolute path from one
     machine is noise on another.
@@ -2899,16 +3024,15 @@ def _persist_review(role, text, model, mode):
     if project is None:
         return None
     stamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
-    rel = os.path.join("process", "reviews", f"{stamp}-{role}.md")
-    path = os.path.join(project, rel)
+    folder = os.path.join(project, "process", "reviews")
     header = f"# {role} — {model or 'unknown model'} ({mode})\n\n_{datetime.now().isoformat(timespec='seconds')}_\n\n"
     try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(header + (text or ""))
+        os.makedirs(folder, exist_ok=True)
+        base = _write_free(folder, stamp, role, ".md", header + (text or ""))
     except OSError as e:
         print(f">> Не вдалося зберегти текст рецензії: {e}", file=sys.stderr)
         return None
+    rel = os.path.join("process", "reviews", base + ".md")
     print(f">> Текст рецензії збережено: {rel}", file=sys.stderr)
     # Machine-readable twin of the line above: a front-end should not have to parse a sentence,
     # least of all one that is translated.
@@ -2927,17 +3051,19 @@ def _write_package(role, text):
     used to land in `<cwd>/rew_analitic`, and a run from the method's folder dirtied the method's
     checkout, which TCC's updater then refuses to move (ask 2). With no project to write into, a
     temp file -- the clipboard carries the text either way. Returns `(path, rel or None)`.
+    Under a base free of both names (`_free_base`, #135): `<ts>-<role>-2-package.md` when that
+    second already holds a review or a package of this role, so the answer's name -- `-package.md`
+    read as `.md` -- is free too.
     """
     stamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
     project = _review_target(what="Пакет")
     if project:
-        rel = os.path.join("process", "reviews", f"{stamp}-{role}-package.md")
-        path = os.path.join(project, rel)
+        folder = os.path.join(project, "process", "reviews")
         try:
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(text)
-            return path, rel
+            os.makedirs(folder, exist_ok=True)
+            rel = os.path.join("process", "reviews", _write_free(folder, stamp, role, "-package.md", text)
+                               + "-package.md")
+            return os.path.join(project, rel), rel
         except OSError as e:
             print(f">> Пакет не записано в проект ({e}) — пишу в тимчасову теку.", file=sys.stderr)
     fd, path = tempfile.mkstemp(prefix=f"autosound_{role}_package_", suffix=".md")

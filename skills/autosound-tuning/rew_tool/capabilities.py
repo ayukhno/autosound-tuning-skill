@@ -57,11 +57,13 @@ NOT_ON_BOARD = {
                   "(issue #21). Not a decision a tuner makes -- `console.py report` exists to "
                   "answer 'what is this terminal?' when a Windows machine reports a crash",
     "siblings.py": "a loader: one module object per file of the method (skill #137), not a step a tuner takes",
-    "project_io.py": "how the method writes the files it owns, atomically (skill #135): a library its writers call; "
-                     "its command line is its selftest, not a step a tuner takes",
+    "project_io.py": "how the method writes the files rew_tool/CONTRACT.md item 8 lists -- replaced atomically, a "
+                     "ledger version created exclusively, a journal line appended after a torn one (skill #135): a "
+                     "library its writers call; its command line is its selftest, not a step a tuner takes",
     "contract-guard.py": "the guard that holds contract 1 (skill #137): a maintainer's check, not a tuner's step",
-    "atomic-write-check.py": "the scan that keeps every write of a project file going through project_io (skill "
-                             "#135): a maintainer's check, not a tuner's step",
+    "atomic-write-check.py": "the scan that keeps temp names and moves inside project_io -- no fixed `.tmp` name, no "
+                             "os.replace or os.rename but the named whole-file moves (skill #135); a file written in "
+                             "place it does not see: a maintainer's check, not a tuner's step",
     "encoding-check.py": "the checker that keeps issue #21 from coming back",
     "changelog-index.py": "generates the CHANGELOG's index table from the version headings "
                           "(HUB-043); --check fails the suite on a stale one. Repo hygiene, not a "
