@@ -274,9 +274,12 @@ exit 1, from `state.py`, `dsp_profile.py` and `apply.py`):
 - `project.json` where a bank stamps its `project_rev`: read as "no facts file", it stamped rev 0 into a version that
   is never rewritten.
 - `dsp_profile.json` and `dsp_profile.draft.json`: `load_profile`, `load_draft` and every writer through them
-  (`set-field`, `reset-field`, `start`, `finalize`, `set-setting`, `refresh`). A draft that could not be read was passed over -- and
-  the good profile with it -- for a blank one, which `set-field` saved over the interview's answers. The intake's
-  processor change sorts the profiles before it writes, so it refuses whole.
+  (`set-field`, `reset-field`, `start`, `finalize`, `set-setting`, `refresh`). A draft that could not be read was
+  passed over -- and the good profile with it -- for a blank one, which `set-field` saved over the interview's
+  answers. Two readers answer it otherwise, on purpose (ruling R26): the intake's processor change, the step that
+  replaces the profile, sets it aside like any other old one, unread and byte for byte, with one line on stderr
+  naming it and where it went; and the intake form's page shows it at the top with its repair instead of failing
+  (a save through it is still refused).
 
 `contract.py check` reports `seals.json`, `project.json` and `dsp_profile.json` as there and not valid, the refusal
 in `issues`, and does not fail.

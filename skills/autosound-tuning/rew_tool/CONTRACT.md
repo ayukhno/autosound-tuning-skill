@@ -106,7 +106,9 @@ file at all is the one quiet case: a fresh project. It holds for:
   `repair-version`;
 - `project.json`, where a bank stamps its `project_rev` and where the phase-1 gate reads the flaw map;
 - `dsp_profile.json` and `dsp_profile.draft.json`: `load_profile`, `load_draft` and every writer that reads through
-  them (`set-field`, `reset-field`, `start`, `finalize`, `set-setting`, `refresh`), and the phase gates.
+  them (`set-field`, `reset-field`, `start`, `finalize`, `set-setting`, `refresh`), and the phase gates. The
+  intake's processor change, which replaces the profile, sets such a file aside unread and byte for byte, with one
+  line on stderr saying where; the intake form's page shows it with its repair.
 
 The phase gates refuse what they cannot check: an intake check that raises or cannot be loaded, a profile check that
 cannot be loaded, and a `project.json` or `dsp_profile.json` that cannot be read. `contract.py check` reports such a

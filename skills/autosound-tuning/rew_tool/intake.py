@@ -348,10 +348,15 @@ def change_dsp(project_dir, vendor, model, replace_map=False):
       are placed again on the new processor's slots;
     * `dsp.tiers_used` is cleared (it named the old processor's tiers);
     * a `dsp_profile.json` or draft that describes the OLD processor is moved aside
-      (`…replaced-<vendor>-<model>.json`), so the Phase-0 gate cannot pass on another unit's profile;
-      one that cannot be read refuses the change before anything is written (#136).
+      (`…replaced-<vendor>-<model>.json`), so the Phase-0 gate cannot pass on another unit's profile.
+      One that cannot be read, or that a newer method wrote, is moved aside the same way, unread and
+      byte for byte, and one line on stderr names it and where it went (#136, ruling R26): this step
+      exists to replace that profile, and a refusal walled the person out of the one step that sets
+      the damage aside. Nothing is ever carried over from a profile here, readable or not: it is read
+      only to tell whose it is.
 
-    Returns `{"vendor", "model", "replaced": <slots moved to the record>, "set_aside": [paths]}`.
+    Returns `{"vendor", "model", "replaced": <slots moved to the record>, "set_aside": [paths]}`, and
+    `"said": [lines]` when a profile that could not be read was set aside.
     """
     vendor, model = str(vendor or "").strip(), str(model or "").strip()
     if not (vendor and model):
@@ -390,14 +395,30 @@ def change_dsp(project_dir, vendor, model, replace_map=False):
     dsp.pop("tiers_used", None)
     dsp.update(vendor=vendor, model=model)
     data["dsp"] = dsp
-    # Which profiles on disk describe another processor is read BEFORE anything is written (#136): one that is there
-    # and cannot be read raises, naming it and its repair, and the change waits for it. Met after the save, it left
-    # the change half made -- and a second try found the processor already changed and sorted nothing.
-    others = [path for path in (dsp_profile.profile_path(project_dir), dsp_profile.draft_path(project_dir))
-              if os.path.isfile(path) and not _same_dsp(dsp_profile.load_profile(path), vendor, model)]
+    # Which profiles on disk to set aside is settled BEFORE anything is written. One that cannot be read (#136:
+    # `load_profile` raises for it now) is not taken as this processor's: it is set aside with the rest, never read
+    # for anything (ruling R26). Raised after the save, it left the change half made.
+    others, unread = [], {}
+    for path in (dsp_profile.profile_path(project_dir), dsp_profile.draft_path(project_dir)):
+        if not os.path.isfile(path):
+            continue
+        try:
+            mine = _same_dsp(dsp_profile.load_profile(path), vendor, model)
+        except Exception as exc:  # noqa: BLE001 -- matched below; anything else still raises
+            if not getattr(exc, "is_unreadable", False):
+                raise
+            mine, unread[path] = False, exc.reason
+        if not mine:
+            others.append(path)
     handle.save(data)
     for path in others:
-        out["set_aside"].append(_set_aside(path, old_v, old_m))
+        target = _set_aside(path, old_v, old_m)
+        out["set_aside"].append(target)
+        if path in unread:
+            line = (f"{path} {unread[path]} -- set aside as {target}, unread and byte for byte; "
+                    "nothing in it was carried over")
+            out.setdefault("said", []).append(line)
+            print(line, file=sys.stderr)
     return out
 
 
@@ -1752,36 +1773,50 @@ def _main(argv):
 
 
 # ── selftest ──────────────────────────────────────────────────────────────────
-def _check_unreadable_profile_refused_before_a_write():
-    """A processor change refuses before it writes anything when a profile it has to sort cannot be read (#136):
-    `load_profile` raises for such a file now, and `change_dsp` met it after `project.json` was saved -- the new
-    processor recorded, the old profile left in place, and a second try found the processor already changed and
-    sorted nothing. `gate_requirements` reports it as the tier list's error, as it reports any other."""
+def _check_change_dsp_sets_an_unreadable_profile_aside():
+    """A processor change sets a profile that cannot be read aside, as it sets aside any other old one (#136, ruling
+    R26). `load_profile` raises for such a file now, and `change_dsp` met that after `project.json` was saved: the
+    change half made. The step exists to replace that profile, so it goes aside unread and byte for byte, nothing in
+    it carried over, and one line on stderr names it and where it went -- a cut profile and a draft a newer method
+    wrote alike. The new processor's own profile is then made as for any other. `gate_requirements` reports such a
+    profile as the tier list's error, as it reports any other."""
+    import contextlib
+    import io
     import shutil
     import tempfile
     top = tempfile.mkdtemp(prefix="autosound_intake_unreadable_")
     try:
         project.Project(top).save({"schema_version": project.SCHEMA_VERSION, "channels": [],
                                    "dsp": {"vendor": "Audiotec-Fischer", "model": "Helix DSP Ultra S"}})
-        facts, prof = os.path.join(top, "project.json"), os.path.join(top, "dsp_profile.json")
-        damaged = b'{"dsp_profile": {"name": "Helix DSP Ultra S", "gro'
-        with open(prof, "wb") as fh:
-            fh.write(damaged)
-        with open(facts, "rb") as fh:
-            before = fh.read()
-        try:
-            change_dsp(top, "Acme", "X8")
-        except Exception as exc:  # noqa: BLE001 -- the kind is what is under test
-            assert getattr(exc, "is_unreadable", False) and str(exc).startswith(prof + " "), repr(exc)
-        else:
-            raise AssertionError("the processor changed past a profile nobody could read")
-        with open(facts, "rb") as fh:
-            assert fh.read() == before, "project.json was written"
-        with open(prof, "rb") as fh:
-            assert fh.read() == damaged, "the profile changed"
-        assert sorted(os.listdir(top)) == ["dsp_profile.json", "project.json"], os.listdir(top)
+        prof, draft = dsp_profile.profile_path(top), dsp_profile.draft_path(top)
+        damaged = {prof: b'{"dsp_profile": {"name": "Helix DSP Ultra S", "gro',
+                   draft: json.dumps({"schema_version": dsp_profile.SCHEMA_VERSION + 1, "dsp_profile": {
+                       "name": "Helix DSP Ultra S", "vendor": "Audiotec-Fischer", "groups": []}}).encode("utf-8")}
+        for path, raw in damaged.items():
+            with open(path, "wb") as fh:
+                fh.write(raw)
         tiers = gate_requirements(top)["ledger"]
         assert tiers["tiers"] is None and str(tiers.get("tiers_error")).startswith(prof + " "), tiers
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            done = change_dsp(top, "Acme", "X8")
+        assert len(done["set_aside"]) == 2 and not os.path.exists(prof) and not os.path.exists(draft), done
+        said = err.getvalue().splitlines()
+        assert said == done.get("said") and len(said) == 2, (said, done)
+        for (path, raw), target, line, reason in zip(damaged.items(), done["set_aside"], said, (
+                "is not valid JSON", f"is schema v{dsp_profile.SCHEMA_VERSION + 1}; this method reads v")):
+            assert os.path.basename(target).startswith(os.path.basename(path)[:-5] + ".replaced-"), target
+            with open(target, "rb") as fh:
+                assert fh.read() == raw, f"{target} is not the file set aside, byte for byte"
+            assert line.startswith(f"{path} {reason}") and f"set aside as {target}," in line, line
+        assert project.Project(top).load()["dsp"]["vendor"] == "Acme", "the processor did not change"
+        save_new_dsp(top, {"tiers": {"channels": {"count": "4", "letters": True, "fields": ["hp", "lp", "ta_ms"]}},
+                           "delay": {"step_ms": "0.02", "max_ms": "10"}, "rate": 48000})
+        made = dsp_profile.load_draft(top)
+        assert dsp_profile._unwrap(made)["vendor"] == "Acme" and "Helix" not in json.dumps(made), made
+        for path, target in zip(damaged, done["set_aside"]):
+            with open(target, "rb") as fh:
+                assert fh.read() == damaged[path], f"{target} changed after it was set aside"
     finally:
         shutil.rmtree(top, ignore_errors=True)
 
@@ -1790,7 +1825,7 @@ def _selftest():
     import tempfile
 
     failures = []
-    for check in (_check_unreadable_profile_refused_before_a_write,):
+    for check in (_check_change_dsp_sets_an_unreadable_profile_aside,):
         try:
             check()
         except AssertionError as exc:
@@ -2125,8 +2160,9 @@ def _selftest():
           "PROJECT IS and is written once, a second different one refused with the route out "
           "(S-032); the car refuses three "
           "parts, a slot refuses to go in without its tier, and neither refusal writes anything; "
-          "`missing` reports prose as unreadable rather than as a gap; a processor change past a profile "
-          "that cannot be read refuses before it writes, and the gate list reports that profile (#136).")
+          "`missing` reports prose as unreadable rather than as a gap; a processor change sets a profile "
+          "that cannot be read aside unread and byte for byte, saying where, and the gate list reports "
+          "that profile (#136).")
     return 0
 
 

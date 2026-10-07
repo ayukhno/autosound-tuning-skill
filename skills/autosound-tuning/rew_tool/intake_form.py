@@ -151,10 +151,28 @@ def model(project_dir, lang=DEFAULT_LANG):
     except (project.ProjectError, OSError):
         data = None
 
+    # A page is a reader (#136, ruling R26): a profile or a draft that is there and cannot be read -- or that a newer
+    # method wrote -- is SHOWN, the file and its repair at the top of the page, and the page is drawn as for a
+    # processor nobody has described yet. A save that would write through that file is refused by its writer.
+    refusals = []
+
+    def read(fn, fallback):
+        try:
+            return fn()
+        except Exception as exc:  # noqa: BLE001 -- matched below; anything else still raises
+            if not getattr(exc, "is_unreadable", False):
+                raise
+            if str(exc) not in refusals:
+                refusals.append(str(exc))
+            return fallback
+
     # The processor decides which tiers a channel row may name (the Arbiter, 2026-09-22): the
     # tiers it has, narrowed to the ones this car uses once that is answered; every tier for a
     # processor nobody has described yet.
-    dsp = intake.dsp_state(project_dir)
+    saved = (data or {}).get("dsp") or {}
+    dsp = read(lambda: intake.dsp_state(project_dir),
+               {"vendor": saved.get("vendor") or "", "model": saved.get("model") or "", "source": None,
+                "tiers": [], "groups": [], "knobs": [], "new": None})
     has = dsp["tiers"] or list(intake.SUGGESTED_TIERS)
     used = [t for t in ((data or {}).get("dsp") or {}).get("tiers_used") or [] if t in has]
 
@@ -197,7 +215,7 @@ def model(project_dir, lang=DEFAULT_LANG):
     return {
         "project_dir": project_dir, "lang": lab.get("lang", lang), "ui": lab["ui"],
         "when": whens, "dsp": dsp, "dsps": intake.known_dsps(),
-        "map": intake.channel_map(project_dir),
+        "map": read(lambda: intake.channel_map(project_dir), []),
         "tiers_used": [t for t in ((data or {}).get("dsp") or {}).get("tiers_used") or []],
         "controls": {k: str(project.fact_value(v)) for k, v in
                      (((data or {}).get("hardware") or {}).get("controls") or {}).items()},
@@ -205,7 +223,10 @@ def model(project_dir, lang=DEFAULT_LANG):
                    if k in ("make", "model", "generation", "body") and v},
                 "drive": ((data or {}).get("car") or {}).get("drive_side")},
         "lang_saved": (((data or {}).get("language") or {}).get("reply")),
-        "new_dsp": intake.new_dsp_answers(project_dir),
+        "new_dsp": read(lambda: intake.new_dsp_answers(project_dir),
+                        {"tiers": {}, "eq": {}, "crossover": {}, "delay": {}, "presets": {}, "rate": None}),
+        # Each file the page could not read, in the method's words: the file, why, and the repair.
+        "refusals": refusals,
         "cars": intake.known_cars(project_dir),
         "couplings": {c["id"]: {"fields": c["fields"], "why": c["why"],
                                 "title": lab["couplings"].get(c["id"]) or c["id"]}
@@ -1214,6 +1235,13 @@ def _page_data(m):
     return json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
 
 
+def _refusals_html(m):
+    """Each file the page could not read, at the top, in the method's own words (#136): which file, why, the repair."""
+    label = m["ui"].get("unreadable", "Not read — a save that needs this file is refused until it is put right:")
+    return "".join(f'<div class="note err refusal" role="alert">{_esc(label)} {_esc(r)}</div>'
+                   for r in m.get("refusals") or [])
+
+
 def _shell(m, title, parts, button_after=""):
     ui = m["ui"]
     after = f' data-after="{_esc(button_after)}"' if button_after else ""
@@ -1221,7 +1249,7 @@ def _shell(m, title, parts, button_after=""):
         "<!doctype html><html lang=\"" + _esc(m["lang"]) + "\"><head><meta charset=\"utf-8\">"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
         f"<title>{_esc(title)}</title><style>{_CSS}</style></head><body>"
-        f"<header><h1>{_esc(title)}</h1>" + parts[0] + "</header>"
+        f"<header><h1>{_esc(title)}</h1>" + _refusals_html(m) + parts[0] + "</header>"
         f"<main>{''.join(parts[1:])}</main>"
         f'<div class="savebar"><button type="button" class="save big" onclick="saveAll(this)"{after}>'
         f'{_esc(ui.get("save", "Save"))}</button><div id="save-status" class="status"></div></div>'
@@ -1561,27 +1589,67 @@ def serve(project_dir, port=0, lang=DEFAULT_LANG, open_browser=False):
 
 
 # ── selftest ──────────────────────────────────────────────────────────────────
-def _check_unreadable_answer_reported():
-    """An answer whose writer meets a file that cannot be read is that answer's refusal, naming the file, and the
-    answers after it still go in (#136). Such a refusal is neither an `OSError` nor a `ValueError`: it passed the
-    batch's handler and ended the whole request, so the page heard nothing and the answers after it were lost.
-    `do_POST` answers 400 by the same rule (`_refusal`)."""
+def _check_unreadable_profile_shown_and_refused():
+    """A profile that cannot be read is SHOWN by the page and refused by a save that would write through it (#136,
+    ruling R26). A page is a reader: `/`, `/new-dsp` and `/state` answer 200 with the file and its repair at the top,
+    where `intake.dsp_state` raised and the request ended with no page at all. A save through that profile (the new
+    processor's base) is refused naming the file: 400 alone, that answer's error in a batch, whose other answers still
+    go in -- such a refusal is neither an `OSError` nor a `ValueError`, and it used to end the whole request.
+    Nothing is written through it."""
     import shutil
     import tempfile
+    import threading
+    import urllib.error
+    import urllib.request
     root = tempfile.mkdtemp(prefix="autosound_form_unreadable_")
+    httpd = None
     try:
-        prof = os.path.join(root, "dsp_profile.json")
+        project.Project(root).save({"schema_version": project.SCHEMA_VERSION, "channels": [],
+                                    "dsp": {"vendor": "Acme", "model": "X8"}})
+        prof = dsp_profile.profile_path(root)
+        damaged = b'{"dsp_profile": {"name": "X8", "vendor": "Acme", "gro'
         with open(prof, "wb") as fh:
-            fh.write(b'{"dsp_profile": {"name": "Helix DSP Ultra S", "gro')
-        res = apply_save(root, {"batch": [{"dsp": {"vendor": "Acme", "model": "X8"}},
-                                          {"car": {"make": "VW", "model": "Passat", "generation": "B8",
-                                                   "body": "sedan"}}]})
-        assert [e["index"] for e in res["errors"]] == [0], res
-        assert res["errors"][0]["error"].startswith(prof + " ") and "checkout HEAD" in res["errors"][0]["error"], res
-        assert len(res["results"]) == 1 and "car" in res["results"][0], res
+            fh.write(damaged)
+        m = model(root, "uk")
+        assert len(m["refusals"]) == 1 and m["refusals"][0].startswith(prof + " is not valid JSON"), m["refusals"]
+        assert "checkout HEAD -- dsp_profile.json" in m["refusals"][0], m["refusals"]
+        handler = type("_Bound", (_Handler,), {"project_dir": root, "lang": "uk"})
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        base = f"http://127.0.0.1:{httpd.server_address[1]}/"
+        for route in ("", "new-dsp"):
+            with urllib.request.urlopen(base + route) as r:
+                page = r.read().decode("utf-8")
+                assert r.status == 200 and 'class="note err refusal"' in page, (route, r.status)
+                assert _esc(m["refusals"][0]) in page, (route, page[:300])
+        with urllib.request.urlopen(base + "state") as r:
+            assert r.status == 200 and json.loads(r.read())["refusals"] == m["refusals"], "the /state answer"
+
+        def post(payload):
+            req = urllib.request.Request(base + "save", headers={"Content-Type": "application/json"},
+                                         data=json.dumps(payload).encode("utf-8"))
+            try:
+                with urllib.request.urlopen(req) as r:
+                    return r.status, json.loads(r.read())
+            except urllib.error.HTTPError as exc:
+                return exc.code, json.loads(exc.read())
+        answers = {"tiers": {"channels": {"count": "4", "letters": True, "fields": ["hp", "lp"]}}, "rate": 48000}
+        code, said = post({"new_dsp": answers})
+        assert code == 400 and said["error"].startswith(prof + " is not valid JSON"), (code, said)
+        code, said = post({"batch": [{"new_dsp": answers},
+                                     {"car": {"make": "VW", "model": "Passat", "generation": "B8", "body": "sedan"}}]})
+        assert code == 200 and [e["index"] for e in said["errors"]] == [0], (code, said)
+        assert said["errors"][0]["error"].startswith(prof + " ") and len(said["results"]) == 1, said
+        assert project.Project(root).load()["car"]["model"] == "Passat", "the answer after the refusal was lost"
+        with open(prof, "rb") as fh:
+            assert fh.read() == damaged, "the profile changed"
+        assert not os.path.exists(dsp_profile.draft_path(root)), "a draft was written through it"
         unreadable = dsp_profile._project_io().Unreadable(prof, "is empty -- a write was cut off", "REPAIR")
         assert _refusal(unreadable) and _refusal(intake.IntakeError("no")) and not _refusal(KeyError("x")), "_refusal"
     finally:
+        if httpd is not None:
+            httpd.shutdown()
+            httpd.server_close()
         shutil.rmtree(root, ignore_errors=True)
 
 
@@ -1590,7 +1658,7 @@ def _selftest():
     import tempfile
 
     failures = []
-    for check in (_check_unreadable_answer_reported,):
+    for check in (_check_unreadable_profile_shown_and_refused,):
         try:
             check()
         except Exception as exc:  # noqa: BLE001 -- a check that raises is reported by name, like one that fails
@@ -1865,7 +1933,8 @@ def _selftest():
           "interface's and never asked, knobs are rows the processor pre-seeds, a processor change REPLACES a saved map only when "
           "confirmed, a new processor gets its own page and its map from it, the page loads nothing "
           "from the network (one link out: NTT), and every write goes through intake's own writers; "
-          "an answer refused over a file that cannot be read is that answer's refusal, and the rest go in (#136)")
+          "a profile that cannot be read is shown on the page with its repair, and a save through it is refused "
+          "as that answer's, the rest going in (#136)")
     return 0
 
 
