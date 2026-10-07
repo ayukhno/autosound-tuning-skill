@@ -55,12 +55,9 @@ def _siblings():
     if module is None:
         spec = importlib.util.spec_from_file_location(name, os.path.join(here, "siblings.py"))
         module = importlib.util.module_from_spec(spec)
-        sys.modules[name] = module
-        try:
-            spec.loader.exec_module(module)
-        except BaseException:
-            sys.modules.pop(name, None)
-            raise
+        spec.loader.exec_module(module)
+        # Published only once it has run: a thread racing this first call never gets a half-run siblings.py.
+        module = sys.modules.setdefault(name, module)
     return module
 
 

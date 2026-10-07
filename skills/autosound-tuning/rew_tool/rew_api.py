@@ -24,12 +24,9 @@ def _siblings():
     if module is None:
         spec = importlib.util.spec_from_file_location(name, os.path.join(here, "siblings.py"))
         module = importlib.util.module_from_spec(spec)
-        sys.modules[name] = module
-        try:
-            spec.loader.exec_module(module)
-        except BaseException:
-            sys.modules.pop(name, None)
-            raise
+        spec.loader.exec_module(module)
+        # Published only once it has run: a thread racing this first call never gets a half-run siblings.py.
+        module = sys.modules.setdefault(name, module)
     return module
 
 
@@ -713,20 +710,25 @@ def get_distortion(mid):
 def _check_loads_by_path():
     """The load TCC does (skill #137, audit T-27): this file by its path, from an empty folder, `PYTHONPATH` unset --
     and `get_timing`, which loads `timebase` lazily. REW is not there (a dead port, whatever the caller's
-    environment says), so an import error is the only failure; "loaded" proves the probe got past the load."""
+    environment says), so the call must end there: "loaded", then "dead port" (REW not answering is a `URLError`).
+    A probe that dies another way -- a half-run siblings, a file not found -- fails."""
     import subprocess, tempfile
-    probe = ("import importlib.util, sys\n"
+    probe = ("import importlib.util, sys, urllib.error\n"
              "spec = importlib.util.spec_from_file_location('probe_rew_api', sys.argv[1])\n"
              "m = importlib.util.module_from_spec(spec); sys.modules[spec.name] = m; spec.loader.exec_module(m)\n"
              "print('loaded', flush=True)\n"
-             "m.get_timing('1')\n")
+             "try:\n"
+             "    m.get_timing('1')\n"
+             "except urllib.error.URLError:\n"
+             "    print('dead port')\n")
     env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
     env["REW_API_URL"] = "http://127.0.0.1:1"
     with tempfile.TemporaryDirectory() as empty:
         r = subprocess.run([sys.executable, "-c", probe, os.path.abspath(__file__)], cwd=empty,
                            env=env, capture_output=True, text=True, timeout=120)
     assert "ModuleNotFoundError" not in r.stderr and "ImportError" not in r.stderr, r.stderr[-600:]
-    assert r.stdout.startswith("loaded"), (r.returncode, r.stdout[-300:], r.stderr[-600:])
+    assert r.returncode == 0 and r.stdout.splitlines() == ["loaded", "dead port"], \
+        (r.returncode, r.stdout[-300:], r.stderr[-600:])
 
 
 def _selftest():

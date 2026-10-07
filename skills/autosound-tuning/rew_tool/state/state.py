@@ -72,12 +72,9 @@ def _siblings():
     if module is None:
         spec = importlib.util.spec_from_file_location(name, os.path.join(here, "siblings.py"))
         module = importlib.util.module_from_spec(spec)
-        sys.modules[name] = module
-        try:
-            spec.loader.exec_module(module)
-        except BaseException:
-            sys.modules.pop(name, None)
-            raise
+        spec.loader.exec_module(module)
+        # Published only once it has run: a thread racing this first call never gets a half-run siblings.py.
+        module = sys.modules.setdefault(name, module)
     return module
 
 
@@ -2089,20 +2086,31 @@ def _check_eq_refusals():
 
 def _check_canonical_code_uses_the_loaded_naming():
     """`_canonical_code` reads the notation rule from the `naming` a front end already loaded by its path under a name
-    of its own (skill #137; TCC's is `autosound_tcc._vendor.naming`) -- not from a second copy: one `NamingError`."""
+    of its own (skill #137; TCC's is `autosound_tcc._vendor.naming`) -- not from a second copy: one `NamingError`.
+    As when TCC loads first: copies of naming.py loaded earlier in this process step aside and siblings' cache
+    forgets the file, so the order the checks run in decides nothing."""
     import importlib.util
-    path = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "naming.py")
-    spec = importlib.util.spec_from_file_location("front_end_naming", path)
-    naming = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = naming
+    sib = _siblings()
+    path = sib.path_of("naming.py")
+    want = sib._real(path)
+    earlier = {key: m for key, m in list(sys.modules.items())
+               if getattr(m, "__file__", None) and sib._real(m.__file__) == want}
     cached = list(_NAMING)
-    del _NAMING[:]
     try:
+        for key in earlier:
+            del sys.modules[key]
+        sib._BY_PATH.pop(want, None)
+        del _NAMING[:]
+        spec = importlib.util.spec_from_file_location("front_end_naming", path)
+        naming = importlib.util.module_from_spec(spec)
+        sys.modules["front_end_naming"] = naming
         spec.loader.exec_module(naming)
         assert _canonical_code("w_L") == "w-L", _canonical_code("w_L")
         assert _NAMING and _NAMING[0] is naming, "state.py ran a copy of naming.py of its own"
     finally:
-        sys.modules.pop(spec.name, None)
+        sys.modules.pop("front_end_naming", None)
+        sys.modules.update(earlier)
+        sib._BY_PATH.pop(want, None)
         _NAMING[:] = cached
 
 

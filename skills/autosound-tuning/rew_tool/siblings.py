@@ -51,9 +51,11 @@ def find_loaded(path):
     module = _BY_PATH.get(want)
     if module is not None and sys.modules.get(module.__name__) is module:
         return module
+    name = os.path.basename(want)
     for module in list(sys.modules.values()):
         file = getattr(module, "__file__", None)
-        if file and _real(file) == want:
+        # The file's name first: a miss would otherwise take the real path of every module loaded (1-2k under TCC).
+        if file and os.path.normcase(os.path.basename(file)) == name and _real(file) == want:
             _BY_PATH[want] = module
             return module
     return None
@@ -95,6 +97,10 @@ def _selftest():
     put("cyc1.py", "import siblings_probe\nB = siblings_probe.load('cyc2.py')\n")
     put("cyc2.py", "import siblings_probe\nA = siblings_probe.load('cyc1.py')\n")
     put("slow.py", "import time, os\ntime.sleep(0.2)\nopen(os.path.join(os.path.dirname(__file__), 'ran.txt'), 'a').write('x')\n")
+    put("fa.py", "import siblings_probe\nB = siblings_probe.load('fb.py')\nraise RuntimeError('fa fails after fb took it')\n")
+    put("fb.py", "import siblings_probe\nA = siblings_probe.load('fa.py')\n")
+    put("gated.py", "import sys\ngate = sys.modules['siblings_load_gate']\ngate.entered.set()\ngate.release.wait(60)\n"
+                    "DONE = True\n")
     spec = importlib.util.spec_from_file_location("siblings_probe", os.path.join(root, "siblings.py"))
     sib = importlib.util.module_from_spec(spec); sys.modules["siblings_probe"] = sib; spec.loader.exec_module(sib)
     failures = []
@@ -127,6 +133,85 @@ def _selftest():
             pass
         else:
             raise AssertionError("a missing file did not raise")
+        # fa.py fails AFTER a cycle took it (fb.py loads fa.py while fa.py runs), so the cache still holds the
+        # half-built fa: a second load must run fa.py again and fail again, never hand that copy out.
+        for attempt in (1, 2):
+            try:
+                sib.load("fa.py")
+            except RuntimeError:
+                assert sib.module_name("fa.py") not in sys.modules, attempt
+            else:
+                raise AssertionError(f"load #{attempt} returned fa.py, which fails at import (a half-built copy)")
+    def a_miss_reads_only_that_name():
+        # A miss in the cache scans sys.modules -- 1-2k modules under TCC, often on its GUI thread: only a file of
+        # the wanted name may cost a realpath.
+        read = []
+        real = sib._real
+        sib._real = lambda p: read.append(p) or real(p)
+        try:
+            sib._BY_PATH.clear()
+            sib.find_loaded(os.path.join(root, "a.py"))
+        finally:
+            sib._real = real
+        names = sorted({os.path.basename(p) for p in read})
+        assert read and names == ["a.py"], names[:8]
+    def bootstrap_publishes_after_run():
+        # Every `_siblings()` copy in the method, against a throwaway siblings.py whose FIRST run blocks: a call
+        # racing it gets a module that has run, never the half-run one, and both calls end with the one published.
+        # A siblings.py that fails at import leaves nothing behind.
+        import ast, threading, types
+        fake = tempfile.mkdtemp()
+        os.makedirs(os.path.join(fake, "rew_tool"))
+        with open(os.path.join(fake, "rew_tool", "siblings.py"), "w", encoding="utf-8") as f:
+            f.write("import sys\ngate = sys.modules['siblings_race_gate']\n"
+                    "if gate.fail:\n    raise RuntimeError('siblings.py fails at import')\n"
+                    "gate.runs += 1\nif gate.runs == 1:\n    gate.started.set()\n    gate.release.wait(60)\n"
+                    "def load(rel):\n    return rel\n")
+        here = os.path.realpath(os.path.join(fake, "rew_tool"))
+        name = "_autosound_" + hashlib.sha1(here.encode("utf-8")).hexdigest()[:8] + "_siblings"
+        skill = os.path.dirname(HERE)
+        copies = []
+        for top in (HERE, os.path.join(skill, "scripts")):
+            for dirpath, _dirs, files in os.walk(top):
+                for fn in sorted(f for f in files if f.endswith(".py")):
+                    with open(os.path.join(dirpath, fn), encoding="utf-8") as f:
+                        text = f.read()
+                    if "def _siblings(" not in text:
+                        continue
+                    for node in ast.parse(text).body:
+                        if isinstance(node, ast.FunctionDef) and node.name == "_siblings":
+                            rel = os.path.relpath(os.path.join(dirpath, fn), skill)
+                            copies.append((rel, ast.get_source_segment(text, node)))
+        assert copies, "no _siblings() bootstrap in the method to test"
+        gate = types.ModuleType("siblings_race_gate")
+        sys.modules[gate.__name__] = gate
+        try:
+            for rel, src in copies:
+                ns = {"os": os, "sys": sys, "__file__": os.path.join(fake, rel)}
+                exec(compile(src, rel, "exec"), ns)
+                boot = ns["_siblings"]
+                gate.fail, gate.runs = True, 0
+                try:
+                    boot()
+                except RuntimeError:
+                    assert name not in sys.modules, f"{rel}: a siblings.py that failed was left in sys.modules"
+                else:
+                    raise AssertionError(f"{rel}: a siblings.py that failed at import was returned")
+                gate.fail, gate.started, gate.release = False, threading.Event(), threading.Event()
+                got = {}
+                first = threading.Thread(target=lambda: got.update(first=boot()))
+                first.start()
+                try:
+                    assert gate.started.wait(60), f"{rel}: the first call never ran siblings.py"
+                    second = boot()
+                    assert hasattr(second, "load"), f"{rel}: a racing call got siblings.py before it had run"
+                finally:
+                    gate.release.set()
+                    first.join(60)
+                    published = sys.modules.pop(name, None)
+                assert got.get("first") is second is published, f"{rel}: the racing calls ended with two objects"
+        finally:
+            sys.modules.pop(gate.__name__, None)
     def cycle():
         c1 = sib.load("cyc1.py")
         assert c1.B.A is c1
@@ -137,11 +222,49 @@ def _selftest():
         for t in ts: t.join()
         with open(os.path.join(root, "ran.txt")) as f:
             assert f.read() == "x", "slow.py ran more than once"
+    def waits_for_a_load_in_progress():
+        # A thread asking for a file another thread is still running waits until it has run -- never handed the
+        # half-run module. Watched, not timed: `progress` is set when the asking thread has to wait for the lock, or
+        # when it comes back without having waited (the half-run module, which the last assert then refuses).
+        import threading, types
+        gate = types.ModuleType("siblings_load_gate")
+        gate.entered, gate.release, progress = threading.Event(), threading.Event(), threading.Event()
+        lock, got = sib._LOCK, {}
+        class Watched:
+            def __enter__(self):
+                if not lock.acquire(blocking=False):
+                    progress.set()
+                    lock.acquire()
+            def __exit__(self, *exc):
+                lock.release()
+        def ask():
+            got["complete"] = hasattr(sib.load("gated.py"), "DONE")
+            progress.set()
+        first = threading.Thread(target=sib.load, args=("gated.py",))
+        second = threading.Thread(target=ask)
+        sys.modules[gate.__name__] = gate
+        sib._LOCK = Watched()
+        try:
+            first.start()
+            assert gate.entered.wait(60), "gated.py never ran"
+            second.start()
+            assert progress.wait(60), "the asking thread neither waited nor came back"
+        finally:
+            gate.release.set()
+            first.join(60)
+            second.join(60)
+            sib._LOCK = lock
+            sys.modules.pop(gate.__name__, None)
+        assert got.get("complete") is True, "a thread was handed gated.py while another was still running it"
     for label, fn in (("one object", one_object), ("adopts a loaded copy", adopts), ("fails clean", fails_clean),
-                      ("cycle", cycle), ("threads", threads)):
+                      ("a miss reads only that name", a_miss_reads_only_that_name),
+                      ("the bootstrap publishes after it has run", bootstrap_publishes_after_run),
+                      ("cycle", cycle), ("threads", threads),
+                      ("a load in progress is waited for", waits_for_a_load_in_progress)):
         check(label, fn)
     assert not failures, "\n".join(failures)
-    print("siblings selftest OK -- one object per file, adoption, clean failure, cycles, threads")
+    print("siblings selftest OK -- one object per file, adoption, clean failure, cycles, threads, a load in progress "
+          "waited for; a miss reads only that name; every _siblings() copy publishes siblings.py only after it has run")
 
 
 if __name__ == "__main__":

@@ -72,12 +72,9 @@ def _siblings():
     if module is None:
         spec = importlib.util.spec_from_file_location(name, os.path.join(here, "siblings.py"))
         module = importlib.util.module_from_spec(spec)
-        sys.modules[name] = module
-        try:
-            spec.loader.exec_module(module)
-        except BaseException:
-            sys.modules.pop(name, None)
-            raise
+        spec.loader.exec_module(module)
+        # Published only once it has run: a thread racing this first call never gets a half-run siblings.py.
+        module = sys.modules.setdefault(name, module)
     return module
 
 
@@ -427,12 +424,21 @@ def _rec(**over):
 def _check_read_batch_reads_the_loaded_rew_api():
     """`read_batch` reads through the `rew_api` a front end already loaded by its path under a name of its own
     (skill #137; TCC's is `autosound_tcc._vendor.rew_api`) -- never a second copy of the file, with a `BASE_URL` of
-    its own."""
+    its own. As when TCC loads first: copies of rew_api.py loaded earlier in this process step aside and siblings'
+    cache forgets the file, so the order the checks run in decides nothing."""
     import importlib.util
-    spec = importlib.util.spec_from_file_location("front_end_rew_api", os.path.join(_HERE, "rew_api.py"))
-    api = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = api
+    sib = _siblings()
+    path = sib.path_of("rew_api.py")
+    want = sib._real(path)
+    earlier = {key: m for key, m in list(sys.modules.items())
+               if getattr(m, "__file__", None) and sib._real(m.__file__) == want}
     try:
+        for key in earlier:
+            del sys.modules[key]
+        sib._BY_PATH.pop(want, None)
+        spec = importlib.util.spec_from_file_location("front_end_rew_api", path)
+        api = importlib.util.module_from_spec(spec)
+        sys.modules["front_end_rew_api"] = api
         spec.loader.exec_module(api)
         api.get_measurements = lambda: {"5": {"title": "w-L_1 (sw)"}, "6": {"title": "m-L_1 (sw)"}}
         api.get_timing = lambda mid: {"id": mid, "read by": "the front end's copy"}
@@ -442,7 +448,9 @@ def _check_read_batch_reads_the_loaded_rew_api():
             raise AssertionError(f"read_batch did not read through the loaded rew_api: {exc!r}")
         assert got == [{"id": "5", "read by": "the front end's copy"}], got
     finally:
-        sys.modules.pop(spec.name, None)
+        sys.modules.pop("front_end_rew_api", None)
+        sys.modules.update(earlier)
+        sib._BY_PATH.pop(want, None)
 
 
 def _selftest():
