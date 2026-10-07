@@ -508,8 +508,16 @@ def _main(argv=None):
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
     channels = [c.strip() for c in args.channels.split(",") if c.strip()] if args.channels else None
-    r = run(args.project, args.solos, args.ellipsoid, args.write, rew_ver=args.rew, channels=channels,
-            process_dir=args.process)
+    try:
+        r = run(args.project, args.solos, args.ellipsoid, args.write, rew_ver=args.rew, channels=channels,
+                process_dir=args.process)
+    except Exception as exc:  # noqa: BLE001 -- matched by its attribute below; anything else still raises
+        # A project file this reads and cannot -- the journal held, a line in it in another code page (#134, R53):
+        # one line, `error: <file> <reason> -- <repair>`, exit 1, never a traceback.
+        if not getattr(type(exc), "is_unreadable", False):
+            raise
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     print(json.dumps(r, indent=2, ensure_ascii=False) if args.json else render(r))
     return 0
 

@@ -1747,6 +1747,57 @@ def _selftest():
     assert _side_of("w_L") == "L" and _side_of("tw_R") == "R" and _side_of("sw") == "sub"   # skill #81
     print(f"selftest[state-map] OK — derived {len(sp)} joints from active slot "
           f"'{preset}' crossovers (sub↔w↔m↔tw per side).")
+    _check_joints_refuse_an_unreadable_journal()
+    print("selftest[journal] OK — analyze-joints --process refuses a journal it cannot read in one line, exit 1, "
+          "never as REW's failure (#134, R53).")
+
+
+def _check_joints_refuse_an_unreadable_journal():
+    """`analyze-joints --process` refuses a journal it cannot read in one line, `error: <file> <reason> -- <repair>`,
+    exit 1, and never a traceback (#134, R53). The round's protective record is read as the method reads the journal,
+    strictly, so a journal held by another program refuses it; it was caught as REW's failure -- "Помилка підключення
+    до REW API / state", then "start REW", on stdout -- and REW could not mend it. Read leniently it was no round at
+    all. Held as Windows refuses a held file: `open()` raising `PermissionError` 13."""
+    import builtins
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    state_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state")
+    if state_dir not in sys.path:
+        sys.path.insert(0, state_dir)
+    from process import Process                      # the module `main` imports, by the same bare name
+    top = tempfile.mkdtemp(prefix="autosound_joints_journal_")
+    real_open, real_argv = builtins.open, sys.argv
+    try:
+        d = os.path.join(top, "process")
+        with contextlib.redirect_stdout(io.StringIO()):
+            Process(d).enter_phase("-1")
+        journal = os.path.join(d, "journal.jsonl")
+
+        def held(file, *args, **kwargs):
+            if isinstance(file, str) and os.path.abspath(file) == journal:
+                raise PermissionError(13, "The process cannot access the file because it is being used by another "
+                                          "process", file)
+            return real_open(file, *args, **kwargs)
+        out, err = io.StringIO(), io.StringIO()
+        code = 0
+        sys.argv = ["rew_tool.py", "analyze-joints", "--joint", "w-L,m-L,400", "--process", d, "--ver", "1"]
+        builtins.open = held
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                main()
+        except SystemExit as exc:
+            code = exc.code
+        finally:
+            builtins.open, sys.argv = real_open, real_argv
+        said = err.getvalue()
+        assert code == 1 and said.startswith(f"error: {journal} cannot be opened (") and said.count("\n") == 1, \
+            (code, out.getvalue(), said)
+        assert "REW" not in out.getvalue() and "Traceback" not in said, (out.getvalue(), said)
+    finally:
+        builtins.open, sys.argv = real_open, real_argv
+        shutil.rmtree(top, ignore_errors=True)
 
 
 def main():
@@ -1900,6 +1951,12 @@ def main():
             print(f"Помилка: {e}")
             sys.exit(1)
         except Exception as e:
+            if getattr(type(e), "is_unreadable", False):
+                # A project file this reads and cannot -- the journal held, a line in it in another code page (#134,
+                # R53): its own refusal in one line, `error: <file> <reason> -- <repair>`. Said as REW's, it sent the
+                # person to start REW, which cannot mend it.
+                print(f"error: {e}", file=sys.stderr)
+                sys.exit(1)
             print(f"Помилка підключення до REW API / state: {e}")
             print("Переконайся що REW запущений з -api і API сервер увімкнений.")
             sys.exit(1)

@@ -124,19 +124,28 @@ for that checkout — see `rew_tool/provenance.py` for why it is the sha and not
 **How the journal is read** (#134, the silent-failures review: F I-2, H I-2, T I8). As bytes, split on `\n` alone --
 U+2028, U+2029 and U+0085, which the method writes raw inside an event's text, never split a line -- and each line
 decoded by itself. No journal is no events. A line torn by a cut write -- not JSON, cut inside its last character,
-or JSON that is no object -- is skipped by every reader. Two things are never read as missing:
+or JSON that is no object -- is skipped by every reader. The method's own readers -- every writer and verdict,
+`amp-changes`, `listening-verdicts`, `session_closed`, the flaw-map gate, and what the other tools ask
+(`capture_rounds`, `protective_record_for`, ...) -- read through `Process._events`, which never reads two things as
+missing:
 
 - **a journal that is there and cannot be opened** (held by another program, a permission, a folder in its place):
-  `Process.events()` raises `project_io.Unreadable` naming it and its repair, where it answered `[]`;
-- **a line in another code page** (not UTF-8 before its end: a project begun before v3.0.45 on Windows): the method's
-  own readers -- every writer and verdict, `amp-changes`, `listening-verdicts`, `session_closed`, the flaw-map gate,
-  and what the other tools ask (`capture_rounds`, `protective_record_for`, ...) -- read through `Process._events`,
-  which refuses it, naming the line(s) and `contract.py repair-encoding`; skipped, a round, a series, a protective
-  record or a ruling was gone without a word. `events()`, the reader for a screen (TCC), skips it and counts it in
-  `journal_skipped` (`{"torn": [...], "not_utf8": [...]}`, line numbers from 1).
+  refused with `project_io.Unreadable` naming it and its repair -- read as `[]`, a held journal was a project with no
+  history;
+- **a line in another code page** (not UTF-8 before its end: a project begun before v3.0.45 on Windows): refused,
+  naming the line(s) and `contract.py repair-encoding` -- skipped, a round, a series, a protective record or a ruling
+  was gone without a word.
 
-`contract.py check` reports either as not valid, and counts the skipped lines (`skipped`). An appended line is fsynced
-(and the folder, when the append made the file), so it survives a power loss.
+The command lines that read the journal through `Process` (`predict.py`, `flaw_map.py`, `rew_tool.py analyze-joints`,
+`resonalyze_ir.py`, `eq_propose.py`, `ear_suspects.py`, `naming.py next-series`) refuse either in one line, `error:
+<file> <reason> -- <repair>`, exit 1, never a traceback (R53). `Process.events()`, the reader for a screen (TCC), stays
+lenient, as `Process.load()` does (R53): a journal it cannot open is `[]` there, and a line in another code page is
+skipped and counted in `journal_skipped` (`{"torn": [...], "not_utf8": [...]}`, line numbers from 1).
+
+`contract.py check` reads the journal strictly too, and reports as not valid one that cannot be opened, that holds a
+line in another code page, or that has lines and no event or as many lines that are no event as events or more (R55:
+damage, not a cut write); it counts the skipped lines (`skipped`), and fewer torn lines than events are only said. An
+appended line is fsynced (and the folder, when the append made the file), so it survives a power loss.
 
 ## Invariants (enforced in code, not by discipline)
 

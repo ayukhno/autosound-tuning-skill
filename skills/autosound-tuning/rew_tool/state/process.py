@@ -1132,24 +1132,31 @@ class Process:
     def events(self, limit=None, kinds=None):
         """Journal entries oldest-first. `kinds` filters by event type.
 
-        No journal is no events, `[]`. A journal that is there and cannot be opened -- held by another program, a
-        permission, a folder in its place -- raises `project_io.Unreadable` naming it and its repair, never `[]` (#134,
-        F I-2): read as empty, a held journal was a project with no history. Match it by `is_unreadable`.
+        The reader for a screen (TCC), lenient as `load()` is (#134, R53): no journal, and a journal that is there and
+        cannot be opened -- held by another program, a permission, a folder in its place -- are no events, `[]`. The
+        method's own readers read the journal through `_events`, which refuses both what cannot be opened and a line
+        in another code page, naming it and its repair.
 
         Read as bytes, split on "\\n" alone (T I8: U+2028, U+2029 and U+0085 inside an event's text are not line
         ends), each line decoded by itself (R23). A line that is not an event -- torn by a cut write, inside a
         character too, or not JSON -- is skipped, and so, here, is a line written in another code page; both are
-        counted in `journal_skipped`, `{"torn": [line numbers], "not_utf8": [...]}`, from 1. This is the reader for
-        a screen (TCC); the method's own readers read the journal through `_events`, which refuses a line in another
-        code page. A byte-order mark stays part of its line, as with `encoding="utf-8"` before."""
-        events, torn, foreign = self._read_journal()
+        counted in `journal_skipped`, `{"torn": [line numbers], "not_utf8": [...]}`, from 1 (both empty for a journal
+        that could not be opened). A byte-order mark stays part of its line, as with `encoding="utf-8"` before."""
+        try:
+            events, torn, foreign = self._read_journal()
+        except Exception as exc:  # noqa: BLE001 -- the journal that cannot be opened alone is no events here
+            if not getattr(type(exc), "is_unreadable", False):
+                raise
+            events, torn, foreign = [], [], []
         self.journal_skipped = {"torn": torn, "not_utf8": foreign}
         return self._pick(events, limit, kinds)
 
     def _events(self, limit=None, kinds=None):
-        """`events()` read strictly (#134, F I-2, H I-2): what every reader of the method reads -- each writer, each
-        verdict, `amp-changes` and `listening-verdicts`, `session_closed`, `_stamp`, the flaw-map gate. A line written
-        in another code page refuses the read with `Unreadable`, naming the line(s) and the repair (`contract.py
+        """`events()` read strictly (#134, F I-2, H I-2, R53): what every reader of the method reads -- each writer,
+        each verdict, `amp-changes` and `listening-verdicts`, `session_closed`, `_stamp`, the flaw-map gate, and what
+        the other tools ask (`capture_rounds`, `protective_record_for`, ...). A journal that is there and cannot be
+        opened raises `Unreadable` (`project_io.cannot_open`): read as empty, a held journal was a project with no
+        history. So does a line written in another code page, naming the line(s) and the repair (`contract.py
         repair-encoding`): skipped, a round, a series, a protective record or a ruling was gone from what the method
         decided and recorded, without a word. A torn line is skipped as in `events()`."""
         events, torn, foreign = self._read_journal()
@@ -3571,14 +3578,15 @@ class _Held:
 
 
 def _check_journal_that_cannot_be_opened():
-    """A journal that is there and cannot be opened is never read as empty (#134, F I-2, H minor 4): held by another
-    program (Windows), a permission, a folder in its place. `events()` raised nothing and answered `[]` -- no file and
-    no events alike -- so `amp-changes` said "no amp changes on record", `amp-gain` numbered its change `amp-1` again,
-    `session_closed()` answered False, the flaw-map gate refused for the wrong reason, `session-reopen` said the journal
-    held no session event, and a state writer wrote its change before its event's append failed. Now `events()` raises
-    an exception with `is_unreadable` naming the journal and the repair its cause allows, and every verb that reads or
-    writes the journal exits 1 on it with nothing on stdout and nothing written -- the state writers before their write.
-    No file at all is still no events."""
+    """A journal that is there and cannot be opened is never read as empty by the method (#134, F I-2, H minor 4,
+    R53): held by another program (Windows), a permission, a folder in its place. Every reader read it as `[]` -- no
+    file and no events alike -- so `amp-changes` said "no amp changes on record", `amp-gain` numbered its change
+    `amp-1` again, `session_closed()` answered False, the flaw-map gate refused for the wrong reason, `session-reopen`
+    said the journal held no session event, and a state writer wrote its change before its event's append failed. Now
+    the method's reads (`_events`) raise an exception with `is_unreadable` naming the journal and the repair its cause
+    allows, and every verb that reads or writes the journal exits 1 on it with nothing on stdout and nothing written --
+    the state writers before their write. `events()`, the reader a screen (TCC) calls, stays lenient, as `load()`
+    does (R53): such a journal is `[]` there. No file at all is no events."""
     import contextlib
     import io as _io
     import shutil
@@ -3606,8 +3614,16 @@ def _check_journal_that_cannot_be_opened():
                     failures.append(f"{label}: {type(exc).__name__}: {exc}")
             else:
                 failures.append(f"{label}: answered {got!r}")
+        def lenient(label):
+            try:
+                got = Process(d).events()
+            except Exception as exc:  # noqa: BLE001 -- the kind is what is under test
+                got = f"raised {type(exc).__name__}: {exc}"
+            if got != []:
+                failures.append(f"{label}: events(), the screen's reader, answered {got!r} -- it stays lenient (R53)")
         with _Held(journal):
-            refused("events()", lambda: Process(d).events())
+            lenient("held")
+            refused("the method's read (_events)", lambda: Process(d)._events())
             refused("session_closed()", lambda: Process(d).session_closed())
             refused("the flaw-map gate", lambda: _positions_asked(top))
             for argv in (["amp-changes"], ["listening-verdicts"], ["amp-gain", "sw=+3"], ["decision", "q", "a"],
@@ -3621,9 +3637,10 @@ def _check_journal_that_cannot_be_opened():
         if os.name == "posix" and os.geteuid() != 0:            # the same, met for real: a permission
             os.chmod(journal, 0)
             try:
-                refused("events() on a mode-0 journal", lambda: Process(d).events())
+                refused("_events() on a mode-0 journal", lambda: Process(d)._events())
+                lenient("mode 0")
                 try:
-                    Process(d).events()
+                    Process(d)._events()
                 except Exception as exc:  # noqa: BLE001
                     if "close what holds it" in str(exc):
                         failures.append(f"a permission told to close what holds it: {exc}")
@@ -3632,12 +3649,13 @@ def _check_journal_that_cannot_be_opened():
         os.remove(journal)
         os.makedirs(journal)                                     # a folder where the journal belongs
         try:
-            Process(d).events()
+            Process(d)._events()
         except Exception as exc:  # noqa: BLE001
             if not (getattr(exc, "is_unreadable", False) and exc.reason == "is a directory, not a file"):
                 failures.append(f"a folder in the journal's place: {type(exc).__name__}: {exc}")
         else:
             failures.append("a folder in the journal's place read as a journal")
+        lenient("a folder in its place")
         os.rmdir(journal)
         # No file at all is no events, and no session event: a fresh project, not a fault.
         if Process(d).events() != [] or Process(d).session_closed() is not False:
@@ -6508,9 +6526,10 @@ def _selftest():
         "a verifier that will not load is named with why; the handoff says a changelog it cannot read, its mend by "
         "the cause; "
         "a superseded row counts nowhere as taken, the reconcile's extra included, and a check never invents a "
-        "capture REW does not hold (#134, #138 I-15); the journal is never read as empty: one that cannot be opened, "
-        "or that holds a line in another code page, refuses every reader of the method with its repair (events() "
-        "skips and counts such a line), split on \\n alone so an event holding U+2028, U+2029 or U+0085 reads whole; "
+        "capture REW does not hold (#134, #138 I-15); the journal is never read as empty by the method: one that cannot "
+        "be opened, or that holds a line in another code page, refuses every reader of the method with its repair "
+        "(events(), a screen's reader, stays lenient: such a journal is no events there, such a line skipped and "
+        "counted), split on \\n alone so an event holding U+2028, U+2029 or U+0085 reads whole; "
         "a state writer refuses such a journal before it writes, an append refused after the write says what landed "
         "and the line to append, and a replace refused past the retries is a refusal, the file as it was; "
         "session-close's and capture-check's own reads are strict (#134, the silent-failures review, batch 2). "

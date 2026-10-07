@@ -798,10 +798,11 @@ def seal_all(root):
 
 def verify_seals(root):
     """`[{"version", "why"}]` -- every sealed version whose content changed, or whose file is gone, and every version
-    banked and never sealed (#134, F M-10): a bank creates the version and then writes its seal, and a seal write that
-    failed (a full disk, a held `seals.json`) left a version nothing checked. A `seals.json` that cannot be read raises
-    (`_read_seals`, #136): it is not "nothing to verify". A ledger with no seals at all is not this one's to name:
-    banked before seals existed, it is `contract.py check`'s `unsealed` offer."""
+    banked after its line's first seal and never sealed (#134, F M-10, R54): a bank creates the version and then writes
+    its seal, and a seal write that failed (a full disk, a held `seals.json`) left a version nothing checked. One older
+    than the line's oldest sealed version is not named: banked before seals existed, or imported by `migrate.py
+    --into`. A `seals.json` that cannot be read raises (`_read_seals`, #136): it is not "nothing to verify". A ledger
+    with no seals at all is not this one's to name: it is `contract.py check`'s `unsealed` offer."""
     seals = _read_seals(root)
     if not seals:
         return []
@@ -820,11 +821,31 @@ def verify_seals(root):
         if got != digest:
             out.append({"version": key, "why": "its content changed after it was banked -- a banked version is "
                                                "immutable (#58 P1); a change is a NEW version"})
+    # Banked after its line's first seal, and not sealed (R54): only those. A version older than the line's oldest sealed
+    # one was banked before seals existed, or imported by `migrate.py --into`, which seals nothing -- the first bank
+    # after either seals its own version alone. A line is a preset's on the old layout (each numbers its own), the
+    # project's on the new one.
+    first = {}
+    for key in seals:
+        line, number = _line_and_number(key)
+        if number is not None:
+            first[line] = min(number, first.get(line, number))
     for key in sorted(k for k in paths if k not in seals):
+        line, number = _line_and_number(key)
+        if number is None or line not in first or number < first[line]:
+            continue
         out.append({"version": key, "why": f"banked, never sealed (the bank stopped before its seal was written: a "
                                            f"full disk, a held {SEALS_FILE}) -- seal it as it stands: python3 "
                                            f"{os.path.abspath(__file__)} --root {root} seal"})
     return out
+
+
+def _line_and_number(key):
+    """`(line, number)` of a seal key: `("", 3)` for `v_003` (the per-project line), `("SQ", 3)` for `SQ/v_003` (a
+    preset's line on the old layout); the number None for a key that names no version."""
+    line, _, name = key.rpartition("/")
+    match = _VER_RE.match(name)
+    return line, int(match.group(1)) if match else None
 
 
 # ── identity: a file IS the version its name says (skill #89, hub #213 TCC-033) ─────────────────
@@ -2459,8 +2480,9 @@ def _check_banked_never_sealed():
     """A version banked without its seal is reported (#134, F M-10): the bank creates the version, then writes its seal,
     and a seal write that failed (a full disk, a held file) left a version nothing would ever check -- `verify` said
     every sealed version was as banked, `check` was OK. `verify_seals` names it "banked, never sealed" with the way to
-    seal it, and `state.py verify` exits 3 on it. A ledger with no seals at all is `contract.py check`'s `unsealed`
-    offer, as before."""
+    seal it, and `state.py verify` exits 3 on it. Only a version banked after its line's first seal is named (R54): one
+    older than the oldest sealed version was banked before seals existed, or imported by `migrate.py --into`, which
+    seals nothing. A ledger with no seals at all is `contract.py check`'s `unsealed` offer, as before."""
     import contextlib
     import io
     import shutil
@@ -2469,7 +2491,10 @@ def _check_banked_never_sealed():
     real = _write_seals
     try:
         h = PresetHistory(root, "SQ")
-        assert h.snapshot(_sample_state(), note="sealed") == "v_001"
+        assert h.snapshot(_sample_state(), note="banked before seals existed") == "v_001"
+        os.remove(os.path.join(root, SEALS_FILE))            # as a ledger from before #58 P1, or an import, has it
+        assert h.snapshot(_sample_state(), note="the first seal") == "v_002"
+        assert verify_seals(root) == [], ("a version older than the first seal named", verify_seals(root))
 
         def full_disk(*_args):
             raise OSError(28, "No space left on device")
@@ -2481,16 +2506,17 @@ def _check_banked_never_sealed():
             pass
         finally:
             globals()["_write_seals"] = real
-        assert project_versions(root) == ["v_001", "v_002"], project_versions(root)
+        assert h.snapshot(_sample_state(), note="the banks go on, sealed") == "v_004"   # its line's first seal stays v_002
+        assert project_versions(root) == ["v_001", "v_002", "v_003", "v_004"], project_versions(root)
         broken = verify_seals(root)
-        assert [b["version"] for b in broken] == ["v_002"], broken
+        assert [b["version"] for b in broken] == ["v_003"], broken
         assert broken[0]["why"].startswith("banked, never sealed") and f"--root {root} seal" in broken[0]["why"], \
             broken[0]
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             rc = _main(["--root", root, "verify"])
-        assert rc == 3 and "✗ v_002: banked, never sealed" in out.getvalue(), (rc, out.getvalue(), err.getvalue())
-        assert seal_all(root) == ["v_002"] and verify_seals(root) == [], verify_seals(root)
+        assert rc == 3 and "✗ v_003: banked, never sealed" in out.getvalue(), (rc, out.getvalue(), err.getvalue())
+        assert seal_all(root) == ["v_001", "v_003"] and verify_seals(root) == [], verify_seals(root)
         os.remove(os.path.join(root, SEALS_FILE))           # no seals at all: the `unsealed` offer, not this
         assert verify_seals(root) == [], verify_seals(root)
     finally:

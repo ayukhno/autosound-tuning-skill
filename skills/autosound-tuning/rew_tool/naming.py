@@ -1152,6 +1152,13 @@ def _main(argv):
     except (NamingError, IndexError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+    except Exception as exc:  # noqa: BLE001 -- matched by its attribute below; anything else still raises
+        # `next-series` reads the journal as the method does, strictly (#134, R53): one it cannot read is a refusal in
+        # one line, `error: <file> <reason> -- <repair>`, exit 1, never a traceback -- nor a number counted without it.
+        if not getattr(type(exc), "is_unreadable", False):
+            raise
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     return 0
 
 

@@ -299,27 +299,37 @@ def check_glossary(project_dir):
 
 
 def _journal_entry(proc):
-    """The row of `process/journal.jsonl` (#134, F I-2, H I-2, H 14). Not there: `exists: false`, a fresh project. There
-    and not opened -- held, a permission, a folder in its place -- or holding a line in another code page: not valid,
-    with the file and its repair, as every reader of the method refuses it. `events` counts what was read and `skipped`
-    the lines no reader reads; torn ones -- a write cut off, which every reader skips -- are said in `issues` without
-    making the journal invalid. It said `valid: True` over all of these, `events: 0` for a journal it could not open."""
+    """The row of `process/journal.jsonl` (#134, F I-2, H I-2, H 14, R53, R55). Not there: `exists: false`, a fresh
+    project. It is read as the method reads it, strictly -- not through `events()`, which reads a journal it cannot open
+    as no events for a screen (R53). There and not opened -- held, a permission, a folder in its place -- or holding a
+    line in another code page: not valid, with the file and its repair, as every reader of the method refuses it.
+    `events` counts what was read and `skipped` the lines no reader reads. A torn line -- a write cut off, which every
+    reader skips (Task 6) -- is said in `issues` and keeps the journal valid while such lines are fewer than its events;
+    a journal with lines and no event, or with as many lines that are no event as events or more, is damage, not a cut
+    write: not valid, with the committed copy for its repair (R55). It said `valid: True` over all of these, `events:
+    0` for a journal it could not open."""
     name = "process/journal.jsonl"
     if not os.path.lexists(proc.journal_path):
         return _entry(name, False, None, None, events=0, skipped=0)
     try:
-        events = proc.events()                   # TCC's reader: it skips and counts what the method's readers refuse
+        events, torn, foreign = proc._read_journal()      # strict about opening, as `_events` is (R53)
     except Exception as exc:  # noqa: BLE001 -- matched by its attribute below; anything else still raises
         if not getattr(exc, "is_unreadable", False):
             raise
         return _entry(name, True, None, False, [str(exc)], events=0, skipped=0)
-    torn, foreign = proc.journal_skipped["torn"], proc.journal_skipped["not_utf8"]
     issues = [str(proc._not_utf8(foreign))] if foreign else []
+    damaged = bool(torn) and len(torn) >= len(events)
     if torn:
         shown = ", ".join(str(n) for n in torn[:10]) + (f" and {len(torn) - 10} more" if len(torn) > 10 else "")
-        issues.append(f"{len(torn)} line(s) skipped, not an event -- a write cut off, or text that is no event: line "
-                      f"{shown}; every reader skips them and reads the events around them")
-    return _entry(name, True, None, not foreign, issues, events=len(events), skipped=len(torn) + len(foreign))
+        if damaged:
+            restore = _siblings().load("project_io.py").restore_line(proc.journal_path)
+            issues.append(f"{proc.journal_path}: {len(torn)} line(s) are not events (line {shown}) and {len(events)} "
+                          f"are -- no write cut off leaves as many: the journal is damaged -- {restore}")
+        else:
+            issues.append(f"{len(torn)} line(s) skipped, not an event -- a write cut off, or text that is no event: "
+                          f"line {shown}; every reader skips them and reads the events around them")
+    return _entry(name, True, None, not (foreign or damaged), issues, events=len(events),
+                  skipped=len(torn) + len(foreign))
 
 
 def check_process(project_dir):
@@ -1641,13 +1651,16 @@ def _check_unreadable_process_state():
 
 def _check_journal_reported():
     """`process/journal.jsonl` is never reported valid off a read that failed or skipped what it could not read (#134,
-    F I-2, H I-2, H 14). A journal that is there and cannot be opened -- held, a permission, a folder in its place --
-    read as empty: `valid: True, events: 0`; one with a line in another code page read as valid, the line dropped, its
-    repair unsaid; and one of garbage read "valid, 0 events". Now the row is not valid, with the file and its repair
-    (`repair-encoding` for the code page, naming the lines), and the project is not OK; `skipped` counts the lines no
-    reader reads, and torn ones -- a write cut off, which every reader skips -- are said without making the journal
-    invalid. `check` and `repair-encoding` answer: a journal they cannot open is named, never a traceback, and the
-    survey never calls it UTF-8."""
+    F I-2, H I-2, H 14, R53, R55). A journal that is there and cannot be opened -- held, a permission, a folder in its
+    place -- read as empty: `valid: True, events: 0`; one with a line in another code page read as valid, the line
+    dropped, its repair unsaid; and one of garbage read "valid, 0 events". Now the row is not valid, with the file and
+    its repair (`repair-encoding` for the code page, naming the lines; the committed copy for damage), and the project
+    is not OK. `check` reads the journal as the method does, strictly, though `events()` reads one it cannot open as
+    `[]` for a screen (R53). `skipped` counts the lines no reader reads. Torn ones -- a write cut off, which every
+    reader skips -- are said without making the journal invalid while they are fewer than its events; a journal with
+    lines and no event, or with as many lines that are no event as events or more, is damage, not a cut write (R55).
+    `check` and `repair-encoding` answer: a journal they cannot open is named, never a traceback, and the survey never
+    calls it UTF-8."""
     import builtins
     import contextlib
     import io
@@ -1684,17 +1697,22 @@ def _check_journal_reported():
         assert rc == 1 and f"{journal} was not surveyed" in err.getvalue(), (rc, out.getvalue(), err.getvalue())
         torn = '{"at": "2026-10-06T00:00:01+00:00", "type": "user_dec'.encode("utf-8")
         foreign = json.dumps({"type": "user_decision", "question": "лишаємо 45°?"}, ensure_ascii=False).encode("cp1251")
-        for label, raw, valid, skipped, said in (
-                ("a line in another code page", whole + foreign + b"\n", False, 1, "line 3"),
-                ("a torn line", whole + torn + b"\n", True, 1, "line 3"),
-                ("garbage", b"not an event\n" * 3, True, 3, "line 1, 2, 3")):
+        # `whole` holds two events. A torn line among more events is a write cut off, read past (Task 6); as many lines
+        # that are no event as events, or more, and a journal with lines and no event, is damage (R55).
+        for label, raw, valid, skipped, said, repair in (
+                ("a line in another code page", whole + foreign + b"\n", False, 1, "line 3", "repair-encoding"),
+                ("one torn line among two events", whole + torn + b"\n", True, 1, "line 3", None),
+                ("two torn lines and two events", whole + (torn + b"\n") * 2, False, 2, "line 3, 4",
+                 "checkout HEAD -- journal.jsonl"),
+                ("garbage, no event", b"not an event\n" * 3, False, 3, "line 1, 2, 3",
+                 "checkout HEAD -- journal.jsonl")):
             with open(journal, "wb") as f:
                 f.write(raw)
             _entry_, row, _state = check_process(d)
             assert (row["exists"], row["valid"], row.get("skipped")) == (True, valid, skipped), (label, row)
             assert any(said in i for i in row["issues"]), (label, row["issues"])
-            if not valid:
-                assert any("repair-encoding" in i for i in row["issues"]), (label, row["issues"])
+            if repair:
+                assert any(repair in i for i in row["issues"]), (label, row["issues"])
             assert check_project(d, skip_rew=True)["ok"] is valid, label
         os.remove(journal)
         os.makedirs(journal)                      # a folder where the journal belongs
@@ -1706,6 +1724,61 @@ def _check_journal_reported():
     finally:
         builtins.open = real_open
         shutil.rmtree(d, ignore_errors=True)
+
+
+def _check_never_sealed_after_the_first_seal():
+    """"banked, never sealed" counts only a version banked after its ledger line's first seal (#134, R54). A ledger
+    holds versions from before seals existed (#58 P1), and `migrate.py --into` imports a version and seals nothing, so
+    the first bank after either sealed its own version alone, and every older one was then named "banked, never
+    sealed": a migrated project banked once turned `check` not OK. Such a version is older than the line's oldest
+    sealed one and is not named. A version banked after a seal, whose own seal was never written -- a bank cut off
+    between the two -- still turns `check` not OK."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    migrate_mod, state_mod = _load_vendored("migrate"), _load_vendored("state")
+    old, new = tempfile.mkdtemp(prefix="autosound_r54_old_"), tempfile.mkdtemp(prefix="autosound_r54_new_")
+    real = state_mod._write_seals
+
+    def seals_row(report):
+        return [f for f in report["files"] if f["file"] == f"state/{state_mod.SEALS_FILE}"]
+    try:
+        os.makedirs(os.path.join(old, "state", "SQ"))
+        with open(os.path.join(old, "state", "SQ", "v_001.json"), "w", encoding="utf-8") as f:     # a 2.x project
+            json.dump({"preset": "SQ", "version": "v_001", "sample_rate": 96000,
+                       "channels": {"w-L": {"helix_ch": "C", "hp": {"f": 70, "type": "BW", "slope": 12},
+                                            "lp": {"f": 270, "type": "BW", "slope": 12}, "gain_db": -7.8,
+                                            "ta_ms": 5.38, "polarity": "NORM"}}}, f)
+        with contextlib.redirect_stdout(io.StringIO()):
+            migrate_mod.import_current_state(old, new)
+        assert check_project(new, skip_rew=True)["ok"] is True, "the fixture: a migrated project is OK"
+        history = state_mod.PresetHistory(os.path.join(new, "state"), "SQ", project_dir=new)
+        current = {k: v for k, v in history.load("v_001").items() if k not in ("version", "created", "parent")}
+        assert history.snapshot(current, note="the first bank after the import") == "v_002"
+        report = check_project(new, skip_rew=True)
+        assert report["ok"] is True and not seals_row(report), ("a migrated project banked once", seals_row(report))
+
+        def full_disk(*_args):
+            raise OSError(28, "No space left on device")
+        state_mod._write_seals = full_disk
+        try:
+            history.snapshot(current, note="its seal never written")
+            raise AssertionError("a bank whose seal could not be written reported success")
+        except OSError:
+            pass
+        finally:
+            state_mod._write_seals = real
+        assert history.snapshot(current, note="the banks go on, sealed") == "v_004"   # the line's first seal: v_002
+        report = check_project(new, skip_rew=True)
+        rows = seals_row(report)
+        assert report["ok"] is False and rows and rows[0]["valid"] is False, (report["ok"], rows)
+        assert [i.split(":")[0] for i in rows[0]["issues"]] == ["SQ/v_003"], rows[0]["issues"]
+        assert "banked, never sealed" in rows[0]["issues"][0], rows[0]["issues"]
+    finally:
+        state_mod._write_seals = real
+        shutil.rmtree(old, ignore_errors=True)
+        shutil.rmtree(new, ignore_errors=True)
 
 
 def _check_gate_last_line():
@@ -1922,7 +1995,7 @@ def _selftest():
     os.environ["AUTOSOUND_NO_GH"] = "1"          # the history line is checked; GitHub is never reached from a test
     failures = []
     for check in (_check_invalid_project_json, _check_unreadable_process_state, _check_journal_reported,
-                  _check_gate_last_line,
+                  _check_never_sealed_after_the_first_seal, _check_gate_last_line,
                   _check_unreadable_profile_and_seals_reported, _check_version_verb, _check_version_shape,
                   _check_skill_version, _check_skill_sha):
         try:
@@ -2426,8 +2499,11 @@ def _selftest():
           f"one its exit code gives, and an empty flaw map is said to have no rows (I-28); a dsp_profile.json or a "
           f"seals.json that cannot be read, or a profile a newer method wrote, is reported with its repair (#136); a "
           f"journal that cannot be opened, or that holds a line in another code page, is reported not valid with its "
-          f"repair, its skipped lines counted and a torn one said without failing it, a process state a newer method "
-          f"wrote is reported in JSON, and repair-encoding names a file it could not open, exit 1 (#134). "
+          f"repair, read strictly though events() is lenient, its skipped lines counted, a torn one among more events "
+          f"said without failing it and one with lines and no event, or as many torn lines as events, not valid; a "
+          f"version banked after its line's first seal and never sealed is not OK, while a migrated project banked "
+          f"once stays OK; a process state a newer method wrote is reported in JSON, and repair-encoding names a file "
+          f"it could not open, exit 1 (#134). "
           f"root={root}")
     return 0
 

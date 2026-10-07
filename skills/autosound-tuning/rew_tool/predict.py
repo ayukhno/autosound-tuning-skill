@@ -2008,6 +2008,18 @@ def plot(result, path):
 
 # ---------------------------------------------------------------- CLI
 def main(argv=None):
+    """The command line (`_main`), and its refusal of a project file it reads and cannot (#134, R53): the journal held,
+    a line in it in another code page -- one line, `error: <file> <reason> -- <repair>`, exit 1, never a traceback."""
+    try:
+        return _main(argv)
+    except Exception as exc:  # noqa: BLE001 -- matched by its attribute below; anything else still raises
+        if not getattr(type(exc), "is_unreadable", False):
+            raise
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+
+def _main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     src = ap.add_mutually_exclusive_group()
     src.add_argument("--solos", metavar="DIR", help="directory of Resonalyze v7 solo files")

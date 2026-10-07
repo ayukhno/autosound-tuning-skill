@@ -166,16 +166,21 @@ such. No file at all is the one quiet case: a fresh project. It holds for:
 
 - `process/process-state.json`: every `process.py` verb but `plan`, `amp-changes` and `listening-verdicts`, every
   writer method, `handoff()` and `contract.py check` (`state/process-schema.md` has it in full);
-- `process/journal.jsonl` (#134): `Process.events()` answers `[]` for no journal only, and raises for one that cannot
-  be opened. The method's own readers read it strictly -- every `process.py` verb that reads or writes it,
-  `session_closed()`, the flaw-map gate and every writer method -- and refuse a line in another code page too, naming
-  the line and `contract.py repair-encoding`; `events()` skips such a line and counts it in `journal_skipped`
-  (`{"torn": [...], "not_utf8": [...]}`, line numbers from 1). A line torn by a cut write, inside its last character
-  too, is skipped by every reader. `contract.py check` reports a journal that cannot be opened or that holds a line in
-  another code page as not valid, and counts the skipped lines (`skipped`);
+- `process/journal.jsonl` (#134): the method's own readers read it strictly and refuse one that cannot be opened,
+  and a line in another code page (naming the line and `contract.py repair-encoding`): every `process.py` verb that
+  reads or writes it, `session_closed()`, the flaw-map gate, every writer method, and the command lines that read it
+  through `Process` (`predict.py`, `flaw_map.py`, `rew_tool.py analyze-joints`, `resonalyze_ir.py`, `eq_propose.py`,
+  `ear_suspects.py`, `naming.py next-series`), each in one line, `error: <file> <reason> -- <repair>`, exit 1.
+  `Process.events()`, the reader for a screen, stays lenient, as `Process.load()` does: no journal and one that cannot
+  be opened are `[]` there, and a line in another code page is skipped and counted in `journal_skipped` (`{"torn":
+  [...], "not_utf8": [...]}`, line numbers from 1). A line torn by a cut write, inside its last character too, is
+  skipped by every reader. `contract.py check` reads it strictly too, and reports as not valid a journal that cannot
+  be opened, that holds a line in another code page, or that has lines and no event or as many lines that are no event
+  as events or more; it counts the skipped lines (`skipped`), and fewer torn lines than events are only said;
 - `state/seals.json`: `state.py verify` and `seal` (exit 1), a bank (`PresetHistory.snapshot`: nothing banked) and
-  `repair-version`. A version banked and never sealed (its seal write failed) is reported by `verify` (exit 3) and
-  `contract.py check`, beside sealed ones;
+  `repair-version`. A version banked after its ledger line's first seal and never sealed (its seal write failed) is
+  reported by `verify` (exit 3) and `contract.py check`; one older than the line's first seal -- banked before seals
+  existed, or imported by `migrate.py --into` -- is not;
 - `project.json`, where a bank stamps its `project_rev` and where the phase-1 gate reads the flaw map;
 - `dsp_profile.json` and `dsp_profile.draft.json`: `load_profile`, `load_draft` and every writer that reads through
   them (`set-field`, `reset-field`, `start`, `finalize`, `set-setting`, `refresh`), and the phase-1 and phase-2
