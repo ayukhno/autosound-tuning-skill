@@ -255,24 +255,26 @@ _REPAIR_FOLDER = "move the folder aside"
 #: Where nothing can hold a file against its reader -- POSIX has no mandatory locks -- "close what holds it" cannot be
 #: followed (H minor 3): a permission refuses it, a file stands where a folder of its path belongs, or the disk does.
 _REPAIR_PERMISSION = "this user may not open it: give it access (its owner and mode, `ls -l`) and run again"
+_REPAIR_WRITE_PERMISSION = "this user may not write it: give it access (its owner and mode, `ls -l`) and run again"
 _REPAIR_NOT_A_FOLDER = "a file stands where a folder of its path belongs: move that file aside"
 _REPAIR_RETRY = "check the disk and the folder it is in (a network share, a sync client's folder) and run again"
 
 
-def repair_for(exc):
+def repair_for(exc, writing=False):
     """The repair for `exc`, an `OSError` met opening or writing one of the method's files: the one its cause allows
-    (H minor 3). A file standing where a folder of the path belongs, and a folder where the file belongs, are said as
-    such everywhere. On Windows another program holding the file is the common cause -- a sharing violation reaches
-    `open()` as a plain EACCES -- so it is told to close what holds it. On POSIX nothing holds a file against a reader:
-    a permission is told as one, and anything else as the disk's."""
+    (H minor 3, m2). A file standing where a folder of the path belongs, and a folder where the file belongs, are said
+    as such everywhere. A permission refusal (EACCES, EPERM) is, on Windows, most often another program holding the
+    file -- a sharing violation reaches `open()` as a plain EACCES -- so it is told to close what holds it; on POSIX,
+    where nothing holds a file against a reader, it is a permission, to read or (`writing`) to write. Anything else --
+    a full disk, the disk's own error -- is the disk's, on both: no holder causes it."""
     if exc.errno == errno.ENOTDIR:
         return _REPAIR_NOT_A_FOLDER
     if exc.errno == errno.EISDIR:
         return _REPAIR_FOLDER
-    if os.name == "nt":
-        return _REPAIR_HELD
     if exc.errno in (errno.EACCES, errno.EPERM):
-        return _REPAIR_PERMISSION
+        if os.name == "nt":
+            return _REPAIR_HELD
+        return _REPAIR_WRITE_PERMISSION if writing else _REPAIR_PERMISSION
     return _REPAIR_RETRY
 
 
@@ -283,6 +285,13 @@ def cannot_open(path, exc):
     if os.path.isdir(path):
         return Unreadable(path, "is a directory, not a file", _REPAIR_FOLDER)
     return Unreadable(path, f"cannot be opened ({exc})", repair_for(exc))
+
+
+def cannot_append(path, exc):
+    """The `Unreadable` to raise for `path`, which reads and refused the append `exc` names (m4): `cannot be appended to
+    (...)`, with a write's repair -- a read-only journal is not one that "cannot be opened". One wording for one cause,
+    whether the look before a state write or the append itself meets it."""
+    return Unreadable(path, f"cannot be appended to ({exc})", repair_for(exc, writing=True))
 
 
 #: What a refusal calls a JSON value: JSON's words, not Python's type names ("null", not "NoneType").
@@ -379,6 +388,14 @@ def reencode_line(project_dir):
     candidate page makes it say and rewrites it as UTF-8. For `read_json`'s `repair_encoding`."""
     contract_py = os.path.join(os.path.dirname(os.path.abspath(__file__)), "contract.py")
     return f"rewrite it as UTF-8: python3 {contract_py} repair-encoding {os.path.abspath(project_dir)}"
+
+
+def set_aside_line(project_dir):
+    """The way out for journal lines no code page makes JSON of (#134, R56): `contract.py repair-encoding --set-aside`,
+    which moves them, bytes kept and numbered, into `<journal>.set-aside` -- no repair can rewrite them."""
+    contract_py = os.path.join(os.path.dirname(os.path.abspath(__file__)), "contract.py")
+    return (f"set such lines aside, bytes kept: python3 {contract_py} repair-encoding {os.path.abspath(project_dir)} "
+            f"--set-aside")
 
 
 # ── selftest ─────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -816,7 +833,11 @@ def _check_read_json():
                 ("posix", PermissionError(13, "Permission denied"), _REPAIR_PERMISSION),
                 ("posix", NotADirectoryError(20, "Not a directory"), _REPAIR_NOT_A_FOLDER),
                 ("nt", NotADirectoryError(20, "Not a directory"), _REPAIR_NOT_A_FOLDER),
-                ("posix", OSError(5, "Input/output error"), _REPAIR_RETRY)):
+                ("posix", OSError(5, "Input/output error"), _REPAIR_RETRY),
+                # m2: on Windows too, only what a holder causes is told to close it -- a sharing violation reaches
+                # `open()` as EACCES; a full disk or the disk's own error is the disk's.
+                ("nt", OSError(28, "No space left on device"), _REPAIR_RETRY),
+                ("nt", OSError(5, "Input/output error"), _REPAIR_RETRY)):
             def refused(p, *args, error=error, **kwargs):
                 raise type(error)(error.errno, error.strerror, p)
             globals()["open"], os.name = refused, platform      # read_json's own open() resolves here first
@@ -831,6 +852,21 @@ def _check_read_json():
             finally:
                 del globals()["open"]
                 os.name = real_name
+        # A write's repair (m2, m4): a POSIX permission to WRITE is not "may not open it", and a full disk is the disk's
+        # on both platforms; a Windows EACCES or EPERM, a holder's, is told to close what holds it.
+        try:
+            os.name = "posix"
+            assert repair_for(PermissionError(13, "Permission denied"), writing=True) == _REPAIR_WRITE_PERMISSION
+            assert repair_for(OSError(28, "No space left on device"), writing=True) == _REPAIR_RETRY
+            os.name = "nt"
+            assert repair_for(PermissionError(13, "Access is denied"), writing=True) == _REPAIR_HELD
+            assert repair_for(PermissionError(1, "Operation not permitted"), writing=True) == _REPAIR_HELD
+            assert repair_for(OSError(28, "No space left on device"), writing=True) == _REPAIR_RETRY
+        finally:
+            os.name = real_name
+        appended = cannot_append(path, PermissionError(13, "Permission denied", path))
+        assert getattr(appended, "is_unreadable", False) and appended.reason.startswith("cannot be appended to ("), \
+            repr(appended)
         if os.name != "nt":                      # the same two, met for real: POSIX gives them their own errno
             through = os.path.join(path, "x.json")                     # `path` is a file: a folder of the path
             try:
@@ -1107,7 +1143,8 @@ def _selftest():
           f"opened is Unreadable from the append, nothing appended; read_json gives the "
           f"default for no file, reads a BOM, and refuses an empty, cut-off, cp1251, wrong-type, held or directory one "
           f"as Unreadable, naming it and its repair -- never the caller's older copy for a file that may be whole, the "
-          f"repair by its cause (close what holds it on Windows, a permission or a file in the path's place on POSIX), "
+          f"repair by its cause (close what holds it for a permission refusal on Windows, a permission or a file in "
+          f"the path's place on POSIX, the disk's for anything else on both; a refused append said as one), "
           f"and a file cut inside a character as cut off, not re-encoded; Project.save, Process._write, the seals and "
           f"save_profile go through the move: with it failing each raises, the old bytes whole and no temp left; "
           f"newer_schema tells a file a newer method wrote by an int version alone; "

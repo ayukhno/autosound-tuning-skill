@@ -1148,7 +1148,7 @@ class Process:
             if not getattr(type(exc), "is_unreadable", False):
                 raise
             events, torn, foreign = [], [], []
-        self.journal_skipped = {"torn": torn, "not_utf8": foreign}
+        self.journal_skipped = {"torn": torn, "not_utf8": [number for number, _line in foreign]}
         return self._pick(events, limit, kinds)
 
     def _events(self, limit=None, kinds=None):
@@ -1160,16 +1160,16 @@ class Process:
         repair-encoding`): skipped, a round, a series, a protective record or a ruling was gone from what the method
         decided and recorded, without a word. A torn line is skipped as in `events()`."""
         events, torn, foreign = self._read_journal()
-        self.journal_skipped = {"torn": torn, "not_utf8": foreign}
+        self.journal_skipped = {"torn": torn, "not_utf8": [number for number, _line in foreign]}
         if foreign:
             raise self._not_utf8(foreign)
         return self._pick(events, limit, kinds)
 
     def _read_journal(self):
-        """`(events, torn, foreign)`: every event of the journal, and the numbers of the lines skipped -- torn (not
-        JSON, not an object, or cut inside its last character) and foreign (not UTF-8 before its end: another code
-        page). `[]`s when there is no journal; `Unreadable` (`project_io.cannot_open`) when there is one and it
-        cannot be opened."""
+        """`(events, torn, foreign)`: every event of the journal, and the lines skipped -- `torn`, their numbers (not
+        JSON, not an object, or cut inside its last character), and `foreign`, `[(number, bytes)]` (not UTF-8 before
+        its end: another code page, or none -- R56). `[]`s when there is no journal; `Unreadable`
+        (`project_io.cannot_open`) when there is one and it cannot be opened."""
         io_ = _project_io()
         try:
             with open(self.journal_path, "rb") as f:
@@ -1184,7 +1184,10 @@ class Process:
                 text = line.decode("utf-8")
             except UnicodeDecodeError:
                 # Cut inside its last character (R23) is a torn append; a wrong byte before the end is a code page.
-                (torn if io_.cut_inside_a_character(line.rstrip(b"\r")) else foreign).append(number)
+                if io_.cut_inside_a_character(line.rstrip(b"\r")):
+                    torn.append(number)
+                else:
+                    foreign.append((number, line))
                 continue
             if not text.strip():
                 continue
@@ -1205,26 +1208,46 @@ class Process:
             events = [e for e in events if e.get("type") in kinds]
         return events[-limit:] if limit else events
 
-    def _not_utf8(self, lines):
-        """The refusal for journal lines in another code page (H I-2): the lines, and the repair that rewrites them --
-        line by line, the lines in UTF-8 left as they are."""
-        shown = ", ".join(str(n) for n in lines[:10]) + (f" and {len(lines) - 10} more" if len(lines) > 10 else "")
-        return _project_io().Unreadable(
-            self.journal_path, f"has {len(lines)} line(s) not in UTF-8 -- written in another code page: line {shown}",
-            _project_io().reencode_line(self.project_dir))
+    def _not_utf8(self, foreign):
+        """The refusal for journal lines that are not UTF-8 (H I-2), `foreign` as `_read_journal` gives them: the lines,
+        and the way each is mended. A line a code page makes JSON of is rewritten line by line (`repair-encoding`), the
+        lines in UTF-8 left as they are; one no code page makes JSON of -- an old append cut inside a character, the
+        next event glued on -- cannot be rewritten, and is set aside, bytes kept (`repair-encoding --set-aside`, R56):
+        named so, the refusal no longer sends the person to a survey that offers nothing. Told apart by `state.py`'s
+        `page_reads`, the rule the survey uses; with `state.py` not loadable, every line is told the rewrite."""
+        io_ = _project_io()
+        state_mod = _load_sibling("state/state.py")
+
+        def shown(numbers):
+            return ", ".join(str(n) for n in numbers[:10]) + (f" and {len(numbers) - 10} more" if len(numbers) > 10
+                                                               else "")
+        numbers = [number for number, _line in foreign]
+        nowhere = [number for number, line in foreign
+                   if state_mod is not None and not state_mod.page_reads(line.rstrip(b"\r"))]
+        if not nowhere:
+            return io_.Unreadable(
+                self.journal_path, f"has {len(numbers)} line(s) not in UTF-8 -- written in another code page: line "
+                                   f"{shown(numbers)}", io_.reencode_line(self.project_dir))
+        repair = io_.set_aside_line(self.project_dir)
+        if len(nowhere) < len(numbers):
+            repair += "; then rewrite the rest as UTF-8: " + io_.reencode_line(self.project_dir).split(": ", 1)[1]
+        return io_.Unreadable(
+            self.journal_path, f"has {len(numbers)} line(s) not in UTF-8: line {shown(numbers)} -- no code page makes "
+                               f"JSON of line {shown(nowhere)} (a write cut off, another glued on)", repair)
 
     def _require_journal(self):
         """Before a state write, what would keep its event from following it (F M-7): a journal that cannot be read
         whole -- held, a permission, a line in another code page (`_events`) -- or cannot be appended to. Refused here,
         nothing is written; the append's own refusal, after the write, would leave the change in the state with no
-        line in the journal for it."""
+        line in the journal for it. A journal that reads and refuses the append is said as that, as the append's own
+        refusal says it (`cannot_append`, m4)."""
         self._events(limit=1)
         if os.path.exists(self.journal_path):
             try:
                 with open(self.journal_path, "ab"):
                     pass
             except OSError as exc:
-                raise _project_io().cannot_open(self.journal_path, exc) from exc
+                raise _project_io().cannot_append(self.journal_path, exc) from exc
 
     def step(self, state, step_id):
         for entry in state.get("plan", []):
@@ -2839,8 +2862,8 @@ class Process:
         except OSError as exc:
             # A refusal, exit 1, not a bug (H minor 2): on Windows a holder past the retries -- a sync client, a scanner
             # -- as the same hold is on the read. The move either lands or leaves the file whole, and no temp behind.
-            raise ProcessError(f"{self.state_path} could not be written ({exc}) -- {io_.repair_for(exc)}; it is as it "
-                               f"was") from exc
+            raise ProcessError(f"{self.state_path} could not be written ({exc}) -- "
+                               f"{io_.repair_for(exc, writing=True)}; it is as it was") from exc
         # Owed from here: the event that goes with this change (`_append` says it, if it cannot be appended).
         self._unjournaled = True
 
@@ -2916,8 +2939,7 @@ class Process:
         unreadable = getattr(type(exc), "is_unreadable", False)
         if not (unreadable or isinstance(exc, OSError)):
             return None
-        why = str(exc) if unreadable else (f"{self.journal_path} cannot be appended to ({exc}) -- "
-                                           f"{io_.repair_for(exc)}")
+        why = str(exc if unreadable else io_.cannot_append(self.journal_path, exc))     # one wording (m4)
         if getattr(self, "_unjournaled", False):
             event = {"at": _now(), "type": event_type}
             event.update({k: v for k, v in payload.items() if v is not None})
@@ -3745,6 +3767,27 @@ def _check_journal_line_in_another_code_page():
             failures.append(f"events() read {got}")
         if getattr(lenient, "journal_skipped", None) != {"torn": [2], "not_utf8": [3]}:
             failures.append(f"events() counted {getattr(lenient, 'journal_skipped', None)}")
+        try:
+            Process(d)._events()
+        except Exception as exc:  # noqa: BLE001
+            if "--set-aside" in str(exc):
+                failures.append(f"a line a code page reads was sent to --set-aside: {exc}")
+        # A line no code page makes JSON of (R56) -- an old append cut inside a character with the next event glued on
+        # (before T-14) -- cannot be rewritten: the refusal names the way that takes it out, bytes kept, and no longer
+        # sends the person to a survey that offers nothing.
+        glued = b'{"type": "user_decision", "question": "\xd0' + json.dumps(asked).encode("utf-8")
+        with open(os.path.join(d, "journal.jsonl"), "wb") as f:
+            f.write(b"\n".join([lines[0], lines[2], glued, lines[3]]) + b"\n")
+        try:
+            Process(d)._events()
+        except Exception as exc:  # noqa: BLE001
+            said = str(exc)
+            if not (getattr(exc, "is_unreadable", False) and "line 2, 3" in said
+                    and "no code page makes JSON of line 3 " in said and " --set-aside" in said
+                    and "then rewrite the rest as UTF-8" in said):
+                failures.append(f"a line no code page reads: {said}")
+        else:
+            failures.append("a line no code page reads was read")
     finally:
         shutil.rmtree(top, ignore_errors=True)
     assert not failures, "\n  ".join(["a journal line in another code page:"] + failures)
@@ -3830,8 +3873,20 @@ def _check_event_refused_after_the_state():
         assert _project_bytes(d) == before, "a refused decision wrote something"
         with _Held(p.journal_path, refuses=lambda mode: "a" in mode):     # held for appending, readable
             rc, out, err = _run_main(["process.py", d, "start", "-1.8"])
-        assert rc == EXIT_NO and "journal.jsonl cannot be opened" in err and "Traceback" not in err, (rc, err)
+        # One cause, one wording (m4): the journal reads, and refuses the append -- "cannot be appended to", as the
+        # append's own refusal says it, never "cannot be opened".
+        assert rc == EXIT_NO and "journal.jsonl cannot be appended to (" in err and "Traceback" not in err, (rc, err)
         assert _project_bytes(d) == before, "the state was written beside a journal that refused the append"
+        if os.name == "posix" and os.geteuid() != 0:            # met for real: a read-only journal, both ways in
+            os.chmod(p.journal_path, 0o444)
+            try:
+                for argv in (["start", "-1.8"], ["decision", "q", "a"]):
+                    rc, out, err = _run_main(["process.py", d, *argv])
+                    assert rc == EXIT_NO and "journal.jsonl cannot be appended to (" in err \
+                        and "may not write it" in err and "Traceback" not in err, (argv, rc, err)
+            finally:
+                os.chmod(p.journal_path, 0o644)
+            assert _project_bytes(d) == before, "something was written beside a read-only journal"
         # A close appends its event before its state write: that write owes no line, and a refusal after it -- in the
         # same process, as a caller in code keeps one -- is not said as a state change missing its event.
         q = Process(d)
@@ -6749,7 +6804,9 @@ def _selftest():
         "counted), split on \\n alone so an event holding U+2028, U+2029 or U+0085 reads whole; "
         "a state writer refuses such a journal before it writes, an append refused after the write says what landed "
         "and the line to append, and a replace refused past the retries is a refusal, the file as it was; "
-        "session-close's and capture-check's own reads are strict (#134, the silent-failures review, batch 2). "
+        "session-close's and capture-check's own reads are strict; a line no code page makes JSON of is refused "
+        "naming --set-aside, and a journal that refuses the append is said as one (#134, the silent-failures "
+        "review, batch 2). "
         f"root={root}"
     )
     return 0

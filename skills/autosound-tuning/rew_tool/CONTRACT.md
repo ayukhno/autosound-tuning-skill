@@ -160,17 +160,20 @@ planned (W-11, J3b).
 a character too), not UTF-8, not JSON, the wrong top-level type, a folder in its place or a file that cannot be opened
 raises an exception with `is_unreadable` (`project_io.Unreadable`, with `.path`, `.reason`, `.repair`; neither an
 `OSError` nor a `ValueError`, so match the attribute, never the class), naming the file and its repair, and nothing is
-written. The repair for a file that cannot be opened is its cause's: on Windows, close what holds it; on POSIX, where
-nothing holds a file against a reader, a permission or a file standing where a folder of the path belongs is said as
-such. No file at all is the one quiet case: a fresh project. It holds for:
+written. The repair for a file that cannot be opened is its cause's: for a permission refusal on Windows, close what
+holds it; on POSIX, where nothing holds a file against a reader, a permission (to read, or to write) or a file standing
+where a folder of the path belongs is said as such; anything else -- a full disk, an I/O error -- is the disk's, on
+both. No file at all is the one quiet case: a fresh project. It holds for:
 
 - `process/process-state.json`: every `process.py` verb but `plan`, `amp-changes` and `listening-verdicts`, every
   writer method, `handoff()` and `contract.py check` (`state/process-schema.md` has it in full);
 - `process/journal.jsonl` (#134): the method's own readers read it strictly and refuse one that cannot be opened,
-  and a line in another code page (naming the line and `contract.py repair-encoding`): every `process.py` verb that
-  reads or writes it, `session_closed()`, the flaw-map gate, every writer method, and the command lines that read it
-  through `Process` (`predict.py`, `flaw_map.py`, `rew_tool.py analyze-joints`, `resonalyze_ir.py`, `eq_propose.py`,
-  `ear_suspects.py`, `naming.py next-series`), each in one line, `error: <file> <reason> -- <repair>`, exit 1.
+  and a line in another code page (naming the line and `contract.py repair-encoding`, or, for a line no code page
+  makes JSON of, `contract.py repair-encoding --set-aside`): every `process.py` verb that reads or writes it,
+  `session_closed()`, the flaw-map gate, every writer method, and the command lines that read it through `Process`
+  (`predict.py` -- its read of a series' knobs included --, `flaw_map.py`, `rew_tool.py analyze-joints`,
+  `resonalyze_ir.py`, `eq_propose.py`, `ear_suspects.py`, `naming.py next-series`), each in one line, `error: <file>
+  <reason> -- <repair>`, exit 1. One that reads and refuses the append is `cannot be appended to (...)`.
   `Process.events()`, the reader for a screen, stays lenient, as `Process.load()` does: no journal and one that cannot
   be opened are `[]` there, and a line in another code page is skipped and counted in `journal_skipped` (`{"torn":
   [...], "not_utf8": [...]}`, line numbers from 1). A line torn by a cut write, inside its last character too, is
@@ -209,7 +212,8 @@ ignores the mode). The files, each with the bytes its old writer wrote:
 - `dsp_profile.json` and `dsp_profile.draft.json`;
 - the old (per-preset) layout's `registry.json` and `HEAD`;
 - a ledger version `state.py repair-version` or `repair-encoding` rewrites, and the `<file>.<codec>.orig` backup
-  `repair-encoding` keeps (any project text file it repairs, the same way);
+  `repair-encoding` keeps (any project text file it repairs, the same way); the journal `repair-encoding
+  --set-aside` rewrites, and the `<journal>.set-aside` it writes first (#134, R56);
 - the ledger version `state/migrate.py --into` imports;
 - the Resonalyze impulse-response files (`resonalyze_ir.write_v7`);
 - the reviewer's machine file and key store, and a shell profile `autosound_ai.py key move-shell` rewrites, with its
@@ -246,9 +250,13 @@ Two more writes go through `project_io.py`; neither replaces a file:
   the journal line by line, split on `\n` alone, and skip a line that stops inside its last character like one that
   is not JSON; a line that is not UTF-8 before its end is another code page, which the method's readers refuse (item
   7). The survey of `repair-encoding` reads a `.jsonl` line by line, does not count a line that stops inside its last
-  character as a wrong code page, and repairs it line by line: only the lines that are not UTF-8 are rewritten. The
-  append itself is a plain one: text mode, the platform's line ending, no lock; it is fsynced, and so is the folder
-  when the append made the file (#134). A journal that cannot be opened is refused by the append too (`Unreadable`).
+  character as a wrong code page, and repairs it line by line: only the lines that are not UTF-8 are rewritten. A
+  line no code page makes JSON of (a write cut inside a character with the next event glued on, before T-14) is
+  left by every page's rewrite; on the person's `--set-aside` it moves, bytes kept, into `<journal>.set-aside` as
+  `line N: <bytes>`, every other line byte-identical (R56). Nothing is rewritten or set aside while a file could not
+  be read. The append itself is a plain one: text mode, the platform's line ending, no lock; it is fsynced, and so is
+  the folder when the append made the file (#134). A journal that cannot be opened is refused by the append too
+  (`Unreadable`), and one that reads and refuses the append is `cannot be appended to (...)`.
   `process.py` reads the journal, and opens it for appending, before it writes the state that an event goes with;
   an append refused after that write is said as what landed -- the state holds the change, the journal has no line
   for it -- with the line to append, exit 1.

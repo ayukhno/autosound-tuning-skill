@@ -1704,6 +1704,47 @@ def _utf8_damage(raw, appended):
     return None
 
 
+def _json_in(body, page):
+    """The text `page` makes of `body` when it is JSON there, else None."""
+    try:
+        text = body.decode(page)
+        json.loads(text)
+    except ValueError:                          # a UnicodeDecodeError too: the page cannot read it, or not as JSON
+        return None
+    return text
+
+
+def page_reads(line):
+    """Whether some legacy page makes JSON of `line`, the bytes of a journal line that is not UTF-8 (#134, R56): a
+    line a repair can rewrite. One no page reads -- an old append cut inside a character, the next event glued on --
+    cannot be rewritten, only set aside (`set_aside`). The one rule the survey and `process.py`'s refusal use."""
+    return any(_json_in(line, page) is not None for page in LEGACY_PAGES)
+
+
+def _pieces(raw):
+    """`[(number, piece, ending, body)]` of a `.jsonl`, split on "\\n" alone and numbered from 1 as the method's readers
+    number its lines: the piece without its "\\n", the "\\n" it had (none for the last), its body without a "\\r"."""
+    pieces = raw.split(b"\n")
+    return [(number, piece, b"\n" if number < len(pieces) else b"", piece[:-1] if piece.endswith(b"\r") else piece)
+            for number, piece in enumerate(pieces, 1)]
+
+
+def lines_no_page_reads(raw):
+    """`[(number, piece)]`: the lines of a `.jsonl` that are not UTF-8 before their end and that no legacy page makes
+    JSON of (R56). A line torn inside its last character is not among them: the method's readers skip it."""
+    io_ = _project_io()
+    out = []
+    for number, piece, _ending, body in _pieces(raw):
+        try:
+            body.decode("utf-8")
+            continue
+        except UnicodeDecodeError:
+            pass
+        if not io_.cut_inside_a_character(body) and not page_reads(body):
+            out.append((number, piece))
+    return out
+
+
 def _relined(raw, page):
     """A `.jsonl` in `page`, line by line (#134, H I-1): `(data, changed)`, or None when `page` is no answer.
 
@@ -1711,24 +1752,23 @@ def _relined(raw, page):
     as torn; only a line that is not UTF-8 is decoded with `page`, and must then parse as JSON. `data` is the file
     with those lines in UTF-8, every line ending kept; `changed` is `[(line number, its text)]` -- what the repair
     changes, numbered as the method's readers number a journal's lines (split on "\\n" alone, from 1). Decoding the
-    whole file with the page turned every UTF-8 line holding a non-ASCII character into mojibake."""
+    whole file with the page turned every UTF-8 line holding a non-ASCII character into mojibake. A line no page makes
+    JSON of keeps its bytes too (R56): no page's failure, it is `set_aside`'s to take out; a line another page reads
+    and this one does not makes this page no answer."""
     io_ = _project_io()
     out, changed = [], []
-    pieces = raw.split(b"\n")
-    for number, piece in enumerate(pieces, 1):
-        ending = b"\n" if number < len(pieces) else b""
-        body = piece[:-1] if piece.endswith(b"\r") else piece
+    for number, piece, ending, body in _pieces(raw):
         try:
             body.decode("utf-8")
         except UnicodeDecodeError:
             if not io_.cut_inside_a_character(body):
-                try:
-                    text = body.decode(page)
-                    json.loads(text)
-                except ValueError:              # a UnicodeDecodeError too: the page cannot read it, or not as JSON
-                    return None
-                changed.append((number, text.strip()))
-                piece = text.encode("utf-8") + piece[len(body):]
+                text = _json_in(body, page)
+                if text is None:
+                    if page_reads(body):
+                        return None
+                else:
+                    changed.append((number, text.strip()))
+                    piece = text.encode("utf-8") + piece[len(body):]
         out.append(piece + ending)
     return b"".join(out), changed
 
@@ -1745,8 +1785,9 @@ def encoding_survey(paths, unread=None):
 
     Each candidate is `{"codec", "text", "data"}`: `data` the bytes the repair writes. A `.jsonl` is judged and
     repaired line by line (H I-1, `_relined`): its candidate carries `changed`, the lines the repair rewrites, and
-    every other line keeps its bytes. A file that cannot be opened (held, a permission) is not surveyed -- never
-    called UTF-8 either: it goes into `unread`, `[(path, why)]`, when the caller passes a list.
+    every other line keeps its bytes; its entry carries `set_aside`, `[(number, text)]`, the lines no page makes JSON
+    of (R56), which no candidate rewrites and `set_aside` takes out. A file that cannot be opened (held, a permission)
+    is not surveyed -- never called UTF-8 either: it goes into `unread`, `[(path, why)]`, when the caller passes a list.
     """
     found = []
     for path in paths:
@@ -1762,11 +1803,15 @@ def encoding_survey(paths, unread=None):
         if exc is None:
             continue                            # already UTF-8: nothing to repair
         entry = {"path": path, "byte": raw[exc.start], "position": exc.start, "reason": exc.reason, "candidates": []}
+        if appended:
+            # The lines no page makes JSON of (R56): no candidate rewrites them; `set_aside` takes them out.
+            entry["set_aside"] = [(number, piece.decode("utf-8", "replace").strip())
+                                  for number, piece in lines_no_page_reads(raw)]
         for page in LEGACY_PAGES:
             if appended:
                 relined = _relined(raw, page)
-                if relined is None:
-                    continue
+                if relined is None or not relined[1]:
+                    continue                    # no answer, or a page that would change nothing
                 data, changed = relined
                 entry["candidates"].append({"codec": page, "text": data.decode("utf-8", "replace"), "data": data,
                                             "changed": changed})
@@ -1791,17 +1836,31 @@ def _non_ascii_lines(text, limit=6):
     return out[:limit]
 
 
-def render_survey(found, where, repair_command):
+def render_survey(found, where, repair_command, set_aside_command=None, unread=()):
+    """The survey as a person reads it. `set_aside_command` is the command that takes out the journal lines no code
+    page makes JSON of (R56); `unread` the files the survey could not open (m3): with any, it never says that every
+    file is UTF-8 -- the caller names them on stderr."""
     if not found:
+        if unread:
+            return (f"the files the survey could read under {where} are UTF-8, but {len(unread)} could not be read "
+                    f"(each named on its own error line) -- run this again once they can be")
         return f"every file under {where} is UTF-8 — nothing to repair"
     lines = [f"{len(found)} file(s) under {where} are NOT UTF-8.", ""]
     for e in found:
         lines.append(f"{e['path']}")
         lines.append(f"    byte {e['byte']:#04x} at position {e['position']} — {e['reason']}")
+        if e.get("set_aside"):
+            # No page makes JSON of these (R56): no rewrite mends them, and the readers refuse the journal over them.
+            for number, text in e["set_aside"][:6]:
+                lines.append(f"    line {number}: no code page makes JSON of it (a write cut off, another glued on): "
+                             f"{text[:100]}")
+            if len(e["set_aside"]) > 6:
+                lines.append(f"    ... and {len(e['set_aside']) - 6} more line(s) no code page makes JSON of")
         if not e["candidates"]:
-            lines.append("    no code page decodes this into readable JSON — it is damaged, not "
-                         "merely mis-encoded; the file's own history (`git`, a backup) is the way "
-                         "back, and the numbers can be re-banked with a fresh snapshot.")
+            if not e.get("set_aside"):
+                lines.append("    no code page decodes this into readable JSON — it is damaged, not "
+                             "merely mis-encoded; the file's own history (`git`, a backup) is the way "
+                             "back, and the numbers can be re-banked with a fresh snapshot.")
             continue
         for c in e["candidates"]:
             lines.append(f"    as {c['codec']}:")
@@ -1816,18 +1875,30 @@ def render_survey(found, where, repair_command):
             for s in _non_ascii_lines(c["text"]):
                 lines.append(f"        {s}")
         lines.append("")
-    codec = found[0]["candidates"][0]["codec"] if found[0]["candidates"] else "cp1251"
-    lines.append("Read the text above and pick the page whose words are the ones that were "
-                 "written. Nothing is guessed for you: a UTF-8 file read as cp1251 does not fail, "
-                 "it just says something else, so the only reader who can tell is the one who "
-                 "knows what it should say.")
-    lines.append("")
-    lines.append("    " + repair_command(codec))
-    lines.append("")
-    lines.append("That rewrites each file as UTF-8 and keeps the original bytes beside it as "
-                 "`<file>.<codec>.orig` — a snapshot is immutable, so the bytes that were there "
-                 "stay on disk. A journal (`.jsonl`) is rewritten line by line: only the lines shown "
-                 "change, and every line already in UTF-8 keeps its bytes.")
+    offered = [e for e in found if e["candidates"]]
+    if offered:
+        # A page is named only where one is offered: a command naming a page no file takes leads nowhere.
+        codec = offered[0]["candidates"][0]["codec"]
+        lines.append("Read the text above and pick the page whose words are the ones that were "
+                     "written. Nothing is guessed for you: a UTF-8 file read as cp1251 does not fail, "
+                     "it just says something else, so the only reader who can tell is the one who "
+                     "knows what it should say.")
+        lines.append("")
+        lines.append("    " + repair_command(codec))
+        lines.append("")
+        lines.append("That rewrites each file as UTF-8 and keeps the original bytes beside it as "
+                     "`<file>.<codec>.orig` — a snapshot is immutable, so the bytes that were there "
+                     "stay on disk. A journal (`.jsonl`) is rewritten line by line: only the lines shown "
+                     "change, and every line already in UTF-8 keeps its bytes.")
+    if any(e.get("set_aside") for e in found):
+        lines.append("")
+        lines.append("The lines no code page makes JSON of cannot be rewritten, and the method's readers refuse the "
+                     "journal while they are in it. Set them aside, on your word:")
+        lines.append("")
+        lines.append("    " + (set_aside_command or "contract.py repair-encoding <project> --set-aside"))
+        lines.append("")
+        lines.append("That moves each such line, bytes kept and its number with it, into `<journal>.set-aside`; "
+                     "every other line keeps its bytes. It is a run of its own, before or after a page's rewrite.")
     return "\n".join(lines)
 
 
@@ -1857,16 +1928,37 @@ def repair_encoding(paths, codec, unread=None):
 
     A `.jsonl` is rewritten line by line (#134, H I-1): only its lines that are not UTF-8 are decoded
     as `codec`, and every other line keeps its bytes -- a journal begun in cp1251 and continued in
-    UTF-8 had its UTF-8 lines turned into mojibake (`encoding_survey`'s `data`).
+    UTF-8 had its UTF-8 lines turned into mojibake (`encoding_survey`'s `data`). A line no page makes
+    JSON of is left as it is, and named in the entry's `left` (R56): `set_aside` takes it out. A
+    journal holding nothing else is not rewritten: its entry has `left` and no `backup`.
+
+    Nothing is rewritten while a file could not be read (`unread` not empty, m3), nor when one damaged
+    file has no answer in `codec`: every file is judged before the first write, so a refusal writes
+    nothing (it rewrote the files before the one that failed).
     """
-    done = []
-    for e in encoding_survey(paths, unread):
+    found = encoding_survey(paths, unread)
+    if unread:
+        return []
+    plan = []
+    for e in found:
         match = [c for c in e["candidates"] if c["codec"] == codec]
+        left = [number for number, _text in e.get("set_aside") or []]
+        if not match and left and not e["candidates"]:
+            plan.append((e, None, left))            # only lines no page reads: `set_aside`'s, not a page's
+            continue
         if not match:
             raise SnapshotError(
                 f"{e['path']}: {codec} does not decode this file into readable JSON. "
                 f"Offered: {', '.join(c['codec'] for c in e['candidates']) or 'none'}"
+                + (f"; lines no code page makes JSON of: {', '.join(map(str, left))} -- set them aside first "
+                   f"(repair-encoding --set-aside)" if left else "")
             )
+        plan.append((e, match[0], left))
+    done = []
+    for e, candidate, left in plan:
+        if candidate is None:
+            done.append({"path": e["path"], "backup": None, "codec": None, "left": left})
+            continue
         backup = e["path"] + f".{codec}.orig"
         if not os.path.exists(backup):          # on a second run the first backup is the original, and stays
             with open(e["path"], "rb") as f:
@@ -1877,8 +1969,51 @@ def repair_encoding(paths, codec, unread=None):
         # already had; writing it back in the default text mode would translate every `\n` to `\r\n`
         # on the very platform this repair is for, and a repair that silently rewrites bytes it was
         # not asked about is one nobody can check afterwards.
-        _project_io().atomic_write_bytes(e["path"], match[0]["data"])
-        done.append({"path": e["path"], "backup": backup, "codec": codec})
+        _project_io().atomic_write_bytes(e["path"], candidate["data"])
+        done.append({"path": e["path"], "backup": backup, "codec": codec, "left": left})
+    return done
+
+
+def set_aside(paths, unread=None):
+    """Move the journal lines no code page makes JSON of out of each `.jsonl` among `paths`, on the person's word
+    (#134, R56; the re-review's m1). Returns `[{"path", "set_aside", "lines"}]`, one per journal that had any.
+
+    Such a line -- an old append cut inside a character with the next event glued on (before T-14) -- is no UTF-8 and
+    no JSON in any page: the strict readers refuse the journal over it, and no rewrite can mend it. Each goes, bytes
+    kept, into `<journal>.set-aside` as `line N: <its bytes>` and a "\\n", after what that file holds already; every
+    other line keeps its bytes and its line ending. Both are written atomically, the set-aside first, so the bytes are
+    safe before they leave the journal. Nothing is moved while a file could not be read (`unread`, m3)."""
+    io_ = _project_io()
+    plan = []
+    for path in paths:
+        if not path.endswith(".jsonl"):
+            continue
+        try:
+            with open(path, "rb") as fh:
+                raw = fh.read()
+        except OSError as exc:
+            if unread is not None:
+                unread.append((path, str(exc)))
+            continue
+        moved = lines_no_page_reads(raw)
+        if moved:
+            plan.append((path, raw, moved))
+    if unread:
+        return []
+    done = []
+    for path, raw, moved in plan:
+        numbers = {number for number, _piece in moved}
+        target = path + ".set-aside"
+        try:
+            with open(target, "rb") as fh:
+                kept = fh.read()
+        except FileNotFoundError:
+            kept = b""
+        records = b"".join(b"line %d: " % number + piece + b"\n" for number, piece in moved)
+        io_.atomic_write_bytes(target, kept + records)
+        io_.atomic_write_bytes(path, b"".join(piece + ending for number, piece, ending, _body in _pieces(raw)
+                                              if number not in numbers))
+        done.append({"path": path, "set_aside": target, "lines": sorted(numbers)})
     return done
 
 
@@ -2068,23 +2203,28 @@ def _run(p, args):
         me = os.path.abspath(__file__)
         unread = []
         if args.codec is None:
+            found = encoding_survey(paths, unread)
             print(render_survey(
-                encoding_survey(paths, unread), args.root,
+                found, args.root,
                 lambda c: f"python3 {me} --root {args.root} repair-encoding "
                           + (" ".join(sorted(presets)) + " " if presets else "")
-                          + f"--from {c}"))
+                          + f"--from {c}", unread=unread))
             return said_unread(unread)
         try:
             done = repair_encoding(paths, args.codec, unread)
         except SnapshotError as exc:
             print(str(exc), file=sys.stderr)
             return 3
-        if not done and not unread:
+        if unread:                              # nothing was rewritten: a refusal writes nothing (m3)
+            print(f"nothing was rewritten under {args.root}: every file is read before any is rewritten",
+                  file=sys.stderr)
+            return said_unread(unread)
+        if not done:
             print(f"every ledger file under {args.root} is UTF-8 — nothing was rewritten")
         for d in done:
             print(f"{d['path']} — rewritten as UTF-8 (was {d['codec']}); "
                   f"original bytes kept at {os.path.basename(d['backup'])}")
-        return said_unread(unread)
+        return 0
     if args.cmd == "config":
         return _config_cli(args)
     if args.cmd == "registry":
@@ -2476,6 +2616,52 @@ def _check_repair_encoding_line_by_line():
         shutil.rmtree(folder, ignore_errors=True)
 
 
+def _check_set_aside_what_no_page_reads():
+    """A journal line no code page makes JSON of has a way out (#134, R56, the re-review's m1). A write cut inside a
+    character with the next event glued on (an append before T-14) is no UTF-8 and no JSON in any page: the strict
+    readers refused the journal, and `repair-encoding` offered no page -- a dead end. The survey names such a line and
+    the way out; `set_aside` moves it, bytes kept and numbered, into `<journal>.set-aside`, every other line
+    byte-identical; a page's repair rewrites the lines it reads and leaves that one as it is, said. Nothing is
+    rewritten or set aside while a file could not be read (m3): a repair that went on would do part of the job."""
+    import shutil
+    import tempfile
+    folder = tempfile.mkdtemp(prefix="autosound_set_aside_")
+    try:
+        utf8 = json.dumps({"type": "user_decision", "question": "нова сесія"}, ensure_ascii=False).encode("utf-8")
+        legacy = json.dumps({"type": "user_decision", "question": "лишаємо 45°?"}, ensure_ascii=False).encode("cp1251")
+        glued = b'{"type": "user_decision", "question": "\xd0' + utf8       # cut inside "л", the next event glued on
+        torn = '{"question": "л'.encode("utf-8")[:-1]
+        path = os.path.join(folder, "journal.jsonl")
+        original = b"\n".join([utf8, legacy, glued, utf8, torn]) + b"\n"
+        with open(path, "wb") as fh:
+            fh.write(original)
+        found = encoding_survey([path])
+        assert [e["path"] for e in found] == [path] and [n for n, _ in found[0]["set_aside"]] == [3], found
+        offered = found[0]["candidates"]
+        assert offered and all([n for n, _text in c["changed"]] == [2] for c in offered), offered
+        shown = render_survey(found, folder, lambda c: f"repair --from {c}", set_aside_command="repair --set-aside")
+        assert "line 3" in shown and "repair --set-aside" in shown and "repair --from cp1251" in shown, shown
+        unread = [(os.path.join(folder, "held.json"), "held")]
+        assert repair_encoding([path], "cp1251", unread) == [] and set_aside([path], unread) == []
+        with open(path, "rb") as fh:
+            assert fh.read() == original, "a repair went on beside a file it could not read"
+        done = repair_encoding([path], "cp1251")
+        assert [(d["path"], d["left"]) for d in done] == [(path, [3])], done
+        with open(path, "rb") as fh:
+            after_page = fh.read()
+        assert after_page == b"\n".join([utf8, legacy.decode("cp1251").encode("utf-8"), glued, utf8, torn]) + b"\n", \
+            after_page
+        moved = set_aside([path])
+        assert [(m["path"], m["set_aside"], m["lines"]) for m in moved] == [(path, path + ".set-aside", [3])], moved
+        with open(path + ".set-aside", "rb") as fh:
+            assert fh.read() == b"line 3: " + glued + b"\n", "the set-aside file is not the line's bytes"
+        with open(path, "rb") as fh:
+            assert fh.read() == b"\n".join([utf8, legacy.decode("cp1251").encode("utf-8"), utf8, torn]) + b"\n"
+        assert encoding_survey([path]) == [] and set_aside([path]) == [], "set aside, and still named"
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+
+
 def _check_banked_never_sealed():
     """A version banked without its seal is reported (#134, F M-10): the bank creates the version, then writes its seal,
     and a seal write that failed (a full disk, a held file) left a version nothing would ever check -- `verify` said
@@ -2700,7 +2886,8 @@ def _selftest():
     for check in (_check_eq_refusals, _check_canonical_code_uses_the_loaded_naming,
                   _check_repair_encoding_keeps_the_file, _check_version_never_overwritten,
                   _check_survey_reads_a_torn_journal_as_torn, _check_repair_encoding_line_by_line,
-                  _check_banked_never_sealed, _check_unreadable_seals_and_project_refused,
+                  _check_set_aside_what_no_page_reads, _check_banked_never_sealed,
+                  _check_unreadable_seals_and_project_refused,
                   _check_newer_version_refused, _check_snapshot_error_from_another_copy):
         try:
             check()

@@ -134,11 +134,15 @@ missing:
   history;
 - **a line in another code page** (not UTF-8 before its end: a project begun before v3.0.45 on Windows): refused,
   naming the line(s) and `contract.py repair-encoding` -- skipped, a round, a series, a protective record or a ruling
-  was gone without a word.
+  was gone without a word. A line no code page makes JSON of -- a write cut inside a character with the next event
+  glued on, before T-14 -- cannot be rewritten: the refusal names `contract.py repair-encoding <project> --set-aside`,
+  which moves such lines, bytes kept and numbered, into `<journal>.set-aside`, every other line byte-identical (R56).
 
-The command lines that read the journal through `Process` (`predict.py`, `flaw_map.py`, `rew_tool.py analyze-joints`,
-`resonalyze_ir.py`, `eq_propose.py`, `ear_suspects.py`, `naming.py next-series`) refuse either in one line, `error:
-<file> <reason> -- <repair>`, exit 1, never a traceback (R53). `Process.events()`, the reader for a screen (TCC), stays
+A journal that reads and refuses the append (read-only, held for writing) is `cannot be appended to (...)` from every
+verb (m4). The command lines that read the journal through `Process` (`predict.py` -- its read of the knobs a series
+was taken at too --, `flaw_map.py`, `rew_tool.py analyze-joints`, `resonalyze_ir.py`, `eq_propose.py`,
+`ear_suspects.py`, `naming.py next-series`) refuse either in one line, `error: <file> <reason> -- <repair>`, exit 1,
+never a traceback (R53). `Process.events()`, the reader for a screen (TCC), stays
 lenient, as `Process.load()` does (R53): a journal it cannot open is `[]` there, and a line in another code page is
 skipped and counted in `journal_skipped` (`{"torn": [...], "not_utf8": [...]}`, line numbers from 1).
 
@@ -388,10 +392,11 @@ usage on stdout, exit 0.
     (no git repository), move `process-state.json` aside: the process starts empty, and the journal keeps every
     event;
   - for a file written in another code page, `contract.py repair-encoding <project-dir>`;
-  - for a file that cannot be opened, the repair its cause allows (`project_io.repair_for`, H minor 3): on Windows,
-    close what holds it (an editor, a sync client, another tool) and run again; on POSIX, where nothing holds a file
-    against a reader, a permission (`this user may not open it: give it access ...`) or a file standing where a
-    folder of the path belongs (`... move that file aside`), else the disk's;
+  - for a file that cannot be opened, the repair its cause allows (`project_io.repair_for`, H minor 3, m2): for a
+    permission refusal on Windows, close what holds it (an editor, a sync client, another tool) and run again; on
+    POSIX, where nothing holds a file against a reader, a permission (`this user may not open it: ...`, `may not
+    write it` for a write) or a file standing where a folder of the path belongs (`... move that file aside`); and
+    the disk's for anything else -- a full disk, an I/O error -- on both;
   - for a folder in its place, move the folder aside.
 
   In the last two the file may be whole, and an older copy restored over it would replace a good file.

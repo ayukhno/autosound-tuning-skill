@@ -2212,6 +2212,10 @@ def _main(argv=None):
         try:
             knobs = _Proc(knob_dir).knobs_for(args.ver)
         except Exception as exc:                        # noqa: BLE001 -- unreadable is not "none"
+            # A journal that cannot be read -- held, a line in another code page -- refuses the run (#134, R53):
+            # `main` says it in one line, exit 1. Read past, the run said "NOT recorded" over knobs on record.
+            if getattr(type(exc), "is_unreadable", False):
+                raise
             print(f"  knobs not read from {knob_dir}: {exc}", file=sys.stderr)
     if args.no_de_embed:
         solos = {c: H for c, (H, _) in loaded.items()}
@@ -2426,6 +2430,111 @@ def _main(argv=None):
 
 
 # ---------------------------------------------------------------- selftest
+def _check_knobs_read_strictly():
+    """The knobs a series was taken at are read from the journal as the method reads it, strictly (#134, R53): a
+    journal that cannot be opened -- mode 0 -- or that holds a line in another code page refuses the run in one line,
+    `error: <journal> <reason> -- <repair>`, exit 1, nothing on stdout. Its `except` read such a journal as no knobs:
+    the run went on, said "hardware controls ... NOT recorded" (`--json`: `knobs: null`) and exited 0, over knobs on
+    record. Both ways in that reach the journal for the knobs alone: `--solos` with `--process`, and `--rew` with
+    `--project` and no `--process`; REW is the method's stub, serving the same solos."""
+    import contextlib
+    import io as _io
+    import shutil
+    import tempfile
+    import resonalyze_ir as ri
+    import rew_api
+    import rew_stub
+    state_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state")
+    if state_dir not in sys.path:
+        sys.path.insert(0, state_dir)
+    import state as st
+    import project as _project_mod
+    from process import Process
+    fs = 96000
+    top = tempfile.mkdtemp(prefix="autosound_predict_knobs_")
+    saved_url, saved_env = rew_api.BASE_URL, os.environ.pop("AUTOSOUND_PROJECT_DIR", None)
+    server = None
+
+    def run(argv):
+        out, err = _io.StringIO(), _io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = main(argv)
+        return rc, out.getvalue(), err.getvalue()
+    try:
+        proj = os.path.join(top, "project")
+        os.makedirs(proj)
+        pj = _project_mod.Project(proj)
+        pj.save(pj.load())
+        legs = {"w-L": ({"f": 60, "type": "LR", "slope": 24}, {"f": 400, "type": "LR", "slope": 24}),
+                "m-L": ({"f": 400, "type": "LR", "slope": 24}, "OFF")}
+        snap = {"schema_version": 3, "preset": "SQ", "sample_rate": fs, "channels": {
+            code: {"hp": hp, "lp": lp, "gain_db": 0.0, "ta_ms": 0.0, "polarity": "NORM", "eq": []}
+            for code, (hp, lp) in legs.items()}}
+        root = os.path.join(proj, "state")
+        st.PresetHistory(root, "SQ", project_dir=proj).snapshot(snap, note="the design")
+        st.Registry(root).set_active("SQ")
+        solos = os.path.join(top, "solos")
+        os.makedirs(solos)
+        for name, k in (("w_L", 96), ("m_L", 120)):
+            x = np.zeros(1 << 15)
+            x[k] = 0.5
+            doc = ri.build_v7(x, fs, 0.0, low_hz=20.0, high_hz=20000.0)
+            ri.write_v7(doc[0] if isinstance(doc, tuple) else doc, os.path.join(solos, name + ".json"))
+        proc = os.path.join(proj, "process")
+        with contextlib.redirect_stdout(_io.StringIO()):
+            p = Process(proc)
+            p.enter_phase("-1")
+            p.start_capture("1", expected=["w-L_1 (sw)", "m-L_1 (sw)"])
+            p.set_knobs({"SubRC": "4/4"})
+        journal = os.path.join(proc, "journal.jsonl")
+        with open(journal, "rb") as fh:
+            whole = fh.read()
+        url, server = rew_stub.serve(rew_stub.measurements_from_v7_dir(solos, "1"))
+        rew_api.BASE_URL = url
+        foreign = json.dumps({"type": "user_decision", "question": "лишаємо 45°?"}, ensure_ascii=False).encode("cp1251")
+
+        def mode_0():
+            os.chmod(journal, 0)
+
+        def cp1251_line():
+            with open(journal, "ab") as fh:
+                fh.write(foreign + b"\n")
+        damages = [("a line in another code page", cp1251_line)]
+        if os.name == "posix" and os.geteuid() != 0:           # root reads a mode-0 file all the same
+            damages.insert(0, ("mode 0", mode_0))
+        failures = []
+        for way, argv in (("--solos with --process", ["--solos", solos, "--project", proj, "--process", proc]),
+                          ("--rew, --project, no --process", ["--rew", "--ver", "1", "--project", proj])):
+            rc, out, err = run(argv + ["--json"])
+            assert rc == 0, (way, "readable", rc, err[-400:])
+            assert (json.loads(out).get("knobs") or {}).get("knobs") == {"SubRC": "4/4"}, (way, out[:300])
+            for label, damage in damages:
+                damage()
+                try:
+                    rc, out, err = run(argv + ["--json"])
+                finally:
+                    os.chmod(journal, 0o644)
+                    with open(journal, "wb") as fh:
+                        fh.write(whole)
+                said = err.strip().splitlines()
+                if rc != 1 or not said or not said[-1].startswith(f"error: {journal} ") or "Traceback" in err \
+                        or out.strip():
+                    knobs = "?"
+                    try:
+                        knobs = json.loads(out).get("knobs")
+                    except ValueError:
+                        pass
+                    failures.append(f"{way}, {label}: rc {rc}, knobs {knobs!r}, said {(said or [''])[-1][:160]!r}")
+        assert not failures, "\n  ".join(["a journal predict could not read for the knobs:"] + failures)
+    finally:
+        rew_api.BASE_URL = saved_url
+        if saved_env is not None:
+            os.environ["AUTOSOUND_PROJECT_DIR"] = saved_env
+        if server is not None:
+            server.shutdown()
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _selftest():
     """Anchored to facts about waves and to the ledger's own vocabulary, never to a stored run."""
     import tempfile
@@ -3114,6 +3223,7 @@ def _selftest():
     assert short[0].startswith("sw, w-L, w-R, m-L, m-R, tw-L, tw-R, c: solo used as recorded"), short[0]
     assert len(short) == NOTES_SHOWN + 1 and "--verbose" in short[-1], short
     assert len(compact_notes(many, verbose=True)) == 7
+    _check_knobs_read_strictly()
     print("selftest[predict] OK -- chain arithmetic (gain/pol/delay/LR corner/PK), ledger row == anchors "
           "entry, a phase angle is realized at the row's configured reference (LPF on a sub, HPF "
           "otherwise; slope OFF keeps it), delivered AT the reference, capped by name, refused without "
@@ -3137,7 +3247,9 @@ def _selftest():
           "asked in, and a gated arrival recovers a pure 0.26 ms delay through the rows' own band; "
           "skill #70: the table and the alignment each open with a verdict block of five lines at most -- "
           "the junction the sum-loss score reads worst, `--align` first when no row has a delay, the "
-          "not-bankable pair measured before anything is banked.")
+          "not-bankable pair measured before anything is banked; #134 R53: the knobs are read as the method "
+          "reads the journal, so one it cannot read refuses the run in one line, exit 1, on --solos and on --rew "
+          "alike, where it said NOT recorded over knobs on record.")
     return 0
 
 

@@ -1484,10 +1484,12 @@ _USAGE = """usage: contract.py check <project-dir> [--json] [--no-rew] [--gate] 
                                                current schema, and in which rows -- a schema change
                                                reaches the model at once and the cars never, unless
                                                something asks (autosound-hub CAR-007)
-       contract.py repair-encoding <project-dir> [--from <code-page>]
+       contract.py repair-encoding <project-dir> [--from <code-page> | --set-aside]
                                                files this method wrote on a machine whose default
                                                was not UTF-8 (TCC-007). Without --from it only
-                                               SHOWS what each candidate page makes the text say
+                                               SHOWS what each candidate page makes the text say;
+                                               --set-aside moves the journal lines no page makes
+                                               JSON of, bytes kept, into <journal>.set-aside
        contract.py table                       print the CONTRACT (file -> owner -> schema version)
        contract.py version [--json]            the contract this copy keeps (CONTRACT_VERSION), for diagnostics
        contract.py selftest
@@ -1540,25 +1542,56 @@ def _main(argv):
         state_mod = _load_vendored("state")
         paths = project_text_files(project_dir)
         codec = argv[argv.index("--from") + 1] if "--from" in argv else None
-        # A file that cannot be opened is not surveyed, and is never called UTF-8: said on stderr, exit 1 (#134).
+        here = os.path.abspath(__file__)
+        set_aside_command = f"python3 {here} repair-encoding {project_dir} --set-aside"
+        # A file that cannot be opened is not surveyed, and is never called UTF-8: said on stderr, exit 1 (#134); and
+        # nothing is rewritten or set aside while one was not read -- a refusal writes nothing (m3).
         unread = []
+        if "--set-aside" in argv:
+            if codec is not None:
+                print("error: repair-encoding: --set-aside is a run of its own -- set the lines aside, then rewrite "
+                      "the rest with --from <page>", file=sys.stderr)
+                return 2
+            # The journal lines no code page makes JSON of (#134, R56): moved, on the person's word, bytes kept.
+            moved = state_mod.set_aside(paths, unread)
+            if unread:
+                print(f"nothing was set aside under {project_dir}: every journal is read before any line moves",
+                      file=sys.stderr)
+                return state_mod.said_unread(unread)
+            if not moved:
+                print(f"no line to set aside under {project_dir}: every journal line is UTF-8, torn, or JSON in a code "
+                      f"page -- nothing was written")
+            for m in moved:
+                shown = ", ".join(map(str, m["lines"]))
+                print(f"{m['path']} -- {len(m['lines'])} line(s) no code page makes JSON of set aside, bytes kept, in "
+                      f"{m['set_aside']} (line {shown}); every other line is as it was")
+            return 0
         if codec is None:
-            here = os.path.abspath(__file__)
             print(state_mod.render_survey(
                 state_mod.encoding_survey(paths, unread), project_dir,
-                lambda c: f"python3 {here} repair-encoding {project_dir} --from {c}"))
+                lambda c: f"python3 {here} repair-encoding {project_dir} --from {c}", set_aside_command, unread))
             return state_mod.said_unread(unread)
         try:
             done = state_mod.repair_encoding(paths, codec, unread)
         except state_mod.SnapshotError as exc:
             print(str(exc), file=sys.stderr)
             return 3
-        if not done and not unread:
+        if unread:
+            print(f"nothing was rewritten under {project_dir}: every file is read before any is rewritten",
+                  file=sys.stderr)
+            return state_mod.said_unread(unread)
+        if not done:
             print(f"every file the method owns under {project_dir} is UTF-8 — nothing was written")
-        for d in done:
+        rewritten = [d for d in done if d["backup"]]
+        for d in rewritten:
             print(f"{d['path']} — rewritten as UTF-8 (was {d['codec']}); original bytes kept at "
                   f"{os.path.basename(d['backup'])}")
-        return state_mod.said_unread(unread)
+        for d in done:
+            if d.get("left"):
+                # No page rewrites these (R56): the way that takes them out is said, never left unsaid.
+                print(f"{d['path']} -- line {', '.join(map(str, d['left']))} left as it was: no code page makes JSON "
+                      f"of it -- set such lines aside, bytes kept: {set_aside_command}")
+        return 0 if rewritten or not done else 3
     if argv[1] == "version":
         info = {"contract_version": CONTRACT_VERSION, "format_version": FORMAT_VERSION,
                 "skill_version": _skill_version(), "sha": _skill_sha()}
@@ -1682,19 +1715,35 @@ def _check_journal_reported():
                 raise PermissionError(13, "The process cannot access the file because it is being used by another "
                                           "process", file)
             return real_open(file, *args, **kwargs)
+        legacy = os.path.join(d, "project.json")        # a file the repair could rewrite, beside the one it cannot read
+        survey = []
         builtins.open = held
         try:
             _entry_, row, _state = check_process(d)
             report = check_project(d, skip_rew=True)
-            out, err = io.StringIO(), io.StringIO()
-            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-                rc = _main(["contract.py", "repair-encoding", d])
+            for argv in (["repair-encoding", d], ["repair-encoding", d, "--from", "cp1251"]):
+                if "--from" in argv:                     # the survey ran over UTF-8 files alone, and the held journal
+                    with real_open(legacy, "wb") as f:
+                        f.write('{"schema_version": 3, "note": "тест"}'.encode("cp1251"))
+                out, err = io.StringIO(), io.StringIO()
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    rc = _main(["contract.py", *argv])
+                survey.append((rc, out.getvalue(), err.getvalue()))
         finally:
             builtins.open = real_open
         assert (row["exists"], row["valid"]) == (True, False) and journal in row["issues"][0] \
             and "cannot be opened" in row["issues"][0], row
         assert report["ok"] is False, "a journal that cannot be opened made an OK project"
-        assert rc == 1 and f"{journal} was not surveyed" in err.getvalue(), (rc, out.getvalue(), err.getvalue())
+        # The survey never calls a set holding a file it could not read UTF-8; the repair rewrites nothing while one
+        # was not read -- a refusal writes nothing (m3).
+        for rc, out, err in survey:
+            assert rc == 1 and f"{journal} was not surveyed" in err and "every file under" not in out, (rc, out, err)
+        assert "could not be read" in survey[0][1], survey[0]
+        assert "nothing was rewritten" in survey[1][1] + survey[1][2], survey[1]
+        with open(legacy, "rb") as f:
+            assert f.read() == '{"schema_version": 3, "note": "тест"}'.encode("cp1251"), \
+                "rewritten beside an unread file"
+        os.remove(legacy)
         torn = '{"at": "2026-10-06T00:00:01+00:00", "type": "user_dec'.encode("utf-8")
         foreign = json.dumps({"type": "user_decision", "question": "лишаємо 45°?"}, ensure_ascii=False).encode("cp1251")
         # `whole` holds two events. A torn line among more events is a write cut off, read past (Task 6); as many lines
@@ -1723,6 +1772,66 @@ def _check_journal_reported():
         assert (row["exists"], row["valid"], row["events"]) == (False, None, 0), row
     finally:
         builtins.open = real_open
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def _check_set_aside_verb():
+    """`repair-encoding --set-aside` takes out the journal lines no code page makes JSON of (#134, R56; the re-review's
+    m1). Such a line -- an old append cut inside a character, the next event glued on -- refused every writer, and the
+    repair the refusal named offered no page: a dead end. Now the refusal and the survey name the way; with
+    `--set-aside` the lines move, bytes kept and numbered, into `<journal>.set-aside`, every other line byte-identical,
+    the count and the place said, exit 0, and the journal reads again. `--from <page>` alone rewrites nothing there and
+    names the way, exit 3; with `--set-aside` it is a usage error, exit 2 -- the set-aside is a run of its own."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_contract_set_aside_")
+
+    def run(*argv):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = _main(["contract.py", *argv])
+        return rc, out.getvalue(), err.getvalue()
+    try:
+        process_mod = _load_vendored("process")
+        proc_dir = os.path.join(d, "process")
+        with contextlib.redirect_stdout(io.StringIO()):
+            process_mod.Process(proc_dir).enter_phase("-1")
+        journal = os.path.join(proc_dir, "journal.jsonl")
+        with open(journal, "rb") as f:
+            whole = f.read()
+        glued = b'{"type": "user_decision", "question": "\xd0' + json.dumps(
+            {"type": "user_decision", "question": "q", "answer": "a"}).encode("utf-8")
+        with open(journal, "ab") as f:
+            f.write(glued + b"\n")
+        damaged = whole + glued + b"\n"
+        try:
+            process_mod.Process(proc_dir)._events()
+            raise AssertionError("a line no code page reads was read")
+        except Exception as exc:  # noqa: BLE001 -- the kind is what is under test
+            assert getattr(exc, "is_unreadable", False) and "--set-aside" in str(exc), repr(exc)
+        rc, out, err = run("repair-encoding", d)
+        assert rc == 0 and "line 3" in out and f"repair-encoding {d} --set-aside" in out, (rc, out, err)
+        assert "--from cp1251" not in out, ("a page offered for a line no page reads", out)
+        rc, out, err = run("repair-encoding", d, "--from", "cp1251")
+        assert rc == 3 and "--set-aside" in out + err, (rc, out, err)
+        rc, out, err = run("repair-encoding", d, "--set-aside", "--from", "cp1251")
+        assert rc == 2 and "--set-aside" in err, (rc, out, err)
+        with open(journal, "rb") as f:
+            assert f.read() == damaged, "a run that changed nothing changed the journal"
+        rc, out, err = run("repair-encoding", d, "--set-aside")
+        assert rc == 0 and "1 line(s)" in out and f"{journal}.set-aside" in out and "line 3" in out, (rc, out, err)
+        with open(journal + ".set-aside", "rb") as f:
+            assert f.read() == b"line 3: " + glued + b"\n", "the set-aside file is not the line's bytes"
+        with open(journal, "rb") as f:
+            assert f.read() == whole, "a line that stayed changed its bytes"
+        assert [e.get("type") for e in process_mod.Process(proc_dir)._events()], "the journal does not read again"
+        with contextlib.redirect_stdout(io.StringIO()):
+            assert process_mod._main(["process.py", proc_dir, "decision", "q", "a"]) == 0, "a writer still refused"
+        rc, out, err = run("repair-encoding", d, "--set-aside")
+        assert rc == 0 and "no line to set aside" in out, (rc, out, err)
+    finally:
         shutil.rmtree(d, ignore_errors=True)
 
 
@@ -1995,7 +2104,7 @@ def _selftest():
     os.environ["AUTOSOUND_NO_GH"] = "1"          # the history line is checked; GitHub is never reached from a test
     failures = []
     for check in (_check_invalid_project_json, _check_unreadable_process_state, _check_journal_reported,
-                  _check_never_sealed_after_the_first_seal, _check_gate_last_line,
+                  _check_set_aside_verb, _check_never_sealed_after_the_first_seal, _check_gate_last_line,
                   _check_unreadable_profile_and_seals_reported, _check_version_verb, _check_version_shape,
                   _check_skill_version, _check_skill_sha):
         try:
@@ -2503,7 +2612,8 @@ def _selftest():
           f"said without failing it and one with lines and no event, or as many torn lines as events, not valid; a "
           f"version banked after its line's first seal and never sealed is not OK, while a migrated project banked "
           f"once stays OK; a process state a newer method wrote is reported in JSON, and repair-encoding names a file "
-          f"it could not open, exit 1 (#134). "
+          f"it could not open, exit 1, rewriting nothing beside it and never calling the set UTF-8; --set-aside moves "
+          f"the journal lines no code page reads, bytes kept, and the journal reads again (#134, R56). "
           f"root={root}")
     return 0
 
