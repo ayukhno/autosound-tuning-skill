@@ -107,10 +107,12 @@ CONTRACT = (
 #: What TCC imports in-process: its loader's 15 modules (`vendor_loader._VENDORED`, keyed the same way) and the
 #: names it reads from each -- contract 1 (CONTRACT.md item 9). A separate table, not rows of `CONTRACT`
 #: (`intake.py` unpacks those as 4-tuples). A dict LITERAL: TCC reads it with `ast`. An entry is a name, a function
-#: with the parameters TCC passes (`f(a, b=None)`: the real ones begin with these, and any past them has a
-#: default), a class with its constructor's (`Process(root)`), or a member (`Process.load()`, `Glossary.pairs`).
-#: Adding a trailing parameter with a default is not a break; scripts/contract-guard.py refuses a removal or a
-#: rename. Read from tcc 47257ff: SURFACE.md B1 (written at f58d208) and every call site at HEAD.
+#: with the parameters TCC passes (`f(a, b=None)`: the real ones begin with these, each of the same kind and with
+#: the same default, and any past them has a default), a class with its constructor's (`Process(root)`), or a
+#: member (`Process.load()`, `Glossary.pairs`). Adding a trailing parameter with a default is not a break;
+#: scripts/contract-guard.py refuses a removal, a rename, a default removed or changed, and a parameter made
+#: keyword-only or positional-only. Read from tcc 47257ff: SURFACE.md B1 (written at f58d208) and every call site
+#: at HEAD.
 #: TCC also relies on VALUES, which no entry pins: naming's tags "sw"/"rta" (`METHOD_SWEEP`/`METHOD_RTA` are
 #: listed by name, but TCC compares the strings), rew_api's kinds "sweep"/"rta"/"impedance", and the journal's
 #: event names, which TCC folds itself.

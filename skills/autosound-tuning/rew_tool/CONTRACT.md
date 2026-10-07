@@ -39,9 +39,21 @@ TCC does not need it (§8 M6). It answers as `SKILL.md` documents, outside this 
 
 ## 5. `scripts/autosound_ai.py critic|advisor|ask|doctor|key` — guaranteed, as today
 
-Exit 0 done · 1 error · 2 refused: a key file that git would take, or a key that was not stored · 3 a model must be
-picked · 4 the reviewer refused or failed, and no review was filed. On stderr: `>> REVIEW_FILE: <rel>`,
-`>> REVIEW_ROUTE: omp|api|cli`, `>> PACKAGE_FILE: <path>`. Reviews are written under `<project>/process/reviews/`.
+Before any verb runs, the script exits 2 when a project's `.critic-env` carries a key and git would take it (the file
+is tracked, or not ignored). It exits 1 when `--via`, `--model`, `--provider` or `AUTOSOUND_CRITIC_VIA` is not
+valid, when no verb is given, or when the verb is unknown. Then each verb answers:
+
+| verb | exit codes |
+|---|---|
+| `critic`, `advisor`, `ask <package> [<trace>]` | 0 a review came back and was filed, or the clipboard route made the package · 1 an input is missing: the package, or for `critic` and `advisor` the contract or the project context · 3 a model must be picked · 4 the reviewer refused or failed, and no review was filed |
+| `doctor` | 0 every check passed · 1 a check failed |
+| `key set <provider>` | 0 stored · 2 refused: an unknown provider, wrong arguments, or a value that is not a key |
+| `key status [--json]`, `key rm <provider>` | 0 |
+| `key move-shell [<provider>] [--drop] [--yes]` | 0 something moved or removed, and nothing refused · 1 nothing to do · 3 something refused or failed · 2 usage |
+| `key` with anything else | 2 usage |
+
+On stderr: `>> REVIEW_FILE: <rel>`, `>> REVIEW_ROUTE: omp|api|cli`, `>> PACKAGE_FILE: <path>`. Reviews are written
+under `<project>/process/reviews/`.
 
 ## 6. `"contract": N` in every JSON output — not built
 
@@ -65,12 +77,15 @@ a writer waits, and the busy exit 75.
 ## 9. The modules TCC imports — guaranteed (names); `sys.path` partly planned (W-10, J1b)
 
 The names TCC reads from each module, with the parameters it passes, are the `IMPORTABLE` table in `contract.py`.
-The guard holds every entry to the code. A removal or a rename fails it; a new trailing parameter with a default
-does not.
+The guard holds every entry to the code: each listed parameter keeps its name, its place, its kind (positional or
+keyword) and its default value. These fail the guard: a removal, a rename, a default removed or changed, a
+parameter made keyword-only or positional-only. These pass: a new trailing parameter with a default, and a
+keyword-only parameter widened to positional-or-keyword.
 
-Every module below loads by path from an empty folder with `PYTHONPATH` unset, and its lazy sibling loads raise no
-`ImportError`: the guard's probe checks all of them. The column says whether that load also leaves `sys.path` as it
-was:
+The guard's probe loads every module below by path, in a fresh python started in an empty folder with `PYTHONPATH`
+unset. For two of them it also calls the function that reaches their lazy sibling loads
+(`dsp_profile.annotate_modellable`, `rew_api.get_timing`), and that call must raise no `ImportError`. The column says
+whether the load also leaves `sys.path` as it was; the guard holds this column equal to its `CLEAN` set:
 
 | module | loads by path without touching `sys.path` |
 |---|---|
@@ -103,8 +118,20 @@ keys of `verify.verdict`, the result of `resonalyze_vc.convert` or `eq_export.ex
 ## 10. Environment variables — planned (W-10)
 
 Each variable listed, with its precedence over an explicit argument written down and left as it is (J1b). Known
-today: `AUTOSOUND_PROJECT_DIR`, `AUTOSOUND_STATE_ROOT`, `AUTOSOUND_SKILL_ROOT`, `REW_API_URL`, `AUTOSOUND_NO_GH`,
-`AUTOSOUND_KEYSTORE`, `AUTOSOUND_CRITIC_*`, and `AUTOSOUND_SKIP_TAG_VERIFY` (for developers only).
+today, every one the code reads:
+
+- the project: `AUTOSOUND_PROJECT_DIR`, `AUTOSOUND_STATE_ROOT`, `AUTOSOUND_SKILL_ROOT` (the copy a front end
+  declares), `AUTOSOUND_NO_GH`;
+- REW: `REW_API_URL`;
+- the reviewer (`scripts/autosound_ai.py`; `issue_triage.py` for the advisor's model): `AUTOSOUND_DIR`,
+  `AUTOSOUND_KEYSTORE`, `AUTOSOUND_CRITIC_MODEL`, `AUTOSOUND_CRITIC_PROVIDER`, `AUTOSOUND_CRITIC_VIA`,
+  `AUTOSOUND_CRITIC_BIN`, `AUTOSOUND_CRITIC_CLI_ARGS`, `AUTOSOUND_CRITIC_EFFORT`, `AUTOSOUND_ADVISOR_MODEL`,
+  `AUTOSOUND_API_TIMEOUT`, `AUTOSOUND_CLI_TIMEOUT`, `AUTOSOUND_REVIEW_RAW_DIR`, `AUTOSOUND_ALLOW_NESTED_CLI`; it
+  also reads the vendors' own (`GEMINI_*`, the providers' API keys);
+- the Resonalyze engine: `AUTOSOUND_RESONALYZE_ENGINE`;
+- for developers only: `AUTOSOUND_SKIP_TAG_VERIFY` (the installers), `AUTOSOUND_UPSTREAM_CLONE`
+  (`scripts/upstream-drift.py`), `AUTOSOUND_PASSAT_IR_SET` and `AUTOSOUND_PASSAT_PROJECT` (the Resonalyze
+  engine's acceptance run).
 
 ## 11. REW write semantics — planned (W-8, #134)
 
@@ -116,7 +143,8 @@ is verified (audit K-1). PLAN-W-8 Task 9 flips this item.
 - An addition keeps the number: a new verb, flag, key or exit code, a new exception that subclasses the old type,
   strictness a caller opts into, a new trailing parameter with a default, a usage error for a flag a correct caller
   never sends.
-- A breaking change to a guaranteed item moves `CONTRACT_VERSION`. It happens only in a minor (a `### Breaking`
-  entry, which the release preflight refuses on a patch), and only after a TCC release that accepts the new number
-  is out (§8 M5).
+- A breaking change to a guaranteed item moves `CONTRACT_VERSION`. For a listed name that is: removing or renaming
+  it, or a parameter TCC passes removed, renamed, made keyword-only or positional-only, or its default removed or
+  given another value. It happens only in a minor (a `### Breaking` entry, which the release preflight refuses on a
+  patch), and only after a TCC release that accepts the new number is out (§8 M5).
 - Every change to an item is named in the CHANGELOG's `### Upgrading` note, with a line for TCC.
