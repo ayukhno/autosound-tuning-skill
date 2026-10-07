@@ -50,6 +50,30 @@ import json
 import os
 import sys
 
+
+def _siblings():
+    """`rew_tool/siblings.py`, by its path: how this module reaches a sibling (skill #137).
+
+    The same text in every module that loads a sibling -- only the `here` line differs with the file's folder;
+    scripts/contract-guard.py holds the copies identical.
+    """
+    import hashlib
+    import importlib.util
+    here = os.path.dirname(os.path.realpath(__file__))
+    name = "_autosound_" + hashlib.sha1(here.encode("utf-8")).hexdigest()[:8] + "_siblings"
+    module = sys.modules.get(name)
+    if module is None:
+        spec = importlib.util.spec_from_file_location(name, os.path.join(here, "siblings.py"))
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        try:
+            spec.loader.exec_module(module)
+        except BaseException:
+            sys.modules.pop(name, None)
+            raise
+    return module
+
+
 # ── schema ──────────────────────────────────────────────────────────────────
 # One number across every machine file (see `project.py`'s own note). This file carried no version
 # at all before 3.0 -- which meant a consumer could not tell a profile written by this skill from
@@ -315,7 +339,7 @@ def bind_model_rate(project_dir_or_profile):
     `dsp_math` is imported lazily: this module is pure stdlib on purpose and is read by tools that
     have no numpy.
     """
-    import dsp_math
+    dsp_math = _siblings().load("dsp_math.py")
     profile = project_dir_or_profile
     if isinstance(profile, str):
         path = os.path.join(profile, "dsp_profile.json") if os.path.isdir(profile) else profile
@@ -341,17 +365,9 @@ def load_profile(path):
 def _provenance():
     """`provenance.py` from the same checkout, by path — same reason as every other sibling load
     here: `rew_tool/` is not on the consumer's import path, it is loaded from one."""
-    import importlib.util
-
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "provenance.py")
     try:
-        spec = importlib.util.spec_from_file_location("_dsp_profile_provenance", path)
-        if spec is None or spec.loader is None:
-            return None
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        return module
-    except Exception:  # noqa: BLE001 — an unloadable stamp must not cost the profile
+        return _siblings().load("provenance.py")
+    except Exception:  # noqa: BLE001 -- a provenance stamp that cannot be made leaves the file unstamped, as before
         return None
 
 
@@ -381,7 +397,7 @@ def annotate_modellable(data):
     without the decider is worse than none, because absent means "ask" and a wrong `true` means
     "go ahead" (`estimator-scope.md` — a check whose input is missing must fail, not wave through).
     """
-    import dsp_math                                   # lazy: this module is stdlib for readers with no numpy
+    dsp_math = _siblings().load("dsp_math.py")        # lazy: this module is stdlib for readers with no numpy
 
     profile = _unwrap(data)
     for group in profile.get("groups") or []:
@@ -1270,7 +1286,33 @@ def _musway_stub():
     }
 
 
+def _check_loads_by_path():
+    """The load TCC does (skill #137, audit T-27): this file by its path, from an empty folder, `PYTHONPATH` unset --
+    and a call that reaches a lazy sibling load. "loaded" proves the probe got past the load, so a probe that dies
+    before the call cannot pass for one whose import worked."""
+    import subprocess, tempfile
+    probe = ("import importlib.util, sys\n"
+             "spec = importlib.util.spec_from_file_location('probe_dsp_profile', sys.argv[1])\n"
+             "m = importlib.util.module_from_spec(spec); sys.modules[spec.name] = m; spec.loader.exec_module(m)\n"
+             "print('loaded', flush=True)\n"
+             "m.annotate_modellable({})\n")
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    with tempfile.TemporaryDirectory() as empty:
+        r = subprocess.run([sys.executable, "-c", probe, os.path.abspath(__file__)], cwd=empty,
+                           env=env, capture_output=True, text=True, timeout=120)
+    assert "ModuleNotFoundError" not in r.stderr and "ImportError" not in r.stderr, r.stderr[-600:]
+    assert r.stdout.startswith("loaded"), (r.returncode, r.stdout[-300:], r.stderr[-600:])
+
+
 def _selftest():
+    failures = []
+    for check in (_check_loads_by_path,):
+        try:
+            check()
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
+
     import tempfile
 
     helix = {

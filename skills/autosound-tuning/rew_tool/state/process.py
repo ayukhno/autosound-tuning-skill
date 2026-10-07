@@ -40,6 +40,30 @@ import re
 import sys
 from datetime import datetime, timezone
 
+
+def _siblings():
+    """`rew_tool/siblings.py`, by its path: how this module reaches a sibling (skill #137).
+
+    The same text in every module that loads a sibling -- only the `here` line differs with the file's folder;
+    scripts/contract-guard.py holds the copies identical.
+    """
+    import hashlib
+    import importlib.util
+    here = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+    name = "_autosound_" + hashlib.sha1(here.encode("utf-8")).hexdigest()[:8] + "_siblings"
+    module = sys.modules.get(name)
+    if module is None:
+        spec = importlib.util.spec_from_file_location(name, os.path.join(here, "siblings.py"))
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        try:
+            spec.loader.exec_module(module)
+        except BaseException:
+            sys.modules.pop(name, None)
+            raise
+    return module
+
+
 # One number across every machine file (see `project.py`'s own note) -- this file's own shape did
 # not change in the 3.0 break, but "which format is this project in?" has to have one answer.
 SCHEMA_VERSION = 3
@@ -414,18 +438,10 @@ def _require_intake(phase, previous, project_dir):
 
 
 def _load_sibling(name):
-    """Load a `rew_tool/` module by path. Same reason as `_load_naming`: these are loaded by path
-    everywhere so that names like `state` stay off the global import path."""
-    import importlib.util
-
-    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), name)
+    """A `rew_tool/` module through `siblings` -- one object per file. None when it cannot be loaded: the
+    callers here read that as "cannot tell", and say so at their call site."""
     try:
-        spec = importlib.util.spec_from_file_location(f"_process_{name[:-3]}", path)
-        if spec is None or spec.loader is None:
-            return None
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        return module
+        return _siblings().load(name)
     except Exception:  # noqa: BLE001
         return None
 
@@ -446,21 +462,9 @@ _PHASE_FACTS = {
 
 
 def _load_dsp_profile_module():
-    """`dsp_profile.py` from the same checkout, by path — same reason as `_load_naming`."""
-    import importlib.util
-
-    path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "dsp_profile.py"
-    )
-    try:
-        spec = importlib.util.spec_from_file_location("_process_dsp_profile", path)
-        if spec is None or spec.loader is None:
-            return None
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        return module
-    except Exception:  # noqa: BLE001 — an unloadable sibling must not make the gate crash
-        return None
+    """`dsp_profile.py` from the same checkout, by path — same reason as `_load_naming`. None when it
+    cannot be loaded: an unloadable sibling must not make the gate crash."""
+    return _load_sibling("dsp_profile.py")
 
 
 def _require_profile_facts(phase, previous, project_dir):
@@ -514,18 +518,9 @@ _PATH_RE = re.compile(r"[\w./\\-]+\.(?:json|jsonl|md|mdat|txt|csv|yml|yaml|req|p
 
 
 def _load_rew_tool_module(name):
-    """A `rew_tool/<name>.py` module from the same checkout, by path (see `_load_naming`)."""
-    import importlib.util
-    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), name + ".py")
-    try:
-        spec = importlib.util.spec_from_file_location("_process_" + name, path)
-        if spec is None or spec.loader is None:
-            return None
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        return mod
-    except Exception:  # noqa: BLE001 -- the caller decides whether "cannot load" is fatal
-        return None
+    """A `rew_tool/<name>.py` module from the same checkout, by path (see `_load_naming`). None when
+    it cannot be loaded -- the caller decides whether "cannot load" is fatal."""
+    return _load_sibling(name + ".py")
 
 
 _NAMING = []
@@ -547,18 +542,8 @@ def _load_naming():
 
 
 def _load_naming_uncached():
-    import importlib.util
-
-    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "naming.py")
-    try:
-        spec = importlib.util.spec_from_file_location("_process_naming", path)
-        if spec is None or spec.loader is None:
-            return None
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        return module
-    except Exception:  # noqa: BLE001 -- any failure here means "cannot tell", never "invalid"
-        return None
+    """None when `naming.py` cannot be loaded: any failure here means "cannot tell", never "invalid"."""
+    return _load_sibling("naming.py")
 
 
 def _state_root(project_dir):
@@ -659,7 +644,7 @@ def _ledger_heads(project_dir):
     checks that own it (`handoff`, `contract.py check`).
     """
     root = _state_root(project_dir)
-    state_mod = _load_sibling(os.path.join("state", "state.py")) if os.path.isdir(root) else None
+    state_mod = _load_sibling("state/state.py") if os.path.isdir(root) else None
     if state_mod is None:
         return {}
     try:
@@ -2106,19 +2091,9 @@ class Process:
         return round_
 
     def _load_verifier(self):
-        """`verify.py` from the same checkout, by path — same reason `_load_naming` does it."""
-        import importlib.util
-
-        path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "verify.py")
-        try:
-            spec = importlib.util.spec_from_file_location("_process_verify", path)
-            if spec is None or spec.loader is None:
-                return None
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            return module
-        except Exception:  # noqa: BLE001 -- unavailable arithmetic is "cannot tell", never "bad"
-            return None
+        """`verify.py` from the same checkout, by path — same reason `_load_naming` does it. None when
+        it cannot be loaded: unavailable arithmetic is "cannot tell", never "bad"."""
+        return _load_sibling("verify.py")
 
     def check_captures(self, titles=None, verifier=None, session=False):
         """Run the skill's own verdict over the open round and record it (SCR-040).
@@ -2701,7 +2676,7 @@ def _seed_intake(root):
     """
     project_mod = _load_sibling("project.py")
     profile_mod = _load_sibling("dsp_profile.py")
-    state_mod = _load_sibling(os.path.join("state", "state.py"))
+    state_mod = _load_sibling("state/state.py")
     if not all((project_mod, profile_mod, state_mod)):
         return
     proj = project_mod.Project(root)
@@ -2725,12 +2700,40 @@ def _seed_intake(root):
     }, note="fixture intake")
 
 
+def _check_one_naming():
+    sib = _siblings()
+    assert _load_naming() is sib.load("naming.py")
+    assert _load_sibling("contract.py") is _load_sibling("contract.py")
+
+
+def _check_every_loader_shares():
+    """Each loader here hands out THE module object `siblings` holds for its file (skill #137) -- none runs a fresh
+    copy any more. Not None first: two Nones are `is` each other, and a loader that loads nothing would pass."""
+    sib = _siblings()
+    verifier = Process(os.path.join("never-written", "process"))._load_verifier()   # the constructor writes nothing
+    for rel, got in (("contract.py", _load_sibling("contract.py")),
+                     ("state/state.py", _load_sibling("state/state.py")),
+                     ("dsp_profile.py", _load_dsp_profile_module()),
+                     ("provenance.py", _load_rew_tool_module("provenance")),
+                     ("verify.py", verifier)):
+        assert got is not None, f"{rel} did not load"
+        assert got is sib.load(rel), f"{rel}: the loader ran a copy of its own"
+
+
 def _selftest():
     """The refusals, exercised. This module is the one with the most of them — evidence must exist
     and must resolve (SCR-035), a round's captures must be usable (SCR-040), phase 0 must record a
     target (SCR-036) and now its flaw map (SCR-044) — and it was the only one of the seven with no
     selftest at all, so every one of those gates was a thing nobody had run since it was written.
     """
+    failures = []
+    for check in (_check_one_naming, _check_every_loader_shares):
+        try:
+            check()
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
+
     import tempfile
 
     # skill #105: the route of a car that is already tuned is named at handoff; any other mode, a missing or an

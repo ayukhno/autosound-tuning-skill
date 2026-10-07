@@ -48,6 +48,7 @@ skills/autosound-tuning/rew_tool/rew_stub.py --selftest
 skills/autosound-tuning/rew_tool/rew_tool.py selftest
 skills/autosound-tuning/rew_tool/scene_presets.py --selftest
 skills/autosound-tuning/rew_tool/setup_import.py --selftest
+skills/autosound-tuning/rew_tool/siblings.py --selftest
 skills/autosound-tuning/rew_tool/spot_check.py --selftest
 skills/autosound-tuning/rew_tool/state/apply.py --selftest
 skills/autosound-tuning/rew_tool/state/migrate.py selftest

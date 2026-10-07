@@ -6,7 +6,32 @@ import re
 import base64
 import os
 import struct
+import sys
 import time
+
+
+def _siblings():
+    """`rew_tool/siblings.py`, by its path: how this module reaches a sibling (skill #137).
+
+    The same text in every module that loads a sibling -- only the `here` line differs with the file's folder;
+    scripts/contract-guard.py holds the copies identical.
+    """
+    import hashlib
+    import importlib.util
+    here = os.path.dirname(os.path.realpath(__file__))
+    name = "_autosound_" + hashlib.sha1(here.encode("utf-8")).hexdigest()[:8] + "_siblings"
+    module = sys.modules.get(name)
+    if module is None:
+        spec = importlib.util.spec_from_file_location(name, os.path.join(here, "siblings.py"))
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        try:
+            spec.loader.exec_module(module)
+        except BaseException:
+            sys.modules.pop(name, None)
+            raise
+    return module
+
 
 # REW's own API port. `REW_API_URL` overrides it -- for a REW on another host, and for
 # `rew_tool/rew_stub.py`, which serves the same four endpoints from files so the commands that talk
@@ -328,7 +353,7 @@ def get_timing(mid):
 
     Returns the dict `timebase.timing_of` produces. Read-only: REW may be mid-session.
     """
-    import timebase
+    timebase = _siblings().load("timebase.py")
     return timebase.timing_of(_get(f"/measurements/{mid}"), mid=mid)
 
 
@@ -685,12 +710,39 @@ def get_distortion(mid):
     return col(0), col(1), col(i_thd), rows
 
 
+def _check_loads_by_path():
+    """The load TCC does (skill #137, audit T-27): this file by its path, from an empty folder, `PYTHONPATH` unset --
+    and `get_timing`, which loads `timebase` lazily. REW is not there (a dead port, whatever the caller's
+    environment says), so an import error is the only failure; "loaded" proves the probe got past the load."""
+    import subprocess, tempfile
+    probe = ("import importlib.util, sys\n"
+             "spec = importlib.util.spec_from_file_location('probe_rew_api', sys.argv[1])\n"
+             "m = importlib.util.module_from_spec(spec); sys.modules[spec.name] = m; spec.loader.exec_module(m)\n"
+             "print('loaded', flush=True)\n"
+             "m.get_timing('1')\n")
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    env["REW_API_URL"] = "http://127.0.0.1:1"
+    with tempfile.TemporaryDirectory() as empty:
+        r = subprocess.run([sys.executable, "-c", probe, os.path.abspath(__file__)], cwd=empty,
+                           env=env, capture_output=True, text=True, timeout=120)
+    assert "ModuleNotFoundError" not in r.stderr and "ImportError" not in r.stderr, r.stderr[-600:]
+    assert r.stdout.startswith("loaded"), (r.returncode, r.stdout[-300:], r.stderr[-600:])
+
+
 def _selftest():
     """Exercise both branches of get_fr offline — phase-present (sweep) and
     phase-absent (RTA). The RTA branch used to KeyError on data["phase"]
     (rew-api-quirks.md "Timing"); it stayed hidden because no test drove it.
     Stubbing the HTTP layer keeps this regression caught even when no live
     measurement or production caller touches the phase-absent path."""
+    failures = []
+    for check in (_check_loads_by_path,):
+        try:
+            check()
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
+
     global _get
     _orig = _get
 

@@ -37,6 +37,9 @@ IMPORT = re.compile(r"^\s*(?:import|from)\s+(numpy|scipy)\b", re.M)
 # that does the work is still something that has to be installed. `dsp_math` reaches scipy exactly
 # that way, and its "numpy + scipy" is right.
 LOCAL = re.compile(r"^\s*(?:from\s+([a-z_][\w.]*)\s+import|import\s+([a-z_][\w.]*))", re.M)
+# ...and since W-8 a sibling is reached through `siblings.py` (skill #137), `_siblings().load("dsp_math.py")`, with no
+# `import` statement at all. Followed the same way, or a module would read as needing nothing it loads that way.
+SIBLING = re.compile(r"""_siblings\(\)\.load\(\s*["']([\w/]+)\.py["']""")
 BACKTICK = re.compile(r"`([^`]+)`")
 FLAG = re.compile(r"(--[a-z][\w-]*)")
 
@@ -60,8 +63,8 @@ def _needs(path, seen):
     seen.add(path)
     src = io.open(path, encoding="utf-8", errors="replace").read()
     found = set(IMPORT.findall(src))
-    for a, b in LOCAL.findall(src):
-        nxt = _local_path(a or b)
+    for name in [a or b for a, b in LOCAL.findall(src)] + SIBLING.findall(src):
+        nxt = _local_path(name)
         if nxt:
             found |= _needs(nxt, seen)
     return found
@@ -160,7 +163,23 @@ def main(argv=None):
     return 1 if problems else 0
 
 
+def _check_follows_sibling_loads():
+    """A module reaches its siblings through `siblings.py` since W-8 (skill #137): `dsp_profile` loads `dsp_math` with
+    `_siblings().load(...)` and has no `import dsp_math` left. That load is still something that has to be installed,
+    and `project_seed` reaches numpy only through it."""
+    assert deps_of("rew_tool/dsp_profile.py") == "numpy + scipy", deps_of("rew_tool/dsp_profile.py")
+    assert deps_of("rew_tool/project_seed.py") == "numpy + scipy", deps_of("rew_tool/project_seed.py")
+
+
 def selftest():
+    failures = []
+    for case in (_check_follows_sibling_loads,):         # not `check`: that is this module's own function
+        try:
+            case()
+        except AssertionError as exc:
+            failures.append(f"{case.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
+
     # the real tree: the reader of this rule is the file it guards
     assert deps_of("rew_tool/predict.py") == "numpy + scipy", deps_of("rew_tool/predict.py")
     assert deps_of("rew_tool/naming.py") == "stdlib only", deps_of("rew_tool/naming.py")

@@ -57,6 +57,30 @@ import os
 import re
 import sys
 
+
+def _siblings():
+    """`rew_tool/siblings.py`, by its path: how this module reaches a sibling (skill #137).
+
+    The same text in every module that loads a sibling -- only the `here` line differs with the file's folder;
+    scripts/contract-guard.py holds the copies identical.
+    """
+    import hashlib
+    import importlib.util
+    here = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+    name = "_autosound_" + hashlib.sha1(here.encode("utf-8")).hexdigest()[:8] + "_siblings"
+    module = sys.modules.get(name)
+    if module is None:
+        spec = importlib.util.spec_from_file_location(name, os.path.join(here, "siblings.py"))
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        try:
+            spec.loader.exec_module(module)
+        except BaseException:
+            sys.modules.pop(name, None)
+            raise
+    return module
+
+
 # ── schema ──────────────────────────────────────────────────────────────────
 # One number across every machine file (see `project.py`'s own note). 3 is the format break.
 SCHEMA_VERSION = 3
@@ -249,14 +273,10 @@ _NAMING = []
 
 def _canonical_code(code):
     """`naming.canonical_code` -- the one home of the notation rule (S-079, hub #232) -- loaded from beside this
-    folder by path: this module is imported by consumers that put neither `state/` nor its parent on `sys.path`."""
+    folder by path, through `siblings` (one `naming` per process, skill #137): this module is imported by consumers
+    that put neither `state/` nor its parent on `sys.path`. Raises when `naming.py` cannot be loaded."""
     if not _NAMING:
-        import importlib.util
-        path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "naming.py")
-        spec = importlib.util.spec_from_file_location("_autosound_naming_for_state", path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        _NAMING.append(module)
+        _NAMING.append(_siblings().load("naming.py"))
     return _NAMING[0].canonical_code(code)
 
 
@@ -2067,9 +2087,28 @@ def _check_eq_refusals():
         raise AssertionError(f"_validate_eq accepted {label}: {eq!r}")
 
 
+def _check_canonical_code_uses_the_loaded_naming():
+    """`_canonical_code` reads the notation rule from the `naming` a front end already loaded by its path under a name
+    of its own (skill #137; TCC's is `autosound_tcc._vendor.naming`) -- not from a second copy: one `NamingError`."""
+    import importlib.util
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "naming.py")
+    spec = importlib.util.spec_from_file_location("front_end_naming", path)
+    naming = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = naming
+    cached = list(_NAMING)
+    del _NAMING[:]
+    try:
+        spec.loader.exec_module(naming)
+        assert _canonical_code("w_L") == "w-L", _canonical_code("w_L")
+        assert _NAMING and _NAMING[0] is naming, "state.py ran a copy of naming.py of its own"
+    finally:
+        sys.modules.pop(spec.name, None)
+        _NAMING[:] = cached
+
+
 def _selftest():
     failures = []
-    for check in (_check_eq_refusals,):
+    for check in (_check_eq_refusals, _check_canonical_code_uses_the_loaded_naming):
         try:
             check()
         except AssertionError as exc:

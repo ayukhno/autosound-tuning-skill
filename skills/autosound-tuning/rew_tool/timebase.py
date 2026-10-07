@@ -57,6 +57,30 @@ import os
 import re
 import sys
 
+
+def _siblings():
+    """`rew_tool/siblings.py`, by its path: how this module reaches a sibling (skill #137).
+
+    The same text in every module that loads a sibling -- only the `here` line differs with the file's folder;
+    scripts/contract-guard.py holds the copies identical.
+    """
+    import hashlib
+    import importlib.util
+    here = os.path.dirname(os.path.realpath(__file__))
+    name = "_autosound_" + hashlib.sha1(here.encode("utf-8")).hexdigest()[:8] + "_siblings"
+    module = sys.modules.get(name)
+    if module is None:
+        spec = importlib.util.spec_from_file_location(name, os.path.join(here, "siblings.py"))
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        try:
+            spec.loader.exec_module(module)
+        except BaseException:
+            sys.modules.pop(name, None)
+            raise
+    return module
+
+
 _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
@@ -290,7 +314,7 @@ def read_batch(ids=None, title_contains=None):
     back -- so this only ever GETs: no smoothing changes, no filters, nothing put back afterwards
     because nothing was moved.
     """
-    import rew_api
+    rew_api = _siblings().load("rew_api.py")
 
     if ids:
         wanted = [(str(i), None) for i in ids]
@@ -400,7 +424,36 @@ def _rec(**over):
     return rec
 
 
+def _check_read_batch_reads_the_loaded_rew_api():
+    """`read_batch` reads through the `rew_api` a front end already loaded by its path under a name of its own
+    (skill #137; TCC's is `autosound_tcc._vendor.rew_api`) -- never a second copy of the file, with a `BASE_URL` of
+    its own."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("front_end_rew_api", os.path.join(_HERE, "rew_api.py"))
+    api = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = api
+    try:
+        spec.loader.exec_module(api)
+        api.get_measurements = lambda: {"5": {"title": "w-L_1 (sw)"}, "6": {"title": "m-L_1 (sw)"}}
+        api.get_timing = lambda mid: {"id": mid, "read by": "the front end's copy"}
+        try:
+            got = read_batch(title_contains="w-L")
+        except Exception as exc:  # noqa: BLE001 -- a second copy of rew_api asked REW itself
+            raise AssertionError(f"read_batch did not read through the loaded rew_api: {exc!r}")
+        assert got == [{"id": "5", "read by": "the front end's copy"}], got
+    finally:
+        sys.modules.pop(spec.name, None)
+
+
 def _selftest():
+    failures = []
+    for check in (_check_read_batch_reads_the_loaded_rew_api,):
+        try:
+            check()
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
+
     same = [timing_of(_rec(title="w-L (sw)"), mid=1), timing_of(_rec(title="w-R (sw)"), mid=2)]
     good = compare(same)
     assert good["comparable"] and exit_code(good) == 0, good
