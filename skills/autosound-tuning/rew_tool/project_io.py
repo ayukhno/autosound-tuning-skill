@@ -2,18 +2,20 @@
 
 WRITES go through `atomic_write_text` / `atomic_write_json` / `atomic_write_bytes`, which share one path: a temp file
 with a name no other writer uses, opened exclusively, written, flushed and fsynced, then moved over the target in one
-`os.replace`. A reader sees the old file or the new one, never half of either; two writers never share a temp file. On
-POSIX a private file (`mode`) is private from its first byte: the temp is created with that mode. A Windows
-`PermissionError` on the move (an editor, an antivirus scan or TCC holding the target open) is retried for under a
-second.
+`os.replace`, and the folder fsynced (POSIX), so the move survives a power loss. A reader sees the old file or the
+new one, never half of either; two writers never share a temp file. On POSIX a private file (`mode`) is private from
+its first byte: the temp is created with that mode. A Windows `PermissionError` on the move (an editor, an antivirus
+scan or TCC holding the target open) is retried for under a second.
 
 A file whose NAME is the claim -- a ledger version -- is made by `create_exclusive`: the same temp, linked into place,
-never over a file that is there. `append_line` appends one line, and after a torn last line starts on a fresh one.
+never over a file that is there. `append_line` appends one line, fsynced, and after a torn last line starts on a
+fresh one.
 
 READS: `read_json` tells a file that is not there from one that is there and cannot be read (audit K-2). Absent is
-the caller's default, the one quiet case -- a fresh project has no state yet. Empty, cut off, not UTF-8, not JSON, the
-wrong top-level type, a directory, a file that cannot be opened: each raises `Unreadable`, naming the file and the
-repair -- the caller's for damaged contents, its own where the file may be whole (held open, a folder in its place).
+the caller's default, the one quiet case -- a fresh project has no state yet. Empty, cut off (inside a character
+too), not UTF-8, not JSON, the wrong top-level type, a directory, a file that cannot be opened: each raises
+`Unreadable`, naming the file and the repair -- the caller's for damaged contents, its own where the file may be whole
+(held open, a permission, a folder in its place: `cannot_open`, the repair its cause allows).
 Read as empty instead, such a file was written over with an empty one by the next write. `Unreadable` is
 neither an `OSError` nor a `ValueError`, so the `except (OSError, ValueError)` blocks that read "empty" do not catch
 it, and it is matched by its attribute `is_unreadable`, never by its class: a copy of this module loaded under
@@ -24,6 +26,8 @@ Stdlib only. Loaded by path like every sibling: `_siblings().load("project_io.py
 
     python3 project_io.py --selftest
 """
+import codecs
+import errno
 import io
 import json
 import os
@@ -80,6 +84,25 @@ def _discard(path):
         pass
 
 
+def _sync_folder(path):
+    """fsync the folder `path` is in (POSIX), so that a move or a link into it, or a file just made there, survives a
+    power loss (F M-6): until the folder is on the disk, the move can be undone, the file back at its old contents.
+    Windows has no folder fsync and is not asked for one. Best effort: a filesystem that refuses a folder's fsync (some
+    network shares) changes nothing about the write, which has landed -- raising here would report it as failed."""
+    if os.name == "nt":
+        return
+    try:
+        fd = os.open(os.path.dirname(os.path.abspath(path)), os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
 def _create(path, data, mode=None):
     """Create `path`, which must not exist, holding `data`, flushed and fsynced: the first step of a replace
     (`atomic_write_bytes`) and of an exclusive create (`create_exclusive`).
@@ -122,7 +145,8 @@ def atomic_write_bytes(path, data, *, mode=None, makedirs=False):
 
     `mode` (POSIX only) is the temp's mode from its creation, so a private file -- a key -- is never readable by
     others, not even while it is being written; it is set again before the move, since the umask may have narrowed it.
-    Without a mode the file gets the umask's default, as `open(path, "w")` gave it.
+    Without a mode the file gets the umask's default, as `open(path, "w")` gave it. After the move the folder is
+    fsynced (POSIX), so the move survives a power loss (`_sync_folder`).
     """
     if makedirs:
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
@@ -133,6 +157,7 @@ def atomic_write_bytes(path, data, *, mode=None, makedirs=False):
     except BaseException:
         _discard(tmp)
         raise
+    _sync_folder(path)
 
 
 def atomic_write_text(path, text, *, newline=None, mode=None, makedirs=False):
@@ -178,6 +203,7 @@ def create_exclusive(path, text, *, newline=None):
             _create(path, data)                 # no hard links here: the name itself, exclusively, in place
     finally:
         _discard(tmp)
+    _sync_folder(path)                          # the new name survives a power loss (F M-6)
 
 
 def append_line(path, line):
@@ -185,18 +211,29 @@ def append_line(path, line):
     the torn line stays one skipped line and the new one is read (audit T-14).
 
     Text mode, UTF-8: the line ending is the platform's, as the `open(path, "a")` this replaces wrote it. The append
-    itself is a plain one and takes no lock; the lock comes in W-9 (J2b).
+    itself is a plain one and takes no lock; the lock comes in W-9 (J2b). The line is fsynced, and the folder too when
+    the append made the file (F M-6): an event survives a power loss once this returns.
+
+    A journal that is there and cannot be opened raises `Unreadable` (`cannot_open`), nothing appended (F M-7): it
+    was a bare `PermissionError`, which a command reports as a bug. An append refused once the file is open -- a
+    read-only file, a full disk -- raises its `OSError`, for the caller to say.
     """
-    torn = False
+    torn, made = False, False
     try:
         with open(path, "rb") as f:
             if f.seek(0, os.SEEK_END):
                 f.seek(-1, os.SEEK_END)
                 torn = f.read(1) != b"\n"
     except FileNotFoundError:
-        pass
+        made = True
+    except OSError as exc:
+        raise cannot_open(path, exc) from exc
     with open(path, "a", encoding="utf-8") as f:
         f.write(("\n" if torn else "") + line + "\n")
+        f.flush()
+        os.fsync(f.fileno())
+    if made:
+        _sync_folder(path)
 
 
 class Unreadable(Exception):
@@ -215,10 +252,53 @@ class Unreadable(Exception):
 #: caller's repair for damaged contents -- an older copy restored over it -- would replace a good file.
 _REPAIR_HELD = "close what holds it (an editor, a sync client, another tool) and run again"
 _REPAIR_FOLDER = "move the folder aside"
+#: Where nothing can hold a file against its reader -- POSIX has no mandatory locks -- "close what holds it" cannot be
+#: followed (H minor 3): a permission refuses it, a file stands where a folder of its path belongs, or the disk does.
+_REPAIR_PERMISSION = "this user may not open it: give it access (its owner and mode, `ls -l`) and run again"
+_REPAIR_NOT_A_FOLDER = "a file stands where a folder of its path belongs: move that file aside"
+_REPAIR_RETRY = "check the disk and the folder it is in (a network share, a sync client's folder) and run again"
+
+
+def repair_for(exc):
+    """The repair for `exc`, an `OSError` met opening or writing one of the method's files: the one its cause allows
+    (H minor 3). A file standing where a folder of the path belongs, and a folder where the file belongs, are said as
+    such everywhere. On Windows another program holding the file is the common cause -- a sharing violation reaches
+    `open()` as a plain EACCES -- so it is told to close what holds it. On POSIX nothing holds a file against a reader:
+    a permission is told as one, and anything else as the disk's."""
+    if exc.errno == errno.ENOTDIR:
+        return _REPAIR_NOT_A_FOLDER
+    if exc.errno == errno.EISDIR:
+        return _REPAIR_FOLDER
+    if os.name == "nt":
+        return _REPAIR_HELD
+    if exc.errno in (errno.EACCES, errno.EPERM):
+        return _REPAIR_PERMISSION
+    return _REPAIR_RETRY
+
+
+def cannot_open(path, exc):
+    """The `Unreadable` to raise for `path`, which `exc` -- an `OSError` other than `FileNotFoundError` -- refused to
+    open: a folder in its place said as one, anything else with the repair its cause allows (`repair_for`). For a
+    reader that opens one of the method's files itself (`process.py`'s journal), as `read_json` and `append_line` do."""
+    if os.path.isdir(path):
+        return Unreadable(path, "is a directory, not a file", _REPAIR_FOLDER)
+    return Unreadable(path, f"cannot be opened ({exc})", repair_for(exc))
+
 
 #: What a refusal calls a JSON value: JSON's words, not Python's type names ("null", not "NoneType").
 _JSON_KINDS = ((bool, "true or false"), (dict, "an object"), (list, "an array"), (str, "a string"),
                ((int, float), "a number"), (type(None), "null"))
+
+
+def cut_inside_a_character(raw):
+    """True when the only fault UTF-8 finds in `raw` is an unfinished last character: a write cut inside a multi-byte
+    character, not text in another code page. Asked of bytes that did not decode. An incremental decoder holds such
+    an end back instead of raising; a byte in another code page is wrong before the end, and it raises there."""
+    try:
+        codecs.getincrementaldecoder("utf-8")().decode(raw)
+    except UnicodeDecodeError:
+        return False
+    return True
 
 
 def _json_kind(kind):
@@ -238,7 +318,8 @@ def read_json(path, default=None, *, want=dict, repair=None, repair_encoding=Non
     top-level type (`want`: a type or a tuple of them; None takes any), a directory, a file that cannot be opened --
     each raises `Unreadable` naming the file and its repair. `repair` is the caller's, for damaged contents; a file
     that is not UTF-8 gets `repair_encoding` when given -- a file in another code page is mended by re-encoding it, not
-    by an older copy. A file that cannot be opened, and a directory, get their own (`_REPAIR_HELD`, `_REPAIR_FOLDER`):
+    by an older copy -- but one cut inside its last character is cut off, and gets `repair` (F M-2). A file that
+    cannot be opened, and a directory, get their own (`cannot_open`: the repair its cause allows, `_REPAIR_FOLDER`):
     the file may be whole there. A UTF-8 BOM is read: it is an editor's marker, not damage. The bytes are decoded
     here, so the platform's code page plays no part.
     """
@@ -250,12 +331,16 @@ def read_json(path, default=None, *, want=dict, repair=None, repair_encoding=Non
     except FileNotFoundError:
         return default
     except OSError as exc:
-        raise Unreadable(path, f"cannot be opened ({exc})", _REPAIR_HELD) from exc
+        raise cannot_open(path, exc) from exc
     if not raw.strip():
         raise Unreadable(path, "is empty -- a write was cut off", repair)
     try:
         text = raw.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
+        if cut_inside_a_character(raw):
+            # UTF-8 up to an unfinished last character (F M-2): a write cut off, not another code page --
+            # `repair-encoding` finds no page that makes JSON of it, so the caller's repair for damage is the one.
+            raise Unreadable(path, "is cut off inside a character -- a write was cut off", repair) from exc
         raise Unreadable(path, f"is not UTF-8 (byte {exc.start})", repair_encoding or repair) from exc
     try:
         data = json.loads(text)
@@ -492,7 +577,8 @@ def _check_private_mode():
 
     def fsync(fd):                               # the temp as it is when its bytes are all in it
         st = os.fstat(fd)
-        at_fsync.append((stat.S_IMODE(st.st_mode), st.st_size))
+        if not stat.S_ISDIR(st.st_mode):         # the folder's own fsync after the move is not the temp's
+            at_fsync.append((stat.S_IMODE(st.st_mode), st.st_size))
         real_fsync(fd)
 
     def replace(src, dst):                       # the temp as it is when it takes the file's name
@@ -687,9 +773,13 @@ def _check_read_json():
         path = os.path.join(d, "process-state.json")
         absent = object()
         assert read_json(path, absent) is absent and read_json(path) is None, "an absent file is not its default"
+        # A write cut inside a multi-byte character (F M-2) is cut off, not another code page: its repair is the
+        # caller's older copy -- `repair-encoding` finds no page that makes JSON of it, a dead end.
+        cut = '{"schema_version": 3, "note": "тест'.encode("utf-8")[:-1]     # after the first byte of the last "т"
         for label, raw in (("empty", b""), ("blank", b" \r\n\t"),
                            ("truncated", b'{"schema_version": 3, "pla'),
                            ("cp1251", '{"schema_version": 3, "note": "тест"}'.encode("cp1251")),
+                           ("cut inside a character", cut), ("BOM, then cut inside a character", b"\xef\xbb\xbf" + cut),
                            ("an array", b"[1, 2]"), ("null", b"null"), ("not JSON", b"schema_version: 3")):
             with open(path, "wb") as f:
                 f.write(raw)
@@ -700,6 +790,10 @@ def _check_read_json():
                 repair = "RE-ENCODE" if label == "cp1251" else "REPAIR"
                 assert (exc.path, exc.repair) == (path, repair), (label, exc.path, exc.repair)
                 assert str(exc).startswith(path + " ") and str(exc).endswith(" -- " + repair), (label, str(exc))
+                if "cut inside" in label:
+                    assert exc.reason == "is cut off inside a character -- a write was cut off", (label, exc.reason)
+                elif label == "cp1251":
+                    assert exc.reason.startswith("is not UTF-8 (byte "), (label, exc.reason)
             else:
                 raise AssertionError(f"{label}: read as JSON")
             assert _read_bytes(path) == raw, f"{label}: the read changed the file"
@@ -711,20 +805,50 @@ def _check_read_json():
         assert read_json(path) == {"note": "нуль"}, "a UTF-8 BOM is an editor's marker, not damage"
         # A file that cannot be OPENED, and a folder where the file belongs, may hold nothing wrong (Windows refusing
         # an open while another program holds the file, a permission, a cloud placeholder): each is told its own
-        # repair, never the caller's -- an older copy restored over a good file is the damage it would cause.
-        def held(p, *args, **kwargs):
-            raise PermissionError(13, "The process cannot access the file because it is being used by another "
-                                      "process", p)
-        globals()["open"] = held                 # read_json's own open() resolves here first
-        try:
-            read_json(path, {}, repair="REPAIR", repair_encoding="RE-ENCODE")
-        except Exception as exc:  # noqa: BLE001
-            assert getattr(exc, "is_unreadable", False) and exc.reason.startswith("cannot be opened ("), repr(exc)
-            assert exc.repair == _REPAIR_HELD and str(exc).endswith(" -- " + _REPAIR_HELD), str(exc)
-        else:
-            raise AssertionError("a file that could not be opened was read")
-        finally:
-            del globals()["open"]
+        # repair, never the caller's -- an older copy restored over a good file is the damage it would cause. Which
+        # one is the cause's (H minor 3): "close what holds it" only where something can hold a file, Windows; on
+        # POSIX nothing holds a file against a reader, and a permission or a file standing where a folder of the path
+        # belongs is told what it is.
+        real_name = os.name
+        for platform, error, repair in (
+                ("nt", PermissionError(13, "The process cannot access the file because it is being used by another "
+                                           "process"), _REPAIR_HELD),
+                ("posix", PermissionError(13, "Permission denied"), _REPAIR_PERMISSION),
+                ("posix", NotADirectoryError(20, "Not a directory"), _REPAIR_NOT_A_FOLDER),
+                ("nt", NotADirectoryError(20, "Not a directory"), _REPAIR_NOT_A_FOLDER),
+                ("posix", OSError(5, "Input/output error"), _REPAIR_RETRY)):
+            def refused(p, *args, error=error, **kwargs):
+                raise type(error)(error.errno, error.strerror, p)
+            globals()["open"], os.name = refused, platform      # read_json's own open() resolves here first
+            try:
+                read_json(path, {}, repair="REPAIR", repair_encoding="RE-ENCODE")
+            except Exception as exc:  # noqa: BLE001
+                assert getattr(exc, "is_unreadable", False) and exc.reason.startswith("cannot be opened ("), \
+                    (platform, repr(exc))
+                assert exc.repair == repair and str(exc).endswith(" -- " + repair), (platform, error, str(exc))
+            else:
+                raise AssertionError("a file that could not be opened was read")
+            finally:
+                del globals()["open"]
+                os.name = real_name
+        if os.name != "nt":                      # the same two, met for real: POSIX gives them their own errno
+            through = os.path.join(path, "x.json")                     # `path` is a file: a folder of the path
+            try:
+                read_json(through, {}, repair="REPAIR")
+            except Exception as exc:  # noqa: BLE001
+                assert getattr(exc, "is_unreadable", False) and exc.repair == _REPAIR_NOT_A_FOLDER, repr(exc)
+            else:
+                raise AssertionError("a path through a file was read as no file")
+            if os.geteuid() != 0:                # root opens a mode-0 file all the same
+                os.chmod(path, 0)
+                try:
+                    read_json(path, {}, repair="REPAIR")
+                except Exception as exc:  # noqa: BLE001
+                    assert getattr(exc, "is_unreadable", False) and exc.repair == _REPAIR_PERMISSION, repr(exc)
+                else:
+                    raise AssertionError("a file this user may not open was read")
+                finally:
+                    os.chmod(path, 0o600)
         os.remove(path)
         os.makedirs(path)
         try:
@@ -756,6 +880,151 @@ def _check_newer_schema():
     contract_py = os.path.join(os.path.dirname(os.path.abspath(__file__)), "contract.py")
     assert reencode_line("car") == f"rewrite it as UTF-8: python3 {contract_py} repair-encoding " \
                                    f"{os.path.abspath('car')}", reencode_line("car")
+
+
+def _check_durable():
+    """F M-6: what landed stays landed after a power loss. On POSIX the folder is fsynced after the move -- the move
+    is an entry in the folder, and until the folder is on the disk a power cut can undo it, the file back at its old
+    contents -- and after an exclusive create's link; Windows has no folder fsync and is not asked for one. An appended
+    journal line is fsynced, and so is the folder when the append made the file."""
+    import stat
+    d = _scratch()
+    real_fsync, real_replace, real_link, real_name = os.fsync, os.replace, os.link, os.name
+    seen = []
+
+    def fsync(fd):
+        seen.append("fsync folder" if stat.S_ISDIR(os.fstat(fd).st_mode) else "fsync file")
+        real_fsync(fd)
+
+    def replace(src, dst):
+        seen.append("replace")
+        real_replace(src, dst)
+
+    def link(src, dst):
+        seen.append("link")
+        real_link(src, dst)
+    # A folder cannot be opened for its fsync on Windows: there only the Windows half is asked.
+    platforms = ("nt",) if os.name == "nt" else ("posix", "nt")
+    try:
+        os.fsync, os.replace, os.link = fsync, replace, link
+        for platform in platforms:
+            sub = os.path.join(d, platform)
+            os.makedirs(sub)
+            folder = ["fsync folder"] if platform != "nt" else []
+            os.name = platform
+            try:
+                del seen[:]
+                atomic_write_json(os.path.join(sub, "x.json"), {"v": 1})
+                assert seen == ["fsync file", "replace"] + folder, ("atomic_write_json", platform, seen)
+                del seen[:]
+                create_exclusive(os.path.join(sub, "v_001.json"), "{}")
+                assert seen == ["fsync file", "link"] + folder, ("create_exclusive", platform, seen)
+                journal = os.path.join(sub, "journal.jsonl")
+                del seen[:]
+                append_line(journal, '{"type": "first"}')                   # the append makes the file
+                assert seen == ["fsync file"] + folder, ("append_line, a new journal", platform, seen)
+                del seen[:]
+                append_line(journal, '{"type": "second"}')
+                assert seen == ["fsync file"], ("append_line", platform, seen)
+            finally:
+                os.name = real_name
+            assert _read_bytes(journal) == ('{"type": "first"}\n{"type": "second"}\n').replace(
+                "\n", os.linesep).encode("utf-8"), _read_bytes(journal)
+    finally:
+        os.fsync, os.replace, os.link, os.name = real_fsync, real_replace, real_link, real_name
+        _drop(d)
+
+
+def _check_append_refused():
+    """F M-7: a journal that is there and cannot be opened -- held by another program on Windows, a permission on
+    POSIX -- is `Unreadable` from `append_line`, naming the file and its repair, never a bare `PermissionError` (which
+    `process.py` reported as a bug, exit 70); nothing is appended. A refusal of the append itself is an `OSError` the
+    caller says, never swallowed."""
+    import builtins
+    d = _scratch()
+    try:
+        path = os.path.join(d, "journal.jsonl")
+        append_line(path, '{"type": "first"}')
+        before = _read_bytes(path)
+        for refused_mode in ("rb", "a"):
+            def refusing(p, mode="r", *args, refused_mode=refused_mode, **kwargs):
+                if mode == refused_mode:
+                    raise PermissionError(13, "held by another program", p)
+                return builtins.open(p, mode, *args, **kwargs)
+            globals()["open"] = refusing                     # append_line's own open() resolves here first
+            try:
+                append_line(path, '{"type": "second"}')
+            except Exception as exc:  # noqa: BLE001 -- the kind is what is under test
+                if refused_mode == "rb":
+                    assert getattr(exc, "is_unreadable", False) and exc.path == path, repr(exc)
+                    assert exc.reason.startswith("cannot be opened (") and exc.repair, str(exc)
+                else:
+                    assert isinstance(exc, PermissionError), repr(exc)
+            else:
+                raise AssertionError(f"an append whose {refused_mode!r} open was refused went through")
+            finally:
+                del globals()["open"]
+            assert _read_bytes(path) == before, (refused_mode, _read_bytes(path))
+    finally:
+        _drop(d)
+
+
+def _check_every_writer_moves():
+    """T I2: the writers CONTRACT.md item 8 names write through the move, as this module's own tests are -- not only
+    that the module is atomic, but that `Project.save`, `Process._write`, the seals and `save_profile` use it. Each
+    replaces a file that is there while the move fails, as a pulled disk or a Windows holder past the retries would:
+    the writer must raise, the old file keep its bytes, and no temp be left. A writer that went back to writing in place
+    does not raise, and the old bytes are gone -- a crash in the middle of that write leaves the file torn."""
+    sib = _siblings()
+    project, process = sib.load("project.py"), sib.load("state/process.py")
+    state, dsp_profile = sib.load("state/state.py"), sib.load("dsp_profile.py")
+    top = _scratch()
+    real = os.replace
+    failures = []
+
+    def broken(src, dst):
+        raise OSError(5, "the move failed (a fault injected here)", dst)
+
+    def judge(label, path, call):
+        folder = os.path.dirname(path)
+        before, names = _read_bytes(path), set(os.listdir(folder))
+        os.replace = broken
+        try:
+            call()
+            raised = None
+        except Exception as exc:  # noqa: BLE001 -- any refusal will do; the file and the folder are what is judged
+            raised = exc
+        finally:
+            os.replace = real
+        left = sorted(n for n in set(os.listdir(folder)) - names if n.endswith(".tmp"))
+        if raised is None:
+            failures.append(f"{label}: wrote with the move failing -- in place")
+        if _read_bytes(path) != before:
+            failures.append(f"{label}: the old file's bytes changed")
+        if left:
+            failures.append(f"{label}: a temp was left: {left}")
+    try:
+        proj = project.Project(top)
+        proj.save({"schema_version": 3, "channels": []})
+        judge("project.json (Project.save)", proj.path, lambda: proj.save(proj.load()))
+        proc = process.Process(os.path.join(top, "process"))
+        proc.enter_phase("-1")
+        judge("process-state.json (Process._write)", proc.state_path, lambda: proc.enter_phase("-1"))
+        root = os.path.join(top, "state")
+        state.PresetHistory(root, "SQ", project_dir=top).snapshot(state._sample_state(), note="v1")
+        seals = os.path.join(root, state.SEALS_FILE)
+        with open(seals, "w", encoding="utf-8") as f:            # a version with no seal: `seal` has one to write
+            f.write("{}")
+        judge("state/seals.json (seal_all)", seals, lambda: state.seal_all(root))
+        profile = os.path.join(top, "dsp_profile.json")
+        body = {"dsp_profile": {"name": "M", "vendor": "V", "groups": [
+            {"id": "physical_outputs", "label": "Out", "fields": ["hp", "lp", "gain_db"]}]}}
+        dsp_profile.save_profile(profile, body)
+        judge("dsp_profile.json (save_profile)", profile, lambda: dsp_profile.save_profile(profile, body))
+    finally:
+        os.replace = real
+        _drop(top)
+    assert not failures, "\n  ".join(["a writer item 8 lists does not go through the move:"] + failures)
 
 
 def _check_two_writers_one_reader():
@@ -817,7 +1086,8 @@ def _selftest():
     failures, seen = [], {}
     for check in (_check_text_and_json, _check_foreign_tmp, _check_replace_fails_clean, _check_write_fails_clean,
                   _check_replace_retry, _check_private_mode, _check_create_exclusive, _check_append_line,
-                  _check_read_json, _check_newer_schema, _check_two_writers_one_reader):
+                  _check_durable, _check_append_refused, _check_read_json, _check_newer_schema,
+                  _check_every_writer_moves, _check_two_writers_one_reader):
         try:
             seen[check.__name__] = check()
         except Exception as exc:  # noqa: BLE001 -- each check is reported by name; one failing must not hide the rest
@@ -832,9 +1102,14 @@ def _selftest():
           f"Ctrl-C there leave the old file whole and no temp behind; a held move is retried on Windows only; a "
           f"private file is private from its first byte, its mode set again before the move; an exclusive create "
           f"never writes over a name, linked or (no hard links) in place, and a failed one leaves no name; a line "
-          f"appended after a torn one starts on a fresh line, the old append's bytes otherwise; read_json gives the "
+          f"appended after a torn one starts on a fresh line, the old append's bytes otherwise; the folder is fsynced "
+          f"after a move and a link (POSIX, never on Windows), an appended line too, and a journal that cannot be "
+          f"opened is Unreadable from the append, nothing appended; read_json gives the "
           f"default for no file, reads a BOM, and refuses an empty, cut-off, cp1251, wrong-type, held or directory one "
-          f"as Unreadable, naming it and its repair -- never the caller's older copy for a file that may be whole; "
+          f"as Unreadable, naming it and its repair -- never the caller's older copy for a file that may be whole, the "
+          f"repair by its cause (close what holds it on Windows, a permission or a file in the path's place on POSIX), "
+          f"and a file cut inside a character as cut off, not re-encoded; Project.save, Process._write, the seals and "
+          f"save_profile go through the move: with it failing each raises, the old bytes whole and no temp left; "
           f"newer_schema tells a file a newer method wrote by an int version alone; "
           f"two writers x 100 and a reader: {reads} reads, every one whole")
     return 0

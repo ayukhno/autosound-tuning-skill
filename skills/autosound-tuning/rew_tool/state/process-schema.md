@@ -121,6 +121,23 @@ repository, no git); a journal with no header at all predates anyone asking. The
 characters, the same spelling `dsp_profile.json` carries and the same number the companion app shows
 for that checkout — see `rew_tool/provenance.py` for why it is the sha and not the version string.
 
+**How the journal is read** (#134, the silent-failures review: F I-2, H I-2, T I8). As bytes, split on `\n` alone --
+U+2028, U+2029 and U+0085, which the method writes raw inside an event's text, never split a line -- and each line
+decoded by itself. No journal is no events. A line torn by a cut write -- not JSON, cut inside its last character,
+or JSON that is no object -- is skipped by every reader. Two things are never read as missing:
+
+- **a journal that is there and cannot be opened** (held by another program, a permission, a folder in its place):
+  `Process.events()` raises `project_io.Unreadable` naming it and its repair, where it answered `[]`;
+- **a line in another code page** (not UTF-8 before its end: a project begun before v3.0.45 on Windows): the method's
+  own readers -- every writer and verdict, `amp-changes`, `listening-verdicts`, `session_closed`, the flaw-map gate,
+  and what the other tools ask (`capture_rounds`, `protective_record_for`, ...) -- read through `Process._events`,
+  which refuses it, naming the line(s) and `contract.py repair-encoding`; skipped, a round, a series, a protective
+  record or a ruling was gone without a word. `events()`, the reader for a screen (TCC), skips it and counts it in
+  `journal_skipped` (`{"torn": [...], "not_utf8": [...]}`, line numbers from 1).
+
+`contract.py check` reports either as not valid, and counts the skipped lines (`skipped`). An appended line is fsynced
+(and the folder, when the append made the file), so it survives a power loss.
+
 ## Invariants (enforced in code, not by discipline)
 
 - **Steps are never deleted.** Superseding marks `skipped` and leaves the step visible, so the
@@ -168,7 +185,8 @@ for that checkout — see `rew_tool/provenance.py` for why it is the sha and not
   — is everything the NEXT session needs on disk — and REFUSES while it is not: no phase recorded,
   an open capture round, a plan step left `todo`/`in_progress`, a done step whose evidence resolves
   to nothing, no ledger snapshot, a `tuning-changelog` with no ▶️ CONTINUE block, or one it cannot read (another code
-  page, a file that cannot be opened: named, where it read as no changelog). It writes nothing
+  page, a file that cannot be opened: named, with the mend its cause allows, where it read as no changelog). It
+  writes nothing
   either way (which evidence closes a step is a decision), and when it passes it prints the resume
   line: what to say next, and what must stay open.
 - **A round says WHICH counter its version is, and a ledger version must exist** (TCC-022). The two
@@ -198,9 +216,19 @@ for that checkout — see `rew_tool/provenance.py` for why it is the sha and not
   the ledger before its first round, so a bad one is refused with nothing imported.
 - **Phases are the skill's, not the project's.** Only status and re-entry change. Phase 5 is
   explicitly cyclical, so `enter_phase` is not a one-way ratchet.
-- **State writes are atomic** (write-temp-then-rename). A torn write would otherwise read back as
-  an empty process, i.e. "nothing ever happened".
-- **A torn last journal line is skipped, not fatal** — the rest of the history still loads.
+- **State writes are atomic** (write-temp-then-rename, the folder fsynced after on POSIX). A torn write would
+  otherwise read back as an empty process, i.e. "nothing ever happened".
+- **A torn last journal line is skipped, not fatal** — the rest of the history still loads. A journal that cannot be
+  opened, and a line in another code page, are refused, never read as missing (above).
+- **A state change and its event** (#134, F M-7). Each state write is followed by its event. A writer reads the
+  journal strictly, and opens it for appending, before it writes the state: a journal that cannot be read or appended
+  to refuses the verb with nothing written. An append refused after the state write (a hold that began in between)
+  is exit 1, `<state> is written, but its journal line is not: <why>. The state holds this change and the journal has
+  no '<type>' event for it, and nothing replays it: once the journal can be written, append this line to <journal>:
+  {...}` -- it was 70, a bug. An append refused with nothing written before it says `the <type> event was not
+  recorded`, exit 1. A replace of `process-state.json` refused past the retries (Windows: a sync client, a scanner)
+  is exit 1, `<state> could not be written (...) -- <repair>; it is as it was` (H minor 2). `session-close` records
+  its close before it prints its report, so a refused close prints nothing first.
 
 ## Usage
 
@@ -312,7 +340,8 @@ usage on stdout, exit 0.
   empty process, `session-close` recorded a clean stop, and a verb that wrote the state put an empty process over the
   plan.
 - **Lenient only for the display-only verbs: `plan`, `amp-changes` and `listening-verdicts`** (with `--bank` too).
-  They write nothing. `plan` shows such a file as an empty plan; the other two read only the journal. `_DISPLAY_VERBS`
+  They write nothing. `plan` shows such a file as an empty plan; the other two read only the journal, strictly (#134:
+  a journal that cannot be opened, or a line in another code page, is exit 1 there too). `_DISPLAY_VERBS`
   in `process.py` is this list, and `_main` reads strictly for any verb not on it, so a new verb is strict unless it is
   added there.
 - **Every writer reads strictly itself, and again before it writes.** Each writer method of `Process` (the public ones
@@ -335,7 +364,10 @@ usage on stdout, exit 0.
     (no git repository), move `process-state.json` aside: the process starts empty, and the journal keeps every
     event;
   - for a file written in another code page, `contract.py repair-encoding <project-dir>`;
-  - for a file that cannot be opened, close what holds it (an editor, a sync client, another tool) and run again;
+  - for a file that cannot be opened, the repair its cause allows (`project_io.repair_for`, H minor 3): on Windows,
+    close what holds it (an editor, a sync client, another tool) and run again; on POSIX, where nothing holds a file
+    against a reader, a permission (`this user may not open it: give it access ...`) or a file standing where a
+    folder of the path belongs (`... move that file aside`), else the disk's;
   - for a folder in its place, move the folder aside.
 
   In the last two the file may be whole, and an older copy restored over it would replace a good file.

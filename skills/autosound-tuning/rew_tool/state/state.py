@@ -50,7 +50,6 @@ every snapshot going forward.
 """
 
 import argparse
-import codecs
 import copy
 import datetime
 import json
@@ -798,8 +797,11 @@ def seal_all(root):
 
 
 def verify_seals(root):
-    """`[{"version", "why"}]` -- every sealed version whose content changed, or whose file is gone. A `seals.json`
-    that cannot be read raises (`_read_seals`, #136): it is not "nothing to verify"."""
+    """`[{"version", "why"}]` -- every sealed version whose content changed, or whose file is gone, and every version
+    banked and never sealed (#134, F M-10): a bank creates the version and then writes its seal, and a seal write that
+    failed (a full disk, a held `seals.json`) left a version nothing checked. A `seals.json` that cannot be read raises
+    (`_read_seals`, #136): it is not "nothing to verify". A ledger with no seals at all is not this one's to name:
+    banked before seals existed, it is `contract.py check`'s `unsealed` offer."""
     seals = _read_seals(root)
     if not seals:
         return []
@@ -818,6 +820,10 @@ def verify_seals(root):
         if got != digest:
             out.append({"version": key, "why": "its content changed after it was banked -- a banked version is "
                                                "immutable (#58 P1); a change is a NEW version"})
+    for key in sorted(k for k in paths if k not in seals):
+        out.append({"version": key, "why": f"banked, never sealed (the bank stopped before its seal was written: a "
+                                           f"full disk, a held {SEALS_FILE}) -- seal it as it stands: python3 "
+                                           f"{os.path.abspath(__file__)} --root {root} seal"})
     return out
 
 
@@ -1671,15 +1677,42 @@ def _utf8_damage(raw, appended):
         try:
             body.decode("utf-8")
         except UnicodeDecodeError as exc:
-            try:
-                codecs.getincrementaldecoder("utf-8")().decode(body)   # holds an unfinished last character back
-            except UnicodeDecodeError:
+            if not _project_io().cut_inside_a_character(body):   # an unfinished last character is a torn append
                 return UnicodeDecodeError("utf-8", raw, start + exc.start, start + exc.end, exc.reason)
         start += len(line)
     return None
 
 
-def encoding_survey(paths):
+def _relined(raw, page):
+    """A `.jsonl` in `page`, line by line (#134, H I-1): `(data, changed)`, or None when `page` is no answer.
+
+    A line in UTF-8 keeps its bytes, and so does one torn inside its last character -- the method's readers skip it
+    as torn; only a line that is not UTF-8 is decoded with `page`, and must then parse as JSON. `data` is the file
+    with those lines in UTF-8, every line ending kept; `changed` is `[(line number, its text)]` -- what the repair
+    changes, numbered as the method's readers number a journal's lines (split on "\\n" alone, from 1). Decoding the
+    whole file with the page turned every UTF-8 line holding a non-ASCII character into mojibake."""
+    io_ = _project_io()
+    out, changed = [], []
+    pieces = raw.split(b"\n")
+    for number, piece in enumerate(pieces, 1):
+        ending = b"\n" if number < len(pieces) else b""
+        body = piece[:-1] if piece.endswith(b"\r") else piece
+        try:
+            body.decode("utf-8")
+        except UnicodeDecodeError:
+            if not io_.cut_inside_a_character(body):
+                try:
+                    text = body.decode(page)
+                    json.loads(text)
+                except ValueError:              # a UnicodeDecodeError too: the page cannot read it, or not as JSON
+                    return None
+                changed.append((number, text.strip()))
+                piece = text.encode("utf-8") + piece[len(body):]
+        out.append(piece + ending)
+    return b"".join(out), changed
+
+
+def encoding_survey(paths, unread=None):
     """Which of `paths` are not UTF-8, and what each one could say instead.
 
     Returns one dict per DAMAGED file -- a clean set surveys to `[]`. `candidates` holds only the
@@ -1688,15 +1721,35 @@ def encoding_survey(paths):
     or a root: the damage is a property of BYTES, and the same repair serves `project.json` and a
     snapshot equally -- who knows which files a project has is the caller (`contract.py` for a
     whole project, `ledger_files` for this module's own CLI).
+
+    Each candidate is `{"codec", "text", "data"}`: `data` the bytes the repair writes. A `.jsonl` is judged and
+    repaired line by line (H I-1, `_relined`): its candidate carries `changed`, the lines the repair rewrites, and
+    every other line keeps its bytes. A file that cannot be opened (held, a permission) is not surveyed -- never
+    called UTF-8 either: it goes into `unread`, `[(path, why)]`, when the caller passes a list.
     """
     found = []
     for path in paths:
-        raw = open(path, "rb").read()
-        exc = _utf8_damage(raw, path.endswith(".jsonl"))
+        try:
+            with open(path, "rb") as fh:
+                raw = fh.read()
+        except OSError as exc:
+            if unread is not None:
+                unread.append((path, str(exc)))
+            continue
+        appended = path.endswith(".jsonl")
+        exc = _utf8_damage(raw, appended)
         if exc is None:
             continue                            # already UTF-8: nothing to repair
         entry = {"path": path, "byte": raw[exc.start], "position": exc.start, "reason": exc.reason, "candidates": []}
         for page in LEGACY_PAGES:
+            if appended:
+                relined = _relined(raw, page)
+                if relined is None:
+                    continue
+                data, changed = relined
+                entry["candidates"].append({"codec": page, "text": data.decode("utf-8", "replace"), "data": data,
+                                            "changed": changed})
+                continue
             try:
                 text = raw.decode(page)
             except UnicodeDecodeError:
@@ -1706,7 +1759,7 @@ def encoding_survey(paths):
                     json.loads(text)
                 except ValueError:
                     continue                    # decodes, but not into our file: not an answer
-            entry["candidates"].append({"codec": page, "text": text})
+            entry["candidates"].append({"codec": page, "text": text, "data": text.encode("utf-8")})
         found.append(entry)
     return found
 
@@ -1730,9 +1783,16 @@ def render_survey(found, where, repair_command):
                          "back, and the numbers can be re-banked with a fresh snapshot.")
             continue
         for c in e["candidates"]:
-            shown = _non_ascii_lines(c["text"])
             lines.append(f"    as {c['codec']}:")
-            for s in shown:
+            if c.get("changed") is not None:
+                # A `.jsonl`: the lines the repair rewrites, and only those (H I-1) -- the first non-ASCII lines of the
+                # whole file were the old ones in another page, which read right, and the page looked safe.
+                for number, text in c["changed"][:6]:
+                    lines.append(f"        line {number}: {text}")
+                if len(c["changed"]) > 6:
+                    lines.append(f"        ... and {len(c['changed']) - 6} more line(s)")
+                continue
+            for s in _non_ascii_lines(c["text"]):
                 lines.append(f"        {s}")
         lines.append("")
     codec = found[0]["candidates"][0]["codec"] if found[0]["candidates"] else "cp1251"
@@ -1745,12 +1805,23 @@ def render_survey(found, where, repair_command):
     lines.append("")
     lines.append("That rewrites each file as UTF-8 and keeps the original bytes beside it as "
                  "`<file>.<codec>.orig` — a snapshot is immutable, so the bytes that were there "
-                 "stay on disk.")
+                 "stay on disk. A journal (`.jsonl`) is rewritten line by line: only the lines shown "
+                 "change, and every line already in UTF-8 keeps its bytes.")
     return "\n".join(lines)
 
 
-def repair_encoding(paths, codec):
-    """Rewrite every non-UTF-8 file among `paths` as UTF-8, decoding it as `codec`.
+def said_unread(unread):
+    """What a `repair-encoding` command line says of the files it could not open (`encoding_survey`'s `unread`): one
+    line each on stderr, and exit 1 -- a survey that skipped a file has not shown it UTF-8. 0 when there are none."""
+    for path, why in unread:
+        print(f"error: {path} was not surveyed: it cannot be opened ({why}) -- run this again once it can be read",
+              file=sys.stderr)
+    return 1 if unread else 0
+
+
+def repair_encoding(paths, codec, unread=None):
+    """Rewrite every non-UTF-8 file among `paths` as UTF-8, decoding it as `codec`. A file that cannot be opened is not
+    repaired, and goes into `unread` (`encoding_survey`).
 
     The characters are unchanged; only the bytes that carry them are. The original file is kept as
     `<file>.<codec>.orig` rather than replaced — this history's own invariant is that a snapshot is
@@ -1762,9 +1833,13 @@ def repair_encoding(paths, codec):
     file under the name until the rewrite landed). The backup is written atomically too: one torn
     part-way would be trusted by the next run, which makes no second one. Its bytes are what is
     kept; its time stamps are its own, nothing reads them.
+
+    A `.jsonl` is rewritten line by line (#134, H I-1): only its lines that are not UTF-8 are decoded
+    as `codec`, and every other line keeps its bytes -- a journal begun in cp1251 and continued in
+    UTF-8 had its UTF-8 lines turned into mojibake (`encoding_survey`'s `data`).
     """
     done = []
-    for e in encoding_survey(paths):
+    for e in encoding_survey(paths, unread):
         match = [c for c in e["candidates"] if c["codec"] == codec]
         if not match:
             raise SnapshotError(
@@ -1776,12 +1851,12 @@ def repair_encoding(paths, codec):
             with open(e["path"], "rb") as f:
                 original = f.read()
             _project_io().atomic_write_bytes(backup, original)
-        # `newline=""` because the repair changes the ENCODING and nothing else. The text came from
-        # `bytes.decode`, so its line endings are the ones the file already had; writing it back in
-        # the default text mode would translate every `\n` to `\r\n` on the very platform this
-        # repair is for, and a repair that silently rewrites bytes it was not asked about is one
-        # nobody can check afterwards.
-        _project_io().atomic_write_text(e["path"], match[0]["text"], newline="")
+        # The candidate's bytes, written as they are, because the repair changes the ENCODING and
+        # nothing else. The text came from `bytes.decode`, so its line endings are the ones the file
+        # already had; writing it back in the default text mode would translate every `\n` to `\r\n`
+        # on the very platform this repair is for, and a repair that silently rewrites bytes it was
+        # not asked about is one nobody can check afterwards.
+        _project_io().atomic_write_bytes(e["path"], match[0]["data"])
         done.append({"path": e["path"], "backup": backup, "codec": codec})
     return done
 
@@ -1970,25 +2045,25 @@ def _run(p, args):
         paths = [p_ for p_ in ledger_files(args.root)
                  if not presets or os.path.basename(os.path.dirname(p_)) in presets]
         me = os.path.abspath(__file__)
+        unread = []
         if args.codec is None:
             print(render_survey(
-                encoding_survey(paths), args.root,
+                encoding_survey(paths, unread), args.root,
                 lambda c: f"python3 {me} --root {args.root} repair-encoding "
                           + (" ".join(sorted(presets)) + " " if presets else "")
                           + f"--from {c}"))
-            return 0
+            return said_unread(unread)
         try:
-            done = repair_encoding(paths, args.codec)
+            done = repair_encoding(paths, args.codec, unread)
         except SnapshotError as exc:
             print(str(exc), file=sys.stderr)
             return 3
-        if not done:
+        if not done and not unread:
             print(f"every ledger file under {args.root} is UTF-8 — nothing was rewritten")
-            return 0
         for d in done:
             print(f"{d['path']} — rewritten as UTF-8 (was {d['codec']}); "
                   f"original bytes kept at {os.path.basename(d['backup'])}")
-        return 0
+        return said_unread(unread)
     if args.cmd == "config":
         return _config_cli(args)
     if args.cmd == "registry":
@@ -2340,6 +2415,89 @@ def _check_survey_reads_a_torn_journal_as_torn():
         shutil.rmtree(folder, ignore_errors=True)
 
 
+def _check_repair_encoding_line_by_line():
+    """A journal begun in cp1251 and continued in UTF-8 is repaired line by line (#134, H I-1): only the lines that are
+    not UTF-8 are decoded with the page named, and every line in UTF-8 keeps its bytes. The whole file was decoded with
+    the page, so every UTF-8 line with a non-ASCII character -- the Arbiter's rulings, the verdicts -- was written back
+    as mojibake, exit 0, "rewritten as UTF-8"; and the survey's preview showed the first non-ASCII lines, all of them
+    old cp1251 lines that read right, so the page looked safe. The preview shows the lines the repair changes, by
+    number; a line torn inside its last character is left as it is, and so are the line endings."""
+    import shutil
+    import tempfile
+    folder = tempfile.mkdtemp(prefix="autosound_repair_lines_")
+    try:
+        old = json.dumps({"type": "user_decision", "question": "лишаємо 45°?", "answer": "так"}, ensure_ascii=False)
+        new = json.dumps({"type": "user_decision", "question": "нова сесія", "answer": "добре"}, ensure_ascii=False)
+        ascii_ = json.dumps({"type": "session_started"})
+        torn = '{"question": "л'.encode("utf-8")[:-1]                         # cut inside "л"
+        lines = [old.encode("cp1251"), new.encode("utf-8"), ascii_.encode("utf-8"), torn, new.encode("utf-8")]
+        for ending in (b"\n", b"\r\n"):
+            path = os.path.join(folder, "journal-%s.jsonl" % ("lf" if ending == b"\n" else "crlf"))
+            original = ending.join(lines) + ending
+            with open(path, "wb") as fh:
+                fh.write(original)
+            found = encoding_survey([path])
+            shown = render_survey(found, folder, lambda c: f"repair --from {c}")
+            done = repair_encoding([path], "cp1251")
+            assert [d["path"] for d in done] == [path], done
+            with open(path, "rb") as fh:
+                repaired = fh.read()
+            want = ending.join([old.encode("utf-8")] + lines[1:]) + ending
+            assert repaired == want, ("the repair changed lines that were UTF-8", ending, repaired)
+            with open(path + ".cp1251.orig", "rb") as fh:
+                assert fh.read() == original, "the backup is not the original's bytes"
+            assert encoding_survey([path]) == [], "a repaired journal is still named"
+            assert [e["path"] for e in found] == [path], found
+            page = [c for c in found[0]["candidates"] if c["codec"] == "cp1251"]
+            assert page and page[0].get("changed") == [(1, old)], (ending, page and page[0].get("changed"))
+            assert f"line 1: {old}" in shown and new.encode("utf-8").decode("cp1251") not in shown, shown
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+def _check_banked_never_sealed():
+    """A version banked without its seal is reported (#134, F M-10): the bank creates the version, then writes its seal,
+    and a seal write that failed (a full disk, a held file) left a version nothing would ever check -- `verify` said
+    every sealed version was as banked, `check` was OK. `verify_seals` names it "banked, never sealed" with the way to
+    seal it, and `state.py verify` exits 3 on it. A ledger with no seals at all is `contract.py check`'s `unsealed`
+    offer, as before."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    root = tempfile.mkdtemp(prefix="autosound_never_sealed_")
+    real = _write_seals
+    try:
+        h = PresetHistory(root, "SQ")
+        assert h.snapshot(_sample_state(), note="sealed") == "v_001"
+
+        def full_disk(*_args):
+            raise OSError(28, "No space left on device")
+        globals()["_write_seals"] = full_disk
+        try:
+            h.snapshot(_sample_state(), note="its seal never written")
+            raise AssertionError("a bank whose seal could not be written reported success")
+        except OSError:
+            pass
+        finally:
+            globals()["_write_seals"] = real
+        assert project_versions(root) == ["v_001", "v_002"], project_versions(root)
+        broken = verify_seals(root)
+        assert [b["version"] for b in broken] == ["v_002"], broken
+        assert broken[0]["why"].startswith("banked, never sealed") and f"--root {root} seal" in broken[0]["why"], \
+            broken[0]
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = _main(["--root", root, "verify"])
+        assert rc == 3 and "✗ v_002: banked, never sealed" in out.getvalue(), (rc, out.getvalue(), err.getvalue())
+        assert seal_all(root) == ["v_002"] and verify_seals(root) == [], verify_seals(root)
+        os.remove(os.path.join(root, SEALS_FILE))           # no seals at all: the `unsealed` offer, not this
+        assert verify_seals(root) == [], verify_seals(root)
+    finally:
+        globals()["_write_seals"] = real
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def _check_unreadable_seals_and_project_refused():
     """A `seals.json` that is there and cannot be read is refused, never read as "no seals" (#136, audit T-11). Read as
     none, `verify` said every sealed version was as banked -- exit 0 -- and the next bank rewrote the file holding its
@@ -2384,6 +2542,26 @@ def _check_unreadable_seals_and_project_refused():
                 rc = _main(["--root", root, verb])
             assert rc == 1 and err.getvalue().startswith(f"error: {seals} "), (verb, rc, out.getvalue(), err.getvalue())
             assert "checkout HEAD -- seals.json" in err.getvalue() and not out.getvalue(), (verb, out.getvalue())
+        # `repair-version` too (T I7a): the one rewrite a version ever gets, made beside seals nobody could read, and a
+        # seals.json restored from git afterwards would name the repaired version as changed. A copy over v_001 gives
+        # it something to repair, so the read of the seals is reached.
+        version = h._path("v_001")
+        with open(version, encoding="utf-8") as f:
+            snap = json.load(f)
+        with open(version, "rb") as f:
+            version_whole = f.read()
+        copied = json.dumps(dict(snap, version="v_009"), indent=2, sort_keys=True, ensure_ascii=False).encode("utf-8")
+        with open(version, "wb") as f:
+            f.write(copied)
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = _main(["--root", root, "repair-version", "v_001"])
+        assert rc == 1 and err.getvalue().startswith(f"error: {seals} ") and not out.getvalue(), \
+            (rc, out.getvalue(), err.getvalue())
+        with open(version, "rb") as f:
+            assert f.read() == copied, "repair-version rewrote a version beside seals it could not read"
+        with open(version, "wb") as f:
+            f.write(version_whole)
         with open(seals, "rb") as f:
             assert f.read() == cut, "seals.json changed"
         with open(slots, "rb") as f:
@@ -2495,7 +2673,8 @@ def _selftest():
     failures = []
     for check in (_check_eq_refusals, _check_canonical_code_uses_the_loaded_naming,
                   _check_repair_encoding_keeps_the_file, _check_version_never_overwritten,
-                  _check_survey_reads_a_torn_journal_as_torn, _check_unreadable_seals_and_project_refused,
+                  _check_survey_reads_a_torn_journal_as_torn, _check_repair_encoding_line_by_line,
+                  _check_banked_never_sealed, _check_unreadable_seals_and_project_refused,
                   _check_newer_version_refused, _check_snapshot_error_from_another_copy):
         try:
             check()

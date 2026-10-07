@@ -156,16 +156,26 @@ An older file gets the migration hint where it got one before (`project.json`'s 
 `validate`, a ledger row carrying identity fields); a check per file for older versions, the glossary's included, is
 planned (W-11, J3b).
 
-**The read rule: a file that is there and cannot be read is refused, never read as absent.** Empty, cut off, not
-UTF-8, not JSON, the wrong top-level type, a folder in its place or a file that cannot be opened raises an exception
-with `is_unreadable` (`project_io.Unreadable`, with `.path`, `.reason`, `.repair`; neither an `OSError` nor a
-`ValueError`, so match the attribute, never the class), naming the file and its repair, and nothing is written. No
-file at all is the one quiet case: a fresh project. It holds for:
+**The read rule: a file that is there and cannot be read is refused, never read as absent.** Empty, cut off (inside
+a character too), not UTF-8, not JSON, the wrong top-level type, a folder in its place or a file that cannot be opened
+raises an exception with `is_unreadable` (`project_io.Unreadable`, with `.path`, `.reason`, `.repair`; neither an
+`OSError` nor a `ValueError`, so match the attribute, never the class), naming the file and its repair, and nothing is
+written. The repair for a file that cannot be opened is its cause's: on Windows, close what holds it; on POSIX, where
+nothing holds a file against a reader, a permission or a file standing where a folder of the path belongs is said as
+such. No file at all is the one quiet case: a fresh project. It holds for:
 
 - `process/process-state.json`: every `process.py` verb but `plan`, `amp-changes` and `listening-verdicts`, every
   writer method, `handoff()` and `contract.py check` (`state/process-schema.md` has it in full);
+- `process/journal.jsonl` (#134): `Process.events()` answers `[]` for no journal only, and raises for one that cannot
+  be opened. The method's own readers read it strictly -- every `process.py` verb that reads or writes it,
+  `session_closed()`, the flaw-map gate and every writer method -- and refuse a line in another code page too, naming
+  the line and `contract.py repair-encoding`; `events()` skips such a line and counts it in `journal_skipped`
+  (`{"torn": [...], "not_utf8": [...]}`, line numbers from 1). A line torn by a cut write, inside its last character
+  too, is skipped by every reader. `contract.py check` reports a journal that cannot be opened or that holds a line in
+  another code page as not valid, and counts the skipped lines (`skipped`);
 - `state/seals.json`: `state.py verify` and `seal` (exit 1), a bank (`PresetHistory.snapshot`: nothing banked) and
-  `repair-version`;
+  `repair-version`. A version banked and never sealed (its seal write failed) is reported by `verify` (exit 3) and
+  `contract.py check`, beside sealed ones;
 - `project.json`, where a bank stamps its `project_rev` and where the phase-1 gate reads the flaw map;
 - `dsp_profile.json` and `dsp_profile.draft.json`: `load_profile`, `load_draft` and every writer that reads through
   them (`set-field`, `reset-field`, `start`, `finalize`, `set-setting`, `refresh`), and the phase-1 and phase-2
@@ -184,10 +194,11 @@ readability, with that parity, waits for J3b (W-11). `contract.py check` reports
 
 Atomic writes: a writer that replaces one of the files below writes a temporary file beside it under a name of its
 own (`<file>.<pid>-<8 hex>.tmp`, created exclusively), flushes and fsyncs it, then moves it over the file with one
-`os.replace`. That writer is `rew_tool/project_io.py` (`atomic_write_text`, `atomic_write_json`,
-`atomic_write_bytes`). A reader sees the old file or the new one, never part of either, and two writers never share a
-temp file. On POSIX a private file (the reviewer's machine file, 0600) is private from its first byte: its temp is
-created with that mode (Windows ignores the mode). The files, each with the bytes its old writer wrote:
+`os.replace`, and on POSIX fsyncs the folder, so the move survives a power loss (#134; Windows has no folder fsync).
+That writer is `rew_tool/project_io.py` (`atomic_write_text`, `atomic_write_json`, `atomic_write_bytes`). A reader
+sees the old file or the new one, never part of either, and two writers never share a temp file. On POSIX a private
+file (the reviewer's machine file, 0600) is private from its first byte: its temp is created with that mode (Windows
+ignores the mode). The files, each with the bytes its old writer wrote:
 
 - `project.json`, `process/process-state.json`, `state/slots.json`, `state/seals.json`;
 - `dsp_profile.json` and `dsp_profile.draft.json`;
@@ -200,7 +211,8 @@ created with that mode (Windows ignores the mode). The files, each with the byte
   `.autosound-bak`.
 
 On Windows a move refused because a process holds the file open is retried for under a second (0.75 s), then raised,
-with the old file whole. A `*.tmp` beside a file is a crash's leftover, never a file to read; a new project's
+with the old file whole; `process.py` says it as a refusal, exit 1 (`<file> could not be written (...) -- close what
+holds it ...; it is as it was`). A `*.tmp` beside a file is a crash's leftover, never a file to read; a new project's
 `.gitignore` ignores it. `scripts/atomic-write-check.py` holds this: outside `project_io.py`, no `.tmp` literal but
 two it names (neither is a temp name), and no `os.replace`, `os.rename` or `os.renames` but three named moves of whole
 files.
@@ -221,13 +233,20 @@ Two more writes go through `project_io.py`; neither replaces a file:
   the second is told and takes the next number, and after 100 numbers taken under it gives up with `SnapshotError`,
   naming the numbers it tried. A watcher of the versions folder sees the temp come and go and the version appear
   whole. On a filesystem that refuses hard links (FAT, some network shares) the name is created exclusively and
-  written in place, so there a reader can meet a version mid-write for an instant.
+  written in place, so there a reader can meet a version mid-write for an instant. On POSIX the folder is fsynced
+  after the link (#134).
 - A line appended to `process/journal.jsonl` (`append_line`) has the old append's bytes, with one line ending before
   it when the file's last write was cut before its newline: the torn line stays one line a reader skips, and the
   event after it is read. That holds for a write cut inside a multi-byte character too: the method's readers decode
-  the journal line by line, so a line that is not UTF-8 is skipped like one that is not JSON, and the survey of
-  `repair-encoding` reads a `.jsonl` line by line and does not count a line that stops inside its last character as
-  a wrong code page. The append itself is a plain one: text mode, the platform's line ending, no lock.
+  the journal line by line, split on `\n` alone, and skip a line that stops inside its last character like one that
+  is not JSON; a line that is not UTF-8 before its end is another code page, which the method's readers refuse (item
+  7). The survey of `repair-encoding` reads a `.jsonl` line by line, does not count a line that stops inside its last
+  character as a wrong code page, and repairs it line by line: only the lines that are not UTF-8 are rewritten. The
+  append itself is a plain one: text mode, the platform's line ending, no lock; it is fsynced, and so is the folder
+  when the append made the file (#134). A journal that cannot be opened is refused by the append too (`Unreadable`).
+  `process.py` reads the journal, and opens it for appending, before it writes the state that an event goes with;
+  an append refused after that write is said as what landed -- the state holds the change, the journal has no line
+  for it -- with the line to append, exit 1.
 
 Every other write is still a plain one, in place. Among them: `state/apply.py`'s proposal deltas and sheets; the
 capture plans in `docs/plans/`; the review files in `process/reviews/` (each created under a name of its own since

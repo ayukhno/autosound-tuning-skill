@@ -297,8 +297,10 @@ def _positions_asked(project_dir):
     Anything else is the question never having been put, which is exactly the state this gate is
     about: 43 rows written on an assumption while the set that would settle them sat on the disk.
     """
-    # Through `events()`: a torn line -- cut inside a character too -- is skipped, not fatal (the file's rule, R23).
-    for event in Process(os.path.join(project_dir, "process")).events(kinds=(EV_CAPTURE_ISSUED, EV_USER_DECISION)):
+    # Strictly (#134, F I-2, H I-2): a torn line -- cut inside a character too -- is skipped, not fatal (R23), but a
+    # journal that cannot be opened, or holds a line in another code page, refuses the gate naming itself: read as
+    # empty, the gate refused for a question it never saw asked, or let it through without the line that asked it.
+    for event in Process(os.path.join(project_dir, "process"))._events(kinds=(EV_CAPTURE_ISSUED, EV_USER_DECISION)):
         kind = event.get("type")
         if kind == EV_CAPTURE_ISSUED:
             if any(_POSITION_IN_TITLE.search(str(t)) for t in (event.get("expected") or [])):
@@ -633,19 +635,21 @@ def version_kind(version):
 
 
 def _changelog_read(project_dir):
-    """`(path, text, why)` for `tuning-changelog`: its text, or why it cannot be read -- `cannot be opened (...)`, `is
-    not UTF-8` -- with the text None; `(None, None, None)` when there is no such file."""
+    """`(path, text, why, mend)` for `tuning-changelog`: its text, or why it cannot be read -- `cannot be opened (...)`,
+    `is not UTF-8` -- and what mends that, with the text None; `(None, None, None, None)` when there is no such file.
+    The mend for a file that cannot be opened is its cause's (m2, `project_io.repair_for`): "close what holds it" where
+    something can hold it, Windows -- closing an editor cannot mend a permission."""
     for name in ("tuning-changelog.md", "tuning-changelog"):
         path = os.path.join(project_dir, name)
         if os.path.isfile(path):
             try:
                 with open(path, encoding="utf-8") as fh:
-                    return path, fh.read(), None
+                    return path, fh.read(), None, None
             except UnicodeDecodeError:
-                return path, None, "is not UTF-8"
+                return path, None, "is not UTF-8", "save it as UTF-8 and run this again"
             except OSError as exc:
-                return path, None, f"cannot be opened ({exc})"
-    return None, None, None
+                return path, None, f"cannot be opened ({exc})", _project_io().repair_for(exc)
+    return None, None, None, None
 
 
 def _changelog_text(project_dir):
@@ -1034,6 +1038,9 @@ class Process:
         # instance: the sha is a property of the code that is running, and that does not change
         # under it.
         self._stamped = False
+        # A state change written and its event not yet appended (F M-7): `_write` sets it, `_append` clears it, and
+        # says what landed when the append is refused in between.
+        self._unjournaled = False
 
     # -- paths --
     @property
@@ -1125,28 +1132,92 @@ class Process:
     def events(self, limit=None, kinds=None):
         """Journal entries oldest-first. `kinds` filters by event type.
 
-        Read as bytes and decoded line by line (R23): a write cut inside a multi-byte character leaves a line that
-        is not UTF-8, and decoding the whole file raised on it -- here, and in `_stamp` before every append. Such a
-        line is skipped like a line that is not JSON. The lines split as text mode split them ("\\n", "\\r\\n",
-        "\\r"), and a byte-order mark stays part of its line, as with `encoding="utf-8"` before."""
+        No journal is no events, `[]`. A journal that is there and cannot be opened -- held by another program, a
+        permission, a folder in its place -- raises `project_io.Unreadable` naming it and its repair, never `[]` (#134,
+        F I-2): read as empty, a held journal was a project with no history. Match it by `is_unreadable`.
+
+        Read as bytes, split on "\\n" alone (T I8: U+2028, U+2029 and U+0085 inside an event's text are not line
+        ends), each line decoded by itself (R23). A line that is not an event -- torn by a cut write, inside a
+        character too, or not JSON -- is skipped, and so, here, is a line written in another code page; both are
+        counted in `journal_skipped`, `{"torn": [line numbers], "not_utf8": [...]}`, from 1. This is the reader for
+        a screen (TCC); the method's own readers read the journal through `_events`, which refuses a line in another
+        code page. A byte-order mark stays part of its line, as with `encoding="utf-8"` before."""
+        events, torn, foreign = self._read_journal()
+        self.journal_skipped = {"torn": torn, "not_utf8": foreign}
+        return self._pick(events, limit, kinds)
+
+    def _events(self, limit=None, kinds=None):
+        """`events()` read strictly (#134, F I-2, H I-2): what every reader of the method reads -- each writer, each
+        verdict, `amp-changes` and `listening-verdicts`, `session_closed`, `_stamp`, the flaw-map gate. A line written
+        in another code page refuses the read with `Unreadable`, naming the line(s) and the repair (`contract.py
+        repair-encoding`): skipped, a round, a series, a protective record or a ruling was gone from what the method
+        decided and recorded, without a word. A torn line is skipped as in `events()`."""
+        events, torn, foreign = self._read_journal()
+        self.journal_skipped = {"torn": torn, "not_utf8": foreign}
+        if foreign:
+            raise self._not_utf8(foreign)
+        return self._pick(events, limit, kinds)
+
+    def _read_journal(self):
+        """`(events, torn, foreign)`: every event of the journal, and the numbers of the lines skipped -- torn (not
+        JSON, not an object, or cut inside its last character) and foreign (not UTF-8 before its end: another code
+        page). `[]`s when there is no journal; `Unreadable` (`project_io.cannot_open`) when there is one and it
+        cannot be opened."""
+        io_ = _project_io()
         try:
             with open(self.journal_path, "rb") as f:
-                lines = f.read().splitlines()
-        except OSError:
-            return []
-        out = []
-        for raw in lines:
+                raw = f.read()
+        except FileNotFoundError:
+            return [], [], []
+        except OSError as exc:
+            raise io_.cannot_open(self.journal_path, exc) from exc
+        events, torn, foreign = [], [], []
+        for number, line in enumerate(raw.split(b"\n"), 1):
             try:
-                line = raw.decode("utf-8").strip()
-                if not line:
-                    continue
-                event = json.loads(line)
-            except ValueError:
-                continue  # a torn last line -- cut inside a character too -- must not hide the rest of the history
-            if kinds and event.get("type") not in kinds:
+                text = line.decode("utf-8")
+            except UnicodeDecodeError:
+                # Cut inside its last character (R23) is a torn append; a wrong byte before the end is a code page.
+                (torn if io_.cut_inside_a_character(line.rstrip(b"\r")) else foreign).append(number)
                 continue
-            out.append(event)
-        return out[-limit:] if limit else out
+            if not text.strip():
+                continue
+            try:
+                event = json.loads(text)
+            except ValueError:
+                torn.append(number)   # a torn line must not hide the rest of the history
+                continue
+            if not isinstance(event, dict):
+                torn.append(number)   # JSON, but no event: every reader asks an event for its type
+                continue
+            events.append(event)
+        return events, torn, foreign
+
+    @staticmethod
+    def _pick(events, limit, kinds):
+        if kinds:
+            events = [e for e in events if e.get("type") in kinds]
+        return events[-limit:] if limit else events
+
+    def _not_utf8(self, lines):
+        """The refusal for journal lines in another code page (H I-2): the lines, and the repair that rewrites them --
+        line by line, the lines in UTF-8 left as they are."""
+        shown = ", ".join(str(n) for n in lines[:10]) + (f" and {len(lines) - 10} more" if len(lines) > 10 else "")
+        return _project_io().Unreadable(
+            self.journal_path, f"has {len(lines)} line(s) not in UTF-8 -- written in another code page: line {shown}",
+            _project_io().reencode_line(self.project_dir))
+
+    def _require_journal(self):
+        """Before a state write, what would keep its event from following it (F M-7): a journal that cannot be read
+        whole -- held, a permission, a line in another code page (`_events`) -- or cannot be appended to. Refused here,
+        nothing is written; the append's own refusal, after the write, would leave the change in the state with no
+        line in the journal for it."""
+        self._events(limit=1)
+        if os.path.exists(self.journal_path):
+            try:
+                with open(self.journal_path, "ab"):
+                    pass
+            except OSError as exc:
+                raise _project_io().cannot_open(self.journal_path, exc) from exc
 
     def step(self, state, step_id):
         for entry in state.get("plan", []):
@@ -1891,7 +1962,7 @@ class Process:
             clean[code] = round(db, 2)
         if not clean:
             raise ProcessError("an amp change needs at least one CHANNEL=dB (sw=+3)")
-        known = [e.get("id") for e in self.events(kinds=(EV_AMP_GAIN,))]
+        known = [e.get("id") for e in self._events(kinds=(EV_AMP_GAIN,))]
         if amends and amends not in known:
             raise ProcessError(f"no amp change {amends!r} on record" + (f" (on record: {', '.join(known)})" if known else ""))
         change_id = f"amp-{len(known) + 1}"
@@ -1904,7 +1975,7 @@ class Process:
     def amp_changes(self):
         """Every amp change on record, oldest first, with a later `amends` folded into the change it corrects."""
         out, by_id = [], {}
-        for pos, e in enumerate(self.events()):
+        for pos, e in enumerate(self._events()):
             if e.get("type") != EV_AMP_GAIN:
                 continue
             if e.get("amends") in by_id:
@@ -1924,7 +1995,7 @@ class Process:
         A series is placed in the journal by the round it was issued in; a version with no round cannot be
         placed, and says so with None rather than with `{}`, which would read "nothing moved"."""
         key = self._version_key
-        events = self.events()
+        events = self._events()
         issued = {}
         for pos, e in enumerate(events):
             if e.get("type") == EV_CAPTURE_ISSUED:
@@ -1972,7 +2043,7 @@ class Process:
                    if key(r["version"]) == version
                    or any(key(v) == version for v in r["title_versions"])}
         rounds, order = {}, []
-        for event in self.events(kinds=(EV_CAPTURE_ISSUED, EV_CAPTURE_KNOBS)):
+        for event in self._events(kinds=(EV_CAPTURE_ISSUED, EV_CAPTURE_KNOBS)):
             cid = event.get("capture")
             if cid not in matches:
                 continue
@@ -2031,7 +2102,7 @@ class Process:
         """Every round ever opened, oldest first: id, the version it was keyed by, its phase, and
         the `_N` versions of the titles it expected or took. What a lookup failure lists."""
         rounds, order = {}, []
-        for event in self.events(kinds=(EV_CAPTURE_ISSUED, EV_CAPTURE_TAKEN)):
+        for event in self._events(kinds=(EV_CAPTURE_ISSUED, EV_CAPTURE_TAKEN)):
             cid = event.get("capture")
             if event.get("type") == EV_CAPTURE_ISSUED:
                 rounds[cid] = {"id": cid, "version": str(event.get("version")),
@@ -2058,7 +2129,7 @@ class Process:
         `taken` (what the read against REW added, with no `capture_taken` of its own); REW's own spelling of a title
         that read matched (`capture_reconciled`'s `renames`); and the open round's `taken` rows in `state`."""
         titles = set()
-        for event in self.events(kinds=(EV_CAPTURE_TAKEN, EV_CAPTURE_CLOSED, EV_CAPTURE_RECONCILED)):
+        for event in self._events(kinds=(EV_CAPTURE_TAKEN, EV_CAPTURE_CLOSED, EV_CAPTURE_RECONCILED)):
             if event.get("title"):
                 titles.add(str(event["title"]))
             titles.update(str(t) for t in event.get("taken") or [])
@@ -2089,7 +2160,7 @@ class Process:
                    if key(r["version"]) == version
                    or any(key(v) == version for v in r["title_versions"])}
         rounds, order = {}, []
-        for event in self.events(kinds=(EV_CAPTURE_ISSUED, EV_CAPTURE_PROTECTIVE)):
+        for event in self._events(kinds=(EV_CAPTURE_ISSUED, EV_CAPTURE_PROTECTIVE)):
             cid = event.get("capture")
             if cid not in matches:
                 continue
@@ -2118,7 +2189,7 @@ class Process:
         not a protective filter and does not hide an older one. Within a round, an amendment is the last word."""
         issued = [r["id"] for r in self.capture_rounds()]
         per_round = {}
-        for event in self.events(kinds=(EV_CAPTURE_PROTECTIVE,)):
+        for event in self._events(kinds=(EV_CAPTURE_PROTECTIVE,)):
             if event.get("channel"):
                 per_round.setdefault(event.get("capture"), {})[event["channel"]] = event
         out = {}
@@ -2190,7 +2261,7 @@ class Process:
         mention `track` / `characteristic` / were heard at `ledger_version`. This is how one looks
         back -- `bad` at v_003, `ok` at v_005, and the ledger diff between them says what changed."""
         out = []
-        for e in self.events(kinds=(EV_LISTENING_VERDICT,)):
+        for e in self._events(kinds=(EV_LISTENING_VERDICT,)):
             pairs = e.get("pairs") or []
             if track and not any(p.get("track") == track for p in pairs):
                 continue
@@ -2426,6 +2497,7 @@ class Process:
         state, round_ = self._require_capture()
         self._close_capture(state, round_, reason=reason)
         self._write(state)
+        self._unjournaled = False                # its event went first: this write owes the journal no line
         return round_
 
     def capture_outstanding(self, state=None):
@@ -2521,7 +2593,7 @@ class Process:
 
     def last_session_event(self):
         """The journal's last `session_started` / `session_closed` / `session_reopened`, or None."""
-        seen = self.events(kinds=SESSION_EVENTS)
+        seen = self._events(kinds=SESSION_EVENTS)
         return seen[-1] if seen else None
 
     def session_closed(self):
@@ -2650,14 +2722,13 @@ class Process:
                 "no ledger snapshot on disk (`state/<preset>/v_NNN.json`) — the next session reads "
                 "the DSP state from there, and from nowhere else. `apply.propose` banks one")
         changelog = _continue_block(self.project_dir)
-        log_path, _, log_why = _changelog_read(self.project_dir)
+        log_path, _, log_why, mend = _changelog_read(self.project_dir)
         if log_why:
-            # Said, not read as no changelog (H 15): "no opinion" passed the handoff over a block nobody could see.
-            mend = ("save it as UTF-8" if log_why == "is not UTF-8"
-                    else "close what holds it (an editor, a sync client, another tool)")
+            # Said, not read as no changelog (H 15): "no opinion" passed the handoff over a block nobody could see. The
+            # mend is the cause's (m2): a permission is not mended by closing an editor.
             missing.append(
                 f"`{log_path}` {log_why} — its ▶️ CONTINUE block cannot be checked, and it is the human-readable "
-                f"cross-check the next session reads beside the machine files: {mend}, and run this again")
+                f"cross-check the next session reads beside the machine files: {mend}")
         elif changelog is not None and not changelog:
             missing.append(
                 "`tuning-changelog` has no ▶️ CONTINUE block — it is the human-readable cross-check "
@@ -2735,20 +2806,32 @@ class Process:
         # the one on disk. `Unreadable` names the file and the repair; no file at all is a fresh project, and passes.
         # A state a newer method wrote there since the read is not written down to v3 either (audit T-21).
         self._refuse_newer(self._read_state())
+        # The journal too, before the state (F M-7): every write here is followed by its event, and one refused after
+        # the write left the change in the state with no line in the journal.
+        self._require_journal()
         os.makedirs(self.dir, exist_ok=True)  # first real write is what creates `process/`
         # A temp of this writer's own, then one move (skill #135): a crash mid-write would otherwise leave truncated
         # JSON, and the next session would read an empty process and think nothing had happened; a fixed temp name
         # was shared by every writer of the file (audit T-8).
-        _project_io().atomic_write_json(self.state_path, state, indent=2, ensure_ascii=False, trailing_newline=True)
+        io_ = _project_io()
+        try:
+            io_.atomic_write_json(self.state_path, state, indent=2, ensure_ascii=False, trailing_newline=True)
+        except OSError as exc:
+            # A refusal, exit 1, not a bug (H minor 2): on Windows a holder past the retries -- a sync client, a scanner
+            # -- as the same hold is on the read. The move either lands or leaves the file whole, and no temp behind.
+            raise ProcessError(f"{self.state_path} could not be written ({exc}) -- {io_.repair_for(exc)}; it is as it "
+                               f"was") from exc
+        # Owed from here: the event that goes with this change (`_append` says it, if it cannot be appended).
+        self._unjournaled = True
 
     def _last_written_by(self):
         """The sha in the last header event, or None when the journal carries no header at all.
 
         None is not `""`: a journal that has never recorded a writer must get a header even when
         the writer cannot be told, otherwise "asked, could not be told" and "never asked" are the
-        same silence.
+        same silence. Read strictly (`_events`): a header lost to a skipped line would be written twice.
         """
-        seen = self.events(kinds=(EV_WRITTEN_BY,))
+        seen = self._events(kinds=(EV_WRITTEN_BY,))
         return seen[-1].get("skill_sha", "") if seen else None
 
     def _stamp(self):
@@ -2767,25 +2850,64 @@ class Process:
         """
         if self._stamped:
             return
-        self._stamped = True  # decided first: one attempt per run, whatever it finds
         sha = _writer_sha()
-        if sha == self._last_written_by():
+        last = self._last_written_by()     # strict: a journal that cannot be read refuses here, and is asked again
+        self._stamped = True  # decided once read: one attempt per run, whatever it finds
+        if sha == last:
             return
         self._append(EV_WRITTEN_BY, skill_sha=sha)
 
     def _append(self, event_type, **payload):
-        if event_type != EV_WRITTEN_BY:
+        if event_type == EV_WRITTEN_BY:          # `_stamp`'s header: the `_append` it rides on says a refusal
+            return self._append_event(event_type, payload)
+        try:
             # Strictly first, as `_write` (#136): no event is appended beside a state that cannot be read, or that a
             # newer method wrote -- several carry what they read of it (the phase, the open round), and `project.py
             # record-change` and any other caller outside `_main` write through here.
             self._refuse_newer(self._read_state())
             self._stamp()
+            event = self._append_event(event_type, payload)
+        except Exception as exc:  # noqa: BLE001 -- matched below; anything else still raises as it was
+            refusal = self._append_refused(event_type, payload, exc)
+            if refusal is None:
+                raise
+            raise refusal from exc
+        self._unjournaled = False
+        return event
+
+    def _append_event(self, event_type, payload):
         event = {"at": _now(), "type": event_type}
         event.update({k: v for k, v in payload.items() if v is not None})
         os.makedirs(self.dir, exist_ok=True)
         # After a torn last line the event starts on a fresh one instead of being glued to it and lost (audit T-14).
         _project_io().append_line(self.journal_path, json.dumps(event, ensure_ascii=False))
         return event
+
+    def _append_refused(self, event_type, payload, exc):
+        """The refusal for an event that could not be appended, or None to let `exc` raise as it is (#134, F M-7).
+
+        Only a file that could not be read or written is this one's to say -- an exception with `is_unreadable` (the
+        journal or the state held, a permission, a line in another code page) or an `OSError` from the append itself
+        (a read-only journal, a full disk). After a state write in this run (`_write`), it says what landed: the state
+        holds the change, the journal has no line for it, and the line to append once the journal can be written --
+        nothing replays it. It was a bare `PermissionError`, exit 70, "a bug". With no state write before it, an
+        `OSError` is said as the event not recorded; an `Unreadable` raises as it is."""
+        io_ = _project_io()
+        unreadable = getattr(type(exc), "is_unreadable", False)
+        if not (unreadable or isinstance(exc, OSError)):
+            return None
+        why = str(exc) if unreadable else (f"{self.journal_path} cannot be appended to ({exc}) -- "
+                                           f"{io_.repair_for(exc)}")
+        if getattr(self, "_unjournaled", False):
+            event = {"at": _now(), "type": event_type}
+            event.update({k: v for k, v in payload.items() if v is not None})
+            return ProcessError(
+                f"{self.state_path} is written, but its journal line is not: {why}. The state holds this change and "
+                f"the journal has no `{event_type}` event for it, and nothing replays it: once the journal can be "
+                f"written, append this line to {self.journal_path}: {json.dumps(event, ensure_ascii=False)}")
+        if unreadable:
+            return None
+        return ProcessError(f"{why}; the `{event_type}` event was not recorded")
 
 
 # --------------------------------------------------------------------------- CLI
@@ -3422,6 +3544,322 @@ def _check_line_torn_inside_a_character():
         shutil.rmtree(top, ignore_errors=True)
 
 
+class _Held:
+    """While the `with` lasts, opening `path` in a mode `refuses` matches raises what Windows raises for a file another
+    program holds: a sharing violation reaches `open()` as `PermissionError`, errno 13. `refuses(mode)` is every mode by
+    default. How the tests hold the journal or the changelog (F I-2, F M-7, m2) without a second program."""
+
+    def __init__(self, path, refuses=lambda mode: True):
+        self.path, self.refuses = os.path.abspath(path), refuses
+
+    def __enter__(self):
+        import builtins
+        self.builtins, self.real = builtins, builtins.open
+
+        def held(file, mode="r", *args, **kwargs):
+            if isinstance(file, (str, bytes, os.PathLike)) and os.path.abspath(os.fsdecode(file)) == self.path \
+                    and self.refuses(mode):
+                raise PermissionError(13, "The process cannot access the file because it is being used by another "
+                                          "process", os.fsdecode(file))
+            return self.real(file, mode, *args, **kwargs)
+        builtins.open = held
+        return self
+
+    def __exit__(self, *exc_info):
+        self.builtins.open = self.real
+        return False
+
+
+def _check_journal_that_cannot_be_opened():
+    """A journal that is there and cannot be opened is never read as empty (#134, F I-2, H minor 4): held by another
+    program (Windows), a permission, a folder in its place. `events()` raised nothing and answered `[]` -- no file and
+    no events alike -- so `amp-changes` said "no amp changes on record", `amp-gain` numbered its change `amp-1` again,
+    `session_closed()` answered False, the flaw-map gate refused for the wrong reason, `session-reopen` said the journal
+    held no session event, and a state writer wrote its change before its event's append failed. Now `events()` raises
+    an exception with `is_unreadable` naming the journal and the repair its cause allows, and every verb that reads or
+    writes the journal exits 1 on it with nothing on stdout and nothing written -- the state writers before their write.
+    No file at all is still no events."""
+    import contextlib
+    import io as _io
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_process_held_journal_")
+    failures = []
+    try:
+        d = os.path.join(top, "process")
+        p = Process(d)
+        with contextlib.redirect_stdout(_io.StringIO()):
+            p.enter_phase("-1")
+            p.add_step("-1.9", "a step")
+            p.record_decision("the ellipsoid positions?", "later")
+            p.record_amp_gain({"sw": "+3"})
+            p._append(EV_SESSION_CLOSED)
+        journal = p.journal_path
+        before = _project_bytes(d)
+
+        def refused(label, call):
+            try:
+                got = call()
+            except Exception as exc:  # noqa: BLE001 -- the kind is what is under test
+                if not (getattr(exc, "is_unreadable", False) and exc.path == journal
+                        and exc.reason.startswith("cannot be opened (")):
+                    failures.append(f"{label}: {type(exc).__name__}: {exc}")
+            else:
+                failures.append(f"{label}: answered {got!r}")
+        with _Held(journal):
+            refused("events()", lambda: Process(d).events())
+            refused("session_closed()", lambda: Process(d).session_closed())
+            refused("the flaw-map gate", lambda: _positions_asked(top))
+            for argv in (["amp-changes"], ["listening-verdicts"], ["amp-gain", "sw=+3"], ["decision", "q", "a"],
+                         ["enter-phase", "-1"], ["start", "-1.9"], ["session-reopen", "it was a check"],
+                         ["capture-start", "1", "w-L_1 (sw)"], ["session-close"]):
+                rc, out, err = _run_main(["process.py", d, *argv])
+                if rc != EXIT_NO or "journal.jsonl cannot be opened" not in err or "Traceback" in err or out.strip():
+                    failures.append(f"{' '.join(argv)}: rc {rc}, out {out.strip()[:80]!r}, err {err.strip()[-200:]!r}")
+        if _project_bytes(d) != before:
+            failures.append("something was written beside the journal that could not be opened")
+        if os.name == "posix" and os.geteuid() != 0:            # the same, met for real: a permission
+            os.chmod(journal, 0)
+            try:
+                refused("events() on a mode-0 journal", lambda: Process(d).events())
+                try:
+                    Process(d).events()
+                except Exception as exc:  # noqa: BLE001
+                    if "close what holds it" in str(exc):
+                        failures.append(f"a permission told to close what holds it: {exc}")
+            finally:
+                os.chmod(journal, 0o644)
+        os.remove(journal)
+        os.makedirs(journal)                                     # a folder where the journal belongs
+        try:
+            Process(d).events()
+        except Exception as exc:  # noqa: BLE001
+            if not (getattr(exc, "is_unreadable", False) and exc.reason == "is a directory, not a file"):
+                failures.append(f"a folder in the journal's place: {type(exc).__name__}: {exc}")
+        else:
+            failures.append("a folder in the journal's place read as a journal")
+        os.rmdir(journal)
+        # No file at all is no events, and no session event: a fresh project, not a fault.
+        if Process(d).events() != [] or Process(d).session_closed() is not False:
+            failures.append("no journal at all is not the empty journal")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["a journal that cannot be opened:"] + failures)
+
+
+def _check_journal_line_in_another_code_page():
+    """A journal line in another code page is never dropped without a word (#134, H I-2). A journal begun before
+    v3.0.45 on Windows holds lines in cp1251 beside the UTF-8 ones after; R23 skipped such a line like a torn one, so a
+    `capture_task_issued` with a Ukrainian note was gone from every reader -- its round, its series (refused as
+    foreign), its protective record -- without a word. Now the method's own readers read the journal strictly: a line
+    that is not UTF-8 before its end refuses the read, naming the line and the repair (`repair-encoding`), and nothing
+    is written. `events()`, TCC's reader, skips it and counts it in `journal_skipped`. A line torn inside its last
+    character is torn, skipped as before. The lines are split on "\\n" alone, so a stray "\\r" does not shift the
+    numbers a refusal names."""
+    import contextlib
+    import io as _io
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_process_cp1251_line_")
+    failures = []
+    try:
+        d = os.path.join(top, "process")
+        with contextlib.redirect_stdout(_io.StringIO()):
+            Process(d).enter_phase("-1")
+        head = {"at": "2026-10-06T00:00:00+00:00", "type": EV_WRITTEN_BY, "skill_sha": "a" * 40}
+        issued = {"at": "2026-10-06T00:00:01+00:00", "type": EV_CAPTURE_ISSUED, "capture": "cap_001", "phase": "-1",
+                  "version": "49", "expected": ["m-L_49 (sw)"], "note": "друга сесія, вікна зачинені"}
+        protective = {"at": "2026-10-06T00:00:02+00:00", "type": EV_CAPTURE_PROTECTIVE, "capture": "cap_001",
+                      "channel": "m-L", "legs": "OFF", "source": "user"}
+        asked = {"at": "2026-10-06T00:00:03+00:00", "type": EV_USER_DECISION,
+                 "question": "the ellipsoid positions?", "answer": "later"}
+        lines = [json.dumps(head).encode("utf-8"),
+                 b"half a line\rand the rest",                         # line 2: a stray "\r", and not JSON
+                 json.dumps(issued, ensure_ascii=False).encode("cp1251"),   # line 3: another code page
+                 json.dumps(protective).encode("utf-8"),
+                 json.dumps(asked, ensure_ascii=False).encode("utf-8")]
+        with open(os.path.join(d, "journal.jsonl"), "wb") as f:
+            f.write(b"\n".join(lines) + b"\n")
+        before = _project_bytes(d)
+
+        def refused(label, call):
+            try:
+                got = call()
+            except Exception as exc:  # noqa: BLE001 -- the kind is what is under test
+                said = str(exc)
+                if not (getattr(exc, "is_unreadable", False) and "line 3" in said and "line 2" not in said
+                        and "repair-encoding" in said):
+                    failures.append(f"{label}: {type(exc).__name__}: {said}")
+            else:
+                failures.append(f"{label}: answered {got!r} past the line in another code page")
+        refused("capture_rounds()", lambda: Process(d).capture_rounds())
+        refused("protective_record_for('49')", lambda: Process(d).protective_record_for("49"))
+        refused("series_used()", lambda: Process(d).series_used())
+        refused("session_closed()", lambda: Process(d).session_closed())
+        refused("the flaw-map gate", lambda: _positions_asked(top))
+        for argv in (["amp-changes"], ["decision", "q", "a"], ["enter-phase", "-1"],
+                     ["capture-start", "50", "m-L_50 (sw)"]):
+            rc, out, err = _run_main(["process.py", d, *argv])
+            if rc != EXIT_NO or "line 3" not in err or "repair-encoding" not in err or "Traceback" in err \
+                    or out.strip():
+                failures.append(f"{' '.join(argv)}: rc {rc}, out {out.strip()[:80]!r}, err {err.strip()[-200:]!r}")
+        same = Process(d)                        # one process, asked twice: a refused read is no stamp decided
+        for attempt in (1, 2):
+            refused(f"record_decision, attempt {attempt}", lambda: same.record_decision("q", "a"))
+        if _project_bytes(d) != before:
+            failures.append("something was written beside a journal line in another code page")
+        lenient = Process(d)
+        got = [e.get("type") for e in lenient.events()]
+        if got != [EV_WRITTEN_BY, EV_CAPTURE_PROTECTIVE, EV_USER_DECISION]:
+            failures.append(f"events() read {got}")
+        if getattr(lenient, "journal_skipped", None) != {"torn": [2], "not_utf8": [3]}:
+            failures.append(f"events() counted {getattr(lenient, 'journal_skipped', None)}")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    assert not failures, "\n  ".join(["a journal line in another code page:"] + failures)
+
+
+def _check_line_separators_inside_an_event():
+    """An event holding U+2028, U+2029 or U+0085 is read whole (#134, T I8). The method writes them raw
+    (`ensure_ascii=False`), and `str.splitlines()` splits there: a reader that decoded the journal and split it so lost
+    the Arbiter's ruling from every reader -- the flaw-map gate, the handoff, the decision lists. The journal is split
+    on "\\n" alone, as bytes."""
+    import contextlib
+    import io as _io
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_process_separators_")
+    try:
+        d = os.path.join(top, "process")
+        with contextlib.redirect_stdout(_io.StringIO()):
+            Process(d).enter_phase("-1")
+        ls, ps, nel = (chr(c) for c in (0x2028, 0x2029, 0x85))     # built, not literals: data, never printed
+        question = f"лишаємо 45°? the positions{ls}a second line{ps}a third{nel}a fourth"
+        rc, out, err = _run_main(["process.py", d, "decision", question, "yes"])
+        assert rc == 0, (rc, out, err)
+        said = [e for e in Process(d).events() if e.get("type") == EV_USER_DECISION]
+        assert [e.get("question") for e in said] == [question], said
+        assert _positions_asked(top) is True, "the flaw-map gate lost the decision"
+        with open(os.path.join(d, "journal.jsonl"), "rb") as f:
+            written = f.read()
+        assert written.endswith((json.dumps(said[-1], ensure_ascii=False) + os.linesep).encode("utf-8")), written[-200:]
+        for raw in (b"\xe2\x80\xa8", b"\xe2\x80\xa9", b"\xc2\x85"):
+            assert raw in written, (raw, "written escaped, not raw: the test would test nothing")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_event_refused_after_the_state():
+    """A journal held between a state write and its event's append exits 1 saying what landed (#134, F M-7): the
+    state change is written, its journal line is not, and the line to append. It was a bare `PermissionError`, exit 70
+    with a traceback -- a bug -- with the state changed and the journal silent. An append refused with no state write
+    before it (`decision`) is a refusal too, the event not recorded, nothing written. And a journal that refuses the
+    append before the state is written refuses the verb there, nothing written."""
+    import contextlib
+    import io as _io
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_process_unappended_")
+    pio = _project_io()
+    real_append = pio.append_line
+
+    def refused(path, line):
+        raise PermissionError(13, "The process cannot access the file because it is being used by another process",
+                              path)
+    try:
+        d = os.path.join(top, "process")
+        p = Process(d)
+        with contextlib.redirect_stdout(_io.StringIO()):
+            p.enter_phase("-1")
+            p.add_step("-1.9", "a step")
+            p.add_step("-1.8", "another step")
+        with open(p.journal_path, "rb") as f:
+            journal_before = f.read()
+        pio.append_line = refused                     # held after `_write`'s look at the journal: the race
+        try:
+            rc, out, err = _run_main(["process.py", d, "start", "-1.9"])
+        finally:
+            pio.append_line = real_append
+        assert rc == EXIT_NO and "Traceback" not in err, (rc, err[-400:])
+        for words in ("process-state.json is written", "its journal line is not", f"`{EV_ATTEMPT_STARTED}`",
+                      '"step": "-1.9"', "journal.jsonl"):
+            assert words in err, (words, err)
+        assert Process(d).step(Process(d).load(strict=True), "-1.9")["status"] == STEP_IN_PROGRESS, \
+            "the message says the state change is written"
+        with open(p.journal_path, "rb") as f:
+            assert f.read() == journal_before, "an event was appended"
+        before = _project_bytes(d)
+        pio.append_line = refused                     # an event with no state write before it
+        try:
+            rc, out, err = _run_main(["process.py", d, "decision", "q", "a"])
+        finally:
+            pio.append_line = real_append
+        assert rc == EXIT_NO and "Traceback" not in err and not out.strip(), (rc, out, err[-400:])
+        assert "journal.jsonl" in err and f"the `{EV_USER_DECISION}` event was not recorded" in err, err
+        assert _project_bytes(d) == before, "a refused decision wrote something"
+        with _Held(p.journal_path, refuses=lambda mode: "a" in mode):     # held for appending, readable
+            rc, out, err = _run_main(["process.py", d, "start", "-1.8"])
+        assert rc == EXIT_NO and "journal.jsonl cannot be opened" in err and "Traceback" not in err, (rc, err)
+        assert _project_bytes(d) == before, "the state was written beside a journal that refused the append"
+        # A close appends its event before its state write: that write owes no line, and a refusal after it -- in the
+        # same process, as a caller in code keeps one -- is not said as a state change missing its event.
+        q = Process(d)
+        with contextlib.redirect_stdout(_io.StringIO()):
+            q.start_capture("1", expected=["w-L_1 (sw)"])
+            q.close_capture("done")
+        pio.append_line = refused
+        try:
+            q.record_decision("q2", "a2")
+        except ProcessError as exc:
+            said = str(exc)
+            assert f"the `{EV_USER_DECISION}` event was not recorded" in said and "is written" not in said, said
+        else:
+            raise AssertionError("a refused append went through")
+        finally:
+            pio.append_line = real_append
+    finally:
+        pio.append_line = real_append
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_state_replace_refused():
+    """A replace refused past the retries -- Windows, a sync client or a scanner holding `process-state.json` -- is a
+    refusal naming what holds it, exit 1, the file as it was (#134, H minor 2): it was a `PermissionError`, exit 70, "a
+    bug", while the same hold on the read was exit 1. Faked here as Windows: the move is retried as there, then
+    refused; nothing is written and no temp is left."""
+    import contextlib
+    import io as _io
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_process_replace_held_")
+    pio = _project_io()
+    real_replace, real_name, real_waits = os.replace, os.name, pio._REPLACE_RETRIES_S
+    tries = []
+
+    def held(src, dst):
+        tries.append(dst)
+        raise PermissionError(13, "Access is denied", dst)
+    try:
+        d = os.path.join(top, "process")
+        p = Process(d)
+        with contextlib.redirect_stdout(_io.StringIO()):
+            p.enter_phase("-1")
+            p.add_step("-1.9", "a step")
+        before = _project_bytes(d)
+        try:
+            os.name, os.replace, pio._REPLACE_RETRIES_S = "nt", held, (0.001,) * len(real_waits)
+            rc, out, err = _run_main(["process.py", d, "start", "-1.9"])
+        finally:
+            os.name, os.replace, pio._REPLACE_RETRIES_S = real_name, real_replace, real_waits
+        assert rc == EXIT_NO and "Traceback" not in err and not out.strip(), (rc, out, err[-400:])
+        assert p.state_path in err and "close what holds it" in err and "it is as it was" in err, err
+        assert len(tries) == len(real_waits) + 1, f"tried {len(tries)} times, not as on Windows"
+        assert _project_bytes(d) == before, "a refused replace left something behind"
+    finally:
+        os.name, os.replace, pio._REPLACE_RETRIES_S = real_name, real_replace, real_waits
+        shutil.rmtree(top, ignore_errors=True)
+
+
 _UNREADABLE = {
     "empty": b"",
     "truncated": b'{"schema_version": 3, "pla',
@@ -3504,8 +3942,9 @@ def _check_write_guard_catches_damage_after_the_read():
 def _writer_methods(src):
     """The public methods of `Process` in the source `src` that write -- that call `_write` or `_append` themselves, or
     through this file's own functions: a method of `Process` (`self._close_capture(...)`), or a function of the module
-    (`_helper(self, ...)`), one level down or more (T m14). The table of `_check_writers_read_strictly` is held to
-    this, so a writer cannot slip past it by writing through a private helper."""
+    (`_helper(self, ...)`) -- and a method that function calls on the process it was handed (`p._close_capture(...)`,
+    m6) -- one level down or more (T m14). The table of `_check_writers_read_strictly` is held to this, so a writer
+    cannot slip past it by writing through a private helper."""
     import ast
     tree = ast.parse(src)
     cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Process")
@@ -3513,15 +3952,17 @@ def _writer_methods(src):
     functions = {f.name: f for f in tree.body if isinstance(f, ast.FunctionDef)}
 
     def reaches(fn):
-        """`fn`'s calls: `("w", None)` for `_write`/`_append` on anything, `("m", name)` for `self.<name>(...)`, a
-        method of `Process`, and `("f", name)` for a function of this module."""
+        """`fn`'s calls: `("w", None)` for `_write`/`_append` on anything, `("m", name)` for `<anything>.<name>(...)`
+        where `name` is a method of `Process` -- `self.<name>` in a method, and the process a function was handed,
+        `p.<name>`, in a function (m6: `_helper(p)` -> `p._close_capture(...)` slipped) -- and `("f", name)` for a
+        function of this module. A call on something that is no process but shares a method's name is followed too:
+        a writer table asked to drive one method more is a red test, never a writer missed."""
         out = set()
         for call in (c for c in ast.walk(fn) if isinstance(c, ast.Call)):
             if isinstance(call.func, ast.Attribute):
                 if call.func.attr in ("_write", "_append"):
                     out.add(("w", None))
-                elif isinstance(call.func.value, ast.Name) and call.func.value.id == "self" \
-                        and call.func.attr in methods:
+                elif call.func.attr in methods:
                     out.add(("m", call.func.attr))
             elif isinstance(call.func, ast.Name) and call.func.id in functions:
                 out.add(("f", call.func.id))
@@ -3544,8 +3985,9 @@ def _check_writers_read_strictly():
     its own read, nothing written. The methods are every public one of `Process` that calls `_write` or `_append`,
     itself or through this file's own functions (`_writer_methods`), read off the source, so a new writer cannot slip
     past the table -- through a private helper neither (T m14). And the verdicts that read the state again after
-    `_main`'s read (`check`, `handoff --json`, `capture-close`'s count) read it strictly: a check never says 0 off a
-    read that failed, `handoff --json` answers in its own shape."""
+    `_main`'s read (`check`, `handoff --json`, `capture-close`'s count, `session-close`'s look at what is open, and
+    `capture-check`'s exit code, its last read) read it strictly: a check never says 0 off a read that failed,
+    `session-close` never records a clean stop off one (T I3), `handoff --json` answers in its own shape."""
     import contextlib
     import io as _io
     import shutil
@@ -3634,28 +4076,51 @@ def _check_writers_read_strictly():
             if not kept():
                 failures.append(f"{name}: wrote")
                 restore()
-        # The verdicts read the state again after `_main`'s read: that second read is the one that fails here.
+        # The verdicts read the state again after `_main`'s read: that second read is the one that fails here -- and
+        # for `capture-check` its LAST read, the one its exit code stands on, after its checks are written (T I3): a
+        # lenient one gave exit 0 off an empty process, and `session-close` recorded a clean stop over an open round.
         want = _handoff_json_keys(top)
-        for argv in (["check"], ["handoff", "--json"], ["capture-close", "--no-rew"]):
-            out, err = _io.StringIO(), _io.StringIO()
-            with _StateReads(failed_second), contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-                rc = _main(["process.py", d, *argv])
-            said = err.getvalue()
-            if rc != 1 or "process-state.json" not in said:
-                failures.append(f"{' '.join(argv)}: rc {rc}, said {(said or out.getvalue()).strip()[-120:]!r}")
-            if argv[0] == "handoff":
-                try:
-                    answer = json.loads(out.getvalue())
-                except ValueError:
-                    answer = {}
-                if set(answer) != want or answer.get("ok") is not False \
-                        or "process-state.json" not in " ".join(answer.get("missing") or []):
-                    failures.append(f"handoff --json: answered {out.getvalue().strip()[:160]!r}")
-            elif out.getvalue():
-                failures.append(f"{' '.join(argv)}: printed {out.getvalue().strip()[:120]!r}")
-            if not kept():
-                failures.append(f"{' '.join(argv)}: wrote")
-                restore()
+        real_verifier = Process._load_verifier
+        Process._load_verifier = lambda self: Verifier()
+        try:
+            for argv in (["check"], ["handoff", "--json"], ["capture-close", "--no-rew"], ["session-close"],
+                         ["capture-check"]):
+                fail = failed_second
+                if argv[0] == "capture-check":
+                    counted = _StateReads(lambda n, read: read())       # a dry run counts its reads; then restored
+                    with counted, contextlib.redirect_stdout(_io.StringIO()):
+                        _main(["process.py", d, *argv])
+                    restore()
+
+                    def fail(n, read, last=counted.count):
+                        if n == last:
+                            raise _project_io().Unreadable(p.state_path, "cannot be opened (held a moment by another "
+                                                                         "writer)")
+                        return read()
+                out, err = _io.StringIO(), _io.StringIO()
+                with _StateReads(fail), contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    rc = _main(["process.py", d, *argv])
+                said = err.getvalue()
+                if rc != 1 or "process-state.json" not in said:
+                    failures.append(f"{' '.join(argv)}: rc {rc}, said {(said or out.getvalue()).strip()[-120:]!r}")
+                if argv[0] == "handoff":
+                    try:
+                        answer = json.loads(out.getvalue())
+                    except ValueError:
+                        answer = {}
+                    if set(answer) != want or answer.get("ok") is not False \
+                            or "process-state.json" not in " ".join(answer.get("missing") or []):
+                        failures.append(f"handoff --json: answered {out.getvalue().strip()[:160]!r}")
+                elif argv[0] == "capture-check":            # its verdicts are on disk before the exit's read
+                    restore()
+                    continue
+                elif out.getvalue():
+                    failures.append(f"{' '.join(argv)}: printed {out.getvalue().strip()[:120]!r}")
+                if not kept():
+                    failures.append(f"{' '.join(argv)}: wrote")
+                    restore()
+        finally:
+            Process._load_verifier = real_verifier
     finally:
         shutil.rmtree(top, ignore_errors=True)
     assert not failures, f"{len(failures)} writer(s) read the state leniently:\n  " + "\n  ".join(failures)
@@ -4946,6 +5411,17 @@ def _check_handoff_says_an_unreadable_changelog():
                 os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
             said = [m for m in got["missing"] if path in m]
             assert got["ok"] is False and said and "cannot be opened" in said[0], got
+            # The advice is the errno's (m2, as H minor 3): closing an editor cannot mend a permission.
+            assert "close what holds it" not in said[0] and _project_io()._REPAIR_PERMISSION in said[0], said[0]
+        real_name = os.name
+        os.name = "nt"                                   # a program holding it, as Windows refuses the open
+        try:
+            with _Held(path):
+                got = p.handoff()
+        finally:
+            os.name = real_name
+        said = [m for m in got["missing"] if path in m]
+        assert got["ok"] is False and said and "cannot be opened" in said[0] and "close what holds it" in said[0], got
     finally:
         shutil.rmtree(top, ignore_errors=True)
 
@@ -5166,7 +5642,10 @@ def _selftest():
     failures = []
     for check in (_check_one_naming, _check_every_loader_shares, _check_load_sibling_reads_a_failure_as_none,
                   _check_verifier_load_error_named, _check_foreign_tmp_untouched, _check_state_bytes,
-                  _check_torn_journal_line, _check_line_torn_inside_a_character, _check_unreadable_state,
+                  _check_torn_journal_line, _check_line_torn_inside_a_character,
+                  _check_journal_that_cannot_be_opened, _check_journal_line_in_another_code_page,
+                  _check_line_separators_inside_an_event, _check_event_refused_after_the_state,
+                  _check_state_replace_refused, _check_unreadable_state,
                   _check_every_writer_refuses_unreadable, _check_write_guard_catches_damage_after_the_read,
                   _check_writers_read_strictly, _check_gates_refuse_unreadable, _check_newer_state_refused,
                   _check_exit_table, _check_typed_values_refused, _check_refused_capture_writes_nothing,
@@ -6025,10 +6504,16 @@ def _selftest():
         "`<verb> --help` writing nothing (`-h` and `--help` elsewhere are 2); a refused capture-start or "
         "capture-import writes nothing, and an import of a whole series imports what is not on record, refuses a "
         "series REW holds nothing of and says when nothing is new; a writer reached through a private helper is driven "
-        "by the strict-read table; "
-        "a verifier that will not load is named with why; the handoff says a changelog it cannot read; "
+        "by the strict-read table, and so is one reached through a function handed the process; "
+        "a verifier that will not load is named with why; the handoff says a changelog it cannot read, its mend by "
+        "the cause; "
         "a superseded row counts nowhere as taken, the reconcile's extra included, and a check never invents a "
-        "capture REW does not hold (#134, #138 I-15). "
+        "capture REW does not hold (#134, #138 I-15); the journal is never read as empty: one that cannot be opened, "
+        "or that holds a line in another code page, refuses every reader of the method with its repair (events() "
+        "skips and counts such a line), split on \\n alone so an event holding U+2028, U+2029 or U+0085 reads whole; "
+        "a state writer refuses such a journal before it writes, an append refused after the write says what landed "
+        "and the line to append, and a replace refused past the retries is a refusal, the file as it was; "
+        "session-close's and capture-check's own reads are strict (#134, the silent-failures review, batch 2). "
         f"root={root}"
     )
     return 0
@@ -6173,6 +6658,11 @@ def _main(argv):
                     + (f"\n    covers: {', '.join(entry['covers'])}" if entry.get("covers") else "")
                     + "\n    close it: done <id> <evidence that RESOLVES>, or block <id> <reason>, "
                       "or skip <id> <reason>")
+            if not check_only and not owed:
+                # Only a CLEAN stop is an event, recorded before the report is printed (#134, F I-2): an append refused
+                # -- a journal that cannot be opened -- is the verb's refusal then, with nothing printed before it, as
+                # `check_captures` records before it tells (issue #21).
+                p._append(EV_SESSION_CLOSED)
             print("\n".join(lines) if lines else
                   "nothing open in the process record — round closed, no step left in progress")
             # Two carriers this module does not own, named rather than checked: saying "also do X"
@@ -6187,10 +6677,9 @@ def _main(argv):
                 print("\nnothing recorded (--check): this asked what is open and wrote nothing. "
                       "`session-close` without --check is the stop itself")
             elif not owed:
-                # Only a CLEAN stop is an event: with work still open the honest record is the
-                # report above, and `session-close` exits non-zero so "we stopped" cannot be said
+                # Only a CLEAN stop is an event (appended above): with work still open the honest record
+                # is the report above, and `session-close` exits non-zero so "we stopped" cannot be said
                 # over an open round.
-                p._append(EV_SESSION_CLOSED)
                 print("\nrecorded: session_closed")
             return 1 if owed else 0
         elif cmd == "session-reopen":

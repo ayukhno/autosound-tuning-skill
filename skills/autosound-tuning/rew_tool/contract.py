@@ -298,13 +298,35 @@ def check_glossary(project_dir):
     return entry, glossary
 
 
+def _journal_entry(proc):
+    """The row of `process/journal.jsonl` (#134, F I-2, H I-2, H 14). Not there: `exists: false`, a fresh project. There
+    and not opened -- held, a permission, a folder in its place -- or holding a line in another code page: not valid,
+    with the file and its repair, as every reader of the method refuses it. `events` counts what was read and `skipped`
+    the lines no reader reads; torn ones -- a write cut off, which every reader skips -- are said in `issues` without
+    making the journal invalid. It said `valid: True` over all of these, `events: 0` for a journal it could not open."""
+    name = "process/journal.jsonl"
+    if not os.path.lexists(proc.journal_path):
+        return _entry(name, False, None, None, events=0, skipped=0)
+    try:
+        events = proc.events()                   # TCC's reader: it skips and counts what the method's readers refuse
+    except Exception as exc:  # noqa: BLE001 -- matched by its attribute below; anything else still raises
+        if not getattr(exc, "is_unreadable", False):
+            raise
+        return _entry(name, True, None, False, [str(exc)], events=0, skipped=0)
+    torn, foreign = proc.journal_skipped["torn"], proc.journal_skipped["not_utf8"]
+    issues = [str(proc._not_utf8(foreign))] if foreign else []
+    if torn:
+        shown = ", ".join(str(n) for n in torn[:10]) + (f" and {len(torn) - 10} more" if len(torn) > 10 else "")
+        issues.append(f"{len(torn)} line(s) skipped, not an event -- a write cut off, or text that is no event: line "
+                      f"{shown}; every reader skips them and reads the events around them")
+    return _entry(name, True, None, not foreign, issues, events=len(events), skipped=len(torn) + len(foreign))
+
+
 def check_process(project_dir):
     process_mod = _load_vendored("process")
     process_dir = os.path.join(project_dir, "process")
     proc = process_mod.Process(process_dir)
-    journal_exists = os.path.isfile(proc.journal_path)
-    journal_entry = _entry("process/journal.jsonl", journal_exists, None, journal_exists or None,
-                            events=len(proc.events()) if journal_exists else 0)
+    journal_entry = _journal_entry(proc)
     try:
         # Strict (#136, audit K-2): no file is a project with no process yet, the empty skeleton; a file that is there
         # and cannot be read is reported as one, with its repair. Read leniently it was an empty process here,
@@ -1508,24 +1530,25 @@ def _main(argv):
         state_mod = _load_vendored("state")
         paths = project_text_files(project_dir)
         codec = argv[argv.index("--from") + 1] if "--from" in argv else None
+        # A file that cannot be opened is not surveyed, and is never called UTF-8: said on stderr, exit 1 (#134).
+        unread = []
         if codec is None:
             here = os.path.abspath(__file__)
             print(state_mod.render_survey(
-                state_mod.encoding_survey(paths), project_dir,
+                state_mod.encoding_survey(paths, unread), project_dir,
                 lambda c: f"python3 {here} repair-encoding {project_dir} --from {c}"))
-            return 0
+            return state_mod.said_unread(unread)
         try:
-            done = state_mod.repair_encoding(paths, codec)
+            done = state_mod.repair_encoding(paths, codec, unread)
         except state_mod.SnapshotError as exc:
             print(str(exc), file=sys.stderr)
             return 3
-        if not done:
+        if not done and not unread:
             print(f"every file the method owns under {project_dir} is UTF-8 — nothing was written")
-            return 0
         for d in done:
             print(f"{d['path']} — rewritten as UTF-8 (was {d['codec']}); original bytes kept at "
                   f"{os.path.basename(d['backup'])}")
-        return 0
+        return state_mod.said_unread(unread)
     if argv[1] == "version":
         info = {"contract_version": CONTRACT_VERSION, "format_version": FORMAT_VERSION,
                 "skill_version": _skill_version(), "sha": _skill_sha()}
@@ -1602,7 +1625,86 @@ def _check_unreadable_process_state():
         assert "checkout HEAD -- process-state.json" in entry["issues"][0], entry
         assert (journal["file"], journal["exists"]) == ("process/journal.jsonl", False), journal
         assert check_project(d, skip_rew=True)["ok"] is False, "an unreadable process state made an OK project"
+        # A state a newer method wrote (T I7d): reported as there and not valid, in JSON -- never a traceback; TCC runs
+        # `check --json` at every launch.
+        with open(os.path.join(d, "process", "process-state.json"), "w", encoding="utf-8") as f:
+            json.dump({"schema_version": FORMAT_VERSION + 1, "plan": []}, f)
+        entry, _journal, state = check_process(d)
+        assert (entry["exists"], entry["valid"], state) == (True, False, None), entry
+        assert any(f"is schema v{FORMAT_VERSION + 1}" in i for i in entry["issues"]), entry
+        report = check_project(d, skip_rew=True)
+        assert report["ok"] is False, "a newer process state made an OK project"
+        json.dumps(report)                               # what `--json` prints
     finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def _check_journal_reported():
+    """`process/journal.jsonl` is never reported valid off a read that failed or skipped what it could not read (#134,
+    F I-2, H I-2, H 14). A journal that is there and cannot be opened -- held, a permission, a folder in its place --
+    read as empty: `valid: True, events: 0`; one with a line in another code page read as valid, the line dropped, its
+    repair unsaid; and one of garbage read "valid, 0 events". Now the row is not valid, with the file and its repair
+    (`repair-encoding` for the code page, naming the lines), and the project is not OK; `skipped` counts the lines no
+    reader reads, and torn ones -- a write cut off, which every reader skips -- are said without making the journal
+    invalid. `check` and `repair-encoding` answer: a journal they cannot open is named, never a traceback, and the
+    survey never calls it UTF-8."""
+    import builtins
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    d = tempfile.mkdtemp(prefix="autosound_contract_journal_")
+    real_open = builtins.open
+    try:
+        process_mod = _load_vendored("process")
+        with contextlib.redirect_stdout(io.StringIO()):
+            process_mod.Process(os.path.join(d, "process")).enter_phase("-1")
+        journal = os.path.join(d, "process", "journal.jsonl")
+        with open(journal, "rb") as f:
+            whole = f.read()
+        assert check_project(d, skip_rew=True)["ok"] is True, "the fixture is not an OK project"
+
+        def held(file, *args, **kwargs):          # a sharing violation, as Windows refuses the open
+            if isinstance(file, str) and os.path.abspath(file) == journal:
+                raise PermissionError(13, "The process cannot access the file because it is being used by another "
+                                          "process", file)
+            return real_open(file, *args, **kwargs)
+        builtins.open = held
+        try:
+            _entry_, row, _state = check_process(d)
+            report = check_project(d, skip_rew=True)
+            out, err = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                rc = _main(["contract.py", "repair-encoding", d])
+        finally:
+            builtins.open = real_open
+        assert (row["exists"], row["valid"]) == (True, False) and journal in row["issues"][0] \
+            and "cannot be opened" in row["issues"][0], row
+        assert report["ok"] is False, "a journal that cannot be opened made an OK project"
+        assert rc == 1 and f"{journal} was not surveyed" in err.getvalue(), (rc, out.getvalue(), err.getvalue())
+        torn = '{"at": "2026-10-06T00:00:01+00:00", "type": "user_dec'.encode("utf-8")
+        foreign = json.dumps({"type": "user_decision", "question": "лишаємо 45°?"}, ensure_ascii=False).encode("cp1251")
+        for label, raw, valid, skipped, said in (
+                ("a line in another code page", whole + foreign + b"\n", False, 1, "line 3"),
+                ("a torn line", whole + torn + b"\n", True, 1, "line 3"),
+                ("garbage", b"not an event\n" * 3, True, 3, "line 1, 2, 3")):
+            with open(journal, "wb") as f:
+                f.write(raw)
+            _entry_, row, _state = check_process(d)
+            assert (row["exists"], row["valid"], row.get("skipped")) == (True, valid, skipped), (label, row)
+            assert any(said in i for i in row["issues"]), (label, row["issues"])
+            if not valid:
+                assert any("repair-encoding" in i for i in row["issues"]), (label, row["issues"])
+            assert check_project(d, skip_rew=True)["ok"] is valid, label
+        os.remove(journal)
+        os.makedirs(journal)                      # a folder where the journal belongs
+        _entry_, row, _state = check_process(d)
+        assert (row["exists"], row["valid"]) == (True, False) and "is a directory" in row["issues"][0], row
+        os.rmdir(journal)
+        _entry_, row, _state = check_process(d)
+        assert (row["exists"], row["valid"], row["events"]) == (False, None, 0), row
+    finally:
+        builtins.open = real_open
         shutil.rmtree(d, ignore_errors=True)
 
 
@@ -1819,7 +1921,8 @@ def _check_skill_sha():
 def _selftest():
     os.environ["AUTOSOUND_NO_GH"] = "1"          # the history line is checked; GitHub is never reached from a test
     failures = []
-    for check in (_check_invalid_project_json, _check_unreadable_process_state, _check_gate_last_line,
+    for check in (_check_invalid_project_json, _check_unreadable_process_state, _check_journal_reported,
+                  _check_gate_last_line,
                   _check_unreadable_profile_and_seals_reported, _check_version_verb, _check_version_shape,
                   _check_skill_version, _check_skill_sha):
         try:
@@ -2321,7 +2424,10 @@ def _selftest():
           f"still does NOT close the phase-0 gate; a process-state.json cut off mid-object is reported as there and not valid, its repair named (#136); every skip is reported and one the round never expected is named as such (TCC-022); a fact carried in from another project is REPORTED and gates nothing (S-024); a ▶️ CONTINUE block naming a HEAD the ledger is not at is warned of and moves no verdict (S-084); and the report names the REPLY language above "
           f"the file table, or says nobody has answered (S-045); a gate's report ends with that gate's verdict, the "
           f"one its exit code gives, and an empty flaw map is said to have no rows (I-28); a dsp_profile.json or a "
-          f"seals.json that cannot be read, or a profile a newer method wrote, is reported with its repair (#136). "
+          f"seals.json that cannot be read, or a profile a newer method wrote, is reported with its repair (#136); a "
+          f"journal that cannot be opened, or that holds a line in another code page, is reported not valid with its "
+          f"repair, its skipped lines counted and a torn one said without failing it, a process state a newer method "
+          f"wrote is reported in JSON, and repair-encoding names a file it could not open, exit 1 (#134). "
           f"root={root}")
     return 0
 
