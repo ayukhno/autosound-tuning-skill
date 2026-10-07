@@ -1681,9 +1681,10 @@ def repair_encoding(paths, codec):
 
     The original's bytes are COPIED to the backup, and the file is then replaced in one move: the
     file is never absent (skill #135, audit T-17 -- the backup used to be a move, which left no
-    file under the name until the rewrite landed).
+    file under the name until the rewrite landed). The backup is written atomically too: one torn
+    part-way would be trusted by the next run, which makes no second one. Its bytes are what is
+    kept; its time stamps are its own, nothing reads them.
     """
-    import shutil
     done = []
     for e in encoding_survey(paths):
         match = [c for c in e["candidates"] if c["codec"] == codec]
@@ -1694,7 +1695,9 @@ def repair_encoding(paths, codec):
             )
         backup = e["path"] + f".{codec}.orig"
         if not os.path.exists(backup):          # on a second run the first backup is the original, and stays
-            shutil.copy2(e["path"], backup)
+            with open(e["path"], "rb") as f:
+                original = f.read()
+            _project_io().atomic_write_bytes(backup, original)
         # `newline=""` because the repair changes the ENCODING and nothing else. The text came from
         # `bytes.decode`, so its line endings are the ones the file already had; writing it back in
         # the default text mode would translate every `\n` to `\r\n` on the very platform this
@@ -2110,9 +2113,67 @@ def _check_canonical_code_uses_the_loaded_naming():
         _NAMING[:] = cached
 
 
+def _check_repair_encoding_keeps_the_file():
+    """Audit T-17: a repair that fails half way leaves the file under its name, with its own bytes. The backup used to
+    be a MOVE, so the file was absent until the rewrite landed -- and stayed absent when it did not. The backup itself
+    is written whole or not at all: a backup torn part-way would be trusted by the next run, which makes no second one,
+    and the original's bytes would be left only in it."""
+    import shutil
+    import tempfile
+    root = tempfile.mkdtemp(prefix="autosound_t17_")
+    real_replace = os.replace
+    try:
+        h = PresetHistory(root, "FULL")
+        h.snapshot(_sample_state(), note="нуль — Phase 0 §2.5")
+        path = h._path("v_001")
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        original = text.encode("cp1251")                   # what a pre-v3.0.45 Windows session wrote
+        with open(path, "wb") as fh:
+            fh.write(original)
+        folder, name = os.path.split(path)
+        backup = path + ".cp1251.orig"
+
+        def failing_at(target):
+            def replace(src, dst):
+                if os.path.abspath(dst) == os.path.abspath(target):
+                    raise OSError("disk pulled")   # the move onto `target` fails; any other move happens
+                return real_replace(src, dst)
+            return replace
+        for label, target, backed_up in (("the backup's own move", backup, False),
+                                         ("the file's move, first run", path, True),
+                                         ("the file's move, a backup already there", path, True)):
+            os.replace = failing_at(target)
+            try:
+                repair_encoding([path], "cp1251")
+                raise AssertionError(f"{label}: a repair that failed reported success")
+            except OSError:
+                pass
+            finally:
+                os.replace = real_replace
+            assert os.path.isfile(path), f"{label}: the failed repair left no file under the name"
+            with open(path, "rb") as fh:
+                assert fh.read() == original, f"{label}: the file's bytes changed"
+            listed = sorted(os.listdir(folder))
+            assert listed == sorted([name] + ([os.path.basename(backup)] if backed_up else [])), (label, listed)
+            if backed_up:
+                with open(backup, "rb") as fh:
+                    assert fh.read() == original, f"{label}: the backup is not the original's bytes"
+        done = repair_encoding([path], "cp1251")
+        assert [d["backup"] for d in done] == [backup], done
+        with open(path, encoding="utf-8") as fh:
+            assert fh.read() == text, "the repair did not restore the text"
+        with open(backup, "rb") as fh:
+            assert fh.read() == original, "the backup is not the original's bytes"
+    finally:
+        os.replace = real_replace
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def _selftest():
     failures = []
-    for check in (_check_eq_refusals, _check_canonical_code_uses_the_loaded_naming):
+    for check in (_check_eq_refusals, _check_canonical_code_uses_the_loaded_naming,
+                  _check_repair_encoding_keeps_the_file):
         try:
             check()
         except AssertionError as exc:
@@ -2472,28 +2533,6 @@ def _selftest():
         assert "does not decode" in str(exc), exc
     assert open(snap_path, "rb").read() == text_before.encode("cp1251"), \
         "a refused repair must leave the file exactly as it found it"
-    # Audit T-17: a repair whose rewrite fails half way leaves the file under its name, with its own bytes. The backup
-    # used to be a MOVE, so the file was absent until the rewrite landed -- and stayed absent when it did not.
-    real_replace = os.replace
-
-    def pulled(src, dst):
-        if os.path.abspath(dst) == os.path.abspath(snap_path):
-            raise OSError("disk pulled")         # the move over the file itself fails; any other move happens
-        return real_replace(src, dst)
-    for first_run in (True, False):
-        if first_run:
-            os.remove(done[0]["backup"])
-        os.replace = pulled
-        try:
-            repair_encoding(ledger_files(enc_root), "cp1251")
-            raise AssertionError("a repair whose rewrite failed reported success")
-        except OSError:
-            pass
-        finally:
-            os.replace = real_replace
-        assert os.path.isfile(snap_path), f"a failed repair left no file under the name (first run: {first_run})"
-        assert open(snap_path, "rb").read() == text_before.encode("cp1251"), first_run
-        assert open(done[0]["backup"], "rb").read() == text_before.encode("cp1251"), first_run
 
     # ── the root is resolved, and an absent one is REFUSED, not answered (release review 2026-09-09)
     assert resolve_root("x/state") == ("x/state", "--root"), resolve_root("x/state")

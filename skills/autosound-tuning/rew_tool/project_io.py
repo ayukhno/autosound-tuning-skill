@@ -1,9 +1,10 @@
 """How the method writes, and reads, the files it owns (skill #135, #136; audit T-8, T-17, K-2).
 
-WRITES go through `atomic_write_text` / `atomic_write_json`: a temp file with a name no other writer uses, opened
-exclusively, written, flushed and fsynced, then moved over the target in one `os.replace`. A reader sees the old file
-or the new one, never half of either; two writers never share a temp file. A Windows `PermissionError` on the move (an
-editor, an antivirus scan or TCC holding the target open) is retried for under a second.
+WRITES go through `atomic_write_text` / `atomic_write_json` / `atomic_write_bytes`, which share one path: a temp file
+with a name no other writer uses, opened exclusively, written, flushed and fsynced, then moved over the target in one
+`os.replace`. A reader sees the old file or the new one, never half of either; two writers never share a temp file. A
+private file (`mode`) is private from its first byte: the temp is created with that mode. A Windows `PermissionError`
+on the move (an editor, an antivirus scan or TCC holding the target open) is retried for under a second.
 
 Stdlib only. Loaded by path like every sibling: `_siblings().load("project_io.py")`.
 
@@ -58,26 +59,28 @@ def _replace(src, dst):
             time.sleep(delay)
 
 
-def atomic_write_text(path, text, *, newline=None, mode=None, makedirs=False):
-    """Write `text` to `path` so that no reader ever sees a half-written file.
+def atomic_write_bytes(path, data, *, mode=None, makedirs=False):
+    """Write `data` to `path` so that no reader ever sees a half-written file: the one path every writer here takes.
 
-    `newline` is `open()`'s: None writes the platform's line ending -- what `open(path, "w")` did at every site this
-    replaces -- while "" and "\\n" keep the text's own. `mode` (POSIX only) is set on the temp BEFORE the move, so the
-    target never exists with looser permissions.
+    `mode` (POSIX only) is the temp's mode from its creation, so a private file -- a key -- is never readable by
+    others, not even while it is being written; it is set again before the move, since the umask may have narrowed it.
+    Without a mode the file gets the umask's default, as `open(path, "w")` gave it.
     """
     if makedirs:
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     tmp = _temp_name(path)
+    private = mode is not None and os.name != "nt"
     # O_BINARY (Windows; 0 elsewhere): a descriptor from `os.open` is otherwise in the C runtime's text mode, which
-    # turns each "\n" the text layer writes into "\r\n" once more -- "\r\r\n", and "\r\n" where `newline` asked for
-    # the text's own. `open(path, "w")` opens binary underneath too; so does `tempfile.mkstemp`.
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), 0o666)
+    # turns each "\n" written into "\r\n": a copy of bytes would not be the original's, a text with the platform's
+    # ending would get "\r\r\n", and `newline=""` would not keep the text's own. `open(path, "w")` opens binary
+    # underneath too; so does `tempfile.mkstemp`.
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), mode if private else 0o666)
     try:
-        with io.open(fd, "w", encoding="utf-8", newline=newline) as f:
-            f.write(text)
+        with io.open(fd, "wb") as f:
+            f.write(data)
             f.flush()
             os.fsync(f.fileno())
-        if mode is not None and os.name != "nt":
+        if private:
             os.chmod(tmp, mode)
         _replace(tmp, path)
     except BaseException:
@@ -86,6 +89,21 @@ def atomic_write_text(path, text, *, newline=None, mode=None, makedirs=False):
         except OSError:
             pass
         raise
+
+
+def atomic_write_text(path, text, *, newline=None, mode=None, makedirs=False):
+    """Write `text` to `path` so that no reader ever sees a half-written file: UTF-8, through `atomic_write_bytes`.
+
+    `newline` is `open()`'s: None writes the platform's line ending -- what `open(path, "w")` did at every site this
+    replaces -- while "" and "\\n" keep the text's own, and "\\r" or "\\r\\n" write that. `mode`: `atomic_write_bytes`.
+    A text UTF-8 cannot carry is refused before anything is written.
+    """
+    if newline not in (None, "", "\n", "\r", "\r\n"):
+        raise ValueError(f"illegal newline value: {newline!r}")
+    ending = os.linesep if newline is None else newline
+    if ending not in ("", "\n"):
+        text = text.replace("\n", ending)            # what a text file opened with this `newline` writes
+    atomic_write_bytes(path, text.encode("utf-8"), mode=mode, makedirs=makedirs)
 
 
 def atomic_write_json(path, data, *, indent=2, sort_keys=False, ensure_ascii=False, trailing_newline=False,
@@ -153,6 +171,19 @@ def _check_text_and_json():
         for newline in ("", "\n"):
             atomic_write_text(path, text, newline=newline)
             assert _read_bytes(path) == text.encode("utf-8"), (newline, _read_bytes(path))
+        for newline, ending in (("\r\n", b"\r\n"), ("\r", b"\r")):                     # open()'s other two
+            atomic_write_text(path, "a\nb\n", newline=newline)
+            assert _read_bytes(path) == b"a" + ending + b"b" + ending, (newline, _read_bytes(path))
+        try:
+            atomic_write_text(path, "a\n", newline="\t")
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("a newline open() refuses was taken")
+        # Bytes as they are: a backup of a file in another code page, line endings of every kind, not one changed.
+        raw = "нуль\r\none\ntwo\r".encode("cp1251") + b"\x00\xff"
+        atomic_write_bytes(path, raw)
+        assert _read_bytes(path) == raw, _read_bytes(path)
         deep = os.path.join(d, "a", "b", "c.json")
         atomic_write_json(deep, {"v": 1}, makedirs=True)
         assert json.loads(_read_bytes(deep).decode("utf-8")) == {"v": 1}, _read_bytes(deep)
@@ -183,8 +214,8 @@ def _check_foreign_tmp():
 
 
 def _check_replace_fails_clean():
-    """A crash between the temp and the move leaves the old file whole and no temp behind; so does a write that
-    fails half way."""
+    """A crash between the temp and the move leaves the old file whole and no temp behind; a text UTF-8 cannot carry is
+    refused before anything is written. (A write that fails with its bytes in the temp: `_check_write_fails_clean`.)"""
     d = _scratch()
     try:
         path = os.path.join(d, "x.json")
@@ -263,22 +294,86 @@ def _check_replace_retry():
 
 
 def _check_private_mode():
-    """`mode` is set on the temp before the move: on POSIX the file is 0600 from the moment it has its name. Without a
-    mode it gets what `open(path, "w")` gave -- the umask's default, never 0600 by accident (a `mkstemp` temp would
-    make every `project.json` private)."""
+    """A private file is private from its first byte (POSIX): the temp is CREATED with `mode`, so a key is never
+    readable by others while it is written -- at the fsync, with the key in it, the temp is already 0600 (a reader that
+    opened it in a wider window would keep reading after any chmod). `mode` is set again before the move, since the
+    umask may have narrowed the create: under umask 077 a 0640 file is 0640 by the time it has its name. Without a mode
+    a file gets what `open(path, "w")` gave -- the umask's default, never 0600 by accident (a `mkstemp` temp would make
+    every `project.json` private)."""
     if os.name == "nt":
         return
     import stat
     d = _scratch()
+    real_fsync, real_replace = os.fsync, os.replace
+    umask = os.umask(0)
+    os.umask(umask)
+    at_fsync, at_replace = [], []
+
+    def fsync(fd):                               # the temp as it is when its bytes are all in it
+        st = os.fstat(fd)
+        at_fsync.append((stat.S_IMODE(st.st_mode), st.st_size))
+        real_fsync(fd)
+
+    def replace(src, dst):                       # the temp as it is when it takes the file's name
+        at_replace.append(stat.S_IMODE(os.stat(src).st_mode))
+        real_replace(src, dst)
     try:
-        private, plain = os.path.join(d, "critic-env"), os.path.join(d, "project.json")
-        atomic_write_text(private, "export KEY=1\n", mode=0o600)
+        os.fsync, os.replace = fsync, replace
+        private, wide, plain = (os.path.join(d, n) for n in ("critic-env", "group.txt", "project.json"))
+        key = "export GEMINI_API_KEY=" + "k" * 39 + "\n"
+        atomic_write_text(private, key, mode=0o600)
+        assert at_fsync == [(0o600, len(key))], \
+            f"the key was in a temp of mode {oct(at_fsync[0][0])} (size {at_fsync[0][1]}): readable by others"
+        assert at_replace == [0o600], [oct(m) for m in at_replace]
         assert stat.S_IMODE(os.stat(private).st_mode) == 0o600, oct(os.stat(private).st_mode)
+        del at_fsync[:], at_replace[:]
+        os.umask(0o077)
+        try:
+            atomic_write_text(wide, "shared\n", mode=0o640)
+        finally:
+            os.umask(umask)
+        assert [m for m, _ in at_fsync] == [0o600] and at_replace == [0o640], \
+            f"umask 077, mode 0640: {[oct(m) for m, _ in at_fsync]} at the fsync, {[oct(m) for m in at_replace]} at " \
+            f"the move -- the mode is set before the move, not after"
+        assert stat.S_IMODE(os.stat(wide).st_mode) == 0o640, oct(os.stat(wide).st_mode)
         atomic_write_text(plain, "{}")
-        umask = os.umask(0)
-        os.umask(umask)
         assert stat.S_IMODE(os.stat(plain).st_mode) == 0o666 & ~umask, (oct(os.stat(plain).st_mode), oct(umask))
     finally:
+        os.fsync, os.replace = real_fsync, real_replace
+        os.umask(umask)
+        _drop(d)
+
+
+def _check_write_fails_clean():
+    """A write that fails once its bytes are in the temp -- at the fsync, as a full disk would -- leaves the old file
+    whole and no temp behind; so does a Ctrl-C there: the clean-up takes a `BaseException`, not only an `Exception`."""
+    d = _scratch()
+    real_fsync = os.fsync
+    try:
+        path = os.path.join(d, "x.json")
+        atomic_write_json(path, {"v": 1})
+        before = _read_bytes(path)
+        for exc in (OSError(28, "No space left on device"), KeyboardInterrupt()):
+            sizes = []
+
+            def failing(fd, exc=exc):
+                sizes.append(os.fstat(fd).st_size)
+                raise exc
+            os.fsync = failing
+            try:
+                atomic_write_json(path, {"v": 2, "pad": "x" * 1000})
+            except BaseException as got:  # noqa: BLE001 -- a KeyboardInterrupt is the case under test
+                if got is not exc:
+                    raise
+            else:
+                raise AssertionError(f"a write that failed with {exc!r} was reported as written")
+            finally:
+                os.fsync = real_fsync
+            assert sizes and sizes[0] > 1000, f"{type(exc).__name__}: the temp held {sizes} bytes, not the write"
+            assert _read_bytes(path) == before, type(exc).__name__
+            assert os.listdir(d) == ["x.json"], (type(exc).__name__, os.listdir(d))
+    finally:
+        os.fsync = real_fsync
         _drop(d)
 
 
@@ -339,8 +434,8 @@ def _check_two_writers_one_reader():
 
 def _selftest():
     failures, seen = [], {}
-    for check in (_check_text_and_json, _check_foreign_tmp, _check_replace_fails_clean, _check_replace_retry,
-                  _check_private_mode, _check_two_writers_one_reader):
+    for check in (_check_text_and_json, _check_foreign_tmp, _check_replace_fails_clean, _check_write_fails_clean,
+                  _check_replace_retry, _check_private_mode, _check_two_writers_one_reader):
         try:
             seen[check.__name__] = check()
         except Exception as exc:  # noqa: BLE001 -- each check is reported by name; one failing must not hide the rest
@@ -350,10 +445,11 @@ def _selftest():
         print(f"project_io selftest FAILED -- {len(failures)} check(s)")
         return 1
     reads = seen["_check_two_writers_one_reader"]
-    print(f"project_io selftest OK -- text and JSON land with the old sites' bytes; a foreign <file>.tmp is left alone "
-          f"and no temp name repeats; a failed move or write leaves the old file whole and no temp behind; a held move "
-          f"is retried on Windows only; a private mode is set before the move; two writers x 100 and a reader: "
-          f"{reads} reads, every one whole")
+    print(f"project_io selftest OK -- text, JSON and bytes land with the old sites' bytes; a foreign <file>.tmp is "
+          f"left alone and no temp name repeats; a failed move, a write failing with its bytes in the temp and a "
+          f"Ctrl-C there leave the old file whole and no temp behind; a held move is retried on Windows only; a "
+          f"private file is private from its first byte, its mode set again before the move; two writers x 100 and "
+          f"a reader: {reads} reads, every one whole")
     return 0
 
 

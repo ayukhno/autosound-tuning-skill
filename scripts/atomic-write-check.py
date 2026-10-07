@@ -1,22 +1,24 @@
 #!/usr/bin/env python3
-"""Every file the method owns is written through `rew_tool/project_io.py` (skill #135; audit T-8) -- checked.
+"""A file the method replaces is replaced through `rew_tool/project_io.py` (skill #135; audit T-8) -- checked.
 
-`project_io.atomic_write_text` / `atomic_write_json` write a temp file whose name no other writer uses, fsync it and
-move it over the file in one `os.replace`. Before #135, eleven writers named their temp `<file>.tmp` -- one name for
-every writer of that file, so a second writer truncated the first one's temp and moved it into place -- and four more
-wrote in place. Two rules keep that from coming back:
+`project_io`'s writers write a temp file whose name no other writer uses, fsync it and move it over the file in one
+`os.replace`. Before #135, eleven writers named their temp `<file>.tmp` -- one name for every writer of that file, so
+a second writer truncated the first one's temp and moved it into place -- and four more wrote in place. Two rules keep
+the fixed temp name and the hand-made move from coming back:
 
   (a) no string constant ending in `.tmp` outside `rew_tool/project_io.py`: a fixed temp name IS the defect. ALLOWED
       holds the (file, literal) pairs that are not a temp name, each with its reason. This file is not read for (a).
-  (b) no call to `os.replace` or `os.rename` outside `project_io.py` but the moves MOVES names by (file, function):
-      whole files moved aside or installed, not a temp moved over a file the method owns.
+  (b) no call to `os.replace`, `os.rename` or `os.renames` outside `project_io.py` but the moves MOVES names by (file,
+      function): whole files moved aside or installed, not a temp moved over a file the method owns.
 
 An ALLOWED or MOVES entry that matches nothing is a complaint too: a stale entry would let the next fixed temp name,
 or the next move, through unseen.
 
 Read by AST, every .py under skills/autosound-tuning/ and the repo's scripts/: a comment is not a constant, and `os`
 under another name (`import os as _os`, `from os import replace`) is still `os`. What it does not see: a temp name
-built without a `.tmp` literal, and a move by `shutil.move` or `pathlib`.
+built without a `.tmp` literal; a move by `shutil.move` or `pathlib`; and a file written IN PLACE, `open(path, "w")`
+with no temp at all -- a reader can still find such a file half-written, and nothing here says so (the plain writers
+left are listed in rew_tool/CONTRACT.md item 8). It checks the temps and the moves, not every write.
 
     scripts/atomic-write-check.py             # the tree: each complaint and exit 1, or the OK line
     scripts/atomic-write-check.py --selftest  # each rule broken on purpose in a throwaway tree
@@ -57,7 +59,7 @@ MOVES = {
 }
 
 
-MOVERS = ("replace", "rename")
+MOVERS = ("replace", "rename", "renames")
 
 
 def _py_files(root):
@@ -191,10 +193,11 @@ def _selftest():
                                 'NAME = "x.tmp.json"\n\n\ndef f(s):\n    return s.replace("a", "b")\n')
         put(PROJECT_IO, 'import os\n\n\ndef w(p):\n    os.replace(p + ".tmp", p)\n')
         put(SELF, 'SUFFIX = ".tmp"\n')
-        # `os` under another name is still `os`, in the repo's scripts/ as in the skill.
+        # `os` under another name is still `os`, in the repo's scripts/ as in the skill; `os.renames` is a move too.
         put("scripts/tool.py", "import os as _os\n\n\ndef go(a, b):\n    _os.rename(a, b)\n")
         put("skills/autosound-tuning/scripts/helper.py", "from os import replace as mv\n\n\ndef go(a, b):\n"
-                                                         "    mv(a, b)\n")
+                                                         "    mv(a, b)\n\n\ndef deep(a, b):\n    import os\n"
+                                                         "    os.renames(a, b)\n")
         # A listed literal in a file it is not listed for, and a listed function's name in another file.
         put(f"{tool}/other.py", 'IGNORE = "*.tmp"\n\n\ndef set_aside(a, b):\n    import os\n    os.replace(a, b)\n')
         allowed = {(f"{tool}/seed.py", "*.tmp"): "a pattern",
@@ -208,6 +211,7 @@ def _selftest():
                 f"{tool}/other.py:6: os.replace in set_aside()",
                 "scripts/tool.py:5: os.rename in go()",
                 "skills/autosound-tuning/scripts/helper.py:5: os.replace in go()",
+                "skills/autosound-tuning/scripts/helper.py:10: os.renames in deep()",
                 f"ALLOWED names {tool}/seed.py 'gone.tmp'",
                 f"MOVES names unswap() in {tool}/mover.py"]
         missing = [w for w in want if not any(line.startswith(w) for line in got)]
@@ -216,8 +220,9 @@ def _selftest():
     finally:
         shutil.rmtree(root, ignore_errors=True)
     print("atomic-write-check selftest OK -- named: a .tmp literal, an unlisted os.replace, os.rename under an alias, "
-          "a replace imported from os, a listed literal or function name in another file, a stale ALLOWED or MOVES "
-          "entry; passed: a listed move, a listed literal, a comment, a str.replace, project_io itself, this file")
+          "a replace imported from os, os.renames, a listed literal or function name in another file, a stale ALLOWED "
+          "or MOVES entry; passed: a listed move, a listed literal, a comment, a str.replace, project_io itself, "
+          "this file")
     return 0
 
 
@@ -233,7 +238,8 @@ def main(argv):
     if problems:
         print(f"atomic-write-check: {len(problems)} complaint(s)")
         return 1
-    print("atomic-write-check OK -- every write goes through project_io")
+    print(f"atomic-write-check OK -- no .tmp literal and no os.replace/rename/renames outside project_io but the "
+          f"{len(ALLOWED)} literals and {len(MOVES)} moves it names ({len(_py_files(ROOT))} files read)")
     return 0
 
 
