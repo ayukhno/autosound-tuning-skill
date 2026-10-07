@@ -106,7 +106,7 @@ PYEOF
   brk() {  # brk <name> <python that edits the tree at $1>
     G checkout -q "$a" && "$PY" -c "$2" "$repo" "$newest" "$next" && G commit -qam "$1" && G rev-parse HEAD
   }
-  local b c d
+  local b c d e
   b="$(brk front 'import sys,pathlib
 r,o,n=pathlib.Path(sys.argv[1]),sys.argv[2],sys.argv[3]
 for f in [*r.glob("README*.md"),*r.glob("FAQ*.md"),r/"ADVANCED.md"]: f.write_text(f.read_text(encoding="utf-8").replace("/"+o+"/","/"+n+"/"),encoding="utf-8")')" || return 1
@@ -114,11 +114,16 @@ for f in [*r.glob("README*.md"),*r.glob("FAQ*.md"),r/"ADVANCED.md"]: f.write_tex
 p=pathlib.Path(sys.argv[1])/".claude-plugin"/"plugin.json"; d=json.loads(p.read_text()); d["version"]=sys.argv[2][1:]; p.write_text(json.dumps(d,indent=2)+"\n")')" || return 1
   d="$(brk cmd 'import sys,pathlib
 p=pathlib.Path(sys.argv[1])/"install.cmd"; p.write_bytes(p.read_bytes().replace(("/"+sys.argv[3]+"/").encode(),("/"+sys.argv[2]+"/").encode()))')" || return 1
+  # An `## [Unreleased]` heading left above the release's own (the rename forgotten, or new work put back on top).
+  e="$(brk unreleased 'import sys,pathlib,re
+p=pathlib.Path(sys.argv[1])/"CHANGELOG.md"; h="## ["+sys.argv[3]+"]"
+p.write_text(re.sub("(?m)^"+re.escape(h),lambda m:"## [Unreleased]\n\n- x\n\n"+h,p.read_text(encoding="utf-8"),count=1),encoding="utf-8")')" || return 1
   G checkout -q "$base"
   expect 0 "ready at ${a:0:12}" "the last candidate carries the release" -- --at "$a" "$next" || return 1
   expect 1 "FAIL install-lines" "front-page lines naming the coming tag" -- --at "$b" "$next" || return 1
   expect 1 "FAIL manifest" "a manifest still at the previous version" -- --at "$c" "$next" || return 1
   expect 1 "FAIL shipped-pins" "install.cmd still fetching the previous tag" -- --at "$d" "$next" || return 1
+  expect 1 "FAIL changelog-note" "an [Unreleased] heading still above the release's" -- --at "$e" "$next" || return 1
   expect 2 "not in this repository" "a commit that is not here" -- --at 0123456789abcdef0123456789abcdef01234567 "$next" || return 1
   expect 2 "usage" "--at with no tag" -- --at "$a" || return 1
   # A patch (the plain mode, at HEAD) holds the front page to its own tag; the channel half fails here, no hub.
@@ -126,7 +131,8 @@ p=pathlib.Path(sys.argv[1])/"install.cmd"; p.write_bytes(p.read_bytes().replace(
   expect 1 "FAIL install-lines" "a patch whose front page is behind" -- "$next" || return 1
   echo "selftest[tag-check] OK -- --at reads the named commit, not HEAD: a last candidate carrying its heading, manifest and" \
        "install.cmd pin passes with the front page one release behind; front-page lines naming the coming tag, a manifest" \
-       "or an install.cmd pin left behind are each refused by name; a commit not here and a missing tag are usage errors;" \
+       "or an install.cmd pin left behind, and an [Unreleased] heading still above the release's, are each refused by" \
+       "name; a commit not here and a missing tag are usage errors;" \
        "a patch's front page is held to its own tag"
 }
 
