@@ -65,10 +65,16 @@ panel had nothing real to render and every resume re-derived the phase by re-rea
     "taken": {"tw-L_1 (sw)": {"at": "…", "planned": true,     // planned=false: not on the list
       "superseded_by": null,                        // S-039: a row recorded under a WRONG title
                                                     //   stays, dimmed, naming what it was
-                                                    //   corrected to. Never deleted
-      "verified": {"ok": true, "exists": true,      // SCR-040: what the arithmetic said
-                   "uuid": "9ff4deb9-…",            //   REW's own id — the title is NOT identity
-                   "at": "…", "issues": []}}},
+                                                    //   corrected to. Never deleted, and counted
+                                                    //   nowhere as taken (N17)
+      "verified": {"ok": true, "exists": true,      // SCR-040: what the arithmetic said; `exists`
+                   "uuid": "9ff4deb9-…",            //   null when REW's list was not read. REW's own
+                   "at": "…", "issues": []}}},      //   id — the title is NOT identity
+    "checks": {"tw-L_1 (sw)": {"ok": true, "exists": true, "applicable": true,   // #134 (T-1): the last
+                               "uuid": "9ff4deb9-…", "at": "…", "issues": []},   //   check of EVERY title,
+               "tw-L_1 (rta)": {"ok": false, "exists": false,                     //   held or not -- what
+                                "applicable": true, "uuid": null, "at": "…",      //   `verified` holds on a
+                                "issues": ["No measurement titled 'tw-L_1 (rta)' (REW holds 4)"]}},  // taken row
     "skipped": {"c_1 (sw)": {"at": "…", "reason": "centre not wired yet",
                              "planned": true}},    // planned=false: never on the list
     "reconciled": {"at": "…", "rew": true,          // skill #77 rule 3: the list read against REW's
@@ -144,7 +150,18 @@ for that checkout — see `rew_tool/provenance.py` for why it is the sha and not
   REW, because the only states were «taken» and «never mentioned». The row keeps its place with
   `superseded_by`, the corrected title is recorded in the same breath, and `_outstanding` stops
   counting the ghost as a capture that exists. A round that quietly loses a row is a round nobody
-  can audit.
+  can audit. **Nothing counts a superseded row as taken** (N17, #134): not the step gate
+  (`unusable_captures`), not `capture_round_closed`'s `taken`, not the counts `session-close` and
+  `capture-close` print, not the setup a next round starts from, not a channel the round captured.
+  `capture-check` prints it `UNUSABLE <title> — superseded by <right title>`. Before, a row checked
+  and passed under the wrong title counted as a usable capture.
+- **A check reads; it does not take** (#134, audit T-1). `capture-check` records every title's
+  verdict in the round's `checks` (`{title: verified}`, `exists` true, false, or null when REW's
+  list was not read), and creates a `taken` row only for a title REW holds — the rule `capture-close`
+  closes by (skill #77); a row already there gets the new verdict. A title REW does not hold stays
+  outstanding. It used to become a `taken` row with a failed verdict: a capture the round took,
+  outstanding nowhere. `capture-check` reads a title's line from its `taken` row, else from
+  `checks`. With REW not answering it records nothing and exits 69 (below).
 - **Nothing is cleared over work that is only in the chat** (S-044). `handoff` answers one question
   — is everything the NEXT session needs on disk — and REFUSES while it is not: no phase recorded,
   an open capture round, a plan step left `todo`/`in_progress`, a done step whose evidence resolves
@@ -198,6 +215,39 @@ state = p.load(strict=True)     # ... and here it raises project_io.Unreadable (
 p.plan_for("2", state)          # steps of one phase
 p.unevidenced_done_steps()      # resume drift check
 ```
+
+## The command line: verbs, flags, exit codes (#134; #138 I-15)
+
+`python3 process.py <process-dir> <verb> [args]`. `process.py --help` (or `<process-dir> --help`) prints the whole
+usage on stdout, exit 0.
+
+| exit | means |
+|---|---|
+| 0 | done, or yes |
+| 1 | refused, or no: the reason on stderr (`error: …`) |
+| 2 | usage: an unknown verb, a flag the verb does not take, a value on a flag that takes none |
+| 69 | REW did not answer, and nothing was written (sysexits' `EX_UNAVAILABLE`) |
+| 70 | an unexpected error, a bug: Python's traceback on stderr, then `error: unexpected <type>: <message>` (`EX_SOFTWARE`) |
+| 75 | the project busy: reserved for the lock (J2b, W-9), not raised yet (`EX_TEMPFAIL`) |
+
+- **Each verb takes its own flags, and only those.** `VERB_FLAGS` in `process.py` is the table, one string literal
+  per flag. Any other `--<word>` is a usage error, exit 2, with the flags the verb takes named on stderr and nothing
+  written; it used to become a title, a reason or a piece of evidence (TCC's N19). `--flag value` and `--flag=value`
+  are the same (a value given with `=` passes as it is); a flag that takes no value (`--plan`, `--session`, `--json`,
+  `--check`, `--no-rew`, ...) takes no `=`. A bare `--` and a negative number are arguments. The refusal's words never
+  contain `usage: process.py`, which a front-end reads as "this method is too old".
+- **`<verb> --help`** (or `-h`), right after the verb, prints that verb's lines of the usage and the exit table on
+  stdout, exit 0, and reads and writes nothing. It ran the verb: `session-close --help` recorded a close,
+  `capture-start --help` opened a round at `--help`.
+- **The command line is answered first**: `--help`, an unknown verb and an unknown flag come before the strict read
+  below, so on a state that cannot be read they still answer 0 or 2, not 1.
+- **REW down is 69, nothing written.** `capture-check` with REW not answering (any title `reachable: false` in
+  `verify`'s verdicts) records no verdict, no round change and no event; REW not answering a verb that asks it
+  itself (`capture-import`, for a series' titles) exits 69 too. `capture-close` still closes on the record alone
+  with REW down, exit 0, and says which it met: `REW not reached`, or `REW answered something that is not a
+  measurement list`.
+- **A bug is 70, not 1.** An exception no refusal names exits 70 with its traceback, where it exited 1 like a
+  refusal or escaped as a bare traceback. An unreadable file (`is_unreadable`) stays a refusal, exit 1.
 
 ## The read rule: unreadable is not empty (#136, audit K-2)
 

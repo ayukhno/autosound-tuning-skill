@@ -23,11 +23,54 @@ loads. A method older than contract 1 has no `version` verb: it exits 2, prints 
 stderr begins `usage: contract.py` (v3.0.0, v3.0.40 and v3.1.1 answer so). Read that as contract 0. Python exits 2
 too when the path is wrong, with `can't open file` on stderr: the usage line is what tells the two apart.
 
-## 2. `state/process.py <process-dir> <verb>` — planned (W-8, #134)
+## 2. `state/process.py <process-dir> <verb>` — guaranteed (W-8, #134)
 
-The verbs and their flags, the exit table (0 done or yes · 1 refused or no, the reason on stderr · 2 usage · 69 REW
-unavailable, nothing written · 70 an unexpected error; 75 reserved for the lock), and the JSON of `show`, `plan` and
-`handoff --json`. PLAN-W-8 Task 11 writes the table and flips this item.
+**The exit table**, for every verb:
+
+| exit | means |
+|---|---|
+| 0 | done, or yes |
+| 1 | refused, or no: the reason on stderr, `error: <reason>` |
+| 2 | usage: an unknown verb (the usage on stderr), a flag the verb does not take, `=` on a flag that takes no value |
+| 69 | REW did not answer, and nothing was written |
+| 70 | an unexpected error, a bug: Python's traceback on stderr, then `error: unexpected <type>: <message>` |
+| 75 | the project busy: reserved for the lock (W-9, J2b), not raised yet |
+
+Four verbs answer with their exit code, their report on stdout: `session-close` (1 while a round or a step is open),
+`capture-check` (1 while a capture of the open round is unusable), `check` (1 while a done step has no evidence that
+resolves) and `handoff` (1 while the next session would miss something), as `state/process-schema.md` says.
+
+**The verbs and their flags** are `VERB_FLAGS` in `process.py`, one string literal per flag:
+
+| verb | flags |
+|---|---|
+| `add-step` | `--project`, `--covers` |
+| `skip` | `--superseded-by` |
+| `reviewer` | `--review`, `--mode` |
+| `decision` | `--invalidates` |
+| `session-close` | `--check` |
+| `capture-start` | `--origin`, `--step`, `--under`, `--level`, `--level-read-as`, `--start`, `--phase`, `--optional`, `--plan` |
+| `capture-check` | `--session` |
+| `capture-import` | `--bind`, `--late`, `--knob` |
+| `amp-gain` | `--measured`, `--amends`, `--note` |
+| `capture-knobs` | `--amend`, `--reason` |
+| `capture-protective` | `--source`, `--amend`, `--reason`, `--hp`, `--lp` |
+| `listening-verdict` | `--pair`, `--text`, `--route`, `--ledger-version`, `--note` |
+| `listening-verdicts` | `--track`, `--characteristic`, `--ledger-version`, `--bank` |
+| `handoff` | `--json` |
+| `capture-close` | `--no-rew` |
+
+`show`, `plan`, `enter-phase`, `start`, `done`, `block`, `target`, `session-start`, `session-reopen`,
+`capture-taken`, `amp-changes`, `capture-supersede`, `capture-skip` and `check` take none. Any other flag (`--`
+and a letter) is a usage error, exit 2, and the verb does not run; its words never contain `usage: process.py`.
+`--flag value` and `--flag=value` are one; `--project`, `--check`, `--plan`, `--session`, `--measured`, `--bank`,
+`--json` and `--no-rew` take no value. `<verb> --help` (or `-h`), right after the verb, prints that verb's lines and
+exits 0, reading and writing nothing; `process.py --help` prints the whole usage on stdout. A verb or a flag added
+later is an addition (item 12); removing or renaming one is a contract change.
+
+**The JSON:** `show` prints `process-state.json` as `state/process-schema.md` describes it (a round's `checks` among
+its keys); `plan [phase]` a list of the plan's steps; `handoff --json` `{ok, missing, phase, resume, warnings,
+next_message}`, with the same keys when the state cannot be read (`ok` false, the file and its repair in `missing`).
 
 ## 3. `contract.py check <dir> [--json] [--no-rew] [--gate | --phase0-gate]` — planned (W-10)
 
