@@ -226,6 +226,10 @@ if [ -z "${SELFTEST_ONLY_TOOL:-}" ]; then
   # The guard's own mechanics in a throwaway tree, then this tree (its success line says OK, so `ok`, not `rc`).
   run_one "contract-guard"  ok scripts/contract-guard.py --selftest
   run_one "contract-in-tree" ok scripts/contract-guard.py
+  # #135: every file the method owns is written through rew_tool/project_io.py -- no fixed `.tmp` name, no move but
+  # the named whole-file ones. The scan's own mechanics in a throwaway tree, then this tree (its success line says OK).
+  run_one "atomic-write"    ok scripts/atomic-write-check.py --selftest
+  run_one "atomic-in-tree"  ok scripts/atomic-write-check.py
   # HUB-044: README and FAQ live in four languages. The guard compares what can be compared without
   # knowing them -- the heading skeleton and the commands -- and says out loud that it cannot see all
   # four lagging the code together.

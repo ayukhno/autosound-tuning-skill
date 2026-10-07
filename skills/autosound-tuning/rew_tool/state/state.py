@@ -78,6 +78,11 @@ def _siblings():
     return module
 
 
+def _project_io():
+    """`rew_tool/project_io.py`: how this module writes the files it owns (skill #135)."""
+    return _siblings().load("project_io.py")
+
+
 # ── schema ──────────────────────────────────────────────────────────────────
 # One number across every machine file (see `project.py`'s own note). 3 is the format break.
 SCHEMA_VERSION = 3
@@ -593,10 +598,8 @@ def _write_slots(root, data):
     data["layout"] = LAYOUT_TAG
     data["updated"] = datetime.datetime.now().isoformat(timespec="seconds")
     os.makedirs(root, exist_ok=True)
-    tmp = os.path.join(root, SLOTS_FILE + ".tmp")
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(data, fh, indent=2, sort_keys=True, ensure_ascii=False)
-    os.replace(tmp, os.path.join(root, SLOTS_FILE))
+    _project_io().atomic_write_json(os.path.join(root, SLOTS_FILE), data, indent=2, sort_keys=True,
+                                    ensure_ascii=False)
 
 
 # ── configurations: a version SAVED into a DSP preset under a name (the Arbiter, 2026-09-23) ──
@@ -740,10 +743,8 @@ def _read_seals(root):
 
 
 def _write_seals(root, seals):
-    tmp = os.path.join(root, SEALS_FILE + ".tmp")
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(seals, fh, indent=1, sort_keys=True)
-    os.replace(tmp, os.path.join(root, SEALS_FILE))
+    _project_io().atomic_write_json(os.path.join(root, SEALS_FILE), seals, indent=1, sort_keys=True,
+                                    ensure_ascii=True)
 
 
 def _all_version_paths(root):
@@ -880,10 +881,7 @@ def repair_version(root, version, preset=None):
     sealed_as_is = seals.get(key) == content_digest(snap)
     was = snap["version"]
     snap["version_was"], snap["version"] = was, version
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(snap, fh, indent=2, sort_keys=True, ensure_ascii=False)
-    os.replace(tmp, path)
+    _project_io().atomic_write_json(path, snap, indent=2, sort_keys=True, ensure_ascii=False)
     if sealed_as_is:
         seals[key] = content_digest(snap)
         _write_seals(root, seals)
@@ -1151,8 +1149,7 @@ class PresetHistory:
             entry.setdefault("history", []).append({"version": version, "since": now})
             _write_slots(self.root, slots)
             return
-        with open(self._head_path(), "w", encoding="utf-8") as f:
-            f.write(version + "\n")
+        _project_io().atomic_write_text(self._head_path(), version + "\n")
 
     # -- read/write --
     def load(self, version=None):
@@ -1497,9 +1494,8 @@ class Registry:
             _write_slots(self.root, reg)
             return
         reg["updated"] = datetime.datetime.now().isoformat(timespec="seconds")
-        os.makedirs(self.root, exist_ok=True)
-        with open(self._path(), "w", encoding="utf-8") as f:
-            json.dump(reg, f, indent=2, sort_keys=True, ensure_ascii=False)
+        _project_io().atomic_write_json(self._path(), reg, indent=2, sort_keys=True, ensure_ascii=False,
+                                        makedirs=True)
 
     def get_active(self):
         return self.load().get("active")
@@ -1682,7 +1678,12 @@ def repair_encoding(paths, codec):
     `<file>.<codec>.orig` rather than replaced — this history's own invariant is that a snapshot is
     immutable and nothing here destroys what was written, and a repair that cannot be checked
     afterwards is one the user has to take on faith.
+
+    The original's bytes are COPIED to the backup, and the file is then replaced in one move: the
+    file is never absent (skill #135, audit T-17 -- the backup used to be a move, which left no
+    file under the name until the rewrite landed).
     """
+    import shutil
     done = []
     for e in encoding_survey(paths):
         match = [c for c in e["candidates"] if c["codec"] == codec]
@@ -1692,19 +1693,14 @@ def repair_encoding(paths, codec):
                 f"Offered: {', '.join(c['codec'] for c in e['candidates']) or 'none'}"
             )
         backup = e["path"] + f".{codec}.orig"
-        if not os.path.exists(backup):
-            os.replace(e["path"], backup)
-        else:
-            os.remove(e["path"])                # a second run: the first backup is the original
-        tmp = e["path"] + ".tmp"
+        if not os.path.exists(backup):          # on a second run the first backup is the original, and stays
+            shutil.copy2(e["path"], backup)
         # `newline=""` because the repair changes the ENCODING and nothing else. The text came from
         # `bytes.decode`, so its line endings are the ones the file already had; writing it back in
         # the default text mode would translate every `\n` to `\r\n` on the very platform this
         # repair is for, and a repair that silently rewrites bytes it was not asked about is one
         # nobody can check afterwards.
-        with open(tmp, "w", encoding="utf-8", newline="") as f:
-            f.write(match[0]["text"])
-        os.replace(tmp, e["path"])
+        _project_io().atomic_write_text(e["path"], match[0]["text"], newline="")
         done.append({"path": e["path"], "backup": backup, "codec": codec})
     return done
 
@@ -2476,6 +2472,28 @@ def _selftest():
         assert "does not decode" in str(exc), exc
     assert open(snap_path, "rb").read() == text_before.encode("cp1251"), \
         "a refused repair must leave the file exactly as it found it"
+    # Audit T-17: a repair whose rewrite fails half way leaves the file under its name, with its own bytes. The backup
+    # used to be a MOVE, so the file was absent until the rewrite landed -- and stayed absent when it did not.
+    real_replace = os.replace
+
+    def pulled(src, dst):
+        if os.path.abspath(dst) == os.path.abspath(snap_path):
+            raise OSError("disk pulled")         # the move over the file itself fails; any other move happens
+        return real_replace(src, dst)
+    for first_run in (True, False):
+        if first_run:
+            os.remove(done[0]["backup"])
+        os.replace = pulled
+        try:
+            repair_encoding(ledger_files(enc_root), "cp1251")
+            raise AssertionError("a repair whose rewrite failed reported success")
+        except OSError:
+            pass
+        finally:
+            os.replace = real_replace
+        assert os.path.isfile(snap_path), f"a failed repair left no file under the name (first run: {first_run})"
+        assert open(snap_path, "rb").read() == text_before.encode("cp1251"), first_run
+        assert open(done[0]["backup"], "rb").read() == text_before.encode("cp1251"), first_run
 
     # ── the root is resolved, and an absent one is REFUSED, not answered (release review 2026-09-09)
     assert resolve_root("x/state") == ("x/state", "--root"), resolve_root("x/state")

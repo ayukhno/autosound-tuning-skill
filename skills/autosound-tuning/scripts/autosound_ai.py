@@ -38,6 +38,32 @@ import shutil
 import tempfile
 from datetime import datetime
 
+
+def _siblings():
+    """`rew_tool/siblings.py`, by its path: how this module reaches a sibling (skill #137).
+
+    The same text in every module that loads a sibling -- only the `here` line differs with the file's folder;
+    scripts/contract-guard.py holds the copies identical.
+    """
+    import hashlib
+    import importlib.util
+    here = os.path.realpath(os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "rew_tool"))
+    name = "_autosound_" + hashlib.sha1(here.encode("utf-8")).hexdigest()[:8] + "_siblings"
+    module = sys.modules.get(name)
+    if module is None:
+        spec = importlib.util.spec_from_file_location(name, os.path.join(here, "siblings.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        # Published only once it has run: a thread racing this first call never gets a half-run siblings.py.
+        module = sys.modules.setdefault(name, module)
+    return module
+
+
+def _project_io():
+    """`rew_tool/project_io.py`: how this script writes the files it owns (skill #135)."""
+    return _siblings().load("project_io.py")
+
+
 def stderr_encoding(platform, is_tty, env):
     """What stderr is written in: `utf-8`, or `ascii` folded by `rew_tool/console.py` (skill #90).
 
@@ -474,12 +500,7 @@ def _dpapi_get(var):
 
 
 def _dpapi_write(store):
-    path = _dpapi_path()
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(store, fh)
-    os.replace(tmp, path)
+    _project_io().atomic_write_json(_dpapi_path(), store, indent=None, ensure_ascii=True, makedirs=True)
 
 
 def _dpapi_put(var, value):
@@ -2292,13 +2313,8 @@ def _file_lines(path):
 
 
 def _write_private(path, lines):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        fh.write("\n".join(lines) + "\n")
-    if os.name != "nt":
-        os.chmod(tmp, 0o600)
-    os.replace(tmp, path)
+    # 0600 is set on the temp before the move (POSIX): the file holds a key, and its name never shows it to others.
+    _project_io().atomic_write_text(path, "\n".join(lines) + "\n", mode=0o600, makedirs=True)
 
 
 def _machine_file_drop(var, why):

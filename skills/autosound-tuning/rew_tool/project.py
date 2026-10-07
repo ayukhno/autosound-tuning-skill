@@ -40,6 +40,32 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 import naming as _naming  # noqa: E402 -- the one notation for codes (S-079); stdlib-only, like this module
 
+
+def _siblings():
+    """`rew_tool/siblings.py`, by its path: how this module reaches a sibling (skill #137).
+
+    The same text in every module that loads a sibling -- only the `here` line differs with the file's folder;
+    scripts/contract-guard.py holds the copies identical.
+    """
+    import hashlib
+    import importlib.util
+    here = os.path.dirname(os.path.realpath(__file__))
+    name = "_autosound_" + hashlib.sha1(here.encode("utf-8")).hexdigest()[:8] + "_siblings"
+    module = sys.modules.get(name)
+    if module is None:
+        spec = importlib.util.spec_from_file_location(name, os.path.join(here, "siblings.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        # Published only once it has run: a thread racing this first call never gets a half-run siblings.py.
+        module = sys.modules.setdefault(name, module)
+    return module
+
+
+def _project_io():
+    """`rew_tool/project_io.py`: how this module writes the files it owns (skill #135)."""
+    return _siblings().load("project_io.py")
+
+
 # One number across every machine file this skill writes (project.json, the ledger,
 # process-state.json, dsp_profile.json), moving together with the skill's own major version.
 # "Which format is this project in?" is then one question with one answer, and `contract.py` can
@@ -823,9 +849,9 @@ class Project:
         return base
 
     def save(self, data):
-        """Bump `project_rev`, validate, then write atomically (write-temp-then-rename — same
-        discipline as `process.py`'s `_write`: a crash mid-write must not read back as an empty
-        project).
+        """Bump `project_rev`, validate, then write atomically (`project_io`: a temp of this writer's
+        own, then one move -- same discipline as `process.py`'s `_write`: a crash mid-write must not
+        read back as an empty project, skill #135).
 
         The revision counts WRITES, not semantic changes (SCR-024). A consumer only ever needs two
         things from it — ordering and equality — and deciding "did these facts really change?"
@@ -836,10 +862,7 @@ class Project:
         data["project_rev"] = (rev if isinstance(rev, int) and not isinstance(rev, bool) else 0) + 1
         validate(data)
         os.makedirs(self.dir, exist_ok=True)
-        tmp = self.path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, sort_keys=True, ensure_ascii=False)
-        os.replace(tmp, self.path)
+        _project_io().atomic_write_json(self.path, data, indent=2, sort_keys=True, ensure_ascii=False)
         return data
 
     def migrate_fields(self, write=True):

@@ -79,11 +79,24 @@ Today `project.json`, `process/process-state.json`, the ledger's `v_NNN.json` an
 The rule: a file newer than this copy reads is refused, and an older one gets the migration hint. PLAN-W-8 Task 8
 flips this item.
 
-## 8. How to write them — atomic writes planned (W-8, #135); the lock planned (W-9, J2b)
+## 8. How to write them — atomic writes guaranteed (W-8, #135); the lock planned (W-9, J2b)
 
-Atomic writes: every writer writes a temporary file with a name of its own, flushes and fsyncs it, then moves it over
-the old one with `os.replace`. PLAN-W-8 Task 5 flips this half. The lock comes with J2b in W-9: which file, how long
-a writer waits, and the busy exit 75.
+Atomic writes: a writer that replaces a file the method owns writes a temporary file beside it under a name of its
+own (`<file>.<pid>-<8 hex>.tmp`, created exclusively), flushes and fsyncs it, then moves it over the file with one
+`os.replace`. That writer is `rew_tool/project_io.py` (`atomic_write_text`, `atomic_write_json`). A reader sees the
+old file or the new one, never part of either, and two writers never share a temp file. The files: `project.json`,
+`process/process-state.json`, `state/slots.json`, `state/seals.json`, a file `state.py repair-version` or
+`repair-encoding` rewrites, the old layout's `registry.json` and `HEAD`, `dsp_profile.json` and its draft, what
+`state/migrate.py` writes, the Resonalyze impulse-response files, and the reviewer's machine file and key store; each
+with the bytes its old writer wrote. On Windows a move refused because a process holds the file open is retried for
+under a second, then raised, with the old file whole. A `*.tmp` beside a file is a crash's leftover, never a file to
+read; a new project's `.gitignore` ignores it. `scripts/atomic-write-check.py` holds this: outside `project_io.py`,
+no `.tmp` literal but two it names (no temp name), and no `os.replace` or `os.rename` but three named moves of whole
+files.
+
+A new ledger version and a line appended to `process/journal.jsonl` replace nothing: an exclusive create and an
+append that cannot tear a line are planned (W-8, #135). The lock comes with J2b in W-9: which file, how long a writer
+waits, and the busy exit 75.
 
 ## 9. The modules TCC imports — guaranteed (names); `sys.path` partly planned (W-10, J1b)
 
@@ -160,7 +173,8 @@ today, every one the code reads:
   (`scripts/upstream-drift.py`), `AUTOSOUND_PASSAT_IR_SET` and `AUTOSOUND_PASSAT_PROJECT` (the Resonalyze
   engine's acceptance run), `SMOKE_VERBOSE` (`scripts/smoke_test.py`), the selftest runner's `SELFTEST_TIMEOUT`,
   `SELFTEST_TOOL`, `SELFTEST_MANIFEST` and `SELFTEST_ONLY_TOOL`, `PYTHON` (the interpreter `scripts/run-selftests.sh`
-  and `scripts/tag-check.sh` run) and `PREFLIGHT` (`scripts/tag-check.sh`'s path to the hub's release preflight).
+  and `scripts/tag-check.sh` run), `PREFLIGHT` (`scripts/tag-check.sh`'s path to the hub's release preflight) and
+  `CHROME` (the browser `scripts/xss-proof-visualizer.mjs` drives).
 
 Beyond these, the code reads only the system's and Python's own (`PATH`, `HOME`, `SHELL`, `APPDATA`,
 `LOCALAPPDATA`, `ProgramFiles`, `XDG_*`, `EDITOR`, `VISUAL`, `no_proxy`, `PYTHONPATH`, ...), a CI's `CI`

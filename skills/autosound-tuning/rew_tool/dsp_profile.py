@@ -71,6 +71,11 @@ def _siblings():
     return module
 
 
+def _project_io():
+    """`rew_tool/project_io.py`: how this module writes the files it owns (skill #135)."""
+    return _siblings().load("project_io.py")
+
+
 # ── schema ──────────────────────────────────────────────────────────────────
 # One number across every machine file (see `project.py`'s own note). This file carried no version
 # at all before 3.0 -- which meant a consumer could not tell a profile written by this skill from
@@ -475,8 +480,7 @@ def save_profile(path, data):
     parent = os.path.dirname(path)
     if parent:
         os.makedirs(parent, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, sort_keys=True, ensure_ascii=False)
+    _project_io().atomic_write_json(path, data, indent=2, sort_keys=True, ensure_ascii=False)
     return path
 
 
@@ -718,10 +722,7 @@ def save_draft(project_dir, data):
     groups yet, a name still null), and refusing to save it would defeat the point of having one."""
     os.makedirs(project_dir, exist_ok=True)
     path = draft_path(project_dir)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, sort_keys=True, ensure_ascii=False)
-    os.replace(tmp, path)
+    _project_io().atomic_write_json(path, data, indent=2, sort_keys=True, ensure_ascii=False)
     return path
 
 
@@ -795,8 +796,7 @@ def set_setting(project_dir, path, value):
     section, key = path.split(".")
     inner.setdefault(section, {})[key] = value
     validate_profile(data)
-    with open(target, "w", encoding="utf-8") as fh:
-        json.dump(data, fh, indent=2, ensure_ascii=False)
+    _project_io().atomic_write_json(target, data, indent=2, ensure_ascii=False)     # no sort_keys, as before
     return value
 
 

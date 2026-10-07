@@ -35,6 +35,7 @@ skills/autosound-tuning/rew_tool/nono_curves.py --selftest
 skills/autosound-tuning/rew_tool/path_check.py --selftest
 skills/autosound-tuning/rew_tool/phase_rotation.py --selftest
 skills/autosound-tuning/rew_tool/predict.py --selftest
+skills/autosound-tuning/rew_tool/project_io.py --selftest
 skills/autosound-tuning/rew_tool/project_repo.py --selftest
 skills/autosound-tuning/rew_tool/project_seed.py --selftest
 skills/autosound-tuning/rew_tool/project.py selftest

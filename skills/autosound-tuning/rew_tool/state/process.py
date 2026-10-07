@@ -61,6 +61,11 @@ def _siblings():
     return module
 
 
+def _project_io():
+    """`rew_tool/project_io.py`: how this module writes the files it owns (skill #135)."""
+    return _siblings().load("project_io.py")
+
+
 # One number across every machine file (see `project.py`'s own note) -- this file's own shape did
 # not change in the 3.0 break, but "which format is this project in?" has to have one answer.
 SCHEMA_VERSION = 3
@@ -2502,13 +2507,10 @@ class Process:
         state["updated"] = _now()
         validate(state)
         os.makedirs(self.dir, exist_ok=True)  # first real write is what creates `process/`
-        tmp = self.state_path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(state, f, indent=2, ensure_ascii=False)
-            f.write("\n")
-        # Rename rather than write in place: a crash mid-write would otherwise leave truncated
-        # JSON, and the next session would read an empty process and think nothing had happened.
-        os.replace(tmp, self.state_path)
+        # A temp of this writer's own, then one move (skill #135): a crash mid-write would otherwise leave truncated
+        # JSON, and the next session would read an empty process and think nothing had happened; a fixed temp name
+        # was shared by every writer of the file (audit T-8).
+        _project_io().atomic_write_json(self.state_path, state, indent=2, ensure_ascii=False, trailing_newline=True)
 
     def _last_written_by(self):
         """The sha in the last header event, or None when the journal carries no header at all.
@@ -2749,6 +2751,40 @@ def _check_load_sibling_reads_a_failure_as_none():
         globals()["_siblings"] = real
 
 
+def _check_foreign_tmp_untouched():
+    """Two writers never share a temp file (audit T-8): a `process-state.json.tmp` that is not ours stays as it is."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_process_tmp_")
+    try:
+        d = os.path.join(top, "process")
+        os.makedirs(d)
+        foreign = os.path.join(d, "process-state.json.tmp")
+        with open(foreign, "wb") as f:
+            f.write(b"someone else's half-written file")
+        assert _main(["process.py", d, "enter-phase", "-1"]) == 0
+        assert os.path.isfile(foreign), "the writer moved another writer's temp file over process-state.json"
+        with open(foreign, "rb") as f:
+            assert f.read() == b"someone else's half-written file", "the writer used a temp name another writer uses"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
+def _check_state_bytes():
+    """The same bytes as before the change: json.dumps(indent=2, ensure_ascii=False) and a final newline."""
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_process_bytes_")
+    try:
+        p = Process(os.path.join(top, "process"))
+        p.enter_phase("-1")
+        with open(p.state_path, encoding="utf-8") as f:
+            text = f.read()
+        assert text == json.dumps(json.loads(text), indent=2, ensure_ascii=False) + "\n"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _selftest():
     """The refusals, exercised. This module is the one with the most of them — evidence must exist
     and must resolve (SCR-035), a round's captures must be usable (SCR-040), phase 0 must record a
@@ -2756,7 +2792,8 @@ def _selftest():
     selftest at all, so every one of those gates was a thing nobody had run since it was written.
     """
     failures = []
-    for check in (_check_one_naming, _check_every_loader_shares, _check_load_sibling_reads_a_failure_as_none):
+    for check in (_check_one_naming, _check_every_loader_shares, _check_load_sibling_reads_a_failure_as_none,
+                  _check_foreign_tmp_untouched, _check_state_bytes):
         try:
             check()
         except AssertionError as exc:

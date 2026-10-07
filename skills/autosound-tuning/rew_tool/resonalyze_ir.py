@@ -126,6 +126,31 @@ class ConversionError(ValueError):
     pass
 
 
+def _siblings():
+    """`rew_tool/siblings.py`, by its path: how this module reaches a sibling (skill #137).
+
+    The same text in every module that loads a sibling -- only the `here` line differs with the file's folder;
+    scripts/contract-guard.py holds the copies identical.
+    """
+    import hashlib
+    import importlib.util
+    here = os.path.dirname(os.path.realpath(__file__))
+    name = "_autosound_" + hashlib.sha1(here.encode("utf-8")).hexdigest()[:8] + "_siblings"
+    module = sys.modules.get(name)
+    if module is None:
+        spec = importlib.util.spec_from_file_location(name, os.path.join(here, "siblings.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        # Published only once it has run: a thread racing this first call never gets a half-run siblings.py.
+        module = sys.modules.setdefault(name, module)
+    return module
+
+
+def _project_io():
+    """`rew_tool/project_io.py`: how this module writes the files it owns (skill #135)."""
+    return _siblings().load("project_io.py")
+
+
 # ----------------------------------------------------------------- signal helpers
 
 def advance_circular(x, shift_samples):
@@ -342,10 +367,7 @@ def dumps_v7(doc):
 
 def write_v7(doc, path):
     validate_v7(doc)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
-        fh.write(dumps_v7(doc))
-    os.replace(tmp, path)
+    _project_io().atomic_write_text(path, dumps_v7(doc), newline="\n")
     return path
 
 

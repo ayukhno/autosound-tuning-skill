@@ -274,6 +274,9 @@ GITIGNORE_LINES = [
     ".mcp.json",
     ".tcc/",
     "*.mdat",
+    # A temp file a crash left beside a project file (`<file>.<pid>-<hex>.tmp`, rew_tool/project_io.py, skill #135):
+    # never committed by `project_repo.init`'s `git add -A`.
+    "*.tmp",
 ]
 
 
@@ -761,7 +764,8 @@ def _selftest():
         assert ".gitignore" in out.written, out.written
         with open(gi_path, encoding="utf-8") as f:
             gi = f.read()
-        for rule in (".critic-env", "rew_analitic/.critic-env", ".mcp.json", ".tcc/", "*.mdat"):
+        # `*.tmp` (skill #135): a temp file a crash left beside a project file is never committed by `git add -A`.
+        for rule in (".critic-env", "rew_analitic/.critic-env", ".mcp.json", ".tcc/", "*.mdat", "*.tmp"):
             assert any(ln.strip() == rule for ln in gi.splitlines()), (rule, gi)
         # And it says where the key SHOULD live, because a rule with no alternative just moves
         # the problem to wherever the user puts the file next.
