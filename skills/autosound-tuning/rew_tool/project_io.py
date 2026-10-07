@@ -12,8 +12,9 @@ never over a file that is there. `append_line` appends one line, and after a tor
 
 READS: `read_json` tells a file that is not there from one that is there and cannot be read (audit K-2). Absent is
 the caller's default, the one quiet case -- a fresh project has no state yet. Empty, cut off, not UTF-8, not JSON, the
-wrong top-level type, a directory: each raises `Unreadable`, naming the file and, when the caller knows one, the
-repair. Read as empty instead, such a file was written over with an empty one by the next write. `Unreadable` is
+wrong top-level type, a directory, a file that cannot be opened: each raises `Unreadable`, naming the file and the
+repair -- the caller's for damaged contents, its own where the file may be whole (held open, a folder in its place).
+Read as empty instead, such a file was written over with an empty one by the next write. `Unreadable` is
 neither an `OSError` nor a `ValueError`, so the `except (OSError, ValueError)` blocks that read "empty" do not catch
 it, and it is matched by its attribute `is_unreadable`, never by its class: a copy of this module loaded under
 another name has a class of its own.
@@ -208,6 +209,12 @@ class Unreadable(Exception):
         super().__init__(f"{path} {reason}" + (f" -- {repair}" if repair else ""))
 
 
+#: The repairs `read_json` says itself, whatever the caller's: the file may be whole there (Windows refusing an open
+#: while another program holds it, a permission, a cloud placeholder; a folder where the file belongs), and the
+#: caller's repair for damaged contents -- an older copy restored over it -- would replace a good file.
+_REPAIR_HELD = "close what holds it (an editor, a sync client, another tool) and run again"
+_REPAIR_FOLDER = "move the folder aside"
+
 #: What a refusal calls a JSON value: JSON's words, not Python's type names ("null", not "NoneType").
 _JSON_KINDS = ((bool, "true or false"), (dict, "an object"), (list, "an array"), (str, "a string"),
                ((int, float), "a number"), (type(None), "null"))
@@ -227,20 +234,22 @@ def read_json(path, default=None, *, want=dict, repair=None, repair_encoding=Non
     """The JSON in `path`; `default` if there is no such file; `Unreadable` for anything else that cannot be read.
 
     Absent is the one quiet case: a fresh project has no state yet. Empty, truncated, not UTF-8, not JSON, the wrong
-    top-level type (`want`: a type or a tuple of them; None takes any), a directory -- each raises `Unreadable` naming
-    the file and, where one is known, the repair: `repair`, or for a file that is not UTF-8 `repair_encoding` when
-    given -- a file in another code page is mended by re-encoding it, not by an older copy. A UTF-8 BOM is read: it is
-    an editor's marker, not damage. The bytes are decoded here, so the platform's code page plays no part.
+    top-level type (`want`: a type or a tuple of them; None takes any), a directory, a file that cannot be opened --
+    each raises `Unreadable` naming the file and its repair. `repair` is the caller's, for damaged contents; a file
+    that is not UTF-8 gets `repair_encoding` when given -- a file in another code page is mended by re-encoding it, not
+    by an older copy. A file that cannot be opened, and a directory, get their own (`_REPAIR_HELD`, `_REPAIR_FOLDER`):
+    the file may be whole there. A UTF-8 BOM is read: it is an editor's marker, not damage. The bytes are decoded
+    here, so the platform's code page plays no part.
     """
     if os.path.isdir(path):
-        raise Unreadable(path, "is a directory, not a file", repair)
+        raise Unreadable(path, "is a directory, not a file", _REPAIR_FOLDER)
     try:
         with open(path, "rb") as f:
             raw = f.read()
     except FileNotFoundError:
         return default
     except OSError as exc:
-        raise Unreadable(path, f"cannot be opened ({exc})", repair) from exc
+        raise Unreadable(path, f"cannot be opened ({exc})", _REPAIR_HELD) from exc
     if not raw.strip():
         raise Unreadable(path, "is empty -- a write was cut off", repair)
     try:
@@ -669,14 +678,30 @@ def _check_read_json():
         with open(path, "wb") as f:
             f.write(b"\xef\xbb\xbf" + json.dumps({"note": "нуль"}, ensure_ascii=False).encode("utf-8"))
         assert read_json(path) == {"note": "нуль"}, "a UTF-8 BOM is an editor's marker, not damage"
+        # A file that cannot be OPENED, and a folder where the file belongs, may hold nothing wrong (Windows refusing
+        # an open while another program holds the file, a permission, a cloud placeholder): each is told its own
+        # repair, never the caller's -- an older copy restored over a good file is the damage it would cause.
+        def held(p, *args, **kwargs):
+            raise PermissionError(13, "The process cannot access the file because it is being used by another "
+                                      "process", p)
+        globals()["open"] = held                 # read_json's own open() resolves here first
+        try:
+            read_json(path, {}, repair="REPAIR", repair_encoding="RE-ENCODE")
+        except Exception as exc:  # noqa: BLE001
+            assert getattr(exc, "is_unreadable", False) and exc.reason.startswith("cannot be opened ("), repr(exc)
+            assert exc.repair == _REPAIR_HELD and str(exc).endswith(" -- " + _REPAIR_HELD), str(exc)
+        else:
+            raise AssertionError("a file that could not be opened was read")
+        finally:
+            del globals()["open"]
         os.remove(path)
         os.makedirs(path)
         try:
-            read_json(path, {})
+            read_json(path, {}, repair="REPAIR")
         except Exception as exc:  # noqa: BLE001
             # Said as a directory everywhere: opening one raises IsADirectoryError on POSIX, PermissionError on Windows.
             assert getattr(exc, "is_unreadable", False) and exc.reason == "is a directory, not a file", repr(exc)
-            assert exc.repair is None and str(exc) == f"{path} {exc.reason}", str(exc)
+            assert exc.repair == _REPAIR_FOLDER and str(exc) == f"{path} {exc.reason} -- {_REPAIR_FOLDER}", str(exc)
         else:
             raise AssertionError("a directory was read as JSON")
     finally:
@@ -758,8 +783,9 @@ def _selftest():
           f"private file is private from its first byte, its mode set again before the move; an exclusive create "
           f"never writes over a name, linked or (no hard links) in place, and a failed one leaves no name; a line "
           f"appended after a torn one starts on a fresh line, the old append's bytes otherwise; read_json gives the "
-          f"default for no file, reads a BOM, and refuses an empty, cut-off, cp1251, wrong-type or directory one as "
-          f"Unreadable, naming it and its repair; two writers x 100 and a reader: {reads} reads, every one whole")
+          f"default for no file, reads a BOM, and refuses an empty, cut-off, cp1251, wrong-type, held or directory one "
+          f"as Unreadable, naming it and its repair -- never the caller's older copy for a file that may be whole; "
+          f"two writers x 100 and a reader: {reads} reads, every one whole")
     return 0
 
 

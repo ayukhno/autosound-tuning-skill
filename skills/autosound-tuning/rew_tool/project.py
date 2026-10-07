@@ -1811,12 +1811,55 @@ def _main(argv):
     except (ProjectError, IndexError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+    except Exception as exc:  # noqa: BLE001 -- matched by its attribute; anything else still raises
+        # `record-change` writes the process journal, whose writer refuses beside a state that cannot be read (#136).
+        if getattr(exc, "is_unreadable", False):
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        raise
     return 0
 
 
 # ── self-test ─────────────────────────────────────────────────────────────────
+def _check_record_change_refuses_unreadable():
+    """`record-change` beside a process state that cannot be read exits 1 naming the file, nothing appended (#136):
+    the journal's writer refuses such a file, and the refusal ended here in a traceback."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    top = tempfile.mkdtemp(prefix="autosound_project_record_change_")
+    try:
+        proc_dir = os.path.join(top, "process")
+        os.makedirs(proc_dir)
+        state = os.path.join(proc_dir, "process-state.json")
+        damaged = b'{"schema_version": 3, "pla'
+        with open(state, "wb") as f:
+            f.write(damaged)
+        err = io.StringIO()
+        try:
+            with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
+                rc = _main(["project.py", top, "record-change", proc_dir, "project.json", "swapped the woofer"])
+        except Exception as exc:  # noqa: BLE001 -- the failure under test is the traceback itself
+            raise AssertionError(f"record-change raised {type(exc).__name__}: {exc}") from None
+        assert rc == 1 and "process-state.json" in err.getvalue(), (rc, err.getvalue()[-300:])
+        assert not os.path.exists(os.path.join(proc_dir, "journal.jsonl")), "an event was appended"
+        with open(state, "rb") as f:
+            assert f.read() == damaged, "the state changed"
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+
+
 def _selftest():
     import tempfile
+
+    failures = []
+    for check in (_check_record_change_refuses_unreadable,):
+        try:
+            check()
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
 
     root = tempfile.mkdtemp(prefix="autosound_project_")
     proj = Project(root)
@@ -2522,7 +2565,7 @@ def _selftest():
     except ProjectError:
         pass
 
-    print(f"selftest OK — the seat is the PROJECT's type, one of six, written once and refused a second different value with the route out (S-032); an imported fact says so without losing the value or the moment it was measured there, and no second measurement is owed (S-024); the REPLY language has a machine home, a front-end's report wins over it, and a project written before the field existed still reports the question (S-045); an unreadable project.json is refused rather than replaced (load AND write); two spare slots sharing slot 'F' stayed apart by tier and the profile's "
+    print(f"selftest OK — the seat is the PROJECT's type, one of six, written once and refused a second different value with the route out (S-032); an imported fact says so without losing the value or the moment it was measured there, and no second measurement is owed (S-024); the REPLY language has a machine home, a front-end's report wins over it, and a project written before the field existed still reports the question (S-045); an unreadable project.json is refused rather than replaced (load AND write); record-change beside an unreadable process state exits 1 naming it, nothing appended (#136); two spare slots sharing slot 'F' stayed apart by tier and the profile's "
           f"group id was refused as one (SCR-042), a tier-less project still validates; "
           f"channels[] round-tripped driver/fs_hz facts (SCR-001), duplicate code "
           f"refused, a rename kept the channel's id and resolved its old captures (SCR-039), "
