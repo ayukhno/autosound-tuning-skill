@@ -196,12 +196,13 @@ Then also record it in the car record (PART-B style: each item phrased as a chec
 ### The boundary out of phase 0 — one command, not a memory
 
 ```bash
-python3 rew_tool/contract.py check <project> --phase0-gate     # exits non-zero while a row names no measurement
+python3 rew_tool/contract.py check <project> --phase0-gate     # exits non-zero while the map has no rows or a row names no measurement
 ```
 
 Once the baseline is saved, analyzed, and logged in the `tuning-changelog` — **and every row of
-the map stands on a measurement** — proceed to **Phase 1**. The gate asks one thing: every flaw
-row names its evidence (a capture on this build). A row with none is a guess wearing the map's
+the map stands on a measurement** — proceed to **Phase 1**. The gate asks one thing: the map has
+rows, and every flaw row names its evidence (a capture on this build); its last line says
+`**READY to leave phase 0.**`, or which half is not there yet. A row with none is a guess wearing the map's
 authority, and nothing downstream can tell the difference — the map *binds* Phase 1 and 2. The
 gate also **lists** what it does not block: the `hypothesis` rows, to be settled by a capture the
 owner is asked for; and the owner-facing rows with no owner's line yet, which is information for

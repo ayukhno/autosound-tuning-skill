@@ -1141,19 +1141,37 @@ def verdict_lines(report):
 
 
 #: The questions a report can end on (`render_report`'s `gate`): None, plain `check` -- is anything wrong; "intake",
-#: `--gate` -- does phase 0 have everything it needs; "phase0", `--phase0-gate` -- does every flaw row stand on a
-#: measurement.
+#: `--gate` -- does phase 0 have everything it needs; "phase0", `--phase0-gate` -- is phase 0 finished: the flaw map
+#: has rows, and every one stands on a measurement.
 GATES = (None, "intake", "phase0")
+
+
+def flaw_rows(report):
+    """How many rows `check_project`'s `report` found in the flaw map (each `row_gaps` entry counts all of them): 0 for
+    a map with none, and for a `project.json` that could not be read."""
+    return max((g.get("rows") or 0 for g in report.get("row_gaps") or []), default=0)
+
+
+def ready_to_leave_phase0(report):
+    """`--phase0-gate`'s answer (R27): phase 0 is finished when the flaw map has at least one row and every row stands
+    on a measurement. The report's `map_ready` is the second half alone -- no row lacks evidence, which an empty map
+    satisfies, the question `gaps` asks too -- and keeps that meaning in `--json`. `enter-phase 1` refuses an empty
+    map (`process._require_flaw_map`), and this gate passed one, exit 0."""
+    return flaw_rows(report) > 0 and bool(report.get("map_ready"))
 
 
 def _verdict_line(report, gate=None):
     """The report's last line: the answer to the question asked, the one its exit code gives (#136, audit I-28).
 
     It said "**OK — nothing to fix.**" whatever the gate, so `check <empty> --gate` exited 1 under a last line saying
-    all was well. Not ready with nothing missing is something there being wrong, and is said so -- not "0 missing"."""
+    all was well. Not ready with nothing missing is something there being wrong, and is said so -- not "0 missing".
+    The phase-0 lines name the step they gate, leaving phase 0 (R27), and say which half is not there."""
     if gate == "phase0":
-        return ("**READY for phase 0.**" if report.get("map_ready")
-                else "**NOT READY for phase 0 — flaw rows without evidence.**")
+        if not flaw_rows(report):
+            return "**NOT READY to leave phase 0 — no flaw rows yet.**"
+        if not report.get("map_ready"):
+            return "**NOT READY to leave phase 0 — flaw rows without evidence.**"
+        return "**READY to leave phase 0.**"
     if gate == "intake":
         missing = report.get("missing") or []
         if report.get("complete"):
@@ -1383,7 +1401,7 @@ def render_report(report, gate=None):
                      + (f" — {w['look']}" if w.get("look") else "")
                      + ". What came from it stays valid, but cannot be re-checked until it is found")
     # Every row standing on a measurement is said of a map that has rows: of an empty one it was true and said nothing.
-    rows = max((g.get("rows") or 0 for g in report.get("row_gaps") or []), default=0)
+    rows = flaw_rows(report)
     if report.get("row_gaps") and not rows:
         lines.append("- flaw map: no rows yet.")
     elif rows and report.get("map_ready"):
@@ -1443,9 +1461,10 @@ _USAGE = """usage: contract.py check <project-dir> [--json] [--no-rew] [--gate] 
        contract.py selftest
 
   --gate         phase -1: does everything the method needs before phase 0 EXIST and validate
-  --phase0-gate  phase 0: does every flaw row STAND on a measurement (evidence). A flaw is
-                 computed, not heard -- the ear cannot verify one, so the owner's `symptom` is
-                 reported and gates nothing; hypotheses are listed to be settled by a capture
+  --phase0-gate  leaving phase 0: does the flaw map have rows, and does every one STAND on a
+                 measurement (evidence). A flaw is computed, not heard -- the ear cannot verify
+                 one, so the owner's `symptom` is reported and gates nothing; hypotheses are
+                 listed to be settled by a capture
 """
 
 
@@ -1532,7 +1551,7 @@ def _main(argv):
         # The last line answers the question the exit code below answers (#136, audit I-28).
         print(render_report(report, gate="phase0" if "--phase0-gate" in argv else "intake" if gate else None))
     if "--phase0-gate" in argv:
-        return 0 if report["map_ready"] else 1
+        return 0 if ready_to_leave_phase0(report) else 1
     if gate:
         return 0 if report["complete"] else 1
     return 0 if report["ok"] else 1
@@ -1590,7 +1609,11 @@ def _check_unreadable_process_state():
 def _check_gate_last_line():
     """A gate's report ends with that gate's verdict (#136, audit I-28). `check <empty> --gate` exited 1 and its last
     line said "**OK — nothing to fix.**"; `--phase0-gate` said "every row stands on a measurement" of a map with no
-    rows. The last line now answers the question the exit code answers; without a gate it is as before."""
+    rows. The last line now answers the question the exit code answers; without a gate it is as before.
+
+    `--phase0-gate` asks whether phase 0 is FINISHED (R27): `enter-phase 1` refuses an empty map, and this gate passed
+    one, exit 0. It is ready only with rows, every one on a measurement; `map_ready` keeps its own meaning (no row
+    lacks evidence: `gaps` asks that, and an empty map owes nothing there)."""
     import contextlib
     import io
     import shutil
@@ -1604,7 +1627,11 @@ def _check_gate_last_line():
         assert render_report(report, gate="intake").splitlines()[-1] == \
             f"**NOT READY for phase 0 — {len(report['missing'])} item(s) missing.**", report["missing"]
         assert render_report(report) == render_report(report, gate=None), "gate=None is the old report"
-        assert "- flaw map: no rows yet." in render_report(report, gate="phase0").splitlines(), "no rows, said so"
+        for gate in GATES:   # R28: an empty map says so in every mode, plain `check` included
+            assert "- flaw map: no rows yet." in render_report(report, gate=gate).splitlines(), ("no rows", gate)
+        assert render_report(report, gate="phase0").splitlines()[-1] == \
+            "**NOT READY to leave phase 0 — no flaw rows yet.**", render_report(report, gate="phase0")[-200:]
+        assert report["map_ready"] is True and ready_to_leave_phase0(report) is False, "R27: two questions"
         for gate, flag in (("intake", "--gate"), ("phase0", "--phase0-gate")):
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
@@ -1612,17 +1639,31 @@ def _check_gate_last_line():
             last = out.getvalue().rstrip("\n").splitlines()[-1]
             assert last == render_report(report, gate=gate).splitlines()[-1], (flag, last)
             assert last.startswith("**READY") is (rc == 0), (flag, rc, last)
+            assert rc == 1, (flag, rc, last)            # an empty folder is ready for neither step
         ready = dict(report, complete=True, missing=[], map_ready=True,
                      row_gaps=[dict(g, rows=2) for g in report["row_gaps"]])
         assert render_report(ready, gate="intake").splitlines()[-1] == "**READY: everything phase 0 needs is here.**"
-        assert render_report(ready, gate="phase0").splitlines()[-1] == "**READY for phase 0.**"
+        assert render_report(ready, gate="phase0").splitlines()[-1] == "**READY to leave phase 0.**"
         assert "- flaw map: every row stands on a measurement." in render_report(ready).splitlines()
         assert render_report(dict(ready, map_ready=False), gate="phase0").splitlines()[-1] == \
-            "**NOT READY for phase 0 — flaw rows without evidence.**"
+            "**NOT READY to leave phase 0 — flaw rows without evidence.**"
         # Not complete with nothing missing: something there is wrong, and the line does not say "0 missing".
         broken = dict(report, ok=False, complete=False, missing=[])
         assert render_report(broken, gate="intake").splitlines()[-1] == \
             "**NOT READY for phase 0 — issues found, see above.**", render_report(broken, gate="intake")[-200:]
+        # On disk, through the command: rows on captures leave phase 0 (exit 0); one row with none keeps it (exit 1).
+        row = {"f_hz": 150.0, "level_db": -9.0, "kind": "cabin_null", "action": "no_boost", "why": "a null",
+               "evidence": ["w-L_01 (sw)"], "channels": ["w-L"], "at": "2026-01-01T00:00:00Z"}
+        for rows, line, code in (
+                ([row], "**READY to leave phase 0.**", 0),
+                ([row, dict(row, f_hz=300.0, evidence=[])],
+                 "**NOT READY to leave phase 0 — flaw rows without evidence.**", 1)):
+            with open(os.path.join(d, "project.json"), "w", encoding="utf-8") as fh:
+                json.dump({"schema_version": project.SCHEMA_VERSION, "acoustics": {"flaws": rows}}, fh)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                rc = _main(["contract.py", "check", d, "--no-rew", "--phase0-gate"])
+            assert (out.getvalue().rstrip("\n").splitlines()[-1], rc) == (line, code), (out.getvalue()[-300:], rc)
     finally:
         shutil.rmtree(d, ignore_errors=True)
 
