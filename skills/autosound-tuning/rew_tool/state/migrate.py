@@ -317,6 +317,14 @@ def import_current_state(old_dir, new_dir, dry_run=False):
 
     proj = _project.Project(new_dir)
     data = proj.load()
+    # Facts a newer method wrote are refused before this copy's version is stamped over them, in `Project.save`'s words
+    # (#136, audit T-21): stamped first, `save` saw v3 and wrote the newer file down.
+    io_ = _project_io()
+    newer = io_.newer_schema(data, _project.SCHEMA_VERSION)
+    if newer is not None:
+        raise _project.ProjectError(f"{proj.path}: the facts to write are schema v{newer} and this method writes "
+                                    f"v{_project.SCHEMA_VERSION} -- writing them would write them down, so nothing "
+                                    f"was written; {io_.UPDATE_THE_METHOD}")
     data["schema_version"] = _project.SCHEMA_VERSION
     report["identity_fields"] = fold_identity(data, identity)
     if not data.get("channel_summary"):
@@ -432,8 +440,57 @@ def _main(argv=None):
 
 
 # ── self-test ─────────────────────────────────────────────────────────────────
+def _check_import_refuses_newer_project():
+    """An import into a folder whose `project.json` a newer method wrote is refused before anything is stamped or
+    written, in `Project.save`'s own words (#136, audit T-21): the import stamped v3 onto the loaded facts first, so
+    `save` saw v3 and wrote the newer file down. A dry run refuses it too, and the file keeps its bytes."""
+    import shutil
+    import tempfile
+    old = tempfile.mkdtemp(prefix="autosound_migrate_newer_old_")
+    new = tempfile.mkdtemp(prefix="autosound_migrate_newer_new_")
+    try:
+        os.makedirs(os.path.join(old, "state", "SQ"))
+        _write_json(os.path.join(old, "state", "SQ", "v_001.json"), {
+            "preset": "SQ", "version": "v_001", "sample_rate": 96000,
+            "channels": {"w-L": {"helix_ch": "C", "hp": {"f": 70, "type": "BW", "slope": 12},
+                                 "lp": {"f": 270, "type": "BW", "slope": 12}, "gain_db": -7.8, "ta_ms": 5.38,
+                                 "polarity": "NORM"}}})
+        newer = _project.SCHEMA_VERSION + 1
+        path = os.path.join(new, "project.json")
+        _write_json(path, {"schema_version": newer, "project_rev": 7, "channels": []})
+        with open(path, "rb") as fh:
+            raw = fh.read()
+        try:
+            _project.Project(new).save({"schema_version": newer})
+        except _project.ProjectError as exc:
+            words = str(exc)
+        else:
+            raise AssertionError("Project.save wrote down facts a newer method wrote")
+        for dry_run in (False, True):
+            try:
+                import_current_state(old, new, dry_run=dry_run)
+            except _project.ProjectError as exc:
+                assert str(exc) == words, (dry_run, str(exc), words)
+            else:
+                raise AssertionError(f"dry_run={dry_run}: the import took a v{newer} project.json")
+            with open(path, "rb") as fh:
+                assert fh.read() == raw, f"dry_run={dry_run}: project.json changed"
+            assert sorted(os.listdir(new)) == ["project.json"], (dry_run, sorted(os.listdir(new)))
+    finally:
+        shutil.rmtree(old, ignore_errors=True)
+        shutil.rmtree(new, ignore_errors=True)
+
+
 def _selftest():
     import tempfile
+
+    failures = []
+    for check in (_check_import_refuses_newer_project,):
+        try:
+            check()
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+    assert not failures, "\n".join(failures)
 
     root = tempfile.mkdtemp(prefix="autosound_migrate_")
     preset_dir = os.path.join(root, "state", "SQ_Jazzi")

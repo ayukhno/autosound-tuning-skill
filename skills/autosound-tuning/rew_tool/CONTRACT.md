@@ -86,8 +86,9 @@ TCC's «Оновити Скіл»`. Nothing is written.
   draft, `set-setting`, `refresh` and the phase-1 and phase-2 profile gate refuse too. Leaving phase −1 does not
   refuse such a profile yet (below).
 - On write: `Project.save` (`ProjectError`) and `dsp_profile.save_profile` (`ValueError`) refuse data a newer method
-  wrote before they stamp v3 over it; `process.py`'s `_write` and `_append` refuse beside a state a newer method wrote
-  since the writer read it.
+  wrote before they stamp v3 over it, and so does `state/migrate.py`'s import into a folder whose `project.json` a
+  newer method wrote (`ProjectError`, in `Project.save`'s words); `process.py`'s `_write` and `_append` refuse beside
+  a state a newer method wrote since the writer read it.
 - Left as they were: `Process.load()` (lenient) and `Project.load()` return such a file as it is (`project.py`'s
   `validate` calls it unsupported, and `contract.py check` reports every one of the four as not valid).
 
