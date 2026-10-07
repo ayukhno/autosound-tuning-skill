@@ -433,17 +433,26 @@ def _profile(vendor="Audiotec-Fischer", size=30, types=None, name="Helix DSP Ult
 
 def _check_atf_values():
     """The ATF rows by value (audit T-25): until this check the selftest looked at types and counts only. Read as
-    text, through no parser of ours (the row format is `atf_eq.format_atf_eq`)."""
+    text, through no parser of ours (the row format is `atf_eq.format_atf_eq`), one row of every type the ledger
+    banks. The shelves and the all-passes are WHOLE lines -- a high shelf mapped to LS_Q, or an APF1 to AP2, once
+    stayed green -- and PK is read by its prefix, since its line goes on into a bandwidth field. Then the block is
+    read back, and each wire type must come home as the ledger type it was written from."""
     rows = [{"type": "PK", "f": 2551, "gain_db": -14.1, "q": 1.5},
             {"type": "LSH", "f": 60, "gain_db": 2.0, "q": 0.7},
-            {"type": "APF2", "f": 1200, "q": 1.7}]
+            {"type": "APF2", "f": 1200, "q": 1.7},
+            {"type": "HSH", "f": 8000, "gain_db": -3.0, "q": 0.7},
+            {"type": "APF1", "f": 300}]
     text = export_eq(_profile(), rows, channel="m-L").text
-    want = ("1\tTrue\tManual\tPK\t2551.0\t-14.1\t1.50\t",
-            "2\tTrue\tManual\tLS_Q\t60.0\t2.0\t0.7\t",
-            "3\tTrue\tManual\tAP2\t1200.0\t\t1.70")
     lines = text.splitlines()
-    for row in want:
-        assert any(line.startswith(row) for line in lines), (row, lines[:5])
+    pk = "1\tTrue\tManual\tPK\t2551.0\t-14.1\t1.50\t"
+    assert any(line.startswith(pk) for line in lines), (pk, lines[:7])
+    for row in ("2\tTrue\tManual\tLS_Q\t60.0\t2.0\t0.7\t",
+                "3\tTrue\tManual\tAP2\t1200.0\t\t1.70",
+                "4\tTrue\tManual\tHS_Q\t8000.0\t-3.0\t0.7\t",
+                "5\tTrue\tManual\tAP1\t300.0"):
+        assert row in lines, (row, lines[:7])
+    types = [r["type"] for r in import_eq(text).eq]
+    assert types == ["PK", "LSH", "APF2", "HSH", "APF1"], types
 
 
 def _selftest():
